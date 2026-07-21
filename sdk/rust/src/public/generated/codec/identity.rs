@@ -5,24 +5,6 @@
 #![allow(clippy::all, unused_variables, unused_mut, dead_code)]
 
 use crate::generated::v1;
-use crate::public::generated::identity::{
-    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, GrantScope,
-    IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
-    RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest,
-    UserInfoResponse,
-};
-
-/// Converts a native `AuthorizeRequest` to its wire message.
-pub(crate) fn to_wire_authorize_request(value: AuthorizeRequest) -> v1::AuthorizeRequest {
-    v1::AuthorizeRequest {
-        response_type: value.response_type,
-        client_id: value.client_id,
-        redirect_uri: value.redirect_uri,
-        scope: value.scope,
-        state: value.state,
-        ..Default::default()
-    }
-}
 
 /// Encodes a wire `AuthorizeRequest` as protobuf JSON.
 pub(crate) fn encode_wire_authorize_request_json(
@@ -97,13 +79,6 @@ pub(crate) fn decode_wire_authorize_request_json(
     })
 }
 
-/// Converts a wire `AuthorizeResponse` to its native message.
-pub(crate) fn from_wire_authorize_response(value: v1::AuthorizeResponse) -> AuthorizeResponse {
-    AuthorizeResponse {
-        redirect_uri: value.redirect_uri,
-    }
-}
-
 /// Encodes a wire `AuthorizeResponse` as protobuf JSON.
 pub(crate) fn encode_wire_authorize_response_json(
     value: &v1::AuthorizeResponse,
@@ -137,14 +112,6 @@ pub(crate) fn decode_wire_authorize_response_json(
     })
 }
 
-/// Converts a native `GetGrantRequest` to its wire message.
-pub(crate) fn to_wire_get_grant_request(value: GetGrantRequest) -> v1::GetGrantRequest {
-    v1::GetGrantRequest {
-        grant_id: value.grant_id,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `GetGrantRequest` as protobuf JSON.
 pub(crate) fn encode_wire_get_grant_request_json(value: &v1::GetGrantRequest) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -174,19 +141,6 @@ pub(crate) fn decode_wire_get_grant_request_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `GetGrantResponse` to its native message.
-pub(crate) fn from_wire_get_grant_response(value: v1::GetGrantResponse) -> GetGrantResponse {
-    GetGrantResponse {
-        scopes: value
-            .scopes
-            .into_iter()
-            .map(from_wire_grant_scope)
-            .collect(),
-        created_at: value.created_at,
-        expires_at: value.expires_at,
-    }
 }
 
 /// Encodes a wire `GrantScope` as protobuf JSON.
@@ -313,23 +267,6 @@ pub(crate) fn decode_wire_get_grant_response_json(
     })
 }
 
-/// Converts a wire `GrantScope` to its native message.
-pub(crate) fn from_wire_grant_scope(value: v1::GrantScope) -> GrantScope {
-    GrantScope {
-        scope: value.scope,
-        resource: value.resource,
-    }
-}
-
-/// Converts a native `IntrospectRequest` to its wire message.
-pub(crate) fn to_wire_introspect_request(value: IntrospectRequest) -> v1::IntrospectRequest {
-    v1::IntrospectRequest {
-        token: value.token,
-        token_type_hint: value.token_type_hint,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `IntrospectRequest` as protobuf JSON.
 pub(crate) fn encode_wire_introspect_request_json(
     value: &v1::IntrospectRequest,
@@ -371,17 +308,6 @@ pub(crate) fn decode_wire_introspect_request_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `IntrospectResponse` to its native message.
-pub(crate) fn from_wire_introspect_response(value: v1::IntrospectResponse) -> IntrospectResponse {
-    IntrospectResponse {
-        active: value.active,
-        subject: value.subject,
-        scope: value.scope,
-        client_id: value.client_id,
-        audience: value.audience,
-    }
 }
 
 /// Encodes a wire `IntrospectResponse` as protobuf JSON.
@@ -471,13 +397,6 @@ pub(crate) fn decode_wire_introspect_response_json(
     })
 }
 
-/// Converts a native `ListGrantsRequest` to its wire message.
-pub(crate) fn to_wire_list_grants_request(_value: ListGrantsRequest) -> v1::ListGrantsRequest {
-    v1::ListGrantsRequest {
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `ListGrantsRequest` as protobuf JSON.
 pub(crate) fn encode_wire_list_grants_request_json(
     value: &v1::ListGrantsRequest,
@@ -499,13 +418,6 @@ pub(crate) fn decode_wire_list_grants_request_json(
     Ok(v1::ListGrantsRequest {
         ..Default::default()
     })
-}
-
-/// Converts a wire `ListGrantsResponse` to its native message.
-pub(crate) fn from_wire_list_grants_response(value: v1::ListGrantsResponse) -> ListGrantsResponse {
-    ListGrantsResponse {
-        grant_ids: value.grant_ids,
-    }
 }
 
 /// Encodes a wire `ListGrantsResponse` as protobuf JSON.
@@ -558,14 +470,6 @@ pub(crate) fn decode_wire_list_grants_response_json(
     })
 }
 
-/// Converts a native `RevokeGrantRequest` to its wire message.
-pub(crate) fn to_wire_revoke_grant_request(value: RevokeGrantRequest) -> v1::RevokeGrantRequest {
-    v1::RevokeGrantRequest {
-        grant_id: value.grant_id,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `RevokeGrantRequest` as protobuf JSON.
 pub(crate) fn encode_wire_revoke_grant_request_json(
     value: &v1::RevokeGrantRequest,
@@ -599,13 +503,6 @@ pub(crate) fn decode_wire_revoke_grant_request_json(
     })
 }
 
-/// Converts a wire `RevokeGrantResponse` to its native message.
-pub(crate) fn from_wire_revoke_grant_response(
-    _value: v1::RevokeGrantResponse,
-) -> RevokeGrantResponse {
-    RevokeGrantResponse {}
-}
-
 /// Encodes a wire `RevokeGrantResponse` as protobuf JSON.
 pub(crate) fn encode_wire_revoke_grant_response_json(
     value: &v1::RevokeGrantResponse,
@@ -627,22 +524,6 @@ pub(crate) fn decode_wire_revoke_grant_response_json(
     Ok(v1::RevokeGrantResponse {
         ..Default::default()
     })
-}
-
-/// Converts a native `TokenRequest` to its wire message.
-pub(crate) fn to_wire_token_request(value: TokenRequest) -> v1::TokenRequest {
-    v1::TokenRequest {
-        grant_type: value.grant_type,
-        code: value.code,
-        redirect_uri: value.redirect_uri,
-        client_id: value.client_id,
-        state: value.state,
-        scope: value.scope,
-        subject_token: value.subject_token,
-        subject_token_type: value.subject_token_type,
-        expires_in: value.expires_in,
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `TokenRequest` as protobuf JSON.
@@ -756,18 +637,6 @@ pub(crate) fn decode_wire_token_request_json(
     })
 }
 
-/// Converts a wire `TokenResponse` to its native message.
-pub(crate) fn from_wire_token_response(value: v1::TokenResponse) -> TokenResponse {
-    TokenResponse {
-        access_token: value.access_token,
-        token_type: value.token_type,
-        expires_in: value.expires_in,
-        refresh_token: value.refresh_token,
-        scope: value.scope,
-        grant_id: value.grant_id,
-    }
-}
-
 /// Encodes a wire `TokenResponse` as protobuf JSON.
 pub(crate) fn encode_wire_token_response_json(value: &v1::TokenResponse) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -849,13 +718,6 @@ pub(crate) fn decode_wire_token_response_json(
     })
 }
 
-/// Converts a native `UserInfoRequest` to its wire message.
-pub(crate) fn to_wire_user_info_request(_value: UserInfoRequest) -> v1::UserInfoRequest {
-    v1::UserInfoRequest {
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `UserInfoRequest` as protobuf JSON.
 pub(crate) fn encode_wire_user_info_request_json(value: &v1::UserInfoRequest) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -875,15 +737,6 @@ pub(crate) fn decode_wire_user_info_request_json(
     Ok(v1::UserInfoRequest {
         ..Default::default()
     })
-}
-
-/// Converts a wire `UserInfoResponse` to its native message.
-pub(crate) fn from_wire_user_info_response(value: v1::UserInfoResponse) -> UserInfoResponse {
-    UserInfoResponse {
-        subject_id: value.subject_id,
-        email: value.email,
-        name: value.name,
-    }
 }
 
 /// Encodes a wire `UserInfoResponse` as protobuf JSON.

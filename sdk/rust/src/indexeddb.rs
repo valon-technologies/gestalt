@@ -65,7 +65,8 @@ pub mod transaction_mode {
 /// BeginTransactionRequest starts an IndexedDB transaction stream.
 ///
 /// Native message type for `gestalt.provider.v1.BeginTransactionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BeginTransactionRequest {
     /// The `stores` field.
     pub stores: Vec<String>,
@@ -78,7 +79,8 @@ pub struct BeginTransactionRequest {
 /// ColumnDef is reserved for providers that preserve SQL-style column metadata.
 ///
 /// Native message type for `gestalt.provider.v1.ColumnDef`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ColumnDef {
     /// The `name` field.
     pub name: String,
@@ -95,7 +97,8 @@ pub struct ColumnDef {
 /// CountResponse reports how many rows matched a query.
 ///
 /// Native message type for `gestalt.provider.v1.CountResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CountResponse {
     /// The `count` field.
     pub count: i64,
@@ -104,7 +107,8 @@ pub struct CountResponse {
 /// CreateIndexRequest adds a secondary index to an existing object store.
 ///
 /// Native message type for `gestalt.provider.v1.CreateIndexRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateIndexRequest {
     /// The `store` field.
     pub store: String,
@@ -119,7 +123,8 @@ pub struct CreateIndexRequest {
 /// CreateObjectStoreRequest creates a new object store.
 ///
 /// Native message type for `gestalt.provider.v1.CreateObjectStoreRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateObjectStoreRequest {
     /// The `name` field.
     pub name: String,
@@ -129,7 +134,7 @@ pub struct CreateObjectStoreRequest {
 
 /// Values of the `msg` oneof in `CursorClientMessage`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CursorClientMessageMsg {
     /// The `open` variant.
     Open(OpenCursorRequest),
@@ -140,7 +145,8 @@ pub enum CursorClientMessageMsg {
 /// CursorClientMessage is one frame in the bidirectional cursor stream.
 ///
 /// Native message type for `gestalt.provider.v1.CursorClientMessage`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CursorClientMessage {
     /// The `msg` oneof; None when unset.
     pub msg: Option<CursorClientMessageMsg>,
@@ -148,7 +154,7 @@ pub struct CursorClientMessage {
 
 /// Values of the `command` oneof in `CursorCommand`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CursorCommandCommand {
     /// The `next` variant.
     Next(bool),
@@ -167,7 +173,8 @@ pub enum CursorCommandCommand {
 /// CursorCommand advances, mutates, or closes an open cursor.
 ///
 /// Native message type for `gestalt.provider.v1.CursorCommand`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CursorCommand {
     /// The `command` oneof; None when unset.
     pub command: Option<CursorCommandCommand>,
@@ -176,7 +183,8 @@ pub struct CursorCommand {
 /// CursorEntry is one streamed cursor row.
 ///
 /// Native message type for `gestalt.provider.v1.CursorEntry`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CursorEntry {
     /// One full IndexedDB key (scalar or array).
     /// <https://www.w3.org/TR/IndexedDB/#dom-idbcursor-key>
@@ -192,7 +200,8 @@ pub struct CursorEntry {
 /// CursorKeyTarget addresses a specific cursor position.
 ///
 /// Native message type for `gestalt.provider.v1.CursorKeyTarget`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CursorKeyTarget {
     /// The `key` field; None when unset.
     pub key: Option<KeyValue>,
@@ -200,7 +209,7 @@ pub struct CursorKeyTarget {
 
 /// Values of the `result` oneof in `CursorResponse`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CursorResponseResult {
     /// The `entry` variant.
     Entry(CursorEntry),
@@ -211,7 +220,8 @@ pub enum CursorResponseResult {
 /// CursorResponse is one streamed cursor frame.
 ///
 /// Native message type for `gestalt.provider.v1.CursorResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CursorResponse {
     /// The `result` oneof; None when unset.
     pub result: Option<CursorResponseResult>,
@@ -220,7 +230,8 @@ pub struct CursorResponse {
 /// DeleteIndexRequest removes a secondary index from an existing object store.
 ///
 /// Native message type for `gestalt.provider.v1.DeleteIndexRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteIndexRequest {
     /// The `store` field.
     pub store: String,
@@ -231,7 +242,8 @@ pub struct DeleteIndexRequest {
 /// DeleteObjectStoreRequest removes an object store.
 ///
 /// Native message type for `gestalt.provider.v1.DeleteObjectStoreRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteObjectStoreRequest {
     /// The `name` field.
     pub name: String,
@@ -240,7 +252,8 @@ pub struct DeleteObjectStoreRequest {
 /// DeleteResponse reports how many rows were deleted.
 ///
 /// Native message type for `gestalt.provider.v1.DeleteResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteResponse {
     /// The `deleted` field.
     pub deleted: i64,
@@ -249,7 +262,8 @@ pub struct DeleteResponse {
 /// IndexQueryRequest addresses a secondary index plus an optional query.
 ///
 /// Native message type for `gestalt.provider.v1.IndexQueryRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndexQueryRequest {
     /// The `store` field.
     pub store: String,
@@ -264,7 +278,8 @@ pub struct IndexQueryRequest {
 /// IndexSchema describes one secondary index on an object store.
 ///
 /// Native message type for `gestalt.provider.v1.IndexSchema`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndexSchema {
     /// The `name` field.
     pub name: String,
@@ -276,7 +291,7 @@ pub struct IndexSchema {
 
 /// Values of the `query` oneof in `IndexedDBQuery`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum IndexedDBQueryQuery {
     /// The `key` variant.
     Key(KeyValue),
@@ -289,7 +304,8 @@ pub enum IndexedDBQueryQuery {
 /// matching a W3C query argument of undefined/null.
 ///
 /// Native message type for `gestalt.provider.v1.IndexedDBQuery`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndexedDBQuery {
     /// The `query` oneof; None when unset.
     pub query: Option<IndexedDBQueryQuery>,
@@ -301,7 +317,8 @@ pub struct IndexedDBQuery {
 /// <https://www.w3.org/TR/IndexedDB/#keyrange>
 ///
 /// Native message type for `gestalt.provider.v1.KeyRange`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KeyRange {
     /// The `lower` field; None when unset.
     pub lower: Option<KeyValue>,
@@ -316,7 +333,8 @@ pub struct KeyRange {
 /// KeyResponse wraps one primary key.
 ///
 /// Native message type for `gestalt.provider.v1.KeyResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KeyResponse {
     /// The `key` field.
     pub key: String,
@@ -324,7 +342,7 @@ pub struct KeyResponse {
 
 /// Values of the `kind` oneof in `KeyValue`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum KeyValueKind {
     /// The `scalar` variant.
     Scalar(TypedValue),
@@ -337,14 +355,16 @@ pub enum KeyValueKind {
 /// <https://www.w3.org/TR/IndexedDB/#key-construct>
 ///
 /// Native message type for `gestalt.provider.v1.KeyValue`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KeyValue {
     /// The `kind` oneof; None when unset.
     pub kind: Option<KeyValueKind>,
 }
 
 /// Native message type for `gestalt.provider.v1.KeyValueArray`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KeyValueArray {
     /// The `elements` field.
     pub elements: Vec<KeyValue>,
@@ -353,7 +373,8 @@ pub struct KeyValueArray {
 /// KeysResponse wraps repeated primary keys.
 ///
 /// Native message type for `gestalt.provider.v1.KeysResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KeysResponse {
     /// The `keys` field.
     pub keys: Vec<String>,
@@ -362,7 +383,8 @@ pub struct KeysResponse {
 /// ObjectStoreNameRequest addresses an object store without a specific row key.
 ///
 /// Native message type for `gestalt.provider.v1.ObjectStoreNameRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectStoreNameRequest {
     /// The `store` field.
     pub store: String,
@@ -371,7 +393,8 @@ pub struct ObjectStoreNameRequest {
 /// ObjectStoreRangeRequest addresses an object store plus an optional query.
 ///
 /// Native message type for `gestalt.provider.v1.ObjectStoreRangeRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectStoreRangeRequest {
     /// The `store` field.
     pub store: String,
@@ -384,7 +407,8 @@ pub struct ObjectStoreRangeRequest {
 /// ObjectStoreRequest addresses one object store row by primary key.
 ///
 /// Native message type for `gestalt.provider.v1.ObjectStoreRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectStoreRequest {
     /// The `store` field.
     pub store: String,
@@ -396,7 +420,8 @@ pub struct ObjectStoreRequest {
 /// store.
 ///
 /// Native message type for `gestalt.provider.v1.ObjectStoreSchema`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectStoreSchema {
     /// The `indexes` field.
     pub indexes: Vec<IndexSchema>,
@@ -407,7 +432,8 @@ pub struct ObjectStoreSchema {
 /// OpenCursorRequest starts a streaming cursor over an object store or index.
 ///
 /// Native message type for `gestalt.provider.v1.OpenCursorRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OpenCursorRequest {
     /// The `store` field.
     pub store: String,
@@ -426,7 +452,8 @@ pub struct OpenCursorRequest {
 /// Record is one JSON-like row in an object store.
 ///
 /// Native message type for `gestalt.provider.v1.Record`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Record {
     /// The `fields` field.
     pub fields: std::collections::BTreeMap<String, TypedValue>,
@@ -435,7 +462,8 @@ pub struct Record {
 /// RecordRequest addresses one object store and carries one row payload.
 ///
 /// Native message type for `gestalt.provider.v1.RecordRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecordRequest {
     /// The `store` field.
     pub store: String,
@@ -446,7 +474,8 @@ pub struct RecordRequest {
 /// RecordResponse wraps one row payload.
 ///
 /// Native message type for `gestalt.provider.v1.RecordResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecordResponse {
     /// The `record` field; None when unset.
     pub record: Option<Record>,
@@ -455,14 +484,16 @@ pub struct RecordResponse {
 /// RecordsResponse wraps repeated row payloads.
 ///
 /// Native message type for `gestalt.provider.v1.RecordsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecordsResponse {
     /// The `records` field.
     pub records: Vec<Record>,
 }
 
 /// Native message type for `gestalt.provider.v1.TransactionAbortRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionAbortRequest {
     /// The `reason` field.
     pub reason: String,
@@ -471,19 +502,21 @@ pub struct TransactionAbortRequest {
 /// TransactionAbortResponse acknowledges abort or reports an abort failure.
 ///
 /// Native message type for `gestalt.provider.v1.TransactionAbortResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionAbortResponse {
     /// The `error` field; None when unset.
     pub error: Option<RpcStatus>,
 }
 
 /// Native message type for `gestalt.provider.v1.TransactionBeginResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionBeginResponse {}
 
 /// Values of the `msg` oneof in `TransactionClientMessage`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TransactionClientMessageMsg {
     /// The `begin` variant.
     Begin(BeginTransactionRequest),
@@ -499,21 +532,24 @@ pub enum TransactionClientMessageMsg {
 /// first frame must be BeginTransactionRequest.
 ///
 /// Native message type for `gestalt.provider.v1.TransactionClientMessage`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionClientMessage {
     /// The `msg` oneof; None when unset.
     pub msg: Option<TransactionClientMessageMsg>,
 }
 
 /// Native message type for `gestalt.provider.v1.TransactionCommitRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionCommitRequest {}
 
 /// TransactionCommitResponse carries a non-OK status when commit failed after
 /// the provider accepted the commit frame and rolled the transaction back.
 ///
 /// Native message type for `gestalt.provider.v1.TransactionCommitResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionCommitResponse {
     /// The `error` field; None when unset.
     pub error: Option<RpcStatus>,
@@ -521,7 +557,7 @@ pub struct TransactionCommitResponse {
 
 /// Values of the `operation` oneof in `TransactionOperation`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TransactionOperationOperation {
     /// The `get` variant.
     Get(ObjectStoreRequest),
@@ -562,7 +598,8 @@ pub enum TransactionOperationOperation {
 /// transaction contract.
 ///
 /// Native message type for `gestalt.provider.v1.TransactionOperation`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionOperation {
     /// The `request_id` field.
     pub request_id: u64,
@@ -572,7 +609,7 @@ pub struct TransactionOperation {
 
 /// Values of the `result` oneof in `TransactionOperationResponse`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TransactionOperationResponseResult {
     /// The `empty` variant.
     Empty,
@@ -594,7 +631,8 @@ pub enum TransactionOperationResponseResult {
 /// Non-OK error marks the transaction failed and causes rollback in phase 1.
 ///
 /// Native message type for `gestalt.provider.v1.TransactionOperationResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionOperationResponse {
     /// The `request_id` field.
     pub request_id: u64,
@@ -606,7 +644,7 @@ pub struct TransactionOperationResponse {
 
 /// Values of the `msg` oneof in `TransactionServerMessage`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TransactionServerMessageMsg {
     /// The `begin` variant.
     Begin(TransactionBeginResponse),
@@ -619,7 +657,8 @@ pub enum TransactionServerMessageMsg {
 }
 
 /// Native message type for `gestalt.provider.v1.TransactionServerMessage`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionServerMessage {
     /// The `msg` oneof; None when unset.
     pub msg: Option<TransactionServerMessageMsg>,
@@ -627,7 +666,7 @@ pub struct TransactionServerMessage {
 
 /// Values of the `kind` oneof in `TypedValue`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TypedValueKind {
     /// The `null_value` variant.
     NullValue,
@@ -650,7 +689,8 @@ pub enum TypedValueKind {
 /// TypedValue stores one scalar or structured value in an IndexedDB record.
 ///
 /// Native message type for `gestalt.provider.v1.TypedValue`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TypedValue {
     /// The `kind` oneof; None when unset.
     pub kind: Option<TypedValueKind>,

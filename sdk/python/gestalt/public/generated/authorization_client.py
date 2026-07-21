@@ -8,9 +8,8 @@ from typing import Any, Protocol
 
 from google.protobuf import empty_pb2 as _empty_pb2
 
-from ..._gen.v1 import authorization_pb2 as _authorization_pb2
-from ._codec import authorization as _authorization_codec
-from .authorization import (
+from gestalt._codec import authorization as _authorization_provider_codec
+from gestalt.authorization import (
     AddRelationshipRequest,
     AddRelationshipResponse,
     CheckAccessManyRequest,
@@ -29,6 +28,8 @@ from .authorization import (
     SetAuthorizationStateRequest,
     SetAuthorizationStateResponse,
 )
+
+from ..._gen.v1 import authorization_pb2 as _authorization_pb2
 from .metadata import (
     METHOD_AUTHORIZATION_ADD_RELATIONSHIP,
     METHOD_AUTHORIZATION_CHECK_ACCESS,
@@ -52,70 +53,82 @@ class AuthorizationClient:
         self._transport = transport
 
     def check_access(self, request: CheckAccessRequest) -> CheckAccessResponse:
-        wire = _authorization_codec.to_wire_check_access_request(request)
+        wire = _authorization_provider_codec.to_wire_check_access_request(request)
         wire_response = self._transport.unary(
             METHOD_AUTHORIZATION_CHECK_ACCESS,
             wire,
             _authorization_pb2.CheckAccessResponse,
         )
-        return _authorization_codec.from_wire_check_access_response(wire_response)
+        return _authorization_provider_codec.from_wire_check_access_response(
+            wire_response
+        )
 
     def check_access_many(
         self, request: CheckAccessManyRequest
     ) -> CheckAccessManyResponse:
-        wire = _authorization_codec.to_wire_check_access_many_request(request)
+        wire = _authorization_provider_codec.to_wire_check_access_many_request(request)
         wire_response = self._transport.unary(
             METHOD_AUTHORIZATION_CHECK_ACCESS_MANY,
             wire,
             _authorization_pb2.CheckAccessManyResponse,
         )
-        return _authorization_codec.from_wire_check_access_many_response(wire_response)
+        return _authorization_provider_codec.from_wire_check_access_many_response(
+            wire_response
+        )
 
     def list_relationships(
         self, request: ListRelationshipsRequest
     ) -> ListRelationshipsResponse:
-        wire = _authorization_codec.to_wire_list_relationships_request(request)
+        wire = _authorization_provider_codec.to_wire_list_relationships_request(request)
         wire_response = self._transport.unary(
             METHOD_AUTHORIZATION_LIST_RELATIONSHIPS,
             wire,
             _authorization_pb2.ListRelationshipsResponse,
         )
-        return _authorization_codec.from_wire_list_relationships_response(wire_response)
+        return _authorization_provider_codec.from_wire_list_relationships_response(
+            wire_response
+        )
 
     def add_relationship(
         self, request: AddRelationshipRequest
     ) -> AddRelationshipResponse:
-        wire = _authorization_codec.to_wire_add_relationship_request(request)
+        wire = _authorization_provider_codec.to_wire_add_relationship_request(request)
         wire_response = self._transport.unary(
             METHOD_AUTHORIZATION_ADD_RELATIONSHIP,
             wire,
             _authorization_pb2.AddRelationshipResponse,
         )
-        return _authorization_codec.from_wire_add_relationship_response(wire_response)
+        return _authorization_provider_codec.from_wire_add_relationship_response(
+            wire_response
+        )
 
     def delete_relationship(
         self, request: DeleteRelationshipRequest
     ) -> DeleteRelationshipResponse:
-        wire = _authorization_codec.to_wire_delete_relationship_request(request)
+        wire = _authorization_provider_codec.to_wire_delete_relationship_request(
+            request
+        )
         wire_response = self._transport.unary(
             METHOD_AUTHORIZATION_DELETE_RELATIONSHIP,
             wire,
             _authorization_pb2.DeleteRelationshipResponse,
         )
-        return _authorization_codec.from_wire_delete_relationship_response(
+        return _authorization_provider_codec.from_wire_delete_relationship_response(
             wire_response
         )
 
     def set_authorization_state(
         self, request: SetAuthorizationStateRequest
     ) -> SetAuthorizationStateResponse:
-        wire = _authorization_codec.to_wire_set_authorization_state_request(request)
+        wire = _authorization_provider_codec.to_wire_set_authorization_state_request(
+            request
+        )
         wire_response = self._transport.unary(
             METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE,
             wire,
             _authorization_pb2.SetAuthorizationStateResponse,
         )
-        return _authorization_codec.from_wire_set_authorization_state_response(
+        return _authorization_provider_codec.from_wire_set_authorization_state_response(
             wire_response
         )
 
@@ -126,25 +139,27 @@ class AuthorizationClient:
             wire,
             _authorization_pb2.GetActiveModelRefResponse,
         )
-        return _authorization_codec.from_wire_get_active_model_ref_response(
+        return _authorization_provider_codec.from_wire_get_active_model_ref_response(
             wire_response
         )
 
     def set_active_model(
         self, request: SetActiveModelRequest
     ) -> SetActiveModelResponse:
-        wire = _authorization_codec.to_wire_set_active_model_request(request)
+        wire = _authorization_provider_codec.to_wire_set_active_model_request(request)
         wire_response = self._transport.unary(
             METHOD_AUTHORIZATION_SET_ACTIVE_MODEL,
             wire,
             _authorization_pb2.SetActiveModelResponse,
         )
-        return _authorization_codec.from_wire_set_active_model_response(wire_response)
+        return _authorization_provider_codec.from_wire_set_active_model_response(
+            wire_response
+        )
 
     def list_active_model_resource_types(
         self, request: ListActiveModelResourceTypesRequest
     ) -> ListActiveModelResourceTypesResponse:
-        wire = _authorization_codec.to_wire_list_active_model_resource_types_request(
+        wire = _authorization_provider_codec.to_wire_list_active_model_resource_types_request(
             request
         )
         wire_response = self._transport.unary(
@@ -152,7 +167,7 @@ class AuthorizationClient:
             wire,
             _authorization_pb2.ListActiveModelResourceTypesResponse,
         )
-        return _authorization_codec.from_wire_list_active_model_resource_types_response(
+        return _authorization_provider_codec.from_wire_list_active_model_resource_types_response(
             wire_response
         )
 
@@ -192,70 +207,82 @@ class AsyncAuthorizationClient:
         self._transport = transport
 
     async def check_access(self, request: CheckAccessRequest) -> CheckAccessResponse:
-        wire = _authorization_codec.to_wire_check_access_request(request)
+        wire = _authorization_provider_codec.to_wire_check_access_request(request)
         wire_response = await self._transport.unary(
             METHOD_AUTHORIZATION_CHECK_ACCESS,
             wire,
             _authorization_pb2.CheckAccessResponse,
         )
-        return _authorization_codec.from_wire_check_access_response(wire_response)
+        return _authorization_provider_codec.from_wire_check_access_response(
+            wire_response
+        )
 
     async def check_access_many(
         self, request: CheckAccessManyRequest
     ) -> CheckAccessManyResponse:
-        wire = _authorization_codec.to_wire_check_access_many_request(request)
+        wire = _authorization_provider_codec.to_wire_check_access_many_request(request)
         wire_response = await self._transport.unary(
             METHOD_AUTHORIZATION_CHECK_ACCESS_MANY,
             wire,
             _authorization_pb2.CheckAccessManyResponse,
         )
-        return _authorization_codec.from_wire_check_access_many_response(wire_response)
+        return _authorization_provider_codec.from_wire_check_access_many_response(
+            wire_response
+        )
 
     async def list_relationships(
         self, request: ListRelationshipsRequest
     ) -> ListRelationshipsResponse:
-        wire = _authorization_codec.to_wire_list_relationships_request(request)
+        wire = _authorization_provider_codec.to_wire_list_relationships_request(request)
         wire_response = await self._transport.unary(
             METHOD_AUTHORIZATION_LIST_RELATIONSHIPS,
             wire,
             _authorization_pb2.ListRelationshipsResponse,
         )
-        return _authorization_codec.from_wire_list_relationships_response(wire_response)
+        return _authorization_provider_codec.from_wire_list_relationships_response(
+            wire_response
+        )
 
     async def add_relationship(
         self, request: AddRelationshipRequest
     ) -> AddRelationshipResponse:
-        wire = _authorization_codec.to_wire_add_relationship_request(request)
+        wire = _authorization_provider_codec.to_wire_add_relationship_request(request)
         wire_response = await self._transport.unary(
             METHOD_AUTHORIZATION_ADD_RELATIONSHIP,
             wire,
             _authorization_pb2.AddRelationshipResponse,
         )
-        return _authorization_codec.from_wire_add_relationship_response(wire_response)
+        return _authorization_provider_codec.from_wire_add_relationship_response(
+            wire_response
+        )
 
     async def delete_relationship(
         self, request: DeleteRelationshipRequest
     ) -> DeleteRelationshipResponse:
-        wire = _authorization_codec.to_wire_delete_relationship_request(request)
+        wire = _authorization_provider_codec.to_wire_delete_relationship_request(
+            request
+        )
         wire_response = await self._transport.unary(
             METHOD_AUTHORIZATION_DELETE_RELATIONSHIP,
             wire,
             _authorization_pb2.DeleteRelationshipResponse,
         )
-        return _authorization_codec.from_wire_delete_relationship_response(
+        return _authorization_provider_codec.from_wire_delete_relationship_response(
             wire_response
         )
 
     async def set_authorization_state(
         self, request: SetAuthorizationStateRequest
     ) -> SetAuthorizationStateResponse:
-        wire = _authorization_codec.to_wire_set_authorization_state_request(request)
+        wire = _authorization_provider_codec.to_wire_set_authorization_state_request(
+            request
+        )
         wire_response = await self._transport.unary(
             METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE,
             wire,
             _authorization_pb2.SetAuthorizationStateResponse,
         )
-        return _authorization_codec.from_wire_set_authorization_state_response(
+        return _authorization_provider_codec.from_wire_set_authorization_state_response(
             wire_response
         )
 
@@ -266,25 +293,27 @@ class AsyncAuthorizationClient:
             wire,
             _authorization_pb2.GetActiveModelRefResponse,
         )
-        return _authorization_codec.from_wire_get_active_model_ref_response(
+        return _authorization_provider_codec.from_wire_get_active_model_ref_response(
             wire_response
         )
 
     async def set_active_model(
         self, request: SetActiveModelRequest
     ) -> SetActiveModelResponse:
-        wire = _authorization_codec.to_wire_set_active_model_request(request)
+        wire = _authorization_provider_codec.to_wire_set_active_model_request(request)
         wire_response = await self._transport.unary(
             METHOD_AUTHORIZATION_SET_ACTIVE_MODEL,
             wire,
             _authorization_pb2.SetActiveModelResponse,
         )
-        return _authorization_codec.from_wire_set_active_model_response(wire_response)
+        return _authorization_provider_codec.from_wire_set_active_model_response(
+            wire_response
+        )
 
     async def list_active_model_resource_types(
         self, request: ListActiveModelResourceTypesRequest
     ) -> ListActiveModelResourceTypesResponse:
-        wire = _authorization_codec.to_wire_list_active_model_resource_types_request(
+        wire = _authorization_provider_codec.to_wire_list_active_model_resource_types_request(
             request
         )
         wire_response = await self._transport.unary(
@@ -292,7 +321,7 @@ class AsyncAuthorizationClient:
             wire,
             _authorization_pb2.ListActiveModelResourceTypesResponse,
         )
-        return _authorization_codec.from_wire_list_active_model_resource_types_response(
+        return _authorization_provider_codec.from_wire_list_active_model_resource_types_response(
             wire_response
         )
 

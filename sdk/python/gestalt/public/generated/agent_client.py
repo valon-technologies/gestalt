@@ -6,25 +6,29 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ..._gen.v1 import agent_pb2 as _agent_pb2
-from ._codec import agent as _agent_codec
-from .agent import (
+from gestalt._codec import agent as _agent_provider_codec
+from gestalt.agent import (
     AgentInteraction,
     AgentSession,
     AgentTurn,
+    ListAgentProviderInteractionsResponse,
+    ListAgentProviderSessionsResponse,
+    ListAgentProviderTurnEventsResponse,
+    ListAgentProviderTurnsResponse,
+)
+
+from ..._gen.v1 import agent_pb2 as _agent_pb2
+from ._codec import agent as _agent_codec
+from .agent import (
     CancelAgentProviderTurnRequest,
     CreateAgentProviderSessionRequest,
     CreateAgentProviderTurnRequest,
     GetAgentProviderSessionRequest,
     GetAgentProviderTurnRequest,
     ListAgentProviderInteractionsRequest,
-    ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsRequest,
-    ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsRequest,
-    ListAgentProviderTurnEventsResponse,
     ListAgentProviderTurnsRequest,
-    ListAgentProviderTurnsResponse,
     ResolveAgentProviderInteractionRequest,
     UpdateAgentProviderSessionRequest,
 )
@@ -65,7 +69,7 @@ class AgentClient:
             wire,
             _agent_pb2.AgentSession,
         )
-        return _agent_codec.from_wire_agent_session(wire_response)
+        return _agent_provider_codec.from_wire_agent_session(wire_response)
 
     def get_session(self, request: GetAgentProviderSessionRequest) -> AgentSession:
         wire = _agent_codec.to_wire_get_agent_provider_session_request(request)
@@ -74,7 +78,7 @@ class AgentClient:
             wire,
             _agent_pb2.AgentSession,
         )
-        return _agent_codec.from_wire_agent_session(wire_response)
+        return _agent_provider_codec.from_wire_agent_session(wire_response)
 
     def list_sessions(
         self, request: ListAgentProviderSessionsRequest
@@ -85,7 +89,7 @@ class AgentClient:
             wire,
             _agent_pb2.ListAgentProviderSessionsResponse,
         )
-        return _agent_codec.from_wire_list_agent_provider_sessions_response(
+        return _agent_provider_codec.from_wire_list_agent_provider_sessions_response(
             wire_response
         )
 
@@ -98,7 +102,7 @@ class AgentClient:
             wire,
             _agent_pb2.AgentSession,
         )
-        return _agent_codec.from_wire_agent_session(wire_response)
+        return _agent_provider_codec.from_wire_agent_session(wire_response)
 
     def create_turn(self, request: CreateAgentProviderTurnRequest) -> AgentTurn:
         wire = _agent_codec.to_wire_create_agent_provider_turn_request(request)
@@ -107,7 +111,7 @@ class AgentClient:
             wire,
             _agent_pb2.AgentTurn,
         )
-        return _agent_codec.from_wire_agent_turn(wire_response)
+        return _agent_provider_codec.from_wire_agent_turn(wire_response)
 
     def get_turn(self, request: GetAgentProviderTurnRequest) -> AgentTurn:
         wire = _agent_codec.to_wire_get_agent_provider_turn_request(request)
@@ -116,7 +120,7 @@ class AgentClient:
             wire,
             _agent_pb2.AgentTurn,
         )
-        return _agent_codec.from_wire_agent_turn(wire_response)
+        return _agent_provider_codec.from_wire_agent_turn(wire_response)
 
     def list_turns(
         self, request: ListAgentProviderTurnsRequest
@@ -127,7 +131,9 @@ class AgentClient:
             wire,
             _agent_pb2.ListAgentProviderTurnsResponse,
         )
-        return _agent_codec.from_wire_list_agent_provider_turns_response(wire_response)
+        return _agent_provider_codec.from_wire_list_agent_provider_turns_response(
+            wire_response
+        )
 
     def cancel_turn(self, request: CancelAgentProviderTurnRequest) -> AgentTurn:
         wire = _agent_codec.to_wire_cancel_agent_provider_turn_request(request)
@@ -136,7 +142,7 @@ class AgentClient:
             wire,
             _agent_pb2.AgentTurn,
         )
-        return _agent_codec.from_wire_agent_turn(wire_response)
+        return _agent_provider_codec.from_wire_agent_turn(wire_response)
 
     def list_turn_events(
         self, request: ListAgentProviderTurnEventsRequest
@@ -147,7 +153,7 @@ class AgentClient:
             wire,
             _agent_pb2.ListAgentProviderTurnEventsResponse,
         )
-        return _agent_codec.from_wire_list_agent_provider_turn_events_response(
+        return _agent_provider_codec.from_wire_list_agent_provider_turn_events_response(
             wire_response
         )
 
@@ -160,8 +166,10 @@ class AgentClient:
             wire,
             _agent_pb2.ListAgentProviderInteractionsResponse,
         )
-        return _agent_codec.from_wire_list_agent_provider_interactions_response(
-            wire_response
+        return (
+            _agent_provider_codec.from_wire_list_agent_provider_interactions_response(
+                wire_response
+            )
         )
 
     def resolve_interaction(
@@ -173,7 +181,7 @@ class AgentClient:
             wire,
             _agent_pb2.AgentInteraction,
         )
-        return _agent_codec.from_wire_agent_interaction(wire_response)
+        return _agent_provider_codec.from_wire_agent_interaction(wire_response)
 
 
 class AgentClientREST(Protocol):
@@ -221,7 +229,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.AgentSession,
         )
-        return _agent_codec.from_wire_agent_session(wire_response)
+        return _agent_provider_codec.from_wire_agent_session(wire_response)
 
     async def get_session(
         self, request: GetAgentProviderSessionRequest
@@ -232,7 +240,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.AgentSession,
         )
-        return _agent_codec.from_wire_agent_session(wire_response)
+        return _agent_provider_codec.from_wire_agent_session(wire_response)
 
     async def list_sessions(
         self, request: ListAgentProviderSessionsRequest
@@ -243,7 +251,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.ListAgentProviderSessionsResponse,
         )
-        return _agent_codec.from_wire_list_agent_provider_sessions_response(
+        return _agent_provider_codec.from_wire_list_agent_provider_sessions_response(
             wire_response
         )
 
@@ -256,7 +264,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.AgentSession,
         )
-        return _agent_codec.from_wire_agent_session(wire_response)
+        return _agent_provider_codec.from_wire_agent_session(wire_response)
 
     async def create_turn(self, request: CreateAgentProviderTurnRequest) -> AgentTurn:
         wire = _agent_codec.to_wire_create_agent_provider_turn_request(request)
@@ -265,7 +273,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.AgentTurn,
         )
-        return _agent_codec.from_wire_agent_turn(wire_response)
+        return _agent_provider_codec.from_wire_agent_turn(wire_response)
 
     async def get_turn(self, request: GetAgentProviderTurnRequest) -> AgentTurn:
         wire = _agent_codec.to_wire_get_agent_provider_turn_request(request)
@@ -274,7 +282,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.AgentTurn,
         )
-        return _agent_codec.from_wire_agent_turn(wire_response)
+        return _agent_provider_codec.from_wire_agent_turn(wire_response)
 
     async def list_turns(
         self, request: ListAgentProviderTurnsRequest
@@ -285,7 +293,9 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.ListAgentProviderTurnsResponse,
         )
-        return _agent_codec.from_wire_list_agent_provider_turns_response(wire_response)
+        return _agent_provider_codec.from_wire_list_agent_provider_turns_response(
+            wire_response
+        )
 
     async def cancel_turn(self, request: CancelAgentProviderTurnRequest) -> AgentTurn:
         wire = _agent_codec.to_wire_cancel_agent_provider_turn_request(request)
@@ -294,7 +304,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.AgentTurn,
         )
-        return _agent_codec.from_wire_agent_turn(wire_response)
+        return _agent_provider_codec.from_wire_agent_turn(wire_response)
 
     async def list_turn_events(
         self, request: ListAgentProviderTurnEventsRequest
@@ -305,7 +315,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.ListAgentProviderTurnEventsResponse,
         )
-        return _agent_codec.from_wire_list_agent_provider_turn_events_response(
+        return _agent_provider_codec.from_wire_list_agent_provider_turn_events_response(
             wire_response
         )
 
@@ -318,8 +328,10 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.ListAgentProviderInteractionsResponse,
         )
-        return _agent_codec.from_wire_list_agent_provider_interactions_response(
-            wire_response
+        return (
+            _agent_provider_codec.from_wire_list_agent_provider_interactions_response(
+                wire_response
+            )
         )
 
     async def resolve_interaction(
@@ -331,7 +343,7 @@ class AsyncAgentClient:
             wire,
             _agent_pb2.AgentInteraction,
         )
-        return _agent_codec.from_wire_agent_interaction(wire_response)
+        return _agent_provider_codec.from_wire_agent_interaction(wire_response)
 
 
 class AsyncAgentClientREST(Protocol):

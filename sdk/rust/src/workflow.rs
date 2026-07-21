@@ -69,7 +69,8 @@ pub mod workflow_step_status {
 }
 
 /// Native message type for `gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ApplyWorkflowProviderDefinitionRequest {
     /// The `provider` field.
     pub provider: String,
@@ -82,14 +83,16 @@ pub struct ApplyWorkflowProviderDefinitionRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.BoundWorkflowTarget`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BoundWorkflowTarget {
     /// The `steps` field.
     pub steps: Vec<WorkflowStep>,
 }
 
 /// Native message type for `gestalt.provider.v1.CancelWorkflowProviderRunRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CancelWorkflowProviderRunRequest {
     /// The `run_id` field.
     pub run_id: String,
@@ -102,7 +105,8 @@ pub struct CancelWorkflowProviderRunRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteWorkflowProviderDefinitionRequest {
     /// The `definition_id` field.
     pub definition_id: String,
@@ -113,7 +117,8 @@ pub struct DeleteWorkflowProviderDefinitionRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.DeliverWorkflowProviderEventRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeliverWorkflowProviderEventRequest {
     /// The `provider` field.
     pub provider: String,
@@ -124,7 +129,8 @@ pub struct DeliverWorkflowProviderEventRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.GetWorkflowProviderDefinitionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetWorkflowProviderDefinitionRequest {
     /// The `definition_id` field.
     pub definition_id: String,
@@ -135,7 +141,8 @@ pub struct GetWorkflowProviderDefinitionRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.GetWorkflowProviderRunEventsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetWorkflowProviderRunEventsRequest {
     /// The `run_id` field.
     pub run_id: String,
@@ -146,14 +153,16 @@ pub struct GetWorkflowProviderRunEventsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.GetWorkflowProviderRunEventsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetWorkflowProviderRunEventsResponse {
     /// The `events` field.
     pub events: Vec<WorkflowRunEvent>,
 }
 
 /// Native message type for `gestalt.provider.v1.GetWorkflowProviderRunOutputRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetWorkflowProviderRunOutputRequest {
     /// The `run_id` field.
     pub run_id: String,
@@ -164,14 +173,16 @@ pub struct GetWorkflowProviderRunOutputRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.GetWorkflowProviderRunOutputResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetWorkflowProviderRunOutputResponse {
     /// The `output` field; None when unset.
     pub output: Option<serde_json::Value>,
 }
 
 /// Native message type for `gestalt.provider.v1.GetWorkflowProviderRunRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetWorkflowProviderRunRequest {
     /// The `run_id` field.
     pub run_id: String,
@@ -182,7 +193,8 @@ pub struct GetWorkflowProviderRunRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListWorkflowProviderDefinitionsRequest {
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
@@ -191,14 +203,16 @@ pub struct ListWorkflowProviderDefinitionsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListWorkflowProviderDefinitionsResponse {
     /// The `definitions` field.
     pub definitions: Vec<WorkflowDefinition>,
 }
 
 /// Native message type for `gestalt.provider.v1.ListWorkflowProviderRunsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListWorkflowProviderRunsRequest {
     /// The `page_size` field.
     pub page_size: i32,
@@ -215,7 +229,8 @@ pub struct ListWorkflowProviderRunsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListWorkflowProviderRunsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListWorkflowProviderRunsResponse {
     /// The `runs` field.
     pub runs: Vec<WorkflowRun>,
@@ -224,7 +239,8 @@ pub struct ListWorkflowProviderRunsResponse {
 }
 
 /// Native message type for `gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetWorkflowProviderActivationPausedRequest {
     /// The `definition_id` field.
     pub definition_id: String,
@@ -239,7 +255,8 @@ pub struct SetWorkflowProviderActivationPausedRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetWorkflowProviderDefinitionPausedRequest {
     /// The `definition_id` field.
     pub definition_id: String,
@@ -252,7 +269,8 @@ pub struct SetWorkflowProviderDefinitionPausedRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SignalOrStartWorkflowProviderRunRequest {
     /// The `workflow_key` field.
     pub workflow_key: String,
@@ -273,7 +291,8 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.SignalWorkflowProviderRunRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SignalWorkflowProviderRunRequest {
     /// The `run_id` field.
     pub run_id: String,
@@ -286,7 +305,8 @@ pub struct SignalWorkflowProviderRunRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.SignalWorkflowRunResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SignalWorkflowRunResponse {
     /// The `run` field; None when unset.
     pub run: Option<WorkflowRun>,
@@ -299,7 +319,8 @@ pub struct SignalWorkflowRunResponse {
 }
 
 /// Native message type for `gestalt.provider.v1.StartWorkflowProviderRunRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartWorkflowProviderRunRequest {
     /// The `idempotency_key` field.
     pub idempotency_key: String,
@@ -319,7 +340,7 @@ pub struct StartWorkflowProviderRunRequest {
 
 /// Values of the `trigger` oneof in `WorkflowActivation`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WorkflowActivationTrigger {
     /// The `schedule` variant.
     Schedule(WorkflowScheduleActivation),
@@ -328,7 +349,8 @@ pub enum WorkflowActivationTrigger {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowActivation`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowActivation {
     /// The `id` field.
     pub id: String,
@@ -341,7 +363,8 @@ pub struct WorkflowActivation {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowAgentMessage`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowAgentMessage {
     /// The `role` field.
     pub role: String,
@@ -352,14 +375,16 @@ pub struct WorkflowAgentMessage {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowArray`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowArray {
     /// The `values` field.
     pub values: Vec<WorkflowValue>,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowDefinition`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowDefinition {
     /// The `id` field.
     pub id: String,
@@ -371,8 +396,10 @@ pub struct WorkflowDefinition {
     pub activations: Vec<WorkflowActivation>,
     /// The `paused` field.
     pub paused: bool,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
     /// The `provider` field.
@@ -382,7 +409,8 @@ pub struct WorkflowDefinition {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowDefinitionSpec`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowDefinitionSpec {
     /// The `id` field.
     pub id: String,
@@ -397,7 +425,8 @@ pub struct WorkflowDefinitionSpec {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowEvent`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowEvent {
     /// The `id` field.
     pub id: String,
@@ -409,6 +438,7 @@ pub struct WorkflowEvent {
     pub r#type: String,
     /// The `subject` field.
     pub subject: String,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `time` field; None when unset.
     pub time: Option<std::time::SystemTime>,
     /// The `datacontenttype` field.
@@ -420,14 +450,16 @@ pub struct WorkflowEvent {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowEventActivation`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowEventActivation {
     /// The `match` field; None when unset.
     pub r#match: Option<WorkflowEventMatch>,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowEventMatch`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowEventMatch {
     /// The `type` field.
     pub r#type: String,
@@ -438,7 +470,8 @@ pub struct WorkflowEventMatch {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowEventTriggerInvocation`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowEventTriggerInvocation {
     /// The `activation_id` field.
     pub activation_id: String,
@@ -447,25 +480,29 @@ pub struct WorkflowEventTriggerInvocation {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowManualTrigger`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowManualTrigger {}
 
 /// Native message type for `gestalt.provider.v1.WorkflowObject`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowObject {
     /// The `fields` field.
     pub fields: std::collections::BTreeMap<String, WorkflowValue>,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowPathSource`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowPathSource {
     /// The `path` field.
     pub path: String,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowRun`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowRun {
     /// The `id` field.
     pub id: String,
@@ -475,10 +512,13 @@ pub struct WorkflowRun {
     pub target: Option<BoundWorkflowTarget>,
     /// The `trigger` field; None when unset.
     pub trigger: Option<WorkflowRunTrigger>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `completed_at` field; None when unset.
     pub completed_at: Option<std::time::SystemTime>,
     /// The `status_message` field.
@@ -504,7 +544,8 @@ pub struct WorkflowRun {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowRunEvent`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowRunEvent {
     /// The `id` field.
     pub id: String,
@@ -516,13 +557,14 @@ pub struct WorkflowRunEvent {
     pub r#type: String,
     /// The `data` field; None when unset.
     pub data: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
 }
 
 /// Values of the `kind` oneof in `WorkflowRunTrigger`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WorkflowRunTriggerKind {
     /// The `manual` variant.
     Manual(WorkflowManualTrigger),
@@ -533,14 +575,16 @@ pub enum WorkflowRunTriggerKind {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowRunTrigger`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowRunTrigger {
     /// The `kind` oneof; None when unset.
     pub kind: Option<WorkflowRunTriggerKind>,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowScheduleActivation`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowScheduleActivation {
     /// The `cron` field.
     pub cron: String,
@@ -549,16 +593,19 @@ pub struct WorkflowScheduleActivation {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowScheduleTrigger`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowScheduleTrigger {
     /// The `activation_id` field.
     pub activation_id: String,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `scheduled_for` field; None when unset.
     pub scheduled_for: Option<std::time::SystemTime>,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowSignal`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowSignal {
     /// The `id` field.
     pub id: String,
@@ -568,6 +615,7 @@ pub struct WorkflowSignal {
     pub payload: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `metadata` field; None when unset.
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
     /// The `idempotency_key` field.
@@ -578,7 +626,7 @@ pub struct WorkflowSignal {
 
 /// Values of the `action` oneof in `WorkflowStep`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WorkflowStepAction {
     /// The `app` variant.
     App(WorkflowStepAppCall),
@@ -587,7 +635,8 @@ pub enum WorkflowStepAction {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStep`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStep {
     /// The `id` field.
     pub id: String,
@@ -604,7 +653,8 @@ pub struct WorkflowStep {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStepAgentTurn`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStepAgentTurn {
     /// The `provider` field.
     pub provider: String,
@@ -625,7 +675,8 @@ pub struct WorkflowStepAgentTurn {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStepAppCall`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStepAppCall {
     /// The `name` field.
     pub name: String,
@@ -642,7 +693,8 @@ pub struct WorkflowStepAppCall {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStepAttempt`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStepAttempt {
     /// The `id` field.
     pub id: String,
@@ -656,14 +708,17 @@ pub struct WorkflowStepAttempt {
     pub output: Option<serde_json::Value>,
     /// The `status_message` field.
     pub status_message: String,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `completed_at` field; None when unset.
     pub completed_at: Option<std::time::SystemTime>,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStepExecution`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStepExecution {
     /// The `step_id` field.
     pub step_id: String,
@@ -679,14 +734,17 @@ pub struct WorkflowStepExecution {
     pub status_message: String,
     /// The `skip_reason` field.
     pub skip_reason: String,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `completed_at` field; None when unset.
     pub completed_at: Option<std::time::SystemTime>,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStepInputSource`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStepInputSource {
     /// The `step_id` field.
     pub step_id: String,
@@ -695,7 +753,8 @@ pub struct WorkflowStepInputSource {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStepOutputSource`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStepOutputSource {
     /// The `step_id` field.
     pub step_id: String,
@@ -704,7 +763,8 @@ pub struct WorkflowStepOutputSource {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStepWhen`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStepWhen {
     /// The `value` field; None when unset.
     pub value: Option<WorkflowValue>,
@@ -713,7 +773,8 @@ pub struct WorkflowStepWhen {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowText`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowText {
     /// The `template` field.
     pub template: String,
@@ -721,7 +782,7 @@ pub struct WorkflowText {
 
 /// Values of the `kind` oneof in `WorkflowValue`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WorkflowValueKind {
     /// The `literal` variant.
     Literal(serde_json::Value),
@@ -742,7 +803,8 @@ pub enum WorkflowValueKind {
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowValue`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowValue {
     /// The `kind` oneof; None when unset.
     pub kind: Option<WorkflowValueKind>,

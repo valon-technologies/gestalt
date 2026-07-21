@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use gestalt::public::auth::NoAuth;
 use gestalt::public::generated::app_client::ExternalCredentialsClient;
-use gestalt::public::generated::external_credential::{
+use gestalt::external_credential::{
     CreateExternalCredentialRequest, ExternalCredential,
 };
 use gestalt::public::grpc_transport::SyncGrpcTransport;

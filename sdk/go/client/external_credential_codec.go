@@ -112,8 +112,8 @@ func ToWireExternalCredential(value *ExternalCredential) *proto.ExternalCredenti
 		Audience:     value.Audience,
 		Qualifier:    value.Qualifier,
 		MetadataJson: value.MetadataJson,
-		CreatedAt:    toWireTimestamp(value.CreatedAt),
-		UpdatedAt:    toWireTimestamp(value.UpdatedAt),
+		CreatedAt:    ToWireTimestamp(value.CreatedAt),
+		UpdatedAt:    ToWireTimestamp(value.UpdatedAt),
 	}
 	switch variant := value.Credential.(type) {
 	case *ExternalCredentialCredentialGrant:
@@ -136,8 +136,8 @@ func FromWireExternalCredential(value *proto.ExternalCredential) *ExternalCreden
 		Audience:     value.Audience,
 		Qualifier:    value.Qualifier,
 		MetadataJson: value.MetadataJson,
-		CreatedAt:    fromWireTimestamp(value.CreatedAt),
-		UpdatedAt:    fromWireTimestamp(value.UpdatedAt),
+		CreatedAt:    FromWireTimestamp(value.CreatedAt),
+		UpdatedAt:    FromWireTimestamp(value.UpdatedAt),
 	}
 	switch variant := value.Credential.(type) {
 	case *proto.ExternalCredential_Grant:
@@ -215,7 +215,7 @@ func ToWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *pr
 	out := &proto.ExternalCredentialClientInfo{
 		ClientId:              value.ClientId,
 		ClientSecret:          value.ClientSecret,
-		ClientSecretExpiresAt: toWireTimestamp(value.ClientSecretExpiresAt),
+		ClientSecretExpiresAt: ToWireTimestamp(value.ClientSecretExpiresAt),
 	}
 	return out
 }
@@ -227,7 +227,7 @@ func FromWireExternalCredentialClientInfo(value *proto.ExternalCredentialClientI
 	out := &ExternalCredentialClientInfo{
 		ClientId:              value.ClientId,
 		ClientSecret:          value.ClientSecret,
-		ClientSecretExpiresAt: fromWireTimestamp(value.ClientSecretExpiresAt),
+		ClientSecretExpiresAt: FromWireTimestamp(value.ClientSecretExpiresAt),
 	}
 	return out
 }
@@ -240,8 +240,8 @@ func ToWireExternalCredentialGrant(value *ExternalCredentialGrant) *proto.Extern
 		AccessToken:       value.AccessToken,
 		RefreshToken:      value.RefreshToken,
 		Scope:             value.Scope,
-		ExpiresAt:         toWireTimestamp(value.ExpiresAt),
-		LastRefreshedAt:   toWireTimestamp(value.LastRefreshedAt),
+		ExpiresAt:         ToWireTimestamp(value.ExpiresAt),
+		LastRefreshedAt:   ToWireTimestamp(value.LastRefreshedAt),
 		RefreshErrorCount: value.RefreshErrorCount,
 	}
 	return out
@@ -255,8 +255,8 @@ func FromWireExternalCredentialGrant(value *proto.ExternalCredentialGrant) *Exte
 		AccessToken:       value.AccessToken,
 		RefreshToken:      value.RefreshToken,
 		Scope:             value.Scope,
-		ExpiresAt:         fromWireTimestamp(value.ExpiresAt),
-		LastRefreshedAt:   fromWireTimestamp(value.LastRefreshedAt),
+		ExpiresAt:         FromWireTimestamp(value.ExpiresAt),
+		LastRefreshedAt:   FromWireTimestamp(value.LastRefreshedAt),
 		RefreshErrorCount: value.RefreshErrorCount,
 	}
 	return out
@@ -452,7 +452,7 @@ func ToWireResolveExternalCredentialResponse(value *ResolveExternalCredentialRes
 	}
 	out := &proto.ResolveExternalCredentialResponse{
 		Token:        value.Token,
-		ExpiresAt:    toWireTimestamp(value.ExpiresAt),
+		ExpiresAt:    ToWireTimestamp(value.ExpiresAt),
 		MetadataJson: value.MetadataJson,
 		Params:       value.Params,
 		Credential:   ToWireExternalCredential(value.Credential),
@@ -466,7 +466,7 @@ func FromWireResolveExternalCredentialResponse(value *proto.ResolveExternalCrede
 	}
 	out := &ResolveExternalCredentialResponse{
 		Token:        value.Token,
-		ExpiresAt:    fromWireTimestamp(value.ExpiresAt),
+		ExpiresAt:    FromWireTimestamp(value.ExpiresAt),
 		MetadataJson: value.MetadataJson,
 		Params:       value.Params,
 		Credential:   FromWireExternalCredential(value.Credential),

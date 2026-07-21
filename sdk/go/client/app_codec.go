@@ -95,7 +95,7 @@ func ToWireAppInvokeGraphQLRequest(value *AppInvokeGraphQLRequest) *proto.AppInv
 	out := &proto.AppInvokeGraphQLRequest{
 		App:            value.App,
 		Document:       value.Document,
-		Variables:      toWireStruct(value.Variables),
+		Variables:      ToWireStruct(value.Variables),
 		Connection:     value.Connection,
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
@@ -111,7 +111,7 @@ func FromWireAppInvokeGraphQLRequest(value *proto.AppInvokeGraphQLRequest) *AppI
 	out := &AppInvokeGraphQLRequest{
 		App:            value.App,
 		Document:       value.Document,
-		Variables:      fromWireStruct(value.Variables),
+		Variables:      FromWireStruct(value.Variables),
 		Connection:     value.Connection,
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
@@ -127,7 +127,7 @@ func ToWireAppInvokeRequest(value *AppInvokeRequest) *proto.AppInvokeRequest {
 	out := &proto.AppInvokeRequest{
 		App:            value.App,
 		Operation:      value.Operation,
-		Params:         toWireStruct(value.Params),
+		Params:         ToWireStruct(value.Params),
 		Connection:     value.Connection,
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
@@ -145,7 +145,7 @@ func FromWireAppInvokeRequest(value *proto.AppInvokeRequest) *AppInvokeRequest {
 	out := &AppInvokeRequest{
 		App:            value.App,
 		Operation:      value.Operation,
-		Params:         fromWireStruct(value.Params),
+		Params:         FromWireStruct(value.Params),
 		Connection:     value.Connection,
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
@@ -247,7 +247,7 @@ func ToWireCatalogParameter(value *CatalogParameter) *proto.CatalogParameter {
 		Type:        value.Type,
 		Description: value.Description,
 		Required:    value.Required,
-		Default:     toWireValue(value.Default),
+		Default:     ToWireValue(value.Default),
 	}
 	return out
 }
@@ -261,7 +261,7 @@ func FromWireCatalogParameter(value *proto.CatalogParameter) *CatalogParameter {
 		Type:        value.Type,
 		Description: value.Description,
 		Required:    value.Required,
-		Default:     fromWireValue(value.Default),
+		Default:     FromWireValue(value.Default),
 	}
 	return out
 }
@@ -326,7 +326,7 @@ func ToWireExecuteRequest(value *ExecuteRequest) *proto.ExecuteRequest {
 	}
 	out := &proto.ExecuteRequest{
 		Operation:        value.Operation,
-		Params:           toWireStruct(value.Params),
+		Params:           ToWireStruct(value.Params),
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
 		InvocationId:     value.InvocationId,
@@ -342,7 +342,7 @@ func FromWireExecuteRequest(value *proto.ExecuteRequest) *ExecuteRequest {
 	}
 	out := &ExecuteRequest{
 		Operation:        value.Operation,
-		Params:           fromWireStruct(value.Params),
+		Params:           FromWireStruct(value.Params),
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
 		InvocationId:     value.InvocationId,
@@ -407,7 +407,7 @@ func ToWireHTTPSubjectRequest(value *HTTPSubjectRequest) *proto.HTTPSubjectReque
 		Method:          value.Method,
 		Path:            value.Path,
 		ContentType:     value.ContentType,
-		Params:          toWireStruct(value.Params),
+		Params:          ToWireStruct(value.Params),
 		RawBody:         value.RawBody,
 		SecurityScheme:  value.SecurityScheme,
 		VerifiedSubject: value.VerifiedSubject,
@@ -437,7 +437,7 @@ func FromWireHTTPSubjectRequest(value *proto.HTTPSubjectRequest) *HTTPSubjectReq
 		Method:          value.Method,
 		Path:            value.Path,
 		ContentType:     value.ContentType,
-		Params:          fromWireStruct(value.Params),
+		Params:          FromWireStruct(value.Params),
 		RawBody:         value.RawBody,
 		SecurityScheme:  value.SecurityScheme,
 		VerifiedSubject: value.VerifiedSubject,
@@ -738,7 +738,7 @@ func ToWireRequestContext(value *RequestContext) *proto.RequestContext {
 		Subject:      ToWireSubjectContext(value.Subject),
 		Credential:   ToWireCredentialContext(value.Credential),
 		Access:       ToWireAccessContext(value.Access),
-		Workflow:     toWireStruct(value.Workflow),
+		Workflow:     ToWireStruct(value.Workflow),
 		Host:         ToWireHostContext(value.Host),
 		AgentSubject: ToWireSubjectContext(value.AgentSubject),
 		Caller:       ToWireProviderContext(value.Caller),
@@ -761,7 +761,7 @@ func FromWireRequestContext(value *proto.RequestContext) *RequestContext {
 		Subject:      FromWireSubjectContext(value.Subject),
 		Credential:   FromWireCredentialContext(value.Credential),
 		Access:       FromWireAccessContext(value.Access),
-		Workflow:     fromWireStruct(value.Workflow),
+		Workflow:     FromWireStruct(value.Workflow),
 		Host:         FromWireHostContext(value.Host),
 		AgentSubject: FromWireSubjectContext(value.AgentSubject),
 		Caller:       FromWireProviderContext(value.Caller),
@@ -852,7 +852,7 @@ func ToWireStartProviderRequest(value *StartProviderRequest) *proto.StartProvide
 	}
 	out := &proto.StartProviderRequest{
 		Name:            value.Name,
-		Config:          toWireStruct(value.Config),
+		Config:          ToWireStruct(value.Config),
 		ProtocolVersion: value.ProtocolVersion,
 	}
 	return out
@@ -864,7 +864,7 @@ func FromWireStartProviderRequest(value *proto.StartProviderRequest) *StartProvi
 	}
 	out := &StartProviderRequest{
 		Name:            value.Name,
-		Config:          fromWireStruct(value.Config),
+		Config:          FromWireStruct(value.Config),
 		ProtocolVersion: value.ProtocolVersion,
 	}
 	return out
@@ -896,7 +896,7 @@ func ToWireStreamResponseSpec(value *StreamResponseSpec) *proto.StreamResponseSp
 	}
 	out := &proto.StreamResponseSpec{
 		MediaType:  value.MediaType,
-		ItemSchema: toWireStruct(value.ItemSchema),
+		ItemSchema: ToWireStruct(value.ItemSchema),
 	}
 	return out
 }
@@ -907,7 +907,7 @@ func FromWireStreamResponseSpec(value *proto.StreamResponseSpec) *StreamResponse
 	}
 	out := &StreamResponseSpec{
 		MediaType:  value.MediaType,
-		ItemSchema: fromWireStruct(value.ItemSchema),
+		ItemSchema: FromWireStruct(value.ItemSchema),
 	}
 	return out
 }
@@ -993,7 +993,7 @@ func ToWireUnaryResponseSpec(value *UnaryResponseSpec) *proto.UnaryResponseSpec 
 		return nil
 	}
 	out := &proto.UnaryResponseSpec{
-		Schema: toWireStruct(value.Schema),
+		Schema: ToWireStruct(value.Schema),
 	}
 	return out
 }
@@ -1003,7 +1003,7 @@ func FromWireUnaryResponseSpec(value *proto.UnaryResponseSpec) *UnaryResponseSpe
 		return nil
 	}
 	out := &UnaryResponseSpec{
-		Schema: fromWireStruct(value.Schema),
+		Schema: FromWireStruct(value.Schema),
 	}
 	return out
 }

@@ -118,7 +118,8 @@ pub mod agent_tool_source_mode {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentCatalogToolConfig`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentCatalogToolConfig {
     /// The `refs` field.
     pub refs: Vec<AgentToolRef>,
@@ -127,7 +128,8 @@ pub struct AgentCatalogToolConfig {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentInteraction`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentInteraction {
     /// The `id` field.
     pub id: String,
@@ -143,8 +145,10 @@ pub struct AgentInteraction {
     pub request: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `resolution` field; None when unset.
     pub resolution: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `resolved_at` field; None when unset.
     pub resolved_at: Option<std::time::SystemTime>,
     /// The `turn_id` field.
@@ -154,7 +158,8 @@ pub struct AgentInteraction {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentMessage`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentMessage {
     /// The `role` field.
     pub role: String,
@@ -167,7 +172,8 @@ pub struct AgentMessage {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentMessagePart`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentMessagePart {
     /// The `type` field.
     pub r#type: AgentMessagePartType,
@@ -184,7 +190,8 @@ pub struct AgentMessagePart {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentMessagePartImageRef`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentMessagePartImageRef {
     /// The `uri` field.
     pub uri: String,
@@ -193,7 +200,8 @@ pub struct AgentMessagePartImageRef {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentMessagePartToolCall`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentMessagePartToolCall {
     /// The `id` field.
     pub id: String,
@@ -204,7 +212,8 @@ pub struct AgentMessagePartToolCall {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentMessagePartToolResult`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentMessagePartToolResult {
     /// The `tool_call_id` field.
     pub tool_call_id: String,
@@ -217,12 +226,13 @@ pub struct AgentMessagePartToolResult {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentNoTools`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentNoTools {}
 
 /// Values of the `kind` oneof in `AgentOutput`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum AgentOutputKind {
     /// The `text` variant.
     Text(AgentTextOutput),
@@ -231,14 +241,16 @@ pub enum AgentOutputKind {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentOutput`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentOutput {
     /// The `kind` oneof; None when unset.
     pub kind: Option<AgentOutputKind>,
 }
 
 /// Native message type for `gestalt.provider.v1.AgentProviderCapabilities`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentProviderCapabilities {
     /// The `streaming_text` field.
     pub streaming_text: bool,
@@ -267,7 +279,8 @@ pub struct AgentProviderCapabilities {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentSession`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentSession {
     /// The `id` field.
     pub id: String,
@@ -283,23 +296,28 @@ pub struct AgentSession {
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `created_by_subject_id` field.
     pub created_by_subject_id: String,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `last_turn_at` field; None when unset.
     pub last_turn_at: Option<std::time::SystemTime>,
 }
 
 /// Native message type for `gestalt.provider.v1.AgentSessionStartConfig`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentSessionStartConfig {
     /// The `hooks` field.
     pub hooks: Vec<AgentSessionStartHook>,
 }
 
 /// Native message type for `gestalt.provider.v1.AgentSessionStartHook`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentSessionStartHook {
     /// The `id` field.
     pub id: String,
@@ -318,7 +336,8 @@ pub struct AgentSessionStartHook {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentSessionStartHookOutput`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentSessionStartHookOutput {
     /// The `additional_context` field.
     pub additional_context: bool,
@@ -327,19 +346,21 @@ pub struct AgentSessionStartHookOutput {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentStructuredOutput`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentStructuredOutput {
     /// The `schema` field; None when unset.
     pub schema: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 /// Native message type for `gestalt.provider.v1.AgentTextOutput`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentTextOutput {}
 
 /// Values of the `source` oneof in `AgentToolConfig`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum AgentToolConfigSource {
     /// The `none` variant.
     None(AgentNoTools),
@@ -348,7 +369,8 @@ pub enum AgentToolConfigSource {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentToolConfig`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentToolConfig {
     /// The `source` oneof; None when unset.
     pub source: Option<AgentToolConfigSource>,
@@ -356,7 +378,7 @@ pub struct AgentToolConfig {
 
 /// Values of the `output` oneof in `AgentTurn`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum AgentTurnOutput {
     /// The `text` variant.
     Text(AgentTurnTextOutput),
@@ -365,7 +387,8 @@ pub enum AgentTurnOutput {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentTurn`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentTurn {
     /// The `id` field.
     pub id: String,
@@ -383,10 +406,13 @@ pub struct AgentTurn {
     pub status_message: String,
     /// The `created_by_subject_id` field.
     pub created_by_subject_id: String,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `completed_at` field; None when unset.
     pub completed_at: Option<std::time::SystemTime>,
     /// The `execution_ref` field.
@@ -396,7 +422,8 @@ pub struct AgentTurn {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentTurnDisplay`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentTurnDisplay {
     /// The `kind` field.
     pub kind: String,
@@ -425,7 +452,8 @@ pub struct AgentTurnDisplay {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentTurnEvent`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentTurnEvent {
     /// The `id` field.
     pub id: String,
@@ -441,6 +469,7 @@ pub struct AgentTurnEvent {
     pub visibility: String,
     /// The `data` field; None when unset.
     pub data: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
     /// The `display` field; None when unset.
@@ -448,7 +477,8 @@ pub struct AgentTurnEvent {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentTurnStructuredOutput`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentTurnStructuredOutput {
     /// The `text` field.
     pub text: String,
@@ -457,14 +487,16 @@ pub struct AgentTurnStructuredOutput {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentTurnTextOutput`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentTurnTextOutput {
     /// The `text` field.
     pub text: String,
 }
 
 /// Native message type for `gestalt.provider.v1.AgentWorkspace`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentWorkspace {
     /// The `checkouts` field.
     pub checkouts: Vec<AgentWorkspaceGitCheckout>,
@@ -473,7 +505,8 @@ pub struct AgentWorkspace {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentWorkspaceGitCheckout`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentWorkspaceGitCheckout {
     /// The `url` field.
     pub url: String,
@@ -484,7 +517,8 @@ pub struct AgentWorkspaceGitCheckout {
 }
 
 /// Native message type for `gestalt.provider.v1.CancelAgentProviderTurnRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CancelAgentProviderTurnRequest {
     /// The `turn_id` field.
     pub turn_id: String,
@@ -499,7 +533,8 @@ pub struct CancelAgentProviderTurnRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.CreateAgentProviderSessionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateAgentProviderSessionRequest {
     /// The provider mints the session id returned on AgentSession. Creation is
     /// idempotent on idempotency_key scoped per caller (context.subject.id):
@@ -529,7 +564,8 @@ pub struct CreateAgentProviderSessionRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.CreateAgentProviderTurnRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateAgentProviderTurnRequest {
     /// The `turn_id` field.
     pub turn_id: String,
@@ -562,11 +598,13 @@ pub struct CreateAgentProviderTurnRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.GetAgentProviderCapabilitiesRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetAgentProviderCapabilitiesRequest {}
 
 /// Native message type for `gestalt.provider.v1.GetAgentProviderInteractionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetAgentProviderInteractionRequest {
     /// The `interaction_id` field.
     pub interaction_id: String,
@@ -575,7 +613,8 @@ pub struct GetAgentProviderInteractionRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.GetAgentProviderSessionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetAgentProviderSessionRequest {
     /// The `session_id` field.
     pub session_id: String,
@@ -586,7 +625,8 @@ pub struct GetAgentProviderSessionRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.GetAgentProviderTurnRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetAgentProviderTurnRequest {
     /// The `turn_id` field.
     pub turn_id: String,
@@ -599,7 +639,8 @@ pub struct GetAgentProviderTurnRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderInteractionsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListAgentProviderInteractionsRequest {
     /// The `turn_id` field.
     pub turn_id: String,
@@ -610,14 +651,16 @@ pub struct ListAgentProviderInteractionsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderInteractionsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListAgentProviderInteractionsResponse {
     /// The `interactions` field.
     pub interactions: Vec<AgentInteraction>,
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderSessionsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListAgentProviderSessionsRequest {
     /// The `session_ids` field.
     pub session_ids: Vec<String>,
@@ -640,14 +683,16 @@ pub struct ListAgentProviderSessionsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderSessionsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListAgentProviderSessionsResponse {
     /// The `sessions` field.
     pub sessions: Vec<AgentSession>,
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderTurnEventsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListAgentProviderTurnEventsRequest {
     /// The `turn_id` field.
     pub turn_id: String,
@@ -664,14 +709,16 @@ pub struct ListAgentProviderTurnEventsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderTurnEventsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListAgentProviderTurnEventsResponse {
     /// The `events` field.
     pub events: Vec<AgentTurnEvent>,
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderTurnsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListAgentProviderTurnsRequest {
     /// The `session_id` field.
     pub session_id: String,
@@ -697,14 +744,16 @@ pub struct ListAgentProviderTurnsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderTurnsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListAgentProviderTurnsResponse {
     /// The `turns` field.
     pub turns: Vec<AgentTurn>,
 }
 
 /// Native message type for `gestalt.provider.v1.ListedAgentTool`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListedAgentTool {
     /// The `id` field.
     pub id: String,
@@ -729,7 +778,8 @@ pub struct ListedAgentTool {
 }
 
 /// Native message type for `gestalt.provider.v1.PreparedAgentWorkspace`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PreparedAgentWorkspace {
     /// The `root` field.
     pub root: String,
@@ -738,7 +788,8 @@ pub struct PreparedAgentWorkspace {
 }
 
 /// Native message type for `gestalt.provider.v1.ResolveAgentProviderInteractionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveAgentProviderInteractionRequest {
     /// The `interaction_id` field.
     pub interaction_id: String,
@@ -753,7 +804,8 @@ pub struct ResolveAgentProviderInteractionRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.UpdateAgentProviderSessionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateAgentProviderSessionRequest {
     /// The `session_id` field.
     pub session_id: String,

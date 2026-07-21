@@ -9,7 +9,8 @@ use crate::rpc_support::GestaltError;
 /// GetSecretRequest looks up one named secret.
 ///
 /// Native message type for `gestalt.provider.v1.GetSecretRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetSecretRequest {
     /// The `name` field.
     pub name: String,
@@ -18,7 +19,8 @@ pub struct GetSecretRequest {
 /// GetSecretResponse returns the secret value.
 ///
 /// Native message type for `gestalt.provider.v1.GetSecretResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetSecretResponse {
     /// The `value` field.
     pub value: String,

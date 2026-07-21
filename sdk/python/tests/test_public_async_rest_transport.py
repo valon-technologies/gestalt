@@ -174,7 +174,7 @@ async def test_async_unauthenticated_auth_omits_authorization_header() -> None:
 
 async def test_async_generated_client_check_access() -> None:
     """The generated AsyncAuthorizationClient drives the async transport end-to-end."""
-    from gestalt.public.generated.authorization import (
+    from gestalt.authorization import (
         Action,
         CheckAccessRequest,
         Resource,

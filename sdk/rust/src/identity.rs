@@ -16,7 +16,8 @@ use crate::rpc_support::GestaltError;
 /// AuthorizeRequest models RFC 6749 authorization endpoint parameters.
 ///
 /// Native message type for `gestalt.provider.v1.AuthorizeRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthorizeRequest {
     /// response_type is typically "code".
     ///
@@ -36,7 +37,8 @@ pub struct AuthorizeRequest {
 /// response parameters.
 ///
 /// Native message type for `gestalt.provider.v1.AuthorizeResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthorizeResponse {
     /// The `redirect_uri` field.
     pub redirect_uri: String,
@@ -45,7 +47,8 @@ pub struct AuthorizeResponse {
 /// GetGrantRequest retrieves one API-token grant by ID.
 ///
 /// Native message type for `gestalt.provider.v1.GetGrantRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetGrantRequest {
     /// The `grant_id` field.
     pub grant_id: String,
@@ -54,7 +57,8 @@ pub struct GetGrantRequest {
 /// GetGrantResponse returns OIDF-shaped grant details.
 ///
 /// Native message type for `gestalt.provider.v1.GetGrantResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetGrantResponse {
     /// The `scopes` field.
     pub scopes: Vec<GrantScope>,
@@ -67,7 +71,8 @@ pub struct GetGrantResponse {
 /// GrantScope describes one authorized scope and optional resources.
 ///
 /// Native message type for `gestalt.provider.v1.GrantScope`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GrantScope {
     /// The `scope` field.
     pub scope: String,
@@ -78,7 +83,8 @@ pub struct GrantScope {
 /// IntrospectRequest models RFC 7662 token introspection parameters.
 ///
 /// Native message type for `gestalt.provider.v1.IntrospectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IntrospectRequest {
     /// The `token` field.
     pub token: String,
@@ -95,7 +101,8 @@ pub struct IntrospectRequest {
 /// that grant.
 ///
 /// Native message type for `gestalt.provider.v1.IntrospectResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IntrospectResponse {
     /// The `active` field.
     pub active: bool,
@@ -112,14 +119,16 @@ pub struct IntrospectResponse {
 /// ListGrantsRequest lists API-token grant IDs visible to the caller.
 ///
 /// Native message type for `gestalt.provider.v1.ListGrantsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListGrantsRequest {}
 
 /// ListGrantsResponse returns caller-visible API-token grant IDs created via
 /// token exchange. It must not include transient login or session grants.
 ///
 /// Native message type for `gestalt.provider.v1.ListGrantsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListGrantsResponse {
     /// The `grant_ids` field.
     pub grant_ids: Vec<String>,
@@ -128,7 +137,8 @@ pub struct ListGrantsResponse {
 /// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
 ///
 /// Native message type for `gestalt.provider.v1.RevokeGrantRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RevokeGrantRequest {
     /// The `grant_id` field.
     pub grant_id: String,
@@ -137,14 +147,16 @@ pub struct RevokeGrantRequest {
 /// RevokeGrantResponse acknowledges grant revocation.
 ///
 /// Native message type for `gestalt.provider.v1.RevokeGrantResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RevokeGrantResponse {}
 
 /// TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
 /// exchange inputs.
 ///
 /// Native message type for `gestalt.provider.v1.TokenRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenRequest {
     /// grant_type is "authorization_code" or
     /// "urn:ietf:params:oauth:grant-type:token-exchange".
@@ -185,7 +197,8 @@ pub struct TokenRequest {
 /// TokenResponse models RFC 6749 token endpoint response fields.
 ///
 /// Native message type for `gestalt.provider.v1.TokenResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenResponse {
     /// The `access_token` field.
     pub access_token: String,
@@ -207,13 +220,15 @@ pub struct TokenResponse {
 /// through provider-call metadata, analogous to OIDC Authorization: Bearer.
 ///
 /// Native message type for `gestalt.provider.v1.UserInfoRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserInfoRequest {}
 
 /// UserInfoResponse models profile claims about the authenticated end user.
 ///
 /// Native message type for `gestalt.provider.v1.UserInfoResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserInfoResponse {
     /// The `subject_id` field.
     pub subject_id: String,

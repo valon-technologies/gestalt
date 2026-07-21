@@ -4,44 +4,9 @@
 
 #![allow(clippy::all, unused_variables, unused_mut, dead_code)]
 
+use crate::codec::support::to_wire_struct;
 use crate::generated::v1;
-use crate::public::generated::app::{
-    AgentToolRef, AppInvokeGraphQLRequest, AppInvokeRequest, InvokeFrame, InvokeFrameValue,
-    InvokeMetadata, OperationAnnotations, OperationResult, StringList, SubjectContext,
-    SubjectPermissionContext,
-};
-use crate::public::generated::codec::support::to_wire_struct;
-
-/// Converts a native `AgentToolRef` to its wire message.
-pub(crate) fn to_wire_agent_tool_ref(value: AgentToolRef) -> v1::AgentToolRef {
-    v1::AgentToolRef {
-        app: value.app,
-        operation: value.operation,
-        connection: value.connection,
-        instance: value.instance,
-        title: value.title,
-        description: value.description,
-        credential_mode: value.credential_mode,
-        system: value.system,
-        run_as: value.run_as.map(to_wire_subject_context),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentToolRef` to its native message.
-pub(crate) fn from_wire_agent_tool_ref(value: v1::AgentToolRef) -> AgentToolRef {
-    AgentToolRef {
-        app: value.app,
-        operation: value.operation,
-        connection: value.connection,
-        instance: value.instance,
-        title: value.title,
-        description: value.description,
-        credential_mode: value.credential_mode,
-        system: value.system,
-        run_as: value.run_as.map(from_wire_subject_context),
-    }
-}
+use crate::public::generated::app::{AppInvokeGraphQLRequest, AppInvokeRequest};
 
 /// Encodes a wire `SubjectPermissionContext` as protobuf JSON.
 pub(crate) fn encode_wire_subject_permission_context_json(
@@ -524,22 +489,6 @@ pub(crate) fn decode_wire_app_invoke_request_json(
     })
 }
 
-/// Converts a wire `InvokeFrame` to its native message.
-pub(crate) fn from_wire_invoke_frame(value: v1::InvokeFrame) -> InvokeFrame {
-    InvokeFrame {
-        value: value.value.map(from_wire_invoke_frame_value),
-    }
-}
-
-pub(crate) fn from_wire_invoke_frame_value(value: v1::invoke_frame::Value) -> InvokeFrameValue {
-    match value {
-        v1::invoke_frame::Value::Metadata(value) => {
-            InvokeFrameValue::Metadata(from_wire_invoke_metadata(value))
-        }
-        v1::invoke_frame::Value::Data(value) => InvokeFrameValue::Data(value),
-    }
-}
-
 /// Encodes a wire `StringList` as protobuf JSON.
 pub(crate) fn encode_wire_string_list_json(value: &v1::StringList) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -701,32 +650,6 @@ pub(crate) fn decode_wire_invoke_frame_json(
     })
 }
 
-/// Converts a wire `InvokeMetadata` to its native message.
-pub(crate) fn from_wire_invoke_metadata(value: v1::InvokeMetadata) -> InvokeMetadata {
-    InvokeMetadata {
-        status: value.status,
-        headers: value
-            .headers
-            .into_iter()
-            .map(|(key, item)| (key, from_wire_string_list(item)))
-            .collect(),
-        media_type: value.media_type,
-    }
-}
-
-/// Converts a native `OperationAnnotations` to its wire message.
-pub(crate) fn to_wire_operation_annotations(
-    value: OperationAnnotations,
-) -> v1::OperationAnnotations {
-    v1::OperationAnnotations {
-        read_only_hint: value.read_only_hint,
-        idempotent_hint: value.idempotent_hint,
-        destructive_hint: value.destructive_hint,
-        open_world_hint: value.open_world_hint,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `OperationAnnotations` as protobuf JSON.
 pub(crate) fn encode_wire_operation_annotations_json(
     value: &v1::OperationAnnotations,
@@ -784,19 +707,6 @@ pub(crate) fn decode_wire_operation_annotations_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a wire `OperationResult` to its native message.
-pub(crate) fn from_wire_operation_result(value: v1::OperationResult) -> OperationResult {
-    OperationResult {
-        status: value.status,
-        body: value.body,
-        headers: value
-            .headers
-            .into_iter()
-            .map(|(key, item)| (key, from_wire_string_list(item)))
-            .collect(),
-    }
 }
 
 /// Encodes a wire `OperationResult` as protobuf JSON.
@@ -862,65 +772,4 @@ pub(crate) fn decode_wire_operation_result_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `StringList` to its native message.
-pub(crate) fn from_wire_string_list(value: v1::StringList) -> StringList {
-    StringList {
-        values: value.values,
-    }
-}
-
-/// Converts a native `SubjectContext` to its wire message.
-pub(crate) fn to_wire_subject_context(value: SubjectContext) -> v1::SubjectContext {
-    v1::SubjectContext {
-        id: value.id,
-        email: value.email,
-        display_name: value.display_name,
-        scopes: value.scopes,
-        permissions: value
-            .permissions
-            .into_iter()
-            .map(to_wire_subject_permission_context)
-            .collect(),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `SubjectContext` to its native message.
-pub(crate) fn from_wire_subject_context(value: v1::SubjectContext) -> SubjectContext {
-    SubjectContext {
-        id: value.id,
-        email: value.email,
-        display_name: value.display_name,
-        scopes: value.scopes,
-        permissions: value
-            .permissions
-            .into_iter()
-            .map(from_wire_subject_permission_context)
-            .collect(),
-    }
-}
-
-/// Converts a native `SubjectPermissionContext` to its wire message.
-pub(crate) fn to_wire_subject_permission_context(
-    value: SubjectPermissionContext,
-) -> v1::SubjectPermissionContext {
-    v1::SubjectPermissionContext {
-        app: value.app,
-        operations: value.operations,
-        all_operations: value.all_operations,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `SubjectPermissionContext` to its native message.
-pub(crate) fn from_wire_subject_permission_context(
-    value: v1::SubjectPermissionContext,
-) -> SubjectPermissionContext {
-    SubjectPermissionContext {
-        app: value.app,
-        operations: value.operations,
-        all_operations: value.all_operations,
-    }
 }

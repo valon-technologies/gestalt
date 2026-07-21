@@ -8,9 +8,8 @@ from typing import Any
 
 from google.protobuf import empty_pb2 as _empty_pb2
 
-from ..._gen.v1 import external_credential_pb2 as _external_credential_pb2
-from ._codec import external_credential as _external_credential_codec
-from .external_credential import (
+from gestalt._codec import external_credential as _external_credential_provider_codec
+from gestalt.external_credential import (
     CreateExternalCredentialRequest,
     DeleteExternalCredentialRequest,
     ExchangeExternalCredentialRequest,
@@ -24,6 +23,8 @@ from .external_credential import (
     UpsertExternalCredentialRequest,
     ValidateExternalCredentialConfigRequest,
 )
+
+from ..._gen.v1 import external_credential_pb2 as _external_credential_pb2
 from .metadata import (
     METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL,
     METHOD_EXTERNAL_CREDENTIALS_DELETE_CREDENTIAL,
@@ -48,7 +49,7 @@ class ExternalCredentialsClient:
     def create_credential(
         self, request: CreateExternalCredentialRequest
     ) -> ExternalCredential:
-        wire = _external_credential_codec.to_wire_create_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_create_external_credential_request(
             request
         )
         wire_response = self._transport.unary(
@@ -56,12 +57,14 @@ class ExternalCredentialsClient:
             wire,
             _external_credential_pb2.ExternalCredential,
         )
-        return _external_credential_codec.from_wire_external_credential(wire_response)
+        return _external_credential_provider_codec.from_wire_external_credential(
+            wire_response
+        )
 
     def upsert_credential(
         self, request: UpsertExternalCredentialRequest
     ) -> ExternalCredential:
-        wire = _external_credential_codec.to_wire_upsert_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_upsert_external_credential_request(
             request
         )
         wire_response = self._transport.unary(
@@ -69,25 +72,31 @@ class ExternalCredentialsClient:
             wire,
             _external_credential_pb2.ExternalCredential,
         )
-        return _external_credential_codec.from_wire_external_credential(wire_response)
+        return _external_credential_provider_codec.from_wire_external_credential(
+            wire_response
+        )
 
     def get_credential(
         self, request: GetExternalCredentialRequest
     ) -> ExternalCredential:
-        wire = _external_credential_codec.to_wire_get_external_credential_request(
-            request
+        wire = (
+            _external_credential_provider_codec.to_wire_get_external_credential_request(
+                request
+            )
         )
         wire_response = self._transport.unary(
             METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
             wire,
             _external_credential_pb2.ExternalCredential,
         )
-        return _external_credential_codec.from_wire_external_credential(wire_response)
+        return _external_credential_provider_codec.from_wire_external_credential(
+            wire_response
+        )
 
     def list_credentials(
         self, request: ListExternalCredentialsRequest
     ) -> ListExternalCredentialsResponse:
-        wire = _external_credential_codec.to_wire_list_external_credentials_request(
+        wire = _external_credential_provider_codec.to_wire_list_external_credentials_request(
             request
         )
         wire_response = self._transport.unary(
@@ -95,12 +104,12 @@ class ExternalCredentialsClient:
             wire,
             _external_credential_pb2.ListExternalCredentialsResponse,
         )
-        return _external_credential_codec.from_wire_list_external_credentials_response(
+        return _external_credential_provider_codec.from_wire_list_external_credentials_response(
             wire_response
         )
 
     def delete_credential(self, request: DeleteExternalCredentialRequest) -> None:
-        wire = _external_credential_codec.to_wire_delete_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_delete_external_credential_request(
             request
         )
         self._transport.unary(
@@ -112,7 +121,7 @@ class ExternalCredentialsClient:
     def validate_credential_config(
         self, request: ValidateExternalCredentialConfigRequest
     ) -> None:
-        wire = _external_credential_codec.to_wire_validate_external_credential_config_request(
+        wire = _external_credential_provider_codec.to_wire_validate_external_credential_config_request(
             request
         )
         self._transport.unary(
@@ -124,7 +133,7 @@ class ExternalCredentialsClient:
     def resolve_credential(
         self, request: ResolveExternalCredentialRequest
     ) -> ResolveExternalCredentialResponse:
-        wire = _external_credential_codec.to_wire_resolve_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_resolve_external_credential_request(
             request
         )
         wire_response = self._transport.unary(
@@ -132,16 +141,14 @@ class ExternalCredentialsClient:
             wire,
             _external_credential_pb2.ResolveExternalCredentialResponse,
         )
-        return (
-            _external_credential_codec.from_wire_resolve_external_credential_response(
-                wire_response
-            )
+        return _external_credential_provider_codec.from_wire_resolve_external_credential_response(
+            wire_response
         )
 
     def exchange_credential(
         self, request: ExchangeExternalCredentialRequest
     ) -> ExchangeExternalCredentialResponse:
-        wire = _external_credential_codec.to_wire_exchange_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_exchange_external_credential_request(
             request
         )
         wire_response = self._transport.unary(
@@ -149,10 +156,8 @@ class ExternalCredentialsClient:
             wire,
             _external_credential_pb2.ExchangeExternalCredentialResponse,
         )
-        return (
-            _external_credential_codec.from_wire_exchange_external_credential_response(
-                wire_response
-            )
+        return _external_credential_provider_codec.from_wire_exchange_external_credential_response(
+            wire_response
         )
 
 
@@ -165,7 +170,7 @@ class AsyncExternalCredentialsClient:
     async def create_credential(
         self, request: CreateExternalCredentialRequest
     ) -> ExternalCredential:
-        wire = _external_credential_codec.to_wire_create_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_create_external_credential_request(
             request
         )
         wire_response = await self._transport.unary(
@@ -173,12 +178,14 @@ class AsyncExternalCredentialsClient:
             wire,
             _external_credential_pb2.ExternalCredential,
         )
-        return _external_credential_codec.from_wire_external_credential(wire_response)
+        return _external_credential_provider_codec.from_wire_external_credential(
+            wire_response
+        )
 
     async def upsert_credential(
         self, request: UpsertExternalCredentialRequest
     ) -> ExternalCredential:
-        wire = _external_credential_codec.to_wire_upsert_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_upsert_external_credential_request(
             request
         )
         wire_response = await self._transport.unary(
@@ -186,25 +193,31 @@ class AsyncExternalCredentialsClient:
             wire,
             _external_credential_pb2.ExternalCredential,
         )
-        return _external_credential_codec.from_wire_external_credential(wire_response)
+        return _external_credential_provider_codec.from_wire_external_credential(
+            wire_response
+        )
 
     async def get_credential(
         self, request: GetExternalCredentialRequest
     ) -> ExternalCredential:
-        wire = _external_credential_codec.to_wire_get_external_credential_request(
-            request
+        wire = (
+            _external_credential_provider_codec.to_wire_get_external_credential_request(
+                request
+            )
         )
         wire_response = await self._transport.unary(
             METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
             wire,
             _external_credential_pb2.ExternalCredential,
         )
-        return _external_credential_codec.from_wire_external_credential(wire_response)
+        return _external_credential_provider_codec.from_wire_external_credential(
+            wire_response
+        )
 
     async def list_credentials(
         self, request: ListExternalCredentialsRequest
     ) -> ListExternalCredentialsResponse:
-        wire = _external_credential_codec.to_wire_list_external_credentials_request(
+        wire = _external_credential_provider_codec.to_wire_list_external_credentials_request(
             request
         )
         wire_response = await self._transport.unary(
@@ -212,12 +225,12 @@ class AsyncExternalCredentialsClient:
             wire,
             _external_credential_pb2.ListExternalCredentialsResponse,
         )
-        return _external_credential_codec.from_wire_list_external_credentials_response(
+        return _external_credential_provider_codec.from_wire_list_external_credentials_response(
             wire_response
         )
 
     async def delete_credential(self, request: DeleteExternalCredentialRequest) -> None:
-        wire = _external_credential_codec.to_wire_delete_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_delete_external_credential_request(
             request
         )
         await self._transport.unary(
@@ -229,7 +242,7 @@ class AsyncExternalCredentialsClient:
     async def validate_credential_config(
         self, request: ValidateExternalCredentialConfigRequest
     ) -> None:
-        wire = _external_credential_codec.to_wire_validate_external_credential_config_request(
+        wire = _external_credential_provider_codec.to_wire_validate_external_credential_config_request(
             request
         )
         await self._transport.unary(
@@ -241,7 +254,7 @@ class AsyncExternalCredentialsClient:
     async def resolve_credential(
         self, request: ResolveExternalCredentialRequest
     ) -> ResolveExternalCredentialResponse:
-        wire = _external_credential_codec.to_wire_resolve_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_resolve_external_credential_request(
             request
         )
         wire_response = await self._transport.unary(
@@ -249,16 +262,14 @@ class AsyncExternalCredentialsClient:
             wire,
             _external_credential_pb2.ResolveExternalCredentialResponse,
         )
-        return (
-            _external_credential_codec.from_wire_resolve_external_credential_response(
-                wire_response
-            )
+        return _external_credential_provider_codec.from_wire_resolve_external_credential_response(
+            wire_response
         )
 
     async def exchange_credential(
         self, request: ExchangeExternalCredentialRequest
     ) -> ExchangeExternalCredentialResponse:
-        wire = _external_credential_codec.to_wire_exchange_external_credential_request(
+        wire = _external_credential_provider_codec.to_wire_exchange_external_credential_request(
             request
         )
         wire_response = await self._transport.unary(
@@ -266,8 +277,6 @@ class AsyncExternalCredentialsClient:
             wire,
             _external_credential_pb2.ExchangeExternalCredentialResponse,
         )
-        return (
-            _external_credential_codec.from_wire_exchange_external_credential_response(
-                wire_response
-            )
+        return _external_credential_provider_codec.from_wire_exchange_external_credential_response(
+            wire_response
         )

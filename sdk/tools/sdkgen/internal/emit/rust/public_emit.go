@@ -114,6 +114,20 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		return set, nil
 	}
 
+ 	// Build local-name and codec-function-name sets for shared types so
+ 	// renderers can route imports to the provider modules.
+	sharedLocal := map[string]bool{}
+	sharedCodecFn := map[string]bool{}
+	for fullName := range plan.SharedMessages {
+		sharedLocal[localName(fullName)] = true
+		sharedCodecFn[toWireFunc(fullName)] = true
+		sharedCodecFn[fromWireFunc(fullName)] = true
+	}
+ 	// Enums are always shared: the public surface never projects enum values.
+ 	for _, e := range plan.ReachableEnums {
+ 		sharedLocal[localName(e.FullName)] = true
+ 	}
+
 	markConversionNeeds(idx, plan.Filtered.Services)
 	reachableMessages := plan.ReachableMessages
 	enums := plan.ReachableEnums
@@ -122,8 +136,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		idx.wireMessages[m.FullName] = m
 	}
 	markPublicWireJSONFromMessages(idx, reachableMessages)
-	supportUses := map[string]bool{}
-	codecModules := []string{"support"}
 	if err := set.Add("generated/rpc_support.rs", []byte(publicRPCSupportReexport)); err != nil {
 		return nil, err
 	}
@@ -135,49 +147,61 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/unary_transport.rs", []byte(publicUnaryTransportFile)); err != nil {
 		return nil, err
 	}
-	meta := newRenderer(idx, "metadata", "metadata", modulePublic, true)
+ 	meta := newRenderer(idx, "metadata", "metadata", modulePublic, true, sharedLocal, sharedCodecFn)
 	meta.renderPublicMetadata(methods)
 	if err := set.Add("generated/metadata.rs", []byte(meta.assembleGenerated())); err != nil {
 		return nil, err
 	}
 
+ 	codecModules := []string{}
 	for _, g := range groupFiles(plan.Filtered.Services, reachableMessages, enums) {
-		public := newRenderer(idx, g.base, g.base, modulePublic, true)
-		for _, e := range g.enums {
-			public.renderEnum(e)
-		}
+ 		public := newRenderer(idx, g.base, g.base, modulePublic, true, sharedLocal, sharedCodecFn)
+ 		// Enums and shared messages are referenced from the provider modules;
+ 		// only projected messages (with stripped fill/reject fields) get
+ 		// local definitions.
+ 		hasProjected := false
 		for _, m := range g.messages {
-			public.renderMessage(m)
+ 			if plan.SharedMessages[m.FullName] {
+ 				continue
+ 			}
+ 			public.renderMessage(m)
+ 			hasProjected = true
 		}
-		if err := set.Add("generated/"+g.base+".rs", []byte(public.assembleGenerated())); err != nil {
-			return nil, err
+		if hasProjected {
+			if err := set.Add("generated/"+g.base+".rs", []byte(public.assembleGenerated())); err != nil {
+				return nil, err
+			}
 		}
-		for name := range public.features.supportFns {
-			supportUses[name] = true
-		}
-		if len(g.messages) == 0 {
-			continue
-		}
-		codec := newRenderer(idx, g.base, g.base, moduleCodec, true)
+ 		// Generate codec files when there are projected messages (needing
+ 		// to_wire) or shared messages needing wire JSON helpers for REST.
+ 		needCodec := hasProjected
+ 		if !needCodec {
+ 			for _, m := range g.messages {
+ 				if idx.needWireJSON[m.FullName] {
+ 					needCodec = true
+ 					break
+ 				}
+ 			}
+ 		}
+ 		if !needCodec {
+ 			continue
+ 		}
+		codec := newRenderer(idx, g.base, g.base, moduleCodec, true, sharedLocal, sharedCodecFn)
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}
-		if err := set.Add("generated/codec/"+g.base+".rs", []byte(codec.assembleGenerated())); err != nil {
-			return nil, err
-		}
-		codecModules = append(codecModules, g.base)
-		for name := range codec.features.supportFns {
-			supportUses[name] = true
+ 		if codec.body.Len() > 0 {
+ 			if err := set.Add("generated/codec/"+g.base+".rs", []byte(codec.assembleGenerated())); err != nil {
+ 				return nil, err
+ 			}
+ 			codecModules = append(codecModules, g.base)
 		}
 	}
 	if err := set.Add("generated/codec.rs", []byte(renderPublicCodecIndex(codecModules))); err != nil {
 		return nil, err
 	}
-	if err := set.Add("generated/codec/support.rs", []byte(renderCodecSupport(supportUses))); err != nil {
-		return nil, err
-	}
 
-	client := newRenderer(idx, "app_client", "app", modulePublic, true)
+ 	client := newRenderer(idx, "app_client", "app", modulePublic, true, sharedLocal, sharedCodecFn)
 	client.docIntro = "Generated transport-neutral App client for the public gestaltd surface."
 	for _, svc := range plan.Filtered.Services {
 		client.renderAppClient(svc)
@@ -191,7 +215,16 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		modules = append(modules, "invoke_support")
 	}
 	for _, g := range groupFiles(plan.Filtered.Services, reachableMessages, enums) {
-		modules = append(modules, g.base)
+ 		hasProjected := false
+ 		for _, m := range g.messages {
+ 			if !plan.SharedMessages[m.FullName] {
+ 				hasProjected = true
+ 				break
+ 			}
+ 		}
+ 		if hasProjected {
+ 			modules = append(modules, g.base)
+ 		}
 	}
 	if err := set.Add("generated/mod.rs", []byte(renderGeneratedMod(modules))); err != nil {
 		return nil, err
@@ -217,7 +250,6 @@ func renderPublicCodecIndex(modules []string) string {
 	var b strings.Builder
 	b.WriteString("//! Crate-private wire converters for the public generated clients.\n\n")
 	b.WriteString("#![allow(missing_docs)]\n\n")
-	b.WriteString("pub(crate) mod support;\n")
 	for _, m := range sorted {
 		if m == "support" {
 			continue
@@ -333,14 +365,23 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 	for _, pm := range methods {
 		collectWireJSONCodecImports(pm, codecImports)
 	}
-	for _, base := range sortedKeys2(codecImports) {
-		names := sortedKeys(codecImports[base])
-		fmt.Fprintf(
-			&r.body,
-			"use crate::public::generated::codec::%s::{%s};\n",
-			base,
-			strings.Join(names, ", "),
-		)
+ 	// Split codec imports: shared functions come from the provider codec,
+ 	// projected functions from the public generated codec.
+ 	for _, base := range sortedKeys2(codecImports) {
+ 		var shared, projected []string
+ 		for _, name := range sortedKeys(codecImports[base]) {
+ 			if r.sharedCodec != nil && r.sharedCodec[name] {
+ 				shared = append(shared, name)
+ 			} else {
+ 				projected = append(projected, name)
+ 			}
+ 		}
+ 		if len(shared) > 0 {
+ 			fmt.Fprintf(&r.body, "use crate::codec::%s::{%s};\n", base, strings.Join(shared, ", "))
+ 		}
+ 		if len(projected) > 0 {
+ 			fmt.Fprintf(&r.body, "use crate::public::generated::codec::%s::{%s};\n", base, strings.Join(projected, ", "))
+ 		}
 	}
 	r.body.WriteString("\n")
 

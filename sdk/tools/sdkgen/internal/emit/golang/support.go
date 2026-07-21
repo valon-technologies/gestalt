@@ -2,7 +2,6 @@ package golang
 
 import (
 	_ "embed"
-	"strings"
 )
 
 // supportFile is the shared error model template. Provider clients keep the
@@ -300,5 +299,3 @@ func applyClientOptions(opts []ClientOption) clientOptions {
 	return options
 }
 `
-
-var publicCodecSupportFile = strings.Replace(codecSupportFile, "package client", "package generated", 1)

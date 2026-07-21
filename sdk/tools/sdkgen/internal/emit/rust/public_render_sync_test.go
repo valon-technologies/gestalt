@@ -55,7 +55,7 @@ func TestSyncMethodsGeneratedForREST(t *testing.T) {
 		},
 	}
 
-	r := newRenderer(&index{}, "app_client", "app", modulePublic, true)
+	r := newRenderer(&index{}, "app_client", "app", modulePublic, true, nil, nil)
 	r.renderAppClient(svc)
 	out := r.assembleGenerated()
 
@@ -101,7 +101,7 @@ func TestSyncMethodsGeneratedForGRPCOnly(t *testing.T) {
 		},
 	}
 
-	r := newRenderer(&index{}, "app_client", "app", modulePublic, true)
+	r := newRenderer(&index{}, "app_client", "app", modulePublic, true, nil, nil)
 	r.renderAppClient(svc)
 	out := r.assembleGenerated()
 
@@ -151,7 +151,7 @@ func TestSyncMethodBodiesHaveNoAwait(t *testing.T) {
 		},
 	}
 
-	r := newRenderer(&index{}, "app_client", "app", modulePublic, true)
+	r := newRenderer(&index{}, "app_client", "app", modulePublic, true, nil, nil)
 	r.renderAppClient(svc)
 	out := r.assembleGenerated()
 

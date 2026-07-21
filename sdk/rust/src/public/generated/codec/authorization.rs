@@ -5,30 +5,6 @@
 #![allow(clippy::all, unused_variables, unused_mut, dead_code)]
 
 use crate::generated::v1;
-use crate::public::generated::authorization::{
-    Action, AddRelationshipRequest, AddRelationshipResponse, AuthorizationModel,
-    AuthorizationModelRef, AuthorizationModelResourceType, AuthorizationModelResourceTypeFilter,
-    CheckAccessManyRequest, CheckAccessManyResponse, CheckAccessRequest, CheckAccessResponse,
-    DeleteRelationshipRequest, DeleteRelationshipResponse, GetActiveModelRefResponse,
-    ListActiveModelResourceTypesRequest, ListActiveModelResourceTypesResponse,
-    ListRelationshipsRequest, ListRelationshipsResponse, ModelAction, ModelAllowedTarget,
-    ModelAllowedTargetKind, ModelRelation, Relationship, RelationshipFilter, RelationshipTarget,
-    RelationshipTargetKind, RelationshipTuple, Resource, SetActiveModelRequest,
-    SetActiveModelResponse, SetAuthorizationStateRequest, SetAuthorizationStateResponse, Subject,
-    SubjectSet, SubjectSetType,
-};
-use crate::public::generated::codec::support::{
-    from_wire_struct, from_wire_timestamp, to_wire_struct,
-};
-
-/// Converts a native `Action` to its wire message.
-pub(crate) fn to_wire_action(value: Action) -> v1::Action {
-    v1::Action {
-        name: value.name,
-        properties: value.properties.map(to_wire_struct),
-        ..Default::default()
-    }
-}
 
 /// Encodes a wire `Action` as protobuf JSON.
 pub(crate) fn encode_wire_action_json(value: &v1::Action) -> serde_json::Value {
@@ -69,16 +45,6 @@ pub(crate) fn decode_wire_action_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a native `AddRelationshipRequest` to its wire message.
-pub(crate) fn to_wire_add_relationship_request(
-    value: AddRelationshipRequest,
-) -> v1::AddRelationshipRequest {
-    v1::AddRelationshipRequest {
-        relationship: value.relationship.map(to_wire_relationship),
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `Subject` as protobuf JSON.
@@ -429,15 +395,6 @@ pub(crate) fn decode_wire_add_relationship_request_json(
     })
 }
 
-/// Converts a wire `AddRelationshipResponse` to its native message.
-pub(crate) fn from_wire_add_relationship_response(
-    value: v1::AddRelationshipResponse,
-) -> AddRelationshipResponse {
-    AddRelationshipResponse {
-        relationship: value.relationship.map(from_wire_relationship),
-    }
-}
-
 /// Encodes a wire `AddRelationshipResponse` as protobuf JSON.
 pub(crate) fn encode_wire_add_relationship_response_json(
     value: &v1::AddRelationshipResponse,
@@ -466,20 +423,6 @@ pub(crate) fn decode_wire_add_relationship_response_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a native `AuthorizationModel` to its wire message.
-pub(crate) fn to_wire_authorization_model(value: AuthorizationModel) -> v1::AuthorizationModel {
-    v1::AuthorizationModel {
-        id: value.id,
-        version: value.version,
-        resource_types: value
-            .resource_types
-            .into_iter()
-            .map(to_wire_authorization_model_resource_type)
-            .collect(),
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `SubjectSetType` as protobuf JSON.
@@ -900,17 +843,6 @@ pub(crate) fn decode_wire_authorization_model_json(
     })
 }
 
-/// Converts a wire `AuthorizationModelRef` to its native message.
-pub(crate) fn from_wire_authorization_model_ref(
-    value: v1::AuthorizationModelRef,
-) -> AuthorizationModelRef {
-    AuthorizationModelRef {
-        id: value.id,
-        version: value.version,
-        created_at: value.created_at.map(from_wire_timestamp),
-    }
-}
-
 /// Encodes a wire `AuthorizationModelRef` as protobuf JSON.
 pub(crate) fn encode_wire_authorization_model_ref_json(
     value: &v1::AuthorizationModelRef,
@@ -959,60 +891,6 @@ pub(crate) fn decode_wire_authorization_model_ref_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a native `AuthorizationModelResourceType` to its wire message.
-pub(crate) fn to_wire_authorization_model_resource_type(
-    value: AuthorizationModelResourceType,
-) -> v1::AuthorizationModelResourceType {
-    v1::AuthorizationModelResourceType {
-        name: value.name,
-        relations: value
-            .relations
-            .into_iter()
-            .map(to_wire_model_relation)
-            .collect(),
-        actions: value
-            .actions
-            .into_iter()
-            .map(to_wire_model_action)
-            .collect(),
-        source_layer: value.source_layer,
-        default_role: value.default_role,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AuthorizationModelResourceType` to its native message.
-pub(crate) fn from_wire_authorization_model_resource_type(
-    value: v1::AuthorizationModelResourceType,
-) -> AuthorizationModelResourceType {
-    AuthorizationModelResourceType {
-        name: value.name,
-        relations: value
-            .relations
-            .into_iter()
-            .map(from_wire_model_relation)
-            .collect(),
-        actions: value
-            .actions
-            .into_iter()
-            .map(from_wire_model_action)
-            .collect(),
-        source_layer: value.source_layer,
-        default_role: value.default_role,
-    }
-}
-
-/// Converts a native `AuthorizationModelResourceTypeFilter` to its wire message.
-pub(crate) fn to_wire_authorization_model_resource_type_filter(
-    value: AuthorizationModelResourceTypeFilter,
-) -> v1::AuthorizationModelResourceTypeFilter {
-    v1::AuthorizationModelResourceTypeFilter {
-        name: value.name,
-        source_layer: value.source_layer,
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `AuthorizationModelResourceTypeFilter` as protobuf JSON.
@@ -1093,20 +971,6 @@ pub(crate) fn decode_wire_authorization_model_resource_type_filter_json(
             .unwrap_or(0),
         ..Default::default()
     })
-}
-
-/// Converts a native `CheckAccessManyRequest` to its wire message.
-pub(crate) fn to_wire_check_access_many_request(
-    value: CheckAccessManyRequest,
-) -> v1::CheckAccessManyRequest {
-    v1::CheckAccessManyRequest {
-        requests: value
-            .requests
-            .into_iter()
-            .map(to_wire_check_access_request)
-            .collect(),
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `CheckAccessRequest` as protobuf JSON.
@@ -1199,19 +1063,6 @@ pub(crate) fn decode_wire_check_access_many_request_json(
     })
 }
 
-/// Converts a wire `CheckAccessManyResponse` to its native message.
-pub(crate) fn from_wire_check_access_many_response(
-    value: v1::CheckAccessManyResponse,
-) -> CheckAccessManyResponse {
-    CheckAccessManyResponse {
-        decisions: value
-            .decisions
-            .into_iter()
-            .map(from_wire_check_access_response)
-            .collect(),
-    }
-}
-
 /// Encodes a wire `CheckAccessResponse` as protobuf JSON.
 pub(crate) fn encode_wire_check_access_response_json(
     value: &v1::CheckAccessResponse,
@@ -1298,36 +1149,6 @@ pub(crate) fn decode_wire_check_access_many_response_json(
     })
 }
 
-/// Converts a native `CheckAccessRequest` to its wire message.
-pub(crate) fn to_wire_check_access_request(value: CheckAccessRequest) -> v1::CheckAccessRequest {
-    v1::CheckAccessRequest {
-        subject: value.subject.map(to_wire_subject),
-        action: value.action.map(to_wire_action),
-        resource: value.resource.map(to_wire_resource),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `CheckAccessResponse` to its native message.
-pub(crate) fn from_wire_check_access_response(
-    value: v1::CheckAccessResponse,
-) -> CheckAccessResponse {
-    CheckAccessResponse {
-        allowed: value.allowed,
-        model_id: value.model_id,
-    }
-}
-
-/// Converts a native `DeleteRelationshipRequest` to its wire message.
-pub(crate) fn to_wire_delete_relationship_request(
-    value: DeleteRelationshipRequest,
-) -> v1::DeleteRelationshipRequest {
-    v1::DeleteRelationshipRequest {
-        relationship_tuple: value.relationship_tuple.map(to_wire_relationship_tuple),
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `DeleteRelationshipRequest` as protobuf JSON.
 pub(crate) fn encode_wire_delete_relationship_request_json(
     value: &v1::DeleteRelationshipRequest,
@@ -1361,13 +1182,6 @@ pub(crate) fn decode_wire_delete_relationship_request_json(
     })
 }
 
-/// Converts a wire `DeleteRelationshipResponse` to its native message.
-pub(crate) fn from_wire_delete_relationship_response(
-    _value: v1::DeleteRelationshipResponse,
-) -> DeleteRelationshipResponse {
-    DeleteRelationshipResponse {}
-}
-
 /// Encodes a wire `DeleteRelationshipResponse` as protobuf JSON.
 pub(crate) fn encode_wire_delete_relationship_response_json(
     value: &v1::DeleteRelationshipResponse,
@@ -1389,15 +1203,6 @@ pub(crate) fn decode_wire_delete_relationship_response_json(
     Ok(v1::DeleteRelationshipResponse {
         ..Default::default()
     })
-}
-
-/// Converts a wire `GetActiveModelRefResponse` to its native message.
-pub(crate) fn from_wire_get_active_model_ref_response(
-    value: v1::GetActiveModelRefResponse,
-) -> GetActiveModelRefResponse {
-    GetActiveModelRefResponse {
-        model: value.model.map(from_wire_authorization_model_ref),
-    }
 }
 
 /// Encodes a wire `GetActiveModelRefResponse` as protobuf JSON.
@@ -1431,20 +1236,6 @@ pub(crate) fn decode_wire_get_active_model_ref_response_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a native `ListActiveModelResourceTypesRequest` to its wire message.
-pub(crate) fn to_wire_list_active_model_resource_types_request(
-    value: ListActiveModelResourceTypesRequest,
-) -> v1::ListActiveModelResourceTypesRequest {
-    v1::ListActiveModelResourceTypesRequest {
-        filter: value
-            .filter
-            .map(to_wire_authorization_model_resource_type_filter),
-        page_size: value.page_size,
-        page_token: value.page_token,
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `ListActiveModelResourceTypesRequest` as protobuf JSON.
@@ -1498,21 +1289,6 @@ pub(crate) fn decode_wire_list_active_model_resource_types_request_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `ListActiveModelResourceTypesResponse` to its native message.
-pub(crate) fn from_wire_list_active_model_resource_types_response(
-    value: v1::ListActiveModelResourceTypesResponse,
-) -> ListActiveModelResourceTypesResponse {
-    ListActiveModelResourceTypesResponse {
-        resource_types: value
-            .resource_types
-            .into_iter()
-            .map(from_wire_authorization_model_resource_type)
-            .collect(),
-        next_page_token: value.next_page_token,
-        model_id: value.model_id,
-    }
 }
 
 /// Encodes a wire `ListActiveModelResourceTypesResponse` as protobuf JSON.
@@ -1584,18 +1360,6 @@ pub(crate) fn decode_wire_list_active_model_resource_types_response_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `ListRelationshipsRequest` to its wire message.
-pub(crate) fn to_wire_list_relationships_request(
-    value: ListRelationshipsRequest,
-) -> v1::ListRelationshipsRequest {
-    v1::ListRelationshipsRequest {
-        filter: value.filter.map(to_wire_relationship_filter),
-        page_size: value.page_size,
-        page_token: value.page_token,
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `RelationshipFilter` as protobuf JSON.
@@ -1804,20 +1568,6 @@ pub(crate) fn decode_wire_list_relationships_request_json(
     })
 }
 
-/// Converts a wire `ListRelationshipsResponse` to its native message.
-pub(crate) fn from_wire_list_relationships_response(
-    value: v1::ListRelationshipsResponse,
-) -> ListRelationshipsResponse {
-    ListRelationshipsResponse {
-        relationships: value
-            .relationships
-            .into_iter()
-            .map(from_wire_relationship)
-            .collect(),
-        next_page_token: value.next_page_token,
-    }
-}
-
 /// Encodes a wire `ListRelationshipsResponse` as protobuf JSON.
 pub(crate) fn encode_wire_list_relationships_response_json(
     value: &v1::ListRelationshipsResponse,
@@ -1876,223 +1626,6 @@ pub(crate) fn decode_wire_list_relationships_response_json(
     })
 }
 
-/// Converts a native `ModelAction` to its wire message.
-pub(crate) fn to_wire_model_action(value: ModelAction) -> v1::ModelAction {
-    v1::ModelAction {
-        name: value.name,
-        relations: value.relations,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `ModelAction` to its native message.
-pub(crate) fn from_wire_model_action(value: v1::ModelAction) -> ModelAction {
-    ModelAction {
-        name: value.name,
-        relations: value.relations,
-    }
-}
-
-/// Converts a native `ModelAllowedTarget` to its wire message.
-pub(crate) fn to_wire_model_allowed_target(value: ModelAllowedTarget) -> v1::ModelAllowedTarget {
-    v1::ModelAllowedTarget {
-        kind: value.kind.map(to_wire_model_allowed_target_kind),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `ModelAllowedTarget` to its native message.
-pub(crate) fn from_wire_model_allowed_target(value: v1::ModelAllowedTarget) -> ModelAllowedTarget {
-    ModelAllowedTarget {
-        kind: value.kind.map(from_wire_model_allowed_target_kind),
-    }
-}
-
-pub(crate) fn to_wire_model_allowed_target_kind(
-    value: ModelAllowedTargetKind,
-) -> v1::model_allowed_target::Kind {
-    match value {
-        ModelAllowedTargetKind::SubjectType(value) => {
-            v1::model_allowed_target::Kind::SubjectType(value)
-        }
-        ModelAllowedTargetKind::ResourceType(value) => {
-            v1::model_allowed_target::Kind::ResourceType(value)
-        }
-        ModelAllowedTargetKind::SubjectSetType(value) => {
-            v1::model_allowed_target::Kind::SubjectSetType(to_wire_subject_set_type(value))
-        }
-    }
-}
-
-pub(crate) fn from_wire_model_allowed_target_kind(
-    value: v1::model_allowed_target::Kind,
-) -> ModelAllowedTargetKind {
-    match value {
-        v1::model_allowed_target::Kind::SubjectType(value) => {
-            ModelAllowedTargetKind::SubjectType(value)
-        }
-        v1::model_allowed_target::Kind::ResourceType(value) => {
-            ModelAllowedTargetKind::ResourceType(value)
-        }
-        v1::model_allowed_target::Kind::SubjectSetType(value) => {
-            ModelAllowedTargetKind::SubjectSetType(from_wire_subject_set_type(value))
-        }
-    }
-}
-
-/// Converts a native `ModelRelation` to its wire message.
-pub(crate) fn to_wire_model_relation(value: ModelRelation) -> v1::ModelRelation {
-    v1::ModelRelation {
-        name: value.name,
-        allowed_targets: value
-            .allowed_targets
-            .into_iter()
-            .map(to_wire_model_allowed_target)
-            .collect(),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `ModelRelation` to its native message.
-pub(crate) fn from_wire_model_relation(value: v1::ModelRelation) -> ModelRelation {
-    ModelRelation {
-        name: value.name,
-        allowed_targets: value
-            .allowed_targets
-            .into_iter()
-            .map(from_wire_model_allowed_target)
-            .collect(),
-    }
-}
-
-/// Converts a native `Relationship` to its wire message.
-pub(crate) fn to_wire_relationship(value: Relationship) -> v1::Relationship {
-    v1::Relationship {
-        tuple: value.tuple.map(to_wire_relationship_tuple),
-        properties: value.properties.map(to_wire_struct),
-        source_layer: value.source_layer,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `Relationship` to its native message.
-pub(crate) fn from_wire_relationship(value: v1::Relationship) -> Relationship {
-    Relationship {
-        tuple: value.tuple.map(from_wire_relationship_tuple),
-        properties: value.properties.map(from_wire_struct),
-        source_layer: value.source_layer,
-    }
-}
-
-/// Converts a native `RelationshipFilter` to its wire message.
-pub(crate) fn to_wire_relationship_filter(value: RelationshipFilter) -> v1::RelationshipFilter {
-    v1::RelationshipFilter {
-        target: value.target.map(to_wire_relationship_target),
-        relation: value.relation,
-        resource: value.resource.map(to_wire_resource),
-        target_type: value.target_type,
-        target_entity_type: value.target_entity_type,
-        resource_type: value.resource_type,
-        source_layer: value.source_layer,
-        ..Default::default()
-    }
-}
-
-/// Converts a native `RelationshipTarget` to its wire message.
-pub(crate) fn to_wire_relationship_target(value: RelationshipTarget) -> v1::RelationshipTarget {
-    v1::RelationshipTarget {
-        kind: value.kind.map(to_wire_relationship_target_kind),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `RelationshipTarget` to its native message.
-pub(crate) fn from_wire_relationship_target(value: v1::RelationshipTarget) -> RelationshipTarget {
-    RelationshipTarget {
-        kind: value.kind.map(from_wire_relationship_target_kind),
-    }
-}
-
-pub(crate) fn to_wire_relationship_target_kind(
-    value: RelationshipTargetKind,
-) -> v1::relationship_target::Kind {
-    match value {
-        RelationshipTargetKind::Subject(value) => {
-            v1::relationship_target::Kind::Subject(to_wire_subject(value))
-        }
-        RelationshipTargetKind::Resource(value) => {
-            v1::relationship_target::Kind::Resource(to_wire_resource(value))
-        }
-        RelationshipTargetKind::SubjectSet(value) => {
-            v1::relationship_target::Kind::SubjectSet(to_wire_subject_set(value))
-        }
-    }
-}
-
-pub(crate) fn from_wire_relationship_target_kind(
-    value: v1::relationship_target::Kind,
-) -> RelationshipTargetKind {
-    match value {
-        v1::relationship_target::Kind::Subject(value) => {
-            RelationshipTargetKind::Subject(from_wire_subject(value))
-        }
-        v1::relationship_target::Kind::Resource(value) => {
-            RelationshipTargetKind::Resource(from_wire_resource(value))
-        }
-        v1::relationship_target::Kind::SubjectSet(value) => {
-            RelationshipTargetKind::SubjectSet(from_wire_subject_set(value))
-        }
-    }
-}
-
-/// Converts a native `RelationshipTuple` to its wire message.
-pub(crate) fn to_wire_relationship_tuple(value: RelationshipTuple) -> v1::RelationshipTuple {
-    v1::RelationshipTuple {
-        target: value.target.map(to_wire_relationship_target),
-        relation: value.relation,
-        resource: value.resource.map(to_wire_resource),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `RelationshipTuple` to its native message.
-pub(crate) fn from_wire_relationship_tuple(value: v1::RelationshipTuple) -> RelationshipTuple {
-    RelationshipTuple {
-        target: value.target.map(from_wire_relationship_target),
-        relation: value.relation,
-        resource: value.resource.map(from_wire_resource),
-    }
-}
-
-/// Converts a native `Resource` to its wire message.
-pub(crate) fn to_wire_resource(value: Resource) -> v1::Resource {
-    v1::Resource {
-        r#type: value.r#type,
-        id: value.id,
-        properties: value.properties.map(to_wire_struct),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `Resource` to its native message.
-pub(crate) fn from_wire_resource(value: v1::Resource) -> Resource {
-    Resource {
-        r#type: value.r#type,
-        id: value.id,
-        properties: value.properties.map(from_wire_struct),
-    }
-}
-
-/// Converts a native `SetActiveModelRequest` to its wire message.
-pub(crate) fn to_wire_set_active_model_request(
-    value: SetActiveModelRequest,
-) -> v1::SetActiveModelRequest {
-    v1::SetActiveModelRequest {
-        model: value.model.map(to_wire_authorization_model),
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `SetActiveModelRequest` as protobuf JSON.
 pub(crate) fn encode_wire_set_active_model_request_json(
     value: &v1::SetActiveModelRequest,
@@ -2121,15 +1654,6 @@ pub(crate) fn decode_wire_set_active_model_request_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a wire `SetActiveModelResponse` to its native message.
-pub(crate) fn from_wire_set_active_model_response(
-    value: v1::SetActiveModelResponse,
-) -> SetActiveModelResponse {
-    SetActiveModelResponse {
-        model: value.model.map(from_wire_authorization_model_ref),
-    }
 }
 
 /// Encodes a wire `SetActiveModelResponse` as protobuf JSON.
@@ -2163,21 +1687,6 @@ pub(crate) fn decode_wire_set_active_model_response_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a native `SetAuthorizationStateRequest` to its wire message.
-pub(crate) fn to_wire_set_authorization_state_request(
-    value: SetAuthorizationStateRequest,
-) -> v1::SetAuthorizationStateRequest {
-    v1::SetAuthorizationStateRequest {
-        model: value.model.map(to_wire_authorization_model),
-        relationships: value
-            .relationships
-            .into_iter()
-            .map(to_wire_relationship)
-            .collect(),
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `SetAuthorizationStateRequest` as protobuf JSON.
@@ -2235,15 +1744,6 @@ pub(crate) fn decode_wire_set_authorization_state_request_json(
     })
 }
 
-/// Converts a wire `SetAuthorizationStateResponse` to its native message.
-pub(crate) fn from_wire_set_authorization_state_response(
-    value: v1::SetAuthorizationStateResponse,
-) -> SetAuthorizationStateResponse {
-    SetAuthorizationStateResponse {
-        active_model: value.active_model.map(from_wire_authorization_model_ref),
-    }
-}
-
 /// Encodes a wire `SetAuthorizationStateResponse` as protobuf JSON.
 pub(crate) fn encode_wire_set_authorization_state_response_json(
     value: &v1::SetAuthorizationStateResponse,
@@ -2276,57 +1776,4 @@ pub(crate) fn decode_wire_set_authorization_state_response_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a native `Subject` to its wire message.
-pub(crate) fn to_wire_subject(value: Subject) -> v1::Subject {
-    v1::Subject {
-        r#type: value.r#type,
-        id: value.id,
-        properties: value.properties.map(to_wire_struct),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `Subject` to its native message.
-pub(crate) fn from_wire_subject(value: v1::Subject) -> Subject {
-    Subject {
-        r#type: value.r#type,
-        id: value.id,
-        properties: value.properties.map(from_wire_struct),
-    }
-}
-
-/// Converts a native `SubjectSet` to its wire message.
-pub(crate) fn to_wire_subject_set(value: SubjectSet) -> v1::SubjectSet {
-    v1::SubjectSet {
-        resource: value.resource.map(to_wire_resource),
-        relation: value.relation,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `SubjectSet` to its native message.
-pub(crate) fn from_wire_subject_set(value: v1::SubjectSet) -> SubjectSet {
-    SubjectSet {
-        resource: value.resource.map(from_wire_resource),
-        relation: value.relation,
-    }
-}
-
-/// Converts a native `SubjectSetType` to its wire message.
-pub(crate) fn to_wire_subject_set_type(value: SubjectSetType) -> v1::SubjectSetType {
-    v1::SubjectSetType {
-        resource_type: value.resource_type,
-        relation: value.relation,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `SubjectSetType` to its native message.
-pub(crate) fn from_wire_subject_set_type(value: v1::SubjectSetType) -> SubjectSetType {
-    SubjectSetType {
-        resource_type: value.resource_type,
-        relation: value.relation,
-    }
 }

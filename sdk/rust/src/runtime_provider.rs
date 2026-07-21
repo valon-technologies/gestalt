@@ -30,14 +30,16 @@ pub mod runtime_egress_mode {
 }
 
 /// Native message type for `gestalt.provider.v1.GetRuntimeSessionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetRuntimeSessionRequest {
     /// The `session_id` field.
     pub session_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.HostedApp`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HostedApp {
     /// The `id` field.
     pub id: String,
@@ -50,7 +52,8 @@ pub struct HostedApp {
 }
 
 /// Native message type for `gestalt.provider.v1.ListRuntimeSessionsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListRuntimeSessionsRequest {
     /// The `page_size` field.
     pub page_size: i32,
@@ -59,7 +62,8 @@ pub struct ListRuntimeSessionsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListRuntimeSessionsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListRuntimeSessionsResponse {
     /// The `sessions` field.
     pub sessions: Vec<RuntimeSession>,
@@ -68,7 +72,8 @@ pub struct ListRuntimeSessionsResponse {
 }
 
 /// Native message type for `gestalt.provider.v1.PrepareRuntimeWorkspaceRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrepareRuntimeWorkspaceRequest {
     /// The `session_id` field.
     pub session_id: String,
@@ -83,14 +88,16 @@ pub struct PrepareRuntimeWorkspaceRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.PrepareRuntimeWorkspaceResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrepareRuntimeWorkspaceResponse {
     /// The `workspace` field; None when unset.
     pub workspace: Option<PreparedAgentWorkspace>,
 }
 
 /// Native message type for `gestalt.provider.v1.RemoveRuntimeWorkspaceRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoveRuntimeWorkspaceRequest {
     /// The `session_id` field.
     pub session_id: String,
@@ -102,14 +109,16 @@ pub struct RemoveRuntimeWorkspaceRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.RuntimeImagePullAuth`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeImagePullAuth {
     /// The `docker_config_json` field.
     pub docker_config_json: String,
 }
 
 /// Native message type for `gestalt.provider.v1.RuntimeSession`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeSession {
     /// The `id` field.
     pub id: String,
@@ -126,18 +135,23 @@ pub struct RuntimeSession {
 }
 
 /// Native message type for `gestalt.provider.v1.RuntimeSessionLifecycle`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeSessionLifecycle {
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `recommended_drain_at` field; None when unset.
     pub recommended_drain_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::public::proto_json::system_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
 }
 
 /// Native message type for `gestalt.provider.v1.RuntimeSupport`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeSupport {
     /// The `can_host_apps` field.
     pub can_host_apps: bool,
@@ -153,7 +167,8 @@ pub struct RuntimeSupport {
 /// HostedApp response.
 ///
 /// Native message type for `gestalt.provider.v1.StartHostedAppRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartHostedAppRequest {
     /// The `session_id` field.
     pub session_id: String,
@@ -176,7 +191,8 @@ pub struct StartHostedAppRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.StartRuntimeSessionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartRuntimeSessionRequest {
     /// The `app_name` field.
     pub app_name: String,
@@ -191,7 +207,8 @@ pub struct StartRuntimeSessionRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.StopRuntimeSessionRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StopRuntimeSessionRequest {
     /// The `session_id` field.
     pub session_id: String,

@@ -3,338 +3,8 @@
 package generated
 
 import (
-	"time"
+	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 )
-
-// AgentExecutionStatus is the gestalt.provider.v1.AgentExecutionStatus enum. It is open:
-// numeric values outside the named constants are preserved.
-type AgentExecutionStatus int32
-
-const (
-	// AgentExecutionStatusUnspecified is the AGENT_EXECUTION_STATUS_UNSPECIFIED value of AgentExecutionStatus.
-	AgentExecutionStatusUnspecified AgentExecutionStatus = 0
-	// AgentExecutionStatusPending is the AGENT_EXECUTION_STATUS_PENDING value of AgentExecutionStatus.
-	AgentExecutionStatusPending AgentExecutionStatus = 1
-	// AgentExecutionStatusRunning is the AGENT_EXECUTION_STATUS_RUNNING value of AgentExecutionStatus.
-	AgentExecutionStatusRunning AgentExecutionStatus = 2
-	// AgentExecutionStatusSucceeded is the AGENT_EXECUTION_STATUS_SUCCEEDED value of AgentExecutionStatus.
-	AgentExecutionStatusSucceeded AgentExecutionStatus = 3
-	// AgentExecutionStatusFailed is the AGENT_EXECUTION_STATUS_FAILED value of AgentExecutionStatus.
-	AgentExecutionStatusFailed AgentExecutionStatus = 4
-	// AgentExecutionStatusCanceled is the AGENT_EXECUTION_STATUS_CANCELED value of AgentExecutionStatus.
-	AgentExecutionStatusCanceled AgentExecutionStatus = 5
-	// AgentExecutionStatusWaitingForInput is the AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT value of AgentExecutionStatus.
-	AgentExecutionStatusWaitingForInput AgentExecutionStatus = 6
-)
-
-// AgentInteractionState is the gestalt.provider.v1.AgentInteractionState enum. It is open:
-// numeric values outside the named constants are preserved.
-type AgentInteractionState int32
-
-const (
-	// AgentInteractionStateUnspecified is the AGENT_INTERACTION_STATE_UNSPECIFIED value of AgentInteractionState.
-	AgentInteractionStateUnspecified AgentInteractionState = 0
-	// AgentInteractionStatePending is the AGENT_INTERACTION_STATE_PENDING value of AgentInteractionState.
-	AgentInteractionStatePending AgentInteractionState = 1
-	// AgentInteractionStateResolved is the AGENT_INTERACTION_STATE_RESOLVED value of AgentInteractionState.
-	AgentInteractionStateResolved AgentInteractionState = 2
-	// AgentInteractionStateCanceled is the AGENT_INTERACTION_STATE_CANCELED value of AgentInteractionState.
-	AgentInteractionStateCanceled AgentInteractionState = 3
-)
-
-// AgentInteractionType is the gestalt.provider.v1.AgentInteractionType enum. It is open:
-// numeric values outside the named constants are preserved.
-type AgentInteractionType int32
-
-const (
-	// AgentInteractionTypeUnspecified is the AGENT_INTERACTION_TYPE_UNSPECIFIED value of AgentInteractionType.
-	AgentInteractionTypeUnspecified AgentInteractionType = 0
-	// AgentInteractionTypeApproval is the AGENT_INTERACTION_TYPE_APPROVAL value of AgentInteractionType.
-	AgentInteractionTypeApproval AgentInteractionType = 1
-	// AgentInteractionTypeClarification is the AGENT_INTERACTION_TYPE_CLARIFICATION value of AgentInteractionType.
-	AgentInteractionTypeClarification AgentInteractionType = 2
-	// AgentInteractionTypeInput is the AGENT_INTERACTION_TYPE_INPUT value of AgentInteractionType.
-	AgentInteractionTypeInput AgentInteractionType = 3
-)
-
-// AgentMessagePartType is the gestalt.provider.v1.AgentMessagePartType enum. It is open:
-// numeric values outside the named constants are preserved.
-type AgentMessagePartType int32
-
-const (
-	// AgentMessagePartTypeUnspecified is the AGENT_MESSAGE_PART_TYPE_UNSPECIFIED value of AgentMessagePartType.
-	AgentMessagePartTypeUnspecified AgentMessagePartType = 0
-	// AgentMessagePartTypeText is the AGENT_MESSAGE_PART_TYPE_TEXT value of AgentMessagePartType.
-	AgentMessagePartTypeText AgentMessagePartType = 1
-	// AgentMessagePartTypeJson is the AGENT_MESSAGE_PART_TYPE_JSON value of AgentMessagePartType.
-	AgentMessagePartTypeJson AgentMessagePartType = 2
-	// AgentMessagePartTypeToolCall is the AGENT_MESSAGE_PART_TYPE_TOOL_CALL value of AgentMessagePartType.
-	AgentMessagePartTypeToolCall AgentMessagePartType = 3
-	// AgentMessagePartTypeToolResult is the AGENT_MESSAGE_PART_TYPE_TOOL_RESULT value of AgentMessagePartType.
-	AgentMessagePartTypeToolResult AgentMessagePartType = 4
-	// AgentMessagePartTypeImageRef is the AGENT_MESSAGE_PART_TYPE_IMAGE_REF value of AgentMessagePartType.
-	AgentMessagePartTypeImageRef AgentMessagePartType = 5
-)
-
-// AgentSessionState is the gestalt.provider.v1.AgentSessionState enum. It is open:
-// numeric values outside the named constants are preserved.
-type AgentSessionState int32
-
-const (
-	// AgentSessionStateUnspecified is the AGENT_SESSION_STATE_UNSPECIFIED value of AgentSessionState.
-	AgentSessionStateUnspecified AgentSessionState = 0
-	// AgentSessionStateActive is the AGENT_SESSION_STATE_ACTIVE value of AgentSessionState.
-	AgentSessionStateActive AgentSessionState = 1
-	// AgentSessionStateArchived is the AGENT_SESSION_STATE_ARCHIVED value of AgentSessionState.
-	AgentSessionStateArchived AgentSessionState = 2
-)
-
-// AgentCatalogToolConfig is the native message type for gestalt.provider.v1.AgentCatalogToolConfig.
-type AgentCatalogToolConfig struct {
-	Refs  []*AgentToolRef
-	Tools []*ListedAgentTool
-}
-
-// AgentInteraction is the native message type for gestalt.provider.v1.AgentInteraction.
-type AgentInteraction struct {
-	Id         string
-	Type       AgentInteractionType
-	State      AgentInteractionState
-	Title      string
-	Prompt     string
-	Request    map[string]any
-	Resolution map[string]any
-	CreatedAt  *time.Time
-	ResolvedAt *time.Time
-	TurnId     string
-	SessionId  string
-}
-
-// AgentMessage is the native message type for gestalt.provider.v1.AgentMessage.
-type AgentMessage struct {
-	Role     string
-	Text     string
-	Parts    []*AgentMessagePart
-	Metadata map[string]any
-}
-
-// AgentMessagePart is the native message type for gestalt.provider.v1.AgentMessagePart.
-type AgentMessagePart struct {
-	Type       AgentMessagePartType
-	Text       string
-	Json       map[string]any
-	ToolCall   *AgentMessagePartToolCall
-	ToolResult *AgentMessagePartToolResult
-	ImageRef   *AgentMessagePartImageRef
-}
-
-// AgentMessagePartImageRef is the native message type for gestalt.provider.v1.AgentMessagePartImageRef.
-type AgentMessagePartImageRef struct {
-	Uri      string
-	MimeType string
-}
-
-// AgentMessagePartToolCall is the native message type for gestalt.provider.v1.AgentMessagePartToolCall.
-type AgentMessagePartToolCall struct {
-	Id        string
-	ToolId    string
-	Arguments map[string]any
-}
-
-// AgentMessagePartToolResult is the native message type for gestalt.provider.v1.AgentMessagePartToolResult.
-type AgentMessagePartToolResult struct {
-	ToolCallId string
-	Status     int32
-	Content    string
-	Output     map[string]any
-}
-
-// AgentNoTools is the native message type for gestalt.provider.v1.AgentNoTools.
-type AgentNoTools struct{}
-
-// AgentOutputKind selects one variant of the kind oneof of AgentOutput.
-// A nil value means unset.
-type AgentOutputKind interface {
-	isAgentOutputKind()
-}
-
-// AgentOutputKindText is the text variant.
-type AgentOutputKindText struct {
-	Value *AgentTextOutput
-}
-
-func (*AgentOutputKindText) isAgentOutputKind() {}
-
-// AgentOutputKindStructured is the structured variant.
-type AgentOutputKindStructured struct {
-	Value *AgentStructuredOutput
-}
-
-func (*AgentOutputKindStructured) isAgentOutputKind() {}
-
-// AgentOutput is the native message type for gestalt.provider.v1.AgentOutput.
-type AgentOutput struct {
-	Kind AgentOutputKind
-}
-
-// AgentSession is the native message type for gestalt.provider.v1.AgentSession.
-type AgentSession struct {
-	Id                 string
-	ProviderName       string
-	Model              string
-	ClientRef          string
-	State              AgentSessionState
-	Metadata           map[string]any
-	CreatedBySubjectId string
-	CreatedAt          *time.Time
-	UpdatedAt          *time.Time
-	LastTurnAt         *time.Time
-}
-
-// AgentSessionStartConfig is the native message type for gestalt.provider.v1.AgentSessionStartConfig.
-type AgentSessionStartConfig struct {
-	Hooks []*AgentSessionStartHook
-}
-
-// AgentSessionStartHook is the native message type for gestalt.provider.v1.AgentSessionStartHook.
-type AgentSessionStartHook struct {
-	Id      string
-	Type    string
-	Command []string
-	Cwd     string
-	Timeout string
-	Env     map[string]string
-	Output  *AgentSessionStartHookOutput
-}
-
-// AgentSessionStartHookOutput is the native message type for gestalt.provider.v1.AgentSessionStartHookOutput.
-type AgentSessionStartHookOutput struct {
-	AdditionalContext bool
-	Metadata          bool
-}
-
-// AgentStructuredOutput is the native message type for gestalt.provider.v1.AgentStructuredOutput.
-type AgentStructuredOutput struct {
-	Schema map[string]any
-}
-
-// AgentTextOutput is the native message type for gestalt.provider.v1.AgentTextOutput.
-type AgentTextOutput struct{}
-
-// AgentToolConfigSource selects one variant of the source oneof of AgentToolConfig.
-// A nil value means unset.
-type AgentToolConfigSource interface {
-	isAgentToolConfigSource()
-}
-
-// AgentToolConfigSourceNone is the none variant.
-type AgentToolConfigSourceNone struct {
-	Value *AgentNoTools
-}
-
-func (*AgentToolConfigSourceNone) isAgentToolConfigSource() {}
-
-// AgentToolConfigSourceCatalog is the catalog variant.
-type AgentToolConfigSourceCatalog struct {
-	Value *AgentCatalogToolConfig
-}
-
-func (*AgentToolConfigSourceCatalog) isAgentToolConfigSource() {}
-
-// AgentToolConfig is the native message type for gestalt.provider.v1.AgentToolConfig.
-type AgentToolConfig struct {
-	Source AgentToolConfigSource
-}
-
-// AgentTurnOutput selects one variant of the output oneof of AgentTurn.
-// A nil value means unset.
-type AgentTurnOutput interface {
-	isAgentTurnOutput()
-}
-
-// AgentTurnOutputText is the text variant.
-type AgentTurnOutputText struct {
-	Value *AgentTurnTextOutput
-}
-
-func (*AgentTurnOutputText) isAgentTurnOutput() {}
-
-// AgentTurnOutputStructured is the structured variant.
-type AgentTurnOutputStructured struct {
-	Value *AgentTurnStructuredOutput
-}
-
-func (*AgentTurnOutputStructured) isAgentTurnOutput() {}
-
-// AgentTurn is the native message type for gestalt.provider.v1.AgentTurn.
-type AgentTurn struct {
-	Id                 string
-	SessionId          string
-	ProviderName       string
-	Model              string
-	Status             AgentExecutionStatus
-	Messages           []*AgentMessage
-	StatusMessage      string
-	CreatedBySubjectId string
-	CreatedAt          *time.Time
-	StartedAt          *time.Time
-	CompletedAt        *time.Time
-	ExecutionRef       string
-	Output             AgentTurnOutput
-}
-
-// AgentTurnDisplay is the native message type for gestalt.provider.v1.AgentTurnDisplay.
-type AgentTurnDisplay struct {
-	Kind      string
-	Phase     string
-	Text      string
-	Label     string
-	Ref       string
-	ParentRef string
-	Input     any
-	Output    any
-	Error     any
-	Action    string
-	Format    string
-	Language  string
-}
-
-// AgentTurnEvent is the native message type for gestalt.provider.v1.AgentTurnEvent.
-type AgentTurnEvent struct {
-	Id         string
-	TurnId     string
-	Seq        int64
-	Type       string
-	Source     string
-	Visibility string
-	Data       map[string]any
-	CreatedAt  *time.Time
-	Display    *AgentTurnDisplay
-}
-
-// AgentTurnStructuredOutput is the native message type for gestalt.provider.v1.AgentTurnStructuredOutput.
-type AgentTurnStructuredOutput struct {
-	Text  string
-	Value map[string]any
-}
-
-// AgentTurnTextOutput is the native message type for gestalt.provider.v1.AgentTurnTextOutput.
-type AgentTurnTextOutput struct {
-	Text string
-}
-
-// AgentWorkspace is the native message type for gestalt.provider.v1.AgentWorkspace.
-type AgentWorkspace struct {
-	Checkouts []*AgentWorkspaceGitCheckout
-	Cwd       string
-}
-
-// AgentWorkspaceGitCheckout is the native message type for gestalt.provider.v1.AgentWorkspaceGitCheckout.
-type AgentWorkspaceGitCheckout struct {
-	Url  string
-	Ref  string
-	Path string
-}
 
 // CancelAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CancelAgentProviderTurnRequest.
 type CancelAgentProviderTurnRequest struct {
@@ -354,11 +24,11 @@ type CreateAgentProviderSessionRequest struct {
 	Model             string
 	ClientRef         string
 	Metadata          map[string]any
-	SessionStart      *AgentSessionStartConfig
-	PreparedWorkspace *PreparedAgentWorkspace
+	SessionStart      *gestaltclient.AgentSessionStartConfig
+	PreparedWorkspace *gestaltclient.PreparedAgentWorkspace
 	ProviderName      string
-	Workspace         *AgentWorkspace
-	Tools             *AgentToolConfig
+	Workspace         *gestaltclient.AgentWorkspace
+	Tools             *gestaltclient.AgentToolConfig
 }
 
 // CreateAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CreateAgentProviderTurnRequest.
@@ -367,7 +37,7 @@ type CreateAgentProviderTurnRequest struct {
 	SessionId      string
 	IdempotencyKey string
 	Model          string
-	Messages       []*AgentMessage
+	Messages       []*gestaltclient.AgentMessage
 	Metadata       map[string]any
 	ExecutionRef   string
 	ModelOptions   map[string]any
@@ -375,7 +45,7 @@ type CreateAgentProviderTurnRequest struct {
 	// If unset or zero, the provider chooses its own execution timeout. This does
 	// not control the CreateTurn RPC deadline.
 	TimeoutSeconds int32
-	Output         *AgentOutput
+	Output         *gestaltclient.AgentOutput
 	ProviderName   string
 }
 
@@ -398,15 +68,10 @@ type ListAgentProviderInteractionsRequest struct {
 	ProviderName string
 }
 
-// ListAgentProviderInteractionsResponse is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsResponse.
-type ListAgentProviderInteractionsResponse struct {
-	Interactions []*AgentInteraction
-}
-
 // ListAgentProviderSessionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderSessionsRequest.
 type ListAgentProviderSessionsRequest struct {
 	SessionIds []string
-	State      AgentSessionState
+	State      gestaltclient.AgentSessionState
 	// When non-zero and bounded_list_hydration is supported, cap results after
 	// ordering sessions newest-first by last_turn_at, updated_at, then created_at.
 	Limit int32
@@ -414,11 +79,6 @@ type ListAgentProviderSessionsRequest struct {
 	// metadata unless exact session_ids require direct lookup.
 	SummaryOnly  bool
 	ProviderName string
-}
-
-// ListAgentProviderSessionsResponse is the native message type for gestalt.provider.v1.ListAgentProviderSessionsResponse.
-type ListAgentProviderSessionsResponse struct {
-	Sessions []*AgentSession
 }
 
 // ListAgentProviderTurnEventsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnEventsRequest.
@@ -430,16 +90,11 @@ type ListAgentProviderTurnEventsRequest struct {
 	SessionId    string
 }
 
-// ListAgentProviderTurnEventsResponse is the native message type for gestalt.provider.v1.ListAgentProviderTurnEventsResponse.
-type ListAgentProviderTurnEventsResponse struct {
-	Events []*AgentTurnEvent
-}
-
 // ListAgentProviderTurnsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnsRequest.
 type ListAgentProviderTurnsRequest struct {
 	SessionId string
 	TurnIds   []string
-	Status    AgentExecutionStatus
+	Status    gestaltclient.AgentExecutionStatus
 	// When non-zero and bounded_list_hydration is supported, cap results after
 	// ordering turns newest-first by created_at.
 	Limit int32
@@ -448,31 +103,6 @@ type ListAgentProviderTurnsRequest struct {
 	// direct lookup.
 	SummaryOnly  bool
 	ProviderName string
-}
-
-// ListAgentProviderTurnsResponse is the native message type for gestalt.provider.v1.ListAgentProviderTurnsResponse.
-type ListAgentProviderTurnsResponse struct {
-	Turns []*AgentTurn
-}
-
-// ListedAgentTool is the native message type for gestalt.provider.v1.ListedAgentTool.
-type ListedAgentTool struct {
-	Id           string
-	McpName      string
-	Title        string
-	Description  string
-	InputSchema  string
-	OutputSchema string
-	Annotations  *OperationAnnotations
-	Ref          *AgentToolRef
-	Tags         []string
-	SearchText   string
-}
-
-// PreparedAgentWorkspace is the native message type for gestalt.provider.v1.PreparedAgentWorkspace.
-type PreparedAgentWorkspace struct {
-	Root string
-	Cwd  string
 }
 
 // ResolveAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.ResolveAgentProviderInteractionRequest.
@@ -487,7 +117,7 @@ type ResolveAgentProviderInteractionRequest struct {
 type UpdateAgentProviderSessionRequest struct {
 	SessionId    string
 	ClientRef    string
-	State        AgentSessionState
+	State        gestaltclient.AgentSessionState
 	Metadata     map[string]any
 	ProviderName string
 }

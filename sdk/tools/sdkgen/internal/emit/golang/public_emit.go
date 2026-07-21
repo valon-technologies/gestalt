@@ -31,47 +31,53 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/rpc_support.go", []byte(publicRPCSupportFile)); err != nil {
 		return nil, err
 	}
-	if err := set.Add("generated/support_codec.go", []byte(publicCodecSupportFile)); err != nil {
-		return nil, err
-	}
 
-	meta := newPublicRenderer(idx)
+ 	meta := newPublicRenderer(idx, plan.SharedMessages)
 	meta.renderMetadata(plan.Methods)
 	if err := set.Add("generated/metadata.go", []byte(meta.assembleGenerated())); err != nil {
 		return nil, err
 	}
 
-	transport := newPublicRenderer(idx)
+ 	transport := newPublicRenderer(idx, plan.SharedMessages)
 	transport.renderTransport()
 	if err := set.Add("generated/transport.go", []byte(transport.assembleTransport())); err != nil {
 		return nil, err
 	}
 
 	for _, g := range groupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
-		types := newPublicRenderer(idx)
-		for _, e := range g.enums {
-			types.renderEnum(e)
-		}
+ 		types := newPublicRenderer(idx, plan.SharedMessages)
+ 		// Enums are always shared — referenced from the client package, not
+ 		// regenerated. Only projected messages (with stripped fill/reject
+ 		// fields) get local type definitions.
+ 		hasProjected := false
 		for _, m := range g.messages {
-			types.renderMessage(m)
+ 			if plan.SharedMessages[m.FullName] {
+ 				continue
+ 			}
+ 			types.renderMessage(m)
+ 			hasProjected = true
 		}
-		if err := set.Add("generated/"+g.base+".go", []byte(types.assembleGenerated())); err != nil {
-			return nil, err
-		}
-		if len(g.messages) == 0 {
+ 		if hasProjected {
+ 			if err := set.Add("generated/"+g.base+".go", []byte(types.assembleGenerated())); err != nil {
+ 				return nil, err
+ 			}
+ 		}
+ 		if !hasProjected {
 			continue
 		}
-		codec := newPublicRenderer(idx)
+ 		codec := newPublicRenderer(idx, plan.SharedMessages)
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}
-		if err := set.Add("generated/"+g.base+"_codec.go", []byte(codec.assembleGenerated())); err != nil {
-			return nil, err
+ 		if codec.body.Len() > 0 {
+ 			if err := set.Add("generated/"+g.base+"_codec.go", []byte(codec.assembleGenerated())); err != nil {
+ 				return nil, err
+ 			}
 		}
 	}
 
 	for _, svc := range plan.Filtered.Services {
-		client := newPublicRenderer(idx)
+ 		client := newPublicRenderer(idx, plan.SharedMessages)
 		client.renderServiceClient(svc)
 		base := serviceClientBase(svc.Name)
 		if err := set.Add("generated/"+base+"_client.go", []byte(client.assembleServiceClient())); err != nil {

@@ -5,6 +5,7 @@ package generated
 import (
 	"context"
 
+	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -19,98 +20,98 @@ func NewAuthorizationClient(transport Transport) *AuthorizationClient {
 	return &AuthorizationClient{transport: transport}
 }
 
-func (c *AuthorizationClient) CheckAccess(ctx context.Context, request *CheckAccessRequest) (*CheckAccessResponse, error) {
-	wire := ToWireCheckAccessRequest(request)
+func (c *AuthorizationClient) CheckAccess(ctx context.Context, request *gestaltclient.CheckAccessRequest) (*gestaltclient.CheckAccessResponse, error) {
+	wire := gestaltclient.ToWireCheckAccessRequest(request)
 	out := &proto.CheckAccessResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationCheckAccess, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireCheckAccessResponse(out), nil
+	return gestaltclient.FromWireCheckAccessResponse(out), nil
 }
 
-func (c *AuthorizationClient) CheckAccessMany(ctx context.Context, request *CheckAccessManyRequest) (*CheckAccessManyResponse, error) {
-	wire := ToWireCheckAccessManyRequest(request)
+func (c *AuthorizationClient) CheckAccessMany(ctx context.Context, request *gestaltclient.CheckAccessManyRequest) (*gestaltclient.CheckAccessManyResponse, error) {
+	wire := gestaltclient.ToWireCheckAccessManyRequest(request)
 	out := &proto.CheckAccessManyResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationCheckAccessMany, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireCheckAccessManyResponse(out), nil
+	return gestaltclient.FromWireCheckAccessManyResponse(out), nil
 }
 
-func (c *AuthorizationClient) ListRelationships(ctx context.Context, request *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
-	wire := ToWireListRelationshipsRequest(request)
+func (c *AuthorizationClient) ListRelationships(ctx context.Context, request *gestaltclient.ListRelationshipsRequest) (*gestaltclient.ListRelationshipsResponse, error) {
+	wire := gestaltclient.ToWireListRelationshipsRequest(request)
 	out := &proto.ListRelationshipsResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationListRelationships, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListRelationshipsResponse(out), nil
+	return gestaltclient.FromWireListRelationshipsResponse(out), nil
 }
 
-func (c *AuthorizationClient) AddRelationship(ctx context.Context, request *AddRelationshipRequest) (*AddRelationshipResponse, error) {
-	wire := ToWireAddRelationshipRequest(request)
+func (c *AuthorizationClient) AddRelationship(ctx context.Context, request *gestaltclient.AddRelationshipRequest) (*gestaltclient.AddRelationshipResponse, error) {
+	wire := gestaltclient.ToWireAddRelationshipRequest(request)
 	out := &proto.AddRelationshipResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationAddRelationship, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAddRelationshipResponse(out), nil
+	return gestaltclient.FromWireAddRelationshipResponse(out), nil
 }
 
-func (c *AuthorizationClient) DeleteRelationship(ctx context.Context, request *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error) {
-	wire := ToWireDeleteRelationshipRequest(request)
+func (c *AuthorizationClient) DeleteRelationship(ctx context.Context, request *gestaltclient.DeleteRelationshipRequest) (*gestaltclient.DeleteRelationshipResponse, error) {
+	wire := gestaltclient.ToWireDeleteRelationshipRequest(request)
 	out := &proto.DeleteRelationshipResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationDeleteRelationship, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireDeleteRelationshipResponse(out), nil
+	return gestaltclient.FromWireDeleteRelationshipResponse(out), nil
 }
 
-func (c *AuthorizationClient) SetAuthorizationState(ctx context.Context, request *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error) {
-	wire := ToWireSetAuthorizationStateRequest(request)
+func (c *AuthorizationClient) SetAuthorizationState(ctx context.Context, request *gestaltclient.SetAuthorizationStateRequest) (*gestaltclient.SetAuthorizationStateResponse, error) {
+	wire := gestaltclient.ToWireSetAuthorizationStateRequest(request)
 	out := &proto.SetAuthorizationStateResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationSetAuthorizationState, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireSetAuthorizationStateResponse(out), nil
+	return gestaltclient.FromWireSetAuthorizationStateResponse(out), nil
 }
 
-func (c *AuthorizationClient) GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error) {
+func (c *AuthorizationClient) GetActiveModelRef(ctx context.Context) (*gestaltclient.GetActiveModelRefResponse, error) {
 	wire := &emptypb.Empty{}
 	out := &proto.GetActiveModelRefResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationGetActiveModelRef, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireGetActiveModelRefResponse(out), nil
+	return gestaltclient.FromWireGetActiveModelRefResponse(out), nil
 }
 
-func (c *AuthorizationClient) SetActiveModel(ctx context.Context, request *SetActiveModelRequest) (*SetActiveModelResponse, error) {
-	wire := ToWireSetActiveModelRequest(request)
+func (c *AuthorizationClient) SetActiveModel(ctx context.Context, request *gestaltclient.SetActiveModelRequest) (*gestaltclient.SetActiveModelResponse, error) {
+	wire := gestaltclient.ToWireSetActiveModelRequest(request)
 	out := &proto.SetActiveModelResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationSetActiveModel, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireSetActiveModelResponse(out), nil
+	return gestaltclient.FromWireSetActiveModelResponse(out), nil
 }
 
-func (c *AuthorizationClient) ListActiveModelResourceTypes(ctx context.Context, request *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error) {
-	wire := ToWireListActiveModelResourceTypesRequest(request)
+func (c *AuthorizationClient) ListActiveModelResourceTypes(ctx context.Context, request *gestaltclient.ListActiveModelResourceTypesRequest) (*gestaltclient.ListActiveModelResourceTypesResponse, error) {
+	wire := gestaltclient.ToWireListActiveModelResourceTypesRequest(request)
 	out := &proto.ListActiveModelResourceTypesResponse{}
 	if err := c.transport.Unary(ctx, MethodAuthorizationListActiveModelResourceTypes, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListActiveModelResourceTypesResponse(out), nil
+	return gestaltclient.FromWireListActiveModelResourceTypesResponse(out), nil
 }
 
 // AuthorizationClientREST exposes only REST-backed methods for Authorization.
 type AuthorizationClientREST interface {
-	CheckAccess(ctx context.Context, request *CheckAccessRequest) (*CheckAccessResponse, error)
-	CheckAccessMany(ctx context.Context, request *CheckAccessManyRequest) (*CheckAccessManyResponse, error)
-	ListRelationships(ctx context.Context, request *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
-	AddRelationship(ctx context.Context, request *AddRelationshipRequest) (*AddRelationshipResponse, error)
-	DeleteRelationship(ctx context.Context, request *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error)
-	SetAuthorizationState(ctx context.Context, request *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error)
-	GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error)
-	SetActiveModel(ctx context.Context, request *SetActiveModelRequest) (*SetActiveModelResponse, error)
-	ListActiveModelResourceTypes(ctx context.Context, request *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error)
+	CheckAccess(ctx context.Context, request *gestaltclient.CheckAccessRequest) (*gestaltclient.CheckAccessResponse, error)
+	CheckAccessMany(ctx context.Context, request *gestaltclient.CheckAccessManyRequest) (*gestaltclient.CheckAccessManyResponse, error)
+	ListRelationships(ctx context.Context, request *gestaltclient.ListRelationshipsRequest) (*gestaltclient.ListRelationshipsResponse, error)
+	AddRelationship(ctx context.Context, request *gestaltclient.AddRelationshipRequest) (*gestaltclient.AddRelationshipResponse, error)
+	DeleteRelationship(ctx context.Context, request *gestaltclient.DeleteRelationshipRequest) (*gestaltclient.DeleteRelationshipResponse, error)
+	SetAuthorizationState(ctx context.Context, request *gestaltclient.SetAuthorizationStateRequest) (*gestaltclient.SetAuthorizationStateResponse, error)
+	GetActiveModelRef(ctx context.Context) (*gestaltclient.GetActiveModelRefResponse, error)
+	SetActiveModel(ctx context.Context, request *gestaltclient.SetActiveModelRequest) (*gestaltclient.SetActiveModelResponse, error)
+	ListActiveModelResourceTypes(ctx context.Context, request *gestaltclient.ListActiveModelResourceTypesRequest) (*gestaltclient.ListActiveModelResourceTypesResponse, error)
 }
 
 var _ AuthorizationClientREST = (*AuthorizationClient)(nil)

@@ -12,11 +12,18 @@ type EmitPlan struct {
 	Methods           []PublicMethod
 	ReachableMessages []*model.Message
 	ReachableEnums    []*model.Enum
+
+	// SharedMessages maps each reachable message full name to true when the
+	// message is field-identical to the provider schema (no fill/reject
+	// omission). Emitters reference the provider type for shared messages
+	// instead of regenerating it. Projected messages (absent from the map or
+	// false) have stripped fields and must be defined locally.
+	SharedMessages map[string]bool
 }
 
 func prepareEmitFromView(view *View, schema *model.Schema) (*EmitPlan, error) {
 	if len(view.Services) == 0 {
-		return &EmitPlan{View: view}, nil
+		return &EmitPlan{View: view, SharedMessages: map[string]bool{}}, nil
 	}
 	filtered, err := Project(schema, view)
 	if err != nil {
@@ -35,6 +42,7 @@ func prepareEmitFromView(view *View, schema *model.Schema) (*EmitPlan, error) {
 	if err != nil {
 		return nil, err
 	}
+	shared := classifySharedMessages(view, reachableMessages)
 	return &EmitPlan{
 		View:              view,
 		Filtered:          filtered,
@@ -42,6 +50,7 @@ func prepareEmitFromView(view *View, schema *model.Schema) (*EmitPlan, error) {
 		Methods:           methods,
 		ReachableMessages: reachableMessages,
 		ReachableEnums:    reachableEnums,
+		SharedMessages:    shared,
 	}, nil
 }
 
@@ -59,4 +68,22 @@ func PrepareRESTEmit(schema *model.Schema) (*EmitPlan, error) {
 		return nil, err
 	}
 	return prepareEmitFromView(FilterREST(Build(schema)), schema)
+}
+
+// classifySharedMessages returns a set of reachable message full names that
+// are field-identical to the provider schema — no fill/reject fields omitted.
+// These messages can be referenced from the provider package instead of
+// regenerated in the public client tree.
+func classifySharedMessages(view *View, reachable []*model.Message) map[string]bool {
+	omitByInput, err := inputFieldPolicies(view)
+	if err != nil {
+		return map[string]bool{}
+	}
+	shared := map[string]bool{}
+	for _, m := range reachable {
+		if len(omitByInput[m.FullName]) == 0 {
+			shared[m.FullName] = true
+		}
+	}
+	return shared
 }

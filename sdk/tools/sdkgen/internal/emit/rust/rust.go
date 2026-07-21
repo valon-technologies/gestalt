@@ -78,7 +78,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	codecModules := []string{"support"}
 	for _, g := range groupFiles(services, messages, enums) {
 		outputBase := g.base
-		public := newRenderer(idx, outputBase, g.base, modulePublic, false)
+		public := newRenderer(idx, outputBase, g.base, modulePublic, false, nil, nil)
 		for _, e := range g.enums {
 			public.renderEnum(e)
 		}
@@ -98,7 +98,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		if len(g.messages) == 0 {
 			continue
 		}
-		codec := newRenderer(idx, outputBase, g.base, moduleCodec, false)
+		codec := newRenderer(idx, outputBase, g.base, moduleCodec, false, nil, nil)
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}

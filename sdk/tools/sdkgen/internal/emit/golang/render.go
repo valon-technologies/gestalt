@@ -12,6 +12,10 @@ import (
 // aliased proto to match the handwritten sdk/go transport code.
 const wireImport = `proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"`
 
+// gestaltClientAlias is the import alias for the provider client package,
+// used by the public renderer to reference shared types defined in client.
+const gestaltClientAlias = "gestaltclient."
+
 // features tracks which imports a generated file needs; the import header is
 // assembled after the body renders.
 type features struct {
@@ -33,6 +37,8 @@ type features struct {
 type renderer struct {
 	idx          *index
 	publicClient bool
+	shared       map[string]bool
+	toWireOnly   bool
 	features     features
 	body         strings.Builder
 }
@@ -41,15 +47,23 @@ func newRenderer(idx *index) *renderer {
 	return &renderer{idx: idx}
 }
 
-func newPublicRenderer(idx *index) *renderer {
-	return &renderer{idx: idx, publicClient: true}
+ func newPublicRenderer(idx *index, shared map[string]bool) *renderer {
+ 	return &renderer{idx: idx, publicClient: true, shared: shared, toWireOnly: true}
 }
 
 func (r *renderer) messageType(fullName string) string {
+	if r.publicClient && r.shared[fullName] {
+ 		r.features.gestaltclient = true
+		return gestaltClientAlias + localName(fullName)
+	}
 	return goTypeName(fullName, r.idx.messages[fullName].ProtoFile)
 }
 
 func (r *renderer) enumType(fullName string) string {
+ 	if r.publicClient {
+ 		r.features.gestaltclient = true
+		return gestaltClientAlias + localName(fullName)
+	}
 	return goTypeName(fullName, r.idx.enums[fullName].ProtoFile)
 }
 
@@ -61,6 +75,38 @@ func wireMessage(fullName string) string {
 
 func wireEnum(fullName string) string {
 	return "proto." + localName(fullName)
+}
+
+// toWireFuncName renders the converter function name for a message, prefixed
+// with the client package alias when the type is shared (defined in client).
+func (r *renderer) toWireFuncName(fullName string) string {
+	if r.publicClient && r.shared[fullName] {
+ 		r.features.gestaltclient = true
+		return gestaltClientAlias + toWireFunc(localName(fullName))
+	}
+	return toWireFunc(r.messageType(fullName))
+}
+
+// fromWireFuncName renders the converter function name for a message, prefixed
+// with the client package alias when the type is shared (defined in client).
+func (r *renderer) fromWireFuncName(fullName string) string {
+	if r.publicClient && r.shared[fullName] {
+ 		r.features.gestaltclient = true
+		return gestaltClientAlias + fromWireFunc(localName(fullName))
+	}
+	return fromWireFunc(r.messageType(fullName))
+}
+
+// codecHelper renders the name of a well-known-type codec helper
+// (toWireStruct, fromWireTimestamp, etc.), prefixed with the client package
+// alias when rendering the public client. The public tree has no
+// support_codec.go; it imports these from the client package.
+func (r *renderer) codecHelper(name string) string {
+	if r.publicClient {
+ 		r.features.gestaltclient = true
+		return gestaltClientAlias + upperFirst(name)
+	}
+	return upperFirst(name)
 }
 
 // valueType renders the native Go type of a singular value: a repeated
@@ -173,7 +219,7 @@ func (r *renderer) valueToWire(ref *model.TypeRef, expr string) string {
 	case model.KindEnum:
 		return wireEnum(ref.Enum) + "(" + expr + ")"
 	case model.KindMessage:
-		return toWireFunc(r.messageType(ref.Message)) + "(" + expr + ")"
+ 		return r.toWireFuncName(ref.Message) + "(" + expr + ")"
 	case model.KindTimestamp:
 		r.features.timestamppb = true
 		return "timestamppb.New(" + expr + ")"
@@ -181,11 +227,11 @@ func (r *renderer) valueToWire(ref *model.TypeRef, expr string) string {
 		r.features.durationpb = true
 		return "durationpb.New(" + expr + ")"
 	case model.KindJSONStruct:
-		return "toWireStruct(" + expr + ")"
+ 		return r.codecHelper("toWireStruct") + "(" + expr + ")"
 	case model.KindJSONValue:
-		return "toWireValue(" + expr + ")"
+ 		return r.codecHelper("toWireValue") + "(" + expr + ")"
 	case model.KindRPCStatus:
-		return "toWireStatus(" + expr + ")"
+ 		return r.codecHelper("toWireStatus") + "(" + expr + ")"
 	default:
 		panic(fmt.Sprintf("golang: no wire conversion for kind %d", ref.Kind))
 	}
@@ -200,17 +246,17 @@ func (r *renderer) valueFromWire(ref *model.TypeRef, expr string) string {
 	case model.KindEnum:
 		return r.enumType(ref.Enum) + "(" + expr + ")"
 	case model.KindMessage:
-		return fromWireFunc(r.messageType(ref.Message)) + "(" + expr + ")"
+ 		return r.fromWireFuncName(ref.Message) + "(" + expr + ")"
 	case model.KindTimestamp:
 		return expr + ".AsTime()"
 	case model.KindDuration:
 		return expr + ".AsDuration()"
 	case model.KindJSONStruct:
-		return "fromWireStruct(" + expr + ")"
+ 		return r.codecHelper("fromWireStruct") + "(" + expr + ")"
 	case model.KindJSONValue:
-		return "fromWireValue(" + expr + ")"
+ 		return r.codecHelper("fromWireValue") + "(" + expr + ")"
 	case model.KindRPCStatus:
-		return "fromWireStatus(" + expr + ")"
+ 		return r.codecHelper("fromWireStatus") + "(" + expr + ")"
 	default:
 		panic(fmt.Sprintf("golang: no native conversion for kind %d", ref.Kind))
 	}
@@ -328,6 +374,9 @@ type conversionParts struct {
 }
 
 func (r *renderer) renderConversions(m *model.Message) {
+ 	if r.publicClient && r.shared[m.FullName] {
+ 		return
+ 	}
 	r.features.proto = true
 	name := r.messageType(m.FullName)
 	wireName := wireMessage(m.FullName)
@@ -347,6 +396,9 @@ func (r *renderer) renderConversions(m *model.Message) {
 	}
 	r.body.WriteString("\treturn out\n}\n\n")
 
+ 	if r.toWireOnly {
+ 		return
+ 	}
 	fmt.Fprintf(&r.body, "func %s(value *%s) *%s {\n", fromWireFunc(name), wireName, name)
 	r.body.WriteString("\tif value == nil {\n\t\treturn nil\n\t}\n")
 	parts = parts[:0]
@@ -443,17 +495,17 @@ func (r *renderer) fieldToWire(f *model.Field) conversionParts {
 func (r *renderer) fieldConvToWire(f *model.Field, expr string) string {
 	switch f.Kind {
 	case model.KindMessage:
-		return toWireFunc(r.messageType(f.Message)) + "(" + expr + ")"
+		return r.toWireFuncName(f.Message) + "(" + expr + ")"
 	case model.KindTimestamp:
-		return "toWireTimestamp(" + expr + ")"
+ 		return r.codecHelper("toWireTimestamp") + "(" + expr + ")"
 	case model.KindDuration:
-		return "toWireDuration(" + expr + ")"
+ 		return r.codecHelper("toWireDuration") + "(" + expr + ")"
 	case model.KindJSONStruct:
-		return "toWireStruct(" + expr + ")"
+ 		return r.codecHelper("toWireStruct") + "(" + expr + ")"
 	case model.KindJSONValue:
-		return "toWireValue(" + expr + ")"
+ 		return r.codecHelper("toWireValue") + "(" + expr + ")"
 	case model.KindRPCStatus:
-		return "toWireStatus(" + expr + ")"
+ 		return r.codecHelper("toWireStatus") + "(" + expr + ")"
 	default:
 		panic(fmt.Sprintf("golang: no field converter for kind %d", f.Kind))
 	}
@@ -497,17 +549,17 @@ func (r *renderer) fieldFromWire(f *model.Field) conversionParts {
 		}
 		return conversionParts{entry: name + ": " + r.enumType(f.Enum) + "(" + expr + ")"}
 	case model.KindMessage:
-		return conversionParts{entry: name + ": " + fromWireFunc(r.messageType(f.Message)) + "(" + expr + ")"}
+ 		return conversionParts{entry: name + ": " + r.fromWireFuncName(f.Message) + "(" + expr + ")"}
 	case model.KindTimestamp:
-		return conversionParts{entry: name + ": fromWireTimestamp(" + expr + ")"}
+ 		return conversionParts{entry: name + ": " + r.codecHelper("fromWireTimestamp") + "(" + expr + ")"}
 	case model.KindDuration:
-		return conversionParts{entry: name + ": fromWireDuration(" + expr + ")"}
+ 		return conversionParts{entry: name + ": " + r.codecHelper("fromWireDuration") + "(" + expr + ")"}
 	case model.KindJSONStruct:
-		return conversionParts{entry: name + ": fromWireStruct(" + expr + ")"}
+ 		return conversionParts{entry: name + ": " + r.codecHelper("fromWireStruct") + "(" + expr + ")"}
 	case model.KindJSONValue:
-		return conversionParts{entry: name + ": fromWireValue(" + expr + ")"}
+ 		return conversionParts{entry: name + ": " + r.codecHelper("fromWireValue") + "(" + expr + ")"}
 	case model.KindRPCStatus:
-		return conversionParts{entry: name + ": fromWireStatus(" + expr + ")"}
+ 		return conversionParts{entry: name + ": " + r.codecHelper("fromWireStatus") + "(" + expr + ")"}
 	default:
 		panic(fmt.Sprintf("golang: unsupported singular field kind %d (field %s)", f.Kind, f.Name))
 	}

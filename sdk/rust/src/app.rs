@@ -32,7 +32,8 @@ pub mod connection_mode {
 /// AccessContext describes the host-side access decision for an operation.
 ///
 /// Native message type for `gestalt.provider.v1.AccessContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AccessContext {
     /// The `policy` field.
     pub policy: String,
@@ -41,7 +42,8 @@ pub struct AccessContext {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentInvocationContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentInvocationContext {
     /// The `provider_name` field.
     pub provider_name: String,
@@ -52,7 +54,8 @@ pub struct AgentInvocationContext {
 }
 
 /// Native message type for `gestalt.provider.v1.AgentToolRef`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentToolRef {
     /// The `app` field.
     pub app: String,
@@ -78,7 +81,8 @@ pub struct AgentToolRef {
 /// through Gestalt.
 ///
 /// Native message type for `gestalt.provider.v1.AppInvokeGraphQLRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppInvokeGraphQLRequest {
     /// The `app` field.
     pub app: String,
@@ -99,7 +103,8 @@ pub struct AppInvokeGraphQLRequest {
 /// AppInvokeRequest invokes a declared operation on another app through Gestalt.
 ///
 /// Native message type for `gestalt.provider.v1.AppInvokeRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppInvokeRequest {
     /// The `app` field.
     pub app: String,
@@ -125,7 +130,8 @@ pub struct AppInvokeRequest {
 /// provider.
 ///
 /// Native message type for `gestalt.provider.v1.Catalog`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Catalog {
     /// The `name` field.
     pub name: String,
@@ -143,7 +149,8 @@ pub struct Catalog {
 /// provider.
 ///
 /// Native message type for `gestalt.provider.v1.CatalogOperation`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CatalogOperation {
     /// The `id` field.
     pub id: String,
@@ -182,7 +189,8 @@ pub struct CatalogOperation {
 /// catalog for an operation.
 ///
 /// Native message type for `gestalt.provider.v1.CatalogParameter`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CatalogParameter {
     /// The `name` field.
     pub name: String,
@@ -199,7 +207,8 @@ pub struct CatalogParameter {
 /// ConnectionParamDef describes one provider-defined connection parameter.
 ///
 /// Native message type for `gestalt.provider.v1.ConnectionParamDef`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionParamDef {
     /// The `required` field.
     pub required: bool,
@@ -216,7 +225,8 @@ pub struct ConnectionParamDef {
 /// CredentialContext describes the resolved credential used for an operation.
 ///
 /// Native message type for `gestalt.provider.v1.CredentialContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CredentialContext {
     /// The `mode` field.
     pub mode: String,
@@ -231,7 +241,8 @@ pub struct CredentialContext {
 /// ExecuteRequest invokes one executable operation.
 ///
 /// Native message type for `gestalt.provider.v1.ExecuteRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExecuteRequest {
     /// The `operation` field.
     pub operation: String,
@@ -253,7 +264,8 @@ pub struct ExecuteRequest {
 /// extensions.
 ///
 /// Native message type for `gestalt.provider.v1.GetSessionCatalogRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetSessionCatalogRequest {
     /// The `token` field.
     pub token: String,
@@ -268,7 +280,8 @@ pub struct GetSessionCatalogRequest {
 /// GetSessionCatalogResponse returns request-scoped catalog extensions.
 ///
 /// Native message type for `gestalt.provider.v1.GetSessionCatalogResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetSessionCatalogResponse {
     /// The `catalog` field; None when unset.
     pub catalog: Option<Catalog>,
@@ -278,7 +291,8 @@ pub struct GetSessionCatalogResponse {
 /// plugin-local subject resolution hook.
 ///
 /// Native message type for `gestalt.provider.v1.HTTPSubjectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HTTPSubjectRequest {
     /// The `binding` field.
     pub binding: String,
@@ -307,14 +321,16 @@ pub struct HTTPSubjectRequest {
 /// HostContext describes stable public host metadata available to provider code.
 ///
 /// Native message type for `gestalt.provider.v1.HostContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HostContext {
     /// The `public_base_url` field.
     pub public_base_url: String,
 }
 
 /// Native message type for `gestalt.provider.v1.InvocationContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InvocationContext {
     /// The `request_id` field.
     pub request_id: String,
@@ -332,7 +348,7 @@ pub struct InvocationContext {
 
 /// Values of the `value` oneof in `InvokeFrame`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum InvokeFrameValue {
     /// The `metadata` variant.
     Metadata(InvokeMetadata),
@@ -348,7 +364,8 @@ pub enum InvokeFrameValue {
 /// JSON error body, after which the stream ends.
 ///
 /// Native message type for `gestalt.provider.v1.InvokeFrame`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InvokeFrame {
     /// The `value` oneof; None when unset.
     pub value: Option<InvokeFrameValue>,
@@ -359,7 +376,8 @@ pub struct InvokeFrame {
 /// operation's StreamResponseSpec).
 ///
 /// Native message type for `gestalt.provider.v1.InvokeMetadata`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InvokeMetadata {
     /// The `status` field.
     pub status: i32,
@@ -373,7 +391,8 @@ pub struct InvokeMetadata {
 /// behaves.
 ///
 /// Native message type for `gestalt.provider.v1.OperationAnnotations`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OperationAnnotations {
     /// The `read_only_hint` field; None when unset.
     pub read_only_hint: Option<bool>,
@@ -387,7 +406,7 @@ pub struct OperationAnnotations {
 
 /// Values of the `kind` oneof in `OperationResponseSpec`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum OperationResponseSpecKind {
     /// The `unary` variant.
     Unary(UnaryResponseSpec),
@@ -399,7 +418,8 @@ pub enum OperationResponseSpecKind {
 /// defaults to unary; emitted catalogs always declare either unary or stream.
 ///
 /// Native message type for `gestalt.provider.v1.OperationResponseSpec`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OperationResponseSpec {
     /// The `kind` oneof; None when unset.
     pub kind: Option<OperationResponseSpecKind>,
@@ -408,7 +428,8 @@ pub struct OperationResponseSpec {
 /// OperationResult is the serialized result returned from an Execute call.
 ///
 /// Native message type for `gestalt.provider.v1.OperationResult`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OperationResult {
     /// The `status` field.
     pub status: i32,
@@ -422,7 +443,8 @@ pub struct OperationResult {
 /// context from the host and is trusted to propagate it back to host services.
 ///
 /// Native message type for `gestalt.provider.v1.ProviderContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderContext {
     /// The `kind` field.
     pub kind: String,
@@ -433,7 +455,8 @@ pub struct ProviderContext {
 /// ProviderMetadata describes an integration provider's static capabilities.
 ///
 /// Native message type for `gestalt.provider.v1.ProviderMetadata`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderMetadata {
     /// The `name` field.
     pub name: String,
@@ -470,7 +493,8 @@ pub struct ProviderMetadata {
 /// one operation.
 ///
 /// Native message type for `gestalt.provider.v1.RequestContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestContext {
     /// The `subject` field; None when unset.
     pub subject: Option<SubjectContext>,
@@ -507,7 +531,8 @@ pub struct RequestContext {
 }
 
 /// Native message type for `gestalt.provider.v1.RequestMetaContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestMetaContext {
     /// The `client_ip` field.
     pub client_ip: String,
@@ -522,7 +547,8 @@ pub struct RequestMetaContext {
 /// and dispatch.
 ///
 /// Native message type for `gestalt.provider.v1.ResolveHTTPSubjectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveHTTPSubjectRequest {
     /// The `request` field; None when unset.
     pub request: Option<HTTPSubjectRequest>,
@@ -536,7 +562,8 @@ pub struct ResolveHTTPSubjectRequest {
 /// request with the provided status and message.
 ///
 /// Native message type for `gestalt.provider.v1.ResolveHTTPSubjectResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveHTTPSubjectResponse {
     /// The `subject` field; None when unset.
     pub subject: Option<SubjectContext>,
@@ -550,7 +577,8 @@ pub struct ResolveHTTPSubjectResponse {
 /// session.
 ///
 /// Native message type for `gestalt.provider.v1.StartProviderRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartProviderRequest {
     /// The `name` field.
     pub name: String,
@@ -563,7 +591,8 @@ pub struct StartProviderRequest {
 /// StartProviderResponse confirms the protocol version the provider is serving.
 ///
 /// Native message type for `gestalt.provider.v1.StartProviderResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartProviderResponse {
     /// The `protocol_version` field.
     pub protocol_version: i32,
@@ -574,7 +603,8 @@ pub struct StartProviderResponse {
 /// is optional and describes one yielded item when the stream is typed.
 ///
 /// Native message type for `gestalt.provider.v1.StreamResponseSpec`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StreamResponseSpec {
     /// The `media_type` field.
     pub media_type: String,
@@ -585,7 +615,8 @@ pub struct StreamResponseSpec {
 /// StringList is a helper map value for repeated HTTP header and query values.
 ///
 /// Native message type for `gestalt.provider.v1.StringList`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StringList {
     /// The `values` field.
     pub values: Vec<String>,
@@ -594,7 +625,8 @@ pub struct StringList {
 /// SubjectContext identifies the caller that initiated an operation.
 ///
 /// Native message type for `gestalt.provider.v1.SubjectContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubjectContext {
     /// The `id` field.
     pub id: String,
@@ -609,7 +641,8 @@ pub struct SubjectContext {
 }
 
 /// Native message type for `gestalt.provider.v1.SubjectPermissionContext`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubjectPermissionContext {
     /// The `app` field.
     pub app: String,
@@ -622,7 +655,8 @@ pub struct SubjectPermissionContext {
 /// UnaryResponseSpec describes a unary (fully materialized) operation response.
 ///
 /// Native message type for `gestalt.provider.v1.UnaryResponseSpec`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UnaryResponseSpec {
     /// The `schema` field; None when unset.
     pub schema: Option<serde_json::Map<String, serde_json::Value>>,

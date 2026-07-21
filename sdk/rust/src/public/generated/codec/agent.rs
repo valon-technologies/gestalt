@@ -4,46 +4,23 @@
 
 #![allow(clippy::all, unused_variables, unused_mut, dead_code)]
 
+use crate::codec::agent::{
+    to_wire_agent_message, to_wire_agent_output, to_wire_agent_session_start_config,
+    to_wire_agent_tool_config, to_wire_agent_workspace, to_wire_prepared_agent_workspace,
+};
+use crate::codec::support::to_wire_struct;
 use crate::generated::v1;
 use crate::public::generated::agent::{
-    AgentCatalogToolConfig, AgentInteraction, AgentMessage, AgentMessagePart,
-    AgentMessagePartImageRef, AgentMessagePartToolCall, AgentMessagePartToolResult, AgentNoTools,
-    AgentOutput, AgentOutputKind, AgentSession, AgentSessionStartConfig, AgentSessionStartHook,
-    AgentSessionStartHookOutput, AgentStructuredOutput, AgentTextOutput, AgentToolConfig,
-    AgentToolConfigSource, AgentTurn, AgentTurnDisplay, AgentTurnEvent, AgentTurnOutput,
-    AgentTurnStructuredOutput, AgentTurnTextOutput, AgentWorkspace, AgentWorkspaceGitCheckout,
     CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
     CreateAgentProviderTurnRequest, GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
-    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
-    ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
-    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
-    ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse, ListedAgentTool,
-    PreparedAgentWorkspace, ResolveAgentProviderInteractionRequest,
-    UpdateAgentProviderSessionRequest,
+    ListAgentProviderInteractionsRequest, ListAgentProviderSessionsRequest,
+    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnsRequest,
+    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
 };
 use crate::public::generated::codec::app::{
     decode_wire_agent_tool_ref_json, decode_wire_operation_annotations_json,
     encode_wire_agent_tool_ref_json, encode_wire_operation_annotations_json,
-    to_wire_agent_tool_ref, to_wire_operation_annotations,
 };
-use crate::public::generated::codec::support::{
-    from_wire_struct, from_wire_timestamp, from_wire_value, to_wire_struct,
-};
-
-/// Converts a native `AgentCatalogToolConfig` to its wire message.
-pub(crate) fn to_wire_agent_catalog_tool_config(
-    value: AgentCatalogToolConfig,
-) -> v1::AgentCatalogToolConfig {
-    v1::AgentCatalogToolConfig {
-        refs: value.refs.into_iter().map(to_wire_agent_tool_ref).collect(),
-        tools: value
-            .tools
-            .into_iter()
-            .map(to_wire_listed_agent_tool)
-            .collect(),
-        ..Default::default()
-    }
-}
 
 /// Encodes a wire `ListedAgentTool` as protobuf JSON.
 pub(crate) fn encode_wire_listed_agent_tool_json(value: &v1::ListedAgentTool) -> serde_json::Value {
@@ -244,23 +221,6 @@ pub(crate) fn decode_wire_agent_catalog_tool_config_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `AgentInteraction` to its native message.
-pub(crate) fn from_wire_agent_interaction(value: v1::AgentInteraction) -> AgentInteraction {
-    AgentInteraction {
-        id: value.id,
-        r#type: value.r#type,
-        state: value.state,
-        title: value.title,
-        prompt: value.prompt,
-        request: value.request.map(from_wire_struct),
-        resolution: value.resolution.map(from_wire_struct),
-        created_at: value.created_at.map(from_wire_timestamp),
-        resolved_at: value.resolved_at.map(from_wire_timestamp),
-        turn_id: value.turn_id,
-        session_id: value.session_id,
-    }
 }
 
 /// Encodes a wire `AgentInteraction` as protobuf JSON.
@@ -467,35 +427,6 @@ pub(crate) fn decode_wire_agent_interaction_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `AgentMessage` to its wire message.
-pub(crate) fn to_wire_agent_message(value: AgentMessage) -> v1::AgentMessage {
-    v1::AgentMessage {
-        role: value.role,
-        text: value.text,
-        parts: value
-            .parts
-            .into_iter()
-            .map(to_wire_agent_message_part)
-            .collect(),
-        metadata: value.metadata.map(to_wire_struct),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentMessage` to its native message.
-pub(crate) fn from_wire_agent_message(value: v1::AgentMessage) -> AgentMessage {
-    AgentMessage {
-        role: value.role,
-        text: value.text,
-        parts: value
-            .parts
-            .into_iter()
-            .map(from_wire_agent_message_part)
-            .collect(),
-        metadata: value.metadata.map(from_wire_struct),
-    }
 }
 
 /// Encodes a wire `AgentMessagePartToolCall` as protobuf JSON.
@@ -854,111 +785,6 @@ pub(crate) fn decode_wire_agent_message_json(
     })
 }
 
-/// Converts a native `AgentMessagePart` to its wire message.
-pub(crate) fn to_wire_agent_message_part(value: AgentMessagePart) -> v1::AgentMessagePart {
-    v1::AgentMessagePart {
-        r#type: value.r#type,
-        text: value.text,
-        json: value.json.map(to_wire_struct),
-        tool_call: value.tool_call.map(to_wire_agent_message_part_tool_call),
-        tool_result: value
-            .tool_result
-            .map(to_wire_agent_message_part_tool_result),
-        image_ref: value.image_ref.map(to_wire_agent_message_part_image_ref),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentMessagePart` to its native message.
-pub(crate) fn from_wire_agent_message_part(value: v1::AgentMessagePart) -> AgentMessagePart {
-    AgentMessagePart {
-        r#type: value.r#type,
-        text: value.text,
-        json: value.json.map(from_wire_struct),
-        tool_call: value.tool_call.map(from_wire_agent_message_part_tool_call),
-        tool_result: value
-            .tool_result
-            .map(from_wire_agent_message_part_tool_result),
-        image_ref: value.image_ref.map(from_wire_agent_message_part_image_ref),
-    }
-}
-
-/// Converts a native `AgentMessagePartImageRef` to its wire message.
-pub(crate) fn to_wire_agent_message_part_image_ref(
-    value: AgentMessagePartImageRef,
-) -> v1::AgentMessagePartImageRef {
-    v1::AgentMessagePartImageRef {
-        uri: value.uri,
-        mime_type: value.mime_type,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentMessagePartImageRef` to its native message.
-pub(crate) fn from_wire_agent_message_part_image_ref(
-    value: v1::AgentMessagePartImageRef,
-) -> AgentMessagePartImageRef {
-    AgentMessagePartImageRef {
-        uri: value.uri,
-        mime_type: value.mime_type,
-    }
-}
-
-/// Converts a native `AgentMessagePartToolCall` to its wire message.
-pub(crate) fn to_wire_agent_message_part_tool_call(
-    value: AgentMessagePartToolCall,
-) -> v1::AgentMessagePartToolCall {
-    v1::AgentMessagePartToolCall {
-        id: value.id,
-        tool_id: value.tool_id,
-        arguments: value.arguments.map(to_wire_struct),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentMessagePartToolCall` to its native message.
-pub(crate) fn from_wire_agent_message_part_tool_call(
-    value: v1::AgentMessagePartToolCall,
-) -> AgentMessagePartToolCall {
-    AgentMessagePartToolCall {
-        id: value.id,
-        tool_id: value.tool_id,
-        arguments: value.arguments.map(from_wire_struct),
-    }
-}
-
-/// Converts a native `AgentMessagePartToolResult` to its wire message.
-pub(crate) fn to_wire_agent_message_part_tool_result(
-    value: AgentMessagePartToolResult,
-) -> v1::AgentMessagePartToolResult {
-    v1::AgentMessagePartToolResult {
-        tool_call_id: value.tool_call_id,
-        status: value.status,
-        content: value.content,
-        output: value.output.map(to_wire_struct),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentMessagePartToolResult` to its native message.
-pub(crate) fn from_wire_agent_message_part_tool_result(
-    value: v1::AgentMessagePartToolResult,
-) -> AgentMessagePartToolResult {
-    AgentMessagePartToolResult {
-        tool_call_id: value.tool_call_id,
-        status: value.status,
-        content: value.content,
-        output: value.output.map(from_wire_struct),
-    }
-}
-
-/// Converts a native `AgentNoTools` to its wire message.
-pub(crate) fn to_wire_agent_no_tools(_value: AgentNoTools) -> v1::AgentNoTools {
-    v1::AgentNoTools {
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `AgentNoTools` as protobuf JSON.
 pub(crate) fn encode_wire_agent_no_tools_json(value: &v1::AgentNoTools) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -978,43 +804,6 @@ pub(crate) fn decode_wire_agent_no_tools_json(
     Ok(v1::AgentNoTools {
         ..Default::default()
     })
-}
-
-/// Converts a native `AgentOutput` to its wire message.
-pub(crate) fn to_wire_agent_output(value: AgentOutput) -> v1::AgentOutput {
-    v1::AgentOutput {
-        kind: value.kind.map(to_wire_agent_output_kind),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentOutput` to its native message.
-pub(crate) fn from_wire_agent_output(value: v1::AgentOutput) -> AgentOutput {
-    AgentOutput {
-        kind: value.kind.map(from_wire_agent_output_kind),
-    }
-}
-
-pub(crate) fn to_wire_agent_output_kind(value: AgentOutputKind) -> v1::agent_output::Kind {
-    match value {
-        AgentOutputKind::Text(value) => {
-            v1::agent_output::Kind::Text(to_wire_agent_text_output(value))
-        }
-        AgentOutputKind::Structured(value) => {
-            v1::agent_output::Kind::Structured(to_wire_agent_structured_output(value))
-        }
-    }
-}
-
-pub(crate) fn from_wire_agent_output_kind(value: v1::agent_output::Kind) -> AgentOutputKind {
-    match value {
-        v1::agent_output::Kind::Text(value) => {
-            AgentOutputKind::Text(from_wire_agent_text_output(value))
-        }
-        v1::agent_output::Kind::Structured(value) => {
-            AgentOutputKind::Structured(from_wire_agent_structured_output(value))
-        }
-    }
 }
 
 /// Encodes a wire `AgentTextOutput` as protobuf JSON.
@@ -1117,22 +906,6 @@ pub(crate) fn decode_wire_agent_output_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `AgentSession` to its native message.
-pub(crate) fn from_wire_agent_session(value: v1::AgentSession) -> AgentSession {
-    AgentSession {
-        id: value.id,
-        provider_name: value.provider_name,
-        model: value.model,
-        client_ref: value.client_ref,
-        state: value.state,
-        metadata: value.metadata.map(from_wire_struct),
-        created_by_subject_id: value.created_by_subject_id,
-        created_at: value.created_at.map(from_wire_timestamp),
-        updated_at: value.updated_at.map(from_wire_timestamp),
-        last_turn_at: value.last_turn_at.map(from_wire_timestamp),
-    }
 }
 
 /// Encodes a wire `AgentSession` as protobuf JSON.
@@ -1285,20 +1058,6 @@ pub(crate) fn decode_wire_agent_session_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a native `AgentSessionStartConfig` to its wire message.
-pub(crate) fn to_wire_agent_session_start_config(
-    value: AgentSessionStartConfig,
-) -> v1::AgentSessionStartConfig {
-    v1::AgentSessionStartConfig {
-        hooks: value
-            .hooks
-            .into_iter()
-            .map(to_wire_agent_session_start_hook)
-            .collect(),
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `AgentSessionStartHookOutput` as protobuf JSON.
@@ -1513,85 +1272,6 @@ pub(crate) fn decode_wire_agent_session_start_config_json(
     })
 }
 
-/// Converts a native `AgentSessionStartHook` to its wire message.
-pub(crate) fn to_wire_agent_session_start_hook(
-    value: AgentSessionStartHook,
-) -> v1::AgentSessionStartHook {
-    v1::AgentSessionStartHook {
-        id: value.id,
-        r#type: value.r#type,
-        command: value.command,
-        cwd: value.cwd,
-        timeout: value.timeout,
-        env: value.env,
-        output: value.output.map(to_wire_agent_session_start_hook_output),
-        ..Default::default()
-    }
-}
-
-/// Converts a native `AgentSessionStartHookOutput` to its wire message.
-pub(crate) fn to_wire_agent_session_start_hook_output(
-    value: AgentSessionStartHookOutput,
-) -> v1::AgentSessionStartHookOutput {
-    v1::AgentSessionStartHookOutput {
-        additional_context: value.additional_context,
-        metadata: value.metadata,
-        ..Default::default()
-    }
-}
-
-/// Converts a native `AgentStructuredOutput` to its wire message.
-pub(crate) fn to_wire_agent_structured_output(
-    value: AgentStructuredOutput,
-) -> v1::AgentStructuredOutput {
-    v1::AgentStructuredOutput {
-        schema: value.schema.map(to_wire_struct),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentStructuredOutput` to its native message.
-pub(crate) fn from_wire_agent_structured_output(
-    value: v1::AgentStructuredOutput,
-) -> AgentStructuredOutput {
-    AgentStructuredOutput {
-        schema: value.schema.map(from_wire_struct),
-    }
-}
-
-/// Converts a native `AgentTextOutput` to its wire message.
-pub(crate) fn to_wire_agent_text_output(_value: AgentTextOutput) -> v1::AgentTextOutput {
-    v1::AgentTextOutput {
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentTextOutput` to its native message.
-pub(crate) fn from_wire_agent_text_output(_value: v1::AgentTextOutput) -> AgentTextOutput {
-    AgentTextOutput {}
-}
-
-/// Converts a native `AgentToolConfig` to its wire message.
-pub(crate) fn to_wire_agent_tool_config(value: AgentToolConfig) -> v1::AgentToolConfig {
-    v1::AgentToolConfig {
-        source: value.source.map(to_wire_agent_tool_config_source),
-        ..Default::default()
-    }
-}
-
-pub(crate) fn to_wire_agent_tool_config_source(
-    value: AgentToolConfigSource,
-) -> v1::agent_tool_config::Source {
-    match value {
-        AgentToolConfigSource::None(value) => {
-            v1::agent_tool_config::Source::None(to_wire_agent_no_tools(value))
-        }
-        AgentToolConfigSource::Catalog(value) => {
-            v1::agent_tool_config::Source::Catalog(to_wire_agent_catalog_tool_config(value))
-        }
-    }
-}
-
 /// Encodes a wire `AgentToolConfig` as protobuf JSON.
 pub(crate) fn encode_wire_agent_tool_config_json(value: &v1::AgentToolConfig) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -1638,40 +1318,6 @@ pub(crate) fn decode_wire_agent_tool_config_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `AgentTurn` to its native message.
-pub(crate) fn from_wire_agent_turn(value: v1::AgentTurn) -> AgentTurn {
-    AgentTurn {
-        id: value.id,
-        session_id: value.session_id,
-        provider_name: value.provider_name,
-        model: value.model,
-        status: value.status,
-        messages: value
-            .messages
-            .into_iter()
-            .map(from_wire_agent_message)
-            .collect(),
-        status_message: value.status_message,
-        created_by_subject_id: value.created_by_subject_id,
-        created_at: value.created_at.map(from_wire_timestamp),
-        started_at: value.started_at.map(from_wire_timestamp),
-        completed_at: value.completed_at.map(from_wire_timestamp),
-        execution_ref: value.execution_ref,
-        output: value.output.map(from_wire_agent_turn_output),
-    }
-}
-
-pub(crate) fn from_wire_agent_turn_output(value: v1::agent_turn::Output) -> AgentTurnOutput {
-    match value {
-        v1::agent_turn::Output::Text(value) => {
-            AgentTurnOutput::Text(from_wire_agent_turn_text_output(value))
-        }
-        v1::agent_turn::Output::Structured(value) => {
-            AgentTurnOutput::Structured(from_wire_agent_turn_structured_output(value))
-        }
-    }
 }
 
 /// Encodes a wire `AgentTurnTextOutput` as protobuf JSON.
@@ -1981,24 +1627,6 @@ pub(crate) fn decode_wire_agent_turn_json(
     })
 }
 
-/// Converts a wire `AgentTurnDisplay` to its native message.
-pub(crate) fn from_wire_agent_turn_display(value: v1::AgentTurnDisplay) -> AgentTurnDisplay {
-    AgentTurnDisplay {
-        kind: value.kind,
-        phase: value.phase,
-        text: value.text,
-        label: value.label,
-        r#ref: value.r#ref,
-        parent_ref: value.parent_ref,
-        input: value.input.map(from_wire_value),
-        output: value.output.map(from_wire_value),
-        error: value.error.map(from_wire_value),
-        action: value.action,
-        format: value.format,
-        language: value.language,
-    }
-}
-
 /// Encodes a wire `AgentTurnDisplay` as protobuf JSON.
 pub(crate) fn encode_wire_agent_turn_display_json(
     value: &v1::AgentTurnDisplay,
@@ -2142,21 +1770,6 @@ pub(crate) fn decode_wire_agent_turn_display_json(
     })
 }
 
-/// Converts a wire `AgentTurnEvent` to its native message.
-pub(crate) fn from_wire_agent_turn_event(value: v1::AgentTurnEvent) -> AgentTurnEvent {
-    AgentTurnEvent {
-        id: value.id,
-        turn_id: value.turn_id,
-        seq: value.seq,
-        r#type: value.r#type,
-        source: value.source,
-        visibility: value.visibility,
-        data: value.data.map(from_wire_struct),
-        created_at: value.created_at.map(from_wire_timestamp),
-        display: value.display.map(from_wire_agent_turn_display),
-    }
-}
-
 /// Encodes a wire `AgentTurnEvent` as protobuf JSON.
 pub(crate) fn encode_wire_agent_turn_event_json(value: &v1::AgentTurnEvent) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -2260,36 +1873,6 @@ pub(crate) fn decode_wire_agent_turn_event_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a wire `AgentTurnStructuredOutput` to its native message.
-pub(crate) fn from_wire_agent_turn_structured_output(
-    value: v1::AgentTurnStructuredOutput,
-) -> AgentTurnStructuredOutput {
-    AgentTurnStructuredOutput {
-        text: value.text,
-        value: value.value.map(from_wire_struct),
-    }
-}
-
-/// Converts a wire `AgentTurnTextOutput` to its native message.
-pub(crate) fn from_wire_agent_turn_text_output(
-    value: v1::AgentTurnTextOutput,
-) -> AgentTurnTextOutput {
-    AgentTurnTextOutput { text: value.text }
-}
-
-/// Converts a native `AgentWorkspace` to its wire message.
-pub(crate) fn to_wire_agent_workspace(value: AgentWorkspace) -> v1::AgentWorkspace {
-    v1::AgentWorkspace {
-        checkouts: value
-            .checkouts
-            .into_iter()
-            .map(to_wire_agent_workspace_git_checkout)
-            .collect(),
-        cwd: value.cwd,
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `AgentWorkspaceGitCheckout` as protobuf JSON.
@@ -2397,18 +1980,6 @@ pub(crate) fn decode_wire_agent_workspace_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `AgentWorkspaceGitCheckout` to its wire message.
-pub(crate) fn to_wire_agent_workspace_git_checkout(
-    value: AgentWorkspaceGitCheckout,
-) -> v1::AgentWorkspaceGitCheckout {
-    v1::AgentWorkspaceGitCheckout {
-        url: value.url,
-        r#ref: value.r#ref,
-        path: value.path,
-        ..Default::default()
-    }
 }
 
 /// Converts a native `CancelAgentProviderTurnRequest` to its wire message.
@@ -3006,19 +2577,6 @@ pub(crate) fn decode_wire_list_agent_provider_interactions_request_json(
     })
 }
 
-/// Converts a wire `ListAgentProviderInteractionsResponse` to its native message.
-pub(crate) fn from_wire_list_agent_provider_interactions_response(
-    value: v1::ListAgentProviderInteractionsResponse,
-) -> ListAgentProviderInteractionsResponse {
-    ListAgentProviderInteractionsResponse {
-        interactions: value
-            .interactions
-            .into_iter()
-            .map(from_wire_agent_interaction)
-            .collect(),
-    }
-}
-
 /// Encodes a wire `ListAgentProviderInteractionsResponse` as protobuf JSON.
 pub(crate) fn encode_wire_list_agent_provider_interactions_response_json(
     value: &v1::ListAgentProviderInteractionsResponse,
@@ -3204,19 +2762,6 @@ pub(crate) fn decode_wire_list_agent_provider_sessions_request_json(
     })
 }
 
-/// Converts a wire `ListAgentProviderSessionsResponse` to its native message.
-pub(crate) fn from_wire_list_agent_provider_sessions_response(
-    value: v1::ListAgentProviderSessionsResponse,
-) -> ListAgentProviderSessionsResponse {
-    ListAgentProviderSessionsResponse {
-        sessions: value
-            .sessions
-            .into_iter()
-            .map(from_wire_agent_session)
-            .collect(),
-    }
-}
-
 /// Encodes a wire `ListAgentProviderSessionsResponse` as protobuf JSON.
 pub(crate) fn encode_wire_list_agent_provider_sessions_response_json(
     value: &v1::ListAgentProviderSessionsResponse,
@@ -3351,19 +2896,6 @@ pub(crate) fn decode_wire_list_agent_provider_turn_events_request_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `ListAgentProviderTurnEventsResponse` to its native message.
-pub(crate) fn from_wire_list_agent_provider_turn_events_response(
-    value: v1::ListAgentProviderTurnEventsResponse,
-) -> ListAgentProviderTurnEventsResponse {
-    ListAgentProviderTurnEventsResponse {
-        events: value
-            .events
-            .into_iter()
-            .map(from_wire_agent_turn_event)
-            .collect(),
-    }
 }
 
 /// Encodes a wire `ListAgentProviderTurnEventsResponse` as protobuf JSON.
@@ -3578,15 +3110,6 @@ pub(crate) fn decode_wire_list_agent_provider_turns_request_json(
     })
 }
 
-/// Converts a wire `ListAgentProviderTurnsResponse` to its native message.
-pub(crate) fn from_wire_list_agent_provider_turns_response(
-    value: v1::ListAgentProviderTurnsResponse,
-) -> ListAgentProviderTurnsResponse {
-    ListAgentProviderTurnsResponse {
-        turns: value.turns.into_iter().map(from_wire_agent_turn).collect(),
-    }
-}
-
 /// Encodes a wire `ListAgentProviderTurnsResponse` as protobuf JSON.
 pub(crate) fn encode_wire_list_agent_provider_turns_response_json(
     value: &v1::ListAgentProviderTurnsResponse,
@@ -3632,34 +3155,6 @@ pub(crate) fn decode_wire_list_agent_provider_turns_response_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `ListedAgentTool` to its wire message.
-pub(crate) fn to_wire_listed_agent_tool(value: ListedAgentTool) -> v1::ListedAgentTool {
-    v1::ListedAgentTool {
-        id: value.id,
-        mcp_name: value.mcp_name,
-        title: value.title,
-        description: value.description,
-        input_schema: value.input_schema,
-        output_schema: value.output_schema,
-        annotations: value.annotations.map(to_wire_operation_annotations),
-        r#ref: value.r#ref.map(to_wire_agent_tool_ref),
-        tags: value.tags,
-        search_text: value.search_text,
-        ..Default::default()
-    }
-}
-
-/// Converts a native `PreparedAgentWorkspace` to its wire message.
-pub(crate) fn to_wire_prepared_agent_workspace(
-    value: PreparedAgentWorkspace,
-) -> v1::PreparedAgentWorkspace {
-    v1::PreparedAgentWorkspace {
-        root: value.root,
-        cwd: value.cwd,
-        ..Default::default()
-    }
 }
 
 /// Converts a native `ResolveAgentProviderInteractionRequest` to its wire message.
