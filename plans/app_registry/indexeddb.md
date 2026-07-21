@@ -282,6 +282,15 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 
 `materialized_at` is set only when that version was the replica's desired version and its package was validated locally. A superseded row can have `restarted_at` without `materialized_at`: this means the replica reconciled past that catalog change while running a newer desired version, not that the superseded version ran.
 
+For example, suppose a replica misses `v1` and next polls after `v2` has become the desired version:
+
+| Version | `materialized_at` | `restarted_at` | Meaning |
+|---------|-------------------|----------------|---------|
+| `v1` | unset | set | `v1` was superseded and intentionally skipped. The replica reconciled past this row, so the poller must not reconsider it. |
+| `v2` | set | set | `v2` was downloaded, validated, and activated. |
+
+In this table, `restarted_at` on `v1` means "reconciled through this catalog version," not "this exact version ran."
+
 `attempt_count` counts failed reconciliation attempts for this replica, app, and version. `last_error_at` and `last_error_message` retain the most recent failure for diagnosis, including after a later attempt succeeds. They do not determine whether the version is currently running.
 
 ### Service API
