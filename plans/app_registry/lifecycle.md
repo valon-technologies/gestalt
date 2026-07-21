@@ -114,7 +114,7 @@ A provider is **restartable** when this replica builds it locally from the confi
 
 1. The materialized package must exist and pass package validation. Registry-only apps never fall back to an unresolved deploy-time provider entry.
 2. If a provider is already registered and the local running-version map says it is serving the requested version, `StartApp` may return success without rebuilding it. If the recorded version is missing or different, Gestalt must not relabel the existing provider as the requested version; it must stop the existing provider and start the requested version.
-3. Provider build, registration, and activation act as one observable transition. On failure, the provider must not remain registered as the requested version and static/runtime surfaces must not advertise it.
+3. If provider build, registration, or activation fails, Gestalt must clean up any partial state from that start attempt. The provider must not remain registered as the requested version, and static or runtime handlers must not serve it.
 4. Stopping or removing a provider clears its running-version and active-static state, including the already-absent-provider path.
 
 Failure and retry behavior:
