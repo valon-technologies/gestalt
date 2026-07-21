@@ -214,9 +214,9 @@ At install or upgrade time, Gestalt should validate the candidate against the ac
 Install-time validation should ensure:
 
 - the selected app version exists in a configured registry — **done** (registry fetch on install)
-- the candidate is compatible with the running `gestaltd` and deployment platform — **step 13**
-- declared app dependencies are satisfied by the current fleet catalog — **step 13**
-- activating the candidate does not break existing installed dependents — **step 13** (optional first cut)
+- the candidate is compatible with the running `gestaltd` and deployment platform
+- declared app dependencies are satisfied by the current fleet catalog
+- activating the candidate does not break existing installed dependents (optional first cut)
 
 Full specification: [validation.md](./validation.md).
 
