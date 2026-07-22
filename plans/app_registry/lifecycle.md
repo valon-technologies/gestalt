@@ -465,7 +465,7 @@ Returns **known versions** for one app.
 
 ### Admin observability API
 
-**Status:** planned. Full shapes and UI wireframes: [admin.md](./admin.md).
+Full shapes and UI wireframes: [admin.md](./admin.md).
 
 These routes expose IndexedDB rollout state that the catalog poller already writes. They do not change install or convergence behavior.
 
