@@ -33,7 +33,8 @@ Implementation: `gestaltd/internal/appregistry/`.
 
 **Path:** `apps/{app}/index.json`
 
-Answers: *what versions exist, where is their metadata, which platforms were published?*
+Answers: *what versions exist, where is their metadata, which platforms were
+published, and what publish event produced each version?*
 
 ```json
 {
@@ -46,7 +47,16 @@ Answers: *what versions exist, where is their metadata, which platforms were pub
         "0.0.0-snapshot.gabc123": {
           "metadata": "apps/g-issues/versions/0.0.0-snapshot.gabc123.json",
           "platforms": ["linux/amd64"],
-          "publishedAt": "2026-07-09T12:00:00Z"
+          "publishedAt": "2026-07-09T12:00:00Z",
+          "sourceRef": "abc123def456abc123def456abc123def456abcd",
+          "repository": "github.com/valon-technologies/valon-tools",
+          "publication": {
+            "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
+            "triggerPullRequest": {
+              "number": 3251,
+              "url": "https://github.com/valon-technologies/valon-tools/pull/3251"
+            }
+          }
         }
       }
     }
@@ -66,7 +76,10 @@ Nested objects are keyed by maps in JSON. Arrows show the Go type at each level 
         └── versions: map[version] to IndexVersion
             ├── metadata
             ├── platforms
-            └── publishedAt
+            ├── publishedAt
+            ├── sourceRef
+            ├── repository
+            └── publication
 
 In a per-app index file (`apps/g-issues/index.json`), the `apps` map usually has one entry whose key matches the app in the path. The same shape can back a future global `index.json` with many apps.
 
@@ -98,6 +111,9 @@ Each key in `versions` is a published version string (e.g. 0.0.0-snapshot.gabc12
 | `metadata` | string | yes | Relative path to the full published version JSON, e.g. `apps/g-issues/versions/0.0.1.json`. |
 | `platforms` | string array | no | Build targets available for this version (see example JSON). Derived from published version artifact keys at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
+| `sourceRef` | string | no | Packaged source commit. Required for newly published versions; omitted only on legacy index entries. |
+| `repository` | string | no | Source repository used with `sourceRef` to build the commit URL. Required for newly published versions. |
+| `publication` | object | no | GitHub workflow and trigger provenance copied from `PublishedVersion.publication`. Required for newly published versions. |
 
 ---
 
@@ -115,6 +131,13 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
   "sourceRef": "abc123def456abc123def456abc123def456abcd",
   "manifestPath": "valon-tools/apps/g-issues/manifest.yaml",
   "repository": "github.com/valon-technologies/valon-tools",
+  "publication": {
+    "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
+    "triggerPullRequest": {
+      "number": 3251,
+      "url": "https://github.com/valon-technologies/valon-tools/pull/3251"
+    }
+  },
   "artifacts": {
     "linux/amd64": {
       "url": "gs://gestalt-app-registry/apps/g-issues/artifacts/0.0.0-snapshot.gabc123/gestalt-app-g-issues_v0.0.0-snapshot.gabc123_linux_amd64.tar.gz",
@@ -159,6 +182,14 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
     ├── manifestPath
     ├── repository
     ├── publishedAt
+    ├── publication
+    │   ├── workflowRunUrl
+    │   ├── triggerPullRequest
+    │   │   ├── number
+    │   │   └── url
+    │   └── triggerCommit
+    │       ├── sha
+    │       └── url
     ├── artifacts: map[platform] to Artifact
     │   ├── url
     │   ├── publicUrl
@@ -187,11 +218,29 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
 | `sourceRef` | string | yes | 40-character lowercase git commit SHA the release was built from. |
 | `manifestPath` | string | yes | Repo-relative path to `manifest.yaml`, e.g. `valon-tools/apps/g-issues/manifest.yaml`. |
 | `repository` | string | yes | Source repository as `host/owner/repo`, e.g. `github.com/valon-technologies/valon-tools`. The manifest `source` must be `{repository}/apps/{app}`. |
+| `publication` | object | no | GitHub Actions run and triggering PR or commit. Required for versions created after publication provenance ships; omitted only on legacy entries. |
 | `artifacts` | map | yes | Platform target → `Artifact`. At least one artifact is required. |
 | `interface` | object | no | Operations this app exposes. Copied from the provider release catalog at publish time. |
 | `requires` | object | no | Declared dependencies on other apps. Copied from the provider release `staticValidation.requires` block at publish time. |
 | `compatibility` | object | no | Runtime constraints, e.g. minimum `gestaltd` version. Copied from the provider release `staticValidation.compatibility` block at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
+
+#### `PublishedVersion.publication` · `Publication`
+
+The publisher records provenance supplied by the calling GitHub Actions
+workflow. Gestalt does not query GitHub while serving registry or app-admin
+requests.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `workflowRunUrl` | string | yes | Canonical URL of the GitHub Actions run that performed the publish. |
+| `triggerPullRequest` | object | conditional | PR number and canonical URL when the publish was attributable to a pull request. |
+| `triggerCommit` | object | conditional | Commit SHA and canonical URL when no triggering PR exists. |
+
+Exactly one of `triggerPullRequest` or `triggerCommit` is required on newly
+published versions. `sourceRef` remains the commit whose app code was packaged;
+it can differ from `triggerCommit.sha` for reusable workflows or indirect
+publishing events.
 
 #### `PublishedVersion.artifacts` · `Artifact`
 

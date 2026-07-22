@@ -402,6 +402,7 @@ Add focused server tests for:
 | Global `gestaltAdmin` without app admin | **403** |
 | Authorization provider unavailable | **503**; fail closed |
 | App admin reads registry state | **200** with desired, known, published, and rollout fields |
+| Published version provenance | Each version includes `publishedAt`, linked source commit, workflow run, and triggering PR or commit |
 | Snapshot-pinned or unknown app | **404** |
 | Active `enrolling` / `restarting` rollout | GET sets `selectionDisabled`; POST returns **409** |
 | Terminal `complete` / `failed` rollout | Selection remains enabled |
@@ -435,11 +436,20 @@ Add route/component tests for:
 - `/apps/{app}/admin` loads only after the protected API returns **200**
 - **Manage app** appears only when `managementPath` is returned
 - published versions render newest first with desired version selected
+- each version shows its publish time, linked source commit, triggering PR or
+  commit, and publishing workflow run
+- legacy versions without publication metadata show **not recorded** for the PR
+  and workflow while still linking the commit from `sourceRef`
 - no desired version renders first-install copy
 - active rollout disables the selector and submit button
 - **409** after a stale page refreshes rollout state and remains disabled
 - successful selection renders the new active rollout
 - **403** renders access denied without registry metadata
+
+Registry publisher tests should assert that newly published index and version
+documents contain identical workflow/trigger provenance, reject a publication
+with neither or both trigger variants, and preserve the distinction between the
+packaged `sourceRef` and the workflow's trigger commit.
 
 ### Manual multi-replica check
 

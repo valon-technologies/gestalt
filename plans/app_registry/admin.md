@@ -391,12 +391,30 @@ Return the data needed to render one selector.
     {
       "version": "0.0.0-snapshot.gdef456",
       "publishedAt": "2026-07-22T15:00:00Z",
-      "platforms": ["linux/amd64"]
+      "platforms": ["linux/amd64"],
+      "sourceRef": "def456def456def456def456def456def456def4",
+      "sourceUrl": "https://github.com/valon-technologies/valon-tools/commit/def456def456def456def456def456def456def4",
+      "publication": {
+        "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
+        "triggerPullRequest": {
+          "number": 3251,
+          "url": "https://github.com/valon-technologies/valon-tools/pull/3251"
+        }
+      }
     },
     {
       "version": "0.0.0-snapshot.gabc123",
       "publishedAt": "2026-07-22T14:00:00Z",
-      "platforms": ["linux/amd64"]
+      "platforms": ["linux/amd64"],
+      "sourceRef": "abc123abc123abc123abc123abc123abc123abc1",
+      "sourceUrl": "https://github.com/valon-technologies/valon-tools/commit/abc123abc123abc123abc123abc123abc123abc1",
+      "publication": {
+        "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456000",
+        "triggerCommit": {
+          "sha": "abc123abc123abc123abc123abc123abc123abc1",
+          "url": "https://github.com/valon-technologies/valon-tools/commit/abc123abc123abc123abc123abc123abc123abc1"
+        }
+      }
     }
   ],
   "rollout": {
@@ -424,9 +442,36 @@ Rules:
   first install.
 - `publishedVersions` comes from the configured registry index, newest
   `publishedAt` first.
+- Every published version includes its publish timestamp and source commit.
+  `sourceUrl` is derived from the registry entry's `repository` and
+  `sourceRef`.
+- `publication` identifies the GitHub Actions run and the event that triggered
+  it. Prefer `triggerPullRequest` when the publishing workflow was attributable
+  to a PR; otherwise return `triggerCommit`. These links come from immutable
+  registry metadata rather than a live GitHub lookup.
 - `selectionDisabled` is true only while rollout state is `enrolling` or
   `restarting`.
 - A terminal `complete` or `failed` rollout does not disable selection.
+
+#### Publication provenance
+
+The publish pipeline must record enough provenance in each registry version to
+answer:
+
+- when was this version published?
+- which source commit was packaged?
+- which pull request or commit triggered the publishing workflow?
+- which GitHub Actions run performed the publish?
+
+`sourceRef` remains the packaged source commit and may differ from the workflow
+trigger commit. The publisher passes the workflow run URL and either the
+triggering PR number/URL or triggering commit SHA/URL to `gestaltd app publish`;
+the app-admin API does not call GitHub to infer this later.
+
+For versions published before this metadata exists, the page still links the
+source commit using `repository` plus `sourceRef` and labels unavailable PR or
+workflow provenance as **not recorded**. Newly published versions must include
+the workflow and trigger metadata.
 
 #### `POST /api/v1/apps/{app}/admin/registry/version`
 
@@ -550,6 +595,7 @@ Other users see the existing card without management controls.
 │ [ 0.0.0-snapshot.gabc123                         ▾ ]         │
 │                                                             │
 │ Published 2026-07-22 15:00 · linux/amd64                    │
+│ Source commit def456 · PR #3251 · View workflow run         │
 │                                                             │
 │                                      [ Select version ]      │
 └─────────────────────────────────────────────────────────────┘
