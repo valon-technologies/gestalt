@@ -25,7 +25,7 @@ Related docs:
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
-| `internal/appregistry` | `install_validator_test.go` | — | Unit | planned |
+| `internal/appregistry` | `install_validator_test.go`, `install_validation_errors_test.go` | — | Unit | planned |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -284,36 +284,79 @@ Run (once implemented):
 
 ```bash
 cd gestaltd
-go test ./internal/appregistry/... -run TestInstallValidator -count=1
-go test ./internal/server/... -run TestAdminAppRegistryInstall -count=1
+go test ./internal/appregistry/... -run 'TestInstallValidator|TestInstaller_validation_failure|TestInstallValidationReasonFrom' -count=1
+go test ./internal/providerregistry/... -run TestVersionSatisfiesFleetConstraint -count=1
+go test ./internal/server/... -run TestAdminAppRegistryInstall/validation_failure -count=1
 ```
 
-### `install_validator_test.go` (planned)
+### `install_validator_test.go`
 
-One table-driven test, `TestInstallValidator`, with stub fleet catalog and synthetic `Entry` documents:
+Table-driven `TestInstallValidator` with stub fleet catalog (`AppVersionChangeRequests`) and synthetic `Entry` documents served over `httptest`.
+
+| Subtest | Reason code | Covers |
+|---------|-------------|--------|
+| `accepts_dependencies/release_with_operations` | — | Happy path: fleet-known dependency version and published `interface` satisfy declared `requires` (version + operation + `inputSchemaHash`) |
+| `accepts_dependencies/snapshot_version` | — | Fleet-known dependency at `2.0.0-snapshot.*` satisfies candidate `requires` at `^2.0.0` |
+| `accepts_dependencies/source_address_key` | — | Candidate `requires.apps` key is a full manifest source address (`github.com/…/apps/slack`); validator resolves to short fleet name `slack` |
+| `rejects_platform_artifact/missing_host_platform` | `platform_artifact_missing` | Candidate `entry.Artifacts` has no artifact for gestaltd host platform |
+| `rejects_platform_artifact/incomplete_sha256` | `platform_artifact_missing` | Platform key exists but artifact URL or SHA256 is incomplete (detail preserved from `resolveRegistryArtifact`) |
+| `gestaltd_version/incompatible` | `gestaltd_version_incompatible` | `entry.compatibility.minGestaltdVersion` above `InstallValidator.GestaltdVersion` |
+| `gestaltd_version/ci_stamp_skipped` | — | `minGestaltdVersion` check skipped for CI build stamp `0.0.0-ci+g…` |
+| `rejects_unsatisfied_dependency/missing_dependency_app` | `dependency_not_installed` | Declared dependency has no fleet-known version |
+| `rejects_unsatisfied_dependency/version_outside_range` | `dependency_version_unsatisfied` | Fleet-known dependency version outside declared semver constraint |
+| `rejects_unsatisfied_dependency/missing_required_operation` | `dependency_operation_missing` | Fleet-known dependency published `interface` does not expose a required operation |
+| `reverse_dependents/operation_missing` | `reverse_dependent_operation_missing` | Fleet-known dependent requires an operation the candidate `interface` does not publish |
+| `reverse_dependents/snapshot_version_accepted` | — | Upgrading dependency to `2.0.0-snapshot.*` satisfies reverse dependent `requires` at `^2.0.0` |
+| `reverse_dependents/version_outside_range` | `reverse_dependent_version_unsatisfied` | Candidate version outside reverse dependent's declared semver constraint (short app key) |
+| `reverse_dependents/version_outside_range_source_address_key` | `reverse_dependent_version_unsatisfied` | Same as above when dependent `requires.apps` key is a full source address |
+| `reverse_dependent_infra/ignores_unrelated_missing_metadata` | — | Fleet-known app with missing published entry does not block install of an unrelated candidate |
+| `reverse_dependent_infra/registry_not_configured` | — | Missing registry config during reverse-dependent fetch returns `ErrAppRegistryNotConfigured` (HTTP **502**), not **404** |
+
+`TestInstaller_validation_failure_writes_nothing` — validation failure before `Rollouts.Create` / `AppendRequest`; asserts no rollout or change-request rows were written.
+
+Source-address `requires.apps` keys are covered by `accepts_dependencies/source_address_key` and `reverse_dependents/version_outside_range_source_address_key`.
+
+### `install_validation_errors_test.go`
+
+| Test | Covers |
+|------|--------|
+| `TestInstallValidationReasonFrom` | `InstallValidationReasonFrom` returns stable reason codes; failures wrap `ErrInstallValidationFailed` |
+
+### `providerregistry/registry_test.go`
+
+| Test | Covers |
+|------|--------|
+| `TestVersionSatisfiesFleetConstraint` | Snapshot versions match release constraints on `major.minor.patch`; prerelease constraints stay strict; release versions behave like `VersionSatisfiesConstraint` |
+
+### `handlers_admin_app_install_test.go`
 
 | Subtest | Covers |
 |---------|--------|
-| `accepts_satisfied_dependencies` | Happy path when catalog, entry, and dependency metadata align |
-| `rejects_missing_platform_artifact` | No artifact for host platform |
-| `rejects_incompatible_gestaltd` | `minGestaltdVersion` above running server version |
-| `rejects_unsatisfied_dependency` | Missing dependency app, version outside declared range, or required operation absent from published `interface` |
-| `rejects_broken_reverse_dependent` | Another fleet-known app's `requires.apps.{app}` would break on the candidate `interface` |
+| `validation_failure` | `POST …/add` with `minGestaltdVersion` above `cfg.GestaltdVersion` returns **400** and writes nothing to IndexedDB. `upgrade` shares the same `Installer.install` path. |
 
-### `handlers_admin_app_install_test.go` (extend)
+### Not covered yet
 
-Add one HTTP case to the existing install test file (same harness as today):
-
-- **`validation_failure`** on `POST …/upgrade` — inject a validator failure, assert **400**, and assert no `app_rollouts` or `app_version_change_requests` rows were created. `add` shares the same `Installer.install` path, so it does not need a separate case.
+| Gap | Reason code / behavior |
+|-----|------------------------|
+| `gestaltd_version_invalid` | Candidate declares unparseable `minGestaltdVersion` |
+| `gestaltd_version_unknown` | Running gestaltd version is not semver (and not `dev` / `(devel)` / `0.0.0-ci+g…`) |
+| `dependency_metadata_missing` | Operation check needed but fleet-known dependency `versions/{version}.json` is missing |
+| `dependency_operation_schema_mismatch` | Dependency operation `inputSchemaHash` does not match |
+| `reverse_dependent_metadata_missing` | Reverse check needed but fleet-known dependent published entry is missing |
+| `reverse_dependent_operation_schema_mismatch` | Candidate operation `inputSchemaHash` does not match reverse dependent requirement |
+| Deploy-pinned dependency skip | Candidate `requires.apps.{app}` satisfied by non-registry `config.yaml` provider |
+| `dev` / `(devel)` / CI gestaltd skip | `minGestaltdVersion` check skipped when running version is non-production (`dev`, `(devel)`, `0.0.0-ci+g…`) |
+| Registry transport vs validation HTTP split | Missing published metadata → **400**; registry fetch/transport failure → **502** |
+| Skip dependency fetch when no operations | Version-only `requires` does not fetch dependency `versions/{version}.json` |
 
 ---
 
 ## What is not covered yet
 
-Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, and get-by-app — but not:
+Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, get-by-app, and one validation-failure case — but not:
 
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
-- Install-time validation failure modes
+- Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
 - Multi-replica materialization ack E2E (see [PLANNED] section above)
 - Deployed verification that catalog restarts serve the newly mounted binary
