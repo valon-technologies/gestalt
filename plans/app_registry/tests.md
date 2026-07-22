@@ -6,7 +6,7 @@ Related docs:
 
 - [plan.md](./plan.md) — implementation path and goals
 - [validation.md](./validation.md) — install-time validation
-- [admin.md](./admin.md) — admin UI and rollout read APIs
+- [admin.md](./admin.md) — admin UI capabilities
 - [models.md](./models.md) — JSON documents exercised by publish and install
 - [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
@@ -356,7 +356,7 @@ Source-address `requires.apps` keys are covered by `accepts_dependencies/source_
 
 ## Admin observability tests
 
-API shapes: [admin.md](./admin.md). Route registration: [lifecycle.md](./lifecycle.md#admin-observability-api).
+API shapes: [lifecycle.md](./lifecycle.md#admin-observability-api). UI wireframes: [admin.md](./admin.md#embedded-admin-ui-admin).
 
 Run:
 
@@ -388,7 +388,7 @@ Manual or Playwright-style check against a local multi-replica harness:
 
 ## App version selection tests
 
-API and UI specification: [admin.md](./admin.md#app-admin-page).
+API: [lifecycle.md](./lifecycle.md#app-admin-version-selection). UI: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 
 ### Gestalt API tests
 
