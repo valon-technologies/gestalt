@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -135,6 +136,41 @@ func AppSourceAddress(repository, appName string) string {
 func AppNameFromManifestSource(source string) (string, error) {
 	appName, _, err := parseAppSource(source)
 	return appName, err
+}
+
+// RequirementAppName normalizes a requires.apps map key to the short fleet app name.
+// Manifest dependencies may use full source addresses (github.com/acme/apps/base)
+// while fleet catalog entries use short names (base).
+func RequirementAppName(key string) (string, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", fmt.Errorf("dependency app name is required")
+	}
+	if appName, err := AppNameFromManifestSource(key); err == nil {
+		return appName, nil
+	}
+	if err := providerregistry.ValidateRepositoryName(key); err != nil {
+		return "", fmt.Errorf("invalid dependency app name %q: %w", key, err)
+	}
+	return key, nil
+}
+
+func requirementForApp(requires Requires, targetApp string) (AppRequirement, bool) {
+	targetApp = strings.TrimSpace(targetApp)
+	if targetApp == "" {
+		return AppRequirement{}, false
+	}
+	if requirement, ok := requires.Apps[targetApp]; ok {
+		return requirement, true
+	}
+	for key, requirement := range requires.Apps {
+		appName, err := RequirementAppName(key)
+		if err != nil || appName != targetApp {
+			continue
+		}
+		return requirement, true
+	}
+	return AppRequirement{}, false
 }
 
 func ValidatePublishInput(manifest *providermanifestv1.Manifest, version, sourceRef string) error {

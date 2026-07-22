@@ -2,12 +2,14 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -155,6 +157,66 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		if second.StatusCode != http.StatusBadRequest {
 			raw, _ := io.ReadAll(second.Body)
 			t.Fatalf("second install status = %d, want 400: %s", second.StatusCode, raw)
+		}
+	})
+
+	t.Run("validation_failure", func(t *testing.T) {
+		t.Parallel()
+
+		fixture := registrytest.NewInstallFixture(t)
+		artifactsDir := t.TempDir()
+
+		publicURL, err := fixture.Registry.PublicURL()
+		if err != nil {
+			t.Fatalf("PublicURL: %v", err)
+		}
+		entry, err := fixture.Reader.FetchEntry(context.Background(), publicURL, "g-issues", fixture.Version)
+		if err != nil {
+			t.Fatalf("FetchEntry: %v", err)
+		}
+		entry.Compatibility = appregistry.Compatibility{MinGestaltdVersion: "99.0.0"}
+		entryJSON, err := json.Marshal(entry)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+
+		registrySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/" + registrytest.Bucket + "/apps/g-issues/versions/" + fixture.Version + ".json":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write(entryJSON)
+			case "/" + registrytest.Bucket + "/apps/g-issues/artifacts/" + fixture.Version + "/artifact.tar.gz":
+				w.Header().Set("Content-Type", "application/gzip")
+				_, _ = w.Write(fixture.ArchiveBytes)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer registrySrv.Close()
+		reader := registrytest.NewReaderForServer(t, registrySrv.URL)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.AppRegistries = map[string]config.AppRegistryConfig{
+				"toolshed": fixture.Registry,
+			}
+			cfg.AppRegistryReader = reader
+			cfg.ArtifactsDir = artifactsDir
+			cfg.GestaltdVersion = "0.1.0"
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := []byte(`{"version":"` + fixture.Version + `"}`)
+		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST add: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("add status = %d, want 400: %s", resp.StatusCode, raw)
 		}
 	})
 

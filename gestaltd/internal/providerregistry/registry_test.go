@@ -118,6 +118,53 @@ func TestResolveHonorsExplicitRepositorySelection(t *testing.T) {
 	}
 }
 
+func TestVersionSatisfiesFleetConstraint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		version    string
+		constraint string
+		want       bool
+	}{
+		{version: "2.0.0", constraint: "^2.0.0", want: true},
+		{version: "2.0.0-snapshot.gabc123", constraint: "^2.0.0", want: true},
+		{version: "1.4.0-snapshot.gabc123", constraint: "^1.4.0", want: true},
+		{version: "0.0.0-snapshot.gabc123", constraint: "^0.0.0", want: true},
+		{version: "1.4.0-snapshot.gabc123", constraint: "^2.0.0", want: false},
+		{version: "0.0.0-snapshot.gabc123", constraint: "^2.0.0", want: false},
+		{version: "2.0.0-snapshot.gabc123", constraint: "", want: true},
+		{version: "", constraint: "^2.0.0", want: false},
+		{version: "2.0.0-alpha", constraint: "^2.0.0-beta", want: false},
+		{version: "2.0.0-beta.1", constraint: ">=2.0.0-beta.2", want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.version+"_"+tc.constraint, func(t *testing.T) {
+			t.Parallel()
+			if got := VersionSatisfiesFleetConstraint(tc.version, tc.constraint); got != tc.want {
+				t.Fatalf("VersionSatisfiesFleetConstraint(%q, %q) = %v, want %v", tc.version, tc.constraint, got, tc.want)
+			}
+		})
+	}
+
+	t.Run("release_behavior_matches_VersionSatisfiesConstraint", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			version    string
+			constraint string
+		}{
+			{version: "2.0.0", constraint: "^2.0.0"},
+			{version: "1.4.0", constraint: "^1.0.0"},
+			{version: "3.0.0", constraint: "^2.0.0"},
+		} {
+			if got := VersionSatisfiesFleetConstraint(tc.version, tc.constraint); got != VersionSatisfiesConstraint(tc.version, tc.constraint) {
+				t.Fatalf("release version %q vs %q: fleet=%v constraint=%v", tc.version, tc.constraint, got, VersionSatisfiesConstraint(tc.version, tc.constraint))
+			}
+		}
+	})
+}
+
 func TestResolveReportsEachRepositoryBeforeFetching(t *testing.T) {
 	t.Parallel()
 	server := newIndexServer(t)

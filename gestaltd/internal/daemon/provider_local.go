@@ -31,15 +31,16 @@ const (
 )
 
 type providerLocalCommandOptions struct {
-	Paths        []string
-	ConfigPaths  []string
-	Port         int
-	Locked       bool
-	NoSync       bool
-	Remote       string
-	RemoteToken  string
-	ArtifactsDir string
-	LockfilePath string
+	Paths           []string
+	ConfigPaths     []string
+	Port            int
+	Locked          bool
+	NoSync          bool
+	Remote          string
+	RemoteToken     string
+	ArtifactsDir    string
+	LockfilePath    string
+	GestaltdVersion string
 	// FleetOverlay is true for serve PATH arguments with --config. Validate always leaves
 	// this false so it keeps the synthesized baseline even with --config.
 	FleetOverlay bool
@@ -138,7 +139,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	}
 	session.PublicURL = providerLocalPublicURL(env.Config)
 	session.AdminURL = strings.TrimRight(session.PublicURL, "/") + "/admin/"
-	return runServerWithReady(env, func() {
+	return runServerWithReady(env, opts.GestaltdVersion, func() {
 		logProviderLocalSummary("local provider ready", session)
 	})
 }

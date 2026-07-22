@@ -20,5 +20,11 @@ var ErrAppNotAdded = errors.New("app has no fleet-known versions")
 // ErrRegistrySourceMismatch means the request registry does not match deploy config.
 var ErrRegistrySourceMismatch = errors.New("app registry does not match configured source")
 
+// ErrInstallValidationFailed means the candidate failed install-time validation.
+var ErrInstallValidationFailed = errors.New("install-time validation failed")
+
+// ErrAppRegistryNotConfigured means the named registry is absent from gestaltd config.
+var ErrAppRegistryNotConfigured = errors.New("app registry is not configured")
+
 // ErrInstallTimedOut means install work exceeded the bounded post-lock timeout.
 var ErrInstallTimedOut = errors.New("app version install timed out")

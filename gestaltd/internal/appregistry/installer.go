@@ -26,13 +26,14 @@ const (
 const installWorkTimeoutBuffer = 30 * time.Second
 
 type Installer struct {
-	Registries     map[string]config.AppRegistryConfig
-	ConfigApps     map[string]*config.ProviderEntry
-	Reader         *RegistryReader
-	ChangeRequests *coredata.AppVersionChangeRequestService
-	Locks          *coredata.AppVersionInstallLockService
-	Rollouts       *coredata.AppRolloutService
-	Now            func() time.Time
+	Registries      map[string]config.AppRegistryConfig
+	ConfigApps      map[string]*config.ProviderEntry
+	Reader          *RegistryReader
+	ChangeRequests  *coredata.AppVersionChangeRequestService
+	Locks           *coredata.AppVersionInstallLockService
+	Rollouts        *coredata.AppRolloutService
+	GestaltdVersion string
+	Now             func() time.Time
 }
 
 type InstallInput struct {
@@ -168,6 +169,10 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	}
 	entry := source.Entry
 
+	if err := i.validateInstallCandidate(installCtx, registryName, appName, version, entry); err != nil {
+		return nil, err
+	}
+
 	entryURL := PublicURL(source.PublicRoot, AppVersionEntryPath(appName, version))
 	checksums := artifactChecksumsFromEntry(*entry)
 
@@ -214,6 +219,22 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	return &InstallOutput{
 		Installation: coredata.InstallationFromChangeRequest(addedRequest),
 	}, nil
+}
+
+func (i *Installer) validateInstallCandidate(ctx context.Context, registryName, appName, version string, entry *Entry) error {
+	validator := &InstallValidator{
+		Registries:      i.Registries,
+		ConfigApps:      i.ConfigApps,
+		Reader:          i.Reader,
+		ChangeRequests:  i.ChangeRequests,
+		GestaltdVersion: i.GestaltdVersion,
+	}
+	return validator.Validate(ctx, ValidateInput{
+		Registry: registryName,
+		App:      appName,
+		Version:  version,
+		Entry:    entry,
+	})
 }
 
 func artifactChecksumsFromEntry(entry Entry) map[string]string {
