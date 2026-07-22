@@ -231,7 +231,7 @@
             return;
           }
           const table = element("table");
-          const head = append(element("tr"), ...["App", "Registry", "Desired version", "Rollout", "Cohort"].map((name) => element("th", name)));
+          const head = append(element("tr"), ...["App", "Registry", "Version", "Rollout", "Cohort"].map((name) => element("th", name)));
           table.appendChild(append(element("thead"), head));
           const body = element("tbody");
           apps.forEach((app) => {
