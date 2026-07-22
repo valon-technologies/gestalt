@@ -388,7 +388,7 @@ Manual or Playwright-style check against a local multi-replica harness:
 
 ## App version selection tests
 
-API and UI specification: [version_selection.md](./version_selection.md).
+API and UI specification: [admin.md](./admin.md#app-admin-page).
 
 ### Gestalt API tests
 

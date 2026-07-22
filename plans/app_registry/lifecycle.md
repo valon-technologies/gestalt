@@ -8,8 +8,7 @@ Related docs:
 
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
 - [validation.md](./validation.md) — install-time validation
-- [admin.md](./admin.md) — admin UI and rollout read APIs
-- [version_selection.md](./version_selection.md) — app-admin desired-version changes
+- [admin.md](./admin.md) — admin UI, rollout read APIs, and app-admin desired-version changes
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
@@ -511,7 +510,7 @@ than the new rollout's `created_at` as stale and resets that row before
 reconciliation, so historical convergence cannot complete the new rollout.
 
 Full API shapes, authorization behavior, and UI ownership:
-[version_selection.md](./version_selection.md).
+[admin.md](./admin.md#app-admin-page).
 
 ### Errors
 
