@@ -401,61 +401,46 @@ Add focused server tests for:
 | User without `admin` on `app/{app}` | **403** |
 | Global `gestaltAdmin` without app admin | **403** |
 | Authorization provider unavailable | **503**; fail closed |
-| App admin reads registry state | **200** with desired, known, published, and rollout fields |
-| Published version provenance | `publishedAt`, `sourceRef`, `sourceUrl`, and `publication` when recorded |
+| App admin reads registry state | **200** with desired, known, published (including provenance), and rollout fields |
 | Snapshot-pinned or unknown app | **404** |
-| Active `enrolling` / `restarting` rollout | GET sets `selectionDisabled`; POST returns **409** |
-| Terminal `complete` / `failed` rollout | Selection remains enabled |
+| Rollout admission | Active `enrolling` / `restarting` rollout: GET sets `selectionDisabled`; POST returns **409** before registry fetch, validation, rollout creation, or change-request append; terminal `complete` / `failed` rollout leaves selection enabled |
 | First selection | Uses add semantics and appends the first change request |
-| Upgrade | Appends a change request from current desired to selected version |
+| Upgrade | Appends a change request; stored actor is the authenticated user subject |
 | Revert to previously known version | Appends a new change request, resets stale replica progress, and makes the older version desired |
 | Select current desired version | **400** and no writes |
-| Actor spoof attempt | **400** for unknown `actor`; stored actor is canonical user subject |
 | Validation failure | Existing typed validation error; no rollout or change request |
 | Concurrent selections | Exactly one passes admission; the other returns **409** |
-
-The active-rollout test must assert that rejection occurs before registry fetch,
-install-time validation, rollout creation, or change-request append.
 
 The revert test must seed completed materialization rows from the older
 version's first rollout. The new rollout must not count those timestamps as
 current convergence: every replica acknowledges again, performs the restart,
 and records timestamps at or after the new rollout's `created_at`.
 
-`GET /api/v1/apps` tests should assert `managementPath` is present only when all
-of the following are true:
+`POST …/registry/version` rejects unknown fields (including `actor`, `registry`,
+and `fromVersion`).
 
-- the app is registry-only
-- the caller is a user
-- the caller has explicit `admin` on `app/{app}`
+`GET /api/v1/apps` exposes `managementPath` only when the app is
+registry-only, the caller is a user, and the caller has `admin` on `app/{app}`.
 
 ### Default app UI tests (`gestalt-providers`)
 
 Add route/component tests for:
 
-- `/apps/{app}/admin` loads only after the protected API returns **200**
 - **Manage app** appears only when `managementPath` is returned
 - published versions render newest first with desired version selected
 - version detail shows `publishedAt`, linked commit, trigger PR or commit, and
   workflow run; legacy entries without `publication` link the commit and show
   **not recorded** for workflow/PR
 - no desired version renders first-install copy
-- active rollout disables the selector and submit button
-- **409** after a stale page refreshes rollout state and remains disabled
+- active rollout or **409** after a stale page disables the selector and submit
+  button until rollout is terminal
 - successful selection renders the new active rollout
 - **403** renders access denied without registry metadata
 
-### Manual multi-replica check
+### Manual smoke
 
-1. Sign in as a user with `admin` on one registry-only app and no global
-   `gestaltAdmin` role.
-2. Open `/apps/{app}/admin`, select a published version, and confirm the normal
-   rollout begins.
-3. Confirm the selector remains disabled while rollout state is `enrolling` or
-   `restarting`.
-4. Submit a direct concurrent POST and confirm **409**.
-5. After completion, select an older known version and confirm a new rollout
-   reverts the fleet.
+App admin without `gestaltAdmin` can open `/apps/{app}/admin`, select a version,
+and see rollout progress.
 
 ---
 
