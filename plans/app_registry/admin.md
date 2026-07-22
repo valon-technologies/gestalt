@@ -21,7 +21,7 @@ Operators installing registry apps should answer these questions without reading
 | What is the desired fleet-known version? | Desired version on app detail |
 | Is the rollout still in progress? | Rollout status badge |
 | Which replicas have converged? | Replica convergence table |
-| What is each replica running right now? | Phase 1: inferred from rollout progress; phase 2: heartbeat |
+| What is each replica running right now? | Out of scope; rollout progress shows convergence only |
 
 App admins additionally need to select the fleet-wide desired version and see
 what published each candidate version.
@@ -151,16 +151,9 @@ disabled until that rollout reaches `complete` or `failed`.
 
 ---
 
-## Out of scope: Runtime heartbeats
-
-Phase 2 UI: show per-replica **observed** running version with a stale indicator
-when heartbeat data is old. Until then, rollout-progress rows show convergence
-only. See [lifecycle.md](./lifecycle.md) for the planned store shape.
-
----
-
 ## Out of scope
 
+- Per-replica observed running version (runtime heartbeats)
 - Installing or upgrading from the embedded `/admin` UI
 - Canceling or force-completing a rollout from either UI
 - Publishing versions from either UI

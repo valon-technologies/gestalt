@@ -452,5 +452,5 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Re-install idempotency (no duplicate change request)
 - Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
 - Multi-replica materialization ack E2E (see [PLANNED section above](#planned-multi-replica-materialization-ack-e2e))
-- Per-replica **observed** running version heartbeats (phase 2; see [admin.md](./admin.md#out-of-scope-runtime-heartbeats))
+- Per-replica **observed** running version heartbeats
 - Deployed verification that catalog restarts serve the newly mounted binary
