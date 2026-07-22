@@ -7,14 +7,18 @@ import type {
   WorkflowStepAppCall,
 } from "./providers/workflow.ts";
 
+type StaticWorkflowAppCall = {
+  app: string;
+  operation?: string;
+};
+
+type StaticWorkflowDefinition = {
+  id?: string;
+  steps: StaticWorkflowAppCall[];
+};
+
 type StaticWorkflowDefinitions = {
-  definitions: Array<{
-    id?: string;
-    steps: Array<{
-      app: string;
-      operation?: string;
-    }>;
-  }>;
+  definitions: StaticWorkflowDefinition[];
 };
 
 /**
@@ -23,12 +27,18 @@ type StaticWorkflowDefinitions = {
 export function workflowsToYaml(
   specs: readonly WorkflowDefinitionSpec[],
 ): string {
-  const definitions = specs
-    .map((spec) => ({
-      id: spec.id,
-      steps: workflowAppCallsFromTarget(spec.target),
-    }))
-    .filter((definition) => definition.steps.length > 0);
+  const definitions: StaticWorkflowDefinition[] = [];
+  for (const spec of specs) {
+    const steps = workflowAppCallsFromTarget(spec.target);
+    if (steps.length === 0) {
+      continue;
+    }
+    const definition: StaticWorkflowDefinition = { steps };
+    if (spec.id) {
+      definition.id = spec.id;
+    }
+    definitions.push(definition);
+  }
   const payload: StaticWorkflowDefinitions = { definitions };
   return YAML.stringify(payload);
 }
@@ -49,20 +59,22 @@ export function writeWorkflowsYaml(
 
 function workflowAppCallsFromTarget(
   target: WorkflowDefinitionSpec["target"],
-): Array<{ app: string; operation?: string }> {
+): StaticWorkflowAppCall[] {
   if (!target?.steps?.length) {
     return [];
   }
-  const out: Array<{ app: string; operation?: string }> = [];
+  const out: StaticWorkflowAppCall[] = [];
   for (const step of target.steps) {
     const appCall = workflowStepAppCall(step);
     if (!appCall?.name?.trim()) {
       continue;
     }
-    out.push({
-      app: appCall.name.trim(),
-      operation: appCall.operation?.trim() || undefined,
-    });
+    const entry: StaticWorkflowAppCall = { app: appCall.name.trim() };
+    const operation = appCall.operation?.trim();
+    if (operation) {
+      entry.operation = operation;
+    }
+    out.push(entry);
   }
   return out;
 }

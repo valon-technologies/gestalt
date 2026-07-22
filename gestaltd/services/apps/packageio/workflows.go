@@ -16,7 +16,7 @@ type StaticWorkflowDefinitions struct {
 }
 
 type StaticWorkflowDefinition struct {
-	ID    string                `yaml:"id,omitempty"`
+	ID    string                  `yaml:"id,omitempty"`
 	Steps []StaticWorkflowAppCall `yaml:"steps,omitempty"`
 }
 

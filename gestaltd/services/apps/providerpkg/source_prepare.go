@@ -149,8 +149,10 @@ func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *provide
 	cmd := exec.Command(execution.Command, execution.Args...)
 	cmd.Dir = execution.Workdir
 	cmd.Env = mergePhaseEnv(os.Environ(), envMapToSlice(execution.Env))
-	cmd.Env = append(cmd.Env, envWriteCatalog+"="+catalogPath)
-	cmd.Env = append(cmd.Env, envWriteWorkflows+"="+staticWorkflowsPathForManifest(manifestPath))
+	cmd.Env = append(cmd.Env,
+		envWriteCatalog+"="+catalogPath,
+		envWriteWorkflows+"="+staticWorkflowsPathForManifest(manifestPath),
+	)
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output

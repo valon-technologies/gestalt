@@ -26,8 +26,8 @@ const (
 	InstallValidationReverseDependentOperationMissing   InstallValidationReason = "reverse_dependent_operation_missing"
 	InstallValidationReverseDependentOperationSchema    InstallValidationReason = "reverse_dependent_operation_schema_mismatch"
 
-	InstallValidationWorkflowTargetAppMissing              InstallValidationReason = "workflow_target_app_missing"
-	InstallValidationWorkflowTargetOperationMissing        InstallValidationReason = "workflow_target_operation_missing"
+	InstallValidationWorkflowTargetAppMissing               InstallValidationReason = "workflow_target_app_missing"
+	InstallValidationWorkflowTargetOperationMissing         InstallValidationReason = "workflow_target_operation_missing"
 	InstallValidationWorkflowTargetOperationMetadataMissing InstallValidationReason = "workflow_target_operation_metadata_missing"
 )
 

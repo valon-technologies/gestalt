@@ -311,8 +311,8 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, manifest),
 		Artifacts:     providerrelease.Artifacts{},
 		StaticValidation: &providerrelease.StaticValidation{
-			Manifest: staticManifest,
-			Catalog:  staticCatalog,
+			Manifest:  staticManifest,
+			Catalog:   staticCatalog,
 			Workflows: staticWorkflows,
 		},
 	}
