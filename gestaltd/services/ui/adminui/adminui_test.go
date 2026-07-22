@@ -42,4 +42,15 @@ func TestEmbeddedHandlerServesAppRegistryRoutes(t *testing.T) {
 			t.Fatalf("admin UI does not contain %q", want)
 		}
 	}
+	for _, unwanted := range []string{
+		`version-dialog`,
+		`chooseVersion`,
+		`method: "POST"`,
+		`>Install<`,
+		`>Upgrade<`,
+	} {
+		if strings.Contains(html, unwanted) {
+			t.Fatalf("admin UI unexpectedly contains action %q", unwanted)
+		}
+	}
 }

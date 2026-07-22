@@ -82,18 +82,16 @@
       }
       .status, .muted { color: var(--muted); }
       .error { color: var(--danger); }
-      button, select {
+      button {
         border: 1px solid var(--border);
         border-radius: 6px;
         background: transparent;
         color: var(--fg);
+        cursor: pointer;
         font: inherit;
         padding: 7px 10px;
       }
-      button { cursor: pointer; }
-      button:hover:not(:disabled) { border-color: var(--accent); }
-      button:disabled { cursor: not-allowed; opacity: .55; }
-      button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+      button:hover { border-color: var(--accent); }
       pre {
         margin: 0;
         min-height: 480px;
@@ -127,15 +125,6 @@
       .field-label { color: var(--muted); font-size: 12px; text-transform: uppercase; }
       .field-value { margin-top: 4px; }
       .empty { padding: 32px 16px; color: var(--muted); text-align: center; }
-      dialog {
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: var(--surface);
-        color: var(--fg);
-        width: min(460px, calc(100vw - 32px));
-      }
-      dialog::backdrop { background: rgb(0 0 0 / .45); }
-      .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
       @media (max-width: 700px) {
         .header-inner { align-items: flex-start; flex-direction: column; padding: 12px 0; }
         table { display: block; overflow-x: auto; }
@@ -153,17 +142,6 @@
       </div>
     </header>
     <main id="main"></main>
-    <dialog id="version-dialog">
-      <form method="dialog">
-        <h2 id="dialog-title">Select a version</h2>
-        <p>Choose a published version to make fleet-known.</p>
-        <div style="margin-top: 16px"><select id="version-select" style="width: 100%"></select></div>
-        <div class="dialog-actions">
-          <button value="cancel">Cancel</button>
-          <button id="confirm-version" class="primary" value="default">Continue</button>
-        </div>
-      </form>
-    </dialog>
     <script>
       (function () {
         const main = document.getElementById("main");
@@ -217,14 +195,6 @@
           pageHeading("App Registry", "Fleet rollout and replica convergence.");
           main.appendChild(element("p", error instanceof Error ? error.message : "Failed to load.", "error"));
         }
-        function showActionError(error) {
-          const message = error instanceof Error ? error.message : "Action failed.";
-          const existing = main.querySelector(".action-error");
-          if (existing) existing.remove();
-          const banner = element("p", message, "error action-error");
-          main.prepend(banner);
-        }
-
         async function loadMetrics() {
           main.replaceChildren();
           pageHeading("Metrics", "Inspect the live Prometheus telemetry exposed by this process.");
@@ -261,26 +231,18 @@
             return;
           }
           const table = element("table");
-          const head = append(element("tr"), ...["App", "Registry", "Desired version", "Rollout", "Cohort", ""].map((name) => element("th", name)));
+          const head = append(element("tr"), ...["App", "Registry", "Desired version", "Rollout", "Cohort"].map((name) => element("th", name)));
           table.appendChild(append(element("thead"), head));
           const body = element("tbody");
           apps.forEach((app) => {
             const link = element("a", app.app);
             link.href = registryPath + "/" + encodeURIComponent(app.app);
-            const active = app.rollout && (app.rollout.state === "enrolling" || app.rollout.state === "restarting");
-            const action = element("button", app.desiredVersion ? "View" : "Install", app.desiredVersion ? "" : "primary");
-            action.disabled = !app.desiredVersion && active;
-            action.addEventListener("click", () => {
-              if (app.desiredVersion) window.location.href = link.href;
-              else if (!active) chooseVersion(app, "add");
-            });
             append(body, append(element("tr"),
               append(element("td"), link),
               element("td", app.registry),
               append(element("td"), code(app.desiredVersion)),
               append(element("td"), badge(app.rollout && app.rollout.state)),
-              element("td", app.cohort ? app.cohort.restarted + "/" + app.cohort.acknowledged + " restarted" : "—"),
-              append(element("td"), action)
+              element("td", app.cohort ? app.cohort.restarted + "/" + app.cohort.acknowledged + " restarted" : "—")
             ));
           });
           table.appendChild(body);
@@ -291,15 +253,6 @@
         async function loadRegistryApp(appName) {
           main.replaceChildren();
           const app = await api("/registry-apps/" + encodeURIComponent(appName));
-          let versions = [];
-          try {
-            const versionsPayload = await api("/app-registries/" + encodeURIComponent(app.registry) + "/apps/" + encodeURIComponent(app.app) + "/versions");
-            versions = versionsPayload.versions || [];
-          } catch (_) {
-            if (app.latestPublished) {
-              versions = [{ version: app.latestPublished.version, publishedAt: app.latestPublished.publishedAt }];
-            }
-          }
           let materializations = { materializations: [] };
           if (app.desiredVersion) {
             materializations = await api("/app-rollouts/" + encodeURIComponent(app.app) + "/materializations");
@@ -311,7 +264,7 @@
           const summary = element("section", null, "panel");
           append(summary, element("h2", "Summary", "toolbar"), append(element("div", null, "grid"),
             field("Desired version", app.desiredVersion),
-            field("Latest published", versions[0] && versions[0].version),
+            field("Latest published", app.latestPublished && app.latestPublished.version),
             field("Installed by", desired && desired.installedBy),
             field("Installed at", desired && formatTime(desired.installedAt))
           ));
@@ -356,43 +309,7 @@
           main.appendChild(replicas);
 
           const active = app.rollout && (app.rollout.state === "enrolling" || app.rollout.state === "restarting");
-          const actionPanel = element("section", null, "panel");
-          const actionButton = element("button", app.desiredVersion ? "Upgrade" : "Install", "primary");
-          actionButton.disabled = active || !versions.length;
-          actionButton.addEventListener("click", () => chooseVersion(app, app.desiredVersion ? "upgrade" : "add"));
-          append(actionPanel, append(element("div", null, "toolbar"), append(element("div"), element("h2", "Actions"), element("p", active ? "Actions are disabled while rollout is active." : "Select any published version, including an older version to revert.")), actionButton));
-          main.appendChild(actionPanel);
           if (active) window.setTimeout(() => loadRegistryApp(appName).catch(showError), 12000);
-        }
-
-        async function chooseVersion(app, mode) {
-          try {
-            const payload = await api("/app-registries/" + encodeURIComponent(app.registry) + "/apps/" + encodeURIComponent(app.app) + "/versions");
-            if (!payload.versions || !payload.versions.length) throw new Error("No published versions are available.");
-            const known = new Set((app.knownVersions || []).map((item) => item.version));
-            const selectable = payload.versions.filter((item) => mode !== "add" || !known.has(item.version));
-            if (!selectable.length) throw new Error(mode === "add" ? "No new published versions are available." : "No published versions are available.");
-            const dialog = document.getElementById("version-dialog");
-            const select = document.getElementById("version-select");
-            select.replaceChildren(...selectable.map((item) => {
-              const option = element("option", item.version);
-              option.value = item.version;
-              return option;
-            }));
-            document.getElementById("dialog-title").textContent = (mode === "add" ? "Install " : "Upgrade ") + app.app;
-            dialog.returnValue = "";
-            dialog.showModal();
-            const result = await new Promise((resolve) => dialog.addEventListener("close", () => resolve(dialog.returnValue), { once: true }));
-            if (result !== "default" || !select.value) return;
-            await api("/app-registries/" + encodeURIComponent(app.registry) + "/apps/" + encodeURIComponent(app.app) + "/" + mode, {
-              method: "POST",
-              headers: { Accept: "application/json", "Content-Type": "application/json" },
-              body: JSON.stringify({ version: select.value }),
-            });
-            window.location.href = registryPath + "/" + encodeURIComponent(app.app);
-          } catch (error) {
-            showActionError(error);
-          }
         }
 
         if (!onRegistry) {
