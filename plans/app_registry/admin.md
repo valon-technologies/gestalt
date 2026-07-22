@@ -210,7 +210,7 @@ Backed by `AppInstanceMaterializationService.ListByAppVersion`. This replaces di
 
 ### Phase 2 (optional): `GET /admin/api/v1/app-rollouts/{app}/runtime`
 
-Expose **observed running version** per replica when heartbeat rows exist (see [Runtime heartbeats](#runtime-heartbeats-phase-2)).
+Expose **observed running version** per replica when heartbeat rows exist (see [Out of Scope: Runtime Heartbeats](#out-of-scope-runtime-heartbeats)).
 
 Until then, the UI shows:
 
@@ -279,7 +279,7 @@ Auto-refresh every 10–15s while rollout is non-terminal.
 
 ---
 
-## Runtime heartbeats (phase 2)
+## Out of Scope: Runtime Heartbeats
 
 To answer "what is each replica running **right now**" reliably:
 

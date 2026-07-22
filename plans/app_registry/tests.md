@@ -396,5 +396,5 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
 - Multi-replica materialization ack E2E (see [PLANNED section above](#planned-multi-replica-materialization-ack-e2e))
 - Admin rollout read APIs and `/admin/registry` UI (see [Admin observability tests](#admin-observability-tests))
-- Per-replica **observed** running version heartbeats (phase 2; see [admin.md](./admin.md#runtime-heartbeats-phase-2))
+- Per-replica **observed** running version heartbeats (phase 2; see [admin.md](./admin.md#out-of-scope-runtime-heartbeats))
 - Deployed verification that catalog restarts serve the newly mounted binary
