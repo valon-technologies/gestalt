@@ -1,8 +1,8 @@
 # App Registry IndexedDB Install State
 
-Reference for the host IndexedDB stores added in plan **step 5** ([gestalt#2718](https://github.com/valon-technologies/gestalt/pull/2718)) and the **catalog** install model in step 6 ([gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730)).
+Reference for the host IndexedDB stores added in [gestalt#2718](https://github.com/valon-technologies/gestalt/pull/2718) (store schemas and services) and the **catalog** install model in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (install HTTP API and change-request writes).
 
-Step 5 adds store schemas, bootstrap (`CreateObjectStore`), and Go services. Step 6 adds the install HTTP API and installer, which **append only to `app_version_change_requests`**. Admin list/get endpoints **project known versions** from those requests.
+The first PR adds store schemas, bootstrap (`CreateObjectStore`), and Go services. The second adds the install HTTP API and installer, which **append only to `app_version_change_requests`**. Admin list/get endpoints **project known versions** from those requests.
 
 Related docs:
 

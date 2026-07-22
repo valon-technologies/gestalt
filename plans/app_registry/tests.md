@@ -5,6 +5,7 @@ Reference for behavioral tests in the app registry plan.
 Related docs:
 
 - [plan.md](./plan.md) — implementation path and goals
+- [validation.md](./validation.md) — install-time validation
 - [models.md](./models.md) — JSON documents exercised by publish and install
 - [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
@@ -18,12 +19,13 @@ Related docs:
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
-| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 21 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + steps 10–11 |
-| `internal/appregistry` | `materializer_test.go` | 5 | Unit | step 10 |
-| `internal/appregistry` | `mount_test.go` | 4 | Unit | step 11 |
+| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 21 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
+| `internal/appregistry` | `materializer_test.go` | 5 | Unit | — |
+| `internal/appregistry` | `mount_test.go` | 4 | Unit | — |
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
-| `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 11 |
+| `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
+| `internal/appregistry` | `install_validator_test.go` | — | Unit | planned |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -274,11 +276,44 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ---
 
+## Install-time validation tests
+
+Planned. Checks: [validation.md](./validation.md).
+
+Run (once implemented):
+
+```bash
+cd gestaltd
+go test ./internal/appregistry/... -run TestInstallValidator -count=1
+go test ./internal/server/... -run TestAdminAppRegistryInstall -count=1
+```
+
+### `install_validator_test.go` (planned)
+
+One table-driven test, `TestInstallValidator`, with stub fleet catalog and synthetic `Entry` documents:
+
+| Subtest | Covers |
+|---------|--------|
+| `accepts_satisfied_dependencies` | Happy path when catalog, entry, and dependency metadata align |
+| `rejects_missing_platform_artifact` | No artifact for host platform |
+| `rejects_incompatible_gestaltd` | `minGestaltdVersion` above running server version |
+| `rejects_unsatisfied_dependency` | Missing dependency app, version outside declared range, or required operation absent from published `interface` |
+| `rejects_broken_reverse_dependent` | Another fleet-known app's `requires.apps.{app}` would break on the candidate `interface` |
+
+### `handlers_admin_app_install_test.go` (extend)
+
+Add one HTTP case to the existing install test file (same harness as today):
+
+- **`validation_failure`** on `POST …/upgrade` — inject a validator failure, assert **400**, and assert no `app_rollouts` or `app_version_change_requests` rows were created. `add` shares the same `Installer.install` path, so it does not need a separate case.
+
+---
+
 ## What is not covered yet
 
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, and get-by-app — but not:
 
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
+- Install-time validation failure modes
 - Multi-replica materialization ack E2E (see [PLANNED] section above)
 - Deployed verification that catalog restarts serve the newly mounted binary

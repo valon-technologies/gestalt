@@ -6,6 +6,7 @@ Related references:
 
 - [config.md](./config.md) — deploy reader config and CI publish flags
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
+- [validation.md](./validation.md) — install-time validation before fleet accept (step 13)
 - [models.md](./models.md) — JSON document shapes stored in GCS
 - [service.md](./service.md) — Go package API for publish and validation
 
@@ -193,7 +194,7 @@ Non-core app installation state should live in IndexedDB.
 
 - **Known versions** — projected from change requests via `ListKnownVersionsByApp` and `ListAllKnownVersions`, one entry per `(app, to_version)` pair. Admin HTTP list/get endpoints read these projections.
 
-There is **no fleet head**, **no promotion**, and **no rollback** yet. Those belong to later activation/rollout work.
+There is **no fleet head** or **promotion**. Reverting to an older version uses `POST …/upgrade` with a previously published version.
 
 Store schema and service API: [indexeddb.md](./indexeddb.md#store-app_version_change_requests-source-of-truth).
 
@@ -208,20 +209,14 @@ Publish-time validation should ensure:
 - the app manifest is valid
 - app invokes operations that exist for the dependencies declared
 
-At install or upgrade time, Gestalt should validate the candidate against the actual runtime environment before activation.
+At install or upgrade time, Gestalt should validate the candidate against the actual runtime environment before activation. See [validation.md](./validation.md).
 
-Install-time validation should ensure:
+Activation is phased:
 
-- the selected app version exists in a configured registry
-- activating the candidate does not break existing installed dependents
-- the candidate can be materialized in the runtime environment
+1. Validate the candidate version against registry metadata (including install-time validation; see [validation.md](./validation.md)) and append a change request to `app_version_change_requests` (fleet declaration).
+2. Each replica acknowledges the catalog row, then progressively downloads, restarts, and mounts the new binary. See [lifecycle.md](./lifecycle.md#polling).
 
-Activation should be phased:
-
-1. Validate the candidate version against registry metadata and append a change request to `app_version_change_requests` (fleet declaration) — step 7.
-2. Each replica acknowledges the catalog row, then progressively downloads, restarts, and mounts the new binary — steps 8–11. See [lifecycle.md](./lifecycle.md#polling).
-
-Fleet activation, rollback, and head selection are planned for later steps (12+).
+Fleet rollout admission and per-replica convergence are shipped (rollouts, install locks, catalog poller).
 
 ### Runtime Materialization
 
@@ -236,7 +231,7 @@ Dynamic app failures should not prevent Gestalt from booting core functionality.
 If an installed non-core app fails to materialize or load:
 
 - Gestalt should continue serving core apps.
-- The failed app should be marked unhealthy and it should be easy to roll back (future activation/rollback steps).
+- The failed app should be marked unhealthy; operators can `POST …/upgrade` with a previously published version.
 
 Core recovery paths must not depend on dynamically installed apps.
 
@@ -264,5 +259,5 @@ Core recovery paths must not depend on dynamically installed apps.
 9. Stop the running app and start the same app back up (restart machinery only; no binary change yet). Use a **1 minute** delay between stop and start during early rollout testing so operators can observe that the process started; production restart has no intentional wait.
 10. Download and materialize the new version artifact **before** bringing the app down. **Done:** catalog poller downloads registry archives to `{artifactsDir}/registry-installed/{app}/{version}` and records `materialized_at` before `StopApp`. See [lifecycle.md](./lifecycle.md#polling), [tests.md](./tests.md#artifact-materialization-tests).
 11. Mount the newly materialized binary instead of the old one when restarting. **Done:** catalog-driven `StartApp` resolves an isolated provider entry from `{artifactsDir}/registry-installed/{app}/{version}` before rebuilding the app. See [lifecycle.md](./lifecycle.md#polling), [tests.md](./tests.md#registry-mount-tests).
-12. Registry-only app config and `add` / `upgrade` install routes. See [config.md](./config.md#registry-only-app-source), [lifecycle.md](./lifecycle.md), [tests.md](./tests.md#registry-only-app-tests).
-13. Add install-time validation, fleet activation/rollback, and concurrency guards.
+12. Registry-only app config and `add` / `upgrade` install routes. **Done.** See [config.md](./config.md#registry-only-app-source), [lifecycle.md](./lifecycle.md), [tests.md](./tests.md#registry-only-app-tests).
+13. Install-time validation before fleet accept: platform artifact, `gestaltd` compatibility, and declared app dependencies. No dedicated rollback API — revert via `upgrade` to an older published version. See [validation.md](./validation.md), [tests.md](./tests.md#install-time-validation-tests).
