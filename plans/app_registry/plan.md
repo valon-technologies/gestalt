@@ -11,8 +11,6 @@ Related references:
 - [models.md](./models.md) — JSON document shapes stored in GCS
 - [service.md](./service.md) — Go package API for publish and validation
 
-Planned extensions are described under [Future work](#future-work).
-
 ## Registry Responsibilities
 
 App registries are responsible for:
