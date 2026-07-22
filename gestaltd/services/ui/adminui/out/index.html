@@ -340,10 +340,9 @@
           main.appendChild(replicas);
 
           const active = app.rollout && (app.rollout.state === "enrolling" || app.rollout.state === "restarting");
-          const newest = versions[0] && versions[0].version;
           const actionPanel = element("section", null, "panel");
           const actionButton = element("button", app.desiredVersion ? "Upgrade" : "Install", "primary");
-          actionButton.disabled = active || !versions.length || (app.desiredVersion && newest === app.desiredVersion);
+          actionButton.disabled = active || !versions.length;
           actionButton.addEventListener("click", () => chooseVersion(app, app.desiredVersion ? "upgrade" : "add"));
           append(actionPanel, append(element("div", null, "toolbar"), append(element("div"), element("h2", "Actions"), element("p", active ? "Actions are disabled while rollout is active." : "Select any published version, including an older version to revert.")), actionButton));
           main.appendChild(actionPanel);
@@ -354,9 +353,12 @@
           try {
             const payload = await api("/app-registries/" + encodeURIComponent(app.registry) + "/apps/" + encodeURIComponent(app.app) + "/versions");
             if (!payload.versions || !payload.versions.length) throw new Error("No published versions are available.");
+            const known = new Set((app.knownVersions || []).map((item) => item.version));
+            const selectable = payload.versions.filter((item) => mode !== "add" || !known.has(item.version));
+            if (!selectable.length) throw new Error(mode === "add" ? "No new published versions are available." : "No published versions are available.");
             const dialog = document.getElementById("version-dialog");
             const select = document.getElementById("version-select");
-            select.replaceChildren(...payload.versions.map((item) => {
+            select.replaceChildren(...selectable.map((item) => {
               const option = element("option", item.version);
               option.value = item.version;
               return option;

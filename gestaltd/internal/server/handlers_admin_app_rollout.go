@@ -88,7 +88,7 @@ func (s *Server) listAdminRegistryApps(w http.ResponseWriter, r *http.Request) {
 	apps := s.configuredRegistryApps()
 	out := make([]adminRegistryAppSummary, 0, len(apps))
 	for _, app := range apps {
-		summary, err := s.loadAdminRegistryAppSummary(r, app)
+		summary, err := s.loadAdminRegistryAppSummary(r, app, nil)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to load registry app state")
 			return
@@ -117,14 +117,14 @@ func (s *Server) getAdminRegistryApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "registry app not found")
 		return
 	}
-	summary, err := s.loadAdminRegistryAppSummary(r, app)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to load registry app state")
-		return
-	}
 	known, err := s.appVersionChanges.ListKnownVersionsByApp(r.Context(), appName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load known app versions")
+		return
+	}
+	summary, err := s.loadAdminRegistryAppSummary(r, app, known)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load registry app state")
 		return
 	}
 	knownVersions := make([]adminAppInstallationInfo, 0, len(known))
@@ -165,7 +165,8 @@ func (s *Server) listAdminAppRollouts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list recent app rollouts")
 		return
 	}
-	rollouts := append(active, recent...)
+	rollouts := active
+	rollouts = append(rollouts, recent...)
 	slices.SortFunc(rollouts, func(a, b *core.AppRollout) int {
 		if byApp := strings.Compare(a.App, b.App); byApp != 0 {
 			return byApp
@@ -278,10 +279,13 @@ func (s *Server) registryApp(name string) (configuredRegistryApp, bool) {
 	return configuredRegistryApp{}, false
 }
 
-func (s *Server) loadAdminRegistryAppSummary(r *http.Request, app configuredRegistryApp) (adminRegistryAppSummary, error) {
-	known, err := s.appVersionChanges.ListKnownVersionsByApp(r.Context(), app.name)
-	if err != nil {
-		return adminRegistryAppSummary{}, err
+func (s *Server) loadAdminRegistryAppSummary(r *http.Request, app configuredRegistryApp, known []*core.AppInstallation) (adminRegistryAppSummary, error) {
+	var err error
+	if known == nil {
+		known, err = s.appVersionChanges.ListKnownVersionsByApp(r.Context(), app.name)
+		if err != nil {
+			return adminRegistryAppSummary{}, err
+		}
 	}
 	summary := adminRegistryAppSummary{
 		App:            app.name,
@@ -370,7 +374,7 @@ func adminRolloutCohortFromRows(rows []*core.AppInstanceMaterialization, rollout
 		if !row.RestartedAt.IsZero() {
 			out.Restarted++
 		}
-		if !row.LastErrorAt.IsZero() {
+		if !row.LastErrorAt.IsZero() && (row.RestartedAt.IsZero() || row.LastErrorAt.After(row.RestartedAt)) {
 			out.Failed++
 		}
 	}
