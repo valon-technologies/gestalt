@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Code } from "@/components/ui/code";
@@ -28,12 +28,27 @@ function formatTime(value?: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
+function SummaryField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="mt-1 min-w-0">{children}</dd>
+    </div>
+  );
+}
+
 function RegistryAppDetailPage() {
   const { app } = Route.useParams();
   const appQuery = useQuery(registryQueries.app(app));
   const materializationsQuery = useQuery({
     ...registryQueries.materializations(app),
-    enabled: Boolean(appQuery.data?.rollout || appQuery.data?.desiredVersion),
+    enabled: Boolean(appQuery.data?.rollout),
   });
 
   const active =
@@ -57,6 +72,8 @@ function RegistryAppDetailPage() {
 
   const detail = appQuery.data;
   const desired = detail.knownVersions.find((item) => item.version === detail.desiredVersion);
+  const cohortReplicas =
+    materializationsQuery.data?.materializations.filter((row) => row.inCohort) ?? [];
 
   return (
     <div className="space-y-8">
@@ -75,23 +92,19 @@ function RegistryAppDetailPage() {
             <SectionHeaderDescription>Fleet-known version and install metadata.</SectionHeaderDescription>
           </SectionHeaderContent>
         </SectionHeader>
-        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Version</dt>
-            <dd className="mt-1"><Code>{detail.desiredVersion || "not installed"}</Code></dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Installed by</dt>
-            <dd className="mt-1 text-sm">{desired?.installedBy || "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Installed at</dt>
-            <dd className="mt-1 text-sm">{formatTime(desired?.installedAt)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest published</dt>
-            <dd className="mt-1 text-sm">{detail.latestPublished?.version || "—"}</dd>
-          </div>
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <SummaryField label="Version">
+            <Code>{detail.desiredVersion || "not installed"}</Code>
+          </SummaryField>
+          <SummaryField label="Latest published">
+            <Code>{detail.latestPublished?.version || "—"}</Code>
+          </SummaryField>
+          <SummaryField label="Installed by">
+            <span className="text-sm break-all">{desired?.installedBy || "—"}</span>
+          </SummaryField>
+          <SummaryField label="Installed at">
+            <span className="text-sm">{formatTime(desired?.installedAt)}</span>
+          </SummaryField>
         </dl>
       </section>
 
@@ -125,43 +138,68 @@ function RegistryAppDetailPage() {
       <section className="space-y-4 rounded-lg border border-border bg-card p-4">
         <SectionHeader>
           <SectionHeaderContent>
-            <SectionHeaderTitle>Replica convergence</SectionHeaderTitle>
+            <SectionHeaderTitle>Replica pool</SectionHeaderTitle>
             <SectionHeaderDescription>
-              A restarted timestamp records rollout reconciliation; it does not prove the replica is currently running this version.
+              Enrollment cohort totals for replicas that acknowledged before enrollment closed.
             </SectionHeaderDescription>
           </SectionHeaderContent>
         </SectionHeader>
-        {materializationsQuery.isPending ? (
-          <Skeleton className="h-32 w-full" />
-        ) : !materializationsQuery.data?.materializations.length ? (
-          <p className="text-sm text-muted-foreground">No replicas have acknowledged this version.</p>
+        {!detail.rollout ? (
+          <p className="text-sm text-muted-foreground">No rollout in progress.</p>
+        ) : !detail.cohort || detail.cohort.acknowledged === 0 ? (
+          <p className="text-sm text-muted-foreground">No replicas have joined the rollout cohort yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Instance</TableHead>
-                <TableHead>Acknowledged</TableHead>
-                <TableHead>Materialized</TableHead>
-                <TableHead>Stopped</TableHead>
-                <TableHead>Restarted</TableHead>
-                <TableHead>Attempts</TableHead>
-                <TableHead>Last error</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {materializationsQuery.data.materializations.map((row) => (
-                <TableRow key={row.instanceId}>
-                  <TableCell><Code>{row.instanceId}</Code></TableCell>
-                  <TableCell>{formatTime(row.acknowledgedAt)}</TableCell>
-                  <TableCell>{formatTime(row.materializedAt)}</TableCell>
-                  <TableCell>{formatTime(row.stoppedAt)}</TableCell>
-                  <TableCell>{formatTime(row.restartedAt)}</TableCell>
-                  <TableCell>{row.attemptCount}</TableCell>
-                  <TableCell>{row.lastErrorMessage || "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="space-y-4">
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <SummaryField label="Acknowledged">
+                <span className="text-sm">{detail.cohort.acknowledged}</span>
+              </SummaryField>
+              <SummaryField label="Materialized">
+                <span className="text-sm">{detail.cohort.materialized}</span>
+              </SummaryField>
+              <SummaryField label="Restarted">
+                <span className="text-sm">{detail.cohort.restarted}</span>
+              </SummaryField>
+              <SummaryField label="Failed">
+                <span className="text-sm">{detail.cohort.failed}</span>
+              </SummaryField>
+            </dl>
+            {materializationsQuery.isPending ? (
+              <Skeleton className="h-24 w-full" />
+            ) : cohortReplicas.length > 0 ? (
+              <details className="rounded-lg border border-border">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-foreground">
+                  Cohort replicas ({cohortReplicas.length})
+                </summary>
+                <div className="border-t border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Instance</TableHead>
+                        <TableHead>Restarted</TableHead>
+                        <TableHead>Attempts</TableHead>
+                        <TableHead>Last error</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cohortReplicas.map((row) => (
+                        <TableRow key={row.instanceId}>
+                          <TableCell className="min-w-0">
+                            <Code>{row.instanceId}</Code>
+                          </TableCell>
+                          <TableCell>{formatTime(row.restartedAt)}</TableCell>
+                          <TableCell>{row.attemptCount}</TableCell>
+                          <TableCell className="min-w-0 break-all text-sm">
+                            {row.lastErrorMessage || "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </details>
+            ) : null}
+          </div>
         )}
       </section>
     </div>

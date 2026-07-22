@@ -43,5 +43,7 @@ export type MaterializationsResponse = {
     restartedAt?: string | null;
     attemptCount: number;
     lastErrorMessage?: string;
+    inCohort: boolean;
+    converged: boolean;
   }>;
 };

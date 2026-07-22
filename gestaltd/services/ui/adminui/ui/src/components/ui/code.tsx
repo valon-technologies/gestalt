@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 // `rounded-sm` (--radius-sm ≈ 4px) — same soft-rect as Badge, not Button's
 // `rounded-md`. Plate `CodeLeaf` / `CodeLeafStatic` consume `codeVariants()`.
 const codeVariants = cva(
-  "whitespace-pre-wrap rounded-sm border border-border bg-muted px-[0.25em] py-[0.12em] font-mono text-[0.9em] font-normal text-foreground [font-variant-ligatures:none]",
+  "inline-block max-w-full break-all whitespace-pre-wrap rounded-sm border border-border bg-muted px-[0.25em] py-[0.12em] font-mono text-[0.9em] font-normal text-foreground [font-variant-ligatures:none]",
 );
 
 export interface CodeProps
