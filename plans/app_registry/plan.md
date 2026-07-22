@@ -265,66 +265,24 @@ Core recovery paths must not depend on dynamically installed apps.
 12. Registry-only app config and `add` / `upgrade` install routes. **Done.** See [config.md](./config.md#registry-only-app-source), [lifecycle.md](./lifecycle.md), [tests.md](./tests.md#registry-only-app-tests).
 13. Install-time validation before fleet accept: platform artifact, `gestaltd` compatibility, and declared app dependencies. No dedicated rollback API — revert via `upgrade` to an older published version. See [validation.md](./validation.md), [tests.md](./tests.md#install-time-validation-tests).
 14. Admin observability for registry-only apps: read APIs for rollouts and per-replica materializations, and an App Registry section in the `/admin` UI. **Done.** See [admin.md](./admin.md), [lifecycle.md](./lifecycle.md#admin-observability-api), [tests.md](./tests.md#admin-observability-tests).
-15. Packaged workflow targets in registry metadata and install-time validation. **In progress.** See [Future work](#future-work-packaged-workflows-in-registry-metadata).
+15. Packaged workflow metadata on published versions and install-time validation for workflow app-call targets. See [Future work](#future-work) and [validation.md](./validation.md).
 
 ## Future work
 
-### Packaged workflows in registry metadata
+### Packaged workflow metadata
 
-Packaged apps can declare workflow definitions in source (`workflows.ts` for TypeScript apps, provider declarations for Go). At bootstrap, gestaltd reads them from the started provider as `DeclaredWorkflowDefinitions` and registers them with the workflow manager. That is too late to catch bad workflow app targets before a version is admitted to the fleet.
+Packaged apps declare workflow definitions in provider source. Bootstrap registers them from `DeclaredWorkflowDefinitions` after install — too late to reject a bad version before fleet accept.
 
-Install-time validation should not download artifacts or run providers. Like `interface` and `requires`, workflow install checks need a **registry contract** on `versions/{version}.json` that publish populates from the packaged app.
+Install validation should read workflow app-call targets from `versions/{version}.json`, like `interface` and `requires`. It should not download artifacts or run providers.
 
-#### Authoring vs registry contract
+At publish time:
 
-| Layer | Role |
-|-------|------|
-| `workflows.ts` (or provider declarations) | Authoring — source of truth in the app repo |
-| `workflows.yaml` in the packaged artifact | Derived at package time — app-call steps only (`definitions[].steps[].app`, `operation`) |
-| `workflows` on `versions/{version}.json` | Install contract — copied from release metadata at publish |
-| `DeclaredWorkflowDefinitions` at bootstrap | Runtime registration — same declarations, after install |
+- derive `workflows.yaml` during `gestaltd provider package` (`GESTALT_APP_WRITE_WORKFLOWS`), including when `catalog.yaml` already exists
+- copy app-call steps into the registry entry at `gestaltd app publish`
+- require identical workflow metadata across platform archives (same rule as static catalog)
 
-Config-managed `workflows.definitions` in deploy `config.yaml` stay separate: they are fleet-owned, validated at config load, and are not part of this registry field.
+At install time, validate `entry.workflows` before `AppendRequest` — see [validation.md](./validation.md). Config-managed `workflows.definitions` stay separate and are validated at config load.
 
-#### Publish path
+When `entry.workflows` is absent, skip workflow checks. Republish registry apps after the publish pipeline ships so existing snapshots gain the field.
 
-Extend the existing static-metadata pipeline (same provider invocation that writes `catalog.yaml`):
-
-1. `gestaltd provider package` runs the built provider with `GESTALT_APP_WRITE_WORKFLOWS` when `workflows.yaml` is missing or stale, even if `catalog.yaml` already exists.
-2. `gestaltd provider release` / `gestaltd app publish` copies `workflows.yaml` into provider-release `staticValidation.workflows` and into the registry entry written by `gestaltd app publish`.
-3. Multi-platform publishes must carry identical workflow metadata across archives (same rule as static catalog).
-
-#### Install path
-
-Extend `InstallValidator` (see [validation.md](./validation.md)) to walk `entry.workflows` before `AppendRequest`:
-
-- Each app-call step `app` must match a deploy config app slot (`config.apps` key on the handling replica).
-- When the step names an operation and the target is fleet-known (or is the candidate app itself), require that operation on the target published `interface`. Self-targets use the candidate entry `interface`, not the previously fleet-known version.
-
-When `entry.workflows` is empty (versions published before this field existed), skip workflow checks for backward compatibility.
-
-#### Example registry entry
-
-```json
-{
-  "app": "g-issues",
-  "version": "0.0.0-snapshot.gXXXX",
-  "interface": { "operations": { "handle_slack_event": {} } },
-  "workflows": {
-    "definitions": [{
-      "id": "slack_v2_smoke_test",
-      "steps": [{ "app": "g-issues", "operation": "handle_slack_event" }]
-    }]
-  }
-}
-```
-
-#### Operational follow-up
-
-- **Republish** registry apps after the publish pipeline ships so existing snapshots gain `workflows` metadata; install validation is a no-op until then.
-- **Align app slot names** across deploy config (`g-issues`), workflow step targets, provider configuration, and UI bindings. The `g-issues` / `gIssues` rename showed that registry workflow validation catches stale targets only when names are inconsistent — consolidation reduces author error.
-- Update [models.md](./models.md) with the `workflows` field shape once the contract stabilizes.
-
-#### Failure example
-
-Installing `g-issues` whose packaged `slack_v2_smoke_test` workflow targets `gIssues` while deploy config only defines `g-issues` should return **400** `workflow_target_app_missing` before IndexedDB write, instead of failing at bootstrap with `workflow target app "gIssues" is not configured`.
+Failure example: installing `g-issues` whose workflow targets `gIssues` while deploy config defines only `g-issues` should return **400** `workflow_target_app_missing` at install, not fail at bootstrap.
