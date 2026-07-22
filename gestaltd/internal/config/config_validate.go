@@ -49,7 +49,7 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeAppStaticMounts(cfg); err != nil {
 		return err
 	}
-	return nil
+	return canonicalizeRemotes(cfg)
 }
 
 // ValidateCanonicalStructure checks config shape assuming canonicalization has
@@ -463,6 +463,16 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 			return err
 		}
 		switch kind {
+		case HostProviderKindIdentity, HostProviderKindAuthorization:
+			if err := validateProviderEntryRemote("providers."+string(kind)+"."+name, entry); err != nil {
+				return err
+			}
+		default:
+			if err := validateUnsupportedRemotePlacement("providers."+string(kind)+"."+name, entry); err != nil {
+				return err
+			}
+		}
+		switch kind {
 		case HostProviderKindIdentity:
 			if entry.Source.IsBuiltin() {
 				return fmt.Errorf("config validation: identity provider %q does not support builtin providers; use a provider source reference or omit identity", name)
@@ -792,7 +802,7 @@ func validateRuntimeConfig(cfg *Config) error {
 	if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
 		return err
 	}
-	if err := normalizeRemoteGestaltdConfig(cfg); err != nil {
+	if err := validateRemotesConfig(cfg); err != nil {
 		return err
 	}
 	for name, entry := range cfg.Runtime.Providers {
@@ -800,6 +810,9 @@ func validateRuntimeConfig(cfg *Config) error {
 			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
 		}
 		if err := validateAppOnlyProviderFields("runtime.providers."+name, &entry.ProviderEntry); err != nil {
+			return err
+		}
+		if err := validateUnsupportedRemotePlacement("runtime.providers."+name, &entry.ProviderEntry); err != nil {
 			return err
 		}
 		entry.Driver = RuntimeProviderDriver(strings.TrimSpace(string(entry.Driver)))
@@ -848,29 +861,21 @@ func validateRuntimeRelayBaseURL(raw string) error {
 	return validateHTTPOriginURL("server.runtime.relayBaseUrl", raw)
 }
 
-func validateRemoteGestaltdURL(raw string) error {
-	return validateHTTPOriginURL("server.remote", raw)
-}
-
-func normalizeRemoteGestaltdConfig(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
-	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
-	return validateRemoteGestaltdURL(cfg.Server.Remote)
-}
-
 // ValidateRemoteGestaltd checks serve-time remote requirements.
 func ValidateRemoteGestaltd(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
-	if strings.TrimSpace(cfg.Server.Remote) == "" {
-		return nil
+	if err := validateRemotesConfig(cfg); err != nil {
+		return err
 	}
-	if strings.TrimSpace(cfg.Server.RemoteToken) == "" {
-		return fmt.Errorf("config validation: server.remoteToken is required when server.remote is set")
+	referenced := cfg.ReferencedRemoteNames()
+	for _, name := range referenced {
+		remote := cfg.Server.Remotes[name]
+		if remote == nil || strings.TrimSpace(remote.Token) != "" {
+			continue
+		}
+		return fmt.Errorf("config validation: server.remotes.%s.token is required when remote %q is referenced", name, name)
 	}
 	return nil
 }
@@ -881,21 +886,39 @@ func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
 	if cfg == nil {
 		return nil
 	}
-	if remote != "" {
-		cfg.Server.Remote = remote
+	if len(cfg.Server.Remotes) > 0 {
+		_, defaultRemote, ok := cfg.DefaultRemoteEntry()
+		if !ok || defaultRemote == nil {
+			return fmt.Errorf("config validation: --remote/--remote-token require a default server.remotes entry (set default: true on one)")
+		}
+		if remote != "" {
+			defaultRemote.URL = remote
+		}
+		if remoteToken != "" {
+			defaultRemote.Token = remoteToken
+		}
+	} else {
+		if remote != "" {
+			cfg.Server.Remote = remote
+		}
+		if remoteToken != "" {
+			cfg.Server.RemoteToken = remoteToken
+		}
 	}
-	if remoteToken != "" {
-		cfg.Server.RemoteToken = remoteToken
-	}
-	if err := normalizeRemoteGestaltdConfig(cfg); err != nil {
+	if err := canonicalizeRemotes(cfg); err != nil {
 		return err
 	}
-	if strings.TrimSpace(cfg.Server.Remote) != "" && strings.TrimSpace(cfg.Server.RemoteToken) == "" {
-		token, err := defaultRemoteToken()
-		if err != nil {
-			return err
+	// Resolve a missing default-remote token from the environment or stored
+	// credentials, but only when the default is actually referenced — an
+	// unreferenced default needs no token.
+	if defaultName, defaultRemote, ok := cfg.DefaultRemoteEntry(); ok && defaultRemote != nil {
+		if strings.TrimSpace(defaultRemote.Token) == "" && slices.Contains(cfg.ReferencedRemoteNames(), defaultName) {
+			token, err := defaultRemoteToken()
+			if err != nil {
+				return err
+			}
+			defaultRemote.Token = token
 		}
-		cfg.Server.RemoteToken = token
 	}
 	return ValidateRemoteGestaltd(cfg)
 }
@@ -967,6 +990,9 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := normalizeProviderRuntimeConfig("apps."+name, entry, false); err != nil {
 		return err
 	}
+	if err := validateProviderEntryRemote("apps."+name, entry); err != nil {
+		return err
+	}
 	if err := validateProviderEntrySource("app", name, entry); err != nil {
 		return err
 	}
@@ -1026,6 +1052,9 @@ func validateIndexedDBConfig(cfg *Config) error {
 		if err := validateAppOnlyProviderFields("providers.indexeddb."+name, entry); err != nil {
 			return err
 		}
+		if err := validateProviderEntryRemote("providers.indexeddb."+name, entry); err != nil {
+			return err
+		}
 		if err := validateProviderEntrySource("indexeddb", name, entry); err != nil {
 			return err
 		}
@@ -1047,6 +1076,9 @@ func validateCacheConfig(cfg *Config) error {
 		if err := validateAppOnlyProviderFields("providers.cache."+name, entry); err != nil {
 			return err
 		}
+		if err := validateUnsupportedRemotePlacement("providers.cache."+name, entry); err != nil {
+			return err
+		}
 		if err := validateProviderEntrySource("cache", name, entry); err != nil {
 			return err
 		}
@@ -1060,6 +1092,9 @@ func validateS3Config(cfg *Config) error {
 			return fmt.Errorf("config validation: providers.s3.%s is required", name)
 		}
 		if err := validateAppOnlyProviderFields("providers.s3."+name, entry); err != nil {
+			return err
+		}
+		if err := validateUnsupportedRemotePlacement("providers.s3."+name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("s3", name, entry); err != nil {
@@ -1086,6 +1121,9 @@ func validateWorkflowConfig(cfg *Config) error {
 			}
 		}
 		if err := validateWorkflowProviderFields(cfg, name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderEntryRemote("providers.workflow."+name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("workflow", name, entry); err != nil {
@@ -1122,6 +1160,9 @@ func validateAgentConfig(cfg *Config) error {
 			return err
 		}
 		if err := validateAgentProviderFields(cfg, name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderEntryRemote("providers.agent."+name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("agent", name, entry); err != nil {

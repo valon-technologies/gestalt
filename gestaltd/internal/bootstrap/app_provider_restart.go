@@ -88,7 +88,7 @@ func (r *AppProviderRestarter) Restartable(app string) (bool, error) {
 }
 
 func appProviderRestartable(cfg *config.Config, entry *config.ProviderEntry) bool {
-	return entry != nil && !entry.DevActive && providerBuildsLocal(cfg, entry)
+	return entry != nil && !entry.DevActive && config.EntryBuildsLocal(entry)
 }
 
 func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {

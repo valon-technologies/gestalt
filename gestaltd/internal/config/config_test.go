@@ -5040,13 +5040,13 @@ server:
 func TestLoadConfigRemoteGestaltd(t *testing.T) {
 	loadRemoteConfigForServe := func(t *testing.T) (*Config, error) {
 		t.Helper()
-		path := mustWriteConfigFile(t, `
-server:
-  remote: https://valon.tools
-`)
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		cfg := &Config{
+			Server: ServerConfig{
+				Remote: "https://valon.tools",
+			},
+			Apps: map[string]*ProviderEntry{
+				"linear": {Remote: DefaultRemoteName},
+			},
 		}
 		return cfg, ApplyServeRemoteOverrides(cfg, "", "")
 	}
@@ -5083,7 +5083,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), "server.remote must not include a path") {
+		if !strings.Contains(err.Error(), "server.remotes.default.url must not include a path") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -5098,7 +5098,7 @@ server:
 		}{
 			{name: "env", envToken: "env-token", wantToken: "env-token"},
 			{name: "stored credentials", storedToken: "stored-token", wantToken: "stored-token"},
-			{name: "missing", wantErr: "server.remoteToken is required when server.remote is set"},
+			{name: "missing", wantErr: "server.remotes.default.token is required"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Setenv("GESTALT_API_KEY", tc.envToken)
@@ -5116,9 +5116,6 @@ server:
 				}
 
 				cfg, err := loadRemoteConfigForServe(t)
-				if got := cfg.Server.Remote; got != "https://valon.tools" {
-					t.Fatalf("server.remote = %q", got)
-				}
 				if tc.wantErr != "" {
 					if err == nil {
 						t.Fatal("ApplyServeRemoteOverrides: expected error, got nil")
@@ -5131,10 +5128,85 @@ server:
 				if err != nil {
 					t.Fatalf("ApplyServeRemoteOverrides: %v", err)
 				}
-				if got := cfg.Server.RemoteToken; got != tc.wantToken {
-					t.Fatalf("server.remoteToken = %q, want %q", got, tc.wantToken)
+				if got := cfg.Server.Remotes[DefaultRemoteName].Token; got != tc.wantToken {
+					t.Fatalf("server.remotes.default.token = %q, want %q", got, tc.wantToken)
 				}
 			})
+		}
+	})
+
+	t.Run("remote flag targets named default remote", func(t *testing.T) {
+		t.Parallel()
+		cfg := &Config{
+			Server: ServerConfig{
+				Remotes: map[string]*RemoteConfig{
+					"prod": {URL: "https://old.test", Token: "configured-token", Default: true},
+					"dev":  {URL: "https://dev.test", Token: "dev-token"},
+				},
+			},
+			Apps: map[string]*ProviderEntry{
+				"local-tool": {},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "https://new.test", ""); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
+		}
+		if got := cfg.Server.Remotes["prod"].URL; got != "https://new.test" {
+			t.Fatalf("server.remotes.prod.url = %q", got)
+		}
+		if got := cfg.Server.Remotes["prod"].Token; got != "configured-token" {
+			t.Fatalf("server.remotes.prod.token = %q", got)
+		}
+		// No app references the default remote, so the legacy scalar mirror
+		// is not populated — the default remote is declared but unused.
+		if got := cfg.Server.Remote; got != "" {
+			t.Fatalf("server.remote = %q, want empty (default unreferenced)", got)
+		}
+		if got := cfg.Apps["local-tool"].Remote; got != "" {
+			t.Fatalf("local-tool remote = %q, want empty local placement", got)
+		}
+	})
+
+	t.Run("remote flag errors when named remotes lack a default", func(t *testing.T) {
+		t.Parallel()
+		cfg := &Config{
+			Server: ServerConfig{
+				Remotes: map[string]*RemoteConfig{
+					"prod": {URL: "https://prod.test", Token: "prod-token"},
+					"dev":  {URL: "https://dev.test", Token: "dev-token"},
+				},
+			},
+			Apps: map[string]*ProviderEntry{
+				"linear": {Remote: "prod"},
+			},
+		}
+		err := ApplyServeRemoteOverrides(cfg, "https://override.test", "")
+		if err == nil {
+			t.Fatal("ApplyServeRemoteOverrides: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "require a default server.remotes entry") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := cfg.Server.Remotes["prod"].URL; got != "https://prod.test" {
+			t.Fatalf("prod url mutated = %q, want unchanged", got)
+		}
+		if _, injected := cfg.Server.Remotes[DefaultRemoteName]; injected {
+			t.Fatalf("spurious default remote created: %#v", cfg.Server.Remotes[DefaultRemoteName])
+		}
+	})
+
+	t.Run("remote flag preserves legacy app stamping", func(t *testing.T) {
+		t.Parallel()
+		cfg := &Config{
+			Apps: map[string]*ProviderEntry{
+				"linear": {},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "https://remote.test", "test-token"); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
+		}
+		if got := cfg.Apps["linear"].Remote; got != DefaultRemoteName {
+			t.Fatalf("linear remote = %q, want %q", got, DefaultRemoteName)
 		}
 	})
 
@@ -5154,6 +5226,155 @@ server:
 		}
 		if got := cfg.Server.RemoteToken; got != "configured-token" {
 			t.Fatalf("server.remoteToken = %q, want configured-token", got)
+		}
+	})
+
+	t.Run("rejects double default remote", func(t *testing.T) {
+		t.Parallel()
+		path := mustWriteConfigFile(t, `
+server:
+  remotes:
+    prod:
+      url: https://valon.tools
+      default: true
+    dev:
+      url: https://vt.dev.valon.tools
+      default: true
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "at most one server.remotes entry may set default: true") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects unknown remote reference", func(t *testing.T) {
+		t.Parallel()
+		path := mustWriteConfigFile(t, `
+server:
+  remotes:
+    prod:
+      url: https://valon.tools
+apps:
+  linear:
+    source:
+      path: /tmp/manifest.yaml
+    remote: missing
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `remote "missing" is not defined under server.remotes`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects local and remote conflict", func(t *testing.T) {
+		t.Parallel()
+		path := mustWriteConfigFile(t, `
+server:
+  remotes:
+    prod:
+      url: https://valon.tools
+apps:
+  linear:
+    source:
+      path: /tmp/manifest.yaml
+    local: true
+    remote: prod
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "cannot set both local: true and remote") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects remote on unsupported provider kind", func(t *testing.T) {
+		t.Parallel()
+		path := mustWriteConfigFile(t, `
+server:
+  remotes:
+    prod:
+      url: https://valon.tools
+providers:
+  cache:
+    shared:
+      source:
+        path: ./providers/cache/memory
+      remote: prod
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "does not support remote placement") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("legacy canonicalization stamps host providers", func(t *testing.T) {
+		t.Parallel()
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://remote.test
+  remoteToken: test-token
+providers:
+  identity:
+    oidc:
+      source:
+        path: ./providers/identity/oidc
+  workflow:
+    wf:
+      source:
+        path: ./providers/workflow/wf
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Providers.Identity["oidc"].Remote; got != DefaultRemoteName {
+			t.Fatalf("identity oidc remote = %q, want %q", got, DefaultRemoteName)
+		}
+		if got := cfg.Providers.Workflow["wf"].Remote; got != DefaultRemoteName {
+			t.Fatalf("workflow wf remote = %q, want %q", got, DefaultRemoteName)
+		}
+	})
+
+	t.Run("sole remote is default without explicit flag", func(t *testing.T) {
+		t.Parallel()
+		cfg := &Config{
+			Server: ServerConfig{
+				Remotes: map[string]*RemoteConfig{
+					"prod": {URL: "https://valon.tools"},
+				},
+			},
+		}
+		name, remote, ok := cfg.DefaultRemoteEntry()
+		if !ok || name != "prod" || remote == nil {
+			t.Fatalf("DefaultRemoteEntry() = (%q, %#v, %v)", name, remote, ok)
+		}
+	})
+
+	t.Run("unreferenced default remote needs no token", func(t *testing.T) {
+		t.Parallel()
+		cfg := &Config{
+			Server: ServerConfig{
+				Remotes: map[string]*RemoteConfig{
+					"prod": {URL: "https://valon.tools", Default: true},
+				},
+			},
+			Apps: map[string]*ProviderEntry{
+				"local-tool": {},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "", ""); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides with unreferenced default: %v", err)
 		}
 	})
 }

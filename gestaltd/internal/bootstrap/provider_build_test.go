@@ -701,10 +701,48 @@ func remoteRoutingConfig(t *testing.T, localDevActive map[string]bool) *config.C
 			entry.DevActive = active
 		}
 	}
-	return &config.Config{
-		Server: config.ServerConfig{Remote: "https://remote.test"},
-		Apps:   apps,
+	for _, entry := range apps {
+		if entry == nil || entry.Local || entry.DevActive {
+			continue
+		}
+		entry.Remote = config.DefaultRemoteName
 	}
+	return &config.Config{
+		Server: config.ServerConfig{
+			Remote: "https://remote.test",
+			Remotes: map[string]*config.RemoteConfig{
+				config.DefaultRemoteName: {
+					URL:     "https://remote.test",
+					Token:   "test-token",
+					Default: true,
+				},
+			},
+		},
+		Apps: apps,
+	}
+}
+
+func multiRemoteRoutingConfig(t *testing.T) *config.Config {
+	t.Helper()
+	return &config.Config{
+		Server: config.ServerConfig{
+			Remotes: map[string]*config.RemoteConfig{
+				"prod": {URL: "https://prod.test", Token: "prod-token", Default: true},
+				"dev":  {URL: "https://dev.test", Token: "dev-token"},
+			},
+		},
+		Apps: map[string]*config.ProviderEntry{
+			"linear":        withRemote(remoteRoutingAppEntry(t, "linear", "issues.list"), "prod"),
+			"valon-profile": withRemote(remoteRoutingAppEntry(t, "valon-profile", "issues.list"), "dev"),
+		},
+	}
+}
+
+func withRemote(entry *config.ProviderEntry, remote string) *config.ProviderEntry {
+	if entry != nil {
+		entry.Remote = remote
+	}
+	return entry
 }
 
 func localRoutingAppStub(name string) *coretesting.StubIntegration {
@@ -720,7 +758,7 @@ func localRoutingAppStub(name string) *coretesting.StubIntegration {
 	}
 }
 
-func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteApp proto.AppClient, localApps ...core.Provider) *invocation.Broker {
+func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteClients map[string]proto.AppClient, localApps ...core.Provider) *invocation.Broker {
 	t.Helper()
 	reg := registry.New()
 	for _, provider := range localApps {
@@ -728,7 +766,11 @@ func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteApp proto.Ap
 			t.Fatalf("Register %q: %v", provider.Name(), err)
 		}
 	}
-	if err := registerRemoteApps(&reg.Providers, cfg, Deps{RemoteClients: &remote.ClientSet{App: remoteApp}}); err != nil {
+	clientSets := make(remote.ClientSets, len(remoteClients))
+	for name, appClient := range remoteClients {
+		clientSets[name] = &remote.ClientSet{App: appClient}
+	}
+	if err := registerRemoteApps(&reg.Providers, cfg, Deps{RemoteClientSets: clientSets}); err != nil {
 		t.Fatalf("registerRemoteApps: %v", err)
 	}
 	svc := testutil.NewStubServices(t)
@@ -808,7 +850,9 @@ func TestRemoteAppRoutingLifecycles(t *testing.T) {
 			t.Parallel()
 
 			remoteClient := &recordingRemoteAppClient{}
-			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), remoteClient, tc.localStubs...)
+			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), map[string]proto.AppClient{
+				config.DefaultRemoteName: remoteClient,
+			}, tc.localStubs...)
 
 			for _, check := range tc.localChecks {
 				result := invokeRemoteRoutingApp(t, broker, check.app, check.operation)
@@ -872,7 +916,9 @@ func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
 			t.Parallel()
 
 			remoteClient := &recordingRemoteAppClient{err: tc.remoteErr}
-			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), remoteClient)
+			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), map[string]proto.AppClient{
+				config.DefaultRemoteName: remoteClient,
+			})
 
 			_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(tc.app), tc.app, "", tc.operation, nil)
 			if !errors.Is(err, tc.wantErr) {
@@ -885,24 +931,55 @@ func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
 	}
 }
 
+func TestMultiRemoteAppRouting(t *testing.T) {
+	t.Parallel()
+
+	prodClient := &recordingRemoteAppClient{}
+	devClient := &recordingRemoteAppClient{}
+	cfg := multiRemoteRoutingConfig(t)
+	broker := newRemoteRoutingBroker(t, cfg, map[string]proto.AppClient{
+		"prod": prodClient,
+		"dev":  devClient,
+	})
+
+	result := invokeRemoteRoutingApp(t, broker, "linear", "issues.list")
+	if result.Status != 202 || string(result.Body) != "relayed" {
+		t.Fatalf("Invoke(linear) = %#v, want remote relayed", result)
+	}
+	result = invokeRemoteRoutingApp(t, broker, "valon-profile", "issues.list")
+	if result.Status != 202 || string(result.Body) != "relayed" {
+		t.Fatalf("Invoke(valon-profile) = %#v, want remote relayed", result)
+	}
+
+	prodCalls := prodClient.snapshot()
+	devCalls := devClient.snapshot()
+	if len(prodCalls) != 1 || prodCalls[0].app != "linear" {
+		t.Fatalf("prod calls = %#v, want linear only", prodCalls)
+	}
+	if len(devCalls) != 1 || devCalls[0].app != "valon-profile" {
+		t.Fatalf("dev calls = %#v, want valon-profile only", devCalls)
+	}
+}
+
 func TestProviderBuildsLocal(t *testing.T) {
 	t.Parallel()
 
-	cfg := &config.Config{Server: config.ServerConfig{Remote: "https://remote.test"}}
-
-	if !providerBuildsLocal(cfg, &config.ProviderEntry{DevActive: true}) {
+	if !config.EntryBuildsLocal(&config.ProviderEntry{DevActive: true}) {
 		t.Fatal("DevActive entry should build local")
 	}
-	if !providerBuildsLocal(cfg, &config.ProviderEntry{Local: true}) {
-		t.Fatal("local entry should build local when server.remote is configured")
+	if !config.EntryBuildsLocal(&config.ProviderEntry{Local: true}) {
+		t.Fatal("local entry should build local when a remote is configured")
 	}
-	if providerBuildsLocal(cfg, &config.ProviderEntry{}) {
-		t.Fatal("non-DevActive entry with remote configured should not build local")
+	if config.EntryBuildsLocal(&config.ProviderEntry{Remote: config.DefaultRemoteName}) {
+		t.Fatal("remote-named entry should not build local")
 	}
-	if !providerBuildsLocal(&config.Config{}, &config.ProviderEntry{}) {
+	if !config.EntryBuildsLocal(&config.ProviderEntry{}) {
+		t.Fatal("entry without remote should build local in named-remote model")
+	}
+	if !config.EntryBuildsLocal(&config.ProviderEntry{}) {
 		t.Fatal("entry without remote configured should build local")
 	}
-	if providerBuildsLocal(cfg, nil) {
+	if config.EntryBuildsLocal(nil) {
 		t.Fatal("nil entry should not build local")
 	}
 }
