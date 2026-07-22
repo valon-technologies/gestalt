@@ -6,8 +6,8 @@ Related references:
 
 - [config.md](./config.md) — deploy reader config and CI publish flags
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
-- [validation.md](./validation.md) — install-time validation before fleet accept (step 13)
-- [admin.md](./admin.md) — admin UI and rollout observability (step 14)
+- [validation.md](./validation.md) — install-time validation before fleet accept
+- [admin.md](./admin.md) — admin UI and rollout observability
 - [models.md](./models.md) — JSON document shapes stored in GCS
 - [service.md](./service.md) — Go package API for publish and validation
 
@@ -210,23 +210,14 @@ Publish-time validation should ensure:
 - the app manifest is valid
 - app invokes operations that exist for the dependencies declared
 
-At install or upgrade time, Gestalt should validate the candidate against the actual runtime environment before activation.
-
-Install-time validation should ensure:
-
-- the selected app version exists in a configured registry — **done** (registry fetch on install)
-- the candidate is compatible with the running `gestaltd` and deployment platform
-- declared app dependencies are satisfied by the current fleet catalog
-- activating the candidate does not break existing installed dependents (optional first cut)
-
-Full specification: [validation.md](./validation.md).
+At install or upgrade time, Gestalt should validate the candidate against the actual runtime environment before activation. See [validation.md](./validation.md).
 
 Activation is phased:
 
 1. Validate the candidate version against registry metadata (including install-time validation; see [validation.md](./validation.md)) and append a change request to `app_version_change_requests` (fleet declaration).
 2. Each replica acknowledges the catalog row, then progressively downloads, restarts, and mounts the new binary. See [lifecycle.md](./lifecycle.md#polling).
 
-Fleet rollout admission and per-replica convergence are shipped (rollouts, install locks, catalog poller). Admin observability for rollout progress is planned. See [admin.md](./admin.md).
+Fleet rollout admission and per-replica convergence are shipped (rollouts, install locks, catalog poller). Admin observability is documented in [admin.md](./admin.md).
 
 ### Runtime Materialization
 
