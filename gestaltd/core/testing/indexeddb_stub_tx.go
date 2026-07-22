@@ -2,6 +2,7 @@ package coretesting
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
@@ -136,6 +137,9 @@ func (s *stubTransactionObjectStore) Get(ctx context.Context, id string) (idb.Re
 		return nil, err
 	}
 	record, err := s.store.Get(ctx, id)
+	if errors.Is(err, idb.ErrNotFound) {
+		return nil, err
+	}
 	if err != nil {
 		return nil, s.tx.abortWithError(err)
 	}
@@ -147,6 +151,9 @@ func (s *stubTransactionObjectStore) GetKey(ctx context.Context, id string) (str
 		return "", err
 	}
 	key, err := s.store.GetKey(ctx, id)
+	if errors.Is(err, idb.ErrNotFound) {
+		return "", err
+	}
 	if err != nil {
 		return "", s.tx.abortWithError(err)
 	}
@@ -239,6 +246,9 @@ func (i *stubTransactionIndex) Get(ctx context.Context, query any) (idb.Record, 
 		return nil, err
 	}
 	record, err := i.index.Get(ctx, query)
+	if errors.Is(err, idb.ErrNotFound) {
+		return nil, err
+	}
 	if err != nil {
 		return nil, i.tx.abortWithError(err)
 	}
@@ -250,6 +260,9 @@ func (i *stubTransactionIndex) GetKey(ctx context.Context, query any) (string, e
 		return "", err
 	}
 	key, err := i.index.GetKey(ctx, query)
+	if errors.Is(err, idb.ErrNotFound) {
+		return "", err
+	}
 	if err != nil {
 		return "", i.tx.abortWithError(err)
 	}

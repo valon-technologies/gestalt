@@ -484,6 +484,55 @@ export const PUBLIC_METHODS = {
       },
     },
   },
+  remoteManagement: {
+    createRemote: {
+      service: "RemoteManagement",
+      method: "CreateRemote",
+      grpcPath: "/gestalt.provider.v1.RemoteManagement/CreateRemote",
+      fill: [],
+      reject: [],
+      stream: false,
+      http: {
+        verb: "POST",
+        path: "/api/v2/remotes",
+        body: "*",
+        pathFields: [],
+        queryFields: [],
+      },
+    },
+    deleteRemote: {
+      service: "RemoteManagement",
+      method: "DeleteRemote",
+      grpcPath: "/gestalt.provider.v1.RemoteManagement/DeleteRemote",
+      fill: [],
+      reject: [],
+      stream: false,
+      http: {
+        verb: "DELETE",
+        path: "/api/v2/remotes/{id}",
+        body: "",
+        pathFields: [{ name: "id", jsonName: "id" }],
+        queryFields: [
+          { name: "expected_generation", jsonName: "expectedGeneration" },
+        ],
+      },
+    },
+    listRemotes: {
+      service: "RemoteManagement",
+      method: "ListRemotes",
+      grpcPath: "/gestalt.provider.v1.RemoteManagement/ListRemotes",
+      fill: [],
+      reject: [],
+      stream: false,
+      http: {
+        verb: "GET",
+        path: "/api/v2/remotes",
+        body: "",
+        pathFields: [],
+        queryFields: [],
+      },
+    },
+  },
   workflow: {
     applyDefinition: {
       service: "Workflow",

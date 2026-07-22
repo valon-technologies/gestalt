@@ -16,6 +16,7 @@ type Services struct {
 	AppVersionInstallLocks      *AppVersionInstallLockService
 	AppRollouts                 *AppRolloutService
 	AppInstanceMaterializations *AppInstanceMaterializationService
+	RemoteRegistrations         *RemoteRegistrationService
 	DB                          indexeddb.IndexedDB
 }
 
@@ -60,6 +61,12 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppInstanceMaterializations, AppInstanceMaterializationsSchema); err != nil {
 			return nil, fmt.Errorf("create app_instance_materializations store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreRemoteRegistrations, RemoteRegistrationsSchema); err != nil {
+			return nil, fmt.Errorf("create remote_registrations store: %w", err)
+		}
+		if _, err := ds.CreateObjectStore(ctx, StoreRemoteProviders, RemoteProvidersSchema); err != nil {
+			return nil, fmt.Errorf("create remote_providers store: %w", err)
+		}
 	}
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
@@ -67,6 +74,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	appVersionInstallLocks := NewAppVersionInstallLockService(ds)
 	appRollouts := NewAppRolloutService(ds)
 	appInstanceMaterializations := NewAppInstanceMaterializationService(ds)
+	remoteRegistrations := NewRemoteRegistrationService(ds)
 	return &Services{
 		ExternalCredentials:         nil,
 		Users:                       users,
@@ -75,6 +83,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		AppVersionInstallLocks:      appVersionInstallLocks,
 		AppRollouts:                 appRollouts,
 		AppInstanceMaterializations: appInstanceMaterializations,
+		RemoteRegistrations:         remoteRegistrations,
 		DB:                          ds,
 	}, nil
 }

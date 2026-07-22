@@ -662,6 +662,47 @@ METHOD_INDEXED_DB_INDEX_DELETE = Method(
     reject=(),
 )
 
+METHOD_REMOTE_MANAGEMENT_CREATE_REMOTE = Method(
+    service="gestalt.provider.v1.RemoteManagement",
+    name="CreateRemote",
+    full_method="/gestalt.provider.v1.RemoteManagement/CreateRemote",
+    http_verb="POST",
+    http_path="/api/v2/remotes",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+)
+
+METHOD_REMOTE_MANAGEMENT_LIST_REMOTES = Method(
+    service="gestalt.provider.v1.RemoteManagement",
+    name="ListRemotes",
+    full_method="/gestalt.provider.v1.RemoteManagement/ListRemotes",
+    http_verb="GET",
+    http_path="/api/v2/remotes",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+)
+
+METHOD_REMOTE_MANAGEMENT_DELETE_REMOTE = Method(
+    service="gestalt.provider.v1.RemoteManagement",
+    name="DeleteRemote",
+    full_method="/gestalt.provider.v1.RemoteManagement/DeleteRemote",
+    http_verb="DELETE",
+    http_path="/api/v2/remotes/{id}",
+    http_body="",
+    http_path_fields=(PublicField(name="id", json_name="id"),),
+    http_query_fields=(
+        PublicField(name="expected_generation", json_name="expectedGeneration"),
+    ),
+    fill=(),
+    reject=(),
+)
+
 METHOD_WORKFLOW_APPLY_DEFINITION = Method(
     service="gestalt.provider.v1.Workflow",
     name="ApplyDefinition",

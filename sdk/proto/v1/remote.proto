@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/api/annotations.proto";
+import "google/api/visibility.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// RemoteManagement is the public management service for reverse remotes. A
+// developer running `gestaltd serve` calls CreateRemote to publish a provider
+// set to this upstream; ListRemotes and DeleteRemote read and remove it. REST
+// and gRPC dispatch through one implementation.
+service RemoteManagement {
+  rpc CreateRemote(CreateRemoteRequest) returns (Remote) {
+    option (google.api.http) = {
+      post: "/api/v2/remotes"
+      body: "*"
+    };
+    option (google.api.method_visibility) = { restriction: "PUBLIC" };
+  }
+
+  rpc ListRemotes(ListRemotesRequest) returns (ListRemotesResponse) {
+    option (google.api.http) = { get: "/api/v2/remotes" };
+    option (google.api.method_visibility) = { restriction: "PUBLIC" };
+  }
+
+  rpc DeleteRemote(DeleteRemoteRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = { delete: "/api/v2/remotes/{id}" };
+    option (google.api.method_visibility) = { restriction: "PUBLIC" };
+  }
+}
+
+// RegistrationLifecycle is served by local gestaltd over the mutually
+// authenticated tunnel only. Internal, never public: it carries no http or
+// visibility annotations so the publicrpc descriptor scan never exposes it.
+service RegistrationLifecycle {
+  // Check succeeds only when the exact provider set named in the request is
+  // present and every provider is ready.
+  rpc Check(RegistrationCheckRequest) returns (RegistrationCheckResponse);
+}
+
+message TunnelEndpoint {
+  string host = 1;
+  bytes certificate = 2;
+  string server_spki_sha256 = 3;
+}
+
+message ProviderRef {
+  string kind = 1;
+  string name = 2;
+}
+
+message RemoteProviderDefinition {
+  string kind = 1;
+  string name = 2;
+  google.protobuf.Struct definition = 3;
+}
+
+message RemoteProviderSummary {
+  string kind = 1;
+  string name = 2;
+}
+
+message CreateRemoteRequest {
+  TunnelEndpoint tunnel = 1;
+  repeated RemoteProviderDefinition providers = 2;
+  uint64 expected_generation = 3;
+}
+
+message DeleteRemoteRequest {
+  string id = 1;
+  uint64 expected_generation = 2;
+}
+
+message ListRemotesRequest {}
+
+message RemoteReachability {
+  bool reachable = 1;
+  string message = 2;
+}
+
+message Remote {
+  string id = 1;
+  string owner_subject_id = 2;
+  uint64 generation = 3;
+  repeated RemoteProviderSummary providers = 4;
+  RemoteReachability reachability = 5;
+  string server_spki_sha256 = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp last_checked_at = 9;
+  google.protobuf.Timestamp last_successful_heartbeat_at = 10;
+  string last_error = 11;
+  google.protobuf.Timestamp lease_expires_at = 12;
+}
+
+message ServerIdentity {
+  string client_spki_sha256 = 1;
+}
+
+message TunnelBootstrap {
+  string frps_address = 1;
+  google.protobuf.Duration lease_duration = 2;
+}
+
+message ListRemotesResponse {
+  repeated Remote remotes = 1;
+  ServerIdentity server_identity = 2;
+  TunnelBootstrap tunnel = 3;
+  google.protobuf.Duration lease_duration = 4;
+}
+
+message RegistrationCheckRequest {
+  string registration_id = 1;
+  uint64 generation = 2;
+  repeated ProviderRef providers = 3;
+}
+
+message RegistrationCheckResponse {
+  bool ready = 1;
+  string message = 2;
+}

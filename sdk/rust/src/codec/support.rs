@@ -65,6 +65,18 @@ pub(crate) fn to_wire_duration(value: Duration) -> prost_types::Duration {
     }
 }
 
+/// Converts a wire duration to its native duration. Negative wire durations
+/// clamp to zero because std::time::Duration is unsigned.
+pub(crate) fn from_wire_duration(value: prost_types::Duration) -> Duration {
+    if value.seconds < 0 {
+        return Duration::ZERO;
+    }
+    Duration::new(
+        value.seconds as u64,
+        value.nanos.clamp(0, 999_999_999) as u32,
+    )
+}
+
 /// Converts a native JSON object to its wire struct.
 pub(crate) fn to_wire_struct(
     value: serde_json::Map<String, serde_json::Value>,

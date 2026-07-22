@@ -10,4 +10,5 @@ pub(crate) mod authorization;
 pub(crate) mod external_credential;
 pub(crate) mod identity;
 pub(crate) mod indexeddb;
+pub(crate) mod remote;
 pub(crate) mod workflow;

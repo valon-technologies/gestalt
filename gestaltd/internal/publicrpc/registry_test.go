@@ -98,6 +98,9 @@ GET /api/v2/identity/userinfo /gestalt.provider.v1.Identity/UserInfo
 GET /api/v2/identity/grants /gestalt.provider.v1.Identity/ListGrants
 GET /api/v2/identity/grants/{grant_id} /gestalt.provider.v1.Identity/GetGrant
 DELETE /api/v2/identity/grants/{grant_id} /gestalt.provider.v1.Identity/RevokeGrant
+POST /api/v2/remotes /gestalt.provider.v1.RemoteManagement/CreateRemote
+GET /api/v2/remotes /gestalt.provider.v1.RemoteManagement/ListRemotes
+DELETE /api/v2/remotes/{id} /gestalt.provider.v1.RemoteManagement/DeleteRemote
 `), "\n")
 	slices.Sort(got)
 	slices.Sort(want)

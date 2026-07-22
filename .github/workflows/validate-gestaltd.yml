@@ -167,7 +167,7 @@ jobs:
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' && steps.collect-lint-packages.outputs.packages != '' }}
         uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:
-          version: v2.11.3
+          version: v2.12.1
           working-directory: gestaltd
           verify: false
           skip-cache: true

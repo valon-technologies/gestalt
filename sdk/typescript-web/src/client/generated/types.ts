@@ -41,6 +41,11 @@ import type {
   UserInfoRequest,
 } from "../runtime/native-types.ts";
 import type {
+  CreateRemoteRequest,
+  DeleteRemoteRequest,
+  ListRemotesRequest,
+} from "../runtime/native-types.ts";
+import type {
   ApplyWorkflowProviderDefinitionRequest,
   CancelWorkflowProviderRunRequest,
   DeleteWorkflowProviderDefinitionRequest,
@@ -142,6 +147,14 @@ export type PublicIdentityListGrantsRequest = Init<ListGrantsRequest>;
 export type PublicIdentityGetGrantRequest = Init<GetGrantRequest>;
 
 export type PublicIdentityRevokeGrantRequest = Init<RevokeGrantRequest>;
+
+export type PublicRemoteManagementCreateRemoteRequest =
+  Init<CreateRemoteRequest>;
+
+export type PublicRemoteManagementListRemotesRequest = Init<ListRemotesRequest>;
+
+export type PublicRemoteManagementDeleteRemoteRequest =
+  Init<DeleteRemoteRequest>;
 
 export type PublicWorkflowApplyDefinitionRequest = Init<
   Omit<ApplyWorkflowProviderDefinitionRequest, "context">

@@ -1,6 +1,6 @@
 # Public API availability
 
-Generated from the public surface manifest (72 gRPC methods, 41 REST methods).
+Generated from the public surface manifest (75 gRPC methods, 44 REST methods).
 
 | Service | Method | REST | Go | Python | Rust | TypeScript |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -62,6 +62,9 @@ Generated from the public surface manifest (72 gRPC methods, 41 REST methods).
 | IndexedDB | IndexGetAllKeys | gRPC only | IndexedDBClient.IndexGetAllKeys | IndexedDBClient.index_get_all_keys | IndexedDBClient.index_get_all_keys | IndexedDBClient.indexGetAllKeys |
 | IndexedDB | IndexGetKey | gRPC only | IndexedDBClient.IndexGetKey | IndexedDBClient.index_get_key | IndexedDBClient.index_get_key | IndexedDBClient.indexGetKey |
 | IndexedDB | Put | gRPC only | IndexedDBClient.Put | IndexedDBClient.put | IndexedDBClient.put | IndexedDBClient.put |
+| RemoteManagement | CreateRemote | POST /api/v2/remotes | RemoteManagementClient.CreateRemote | RemoteManagementClient.create_remote | RemoteManagementClient.create_remote | RemoteManagementClient.createRemote |
+| RemoteManagement | DeleteRemote | DELETE /api/v2/remotes/{id} | RemoteManagementClient.DeleteRemote | RemoteManagementClient.delete_remote | RemoteManagementClient.delete_remote | RemoteManagementClient.deleteRemote |
+| RemoteManagement | ListRemotes | GET /api/v2/remotes | RemoteManagementClient.ListRemotes | RemoteManagementClient.list_remotes | RemoteManagementClient.list_remotes | RemoteManagementClient.listRemotes |
 | Workflow | ApplyDefinition | POST /api/v2/workflow/definitions:apply | WorkflowClient.ApplyDefinition | WorkflowClient.apply_definition | WorkflowClient.apply_definition | WorkflowClient.applyDefinition |
 | Workflow | CancelRun | POST /api/v2/workflow/runs/{run_id}:cancel | WorkflowClient.CancelRun | WorkflowClient.cancel_run | WorkflowClient.cancel_run | WorkflowClient.cancelRun |
 | Workflow | DeleteDefinition | DELETE /api/v2/workflow/definitions/{definition_id} | WorkflowClient.DeleteDefinition | WorkflowClient.delete_definition | WorkflowClient.delete_definition | WorkflowClient.deleteDefinition |

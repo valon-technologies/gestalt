@@ -41,6 +41,11 @@ import {
   toWireUserInfoRequest as codecToWireUserInfoRequest,
 } from "../runtime/internal/codec/identity.ts";
 import {
+  toWireCreateRemoteRequest as codecToWireCreateRemoteRequest,
+  toWireDeleteRemoteRequest as codecToWireDeleteRemoteRequest,
+  toWireListRemotesRequest as codecToWireListRemotesRequest,
+} from "../runtime/internal/codec/remote.ts";
+import {
   toWireApplyWorkflowProviderDefinitionRequest as codecToWireApplyWorkflowProviderDefinitionRequest,
   toWireCancelWorkflowProviderRunRequest as codecToWireCancelWorkflowProviderRunRequest,
   toWireDeleteWorkflowProviderDefinitionRequest as codecToWireDeleteWorkflowProviderDefinitionRequest,
@@ -89,6 +94,11 @@ import type {
   RevokeGrantRequest as NativeRevokeGrantRequest,
   TokenRequest as NativeTokenRequest,
   UserInfoRequest as NativeUserInfoRequest,
+} from "../runtime/native-types.ts";
+import type {
+  CreateRemoteRequest as NativeCreateRemoteRequest,
+  DeleteRemoteRequest as NativeDeleteRemoteRequest,
+  ListRemotesRequest as NativeListRemotesRequest,
 } from "../runtime/native-types.ts";
 import type {
   ApplyWorkflowProviderDefinitionRequest as NativeApplyWorkflowProviderDefinitionRequest,
@@ -141,6 +151,11 @@ import type {
   UserInfoRequest,
 } from "../runtime/internal/gen/v1/identity_pb.ts";
 import type {
+  CreateRemoteRequest,
+  DeleteRemoteRequest,
+  ListRemotesRequest,
+} from "../runtime/internal/gen/v1/remote_pb.ts";
+import type {
   ApplyWorkflowProviderDefinitionRequest,
   CancelWorkflowProviderRunRequest,
   DeleteWorkflowProviderDefinitionRequest,
@@ -185,6 +200,9 @@ import type {
   PublicIdentityRevokeGrantRequest,
   PublicIdentityTokenRequest,
   PublicIdentityUserInfoRequest,
+  PublicRemoteManagementCreateRemoteRequest,
+  PublicRemoteManagementDeleteRemoteRequest,
+  PublicRemoteManagementListRemotesRequest,
   PublicWorkflowApplyDefinitionRequest,
   PublicWorkflowCancelRunRequest,
   PublicWorkflowDeleteDefinitionRequest,
@@ -285,11 +303,27 @@ export function toWireCreateAgentProviderTurnRequest(
   );
 }
 
+export function toWireCreateRemoteRequest(
+  request: PublicRemoteManagementCreateRemoteRequest,
+): CreateRemoteRequest {
+  return codecToWireCreateRemoteRequest(
+    request as Init<NativeCreateRemoteRequest>,
+  );
+}
+
 export function toWireDeleteRelationshipRequest(
   request: PublicAuthorizationDeleteRelationshipRequest,
 ): DeleteRelationshipRequest {
   return codecToWireDeleteRelationshipRequest(
     request as Init<NativeDeleteRelationshipRequest>,
+  );
+}
+
+export function toWireDeleteRemoteRequest(
+  request: PublicRemoteManagementDeleteRemoteRequest,
+): DeleteRemoteRequest {
+  return codecToWireDeleteRemoteRequest(
+    request as Init<NativeDeleteRemoteRequest>,
   );
 }
 
@@ -404,6 +438,14 @@ export function toWireListRelationshipsRequest(
 ): ListRelationshipsRequest {
   return codecToWireListRelationshipsRequest(
     request as Init<NativeListRelationshipsRequest>,
+  );
+}
+
+export function toWireListRemotesRequest(
+  request: PublicRemoteManagementListRemotesRequest,
+): ListRemotesRequest {
+  return codecToWireListRemotesRequest(
+    request as Init<NativeListRemotesRequest>,
   );
 }
 
