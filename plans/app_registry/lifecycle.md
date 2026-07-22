@@ -235,8 +235,6 @@ List/get install endpoints project known versions from `app_version_change_reque
 | `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
 | `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
 
-Planned read routes for rollout observability: see [Admin observability API](#admin-observability-api) and [admin.md](./admin.md).
-
 List routes are read-only (`GET` only). `add` and `upgrade` use `POST` on a separate route group with a longer request timeout (10 minutes).
 
 #### `GET /admin/api/v1/app-registries`
@@ -451,8 +449,6 @@ When no versions are known yet, the response is `[]` (not `null`).
 3. Map each projection to `{ app, version, sourceRef, registry, providerReleaseUrl, artifactChecksums, installedBy, installedAt, updatedAt }`.
 4. Respond `200` with the JSON array (empty if nothing installed fleet-wide).
 
-IndexedDB read only. No GCS fetch.
-
 #### `GET /admin/api/v1/app-installations/{app}`
 
 Returns **known versions** for one app.
@@ -466,10 +462,6 @@ Returns **known versions** for one app.
 3. `ChangeRequests.ListKnownVersionsByApp` — read `app_version_change_requests` and project known versions for that app.
 4. If no known versions, respond `404`.
 5. Otherwise map results to the same installation object shape and respond `200` with a JSON array.
-
-IndexedDB read only. No GCS fetch.
-
-IndexedDB read only. No GCS fetch.
 
 ### Admin observability API
 
