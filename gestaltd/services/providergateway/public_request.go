@@ -56,16 +56,24 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 		return nil, adapted, nil
 	}
 
-	token := bearerTokenFromContext(ctx)
-	if token == "" {
-		return nil, nil, status.Error(codes.Unauthenticated, "bearer token is required")
-	}
-	p, err := t.resolvePublicPrincipal(ctx, token)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := t.canonicalizePublicCredentialPrincipal(ctx, fullMethod, p); err != nil {
-		return nil, nil, err
+	var p *principal.Principal
+	if t.identity != nil {
+		token := bearerTokenFromContext(ctx)
+		if token == "" {
+			return nil, nil, status.Error(codes.Unauthenticated, "bearer token is required")
+		}
+		resolved, err := t.resolvePublicPrincipal(ctx, token)
+		if err != nil {
+			return nil, nil, err
+		}
+		p = resolved
+		if err := t.canonicalizePublicCredentialPrincipal(ctx, fullMethod, p); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		// No IdentityProvider: the caller is anonymous. Use a stable anonymous
+		// subject so a configured AuthorizationProvider can still evaluate access.
+		p = &principal.Principal{SubjectID: "user:anonymous", Kind: principal.KindUser, Source: principal.SourceUnknown}
 	}
 	resourceID, err := t.publicResourceID(req, fullMethod)
 	if err != nil {
@@ -82,15 +90,12 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 }
 
 func (t *ProviderGatewayTransport) resolvePublicPrincipal(ctx context.Context, token string) (*principal.Principal, error) {
-	if t.identity == nil {
-		return nil, status.Error(codes.Unauthenticated, "identity provider is not configured")
-	}
 	p, err := principal.NewResolver(t.identity).ResolveToken(ctx, token)
 	if err != nil {
 		if err == principal.ErrInvalidToken {
 			return nil, status.Error(codes.Unauthenticated, "invalid bearer token")
 		}
-		return nil, status.Errorf(codes.Internal, "provider gateway: introspect: %v", err)
+		return nil, status.Error(codes.Unavailable, "identity provider unavailable")
 	}
 	return p, nil
 }
@@ -100,15 +105,8 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	p *principal.Principal,
 	providerID, fullMethod string,
 ) error {
-	if publicIdentityServiceMethod(fullMethod) {
-		return nil
-	}
-	service, method := splitFullMethod(fullMethod)
-	if service == proto.App_ServiceDesc.ServiceName && (method == "Invoke" || method == "InvokeGraphQL") {
-		return nil
-	}
 	if t == nil || t.authorization == nil {
-		return status.Error(codes.PermissionDenied, "authorization provider is not configured")
+		return nil
 	}
 	subjectID, err := principal.ResolveCredentialSubjectID(ctx, t.users, p)
 	if err != nil {
@@ -117,7 +115,7 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	target := ProviderTarget{Kind: providerKindFromFullMethod(fullMethod), Name: providerID}
 	allowed, _, err := runAuthorizationCheck(ctx, t.authorization, subjectID, target)
 	if err != nil {
-		return status.Errorf(codes.Internal, "provider gateway: authorize: %v", err)
+		return status.Error(codes.Unavailable, "authorization provider unavailable")
 	}
 	if !allowed {
 		return status.Error(codes.PermissionDenied, "access denied")
@@ -170,14 +168,6 @@ func (t *ProviderGatewayTransport) publicResourceID(req gproto.Message, fullMeth
 		return "", status.Error(codes.InvalidArgument, "provider id is required")
 	}
 	return service, nil
-}
-
-func publicIdentityServiceMethod(fullMethod string) bool {
-	service, _ := splitFullMethod(fullMethod)
-	if idx := strings.LastIndex(service, "."); idx >= 0 && idx+1 < len(service) {
-		return strings.EqualFold(service[idx+1:], "Identity")
-	}
-	return strings.EqualFold(service, "Identity")
 }
 
 func publicIdentityLoginMethod(fullMethod string) bool {
