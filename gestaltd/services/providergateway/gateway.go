@@ -9,8 +9,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -172,35 +170,5 @@ func metricRequest(target ProviderTarget, method string) ProviderGatewayRequest 
 		ProviderKind: target.Kind,
 		ServiceName:  service,
 		Operation:    operation,
-	}
-}
-
-func runAuthorizationCheck(
-	ctx context.Context,
-	authorization core.AuthorizationProvider,
-	subjectID string,
-	target ProviderTarget,
-) (bool, *proto.CheckAccessRequest, error) {
-	if authorization == nil {
-		return true, nil, nil
-	}
-	resource := &proto.Resource{Type: string(target.Kind), Id: strings.TrimSpace(target.Name)}
-	action := &proto.Action{Name: strings.TrimSpace(target.Name)}
-	req := invocation.SubjectAccessRequest(subjectID, action.GetName(), resource)
-	allowed, err := invocation.CheckSubjectAccess(ctx, authorization, req)
-	return allowed, req, err
-}
-
-func providerKindFromFullMethod(fullMethod string) ProviderKind {
-	service, _ := splitFullMethod(fullMethod)
-	switch service {
-	case proto.App_ServiceDesc.ServiceName:
-		return ProviderKindApp
-	case proto.Workflow_ServiceDesc.ServiceName:
-		return ProviderKindWorkflow
-	case proto.Agent_ServiceDesc.ServiceName:
-		return ProviderKindAgent
-	default:
-		return ProviderKind(service)
 	}
 }

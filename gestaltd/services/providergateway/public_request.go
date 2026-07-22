@@ -105,6 +105,10 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	p *principal.Principal,
 	providerID, fullMethod string,
 ) error {
+	service, _ := splitFullMethod(fullMethod)
+	if service == proto.App_ServiceDesc.ServiceName {
+		return nil
+	}
 	if t == nil || t.authorization == nil {
 		return nil
 	}
@@ -113,7 +117,10 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 		return status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
 	target := ProviderTarget{Kind: providerKindFromFullMethod(fullMethod), Name: providerID}
-	allowed, _, err := runAuthorizationCheck(ctx, t.authorization, subjectID, target)
+	resource := &proto.Resource{Type: string(target.Kind), Id: strings.TrimSpace(target.Name)}
+	action := &proto.Action{Name: strings.TrimSpace(target.Name)}
+	req := invocation.SubjectAccessRequest(subjectID, action.GetName(), resource)
+	allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, req)
 	if err != nil {
 		return status.Error(codes.Unavailable, "authorization provider unavailable")
 	}
@@ -177,6 +184,20 @@ func publicIdentityLoginMethod(fullMethod string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func providerKindFromFullMethod(fullMethod string) ProviderKind {
+	service, _ := splitFullMethod(fullMethod)
+	switch service {
+	case proto.App_ServiceDesc.ServiceName:
+		return ProviderKindApp
+	case proto.Workflow_ServiceDesc.ServiceName:
+		return ProviderKindWorkflow
+	case proto.Agent_ServiceDesc.ServiceName:
+		return ProviderKindAgent
+	default:
+		return ProviderKind(service)
 	}
 }
 
