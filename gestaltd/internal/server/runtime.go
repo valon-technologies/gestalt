@@ -89,6 +89,11 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		publicIndexedDB = result.Services.DB
 	}
 	appRuntimeState, _ := result.AppRestarter.(AppRuntimeState)
+	reverseRemote, err := setupReverseRemoteUpstream(ctx, cfg, result.Services, authorizationProvider)
+	if err != nil {
+		return err
+	}
+	defer reverseRemote.shutdown(context.Background())
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
@@ -118,11 +123,18 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		SecureCookies:          strings.HasPrefix(cfg.Server.BaseURL, "https://"),
 		StateSecret:            crypto.DeriveKey(cfg.Server.EncryptionKey),
 		S3:                     result.S3,
-		Readiness:              runtimeReadinessStatus(workflowProvidersReady, result.Services),
-		PrometheusMetrics:      result.Telemetry.PrometheusHandler(),
-		PublicHostServices:     result.PublicHostServices,
-		ActivateAppProviders:   result.ActivateAppProviders,
-		IndexedDB:              publicIndexedDB,
+		Readiness: ReadinessChecker(func() string {
+			if reason := runtimeReadinessStatus(workflowProvidersReady, result.Services)(); reason != "" {
+				return reason
+			}
+			return reverseRemote.readinessReason()
+		}),
+		PrometheusMetrics:    result.Telemetry.PrometheusHandler(),
+		PublicHostServices:   result.PublicHostServices,
+		ActivateAppProviders: result.ActivateAppProviders,
+		IndexedDB:            publicIndexedDB,
+		RemoteManagement:     reverseRemote.remoteManagement,
+		FrpsHandler:          reverseRemote.frpsHandler,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
@@ -210,7 +222,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		})
 	}
 
-	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor, onReady)
+	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor, onReady, reverseRemote)
 }
 
 func registryAppStartup(cfg *config.Config, result *bootstrap.Result, reader *appregistry.RegistryReader) func(context.Context) {
@@ -299,7 +311,7 @@ func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services ind
 	}
 }
 
-func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor, readyCallback func()) error {
+func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor, readyCallback func(), reverseRemote *reverseRemoteSetup) error {
 	if devSupervisor != nil {
 		defer devSupervisor.Stop()
 	}
@@ -377,6 +389,13 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		case <-result.ProvidersReady:
 			slog.DebugContext(ctx, "all deferred app providers ready")
 		case <-ctx.Done():
+		}
+
+		if ctx.Err() == nil {
+			if err := startReversePublisher(ctx, result.Providers, reverseRemote, slog.Default()); err != nil {
+				workflowErr <- err
+				return
+			}
 		}
 	}()
 
