@@ -34,7 +34,7 @@ func TestEmbeddedHandlerServesAppRegistryRoutes(t *testing.T) {
 		`brandHref: "/workplace"`,
 		`<base href="/admin/"`,
 		`id="root"`,
-		`/admin/assets/app.js`,
+		`/admin/assets/app-`,
 		`__GESTALT_ADMIN__`,
 	} {
 		if !strings.Contains(html, want) {
