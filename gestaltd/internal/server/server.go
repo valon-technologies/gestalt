@@ -209,6 +209,7 @@ type Config struct {
 	AppRegistries          map[string]config.AppRegistryConfig
 	AppRegistryReader      *appregistry.RegistryReader
 	ArtifactsDir           string
+	GestaltdVersion        string
 	AppRuntimeState        AppRuntimeState
 	RouteProfile           RouteProfile
 	MeterProvider          metric.MeterProvider

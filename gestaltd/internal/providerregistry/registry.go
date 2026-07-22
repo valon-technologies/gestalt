@@ -33,11 +33,12 @@ const (
 )
 
 var (
-	repoNameRe        = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
-	hostRe            = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
-	pathSegmentRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
-	exactVersionRe    = regexp.MustCompile(`^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
-	errNoPackageMatch = errors.New("provider package not found")
+	repoNameRe                    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+	hostRe                        = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
+	pathSegmentRe                 = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+	exactVersionRe                = regexp.MustCompile(`^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+	constraintPrereleaseVersionRe = regexp.MustCompile(`\d+\.\d+\.\d+-[0-9A-Za-z][0-9A-Za-z.-]*`)
+	errNoPackageMatch             = errors.New("provider package not found")
 )
 
 type Repository struct {
@@ -393,6 +394,17 @@ func SelectVersion(versions map[string]Version, constraint string) (string, Vers
 }
 
 func VersionSatisfiesConstraint(version, constraint string) bool {
+	return versionSatisfiesConstraint(version, constraint, false)
+}
+
+// VersionSatisfiesFleetConstraint reports whether version satisfies constraint,
+// treating prerelease versions as their major.minor.patch release line.
+// Fleet registry versions commonly use snapshot prereleases (for example 2.0.0-snapshot.gabc123).
+func VersionSatisfiesFleetConstraint(version, constraint string) bool {
+	return versionSatisfiesConstraint(version, constraint, true)
+}
+
+func versionSatisfiesConstraint(version, constraint string, matchPrereleaseReleaseLine bool) bool {
 	version = strings.TrimSpace(version)
 	constraint = strings.TrimSpace(constraint)
 	if version == "" {
@@ -409,7 +421,21 @@ func VersionSatisfiesConstraint(version, constraint string) bool {
 	if err != nil {
 		return false
 	}
-	return c.Check(v)
+	if c.Check(v) {
+		return true
+	}
+	if !matchPrereleaseReleaseLine || len(v.Prerelease()) == 0 || constraintContainsPrerelease(constraint) {
+		return false
+	}
+	release, err := semver.NewVersion(fmt.Sprintf("%d.%d.%d", v.Major(), v.Minor(), v.Patch()))
+	if err != nil {
+		return false
+	}
+	return c.Check(release)
+}
+
+func constraintContainsPrerelease(constraint string) bool {
+	return constraintPrereleaseVersionRe.MatchString(constraint)
 }
 
 func ResolveMetadataURL(indexURL, metadata string) (string, error) {

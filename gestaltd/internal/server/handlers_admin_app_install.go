@@ -167,8 +167,6 @@ func (s *Server) changeAdminAppRegistryApp(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		status := http.StatusBadGateway
 		switch {
-		case strings.Contains(err.Error(), "app registry not found"):
-			status = http.StatusNotFound
 		case strings.Contains(err.Error(), "invalid app name"),
 			strings.Contains(err.Error(), "registry is required"),
 			strings.Contains(err.Error(), "app is required"),
@@ -187,6 +185,8 @@ func (s *Server) changeAdminAppRegistryApp(w http.ResponseWriter, r *http.Reques
 			errors.Is(err, appregistry.ErrRegistrySourceMismatch):
 			status = http.StatusBadRequest
 		case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled):
+			status = http.StatusBadRequest
+		case errors.Is(err, appregistry.ErrInstallValidationFailed):
 			status = http.StatusBadRequest
 		case errors.Is(err, context.DeadlineExceeded):
 			status = http.StatusGatewayTimeout
@@ -233,11 +233,12 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		reader = &appregistry.RegistryReader{}
 	}
 	return &appregistry.Installer{
-		Registries:     cloneAppRegistryConfig(cfg.AppRegistries),
-		ConfigApps:     cfg.AppDefs,
-		Reader:         reader,
-		ChangeRequests: cfg.Services.AppVersionChangeRequests,
-		Locks:          cfg.Services.AppVersionInstallLocks,
-		Rollouts:       cfg.Services.AppRollouts,
+		Registries:      cloneAppRegistryConfig(cfg.AppRegistries),
+		ConfigApps:      cfg.AppDefs,
+		Reader:          reader,
+		ChangeRequests:  cfg.Services.AppVersionChangeRequests,
+		Locks:           cfg.Services.AppVersionInstallLocks,
+		Rollouts:        cfg.Services.AppRollouts,
+		GestaltdVersion: cfg.GestaltdVersion,
 	}
 }

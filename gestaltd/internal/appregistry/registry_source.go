@@ -26,7 +26,7 @@ func fetchConfiguredRegistryEntry(
 ) (*configuredRegistryEntry, error) {
 	registry, ok := registries[registryName]
 	if !ok {
-		return nil, fmt.Errorf("app registry %q not found", registryName)
+		return nil, fmt.Errorf("%w: %q", ErrAppRegistryNotConfigured, registryName)
 	}
 	if strings.TrimSpace(registry.Kind) != config.AppRegistryKindGCS {
 		return nil, fmt.Errorf("unsupported app registry kind")

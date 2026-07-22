@@ -25,7 +25,7 @@ Related docs:
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
-| `internal/appregistry` | `install_validator_test.go`, `install_validation_errors_test.go` | — | Unit | planned |
+| `internal/appregistry` | `install_validator_test.go`, `install_validation_errors_test.go` | — | Unit | [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -278,9 +278,9 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ## Install-time validation tests
 
-Planned. Checks: [validation.md](./validation.md).
+Implemented in [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887). Checks: [validation.md](./validation.md).
 
-Run (once implemented):
+Run:
 
 ```bash
 cd gestaltd

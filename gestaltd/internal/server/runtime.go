@@ -34,17 +34,17 @@ func httpCatalogConnectionMap(connMaps bootstrap.ConnectionMaps) map[string]stri
 	return connMaps.APIConnection
 }
 
-func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) error {
-	return run(ctx, cfg, result, nil)
+func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gestaltdVersion string) error {
+	return run(ctx, cfg, result, gestaltdVersion, nil)
 }
 
 // RunWithReady is like Run but invokes onReady after all configured public
 // listeners have been bound and the HTTP serving goroutines have started.
-func RunWithReady(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onReady func()) error {
-	return run(ctx, cfg, result, onReady)
+func RunWithReady(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gestaltdVersion string, onReady func()) error {
+	return run(ctx, cfg, result, gestaltdVersion, onReady)
 }
 
-func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onReady func()) error {
+func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gestaltdVersion string, onReady func()) error {
 	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
 	mcpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "mcp", result.AuditSink, invocation.WithoutRateLimit())
 
@@ -129,6 +129,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 		},
 		AppRegistries:   cfg.AppRegistries,
 		ArtifactsDir:    cfg.Server.ArtifactsDir,
+		GestaltdVersion: strings.TrimSpace(gestaltdVersion),
 		AppRuntimeState: appRuntimeState,
 	}
 
