@@ -164,7 +164,7 @@ List rollout records. Default: active rollouts (`enrolling`, `restarting`) plus 
 ]
 ```
 
-Backed by `AppRolloutService.ListActive` and a new `ListRecentTerminal` (or `Get` + history index if added later).
+Backed by `AppRolloutService.ListActiveAndRecentTerminal`, which reads one store snapshot so a state transition cannot duplicate an app across active and terminal results.
 
 #### `GET /admin/api/v1/app-rollouts/{app}/materializations`
 

@@ -120,6 +120,13 @@ func TestAppRolloutService(t *testing.T) {
 		if len(active) != 1 || active[0].App != "g-issues" {
 			t.Fatalf("active = %#v, want g-issues only", active)
 		}
+		combined, err := svc.AppRollouts.ListActiveAndRecentTerminal(ctx, start)
+		if err != nil {
+			t.Fatalf("ListActiveAndRecentTerminal: %v", err)
+		}
+		if len(combined) != 2 {
+			t.Fatalf("active and recent terminal = %#v, want both apps from one snapshot", combined)
+		}
 	})
 
 	t.Run("list_recent_terminal_applies_cutoff", func(t *testing.T) {

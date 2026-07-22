@@ -155,18 +155,11 @@ func (s *Server) listAdminAppRollouts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid rollout state")
 		return
 	}
-	active, err := s.appRollouts.ListActive(r.Context())
+	rollouts, err := s.appRollouts.ListActiveAndRecentTerminal(r.Context(), s.now().Add(-24*time.Hour))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list active app rollouts")
+		writeError(w, http.StatusInternalServerError, "failed to list app rollouts")
 		return
 	}
-	recent, err := s.appRollouts.ListRecentTerminal(r.Context(), s.now().Add(-24*time.Hour))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list recent app rollouts")
-		return
-	}
-	rollouts := active
-	rollouts = append(rollouts, recent...)
 	slices.SortFunc(rollouts, func(a, b *core.AppRollout) int {
 		if byApp := strings.Compare(a.App, b.App); byApp != 0 {
 			return byApp
