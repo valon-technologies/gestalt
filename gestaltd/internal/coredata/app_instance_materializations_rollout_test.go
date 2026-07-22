@@ -9,6 +9,27 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
+func TestAppInstanceMaterializationAcknowledgeForRolloutBumpsAcknowledgedAtToSelectionEpoch(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	svc := services.AppInstanceMaterializations
+	selectionEpoch := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	got, err := svc.AcknowledgeForRollout(ctx, &core.AppInstanceMaterialization{
+		InstanceID:     "replica-a",
+		App:            "g-issues",
+		Version:        "1.0.0",
+		AcknowledgedAt: selectionEpoch.Add(-time.Hour),
+	}, selectionEpoch)
+	if err != nil {
+		t.Fatalf("AcknowledgeForRollout: %v", err)
+	}
+	if !got.AcknowledgedAt.Equal(selectionEpoch) {
+		t.Fatalf("AcknowledgedAt = %v, want %v", got.AcknowledgedAt, selectionEpoch)
+	}
+}
+
 func TestAppInstanceMaterializationAcknowledgeForRolloutResetsStaleProgress(t *testing.T) {
 	t.Parallel()
 
