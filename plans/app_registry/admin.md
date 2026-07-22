@@ -10,13 +10,6 @@ Related docs:
 - [validation.md](./validation.md) — validation before fleet accept
 - [tests.md](./tests.md#admin-observability-tests) — observability, authorization, API, and UI tests
 
-Implementation:
-
-- Read handlers — `gestaltd/internal/server/handlers_admin_app_rollout.go`
-- Admin UI — `gestaltd/services/ui/adminui/` (extend embedded `/admin` shell)
-- App UI — `gestalt-providers/app/default/` (`/apps/{app}/admin`)
-- IndexedDB services — `AppRolloutService`, `AppInstanceMaterializationService`, `AppVersionChangeRequestService`
-
 ---
 
 ## Goals
