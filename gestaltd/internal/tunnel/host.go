@@ -9,8 +9,10 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	frpcclient "github.com/fatedier/frp/client"
+	frpproxy "github.com/fatedier/frp/client/proxy"
 	frpsource "github.com/fatedier/frp/pkg/config/source"
 	v1 "github.com/fatedier/frp/pkg/config/v1"
 )
@@ -28,6 +30,7 @@ type HostConfig struct {
 // identity via PeerIdentity.
 type Host struct {
 	frpService *frpcclient.Service
+	tunnelHost string
 	inner      net.Listener
 	closed     bool
 	mu         sync.Mutex
@@ -106,8 +109,27 @@ func StartHost(ctx context.Context, cfg HostConfig) (*Host, error) {
 
 	return &Host{
 		frpService: service,
+		tunnelHost: cfg.Identity.TunnelHost,
 		inner:      &tlsListener{Listener: innerListener, tlsCfg: tlsCfg},
 	}, nil
+}
+
+// WaitReady blocks until the frpc proxy is running or ctx is canceled. It
+// polls the frpc status exporter for the proxy phase.
+func (h *Host) WaitReady(ctx context.Context) error {
+	exporter := h.frpService.StatusExporter()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if status, ok := exporter.GetProxyStatus(h.tunnelHost); ok && status.Phase == frpproxy.ProxyPhaseRunning {
+			return nil
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // Listener returns connections that have already passed mutual inner TLS. Each

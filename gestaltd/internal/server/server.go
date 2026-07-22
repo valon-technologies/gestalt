@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -141,6 +142,7 @@ type Server struct {
 	hostServiceHandlers    map[uint64]http.Handler
 	publicGRPCHandler      http.Handler
 	publicRESTHandler      http.Handler
+	frpsHandler            http.Handler
 	publicGatewayConn      *publicrpc.InProcessConn
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3sdk.S3
@@ -219,6 +221,8 @@ type Config struct {
 	TracerProvider         trace.TracerProvider
 	ActivateAppProviders   func(context.Context)
 	IndexedDB              indexeddb.IndexedDB
+	RemoteManagement       proto.RemoteManagementServer
+	FrpsHandler            http.Handler
 }
 
 func New(cfg Config) (*Server, error) {
@@ -436,6 +440,7 @@ func New(cfg Config) (*Server, error) {
 			Authorization:       cfg.Authorization,
 			IndexedDB:           cfg.IndexedDB,
 			ExternalCredentials: externalCredentials,
+			RemoteManagement:    cfg.RemoteManagement,
 		})
 		if err != nil {
 			return nil, err
@@ -446,6 +451,7 @@ func New(cfg Config) (*Server, error) {
 		}
 		s.publicRESTHandler = restHandler
 	}
+	s.frpsHandler = cfg.FrpsHandler
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}

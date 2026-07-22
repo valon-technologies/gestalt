@@ -59,6 +59,9 @@ const (
 func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
+	if s.frpsHandler != nil {
+		r.Handle("/~!frp", s.frpsHandler)
+	}
 	switch exposure {
 	case metricsAuthenticated:
 		r.Group(func(r chi.Router) {
