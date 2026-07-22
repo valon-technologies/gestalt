@@ -1,6 +1,6 @@
 # App Registry Admin Observability
 
-Operator-facing visibility for registry-managed apps: fleet-accepted versions, rollout progress, and per-replica convergence.
+Operator-facing visibility for registry-only apps: fleet-known versions, rollout progress, and per-replica convergence.
 
 Related docs:
 
@@ -23,8 +23,8 @@ Operators installing registry apps should answer these questions without reading
 
 | Question | Primary source today | Planned admin surface |
 |----------|----------------------|------------------------|
-| Which apps are registry-managed? | Deploy `apps.*.source.registry` | Registry apps list |
-| What version did the fleet accept? | `app_version_change_requests` projection | Known version on app detail |
+| Which apps are registry-only? | Deploy `apps.*.source.registry` | Registry-only apps list |
+| What is the desired fleet-known version? | `app_version_change_requests` projection (`LatestKnownVersion`) | Desired version on app detail |
 | Is the rollout still in progress? | `app_rollouts` | Rollout status badge |
 | Which replicas have converged? | `app_instance_materializations` | Replica convergence table |
 | What is each replica running right now? | In-process map + local `active-version` file (not centralized) | Phase 1: inferred; phase 2: heartbeat |
@@ -41,7 +41,7 @@ Operators installing registry apps should answer these questions without reading
 | `GET /admin/api/v1/app-registries/{registry}/apps/{app}/versions` | **Published** versions in GCS (not fleet state) |
 | `GET /admin/api/v1/app-installations` | Fleet-**known** versions (change-request projection) |
 | `GET /admin/api/v1/app-installations/{app}` | Known versions for one app |
-| `POST …/add`, `POST …/upgrade` | Write fleet acceptance |
+| `POST …/add`, `POST …/upgrade` | Append fleet-known versions (change requests) |
 
 `app_rollouts` and `app_instance_materializations` are written by the catalog poller but have **no read HTTP routes** yet. The multi-replica E2E plan in [tests.md](./tests.md#planned-multi-replica-materialization-ack-e2e) will poll `GET …/materializations` once these routes ship.
 
@@ -55,12 +55,13 @@ The embedded UI at `/admin` ([`gestaltd/services/ui/adminui/`](../../gestaltd/se
 
 Use the same names as [lifecycle.md](./lifecycle.md#runtime-version-invariants):
 
-- **Fleet-known (desired)** — latest `(app, version)` from `app_version_change_requests` via `LatestKnownVersion`.
+- **Fleet-known** — an accepted `(app, version)` projected from `app_version_change_requests`.
+- **Desired version** — latest fleet-known version for an app (`LatestKnownVersion`); JSON field `desiredVersion`.
 - **Rollout** — fleet-wide execution record in `app_rollouts` (`enrolling` → `restarting` → `complete` | `failed`).
-- **Converged (per replica)** — this replica recorded `restarted_at` for the rollout's `(app, version)` in `app_instance_materializations`.
-- **Running (per replica)** — this process registered the provider for a specific version. Not stored in IndexedDB today.
+- **Converged** — the poller recorded `restarted_at` for the replica and version, meaning the replica reconciled through that catalog change. This is rollout accounting, not proof that the provider ran that exact version or is currently running it.
+- **Running** — this replica successfully built and registered the provider from that exact materialized package. Not stored in IndexedDB today.
 
-`restarted_at` means the replica reconciled through that catalog change. It does **not** guarantee the provider is still running that version after a crash or a later silent drift. The UI must label this distinction clearly.
+`restarted_at` on a rollout-progress row means the replica reconciled through that catalog change. It does **not** guarantee the provider is still running that version after a crash or a later silent drift. The UI must label this distinction clearly.
 
 ---
 
@@ -70,7 +71,7 @@ All routes live under `/admin/api/v1`, reuse existing admin auth (`gestaltAdmin`
 
 #### `GET /admin/api/v1/registry-apps`
 
-List deploy-configured apps whose `source.registry` is set, merged with fleet state.
+List deploy-configured registry-only apps (`source.registry`), merged with fleet state.
 
 **Response `200`**
 
@@ -112,7 +113,7 @@ IndexedDB read only. No GCS fetch.
 
 #### `GET /admin/api/v1/registry-apps/{app}`
 
-Detail view for one registry-managed app. Same fields as one list element, plus:
+Detail view for one registry-only app. Same fields as one list element, plus:
 
 ```json
 {
@@ -134,9 +135,11 @@ Detail view for one registry-managed app. Same fields as one list element, plus:
 }
 ```
 
-`latestPublished` is optional. The handler may call the existing registry index fetch (`GET …/app-registries/{registry}/apps/{app}/versions`) and return the newest `publishedAt` entry so operators can compare **published** vs **accepted** vs **converged**.
+`knownVersions` lists fleet-known `(app, version)` pairs projected from `app_version_change_requests`.
 
-**Response `404`** when `{app}` is not a registry-managed app in deploy config.
+`latestPublished` is optional. The handler may call the existing registry index fetch (`GET …/app-registries/{registry}/apps/{app}/versions`) and return the newest `publishedAt` entry so operators can compare **published** vs **fleet-known** vs **converged**.
+
+**Response `404`** when `{app}` is not a registry-only app in deploy config.
 
 #### `GET /admin/api/v1/app-rollouts`
 
@@ -161,13 +164,13 @@ Backed by `AppRolloutService.ListActive` and a new `ListRecentTerminal` (or `Get
 
 #### `GET /admin/api/v1/app-rollouts/{app}/materializations`
 
-Per-replica convergence rows for one app rollout.
+Per-replica rollout-progress rows for one app rollout.
 
 **Query parameters**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `version` | string | Published version. Defaults to the current rollout's `version`, else `desiredVersion`. |
+| `version` | string | Fleet-known version. Defaults to the current rollout's `version`, else `desiredVersion`. |
 
 **Response `200`**
 
@@ -224,7 +227,7 @@ Table columns:
 |-----|----------|-----------------|---------|--------|
 | g-issues | toolshed | `0.0.0-snapshot.g…` | complete | 3/3 restarted |
 
-Empty catalog: show configured registry apps with desired version "—" and a primary action **Install** (opens version picker fed by `…/versions`).
+Empty fleet-known projection: show configured registry-only apps with desired version "—" and a primary action **Install** (opens version picker fed by `…/versions`).
 
 ### App detail (`/admin/registry/{app}`)
 
@@ -232,7 +235,7 @@ Sections:
 
 1. **Summary** — registry binding, desired version, latest published version (if fetched), install metadata (`installedBy`, `installedAt`).
 2. **Rollout** — state badge, timestamps, enrollment deadline, failure reason when `failed`.
-3. **Replicas** — materializations table (`instanceId`, ack / materialized / stopped / restarted, `attemptCount`, last error). Sort by `instanceId`.
+3. **Replicas** — rollout-progress rows (`instanceId`, ack / materialized / stopped / restarted, `attemptCount`, last error). Sort by `instanceId`.
 4. **Actions** — **Upgrade** when a newer published version exists; disabled while rollout is `enrolling` or `restarting`.
 
 Auto-refresh every 10–15s while rollout is non-terminal.
@@ -248,7 +251,7 @@ Auto-refresh every 10–15s while rollout is non-terminal.
 │ Published latest: 0.0.0-snapshot.gcd9d741… (same)           │
 ├─────────────────────────────────────────────────────────────┤
 │ Replicas                                                    │
-│ instance_id              mat.   restart   attempts  error   │
+│ instanceId               mat.   restart   attempts  error   │
 │ gestaltd-…-ncnq6         ✓     ✓         0                   │
 │ gestaltd-…-hdnx2         ✓     ✓         0                   │
 │ gestaltd-…-smmq7         ✓     ✓         0                   │
@@ -268,7 +271,7 @@ To answer "what is each replica running **right now**" reliably:
 3. Expose via `GET …/runtime` or inline on materialization rows as `observedVersion` / `observedAt`.
 4. Stale `observed_at` (for example older than 3× poll interval) renders as **stale** in the UI.
 
-Convergence columns (`restarted_at`, `materialized_at`) are enough to debug whether each replica completed a rollout. They are not enough when a replica later drifts from that recorded state — for example, the provider crashes after `restarted_at` was written, the process restarts on an older on-disk package, or a manual local change leaves the running binary out of sync with the fleet-known version. In those cases the materialization row still looks converged even though the replica is no longer serving the desired version.
+Convergence columns (`restarted_at`, `materialized_at`) are enough to debug whether each replica completed a rollout. They are not enough when a replica later drifts from that recorded state — for example, the provider crashes after `restarted_at` was written, the process restarts on an older on-disk package, or a manual local change leaves the running binary out of sync with the fleet-known version. In those cases the rollout-progress row still looks converged even though the replica is no longer serving the desired version.
 
 ---
 
@@ -278,7 +281,7 @@ Reuse the standard admin error envelope from [lifecycle.md](./lifecycle.md#error
 
 | Status | When |
 |--------|------|
-| `404` | `{app}` is not registry-managed in deploy config; no rollout when explicitly requested |
+| `404` | `{app}` is not a registry-only app in deploy config; no rollout when explicitly requested |
 | `503` | `AppRollouts` or `AppInstanceMaterializations` service unavailable |
 
 ---

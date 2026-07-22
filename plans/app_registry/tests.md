@@ -369,12 +369,12 @@ go test ./internal/server/... -run TestAdminAppRollout -count=1
 
 Use the same harness as install tests: `newTestServer`, `registrytest.NewInstallFixture`, in-memory IndexedDB stub services.
 
-- **`TestAdminRegistryApps/lists_registry_managed_apps`** — `GET …/registry-apps` returns apps with `source.registry` from deploy config; includes apps with empty fleet catalog.
+- **`TestAdminRegistryApps/lists_registry_managed_apps`** — `GET …/registry-apps` returns registry-only apps with `source.registry` from deploy config; includes apps with an empty fleet-known projection.
 - **`TestAdminRegistryApps/merges_desired_version_and_rollout`** — after `POST …/add`, list/detail include `desiredVersion`, rollout `state`, and cohort counts.
 - **`TestAdminAppRollouts/lists_active_rollout`** — `GET …/app-rollouts` returns enrolling/restarting rollouts.
 - **`TestAdminAppRolloutsMaterializations/lists_replica_rows`** — `GET …/app-rollouts/{app}/materializations` returns distinct `instanceId` rows with ack/materialized/restarted timestamps after poller convergence.
 - **`TestAdminAppRolloutsMaterializations/labels_cohort_membership`** — replicas that ack after `enrollment_ends_at` have `inCohort: false` and do not block rollout completion in the API summary.
-- **`TestAdminRegistryApps/rejects_non_registry_app`** — `GET …/registry-apps/{app}` returns **404** for snapshot-pinned apps.
+- **`TestAdminRegistryApps/rejects_non_registry_app`** — `GET …/registry-apps/{app}` returns **404** for non-registry-only (snapshot-pinned) apps.
 
 ### Admin UI smoke
 

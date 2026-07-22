@@ -475,10 +475,10 @@ These routes expose IndexedDB rollout state that the catalog poller already writ
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/admin/api/v1/registry-apps` | Registry-managed apps from deploy config, merged with desired version and rollout summary |
-| `GET` | `/admin/api/v1/registry-apps/{app}` | One app: known versions, rollout, optional latest published registry version |
+| `GET` | `/admin/api/v1/registry-apps` | Registry-only apps from deploy config, merged with desired version and rollout summary |
+| `GET` | `/admin/api/v1/registry-apps/{app}` | One registry-only app: fleet-known versions, rollout, optional latest published registry version |
 | `GET` | `/admin/api/v1/app-rollouts` | List active and recent terminal rollouts |
-| `GET` | `/admin/api/v1/app-rollouts/{app}/materializations` | Per-replica convergence rows for one `(app, version)` |
+| `GET` | `/admin/api/v1/app-rollouts/{app}/materializations` | Per-replica rollout-progress rows for one `(app, version)` |
 
 The embedded `/admin` UI gains an **App Registry** section that consumes these endpoints. Today `/admin` only shows Prometheus metrics.
 
