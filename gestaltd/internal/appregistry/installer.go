@@ -45,6 +45,8 @@ type InstallInput struct {
 
 type InstallOutput struct {
 	Installation *core.AppInstallation
+	FromVersion  string
+	Rollout      *core.AppRollout
 }
 
 type installMode int
@@ -53,6 +55,7 @@ const (
 	installModeLegacy installMode = iota
 	installModeAdd
 	installModeUpgrade
+	installModeSelect
 )
 
 func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOutput, error) {
@@ -65,6 +68,10 @@ func (i *Installer) Add(ctx context.Context, input InstallInput) (*InstallOutput
 
 func (i *Installer) Upgrade(ctx context.Context, input InstallInput) (*InstallOutput, error) {
 	return i.install(ctx, input, installModeUpgrade)
+}
+
+func (i *Installer) Select(ctx context.Context, input InstallInput) (*InstallOutput, error) {
+	return i.install(ctx, input, installModeSelect)
 }
 
 func (i *Installer) install(ctx context.Context, input InstallInput, mode installMode) (*InstallOutput, error) {
@@ -138,18 +145,25 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 			return nil, ErrAppNotAdded
 		}
 		fromVersion = coredata.LatestKnownVersion(knownVersions)
+	case installModeSelect:
+		fromVersion = coredata.LatestKnownVersion(knownVersions)
+		if fromVersion == "" {
+			fromVersion = "registry:first-install"
+		}
 	default:
 		fromVersion = resolveFromVersion(knownVersions, configEntry)
 		if fromVersion == "" {
 			return nil, fmt.Errorf("resolve from_version: no known fleet version and app is not pinned in config")
 		}
 	}
-	alreadyKnown, err := i.ChangeRequests.HasKnownVersion(installCtx, appName, version)
-	if err != nil {
-		return nil, fmt.Errorf("check known app version: %w", err)
-	}
-	if alreadyKnown {
-		return nil, ErrAppVersionAlreadyInstalled
+	if mode != installModeSelect {
+		alreadyKnown, err := i.ChangeRequests.HasKnownVersion(installCtx, appName, version)
+		if err != nil {
+			return nil, fmt.Errorf("check known app version: %w", err)
+		}
+		if alreadyKnown {
+			return nil, ErrAppVersionAlreadyInstalled
+		}
 	}
 	if current, getErr := i.Rollouts.Get(installCtx, appName); getErr == nil {
 		if current.State == core.AppRolloutStateEnrolling || current.State == core.AppRolloutStateRestarting {
@@ -157,6 +171,9 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		}
 	} else if !errors.Is(getErr, core.ErrNotFound) {
 		return nil, fmt.Errorf("check active app rollout: %w", getErr)
+	}
+	if mode == installModeSelect && coredata.LatestKnownVersion(knownVersions) == version {
+		return nil, ErrAppVersionAlreadyInstalled
 	}
 
 	reader := i.Reader
@@ -188,7 +205,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		InstalledAt:        requestedAt,
 		UpdatedAt:          requestedAt,
 	}
-	_, err = i.Rollouts.Create(installCtx, &core.AppRollout{
+	rollout, err := i.Rollouts.Create(installCtx, &core.AppRollout{
 		App:              appName,
 		Version:          version,
 		State:            core.AppRolloutStateEnrolling,
@@ -218,6 +235,8 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 
 	return &InstallOutput{
 		Installation: coredata.InstallationFromChangeRequest(addedRequest),
+		FromVersion:  fromVersion,
+		Rollout:      rollout,
 	}, nil
 }
 

@@ -69,6 +69,11 @@ func runAppPublish(args []string) (err error) {
 	appName := fs.String("app", "", "app name under apps/{app}/manifest.yaml")
 	version := fs.String("version", "", "semantic version guard")
 	ref := fs.String("ref", "", "full source commit SHA")
+	workflowRunURL := fs.String("workflow-run-url", "", "GitHub Actions workflow run URL")
+	triggerPRNumber := fs.Int("trigger-pr-number", 0, "pull request number that triggered publication")
+	triggerPRURL := fs.String("trigger-pr-url", "", "pull request URL that triggered publication")
+	triggerCommitSHA := fs.String("trigger-commit-sha", "", "commit SHA that triggered publication")
+	triggerCommitURL := fs.String("trigger-commit-url", "", "commit URL that triggered publication")
 	dryRun := fs.Bool("dry-run", false, "print the publish plan as JSON without uploading")
 	var distDirs appPublishDistDirs
 	fs.Var(&distDirs, "dist-dir", "directory containing release archives (repeatable)")
@@ -96,6 +101,16 @@ func runAppPublish(args []string) (err error) {
 	sourceRef := strings.ToLower(strings.TrimSpace(*ref))
 	if !fullGitSHARe.MatchString(sourceRef) {
 		return fmt.Errorf("--ref must be a 40-character commit SHA")
+	}
+	publication, err := appPublishPublication(
+		*workflowRunURL,
+		*triggerPRNumber,
+		*triggerPRURL,
+		*triggerCommitSHA,
+		*triggerCommitURL,
+	)
+	if err != nil {
+		return err
 	}
 
 	registry, err := config.NewGCSAppRegistry(*bucket)
@@ -158,6 +173,7 @@ func runAppPublish(args []string) (err error) {
 		Version:      *version,
 		SourceRef:    sourceRef,
 		ManifestPath: sourceInfo.ManifestPath,
+		Publication:  publication,
 		Manifest:     sourceManifest,
 		Release:      releaseMetadata,
 		Archives:     releaseArchives,
@@ -314,6 +330,7 @@ type appPublishPlanInput struct {
 	Version      string
 	SourceRef    string
 	ManifestPath string
+	Publication  *appregistry.Publication
 	Manifest     *providermanifestv1.Manifest
 	Release      *providerrelease.Metadata
 	Archives     []releaseArchive
@@ -376,6 +393,7 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 		Version:      input.Version,
 		SourceRef:    input.SourceRef,
 		ManifestPath: input.ManifestPath,
+		Publication:  input.Publication,
 		Release:      input.Release,
 		Artifacts:    publishArtifacts,
 	})
@@ -728,7 +746,7 @@ func printAppPublishPlanJSON(plan appPublishPlan) error {
 
 func printAppPublishUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd app publish --bucket BUCKET --app APP --version VERSION --ref SHA --dist-dir DIR [--dist-dir DIR...]")
+	writeUsageLine(w, "  gestaltd app publish --bucket BUCKET --app APP --version VERSION --ref SHA --dist-dir DIR [--dist-dir DIR...] [publication flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Publish an installable app version to a GCS app registry bucket.")
 	writeUsageLine(w, "Resolves the source manifest at apps/{app}/manifest.yaml under the git root.")
@@ -740,5 +758,41 @@ func printAppPublishUsage(w io.Writer) {
 	writeUsageLine(w, "  --dist-dir   Directory containing release archives (repeatable)")
 	writeUsageLine(w, "  --dry-run    Print the upload plan as JSON without writing")
 	writeUsageLine(w, "  --ref        Full source commit SHA")
+	writeUsageLine(w, "  --workflow-run-url      Publishing GitHub Actions run")
+	writeUsageLine(w, "  --trigger-pr-number     Triggering pull request number")
+	writeUsageLine(w, "  --trigger-pr-url        Triggering pull request URL")
+	writeUsageLine(w, "  --trigger-commit-sha    Triggering commit SHA")
+	writeUsageLine(w, "  --trigger-commit-url    Triggering commit URL")
 	writeUsageLine(w, "  --version    Semantic version guard")
+}
+
+func appPublishPublication(workflowRunURL string, triggerPRNumber int, triggerPRURL, triggerCommitSHA, triggerCommitURL string) (*appregistry.Publication, error) {
+	workflowRunURL = strings.TrimSpace(workflowRunURL)
+	triggerPRURL = strings.TrimSpace(triggerPRURL)
+	triggerCommitSHA = strings.ToLower(strings.TrimSpace(triggerCommitSHA))
+	triggerCommitURL = strings.TrimSpace(triggerCommitURL)
+	hasPR := triggerPRNumber != 0 || triggerPRURL != ""
+	hasCommit := triggerCommitSHA != "" || triggerCommitURL != ""
+	if workflowRunURL == "" && !hasPR && !hasCommit {
+		return nil, nil
+	}
+	if workflowRunURL == "" {
+		return nil, fmt.Errorf("--workflow-run-url is required with publication trigger flags")
+	}
+	if hasPR == hasCommit {
+		return nil, fmt.Errorf("publication requires exactly one pull request or commit trigger")
+	}
+	publication := &appregistry.Publication{WorkflowRunURL: workflowRunURL}
+	if hasPR {
+		if triggerPRNumber <= 0 || triggerPRURL == "" {
+			return nil, fmt.Errorf("--trigger-pr-number and --trigger-pr-url are required together")
+		}
+		publication.TriggerPullRequest = &appregistry.PublicationPullRequest{Number: triggerPRNumber, URL: triggerPRURL}
+		return publication, nil
+	}
+	if !fullGitSHARe.MatchString(triggerCommitSHA) || triggerCommitURL == "" {
+		return nil, fmt.Errorf("--trigger-commit-sha must be a 40-character commit SHA and --trigger-commit-url is required")
+	}
+	publication.TriggerCommit = &appregistry.PublicationCommit{SHA: triggerCommitSHA, URL: triggerCommitURL}
+	return publication, nil
 }
