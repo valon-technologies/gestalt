@@ -106,7 +106,7 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	providerID, fullMethod string,
 ) error {
 	service, _ := splitFullMethod(fullMethod)
-	if service == proto.App_ServiceDesc.ServiceName {
+	if service == proto.App_ServiceDesc.ServiceName || service == proto.Identity_ServiceDesc.ServiceName {
 		return nil
 	}
 	if t == nil || t.authorization == nil {
