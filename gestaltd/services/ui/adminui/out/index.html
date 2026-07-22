@@ -260,10 +260,12 @@
           apps.forEach((app) => {
             const link = element("a", app.app);
             link.href = registryPath + "/" + encodeURIComponent(app.app);
+            const active = app.rollout && (app.rollout.state === "enrolling" || app.rollout.state === "restarting");
             const action = element("button", app.desiredVersion ? "View" : "Install", app.desiredVersion ? "" : "primary");
+            action.disabled = !app.desiredVersion && active;
             action.addEventListener("click", () => {
               if (app.desiredVersion) window.location.href = link.href;
-              else chooseVersion(app, "add");
+              else if (!active) chooseVersion(app, "add");
             });
             append(body, append(element("tr"),
               append(element("td"), link),
@@ -282,8 +284,15 @@
         async function loadRegistryApp(appName) {
           main.replaceChildren();
           const app = await api("/registry-apps/" + encodeURIComponent(appName));
-          const versionsPayload = await api("/app-registries/" + encodeURIComponent(app.registry) + "/apps/" + encodeURIComponent(app.app) + "/versions");
-          const versions = versionsPayload.versions || [];
+          let versions = [];
+          try {
+            const versionsPayload = await api("/app-registries/" + encodeURIComponent(app.registry) + "/apps/" + encodeURIComponent(app.app) + "/versions");
+            versions = versionsPayload.versions || [];
+          } catch (_) {
+            if (app.latestPublished) {
+              versions = [{ version: app.latestPublished.version, publishedAt: app.latestPublished.publishedAt }];
+            }
+          }
           let materializations = { materializations: [] };
           if (app.desiredVersion) {
             materializations = await api("/app-rollouts/" + encodeURIComponent(app.app) + "/materializations");
