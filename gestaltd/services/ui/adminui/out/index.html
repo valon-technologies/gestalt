@@ -254,7 +254,7 @@
           main.replaceChildren();
           const app = await api("/registry-apps/" + encodeURIComponent(appName));
           let materializations = { materializations: [] };
-          if (app.desiredVersion) {
+          if (app.rollout || app.desiredVersion) {
             materializations = await api("/app-rollouts/" + encodeURIComponent(app.app) + "/materializations");
           }
           const titleRow = append(element("div", null, "toolbar"), append(element("div"), element("h1", app.app), element("p", "Registry: " + app.registry)), badge(app.rollout && app.rollout.state));
