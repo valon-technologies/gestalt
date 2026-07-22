@@ -217,6 +217,13 @@
           pageHeading("App Registry", "Fleet rollout and replica convergence.");
           main.appendChild(element("p", error instanceof Error ? error.message : "Failed to load.", "error"));
         }
+        function showActionError(error) {
+          const message = error instanceof Error ? error.message : "Action failed.";
+          const existing = main.querySelector(".action-error");
+          if (existing) existing.remove();
+          const banner = element("p", message, "error action-error");
+          main.prepend(banner);
+        }
 
         async function loadMetrics() {
           main.replaceChildren();
@@ -384,7 +391,7 @@
             });
             window.location.href = registryPath + "/" + encodeURIComponent(app.app);
           } catch (error) {
-            showError(error);
+            showActionError(error);
           }
         }
 
