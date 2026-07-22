@@ -38,7 +38,7 @@ function RegistryAppsPage() {
         <PageHeaderContent>
           <PageHeaderTitle>App Registry</PageHeaderTitle>
           <PageHeaderDescription>
-            Fleet-known versions, rollout progress, and per-replica convergence.
+            Fleet-known versions, rollout progress, and replica pool cohorts.
           </PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>

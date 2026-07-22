@@ -9,14 +9,6 @@ import {
   SectionHeaderTitle,
 } from "@/components/ui/section-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { registryQueries } from "@/features/registry/queries";
 import { RolloutBadge } from "@/features/registry/rollout-badge";
 
@@ -46,10 +38,6 @@ function SummaryField({
 function RegistryAppDetailPage() {
   const { app } = Route.useParams();
   const appQuery = useQuery(registryQueries.app(app));
-  const materializationsQuery = useQuery({
-    ...registryQueries.materializations(app),
-    enabled: Boolean(appQuery.data?.rollout || appQuery.data?.desiredVersion),
-  });
 
   const active =
     appQuery.data?.rollout?.state === "enrolling" || appQuery.data?.rollout?.state === "restarting";
@@ -58,10 +46,9 @@ function RegistryAppDetailPage() {
     if (!active) return undefined;
     const timer = window.setTimeout(() => {
       void appQuery.refetch();
-      void materializationsQuery.refetch();
     }, 12_000);
     return () => window.clearTimeout(timer);
-  }, [active, appQuery, materializationsQuery]);
+  }, [active, appQuery]);
 
   if (appQuery.isPending) {
     return <Skeleton className="h-64 w-full" />;
@@ -136,43 +123,31 @@ function RegistryAppDetailPage() {
       <section className="space-y-4 rounded-lg border border-border bg-card p-4">
         <SectionHeader>
           <SectionHeaderContent>
-            <SectionHeaderTitle>Replica convergence</SectionHeaderTitle>
+            <SectionHeaderTitle>Replica pool</SectionHeaderTitle>
             <SectionHeaderDescription>
-              A restarted timestamp records rollout reconciliation; it does not prove the replica is currently running this version.
+              Enrollment cohort totals for replicas that acknowledged before enrollment closed.
             </SectionHeaderDescription>
           </SectionHeaderContent>
         </SectionHeader>
-        {materializationsQuery.isPending ? (
-          <Skeleton className="h-32 w-full" />
-        ) : !materializationsQuery.data?.materializations.length ? (
-          <p className="text-sm text-muted-foreground">No replicas have acknowledged this version.</p>
+        {!detail.rollout ? (
+          <p className="text-sm text-muted-foreground">No rollout in progress.</p>
+        ) : !detail.cohort || detail.cohort.acknowledged === 0 ? (
+          <p className="text-sm text-muted-foreground">No replicas have joined the rollout cohort yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Instance</TableHead>
-                <TableHead>Acknowledged</TableHead>
-                <TableHead>Materialized</TableHead>
-                <TableHead>Stopped</TableHead>
-                <TableHead>Restarted</TableHead>
-                <TableHead>Attempts</TableHead>
-                <TableHead>Last error</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {materializationsQuery.data.materializations.map((row) => (
-                <TableRow key={row.instanceId}>
-                  <TableCell><Code>{row.instanceId}</Code></TableCell>
-                  <TableCell>{formatTime(row.acknowledgedAt)}</TableCell>
-                  <TableCell>{formatTime(row.materializedAt)}</TableCell>
-                  <TableCell>{formatTime(row.stoppedAt)}</TableCell>
-                  <TableCell>{formatTime(row.restartedAt)}</TableCell>
-                  <TableCell>{row.attemptCount}</TableCell>
-                  <TableCell>{row.lastErrorMessage || "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <SummaryField label="Acknowledged">
+              <span className="text-sm">{detail.cohort.acknowledged}</span>
+            </SummaryField>
+            <SummaryField label="Materialized">
+              <span className="text-sm">{detail.cohort.materialized}</span>
+            </SummaryField>
+            <SummaryField label="Restarted">
+              <span className="text-sm">{detail.cohort.restarted}</span>
+            </SummaryField>
+            <SummaryField label="Failed">
+              <span className="text-sm">{detail.cohort.failed}</span>
+            </SummaryField>
+          </dl>
         )}
       </section>
     </div>
