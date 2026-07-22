@@ -37,6 +37,8 @@ func TestEmbeddedHandlerServesAppRegistryRoutes(t *testing.T) {
 		`/app-rollouts/`,
 		`credentials: "include"`,
 		`App Registry`,
+		`not installed`,
+		`does not prove the replica is currently running this version`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("admin UI does not contain %q", want)

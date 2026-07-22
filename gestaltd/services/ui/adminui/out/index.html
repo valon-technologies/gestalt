@@ -162,8 +162,8 @@
         function formatTime(value) {
           return value ? new Date(value).toLocaleString() : "—";
         }
-        function badge(state) {
-          return element("span", state || "not started", "badge " + (state || ""));
+        function badge(state, emptyLabel) {
+          return element("span", state || emptyLabel || "not started", "badge " + (state || ""));
         }
         function code(value) {
           return element("code", value || "—");
@@ -241,7 +241,7 @@
               append(element("td"), link),
               element("td", app.registry),
               append(element("td"), code(app.desiredVersion)),
-              append(element("td"), badge(app.rollout && app.rollout.state)),
+              append(element("td"), badge(app.rollout && app.rollout.state, app.desiredVersion ? "not started" : "not installed")),
               element("td", app.cohort ? app.cohort.restarted + "/" + app.cohort.acknowledged + " restarted" : "—")
             ));
           });
@@ -257,7 +257,7 @@
           if (app.rollout || app.desiredVersion) {
             materializations = await api("/app-rollouts/" + encodeURIComponent(app.app) + "/materializations");
           }
-          const titleRow = append(element("div", null, "toolbar"), append(element("div"), element("h1", app.app), element("p", "Registry: " + app.registry)), badge(app.rollout && app.rollout.state));
+          const titleRow = append(element("div", null, "toolbar"), append(element("div"), element("h1", app.app), element("p", "Registry: " + app.registry)), badge(app.rollout && app.rollout.state, app.desiredVersion ? "not started" : "not installed"));
           main.appendChild(titleRow);
 
           const desired = (app.knownVersions || []).find((item) => item.version === app.desiredVersion);
@@ -287,7 +287,10 @@
           main.appendChild(rolloutPanel);
 
           const replicas = element("section", null, "panel");
-          append(replicas, element("h2", "Replica convergence", "toolbar"));
+          append(replicas, append(element("div", null, "toolbar"), append(element("div"),
+            element("h2", "Replica convergence"),
+            element("p", "A restarted timestamp records rollout reconciliation; it does not prove the replica is currently running this version.")
+          )));
           if (!materializations.materializations.length) {
             replicas.appendChild(element("div", "No replicas have acknowledged this version.", "empty"));
           } else {
