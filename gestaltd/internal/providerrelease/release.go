@@ -49,6 +49,7 @@ type StaticValidation struct {
 	CatalogSessionOnly bool                         `yaml:"catalogSessionOnly,omitempty"`
 	Requires           *Requires                    `yaml:"requires,omitempty"`
 	Compatibility      *Compatibility               `yaml:"compatibility,omitempty"`
+	Workflows          *WorkflowDefinitions         `yaml:"workflows,omitempty"`
 }
 
 type staticValidationYAML struct {
@@ -57,6 +58,7 @@ type staticValidationYAML struct {
 	CatalogSessionOnly bool                          `yaml:"catalogSessionOnly,omitempty"`
 	Requires           *Requires                     `yaml:"requires,omitempty"`
 	Compatibility      *Compatibility                `yaml:"compatibility,omitempty"`
+	Workflows          *WorkflowDefinitions          `yaml:"workflows,omitempty"`
 }
 
 type staticValidationManifestYAML struct {
@@ -90,6 +92,7 @@ func (s StaticValidation) MarshalYAML() (any, error) {
 		CatalogSessionOnly: s.CatalogSessionOnly,
 		Requires:           s.Requires,
 		Compatibility:      s.Compatibility,
+		Workflows:          s.Workflows,
 	}, nil
 }
 

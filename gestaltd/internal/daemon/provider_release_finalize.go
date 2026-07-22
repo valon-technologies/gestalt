@@ -281,6 +281,10 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	if err != nil {
 		return nil, err
 	}
+	staticWorkflows, err := staticValidationWorkflowsForRelease(manifest, archives)
+	if err != nil {
+		return nil, err
+	}
 	contractRaw, err := rawManifestBytesForRelease(archives, rawManifest)
 	if err != nil {
 		return nil, err
@@ -309,6 +313,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		StaticValidation: &providerrelease.StaticValidation{
 			Manifest: staticManifest,
 			Catalog:  staticCatalog,
+			Workflows: staticWorkflows,
 		},
 	}
 	if len(requires.Apps) > 0 {
@@ -368,6 +373,41 @@ func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, ar
 		}
 	}
 	return firstCatalog, nil
+}
+
+func staticValidationWorkflowsForRelease(manifest *providermanifestv1.Manifest, archives []releaseArchive) (*providerrelease.WorkflowDefinitions, error) {
+	if manifest == nil || len(archives) == 0 {
+		return nil, nil
+	}
+	if providermanifestv1.NormalizeKind(manifest.Kind) != providermanifestv1.KindApp {
+		return nil, nil
+	}
+	for _, archive := range archives {
+		workflows, err := staticValidationWorkflowsFromArchive(archive)
+		if err != nil {
+			return nil, err
+		}
+		if workflows != nil {
+			return workflows, nil
+		}
+	}
+	return nil, nil
+}
+
+func staticValidationWorkflowsFromArchive(archive releaseArchive) (*providerrelease.WorkflowDefinitions, error) {
+	tmpDir, err := os.MkdirTemp("", "gestalt-provider-release-workflows-*")
+	if err != nil {
+		return nil, fmt.Errorf("create static validation workflows temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	if err := packageio.ExtractPackage(archive.Path, tmpDir); err != nil {
+		return nil, fmt.Errorf("extract static validation workflows source from %s: %w", filepath.Base(archive.Path), err)
+	}
+	workflows, err := packageio.ReadStaticWorkflows(tmpDir)
+	if err != nil {
+		return nil, err
+	}
+	return providerrelease.WorkflowDefinitionsFromStatic(workflows), nil
 }
 
 func staticValidationCatalogFromArchiveManifest(archive releaseArchive) (*catalog.Catalog, error) {

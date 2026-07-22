@@ -53,6 +53,7 @@ type Entry struct {
 	Repository    string              `json:"repository"`
 	Artifacts     map[string]Artifact `json:"artifacts"`
 	Interface     Interface           `json:"interface,omitempty"`
+	Workflows     Workflows           `json:"workflows,omitempty"`
 	Requires      Requires            `json:"requires,omitempty"`
 	Compatibility Compatibility       `json:"compatibility,omitempty"`
 	PublishedAt   time.Time           `json:"publishedAt"`
@@ -225,6 +226,7 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		Repository:    repository,
 		Artifacts:     artifacts,
 		Interface:     InterfaceFromRelease(input.Release),
+		Workflows:     workflowsFromBuildInput(input),
 		Requires:      requires,
 		Compatibility: compatibility,
 		PublishedAt:   publishedAt.UTC(),
@@ -242,7 +244,15 @@ type BuildEntryInput struct {
 	ManifestPath string
 	Release      *providerrelease.Metadata
 	Artifacts    []PublishArtifact
+	Workflows    Workflows
 	PublishedAt  time.Time
+}
+
+func workflowsFromBuildInput(input BuildEntryInput) Workflows {
+	if len(input.Workflows.Definitions) > 0 {
+		return input.Workflows
+	}
+	return WorkflowsFromProviderRelease(input.Release)
 }
 
 func buildArtifacts(artifacts []PublishArtifact) (map[string]Artifact, error) {

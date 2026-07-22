@@ -29,16 +29,24 @@ func ServeProvider[P any, PP interface {
 	Provider
 }](ctx context.Context, provider PP, router *Router[P]) error {
 	catalogPath := os.Getenv(envWriteCatalog)
-	if catalogPath != "" {
-		cat := router.Catalog()
-		if cat == nil {
-			cat = &Catalog{}
+	workflowsPath := os.Getenv(envWriteWorkflows)
+	if catalogPath != "" || workflowsPath != "" {
+		if catalogPath != "" {
+			cat := router.Catalog()
+			if cat == nil {
+				cat = &Catalog{}
+			}
+			if err := ensureOutputDir("catalog", catalogPath); err != nil {
+				return err
+			}
+			if err := writeCatalogYAML(cat, catalogPath); err != nil {
+				return err
+			}
 		}
-		if err := ensureOutputDir("catalog", catalogPath); err != nil {
-			return err
-		}
-		if err := writeCatalogYAML(cat, catalogPath); err != nil {
-			return err
+		if workflowsPath != "" {
+			if err := writeDeclaredWorkflowsYAML(provider, workflowsPath); err != nil {
+				return err
+			}
 		}
 		return nil
 	}

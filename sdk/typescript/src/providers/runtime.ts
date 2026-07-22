@@ -127,6 +127,7 @@ import {
 import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "../catalog.ts";
+import { writeWorkflowsYaml } from "../workflows-static.ts";
 import {
   stringListsFromProto,
   stringListsToProto,
@@ -186,6 +187,10 @@ export const ENV_PROVIDER_PARENT_PID = "GESTALT_APP_PARENT_PID";
  * Environment variable used to request static catalog generation.
  */
 export const ENV_WRITE_CATALOG = "GESTALT_APP_WRITE_CATALOG";
+/**
+ * Environment variable used to request static workflow metadata generation.
+ */
+export const ENV_WRITE_WORKFLOWS = "GESTALT_APP_WRITE_WORKFLOWS";
 /**
  * Protocol version currently implemented by the TypeScript runtime.
  */
@@ -410,11 +415,17 @@ export async function runLoadedProvider(
   }
 
   const catalogPath = process.env[ENV_WRITE_CATALOG];
-  if (catalogPath) {
+  const workflowsPath = process.env[ENV_WRITE_WORKFLOWS];
+  if (catalogPath || workflowsPath) {
     if (!isAppProvider(provider)) {
-      throw new Error("static catalog generation is only supported for app providers");
+      throw new Error("static provider metadata generation is only supported for app providers");
     }
-    writeFileSync(catalogPath, catalogToYaml(provider.staticCatalog()), "utf8");
+    if (catalogPath) {
+      writeFileSync(catalogPath, catalogToYaml(provider.staticCatalog()), "utf8");
+    }
+    if (workflowsPath) {
+      writeWorkflowsYaml(workflowsPath, provider.declaredWorkflowSpecs());
+    }
     return;
   }
 

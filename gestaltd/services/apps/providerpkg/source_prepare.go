@@ -106,6 +106,9 @@ func ensureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 		if err := os.Remove(absoluteCatalogPath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove static catalog %q: %w", StaticCatalogFile, err)
 		}
+		if err := removeStaticWorkflows(rootDir); err != nil {
+			return err
+		}
 	}
 	if err := generateSourceStaticCatalog(manifestPath, rootDir, manifest, absoluteCatalogPath, opts); err != nil {
 		return err
@@ -147,6 +150,7 @@ func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *provide
 	cmd.Dir = execution.Workdir
 	cmd.Env = mergePhaseEnv(os.Environ(), envMapToSlice(execution.Env))
 	cmd.Env = append(cmd.Env, envWriteCatalog+"="+catalogPath)
+	cmd.Env = append(cmd.Env, envWriteWorkflows+"="+staticWorkflowsPathForManifest(manifestPath))
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
