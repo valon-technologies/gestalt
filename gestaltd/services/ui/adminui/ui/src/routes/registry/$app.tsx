@@ -9,6 +9,14 @@ import {
   SectionHeaderTitle,
 } from "@/components/ui/section-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { registryQueries } from "@/features/registry/queries";
 import { RolloutBadge } from "@/features/registry/rollout-badge";
 
@@ -38,6 +46,10 @@ function SummaryField({
 function RegistryAppDetailPage() {
   const { app } = Route.useParams();
   const appQuery = useQuery(registryQueries.app(app));
+  const materializationsQuery = useQuery({
+    ...registryQueries.materializations(app),
+    enabled: Boolean(appQuery.data?.rollout),
+  });
 
   const active =
     appQuery.data?.rollout?.state === "enrolling" || appQuery.data?.rollout?.state === "restarting";
@@ -46,9 +58,10 @@ function RegistryAppDetailPage() {
     if (!active) return undefined;
     const timer = window.setTimeout(() => {
       void appQuery.refetch();
+      void materializationsQuery.refetch();
     }, 12_000);
     return () => window.clearTimeout(timer);
-  }, [active, appQuery]);
+  }, [active, appQuery, materializationsQuery]);
 
   if (appQuery.isPending) {
     return <Skeleton className="h-64 w-full" />;
@@ -59,6 +72,8 @@ function RegistryAppDetailPage() {
 
   const detail = appQuery.data;
   const desired = detail.knownVersions.find((item) => item.version === detail.desiredVersion);
+  const cohortReplicas =
+    materializationsQuery.data?.materializations.filter((row) => row.inCohort) ?? [];
 
   return (
     <div className="space-y-8">
@@ -134,20 +149,57 @@ function RegistryAppDetailPage() {
         ) : !detail.cohort || detail.cohort.acknowledged === 0 ? (
           <p className="text-sm text-muted-foreground">No replicas have joined the rollout cohort yet.</p>
         ) : (
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryField label="Acknowledged">
-              <span className="text-sm">{detail.cohort.acknowledged}</span>
-            </SummaryField>
-            <SummaryField label="Materialized">
-              <span className="text-sm">{detail.cohort.materialized}</span>
-            </SummaryField>
-            <SummaryField label="Restarted">
-              <span className="text-sm">{detail.cohort.restarted}</span>
-            </SummaryField>
-            <SummaryField label="Failed">
-              <span className="text-sm">{detail.cohort.failed}</span>
-            </SummaryField>
-          </dl>
+          <div className="space-y-4">
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <SummaryField label="Acknowledged">
+                <span className="text-sm">{detail.cohort.acknowledged}</span>
+              </SummaryField>
+              <SummaryField label="Materialized">
+                <span className="text-sm">{detail.cohort.materialized}</span>
+              </SummaryField>
+              <SummaryField label="Restarted">
+                <span className="text-sm">{detail.cohort.restarted}</span>
+              </SummaryField>
+              <SummaryField label="Failed">
+                <span className="text-sm">{detail.cohort.failed}</span>
+              </SummaryField>
+            </dl>
+            {materializationsQuery.isPending ? (
+              <Skeleton className="h-24 w-full" />
+            ) : cohortReplicas.length > 0 ? (
+              <details className="rounded-lg border border-border">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-foreground">
+                  Cohort replicas ({cohortReplicas.length})
+                </summary>
+                <div className="border-t border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Instance</TableHead>
+                        <TableHead>Restarted</TableHead>
+                        <TableHead>Attempts</TableHead>
+                        <TableHead>Last error</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cohortReplicas.map((row) => (
+                        <TableRow key={row.instanceId}>
+                          <TableCell className="min-w-0">
+                            <Code>{row.instanceId}</Code>
+                          </TableCell>
+                          <TableCell>{formatTime(row.restartedAt)}</TableCell>
+                          <TableCell>{row.attemptCount}</TableCell>
+                          <TableCell className="min-w-0 break-all text-sm">
+                            {row.lastErrorMessage || "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </details>
+            ) : null}
+          </div>
         )}
       </section>
     </div>
