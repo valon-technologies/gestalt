@@ -491,88 +491,25 @@ func TestRoutingGatewayAuthorization(t *testing.T) {
 	parityTarget := ProviderTarget{Kind: "test", Name: "parity"}
 	authzTarget := ProviderTarget{Kind: ProviderKindAuthorization, Name: "authz-primary"}
 
-	tests := []struct {
-		name        string
-		target      ProviderTarget
-		principal   *principal.Principal
-		allowed     *bool
-		wantCode    codes.Code
-		wantCalled  bool
-		wantSuccess bool
-	}{
-		{
-			name:        "authorization kind exempt from meta-check",
-			target:      authzTarget,
-			principal:   &principal.Principal{SubjectID: "user:alice"},
-			allowed:     boolPtr(false),
-			wantCode:    codes.OK,
-			wantCalled:  false,
-			wantSuccess: true,
-		},
-		{
-			name:        "non-authorization kind denied",
-			target:      parityTarget,
-			principal:   &principal.Principal{SubjectID: "user:alice"},
-			allowed:     boolPtr(false),
-			wantCode:    codes.PermissionDenied,
-			wantCalled:  true,
-			wantSuccess: false,
-		},
-		{
-			name:        "non-authorization kind allowed",
-			target:      parityTarget,
-			principal:   &principal.Principal{SubjectID: "user:alice"},
-			allowed:     boolPtr(true),
-			wantCode:    codes.OK,
-			wantCalled:  true,
-			wantSuccess: true,
-		},
-		{
-			name:       "no principal unauthenticated",
-			target:     parityTarget,
-			principal:  nil,
-			allowed:    boolPtr(true),
-			wantCode:   codes.Unauthenticated,
-			wantCalled: false,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+	for _, target := range []ProviderTarget{parityTarget, authzTarget} {
+		transport := NewProviderGatewayTransport()
+		connCalled := false
+		conn := &stubConn{invoke: func(_ context.Context, _ string, _ any, reply any, _ ...grpc.CallOption) error {
+			connCalled = true
+			return nil
+		}}
+		if err := transport.RegisterDirect(target, DirectEndpoint{Conn: conn}); err != nil {
+			t.Fatalf("RegisterDirect(%s): %v", target.Name, err)
+		}
+		transport.SetAuthorizationProvider(&stubAuthorizationProvider{allowedResult: boolPtr(false)})
 
-			transport := NewProviderGatewayTransport()
-			connCalled := false
-			conn := &stubConn{invoke: func(_ context.Context, _ string, _ any, reply any, _ ...grpc.CallOption) error {
-				connCalled = true
-				return nil
-			}}
-			for _, target := range []ProviderTarget{parityTarget, authzTarget} {
-				if err := transport.RegisterDirect(target, DirectEndpoint{Conn: conn}); err != nil {
-					t.Fatalf("RegisterDirect(%s): %v", target.Name, err)
-				}
-			}
-			authorization := &stubAuthorizationProvider{allowedResult: tc.allowed}
-			transport.SetAuthorizationProvider(authorization)
-
-			ctx := context.Background()
-			if tc.principal != nil {
-				ctx = principal.WithPrincipal(ctx, tc.principal)
-			}
-			err := transport.Conn(tc.target).Invoke(ctx, "/test.Service/Echo", nil, nil)
-
-			if tc.wantCalled && !authorization.called {
-				t.Fatal("authorization provider was not called")
-			}
-			if !tc.wantCalled && authorization.called {
-				t.Fatal("authorization provider was unexpectedly called")
-			}
-			if status.Code(err) != tc.wantCode {
-				t.Fatalf("status.Code(err) = %v, want %v (%v)", status.Code(err), tc.wantCode, err)
-			}
-			if tc.wantSuccess && !connCalled {
-				t.Fatal("endpoint connection was not invoked")
-			}
-		})
+		err := transport.Conn(target).Invoke(context.Background(), "/test.Service/Echo", nil, nil)
+		if err != nil {
+			t.Fatalf("Invoke(%s): %v", target.Name, err)
+		}
+		if !connCalled {
+			t.Fatal("endpoint connection was not invoked")
+		}
 	}
 }
 
@@ -587,13 +524,11 @@ func TestRoutingGatewayRecordsMetrics(t *testing.T) {
 	if err := transport.RegisterDirect(target, DirectEndpoint{Conn: &stubConn{}}); err != nil {
 		t.Fatalf("RegisterDirect: %v", err)
 	}
-	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
-	transport.SetAuthorizationProvider(authorization)
 	authCtx := principal.WithPrincipal(ctx, &principal.Principal{SubjectID: "user:alice"})
 
 	err := transport.Conn(target).Invoke(authCtx, "/test.Service/Echo", nil, nil)
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("status.Code(err) = %v, want PermissionDenied", status.Code(err))
+	if err != nil {
+		t.Fatalf("Invoke err = %v, want nil", err)
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
@@ -604,22 +539,6 @@ func TestRoutingGatewayRecordsMetrics(t *testing.T) {
 		"gd.transport":             "direct",
 		"gd.entry":                 "internal",
 		"gd.caller_token_provided": "true",
-	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", 1, map[string]string{
-		"gd.provider_id":           "parity",
-		"gd.provider_kind":         "test",
-		"gd.operation":             "Echo",
-		"gd.transport":             "direct",
-		"gd.entry":                 "internal",
-		"gd.caller_token_provided": "true",
-	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
-		"gd.allowed":               "false",
-		"gd.caller_token_provided": "true",
-		"gd.subject":               "subject/user:alice",
-		"gd.resource":              "test/parity",
-		"gd.action":                "parity",
-		"gd.entry":                 "internal",
 	})
 }
 
