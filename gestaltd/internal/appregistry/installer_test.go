@@ -240,3 +240,56 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 		t.Fatalf("first to_version = %q, want %s", requests[0].ToVersion, fixture.Version)
 	}
 }
+
+func TestInstallerSelectAllowsRevertingToKnownVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	start := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	for index, version := range []string{fixture.Version, "2.0.0"} {
+		if _, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+			App:         "g-issues",
+			FromVersion: "previous",
+			ToVersion:   version,
+			Actor:       "user:alice",
+			Timestamp:   start.Add(time.Duration(index) * time.Hour),
+		}); err != nil {
+			t.Fatalf("AppendRequest(%s): %v", version, err)
+		}
+	}
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
+		Now:            func() time.Time { return start.Add(2 * time.Hour) },
+	}
+
+	result, err := installer.Select(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+		Actor:    "user:bob",
+	})
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	if result.FromVersion != "2.0.0" || result.Installation.Version != fixture.Version {
+		t.Fatalf("result = %#v", result)
+	}
+	requests, err := svc.AppVersionChangeRequests.ListRequestsByApp(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("ListRequestsByApp: %v", err)
+	}
+	if len(requests) != 3 || requests[2].FromVersion != "2.0.0" || requests[2].ToVersion != fixture.Version || requests[2].Actor != "user:bob" {
+		t.Fatalf("requests = %#v", requests)
+	}
+}

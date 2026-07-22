@@ -107,10 +107,13 @@ func (r *RegistryReader) FetchEntry(ctx context.Context, publicRoot, appName, ve
 
 // VersionSummary is a lightweight view of one published app version from an index.
 type VersionSummary struct {
-	Version     string    `json:"version"`
-	Metadata    string    `json:"metadata"`
-	Platforms   []string  `json:"platforms,omitempty"`
-	PublishedAt time.Time `json:"publishedAt"`
+	Version     string       `json:"version"`
+	Metadata    string       `json:"metadata"`
+	Platforms   []string     `json:"platforms,omitempty"`
+	PublishedAt time.Time    `json:"publishedAt"`
+	SourceRef   string       `json:"sourceRef,omitempty"`
+	Repository  string       `json:"repository,omitempty"`
+	Publication *Publication `json:"publication,omitempty"`
 }
 
 // VersionsFromIndex returns version summaries for appName, newest first.
@@ -129,6 +132,9 @@ func VersionsFromIndex(index *Index, appName string) []VersionSummary {
 			Metadata:    summary.Metadata,
 			Platforms:   append([]string(nil), summary.Platforms...),
 			PublishedAt: summary.PublishedAt.UTC(),
+			SourceRef:   summary.SourceRef,
+			Repository:  summary.Repository,
+			Publication: clonePublication(summary.Publication),
 		})
 	}
 	sortVersionsNewestFirst(out)

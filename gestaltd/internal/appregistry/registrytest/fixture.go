@@ -100,6 +100,13 @@ func NewInstallFixture(t *testing.T) InstallFixture {
 		SourceRef:     sourceRef,
 		ManifestPath:  "valon-tools/apps/g-issues/manifest.yaml",
 		Repository:    "github.com/valon-technologies/valon-tools",
+		Publication: &appregistry.Publication{
+			WorkflowRunURL: "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
+			TriggerPullRequest: &appregistry.PublicationPullRequest{
+				Number: 3251,
+				URL:    "https://github.com/valon-technologies/valon-tools/pull/3251",
+			},
+		},
 		Artifacts: map[string]appregistry.Artifact{
 			platform: {
 				URL:       "gs://" + Bucket + "/apps/g-issues/artifacts/" + version + "/artifact.tar.gz",
@@ -123,6 +130,9 @@ func NewInstallFixture(t *testing.T) InstallFixture {
 						Metadata:    appregistry.AppVersionEntryPath("g-issues", version),
 						Platforms:   []string{platform},
 						PublishedAt: entry.PublishedAt,
+						SourceRef:   entry.SourceRef,
+						Repository:  entry.Repository,
+						Publication: entry.Publication,
 					},
 				},
 			},

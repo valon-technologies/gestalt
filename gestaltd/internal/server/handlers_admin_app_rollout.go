@@ -357,14 +357,14 @@ func adminRolloutCohortFromRows(rows []*core.AppInstanceMaterialization, rollout
 		return out
 	}
 	for _, row := range rows {
-		if row == nil || row.AcknowledgedAt.IsZero() || !row.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
+		if row == nil || row.AcknowledgedAt.Before(rollout.CreatedAt) || !row.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
 			continue
 		}
 		out.Acknowledged++
-		if !row.MaterializedAt.IsZero() {
+		if !row.MaterializedAt.Before(rollout.CreatedAt) {
 			out.Materialized++
 		}
-		if !row.RestartedAt.IsZero() {
+		if !row.RestartedAt.Before(rollout.CreatedAt) {
 			out.Restarted++
 		}
 		if !row.LastErrorAt.IsZero() && (row.RestartedAt.IsZero() || row.LastErrorAt.After(row.RestartedAt)) {
@@ -389,9 +389,9 @@ func adminAppMaterializationFromCore(row *core.AppInstanceMaterialization, rollo
 	if rollout == nil || rollout.Version != row.Version {
 		return out
 	}
-	out.InCohort = !row.AcknowledgedAt.IsZero() && row.AcknowledgedAt.Before(rollout.EnrollmentEndsAt)
+	out.InCohort = !row.AcknowledgedAt.Before(rollout.CreatedAt) && row.AcknowledgedAt.Before(rollout.EnrollmentEndsAt)
 	if isActiveAdminRollout(rollout.State) {
-		out.Converged = !row.RestartedAt.IsZero() && !row.RestartedAt.After(rollout.Deadline)
+		out.Converged = !row.RestartedAt.Before(rollout.CreatedAt) && !row.RestartedAt.After(rollout.Deadline)
 	}
 	return out
 }

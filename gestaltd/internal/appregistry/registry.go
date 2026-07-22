@@ -39,9 +39,12 @@ type AppVersions struct {
 }
 
 type IndexVersion struct {
-	Metadata    string    `json:"metadata"`
-	Platforms   []string  `json:"platforms,omitempty"`
-	PublishedAt time.Time `json:"publishedAt"`
+	Metadata    string       `json:"metadata"`
+	Platforms   []string     `json:"platforms,omitempty"`
+	PublishedAt time.Time    `json:"publishedAt"`
+	SourceRef   string       `json:"sourceRef,omitempty"`
+	Repository  string       `json:"repository,omitempty"`
+	Publication *Publication `json:"publication,omitempty"`
 }
 
 type Entry struct {
@@ -51,11 +54,28 @@ type Entry struct {
 	SourceRef     string              `json:"sourceRef"`
 	ManifestPath  string              `json:"manifestPath"`
 	Repository    string              `json:"repository"`
+	Publication   *Publication        `json:"publication,omitempty"`
 	Artifacts     map[string]Artifact `json:"artifacts"`
 	Interface     Interface           `json:"interface,omitempty"`
 	Requires      Requires            `json:"requires,omitempty"`
 	Compatibility Compatibility       `json:"compatibility,omitempty"`
 	PublishedAt   time.Time           `json:"publishedAt"`
+}
+
+type Publication struct {
+	WorkflowRunURL     string                  `json:"workflowRunUrl"`
+	TriggerPullRequest *PublicationPullRequest `json:"triggerPullRequest,omitempty"`
+	TriggerCommit      *PublicationCommit      `json:"triggerCommit,omitempty"`
+}
+
+type PublicationPullRequest struct {
+	Number int    `json:"number"`
+	URL    string `json:"url"`
+}
+
+type PublicationCommit struct {
+	SHA string `json:"sha"`
+	URL string `json:"url"`
 }
 
 type Artifact struct {
@@ -223,6 +243,7 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		SourceRef:     strings.ToLower(strings.TrimSpace(input.SourceRef)),
 		ManifestPath:  strings.TrimSpace(input.ManifestPath),
 		Repository:    repository,
+		Publication:   clonePublication(input.Publication),
 		Artifacts:     artifacts,
 		Interface:     InterfaceFromRelease(input.Release),
 		Requires:      requires,
@@ -240,6 +261,7 @@ type BuildEntryInput struct {
 	Version      string
 	SourceRef    string
 	ManifestPath string
+	Publication  *Publication
 	Release      *providerrelease.Metadata
 	Artifacts    []PublishArtifact
 	PublishedAt  time.Time
@@ -394,6 +416,9 @@ func validateEntry(entry *Entry) error {
 	if err := validateEntryRepository(entry.Repository, entry.App); err != nil {
 		return fmt.Errorf("registry entry repository: %w", err)
 	}
+	if err := validatePublication(entry.Publication); err != nil {
+		return fmt.Errorf("registry entry publication: %w", err)
+	}
 	if len(entry.Artifacts) == 0 {
 		return fmt.Errorf("registry entry artifacts are required")
 	}
@@ -437,6 +462,22 @@ func validateIndex(index *Index) error {
 			}
 			if release.PublishedAt.IsZero() {
 				return fmt.Errorf("app registry index app %q version %q publishedAt is required", appName, version)
+			}
+			hasSourceRef := strings.TrimSpace(release.SourceRef) != ""
+			hasRepository := strings.TrimSpace(release.Repository) != ""
+			if hasSourceRef != hasRepository {
+				return fmt.Errorf("app registry index app %q version %q sourceRef and repository must be recorded together", appName, version)
+			}
+			if hasSourceRef {
+				if err := validateSourceRef(release.SourceRef); err != nil {
+					return fmt.Errorf("app registry index app %q version %q sourceRef: %w", appName, version, err)
+				}
+				if err := validateEntryRepository(release.Repository, appName); err != nil {
+					return fmt.Errorf("app registry index app %q version %q repository: %w", appName, version, err)
+				}
+			}
+			if err := validatePublication(release.Publication); err != nil {
+				return fmt.Errorf("app registry index app %q version %q publication: %w", appName, version, err)
 			}
 		}
 	}
@@ -534,6 +575,9 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 		Metadata:    strings.TrimSpace(metadataPath),
 		Platforms:   platforms,
 		PublishedAt: entry.PublishedAt.UTC(),
+		SourceRef:   strings.TrimSpace(entry.SourceRef),
+		Repository:  strings.TrimSpace(entry.Repository),
+		Publication: clonePublication(entry.Publication),
 	}
 	index.Apps[appName] = app
 	if err := validateIndex(index); err != nil {
@@ -618,6 +662,33 @@ func validateSourceRef(sourceRef string) error {
 	return nil
 }
 
+func validatePublication(publication *Publication) error {
+	if publication == nil {
+		return nil
+	}
+	if strings.TrimSpace(publication.WorkflowRunURL) == "" {
+		return fmt.Errorf("workflowRunUrl is required")
+	}
+	hasPR := publication.TriggerPullRequest != nil
+	hasCommit := publication.TriggerCommit != nil
+	if hasPR == hasCommit {
+		return fmt.Errorf("exactly one trigger is required")
+	}
+	if hasPR {
+		if publication.TriggerPullRequest.Number <= 0 || strings.TrimSpace(publication.TriggerPullRequest.URL) == "" {
+			return fmt.Errorf("triggerPullRequest number and URL are required")
+		}
+		return nil
+	}
+	if err := validateSourceRef(publication.TriggerCommit.SHA); err != nil {
+		return fmt.Errorf("triggerCommit sha: %w", err)
+	}
+	if strings.TrimSpace(publication.TriggerCommit.URL) == "" {
+		return fmt.Errorf("triggerCommit URL is required")
+	}
+	return nil
+}
+
 func InputSchemaHash(schema json.RawMessage) string {
 	if len(schema) == 0 {
 		return ""
@@ -633,6 +704,22 @@ func cloneRawJSON(raw json.RawMessage) json.RawMessage {
 	out := make(json.RawMessage, len(raw))
 	copy(out, raw)
 	return out
+}
+
+func clonePublication(value *Publication) *Publication {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	if value.TriggerPullRequest != nil {
+		trigger := *value.TriggerPullRequest
+		out.TriggerPullRequest = &trigger
+	}
+	if value.TriggerCommit != nil {
+		trigger := *value.TriggerCommit
+		out.TriggerCommit = &trigger
+	}
+	return &out
 }
 
 func CatalogOperationContracts(cat *catalog.Catalog) map[string]OperationContract {
