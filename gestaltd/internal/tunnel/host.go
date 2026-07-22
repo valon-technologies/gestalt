@@ -196,38 +196,3 @@ func splitHostPort(rawURL string) (string, int) {
 	_, _ = fmt.Sscanf(portStr, "%d", &port)
 	return host, port
 }
-
-// startRawHost starts frpc forwarding to the given backend listener without
-// wrapping it in inner TLS. Test-only; used to isolate relay issues.
-func startRawHost(ctx context.Context, cfg HostConfig, backend net.Listener) (*Host, error) {
-	proxyCfg := &v1.TCPMuxProxyConfig{}
-	proxyCfg.Name = cfg.Identity.TunnelHost
-	proxyCfg.Type = string(v1.ProxyTypeTCPMUX)
-	proxyCfg.LocalIP = "127.0.0.1"
-	proxyCfg.LocalPort = backend.Addr().(*net.TCPAddr).Port
-	proxyCfg.Multiplexer = string(v1.TCPMultiplexerHTTPConnect)
-	proxyCfg.CustomDomains = []string{cfg.Identity.TunnelHost}
-
-	common := &v1.ClientCommonConfig{}
-	common.ServerAddr = hostFromURL(cfg.ServerURL)
-	common.ServerPort = portFromURL(cfg.ServerURL)
-	common.Transport.TCPMux = ptr(true)
-	if isWebsocketURL(cfg.ServerURL) {
-		common.Transport.Protocol = "websocket"
-	}
-
-	configSource := frpsource.NewConfigSource()
-	if err := configSource.ReplaceAll([]v1.ProxyConfigurer{proxyCfg}, nil); err != nil {
-		return nil, fmt.Errorf("tunnel host: set proxy config: %w", err)
-	}
-
-	service, err := frpcclient.NewService(frpcclient.ServiceOptions{
-		Common:                 common,
-		ConfigSourceAggregator: frpsource.NewAggregator(configSource),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("tunnel host: frpc service: %w", err)
-	}
-	go func() { _ = service.Run(ctx) }()
-	return &Host{frpService: service, inner: backend}, nil
-}
