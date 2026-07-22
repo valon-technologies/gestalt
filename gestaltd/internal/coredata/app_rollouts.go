@@ -108,6 +108,33 @@ func (s *AppRolloutService) ListActive(ctx context.Context) ([]*core.AppRollout,
 	return out, nil
 }
 
+func (s *AppRolloutService) ListRecentTerminal(ctx context.Context, since time.Time) ([]*core.AppRollout, error) {
+	if s == nil {
+		return nil, fmt.Errorf("list recent terminal app rollouts: service is not configured")
+	}
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list recent terminal app rollouts: %w", err)
+	}
+	since = since.UTC()
+	out := make([]*core.AppRollout, 0, len(recs))
+	for _, rec := range recs {
+		rollout := recordToAppRollout(rec)
+		if isActiveRolloutState(rollout.State) {
+			continue
+		}
+		terminalAt := rollout.CompletedAt
+		if rollout.State == core.AppRolloutStateFailed {
+			terminalAt = rollout.FailedAt
+		}
+		if terminalAt.IsZero() || terminalAt.Before(since) {
+			continue
+		}
+		out = append(out, rollout)
+	}
+	return out, nil
+}
+
 func (s *AppRolloutService) MarkRestarting(ctx context.Context, app, version string) (*core.AppRollout, error) {
 	return s.transition(ctx, app, version, core.AppRolloutStateRestarting, time.Time{})
 }

@@ -121,6 +121,31 @@ func TestAppRolloutService(t *testing.T) {
 			t.Fatalf("active = %#v, want g-issues only", active)
 		}
 	})
+
+	t.Run("list_recent_terminal_applies_cutoff", func(t *testing.T) {
+		t.Parallel()
+		svc := testutil.NewStubServices(t)
+		if _, err := svc.AppRollouts.Create(ctx, newRollout("g-issues", "v1")); err != nil {
+			t.Fatalf("Create g-issues: %v", err)
+		}
+		if _, err := svc.AppRollouts.MarkComplete(ctx, "g-issues", "v1", start.Add(time.Hour)); err != nil {
+			t.Fatalf("MarkComplete: %v", err)
+		}
+		recent, err := svc.AppRollouts.ListRecentTerminal(ctx, start.Add(30*time.Minute))
+		if err != nil {
+			t.Fatalf("ListRecentTerminal: %v", err)
+		}
+		if len(recent) != 1 || recent[0].App != "g-issues" {
+			t.Fatalf("recent = %#v, want g-issues", recent)
+		}
+		recent, err = svc.AppRollouts.ListRecentTerminal(ctx, start.Add(2*time.Hour))
+		if err != nil {
+			t.Fatalf("ListRecentTerminal after cutoff: %v", err)
+		}
+		if len(recent) != 0 {
+			t.Fatalf("recent = %#v, want empty after cutoff", recent)
+		}
+	})
 }
 
 func TestAppInstanceMaterializationServiceListByAppVersion(t *testing.T) {

@@ -99,6 +99,7 @@ func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 			s.mountAdminRuntimeRoutes(r)
 			s.mountAdminAppRegistryRoutes(r)
 			s.mountAdminAppInstallReadRoutes(r)
+			s.mountAdminAppRolloutRoutes(r)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(10 * time.Minute))
