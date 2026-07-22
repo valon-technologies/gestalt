@@ -10,6 +10,10 @@ import (
 )
 
 func requireUserCaller(w http.ResponseWriter, p *principal.Principal) error {
+	if p == nil {
+		writeError(w, http.StatusUnauthorized, "missing authorization")
+		return errUserRequired
+	}
 	if !principal.IsNonUserPrincipal(p) {
 		return nil
 	}

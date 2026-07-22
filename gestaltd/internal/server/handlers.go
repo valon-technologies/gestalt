@@ -251,7 +251,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) integrationManagementPath(ctx context.Context, p *principal.Principal, appName string) string {
-	if s == nil || s.authorization == nil || principal.IsNonUserPrincipal(p) {
+	if s == nil || s.authorization == nil || p == nil || principal.IsNonUserPrincipal(p) {
 		return ""
 	}
 	if _, ok := s.registryApp(appName); !ok {
