@@ -8,6 +8,7 @@ Related docs:
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, existing admin HTTP API
 - [indexeddb.md](./indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
 - [tests.md](./tests.md#admin-observability-tests) — HTTP and UI tests
+- [version_selection.md](./version_selection.md) — app-scoped version selection outside `/admin`
 
 Implementation:
 
@@ -52,6 +53,10 @@ Operators installing registry apps should answer these questions without reading
 ### Admin UI
 
 The embedded UI at `/admin` ([`gestaltd/services/ui/adminui/`](../../gestaltd/services/ui/adminui/)) keeps the Prometheus metrics viewer and adds an App Registry section backed by the admin APIs.
+
+The embedded admin UI remains observability-only. Fleet version selection is a
+separate app-scoped capability at `/apps/{app}/admin`; see
+[version_selection.md](./version_selection.md).
 
 ---
 
@@ -291,7 +296,7 @@ Reuse the standard admin error envelope from [lifecycle.md](./lifecycle.md#error
 
 - Install-time validation ([validation.md](./validation.md))
 - Dedicated rollback route (revert via `upgrade` to an older published version)
-- Installing or upgrading apps from the admin UI
+- Installing or upgrading apps from the embedded `/admin` UI
 - Mutating rollouts from the UI (cancel, force-complete)
 - Publishing to GCS from the UI
 - Replacing `kubectl logs` for provider crash diagnostics

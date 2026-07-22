@@ -9,6 +9,7 @@ Related docs:
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
 - [validation.md](./validation.md) — install-time validation
 - [admin.md](./admin.md) — admin UI and rollout read APIs
+- [version_selection.md](./version_selection.md) — app-admin desired-version changes
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
@@ -480,7 +481,37 @@ These routes expose IndexedDB rollout state that the catalog poller already writ
 | `GET` | `/admin/api/v1/app-rollouts` | List active and recent terminal rollouts |
 | `GET` | `/admin/api/v1/app-rollouts/{app}/materializations` | Per-replica rollout-progress rows for one `(app, version)` |
 
-The embedded `/admin` UI gains an **App Registry** section that consumes these endpoints. Today `/admin` only shows Prometheus metrics.
+The embedded `/admin` UI includes a read-only **App Registry** section that consumes these endpoints.
+
+### App-admin version selection
+
+Step 15 adds app-scoped management routes on the authenticated public API:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/apps/{app}/admin/registry` | Load published/known versions, desired version, and rollout admission state |
+| `POST` | `/api/v1/apps/{app}/admin/registry/version` | Select the fleet-wide desired version |
+
+These routes do not use the global `gestaltAdmin` policy. They require an
+authenticated user with explicit `admin` on authorization resource
+`app/{app}` and fail closed when authorization cannot be checked.
+
+The mutation route derives the registry from deploy config and actor from the
+canonical user principal. It claims the existing app-scoped install lock,
+rejects an `enrolling` or `restarting` rollout with **409**, then reuses registry
+fetch, install-time validation, rollout creation, and change-request append.
+The server-side check is authoritative even when the page loaded before another
+rollout began.
+
+First selection adds the app. Later selection upgrades or reverts it. Selecting
+an older version appends a new change request even when that version is already
+present in known-version history; only the current desired version is rejected
+as a no-op. A revert also treats per-replica materialization timestamps older
+than the new rollout's `created_at` as stale and resets that row before
+reconciliation, so historical convergence cannot complete the new rollout.
+
+Full API shapes, authorization behavior, and UI ownership:
+[version_selection.md](./version_selection.md).
 
 ### Errors
 

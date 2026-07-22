@@ -8,6 +8,7 @@ Related references:
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 - [validation.md](./validation.md) — install-time validation before fleet accept
 - [admin.md](./admin.md) — admin UI and rollout observability
+- [version_selection.md](./version_selection.md) — app-admin fleet version selector
 - [models.md](./models.md) — JSON document shapes stored in GCS
 - [service.md](./service.md) — Go package API for publish and validation
 
@@ -263,6 +264,7 @@ Core recovery paths must not depend on dynamically installed apps.
 12. Registry-only app config and `add` / `upgrade` install routes. **Done.** See [config.md](./config.md#registry-only-app-source), [lifecycle.md](./lifecycle.md), [tests.md](./tests.md#registry-only-app-tests).
 13. Install-time validation before fleet accept: platform artifact, `gestaltd` compatibility, and declared app dependencies. No dedicated rollback API — revert via `upgrade` to an older published version. See [validation.md](./validation.md), [tests.md](./tests.md#install-time-validation-tests).
 14. Admin observability for registry-only apps: read APIs for rollouts and per-replica materializations, and an App Registry section in the `/admin` UI. **Done.** See [admin.md](./admin.md), [lifecycle.md](./lifecycle.md#admin-observability-api), [tests.md](./tests.md#admin-observability-tests).
+15. App-admin version selection for registry-only apps: add a fleet-wide version selector at `/apps/{app}/admin`, require `admin` on the app resource, and block selection during active rollouts. See [version_selection.md](./version_selection.md), [lifecycle.md](./lifecycle.md#app-admin-version-selection), [tests.md](./tests.md#app-version-selection-tests).
 
 ## Future work
 
