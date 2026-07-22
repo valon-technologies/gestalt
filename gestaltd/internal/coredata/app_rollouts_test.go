@@ -120,6 +120,20 @@ func TestAppRolloutService(t *testing.T) {
 		if len(active) != 1 || active[0].App != "g-issues" {
 			t.Fatalf("active = %#v, want g-issues only", active)
 		}
+		combined, err := svc.AppRollouts.ListActiveAndRecentTerminal(ctx, start)
+		if err != nil {
+			t.Fatalf("ListActiveAndRecentTerminal: %v", err)
+		}
+		if len(combined) != 2 {
+			t.Fatalf("active and recent terminal = %#v, want both apps from one snapshot", combined)
+		}
+		combined, err = svc.AppRollouts.ListActiveAndRecentTerminal(ctx, start.Add(2*time.Hour))
+		if err != nil {
+			t.Fatalf("ListActiveAndRecentTerminal after cutoff: %v", err)
+		}
+		if len(combined) != 1 || combined[0].App != "g-issues" {
+			t.Fatalf("active and recent terminal = %#v, want active app only after cutoff", combined)
+		}
 	})
 }
 

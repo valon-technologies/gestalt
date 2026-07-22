@@ -153,6 +153,9 @@ type Server struct {
 	appRegistries          map[string]config.AppRegistryConfig
 	appRegistryReader      *appregistry.RegistryReader
 	appRegistryInstaller   *appregistry.Installer
+	appVersionChanges      *coredata.AppVersionChangeRequestService
+	appRollouts            *coredata.AppRolloutService
+	appMaterializations    *coredata.AppInstanceMaterializationService
 	artifactsDir           string
 	appRuntimeState        AppRuntimeState
 	routeProfile           RouteProfile
@@ -400,6 +403,9 @@ func New(cfg Config) (*Server, error) {
 		appRegistries:          cloneAppRegistryConfig(cfg.AppRegistries),
 		appRegistryReader:      cfg.AppRegistryReader,
 		appRegistryInstaller:   newAppRegistryInstaller(cfg),
+		appVersionChanges:      cfg.Services.AppVersionChangeRequests,
+		appRollouts:            cfg.Services.AppRollouts,
+		appMaterializations:    cfg.Services.AppInstanceMaterializations,
 		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
 		appRuntimeState:        cfg.AppRuntimeState,
 		routeProfile:           cfg.RouteProfile,

@@ -41,13 +41,17 @@ Operators installing registry apps should answer these questions without reading
 | `GET /admin/api/v1/app-registries/{registry}/apps/{app}/versions` | **Published** versions in GCS (not fleet state) |
 | `GET /admin/api/v1/app-installations` | Fleet-**known** versions (change-request projection) |
 | `GET /admin/api/v1/app-installations/{app}` | Known versions for one app |
+| `GET /admin/api/v1/registry-apps` | Registry-only apps merged with desired version and rollout summary |
+| `GET /admin/api/v1/registry-apps/{app}` | Registry-only app detail and known versions |
+| `GET /admin/api/v1/app-rollouts` | Active and recent terminal rollouts |
+| `GET /admin/api/v1/app-rollouts/{app}/materializations` | Per-replica rollout progress |
 | `POST …/add`, `POST …/upgrade` | Append fleet-known versions (change requests) |
 
-`app_rollouts` and `app_instance_materializations` are written by the catalog poller but have **no read HTTP routes** yet. The multi-replica E2E plan in [tests.md](./tests.md#planned-multi-replica-materialization-ack-e2e) will poll `GET …/materializations` once these routes ship.
+`app_rollouts` and `app_instance_materializations` are written by the catalog poller and exposed through read-only admin routes. The multi-replica E2E plan in [tests.md](./tests.md#planned-multi-replica-materialization-ack-e2e) can poll `GET …/materializations` without querying IndexedDB directly.
 
 ### Admin UI
 
-The embedded UI at `/admin` ([`gestaltd/services/ui/adminui/`](../../gestaltd/services/ui/adminui/)) is a single-page Prometheus metrics viewer. It does not call the app-registry admin APIs.
+The embedded UI at `/admin` ([`gestaltd/services/ui/adminui/`](../../gestaltd/services/ui/adminui/)) keeps the Prometheus metrics viewer and adds an App Registry section backed by the admin APIs.
 
 ---
 
@@ -65,7 +69,7 @@ Use the same names as [lifecycle.md](./lifecycle.md#runtime-version-invariants):
 
 ---
 
-## Planned admin HTTP API
+## Admin HTTP API
 
 All routes live under `/admin/api/v1`, reuse existing admin auth (`gestaltAdmin`), and are read-only.
 
@@ -160,7 +164,7 @@ List rollout records. Default: active rollouts (`enrolling`, `restarting`) plus 
 ]
 ```
 
-Backed by `AppRolloutService.ListActive` and a new `ListRecentTerminal` (or `Get` + history index if added later).
+Backed by `AppRolloutService.ListActiveAndRecentTerminal`, which reads one store snapshot so a state transition cannot duplicate an app across active and terminal results.
 
 #### `GET /admin/api/v1/app-rollouts/{app}/materializations`
 

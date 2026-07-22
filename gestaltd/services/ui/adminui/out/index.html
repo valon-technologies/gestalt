@@ -13,6 +13,9 @@
         --border: #d9e0ea;
         --surface: #ffffff;
         --accent: #2764c7;
+        --danger: #b42318;
+        --success: #067647;
+        --warning: #b54708;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -22,31 +25,46 @@
           --border: #273244;
           --surface: #171e2a;
           --accent: #82aaff;
+          --danger: #ff8a80;
+          --success: #75d6a1;
+          --warning: #f7b267;
         }
       }
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
         background: var(--bg);
         color: var(--fg);
         font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      main {
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .header-inner, main {
         width: min(1100px, calc(100vw - 32px));
         margin: 0 auto;
-        padding: 40px 0;
       }
-      h1 {
-        margin: 0;
-        font-size: 28px;
-        font-weight: 650;
+      .header-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 60px;
       }
-      p {
-        margin: 8px 0 0;
+      .brand { color: var(--fg); font-size: 18px; font-weight: 650; text-decoration: none; }
+      nav { display: flex; gap: 8px; }
+      nav a {
+        border-radius: 6px;
         color: var(--muted);
+        padding: 7px 10px;
+        text-decoration: none;
       }
+      nav a.active { background: var(--bg); color: var(--fg); }
+      main { padding: 32px 0 48px; }
+      h1 { margin: 0; font-size: 28px; font-weight: 650; }
+      h2 { margin: 0; font-size: 17px; }
+      p { margin: 8px 0 0; color: var(--muted); }
+      a { color: var(--accent); }
       .panel {
         margin-top: 24px;
         border: 1px solid var(--border);
@@ -62,9 +80,8 @@
         padding: 14px 16px;
         border-bottom: 1px solid var(--border);
       }
-      .status {
-        color: var(--muted);
-      }
+      .status, .muted { color: var(--muted); }
+      .error { color: var(--danger); }
       button {
         border: 1px solid var(--border);
         border-radius: 6px;
@@ -72,11 +89,9 @@
         color: var(--fg);
         cursor: pointer;
         font: inherit;
-        padding: 6px 10px;
+        padding: 7px 10px;
       }
-      button:hover {
-        border-color: var(--accent);
-      }
+      button:hover { border-color: var(--accent); }
       pre {
         margin: 0;
         min-height: 480px;
@@ -86,47 +101,226 @@
         white-space: pre-wrap;
         word-break: break-word;
       }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid var(--border); padding: 12px 16px; text-align: left; vertical-align: top; }
+      th { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; }
+      tr:last-child td { border-bottom: 0; }
+      code { font-size: 12px; word-break: break-all; }
+      .badge {
+        display: inline-block;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 12px;
+      }
+      .badge.complete { color: var(--success); }
+      .badge.failed { color: var(--danger); }
+      .badge.enrolling, .badge.restarting { color: var(--warning); }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        padding: 16px;
+      }
+      .field-label { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+      .field-value { margin-top: 4px; }
+      .empty { padding: 32px 16px; color: var(--muted); text-align: center; }
+      @media (max-width: 700px) {
+        .header-inner { align-items: flex-start; flex-direction: column; padding: 12px 0; }
+        table { display: block; overflow-x: auto; }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <h1>Gestalt Admin</h1>
-      <p>Inspect the live Prometheus telemetry exposed by this process.</p>
-
-      <section class="panel">
-        <div class="toolbar">
-          <span id="status" class="status">Loading metrics...</span>
-          <button id="refresh-button" type="button">Refresh</button>
-        </div>
-        <pre id="metrics-output"></pre>
-      </section>
-    </main>
+    <header>
+      <div class="header-inner">
+        <a class="brand" href="/">Gestalt</a>
+        <nav>
+          <a id="metrics-nav" href="/admin/">Metrics</a>
+          <a id="registry-nav" href="/admin/registry">App Registry</a>
+        </nav>
+      </div>
+    </header>
+    <main id="main"></main>
     <script>
       (function () {
-        const status = document.getElementById("status");
-        const output = document.getElementById("metrics-output");
-        const refreshButton = document.getElementById("refresh-button");
+        const main = document.getElementById("main");
+        const registryPath = "/admin/registry";
+        const onRegistry = window.location.pathname.startsWith(registryPath);
+        document.getElementById(onRegistry ? "registry-nav" : "metrics-nav").classList.add("active");
 
-        async function loadMetrics() {
-          status.textContent = "Loading metrics...";
-          try {
-            const response = await fetch("/metrics", {
-              headers: { Accept: "text/plain" },
-              cache: "no-store",
-            });
-            if (!response.ok) {
-              throw new Error("Metrics request failed with HTTP " + response.status);
-            }
-            output.textContent = await response.text();
-            status.textContent = "Last refreshed " + new Date().toLocaleTimeString();
-          } catch (error) {
-            output.textContent = "";
-            status.textContent = error instanceof Error ? error.message : "Failed to load metrics.";
+        function element(tag, text, className) {
+          const node = document.createElement(tag);
+          if (text !== undefined && text !== null) node.textContent = String(text);
+          if (className) node.className = className;
+          return node;
+        }
+        function append(parent, ...children) {
+          children.filter(Boolean).forEach((child) => parent.appendChild(child));
+          return parent;
+        }
+        function formatTime(value) {
+          return value ? new Date(value).toLocaleString() : "—";
+        }
+        function badge(state, emptyLabel) {
+          return element("span", state || emptyLabel || "not started", "badge " + (state || ""));
+        }
+        function code(value) {
+          return element("code", value || "—");
+        }
+        function field(label, value) {
+          return append(element("div"), element("div", label, "field-label"), element("div", value || "—", "field-value"));
+        }
+        async function api(path, options) {
+          const response = await fetch("/admin/api/v1" + path, Object.assign({
+            credentials: "include",
+            cache: "no-store",
+            headers: { Accept: "application/json" },
+          }, options || {}));
+          if (!response.ok) {
+            let message = "Request failed with HTTP " + response.status;
+            try {
+              const body = await response.json();
+              if (body.error) message = body.error;
+            } catch (_) {}
+            throw new Error(message);
           }
+          return response.json();
+        }
+        function pageHeading(title, description) {
+          append(main, element("h1", title), element("p", description));
+        }
+        function showError(error) {
+          main.replaceChildren();
+          pageHeading("App Registry", "Fleet rollout and replica convergence.");
+          main.appendChild(element("p", error instanceof Error ? error.message : "Failed to load.", "error"));
+        }
+        async function loadMetrics() {
+          main.replaceChildren();
+          pageHeading("Metrics", "Inspect the live Prometheus telemetry exposed by this process.");
+          const panel = element("section", null, "panel");
+          const status = element("span", "Loading metrics...", "status");
+          const refresh = element("button", "Refresh");
+          const output = element("pre");
+          append(panel, append(element("div", null, "toolbar"), status, refresh), output);
+          main.appendChild(panel);
+          async function refreshMetrics() {
+            status.textContent = "Loading metrics...";
+            try {
+              const response = await fetch("/metrics", { headers: { Accept: "text/plain" }, cache: "no-store" });
+              if (!response.ok) throw new Error("Metrics request failed with HTTP " + response.status);
+              output.textContent = await response.text();
+              status.textContent = "Last refreshed " + new Date().toLocaleTimeString();
+            } catch (error) {
+              output.textContent = "";
+              status.textContent = error instanceof Error ? error.message : "Failed to load metrics.";
+            }
+          }
+          refresh.addEventListener("click", refreshMetrics);
+          refreshMetrics();
         }
 
-        refreshButton.addEventListener("click", loadMetrics);
-        loadMetrics();
+        async function loadRegistryApps() {
+          main.replaceChildren();
+          pageHeading("App Registry", "Fleet-known versions, rollout progress, and per-replica convergence.");
+          const apps = await api("/registry-apps");
+          const panel = element("section", null, "panel");
+          if (!apps.length) {
+            panel.appendChild(element("div", "No registry-only apps are configured.", "empty"));
+            main.appendChild(panel);
+            return;
+          }
+          const table = element("table");
+          const head = append(element("tr"), ...["App", "Registry", "Desired version", "Rollout", "Cohort"].map((name) => element("th", name)));
+          table.appendChild(append(element("thead"), head));
+          const body = element("tbody");
+          apps.forEach((app) => {
+            const link = element("a", app.app);
+            link.href = registryPath + "/" + encodeURIComponent(app.app);
+            append(body, append(element("tr"),
+              append(element("td"), link),
+              element("td", app.registry),
+              append(element("td"), code(app.desiredVersion)),
+              append(element("td"), badge(app.rollout && app.rollout.state, app.desiredVersion ? "not started" : "not installed")),
+              element("td", app.cohort ? app.cohort.restarted + "/" + app.cohort.acknowledged + " restarted" : "—")
+            ));
+          });
+          table.appendChild(body);
+          panel.appendChild(table);
+          main.appendChild(panel);
+        }
+
+        async function loadRegistryApp(appName) {
+          main.replaceChildren();
+          const app = await api("/registry-apps/" + encodeURIComponent(appName));
+          let materializations = { materializations: [] };
+          if (app.rollout || app.desiredVersion) {
+            materializations = await api("/app-rollouts/" + encodeURIComponent(app.app) + "/materializations");
+          }
+          const titleRow = append(element("div", null, "toolbar"), append(element("div"), element("h1", app.app), element("p", "Registry: " + app.registry)), badge(app.rollout && app.rollout.state, app.desiredVersion ? "not started" : "not installed"));
+          main.appendChild(titleRow);
+
+          const desired = (app.knownVersions || []).find((item) => item.version === app.desiredVersion);
+          const summary = element("section", null, "panel");
+          append(summary, element("h2", "Summary", "toolbar"), append(element("div", null, "grid"),
+            field("Desired version", app.desiredVersion),
+            field("Latest published", app.latestPublished && app.latestPublished.version),
+            field("Installed by", desired && desired.installedBy),
+            field("Installed at", desired && formatTime(desired.installedAt))
+          ));
+          main.appendChild(summary);
+
+          const rolloutPanel = element("section", null, "panel");
+          append(rolloutPanel, element("h2", "Rollout", "toolbar"));
+          if (app.rollout) {
+            append(rolloutPanel, append(element("div", null, "grid"),
+              field("State", app.rollout.state),
+              field("Created", formatTime(app.rollout.createdAt)),
+              field("Enrollment ends", formatTime(app.rollout.enrollmentEndsAt)),
+              field("Deadline", formatTime(app.rollout.deadline)),
+              field("Completed", formatTime(app.rollout.completedAt)),
+              field("Failed", formatTime(app.rollout.failedAt))
+            ));
+          } else {
+            rolloutPanel.appendChild(element("div", "No rollout has started.", "empty"));
+          }
+          main.appendChild(rolloutPanel);
+
+          const replicas = element("section", null, "panel");
+          append(replicas, append(element("div", null, "toolbar"), append(element("div"),
+            element("h2", "Replica convergence"),
+            element("p", "A restarted timestamp records rollout reconciliation; it does not prove the replica is currently running this version.")
+          )));
+          if (!materializations.materializations.length) {
+            replicas.appendChild(element("div", "No replicas have acknowledged this version.", "empty"));
+          } else {
+            const table = element("table");
+            table.appendChild(append(element("thead"), append(element("tr"), ...["Instance", "Acknowledged", "Materialized", "Stopped", "Restarted", "Attempts", "Last error"].map((name) => element("th", name)))));
+            const body = element("tbody");
+            materializations.materializations.forEach((row) => append(body, append(element("tr"),
+              append(element("td"), code(row.instanceId)),
+              element("td", formatTime(row.acknowledgedAt)),
+              element("td", formatTime(row.materializedAt)),
+              element("td", formatTime(row.stoppedAt)),
+              element("td", formatTime(row.restartedAt)),
+              element("td", row.attemptCount),
+              element("td", row.lastErrorMessage || "—")
+            )));
+            table.appendChild(body);
+            replicas.appendChild(table);
+          }
+          main.appendChild(replicas);
+
+          const active = app.rollout && (app.rollout.state === "enrolling" || app.rollout.state === "restarting");
+          if (active) window.setTimeout(() => loadRegistryApp(appName).catch(showError), 12000);
+        }
+
+        if (!onRegistry) {
+          loadMetrics();
+        } else {
+          const suffix = window.location.pathname.slice(registryPath.length).replace(/^\/+|\/+$/g, "");
+          (suffix ? loadRegistryApp(decodeURIComponent(suffix)) : loadRegistryApps()).catch(showError);
+        }
       })();
     </script>
   </body>

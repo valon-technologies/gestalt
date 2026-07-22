@@ -362,15 +362,15 @@ Run:
 
 ```bash
 cd gestaltd
-go test ./internal/server/... -run TestAdminAppRollout -count=1
+go test ./internal/server/... -run 'TestAdminRegistryApps|TestAdminAppRollout' -count=1
 ```
 
 ### `handlers_admin_app_rollout_test.go`
 
-Use the same harness as install tests: `newTestServer`, `registrytest.NewInstallFixture`, in-memory IndexedDB stub services.
+Use the same `newTestServer` harness as install tests with in-memory IndexedDB stub services.
 
 - **`TestAdminRegistryApps/lists_registry_managed_apps`** — `GET …/registry-apps` returns registry-only apps with `source.registry` from deploy config; includes apps with an empty fleet-known projection.
-- **`TestAdminRegistryApps/merges_desired_version_and_rollout`** — after `POST …/add`, list/detail include `desiredVersion`, rollout `state`, and cohort counts.
+- **`TestAdminRegistryApps/merges_desired_version_and_rollout`** — with fleet-known state, list/detail include `desiredVersion`, rollout `state`, and cohort counts.
 - **`TestAdminAppRollouts/lists_active_rollout`** — `GET …/app-rollouts` returns enrolling/restarting rollouts.
 - **`TestAdminAppRolloutsMaterializations/lists_replica_rows`** — `GET …/app-rollouts/{app}/materializations` returns distinct `instanceId` rows with ack/materialized/restarted timestamps after poller convergence.
 - **`TestAdminAppRolloutsMaterializations/labels_cohort_membership`** — replicas that ack after `enrollment_ends_at` have `inCohort: false` and do not block rollout completion in the API summary.
@@ -394,6 +394,5 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Re-install idempotency (no duplicate change request)
 - Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
 - Multi-replica materialization ack E2E (see [PLANNED section above](#planned-multi-replica-materialization-ack-e2e))
-- Admin rollout read APIs and `/admin/registry` UI (see [Admin observability tests](#admin-observability-tests))
 - Per-replica **observed** running version heartbeats (phase 2; see [admin.md](./admin.md#out-of-scope-runtime-heartbeats))
 - Deployed verification that catalog restarts serve the newly mounted binary
