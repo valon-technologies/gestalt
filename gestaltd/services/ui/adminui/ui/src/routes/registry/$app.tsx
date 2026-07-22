@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Code } from "@/components/ui/code";
@@ -26,6 +26,21 @@ export const Route = createFileRoute("/registry/$app")({
 
 function formatTime(value?: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
+}
+
+function SummaryField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="mt-1 min-w-0">{children}</dd>
+    </div>
+  );
 }
 
 function RegistryAppDetailPage() {
@@ -75,23 +90,19 @@ function RegistryAppDetailPage() {
             <SectionHeaderDescription>Fleet-known version and install metadata.</SectionHeaderDescription>
           </SectionHeaderContent>
         </SectionHeader>
-        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Version</dt>
-            <dd className="mt-1"><Code>{detail.desiredVersion || "not installed"}</Code></dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Installed by</dt>
-            <dd className="mt-1 text-sm">{desired?.installedBy || "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Installed at</dt>
-            <dd className="mt-1 text-sm">{formatTime(desired?.installedAt)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest published</dt>
-            <dd className="mt-1 text-sm">{detail.latestPublished?.version || "—"}</dd>
-          </div>
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <SummaryField label="Version">
+            <Code>{detail.desiredVersion || "not installed"}</Code>
+          </SummaryField>
+          <SummaryField label="Latest published">
+            <Code>{detail.latestPublished?.version || "—"}</Code>
+          </SummaryField>
+          <SummaryField label="Installed by">
+            <span className="text-sm break-all">{desired?.installedBy || "—"}</span>
+          </SummaryField>
+          <SummaryField label="Installed at">
+            <span className="text-sm">{formatTime(desired?.installedAt)}</span>
+          </SummaryField>
         </dl>
       </section>
 
