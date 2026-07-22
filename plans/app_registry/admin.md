@@ -276,7 +276,7 @@ To answer "what is each replica running **right now**" reliably:
 3. Expose via `GET …/runtime` or inline on materialization rows as `observedVersion` / `observedAt`.
 4. Stale `observed_at` (for example older than 3× poll interval) renders as **stale** in the UI.
 
-Phase 1 ships without this store. Convergence columns are sufficient for rollout debugging; heartbeats close the gap for live runtime audits.
+Convergence columns (`restarted_at`, `materialized_at`) are enough to debug whether each replica completed a rollout. They are not enough when a replica later drifts from that recorded state — for example, the provider crashes after `restarted_at` was written, the process restarts on an older on-disk package, or a manual local change leaves the running binary out of sync with the fleet-known version. In those cases the materialization row still looks converged even though the replica is no longer serving the desired version.
 
 ---
 
