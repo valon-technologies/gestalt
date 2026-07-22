@@ -70,6 +70,10 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 			return
 		}
 		p := PrincipalFromContext(r.Context())
+		if p == nil {
+			writeError(w, http.StatusUnauthorized, "missing authorization")
+			return
+		}
 		if err := requireUserCaller(w, p); err != nil {
 			return
 		}
