@@ -469,7 +469,7 @@ IndexedDB read only. No GCS fetch.
 
 ### Admin observability API
 
-Full shapes and UI wireframes: [admin.md](./admin.md).
+Route summary. Full shapes and UI wireframes: [admin.md](./admin.md).
 
 These routes expose IndexedDB rollout state that the catalog poller already writes. They do not change install or convergence behavior.
 

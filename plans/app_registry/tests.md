@@ -356,16 +356,16 @@ Source-address `requires.apps` keys are covered by `accepts_dependencies/source_
 
 ## Admin observability tests
 
-Planned. API shapes: [admin.md](./admin.md). Route registration: [lifecycle.md](./lifecycle.md#admin-observability-api).
+API shapes: [admin.md](./admin.md). Route registration: [lifecycle.md](./lifecycle.md#admin-observability-api).
 
-Run (once implemented):
+Run:
 
 ```bash
 cd gestaltd
 go test ./internal/server/... -run TestAdminAppRollout -count=1
 ```
 
-### `handlers_admin_app_rollout_test.go` (planned)
+### `handlers_admin_app_rollout_test.go`
 
 Use the same harness as install tests: `newTestServer`, `registrytest.NewInstallFixture`, in-memory IndexedDB stub services.
 
@@ -376,7 +376,7 @@ Use the same harness as install tests: `newTestServer`, `registrytest.NewInstall
 - **`TestAdminAppRolloutsMaterializations/labels_cohort_membership`** — replicas that ack after `enrollment_ends_at` have `inCohort: false` and do not block rollout completion in the API summary.
 - **`TestAdminRegistryApps/rejects_non_registry_app`** — `GET …/registry-apps/{app}` returns **404** for snapshot-pinned apps.
 
-### Admin UI smoke (planned)
+### Admin UI smoke
 
 Manual or Playwright-style check against a local multi-replica harness:
 

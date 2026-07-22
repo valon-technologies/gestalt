@@ -7,13 +7,13 @@ Related docs:
 - [plan.md](./plan.md) — implementation path
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, existing admin HTTP API
 - [indexeddb.md](./indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
-- [tests.md](./tests.md#admin-observability-tests) — planned HTTP and UI tests
+- [tests.md](./tests.md#admin-observability-tests) — HTTP and UI tests
 
-Implementation (planned):
+Implementation:
 
-- Read handlers — `gestaltd/internal/server/handlers_admin_app_rollout.go` (new)
+- Read handlers — `gestaltd/internal/server/handlers_admin_app_rollout.go`
 - Admin UI — `gestaltd/services/ui/adminui/` (extend embedded `/admin` shell)
-- IndexedDB services — existing `AppRolloutService`, `AppInstanceMaterializationService`, `AppVersionChangeRequestService`
+- IndexedDB services — `AppRolloutService`, `AppInstanceMaterializationService`, `AppVersionChangeRequestService`
 
 ---
 
@@ -43,7 +43,7 @@ Operators installing registry apps should answer these questions without reading
 | `GET /admin/api/v1/app-installations/{app}` | Known versions for one app |
 | `POST …/add`, `POST …/upgrade` | Write fleet acceptance |
 
-`app_rollouts` and `app_instance_materializations` are written by the catalog poller but have **no read HTTP routes** yet. The multi-replica E2E plan in [tests.md](./tests.md#multi-replica-materialization-ack-e2e) still refers to polling IndexedDB directly.
+`app_rollouts` and `app_instance_materializations` are written by the catalog poller but have **no read HTTP routes** yet. The multi-replica E2E plan in [tests.md](./tests.md#planned-multi-replica-materialization-ack-e2e) will poll `GET …/materializations` once these routes ship.
 
 ### Admin UI
 
@@ -68,7 +68,7 @@ Use the same names as [lifecycle.md](./lifecycle.md#runtime-version-invariants):
 
 All routes live under `/admin/api/v1`, reuse existing admin auth (`gestaltAdmin`), and are read-only except where install actions are triggered from the UI.
 
-### `GET /admin/api/v1/registry-apps`
+#### `GET /admin/api/v1/registry-apps`
 
 List deploy-configured apps whose `source.registry` is set, merged with fleet state.
 
@@ -98,21 +98,19 @@ List deploy-configured apps whose `source.registry` is set, merged with fleet st
 ]
 ```
 
-| Field | Description |
-|-------|-------------|
-| `app` | App name from deploy `apps` |
-| `registry` | `source.registry` binding |
-| `desiredVersion` | `LatestKnownVersion`; omitted when the fleet catalog is empty |
-| `rollout` | Current or most recent rollout for this app; omitted when none |
-| `cohort` | Counts over `app_instance_materializations` rows for `rollout.version` that acknowledged before `enrollmentEndsAt` |
+| Field | Type | Description |
+|-------|------|-------------|
+| `app` | string | App name from deploy `apps` |
+| `registry` | string | `source.registry` binding |
+| `desiredVersion` | string | `LatestKnownVersion`; omitted when the fleet catalog is empty |
+| `rollout` | object | Current or most recent rollout for this app; omitted when none |
+| `cohort` | object | Counts over `app_instance_materializations` rows for `rollout.version` that acknowledged before `enrollmentEndsAt` |
 
 Apps with no fleet-known version still appear when configured with `source.registry` so operators can see "not installed yet."
 
-Implementation reads deploy `AppDefs`, `app_version_change_requests`, `app_rollouts`, and aggregates materialization rows. No GCS fetch.
+IndexedDB read only. No GCS fetch.
 
----
-
-### `GET /admin/api/v1/registry-apps/{app}`
+#### `GET /admin/api/v1/registry-apps/{app}`
 
 Detail view for one registry-managed app. Same fields as one list element, plus:
 
@@ -140,9 +138,7 @@ Detail view for one registry-managed app. Same fields as one list element, plus:
 
 **Response `404`** when `{app}` is not a registry-managed app in deploy config.
 
----
-
-### `GET /admin/api/v1/app-rollouts`
+#### `GET /admin/api/v1/app-rollouts`
 
 List rollout records. Default: active rollouts (`enrolling`, `restarting`) plus terminal rollouts from the last 24 hours. Support `?app={app}` and `?state={state}` filters.
 
@@ -163,17 +159,15 @@ List rollout records. Default: active rollouts (`enrolling`, `restarting`) plus 
 
 Backed by `AppRolloutService.ListActive` and a new `ListRecentTerminal` (or `Get` + history index if added later).
 
----
-
-### `GET /admin/api/v1/app-rollouts/{app}/materializations`
+#### `GET /admin/api/v1/app-rollouts/{app}/materializations`
 
 Per-replica convergence rows for one app rollout.
 
 **Query parameters**
 
-| Parameter | Description |
-|-----------|-------------|
-| `version` | Published version. Defaults to the current rollout's `version`, else `desiredVersion`. |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `version` | string | Published version. Defaults to the current rollout's `version`, else `desiredVersion`. |
 
 **Response `200`**
 
@@ -199,14 +193,12 @@ Per-replica convergence rows for one app rollout.
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `inCohort` | `acknowledged_at < rollout.enrollment_ends_at` |
-| `converged` | `restarted_at` set and not after `rollout.deadline` while rollout is active; when terminal, `restarted_at` present |
+| Field | Type | Description |
+|-------|------|-------------|
+| `inCohort` | boolean | `acknowledged_at < rollout.enrollment_ends_at` |
+| `converged` | boolean | `restarted_at` set and not after `rollout.deadline` while rollout is active; when terminal, `restarted_at` present |
 
 Backed by `AppInstanceMaterializationService.ListByAppVersion`. This replaces direct IndexedDB polling in tests and runbooks.
-
----
 
 ## Admin UI
 
@@ -282,7 +274,7 @@ Convergence columns (`restarted_at`, `materialized_at`) are enough to debug whet
 
 ## Errors
 
-Reuse the standard admin error envelope. New cases:
+Reuse the standard admin error envelope from [lifecycle.md](./lifecycle.md#errors). Observability routes add:
 
 | Status | When |
 |--------|------|
