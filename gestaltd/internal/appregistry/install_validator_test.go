@@ -489,6 +489,11 @@ func TestInstallValidator(t *testing.T) {
 			svc := testutil.NewStubServices(t)
 			validator := workflowValidator(t, svc, nil)
 			entry := baseEntry(func(e *appregistry.Entry) {
+				e.Interface = appregistry.Interface{
+					Operations: map[string]appregistry.OperationContract{
+						"handle_slack_event": {},
+					},
+				}
 				e.Workflows = appregistry.Workflows{
 					Definitions: []appregistry.WorkflowDefinitionRef{{
 						ID: "slack_v2_smoke_test",
