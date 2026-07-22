@@ -382,16 +382,34 @@ func staticValidationWorkflowsForRelease(manifest *providermanifestv1.Manifest, 
 	if providermanifestv1.NormalizeKind(manifest.Kind) != providermanifestv1.KindApp {
 		return nil, nil
 	}
+	var firstWorkflows *providerrelease.WorkflowDefinitions
+	var firstData []byte
+	firstPath := ""
+	found := false
 	for _, archive := range archives {
 		workflows, err := staticValidationWorkflowsFromArchive(archive)
 		if err != nil {
 			return nil, err
 		}
-		if workflows != nil {
-			return workflows, nil
+		if workflows == nil {
+			continue
+		}
+		data, err := yaml.Marshal(workflows)
+		if err != nil {
+			return nil, fmt.Errorf("encode static validation workflows from %s: %w", filepath.Base(archive.Path), err)
+		}
+		if !found {
+			firstData = data
+			firstWorkflows = workflows
+			firstPath = archive.Path
+			found = true
+			continue
+		}
+		if !bytes.Equal(bytes.TrimSpace(firstData), bytes.TrimSpace(data)) {
+			return nil, fmt.Errorf("static validation workflows in %s does not match %s", filepath.Base(archive.Path), filepath.Base(firstPath))
 		}
 	}
-	return nil, nil
+	return firstWorkflows, nil
 }
 
 func staticValidationWorkflowsFromArchive(archive releaseArchive) (*providerrelease.WorkflowDefinitions, error) {

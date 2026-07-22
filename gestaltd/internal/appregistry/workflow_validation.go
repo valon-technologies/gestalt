@@ -119,12 +119,18 @@ func workflowAppCallRefsFromTarget(target coreworkflow.Target) []WorkflowAppCall
 func validateWorkflowDefinitions(
 	ctx context.Context,
 	v *InstallValidator,
-	workflows Workflows,
+	input ValidateInput,
 	knownByApp map[string]*core.AppInstallation,
 ) error {
+	entry := input.Entry
+	if entry == nil {
+		return nil
+	}
+	workflows := entry.Workflows
 	if len(workflows.Definitions) == 0 {
 		return nil
 	}
+	candidateApp := strings.TrimSpace(input.App)
 	for _, definition := range workflows.Definitions {
 		definitionID := strings.TrimSpace(definition.ID)
 		for _, step := range definition.Steps {
@@ -141,6 +147,15 @@ func validateWorkflowDefinitions(
 			}
 			operation := strings.TrimSpace(step.Operation)
 			if operation == "" {
+				continue
+			}
+			if candidateApp != "" && targetApp == candidateApp {
+				if _, ok := entry.Interface.Operations[operation]; !ok {
+					return installValidationError(
+						InstallValidationWorkflowTargetOperationMissing,
+						fmt.Sprintf("%s: operation %s is not published", subject, operation),
+					)
+				}
 				continue
 			}
 			installation := knownByApp[targetApp]

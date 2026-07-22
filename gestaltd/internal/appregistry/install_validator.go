@@ -66,7 +66,7 @@ func (v *InstallValidator) Validate(ctx context.Context, input ValidateInput) er
 	if err := validateReverseDependents(ctx, v, input, knownByApp); err != nil {
 		return err
 	}
-	if err := validateWorkflowDefinitions(ctx, v, input.Entry.Workflows, knownByApp); err != nil {
+	if err := validateWorkflowDefinitions(ctx, v, input, knownByApp); err != nil {
 		return err
 	}
 	return nil

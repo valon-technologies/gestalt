@@ -529,6 +529,39 @@ func TestInstallValidator(t *testing.T) {
 			})
 			assertInstallValidationReason(t, err, appregistry.InstallValidationWorkflowTargetOperationMissing)
 		})
+
+		t.Run("self_target_uses_candidate_interface", func(t *testing.T) {
+			t.Parallel()
+			svc := testutil.NewStubServices(t)
+			installFleetApp(t, svc, "g-issues", "0.9.0")
+			validator := workflowValidator(t, svc, map[string]appregistry.Entry{
+				"0.9.0": baseEntry(func(e *appregistry.Entry) {
+					e.Version = "0.9.0"
+					e.Interface = appregistry.Interface{Operations: map[string]appregistry.OperationContract{}}
+				}),
+			})
+			entry := baseEntry(func(e *appregistry.Entry) {
+				e.Interface = appregistry.Interface{
+					Operations: map[string]appregistry.OperationContract{
+						"handle_slack_event": {},
+					},
+				}
+				e.Workflows = appregistry.Workflows{
+					Definitions: []appregistry.WorkflowDefinitionRef{{
+						ID: "slack_v2_smoke_test",
+						Steps: []appregistry.WorkflowAppCallRef{{
+							App:       "g-issues",
+							Operation: "handle_slack_event",
+						}},
+					}},
+				}
+			})
+			if err := validator.Validate(ctx, appregistry.ValidateInput{
+				Registry: "toolshed", App: "g-issues", Version: "1.0.0", Entry: &entry,
+			}); err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+		})
 	})
 }
 

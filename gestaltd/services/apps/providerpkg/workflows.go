@@ -3,7 +3,6 @@ package providerpkg
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
@@ -27,8 +26,4 @@ func removeStaticWorkflows(rootDir string) error {
 		return fmt.Errorf("remove static workflows %q: %w", StaticWorkflowsFile, err)
 	}
 	return nil
-}
-
-func staticWorkflowsPathForManifest(manifestPath string) string {
-	return StaticWorkflowsPath(filepath.Dir(manifestPath))
 }

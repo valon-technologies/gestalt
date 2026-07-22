@@ -97,48 +97,92 @@ func ensureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	if err != nil {
 		return fmt.Errorf("resolve static catalog path %q: %w", catalogPath, err)
 	}
-	if _, err := os.Stat(absoluteCatalogPath); err == nil && !opts.RefreshExisting {
-		return nil
-	} else if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("stat static catalog %q: %w", StaticCatalogFile, err)
+	absoluteWorkflowsPath, err := filepath.Abs(StaticWorkflowsPath(rootDir))
+	if err != nil {
+		return fmt.Errorf("resolve static workflows path %q: %w", StaticWorkflowsFile, err)
 	}
-	if opts.RefreshExisting {
-		if err := os.Remove(absoluteCatalogPath); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove static catalog %q: %w", StaticCatalogFile, err)
-		}
-		if err := removeStaticWorkflows(rootDir); err != nil {
-			return err
-		}
-	}
-	if err := generateSourceStaticCatalog(manifestPath, rootDir, manifest, absoluteCatalogPath, opts); err != nil {
+
+	catalogExists, err := staticMetadataFileExists(absoluteCatalogPath)
+	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(absoluteCatalogPath); err != nil {
-		if os.IsNotExist(err) && !StaticCatalogRequired(manifest) {
-			return nil
+	workflowsExists, err := staticMetadataFileExists(absoluteWorkflowsPath)
+	if err != nil {
+		return err
+	}
+
+	needCatalog := !catalogExists || opts.RefreshExisting
+	needWorkflows := !workflowsExists || opts.RefreshExisting
+	if !needCatalog && !needWorkflows {
+		return nil
+	}
+
+	if opts.RefreshExisting {
+		if needCatalog {
+			if err := os.Remove(absoluteCatalogPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove static catalog %q: %w", StaticCatalogFile, err)
+			}
 		}
-		return fmt.Errorf("provider static catalog %q not found: %w", StaticCatalogFile, err)
+		if needWorkflows {
+			if err := removeStaticWorkflows(rootDir); err != nil {
+				return err
+			}
+		}
+	}
+
+	catalogOut := ""
+	if needCatalog {
+		catalogOut = absoluteCatalogPath
+	}
+	workflowsOut := ""
+	if needWorkflows {
+		workflowsOut = absoluteWorkflowsPath
+	}
+	if err := generateSourceStaticMetadata(manifestPath, manifest, catalogOut, workflowsOut, opts); err != nil {
+		return err
+	}
+	if needCatalog {
+		if _, err := os.Stat(absoluteCatalogPath); err != nil {
+			if os.IsNotExist(err) && !StaticCatalogRequired(manifest) {
+				return nil
+			}
+			return fmt.Errorf("provider static catalog %q not found: %w", StaticCatalogFile, err)
+		}
 	}
 	return nil
 }
 
-func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *providermanifestv1.Manifest, catalogPath string, opts sourceCatalogOptions) error {
+func staticMetadataFileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, fmt.Errorf("stat %q: %w", path, err)
+}
+
+func generateSourceStaticMetadata(manifestPath string, manifest *providermanifestv1.Manifest, catalogPath, workflowsPath string, opts sourceCatalogOptions) error {
 	if manifest != nil && manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
+		return nil
+	}
+	if catalogPath == "" && workflowsPath == "" {
 		return nil
 	}
 	var resolved ResolvedSourceExecution
 	if HasMultipleSourceRuns(manifest) {
-		resolved = explicitRunExecution(rootDir, manifest)
+		resolved = explicitRunExecution(filepath.Dir(manifestPath), manifest)
 	} else {
 		var err error
 		resolved, err = resolveSourceExecution(manifestPath, manifest, providermanifestv1.KindApp, SourceBuildOptions{}, opts.SkipExplicitRun)
 		if err != nil {
-			return fmt.Errorf("prepare source provider for static catalog: %w", err)
+			return fmt.Errorf("prepare source provider for static metadata: %w", err)
 		}
 	}
 	if opts.SkipExplicitRun && resolved.Intent == SourceExecutionIntentPackagedEntrypoint {
 		if _, err := os.Stat(resolved.Command); err != nil && os.IsNotExist(err) && HasExplicitSourceRun(manifest) {
-			resolved = explicitRunExecution(rootDir, manifest)
+			resolved = explicitRunExecution(filepath.Dir(manifestPath), manifest)
 		}
 	}
 	execution := resolved.SourceExecution
@@ -149,19 +193,21 @@ func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *provide
 	cmd := exec.Command(execution.Command, execution.Args...)
 	cmd.Dir = execution.Workdir
 	cmd.Env = mergePhaseEnv(os.Environ(), envMapToSlice(execution.Env))
-	cmd.Env = append(cmd.Env,
-		envWriteCatalog+"="+catalogPath,
-		envWriteWorkflows+"="+staticWorkflowsPathForManifest(manifestPath),
-	)
+	if catalogPath != "" {
+		cmd.Env = append(cmd.Env, envWriteCatalog+"="+catalogPath)
+	}
+	if workflowsPath != "" {
+		cmd.Env = append(cmd.Env, envWriteWorkflows+"="+workflowsPath)
+	}
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 	if err := cmd.Run(); err != nil {
 		msg := bytes.TrimSpace(output.Bytes())
 		if len(msg) == 0 {
-			return fmt.Errorf("generate static catalog: %w", err)
+			return fmt.Errorf("generate static provider metadata: %w", err)
 		}
-		return fmt.Errorf("generate static catalog: %w\n%s", err, msg)
+		return fmt.Errorf("generate static provider metadata: %w\n%s", err, msg)
 	}
 	return nil
 }
