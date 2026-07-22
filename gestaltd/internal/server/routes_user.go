@@ -5,6 +5,8 @@ import (
 )
 
 func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
+	s.mountAppAdminRegistryRoutes(r)
+
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
 

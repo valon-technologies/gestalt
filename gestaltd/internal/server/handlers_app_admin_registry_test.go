@@ -1,0 +1,211 @@
+package server_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"testing"
+
+	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
+	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+)
+
+func TestAppAdminRegistrySelectAndRead(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/version", bytes.NewBufferString(`{"version":"`+fixture.Version+`"}`))
+	request.Header.Set("Authorization", "Bearer alice-token")
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST registry version: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST status = %d: %s", response.StatusCode, body)
+	}
+	var selected struct {
+		FromVersion    string `json:"fromVersion"`
+		DesiredVersion string `json:"desiredVersion"`
+		Rollout        struct {
+			State string `json:"state"`
+		} `json:"rollout"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&selected); err != nil {
+		t.Fatalf("decode POST response: %v", err)
+	}
+	if selected.FromVersion != "registry:first-install" || selected.DesiredVersion != fixture.Version || selected.Rollout.State != "enrolling" {
+		t.Fatalf("selection response = %#v", selected)
+	}
+
+	request, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET registry state: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET status = %d: %s", response.StatusCode, body)
+	}
+	var state struct {
+		DesiredVersion    string `json:"desiredVersion"`
+		SelectionDisabled bool   `json:"selectionDisabled"`
+		DisabledReason    string `json:"disabledReason"`
+		PublishedVersions []struct {
+			SourceRef   string `json:"sourceRef"`
+			SourceURL   string `json:"sourceUrl"`
+			Publication struct {
+				WorkflowRunURL string `json:"workflowRunUrl"`
+			} `json:"publication"`
+		} `json:"publishedVersions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&state); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if state.DesiredVersion != fixture.Version || !state.SelectionDisabled || state.DisabledReason != "rollout in progress" {
+		t.Fatalf("registry state = %#v", state)
+	}
+	if len(state.PublishedVersions) != 1 || state.PublishedVersions[0].SourceRef == "" ||
+		state.PublishedVersions[0].SourceURL == "" || state.PublishedVersions[0].Publication.WorkflowRunURL == "" {
+		t.Fatalf("published versions = %#v", state.PublishedVersions)
+	}
+}
+
+func TestAppAdminRegistryFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	subjectID := principal.UserSubjectID("alice")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET registry state: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusServiceUnavailable {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d, want 503: %s", response.StatusCode, body)
+	}
+}
+
+func TestListAppsIncludesManagementPathForUninstalledRegistryApp(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET apps: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d: %s", response.StatusCode, body)
+	}
+	var apps []struct {
+		Name           string `json:"name"`
+		ManagementPath string `json:"managementPath"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&apps); err != nil {
+		t.Fatalf("decode apps: %v", err)
+	}
+	if len(apps) != 1 || apps[0].Name != "g-issues" || apps[0].ManagementPath != "/apps/g-issues/admin" {
+		t.Fatalf("apps = %#v", apps)
+	}
+}
+
+func TestListAppsIncludesManagementPathForAppAdmin(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "g-issues", ConnMode: core.ConnectionModeNone})
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET apps: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d: %s", response.StatusCode, body)
+	}
+	var apps []struct {
+		Name           string `json:"name"`
+		ManagementPath string `json:"managementPath"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&apps); err != nil {
+		t.Fatalf("decode apps: %v", err)
+	}
+	if len(apps) != 1 || apps[0].Name != "g-issues" || apps[0].ManagementPath != "/apps/g-issues/admin" {
+		t.Fatalf("apps = %#v", apps)
+	}
+}

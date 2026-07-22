@@ -91,6 +91,7 @@ type integrationInfo struct {
 	Description     string              `json:"description,omitempty"`
 	IconSVG         string              `json:"iconSvg,omitempty"`
 	MountedPath     string              `json:"mountedPath,omitempty"`
+	ManagementPath  string              `json:"managementPath,omitempty"`
 	Connections     []connectionDefInfo `json:"connections"`
 	Status          string              `json:"status"`
 	CredentialState string              `json:"credentialState"`
@@ -214,12 +215,14 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	names := s.providers.List()
+	seen := make(map[string]struct{}, len(names))
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
 		prov, err := s.providers.Get(name)
 		if err != nil {
 			continue
 		}
+		seen[name] = struct{}{}
 		info := integrationInfo{
 			Name:            name,
 			DisplayName:     prov.DisplayName(),
@@ -240,12 +243,54 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		authTypes := s.populateIntegrationSettings(&info, instances, p)
 		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
+		info.ManagementPath = s.integrationManagementPath(r.Context(), p, name)
 		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info) {
 			continue
 		}
 		out = append(out, info)
 	}
+	for _, app := range s.configuredRegistryApps() {
+		if _, ok := seen[app.name]; ok {
+			continue
+		}
+		managementPath := s.integrationManagementPath(r.Context(), p, app.name)
+		if managementPath == "" {
+			continue
+		}
+		info := integrationInfo{
+			Name:            app.name,
+			DisplayName:     app.name,
+			Connections:     []connectionDefInfo{},
+			Status:          connectionStatusUnknown,
+			CredentialState: credentialStateUnknown,
+			HealthState:     healthStateUnknown,
+			Actions:         []string{},
+			ManagementPath:  managementPath,
+		}
+		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil && entry.Static != nil {
+			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))
+		}
+		out = append(out, info)
+	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) integrationManagementPath(ctx context.Context, p *principal.Principal, appName string) string {
+	if s == nil || s.authorization == nil || p == nil || principal.IsNonUserPrincipal(p) {
+		return ""
+	}
+	if _, ok := s.registryApp(appName); !ok {
+		return ""
+	}
+	subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
+	if subjectID == "" {
+		return ""
+	}
+	allowed, err := s.hasExplicitAppAdmin(ctx, subjectID, appName)
+	if err != nil || !allowed {
+		return ""
+	}
+	return "/apps/" + appName + "/admin"
 }
 
 func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {

@@ -13,6 +13,9 @@ func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *prin
 	if info.MountedPath != "" {
 		return true
 	}
+	if info.ManagementPath != "" {
+		return true
+	}
 	if s.integrationHasSettingsSurface(p, info) {
 		return true
 	}

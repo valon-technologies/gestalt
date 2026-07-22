@@ -963,6 +963,71 @@ func TestCatalogPollerReconcileOnceDoesNotConvergeWhenRestartModeFails(t *testin
 	}
 }
 
+func TestCatalogPollerReconcileOnceRestartsRevertedVersionWithStaleProgress(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	appendRolloutFixture(t, services, "g-issues", "v1", start)
+	if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+		InstanceID:     "replica-a",
+		App:            "g-issues",
+		Version:        "v1",
+		AcknowledgedAt: start,
+	}); err != nil {
+		t.Fatalf("Acknowledge v1: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.MarkRestarted(ctx, "replica-a", "g-issues", "v1", start.Add(time.Minute)); err != nil {
+		t.Fatalf("MarkRestarted v1: %v", err)
+	}
+
+	upgradeAt := start.Add(24 * time.Hour)
+	appendRolloutFixture(t, services, "g-issues", "v2", upgradeAt)
+	if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+		InstanceID:     "replica-a",
+		App:            "g-issues",
+		Version:        "v2",
+		AcknowledgedAt: upgradeAt,
+	}); err != nil {
+		t.Fatalf("Acknowledge v2: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.MarkRestarted(ctx, "replica-a", "g-issues", "v2", upgradeAt.Add(time.Minute)); err != nil {
+		t.Fatalf("MarkRestarted v2: %v", err)
+	}
+
+	revertAt := upgradeAt.Add(24 * time.Hour)
+	appendRolloutFixture(t, services, "g-issues", "v1", revertAt)
+
+	restarter := &recordingAppRestarter{runningVersion: "v2"}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        restarter,
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return revertAt.Add(5 * time.Minute) },
+	})
+
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if len(restarter.stopCalls) != 1 || len(restarter.startCalls) != 1 {
+		t.Fatalf("restart calls: stop=%v start=%v", restarter.stopCalls, restarter.startCalls)
+	}
+	if got := restarter.startVersions; len(got) != 1 || got[0] != "v1" {
+		t.Fatalf("startVersions = %#v, want [v1]", got)
+	}
+	materialization, err := services.AppInstanceMaterializations.Get(ctx, "replica-a", "g-issues", "v1")
+	if err != nil {
+		t.Fatalf("Get v1 materialization: %v", err)
+	}
+	if materialization.RestartedAt.Before(revertAt) {
+		t.Fatalf("RestartedAt = %v, want current revert progress after %v", materialization.RestartedAt, revertAt)
+	}
+}
+
 func TestCatalogPollerReconcileOnceReportsEveryFailingApp(t *testing.T) {
 	t.Parallel()
 

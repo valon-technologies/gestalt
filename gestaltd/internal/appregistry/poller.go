@@ -258,7 +258,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 			}
 			return nil
 		}
-		if _, err := p.ensureAcknowledged(ctx, instanceID, appName, version); err != nil {
+		if _, err := p.ensureAcknowledged(ctx, instanceID, appName, version, rollout.CreatedAt); err != nil {
 			return err
 		}
 		if rollout.State == core.AppRolloutStateEnrolling {
@@ -292,7 +292,11 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		if version == "" {
 			continue
 		}
-		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, version)
+		selectionEpoch := installation.UpdatedAt
+		if rollout != nil && strings.TrimSpace(rollout.Version) == version {
+			selectionEpoch = rollout.CreatedAt
+		}
+		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, version, selectionEpoch)
 		if err != nil {
 			return err
 		}
@@ -481,14 +485,21 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		return false, fmt.Errorf("list rollout cohort for %s@%s: %w", rollout.App, rollout.Version, err)
 	}
 	converged := true
+	cohortCount := 0
 	for _, materialization := range materializations {
-		if !materialization.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
+		if materialization.AcknowledgedAt.Before(rollout.CreatedAt) ||
+			!materialization.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
 			continue
 		}
-		if materialization.RestartedAt.IsZero() || materialization.RestartedAt.After(rollout.Deadline) {
+		cohortCount++
+		if materialization.RestartedAt.Before(rollout.CreatedAt) ||
+			materialization.RestartedAt.After(rollout.Deadline) {
 			converged = false
 			break
 		}
+	}
+	if cohortCount == 0 {
+		converged = false
 	}
 	if converged {
 		if _, err := p.Rollouts.MarkComplete(ctx, rollout.App, rollout.Version, p.now()); err != nil {
@@ -674,14 +685,21 @@ func (p *CatalogPoller) markAllRestarted(ctx context.Context, instanceID, appNam
 	return nil
 }
 
-func (p *CatalogPoller) ensureAcknowledged(ctx context.Context, instanceID, appName, version string) (*core.AppInstanceMaterialization, error) {
+func (p *CatalogPoller) ensureAcknowledged(ctx context.Context, instanceID, appName, version string, rolloutCreatedAt time.Time) (*core.AppInstanceMaterialization, error) {
 	acknowledgedAt := p.now()
-	materialization, err := p.Materializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+	input := &core.AppInstanceMaterialization{
 		InstanceID:     instanceID,
 		App:            appName,
 		Version:        version,
 		AcknowledgedAt: acknowledgedAt,
-	})
+	}
+	var materialization *core.AppInstanceMaterialization
+	var err error
+	if rolloutCreatedAt.IsZero() {
+		materialization, err = p.Materializations.Acknowledge(ctx, input)
+	} else {
+		materialization, err = p.Materializations.AcknowledgeForRollout(ctx, input, rolloutCreatedAt)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("acknowledge %s@%s: %w", appName, version, err)
 	}

@@ -69,6 +69,16 @@ func (s *AppInstanceMaterializationService) ListByAppVersion(ctx context.Context
 }
 
 func (s *AppInstanceMaterializationService) Acknowledge(ctx context.Context, materialization *core.AppInstanceMaterialization) (*core.AppInstanceMaterialization, error) {
+	return s.acknowledge(ctx, materialization, time.Time{})
+}
+
+// AcknowledgeForRollout resets progress left by an earlier rollout of the same
+// version before acknowledging the current rollout.
+func (s *AppInstanceMaterializationService) AcknowledgeForRollout(ctx context.Context, materialization *core.AppInstanceMaterialization, rolloutCreatedAt time.Time) (*core.AppInstanceMaterialization, error) {
+	return s.acknowledge(ctx, materialization, rolloutCreatedAt.UTC().Truncate(time.Millisecond))
+}
+
+func (s *AppInstanceMaterializationService) acknowledge(ctx context.Context, materialization *core.AppInstanceMaterialization, rolloutCreatedAt time.Time) (*core.AppInstanceMaterialization, error) {
 	if s == nil {
 		return nil, fmt.Errorf("acknowledge app instance materialization: service is not configured")
 	}
@@ -83,17 +93,27 @@ func (s *AppInstanceMaterializationService) Acknowledge(ctx context.Context, mat
 	}
 
 	if existing, err := s.findByInstanceAppVersion(ctx, instanceID, app, version); err == nil {
+		current := recordToAppInstanceMaterialization(existing)
+		if rolloutCreatedAt.IsZero() || !current.AcknowledgedAt.Before(rolloutCreatedAt) {
+			return current, nil
+		}
+		acknowledgedAt := acknowledgedAtForRollout(materialization.AcknowledgedAt, rolloutCreatedAt)
+		existing["acknowledged_at"] = acknowledgedAt
+		delete(existing, "materialized_at")
+		delete(existing, "stopped_at")
+		delete(existing, "restarted_at")
+		existing["attempt_count"] = 0
+		delete(existing, "last_error_at")
+		delete(existing, "last_error_message")
+		if err := s.store.Put(ctx, existing); err != nil {
+			return nil, fmt.Errorf("acknowledge app instance materialization: reset stale progress: %w", err)
+		}
 		return recordToAppInstanceMaterialization(existing), nil
 	} else if !errors.Is(err, idb.ErrNotFound) {
 		return nil, fmt.Errorf("acknowledge app instance materialization: %w", err)
 	}
 
-	acknowledgedAt := materialization.AcknowledgedAt
-	if acknowledgedAt.IsZero() {
-		acknowledgedAt = time.Now().UTC().Truncate(time.Millisecond)
-	} else {
-		acknowledgedAt = acknowledgedAt.UTC().Truncate(time.Millisecond)
-	}
+	acknowledgedAt := acknowledgedAtForRollout(materialization.AcknowledgedAt, rolloutCreatedAt)
 	rec := idb.Record{
 		"id":              uuid.NewString(),
 		"instance_id":     instanceID,
@@ -113,6 +133,21 @@ func (s *AppInstanceMaterializationService) Acknowledge(ctx context.Context, mat
 		return nil, fmt.Errorf("acknowledge app instance materialization: %w", err)
 	}
 	return recordToAppInstanceMaterialization(rec), nil
+}
+
+func acknowledgedAtForRollout(requested, rolloutCreatedAt time.Time) time.Time {
+	acknowledgedAt := normalizedMaterializationTime(requested)
+	if rolloutCreatedAt.IsZero() || !acknowledgedAt.Before(rolloutCreatedAt) {
+		return acknowledgedAt
+	}
+	return rolloutCreatedAt.UTC().Truncate(time.Millisecond)
+}
+
+func normalizedMaterializationTime(value time.Time) time.Time {
+	if value.IsZero() {
+		value = time.Now()
+	}
+	return value.UTC().Truncate(time.Millisecond)
 }
 
 func (s *AppInstanceMaterializationService) MarkMaterialized(ctx context.Context, instanceID, app, version string, materializedAt time.Time) (*core.AppInstanceMaterialization, error) {
