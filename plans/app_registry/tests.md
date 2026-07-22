@@ -6,7 +6,7 @@ Related docs:
 
 - [plan.md](./plan.md) — implementation path and goals
 - [validation.md](./validation.md) — install-time validation
-- [admin.md](./admin.md) — admin UI and rollout read APIs
+- [admin.md](./admin.md) — admin UI capabilities
 - [models.md](./models.md) — JSON documents exercised by publish and install
 - [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
@@ -356,7 +356,7 @@ Source-address `requires.apps` keys are covered by `accepts_dependencies/source_
 
 ## Admin observability tests
 
-API shapes: [admin.md](./admin.md). Route registration: [lifecycle.md](./lifecycle.md#admin-observability-api).
+API shapes: [lifecycle.md](./lifecycle.md#admin-observability-api). UI wireframes: [admin.md](./admin.md#embedded-admin-ui-admin).
 
 Run:
 
@@ -386,6 +386,64 @@ Manual or Playwright-style check against a local multi-replica harness:
 
 ---
 
+## App version selection tests
+
+API: [lifecycle.md](./lifecycle.md#app-admin-version-selection). UI: [admin.md](./admin.md#app-admin-ui-appsappadmin).
+
+### Gestalt API tests
+
+Add focused server tests for:
+
+| Test | Expected behavior |
+|------|-------------------|
+| Unauthenticated read/write | **401** |
+| Non-user principal | **403** |
+| User without `admin` on `app/{app}` | **403** |
+| Global `gestaltAdmin` without app admin | **403** |
+| Authorization provider unavailable | **503**; fail closed |
+| App admin reads registry state | **200** with desired, known, published (including provenance), and rollout fields |
+| Snapshot-pinned or unknown app | **404** |
+| Rollout admission | Active `enrolling` / `restarting` rollout: GET sets `selectionDisabled`; POST returns **409** before registry fetch, validation, rollout creation, or change-request append; terminal `complete` / `failed` rollout leaves selection enabled |
+| First selection | Uses add semantics and appends the first change request |
+| Upgrade | Appends a change request; stored actor is the authenticated user subject |
+| Revert to previously known version | Appends a new change request, resets stale replica progress, and makes the older version desired |
+| Select current desired version | **400** and no writes |
+| Validation failure | Existing typed validation error; no rollout or change request |
+| Concurrent selections | Exactly one passes admission; the other returns **409** |
+
+The revert test must seed completed materialization rows from the older
+version's first rollout. The new rollout must not count those timestamps as
+current convergence: every replica acknowledges again, performs the restart,
+and records timestamps at or after the new rollout's `created_at`.
+
+`POST …/registry/version` rejects unknown fields (including `actor`, `registry`,
+and `fromVersion`).
+
+`GET /api/v1/apps` exposes `managementPath` only when the app is
+registry-only, the caller is a user, and the caller has `admin` on `app/{app}`.
+
+### Default app UI tests (`gestalt-providers`)
+
+Add route/component tests for:
+
+- **Manage app** appears only when `managementPath` is returned
+- published versions render newest first with desired version selected
+- version detail shows `publishedAt`, linked commit, trigger PR or commit, and
+  workflow run; legacy entries without `publication` link the commit and show
+  **not recorded** for workflow/PR
+- no desired version renders first-install copy
+- active rollout or **409** after a stale page disables the selector and submit
+  button until rollout is terminal
+- successful selection renders the new active rollout
+- **403** renders access denied without registry metadata
+
+### Manual smoke
+
+App admin without `gestaltAdmin` can open `/apps/{app}/admin`, select a version,
+and see rollout progress.
+
+---
+
 ## What is not covered yet
 
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, get-by-app, and one validation-failure case — but not:
@@ -394,5 +452,5 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Re-install idempotency (no duplicate change request)
 - Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
 - Multi-replica materialization ack E2E (see [PLANNED section above](#planned-multi-replica-materialization-ack-e2e))
-- Per-replica **observed** running version heartbeats (phase 2; see [admin.md](./admin.md#out-of-scope-runtime-heartbeats))
+- Per-replica **observed** running version heartbeats
 - Deployed verification that catalog restarts serve the newly mounted binary

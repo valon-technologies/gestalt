@@ -8,7 +8,7 @@ Related docs:
 
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
 - [validation.md](./validation.md) — install-time validation
-- [admin.md](./admin.md) — admin UI and rollout read APIs
+- [admin.md](./admin.md) — admin UI capabilities
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
@@ -469,7 +469,8 @@ IndexedDB read only. No GCS fetch.
 
 ### Admin observability API
 
-Route summary. Full shapes and UI wireframes: [admin.md](./admin.md).
+Read-only routes under `/admin/api/v1` with `gestaltAdmin` auth. UI wireframes:
+[admin.md](./admin.md#embedded-admin-ui-admin).
 
 These routes expose IndexedDB rollout state that the catalog poller already writes. They do not change install or convergence behavior.
 
@@ -480,7 +481,279 @@ These routes expose IndexedDB rollout state that the catalog poller already writ
 | `GET` | `/admin/api/v1/app-rollouts` | List active and recent terminal rollouts |
 | `GET` | `/admin/api/v1/app-rollouts/{app}/materializations` | Per-replica rollout-progress rows for one `(app, version)` |
 
-The embedded `/admin` UI gains an **App Registry** section that consumes these endpoints. Today `/admin` only shows Prometheus metrics.
+#### `GET /admin/api/v1/registry-apps`
+
+List deploy-configured registry-only apps (`source.registry`), merged with fleet state.
+
+**Response `200`**
+
+```json
+[
+  {
+    "app": "g-issues",
+    "registry": "toolshed",
+    "desiredVersion": "0.0.0-snapshot.gcd9d741cc35728476426afce6c069e198799a8be",
+    "rollout": {
+      "version": "0.0.0-snapshot.gcd9d741cc35728476426afce6c069e198799a8be",
+      "state": "complete",
+      "createdAt": "2026-07-21T17:06:12Z",
+      "enrollmentEndsAt": "2026-07-21T17:08:12Z",
+      "deadline": "2026-07-21T17:21:12Z",
+      "completedAt": "2026-07-21T17:09:06Z"
+    },
+    "cohort": {
+      "acknowledged": 3,
+      "materialized": 3,
+      "restarted": 3,
+      "failed": 0
+    }
+  }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `app` | string | App name from deploy `apps` |
+| `registry` | string | `source.registry` binding |
+| `desiredVersion` | string | `LatestKnownVersion`; omitted when the fleet catalog is empty |
+| `rollout` | object | Current or most recent rollout for this app; omitted when none |
+| `cohort` | object | Counts over `app_instance_materializations` rows for `rollout.version` that acknowledged before `enrollmentEndsAt` |
+
+Apps with no fleet-known version still appear when configured with `source.registry`. IndexedDB read only. No GCS fetch.
+
+#### `GET /admin/api/v1/registry-apps/{app}`
+
+Detail view for one registry-only app. Same fields as one list element, plus:
+
+```json
+{
+  "app": "g-issues",
+  "registry": "toolshed",
+  "desiredVersion": "0.0.0-snapshot.gcd9d741…",
+  "knownVersions": [
+    {
+      "version": "0.0.0-snapshot.gcd9d741…",
+      "installedAt": "2026-07-21T17:06:12Z",
+      "installedBy": "user:michael.wang@valon.com"
+    }
+  ],
+  "rollout": { },
+  "latestPublished": {
+    "version": "0.0.0-snapshot.gcd9d741…",
+    "publishedAt": "2026-07-21T15:36:47Z"
+  }
+}
+```
+
+`knownVersions` lists fleet-known `(app, version)` pairs projected from `app_version_change_requests`.
+
+`latestPublished` is optional. The handler may fetch the registry index and return the newest `publishedAt` entry so operators can compare **published** vs **fleet-known** vs **converged**.
+
+**Response `404`** when `{app}` is not a registry-only app in deploy config.
+
+#### `GET /admin/api/v1/app-rollouts`
+
+List rollout records. Default: active rollouts (`enrolling`, `restarting`) plus terminal rollouts from the last 24 hours. Support `?app={app}` and `?state={state}` filters.
+
+**Response `200`**
+
+```json
+[
+  {
+    "app": "g-issues",
+    "version": "0.0.0-snapshot.gcd9d741…",
+    "state": "restarting",
+    "createdAt": "2026-07-21T17:06:12Z",
+    "enrollmentEndsAt": "2026-07-21T17:08:12Z",
+    "deadline": "2026-07-21T17:21:12Z"
+  }
+]
+```
+
+#### `GET /admin/api/v1/app-rollouts/{app}/materializations`
+
+Per-replica rollout-progress rows for one app rollout.
+
+**Query parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `version` | string | Fleet-known version. Defaults to the current rollout's `version`, else `desiredVersion`. |
+
+**Response `200`**
+
+```json
+{
+  "app": "g-issues",
+  "version": "0.0.0-snapshot.gcd9d741…",
+  "rolloutState": "complete",
+  "materializations": [
+    {
+      "instanceId": "gestaltd-8d9487869-ncnq6",
+      "acknowledgedAt": "2026-07-21T17:08:12Z",
+      "materializedAt": "2026-07-21T17:08:57Z",
+      "stoppedAt": "2026-07-21T17:08:57Z",
+      "restartedAt": "2026-07-21T17:08:58Z",
+      "attemptCount": 0,
+      "lastErrorAt": null,
+      "lastErrorMessage": "",
+      "inCohort": true,
+      "converged": true
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `inCohort` | boolean | `acknowledged_at < rollout.enrollment_ends_at` |
+| `converged` | boolean | `restarted_at` set and not after `rollout.deadline` while rollout is active; when terminal, `restarted_at` present |
+
+The embedded `/admin` UI includes a read-only **App Registry** section that consumes these endpoints.
+
+### App-admin version selection
+
+App-scoped routes on the authenticated public API. UI capabilities:
+[admin.md](./admin.md#app-admin-ui-appsappadmin).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/apps/{app}/admin/registry` | Load published/known versions, desired version, and rollout admission state |
+| `POST` | `/api/v1/apps/{app}/admin/registry/version` | Select the fleet-wide desired version |
+
+#### Authorization
+
+Only an authenticated **user** with explicit `admin` on `app/{app}` may call
+these routes. Fail closed:
+
+- **401** when unauthenticated
+- **403** when authenticated but not an app admin (including global
+  `gestaltAdmin` without app admin)
+- **503** when authorization is unavailable
+
+Do not reuse the mounted-UI fallback when no authorization provider exists.
+
+`GET /api/v1/apps` exposes optional `managementPath` (for example
+`/apps/g-issues/admin`) only when the app is registry-only, the caller is a
+user, and the caller has `admin` on `app/{app}`.
+
+#### `GET /api/v1/apps/{app}/admin/registry`
+
+**Response `200`**
+
+```json
+{
+  "app": "g-issues",
+  "registry": "toolshed",
+  "desiredVersion": "0.0.0-snapshot.gabc123",
+  "knownVersions": [
+    {
+      "version": "0.0.0-snapshot.gabc123",
+      "installedAt": "2026-07-22T14:00:00Z",
+      "installedBy": "user:alice"
+    }
+  ],
+  "publishedVersions": [
+    {
+      "version": "0.0.0-snapshot.gdef456",
+      "publishedAt": "2026-07-22T15:00:00Z",
+      "platforms": ["linux/amd64"],
+      "sourceRef": "def456def456def456def456def456def456def4",
+      "sourceUrl": "https://github.com/valon-technologies/valon-tools/commit/def456def456def456def456def456def456def4",
+      "publication": {
+        "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
+        "triggerPullRequest": {
+          "number": 3251,
+          "url": "https://github.com/valon-technologies/valon-tools/pull/3251"
+        }
+      }
+    }
+  ],
+  "rollout": {
+    "version": "0.0.0-snapshot.gabc123",
+    "state": "complete"
+  },
+  "selectionDisabled": false
+}
+```
+
+When a rollout is active, `selectionDisabled` is `true` and `disabledReason` is
+`"rollout in progress"`.
+
+Rules:
+
+- `{app}` must be deploy-configured with `source.registry`.
+- `knownVersions` comes from the change-request projection; `desiredVersion` is
+  `LatestKnownVersion` and is omitted before first install.
+- `publishedVersions` comes from the registry index, newest `publishedAt` first.
+  Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication`
+  when recorded. Legacy versions may omit `publication`.
+- `selectionDisabled` is true only while rollout state is `enrolling` or
+  `restarting`.
+
+#### `POST /api/v1/apps/{app}/admin/registry/version`
+
+**Request**
+
+```json
+{
+  "version": "0.0.0-snapshot.gdef456"
+}
+```
+
+The request accepts no `actor`, `registry`, or `fromVersion`; unknown fields
+return **400**. The server derives `actor` from the authenticated user,
+`registry` from deploy config, and `fromVersion` from `LatestKnownVersion`.
+
+**Response `200`**
+
+```json
+{
+  "app": "g-issues",
+  "registry": "toolshed",
+  "fromVersion": "0.0.0-snapshot.gabc123",
+  "desiredVersion": "0.0.0-snapshot.gdef456",
+  "rollout": {
+    "version": "0.0.0-snapshot.gdef456",
+    "state": "enrolling"
+  }
+}
+```
+
+A request is accepted only when all checks pass:
+
+1. Authenticate the caller and authorize `admin` on `app/{app}` (**401** /
+   **403**; **503** when authorization is unavailable).
+2. Validate `{app}` is deploy-configured with `source.registry` (**404** when
+   not registry-only).
+3. Claim the app-scoped install lock.
+4. Read the current rollout while holding the lock.
+5. Reject when rollout state is `enrolling` or `restarting` with **409**. No
+   registry fetch, install-time validation, rollout creation, or change-request
+   append occurs on this path. Terminal `complete` or `failed` rollouts do not
+   block a new selection.
+6. Reject when the selected version equals the current desired version with
+   **400** and no writes.
+7. Fetch the published version from the configured registry and run install-time
+   validation ([validation.md](./validation.md)).
+8. Create the rollout and append the change request (`add` on first selection;
+   `upgrade` on later selections, including revert to an older known version).
+9. Release the install lock.
+
+The rollout check in step 5 is authoritative. Concurrent selection requests
+must recheck under the install lock so only one admission succeeds.
+
+#### Revert to an older known version
+
+Reject only when the selected version equals the **current desired version**.
+Allow a new change request whose `to_version` is an older, previously known
+version.
+
+On reconciliation, treat per-replica materialization rows whose
+`acknowledged_at` predates the new rollout's `created_at` as stale: reset
+materialization, stop, restart, attempt, and error fields before acknowledging
+the new rollout. Count cohort membership and convergence only from timestamps at
+or after the current rollout's `created_at`.
 
 ### Errors
 
@@ -494,6 +767,20 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | `502` | Published version fetch failed; registry fetch failed during install validation; registry named in a fleet-known installation is missing from gestaltd config; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
+
+#### App-admin errors
+
+App-admin routes use the same `{ "error": "…" }` envelope.
+
+| Status | When |
+|--------|------|
+| `400` | Selected version is already desired; unknown request fields; install-time validation failure |
+| `401` | Missing or invalid authentication |
+| `403` | Authenticated user lacks `admin` on `app/{app}` |
+| `404` | App is not registry-only; published version does not exist |
+| `409` | Rollout is active; concurrent selection lost admission |
+| `502` | Registry index or version metadata fetch failed |
+| `503` | Authorization or registry installation services are unavailable |
 
 Example:
 
