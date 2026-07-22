@@ -197,6 +197,7 @@ func serveIndex(w http.ResponseWriter, r *http.Request, readIndex func() ([]byte
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(data))
 }
 
@@ -211,6 +212,7 @@ func serveFile(w http.ResponseWriter, r *http.Request, fsys fs.FS, path string) 
 		http.NotFound(w, r)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeContent(w, r, stdpath.Base(path), time.Time{}, bytes.NewReader(data))
 }
 
@@ -219,5 +221,6 @@ func serve(h http.Handler, w http.ResponseWriter, r *http.Request, path string) 
 	u := *r.URL
 	u.Path = path
 	r2.URL = &u
+	w.Header().Set("Cache-Control", "no-cache")
 	h.ServeHTTP(w, &r2)
 }
