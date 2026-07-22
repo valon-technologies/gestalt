@@ -385,10 +385,6 @@ Manual or Playwright-style check against a local multi-replica harness:
 3. Watch rollout badge transition `enrolling` → `restarting` → `complete` and replica rows populate.
 4. Confirm **Upgrade** is disabled while rollout is non-terminal.
 
-### Multi-replica materialization ack E2E (update)
-
-Replace IndexedDB polling in [Multi-replica materialization ack E2E](#multi-replica-materialization-ack-e2e) with `GET …/app-rollouts/{app}/materializations`.
-
 ---
 
 ## What is not covered yet
@@ -398,7 +394,7 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
 - Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
-- Multi-replica materialization ack E2E (see [Admin observability tests](#admin-observability-tests); HTTP route planned)
-- Admin rollout read APIs and `/admin/registry` UI
-- Per-replica **observed** running version heartbeats (phase 2)
+- Multi-replica materialization ack E2E (see [PLANNED section above](#planned-multi-replica-materialization-ack-e2e))
+- Admin rollout read APIs and `/admin/registry` UI (see [Admin observability tests](#admin-observability-tests))
+- Per-replica **observed** running version heartbeats (phase 2; see [admin.md](./admin.md#runtime-heartbeats-phase-2))
 - Deployed verification that catalog restarts serve the newly mounted binary
