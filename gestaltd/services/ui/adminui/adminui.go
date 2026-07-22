@@ -2,8 +2,6 @@ package adminui
 
 import (
 	"embed"
-	"fmt"
-	"html"
 	"io/fs"
 	"net/http"
 	"os"
@@ -53,12 +51,10 @@ func renderIndexHTML(indexHTML []byte, opts Options) []byte {
 	normalized := normalizeOptions(opts)
 	replaced := strings.Replace(
 		string(indexHTML),
-		`<a class="brand" href="/">Gestalt</a>`,
-		fmt.Sprintf(`<a class="brand" href=%q>Gestalt</a>`, html.EscapeString(normalized.BrandHref)),
+		`__GESTALT_ADMIN_BRAND_HREF__`,
+		strconv.Quote(normalized.BrandHref),
 		1,
 	)
-
-	replaced = strings.Replace(replaced, `<a href="/">Client UI</a>`, "", 1)
 	replaced = strings.Replace(replaced, `__GESTALT_ADMIN_LOGIN_BASE__`, strconv.Quote(normalized.LoginBase), 1)
 	return []byte(replaced)
 }

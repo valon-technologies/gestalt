@@ -1,0 +1,29 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../theme/valon-fonts.css";
+@import "../theme/theme.css";
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  font-family: var(--font-sans);
+}
