@@ -27,6 +27,7 @@ func boolPtr(value bool) *bool {
 type stubAuthorizationProvider struct {
 	called        bool
 	allowedResult *bool
+	fail          bool
 	ctx           context.Context
 	request       *proto.CheckAccessRequest
 }
@@ -35,6 +36,9 @@ func (p *stubAuthorizationProvider) CheckAccess(ctx context.Context, req *proto.
 	p.called = true
 	p.ctx = ctx
 	p.request = req
+	if p.fail {
+		return nil, errors.New("authorization provider down")
+	}
 	allowed := true
 	if p.allowedResult != nil {
 		allowed = *p.allowedResult
@@ -109,7 +113,6 @@ func TestPreparePublicRequest(t *testing.T) {
 			fullMethod: proto.App_Invoke_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
-			authAllow:  &denied,
 			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
 			checkAdapted: func(t *testing.T, adapted gproto.Message) {
 				t.Helper()
@@ -560,5 +563,206 @@ func TestRoutingNewStreamForwardsToEndpoint(t *testing.T) {
 	}
 	if stream == nil {
 		t.Fatalf("NewStream stream = nil, want non-nil")
+	}
+}
+
+// TestPublicRequestOptionalProviderMatrix validates the optional-provider
+// convention: an omitted IdentityProvider yields an anonymous principal, an
+// omitted AuthorizationProvider skips the access check, and a configured
+// provider that fails returns Unavailable. No method changes allow->deny.
+func TestPublicRequestOptionalProviderMatrix(t *testing.T) {
+	t.Parallel()
+
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		t.Fatalf("NewGeneratedRegistry: %v", err)
+	}
+	activeAlice := &core.IntrospectResponse{Active: true, Subject: "user:alice"}
+	inactive := &core.IntrospectResponse{Active: false}
+
+	// failingAuthz returns an error on every call.
+	failingAuthz := &stubAuthorizationProvider{allowedResult: boolPtr(true)}
+	failingAuthz.fail = true
+
+	matrix := []struct {
+		name       string
+		identity   bool // configure an IdentityProvider
+		authz      any  // nil, *stubAuthorizationProvider (allowed/denied/failing)
+		introspect *core.IntrospectResponse
+		token      string // bearer token; empty when identity is omitted
+		wantCode   codes.Code
+	}{
+		{
+			name:     "no providers anonymous allowed",
+			identity: false,
+			authz:    nil,
+			token:    "",
+			wantCode: codes.OK,
+		},
+		{
+			name:       "identity only authenticated allowed",
+			identity:   true,
+			authz:      nil,
+			introspect: activeAlice,
+			token:      "test-token",
+			wantCode:   codes.OK,
+		},
+		{
+			name:       "identity only invalid credential unauthenticated",
+			identity:   true,
+			authz:      nil,
+			introspect: inactive,
+			token:      "test-token",
+			wantCode:   codes.Unauthenticated,
+		},
+		{
+			name:       "identity only missing token unauthenticated",
+			identity:   true,
+			authz:      nil,
+			introspect: activeAlice,
+			token:      "",
+			wantCode:   codes.Unauthenticated,
+		},
+		{
+			name:       "identity failure unavailable",
+			identity:   true,
+			authz:      nil,
+			introspect: nil, // nil introspect response simulates a provider failure
+			token:      "test-token",
+			wantCode:   codes.Unavailable,
+		},
+		{
+			name:     "authz only anonymous allowed",
+			identity: false,
+			authz:    &stubAuthorizationProvider{allowedResult: boolPtr(true)},
+			token:    "",
+			wantCode: codes.OK,
+		},
+		{
+			name:       "both providers authenticated denied",
+			identity:   true,
+			authz:      &stubAuthorizationProvider{allowedResult: boolPtr(false)},
+			introspect: activeAlice,
+			token:      "test-token",
+			wantCode:   codes.PermissionDenied,
+		},
+		{
+			name:       "both providers authenticated allowed",
+			identity:   true,
+			authz:      &stubAuthorizationProvider{allowedResult: boolPtr(true)},
+			introspect: activeAlice,
+			token:      "test-token",
+			wantCode:   codes.OK,
+		},
+		{
+			name:       "authorization failure unavailable",
+			identity:   true,
+			authz:      failingAuthz,
+			introspect: activeAlice,
+			token:      "test-token",
+			wantCode:   codes.Unavailable,
+		},
+	}
+
+	for _, tc := range matrix {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			transport := NewProviderGatewayTransport()
+			transport.SetPublicMethods(registry)
+			transport.SetPublicBaseURL("https://gestalt.example")
+
+			if tc.identity {
+				identity := &coretesting.StubAuthProvider{
+					IntrospectFn: func(context.Context, *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+						if tc.introspect == nil {
+							return nil, errors.New("identity provider down")
+						}
+						return tc.introspect, nil
+					},
+				}
+				transport.SetIdentityProvider(identity)
+			}
+			if authz, ok := tc.authz.(*stubAuthorizationProvider); ok && authz != nil {
+				transport.SetAuthorizationProvider(authz)
+			}
+
+			fullMethod := proto.App_Invoke_FullMethodName
+			ctx := publicrpc.WithPublicOrigin(context.Background(), fullMethod)
+			pairs := []string{}
+			if tc.token != "" {
+				pairs = []string{"authorization", "Bearer " + tc.token}
+			}
+			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(pairs...))
+
+			_, _, err := transport.PreparePublicRequest(ctx, fullMethod, &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"})
+			if tc.wantCode == codes.OK {
+				if err != nil {
+					t.Fatalf("PreparePublicRequest: %v", err)
+				}
+			} else {
+				assertGRPCCode(t, err, tc.wantCode)
+			}
+		})
+	}
+}
+
+// TestPublicRequestLoginMethodsWithoutAuth confirms Authorize and Token are
+// callable without prior authentication in every provider state.
+func TestPublicRequestLoginMethodsWithoutAuth(t *testing.T) {
+	t.Parallel()
+
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		t.Fatalf("NewGeneratedRegistry: %v", err)
+	}
+
+	states := []struct {
+		name     string
+		identity bool
+		authz    bool
+	}{
+		{"no providers", false, false},
+		{"identity only", true, false},
+		{"authz only", false, true},
+		{"both providers", true, true},
+	}
+
+	for _, st := range states {
+		st := st
+		t.Run(st.name, func(t *testing.T) {
+			t.Parallel()
+
+			transport := NewProviderGatewayTransport()
+			transport.SetPublicMethods(registry)
+			transport.SetPublicBaseURL("https://gestalt.example")
+			if st.identity {
+				transport.SetIdentityProvider(&coretesting.StubAuthProvider{
+					IntrospectFn: func(context.Context, *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+						return &core.IntrospectResponse{Active: true, Subject: "user:alice"}, nil
+					},
+				})
+			}
+			if st.authz {
+				transport.SetAuthorizationProvider(&stubAuthorizationProvider{allowedResult: boolPtr(false)})
+			}
+
+			for _, fullMethod := range []string{
+				proto.Identity_Authorize_FullMethodName,
+				proto.Identity_Token_FullMethodName,
+			} {
+				ctx := publicrpc.WithPublicOrigin(context.Background(), fullMethod)
+				ctx = metadata.NewIncomingContext(ctx, metadata.Pairs())
+				if _, _, err := transport.PreparePublicRequest(ctx, fullMethod, &proto.AuthorizeRequest{
+					ResponseType: "code",
+					ClientId:     "gestalt-cli",
+					RedirectUri:  "http://localhost:8080/callback",
+					State:        "s",
+				}); err != nil {
+					t.Fatalf("%s in %s state: %v", fullMethod, st.name, err)
+				}
+			}
+		})
 	}
 }
