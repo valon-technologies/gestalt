@@ -493,19 +493,41 @@ These routes do not use the global `gestaltAdmin` policy. They require an
 authenticated user with explicit `admin` on authorization resource
 `app/{app}` and fail closed when authorization cannot be checked.
 
-The mutation route derives the registry from deploy config and actor from the
-canonical user principal. It claims the existing app-scoped install lock,
-rejects an `enrolling` or `restarting` rollout with **409**, then reuses registry
-fetch, install-time validation, rollout creation, and change-request append.
-The server-side check is authoritative even when the page loaded before another
-rollout began.
+#### `POST /api/v1/apps/{app}/admin/registry/version`
 
-First selection adds the app. Later selection upgrades or reverts it. Selecting
-an older version appends a new change request even when that version is already
-present in known-version history; only the current desired version is rejected
-as a no-op. A revert also treats per-replica materialization timestamps older
-than the new rollout's `created_at` as stale and resets that row before
-reconciliation, so historical convergence cannot complete the new rollout.
+Select the fleet-wide desired version for one registry-only app. The server
+derives `registry` from deploy config, `actor` from the authenticated user, and
+`fromVersion` from `LatestKnownVersion`. Callers send only `{ "version": "…" }`.
+
+A request is accepted only when all checks pass:
+
+1. Authenticate the caller and authorize `admin` on `app/{app}` (**401** /
+   **403**; **503** when authorization is unavailable).
+2. Validate `{app}` is deploy-configured with `source.registry` (**404** when
+   not registry-only).
+3. Claim the app-scoped install lock.
+4. Read the current rollout while holding the lock.
+5. Reject when rollout state is `enrolling` or `restarting` with **409**. No
+   registry fetch, install-time validation, rollout creation, or change-request
+   append occurs on this path. Terminal `complete` or `failed` rollouts do not
+   block a new selection.
+6. Reject when the selected version equals the current desired version with
+   **400** and no writes.
+7. Fetch the published version from the configured registry and run install-time
+   validation ([validation.md](./validation.md)).
+8. Create the rollout and append the change request (`add` on first selection;
+   `upgrade` on later selections, including revert to an older known version).
+9. Release the install lock.
+
+The rollout check in step 5 is authoritative. A rollout can start after the page
+loads; concurrent selection requests must recheck under the install lock so only
+one admission succeeds.
+
+Selecting an older version appends a new change request even when that version
+is already present in known-version history. A revert also treats per-replica
+materialization timestamps older than the new rollout's `created_at` as stale and
+resets that row before reconciliation, so historical convergence cannot complete
+the new rollout.
 
 Full API shapes, authorization behavior, and UI ownership:
 [admin.md](./admin.md#app-admin-page).
