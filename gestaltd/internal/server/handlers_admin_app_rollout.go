@@ -357,14 +357,14 @@ func adminRolloutCohortFromRows(rows []*core.AppInstanceMaterialization, rollout
 		return out
 	}
 	for _, row := range rows {
-		if row == nil || row.AcknowledgedAt.Before(rollout.CreatedAt) || !row.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
+		if !materializationInRolloutCohort(row, rollout) {
 			continue
 		}
 		out.Acknowledged++
-		if !row.MaterializedAt.Before(rollout.CreatedAt) {
+		if materializationTimestampIsCurrent(row.MaterializedAt, rollout) {
 			out.Materialized++
 		}
-		if !row.RestartedAt.Before(rollout.CreatedAt) {
+		if materializationTimestampIsCurrent(row.RestartedAt, rollout) {
 			out.Restarted++
 		}
 		if !row.LastErrorAt.IsZero() && (row.RestartedAt.IsZero() || row.LastErrorAt.After(row.RestartedAt)) {
@@ -389,11 +389,22 @@ func adminAppMaterializationFromCore(row *core.AppInstanceMaterialization, rollo
 	if rollout == nil || rollout.Version != row.Version {
 		return out
 	}
-	out.InCohort = !row.AcknowledgedAt.Before(rollout.CreatedAt) && row.AcknowledgedAt.Before(rollout.EnrollmentEndsAt)
+	out.InCohort = materializationInRolloutCohort(row, rollout)
+	out.Converged = materializationTimestampIsCurrent(row.RestartedAt, rollout)
 	if isActiveAdminRollout(rollout.State) {
-		out.Converged = !row.RestartedAt.Before(rollout.CreatedAt) && !row.RestartedAt.After(rollout.Deadline)
+		out.Converged = out.Converged && !row.RestartedAt.After(rollout.Deadline)
 	}
 	return out
+}
+
+func materializationInRolloutCohort(row *core.AppInstanceMaterialization, rollout *core.AppRollout) bool {
+	return row != nil && rollout != nil &&
+		materializationTimestampIsCurrent(row.AcknowledgedAt, rollout) &&
+		row.AcknowledgedAt.Before(rollout.EnrollmentEndsAt)
+}
+
+func materializationTimestampIsCurrent(value time.Time, rollout *core.AppRollout) bool {
+	return rollout != nil && !value.IsZero() && !value.Before(rollout.CreatedAt)
 }
 
 func validAppRolloutState(state string) bool {

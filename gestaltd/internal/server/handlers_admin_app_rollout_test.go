@@ -122,10 +122,64 @@ func TestAdminRegistryApps(t *testing.T) {
 			t.Fatalf("status = %d, want 404", resp.StatusCode)
 		}
 	})
+
+	t.Run("excludes progress from an earlier rollout of the same version", func(t *testing.T) {
+		t.Parallel()
+		services := testutil.NewStubServices(t)
+		start := time.Now().UTC().Truncate(time.Second)
+		appendKnownVersion(t, services, "g-issues", "1.2.3", start)
+		stale := &core.AppRollout{
+			App:     "g-issues",
+			Version: "1.2.3",
+		}
+		acknowledgeMaterialization(t, services, "replica-stale", stale, start.Add(-time.Hour), true)
+		createRollout(t, services, "g-issues", "1.2.3", start)
+		ts := newRegistryObservabilityTestServer(t, services)
+
+		resp, err := http.Get(ts.URL + "/admin/api/v1/registry-apps/g-issues")
+		if err != nil {
+			t.Fatalf("GET registry app: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		var payload struct {
+			Cohort adminRolloutCohortJSON `json:"cohort"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode registry app: %v", err)
+		}
+		if payload.Cohort != (adminRolloutCohortJSON{}) {
+			t.Fatalf("cohort = %#v, want stale progress excluded", payload.Cohort)
+		}
+
+		resp, err = http.Get(ts.URL + "/admin/api/v1/app-rollouts/g-issues/materializations")
+		if err != nil {
+			t.Fatalf("GET materializations: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		var materializations struct {
+			Rows []struct {
+				InCohort  bool `json:"inCohort"`
+				Converged bool `json:"converged"`
+			} `json:"materializations"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&materializations); err != nil {
+			t.Fatalf("decode materializations: %v", err)
+		}
+		if len(materializations.Rows) != 1 || materializations.Rows[0].InCohort || materializations.Rows[0].Converged {
+			t.Fatalf("materializations = %#v, want stale row outside current rollout", materializations.Rows)
+		}
+	})
 }
 
 type adminAppInstallationJSON struct {
 	Version string `json:"version"`
+}
+
+type adminRolloutCohortJSON struct {
+	Acknowledged int `json:"acknowledged"`
+	Materialized int `json:"materialized"`
+	Restarted    int `json:"restarted"`
+	Failed       int `json:"failed"`
 }
 
 func TestAdminAppRollouts(t *testing.T) {
