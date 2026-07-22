@@ -761,14 +761,26 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 
 | Status | When |
 |--------|------|
-| `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions; **install-time validation failed**; app-admin: selected version is already desired; unknown request fields |
-| `401` | App-admin: missing or invalid authentication |
-| `403` | App-admin: authenticated user lacks `admin` on `app/{app}` |
-| `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured; app-admin: app is not registry-only |
-| `409` | Another instance is already installing this `(app, version)` (install lock held and not expired); `add` called when the app already has fleet-known versions; app-admin: rollout is active; concurrent selection lost admission |
-| `502` | Published version fetch failed; registry fetch failed during install validation; registry named in a fleet-known installation is missing from gestaltd config; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON); app-admin: registry index or version metadata fetch failed |
+| `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions; **install-time validation failed** |
+| `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
+| `409` | Another instance is already installing this `(app, version)` (install lock held and not expired); `add` called when the app already has fleet-known versions |
+| `502` | Published version fetch failed; registry fetch failed during install validation; registry named in a fleet-known installation is missing from gestaltd config; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
-| `503` | Version catalog service or installer not configured; app-admin: authorization or registry installation services unavailable |
+| `503` | Version catalog service or installer not configured |
+
+#### App-admin errors
+
+App-admin routes use the same `{ "error": "…" }` envelope.
+
+| Status | When |
+|--------|------|
+| `400` | Selected version is already desired; unknown request fields; install-time validation failure |
+| `401` | Missing or invalid authentication |
+| `403` | Authenticated user lacks `admin` on `app/{app}` |
+| `404` | App is not registry-only; published version does not exist |
+| `409` | Rollout is active; concurrent selection lost admission |
+| `502` | Registry index or version metadata fetch failed |
+| `503` | Authorization or registry installation services are unavailable |
 
 Example:
 

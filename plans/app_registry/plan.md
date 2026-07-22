@@ -217,7 +217,7 @@ Activation is phased:
 1. Validate the candidate version against registry metadata (including install-time validation; see [validation.md](./validation.md)) and append a change request to `app_version_change_requests` (fleet declaration).
 2. Each replica acknowledges the catalog row, then progressively downloads, restarts, and mounts the new binary. See [lifecycle.md](./lifecycle.md#polling).
 
-Fleet rollout admission and per-replica convergence are shipped (rollouts, install locks, catalog poller). Admin observability is documented in [admin.md](./admin.md).
+Fleet rollout admission and per-replica convergence are shipped (rollouts, install locks, catalog poller). Admin UI capabilities are documented in [admin.md](./admin.md).
 
 ### Runtime Materialization
 

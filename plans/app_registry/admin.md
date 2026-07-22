@@ -7,7 +7,7 @@ Related docs:
 - [plan.md](./plan.md) — implementation path
 - [lifecycle.md](./lifecycle.md) — HTTP APIs, admission checks, and rollout behavior
 - [indexeddb.md](./indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
-- [tests.md](./tests.md#admin-observability-tests) — HTTP and UI tests
+- [tests.md](./tests.md#admin-observability-tests) — observability HTTP and UI tests; [app version selection tests](./tests.md#app-version-selection-tests)
 
 ---
 
@@ -21,10 +21,9 @@ Operators installing registry apps should answer these questions without reading
 | What is the desired fleet-known version? | Desired version on app detail |
 | Is the rollout still in progress? | Rollout status badge |
 | Which replicas have converged? | Replica convergence table |
-| What is each replica running right now? | Out of scope; rollout progress shows convergence only |
 
-App admins additionally need to select the fleet-wide desired version and see
-what published each candidate version.
+App admins additionally select the fleet-wide desired version and inspect what
+published each candidate version.
 
 ---
 
@@ -36,16 +35,15 @@ Use the same names as [lifecycle.md](./lifecycle.md#runtime-version-invariants):
 - **Desired version** — latest fleet-known version for an app (`LatestKnownVersion`).
 - **Rollout** — fleet-wide execution record in `app_rollouts` (`enrolling` → `restarting` → `complete` | `failed`).
 - **Converged** — the poller recorded `restarted_at` for the replica and version. Rollout accounting, not proof the provider is still running that version.
-- **Running** — this replica successfully built and registered the provider from that materialized package. Not stored in IndexedDB today.
 
-Label **converged** vs **running** clearly in the UI.
+Label **converged** as rollout progress, not current runtime state.
 
 ---
 
 ## Embedded admin UI (`/admin`)
 
 Read-only fleet observability for registry-only apps. Requires global
-`gestaltAdmin`. API: [lifecycle.md](./lifecycle.md#admin-observability-api).
+`gestaltAdmin`. API shapes: [lifecycle.md](./lifecycle.md#admin-observability-api).
 
 The embedded shell at `/admin` keeps the Prometheus metrics viewer and adds an
 **App Registry** section. It does not install, upgrade, publish, or mutate
@@ -99,7 +97,7 @@ Auto-refresh every 10–15s while any listed rollout is non-terminal.
 ## App admin UI (`/apps/{app}/admin`)
 
 Fleet version selection for one registry-only app. Requires `admin` on
-`app/{app}`. API and admission checks:
+`app/{app}`. API shapes and admission checks:
 [lifecycle.md](./lifecycle.md#app-admin-version-selection).
 
 Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
@@ -107,7 +105,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
 
 ### Capabilities
 
-- **Manage app** link on the `/apps` catalog when the caller can administer that app.
+- **Manage app** on the `/apps` catalog when the caller can administer that app.
 - Select the fleet-wide desired version: first install, upgrade, or revert to an older published version.
 - Show per-version `publishedAt`, linked source commit, triggering PR or commit, and publishing workflow run.
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
@@ -115,11 +113,6 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
 - Render access denied on **403** without leaking registry metadata.
 
 Selection is fleet-wide. It is not per-user or per-replica.
-
-### Apps catalog
-
-App admins see **Manage app** on the registry-app card. Other users see the
-existing card without management controls.
 
 ### App admin page
 
