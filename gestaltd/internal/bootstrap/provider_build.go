@@ -452,23 +452,32 @@ func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (appserv
 	if err != nil {
 		return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
 	}
-	if spec.Catalog == nil && manifestApp.IsDeclarative() {
-		declarative, err := appservice.NewDeclarativeProvider(
-			manifest,
-			nil,
-			appservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			appservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-			appservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
-		)
-		if err != nil {
-			return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
+	if spec.Catalog == nil && manifestApp.IsManifestBacked() {
+		var dp *appservice.DeclarativeProvider
+		if manifestApp.IsDeclarative() {
+			var err error
+			dp, err = appservice.NewDeclarativeProvider(
+				manifest,
+				nil,
+				appservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+				appservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+				appservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
+			)
+			if err != nil {
+				return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
+			}
+			spec.Catalog = dp.Catalog()
+		} else if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceGraphQL); ok {
+			if def, err := loadSpecDefinition(context.Background(), name, resolved, entry.EffectiveAllowedOperations()); err == nil && def != nil && len(def.Operations) > 0 {
+				spec.Catalog = declarative.CatalogFromDefinition(def)
+			}
 		}
-		spec.Catalog = declarative.Catalog()
-		return spec, startupOperationRouting{
-			connections:    operationConnectionsForCatalog(spec.Catalog, plan, restConnections),
-			resolver:       declarative,
-			overridePolicy: declarative,
-		}, nil
+		routing := startupOperationRouting{connections: operationConnectionsForCatalog(spec.Catalog, plan, restConnections)}
+		if dp != nil {
+			routing.resolver = dp
+			routing.overridePolicy = dp
+		}
+		return spec, routing, nil
 	}
 	return spec, startupOperationRouting{connections: operationConnectionsForCatalog(spec.Catalog, plan, restConnections)}, nil
 }
