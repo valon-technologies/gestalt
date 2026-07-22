@@ -586,6 +586,8 @@ func TestPublicRequestOptionalProviderMatrix(t *testing.T) {
 
 	matrix := []struct {
 		name       string
+		fullMethod string
+		req        gproto.Message
 		identity   bool // configure an IdentityProvider
 		authz      any  // nil, *stubAuthorizationProvider (allowed/denied/failing)
 		introspect *core.IntrospectResponse
@@ -647,6 +649,16 @@ func TestPublicRequestOptionalProviderMatrix(t *testing.T) {
 			wantCode:   codes.OK,
 		},
 		{
+			name:       "identity service skips authorization",
+			fullMethod: proto.Identity_UserInfo_FullMethodName,
+			req:        &proto.UserInfoRequest{},
+			identity:   true,
+			authz:      &stubAuthorizationProvider{allowedResult: boolPtr(false)},
+			introspect: activeAlice,
+			token:      "test-token",
+			wantCode:   codes.OK,
+		},
+		{
 			name:       "both providers authenticated allowed",
 			identity:   true,
 			authz:      &stubAuthorizationProvider{allowedResult: boolPtr(true)},
@@ -669,6 +681,13 @@ func TestPublicRequestOptionalProviderMatrix(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			if tc.fullMethod == "" {
+				tc.fullMethod = proto.App_Invoke_FullMethodName
+			}
+			if tc.req == nil {
+				tc.req = &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"}
+			}
+
 			transport := NewProviderGatewayTransport()
 			transport.SetPublicMethods(registry)
 			transport.SetPublicBaseURL("https://gestalt.example")
@@ -688,15 +707,14 @@ func TestPublicRequestOptionalProviderMatrix(t *testing.T) {
 				transport.SetAuthorizationProvider(authz)
 			}
 
-			fullMethod := proto.App_Invoke_FullMethodName
-			ctx := publicrpc.WithPublicOrigin(context.Background(), fullMethod)
+			ctx := publicrpc.WithPublicOrigin(context.Background(), tc.fullMethod)
 			pairs := []string{}
 			if tc.token != "" {
 				pairs = []string{"authorization", "Bearer " + tc.token}
 			}
 			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(pairs...))
 
-			_, _, err := transport.PreparePublicRequest(ctx, fullMethod, &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"})
+			_, _, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
 			if tc.wantCode == codes.OK {
 				if err != nil {
 					t.Fatalf("PreparePublicRequest: %v", err)
