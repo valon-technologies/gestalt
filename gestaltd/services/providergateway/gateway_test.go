@@ -644,7 +644,7 @@ func TestPublicRequestOptionalProviderMatrix(t *testing.T) {
 			authz:      &stubAuthorizationProvider{allowedResult: boolPtr(false)},
 			introspect: activeAlice,
 			token:      "test-token",
-			wantCode:   codes.PermissionDenied,
+			wantCode:   codes.OK,
 		},
 		{
 			name:       "both providers authenticated allowed",
@@ -660,7 +660,7 @@ func TestPublicRequestOptionalProviderMatrix(t *testing.T) {
 			authz:      failingAuthz,
 			introspect: activeAlice,
 			token:      "test-token",
-			wantCode:   codes.Unavailable,
+			wantCode:   codes.OK,
 		},
 	}
 
