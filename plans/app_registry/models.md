@@ -33,8 +33,7 @@ Implementation: `gestaltd/internal/appregistry/`.
 
 **Path:** `apps/{app}/index.json`
 
-Answers: *what versions exist, where is their metadata, which platforms were
-published, and what publish event produced each version?*
+Answers: *what versions exist, where is their metadata, which platforms were published, and what commit/workflow published each version?*
 
 ```json
 {
@@ -111,9 +110,9 @@ Each key in `versions` is a published version string (e.g. 0.0.0-snapshot.gabc12
 | `metadata` | string | yes | Relative path to the full published version JSON, e.g. `apps/g-issues/versions/0.0.1.json`. |
 | `platforms` | string array | no | Build targets available for this version (see example JSON). Derived from published version artifact keys at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
-| `sourceRef` | string | no | Packaged source commit. Required for newly published versions; omitted only on legacy index entries. |
-| `repository` | string | no | Source repository used with `sourceRef` to build the commit URL. Required for newly published versions. |
-| `publication` | object | no | GitHub workflow and trigger provenance copied from `PublishedVersion.publication`. Required for newly published versions. |
+| `sourceRef` | string | no | Packaged commit SHA. Copied from `PublishedVersion.sourceRef`. |
+| `repository` | string | no | Source repository. Copied from `PublishedVersion.repository`. |
+| `publication` | object | no | Publish workflow provenance. Copied from `PublishedVersion.publication`. |
 
 ---
 
@@ -218,7 +217,7 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
 | `sourceRef` | string | yes | 40-character lowercase git commit SHA the release was built from. |
 | `manifestPath` | string | yes | Repo-relative path to `manifest.yaml`, e.g. `valon-tools/apps/g-issues/manifest.yaml`. |
 | `repository` | string | yes | Source repository as `host/owner/repo`, e.g. `github.com/valon-technologies/valon-tools`. The manifest `source` must be `{repository}/apps/{app}`. |
-| `publication` | object | no | GitHub Actions run and triggering PR or commit. Required for versions created after publication provenance ships; omitted only on legacy entries. |
+| `publication` | object | no | Publish workflow run and trigger. Required for new publishes; omitted on legacy entries. |
 | `artifacts` | map | yes | Platform target → `Artifact`. At least one artifact is required. |
 | `interface` | object | no | Operations this app exposes. Copied from the provider release catalog at publish time. |
 | `requires` | object | no | Declared dependencies on other apps. Copied from the provider release `staticValidation.requires` block at publish time. |
@@ -227,20 +226,16 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
 
 #### `PublishedVersion.publication` · `Publication`
 
-The publisher records provenance supplied by the calling GitHub Actions
-workflow. Gestalt does not query GitHub while serving registry or app-admin
-requests.
+Recorded by the publish workflow. Not looked up at read time.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `workflowRunUrl` | string | yes | Canonical URL of the GitHub Actions run that performed the publish. |
-| `triggerPullRequest` | object | conditional | PR number and canonical URL when the publish was attributable to a pull request. |
-| `triggerCommit` | object | conditional | Commit SHA and canonical URL when no triggering PR exists. |
+| `workflowRunUrl` | string | yes | GitHub Actions run that performed the publish. |
+| `triggerPullRequest` | object | one-of | `{ number, url }` when publish was triggered by a PR. |
+| `triggerCommit` | object | one-of | `{ sha, url }` when publish was triggered by a direct commit. |
 
-Exactly one of `triggerPullRequest` or `triggerCommit` is required on newly
-published versions. `sourceRef` remains the commit whose app code was packaged;
-it can differ from `triggerCommit.sha` for reusable workflows or indirect
-publishing events.
+Exactly one trigger variant is required. `sourceRef` is the packaged commit and
+may differ from `triggerCommit.sha`.
 
 #### `PublishedVersion.artifacts` · `Artifact`
 

@@ -271,20 +271,14 @@ Auto-refresh every 10–15s while rollout is non-terminal.
 
 ## App admin page
 
-App-resource administrators should be able to select the fleet-wide desired
-version of a registry-only app without receiving access to the global Gestalt
-admin surface.
-
-The separate app-management page lives at:
+App admins select the fleet-wide desired version at:
 
 ```text
 /apps/{app}/admin
 ```
 
-The page selects a published version for one registry-only app. Selection is a
-**fleet-wide** change: it updates the desired version projected from
-`app_version_change_requests` and starts the normal multi-replica rollout. It
-does not select a version for only the current user.
+Selection updates `app_version_change_requests` and starts the normal
+multi-replica rollout. It is not per-user or per-replica.
 
 The selector supports:
 
@@ -442,36 +436,16 @@ Rules:
   first install.
 - `publishedVersions` comes from the configured registry index, newest
   `publishedAt` first.
-- Every published version includes its publish timestamp and source commit.
-  `sourceUrl` is derived from the registry entry's `repository` and
-  `sourceRef`.
-- `publication` identifies the GitHub Actions run and the event that triggered
-  it. Prefer `triggerPullRequest` when the publishing workflow was attributable
-  to a PR; otherwise return `triggerCommit`. These links come from immutable
-  registry metadata rather than a live GitHub lookup.
+- Each entry includes `publishedAt`, `sourceRef`, and `sourceUrl`
+  (`repository` + `sourceRef`).
+- `publication` carries the publish workflow run and trigger (`triggerPullRequest`
+  or `triggerCommit`). Copied from registry metadata at publish time; the
+  app-admin API does not call GitHub.
+- Legacy versions may omit `publication`; the UI still links the commit and shows
+  **not recorded** for workflow/PR fields.
 - `selectionDisabled` is true only while rollout state is `enrolling` or
   `restarting`.
 - A terminal `complete` or `failed` rollout does not disable selection.
-
-#### Publication provenance
-
-The publish pipeline must record enough provenance in each registry version to
-answer:
-
-- when was this version published?
-- which source commit was packaged?
-- which pull request or commit triggered the publishing workflow?
-- which GitHub Actions run performed the publish?
-
-`sourceRef` remains the packaged source commit and may differ from the workflow
-trigger commit. The publisher passes the workflow run URL and either the
-triggering PR number/URL or triggering commit SHA/URL to `gestaltd app publish`;
-the app-admin API does not call GitHub to infer this later.
-
-For versions published before this metadata exists, the page still links the
-source commit using `repository` plus `sourceRef` and labels unavailable PR or
-workflow provenance as **not recorded**. Newly published versions must include
-the workflow and trigger metadata.
 
 #### `POST /api/v1/apps/{app}/admin/registry/version`
 
@@ -595,7 +569,7 @@ Other users see the existing card without management controls.
 │ [ 0.0.0-snapshot.gabc123                         ▾ ]         │
 │                                                             │
 │ Published 2026-07-22 15:00 · linux/amd64                    │
-│ Source commit def456 · PR #3251 · View workflow run         │
+│ Commit def456 · PR #3251 · workflow run                       │
 │                                                             │
 │                                      [ Select version ]      │
 └─────────────────────────────────────────────────────────────┘
