@@ -484,8 +484,6 @@ The embedded `/admin` UI includes a read-only **App Registry** section that cons
 
 ### App-admin version selection
 
-Step 15 adds app-scoped management routes on the authenticated public API:
-
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/apps/{app}/admin/registry` | Load published/known versions, desired version, and rollout admission state |
