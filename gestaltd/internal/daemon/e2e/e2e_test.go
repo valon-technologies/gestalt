@@ -1845,7 +1845,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 			name:         "management serves admin ui",
 			url:          managementURL + "/admin/",
 			wantStatus:   http.StatusOK,
-			wantContains: "Prometheus telemetry",
+			wantContains: `id="root"`,
 		},
 	} {
 		tc := tc
