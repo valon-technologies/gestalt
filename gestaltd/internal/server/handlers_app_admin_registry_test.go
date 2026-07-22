@@ -127,6 +127,47 @@ func TestAppAdminRegistryFailsClosed(t *testing.T) {
 	}
 }
 
+func TestListAppsIncludesManagementPathForUninstalledRegistryApp(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET apps: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d: %s", response.StatusCode, body)
+	}
+	var apps []struct {
+		Name           string `json:"name"`
+		ManagementPath string `json:"managementPath"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&apps); err != nil {
+		t.Fatalf("decode apps: %v", err)
+	}
+	if len(apps) != 1 || apps[0].Name != "g-issues" || apps[0].ManagementPath != "/apps/g-issues/admin" {
+		t.Fatalf("apps = %#v", apps)
+	}
+}
+
 func TestListAppsIncludesManagementPathForAppAdmin(t *testing.T) {
 	t.Parallel()
 
