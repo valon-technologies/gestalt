@@ -226,15 +226,15 @@ Copied from the provider release `staticValidation.requires` block at publish ti
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `apps` | map | no | Dependency app name → `AppRequirement`. See below. |
+| `apps` | map | no | Dependency app key → `AppRequirement`. See below. |
 
 #### `PublishedVersion.requires.apps` · `AppRequirement`
 
-Each key in `apps` is a dependency app name (e.g. `slack`). The value describes what this app needs from that dependency.
+Each key in `apps` identifies a dependency app. Keys are copied verbatim from manifest `dependencies.apps` at publish time. A key may be a short fleet app name (`slack`) or a full manifest source address (`github.com/valon-technologies/valon-tools/apps/slack`). Fleet catalog entries, deploy config app slots, and registry object paths (`apps/{app}/…`) always use the short name. Install-time validation normalizes source-address keys before fleet lookup and reverse-dependent matching — see [validation.md](./validation.md#requiresapps-keys).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `version` | string | no | Semver constraint on the dependency app, e.g. ^1.4.0. |
+| `version` | string | no | Semver constraint on the dependency app, e.g. ^1.4.0. Matched against fleet-known versions using snapshot-aware rules — see [validation.md](./validation.md#semver-constraint-matching). |
 | `operations` | map | no | Operation id → `OperationRequirement`. See below. |
 
 #### `PublishedVersion.requires.apps.{app}.operations` · `OperationRequirement`
