@@ -3060,6 +3060,53 @@ func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *test
 	if got, ok := operationRouting.connections["versions.list"]; ok {
 		t.Fatalf("versions.list connection = %q, want no static connection so the selected connection can apply", got)
 	}
+
+	manifest = &providermanifestv1.Manifest{
+		Source:      "gqlapp",
+		DisplayName: "GraphQL App",
+		Spec: &providermanifestv1.Spec{
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"dev":  {Mode: providermanifestv1.ConnectionModeNone},
+				"prod": {Mode: providermanifestv1.ConnectionModeNone},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				GraphQL: &providermanifestv1.GraphQLSurface{URL: "https://{graphql_host}/graphql"},
+			},
+			AllowedOperations: map[string]*providermanifestv1.ManifestOperationOverride{
+				"items": {
+					Alias: "items.list",
+					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+						OperationName: "ItemsQuery",
+						Document:      "query ItemsQuery { items { id name } }",
+					},
+				},
+				"status": {
+					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+						OperationName: "StatusQuery",
+						Document:      "query StatusQuery { status }",
+					},
+				},
+			},
+		},
+	}
+
+	spec, _, err = buildStartupProviderSpec("gqlapp", &config.ProviderEntry{ResolvedManifest: manifest})
+	if err != nil {
+		t.Fatalf("buildStartupProviderSpec graphql allowedOps: %v", err)
+	}
+	if spec.Catalog == nil {
+		t.Fatal("expected startup catalog for GraphQL allowedOperations manifest, got nil")
+	}
+	ids := make(map[string]bool, len(spec.Catalog.Operations))
+	for i := range spec.Catalog.Operations {
+		ids[spec.Catalog.Operations[i].ID] = true
+	}
+	if !ids["items.list"] {
+		t.Errorf("catalog missing aliased operation %q; have %v", "items.list", ids)
+	}
+	if !ids["status"] {
+		t.Errorf("catalog missing operation %q; have %v", "status", ids)
+	}
 }
 
 func TestBuildStartupProviderSpecMCPOnlyManifestHasNoStartupCatalog(t *testing.T) {
