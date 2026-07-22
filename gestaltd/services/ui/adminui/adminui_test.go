@@ -32,6 +32,7 @@ func TestEmbeddedHandlerServesAppRegistryRoutes(t *testing.T) {
 	html := string(body)
 	for _, want := range []string{
 		`brandHref: "/workplace"`,
+		`<base href="/admin/"`,
 		`id="root"`,
 		`/admin/assets/app.js`,
 		`__GESTALT_ADMIN__`,
