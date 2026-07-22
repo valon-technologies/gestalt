@@ -97,7 +97,7 @@ func (s *AppInstanceMaterializationService) acknowledge(ctx context.Context, mat
 		if rolloutCreatedAt.IsZero() || !current.AcknowledgedAt.Before(rolloutCreatedAt) {
 			return current, nil
 		}
-		acknowledgedAt := normalizedMaterializationTime(materialization.AcknowledgedAt)
+		acknowledgedAt := acknowledgedAtForRollout(materialization.AcknowledgedAt, rolloutCreatedAt)
 		existing["acknowledged_at"] = acknowledgedAt
 		delete(existing, "materialized_at")
 		delete(existing, "stopped_at")
@@ -113,7 +113,7 @@ func (s *AppInstanceMaterializationService) acknowledge(ctx context.Context, mat
 		return nil, fmt.Errorf("acknowledge app instance materialization: %w", err)
 	}
 
-	acknowledgedAt := normalizedMaterializationTime(materialization.AcknowledgedAt)
+	acknowledgedAt := acknowledgedAtForRollout(materialization.AcknowledgedAt, rolloutCreatedAt)
 	rec := idb.Record{
 		"id":              uuid.NewString(),
 		"instance_id":     instanceID,
@@ -133,6 +133,14 @@ func (s *AppInstanceMaterializationService) acknowledge(ctx context.Context, mat
 		return nil, fmt.Errorf("acknowledge app instance materialization: %w", err)
 	}
 	return recordToAppInstanceMaterialization(rec), nil
+}
+
+func acknowledgedAtForRollout(requested, rolloutCreatedAt time.Time) time.Time {
+	acknowledgedAt := normalizedMaterializationTime(requested)
+	if rolloutCreatedAt.IsZero() || !acknowledgedAt.Before(rolloutCreatedAt) {
+		return acknowledgedAt
+	}
+	return rolloutCreatedAt.UTC().Truncate(time.Millisecond)
 }
 
 func normalizedMaterializationTime(value time.Time) time.Time {
