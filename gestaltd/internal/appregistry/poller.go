@@ -292,11 +292,11 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		if version == "" {
 			continue
 		}
-		var rolloutCreatedAt time.Time
+		selectionEpoch := installation.UpdatedAt
 		if rollout != nil && strings.TrimSpace(rollout.Version) == version {
-			rolloutCreatedAt = rollout.CreatedAt
+			selectionEpoch = rollout.CreatedAt
 		}
-		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, version, rolloutCreatedAt)
+		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, version, selectionEpoch)
 		if err != nil {
 			return err
 		}
@@ -485,16 +485,21 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		return false, fmt.Errorf("list rollout cohort for %s@%s: %w", rollout.App, rollout.Version, err)
 	}
 	converged := true
+	cohortCount := 0
 	for _, materialization := range materializations {
 		if materialization.AcknowledgedAt.Before(rollout.CreatedAt) ||
 			!materialization.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
 			continue
 		}
+		cohortCount++
 		if materialization.RestartedAt.Before(rollout.CreatedAt) ||
 			materialization.RestartedAt.After(rollout.Deadline) {
 			converged = false
 			break
 		}
+	}
+	if cohortCount == 0 {
+		converged = false
 	}
 	if converged {
 		if _, err := p.Rollouts.MarkComplete(ctx, rollout.App, rollout.Version, p.now()); err != nil {
