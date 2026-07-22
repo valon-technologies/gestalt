@@ -67,7 +67,7 @@ Use the same names as [lifecycle.md](./lifecycle.md#runtime-version-invariants):
 
 ## Planned admin HTTP API
 
-All routes live under `/admin/api/v1`, reuse existing admin auth (`gestaltAdmin`), and are read-only except where install actions are triggered from the UI.
+All routes live under `/admin/api/v1`, reuse existing admin auth (`gestaltAdmin`), and are read-only.
 
 #### `GET /admin/api/v1/registry-apps`
 
@@ -227,7 +227,7 @@ Table columns:
 |-----|----------|-----------------|---------|--------|
 | g-issues | toolshed | `0.0.0-snapshot.g…` | complete | 3/3 restarted |
 
-Empty fleet-known projection: show configured registry-only apps with desired version "—" and a primary action **Install** (opens version picker fed by `…/versions`).
+Empty fleet-known projection: show configured registry-only apps with desired version "—" and status "not installed."
 
 ### App detail (`/admin/registry/{app}`)
 
@@ -236,7 +236,6 @@ Sections:
 1. **Summary** — registry binding, desired version, latest published version (if fetched), install metadata (`installedBy`, `installedAt`).
 2. **Rollout** — state badge, timestamps, enrollment deadline, failure reason when `failed`.
 3. **Replicas** — rollout-progress rows (`instanceId`, ack / materialized / stopped / restarted, `attemptCount`, last error). Sort by `instanceId`.
-4. **Actions** — **Upgrade** when a newer published version exists; disabled while rollout is `enrolling` or `restarting`.
 
 Auto-refresh every 10–15s while rollout is non-terminal.
 
@@ -255,8 +254,6 @@ Auto-refresh every 10–15s while rollout is non-terminal.
 │ gestaltd-…-ncnq6         ✓     ✓         0                   │
 │ gestaltd-…-hdnx2         ✓     ✓         0                   │
 │ gestaltd-…-smmq7         ✓     ✓         0                   │
-├─────────────────────────────────────────────────────────────┤
-│ [ Upgrade to … ]  (disabled when rollout active)            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -290,6 +287,7 @@ Reuse the standard admin error envelope from [lifecycle.md](./lifecycle.md#error
 
 - Install-time validation ([validation.md](./validation.md))
 - Dedicated rollback route (revert via `upgrade` to an older published version)
+- Installing or upgrading apps from the admin UI
 - Mutating rollouts from the UI (cancel, force-complete)
 - Publishing to GCS from the UI
 - Replacing `kubectl logs` for provider crash diagnostics

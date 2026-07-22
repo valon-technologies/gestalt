@@ -383,7 +383,6 @@ Manual or Playwright-style check against a local multi-replica harness:
 1. Open `/admin/registry` while authenticated as a `gestaltAdmin` user.
 2. Confirm `g-issues` appears with desired version after `POST …/add`.
 3. Watch rollout badge transition `enrolling` → `restarting` → `complete` and replica rows populate.
-4. Confirm **Upgrade** is disabled while rollout is non-terminal.
 
 ---
 
