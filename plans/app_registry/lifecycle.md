@@ -480,8 +480,6 @@ These routes expose IndexedDB rollout state that the catalog poller already writ
 | `GET` | `/admin/api/v1/app-rollouts` | List active and recent terminal rollouts |
 | `GET` | `/admin/api/v1/app-rollouts/{app}/materializations` | Per-replica convergence rows for one `(app, version)` |
 
-**Phase 2 (optional):** `GET /admin/api/v1/app-rollouts/{app}/runtime` — per-replica **observed** running version when heartbeat rows exist. Until then, materialization `restarted_at` is the best fleet-wide signal; it records rollout accounting, not live process state. See [admin.md](./admin.md#out-of-scope-runtime-heartbeats).
-
 The embedded `/admin` UI gains an **App Registry** section that consumes these endpoints. Today `/admin` only shows Prometheus metrics.
 
 ### Errors

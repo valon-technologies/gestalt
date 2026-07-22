@@ -208,18 +208,6 @@ Backed by `AppInstanceMaterializationService.ListByAppVersion`. This replaces di
 
 ---
 
-### Phase 2 (optional): `GET /admin/api/v1/app-rollouts/{app}/runtime`
-
-Expose **observed running version** per replica when heartbeat rows exist (see [Out of Scope: Runtime Heartbeats](#out-of-scope-runtime-heartbeats)).
-
-Until then, the UI shows:
-
-- **Desired** — fleet-known version
-- **Converged** — `restarted_at` on the materialization row
-- **Running** — not shown, or shown as "unknown" with a tooltip explaining the gap
-
----
-
 ## Admin UI
 
 Extend the embedded `/admin` shell. Keep the existing metrics page; add an **App Registry** section.
