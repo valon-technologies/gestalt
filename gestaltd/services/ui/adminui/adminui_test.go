@@ -31,28 +31,13 @@ func TestEmbeddedHandlerServesAppRegistryRoutes(t *testing.T) {
 	}
 	html := string(body)
 	for _, want := range []string{
-		`href="/workplace"`,
-		`href="/admin/registry"`,
-		`/registry-apps`,
-		`/app-rollouts/`,
-		`credentials: "include"`,
-		`App Registry`,
-		`not installed`,
-		`does not prove the replica is currently running this version`,
+		`brandHref: "/workplace"`,
+		`id="root"`,
+		`/admin/assets/app.js`,
+		`__GESTALT_ADMIN__`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("admin UI does not contain %q", want)
-		}
-	}
-	for _, unwanted := range []string{
-		`version-dialog`,
-		`chooseVersion`,
-		`method: "POST"`,
-		`>Install<`,
-		`>Upgrade<`,
-	} {
-		if strings.Contains(html, unwanted) {
-			t.Fatalf("admin UI unexpectedly contains action %q", unwanted)
 		}
 	}
 }

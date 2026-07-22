@@ -1,0 +1,122 @@
+/*
+ * Valon brand faces — licensed cuts (KMR Melange Grotesk, Season Serif) plus
+ * Geist Mono for code / data.
+ *
+ * No binaries are redistributed by the registry: these @font-face rules point
+ * at the woffs the deployment already serves at /theme/fonts/<file> (gestaltd
+ * config.theme.assetsDir). @font-face is not a supported shadcn `css` at-rule,
+ * so the family is delivered as this standalone file via the theme item's
+ * files[] target. The consumer imports it once (e.g. from globals.css), then the
+ * font-sans / font-display / font-mono theme tokens resolve to these families.
+ *
+ * Absolute (root-relative) URLs so dev and prod resolve identically.
+ */
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("/theme/fonts/KMRMelangeGrotesk_Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("/theme/fonts/KMRMelangeGrotesk_Medium.woff") format("woff");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("/theme/fonts/KMRMelangeGrotesk_Bold.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("/theme/fonts/KMRMelangeGrotesk_Italic.woff") format("woff");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("/theme/fonts/KMRMelangeGrotesk_MediumItalic.woff") format("woff");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("/theme/fonts/KMRMelangeGrotesk_BoldItalic.woff") format("woff");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Season Serif";
+  src: url("/theme/fonts/SeasonSerif_Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Season Serif";
+  src: url("/theme/fonts/SeasonSerif_RegularItalic.woff") format("woff");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* The Medium cut's OS/2 usWeightClass is a non-standard 650 (Displaay foundry
+ * quirk); declaring 500 here is what CSS matches against for headings. */
+@font-face {
+  font-family: "Season Serif";
+  src: url("/theme/fonts/SeasonSerif_Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Mono for code / data. Regular for Code / CodeBlock / Kbd; Medium for mono UI
+ * chrome that needs weight (e.g. AgentConsole titles). SemiBold / Bold ship for
+ * callers that need heavier emphasis. */
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/theme/fonts/GeistMono_Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/theme/fonts/GeistMono_Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/theme/fonts/GeistMono_SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/theme/fonts/GeistMono_Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

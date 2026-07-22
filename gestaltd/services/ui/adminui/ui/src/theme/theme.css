@@ -1,0 +1,938 @@
+/*
+ * Valon shared theme — Tailwind v4 / shadcn-native (g-issues).
+ *
+ * Bridges the canonical Valon palette onto the shadcn token contract:
+ *   - Raw palette (--valon-*) is the source of truth: five numbered oklch ramps
+ *     (neutral, gold, red, green, yellow, blue; 50→950). The anchor steps are
+ *     transcribed from valon-tools/deploy/ui/theme.css (PR #2512, the gestalt
+ *     shell tenant theme) — see the mapping in :root; KEEP THOSE STEPS IN SYNC.
+ *     The in-between steps are registry-only (deploy ships single picks).
+ *   - System tokens (--background, --primary, --card, --muted, --accent, …)
+ *     map each shadcn token to a ramp step. These are what the shadcn
+ *     components consume via @theme inline below.
+ *   - Motion (--duration-* primitives + --motion-* intent aliases) tokenizes
+ *     transition timing so a hover-out retune is one edit, not a dozen
+ *     (RES-20260617-002). Consumed as named Tailwind duration/easing utilities
+ *     through the @theme aliases below.
+ *
+ * oklch is the Valon house format. Consume from an app's globals.css:
+ *   @import "tailwindcss";
+ *   @import "tw-animate-css";
+ *   @import "../theme/theme.css";
+ *
+ * Vendored inside g-issues; designed to lift into a Valon shadcn registry:theme
+ * item (see README.md). Brand @font-face is no longer declared here — it comes
+ * from the canonical valon-theme/valon-fonts.css (url("/theme/fonts/...")); the
+ * Storybook serves those fonts from deploy/ui/fonts via public/ (npm run
+ * sync-fonts). See PLN-20260616-001.
+ */
+
+/* Brand @font-face comes from valon-theme/valon-fonts.css (served /theme/fonts). */
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.5rem;
+  --valon-ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1); /* easeOutQuart — easings.net */
+  --valon-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); /* easeOutExpo — easings.net */
+  --valon-ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* easeOutBack — easings.net */
+  --valon-ease-out-back-soft: cubic-bezier(0.34, 1.25, 0.64, 1); /* gentler overshoot — larger UI / longer travel */
+  --ease-out-quart: var(--valon-ease-out-quart);
+  --ease-out-expo: var(--valon-ease-out-expo);
+  --ease-out-back: var(--valon-ease-out-back);
+  --ease-out-back-soft: var(--valon-ease-out-back-soft);
+
+  /* ── Motion — duration primitives (RES-20260617-002) ──────────────────
+     Tier 1: the only place a millisecond number is written. Values are the
+     registry's existing inline set, so nothing arbitrary is invented. */
+  --duration-0: 0ms; /* snap */
+  --duration-50: 50ms; /* fastest perceptible settle */
+  --duration-75: 75ms;
+  --duration-100: 100ms;
+  --duration-150: 150ms;
+  --duration-200: 200ms;
+  --duration-250: 250ms;
+  --duration-300: 300ms;
+
+  /* Tier 2: semantic interaction-intent aliases — the shared retiming knobs
+     components consume via named duration-* utilities. Directional
+     interaction timing first (instant in, super-fast settle out), then
+     genuine transform/opacity motion. */
+  --motion-hover-in: var(--duration-0); /* instant; the snap on :hover */
+  --motion-hover-out:  var(--duration-0); /* super-fast settle */
+  --motion-press: var(--duration-0); /* :active snaps */
+  --motion-select-in: var(--duration-0); /* menu/list active item highlight */
+  --motion-select-out: var(--duration-0);
+  --motion-reveal: var(--duration-150); /* popover/select/dialog ENTER */
+  --motion-dismiss: var(--duration-100); /* fast EXIT — shorter than reveal (transitions.md) */
+  --motion-reveal-lg:  var(--duration-300); /* larger surfaces (dialog) — more mass, slower in */
+  --motion-dismiss-lg: var(--duration-200); /* heavier close, still shorter than the lg enter */
+  --motion-move: var(--duration-200); /* tabs indicator, layout shifts; large surfaces (sidebar) */
+  --motion-overshoot: var(--duration-200); /* caret rotate, paired w/ --ease-out-back */
+  --motion-toast: var(--duration-250);
+
+  /* Press/hover feedback — on-color state-layer overlay (RES-20260617-004,
+     press-feedback.md). A control paints an ::after scrim in currentColor (its
+     on-color/label ink) at these opacities. Because currentColor is the fill's
+     complement, the scrim lightens a near-black fill and darkens a near-cream
+     one — direction flips for free, no luminance check, no brightness()
+     headroom problem. Snapped, never transitioned (transitions.md rule #1). */
+  --state-overlay-hover: 0.08; /* Material 3 hover state-layer parity */
+  --state-overlay-press: 0.14; /* M3 0.12, bumped so press reads vs hover on the ink fill */
+
+  /* ── Interaction Step Model (RES-20260721-001 / PLN-20260721-001) ─────
+     Absolute OKLCH ΔL by rest-L / chroma *band* and interaction *intent*.
+     Role tokens (`--accent-vivid-hover`, …) MUST derive via these meta steps —
+     never invent a magic `calc(l - N)` at a role site (hover-pressed-color.md).
+
+     Band            rest L (approx)     chroma     confirm hover / press
+     pale            ≥ 0.95              any        pale-*
+     light           0.88–0.95           low        light-*
+     light-chroma    0.80–0.92           mid+       light-chroma-*  (selected gold)
+     mid             0.45–0.80           any        mid-*
+     deep            0.25–0.45           any        deep-*
+     muted-chrome    idle on muted≈pale  low        muted-chrome-* (sidebar / track)
+     ink-confirm     mid ink strokes     mid        ink-confirm-*
+     extreme         ink/cream fills     —          scrim (--state-overlay-*), not ΔL
+
+     Affordance (transparent → tint) uses a discrete ramp into a pale/light
+     rest color; press then deepens with that band's press step.
+     muted-chrome is a separate band for idle-on-muted chrome (not deep):
+     calibrated 0.025 / 0.015 — do not reuse deep-*. */
+  --interaction-step-pale-hover: 0.012;
+  --interaction-step-pale-press: 0.024;
+  --interaction-step-light-hover: 0.012;
+  --interaction-step-light-press: 0.024;
+  --interaction-step-light-chroma-hover: 0.02;
+  --interaction-step-light-chroma-press: 0.04;
+  --interaction-step-mid-hover: 0.02;
+  --interaction-step-mid-press: 0.04;
+  --interaction-step-deep-hover: 0.015;
+  --interaction-step-deep-press: 0.03;
+  --interaction-step-muted-chrome-hover: 0.025;
+  --interaction-step-muted-chrome-press: 0.015;
+  --interaction-step-ink-confirm-hover: 0.02;
+  --interaction-step-ink-confirm-press: 0.04;
+
+  /* Control sizing — height + font-size + icon glyph per size, shared by input +
+     button so they cannot drift (control-sizing.md, RES-20260701-002). */
+  --control-h-xs: 1.5rem;
+  --control-h-sm: 2rem;
+  --control-h-default: 2.25rem;
+  --control-h-lg: 2.5rem;
+  --control-fz-xs: 0.75rem;
+  --control-fz-sm: 0.875rem;
+  --control-fz-default: 0.875rem;
+  --control-fz-lg: 1rem;
+  --control-icon-xs: 0.75rem;
+  --control-icon-sm: 0.875rem;
+  --control-icon-default: 1rem;
+  --control-icon-lg: 1.125rem;
+  --text-body: 0.875rem;
+  --valon-font-sans: "KMR Melange Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --valon-font-display: "Season Serif", Georgia, ui-serif, serif;
+  --valon-font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-sans: var(--valon-font-sans);
+  --font-display: var(--valon-font-display);
+  --font-mono: var(--valon-font-mono);
+  /* Eyebrow / overline tracking — between Tailwind wider (0.05em) and widest
+     (0.1em). Caps need more air than body; widest reads too open on text-xs. */
+  --tracking-eyebrow: 0.075em;
+
+  /* ── Valon palette — numbered oklch ramps (50 lightest → 950 darkest) ──
+     Source of truth. Anchored on the canonical deploy/ui/theme.css values, which
+     now land on ramp steps (KEEP these anchor steps in sync with deploy):
+       neutral-50=cream-100  neutral-100=cream-200  neutral-200=cream-line
+       neutral-600=ink-soft  neutral-900=ink
+       gold-50..950 = valon.ai brand gold (the public style guide); --brand uses
+       gold-800 (#7a4f10) for AA on white (also synced into deploy/ui/theme.css)
+       red-500=ember         green-600=grove
+     --valon-paper (pure white) is the page surface, not a ramp step. Dark mode is
+     authored as its own numbered neutral-dark + gold-dark ramps in the .dark block
+     below (RES-20260618-001); status hues reuse these light ramps at darker steps. */
+  --valon-paper: oklch(100% 0 0);
+
+  --valon-neutral-50: oklch(98.829% 0.0029 84.56);
+  --valon-neutral-100: oklch(97.384% 0.0045 78.3);
+  --valon-neutral-200: oklch(92.323% 0.0129 63.91);
+  --valon-neutral-300: oklch(86.851% 0.0197 72.55);
+  --valon-neutral-400: oklch(71.063% 0.035 74.65);
+  --valon-neutral-500: oklch(55.538% 0.0431 75.75);
+  --valon-neutral-600: oklch(44.69% 0.0382 91.81);
+  --valon-neutral-700: oklch(37.609% 0.0346 84.27);
+  --valon-neutral-800: oklch(27.043% 0.0259 51.02);
+  --valon-neutral-900: oklch(21.867% 0.0213 76.13);
+  --valon-neutral-950: oklch(20.5% 0.0231 57.22);
+
+  --valon-gold-50: oklch(99.5% 0.005 78.3);
+  --valon-gold-100: oklch(97.9% 0.02 81.8);
+  --valon-gold-200: oklch(93.6% 0.053 81.8);
+  --valon-gold-300: oklch(85.9% 0.112 82.4);
+  --valon-gold-400: oklch(79.3% 0.144 80.3);
+  --valon-gold-500: oklch(73.1% 0.152 72.6);
+  --valon-gold-600: oklch(64.4% 0.134 72.6);
+  --valon-gold-700: oklch(54.9% 0.113 70.8);
+  --valon-gold-800: oklch(46.522% 0.0933 70.48);
+  --valon-gold-900: oklch(38.5% 0.075 71.9);
+  --valon-gold-950: oklch(29.6% 0.055 73.6);
+
+  /* Status ramps — red · yellow (amber) · green · blue (info) — share ONE
+     lightness grid + a chroma envelope clamped per-hue to the sRGB gamut, so the
+     four read as one family (differing only in hue). Deploy anchors red-500=ember
+     and green-600=grove stay byte-stable; the shared L grid passes through their
+     lightness. See guidelines/color.md "Coherent status ramps" (RES-20260623-002). */
+  --valon-red-50: oklch(96.5% 0.012 25);
+  --valon-red-100: oklch(92.8% 0.035 25);
+  --valon-red-200: oklch(85.8% 0.073 25);
+  --valon-red-300: oklch(77.8% 0.108 25);
+  --valon-red-400: oklch(69% 0.132 25);
+  --valon-red-500: oklch(58.766% 0.1526 23);
+  --valon-red-600: oklch(48.204% 0.128 25);
+  --valon-red-700: oklch(40.8% 0.105 25);
+  --valon-red-800: oklch(34% 0.082 25);
+  --valon-red-900: oklch(28.2% 0.058 25);
+  --valon-red-950: oklch(23.4% 0.04 25);
+
+  --valon-green-50: oklch(96.5% 0.012 144);
+  --valon-green-100: oklch(92.8% 0.045 144);
+  --valon-green-200: oklch(85.8% 0.075 144);
+  --valon-green-300: oklch(77.8% 0.108 144);
+  --valon-green-400: oklch(69% 0.132 144);
+  --valon-green-500: oklch(58.766% 0.142 144);
+  --valon-green-600: oklch(48.204% 0.0881 144.06);
+  --valon-green-700: oklch(40.8% 0.105 144);
+  --valon-green-800: oklch(34% 0.082 144);
+  --valon-green-900: oklch(28.2% 0.058 144);
+  --valon-green-950: oklch(23.4% 0.04 144);
+
+  --valon-yellow-50: oklch(96.5% 0.012 82);
+  --valon-yellow-100: oklch(92.8% 0.045 82);
+  --valon-yellow-200: oklch(85.8% 0.075 82);
+  --valon-yellow-300: oklch(77.8% 0.108 82);
+  --valon-yellow-400: oklch(69% 0.132 82);
+  --valon-yellow-500: oklch(58.766% 0.116 82);
+  --valon-yellow-600: oklch(48.204% 0.096 82);
+  --valon-yellow-700: oklch(40.8% 0.082 82);
+  --valon-yellow-800: oklch(34% 0.069 82);
+  --valon-yellow-900: oklch(28.2% 0.058 82);
+  --valon-yellow-950: oklch(23.4% 0.04 82);
+
+  --valon-blue-50: oklch(96.5% 0.012 248);
+  --valon-blue-100: oklch(92.8% 0.035 248);
+  --valon-blue-200: oklch(85.8% 0.07 248);
+  --valon-blue-300: oklch(77.8% 0.108 248);
+  --valon-blue-400: oklch(69% 0.132 248);
+  --valon-blue-500: oklch(58.766% 0.142 248);
+  --valon-blue-600: oklch(48.204% 0.125 248);
+  --valon-blue-700: oklch(40.8% 0.105 248);
+  --valon-blue-800: oklch(34% 0.082 248);
+  --valon-blue-900: oklch(28.2% 0.058 248);
+  --valon-blue-950: oklch(23.4% 0.04 248);
+
+  /* ── shadcn tokens → ramp steps ──────────────────────────────────── */
+  --background: var(--valon-paper);
+  --foreground: var(--valon-neutral-900);
+  --card: var(--valon-paper);
+  --card-foreground: var(--valon-neutral-900);
+  --popover: var(--valon-paper);
+  --popover-foreground: var(--valon-neutral-900);
+  --primary: var(--valon-neutral-900);
+  --primary-foreground: var(--valon-paper);
+  --secondary: var(--valon-neutral-100);
+  --secondary-foreground: var(--valon-neutral-900);
+  --muted: var(--valon-neutral-100);
+  --muted-foreground: var(--valon-neutral-600);
+  /* One step softer than --muted-foreground (neutral-500). Eyebrow / overline
+     microtype — all-caps at text-xs reads heavier than body muted captions. */
+  --muted-foreground-soft: var(--valon-neutral-500);
+  /* Muted hover wash on the NEUTRAL scale — a subtle, brand-free tint for hovering a
+     low-emphasis surface (comment card). Lighter than --muted; the neutral counterpart to
+     --accent-hover for surfaces that should stay neutral on hover, not gold. */
+  --surface-hover: var(--valon-neutral-50);
+  /* Pressed step of --surface-hover — pale-band confirm (Interaction Step Model). */
+  --surface-pressed: oklch(from var(--surface-hover) calc(l - var(--interaction-step-pale-press)) c h);
+  /* Disabled fill + ink — achromatic counterparts of atmospheric neutral
+     lightness. Warm cream/gold-adjacent neutrals stay on --muted for surfaces;
+     inactive controls must not inherit brand chroma (disabled-states.md).
+     `oklch(from … l 0 h)` keeps L in sync with the atmospheric step while
+     forcing chroma to 0. */
+  --disabled: oklch(from var(--valon-neutral-100) l 0 h);
+  --disabled-foreground: oklch(from var(--valon-neutral-400) l 0 h);
+  --accent: var(--valon-gold-200);
+  --accent-foreground: var(--valon-neutral-900);
+  /* Soft accent FILL deepen (today / range band) — light band (Interaction Step Model).
+     Distinct from --accent-hover (menu tint affordance). */
+  --accent-fill-hover: oklch(from var(--accent) calc(l - var(--interaction-step-light-hover)) c h);
+  --accent-fill-pressed: oklch(from var(--accent) calc(l - var(--interaction-step-light-press)) c h);
+  --destructive: var(--valon-red-500);
+  --destructive-foreground: var(--valon-paper);
+  --success: var(--valon-green-100);
+  --success-foreground: var(--valon-green-700);
+  --warning: var(--valon-yellow-100);
+  --warning-foreground: var(--valon-yellow-700);
+  /* Error status SURFACE — soft red tint, the sibling of success/warning for
+     status surfaces (toasts, inline alerts). Distinct from --destructive, the
+     high-emphasis ACTION red (delete buttons): same hue, far lower intensity. */
+  --error: var(--valon-red-100);
+  --error-foreground: var(--valon-red-700);
+  --info: var(--valon-blue-100);
+  --info-foreground: var(--valon-blue-700);
+  /* Solid status fills — the saturated fill (`-solid`) of each feedback color: data
+     viz (meters, charts, status dots, progress) and filled badges. DISTINCT from the
+     pale alert-surface --success/--error above (the tinted backgrounds) and from the
+     --destructive ACTION. The 400 step is a legible mid fill; the four share an L
+     (~69%) so cross-hue pairs read balanced, each with a dark on-color. See
+     guidelines/color.md (wash 100 / vivid 300 / solid 400). */
+  --success-solid: var(--valon-green-400);
+  --success-solid-foreground: var(--valon-neutral-900);
+  --error-solid: var(--valon-red-400);
+  --error-solid-foreground: var(--valon-neutral-900);
+  --warning-solid: var(--valon-yellow-400);
+  --warning-solid-foreground: var(--valon-neutral-900);
+  --info-solid: var(--valon-blue-400);
+  --info-solid-foreground: var(--valon-neutral-900);
+  --overlay: oklch(22.81% 0 0); /* neutral scrim, not brand ink */
+  --border: var(--valon-neutral-200);
+  /* Neutral hover on white/card surfaces — table rows, menu items, filter chips, comment cards. */
+  --neutral-hover: var(--valon-neutral-100);
+  /* Press deepen of the pale affordance wash — pale-band press step. */
+  --neutral-pressed: oklch(from var(--neutral-hover) calc(l - var(--interaction-step-pale-press)) c h);
+  /* Idle on muted chrome (sidebar, SegmentedControl track ≈ --muted ≡ --neutral-hover).
+     muted-chrome band — calibrated for idle-on-muted, not deep-band reuse. */
+  --neutral-dark-hover: oklch(from var(--neutral-hover) calc(l - var(--interaction-step-muted-chrome-hover)) c h);
+  --neutral-dark-pressed: oklch(from var(--neutral-dark-hover) calc(l - var(--interaction-step-muted-chrome-press)) c h);
+  --list-item-hover: var(--neutral-hover);
+  --list-item-pressed: var(--neutral-pressed);
+  --input: oklch(82% 0 0); /* neutral gray control border, pops on white */
+  /* Bright brand accent — the one vivid interaction accent. A small role family on
+     the gold ramp, DISTINCT from the shadcn --accent (gold-200, a subtle hover
+     surface): --accent-vivid is the saturated stroke/fill (drop line, checked
+     checkbox, link underline, commented-line underline) and carries a dark-ink
+     on-color (-foreground). gold-300, not gold-500 — 500 (hue ~73) reads as a
+     darker amber/orange and muddies the dark on-ink; gold-300 (hue ~82) is a
+     bright, true gold that keeps the dark ink very legible. (Same step as --ring.)
+     --accent-wash is the pale "whiter shade" tint behind a commented line.
+     Role-named, not hue-named, so a non-gold brand re-tints them. */
+  --accent-vivid: var(--valon-gold-300);
+  --accent-vivid-foreground: var(--valon-neutral-900);
+  /* Selected FILL confirm — light-chroma band (list / nav / calendar / sidebar). */
+  --accent-vivid-hover: oklch(from var(--accent-vivid) calc(l - var(--interaction-step-light-chroma-hover)) c h);
+  --accent-vivid-pressed: oklch(from var(--accent-vivid) calc(l - var(--interaction-step-light-chroma-press)) c h);
+  --accent-wash: var(--valon-gold-100);
+  /* Near-page wash confirm — pale band (larger absolute ΔL than mid-chroma). */
+  --accent-wash-hover: oklch(from var(--accent-wash) calc(l - var(--interaction-step-pale-hover)) c h);
+  --accent-wash-pressed: oklch(from var(--accent-wash) calc(l - var(--interaction-step-pale-press)) c h);
+  /* Mid-tone accent ink for solid chrome (tabs underline, switch on, radio checked,
+     link draw underline, list markers) — gold-400, between bright --accent-vivid and
+     darker --accent-strong. ink-confirm band. */
+  --accent-solid: var(--valon-gold-400);
+  --accent-solid-hover: oklch(from var(--accent-solid) calc(l - var(--interaction-step-ink-confirm-hover)) c h);
+  --accent-solid-pressed: oklch(from var(--accent-solid) calc(l - var(--interaction-step-ink-confirm-press)) c h);
+  /* Darker accent weight for standalone chromatic ink (logomarks, readable brand
+     strokes) — gold-500, one step past --accent-solid on the wash→vivid→solid→strong
+     ladder. Semantic --link aliases this shade; prefer text-accent-strong when the
+     thing is not a link. */
+  --accent-strong: var(--valon-gold-500);
+  --accent-strong-hover: oklch(from var(--accent-strong) calc(l - var(--interaction-step-ink-confirm-hover)) c h);
+  --accent-strong-pressed: oklch(from var(--accent-strong) calc(l - var(--interaction-step-ink-confirm-press)) c h);
+  /* Search / in-text match highlight — between wash (gold-100) and vivid (gold-300). */
+  --accent-highlight: var(--valon-gold-200);
+  /* Scrollbar thumb: a solid neutral (no brand color, no transparency) — neutral-300 light, a mid
+     dark-gray in dark so it stays visible on either surface. Hover deepens it toward --foreground. */
+  --scrollbar-thumb: var(--valon-neutral-300);
+  /* Focus ring: a lighter shade of the accent. A soft, on-brand keyboard-focus
+     outline — deliberately light (see focus-ring.md), now tinted to the accent. */
+  --ring: var(--valon-gold-300);
+
+  /* Brand passthrough (shadcn has no brand token): bg-brand / text-brand */
+  --brand: var(--valon-gold-800);
+  --brand-foreground: var(--valon-paper);
+  /* Resizable-panel / sidebar divider: the bright accent on hover, one ramp step darker while dragging. */
+  --separator-hover: var(--accent-vivid);
+  --separator-active: oklch(from var(--accent-vivid) calc(l * 0.97) c h);
+  /* Drop indicator: line marking where a dragged block, table row, or dropped file
+     will land — the bright accent. */
+  --drop-indicator: var(--accent-vivid);
+  /* Link color — semantic interaction role for link TEXT. Aliases --accent-strong
+     (gold-500) so the shade lives on the accent weight ladder; hover/pressed deepen
+     via that shade (hover-pressed-color.md). The draw underline reuses mid-tone
+     --accent-solid (gold-400). */
+  --link: var(--accent-strong);
+  --link-hover: var(--accent-strong-hover);
+  --link-pressed: var(--accent-strong-pressed);
+  /* Resizable-pane divider highlight: the 1px handle thickens to this on hover/drag. Hover paints
+     the saturated --accent-vivid so the line clearly reads; dragging deepens it a tiny
+     bit (lower L only). Defined once here and inherited by .dark (resolves per-mode via the dark
+     --accent-vivid). */
+  --separator-hover: var(--accent-vivid);
+  --separator-active: oklch(from var(--accent-vivid) calc(l * 0.97) c h);
+  --highlight: var(--valon-yellow-300);
+  /* Editor text-selection = functional blue (Notion-like), kept hue-distinct from
+     the comment-thread highlight, which is the bright accent: a pale wash plus a
+     solid accent underline. */
+  --selection: var(--valon-blue-500);
+  /* Comment-highlight interaction states derive from the wash by mixing toward
+     --accent-vivid (more emphasis = toward the saturated accent). Same hue, so it
+     only shifts L/C; and because it moves toward the vivid step it darkens the
+     pale light wash but lightens the dark wash — one definition serves BOTH modes
+     (dark-mode elevation = lighter), so .dark needs no override. */
+  --comment-highlight: var(--accent-wash);
+  --comment-highlight-hover: color-mix(in oklch, var(--accent-wash), var(--accent-vivid) 15%);
+  --comment-highlight-active: color-mix(in oklch, var(--accent-wash), var(--accent-vivid) 30%);
+  --comment-highlight-selected: color-mix(in oklch, var(--accent-wash), var(--accent-vivid) 15%);
+  --comment-highlight-line: var(--accent-vivid);
+  --comment-flash: var(--accent);
+  /* Hairline for comment quote / anchor chrome (rail previews, anchored excerpts). */
+  --comment-anchor-border: var(--valon-gold-200);
+
+  /* Accent interaction tints — ONE gold highlight for every interactive surface,
+     at three emphasis levels. Shared by dropdown items and breadcrumb triggers.
+     (Ghost Button uses the on-color ::after scrim instead — RES-20260702-002.)
+     Table rows, menu items, filter chips, and sidebar nav use --neutral-hover /
+     --neutral-dark-hover instead.
+     In LIGHT, hover is simply gold-100 (the lightest gold) — no mix. pressed is the
+     SAME gold as hover, only a hair darker: −0.015 L via relative color syntax
+     (oklch(from …) reads hover's channels and rewrites L, keeping C + H), so it
+     tracks whatever hover resolves to. A BIGGER step than the vivid fill's −0.0025:
+     the pale gold-100 wash has low contrast on white, so it needs more darkening to
+     register the press (lighter / lower-contrast fill → larger ΔL). subtle is the persistent
+     selected tint, a small mix one step more present than hover. A transient hover
+     stays light; a checked control (checkbox / toggle) jumps to --accent-vivid — so
+     "hovered" and "checked" can never read as the same shade.
+       hover    = the lightest transient wash for a hovered row / menu item (gold-100)
+       pressed  = :active feedback — hover −0.015 L (a bigger step than the vivid
+                  fill's −0.0025: the pale wash has low contrast, so it needs more
+                  to read; same gold)
+       subtle   = persistent tint for a selected option / current row — one step more
+                  present than hover, so selected reads stronger than hovered
+     DARK (see .dark below): hover can't be a fixed light gold (a bright blob on the
+     dark surface) and must NOT lighten toward white — it has to blend the gold INTO
+     the dark surface, so .dark mixes --accent toward --popover (the surface) in
+     OKLAB (oklch would skew the hue toward orange). subtle re-derives the same way. */
+  --accent-hover: var(--valon-gold-100);
+  --accent-pressed: oklch(from var(--accent-hover) calc(l - var(--interaction-step-pale-press)) c h);
+  --accent-subtle: color-mix(in oklab, var(--accent), var(--popover) 30%);
+
+  /* Chart series — categorical data-viz (not status). One slot per distinct hue
+     around the wheel at the shared status -400 weight (L≈69% / C≈0.132). Brand
+     gold appears once; chart-5 is a chart-only violet that fills the red↔blue
+     gap (no violet ramp yet). Do not stack gold+yellow or dark 600/800 fills. */
+  --chart-1: var(--valon-blue-400);
+  --chart-2: var(--valon-green-400);
+  --chart-3: var(--valon-gold-400);
+  --chart-4: var(--valon-red-400);
+  --chart-5: oklch(69% 0.12 300);
+
+  --sidebar: var(--valon-neutral-100);
+  --sidebar-foreground: var(--valon-neutral-900);
+  --sidebar-primary: var(--valon-neutral-900);
+  --sidebar-primary-foreground: var(--valon-paper);
+  --sidebar-accent: var(--valon-gold-200);
+  --sidebar-accent-foreground: var(--valon-neutral-900);
+  --sidebar-border: var(--valon-neutral-200);
+  --sidebar-edge: var(--valon-neutral-100);
+  --sidebar-item-hover: var(--neutral-dark-hover);
+  --sidebar-item-pressed: var(--neutral-dark-pressed);
+  /* Legacy aliases → accent-vivid selected ladder (one SoT; was a louder −0.03/−0.06 fork). */
+  --sidebar-item-selected-hover: var(--accent-vivid-hover);
+  --sidebar-item-selected-pressed: var(--accent-vivid-pressed);
+  --sidebar-ring: var(--valon-gold-800);
+}
+
+.dark {
+  /* ── Valon dark ramps — numbered, lightness-ordered 50→950 (RES-20260618-001,
+     guidelines/color.md "Dark mode"). Dark is AUTHORED, not derived: separate dark
+     ramps for neutral + brand (gold); status (red/green/yellow) reuses the shared
+     light ramps at different steps. Like light, 50 = lightest (text) and 950 =
+     darkest (surface); elevation = lighter = lower step. The 7 shipped picks keep
+     their L+C (no surface/text regression) — hue is regularized into a monotonic
+     warm drift and the 4 in-between steps are interpolated, then every step is
+     sRGB-gamut-clamped and verified WCAG AA + APCA Lc (RES-20260618-001).
+       neutral-dark: 100=cream-ink(foreground) 300=cream-ink-soft(muted-fg)
+         500=cream-ink-faint(disabled-fg) 700=night-line(border) 800=night-200
+         (secondary/muted) 900=night-100(card) 950=night(background)
+       gold-dark: 200=gold-bright(brand/ring) 800=gold-deep(accent). gold-dark-200's
+         0.112 chroma deliberately EXCEEDS light gold-200's 0.066 — high-lightness
+         gamut headroom keeps a dark accent vivid (and proves a light→dark transform
+         would mis-derive it). */
+  --valon-neutral-dark-50: oklch(95.5% 0.006 73);
+  --valon-neutral-dark-100: oklch(92.718% 0.0097 72.66);
+  --valon-neutral-dark-200: oklch(84% 0.013 70);
+  --valon-neutral-dark-300: oklch(72% 0.018 68);
+  --valon-neutral-dark-400: oklch(61% 0.016 64);
+  --valon-neutral-dark-500: oklch(51% 0.013 61);
+  --valon-neutral-dark-600: oklch(41% 0.012 58);
+  --valon-neutral-dark-700: oklch(32.208% 0.0111 56);
+  --valon-neutral-dark-800: oklch(27.009% 0.0106 54);
+  --valon-neutral-dark-900: oklch(22.685% 0.0097 53);
+  --valon-neutral-dark-950: oklch(19.494% 0.0088 52);
+
+  --valon-gold-dark-50: oklch(95% 0.04 82);
+  --valon-gold-dark-100: oklch(91% 0.075 82);
+  --valon-gold-dark-200: oklch(85.935% 0.1118 82.45);
+  --valon-gold-dark-300: oklch(77% 0.125 80);
+  --valon-gold-dark-400: oklch(67% 0.135 78);
+  --valon-gold-dark-500: oklch(57% 0.1198 76);
+  --valon-gold-dark-600: oklch(50% 0.105 74);
+  --valon-gold-dark-700: oklch(44% 0.088 73);
+  --valon-gold-dark-800: oklch(38.46% 0.075 71.86);
+  --valon-gold-dark-900: oklch(31% 0.06 71);
+  --valon-gold-dark-950: oklch(24% 0.048 71);
+
+  /* ── shadcn tokens → dark ramp steps ─────────────────────────────────── */
+  --background: var(--valon-neutral-dark-950);
+  --foreground: var(--valon-neutral-dark-100);
+  --card: var(--valon-neutral-dark-900);
+  --card-foreground: var(--valon-neutral-dark-100);
+  --popover: var(--valon-neutral-dark-900);
+  --popover-foreground: var(--valon-neutral-dark-100);
+  --primary: var(--valon-neutral-dark-100);
+  --primary-foreground: var(--valon-neutral-dark-950);
+  --secondary: var(--valon-neutral-dark-800);
+  --secondary-foreground: var(--valon-neutral-dark-100);
+  --muted: var(--valon-neutral-dark-800);
+  --muted-foreground: var(--valon-neutral-dark-300);
+  /* Soft muted ink — one step softer than --muted-foreground in dark. */
+  --muted-foreground-soft: var(--valon-neutral-dark-400);
+  --surface-hover: var(--valon-neutral-dark-800);
+  --disabled: oklch(from var(--valon-neutral-dark-800) l 0 h);
+  --disabled-foreground: oklch(from var(--valon-neutral-dark-500) l 0 h);
+  --accent: var(--valon-gold-dark-800);
+  --accent-foreground: var(--valon-neutral-dark-100);
+  /* Soft accent FILL deepen — re-bind in dark so oklch(from --accent) does not
+     inherit the light computed value (same pattern as --accent-solid-*). */
+  --accent-fill-hover: oklch(from var(--accent) calc(l - var(--interaction-step-light-hover)) c h);
+  --accent-fill-pressed: oklch(from var(--accent) calc(l - var(--interaction-step-light-press)) c h);
+  --accent-vivid: var(--valon-gold-dark-300);
+  --accent-vivid-foreground: var(--valon-neutral-dark-950);
+  --accent-vivid-hover: oklch(from var(--accent-vivid) calc(l - var(--interaction-step-light-chroma-hover)) c h);
+  --accent-vivid-pressed: oklch(from var(--accent-vivid) calc(l - var(--interaction-step-light-chroma-press)) c h);
+  --accent-wash: var(--valon-gold-dark-900);
+  --accent-wash-hover: oklch(from var(--accent-wash) calc(l - var(--interaction-step-pale-hover)) c h);
+  --accent-wash-pressed: oklch(from var(--accent-wash) calc(l - var(--interaction-step-pale-press)) c h);
+  --accent-solid: var(--valon-gold-dark-400);
+  --accent-solid-hover: oklch(from var(--accent-solid) calc(l - var(--interaction-step-ink-confirm-hover)) c h);
+  --accent-solid-pressed: oklch(from var(--accent-solid) calc(l - var(--interaction-step-ink-confirm-press)) c h);
+  --accent-strong: var(--valon-gold-dark-500);
+  --accent-strong-hover: oklch(from var(--accent-strong) calc(l - var(--interaction-step-ink-confirm-hover)) c h);
+  --accent-strong-pressed: oklch(from var(--accent-strong) calc(l - var(--interaction-step-ink-confirm-press)) c h);
+  --accent-highlight: var(--valon-gold-dark-800);
+  --comment-anchor-border: var(--valon-gold-dark-500);
+  /* Light hover is the literal gold-100 ramp step; in dark that would be a bright
+     blob, so blend the gold INTO the dark surface (toward --popover) in OKLAB.
+     pressed + subtle re-derive from the redefined --accent-hover / --accent / --popover. */
+  --accent-hover: color-mix(in oklab, var(--accent), var(--popover) 60%);
+  /* status reuses the shared light ramps at a dark-appropriate step (pattern A) */
+  --destructive: var(--valon-red-300);
+  --destructive-foreground: var(--valon-neutral-dark-950);
+  --success: var(--valon-green-900);
+  --success-foreground: var(--valon-green-200);
+  --warning: var(--valon-yellow-900);
+  --warning-foreground: var(--valon-yellow-200);
+  --error: var(--valon-red-900);
+  --error-foreground: var(--valon-red-200);
+  --info: var(--valon-blue-900);
+  --info-foreground: var(--valon-blue-200);
+  /* Solid status fills (dark) — same 400 step; a clear mid fill on the dark surface,
+     each with a dark on-ink. */
+  --success-solid: var(--valon-green-400);
+  --success-solid-foreground: var(--valon-neutral-dark-950);
+  --error-solid: var(--valon-red-400);
+  --error-solid-foreground: var(--valon-neutral-dark-950);
+  --warning-solid: var(--valon-yellow-400);
+  --warning-solid-foreground: var(--valon-neutral-dark-950);
+  --info-solid: var(--valon-blue-400);
+  --info-solid-foreground: var(--valon-neutral-dark-950);
+  --overlay: oklch(19.494% 0 0); /* neutral scrim, not brand ink */
+  --border: var(--valon-neutral-dark-700);
+  --input: var(--valon-neutral-dark-700);
+  --scrollbar-thumb: var(--valon-neutral-dark-600);
+  --ring: var(--valon-gold-dark-200);
+
+  --brand: var(--valon-gold-dark-200);
+  --brand-foreground: var(--valon-neutral-dark-950);
+  /* --separator-hover / --separator-active inherit from :root (accent-vivid resolves per-mode). */
+  --drop-indicator: var(--accent-vivid);
+  --link: var(--accent-strong);
+  --link-hover: var(--accent-strong-hover);
+  --link-pressed: var(--accent-strong-pressed);
+  /* --separator-hover / --separator-active inherit from :root (they resolve per-mode via the dark
+     --accent-vivid above), so no dark override is needed. */
+  --highlight: var(--valon-yellow-600);
+  --selection: var(--valon-blue-400);
+  /* --comment-highlight* derive from :root via --accent-wash + --accent-vivid,
+     which are redefined above for dark — the color-mix re-resolves, no override. */
+
+  --neutral-hover: var(--valon-neutral-dark-800);
+  --neutral-pressed: oklch(from var(--neutral-hover) calc(l - var(--interaction-step-pale-press)) c h);
+  --neutral-dark-hover: oklch(from var(--neutral-hover) calc(l - var(--interaction-step-muted-chrome-hover)) c h);
+  --neutral-dark-pressed: oklch(from var(--neutral-dark-hover) calc(l - var(--interaction-step-muted-chrome-press)) c h);
+  --list-item-hover: var(--neutral-hover);
+  --list-item-pressed: var(--neutral-pressed);
+
+  /* Same hues as light; -400 solids already read on dark (success/error/info
+     solid). Violet lifts L slightly so it stays vivid on dark canvas. */
+  --chart-1: var(--valon-blue-400);
+  --chart-2: var(--valon-green-400);
+  --chart-3: var(--valon-gold-400);
+  --chart-4: var(--valon-red-400);
+  --chart-5: oklch(78% 0.1 300);
+
+  --sidebar: var(--valon-neutral-dark-950);
+  --sidebar-foreground: var(--valon-neutral-dark-100);
+  --sidebar-primary: var(--valon-neutral-dark-100);
+  --sidebar-primary-foreground: var(--valon-neutral-dark-950);
+  --sidebar-accent: var(--valon-gold-dark-800);
+  --sidebar-accent-foreground: var(--valon-neutral-dark-100);
+  --sidebar-border: var(--valon-neutral-dark-700);
+  --sidebar-edge: var(--valon-neutral-dark-700);
+  --sidebar-item-hover: var(--neutral-dark-hover);
+  --sidebar-item-pressed: var(--neutral-dark-pressed);
+  --sidebar-item-selected-hover: var(--accent-vivid-hover);
+  --sidebar-item-selected-pressed: var(--accent-vivid-pressed);
+  --sidebar-ring: var(--valon-gold-dark-200);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-foreground-soft: var(--muted-foreground-soft);
+  --color-disabled: var(--disabled);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-fill-hover: var(--accent-fill-hover);
+  --color-accent-fill-pressed: var(--accent-fill-pressed);
+  --color-accent-vivid: var(--accent-vivid);
+  --color-accent-vivid-foreground: var(--accent-vivid-foreground);
+  --color-accent-vivid-hover: var(--accent-vivid-hover);
+  --color-accent-vivid-pressed: var(--accent-vivid-pressed);
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-wash-hover: var(--accent-wash-hover);
+  --color-accent-wash-pressed: var(--accent-wash-pressed);
+  --color-accent-solid: var(--accent-solid);
+  --color-accent-solid-hover: var(--accent-solid-hover);
+  --color-accent-solid-pressed: var(--accent-solid-pressed);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-strong-hover: var(--accent-strong-hover);
+  --color-accent-strong-pressed: var(--accent-strong-pressed);
+  --color-accent-highlight: var(--accent-highlight);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-pressed: var(--surface-pressed);
+  --color-neutral-hover: var(--neutral-hover);
+  --color-neutral-pressed: var(--neutral-pressed);
+  --color-neutral-dark-hover: var(--neutral-dark-hover);
+  --color-neutral-dark-pressed: var(--neutral-dark-pressed);
+  --color-list-item-hover: var(--list-item-hover);
+  --color-list-item-pressed: var(--list-item-pressed);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-warning-solid: var(--warning-solid);
+  --color-warning-solid-foreground: var(--warning-solid-foreground);
+  --color-info-solid: var(--info-solid);
+  --color-info-solid-foreground: var(--info-solid-foreground);
+  --color-success-solid: var(--success-solid);
+  --color-success-solid-foreground: var(--success-solid-foreground);
+  --color-error-solid: var(--error-solid);
+  --color-error-solid-foreground: var(--error-solid-foreground);
+  --color-overlay: var(--overlay);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+  --color-link-pressed: var(--link-pressed);
+  --color-drop-indicator: var(--drop-indicator);
+  --color-separator-hover: var(--separator-hover);
+  --color-separator-active: var(--separator-active);
+  --color-highlight: var(--highlight);
+  --color-selection: var(--selection);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-pressed: var(--accent-pressed);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-comment-anchor-border: var(--comment-anchor-border);
+  --color-comment-flash: var(--comment-flash);
+
+  /* Functional palette ramps — wire valon steps as Tailwind color utilities so
+     text-green-500 / text-yellow-500 / text-red-500 / text-blue-500 resolve to
+     valon values rather than Tailwind's built-in palette. */
+  --color-green-50: var(--valon-green-50);
+  --color-green-100: var(--valon-green-100);
+  --color-green-200: var(--valon-green-200);
+  --color-green-300: var(--valon-green-300);
+  --color-green-400: var(--valon-green-400);
+  --color-green-500: var(--valon-green-500);
+  --color-green-600: var(--valon-green-600);
+  --color-green-700: var(--valon-green-700);
+  --color-green-800: var(--valon-green-800);
+  --color-green-900: var(--valon-green-900);
+  --color-green-950: var(--valon-green-950);
+  --color-yellow-50: var(--valon-yellow-50);
+  --color-yellow-100: var(--valon-yellow-100);
+  --color-yellow-200: var(--valon-yellow-200);
+  --color-yellow-300: var(--valon-yellow-300);
+  --color-yellow-400: var(--valon-yellow-400);
+  --color-yellow-500: var(--valon-yellow-500);
+  --color-yellow-600: var(--valon-yellow-600);
+  --color-yellow-700: var(--valon-yellow-700);
+  --color-yellow-800: var(--valon-yellow-800);
+  --color-yellow-900: var(--valon-yellow-900);
+  --color-yellow-950: var(--valon-yellow-950);
+  --color-red-50: var(--valon-red-50);
+  --color-red-100: var(--valon-red-100);
+  --color-red-200: var(--valon-red-200);
+  --color-red-300: var(--valon-red-300);
+  --color-red-400: var(--valon-red-400);
+  --color-red-500: var(--valon-red-500);
+  --color-red-600: var(--valon-red-600);
+  --color-red-700: var(--valon-red-700);
+  --color-red-800: var(--valon-red-800);
+  --color-red-900: var(--valon-red-900);
+  --color-red-950: var(--valon-red-950);
+  --color-blue-50: var(--valon-blue-50);
+  --color-blue-100: var(--valon-blue-100);
+  --color-blue-200: var(--valon-blue-200);
+  --color-blue-300: var(--valon-blue-300);
+  --color-blue-400: var(--valon-blue-400);
+  --color-blue-500: var(--valon-blue-500);
+  --color-blue-600: var(--valon-blue-600);
+  --color-blue-700: var(--valon-blue-700);
+  --color-blue-800: var(--valon-blue-800);
+  --color-blue-900: var(--valon-blue-900);
+  --color-blue-950: var(--valon-blue-950);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-edge: var(--sidebar-edge);
+  --color-sidebar-item-hover: var(--sidebar-item-hover);
+  --color-sidebar-item-pressed: var(--sidebar-item-pressed);
+  --color-sidebar-item-selected-hover: var(--sidebar-item-selected-hover);
+  --color-sidebar-item-selected-pressed: var(--sidebar-item-selected-pressed);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--valon-font-sans);
+  --font-display: var(--valon-font-display);
+  --font-mono: var(--valon-font-mono);
+  --tracking-eyebrow: 0.075em;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --ease-out-quart: var(--valon-ease-out-quart);
+  --ease-out-expo: var(--valon-ease-out-expo);
+  --ease-out-back: var(--valon-ease-out-back);
+  --ease-out-back-soft: var(--valon-ease-out-back-soft);
+
+  --transition-duration-hover-in: var(--motion-hover-in);
+  --transition-duration-hover-out: var(--motion-hover-out);
+  --transition-duration-press: var(--motion-press);
+  --transition-duration-select-in: var(--motion-select-in);
+  --transition-duration-select-out: var(--motion-select-out);
+  --transition-duration-reveal: var(--motion-reveal);
+  --transition-duration-dismiss: var(--motion-dismiss);
+  --transition-duration-reveal-lg: var(--motion-reveal-lg);
+  --transition-duration-dismiss-lg: var(--motion-dismiss-lg);
+  --transition-duration-move: var(--motion-move);
+  --transition-duration-overshoot: var(--motion-overshoot);
+  --transition-duration-toast: var(--motion-toast);
+
+  --height-control-xs: var(--control-h-xs);
+  --height-control-sm: var(--control-h-sm);
+  --height-control-default: var(--control-h-default);
+  --height-control-lg: var(--control-h-lg);
+  --text-control-xs: var(--control-fz-xs);
+  --text-control-sm: var(--control-fz-sm);
+  --text-control-default: var(--control-fz-default);
+  --text-control-lg: var(--control-fz-lg);
+  --size-control-xs: var(--control-h-xs);
+  --size-control-sm: var(--control-h-sm);
+  --size-control-default: var(--control-h-default);
+  --size-control-lg: var(--control-h-lg);
+}
+
+/* Base body text size (guidelines/typography-base-size.md). Set the design-system
+ * default inherited size on the body — NOT the root, which stays user-agent-sized so
+ * rem-based steps keep scaling with the user's browser font-size + zoom (WCAG 1.4.4).
+ * In the `base` layer so any explicit text-* utility still wins; only unstyled text
+ * inherits this. Apps get it by importing this file — they must not re-declare a base. */
+@layer base {
+  body {
+    font-size: var(--text-body);
+  }
+}
+
+/* Focus ring — the one keyboard-focus indicator (RES-20260617-005, guidelines/focus-ring.md).
+ * A solid outline (not a box-shadow ring) survives forced-colors / High-Contrast Mode and is
+ * not clipped the way a ring is; scoped to :focus-visible so mouse clicks don't ring; never
+ * transitioned. NO base outline-none/hidden — it would poison --tw-outline-style (ring renders
+ * nothing) and paint an always-on ring in forced-colors. focus-ring-inset = negative offset for
+ * full-bleed elements clipped by an overflow ancestor (e.g. a clickable data-table row). */
+@utility focus-ring {
+  @apply focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring;
+}
+@utility focus-ring-inset {
+  @apply focus-visible:outline-3 focus-visible:outline-offset-[-3px] focus-visible:outline-ring;
+}
+
+/* Muted scrollbar — a thin, solid neutral thumb (no brand color) on a transparent track, so only
+ * the thumb shows. --scrollbar-thumb is neutral-300 in light / a mid dark-gray in dark, visible on
+ * either surface. The standard scrollbar-width / scrollbar-color cover every modern browser
+ * (Chromium 121+, Safari 18.2+, Firefox), so no ::-webkit-scrollbar pseudo-element rules are needed. */
+@utility scrollbar-muted {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* App-wide default scrollbar — set on html so EVERY scroll container (incl. the document, which
+ * would otherwise fall back to the OS default dark overlay) inherits the same muted neutral thumb
+ * as .scrollbar-muted. The .scrollbar-muted utility stays for self-contained components rendered
+ * outside this app shell. */
+@layer base {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+}
+
+/*
+ * Spinner (Gestalt mark) — mirrors the spinner registry item's css field. Each
+ * of the eight V strokes (V for Valon) renders twice: a static muted "track" so
+ * the whole mark stays legible, and an accent "snake" (pathLength 1) whose
+ * stroke-dash draws on, holds, then off (dashoffset 1 → 0 → -1). Staggered by
+ * --piece-index one V-step apart, the lit V hands off to the next, straddling
+ * V's at each junction (V → VV → V), so one accent glides clockwise around the
+ * ring with eased motion, never blinking out. The draw-on/erase each last one
+ * V-step (an eighth of the cycle) so the head crosses junctions seamlessly,
+ * eased with the brand ease-out-quart for an organic step.
+ * Subtracting one full period keeps every delay negative so the snake is
+ * mid-flight from the first frame.
+ */
+@keyframes valon-spinner-snake {
+  0% { stroke-dashoffset: 1; }
+  12.5% { stroke-dashoffset: 0; }
+  62.5% { stroke-dashoffset: 0; }
+  75%, 100% { stroke-dashoffset: -1; }
+}
+
+.valon-spinner__track {
+  stroke: var(--valon-neutral-200);
+}
+
+.valon-spinner__snake {
+  stroke: var(--valon-gold-400);
+  stroke-dasharray: 1 1;
+  animation: valon-spinner-snake 1.2s var(--valon-ease-out-quart) infinite;
+  animation-delay: calc(var(--piece-index, 0) * 0.15s - 1.2s);
+}
+
+/* Dark mode: track/snake use raw light-ramp tokens (not redefined under .dark),
+ * so remap to the dark ramps — a muted dark-neutral track + a vivid dark gold. */
+.dark .valon-spinner__track {
+  stroke: var(--valon-neutral-dark-700);
+}
+
+.dark .valon-spinner__snake {
+  stroke: var(--valon-gold-dark-300);
+}
+
+/*
+ * Checkbox finish — after the two strokes draw on, the whole indicator gives one
+ * small scale pop. Mirrors the checkbox registry item's css field. The component
+ * passes --duration-200 as the animation duration, so the reduced-motion block
+ * below zeroes it to a no-op (no separate override needed here).
+ */
+@keyframes valon-check-bounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/*
+ * Accordion drawer — height to/from the intrinsic `auto` (no JS measurement),
+ * enabled by `interpolate-size: allow-keywords` on the panel. Opens and closes
+ * with ease-out-back-soft (a gentler overshoot than the caret's, for the larger
+ * travel). Reduced motion zeroes the --motion-* durations below, collapsing both
+ * to an instant state change.
+ */
+@keyframes valon-accordion-open {
+  from { height: 0; }
+  to { height: auto; }
+}
+
+@keyframes valon-accordion-close {
+  from { height: auto; }
+  to { height: 0; }
+}
+
+/* The Accordion panel opts in via its data-slot. Longhands (not the `animation`
+ * shorthand) so the literal keyframe name survives — a shorthand carrying nested
+ * var()s drops the name on substitution. Durations are --motion-* tokens, so the
+ * reduced-motion block below zeroes them to an instant, motionless state change. */
+[data-slot="accordion-content"][data-state="open"] {
+  animation-name: valon-accordion-open;
+  animation-duration: var(--motion-overshoot);
+  animation-timing-function: var(--ease-out-back-soft);
+}
+
+[data-slot="accordion-content"][data-state="closed"] {
+  animation-name: valon-accordion-close;
+  animation-duration: var(--motion-dismiss);
+  animation-timing-function: var(--ease-out-back-soft);
+}
+
+/*
+ * Reduced motion — zero the duration primitives so every --motion-* alias
+ * collapses to 0ms (state still changes; nothing animates), and stop the
+ * spinner pulse. The system-wide safety net for prefers-reduced-motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-50: 0ms;
+    --duration-75: 0ms;
+    --duration-100: 0ms;
+    --duration-150: 0ms;
+    --duration-200: 0ms;
+    --duration-250: 0ms;
+    --duration-300: 0ms;
+  }
+
+  /* Freeze (not clear) the snake so it holds its staggered frame — a calm
+   * static comet — instead of every V going solid gold. */
+  .valon-spinner__snake {
+    animation-play-state: paused;
+  }
+}
