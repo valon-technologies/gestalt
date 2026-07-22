@@ -6,6 +6,7 @@ Related docs:
 
 - [plan.md](./plan.md) — implementation path and goals
 - [validation.md](./validation.md) — install-time validation
+- [admin.md](./admin.md) — admin UI and rollout read APIs
 - [models.md](./models.md) — JSON documents exercised by publish and install
 - [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
@@ -26,6 +27,8 @@ Related docs:
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
 | `internal/appregistry` | `install_validator_test.go`, `install_validation_errors_test.go` | — | Unit | [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887) |
+| `internal/server` | `handlers_admin_app_rollout_test.go` | — | HTTP integration | planned |
+| `services/ui/adminui` | registry UI smoke | — | Manual / browser | planned |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -111,7 +114,7 @@ End-to-end test for fleet install convergence across replicas. Replaces isolated
 1. Start multiple `gestaltd` replicas against shared IndexedDB (or a test harness that simulates distinct `instance_id` values with the catalog poller enabled).
 2. `POST /admin/api/v1/app-registries/{registry}/apps/{app}/add` or `…/upgrade` with a new version.
 3. Assert `app_version_change_requests` contains the change request.
-4. Poll each replica's `app_instance_materializations` (or a future admin list endpoint) until every replica has an ack row for `(app, version)`.
+4. Poll `GET /admin/api/v1/app-rollouts/{app}/materializations` until every replica has an ack row for `(app, version)`.
 5. Assert ack timestamps are recent and `instance_id` values are distinct per replica.
 
 **Not in scope for the first cut:** end-to-end verification that every replica serves the newly mounted binary after restart.
@@ -351,6 +354,38 @@ Source-address `requires.apps` keys are covered by `accepts_dependencies/source_
 
 ---
 
+## Admin observability tests
+
+API shapes: [admin.md](./admin.md). Route registration: [lifecycle.md](./lifecycle.md#admin-observability-api).
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/server/... -run TestAdminAppRollout -count=1
+```
+
+### `handlers_admin_app_rollout_test.go`
+
+Use the same harness as install tests: `newTestServer`, `registrytest.NewInstallFixture`, in-memory IndexedDB stub services.
+
+- **`TestAdminRegistryApps/lists_registry_managed_apps`** — `GET …/registry-apps` returns registry-only apps with `source.registry` from deploy config; includes apps with an empty fleet-known projection.
+- **`TestAdminRegistryApps/merges_desired_version_and_rollout`** — after `POST …/add`, list/detail include `desiredVersion`, rollout `state`, and cohort counts.
+- **`TestAdminAppRollouts/lists_active_rollout`** — `GET …/app-rollouts` returns enrolling/restarting rollouts.
+- **`TestAdminAppRolloutsMaterializations/lists_replica_rows`** — `GET …/app-rollouts/{app}/materializations` returns distinct `instanceId` rows with ack/materialized/restarted timestamps after poller convergence.
+- **`TestAdminAppRolloutsMaterializations/labels_cohort_membership`** — replicas that ack after `enrollment_ends_at` have `inCohort: false` and do not block rollout completion in the API summary.
+- **`TestAdminRegistryApps/rejects_non_registry_app`** — `GET …/registry-apps/{app}` returns **404** for non-registry-only (snapshot-pinned) apps.
+
+### Admin UI smoke
+
+Manual or Playwright-style check against a local multi-replica harness:
+
+1. Open `/admin/registry` while authenticated as a `gestaltAdmin` user.
+2. Confirm `g-issues` appears with desired version after `POST …/add`.
+3. Watch rollout badge transition `enrolling` → `restarting` → `complete` and replica rows populate.
+
+---
+
 ## What is not covered yet
 
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, get-by-app, and one validation-failure case — but not:
@@ -358,5 +393,7 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
 - Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
-- Multi-replica materialization ack E2E (see [PLANNED] section above)
+- Multi-replica materialization ack E2E (see [PLANNED section above](#planned-multi-replica-materialization-ack-e2e))
+- Admin rollout read APIs and `/admin/registry` UI (see [Admin observability tests](#admin-observability-tests))
+- Per-replica **observed** running version heartbeats (phase 2; see [admin.md](./admin.md#out-of-scope-runtime-heartbeats))
 - Deployed verification that catalog restarts serve the newly mounted binary

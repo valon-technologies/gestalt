@@ -8,6 +8,7 @@ Related docs:
 
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
 - [validation.md](./validation.md) — install-time validation
+- [admin.md](./admin.md) — admin UI and rollout read APIs
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
@@ -465,6 +466,21 @@ Returns **known versions** for one app.
 5. Otherwise map results to the same installation object shape and respond `200` with a JSON array.
 
 IndexedDB read only. No GCS fetch.
+
+### Admin observability API
+
+Route summary. Full shapes and UI wireframes: [admin.md](./admin.md).
+
+These routes expose IndexedDB rollout state that the catalog poller already writes. They do not change install or convergence behavior.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/admin/api/v1/registry-apps` | Registry-only apps from deploy config, merged with desired version and rollout summary |
+| `GET` | `/admin/api/v1/registry-apps/{app}` | One registry-only app: fleet-known versions, rollout, optional latest published registry version |
+| `GET` | `/admin/api/v1/app-rollouts` | List active and recent terminal rollouts |
+| `GET` | `/admin/api/v1/app-rollouts/{app}/materializations` | Per-replica rollout-progress rows for one `(app, version)` |
+
+The embedded `/admin` UI gains an **App Registry** section that consumes these endpoints. Today `/admin` only shows Prometheus metrics.
 
 ### Errors
 
