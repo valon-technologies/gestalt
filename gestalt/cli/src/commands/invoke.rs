@@ -215,7 +215,7 @@ fn execute(
         gestalt_sdk::public::grpc_transport::dial_public_grpc(client.base_url())?,
         std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(client.token())),
     )
-    .with_timeout(std::time::Duration::from_secs(30));
+    .with_timeout(std::time::Duration::from_secs(60));
     let app_client = gestalt_sdk::public::generated::app_client::AppClient::new(transport);
 
     let request = gestalt_sdk::public::generated::app::AppInvokeRequest {

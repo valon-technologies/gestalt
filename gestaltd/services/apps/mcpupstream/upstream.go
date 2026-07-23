@@ -20,7 +20,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
-const httpTimeout = 30 * time.Second
+const httpTimeout = 60 * time.Second
 
 var (
 	_ core.Provider               = (*Upstream)(nil)
