@@ -7,19 +7,19 @@ use crate::cli::{
 };
 use crate::output::{self, Format};
 
-use gestalt_sdk::public::generated::app_client::AuthorizationClient;
-use gestalt_sdk::public::generated::authorization::source_layer::{
+use gestalt_sdk::authorization::source_layer::{
     SOURCE_LAYER_RUNTIME, SOURCE_LAYER_STATIC_CONFIG, SOURCE_LAYER_UNSPECIFIED,
 };
-use gestalt_sdk::public::generated::authorization::{
+use gestalt_sdk::authorization::{
     Action, AuthorizationModelResourceTypeFilter, CheckAccessRequest,
     ListActiveModelResourceTypesRequest, ListRelationshipsRequest, RelationshipFilter,
     RelationshipTarget, RelationshipTargetKind, Resource, Subject,
 };
-use gestalt_sdk::public::grpc_transport::SyncGrpcTransport;
+use gestalt_sdk::public::generated::app_client::AuthorizationClient;
+use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
 pub fn dispatch(
-    authz: &AuthorizationClient<SyncGrpcTransport>,
+    authz: &AuthorizationClient<SyncRestTransport>,
     command: AuthorizationCommands,
     format: Format,
 ) -> Result<()> {
