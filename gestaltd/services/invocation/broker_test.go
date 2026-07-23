@@ -852,7 +852,7 @@ func (p *tenantHeaderIntegration) StaticHeaders() map[string]string {
 	return p.staticHeaders
 }
 
-func TestBrokerInvokeTenantInstanceResolvesDefaultCredential(t *testing.T) {
+func TestBrokerInvokeHeaderOverridesResolveDefaultCredential(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
@@ -892,7 +892,10 @@ func TestBrokerInvokeTenantInstanceResolvesDefaultCredential(t *testing.T) {
 	}
 
 	_, err := broker.Invoke(
-		WithConnection(context.Background(), "dev"),
+		WithInvokeRequestHeaders(
+			WithConnection(context.Background(), "dev"),
+			map[string]string{"X-Tenant-Sid": "TENSelected"},
+		),
 		&principal.Principal{
 			SubjectID: subjectID,
 			UserID:    "user-tenant-header",
@@ -900,7 +903,7 @@ func TestBrokerInvokeTenantInstanceResolvesDefaultCredential(t *testing.T) {
 			Scopes:    []string{"frontPorch"},
 		},
 		"frontPorch",
-		"TENSelected",
+		"",
 		"tenants.list",
 		nil,
 	)

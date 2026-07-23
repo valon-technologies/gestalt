@@ -20,6 +20,7 @@ def to_wire_app_invoke_graphql_request(value: native.AppInvokeGraphQLRequest) ->
         connection=value.connection,
         instance=value.instance,
         idempotency_key=value.idempotency_key,
+        headers=value.headers,
     )
 
 
@@ -32,4 +33,5 @@ def to_wire_app_invoke_request(value: native.AppInvokeRequest) -> Any:
         instance=value.instance,
         idempotency_key=value.idempotency_key,
         credential_mode=value.credential_mode,
+        headers=value.headers,
     )

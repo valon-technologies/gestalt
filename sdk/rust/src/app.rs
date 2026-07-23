@@ -98,6 +98,10 @@ pub struct AppInvokeGraphQLRequest {
     pub idempotency_key: String,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
+    /// headers overrides outbound static headers declared by the target provider.
+    ///
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 /// AppInvokeRequest invokes a declared operation on another app through Gestalt.
@@ -124,6 +128,10 @@ pub struct AppInvokeRequest {
     pub context: Option<RequestContext>,
     /// The `run_as` field; None when unset.
     pub run_as: Option<SubjectContext>,
+    /// headers overrides outbound static headers declared by the target provider.
+    ///
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 /// Catalog is the static or request-scoped executable surface exposed by a
@@ -726,6 +734,7 @@ impl App {
             idempotency_key: options.idempotency_key,
             credential_mode: options.credential_mode,
             run_as: options.run_as,
+            headers: options.headers,
             context: self.context.clone(),
         };
         let invoke_context_app = request.app.clone();
@@ -805,6 +814,7 @@ impl App {
             instance: options.instance,
             idempotency_key: options.idempotency_key,
             variables: options.variables,
+            headers: options.headers,
             context: self.context.clone(),
         };
         let mut tonic_request = tonic::Request::new(to_wire_app_invoke_graphql_request(request));
@@ -847,6 +857,10 @@ pub struct AppInvokeOptions {
     pub credential_mode: String,
     /// The `run_as` field; None when unset.
     pub run_as: Option<SubjectContext>,
+    /// headers overrides outbound static headers declared by the target provider.
+    ///
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 /// Optional parameters of [`App::invoke_stream`]; the default value leaves every
@@ -863,6 +877,10 @@ pub struct AppInvokeStreamOptions {
     pub credential_mode: String,
     /// The `run_as` field; None when unset.
     pub run_as: Option<SubjectContext>,
+    /// headers overrides outbound static headers declared by the target provider.
+    ///
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 /// Optional parameters of [`App::invoke_graphql`]; the default value leaves every
@@ -877,6 +895,10 @@ pub struct AppInvokeGraphQLOptions {
     pub idempotency_key: String,
     /// The `variables` field; None when unset.
     pub variables: Option<serde_json::Map<String, serde_json::Value>>,
+    /// headers overrides outbound static headers declared by the target provider.
+    ///
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 /// InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no

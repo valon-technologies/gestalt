@@ -296,6 +296,7 @@ pub(crate) fn to_wire_app_invoke_graphql_request(
         instance: value.instance,
         idempotency_key: value.idempotency_key,
         context: None,
+        headers: value.headers,
         ..Default::default()
     }
 }
@@ -865,6 +866,13 @@ pub(crate) fn encode_wire_app_invoke_graphql_request_json(
     if let Some(inner) = &value.context {
         object.insert("context".into(), encode_wire_request_context_json(inner));
     }
+    if !value.headers.is_empty() {
+        let mut map = serde_json::Map::new();
+        for (key, value) in &value.headers {
+            map.insert(key.clone(), serde_json::Value::String(value.to_string()));
+        }
+        object.insert("headers".into(), serde_json::Value::Object(map));
+    }
     serde_json::Value::Object(object)
 }
 
@@ -907,6 +915,28 @@ pub(crate) fn decode_wire_app_invoke_graphql_request_json(
             .get("context")
             .map(|value| decode_wire_request_context_json(value))
             .transpose()?,
+        headers: match object.get("headers") {
+            Some(value) => {
+                let mut out = std::collections::BTreeMap::new();
+                let Some(entries) = value.as_object() else {
+                    return Err(crate::public::proto_json::invalid_proto_json(
+                        "expected object for map",
+                    ));
+                };
+                for (key, value) in entries {
+                    out.insert(
+                        Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                            key.to_string(),
+                        )?,
+                        Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                            crate::public::proto_json::decode_string(value)?,
+                        )?,
+                    );
+                }
+                out
+            }
+            None => std::collections::BTreeMap::new(),
+        },
         ..Default::default()
     })
 }
@@ -923,6 +953,7 @@ pub(crate) fn to_wire_app_invoke_request(value: AppInvokeRequest) -> v1::AppInvo
         credential_mode: value.credential_mode,
         context: None,
         run_as: None,
+        headers: value.headers,
         ..Default::default()
     }
 }
@@ -980,6 +1011,13 @@ pub(crate) fn encode_wire_app_invoke_request_json(
     if let Some(inner) = &value.run_as {
         object.insert("runAs".into(), encode_wire_subject_context_json(inner));
     }
+    if !value.headers.is_empty() {
+        let mut map = serde_json::Map::new();
+        for (key, value) in &value.headers {
+            map.insert(key.clone(), serde_json::Value::String(value.to_string()));
+        }
+        object.insert("headers".into(), serde_json::Value::Object(map));
+    }
     serde_json::Value::Object(object)
 }
 
@@ -1030,6 +1068,28 @@ pub(crate) fn decode_wire_app_invoke_request_json(
             .get("runAs")
             .map(|value| decode_wire_subject_context_json(value))
             .transpose()?,
+        headers: match object.get("headers") {
+            Some(value) => {
+                let mut out = std::collections::BTreeMap::new();
+                let Some(entries) = value.as_object() else {
+                    return Err(crate::public::proto_json::invalid_proto_json(
+                        "expected object for map",
+                    ));
+                };
+                for (key, value) in entries {
+                    out.insert(
+                        Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                            key.to_string(),
+                        )?,
+                        Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                            crate::public::proto_json::decode_string(value)?,
+                        )?,
+                    );
+                }
+                out
+            }
+            None => std::collections::BTreeMap::new(),
+        },
         ..Default::default()
     })
 }

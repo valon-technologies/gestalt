@@ -65,6 +65,7 @@ export function toWireAppInvokeGraphQLRequest(
     connection: value.connection ?? "",
     instance: value.instance ?? "",
     idempotencyKey: value.idempotencyKey ?? "",
+    headers: value.headers ?? {},
   });
 }
 
@@ -78,6 +79,7 @@ export function fromWireAppInvokeGraphQLRequest(
     connection: value.connection,
     instance: value.instance,
     idempotencyKey: value.idempotencyKey,
+    headers: value.headers,
   };
 }
 
@@ -94,6 +96,7 @@ export function toWireAppInvokeRequest(
     instance: value.instance ?? "",
     idempotencyKey: value.idempotencyKey ?? "",
     credentialMode: value.credentialMode ?? "",
+    headers: value.headers ?? {},
   });
 }
 
@@ -108,6 +111,7 @@ export function fromWireAppInvokeRequest(
     instance: value.instance,
     idempotencyKey: value.idempotencyKey,
     credentialMode: value.credentialMode,
+    headers: value.headers,
   };
 }
 

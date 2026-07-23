@@ -84,6 +84,10 @@ export interface AppInvokeGraphQLRequest {
   instance: string;
   idempotencyKey: string;
   context?: RequestContext;
+  /**
+   * headers overrides outbound static headers declared by the target provider.
+   */
+  headers: { [key: string]: string };
 }
 
 /**
@@ -99,6 +103,10 @@ export interface AppInvokeRequest {
   credentialMode: string;
   context?: RequestContext;
   runAs?: SubjectContext;
+  /**
+   * headers overrides outbound static headers declared by the target provider.
+   */
+  headers: { [key: string]: string };
 }
 
 /**
@@ -513,6 +521,7 @@ export class App {
       idempotencyKey?: string | undefined;
       credentialMode?: string | undefined;
       runAs?: Init<SubjectContext> | undefined;
+      headers?: { [key: string]: string } | undefined;
     },
   ): Promise<T> {
     const request = {
@@ -522,6 +531,7 @@ export class App {
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey ?? "",
       credentialMode: options?.credentialMode ?? "",
+      headers: options?.headers ?? {},
       ...(params !== undefined ? { params } : {}),
       ...(options?.runAs !== undefined ? { runAs: options.runAs } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
@@ -567,6 +577,7 @@ export class App {
       idempotencyKey?: string | undefined;
       credentialMode?: string | undefined;
       runAs?: Init<SubjectContext> | undefined;
+      headers?: { [key: string]: string } | undefined;
     },
   ): AsyncIterable<InvokeFrame> {
     const request = {
@@ -576,6 +587,7 @@ export class App {
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey ?? "",
       credentialMode: options?.credentialMode ?? "",
+      headers: options?.headers ?? {},
       ...(params !== undefined ? { params } : {}),
       ...(options?.runAs !== undefined ? { runAs: options.runAs } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
@@ -616,6 +628,7 @@ export class App {
       instance?: string | undefined;
       idempotencyKey?: string | undefined;
       variables?: JsonObjectInput | undefined;
+      headers?: { [key: string]: string } | undefined;
     },
   ): Promise<OperationResult> {
     const request = {
@@ -624,6 +637,7 @@ export class App {
       connection: options?.connection ?? "",
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey ?? "",
+      headers: options?.headers ?? {},
       ...(options?.variables !== undefined
         ? { variables: options.variables }
         : {}),

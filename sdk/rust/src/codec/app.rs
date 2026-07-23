@@ -77,6 +77,7 @@ pub(crate) fn to_wire_app_invoke_graphql_request(
         instance: value.instance,
         idempotency_key: value.idempotency_key,
         context: value.context.map(to_wire_request_context),
+        headers: value.headers,
     }
 }
 
@@ -92,6 +93,7 @@ pub(crate) fn to_wire_app_invoke_request(value: AppInvokeRequest) -> v1::AppInvo
         credential_mode: value.credential_mode,
         context: value.context.map(to_wire_request_context),
         run_as: value.run_as.map(to_wire_subject_context),
+        headers: value.headers,
     }
 }
 
