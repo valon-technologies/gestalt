@@ -29,7 +29,7 @@ func retryProviderBuild(
 	for {
 		result, err := build(ctx)
 		if err == nil {
-			return result, err
+			return result, nil
 		}
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("retry provider build: %w (last error: %v)", ctx.Err(), err)
