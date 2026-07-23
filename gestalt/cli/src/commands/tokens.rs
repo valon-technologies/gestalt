@@ -9,18 +9,15 @@ use gestalt_sdk::public::generated::app_client::IdentityClient;
 use gestalt_sdk::public::generated::identity::{
     GetGrantRequest, ListGrantsRequest, RevokeGrantRequest, TokenRequest,
 };
-use gestalt_sdk::public::grpc_transport::{SyncGrpcTransport, dial_public_grpc};
+use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
 const GRANT_TYPE_TOKEN_EXCHANGE: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
 const SUBJECT_TOKEN_TYPE_ACCESS_TOKEN: &str = "urn:ietf:params:oauth:token-type:access_token";
 const DEFAULT_CLIENT_ID: &str = "gestalt-cli";
 
-fn identity_client(api: &ApiClient) -> Result<IdentityClient<SyncGrpcTransport>> {
-    let transport = SyncGrpcTransport::from_endpoint(
-        dial_public_grpc(api.base_url())?,
-        Arc::new(BearerAuth::new(api.token())),
-    )
-    .with_timeout(std::time::Duration::from_secs(30));
+fn identity_client(api: &ApiClient) -> Result<IdentityClient<SyncRestTransport>> {
+    let transport = SyncRestTransport::new(api.base_url(), Arc::new(BearerAuth::new(api.token())))
+        .with_timeout(std::time::Duration::from_secs(30));
     Ok(IdentityClient::new(transport))
 }
 
