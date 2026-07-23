@@ -11,16 +11,17 @@ use crate::params::{self, ParamEntry};
 use gestalt_sdk::public::generated::app_client::WorkflowClient;
 use gestalt_sdk::public::generated::workflow::{
     CancelWorkflowProviderRunRequest, GetWorkflowProviderRunRequest,
-    ListWorkflowProviderRunsRequest, WorkflowRunStatus,
+    ListWorkflowProviderRunsRequest,
 };
-use gestalt_sdk::public::grpc_transport::SyncGrpcTransport;
+use gestalt_sdk::public::rest_transport::SyncRestTransport;
+use gestalt_sdk::workflow::WorkflowRunStatus;
 
 use super::workflow_target::{target_app, target_operation};
 
 const EVENTS_PATH: &str = "/api/v1/workflow/events";
 
 pub fn list_runs(
-    client: &WorkflowClient<SyncGrpcTransport>,
+    client: &WorkflowClient<SyncRestTransport>,
     app: Option<&str>,
     status: Option<&str>,
     page_size: Option<u32>,
@@ -41,7 +42,7 @@ pub fn list_runs(
     Ok(())
 }
 
-pub fn get_run(client: &WorkflowClient<SyncGrpcTransport>, id: &str, format: Format) -> Result<()> {
+pub fn get_run(client: &WorkflowClient<SyncRestTransport>, id: &str, format: Format) -> Result<()> {
     let request = GetWorkflowProviderRunRequest {
         run_id: id.to_string(),
         ..Default::default()
@@ -54,7 +55,7 @@ pub fn get_run(client: &WorkflowClient<SyncGrpcTransport>, id: &str, format: For
 }
 
 pub fn cancel_run(
-    client: &WorkflowClient<SyncGrpcTransport>,
+    client: &WorkflowClient<SyncRestTransport>,
     id: &str,
     reason: Option<&str>,
     format: Format,
@@ -91,7 +92,7 @@ pub fn deliver_event(
 }
 
 fn parse_run_status(value: Option<&str>) -> WorkflowRunStatus {
-    use gestalt_sdk::public::generated::workflow::workflow_run_status::*;
+    use gestalt_sdk::workflow::workflow_run_status::*;
     match value.map(str::trim).filter(|v| !v.is_empty()) {
         Some("pending") => WORKFLOW_RUN_STATUS_PENDING,
         Some("running") => WORKFLOW_RUN_STATUS_RUNNING,
@@ -281,7 +282,7 @@ fn run_trigger_label(value: &Value) -> String {
 
 pub fn dispatch(
     api: &ApiClient,
-    workflow: &WorkflowClient<SyncGrpcTransport>,
+    workflow: &WorkflowClient<SyncRestTransport>,
     command: WorkflowCommands,
     format: Format,
 ) -> Result<()> {
