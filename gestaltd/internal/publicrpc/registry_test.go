@@ -68,6 +68,8 @@ GET /api/v2/agent/sessions/{session_id}/turns /gestalt.provider.v1.Agent/ListTur
 GET /api/v2/agent/sessions/{session_id}/turns/{turn_id} /gestalt.provider.v1.Agent/GetTurn
 POST /api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel /gestalt.provider.v1.Agent/CancelTurn
 GET /api/v2/agent/sessions/{session_id}/turns/{turn_id}/events /gestalt.provider.v1.Agent/ListTurnEvents
+GET /api/v2/agent/turns/{turn_id}/interactions /gestalt.provider.v1.Agent/ListInteractions
+POST /api/v2/agent/turns/{turn_id}/interactions/{interaction_id}/resolve /gestalt.provider.v1.Agent/ResolveInteraction
 POST /api/v2/workflow/definitions:apply /gestalt.provider.v1.Workflow/ApplyDefinition
 GET /api/v2/workflow/definitions /gestalt.provider.v1.Workflow/ListDefinitions
 GET /api/v2/workflow/definitions/{definition_id} /gestalt.provider.v1.Workflow/GetDefinition
