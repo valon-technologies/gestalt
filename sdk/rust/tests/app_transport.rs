@@ -374,6 +374,7 @@ async fn app_invokes_graphql_surface() {
                 instance: "secondary".to_string(),
                 idempotency_key: "graphql-call-42".to_string(),
                 variables: Some(variables.as_object().expect("variables object").clone()),
+                ..Default::default()
             },
         )
         .await
