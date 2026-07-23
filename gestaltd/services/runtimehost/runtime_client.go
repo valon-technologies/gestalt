@@ -21,7 +21,7 @@ const (
 	ProviderRPCTimeout = 30 * time.Second
 	// ProviderSessionCreateTimeout bounds agent CreateSession RPCs when callers
 	// do not provide their own deadline.
-	ProviderSessionCreateTimeout = 5 * time.Minute
+	ProviderSessionCreateTimeout  = 5 * time.Minute
 	providerStartTimeout          = 2 * time.Minute
 	providerConfigureTimeout      = 30 * time.Second
 	providerConfigureRetryTimeout = 5 * providerConfigureTimeout
