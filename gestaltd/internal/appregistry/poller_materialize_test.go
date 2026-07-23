@@ -140,6 +140,56 @@ func TestCatalogPollerMaterializesBeforeStop(t *testing.T) {
 	}
 }
 
+func TestCatalogPollerRolloutMaterializesDuringEnrollment(t *testing.T) {
+	t.Parallel()
+	h := newPollerMaterializationHarness(t, "toolshed", true)
+	start := h.clock
+	if _, err := h.services.AppRollouts.Create(h.ctx, &core.AppRollout{
+		App:              "g-issues",
+		Version:          h.fixture.Version,
+		State:            core.AppRolloutStateEnrolling,
+		CreatedAt:        start,
+		EnrollmentEndsAt: start.Add(2 * time.Minute),
+		Deadline:         start.Add(15 * time.Minute),
+	}); err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("enrollment pass: %v", err)
+	}
+	if len(h.restarter.stopCalls) != 0 || len(h.restarter.startCalls) != 0 {
+		t.Fatalf("restart calls during enrollment: stop=%v start=%v", h.restarter.stopCalls, h.restarter.startCalls)
+	}
+	materialization := h.materialization(t)
+	if materialization.MaterializedAt != start {
+		t.Fatalf("MaterializedAt = %v, want %v", materialization.MaterializedAt, start)
+	}
+	if !materialization.RestartedAt.IsZero() {
+		t.Fatalf("RestartedAt = %v, want zero during enrollment", materialization.RestartedAt)
+	}
+	rollout, err := h.services.AppRollouts.Get(h.ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateEnrolling {
+		t.Fatalf("state = %q, want enrolling", rollout.State)
+	}
+
+	close(h.restartReady)
+	h.clock = start.Add(2 * time.Minute)
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("restart pass: %v", err)
+	}
+	if len(h.restarter.stopCalls) != 1 || len(h.restarter.startCalls) != 1 {
+		t.Fatalf("restart calls after enrollment: stop=%v start=%v", h.restarter.stopCalls, h.restarter.startCalls)
+	}
+	materialization = h.materialization(t)
+	if materialization.RestartedAt.IsZero() {
+		t.Fatal("RestartedAt is zero after enrollment")
+	}
+}
+
 func TestCatalogPollerDoesNotStopWithoutMaterializer(t *testing.T) {
 	t.Parallel()
 	h := newPollerMaterializationHarness(t, "toolshed", false)

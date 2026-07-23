@@ -169,6 +169,7 @@ go test ./internal/appregistry -run 'TestMaterializer|TestCatalogPollerMateriali
 ### `poller_materialize_test.go`
 
 - **`TestCatalogPollerMaterializesBeforeStop`** — records `materialized_at` and creates the canonical on-disk artifact before `StopApp`, including while `RestartReady` is still open.
+- **`TestCatalogPollerRolloutMaterializesDuringEnrollment`** — during an active rollout's enrollment window, records `materialized_at` without stop/start; restarts only after enrollment closes.
 - **`TestCatalogPollerSkipsMaterializationForLegacyNonRegistryVersion`** — allows pre-registry catalog rows to retain restart-only convergence when a materializer is configured.
 - **`TestCatalogPollerRematerializesWhenArtifactMissing`** — re-downloads when IndexedDB shows materialization complete but the on-disk tree was removed.
 

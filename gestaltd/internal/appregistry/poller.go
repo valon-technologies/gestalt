@@ -248,6 +248,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	}
 	defer p.endInflight(appName)
 
+	restartBlocked := false
 	if rollout != nil {
 		version := strings.TrimSpace(rollout.Version)
 		if findInstallation(installations, version) == nil {
@@ -263,12 +264,13 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		}
 		if rollout.State == core.AppRolloutStateEnrolling {
 			if p.now().Before(rollout.EnrollmentEndsAt) {
-				return nil
-			}
-			var err error
-			rollout, err = p.Rollouts.MarkRestarting(ctx, appName, version)
-			if err != nil {
-				return fmt.Errorf("start rollout restart phase for %s@%s: %w", appName, version, err)
+				restartBlocked = true
+			} else {
+				var err error
+				rollout, err = p.Rollouts.MarkRestarting(ctx, appName, version)
+				if err != nil {
+					return fmt.Errorf("start rollout restart phase for %s@%s: %w", appName, version, err)
+				}
 			}
 		}
 		if rollout.State == core.AppRolloutStateRestarting {
@@ -337,6 +339,9 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return fmt.Errorf("determine restart mode for app %s: %w", appName, err)
 	}
 	if !restartable {
+		if restartBlocked {
+			return nil
+		}
 		convergedAt := p.now()
 		if err := p.markCatalogConverged(ctx, instanceID, appName, pending, convergedAt); err != nil {
 			return err
@@ -348,6 +353,14 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 			"instance_id", instanceID,
 			"restarted_at", convergedAt,
 		)
+		return nil
+	}
+
+	if err := p.ensureDesiredMaterialized(ctx, instanceID, desired); err != nil {
+		return fmt.Errorf("materialize desired version for app %s: %w", appName, err)
+	}
+
+	if restartBlocked {
 		return nil
 	}
 
@@ -369,10 +382,6 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 			}
 		}
 		return nil
-	}
-
-	if err := p.ensureDesiredMaterialized(ctx, instanceID, desired); err != nil {
-		return fmt.Errorf("materialize desired version for app %s: %w", appName, err)
 	}
 
 	if inspector, ok := p.AppRestarter.(interface {
