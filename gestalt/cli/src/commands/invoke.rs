@@ -211,8 +211,8 @@ fn execute(
         param_map = params::merge_params(file_map, param_map);
     }
 
-    let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::from_endpoint(
-        gestalt_sdk::public::grpc_transport::dial_public_grpc(client.base_url())?,
+    let transport = gestalt_sdk::public::rest_transport::SyncRestTransport::new(
+        client.base_url(),
         std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(client.token())),
     )
     .with_timeout(std::time::Duration::from_secs(60));

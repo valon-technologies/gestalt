@@ -4,11 +4,9 @@ use std::sync::Arc;
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
+use gestalt_sdk::identity::{GetGrantRequest, ListGrantsRequest, RevokeGrantRequest, TokenRequest};
 use gestalt_sdk::public::auth::BearerAuth;
 use gestalt_sdk::public::generated::app_client::IdentityClient;
-use gestalt_sdk::public::generated::identity::{
-    GetGrantRequest, ListGrantsRequest, RevokeGrantRequest, TokenRequest,
-};
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
 const GRANT_TYPE_TOKEN_EXCHANGE: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
