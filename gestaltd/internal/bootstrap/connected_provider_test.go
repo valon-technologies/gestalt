@@ -184,6 +184,35 @@ func (p *connectedNoSessionCatalogProvider) CatalogForRequest(ctx context.Contex
 	return p.connectedBasicProvider.CatalogForRequest(ctx, token)
 }
 
+type connectedStaticHeaderProvider struct {
+	connectedBasicProvider
+	staticHeaders map[string]string
+}
+
+func (p *connectedStaticHeaderProvider) StaticHeaders() map[string]string {
+	return p.staticHeaders
+}
+
+func TestBindProviderConnectionForwardsStaticHeaders(t *testing.T) {
+	t.Parallel()
+
+	inner := &connectedStaticHeaderProvider{
+		staticHeaders: map[string]string{
+			"X-Tenant-Sid": "TENDefault",
+		},
+	}
+	prov := bindProviderConnection(inner, "dev")
+
+	hp, ok := prov.(interface{ StaticHeaders() map[string]string })
+	if !ok {
+		t.Fatal("expected bound provider to expose StaticHeaders")
+	}
+	headers := hp.StaticHeaders()
+	if headers["X-Tenant-Sid"] != "TENDefault" {
+		t.Fatalf("StaticHeaders() = %#v, want default tenant header", headers)
+	}
+}
+
 func TestBindProviderConnectionDoesNotFalsePositiveSessionCatalogSupport(t *testing.T) {
 	t.Parallel()
 
