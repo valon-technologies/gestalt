@@ -154,7 +154,9 @@ func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProvide
 }
 
 func callStartProviderWithRetry(ctx context.Context, client proto.AppProviderClient, name string, config map[string]any) error {
-	return runtimehost.CallWhileStartingNoResult(ctx, runtimehost.ProviderRPCTimeout, func(ctx context.Context) error {
+	// StartProvider can run migrations/configure and may need the full install
+	// budget; do not cap each attempt at ProviderRPCTimeout.
+	return runtimehost.CallWhileStartingNoResult(ctx, 0, func(ctx context.Context) error {
 		return callStartProvider(ctx, client, name, config)
 	})
 }
