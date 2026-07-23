@@ -271,6 +271,33 @@ impl<T: UnaryTransport> AgentClient<T> {
             wire_response,
         ))
     }
+
+    pub async fn list_interactions(
+        &self,
+        request: ListAgentProviderInteractionsRequest,
+    ) -> Result<ListAgentProviderInteractionsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_interactions_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListAgentProviderInteractionsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_INTERACTIONS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_agent_provider_interactions_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn resolve_interaction(
+        &self,
+        request: ResolveAgentProviderInteractionRequest,
+    ) -> Result<AgentInteraction, GestaltError> {
+        let wire = to_wire_resolve_agent_provider_interaction_request(request);
+        let mut wire_response = crate::generated::v1::AgentInteraction::default();
+        self.transport
+            .unary(&METHOD_AGENT_RESOLVE_INTERACTION, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_interaction(wire_response))
+    }
 }
 
 impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AgentClient<T> {
@@ -377,38 +404,7 @@ impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AgentClie
             wire_response,
         ))
     }
-}
 
-impl<T: crate::public::generated::unary_transport::GrpcCapable> AgentClient<T> {
-    pub async fn list_interactions(
-        &self,
-        request: ListAgentProviderInteractionsRequest,
-    ) -> Result<ListAgentProviderInteractionsResponse, GestaltError> {
-        let wire = to_wire_list_agent_provider_interactions_request(request);
-        let mut wire_response =
-            crate::generated::v1::ListAgentProviderInteractionsResponse::default();
-        self.transport
-            .unary(&METHOD_AGENT_LIST_INTERACTIONS, &wire, &mut wire_response)
-            .await?;
-        Ok(from_wire_list_agent_provider_interactions_response(
-            wire_response,
-        ))
-    }
-
-    pub async fn resolve_interaction(
-        &self,
-        request: ResolveAgentProviderInteractionRequest,
-    ) -> Result<AgentInteraction, GestaltError> {
-        let wire = to_wire_resolve_agent_provider_interaction_request(request);
-        let mut wire_response = crate::generated::v1::AgentInteraction::default();
-        self.transport
-            .unary(&METHOD_AGENT_RESOLVE_INTERACTION, &wire, &mut wire_response)
-            .await?;
-        Ok(from_wire_agent_interaction(wire_response))
-    }
-}
-
-impl<T: crate::public::generated::unary_transport::SyncGrpcCapable> AgentClient<T> {
     pub fn list_interactions_sync(
         &self,
         request: ListAgentProviderInteractionsRequest,

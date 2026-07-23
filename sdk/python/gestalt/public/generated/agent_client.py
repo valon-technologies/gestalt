@@ -206,6 +206,12 @@ class AgentClientREST(Protocol):
     def list_turn_events(
         self, request: ListAgentProviderTurnEventsRequest
     ) -> ListAgentProviderTurnEventsResponse: ...
+    def list_interactions(
+        self, request: ListAgentProviderInteractionsRequest
+    ) -> ListAgentProviderInteractionsResponse: ...
+    def resolve_interaction(
+        self, request: ResolveAgentProviderInteractionRequest
+    ) -> AgentInteraction: ...
 
 
 class AsyncAgentClient:
@@ -374,3 +380,9 @@ class AsyncAgentClientREST(Protocol):
     async def list_turn_events(
         self, request: ListAgentProviderTurnEventsRequest
     ) -> ListAgentProviderTurnEventsResponse: ...
+    async def list_interactions(
+        self, request: ListAgentProviderInteractionsRequest
+    ) -> ListAgentProviderInteractionsResponse: ...
+    async def resolve_interaction(
+        self, request: ResolveAgentProviderInteractionRequest
+    ) -> AgentInteraction: ...

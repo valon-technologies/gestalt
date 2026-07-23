@@ -152,21 +152,31 @@ var MethodAgentListTurnEvents = Method{
 }
 
 var MethodAgentListInteractions = Method{
-	Service:    "gestalt.provider.v1.Agent",
-	Name:       "ListInteractions",
-	FullMethod: "/gestalt.provider.v1.Agent/ListInteractions",
-	Stream:     false,
-	Fill:       []string{"context"},
-	Reject:     nil,
+	Service:         "gestalt.provider.v1.Agent",
+	Name:            "ListInteractions",
+	FullMethod:      "/gestalt.provider.v1.Agent/ListInteractions",
+	HTTPVerb:        "GET",
+	HTTPPath:        "/api/v2/agent/turns/{turn_id}/interactions",
+	HTTPBody:        "",
+	HTTPPathFields:  []PublicField{PublicField{Name: "turn_id", JSONName: "turnId"}},
+	HTTPQueryFields: []PublicField{PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Stream:          false,
+	Fill:            []string{"context"},
+	Reject:          nil,
 }
 
 var MethodAgentResolveInteraction = Method{
-	Service:    "gestalt.provider.v1.Agent",
-	Name:       "ResolveInteraction",
-	FullMethod: "/gestalt.provider.v1.Agent/ResolveInteraction",
-	Stream:     false,
-	Fill:       []string{"context"},
-	Reject:     nil,
+	Service:         "gestalt.provider.v1.Agent",
+	Name:            "ResolveInteraction",
+	FullMethod:      "/gestalt.provider.v1.Agent/ResolveInteraction",
+	HTTPVerb:        "POST",
+	HTTPPath:        "/api/v2/agent/turns/{turn_id}/interactions/{interaction_id}/resolve",
+	HTTPBody:        "*",
+	HTTPPathFields:  []PublicField{PublicField{Name: "turn_id", JSONName: "turnId"}, PublicField{Name: "interaction_id", JSONName: "interactionId"}},
+	HTTPQueryFields: nil,
+	Stream:          false,
+	Fill:            []string{"context"},
+	Reject:          nil,
 }
 
 var MethodAppInvoke = Method{

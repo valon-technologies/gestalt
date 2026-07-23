@@ -129,6 +129,8 @@ type AgentClientREST interface {
 	ListTurns(ctx context.Context, request *ListAgentProviderTurnsRequest) (*gestaltclient.ListAgentProviderTurnsResponse, error)
 	CancelTurn(ctx context.Context, request *CancelAgentProviderTurnRequest) (*gestaltclient.AgentTurn, error)
 	ListTurnEvents(ctx context.Context, request *ListAgentProviderTurnEventsRequest) (*gestaltclient.ListAgentProviderTurnEventsResponse, error)
+	ListInteractions(ctx context.Context, request *ListAgentProviderInteractionsRequest) (*gestaltclient.ListAgentProviderInteractionsResponse, error)
+	ResolveInteraction(ctx context.Context, request *ResolveAgentProviderInteractionRequest) (*gestaltclient.AgentInteraction, error)
 }
 
 var _ AgentClientREST = (*AgentClient)(nil)

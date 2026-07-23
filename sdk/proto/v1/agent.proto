@@ -599,6 +599,7 @@ service Agent {
     option (signature) = "interaction_id";
   }
   rpc ListInteractions(ListAgentProviderInteractionsRequest) returns (ListAgentProviderInteractionsResponse) {
+    option (google.api.http) = {get: "/api/v2/agent/turns/{turn_id}/interactions"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -609,6 +610,10 @@ service Agent {
     option (optional_signature) = "provider_name";
   }
   rpc ResolveInteraction(ResolveAgentProviderInteractionRequest) returns (AgentInteraction) {
+    option (google.api.http) = {
+      post: "/api/v2/agent/turns/{turn_id}/interactions/{interaction_id}/resolve"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };

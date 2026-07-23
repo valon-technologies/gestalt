@@ -115,6 +115,13 @@ export const PUBLIC_METHODS = {
       fill: ["context"],
       reject: [],
       stream: false,
+      http: {
+        verb: "GET",
+        path: "/api/v2/agent/turns/{turn_id}/interactions",
+        body: "",
+        pathFields: [{ name: "turn_id", jsonName: "turnId" }],
+        queryFields: [{ name: "provider_name", jsonName: "providerName" }],
+      },
     },
     listSessions: {
       service: "Agent",
@@ -187,6 +194,16 @@ export const PUBLIC_METHODS = {
       fill: ["context"],
       reject: [],
       stream: false,
+      http: {
+        verb: "POST",
+        path: "/api/v2/agent/turns/{turn_id}/interactions/{interaction_id}/resolve",
+        body: "*",
+        pathFields: [
+          { name: "turn_id", jsonName: "turnId" },
+          { name: "interaction_id", jsonName: "interactionId" },
+        ],
+        queryFields: [],
+      },
     },
     updateSession: {
       service: "Agent",

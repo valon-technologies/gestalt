@@ -1,6 +1,6 @@
 # Public API availability
 
-Generated from the public surface manifest (75 gRPC methods, 44 REST methods).
+Generated from the public surface manifest (75 gRPC methods, 46 REST methods).
 
 | Service | Method | REST | Go | Python | Rust | TypeScript |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -9,11 +9,11 @@ Generated from the public surface manifest (75 gRPC methods, 44 REST methods).
 | Agent | CreateTurn | POST /api/v2/agent/sessions/{session_id}/turns | AgentClient.CreateTurn | AgentClient.create_turn | AgentClient.create_turn | AgentClient.createTurn |
 | Agent | GetSession | GET /api/v2/agent/sessions/{session_id} | AgentClient.GetSession | AgentClient.get_session | AgentClient.get_session | AgentClient.getSession |
 | Agent | GetTurn | GET /api/v2/agent/sessions/{session_id}/turns/{turn_id} | AgentClient.GetTurn | AgentClient.get_turn | AgentClient.get_turn | AgentClient.getTurn |
-| Agent | ListInteractions | gRPC only | AgentClient.ListInteractions | AgentClient.list_interactions | AgentClient.list_interactions | AgentClient.listInteractions |
+| Agent | ListInteractions | GET /api/v2/agent/turns/{turn_id}/interactions | AgentClient.ListInteractions | AgentClient.list_interactions | AgentClient.list_interactions | AgentClient.listInteractions |
 | Agent | ListSessions | GET /api/v2/agent/sessions | AgentClient.ListSessions | AgentClient.list_sessions | AgentClient.list_sessions | AgentClient.listSessions |
 | Agent | ListTurnEvents | GET /api/v2/agent/sessions/{session_id}/turns/{turn_id}/events | AgentClient.ListTurnEvents | AgentClient.list_turn_events | AgentClient.list_turn_events | AgentClient.listTurnEvents |
 | Agent | ListTurns | GET /api/v2/agent/sessions/{session_id}/turns | AgentClient.ListTurns | AgentClient.list_turns | AgentClient.list_turns | AgentClient.listTurns |
-| Agent | ResolveInteraction | gRPC only | AgentClient.ResolveInteraction | AgentClient.resolve_interaction | AgentClient.resolve_interaction | AgentClient.resolveInteraction |
+| Agent | ResolveInteraction | POST /api/v2/agent/turns/{turn_id}/interactions/{interaction_id}/resolve | AgentClient.ResolveInteraction | AgentClient.resolve_interaction | AgentClient.resolve_interaction | AgentClient.resolveInteraction |
 | Agent | UpdateSession | PATCH /api/v2/agent/sessions/{session_id} | AgentClient.UpdateSession | AgentClient.update_session | AgentClient.update_session | AgentClient.updateSession |
 | App | Invoke | POST /api/v2/app/{app}/operations/{operation} | AppClient.Invoke | AppClient.invoke | AppClient.invoke | AppClient.invoke |
 | App | InvokeGraphQL | POST /api/v2/app/{app}/graphql | AppClient.InvokeGraphQL | AppClient.invoke_graphql | AppClient.invoke_graphql | AppClient.invokeGraphQL |
