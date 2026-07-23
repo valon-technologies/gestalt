@@ -154,8 +154,8 @@ func (h *upstreamHarness) publisherConfig() remotepublish.PublisherConfig {
 
 func TestPublisherPublishesAndShutsDown(t *testing.T) {
 	t.Parallel()
-	if testing.Short() {
-		t.Skip("publisher test requires in-process frps")
+	if testing.Short() || raceEnabled {
+		t.Skip("publisher test requires in-process frps; upstream frp data race under -race")
 	}
 	h, ctx, cleanup := newUpstreamHarness(t)
 	defer cleanup()
@@ -184,8 +184,8 @@ func TestPublisherPublishesAndShutsDown(t *testing.T) {
 
 func TestPublisherSameSubjectRestart(t *testing.T) {
 	t.Parallel()
-	if testing.Short() {
-		t.Skip("publisher test requires in-process frps")
+	if testing.Short() || raceEnabled {
+		t.Skip("publisher test requires in-process frps; upstream frp data race under -race")
 	}
 	h, ctx, cleanup := newUpstreamHarness(t)
 	defer cleanup()
