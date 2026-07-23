@@ -100,6 +100,35 @@ func TestPublishMonitorListPending(t *testing.T) {
 	}
 }
 
+func TestPublishMonitorListPendingQueriesEachWorkflowStatus(t *testing.T) {
+	t.Parallel()
+
+	statuses := make([]string, 0, 3)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		statuses = append(statuses, r.URL.Query().Get("status"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"workflow_runs":[]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	monitor := &PublishMonitor{
+		HTTPClient: server.Client(),
+		Token:      "test-token",
+		APIBaseURL: server.URL,
+	}
+	_, err := monitor.ListPending(context.Background(), PublishMonitorConfig{
+		Repository: "valon-technologies/toolshed",
+		Workflow:   "auto-publish-app-registry.yml",
+		Branch:     "main",
+	}, map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("ListPending: %v", err)
+	}
+	if len(statuses) != 3 {
+		t.Fatalf("status queries = %#v", statuses)
+	}
+}
+
 func TestPublishMonitorListPendingWithoutToken(t *testing.T) {
 	t.Parallel()
 

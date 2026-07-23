@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const pendingPublishWorkflowStatuses = "queued,in_progress,waiting"
+var pendingPublishWorkflowStatusList = []string{"queued", "in_progress", "waiting"}
 
 var (
 	squashMergePRTitleRe = regexp.MustCompile(`^(.+?)\s+\(#([0-9]+)\)\s*$`)
@@ -201,6 +201,32 @@ type githubWorkflowRun struct {
 }
 
 func (m *PublishMonitor) fetchWorkflowRuns(ctx context.Context, cfg PublishMonitorConfig) ([]githubWorkflowRun, error) {
+	seen := make(map[string]struct{})
+	runs := make([]githubWorkflowRun, 0)
+	for _, status := range pendingPublishWorkflowStatusList {
+		batch, err := m.fetchWorkflowRunsForStatus(ctx, cfg, status)
+		if err != nil {
+			return nil, err
+		}
+		for _, run := range batch {
+			key := strings.ToLower(strings.TrimSpace(run.HeadSHA))
+			if key == "" {
+				key = strings.TrimSpace(run.HTMLURL)
+			}
+			if key == "" {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			runs = append(runs, run)
+		}
+	}
+	return runs, nil
+}
+
+func (m *PublishMonitor) fetchWorkflowRunsForStatus(ctx context.Context, cfg PublishMonitorConfig, status string) ([]githubWorkflowRun, error) {
 	baseURL := "https://api.github.com"
 	if m != nil && strings.TrimSpace(m.APIBaseURL) != "" {
 		baseURL = strings.TrimRight(strings.TrimSpace(m.APIBaseURL), "/")
@@ -210,7 +236,7 @@ func (m *PublishMonitor) fetchWorkflowRuns(ctx context.Context, cfg PublishMonit
 		baseURL,
 		cfg.Repository,
 		cfg.Branch,
-		pendingPublishWorkflowStatuses,
+		status,
 	)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
