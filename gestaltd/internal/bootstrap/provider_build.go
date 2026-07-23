@@ -264,23 +264,9 @@ func (b *preparedProviderBuilds) Start(
 					return
 				}
 			}
-			var result *ProviderBuildResult
-			var buildErr error
-			for {
-				result, buildErr = builder(buildCtx, pending.name, pending.entry, deps)
-				if buildErr == nil || errors.Is(buildErr, providerdev.ErrFrontendOnlyDevApp) || !runtimehost.IsTransientProviderRPCError(buildErr) {
-					break
-				}
-				slog.Debug("retrying transient provider startup failure", "provider", pending.name, "error", buildErr)
-				select {
-				case <-buildCtx.Done():
-					buildErr = buildCtx.Err()
-					result = nil
-				case <-time.After(runtimehost.DefaultProviderRPCRetryInterval):
-					continue
-				}
-				break
-			}
+			result, buildErr := runtimehost.RetryWhileTransient(buildCtx, runtimehost.DefaultProviderRPCRetryInterval, func(ctx context.Context) (*ProviderBuildResult, error) {
+				return builder(ctx, pending.name, pending.entry, deps)
+			})
 			if errors.Is(buildErr, providerdev.ErrFrontendOnlyDevApp) {
 				if pending.proxy != nil {
 					pending.proxy.fail(buildErr)

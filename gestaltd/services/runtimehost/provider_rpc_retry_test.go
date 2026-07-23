@@ -21,7 +21,8 @@ func TestIsTransientProviderRPCError(t *testing.T) {
 	}{
 		{name: "nil", err: nil, want: false},
 		{name: "canceled", err: context.Canceled, want: false},
-		{name: "deadline exceeded", err: context.DeadlineExceeded, want: true},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, want: false},
+		{name: "grpc deadline exceeded", err: status.Error(codes.DeadlineExceeded, "timed out"), want: false},
 		{name: "unavailable", err: status.Error(codes.Unavailable, "relay warming up"), want: true},
 		{name: "connection refused message", err: fmt.Errorf("configure provider: dial tcp 10.10.0.5:8080: connection refused"), want: true},
 		{name: "unknown", err: status.Error(codes.Unknown, "provider metadata exploded"), want: false},
@@ -93,5 +94,34 @@ func TestRetryWhileTransientRespectsContextCancellation(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+}
+
+func TestWithDefaultProviderRetryDeadlineAddsTimeoutWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := withDefaultProviderRetryDeadline(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected deadline")
+	}
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > 50*time.Millisecond {
+		t.Fatalf("remaining deadline = %s, want (0, 50ms]", remaining)
+	}
+}
+
+func TestWithDefaultProviderRetryDeadlinePreservesParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	parentDeadline := time.Now().Add(2 * time.Second)
+	parent, parentCancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer parentCancel()
+
+	ctx, cancel := withDefaultProviderRetryDeadline(parent, 50*time.Millisecond)
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok || !deadline.Equal(parentDeadline) {
+		t.Fatalf("deadline = %v, want parent deadline %v", deadline, parentDeadline)
 	}
 }

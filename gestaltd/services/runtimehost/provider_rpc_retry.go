@@ -18,20 +18,29 @@ func IsTransientProviderRPCError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
 	switch status.Code(err) {
-	case codes.Unavailable, codes.DeadlineExceeded, codes.ResourceExhausted:
+	case codes.Unavailable, codes.ResourceExhausted:
 		return true
 	default:
 		msg := strings.ToLower(err.Error())
 		return strings.Contains(msg, "connection refused") ||
 			strings.Contains(msg, "connection reset")
 	}
+}
+
+// withDefaultProviderRetryDeadline applies timeout when the parent context has
+// no deadline so retry loops cannot run forever.
+func withDefaultProviderRetryDeadline(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if _, ok := parent.Deadline(); ok {
+		return parent, func() {}
+	}
+	return context.WithTimeout(parent, timeout)
 }
 
 func RetryWhileTransient[T any](ctx context.Context, interval time.Duration, op func(context.Context) (T, error)) (T, error) {

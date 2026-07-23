@@ -37,6 +37,8 @@ type RuntimeProviderMetadata struct {
 }
 
 func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
+	ctx, cancel := withDefaultProviderRetryDeadline(ctx, providerConfigureTimeout)
+	defer cancel()
 	return RetryWhileTransient(ctx, DefaultProviderRPCRetryInterval, func(ctx context.Context) (*RuntimeProviderMetadata, error) {
 		return configureRuntimeProviderOnce(ctx, client, expectedKind, name, config)
 	})
@@ -120,6 +122,8 @@ func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecy
 }
 
 func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
+	ctx, cancel := withDefaultProviderRetryDeadline(ctx, providerStartTimeout)
+	defer cancel()
 	return RetryWhileTransientNoResult(ctx, DefaultProviderRPCRetryInterval, func(ctx context.Context) error {
 		return startRuntimeProviderOnce(ctx, client)
 	})
