@@ -18,6 +18,7 @@ func ToWireAppInvokeGraphQLRequest(value *AppInvokeGraphQLRequest) *proto.AppInv
 		Connection:     value.Connection,
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
+		Headers:        value.Headers,
 	}
 	return out
 }
@@ -34,6 +35,7 @@ func ToWireAppInvokeRequest(value *AppInvokeRequest) *proto.AppInvokeRequest {
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
 		CredentialMode: value.CredentialMode,
+		Headers:        value.Headers,
 	}
 	return out
 }

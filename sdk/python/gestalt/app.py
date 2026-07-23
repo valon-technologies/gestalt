@@ -81,6 +81,8 @@ class AppInvokeGraphQLRequest:
     instance: str = ""
     idempotency_key: str = ""
     context: RequestContext | None = None
+    #: headers overrides outbound static headers declared by the target provider.
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +98,8 @@ class AppInvokeRequest:
     credential_mode: str = ""
     context: RequestContext | None = None
     run_as: SubjectContext | None = None
+    #: headers overrides outbound static headers declared by the target provider.
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -536,6 +540,7 @@ class App:
         idempotency_key: str = ...,
         credential_mode: str = ...,
         run_as: SubjectContext | None = ...,
+        headers: dict[str, str] = ...,
     ) -> Any: ...
 
     def invoke(
@@ -550,6 +555,7 @@ class App:
         idempotency_key: str | None = None,
         credential_mode: str | None = None,
         run_as: SubjectContext | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Any:
         """The result decodes with the standard JSON operation envelope
         semantics; envelope failures raise InvokeError.
@@ -564,6 +570,7 @@ class App:
                 idempotency_key=idempotency_key or "",
                 credential_mode=credential_mode or "",
                 run_as=run_as,
+                headers=headers if headers is not None else {},
             )
         elif (
             app is not None
@@ -574,6 +581,7 @@ class App:
             or idempotency_key is not None
             or credential_mode is not None
             or run_as is not None
+            or headers is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
@@ -627,6 +635,7 @@ class App:
         instance: str = ...,
         idempotency_key: str = ...,
         variables: dict[str, JsonValue] | None = ...,
+        headers: dict[str, str] = ...,
     ) -> OperationResult: ...
 
     def invoke_graphql(
@@ -639,6 +648,7 @@ class App:
         instance: str | None = None,
         idempotency_key: str | None = None,
         variables: dict[str, JsonValue] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> OperationResult:
         if request is None:
             request = AppInvokeGraphQLRequest(
@@ -648,6 +658,7 @@ class App:
                 instance=instance or "",
                 idempotency_key=idempotency_key or "",
                 variables=variables,
+                headers=headers if headers is not None else {},
             )
         elif (
             app is not None
@@ -656,6 +667,7 @@ class App:
             or instance is not None
             or idempotency_key is not None
             or variables is not None
+            or headers is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:

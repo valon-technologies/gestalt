@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/http"
 	"slices"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -172,6 +173,23 @@ func (m *MergedProvider) OperationConnectionOverrideAllowed(op string, params ma
 }
 
 func (m *MergedProvider) Catalog() *catalog.Catalog { return m.catalog.Clone() }
+
+func (m *MergedProvider) StaticHeaders() map[string]string {
+	merged := make(map[string]string)
+	for _, provider := range m.owned {
+		hp, ok := provider.(interface{ StaticHeaders() map[string]string })
+		if !ok {
+			continue
+		}
+		for name, value := range hp.StaticHeaders() {
+			merged[http.CanonicalHeaderKey(name)] = value
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
 
 func (m *MergedProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
 	p, ok := m.route[op]

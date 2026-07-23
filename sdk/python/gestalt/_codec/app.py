@@ -88,6 +88,7 @@ def to_wire_app_invoke_graphql_request(value: native.AppInvokeGraphQLRequest) ->
         context=None
         if value.context is None
         else to_wire_request_context(value.context),
+        headers=value.headers,
     )
 
 
@@ -104,6 +105,7 @@ def from_wire_app_invoke_graphql_request(value: Any) -> native.AppInvokeGraphQLR
         context=from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        headers=dict(value.headers),
     )
 
 
@@ -120,6 +122,7 @@ def to_wire_app_invoke_request(value: native.AppInvokeRequest) -> Any:
         if value.context is None
         else to_wire_request_context(value.context),
         run_as=None if value.run_as is None else to_wire_subject_context(value.run_as),
+        headers=value.headers,
     )
 
 
@@ -138,6 +141,7 @@ def from_wire_app_invoke_request(value: Any) -> native.AppInvokeRequest:
         run_as=from_wire_subject_context(value.run_as)
         if value.HasField("run_as")
         else None,
+        headers=dict(value.headers),
     )
 
 

@@ -164,6 +164,8 @@ message AppInvokeRequest {
   SubjectContext run_as = 12;
   reserved 13;
   reserved "delegated_caller_proof";
+  // headers overrides outbound static headers declared by the target provider.
+  map<string, string> headers = 14;
 }
 
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
@@ -180,6 +182,8 @@ message AppInvokeGraphQLRequest {
   RequestContext context = 8;
   reserved 9;
   reserved "delegated_caller_proof";
+  // headers overrides outbound static headers declared by the target provider.
+  map<string, string> headers = 10;
 }
 
 // SubjectContext identifies the caller that initiated an operation.
@@ -421,6 +425,7 @@ service App {
     option (optional_signature) = "idempotency_key";
     option (optional_signature) = "credential_mode";
     option (optional_signature) = "run_as";
+    option (optional_signature) = "headers";
   }
   // InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
   // REST binding) and shares Invoke's request shape, authorization, and
@@ -444,6 +449,7 @@ service App {
     option (optional_signature) = "idempotency_key";
     option (optional_signature) = "credential_mode";
     option (optional_signature) = "run_as";
+    option (optional_signature) = "headers";
   }
   rpc InvokeGraphQL(AppInvokeGraphQLRequest) returns (OperationResult) {
     option (google.api.http) = {
@@ -462,5 +468,6 @@ service App {
     option (optional_signature) = "instance";
     option (optional_signature) = "idempotency_key";
     option (optional_signature) = "variables";
+    option (optional_signature) = "headers";
   }
 }

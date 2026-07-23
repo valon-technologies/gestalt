@@ -131,6 +131,7 @@ export function toWireAppInvokeGraphQLRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    headers: value.headers ?? {},
   });
 }
 
@@ -147,6 +148,7 @@ export function fromWireAppInvokeGraphQLRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    headers: value.headers,
   };
 }
 
@@ -169,6 +171,7 @@ export function toWireAppInvokeRequest(
     ...(value.runAs !== undefined
       ? { runAs: toWireSubjectContext(value.runAs) }
       : {}),
+    headers: value.headers ?? {},
   });
 }
 
@@ -189,6 +192,7 @@ export function fromWireAppInvokeRequest(
     ...(value.runAs !== undefined
       ? { runAs: fromWireSubjectContext(value.runAs) }
       : {}),
+    headers: value.headers,
   };
 }
 

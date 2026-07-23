@@ -66,6 +66,8 @@ type AppInvokeGraphQLRequest struct {
 	Instance       string
 	IdempotencyKey string
 	Context        *RequestContext
+	// headers overrides outbound static headers declared by the target provider.
+	Headers map[string]string
 }
 
 // AppInvokeRequest is the native message type for gestalt.provider.v1.AppInvokeRequest.
@@ -81,6 +83,8 @@ type AppInvokeRequest struct {
 	CredentialMode string
 	Context        *RequestContext
 	RunAs          *SubjectContext
+	// headers overrides outbound static headers declared by the target provider.
+	Headers map[string]string
 }
 
 // Catalog is the native message type for gestalt.provider.v1.Catalog.
@@ -495,6 +499,8 @@ type AppInvokeOptions struct {
 	IdempotencyKey string
 	CredentialMode string
 	RunAs          *SubjectContext
+	// headers overrides outbound static headers declared by the target provider.
+	Headers map[string]string
 }
 
 // Invoke is the ergonomic form of [App.InvokeRaw].
@@ -504,7 +510,7 @@ func (c *App) Invoke(ctx context.Context, app string, operation string, params m
 	if opts == nil {
 		opts = &AppInvokeOptions{}
 	}
-	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs, Context: c.context}
+	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs, Headers: opts.Headers, Context: c.context}
 	response, err := c.client.Invoke(ctx, ToWireAppInvokeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -535,6 +541,8 @@ type AppInvokeStreamOptions struct {
 	IdempotencyKey string
 	CredentialMode string
 	RunAs          *SubjectContext
+	// headers overrides outbound static headers declared by the target provider.
+	Headers map[string]string
 }
 
 // InvokeStream is the ergonomic form of [App.InvokeStreamRaw].
@@ -550,7 +558,7 @@ func (c *App) InvokeStream(ctx context.Context, app string, operation string, pa
 		opts = &AppInvokeStreamOptions{}
 	}
 
-	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs}
+	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs, Headers: opts.Headers}
 
 	if request.Context == nil && c.context != nil {
 		shallow := *request
@@ -592,6 +600,8 @@ type AppInvokeGraphQLOptions struct {
 	Instance       string
 	IdempotencyKey string
 	Variables      map[string]any
+	// headers overrides outbound static headers declared by the target provider.
+	Headers map[string]string
 }
 
 // InvokeGraphQL is the ergonomic form of [App.InvokeGraphQLRaw].
@@ -599,7 +609,7 @@ func (c *App) InvokeGraphQL(ctx context.Context, app string, document string, op
 	if opts == nil {
 		opts = &AppInvokeGraphQLOptions{}
 	}
-	request := &AppInvokeGraphQLRequest{App: app, Document: document, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, Variables: opts.Variables, Context: c.context}
+	request := &AppInvokeGraphQLRequest{App: app, Document: document, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, Variables: opts.Variables, Headers: opts.Headers, Context: c.context}
 	response, err := c.client.InvokeGraphQL(ctx, ToWireAppInvokeGraphQLRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

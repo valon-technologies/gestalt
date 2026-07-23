@@ -21,6 +21,10 @@ pub struct AppInvokeGraphQLRequest {
     pub instance: String,
     /// The `idempotency_key` field.
     pub idempotency_key: String,
+    /// headers overrides outbound static headers declared by the target provider.
+    ///
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 /// AppInvokeRequest invokes a declared operation on another app through Gestalt.
@@ -43,4 +47,8 @@ pub struct AppInvokeRequest {
     pub idempotency_key: String,
     /// The `credential_mode` field.
     pub credential_mode: String,
+    /// headers overrides outbound static headers declared by the target provider.
+    ///
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, String>,
 }

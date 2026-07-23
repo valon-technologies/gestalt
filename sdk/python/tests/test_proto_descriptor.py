@@ -24,6 +24,7 @@ class ProtoDescriptorTests(unittest.TestCase):
                 "credential_mode",
                 "context",
                 "run_as",
+                "headers",
             },
         )
 

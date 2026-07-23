@@ -291,6 +291,12 @@ pub struct AppInvokeRequest {
     pub context: ::core::option::Option<RequestContext>,
     #[prost(message, optional, tag = "12")]
     pub run_as: ::core::option::Option<SubjectContext>,
+    /// headers overrides outbound static headers declared by the target provider.
+    #[prost(btree_map = "string, string", tag = "14")]
+    pub headers: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 /// AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 /// through Gestalt.
@@ -310,6 +316,12 @@ pub struct AppInvokeGraphQlRequest {
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "8")]
     pub context: ::core::option::Option<RequestContext>,
+    /// headers overrides outbound static headers declared by the target provider.
+    #[prost(btree_map = "string, string", tag = "10")]
+    pub headers: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 /// SubjectContext identifies the caller that initiated an operation.
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -251,6 +251,13 @@ func (r *Restricted) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubje
 	return subject, err
 }
 
+func (r *Restricted) StaticHeaders() map[string]string {
+	if hp, ok := r.inner.(interface{ StaticHeaders() map[string]string }); ok {
+		return hp.StaticHeaders()
+	}
+	return nil
+}
+
 func (r *Restricted) ConnectionForOperation(operation string) string {
 	if _, ok := r.allowed[operation]; !ok {
 		return ""

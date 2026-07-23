@@ -78,6 +78,14 @@ type Base struct {
 
 func (b *Base) Name() string        { return b.IntegrationName }
 func (b *Base) DisplayName() string { return b.IntegrationDisplay }
+
+func (b *Base) StaticHeaders() map[string]string {
+	if len(b.Headers) == 0 {
+		return nil
+	}
+	return maps.Clone(b.Headers)
+}
+
 func (b *Base) Description() string { return b.IntegrationDesc }
 
 func (b *Base) ConnectionMode() core.ConnectionMode {

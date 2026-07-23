@@ -13,6 +13,8 @@ type AppInvokeGraphQLRequest struct {
 	Connection     string
 	Instance       string
 	IdempotencyKey string
+	// headers overrides outbound static headers declared by the target provider.
+	Headers map[string]string
 }
 
 // AppInvokeRequest is the native message type for gestalt.provider.v1.AppInvokeRequest.
@@ -26,4 +28,6 @@ type AppInvokeRequest struct {
 	Instance       string
 	IdempotencyKey string
 	CredentialMode string
+	// headers overrides outbound static headers declared by the target provider.
+	Headers map[string]string
 }

@@ -93,6 +93,7 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 		invokePrincipal,
 		callCtx.delegationRunAs,
 	)
+	invokeCtx = invocation.WithInvokeRequestHeaders(invokeCtx, req.GetHeaders())
 
 	result, err := s.invoker.Invoke(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
 	return appOperationResult(result, err)
@@ -133,6 +134,7 @@ func (s *AppServer) InvokeStream(req *proto.AppInvokeRequest, stream proto.App_I
 		invokePrincipal,
 		callCtx.delegationRunAs,
 	)
+	invokeCtx = invocation.WithInvokeRequestHeaders(invokeCtx, req.GetHeaders())
 	streamInvoker, ok := s.invoker.(invocation.StreamingInvoker)
 	if !ok {
 		return status.Error(codes.Unimplemented, "streaming invocation is not available")
@@ -190,6 +192,7 @@ func (s *AppServer) InvokeMaybeStream(ctx context.Context, req *proto.AppInvokeR
 		invokePrincipal,
 		callCtx.delegationRunAs,
 	)
+	invokeCtx = invocation.WithInvokeRequestHeaders(invokeCtx, req.GetHeaders())
 	maybeInvoker, ok := s.invoker.(invocation.MaybeStreamingInvoker)
 	if !ok {
 		result, err := s.invoker.Invoke(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
@@ -300,6 +303,7 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 		return nil, err
 	}
 	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
+	invokeCtx = invocation.WithInvokeRequestHeaders(invokeCtx, req.GetHeaders())
 
 	variables := map[string]any{}
 	if raw := req.GetVariables(); raw != nil {

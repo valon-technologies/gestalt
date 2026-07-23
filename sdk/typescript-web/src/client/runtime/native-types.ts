@@ -404,6 +404,10 @@ export interface AppInvokeGraphQLRequest {
   connection: string;
   instance: string;
   idempotencyKey: string;
+  /**
+   * headers overrides outbound static headers declared by the target provider.
+   */
+  headers: { [key: string]: string };
 }
 
 /**
@@ -417,6 +421,10 @@ export interface AppInvokeRequest {
   instance: string;
   idempotencyKey: string;
   credentialMode: string;
+  /**
+   * headers overrides outbound static headers declared by the target provider.
+   */
+  headers: { [key: string]: string };
 }
 
 export type InvokeFrameValue =

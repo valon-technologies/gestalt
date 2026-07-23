@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from gestalt.rpc_support import JsonValue
 
@@ -21,6 +21,8 @@ class AppInvokeGraphQLRequest:
     connection: str = ""
     instance: str = ""
     idempotency_key: str = ""
+    #: headers overrides outbound static headers declared by the target provider.
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,3 +36,5 @@ class AppInvokeRequest:
     instance: str = ""
     idempotency_key: str = ""
     credential_mode: str = ""
+    #: headers overrides outbound static headers declared by the target provider.
+    headers: dict[str, str] = field(default_factory=dict)

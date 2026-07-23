@@ -13,6 +13,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -839,5 +840,77 @@ func TestBrokerInvokeMaybeStreamRejectsNonStreamingProvider(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "streaming unsupported") && !errors.Is(err, ErrStreamingUnsupported) {
 		t.Fatalf("error = %v, want streaming unsupported", err)
+	}
+}
+
+type tenantHeaderIntegration struct {
+	coretesting.StubIntegration
+	staticHeaders map[string]string
+}
+
+func (p *tenantHeaderIntegration) StaticHeaders() map[string]string {
+	return p.staticHeaders
+}
+
+func TestBrokerInvokeHeaderOverridesResolveDefaultCredential(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("user-tenant-header")
+	var capturedTenant string
+	provider := &tenantHeaderIntegration{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "frontPorch",
+			ConnMode: core.ConnectionModeSubject,
+			CatalogVal: &catalog.Catalog{
+				Name: "frontPorch",
+				Operations: []catalog.CatalogOperation{
+					{ID: "tenants.list"},
+				},
+			},
+			ExecuteFn: func(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
+				if token != "iap-token" {
+					t.Fatalf("token = %q, want iap-token", token)
+				}
+				capturedTenant = egress.OutboundHeaderOverridesFromContext(ctx)["X-Tenant-Sid"]
+				return &core.OperationResult{Status: 200, Body: []byte(`{"ok":true}`)}, nil
+			},
+		},
+		staticHeaders: map[string]string{
+			"X-Tenant-Sid": "TENDefault",
+		},
+	}
+	broker := NewBroker(testutil.NewProviderRegistry(t, provider), svc.Users, svc.ExternalCredentials)
+	if err := svc.ExternalCredentials.UpsertCredential(context.Background(), &core.ExternalCredential{
+		ID:        "front-porch-dev-default",
+		Subject:   subjectID,
+		Audience:  "frontPorch:dev",
+		Qualifier: "",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "iap-token"},
+	}); err != nil {
+		t.Fatalf("UpsertCredential: %v", err)
+	}
+
+	_, err := broker.Invoke(
+		WithInvokeRequestHeaders(
+			WithConnection(context.Background(), "dev"),
+			map[string]string{"X-Tenant-Sid": "TENSelected"},
+		),
+		&principal.Principal{
+			SubjectID: subjectID,
+			UserID:    "user-tenant-header",
+			Kind:      principal.KindUser,
+			Scopes:    []string{"frontPorch"},
+		},
+		"frontPorch",
+		"",
+		"tenants.list",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if capturedTenant != "TENSelected" {
+		t.Fatalf("tenant header override = %q, want TENSelected", capturedTenant)
 	}
 }

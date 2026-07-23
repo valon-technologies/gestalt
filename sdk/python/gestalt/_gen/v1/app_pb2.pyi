@@ -205,6 +205,13 @@ class InvokeFrame(_message.Message):
 
 class AppInvokeRequest(_message.Message):
     __slots__ = ()
+    class HeadersEntry(_message.Message):
+        __slots__ = ()
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     APP_FIELD_NUMBER: _ClassVar[int]
     OPERATION_FIELD_NUMBER: _ClassVar[int]
     PARAMS_FIELD_NUMBER: _ClassVar[int]
@@ -214,6 +221,7 @@ class AppInvokeRequest(_message.Message):
     CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     RUN_AS_FIELD_NUMBER: _ClassVar[int]
+    HEADERS_FIELD_NUMBER: _ClassVar[int]
     app: str
     operation: str
     params: _struct_pb2.Struct
@@ -223,10 +231,18 @@ class AppInvokeRequest(_message.Message):
     credential_mode: str
     context: RequestContext
     run_as: SubjectContext
-    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., credential_mode: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., run_as: _Optional[_Union[SubjectContext, _Mapping]] = ...) -> None: ...
+    headers: _containers.ScalarMap[str, str]
+    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., credential_mode: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., run_as: _Optional[_Union[SubjectContext, _Mapping]] = ..., headers: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class AppInvokeGraphQLRequest(_message.Message):
     __slots__ = ()
+    class HeadersEntry(_message.Message):
+        __slots__ = ()
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     APP_FIELD_NUMBER: _ClassVar[int]
     DOCUMENT_FIELD_NUMBER: _ClassVar[int]
     VARIABLES_FIELD_NUMBER: _ClassVar[int]
@@ -234,6 +250,7 @@ class AppInvokeGraphQLRequest(_message.Message):
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    HEADERS_FIELD_NUMBER: _ClassVar[int]
     app: str
     document: str
     variables: _struct_pb2.Struct
@@ -241,7 +258,8 @@ class AppInvokeGraphQLRequest(_message.Message):
     instance: str
     idempotency_key: str
     context: RequestContext
-    def __init__(self, app: _Optional[str] = ..., document: _Optional[str] = ..., variables: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ...) -> None: ...
+    headers: _containers.ScalarMap[str, str]
+    def __init__(self, app: _Optional[str] = ..., document: _Optional[str] = ..., variables: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., headers: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class SubjectContext(_message.Message):
     __slots__ = ()

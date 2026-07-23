@@ -337,6 +337,10 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
+	ctx, err = ApplyInvokeHeaderOverrides(ctx, prov)
+	if err != nil {
+		return fail(err)
+	}
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
 		return fail(err)
@@ -488,6 +492,10 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
+	ctx, err = ApplyInvokeHeaderOverrides(ctx, prov)
+	if err != nil {
+		return fail(err)
+	}
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
 		return fail(err)
@@ -666,6 +674,10 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
+	ctx, err = ApplyInvokeHeaderOverrides(ctx, prov)
+	if err != nil {
+		return fail(err)
+	}
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
 		return fail(err)
@@ -888,6 +900,10 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
+	ctx, err = ApplyInvokeHeaderOverrides(ctx, prov)
+	if err != nil {
+		return fail(err)
+	}
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
 		return fail(err)
