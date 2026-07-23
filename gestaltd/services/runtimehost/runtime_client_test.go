@@ -125,7 +125,7 @@ func TestStartRuntimeProviderTreatsUnimplementedAsNoop(t *testing.T) {
 	}
 }
 
-func TestStartRuntimeProviderUsesStartupTimeout(t *testing.T) {
+func TestStartRuntimeProviderUsesStartupAttemptTimeout(t *testing.T) {
 	t.Parallel()
 
 	var remaining time.Duration
@@ -142,15 +142,12 @@ func TestStartRuntimeProviderUsesStartupTimeout(t *testing.T) {
 	if err := StartRuntimeProvider(context.Background(), client); err != nil {
 		t.Fatalf("StartRuntimeProvider: %v", err)
 	}
-	if remaining <= ProviderRPCTimeout {
-		t.Fatalf("StartProvider remaining deadline = %s, want above request timeout %s", remaining, ProviderRPCTimeout)
-	}
-	if remaining > providerStartTimeout {
-		t.Fatalf("StartProvider remaining deadline = %s, want at most startup timeout %s", remaining, providerStartTimeout)
+	if remaining <= 0 || remaining > providerStartAttemptTimeout+time.Second {
+		t.Fatalf("StartProvider remaining deadline = %s, want within (0, %s]", remaining, providerStartAttemptTimeout)
 	}
 }
 
-func TestConfigureRuntimeProviderAppliesPerRPCTimeout(t *testing.T) {
+func TestConfigureRuntimeProviderUsesParentDeadlineWhenPresent(t *testing.T) {
 	t.Parallel()
 
 	parentDeadline := time.Now().Add(2 * providerConfigureTimeout)
@@ -178,8 +175,8 @@ func TestConfigureRuntimeProviderAppliesPerRPCTimeout(t *testing.T) {
 	if _, err := ConfigureRuntimeProvider(ctx, client, proto.ProviderKind_PROVIDER_KIND_AGENT, "simple", nil); err != nil {
 		t.Fatalf("ConfigureRuntimeProvider: %v", err)
 	}
-	if configureRemaining <= 0 || configureRemaining > providerConfigureTimeout+time.Second {
-		t.Fatalf("ConfigureProvider remaining deadline = %s, want within (0, %s]", configureRemaining, providerConfigureTimeout)
+	if configureRemaining <= providerConfigureTimeout {
+		t.Fatalf("ConfigureProvider remaining deadline = %s, want above configure timeout %s", configureRemaining, providerConfigureTimeout)
 	}
 }
 

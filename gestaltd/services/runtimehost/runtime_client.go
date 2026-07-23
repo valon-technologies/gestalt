@@ -21,10 +21,9 @@ const (
 	ProviderRPCTimeout = 30 * time.Second
 	// ProviderSessionCreateTimeout bounds agent CreateSession RPCs when callers
 	// do not provide their own deadline.
-	ProviderSessionCreateTimeout  = 5 * time.Minute
-	providerStartTimeout          = 2 * time.Minute
-	providerConfigureTimeout      = 30 * time.Second
-	providerConfigureRetryTimeout = 5 * providerConfigureTimeout
+	ProviderSessionCreateTimeout = 5 * time.Minute
+	providerStartTimeout         = 2 * time.Minute
+	providerConfigureTimeout     = 30 * time.Second
 )
 
 type RuntimeProviderMetadata struct {
@@ -37,9 +36,7 @@ type RuntimeProviderMetadata struct {
 }
 
 func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
-	ctx, cancel := withDefaultProviderRetryDeadline(ctx, providerConfigureRetryTimeout)
-	defer cancel()
-	return RetryWhileTransient(ctx, DefaultProviderRPCRetryInterval, func(ctx context.Context) (*RuntimeProviderMetadata, error) {
+	return CallWhileStarting(ctx, providerConfigureAttemptTimeout, func(ctx context.Context) (*RuntimeProviderMetadata, error) {
 		return configureRuntimeProviderOnce(ctx, client, expectedKind, name, config)
 	})
 }
@@ -122,9 +119,7 @@ func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecy
 }
 
 func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
-	ctx, cancel := withDefaultProviderRetryDeadline(ctx, providerStartTimeout)
-	defer cancel()
-	return RetryWhileTransientNoResult(ctx, DefaultProviderRPCRetryInterval, func(ctx context.Context) error {
+	return CallWhileStartingNoResult(ctx, providerStartAttemptTimeout, func(ctx context.Context) error {
 		return startRuntimeProviderOnce(ctx, client)
 	})
 }
@@ -196,6 +191,9 @@ func providerStartContext(parent context.Context) (context.Context, context.Canc
 func providerConfigureContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
+	}
+	if _, ok := parent.Deadline(); ok {
+		return context.WithCancel(parent)
 	}
 	return context.WithTimeout(parent, providerConfigureTimeout)
 }

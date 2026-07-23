@@ -10,23 +10,29 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const DefaultProviderRPCRetryInterval = 25 * time.Millisecond
+const (
+	DefaultProviderRPCRetryInterval = 25 * time.Millisecond
+	// ProviderStartupRetryTimeout bounds total startup retry time when callers
+	// pass an unbounded context.
+	ProviderStartupRetryTimeout     = 2 * time.Minute
+	providerConfigureAttemptTimeout = 90 * time.Second
+	providerStartAttemptTimeout     = 30 * time.Second
+)
 
-// ProviderStartupRetryTimeout bounds retry loops for app/runtime provider startup
-// when callers pass an unbounded context.
-const ProviderStartupRetryTimeout = 2 * time.Minute
-
-// IsTransientProviderRPCError reports whether a provider startup RPC should be
-// retried while the hosted runtime or host-service relay is still coming up.
-func IsTransientProviderRPCError(err error) bool {
+func isStartupTransient(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) {
 		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
 	switch status.Code(err) {
 	case codes.Unavailable, codes.ResourceExhausted:
+		return true
+	case codes.DeadlineExceeded:
 		return true
 	default:
 		msg := strings.ToLower(err.Error())
@@ -35,47 +41,60 @@ func IsTransientProviderRPCError(err error) bool {
 	}
 }
 
-// WithDefaultProviderRetryDeadline applies timeout when the parent context has
-// no deadline so retry loops cannot run forever.
-func WithDefaultProviderRetryDeadline(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	return withDefaultProviderRetryDeadline(parent, timeout)
-}
-
-// withDefaultProviderRetryDeadline applies timeout when the parent context has
-// no deadline so retry loops cannot run forever.
-func withDefaultProviderRetryDeadline(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+func withStartupBudget(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
 	}
 	if _, ok := parent.Deadline(); ok {
 		return parent, func() {}
 	}
-	return context.WithTimeout(parent, timeout)
+	return context.WithTimeout(parent, ProviderStartupRetryTimeout)
 }
 
-func RetryWhileTransient[T any](ctx context.Context, interval time.Duration, op func(context.Context) (T, error)) (T, error) {
+func attemptContext(parent context.Context, attemptTimeout time.Duration) (context.Context, context.CancelFunc) {
+	if attemptTimeout <= 0 {
+		return context.WithCancel(parent)
+	}
+	return context.WithTimeout(parent, attemptTimeout)
+}
+
+// CallWhileStarting retries op while the hosted relay is still coming up.
+// attemptTimeout caps each try; when zero, each try uses the remaining parent budget.
+func CallWhileStarting[T any](parent context.Context, attemptTimeout time.Duration, op func(context.Context) (T, error)) (T, error) {
 	var zero T
+	parent, cancel := withStartupBudget(parent)
+	defer cancel()
+
+	interval := DefaultProviderRPCRetryInterval
 	if interval <= 0 {
-		interval = DefaultProviderRPCRetryInterval
+		interval = 25 * time.Millisecond
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	var lastErr error
 	for {
-		result, err := op(ctx)
-		if err == nil || !IsTransientProviderRPCError(err) {
-			return result, err
+		attemptCtx, attemptCancel := attemptContext(parent, attemptTimeout)
+		result, err := op(attemptCtx)
+		attemptCancel()
+		if err == nil {
+			return result, nil
 		}
-		select {
-		case <-ctx.Done():
+		lastErr = err
+		if !isStartupTransient(err) || parent.Err() != nil {
 			return zero, err
+		}
+
+		select {
+		case <-parent.Done():
+			return zero, lastErr
 		case <-ticker.C:
 		}
 	}
 }
 
-func RetryWhileTransientNoResult(ctx context.Context, interval time.Duration, op func(context.Context) error) error {
-	_, err := RetryWhileTransient(ctx, interval, func(ctx context.Context) (struct{}, error) {
+func CallWhileStartingNoResult(parent context.Context, attemptTimeout time.Duration, op func(context.Context) error) error {
+	_, err := CallWhileStarting(parent, attemptTimeout, func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, op(ctx)
 	})
 	return err

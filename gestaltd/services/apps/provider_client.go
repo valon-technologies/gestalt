@@ -134,10 +134,7 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 }
 
 func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProviderClient) (*integrationProviderSupport, error) {
-	ctx, cancel := runtimehost.WithDefaultProviderRetryDeadline(ctx, runtimehost.ProviderStartupRetryTimeout)
-	defer cancel()
-
-	return runtimehost.RetryWhileTransient(ctx, runtimehost.DefaultProviderRPCRetryInterval, func(ctx context.Context) (*integrationProviderSupport, error) {
+	return runtimehost.CallWhileStarting(ctx, runtimehost.ProviderRPCTimeout, func(ctx context.Context) (*integrationProviderSupport, error) {
 		meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 		if err == nil {
 			specs, decodeErr := decodeWorkflowDefinitionSpecs(meta.GetWorkflowDefinitionSpecs())
@@ -157,10 +154,7 @@ func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProvide
 }
 
 func callStartProviderWithRetry(ctx context.Context, client proto.AppProviderClient, name string, config map[string]any) error {
-	ctx, cancel := runtimehost.WithDefaultProviderRetryDeadline(ctx, runtimehost.ProviderStartupRetryTimeout)
-	defer cancel()
-
-	return runtimehost.RetryWhileTransientNoResult(ctx, runtimehost.DefaultProviderRPCRetryInterval, func(ctx context.Context) error {
+	return runtimehost.CallWhileStartingNoResult(ctx, runtimehost.ProviderRPCTimeout, func(ctx context.Context) error {
 		return callStartProvider(ctx, client, name, config)
 	})
 }

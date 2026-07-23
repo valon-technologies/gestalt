@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestIsTransientProviderRPCError(t *testing.T) {
+func TestIsStartupTransient(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -21,8 +21,8 @@ func TestIsTransientProviderRPCError(t *testing.T) {
 	}{
 		{name: "nil", err: nil, want: false},
 		{name: "canceled", err: context.Canceled, want: false},
-		{name: "deadline exceeded", err: context.DeadlineExceeded, want: false},
-		{name: "grpc deadline exceeded", err: status.Error(codes.DeadlineExceeded, "timed out"), want: false},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, want: true},
+		{name: "grpc deadline exceeded", err: status.Error(codes.DeadlineExceeded, "timed out"), want: true},
 		{name: "unavailable", err: status.Error(codes.Unavailable, "relay warming up"), want: true},
 		{name: "connection refused message", err: fmt.Errorf("configure provider: dial tcp 10.10.0.5:8080: connection refused"), want: true},
 		{name: "unknown", err: status.Error(codes.Unknown, "provider metadata exploded"), want: false},
@@ -31,18 +31,18 @@ func TestIsTransientProviderRPCError(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := IsTransientProviderRPCError(tc.err); got != tc.want {
-				t.Fatalf("IsTransientProviderRPCError(%v) = %v, want %v", tc.err, got, tc.want)
+			if got := isStartupTransient(tc.err); got != tc.want {
+				t.Fatalf("isStartupTransient(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestRetryWhileTransientEventuallySucceeds(t *testing.T) {
+func TestCallWhileStartingEventuallySucceeds(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	result, err := RetryWhileTransient(context.Background(), time.Millisecond, func(context.Context) (string, error) {
+	result, err := CallWhileStarting(context.Background(), 50*time.Millisecond, func(context.Context) (string, error) {
 		attempts++
 		if attempts < 3 {
 			return "", status.Error(codes.Unavailable, "warming up")
@@ -50,7 +50,7 @@ func TestRetryWhileTransientEventuallySucceeds(t *testing.T) {
 		return "ready", nil
 	})
 	if err != nil {
-		t.Fatalf("RetryWhileTransient: %v", err)
+		t.Fatalf("CallWhileStarting: %v", err)
 	}
 	if result != "ready" {
 		t.Fatalf("result = %q, want ready", result)
@@ -60,11 +60,11 @@ func TestRetryWhileTransientEventuallySucceeds(t *testing.T) {
 	}
 }
 
-func TestRetryWhileTransientStopsOnPermanentError(t *testing.T) {
+func TestCallWhileStartingStopsOnPermanentError(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	_, err := RetryWhileTransient(context.Background(), time.Millisecond, func(context.Context) (string, error) {
+	_, err := CallWhileStarting(context.Background(), 50*time.Millisecond, func(context.Context) (string, error) {
 		attempts++
 		return "", status.Error(codes.InvalidArgument, "bad config")
 	})
@@ -76,13 +76,13 @@ func TestRetryWhileTransientStopsOnPermanentError(t *testing.T) {
 	}
 }
 
-func TestRetryWhileTransientRespectsContextCancellation(t *testing.T) {
+func TestCallWhileStartingRespectsContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	attempts := 0
-	_, err := RetryWhileTransient(ctx, time.Millisecond, func(context.Context) (string, error) {
+	_, err := CallWhileStarting(ctx, 50*time.Millisecond, func(context.Context) (string, error) {
 		attempts++
 		return "", status.Error(codes.Unavailable, "warming up")
 	})
@@ -97,28 +97,48 @@ func TestRetryWhileTransientRespectsContextCancellation(t *testing.T) {
 	}
 }
 
-func TestWithDefaultProviderRetryDeadlineAddsTimeoutWhenMissing(t *testing.T) {
+func TestCallWhileStartingRetriesAttemptDeadlineWithinBudget(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := withDefaultProviderRetryDeadline(context.Background(), 50*time.Millisecond)
+	attempts := 0
+	_, err := CallWhileStarting(context.Background(), 20*time.Millisecond, func(ctx context.Context) (struct{}, error) {
+		attempts++
+		if attempts < 2 {
+			<-ctx.Done()
+			return struct{}{}, context.DeadlineExceeded
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatalf("CallWhileStarting: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+}
+
+func TestWithStartupBudgetAddsTimeoutWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := withStartupBudget(context.Background())
 	defer cancel()
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		t.Fatal("expected deadline")
 	}
-	if remaining := time.Until(deadline); remaining <= 0 || remaining > 50*time.Millisecond {
-		t.Fatalf("remaining deadline = %s, want (0, 50ms]", remaining)
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > ProviderStartupRetryTimeout {
+		t.Fatalf("remaining deadline = %s, want (0, %s]", remaining, ProviderStartupRetryTimeout)
 	}
 }
 
-func TestWithDefaultProviderRetryDeadlinePreservesParentDeadline(t *testing.T) {
+func TestWithStartupBudgetPreservesParentDeadline(t *testing.T) {
 	t.Parallel()
 
 	parentDeadline := time.Now().Add(2 * time.Second)
 	parent, parentCancel := context.WithDeadline(context.Background(), parentDeadline)
 	defer parentCancel()
 
-	ctx, cancel := withDefaultProviderRetryDeadline(parent, 50*time.Millisecond)
+	ctx, cancel := withStartupBudget(parent)
 	defer cancel()
 	deadline, ok := ctx.Deadline()
 	if !ok || !deadline.Equal(parentDeadline) {
