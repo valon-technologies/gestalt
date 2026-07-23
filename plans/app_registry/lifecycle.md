@@ -102,7 +102,7 @@ Only one rollout per app may be active across the fleet. `POST …/add` and `POS
 Replica membership is discovered rather than configured:
 
 1. The rollout remains `enrolling` for a bounded window of at least two poll intervals.
-2. Replicas join by writing `acknowledged_at` before `enrollment_ends_at`.
+2. Replicas join by writing `acknowledged_at` before `enrollment_ends_at` and download the rollout artifact during this window, recording `materialized_at` while the current provider keeps running.
 3. After enrollment, the cohort is frozen and the rollout becomes `restarting`.
 4. The rollout completes when every cohort member records `restarted_at`.
 5. The rollout fails if an acknowledged replica does not restart before the deadline.
@@ -113,8 +113,8 @@ Each pass:
 
 1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
 2. Group pending versions by app and select one desired version with `LatestKnownVersion`.
-3. Download and extract only the desired registry artifact to the canonical `{artifactsDir}/registry-installed/{app}/{desiredVersion}` path, recording `materialized_at` on that version's row while the provider is still running. Superseded pending rows remain without `materialized_at`. Re-validate the desired path on every pass; if the tree is missing or corrupt, re-download it before `StopApp`.
-4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. These timestamps mean the replica reconciled past those catalog changes; they do not mean every superseded version ran. `StartApp` receives the desired version and builds the provider from that materialized package instead of the deploy-time pin.
+3. Download and extract only the desired registry artifact to the canonical `{artifactsDir}/registry-installed/{app}/{desiredVersion}` path, recording `materialized_at` on that version's row while the provider is still running. During an active rollout's enrollment window, replicas materialize but do not stop or restart until enrollment closes. Superseded pending rows remain without `materialized_at`. Re-validate the desired path on every pass; if the tree is missing or corrupt, re-download it before `StopApp`.
+4. After enrollment closes, stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. These timestamps mean the replica reconciled past those catalog changes; they do not mean every superseded version ran. `StartApp` receives the desired version and builds the provider from that materialized package instead of the deploy-time pin.
 5. After the desired version is active, remove older registry-installed package directories for that app.
 6. Mark non-restartable apps converged without a local stop/start.
 
