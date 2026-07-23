@@ -21,7 +21,7 @@ use gestalt_sdk::public::generated::agent::{
 };
 use gestalt_sdk::public::generated::app::AgentToolRef;
 use gestalt_sdk::public::generated::app_client::AgentClient;
-use gestalt_sdk::public::grpc_transport::{SyncGrpcTransport, dial_public_grpc};
+use gestalt_sdk::public::rest_transport::SyncRestTransport;
 use gestalt_sdk::rpc_support::GestaltError;
 
 use super::fields::decode_json;
@@ -35,12 +35,9 @@ use super::types::{AgentInteractionInfo, AgentSessionInfo, AgentTurnEventInfo, A
 pub(crate) const DEFAULT_SESSION_LIST_LIMIT: usize = 50;
 pub(crate) const INTERRUPT_CANCEL_REASON: &str = "operator interrupted";
 
-fn agent_client(api: &ApiClient) -> Result<AgentClient<SyncGrpcTransport>> {
-    let transport = SyncGrpcTransport::from_endpoint(
-        dial_public_grpc(api.base_url())?,
-        Arc::new(BearerAuth::new(api.token())),
-    )
-    .with_timeout(std::time::Duration::from_secs(30));
+fn agent_client(api: &ApiClient) -> Result<AgentClient<SyncRestTransport>> {
+    let transport = SyncRestTransport::new(api.base_url(), Arc::new(BearerAuth::new(api.token())))
+        .with_timeout(std::time::Duration::from_secs(30));
     Ok(AgentClient::new(transport))
 }
 
