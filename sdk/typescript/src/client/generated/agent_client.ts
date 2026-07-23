@@ -279,4 +279,12 @@ export interface AgentClientREST {
     request: PublicAgentListTurnEventsRequest,
     callOptions?: PublicUnaryCallOptions,
   ): Promise<ListAgentProviderTurnEventsResponse>;
+  listInteractions(
+    request: PublicAgentListInteractionsRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<ListAgentProviderInteractionsResponse>;
+  resolveInteraction(
+    request: PublicAgentResolveInteractionRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<AgentInteraction>;
 }

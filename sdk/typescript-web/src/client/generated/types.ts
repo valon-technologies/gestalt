@@ -12,9 +12,11 @@ import type {
   CreateAgentProviderTurnRequest,
   GetAgentProviderSessionRequest,
   GetAgentProviderTurnRequest,
+  ListAgentProviderInteractionsRequest,
   ListAgentProviderSessionsRequest,
   ListAgentProviderTurnEventsRequest,
   ListAgentProviderTurnsRequest,
+  ResolveAgentProviderInteractionRequest,
   UpdateAgentProviderSessionRequest,
 } from "../runtime/native-types.ts";
 import type {
@@ -97,6 +99,14 @@ export type PublicAgentCancelTurnRequest = Init<
 
 export type PublicAgentListTurnEventsRequest = Init<
   Omit<ListAgentProviderTurnEventsRequest, "context">
+>;
+
+export type PublicAgentListInteractionsRequest = Init<
+  Omit<ListAgentProviderInteractionsRequest, "context">
+>;
+
+export type PublicAgentResolveInteractionRequest = Init<
+  Omit<ResolveAgentProviderInteractionRequest, "context">
 >;
 
 export type PublicAppInvokeRequest = Init<

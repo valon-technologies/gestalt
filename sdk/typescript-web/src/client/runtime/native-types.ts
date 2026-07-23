@@ -14,6 +14,24 @@ export const AgentExecutionStatus = {
 
 export type AgentExecutionStatus = number;
 
+export const AgentInteractionState = {
+  UNSPECIFIED: 0,
+  PENDING: 1,
+  RESOLVED: 2,
+  CANCELED: 3,
+} as const;
+
+export type AgentInteractionState = number;
+
+export const AgentInteractionType = {
+  UNSPECIFIED: 0,
+  APPROVAL: 1,
+  CLARIFICATION: 2,
+  INPUT: 3,
+} as const;
+
+export type AgentInteractionType = number;
+
 export const AgentMessagePartType = {
   UNSPECIFIED: 0,
   TEXT: 1,
@@ -36,6 +54,20 @@ export type AgentSessionState = number;
 export interface AgentCatalogToolConfig {
   refs: AgentToolRef[];
   tools: ListedAgentTool[];
+}
+
+export interface AgentInteraction {
+  id: string;
+  type: AgentInteractionType;
+  state: AgentInteractionState;
+  title: string;
+  prompt: string;
+  request?: JsonObjectInput;
+  resolution?: JsonObjectInput;
+  createdAt?: Date;
+  resolvedAt?: Date;
+  turnId: string;
+  sessionId: string;
 }
 
 export interface AgentMessage {
@@ -253,6 +285,15 @@ export interface GetAgentProviderTurnRequest {
   sessionId: string;
 }
 
+export interface ListAgentProviderInteractionsRequest {
+  turnId: string;
+  providerName: string;
+}
+
+export interface ListAgentProviderInteractionsResponse {
+  interactions: AgentInteraction[];
+}
+
 export interface ListAgentProviderSessionsRequest {
   sessionIds: string[];
   state: AgentSessionState;
@@ -323,6 +364,13 @@ export interface ListedAgentTool {
 export interface PreparedAgentWorkspace {
   root: string;
   cwd: string;
+}
+
+export interface ResolveAgentProviderInteractionRequest {
+  interactionId: string;
+  resolution?: JsonObjectInput;
+  turnId: string;
+  providerName: string;
 }
 
 export interface UpdateAgentProviderSessionRequest {

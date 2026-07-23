@@ -6,7 +6,7 @@
     "typescript"
   ],
   "grpcMethodCount": 75,
-  "restMethodCount": 44,
+  "restMethodCount": 46,
   "methods": [
     {
       "service": "Agent",
@@ -209,6 +209,20 @@
       "service": "Agent",
       "method": "ListInteractions",
       "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/agent/turns/{turn_id}/interactions",
+      "restPathFields": [
+        {
+          "name": "turn_id",
+          "jsonName": "turnId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider_name",
+          "jsonName": "providerName"
+        }
+      ],
       "grpcPath": "/gestalt.provider.v1.Agent/ListInteractions",
       "symbols": {
         "go": {
@@ -401,6 +415,19 @@
       "service": "Agent",
       "method": "ResolveInteraction",
       "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/agent/turns/{turn_id}/interactions/{interaction_id}/resolve",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "turn_id",
+          "jsonName": "turnId"
+        },
+        {
+          "name": "interaction_id",
+          "jsonName": "interactionId"
+        }
+      ],
       "grpcPath": "/gestalt.provider.v1.Agent/ResolveInteraction",
       "symbols": {
         "go": {

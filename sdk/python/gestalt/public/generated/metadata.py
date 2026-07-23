@@ -173,6 +173,11 @@ METHOD_AGENT_LIST_INTERACTIONS = Method(
     service="gestalt.provider.v1.Agent",
     name="ListInteractions",
     full_method="/gestalt.provider.v1.Agent/ListInteractions",
+    http_verb="GET",
+    http_path="/api/v2/agent/turns/{turn_id}/interactions",
+    http_body="",
+    http_path_fields=(PublicField(name="turn_id", json_name="turnId"),),
+    http_query_fields=(PublicField(name="provider_name", json_name="providerName"),),
     fill=("context",),
     reject=(),
 )
@@ -181,6 +186,14 @@ METHOD_AGENT_RESOLVE_INTERACTION = Method(
     service="gestalt.provider.v1.Agent",
     name="ResolveInteraction",
     full_method="/gestalt.provider.v1.Agent/ResolveInteraction",
+    http_verb="POST",
+    http_path="/api/v2/agent/turns/{turn_id}/interactions/{interaction_id}/resolve",
+    http_body="*",
+    http_path_fields=(
+        PublicField(name="turn_id", json_name="turnId"),
+        PublicField(name="interaction_id", json_name="interactionId"),
+    ),
+    http_query_fields=(),
     fill=("context",),
     reject=(),
 )

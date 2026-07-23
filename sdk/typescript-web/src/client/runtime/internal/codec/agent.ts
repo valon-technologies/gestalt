@@ -5,6 +5,7 @@ import { create } from "@bufbuild/protobuf";
 import * as wire from "../gen/v1/agent_pb.ts";
 import type {
   AgentCatalogToolConfig,
+  AgentInteraction,
   AgentMessage,
   AgentMessagePart,
   AgentMessagePartImageRef,
@@ -34,6 +35,8 @@ import type {
   CreateAgentProviderTurnRequest,
   GetAgentProviderSessionRequest,
   GetAgentProviderTurnRequest,
+  ListAgentProviderInteractionsRequest,
+  ListAgentProviderInteractionsResponse,
   ListAgentProviderSessionsRequest,
   ListAgentProviderSessionsResponse,
   ListAgentProviderTurnEventsRequest,
@@ -42,6 +45,7 @@ import type {
   ListAgentProviderTurnsResponse,
   ListedAgentTool,
   PreparedAgentWorkspace,
+  ResolveAgentProviderInteractionRequest,
   UpdateAgentProviderSessionRequest,
 } from "../../native-types.ts";
 import {
@@ -74,6 +78,54 @@ export function fromWireAgentCatalogToolConfig(
   return {
     refs: value.refs.map(fromWireAgentToolRef),
     tools: value.tools.map(fromWireListedAgentTool),
+  };
+}
+
+export function toWireAgentInteraction(
+  value: Init<AgentInteraction>,
+): wire.AgentInteraction {
+  return create(wire.AgentInteractionSchema, {
+    id: value.id ?? "",
+    type: (value.type ?? 0) as wire.AgentInteractionType,
+    state: (value.state ?? 0) as wire.AgentInteractionState,
+    title: value.title ?? "",
+    prompt: value.prompt ?? "",
+    ...(value.request !== undefined
+      ? { request: sanitizeJsonObject(value.request) }
+      : {}),
+    ...(value.resolution !== undefined
+      ? { resolution: sanitizeJsonObject(value.resolution) }
+      : {}),
+    ...(value.createdAt !== undefined
+      ? { createdAt: toWireTimestamp(value.createdAt) }
+      : {}),
+    ...(value.resolvedAt !== undefined
+      ? { resolvedAt: toWireTimestamp(value.resolvedAt) }
+      : {}),
+    turnId: value.turnId ?? "",
+    sessionId: value.sessionId ?? "",
+  });
+}
+
+export function fromWireAgentInteraction(
+  value: wire.AgentInteraction,
+): AgentInteraction {
+  return {
+    id: value.id,
+    type: value.type,
+    state: value.state,
+    title: value.title,
+    prompt: value.prompt,
+    ...(value.request !== undefined ? { request: value.request } : {}),
+    ...(value.resolution !== undefined ? { resolution: value.resolution } : {}),
+    ...(value.createdAt !== undefined
+      ? { createdAt: fromWireTimestamp(value.createdAt) }
+      : {}),
+    ...(value.resolvedAt !== undefined
+      ? { resolvedAt: fromWireTimestamp(value.resolvedAt) }
+      : {}),
+    turnId: value.turnId,
+    sessionId: value.sessionId,
   };
 }
 
@@ -849,6 +901,40 @@ export function fromWireGetAgentProviderTurnRequest(
   };
 }
 
+export function toWireListAgentProviderInteractionsRequest(
+  value: Init<ListAgentProviderInteractionsRequest>,
+): wire.ListAgentProviderInteractionsRequest {
+  return create(wire.ListAgentProviderInteractionsRequestSchema, {
+    turnId: value.turnId ?? "",
+    providerName: value.providerName ?? "",
+  });
+}
+
+export function fromWireListAgentProviderInteractionsRequest(
+  value: wire.ListAgentProviderInteractionsRequest,
+): ListAgentProviderInteractionsRequest {
+  return {
+    turnId: value.turnId,
+    providerName: value.providerName,
+  };
+}
+
+export function toWireListAgentProviderInteractionsResponse(
+  value: Init<ListAgentProviderInteractionsResponse>,
+): wire.ListAgentProviderInteractionsResponse {
+  return create(wire.ListAgentProviderInteractionsResponseSchema, {
+    interactions: (value.interactions ?? []).map(toWireAgentInteraction),
+  });
+}
+
+export function fromWireListAgentProviderInteractionsResponse(
+  value: wire.ListAgentProviderInteractionsResponse,
+): ListAgentProviderInteractionsResponse {
+  return {
+    interactions: value.interactions.map(fromWireAgentInteraction),
+  };
+}
+
 export function toWireListAgentProviderSessionsRequest(
   value: Init<ListAgentProviderSessionsRequest>,
 ): wire.ListAgentProviderSessionsRequest {
@@ -1026,6 +1112,30 @@ export function fromWirePreparedAgentWorkspace(
   return {
     root: value.root,
     cwd: value.cwd,
+  };
+}
+
+export function toWireResolveAgentProviderInteractionRequest(
+  value: Init<ResolveAgentProviderInteractionRequest>,
+): wire.ResolveAgentProviderInteractionRequest {
+  return create(wire.ResolveAgentProviderInteractionRequestSchema, {
+    interactionId: value.interactionId ?? "",
+    ...(value.resolution !== undefined
+      ? { resolution: sanitizeJsonObject(value.resolution) }
+      : {}),
+    turnId: value.turnId ?? "",
+    providerName: value.providerName ?? "",
+  });
+}
+
+export function fromWireResolveAgentProviderInteractionRequest(
+  value: wire.ResolveAgentProviderInteractionRequest,
+): ResolveAgentProviderInteractionRequest {
+  return {
+    interactionId: value.interactionId,
+    ...(value.resolution !== undefined ? { resolution: value.resolution } : {}),
+    turnId: value.turnId,
+    providerName: value.providerName,
   };
 }
 
