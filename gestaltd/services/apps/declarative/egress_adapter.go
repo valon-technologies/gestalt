@@ -27,6 +27,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 	bodyParams, queryParams, headerParams := partitionParams(catOp, params, b.MethodDefaultParamLocations)
 
 	baseURL, headers := b.resolvedURLAndHeaders(ctx)
+	headers = egress.ApplyOutboundHeaderOverrides(ctx, headers)
 	for k, v := range headerParams {
 		if headers == nil {
 			headers = make(map[string]string)
@@ -75,6 +76,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 
 func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, operationName string, params map[string]any, token string, parser egress.TokenParser) (*core.OperationResult, error) {
 	gqlURL, headers := b.resolvedURLAndHeaders(ctx)
+	headers = egress.ApplyOutboundHeaderOverrides(ctx, headers)
 
 	if err := b.checkEgressHost(gqlURL); err != nil {
 		return nil, err

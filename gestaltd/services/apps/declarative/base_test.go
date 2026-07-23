@@ -341,6 +341,45 @@ func TestBaseExecuteGraphQLWithVariables(t *testing.T) {
 	}
 }
 
+func TestBaseExecuteGraphQLOverridesTenantHeaderFromInvocationContext(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"tenant": r.Header.Get("X-Tenant-Sid"),
+			},
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		Headers: map[string]string{
+			"X-Tenant-Sid": "TENDefault",
+		},
+	}
+	setTestCatalog(b, graphQLCatalogOp("list_tenants", "{ tenants { sid } }"))
+
+	ctx := egress.WithOutboundHeaderOverrides(context.Background(), map[string]string{
+		"X-Tenant-Sid": "TENSelected",
+	})
+	result, err := b.Execute(ctx, "list_tenants", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal(result.Body, &data); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if data["tenant"] != "TENSelected" {
+		t.Fatalf("tenant header = %v, want TENSelected", data["tenant"])
+	}
+}
+
 func TestBaseExecuteGraphQLRespectsEgressCheck(t *testing.T) {
 	t.Parallel()
 
