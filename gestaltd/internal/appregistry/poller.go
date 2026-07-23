@@ -19,6 +19,12 @@ import (
 const (
 	DefaultCatalogPollInterval = time.Minute
 	DefaultCatalogRestartDelay = time.Minute
+	instanceIDEnvVar           = "GESTALT_INSTANCE_ID"
+)
+
+var (
+	resolvedInstanceID     string
+	resolvedInstanceIDOnce sync.Once
 )
 
 type CatalogPoller struct {
@@ -83,12 +89,23 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 }
 
 func ResolveInstanceID() string {
-	host, err := os.Hostname()
-	if err == nil {
-		host = strings.TrimSpace(host)
-		if host != "" {
-			return host
-		}
+	resolvedInstanceIDOnce.Do(func() {
+		host, _ := os.Hostname()
+		resolvedInstanceID = resolveInstanceID(os.Getenv(instanceIDEnvVar), host)
+	})
+	return resolvedInstanceID
+}
+
+func resolveInstanceID(instanceIDEnv, hostname string) string {
+	if v := strings.TrimSpace(instanceIDEnv); v != "" {
+		return v
+	}
+	host := strings.TrimSpace(hostname)
+	// Cloud Run (and some container runtimes) report localhost for every
+	// replica. A shared instance_id makes rollout convergence look fleet-wide
+	// while only one process actually restarts the registry app.
+	if host != "" && !strings.EqualFold(host, "localhost") {
+		return host
 	}
 	return uuid.NewString()
 }
