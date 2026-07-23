@@ -1003,7 +1003,7 @@ func TestPreparedProviderBuildsRetryTransientStartupFailures(t *testing.T) {
 	var attempts atomic.Int32
 	builder := func(context.Context, string, *config.ProviderEntry, Deps) (*ProviderBuildResult, error) {
 		if attempts.Add(1) < 2 {
-			return nil, status.Error(codes.Unavailable, "relay warming up")
+			return nil, status.Error(codes.Unknown, "configure provider: callback failed: connection refused")
 		}
 		return &ProviderBuildResult{
 			Provider: &coretesting.StubIntegration{

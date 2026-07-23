@@ -23,8 +23,9 @@ const (
 	// do not provide their own deadline.
 	ProviderSessionCreateTimeout = 5 * time.Minute
 	providerStartTimeout         = 2 * time.Minute
-	providerConfigureTimeout     = 30 * time.Second
 )
+
+var providerConfigureTimeout = 30 * time.Second
 
 type RuntimeProviderMetadata struct {
 	Kind        proto.ProviderKind
@@ -36,12 +37,6 @@ type RuntimeProviderMetadata struct {
 }
 
 func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
-	return CallWhileStarting(ctx, providerConfigureAttemptTimeout, func(ctx context.Context) (*RuntimeProviderMetadata, error) {
-		return configureRuntimeProviderOnce(ctx, client, expectedKind, name, config)
-	})
-}
-
-func configureRuntimeProviderOnce(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
 	if client == nil {
 		return nil, fmt.Errorf("runtime client is required")
 	}
@@ -119,12 +114,6 @@ func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecy
 }
 
 func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
-	return CallWhileStartingNoResult(ctx, providerStartAttemptTimeout, func(ctx context.Context) error {
-		return startRuntimeProviderOnce(ctx, client)
-	})
-}
-
-func startRuntimeProviderOnce(ctx context.Context, client proto.ProviderLifecycleClient) error {
 	if client == nil {
 		return fmt.Errorf("runtime client is required")
 	}

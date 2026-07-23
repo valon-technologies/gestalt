@@ -842,42 +842,6 @@ func TestGetAppProviderSupportWithRetryLabelsContextDoneFailures(t *testing.T) {
 	}
 }
 
-type unavailableStartProviderServer struct {
-	proto.UnimplementedAppProviderServer
-	startCalls atomic.Int32
-}
-
-func (s *unavailableStartProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
-	return &proto.ProviderMetadata{}, nil
-}
-
-func (s *unavailableStartProviderServer) StartProvider(context.Context, *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
-	if s.startCalls.Add(1) < 2 {
-		return nil, status.Error(codes.Unavailable, "relay warming up")
-	}
-	return &proto.StartProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
-}
-
-func (s *unavailableStartProviderServer) Execute(context.Context, *proto.ExecuteRequest) (*proto.OperationResult, error) {
-	return &proto.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
-}
-
-func TestNewRemoteRetriesTransientStartProviderFailures(t *testing.T) {
-	t.Parallel()
-
-	server := &unavailableStartProviderServer{}
-	prov, err := NewRemote(context.Background(), newAppProviderClient(t, server), manualOnlyStaticSpec(), nil)
-	if err != nil {
-		t.Fatalf("NewRemote: %v", err)
-	}
-	if prov == nil {
-		t.Fatal("expected provider")
-	}
-	if got := server.startCalls.Load(); got != 2 {
-		t.Fatalf("StartProvider calls = %d, want 2", got)
-	}
-}
-
 type workflowDeclarationsMetadataServer struct {
 	proto.UnimplementedAppProviderServer
 	specs [][]byte

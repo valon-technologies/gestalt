@@ -264,7 +264,7 @@ func (b *preparedProviderBuilds) Start(
 					return
 				}
 			}
-			result, buildErr := runtimehost.CallWhileStarting(buildCtx, 0, func(ctx context.Context) (*ProviderBuildResult, error) {
+			result, buildErr := retryProviderBuild(buildCtx, func(ctx context.Context) (*ProviderBuildResult, error) {
 				return builder(ctx, pending.name, pending.entry, deps)
 			})
 			if errors.Is(buildErr, providerdev.ErrFrontendOnlyDevApp) {

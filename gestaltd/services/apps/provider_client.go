@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -107,7 +108,7 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 	if err != nil {
 		return nil, err
 	}
-	if err := callStartProviderWithRetry(ctx, client, spec.Name, config); err != nil {
+	if err := callStartProvider(ctx, client, spec.Name, config); err != nil {
 		return nil, err
 	}
 
@@ -134,7 +135,10 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 }
 
 func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProviderClient) (*integrationProviderSupport, error) {
-	return runtimehost.CallWhileStarting(ctx, runtimehost.ProviderRPCTimeout, func(ctx context.Context) (*integrationProviderSupport, error) {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
 		meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 		if err == nil {
 			specs, decodeErr := decodeWorkflowDefinitionSpecs(meta.GetWorkflowDefinitionSpecs())
@@ -149,16 +153,16 @@ func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProvide
 		if status.Code(err) == codes.Unimplemented {
 			return &integrationProviderSupport{}, nil
 		}
-		return nil, fmt.Errorf("get provider metadata: %w", err)
-	})
-}
+		if status.Code(err) != codes.Unavailable {
+			return nil, fmt.Errorf("get provider metadata: %w", err)
+		}
 
-func callStartProviderWithRetry(ctx context.Context, client proto.AppProviderClient, name string, config map[string]any) error {
-	// StartProvider can run migrations/configure and may need the full install
-	// budget; do not cap each attempt at ProviderRPCTimeout.
-	return runtimehost.CallWhileStartingNoResult(ctx, 0, func(ctx context.Context) error {
-		return callStartProvider(ctx, client, name, config)
-	})
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("get provider metadata: %w", err)
+		case <-ticker.C:
+		}
+	}
 }
 
 func (p *remoteProviderBase) DeclaredWorkflowDefinitions() []*proto.WorkflowDefinitionSpec {
