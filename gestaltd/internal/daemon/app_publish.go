@@ -72,6 +72,7 @@ func runAppPublish(args []string) (err error) {
 	workflowRunURL := fs.String("workflow-run-url", "", "GitHub Actions workflow run URL")
 	triggerPRNumber := fs.Int("trigger-pr-number", 0, "pull request number that triggered publication")
 	triggerPRURL := fs.String("trigger-pr-url", "", "pull request URL that triggered publication")
+	triggerPRTitle := fs.String("trigger-pr-title", "", "pull request title that triggered publication")
 	triggerCommitSHA := fs.String("trigger-commit-sha", "", "commit SHA that triggered publication")
 	triggerCommitURL := fs.String("trigger-commit-url", "", "commit URL that triggered publication")
 	dryRun := fs.Bool("dry-run", false, "print the publish plan as JSON without uploading")
@@ -106,6 +107,7 @@ func runAppPublish(args []string) (err error) {
 		*workflowRunURL,
 		*triggerPRNumber,
 		*triggerPRURL,
+		*triggerPRTitle,
 		*triggerCommitSHA,
 		*triggerCommitURL,
 	)
@@ -761,14 +763,16 @@ func printAppPublishUsage(w io.Writer) {
 	writeUsageLine(w, "  --workflow-run-url      Publishing GitHub Actions run")
 	writeUsageLine(w, "  --trigger-pr-number     Triggering pull request number")
 	writeUsageLine(w, "  --trigger-pr-url        Triggering pull request URL")
+	writeUsageLine(w, "  --trigger-pr-title      Triggering pull request title")
 	writeUsageLine(w, "  --trigger-commit-sha    Triggering commit SHA")
 	writeUsageLine(w, "  --trigger-commit-url    Triggering commit URL")
 	writeUsageLine(w, "  --version    Semantic version guard")
 }
 
-func appPublishPublication(workflowRunURL string, triggerPRNumber int, triggerPRURL, triggerCommitSHA, triggerCommitURL string) (*appregistry.Publication, error) {
+func appPublishPublication(workflowRunURL string, triggerPRNumber int, triggerPRURL, triggerPRTitle, triggerCommitSHA, triggerCommitURL string) (*appregistry.Publication, error) {
 	workflowRunURL = strings.TrimSpace(workflowRunURL)
 	triggerPRURL = strings.TrimSpace(triggerPRURL)
+	triggerPRTitle = strings.TrimSpace(triggerPRTitle)
 	triggerCommitSHA = strings.ToLower(strings.TrimSpace(triggerCommitSHA))
 	triggerCommitURL = strings.TrimSpace(triggerCommitURL)
 	hasPR := triggerPRNumber != 0 || triggerPRURL != ""
@@ -787,7 +791,11 @@ func appPublishPublication(workflowRunURL string, triggerPRNumber int, triggerPR
 		if triggerPRNumber <= 0 || triggerPRURL == "" {
 			return nil, fmt.Errorf("--trigger-pr-number and --trigger-pr-url are required together")
 		}
-		publication.TriggerPullRequest = &appregistry.PublicationPullRequest{Number: triggerPRNumber, URL: triggerPRURL}
+		publication.TriggerPullRequest = &appregistry.PublicationPullRequest{
+			Number: triggerPRNumber,
+			URL:    triggerPRURL,
+			Title:  triggerPRTitle,
+		}
 		return publication, nil
 	}
 	if !fullGitSHARe.MatchString(triggerCommitSHA) || triggerCommitURL == "" {

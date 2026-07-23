@@ -12,8 +12,15 @@ const AppRegistryKindGCS = "gcs"
 const defaultGCSAppRegistryPublicURLPrefix = "https://storage.googleapis.com/"
 
 type AppRegistryConfig struct {
-	Kind string                `yaml:"kind,omitempty"`
-	GCS  *AppRegistryGCSConfig `yaml:"gcs,omitempty"`
+	Kind           string                          `yaml:"kind,omitempty"`
+	GCS            *AppRegistryGCSConfig             `yaml:"gcs,omitempty"`
+	PublishMonitor *AppRegistryPublishMonitorConfig `yaml:"publishMonitor,omitempty"`
+}
+
+type AppRegistryPublishMonitorConfig struct {
+	Repository string `yaml:"repository,omitempty"`
+	Workflow   string `yaml:"workflow,omitempty"`
+	Branch     string `yaml:"branch,omitempty"`
 }
 
 type AppRegistryGCSConfig struct {
@@ -21,8 +28,9 @@ type AppRegistryGCSConfig struct {
 }
 
 type appRegistryConfigYAML struct {
-	Kind string                `yaml:"kind,omitempty"`
-	GCS  *AppRegistryGCSConfig `yaml:"gcs,omitempty"`
+	Kind           string                          `yaml:"kind,omitempty"`
+	GCS            *AppRegistryGCSConfig             `yaml:"gcs,omitempty"`
+	PublishMonitor *AppRegistryPublishMonitorConfig `yaml:"publishMonitor,omitempty"`
 }
 
 func (c *AppRegistryConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -47,6 +55,7 @@ func (c *AppRegistryConfig) UnmarshalYAML(value *yaml.Node) error {
 	}
 	c.Kind = raw.Kind
 	c.GCS = raw.GCS
+	c.PublishMonitor = raw.PublishMonitor
 	return nil
 }
 

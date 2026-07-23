@@ -71,6 +71,7 @@ type Publication struct {
 type PublicationPullRequest struct {
 	Number int    `json:"number"`
 	URL    string `json:"url"`
+	Title  string `json:"title,omitempty"`
 }
 
 type PublicationCommit struct {
