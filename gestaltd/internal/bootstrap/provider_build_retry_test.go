@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -43,10 +44,21 @@ func TestRetryProviderBuildStopsWhenContextCanceled(t *testing.T) {
 	}
 }
 
-func TestTransientProviderBuildErrorRejectsOperationDeadline(t *testing.T) {
+func TestTransientProviderBuildErrorRetriesOperationDeadlineWithinInstallBudget(t *testing.T) {
 	t.Parallel()
 
-	if isTransientProviderBuildError(context.DeadlineExceeded) {
-		t.Fatal("context deadline exceeded must not be retried")
+	if !isTransientProviderBuildError(context.Background(), context.DeadlineExceeded) {
+		t.Fatal("nested operation deadline should be retried")
+	}
+}
+
+func TestTransientProviderBuildErrorStopsAtInstallDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancel()
+	<-ctx.Done()
+	if isTransientProviderBuildError(ctx, context.DeadlineExceeded) {
+		t.Fatal("install context deadline must stop retries")
 	}
 }

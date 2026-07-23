@@ -28,7 +28,13 @@ func retryProviderBuild(
 	delay := providerBuildRetryInitialDelay
 	for {
 		result, err := build(ctx)
-		if err == nil || !isTransientProviderBuildError(err) {
+		if err == nil {
+			return result, err
+		}
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("retry provider build: %w (last error: %v)", ctx.Err(), err)
+		}
+		if !isTransientProviderBuildError(ctx, err) {
 			return result, err
 		}
 
@@ -48,11 +54,15 @@ func retryProviderBuild(
 	}
 }
 
-func isTransientProviderBuildError(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+func isTransientProviderBuildError(ctx context.Context, err error) bool {
+	if err == nil || ctx.Err() != nil || errors.Is(err, context.Canceled) {
 		return false
 	}
-	if status.Code(err) == codes.Unavailable {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	switch status.Code(err) {
+	case codes.Unavailable, codes.DeadlineExceeded:
 		return true
 	}
 
@@ -64,5 +74,6 @@ func isTransientProviderBuildError(err error) bool {
 	}
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "connection refused") ||
-		strings.Contains(message, "connection reset")
+		strings.Contains(message, "connection reset") ||
+		strings.Contains(message, "deadline exceeded")
 }
