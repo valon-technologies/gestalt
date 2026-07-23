@@ -983,3 +983,51 @@ func TestProviderBuildsLocal(t *testing.T) {
 		t.Fatal("nil entry should not build local")
 	}
 }
+
+func TestPreparedProviderBuildsRetryTransientStartupFailures(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Apps: map[string]*config.ProviderEntry{
+			"retry-app": {
+				ResolvedManifest: newExecutableManifest("Retry App", "Retries transient startup failures"),
+			},
+		},
+	}
+	builds, err := prepareProviderBuilds(cfg, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("prepareProviderBuilds: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(builds.providers) })
+
+	var attempts atomic.Int32
+	builder := func(context.Context, string, *config.ProviderEntry, Deps) (*ProviderBuildResult, error) {
+		if attempts.Add(1) < 2 {
+			return nil, status.Error(codes.Unavailable, "relay warming up")
+		}
+		return &ProviderBuildResult{
+			Provider: &coretesting.StubIntegration{
+				N: "retry-app",
+				CatalogVal: &catalog.Catalog{
+					Name: "retry-app",
+				},
+			},
+		}, nil
+	}
+
+	ready, _, _, errResolver := builds.Start(context.Background(), Deps{}, builder)
+	<-ready
+	if errs := errResolver(); len(errs) != 0 {
+		t.Fatalf("provider build errors = %v", errs)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("builder attempts = %d, want 2", got)
+	}
+	prov, err := builds.providers.Get("retry-app")
+	if err != nil {
+		t.Fatalf("Get(retry-app): %v", err)
+	}
+	if prov == nil || prov.Name() != "retry-app" {
+		t.Fatalf("provider = %#v, want retry-app", prov)
+	}
+}

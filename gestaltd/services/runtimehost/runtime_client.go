@@ -37,6 +37,12 @@ type RuntimeProviderMetadata struct {
 }
 
 func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
+	return RetryWhileTransient(ctx, DefaultProviderRPCRetryInterval, func(ctx context.Context) (*RuntimeProviderMetadata, error) {
+		return configureRuntimeProviderOnce(ctx, client, expectedKind, name, config)
+	})
+}
+
+func configureRuntimeProviderOnce(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
 	if client == nil {
 		return nil, fmt.Errorf("runtime client is required")
 	}
@@ -114,6 +120,12 @@ func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecy
 }
 
 func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
+	return RetryWhileTransientNoResult(ctx, DefaultProviderRPCRetryInterval, func(ctx context.Context) error {
+		return startRuntimeProviderOnce(ctx, client)
+	})
+}
+
+func startRuntimeProviderOnce(ctx context.Context, client proto.ProviderLifecycleClient) error {
 	if client == nil {
 		return fmt.Errorf("runtime client is required")
 	}

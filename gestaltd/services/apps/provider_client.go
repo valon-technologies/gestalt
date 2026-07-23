@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -108,7 +107,7 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 	if err != nil {
 		return nil, err
 	}
-	if err := callStartProvider(ctx, client, spec.Name, config); err != nil {
+	if err := callStartProviderWithRetry(ctx, client, spec.Name, config); err != nil {
 		return nil, err
 	}
 
@@ -135,10 +134,7 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 }
 
 func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProviderClient) (*integrationProviderSupport, error) {
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
+	return runtimehost.RetryWhileTransient(ctx, runtimehost.DefaultProviderRPCRetryInterval, func(ctx context.Context) (*integrationProviderSupport, error) {
 		meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 		if err == nil {
 			specs, decodeErr := decodeWorkflowDefinitionSpecs(meta.GetWorkflowDefinitionSpecs())
@@ -153,16 +149,14 @@ func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProvide
 		if status.Code(err) == codes.Unimplemented {
 			return &integrationProviderSupport{}, nil
 		}
-		if status.Code(err) != codes.Unavailable {
-			return nil, fmt.Errorf("get provider metadata: %w", err)
-		}
+		return nil, fmt.Errorf("get provider metadata: %w", err)
+	})
+}
 
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("get provider metadata: %w", err)
-		case <-ticker.C:
-		}
-	}
+func callStartProviderWithRetry(ctx context.Context, client proto.AppProviderClient, name string, config map[string]any) error {
+	return runtimehost.RetryWhileTransientNoResult(ctx, runtimehost.DefaultProviderRPCRetryInterval, func(ctx context.Context) error {
+		return callStartProvider(ctx, client, name, config)
+	})
 }
 
 func (p *remoteProviderBase) DeclaredWorkflowDefinitions() []*proto.WorkflowDefinitionSpec {

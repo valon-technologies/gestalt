@@ -264,24 +264,40 @@ func (b *preparedProviderBuilds) Start(
 					return
 				}
 			}
-			result, err := builder(buildCtx, pending.name, pending.entry, deps)
-			if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
+			var result *ProviderBuildResult
+			var buildErr error
+			for {
+				result, buildErr = builder(buildCtx, pending.name, pending.entry, deps)
+				if buildErr == nil || errors.Is(buildErr, providerdev.ErrFrontendOnlyDevApp) || !runtimehost.IsTransientProviderRPCError(buildErr) {
+					break
+				}
+				slog.Debug("retrying transient provider startup failure", "provider", pending.name, "error", buildErr)
+				select {
+				case <-buildCtx.Done():
+					buildErr = buildCtx.Err()
+					result = nil
+				case <-time.After(runtimehost.DefaultProviderRPCRetryInterval):
+					continue
+				}
+				break
+			}
+			if errors.Is(buildErr, providerdev.ErrFrontendOnlyDevApp) {
 				if pending.proxy != nil {
-					pending.proxy.fail(err)
+					pending.proxy.fail(buildErr)
 					b.providers.Remove(pending.name)
 				}
 				slog.Debug("frontend-only dev app; no backend provider registered", "provider", pending.name)
 				return
 			}
-			if err != nil {
+			if buildErr != nil {
 				errMu.Lock()
-				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
+				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, buildErr))
 				errMu.Unlock()
 				if pending.proxy != nil {
-					pending.proxy.fail(err)
+					pending.proxy.fail(buildErr)
 					b.providers.Remove(pending.name)
 				}
-				slog.Warn("skipping provider", "provider", pending.name, "error", err)
+				slog.Warn("skipping provider", "provider", pending.name, "error", buildErr)
 				return
 			}
 			if err := validateProviderConnectionMode(pending.name, result.Provider.ConnectionMode()); err != nil {
