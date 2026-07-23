@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -26,19 +25,9 @@ type appAdminRegistryResponse struct {
 	DesiredVersion    string                     `json:"desiredVersion,omitempty"`
 	KnownVersions     []adminAppInstallationInfo `json:"knownVersions"`
 	PublishedVersions []appAdminPublishedVersion `json:"publishedVersions"`
-	PendingPublishes  []appAdminPendingPublish   `json:"pendingPublishes,omitempty"`
 	Rollout           *appAdminRollout           `json:"rollout,omitempty"`
 	SelectionDisabled bool                       `json:"selectionDisabled"`
 	DisabledReason    string                     `json:"disabledReason,omitempty"`
-}
-
-type appAdminPendingPublish struct {
-	WorkflowRunURL     string                            `json:"workflowRunUrl"`
-	WorkflowStatus     string                            `json:"workflowStatus"`
-	SourceRef          string                            `json:"sourceRef,omitempty"`
-	ExpectedVersion    string                            `json:"expectedVersion,omitempty"`
-	StartedAt          string                            `json:"startedAt"`
-	TriggerPullRequest *appregistry.PublicationPullRequest `json:"triggerPullRequest,omitempty"`
 }
 
 type appAdminPublishedVersion struct {
@@ -192,12 +181,6 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		KnownVersions:     knownVersions,
 		PublishedVersions: published,
 	}
-	if pending, err := s.listPendingAppPublishes(r.Context(), registry, published); err != nil {
-		writeError(w, http.StatusBadGateway, "failed to fetch pending app registry publishes")
-		return
-	} else if len(pending) > 0 {
-		response.PendingPublishes = pending
-	}
 	rollout, err := s.appRollouts.Get(r.Context(), app.name)
 	if err == nil {
 		response.Rollout = &appAdminRollout{Version: rollout.Version, State: string(rollout.State)}
@@ -305,52 +288,4 @@ func appVersionSourceURL(repository, sourceRef string) string {
 		repository = "https://" + repository
 	}
 	return repository + "/commit/" + sourceRef
-}
-
-func (s *Server) listPendingAppPublishes(
-	ctx context.Context,
-	registry config.AppRegistryConfig,
-	published []appAdminPublishedVersion,
-) ([]appAdminPendingPublish, error) {
-	if s == nil || s.appRegistryPublishMonitor == nil || registry.PublishMonitor == nil {
-		return nil, nil
-	}
-	publishedVersions := make(map[string]struct{}, len(published))
-	for _, version := range published {
-		if strings.TrimSpace(version.Version) == "" {
-			continue
-		}
-		publishedVersions[version.Version] = struct{}{}
-	}
-	pending, err := s.appRegistryPublishMonitor.ListPending(ctx, appregistry.PublishMonitorConfig{
-		Repository: registry.PublishMonitor.Repository,
-		Workflow:   registry.PublishMonitor.Workflow,
-		Branch:     registry.PublishMonitor.Branch,
-	}, publishedVersions)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]appAdminPendingPublish, 0, len(pending))
-	for _, item := range pending {
-		out = append(out, appAdminPendingPublish{
-			WorkflowRunURL:     item.WorkflowRunURL,
-			WorkflowStatus:     item.WorkflowStatus,
-			SourceRef:          item.SourceRef,
-			ExpectedVersion:    item.ExpectedVersion,
-			StartedAt:          formatAdminTime(item.StartedAt),
-			TriggerPullRequest: item.TriggerPullRequest,
-		})
-	}
-	return out, nil
-}
-
-func resolveAppRegistryPublishMonitor(cfg Config) *appregistry.PublishMonitor {
-	if cfg.AppRegistryPublishMonitor != nil {
-		return cfg.AppRegistryPublishMonitor
-	}
-	token := strings.TrimSpace(os.Getenv("GESTALT_APP_REGISTRY_PUBLISH_MONITOR_TOKEN"))
-	if token == "" {
-		return nil
-	}
-	return &appregistry.PublishMonitor{Token: token}
 }

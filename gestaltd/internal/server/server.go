@@ -152,7 +152,6 @@ type Server struct {
 	adminUI                http.Handler
 	appRegistries          map[string]config.AppRegistryConfig
 	appRegistryReader      *appregistry.RegistryReader
-	appRegistryPublishMonitor *appregistry.PublishMonitor
 	appRegistryInstaller   *appregistry.Installer
 	appVersionChanges      *coredata.AppVersionChangeRequestService
 	appRollouts            *coredata.AppRolloutService
@@ -212,7 +211,6 @@ type Config struct {
 	BuiltinAdminUI         *BuiltinAdminUIOptions
 	AppRegistries          map[string]config.AppRegistryConfig
 	AppRegistryReader      *appregistry.RegistryReader
-	AppRegistryPublishMonitor *appregistry.PublishMonitor
 	ArtifactsDir           string
 	GestaltdVersion        string
 	AppRuntimeState        AppRuntimeState
@@ -404,7 +402,6 @@ func New(cfg Config) (*Server, error) {
 		adminUI:                adminUI,
 		appRegistries:          cloneAppRegistryConfig(cfg.AppRegistries),
 		appRegistryReader:      cfg.AppRegistryReader,
-		appRegistryPublishMonitor: resolveAppRegistryPublishMonitor(cfg),
 		appRegistryInstaller:   newAppRegistryInstaller(cfg),
 		appVersionChanges:      cfg.Services.AppVersionChangeRequests,
 		appRollouts:            cfg.Services.AppRollouts,
