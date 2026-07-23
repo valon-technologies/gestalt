@@ -10,19 +10,22 @@ func TestAppPublishPublication(t *testing.T) {
 		"https://github.com/valon-technologies/valon-tools/actions/runs/123",
 		3251,
 		"https://github.com/valon-technologies/valon-tools/pull/3251",
+		"Add registry admin table",
 		"",
 		"",
 	)
 	if err != nil {
 		t.Fatalf("appPublishPublication: %v", err)
 	}
-	if publication.TriggerPullRequest == nil || publication.TriggerPullRequest.Number != 3251 || publication.TriggerCommit != nil {
+	if publication.TriggerPullRequest == nil || publication.TriggerPullRequest.Number != 3251 ||
+		publication.TriggerPullRequest.Title != "Add registry admin table" || publication.TriggerCommit != nil {
 		t.Fatalf("publication = %#v", publication)
 	}
 
 	publication, err = appPublishPublication(
 		"https://github.com/valon-technologies/valon-tools/actions/runs/124",
 		0,
+		"",
 		"",
 		sha,
 		"https://github.com/valon-technologies/valon-tools/commit/"+sha,
@@ -43,6 +46,7 @@ func TestAppPublishPublicationRejectsAmbiguousTrigger(t *testing.T) {
 		"https://github.com/valon-technologies/valon-tools/actions/runs/123",
 		3251,
 		"https://github.com/valon-technologies/valon-tools/pull/3251",
+		"",
 		sha,
 		"https://github.com/valon-technologies/valon-tools/commit/"+sha,
 	)
