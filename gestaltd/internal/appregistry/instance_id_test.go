@@ -48,6 +48,7 @@ func TestResolveInstanceIDEnvOverridesLocalhostHostname(t *testing.T) {
 }
 
 func TestResolveInstanceIDIsStableWithinProcess(t *testing.T) {
+	t.Parallel()
 	first := ResolveInstanceID()
 	second := ResolveInstanceID()
 	if first == "" || second == "" {
