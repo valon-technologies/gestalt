@@ -12,6 +12,10 @@ import (
 
 const DefaultProviderRPCRetryInterval = 25 * time.Millisecond
 
+// ProviderStartupRetryTimeout bounds retry loops for app/runtime provider startup
+// when callers pass an unbounded context.
+const ProviderStartupRetryTimeout = 2 * time.Minute
+
 // IsTransientProviderRPCError reports whether a provider startup RPC should be
 // retried while the hosted runtime or host-service relay is still coming up.
 func IsTransientProviderRPCError(err error) bool {
@@ -29,6 +33,12 @@ func IsTransientProviderRPCError(err error) bool {
 		return strings.Contains(msg, "connection refused") ||
 			strings.Contains(msg, "connection reset")
 	}
+}
+
+// WithDefaultProviderRetryDeadline applies timeout when the parent context has
+// no deadline so retry loops cannot run forever.
+func WithDefaultProviderRetryDeadline(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return withDefaultProviderRetryDeadline(parent, timeout)
 }
 
 // withDefaultProviderRetryDeadline applies timeout when the parent context has
