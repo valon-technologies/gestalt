@@ -151,6 +151,8 @@ disabled until that rollout reaches `complete` or `failed`.
 
 - Per-replica observed running version (runtime heartbeats)
 - Installing or upgrading from the embedded `/admin` UI
+- Publishing indicator on the embedded `/admin` registry list (app-scoped
+  `/apps/{app}/admin` only; see [pending-publish.md](./pending-publish.md))
 - Canceling or force-completing a rollout from either UI
 - Publishing versions from either UI
 - Granting or editing app authorization relationships

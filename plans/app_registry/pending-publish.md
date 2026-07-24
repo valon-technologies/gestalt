@@ -42,10 +42,10 @@ Operators on `/apps/{app}/admin` should be able to answer:
 ## Design summary
 
 Add a small **pending catalog** document in GCS per app. CI writes it when a
-publish starts and removes the entry when the publish finishes (success or
-failure). `gestaltd` reads it alongside `index.json` and exposes pending rows
-through the existing app-admin registry API. The UI merges pending and
-published rows in the snapshots table.
+publish starts and `pending clear` removes the entry when the workflow finishes
+(success or failure). `gestaltd` reads it alongside `index.json` and exposes
+pending rows through the existing app-admin registry API. The UI merges pending
+and published rows in the snapshots table.
 
 Pending versions are **not** installable. Install-time validation continues to
 read only `versions/{version}.json` via the published index contract.
@@ -86,9 +86,9 @@ writes: read generation, merge, upload with `if-generation-match`.
 
 Record pending with `phase=publishing` at workflow start.
 
-On failure, **remove** the pending
-entry in a workflow `always()` cleanup step. The workflow run URL remains the
-failure audit trail.
+On workflow end (success or failure), **remove** the pending entry with
+`gestaltd app registry pending clear` in an `always()` step. The workflow run
+URL remains the failure audit trail.
 
 ### Self-healing
 
@@ -137,21 +137,20 @@ CI: publish-app-registry.yml
 ├─3. Package artifacts (may take tens of minutes)
 │
 ├─4. gestaltd app registry publish --dist-dir … (artifacts + versions/{version}.json + index.json)
-│      → clear this version from pending.json on success
 │
-└─5. gestaltd app registry pending clear  (always() failure cleanup)
-       → remove version from pending.json if step 4 did not run
+└─5. gestaltd app registry pending clear  (always())
+       → remove this version from pending.json (success or failure)
 ```
 
 Today, `publish-app-registry.yml` runs `gestaltd app publish --dist-dir …` only.
 This proposal adds `gestaltd app registry pending` for steps 2 and 5, and migrates
 step 4 to `gestaltd app registry publish`.
 
-On **success**, step 4 clears pending after uploading. Order within step 4 is
-unchanged: `index.json` is still updated last.
+On **success**, step 4 uploads artifacts and updates `index.json` (unchanged
+order — index last). Step 5 clears pending.
 
-On **failure**, an `always()` workflow step runs step 5 even when packaging or
-publish failed, so pending does not stick unless the cleanup step itself fails.
+On **failure**, step 5 still runs via `always()`, so pending does not stick unless
+the cleanup step itself fails.
 
 ### CLI surface
 
@@ -179,7 +178,7 @@ gestaltd app registry pending set \
   --workflow-run-url … \
   [--trigger-pr-number … --trigger-pr-url …]
 
-# Failure cleanup
+# Workflow end — remove pending row (idempotent)
 gestaltd app registry pending clear \
   --bucket gs://… \
   --app traffic-cop \
@@ -190,9 +189,9 @@ gestaltd app registry pending clear \
 `(app, version)`: refresh `updatedAt` and merge `publication` if re-run.
 `pending clear` is idempotent if the version is already absent.
 
-**Publish** — upload artifacts and version metadata, update `index.json`, then
-remove this version from `pending.json` on success. Same flags as today's
-`gestaltd app publish`; requires `--dist-dir`.
+**Publish** — upload artifacts and version metadata, update `index.json` only.
+Does not read or write `pending.json`. Same flags as today's `gestaltd app
+publish`; requires `--dist-dir`.
 
 ```bash
 gestaltd app registry publish \
@@ -205,8 +204,9 @@ gestaltd app registry publish \
   [publication flags]
 ```
 
-CI runs `pending set` at workflow start and `registry publish` after packaging.
-Manual publishes can call `pending set` first when they want admin UI visibility.
+CI runs `pending set` at workflow start, `registry publish` after packaging,
+and `pending clear` in `always()` at workflow end. Manual publishes can call
+`pending set` first and `pending clear` after when they want admin UI visibility.
 
 Implementation extends `gestaltd/internal/daemon/app_publish.go` and reuses the
 index upload helper (generation-match retries).
@@ -301,9 +301,9 @@ In `toolshed` (and any repo using the shared workflow):
    to GCP and run `gestaltd app registry pending set` with the same publication
    flags used in the publish step.
 2. Keep the existing publish step, migrated to
-   `gestaltd app registry publish --dist-dir …` (clears pending on success).
-3. Add an `always()` step that runs `gestaltd app registry pending clear` when
-   the publish step did not succeed.
+   `gestaltd app registry publish --dist-dir …` (does not touch `pending.json`).
+3. Add an `always()` step that runs `gestaltd app registry pending clear` after
+   the publish job (success or failure).
 
 Install `gestaltd` before step 1 (today it is installed only in the publish job;
 move or duplicate install earlier so pending can be recorded at workflow start).
@@ -325,36 +325,75 @@ move or duplicate install earlier so pending can be recorded at workflow start).
 
 ## Implementation path
 
-1. **Models** — Add `PendingIndex` / `PendingVersion` to
-   `gestaltd/internal/appregistry/`; document in [models.md](./models.md).
-2. **Write path** — add `gestaltd app registry pending set|clear` and
-   `gestaltd app registry publish` (move publish logic from `gestaltd app
-   publish`). `pending set` calls `PrunePendingIndex`; `registry publish` clears
-   pending on success. Deprecate `gestaltd app publish`.
-3. **Read path** — `FetchPendingIndex`; unit tests with `registrytest` HTTP
-   fixture.
-4. **App-admin API** — extend `getAppAdminRegistry` with `pendingVersions`.
-5. **UI** — pending rows + polling in `gestalt-providers` app admin table.
-6. **CI** — add `gestaltd app registry pending set` at workflow start and
-   `pending clear` on failure; migrate publish step to
-   `gestaltd app registry publish`.
-7. **Tests** — see [tests.md](./tests.md) (add section when implementing).
+**Four PRs.** Merge in order below. CI can land after PR 1 and before the UI —
+`pending.json` is written and cleared in production before `/apps/{app}/admin`
+shows publishing rows.
 
-Suggested order: 1 → 2 → 3 → 4 → 6 (CI can ship begin/end before UI) → 5.
+```text
+PR 1 (gestalt) ──► PR 2 (gestalt) ──► PR 4 (gestalt)
+       │
+       └──────────► PR 3 (toolshed)
+```
+
+### PR 1 — Models and write path (`gestalt`)
+
+Foundation for everything else. Ship types and CLI first so CI can call the new
+commands.
+
+- Add `PendingIndex` / `PendingVersion` to `gestaltd/internal/appregistry/`
+  ([models.md](./models.md) already documents the shape).
+- Add `gestaltd app registry pending set|clear` and
+  `gestaltd app registry publish` (move logic from `gestaltd app publish`).
+- `pending set` calls `PrunePendingIndex` before upsert; `registry publish` does
+  not touch `pending.json`.
+- Deprecate `gestaltd app publish` (alias → `registry publish`).
+- Tests: pending write/prune/clear, deprecated alias. Add a [tests.md](./tests.md)
+  section for the write path.
+
+### PR 2 — Read path and app-admin API (`gestalt`)
+
+Depends on **PR 1**. Exposes pending state to the admin page.
+
+- `FetchPendingIndex` in `gestaltd/internal/appregistry/`.
+- Extend `getAppAdminRegistry` with `pendingVersions[]`.
+- Tests: `FetchPendingIndex` via `registrytest` HTTP fixture; handler returns
+  pending alongside published. Extend [tests.md](./tests.md).
+
+### PR 3 — CI (`toolshed`)
+
+Depends on **PR 1** merged and `gestaltd` available to the workflow (released
+binary or workflow install from `main`). Does **not** wait on PR 2 or PR 4 —
+operators get correct GCS state before the UI exists.
+
+- `gestaltd app registry pending set` at workflow start (after version + GCP
+  auth).
+- Migrate publish step to `gestaltd app registry publish`.
+- `gestaltd app registry pending clear` in `always()` at workflow end.
+- Install `gestaltd` early enough for step 1 (see [CI changes](#ci-changes-publish-app-registryyml)
+  above).
+
+### PR 4 — UI (`gestalt`)
+
+Depends on **PR 2**. Completes operator visibility.
+
+- Pending rows (**Publishing**) in the `gestalt-providers` app admin snapshots
+  table.
+- Poll every ~12s while any pending version exists; prefer published row when
+  the same version appears in both lists.
+- Manual / browser smoke per [tests.md](./tests.md) when implementing.
 
 ---
 
-## Open questions
-
-1. **Embedded `/admin`** — Should the fleet observability app list show a
-   “publishing” indicator, or only the app-scoped `/apps/{app}/admin` page?
-
 ## Decisions
+
+**Scope:** Pending publish visibility is **app-scoped only** — `/apps/{app}/admin`.
+The embedded fleet `/admin` registry list does not show a publishing indicator.
 
 **CLI surface:** Two commands under `gestaltd app registry`:
 
-- `pending set|clear` — mutable `pending.json` lifecycle
-- `publish` — immutable artifacts + `index.json` (replaces `gestaltd app publish`)
+- `pending set|clear` — mutable `pending.json` lifecycle (CI calls `clear` in
+  `always()` after publish)
+- `publish` — immutable artifacts + `index.json` only (replaces `gestaltd app publish`)
 
 **Single phase:** Pending rows use `phase=publishing` from workflow start.
 
