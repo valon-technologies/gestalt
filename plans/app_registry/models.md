@@ -197,9 +197,10 @@ Each key in `pending` is a version string being published (e.g.
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
-generation, merge, upload with `if-generation-match`). `pending begin` removes
-stuck entries before writing (`updatedAt` older than 30 minutes, or version
-already in `index.json`). See [pending-publish.md](./pending-publish.md#self-healing).
+generation, merge, upload with `if-generation-match`). The first
+`gestaltd app publish --pending` call removes stuck entries before writing
+(`updatedAt` older than 30 minutes, or version already in `index.json`). See
+[pending-publish.md](./pending-publish.md#self-healing).
 
 ---
 
