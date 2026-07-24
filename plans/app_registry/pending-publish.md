@@ -71,11 +71,6 @@ apps/{app}/
 release object. Use the same optimistic-concurrency update pattern as index
 writes: read generation, merge, upload with `if-generation-match`.
 
-Alternative considered: one object per pending version at
-`apps/{app}/pending/{version}.json`. Rejected for v1 because the public HTTP
-reader cannot list a prefix without object names. A single `pending.json`
-matches how `index.json` is already fetched.
-
 ---
 
 ## PendingIndex
