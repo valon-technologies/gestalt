@@ -267,6 +267,13 @@ Core recovery paths must not depend on dynamically installed apps.
 
 ## Future work
 
+### Pending publish visibility
+
+Show in-flight CI publishes on `/apps/{app}/admin` before `index.json` is
+updated. Add a mutable `apps/{app}/pending.json` in GCS, CI begin/update/end
+hooks, and pending rows in the app-admin API and snapshots table. See
+[pending-publish.md](./pending-publish.md).
+
 ### Packaged workflow metadata
 
 Packaged apps declare workflow definitions in provider source. Bootstrap registers them from `DeclaredWorkflowDefinitions` after install — too late to reject a bad version before fleet accept.

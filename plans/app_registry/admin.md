@@ -7,6 +7,7 @@ Related docs:
 - [plan.md](./plan.md) — implementation path
 - [lifecycle.md](./lifecycle.md) — HTTP APIs, admission checks, and rollout behavior
 - [indexeddb.md](./indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
+- [pending-publish.md](./pending-publish.md) — in-flight publish visibility on app admin
 - [tests.md](./tests.md#admin-observability-tests) — observability HTTP and UI tests; [app version selection tests](./tests.md#app-version-selection-tests)
 
 ---
@@ -111,6 +112,8 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable the selector while a rollout is `enrolling` or `restarting`; refresh until terminal.
 - Render access denied on **403** without leaking registry metadata.
+- Show in-flight publishes with status **Publishing** while CI is running (planned).
+  See [pending-publish.md](./pending-publish.md).
 
 Selection is fleet-wide. It is not per-user or per-replica.
 

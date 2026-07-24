@@ -6,12 +6,13 @@ For deploy reader config (`appRegistries`), see [config.md](./config.md). For br
 
 ## Overview
 
-The registry stores two kinds of JSON per app.
+The registry stores published release JSON plus a mutable pending catalog per app.
 
 Immutable app archives live alongside published versions:
 
     apps/{app}/
     ├── index.json
+    ├── pending.json
     ├── versions/
     │   └── {version}.json
     └── artifacts/
@@ -21,6 +22,7 @@ Immutable app archives live alongside published versions:
 | Document | Path | Purpose |
 |----------|------|---------|
 | **Index** | `apps/{app}/index.json` | Lightweight catalog of published versions |
+| **PendingIndex** | `apps/{app}/pending.json` | In-flight publishes (not installable). See [pending-publish.md](./pending-publish.md). |
 | **PublishedVersion** | `apps/{app}/versions/{version}.json` | Full metadata and install contract for one version |
 
 Document type is implied by path. Each JSON document has a root `schemaVersion` field (currently `1` for both index and published version). Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
