@@ -5,7 +5,7 @@ use crate::catalog::{
     self, CatalogOperation, CatalogParameter, OperationsCatalog, ResolvedOperation,
 };
 use crate::output::{self, Format};
-use crate::params::{self, ParamEntry};
+use crate::params::{self, HeaderEntry, ParamEntry};
 
 use super::app_errors;
 
@@ -13,6 +13,7 @@ use super::app_errors;
 pub struct InvokeOptions<'a> {
     pub connection: Option<&'a str>,
     pub instance: Option<&'a str>,
+    pub headers: &'a [HeaderEntry],
     pub select: Option<&'a str>,
     pub input_file: Option<&'a str>,
 }
@@ -49,6 +50,7 @@ pub fn run(
             .as_ref()
             .map(|selector| selector.instance.as_str())
             .or(options.instance),
+        headers: options.headers,
         select: options.select,
         input_file: options.input_file,
     };
@@ -142,6 +144,7 @@ pub fn invoke(
             .as_ref()
             .map(|selector| selector.instance.as_str())
             .or(options.instance),
+        headers: options.headers,
         select: options.select,
         input_file: options.input_file,
     };
@@ -218,6 +221,7 @@ fn execute(
     .with_timeout(std::time::Duration::from_secs(60));
     let app_client = gestalt_sdk::public::generated::app_client::AppClient::new(transport);
 
+    let headers = params::assemble_headers(options.headers);
     let request = gestalt_sdk::public::generated::app::AppInvokeRequest {
         app: plugin.to_string(),
         operation: operation.to_string(),
@@ -228,6 +232,7 @@ fn execute(
         },
         connection: options.connection.unwrap_or_default().to_string(),
         instance: options.instance.unwrap_or_default().to_string(),
+        headers,
         ..Default::default()
     };
     let resp = app_client
