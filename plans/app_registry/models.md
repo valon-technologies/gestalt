@@ -198,8 +198,7 @@ Each key in `pending` is a version string being published (e.g.
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
 generation, merge, upload with `if-generation-match`). The first
-`gestaltd app registry publish --pending publishing` call removes stuck entries
-before writing
+`gestaltd app registry pending set` removes stuck entries before writing
 (`updatedAt` older than 30 minutes, or version already in `index.json`). See
 [pending-publish.md](./pending-publish.md#self-healing).
 
