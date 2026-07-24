@@ -85,7 +85,7 @@ writes: read generation, merge, upload with `if-generation-match`.
 | `packaging` | `gestaltd provider package` / artifact build in progress. Pending record created at workflow start. |
 | `publishing` | Artifacts built; `gestaltd app publish` upload + index update in progress. Set immediately before the publish step. |
 
-Do not add a `failed` phase in GCS for v1. On failure, **remove** the pending
+On failure, **remove** the pending
 entry in a workflow `always()` cleanup step. The workflow run URL remains the
 failure audit trail.
 
