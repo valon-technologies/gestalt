@@ -159,6 +159,11 @@ func AppNameFromManifestSource(source string) (string, error) {
 	return appName, err
 }
 
+func RepositoryFromManifestSource(source string) (string, error) {
+	_, repository, err := parseAppSource(source)
+	return repository, err
+}
+
 // RequirementAppName normalizes a requires.apps map key to the short fleet app name.
 // Manifest dependencies may use full source addresses (github.com/acme/apps/base)
 // while fleet catalog entries use short names (base).
