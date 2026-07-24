@@ -150,14 +150,70 @@ Do not add a `failed` phase in GCS for v1. On failure, **remove** the pending
 entry in a workflow `always()` cleanup step. The workflow run URL remains the
 failure audit trail.
 
-#### Stale pending
+#### Stale pending (read path)
 
-If CI crashes before cleanup, a pending row can linger. Readers should treat a
-pending entry as **stale** when `updatedAt` is older than a fixed TTL (proposal:
-**6 hours**). The API exposes `stale: true` on pending rows; the UI shows
-**Publishing (stale)** and still links the workflow run. A later successful
-publish for the same version removes the pending entry and adds the index row as
-today.
+If CI crashes before cleanup, a pending row can linger in `pending.json`.
+Readers treat a pending entry as **stale** when `updatedAt` is older than a
+fixed TTL (proposal: **6 hours**). The API exposes `stale: true` on pending
+rows; the UI shows **Publishing (stale)** and still links the workflow run.
+
+Stale labeling is for operator visibility only. It does not remove the GCS
+entry — see [Self-healing](#self-healing) below.
+
+#### Self-healing
+
+`gestaltd serve` reads `pending.json` over public HTTP and cannot write back to
+GCS. Self-healing therefore runs on the **publish write path** (CI and
+`gestaltd app registry pending` subcommands), which already hold bucket
+credentials.
+
+A shared `PrunePendingIndex` helper removes stuck entries from `pending.json`
+before any pending mutation. Prune criteria for each `pending.{version}` entry:
+
+| Condition | Action |
+|-----------|--------|
+| `updatedAt` older than TTL (default **6 hours**) | Remove — publish likely failed or cleanup never ran |
+| Same `version` already listed in `index.json` | Remove — publish succeeded but `pending end` did not run |
+| Otherwise | Keep |
+
+Prune uses the same optimistic-concurrency loop as `begin` / `end`: download
+`pending.json` generation, drop matching entries, upload with
+`if-generation-match`.
+
+**When prune runs:**
+
+1. **`pending begin`** — always prune before adding the new entry. Every app
+   publish workflow triggers this, so stuck rows are cleared on the next merge to
+   `main` for that app even without a dedicated janitor job.
+2. **`pending prune`** (new subcommand) — explicit sweep for one app or all
+   enrolled apps. Used by a scheduled CI workflow and for manual operator cleanup.
+
+```bash
+# Prune one app (typical scheduled / manual use)
+gestaltd app registry pending prune \
+  --bucket gs://… \
+  --app traffic-cop \
+  [--max-age 6h]
+
+# Prune every app that has a pending.json object (optional scheduled job)
+gestaltd app registry pending prune \
+  --bucket gs://… \
+  --all-apps \
+  [--max-age 6h]
+```
+
+`--all-apps` lists `apps/*/pending.json` via the GCS API (publisher credentials
+only; not used by `gestaltd serve`). For each object, load the sibling
+`index.json`, apply the prune rules, and upload only when the pending map changed.
+
+**Scheduled janitor (recommended):** add a low-frequency workflow in `toolshed`
+(e.g. daily) that runs `pending prune --all-apps` against the app registry
+bucket. This covers apps that have not had a merge (and thus no `pending begin`)
+in longer than the TTL.
+
+Prune is idempotent and safe to run concurrently with an in-flight publish:
+generation-match retries apply. An active publish refreshes `updatedAt` on each
+`begin` / `update`, so a healthy in-flight entry is not removed.
 
 ---
 
@@ -212,8 +268,15 @@ gestaltd app registry pending end \
   --bucket gs://… \
   --app traffic-cop \
   --version 0.0.0-snapshot.g…
+
+gestaltd app registry pending prune \
+  --bucket gs://… \
+  --app traffic-cop \
+  [--all-apps] \
+  [--max-age 6h]
 ```
 
+`begin` prunes stuck entries before upserting (see [Self-healing](#self-healing)).
 `begin` is idempotent for the same `(app, version)`: refresh `updatedAt` and
 merge `publication` if re-run. `end` is idempotent if the version is already
 absent.
@@ -318,6 +381,10 @@ In `toolshed` (and any repo using the shared workflow):
 The `begin` step needs the gestaltd binary — reuse the existing install step
 ordering (install gestaltd before pending begin).
 
+**Janitor:** add a scheduled workflow (e.g. daily) that runs
+`gestaltd app registry pending prune --all-apps` so stuck entries are removed
+even when an app has not published recently.
+
 ---
 
 ## Safety and invariants
@@ -329,6 +396,7 @@ ordering (install gestaltd before pending begin).
 | Published catalog remains immutable per version | `versions/{version}.json` and artifacts still uploaded with `if-generation-match=0` |
 | Public read stays HTTP GET | Single `pending.json` per app, no bucket listing |
 | Concurrent publishes for one app | Rare; `pending` map holds multiple versions. CI concurrency is per `(app, sha)`; different SHAs produce different version strings |
+| Stuck pending rows are removed | `PrunePendingIndex` on `pending begin` and `pending prune`; TTL + already-published checks |
 
 ---
 
@@ -336,13 +404,15 @@ ordering (install gestaltd before pending begin).
 
 1. **Models** — Add `PendingIndex` / `PendingVersion` to
    `gestaltd/internal/appregistry/`; document in [models.md](./models.md).
-2. **Write path** — `gestaltd app registry pending begin|update|end` with
-   generation-match retries (mirror index upsert).
+2. **Write path** — `gestaltd app registry pending begin|update|end|prune` with
+   generation-match retries (mirror index upsert). `begin` and `prune` call
+   `PrunePendingIndex`.
 3. **Read path** — `FetchPendingIndex`; unit tests with `registrytest` HTTP
    fixture.
 4. **App-admin API** — extend `getAppAdminRegistry`; stale TTL in handler.
 5. **UI** — pending rows + polling in `gestalt-providers` app admin table.
-6. **CI** — wire `publish-app-registry.yml` begin/update/end steps.
+6. **CI** — wire `publish-app-registry.yml` begin/update/end steps; add scheduled
+   `pending prune --all-apps` janitor workflow.
 7. **Tests** — see [tests.md](./tests.md) (add section when implementing).
 
 Suggested order: 1 → 2 → 3 → 4 → 6 (CI can ship begin/end before UI) → 5.
@@ -351,8 +421,7 @@ Suggested order: 1 → 2 → 3 → 4 → 6 (CI can ship begin/end before UI) →
 
 ## Open questions
 
-1. **TTL** — Is 6 hours the right stale threshold, or should stale pending hide
-   after 24h?
+1. **TTL** — Is 6 hours the right prune threshold?
 2. **Phase granularity** — Is `packaging` / `publishing` enough, or do we want
    per-platform sub-phases in v1?
 3. **Manual publish** — Should `gestaltd app publish` call `pending begin/end`
@@ -360,6 +429,8 @@ Suggested order: 1 → 2 → 3 → 4 → 6 (CI can ship begin/end before UI) →
    also appear in the admin UI?
 4. **Embedded `/admin`** — Should the fleet observability app list show a
    “publishing” indicator, or only the app-scoped `/apps/{app}/admin` page?
+5. **Janitor cadence** — Is daily `pending prune --all-apps` sufficient, or
+   should prune run more frequently?
 
 ---
 

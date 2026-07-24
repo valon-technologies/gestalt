@@ -197,8 +197,9 @@ Each key in `pending` is a version string being published (e.g.
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
-generation, merge, upload with `if-generation-match`). See
-[pending-publish.md](./pending-publish.md).
+generation, merge, upload with `if-generation-match`). `pending begin` and
+`pending prune` remove stuck entries before writing (TTL exceeded, or version
+already in `index.json`). See [pending-publish.md](./pending-publish.md#self-healing).
 
 ---
 
