@@ -84,9 +84,7 @@ writes: read generation, merge, upload with `if-generation-match`.
 |-------|---------|
 | `publishing` | Publish in progress — from workflow start through artifact upload and `index.json` update. |
 
-Record pending with `phase=publishing` at workflow start. There is no separate
-`packaging` phase; `gestaltd provider package` runs while the pending row already
-shows **Publishing**.
+Record pending with `phase=publishing` at workflow start.
 
 On failure, **remove** the pending
 entry in a workflow `always()` cleanup step. The workflow run URL remains the
@@ -365,8 +363,7 @@ Suggested order: 1 → 2 → 3 → 4 → 6 (CI can ship begin/end before UI) →
 CI and manual publishes use the registry command. Pending lifecycle uses the
 same command with `--pending publishing` or `--pending clear`.
 
-**Single phase:** Pending rows use `phase=publishing` from workflow start. No
-separate `packaging` phase.
+**Single phase:** Pending rows use `phase=publishing` from workflow start.
 
 **Workflow start:** `publish-app-registry.yml` should call
 `gestaltd app registry publish --pending publishing` as early as possible (once
