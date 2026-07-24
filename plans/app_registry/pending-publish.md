@@ -37,13 +37,6 @@ Operators on `/apps/{app}/admin` should be able to answer:
 | Where is the CI run? | Link to `publication.workflowRunUrl` |
 | When did publish start? | `startedAt` on the pending row |
 
-Non-goals for this change:
-
-- Installing or deploying a pending version (must remain impossible)
-- Replacing GitHub Actions as the source of live step-level CI progress
-- Storing pending state in IndexedDB
-- Changing when `index.json` is updated (still last, on success only)
-
 ---
 
 ## Design summary
