@@ -62,9 +62,13 @@ type appPublishObject struct {
 	SHA256     string `json:"sha256,omitempty"`
 }
 
-func runAppPublish(args []string) (err error) {
-	fs := flag.NewFlagSet("gestaltd app publish", flag.ContinueOnError)
-	fs.Usage = func() { printAppPublishUsage(fs.Output()) }
+func runAppPublish(args []string) error {
+	return runAppPublishCommand("gestaltd app publish", printAppPublishUsage, args)
+}
+
+func runAppPublishCommand(commandName string, usage func(io.Writer), args []string) error {
+	fs := flag.NewFlagSet(commandName, flag.ContinueOnError)
+	fs.Usage = func() { usage(fs.Output()) }
 	bucket := fs.String("bucket", "", "GCS bucket name for registry uploads")
 	appName := fs.String("app", "", "app name under apps/{app}/manifest.yaml")
 	version := fs.String("version", "", "semantic version guard")

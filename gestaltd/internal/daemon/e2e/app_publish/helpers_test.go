@@ -25,7 +25,11 @@ func gestaltdCommand(args ...string) *exec.Cmd {
 }
 
 func runAppCommandStreams(workDir string, args ...string) ([]byte, []byte, error) {
-	cmd := gestaltdCommand(append([]string{"app"}, args...)...)
+	return runGestaltdCommandStreams(workDir, append([]string{"app"}, args...)...)
+}
+
+func runGestaltdCommandStreams(workDir string, args ...string) ([]byte, []byte, error) {
+	cmd := gestaltdCommand(args...)
 	cmd.Dir = workDir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
