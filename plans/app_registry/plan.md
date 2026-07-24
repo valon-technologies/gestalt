@@ -270,9 +270,9 @@ Core recovery paths must not depend on dynamically installed apps.
 ### Pending publish visibility
 
 Show in-flight CI publishes on `/apps/{app}/admin` before `index.json` is
-updated. Add a mutable `apps/{app}/pending.json` in GCS, CI begin/update/end
-hooks, and pending rows in the app-admin API and snapshots table. See
-[pending-publish.md](./pending-publish.md).
+updated. Add mutable `apps/{app}/pending.json` and `apps/{app}/failed.json` in
+GCS, CI lifecycle hooks, and pending/failed rows in the app-admin API and
+snapshots table. See [pending-publish.md](./pending-publish.md).
 
 ### Packaged workflow metadata
 

@@ -6,13 +6,15 @@ For deploy reader config (`appRegistries`), see [config.md](./config.md). For br
 
 ## Overview
 
-The registry stores published release JSON plus a mutable pending catalog per app.
+The registry stores published release JSON plus mutable pending and failed
+catalogs per app.
 
 Immutable app archives live alongside published versions:
 
     apps/{app}/
     ├── index.json
     ├── pending.json
+    ├── failed.json
     ├── versions/
     │   └── {version}.json
     └── artifacts/
@@ -23,6 +25,7 @@ Immutable app archives live alongside published versions:
 |----------|------|---------|
 | **Index** | `apps/{app}/index.json` | Lightweight catalog of published versions |
 | **PendingIndex** | `apps/{app}/pending.json` | In-flight publishes (not installable). See [pending-publish.md](./pending-publish.md). |
+| **FailedIndex** | `apps/{app}/failed.json` | Recent failed publishes (not installable). See [pending-publish.md](./pending-publish.md). |
 | **PublishedVersion** | `apps/{app}/versions/{version}.json` | Full metadata and install contract for one version |
 
 Document type is implied by path. Each JSON document has a root `schemaVersion` field (currently `1` for index, pending index, and published version). Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
@@ -197,10 +200,90 @@ Each key in `pending` is a version string being published (e.g.
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
-generation, merge, upload with `if-generation-match`). The first
-`gestaltd app registry pending set` removes stuck entries before writing
-(`updatedAt` older than 30 minutes, or version already in `index.json`). See
+generation, merge, upload with `if-generation-match`). The first `gestaltd app registry pending set` reconciles stuck pending entries
+and prunes old failed rows before writing (`updatedAt` older than 30 minutes →
+`failed.json` with `reason=stale`, version already in `index.json` → drop from
+pending only, failed entries older than 30 days → drop). See
 [pending-publish.md](./pending-publish.md#self-healing).
+
+---
+
+## FailedIndex
+
+**Path:** `apps/{app}/failed.json`
+
+Answers: *which recent publish attempts failed for this app, and when?*
+
+Mutable catalog updated when a publish fails in CI or when a pending row goes
+stale. Failed versions are **not** installable. See
+[pending-publish.md](./pending-publish.md).
+
+```json
+{
+  "schemaVersion": 1,
+  "app": "traffic-cop",
+  "failed": {
+    "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd": {
+      "version": "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd",
+      "sourceRef": "abc123def456abc123def456abc123def456abcd",
+      "repository": "github.com/valon-technologies/toolshed",
+      "startedAt": "2026-07-24T19:00:00Z",
+      "failedAt": "2026-07-24T19:35:00Z",
+      "reason": "stale",
+      "publication": {
+        "workflowRunUrl": "https://github.com/valon-technologies/toolshed/actions/runs/123456789",
+        "triggerPullRequest": {
+          "number": 3740,
+          "url": "https://github.com/valon-technologies/toolshed/pull/3740",
+          "title": "Wire traffic-cop to app registry"
+        }
+      }
+    }
+  }
+}
+```
+
+### Object hierarchy
+
+    FailedIndex
+    ├── schemaVersion
+    ├── app
+    └── failed: map[version] to FailedVersion
+        ├── version
+        ├── sourceRef
+        ├── repository
+        ├── startedAt
+        ├── failedAt
+        ├── reason
+        └── publication
+
+### Fields
+
+#### Root · `FailedIndex`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `schemaVersion` | int | yes | Failed index document format version. Start at `1`. |
+| `app` | string | yes | App name. Must match the `{app}` path segment. |
+| `failed` | map | yes | Version string → `FailedVersion`. Empty map when there are no recent failures. |
+
+#### `FailedIndex.failed` · `FailedVersion`
+
+Each key is a version string whose publish attempt failed.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | string | yes | Snapshot version that failed to publish. |
+| `sourceRef` | string | yes | Commit SHA the publish was building from. |
+| `repository` | string | no | Source repository. Same format as `IndexVersion.repository`. |
+| `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (copied from pending). |
+| `failedAt` | RFC 3339 timestamp | yes | When the failure was recorded (UTC). |
+| `reason` | string | yes | `workflow_failed` — CI called `pending fail`. `stale` — pending `updatedAt` exceeded 30 minutes during `PrunePendingIndex`. |
+| `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Copied from the pending row when present. |
+
+Writes use the same optimistic-concurrency pattern as `pending.json`. Entries
+older than **30 days** are removed on `gestaltd app registry pending set` via
+`PruneFailedIndex`.
 
 ---
 
