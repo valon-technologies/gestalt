@@ -24,10 +24,6 @@ while a publish is running — even though the version string and workflow run a
 already known. There is no registry signal between “workflow started” and
 “index updated”.
 
-Fleet deploy state (`desiredVersion`, rollout) lives in IndexedDB and is
-unrelated to publish progress. Pending publish visibility is a **registry read**
-concern only.
-
 ---
 
 ## Goals
