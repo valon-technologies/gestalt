@@ -128,8 +128,10 @@ Each key in `versions` is a published version string (e.g. 0.0.0-snapshot.gabc12
 Answers: *which versions are currently being published for this app, and what
 provenance is known so far?*
 
-Mutable catalog updated by CI at publish start and cleared on success or failure.
-Pending versions are **not** installable. See [pending-publish.md](./pending-publish.md).
+Mutable catalog updated by CI at publish start. Removed on successful publish via
+`gestaltd app registry pending clear`, or recorded in `failed.json` via
+`gestaltd app registry pending fail` or stale prune. Pending versions are **not**
+installable. See [pending-publish.md](./pending-publish.md).
 
 ```json
 {
@@ -200,11 +202,9 @@ Each key in `pending` is a version string being published (e.g.
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
-generation, merge, upload with `if-generation-match`). The first `gestaltd app registry pending set` reconciles stuck pending entries
-and prunes old failed rows before writing (`updatedAt` older than 30 minutes →
-`failed.json` with `reason=stale`, version already in `index.json` → drop from
-pending only, failed entries older than 30 days → drop). See
-[pending-publish.md](./pending-publish.md#self-healing).
+generation, merge, upload with `if-generation-match`). `gestaltd app registry
+pending set` runs `PrunePendingIndex` and `PruneFailedIndex` before upserting.
+See [pending-publish.md](./pending-publish.md#self-healing).
 
 ---
 
@@ -214,9 +214,9 @@ pending only, failed entries older than 30 days → drop). See
 
 Answers: *which recent publish attempts failed for this app, and when?*
 
-Mutable catalog updated when a publish fails in CI or when a pending row goes
-stale. Failed versions are **not** installable. See
-[pending-publish.md](./pending-publish.md).
+Mutable catalog updated when CI calls `gestaltd app registry pending fail` or
+when `PrunePendingIndex` moves a stale pending entry. Failed versions are **not**
+installable. See [pending-publish.md](./pending-publish.md).
 
 ```json
 {
@@ -281,9 +281,10 @@ Each key is a version string whose publish attempt failed.
 | `reason` | string | yes | `workflow_failed` — CI called `pending fail`. `stale` — pending `updatedAt` exceeded 30 minutes during `PrunePendingIndex`. |
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Copied from the pending row when present. |
 
-Writes use the same optimistic-concurrency pattern as `pending.json`. Entries
-older than **30 days** are removed on `gestaltd app registry pending set` via
-`PruneFailedIndex`.
+Writes use the same optimistic-concurrency pattern as `pending.json`.
+`PruneFailedIndex` removes entries older than 30 days on
+`gestaltd app registry pending set`. See
+[pending-publish.md](./pending-publish.md#prunefailedindex).
 
 ---
 

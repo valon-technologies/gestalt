@@ -112,9 +112,8 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable the selector while a rollout is `enrolling` or `restarting`; refresh until terminal.
 - Render access denied on **403** without leaking registry metadata.
-- Show in-flight publishes with status **Publishing** and recent failures with
-  status **Failed** while CI is running or after a failed attempt. See
-  [pending-publish.md](./pending-publish.md).
+- Show in-flight publishes (**Publishing**) and recent failed publishes
+  (**Failed**) in the snapshots table. See [pending-publish.md](./pending-publish.md).
 
 Selection is fleet-wide. It is not per-user or per-replica.
 
