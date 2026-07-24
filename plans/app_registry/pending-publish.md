@@ -6,7 +6,7 @@ is updated at the end of CI.
 Related docs:
 
 - [plan.md](./plan.md) — registry goals and implementation path
-- [models.md](./models.md) — index and published version JSON
+- [models.md](./models.md) — registry JSON documents, including [PendingIndex](./models.md#pendingindex)
 - [admin.md](./admin.md) — app admin UI capabilities
 - [service.md](./service.md) — Go publish/read helpers
 - [lifecycle.md](./lifecycle.md) — app-admin HTTP API
@@ -78,61 +78,12 @@ matches how `index.json` is already fetched.
 
 ---
 
-## `pending.json` model
+## PendingIndex
 
-**Path:** `apps/{app}/pending.json`
+`pending.json` document shape, fields, and example:
+[models.md — PendingIndex](./models.md#pendingindex).
 
-Answers: *which versions are currently being published for this app, and what
-provenance is known so far?*
-
-```json
-{
-  "schemaVersion": 1,
-  "app": "traffic-cop",
-  "pending": {
-    "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd": {
-      "version": "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd",
-      "sourceRef": "abc123def456abc123def456abc123def456abcd",
-      "repository": "github.com/valon-technologies/toolshed",
-      "startedAt": "2026-07-24T19:00:00Z",
-      "updatedAt": "2026-07-24T19:04:12Z",
-      "phase": "packaging",
-      "publication": {
-        "workflowRunUrl": "https://github.com/valon-technologies/toolshed/actions/runs/123456789",
-        "triggerPullRequest": {
-          "number": 3740,
-          "url": "https://github.com/valon-technologies/toolshed/pull/3740",
-          "title": "Wire traffic-cop to app registry"
-        }
-      }
-    }
-  }
-}
-```
-
-### Fields
-
-#### Root · `PendingIndex`
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `schemaVersion` | int | yes | Document format version. Start at `1`. |
-| `app` | string | yes | App name. Must match the `{app}` path segment. |
-| `pending` | map | yes | Version string → `PendingVersion`. Empty map when idle. |
-
-#### `pending.{version}` · `PendingVersion`
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `version` | string | yes | Snapshot version being published (same semver rules as published versions). |
-| `sourceRef` | string | yes | Commit SHA the publish is building from. |
-| `repository` | string | no | Source repository URL/host path. |
-| `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (UTC). |
-| `updatedAt` | RFC 3339 timestamp | yes | Last phase or metadata update (UTC). |
-| `phase` | string | yes | `packaging` or `publishing`. See phases below. |
-| `publication` | object | no | Same `Publication` shape as [models.md](./models.md). Written at pending start so the UI can link the workflow run immediately. |
-
-#### Phases
+### Phases
 
 | Phase | Meaning |
 |-------|---------|
@@ -143,7 +94,7 @@ Do not add a `failed` phase in GCS for v1. On failure, **remove** the pending
 entry in a workflow `always()` cleanup step. The workflow run URL remains the
 failure audit trail.
 
-#### Stale pending (read path)
+### Stale pending (read path)
 
 If CI crashes before cleanup, a pending row can linger in `pending.json`.
 Readers treat a pending entry as **stale** when `updatedAt` is older than a
@@ -153,7 +104,7 @@ rows; the UI shows **Publishing (stale)** and still links the workflow run.
 Stale labeling is for operator visibility only. It does not remove the GCS
 entry — see [Self-healing](#self-healing) below.
 
-#### Self-healing
+### Self-healing
 
 `gestaltd serve` reads `pending.json` over public HTTP and cannot write back to
 GCS. Self-healing therefore runs on the **publish write path** (CI and
