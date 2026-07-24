@@ -17,7 +17,7 @@ Related docs:
 
 Today the **Published snapshots** table only reflects versions listed in
 `apps/{app}/index.json`. That file is updated as the **last** step of
-`gestaltd app publish`, after packaging and artifact upload complete.
+`gestaltd app registry publish`, after packaging and artifact upload complete.
 
 During CI (`publish-app-registry.yml`), operators see nothing on the admin page
 while a publish is running — even though the version string and workflow run are
@@ -83,7 +83,7 @@ writes: read generation, merge, upload with `if-generation-match`.
 | Phase | Meaning |
 |-------|---------|
 | `packaging` | `gestaltd provider package` / artifact build in progress. Pending record created at workflow start. |
-| `publishing` | Artifacts built; `gestaltd app publish` upload + index update in progress. Set immediately before the publish step. |
+| `publishing` | Artifacts built; `gestaltd app registry publish` upload + index update in progress. Set immediately before the publish step. |
 
 On failure, **remove** the pending
 entry in a workflow `always()` cleanup step. The workflow run URL remains the
@@ -92,7 +92,7 @@ failure audit trail.
 ### Self-healing
 
 `gestaltd serve` reads `pending.json` over public HTTP and cannot write back to
-GCS. Self-healing runs on the **`gestaltd app publish` write path** (CI and
+GCS. Self-healing runs on the **`gestaltd app registry publish` write path** (CI and
 manual publishes), which already hold bucket credentials.
 
 A shared `PrunePendingIndex` helper removes stuck entries from `pending.json`
@@ -104,7 +104,7 @@ before any pending mutation. Prune criteria for each `pending.{version}` entry:
 | Same `version` already listed in `index.json` | Remove — publish succeeded but pending was not cleared |
 | Otherwise | Keep |
 
-The 30-minute threshold applies on the first `gestaltd app publish --pending`
+The 30-minute threshold applies on the first `gestaltd app registry publish --pending`
 call in a workflow.
 No `stale` field on the app-admin API — stuck rows are removed in GCS instead
 of surfaced as a separate UI state.
@@ -113,7 +113,7 @@ of surfaced as a separate UI state.
 writes: download `pending.json` generation, drop matching entries, upload with
 `if-generation-match`.
 
-The first `gestaltd app publish --pending …` call in a workflow always prunes
+The first `gestaltd app registry publish --pending …` call in a workflow always prunes
 before upserting. Every app publish workflow self-heals stuck pending rows older
 than 30 minutes, so orphaned entries are cleared on the next merge to `main` for
 that app.
@@ -121,7 +121,7 @@ that app.
 Prune is idempotent and safe to run concurrently with an in-flight publish:
 generation-match retries apply. An active publish refreshes `updatedAt` on each
 `--pending` call, so a healthy in-flight entry is not removed. Workflows with
-packaging longer than 30 minutes should run `gestaltd app publish --pending
+packaging longer than 30 minutes should run `gestaltd app registry publish --pending
 publishing` before the threshold elapses (step 4 below).
 
 ---
@@ -133,25 +133,25 @@ CI: publish-app-registry.yml
 │
 ├─1. Resolve PACKAGE_VERSION + PROVIDER_REF
 │
-├─2. gestaltd app publish --pending packaging
+├─2. gestaltd app registry publish --pending packaging
 │      (same --bucket/--app/--version/--ref/--workflow-run-url flags as step 5)
 │      → PrunePendingIndex (drop entries older than 30m or already in index.json)
 │      → upsert pending.json for this version (phase=packaging)
 │
 ├─3. Package artifacts (may take tens of minutes)
 │
-├─4. gestaltd app publish --pending publishing
+├─4. gestaltd app registry publish --pending publishing
 │
-├─5. gestaltd app publish --dist-dir … (artifacts + versions/{version}.json + index.json)
+├─5. gestaltd app registry publish --dist-dir … (artifacts + versions/{version}.json + index.json)
 │      → clear this version from pending.json on success
 │
-└─6. gestaltd app publish --pending clear  (always() failure cleanup)
+└─6. gestaltd app registry publish --pending clear  (always() failure cleanup)
        → remove version from pending.json if step 5 did not run
 ```
 
-Today, `publish-app-registry.yml` already runs step 5 only (`gestaltd app
-publish` with `--dist-dir`). This proposal adds steps 2, 4, and 6 around the
-existing command — no new top-level CLI subcommands.
+Today, `publish-app-registry.yml` runs `gestaltd app publish --dist-dir …` only.
+This proposal migrates to `gestaltd app registry publish` and adds steps 2, 4,
+and 6 for pending visibility.
 
 On **success**, step 5 clears pending after uploading. Order within step 5 is
 unchanged: `index.json` is still updated last.
@@ -161,14 +161,22 @@ publish failed, so pending does not stick unless the cleanup step itself fails.
 
 ### CLI surface
 
-Extend the existing `gestaltd app publish` command — no `gestaltd app registry`
-subcommands.
+Introduce `gestaltd app registry publish` to replace `gestaltd app publish`.
+Move publish implementation under `gestaltd app registry`; keep `gestaltd app
+publish` as a deprecated alias during migration, then remove it.
+
+```text
+gestaltd app registry publish [flags]
+```
+
+Flags are unchanged from today's `gestaltd app publish`, plus `--pending` for
+pending-only operations.
 
 **Pending-only** (no `--dist-dir`): write or update `pending.json` only.
 
 ```bash
 # Workflow start — record pending publish (prunes stuck entries first)
-gestaltd app publish \
+gestaltd app registry publish \
   --bucket gs://… \
   --app traffic-cop \
   --version 0.0.0-snapshot.g… \
@@ -178,18 +186,18 @@ gestaltd app publish \
   --pending packaging
 
 # Before artifact upload — refresh phase / updatedAt
-gestaltd app publish … --pending publishing
+gestaltd app registry publish … --pending publishing
 
 # Failure cleanup
-gestaltd app publish … --pending clear
+gestaltd app registry publish … --pending clear
 ```
 
-**Full publish** (existing behavior, extended): when `--dist-dir` is set,
-upload artifacts and version metadata, update `index.json`, then remove this
-version from `pending.json`.
+**Full publish:** when `--dist-dir` is set, upload artifacts and version
+metadata, update `index.json`, then remove this version from `pending.json`.
+Same behavior as today's `gestaltd app publish`.
 
 ```bash
-gestaltd app publish \
+gestaltd app registry publish \
   --bucket gs://… \
   --app traffic-cop \
   --version 0.0.0-snapshot.g… \
@@ -297,13 +305,13 @@ idle.
 In `toolshed` (and any repo using the shared workflow):
 
 1. After `Resolve package inputs` (when `PACKAGE_VERSION` is known), authenticate
-   to GCP and run `gestaltd app publish --pending packaging` with the same
+   to GCP and run `gestaltd app registry publish --pending packaging` with the same
    publication flags used in the final publish step.
 2. Immediately before the existing publish step, run
-   `gestaltd app publish --pending publishing`.
-3. Keep the existing `gestaltd app publish --dist-dir …` step (clears pending on
+   `gestaltd app registry publish --pending publishing`.
+3. Keep the existing `gestaltd app registry publish --dist-dir …` step (clears pending on
    success).
-4. Add an `always()` step that runs `gestaltd app publish --pending clear` when
+4. Add an `always()` step that runs `gestaltd app registry publish --pending clear` when
    the full publish step did not succeed.
 
 Install `gestaltd` before step 1 (today it is installed only in the publish job;
@@ -320,7 +328,7 @@ move or duplicate install earlier so step 2 can run at workflow start).
 | Published catalog remains immutable per version | `versions/{version}.json` and artifacts still uploaded with `if-generation-match=0` |
 | Public read stays HTTP GET | Single `pending.json` per app, no bucket listing |
 | Concurrent publishes for one app | Rare; `pending` map holds multiple versions. CI concurrency is per `(app, sha)`; different SHAs produce different version strings |
-| Stuck pending rows are removed | `PrunePendingIndex` on first `gestaltd app publish --pending`; 30-minute `updatedAt` threshold + already-published checks |
+| Stuck pending rows are removed | `PrunePendingIndex` on first `gestaltd app registry publish --pending`; 30-minute `updatedAt` threshold + already-published checks |
 
 ---
 
@@ -328,17 +336,18 @@ move or duplicate install earlier so step 2 can run at workflow start).
 
 1. **Models** — Add `PendingIndex` / `PendingVersion` to
    `gestaltd/internal/appregistry/`; document in [models.md](./models.md).
-2. **Write path** — extend `gestaltd app publish` with `--pending
-   packaging|publishing|clear`; generation-match retries (mirror index upsert).
-   First `--pending` call calls `PrunePendingIndex`; full publish clears pending
-   on success.
+2. **Write path** — add `gestaltd app registry publish` (move logic from
+   `gestaltd app publish`); support `--pending packaging|publishing|clear`.
+   Generation-match retries (mirror index upsert). First `--pending` call calls
+   `PrunePendingIndex`; full publish clears pending on success. Deprecate
+   `gestaltd app publish`.
 3. **Read path** — `FetchPendingIndex`; unit tests with `registrytest` HTTP
    fixture.
 4. **App-admin API** — extend `getAppAdminRegistry` with `pendingVersions`.
 5. **UI** — pending rows + polling in `gestalt-providers` app admin table.
-6. **CI** — extend `publish-app-registry.yml` with early `--pending packaging`,
-   pre-upload `--pending publishing`, and failure `--pending clear` around the
-   existing `gestaltd app publish --dist-dir` step.
+6. **CI** — migrate `publish-app-registry.yml` from `gestaltd app publish` to
+   `gestaltd app registry publish`; add early `--pending packaging`, pre-upload
+   `--pending publishing`, and failure `--pending clear`.
 7. **Tests** — see [tests.md](./tests.md) (add section when implementing).
 
 Suggested order: 1 → 2 → 3 → 4 → 6 (CI can ship begin/end before UI) → 5.
@@ -354,14 +363,14 @@ Suggested order: 1 → 2 → 3 → 4 → 6 (CI can ship begin/end before UI) →
 
 ## Decisions
 
-**CLI surface:** Extend `gestaltd app publish` only — no `gestaltd app registry`
-subcommands. CI and manual publishes use the same command.
+**CLI surface:** `gestaltd app registry publish` replaces `gestaltd app publish`.
+CI and manual publishes use the registry command. Pending lifecycle uses the
+same command with `--pending`.
 
 **Workflow start:** `publish-app-registry.yml` should call
-`gestaltd app publish --pending packaging` as early as possible (once
+`gestaltd app registry publish --pending packaging` as early as possible (once
 `PACKAGE_VERSION`, GCP auth, and `gestaltd` are available), not only at the end
-when artifacts are ready. The final `gestaltd app publish --dist-dir …` step is
-unchanged and already what auto-publish uses today.
+when artifacts are ready.
 
 ---
 

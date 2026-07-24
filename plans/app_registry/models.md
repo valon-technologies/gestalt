@@ -1,6 +1,6 @@
 # App Registry Models
 
-Reference for the JSON documents stored in a GCS app registry by `gestaltd app publish`.
+Reference for the JSON documents stored in a GCS app registry by `gestaltd app registry publish`.
 
 For deploy reader config (`appRegistries`), see [config.md](./config.md). For broader goals (runtime install, IndexedDB state, validation phases), see [plan.md](./plan.md). For the Go package API that reads and writes these documents, see [service.md](./service.md).
 
@@ -198,7 +198,7 @@ Each key in `pending` is a version string being published (e.g.
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
 generation, merge, upload with `if-generation-match`). The first
-`gestaltd app publish --pending` call removes stuck entries before writing
+`gestaltd app registry publish --pending` call removes stuck entries before writing
 (`updatedAt` older than 30 minutes, or version already in `index.json`). See
 [pending-publish.md](./pending-publish.md#self-healing).
 

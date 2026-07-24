@@ -1,6 +1,6 @@
 # `gestaltd/internal/appregistry/registry.go`
 
-Public interface for the app registry package as introduced in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) commit 1. JSON shapes are defined in [models.md](./models.md). Deploy reader config is in [config.md](./config.md); `gestaltd app publish` passes `--bucket` on the CLI.
+Public interface for the app registry package as introduced in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) commit 1. JSON shapes are defined in [models.md](./models.md). Deploy reader config is in [config.md](./config.md); `gestaltd app registry publish` passes `--bucket` on the CLI.
 
 ## PublishedVersion construction
 

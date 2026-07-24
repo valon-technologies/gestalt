@@ -36,7 +36,7 @@ Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.
 
 ## Publish dry-run E2E
 
-Added in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) (GCS app registry + `gestaltd app publish`).
+Added in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) (GCS app registry + `gestaltd app registry publish`).
 
 Run:
 
@@ -45,7 +45,7 @@ cd gestaltd
 go test ./internal/daemon/e2e/appregistry -count=1
 ```
 
-This is a **behavioral** test: the compiled `gestaltd` binary runs as a subprocess through `provider package` → `app publish --dry-run`. No real GCS uploads.
+This is a **behavioral** test: the compiled `gestaltd` binary runs as a subprocess through `provider package` → `app registry publish --dry-run`. No real GCS uploads.
 
 `--dry-run` always prints a JSON plan (`gestaltd.app.publish.plan.v1`) to stdout.
 
@@ -58,7 +58,7 @@ Flow:
 1. Create a temp app fixture at `apps/release-test/` (`newAppRegistryPublishFixture`)
 2. Initialize a git repo (`initProviderPublishGitRepo`)
 3. Run `gestaltd provider package --version … --output dist/`
-4. Run `gestaltd app publish --bucket gs://gestalt-app-registry --app release-test --version … --ref … --dist-dir dist/ --dry-run`
+4. Run `gestaltd app registry publish --bucket gs://gestalt-app-registry --app release-test --version … --ref … --dist-dir dist/ --dry-run`
 5. Decode and assert the JSON plan
 
 Expected plan fields:

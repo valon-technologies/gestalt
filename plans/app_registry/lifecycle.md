@@ -277,7 +277,7 @@ Fetches `apps/{app}/index.json` from the configured registry's `publicUrl` and r
 | Parameter | Description |
 |-----------|-------------|
 | `registry` | Name of a configured registry (`appRegistries` key) |
-| `app` | Published app name (same rules as `gestaltd app publish --app`) |
+| `app` | Published app name (same rules as `gestaltd app registry publish --app`) |
 
 App names must match `providerregistry.ValidateRepositoryName`: lowercase letters, digits, dots, underscores, and hyphens only. Invalid names (including path traversal such as `..`) return `400`.
 
