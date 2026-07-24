@@ -122,9 +122,6 @@ that app.
 Prune is idempotent and safe to run concurrently with an in-flight publish:
 generation-match retries apply. An active publish refreshes `updatedAt` on each
 `--pending publishing` call, so a healthy in-flight entry is not removed.
-Workflows with packaging longer than 30 minutes should run
-`gestaltd app registry publish --pending publishing` again before the full
-`--dist-dir` step to refresh `updatedAt`.
 
 ---
 
@@ -184,9 +181,6 @@ gestaltd app registry publish \
   --workflow-run-url … \
   [--trigger-pr-number … --trigger-pr-url …] \
   --pending publishing
-
-# Optional — refresh updatedAt if packaging exceeds 30 minutes
-gestaltd app registry publish … --pending publishing
 
 # Failure cleanup
 gestaltd app registry publish … --pending clear
