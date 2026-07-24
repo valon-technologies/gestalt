@@ -139,7 +139,7 @@ Pending versions are **not** installable. See [pending-publish.md](./pending-pub
       "repository": "github.com/valon-technologies/toolshed",
       "startedAt": "2026-07-24T19:00:00Z",
       "updatedAt": "2026-07-24T19:04:12Z",
-      "phase": "packaging",
+      "phase": "publishing",
       "publication": {
         "workflowRunUrl": "https://github.com/valon-technologies/toolshed/actions/runs/123456789",
         "triggerPullRequest": {
@@ -193,12 +193,13 @@ Each key in `pending` is a version string being published (e.g.
 | `repository` | string | no | Source repository. Same format as `IndexVersion.repository`. |
 | `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (UTC). |
 | `updatedAt` | RFC 3339 timestamp | yes | Last phase or metadata update (UTC). |
-| `phase` | string | yes | `packaging` or `publishing`. See [pending-publish.md](./pending-publish.md#phases). |
+| `phase` | string | yes | Always `publishing` while the version is pending. See [pending-publish.md](./pending-publish.md#phases). |
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
 generation, merge, upload with `if-generation-match`). The first
-`gestaltd app registry publish --pending` call removes stuck entries before writing
+`gestaltd app registry publish --pending publishing` call removes stuck entries
+before writing
 (`updatedAt` older than 30 minutes, or version already in `index.json`). See
 [pending-publish.md](./pending-publish.md#self-healing).
 
