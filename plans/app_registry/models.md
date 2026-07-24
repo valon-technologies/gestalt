@@ -25,7 +25,7 @@ Immutable app archives live alongside published versions:
 | **PendingIndex** | `apps/{app}/pending.json` | In-flight publishes (not installable). See [pending-publish.md](./pending-publish.md). |
 | **PublishedVersion** | `apps/{app}/versions/{version}.json` | Full metadata and install contract for one version |
 
-Document type is implied by path. Each JSON document has a root `schemaVersion` field (currently `1` for both index and published version). Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
+Document type is implied by path. Each JSON document has a root `schemaVersion` field (currently `1` for index, pending index, and published version). Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
 
 Implementation: `gestaltd/internal/appregistry/`.
 
@@ -115,6 +115,130 @@ Each key in `versions` is a published version string (e.g. 0.0.0-snapshot.gabc12
 | `sourceRef` | string | no | Packaged commit SHA. Copied from `PublishedVersion.sourceRef`. |
 | `repository` | string | no | Source repository. Copied from `PublishedVersion.repository`. |
 | `publication` | object | no | Publish workflow provenance. Copied from `PublishedVersion.publication`. |
+
+---
+
+## PendingIndex
+
+**Path:** `apps/{app}/pending.json`
+
+Answers: *which versions are currently being published for this app, and what
+provenance is known so far?*
+
+Mutable catalog updated by CI at publish start and cleared on success or failure.
+Pending versions are **not** installable. See [pending-publish.md](./pending-publish.md).
+
+`pending.json` is **not** the same shape as `index.json`. Both are version-keyed
+catalogs with shared provenance fields (`sourceRef`, `repository`, `publication`),
+but the root structure and per-version fields differ:
+
+| | `index.json` | `pending.json` |
+|---|--------------|----------------|
+| Root | `apps` map (multi-app) | `app` string + `pending` map |
+| Per-version key fields | `metadata`, `platforms`, `publishedAt` | `startedAt`, `updatedAt`, `phase` |
+| Meaning | Completed publish | In-flight publish |
+
+```json
+{
+  "schemaVersion": 1,
+  "app": "traffic-cop",
+  "pending": {
+    "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd": {
+      "version": "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd",
+      "sourceRef": "abc123def456abc123def456abc123def456abcd",
+      "repository": "github.com/valon-technologies/toolshed",
+      "startedAt": "2026-07-24T19:00:00Z",
+      "updatedAt": "2026-07-24T19:04:12Z",
+      "phase": "packaging",
+      "publication": {
+        "workflowRunUrl": "https://github.com/valon-technologies/toolshed/actions/runs/123456789",
+        "triggerPullRequest": {
+          "number": 3740,
+          "url": "https://github.com/valon-technologies/toolshed/pull/3740",
+          "title": "Wire traffic-cop to app registry"
+        }
+      }
+    }
+  }
+}
+```
+
+For comparison, the same app’s `index.json` entry for a **completed** publish
+looks like this (note `apps` nesting and `publishedAt` / `metadata` instead of
+`phase` / `startedAt`):
+
+```json
+{
+  "schemaVersion": 1,
+  "apps": {
+    "traffic-cop": {
+      "displayName": "traffic-cop",
+      "versions": {
+        "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd": {
+          "metadata": "apps/traffic-cop/versions/0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd.json",
+          "platforms": ["linux/amd64", "darwin/arm64"],
+          "publishedAt": "2026-07-24T19:15:00Z",
+          "sourceRef": "abc123def456abc123def456abc123def456abcd",
+          "repository": "github.com/valon-technologies/toolshed",
+          "publication": {
+            "workflowRunUrl": "https://github.com/valon-technologies/toolshed/actions/runs/123456789",
+            "triggerPullRequest": {
+              "number": 3740,
+              "url": "https://github.com/valon-technologies/toolshed/pull/3740"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Object hierarchy
+
+    PendingIndex
+    ├── schemaVersion
+    ├── app
+    └── pending: map[version] to PendingVersion
+        ├── version
+        ├── sourceRef
+        ├── repository
+        ├── startedAt
+        ├── updatedAt
+        ├── phase
+        └── publication
+
+Unlike `Index`, `PendingIndex` does not use an `apps` map — the app name is
+implied by the path (`apps/traffic-cop/pending.json`).
+
+### Fields
+
+#### Root · `PendingIndex`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `schemaVersion` | int | yes | Pending index document format version. Start at `1`. |
+| `app` | string | yes | App name. Must match the `{app}` path segment. |
+| `pending` | map | yes | Version string → `PendingVersion`. Empty map when no publishes are in flight. |
+
+#### `PendingIndex.pending` · `PendingVersion`
+
+Each key in `pending` is a version string being published (e.g.
+`0.0.0-snapshot.gabc123`). The value is a `PendingVersion` summary.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | string | yes | Snapshot version being published. Same semver rules as published versions. |
+| `sourceRef` | string | yes | Commit SHA the publish is building from. |
+| `repository` | string | no | Source repository. Same format as `IndexVersion.repository`. |
+| `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (UTC). |
+| `updatedAt` | RFC 3339 timestamp | yes | Last phase or metadata update (UTC). |
+| `phase` | string | yes | `packaging` or `publishing`. See [pending-publish.md](./pending-publish.md#phases). |
+| `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
+
+Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
+generation, merge, upload with `if-generation-match`). See
+[pending-publish.md](./pending-publish.md).
 
 ---
 
