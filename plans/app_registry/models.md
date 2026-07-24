@@ -128,16 +128,6 @@ provenance is known so far?*
 Mutable catalog updated by CI at publish start and cleared on success or failure.
 Pending versions are **not** installable. See [pending-publish.md](./pending-publish.md).
 
-`pending.json` is **not** the same shape as `index.json`. Both are version-keyed
-catalogs with shared provenance fields (`sourceRef`, `repository`, `publication`),
-but the root structure and per-version fields differ:
-
-| | `index.json` | `pending.json` |
-|---|--------------|----------------|
-| Root | `apps` map (multi-app) | `app` string + `pending` map |
-| Per-version key fields | `metadata`, `platforms`, `publishedAt` | `startedAt`, `updatedAt`, `phase` |
-| Meaning | Completed publish | In-flight publish |
-
 ```json
 {
   "schemaVersion": 1,
@@ -163,37 +153,6 @@ but the root structure and per-version fields differ:
 }
 ```
 
-For comparison, the same app’s `index.json` entry for a **completed** publish
-looks like this (note `apps` nesting and `publishedAt` / `metadata` instead of
-`phase` / `startedAt`):
-
-```json
-{
-  "schemaVersion": 1,
-  "apps": {
-    "traffic-cop": {
-      "displayName": "traffic-cop",
-      "versions": {
-        "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd": {
-          "metadata": "apps/traffic-cop/versions/0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd.json",
-          "platforms": ["linux/amd64", "darwin/arm64"],
-          "publishedAt": "2026-07-24T19:15:00Z",
-          "sourceRef": "abc123def456abc123def456abc123def456abcd",
-          "repository": "github.com/valon-technologies/toolshed",
-          "publication": {
-            "workflowRunUrl": "https://github.com/valon-technologies/toolshed/actions/runs/123456789",
-            "triggerPullRequest": {
-              "number": 3740,
-              "url": "https://github.com/valon-technologies/toolshed/pull/3740"
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
 ### Object hierarchy
 
     PendingIndex
@@ -207,9 +166,6 @@ looks like this (note `apps` nesting and `publishedAt` / `metadata` instead of
         ├── updatedAt
         ├── phase
         └── publication
-
-Unlike `Index`, `PendingIndex` does not use an `apps` map — the app name is
-implied by the path (`apps/traffic-cop/pending.json`).
 
 ### Fields
 
