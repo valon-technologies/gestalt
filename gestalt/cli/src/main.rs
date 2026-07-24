@@ -201,6 +201,7 @@ fn dispatch_app_command(
             params,
             connection,
             instance,
+            headers,
             select,
             input_file,
         }) => commands::invoke::run(
@@ -211,6 +212,7 @@ fn dispatch_app_command(
             commands::invoke::InvokeOptions {
                 connection: connection.as_deref(),
                 instance: instance.as_deref(),
+                headers: &headers,
                 select: select.as_deref(),
                 input_file: input_file.as_deref(),
             },

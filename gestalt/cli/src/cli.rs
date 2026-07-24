@@ -167,6 +167,10 @@ pub struct InvokeArgs {
     #[arg(long)]
     pub instance: Option<String>,
 
+    /// Outbound header override as key=value (repeatable)
+    #[arg(long = "header", value_parser = params::parse_header_entry)]
+    pub headers: Vec<params::HeaderEntry>,
+
     /// Select a sub-path from the response (e.g., "data.items")
     #[arg(long = "select")]
     pub select: Option<String>,

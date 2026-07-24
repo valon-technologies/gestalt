@@ -16,6 +16,33 @@ pub struct ParamEntry {
     pub value: ParamValue,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeaderEntry {
+    pub key: String,
+    pub value: String,
+}
+
+pub fn parse_header_entry(s: &str) -> Result<HeaderEntry, String> {
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid header: no '=' found in '{s}'"))?;
+    let key = &s[..pos];
+    if key.is_empty() {
+        return Err(format!("invalid header: empty key in '{s}'"));
+    }
+    Ok(HeaderEntry {
+        key: key.to_string(),
+        value: s[pos + 1..].to_string(),
+    })
+}
+
+pub fn assemble_headers(entries: &[HeaderEntry]) -> BTreeMap<String, String> {
+    entries
+        .iter()
+        .map(|entry| (entry.key.clone(), entry.value.clone()))
+        .collect()
+}
+
 impl ParamValue {
     fn to_json(&self) -> serde_json::Value {
         match self {
@@ -133,4 +160,42 @@ pub fn merge_params(
         result.insert(k, v);
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_header_entry_accepts_key_value() {
+        let entry = parse_header_entry("X-Tenant-Sid=TEN123").unwrap();
+        assert_eq!(
+            entry,
+            HeaderEntry {
+                key: "X-Tenant-Sid".to_string(),
+                value: "TEN123".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_header_entry_rejects_missing_equals() {
+        assert!(parse_header_entry("X-Tenant-Sid").is_err());
+    }
+
+    #[test]
+    fn assemble_headers_preserves_entries() {
+        let headers = assemble_headers(&[
+            HeaderEntry {
+                key: "X-Tenant-Sid".to_string(),
+                value: "TEN123".to_string(),
+            },
+            HeaderEntry {
+                key: "X-Other".to_string(),
+                value: "value".to_string(),
+            },
+        ]);
+        assert_eq!(headers.get("X-Tenant-Sid"), Some(&"TEN123".to_string()));
+        assert_eq!(headers.get("X-Other"), Some(&"value".to_string()));
+    }
 }
