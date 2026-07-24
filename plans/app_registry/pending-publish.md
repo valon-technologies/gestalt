@@ -471,11 +471,3 @@ on `pending set`. Stale pending (30 minutes without `updatedAt` refresh) records
 **Workflow start:** `publish-app-registry.yml` should call
 `gestaltd app registry pending set` as early as possible (once `PACKAGE_VERSION`,
 GCP auth, and `gestaltd` are available), not only when artifacts are ready.
-
----
-
-## Future work
-
-- Global pending index across apps for a registry-wide dashboard.
-- Webhook or Pub/Sub on `index.json` change to push updates to the UI instead
-  of polling.
