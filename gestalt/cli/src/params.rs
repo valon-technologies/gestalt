@@ -23,7 +23,9 @@ pub struct HeaderEntry {
 }
 
 pub fn parse_header_entry(s: &str) -> Result<HeaderEntry, String> {
-    let pos = s.find('=').ok_or_else(|| format!("invalid header: no '=' found in '{s}'"))?;
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid header: no '=' found in '{s}'"))?;
     let key = &s[..pos];
     if key.is_empty() {
         return Err(format!("invalid header: empty key in '{s}'"));
