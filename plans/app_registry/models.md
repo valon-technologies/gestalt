@@ -153,6 +153,10 @@ Pending versions are **not** installable. See [pending-publish.md](./pending-pub
 }
 ```
 
+For comparison, the same app's `index.json` entry for a completed publish uses
+`apps` nesting and `publishedAt` / `metadata` instead of `phase` / `startedAt`.
+See [Index](#index).
+
 ### Object hierarchy
 
     PendingIndex
