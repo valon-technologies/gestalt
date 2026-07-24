@@ -155,6 +155,39 @@ immediately after so operators never depend on pending lingering post-success.
 On **failure**, an `always()` workflow step runs step 6 even when packaging or
 publish failed, so pending does not stick unless the cleanup step itself fails.
 
+### CLI surface (proposal)
+
+Add a subcommand group rather than overloading `gestaltd app publish`:
+
+```bash
+gestaltd app registry pending begin \
+  --bucket gs://… \
+  --app traffic-cop \
+  --version 0.0.0-snapshot.g… \
+  --ref abc123… \
+  --workflow-run-url … \
+  [--trigger-pr-number … --trigger-pr-url …]
+
+gestaltd app registry pending update \
+  --bucket gs://… \
+  --app traffic-cop \
+  --version 0.0.0-snapshot.g… \
+  --phase publishing
+
+gestaltd app registry pending end \
+  --bucket gs://… \
+  --app traffic-cop \
+  --version 0.0.0-snapshot.g…
+```
+
+`begin` runs `PrunePendingIndex` before upserting (see [Self-healing](#self-healing)).
+`begin` is idempotent for the same `(app, version)`: refresh `updatedAt` and
+merge `publication` if re-run. `end` is idempotent if the version is already
+absent.
+
+Implementation reuses the index upload helper (generation-match retries) in
+`gestaltd/internal/daemon/app_publish.go`.
+
 ---
 
 ## Read path
