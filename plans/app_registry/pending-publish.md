@@ -36,8 +36,8 @@ Operators on `/apps/{app}/admin` should be able to answer:
 | Which commit / PR triggered it? | Pending entry provenance (same fields as published rows where available) |
 | Where is the CI run? | Link to `publication.workflowRunUrl` |
 | When did publish start? | `startedAt` on the pending entry |
-| How long has publish been running? | Elapsed time since `startedAt` on **Publishing** rows |
-| How long did publish take? | `publishedAt − publishStartedAt` on published rows; `failedAt − startedAt` on **Failed** rows |
+| How long has publish been running? | Elapsed time from `startedAt` on **Publishing** rows |
+| How long did publish take? | Total publish time on published and **Failed** rows |
 | Did a recent publish fail? | Row with status **Failed** and `failedAt` |
 | Why did it fail? | `reason` on the failed entry (`workflow_failed` or `stale`) |
 
@@ -57,31 +57,36 @@ Add mutable `pending.json` and `failed.json` catalogs in GCS per app.
 
 `gestaltd` reads both catalogs alongside `index.json` and exposes them through
 the app-admin registry API. The UI merges pending, failed, and published entries
-in the snapshots table and shows publish duration while in flight and after
-completion.
-
-### Publish duration
-
-Track how long a publish takes end to end:
-
-| State | Start anchor | End anchor | Display |
-|-------|--------------|------------|---------|
-| **Publishing** | `pending.startedAt` | now (UI clock) | “Publishing for 4m” |
-| **Published** | `publishStartedAt` | `publishedAt` | “Published in 4m 32s” |
-| **Failed** | `failed.startedAt` | `failed.failedAt` | “Failed after 35m” |
-
-`publishStartedAt` is written at upload time. `gestaltd app registry publish`
-reads the matching pending entry (if present) and copies `startedAt` into
-`publishStartedAt` on `versions/{version}.json` and `index.json`. When CI
-skipped `pending set`, or for legacy publishes, `publishStartedAt` is omitted and
-the UI shows only `publishedAt`.
-
-Duration is derived from timestamps — do not store a separate duration field in
-GCS.
+in the snapshots table.
 
 Pending and failed versions are **not** installable. Install-time validation
 continues to read only `versions/{version}.json` via the published index
 contract.
+
+---
+
+## Publish duration
+
+Show how long a publish has been running and how long it took to complete.
+Durations are derived from timestamps at read/UI time — not stored as separate
+GCS fields. Field definitions: [`publishStartedAt`](./models.md#publishedversion).
+
+| Row status | Start timestamp | End timestamp | UI label |
+|------------|-----------------|---------------|----------|
+| **Publishing** | `startedAt` | now | Publishing for 4m |
+| **Available** / **Deployed** | `publishStartedAt` | `publishedAt` | Published in 4m 32s |
+| **Failed** | `startedAt` | `failedAt` | Failed after 35m |
+
+`gestaltd app registry publish` reads `pending.json` when present and copies
+`PendingVersion.startedAt` into `publishStartedAt` on `versions/{version}.json`
+and `index.json`. CI publishes always run `pending set` first, so new registry
+entries include `publishStartedAt`. The field is **not required in the JSON
+schema** so readers tolerate legacy entries and manual publishes that skipped
+`pending set`; the UI shows `publishedAt` only when the start timestamp is absent.
+
+The app-admin API may include `publishingForSeconds` on pending rows and
+`publishDurationSeconds` on published and failed rows. Omit these fields when the
+start timestamp is missing.
 
 ---
 
@@ -323,24 +328,12 @@ Extend `GET /api/v1/apps/{app}/admin/registry` response:
   "registry": "toolshed",
   "desiredVersion": "0.0.0-snapshot.g…",
   "knownVersions": [ … ],
-  "publishedVersions": [
-    {
-      "version": "0.0.0-snapshot.g…",
-      "publishedAt": "2026-07-24T19:04:32Z",
-      "publishStartedAt": "2026-07-24T19:00:00Z",
-      "publishDurationSeconds": 272,
-      "platforms": ["linux/amd64"],
-      "sourceRef": "abc123…",
-      "sourceUrl": "https://github.com/…/commit/abc123…",
-      "publication": { … }
-    }
-  ],
+  "publishedVersions": [ … ],
   "pendingVersions": [
     {
       "version": "0.0.0-snapshot.g…",
       "startedAt": "2026-07-24T19:00:00Z",
       "updatedAt": "2026-07-24T19:04:12Z",
-      "publishingForSeconds": 252,
       "phase": "publishing",
       "sourceRef": "abc123…",
       "sourceUrl": "https://github.com/…/commit/abc123…",
@@ -352,7 +345,6 @@ Extend `GET /api/v1/apps/{app}/admin/registry` response:
       "version": "0.0.0-snapshot.g…",
       "startedAt": "2026-07-24T18:00:00Z",
       "failedAt": "2026-07-24T18:35:00Z",
-      "publishDurationSeconds": 2100,
       "reason": "stale",
       "sourceRef": "abc123…",
       "sourceUrl": "https://github.com/…/commit/abc123…",
@@ -371,9 +363,8 @@ Merge rules:
   cleanup), prefer **published** and omit pending and failed.
 - `pendingVersions` sorted by `startedAt` descending (newest first).
 - `failedVersions` sorted by `failedAt` descending (newest first).
-- `publishingForSeconds` on `pendingVersions` and `publishDurationSeconds` on
-  `publishedVersions` / `failedVersions` are computed at read time from the
-  timestamps above. Omit duration fields when the start anchor is missing.
+- Published rows may include `publishStartedAt`. Pending, published, and failed
+  rows may include computed duration fields. See [Publish duration](#publish-duration).
 
 Install and upgrade handlers ignore `pending.json` and `failed.json` entirely.
 
@@ -395,23 +386,20 @@ published entries (single newest-first list with a status column).
 Pending entries:
 
 - Show PR / commit provenance when present (same columns as published)
-- **Published** column shows elapsed publish time (for example “Publishing for
-  4m”) from `publishingForSeconds` or `startedAt`
+- **Published** column shows elapsed publish time from `startedAt`
 - **Action** column: Deploy disabled; optional “View workflow” link using
   `publication.workflowRunUrl`
-
-Published entries:
-
-- When `publishStartedAt` is present, show total publish time (for example
-  “Published in 4m 32s”) alongside `publishedAt`
-- Legacy rows without `publishStartedAt` show `publishedAt` only
 
 Failed entries:
 
 - Show PR / commit provenance when present
-- **Published** column shows `failedAt`, total time before failure (for example
-  “Failed after 35m”), and a reason label (`workflow_failed` → “Workflow
-  failed”, `stale` → “Timed out”)
+- **Published** column shows `failedAt`, total time before failure, and a reason
+  label (`workflow_failed` → “Workflow failed”, `stale` → “Timed out”)
+- **Action** column: Deploy disabled; “View workflow” when
+  `publication.workflowRunUrl` is present
+
+Published entries without `publishStartedAt` show `publishedAt` only. See
+[Publish duration](#publish-duration) for timing labels on all row types.
 
 Polling: extend `AppAdminPageClient` to poll every **12s** while
 `pendingVersions.length > 0` or `failedVersions.length > 0`, not only during
@@ -469,9 +457,9 @@ Add types and CLI first so CI can call the new commands.
 
 - Add `PendingIndex` / `PendingVersion` and `FailedIndex` / `FailedVersion` to
   `gestaltd/internal/appregistry/` ([models.md](./models.md) documents shapes).
-- Add optional `publishStartedAt` to `IndexVersion`, `PublishedVersion`, and the
-  publish upload path (read `pending.json` at publish time; do not mutate
-  pending).
+- Add `publishStartedAt` to `IndexVersion` and `PublishedVersion`. Set it in
+  `gestaltd app registry publish` by reading `pending.json` at upload time (do
+  not mutate pending). See [Publish duration](#publish-duration).
 - Add `gestaltd app registry pending set|clear|fail` and
   `gestaltd app registry publish` (move logic from `gestaltd app publish`).
 - `pending set` calls `PrunePendingIndex` and `PruneFailedIndex` before
@@ -487,8 +475,7 @@ Depends on **PR 1**. Exposes pending and failed catalog state to the admin page.
 
 - `FetchPendingIndex` and `FetchFailedIndex` in `gestaltd/internal/appregistry/`.
 - Extend `getAppAdminRegistry` with `pendingVersions[]` and `failedVersions[]`.
-- Include `publishStartedAt` on published rows and compute
-  `publishingForSeconds` / `publishDurationSeconds` at read time.
+- Expose `publishStartedAt` and computed duration fields per [Publish duration](#publish-duration).
 - Tests: fetch helpers via `registrytest` HTTP fixture; handler returns pending
   and failed entries alongside published. Extend [tests.md](./tests.md).
 
@@ -511,7 +498,7 @@ operators get correct GCS state before the UI exists.
 Depends on **PR 2**. Completes admin visibility.
 
 - **Publishing** and **Failed** rows in the `gestalt-providers` app admin
-  snapshots table, with elapsed and total publish duration labels.
+  snapshots table. Timing labels per [Publish duration](#publish-duration).
 - Poll every ~12s while any pending or failed version exists; prefer published
   entry when the same version appears in multiple lists.
 - Manual / browser smoke per [tests.md](./tests.md) when implementing.
@@ -540,6 +527,5 @@ on `pending set`. Stale pending (30 minutes without `updatedAt` refresh) records
 `gestaltd app registry pending set` as early as possible (once `PACKAGE_VERSION`,
 GCP auth, and `gestaltd` are available), not only when artifacts are ready.
 
-**Publish duration:** `publishStartedAt` is copied from pending at publish time
-and stored on published registry objects. Durations are derived at read/UI time,
-not stored as separate GCS fields.
+**Publish duration:** `publishStartedAt` on published registry objects; elapsed
+and total time derived at read/UI time. See [Publish duration](#publish-duration).

@@ -117,7 +117,7 @@ Each key in `versions` is a published version string (e.g. 0.0.0-snapshot.gabc12
 | `metadata` | string | yes | Relative path to the full published version JSON, e.g. `apps/g-issues/versions/0.0.1.json`. |
 | `platforms` | string array | no | Build targets available for this version (see example JSON). Derived from published version artifact keys at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
-| `publishStartedAt` | RFC 3339 timestamp | no | When the publish workflow recorded the version as pending (copied from `PendingVersion.startedAt` at upload time). Omitted on legacy publishes and when `pending set` was not called. Used with `publishedAt` to show total publish duration. |
+| `publishStartedAt` | RFC 3339 timestamp | no | When CI recorded the version as pending. Copied from `PendingVersion.startedAt` at publish time. Present on CI publishes after `pending set`; omitted on legacy entries and manual publishes without a pending entry. See [pending-publish.md](./pending-publish.md#publish-duration). |
 | `sourceRef` | string | no | Packaged commit SHA. Copied from `PublishedVersion.sourceRef`. |
 | `repository` | string | no | Source repository. Copied from `PublishedVersion.repository`. |
 | `publication` | object | no | Publish workflow provenance. Copied from `PublishedVersion.publication`. |
@@ -400,7 +400,7 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
 | `requires` | object | no | Declared dependencies on other apps. Copied from the provider release `staticValidation.requires` block at publish time. |
 | `compatibility` | object | no | Runtime constraints, e.g. minimum `gestaltd` version. Copied from the provider release `staticValidation.compatibility` block at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
-| `publishStartedAt` | RFC 3339 timestamp | no | When the publish workflow recorded the version as pending. Copied from `PendingVersion.startedAt` when `pending.json` contains this version at upload time. Omitted on legacy publishes. |
+| `publishStartedAt` | RFC 3339 timestamp | no | When CI recorded the version as pending. Copied from `PendingVersion.startedAt` at publish time. Present on CI publishes after `pending set`; omitted on legacy entries and manual publishes without a pending entry. See [pending-publish.md](./pending-publish.md#publish-duration). |
 
 #### `PublishedVersion.publication` · `Publication`
 
