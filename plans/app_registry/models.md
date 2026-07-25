@@ -281,7 +281,7 @@ Each key is a version string whose publish attempt failed.
 | `repository` | string | no | Source repository. Same format as `IndexVersion.repository`. |
 | `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (copied from pending). |
 | `failedAt` | RFC 3339 timestamp | yes | When the failure was recorded (UTC). |
-| `reason` | string | yes | `workflow_failed` — CI called `pending fail`. `stale` — pending `updatedAt` exceeded 30 minutes during `PrunePendingIndex`. |
+| `reason` | string | yes | `workflow_failed` — CI called `pending fail`. `stale` — pending `startedAt` exceeded 2 hours during `PrunePendingIndex`. |
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Copied from the pending row when present. |
 
 Writes use the same optimistic-concurrency pattern as `pending.json`.

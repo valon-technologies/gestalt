@@ -53,7 +53,7 @@ Add mutable `pending.json` and `failed.json` catalogs in GCS per app.
 - **Failure** — `gestaltd app registry pending fail` removes the pending entry
   and records `failedAt` in `failed.json`.
 - **Stale** — `PrunePendingIndex` on the next `pending set` moves entries whose
-  `updatedAt` is older than 30 minutes to `failed.json` with `reason=stale`.
+  `startedAt` is older than **2 hours** to `failed.json` with `reason=stale`.
 
 `gestaltd` reads both catalogs alongside `index.json` and exposes them through
 the app-admin registry API. The UI merges pending, failed, and published entries
@@ -144,7 +144,7 @@ The workflow run URL remains the failure audit trail.
 | `reason` | Meaning |
 |----------|---------|
 | `workflow_failed` | CI called `gestaltd app registry pending fail` after packaging or publish failed |
-| `stale` | Pending `updatedAt` was older than 30 minutes when `PrunePendingIndex` ran |
+| `stale` | Pending `startedAt` was older than 2 hours when `PrunePendingIndex` ran |
 
 ---
 
@@ -162,9 +162,14 @@ For each `pending.{version}` entry:
 
 | Condition | Action |
 |-----------|--------|
-| `updatedAt` older than **30 minutes** | Move to `failed.json` with `failedAt=now`, `reason=stale` |
+| `startedAt` older than **2 hours** | Move to `failed.json` with `failedAt=now`, `reason=stale` |
 | Same `version` already listed in `index.json` | Remove from pending only (publish succeeded; pending cleanup missed) |
 | Otherwise | Keep |
+
+Use `startedAt`, not `updatedAt`, for the stale threshold. Packaging can take
+tens of minutes and `updatedAt` is only refreshed when the same version re-runs
+`pending set`; concurrent publishes for one app (different snapshot versions) must
+not mark an in-flight run as stale while it is still within the window.
 
 ### `PruneFailedIndex`
 
@@ -176,9 +181,13 @@ For each `failed.{version}` entry:
 | Same `version` already listed in `index.json` | Remove |
 | Otherwise | Keep |
 
-The 30-minute pending threshold applies on `gestaltd app registry pending set`.
+The 2-hour pending threshold applies on `gestaltd app registry pending set`.
 Failed entries are retained for 30 days so operators can see recent failures on
 the admin page.
+
+`pending set` also **removes `failed.{version}`** for the version being upserted
+before prune helpers run, so a workflow retry does not leave the same version in
+both catalogs.
 
 `PrunePendingIndex` and `PruneFailedIndex` use the same optimistic-concurrency
 loop as other catalog writes: download generation, merge, upload with
@@ -201,6 +210,7 @@ CI: publish-app-registry.yml
 │
 ├─2. gestaltd app registry pending set
 │      (same --bucket/--app/--version/--ref/--workflow-run-url flags as step 4)
+│      → remove failed.{version} for this version (workflow retry)
 │      → PrunePendingIndex (stale → failed.json; already-published → drop)
 │      → PruneFailedIndex (drop entries older than 30 days or already published)
 │      → upsert pending.json for this version (phase=publishing)
@@ -360,7 +370,7 @@ Merge rules:
 
 - A version MUST NOT appear in more than one of `pendingVersions`,
   `failedVersions`, and `publishedVersions`. If multiple exist (race or missed
-  cleanup), prefer **published** and omit pending and failed.
+  cleanup), prefer **published**, then **pending**, then **failed**.
 - `pendingVersions` sorted by `startedAt` descending (newest first).
 - `failedVersions` sorted by `failedAt` descending (newest first).
 - Published rows may include `publishStartedAt`. Pending, published, and failed
@@ -402,8 +412,11 @@ Published entries without `publishStartedAt` show `publishedAt` only. See
 [Publish duration](#publish-duration) for timing labels on all row types.
 
 Polling: extend `AppAdminPageClient` to poll every **12s** while
-`pendingVersions.length > 0` or `failedVersions.length > 0`, not only during
-fleet rollout. Stop polling when idle.
+`pendingVersions.length > 0` or fleet rollout is non-terminal. **Do not poll
+solely because `failedVersions` is non-empty** — failed rows are retained for
+30 days for visibility but are not in-flight; load them on page fetch and after
+deploy actions. Stop polling when no pending versions remain and rollout is
+terminal.
 
 ---
 
@@ -434,7 +447,8 @@ move or duplicate install earlier so pending can be recorded at workflow start).
 | Published catalog remains immutable per version | `versions/{version}.json` and artifacts still uploaded with `if-generation-match=0` |
 | Public read stays HTTP GET | `pending.json` and `failed.json` per app, no bucket listing |
 | Concurrent publishes for one app | Rare; `pending` map holds multiple versions. CI concurrency is per `(app, sha)`; different SHAs produce different version strings |
-| Stuck pending entries become failed | `PrunePendingIndex` on `pending set`; 30-minute `updatedAt` threshold writes `failedAt` with `reason=stale` |
+| Stuck pending entries become failed | `PrunePendingIndex` on `pending set`; 2-hour `startedAt` threshold writes `failedAt` with `reason=stale` |
+| Workflow retries clear prior failures | `pending set` removes `failed.{version}` for the version being upserted |
 | Old failed entries are pruned | `PruneFailedIndex` on `pending set`; 30-day `failedAt` threshold |
 
 ---
@@ -462,8 +476,9 @@ Add types and CLI first so CI can call the new commands.
   not mutate pending). See [Publish duration](#publish-duration).
 - Add `gestaltd app registry pending set|clear|fail` and
   `gestaltd app registry publish` (move logic from `gestaltd app publish`).
-- `pending set` calls `PrunePendingIndex` and `PruneFailedIndex` before
-  upsert; stale pending → `failed.json`. `gestaltd app registry publish` does
+- `pending set` removes `failed.{version}` for the version being upserted, then
+  calls `PrunePendingIndex` and `PruneFailedIndex` before upsert; stale pending
+  (`startedAt` > 2 hours) → `failed.json`. `gestaltd app registry publish` does
   not touch `pending.json` or `failed.json`.
 - Deprecate `gestaltd app publish` (alias → `gestaltd app registry publish`).
 - Tests: pending write/prune/fail/clear, stale → failed, deprecated alias. Add a
@@ -499,8 +514,8 @@ Depends on **PR 2**. Completes admin visibility.
 
 - **Publishing** and **Failed** rows in the `gestalt-providers` app admin
   snapshots table. Timing labels per [Publish duration](#publish-duration).
-- Poll every ~12s while any pending or failed version exists; prefer published
-  entry when the same version appears in multiple lists.
+- Poll every ~12s while any pending version exists or rollout is non-terminal.
+  Prefer published entry when the same version appears in multiple lists.
 - Manual / browser smoke per [tests.md](./tests.md) when implementing.
 
 ---
@@ -518,7 +533,7 @@ failed catalogs. CI calls `pending clear` on success and `pending fail` on
 failure.
 
 **Failed retention:** `failed.json` entries are kept for **30 days**, then pruned
-on `pending set`. Stale pending (30 minutes without `updatedAt` refresh) records
+on `pending set`. Stale pending (`startedAt` older than 2 hours) records
 `failedAt` with `reason=stale`.
 
 **Single phase:** Pending entries use `phase=publishing` from workflow start.
