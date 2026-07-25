@@ -17,14 +17,14 @@ import (
 const appRegistryCatalogUpdateAttempts = 5
 
 type appRegistryPendingFlags struct {
-	bucket         *string
-	appName        *string
-	version        *string
-	ref            *string
-	workflowRunURL *string
-	triggerPRNumber *int
-	triggerPRURL   *string
-	triggerPRTitle *string
+	bucket           *string
+	appName          *string
+	version          *string
+	ref              *string
+	workflowRunURL   *string
+	triggerPRNumber  *int
+	triggerPRURL     *string
+	triggerPRTitle   *string
 	triggerCommitSHA *string
 	triggerCommitURL *string
 }

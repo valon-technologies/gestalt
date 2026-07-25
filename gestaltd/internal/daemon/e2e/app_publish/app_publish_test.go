@@ -10,10 +10,12 @@ import (
 )
 
 func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	pluginDir := newAppRegistryPublishFixture(t, rootDir)
 	initProviderPublishGitRepo(t, rootDir, "https://github.com/testowner/apps.git")
-	installFakeGcloudForAppPublishDryRun(t)
+	fakeGcloudEnv := installFakeGcloudForAppPublishDryRun(t)
 	outputDir := t.TempDir()
 	const version = "0.0.0-snapshot.g651a5c30feb995c9364c38f63d0d5c3880bc2055"
 	const ref = "651a5c30feb995c9364c38f63d0d5c3880bc2055"
@@ -22,7 +24,7 @@ func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	stdout, stderr, err := runAppCommandStreams(rootDir,
+	stdout, stderr, err := runAppCommandStreamsWithEnv(rootDir, fakeGcloudEnv,
 		"publish",
 		"--bucket", "gs://gestalt-app-registry",
 		"--app", releaseTestAppName,
@@ -168,10 +170,12 @@ exit 1
 }
 
 func TestRun_AppRegistryPublishDryRunMatchesDeprecatedAlias(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	pluginDir := newAppRegistryPublishFixture(t, rootDir)
 	initProviderPublishGitRepo(t, rootDir, "https://github.com/testowner/apps.git")
-	installFakeGcloudForAppPublishDryRun(t)
+	fakeGcloudEnv := installFakeGcloudForAppPublishDryRun(t)
 	outputDir := t.TempDir()
 	const version = "0.0.0-snapshot.g651a5c30feb995c9364c38f63d0d5c3880bc2055"
 	const ref = "651a5c30feb995c9364c38f63d0d5c3880bc2055"
@@ -180,7 +184,7 @@ func TestRun_AppRegistryPublishDryRunMatchesDeprecatedAlias(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	stdout, stderr, err := runAppCommandStreams(rootDir,
+	stdout, stderr, err := runAppCommandStreamsWithEnv(rootDir, fakeGcloudEnv,
 		"registry", "publish",
 		"--bucket", "gs://gestalt-app-registry",
 		"--app", releaseTestAppName,

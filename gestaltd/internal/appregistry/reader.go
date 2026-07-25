@@ -126,7 +126,8 @@ func VersionsFromIndex(index *Index, appName string) []VersionSummary {
 		return []VersionSummary{}
 	}
 	out := make([]VersionSummary, 0, len(appVersions.Versions))
-	for version, summary := range appVersions.Versions {
+	for version := range appVersions.Versions {
+		summary := appVersions.Versions[version]
 		out = append(out, VersionSummary{
 			Version:     version,
 			Metadata:    summary.Metadata,

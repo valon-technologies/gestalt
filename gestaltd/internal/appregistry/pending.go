@@ -410,7 +410,8 @@ func ApplyPendingSet(pending *PendingIndex, failed *FailedIndex, published *Inde
 			pendingChanged = true
 		}
 	}
-	_, _ = UpsertPendingVersion(pending, appName, version, now)
-	pendingChanged = true
+	if _, changed := UpsertPendingVersion(pending, appName, version, now); changed {
+		pendingChanged = true
+	}
 	return pendingChanged, failedChanged
 }

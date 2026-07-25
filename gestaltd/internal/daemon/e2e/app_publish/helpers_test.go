@@ -20,7 +20,7 @@ const (
 	releaseTestSource  = "github.com/testowner/apps/apps/release-test"
 )
 
-func installFakeGcloudForAppPublishDryRun(t *testing.T) {
+func installFakeGcloudForAppPublishDryRun(t *testing.T) []string {
 	t.Helper()
 
 	binDir := t.TempDir()
@@ -36,7 +36,7 @@ exit 1
 `), 0o755); err != nil {
 		t.Fatalf("write fake gcloud: %v", err)
 	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return []string{"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")}
 }
 
 func gestaltdCommand(args ...string) *exec.Cmd {
@@ -44,12 +44,19 @@ func gestaltdCommand(args ...string) *exec.Cmd {
 }
 
 func runAppCommandStreams(workDir string, args ...string) ([]byte, []byte, error) {
-	return runGestaltdCommandStreams(workDir, append([]string{"app"}, args...)...)
+	return runAppCommandStreamsWithEnv(workDir, nil, args...)
 }
 
-func runGestaltdCommandStreams(workDir string, args ...string) ([]byte, []byte, error) {
+func runAppCommandStreamsWithEnv(workDir string, extraEnv []string, args ...string) ([]byte, []byte, error) {
+	return runGestaltdCommandStreams(workDir, extraEnv, append([]string{"app"}, args...)...)
+}
+
+func runGestaltdCommandStreams(workDir string, extraEnv []string, args ...string) ([]byte, []byte, error) {
 	cmd := gestaltdCommand(args...)
 	cmd.Dir = workDir
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

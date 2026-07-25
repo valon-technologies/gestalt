@@ -49,16 +49,16 @@ type IndexVersion struct {
 }
 
 type Entry struct {
-	SchemaVersion int                 `json:"schemaVersion"`
-	App           string              `json:"app"`
-	Version       string              `json:"version"`
-	SourceRef     string              `json:"sourceRef"`
-	ManifestPath  string              `json:"manifestPath"`
-	Repository    string              `json:"repository"`
-	Publication   *Publication        `json:"publication,omitempty"`
-	Artifacts     map[string]Artifact `json:"artifacts"`
-	Interface     Interface           `json:"interface,omitempty"`
-	Requires      Requires            `json:"requires,omitempty"`
+	SchemaVersion    int                 `json:"schemaVersion"`
+	App              string              `json:"app"`
+	Version          string              `json:"version"`
+	SourceRef        string              `json:"sourceRef"`
+	ManifestPath     string              `json:"manifestPath"`
+	Repository       string              `json:"repository"`
+	Publication      *Publication        `json:"publication,omitempty"`
+	Artifacts        map[string]Artifact `json:"artifacts"`
+	Interface        Interface           `json:"interface,omitempty"`
+	Requires         Requires            `json:"requires,omitempty"`
 	Compatibility    Compatibility       `json:"compatibility,omitempty"`
 	PublishedAt      time.Time           `json:"publishedAt"`
 	PublishStartedAt time.Time           `json:"publishStartedAt,omitempty"`
@@ -268,15 +268,15 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 }
 
 type BuildEntryInput struct {
-	Manifest     *providermanifestv1.Manifest
-	Version      string
-	SourceRef    string
-	ManifestPath string
-	Publication  *Publication
-	Release      *providerrelease.Metadata
-	Artifacts         []PublishArtifact
-	PublishedAt       time.Time
-	PublishStartedAt  time.Time
+	Manifest         *providermanifestv1.Manifest
+	Version          string
+	SourceRef        string
+	ManifestPath     string
+	Publication      *Publication
+	Release          *providerrelease.Metadata
+	Artifacts        []PublishArtifact
+	PublishedAt      time.Time
+	PublishStartedAt time.Time
 }
 
 func buildArtifacts(artifacts []PublishArtifact) (map[string]Artifact, error) {
@@ -467,7 +467,8 @@ func validateIndex(index *Index) error {
 		if len(app.Versions) == 0 {
 			return fmt.Errorf("app registry index app %q has no versions", appName)
 		}
-		for version, release := range app.Versions {
+		for version := range app.Versions {
+			release := app.Versions[version]
 			if err := source.ValidateVersion(version); err != nil {
 				return fmt.Errorf("app registry index app %q version %q is invalid: %w", appName, version, err)
 			}
