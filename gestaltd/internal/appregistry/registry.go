@@ -42,7 +42,7 @@ type IndexVersion struct {
 	Metadata         string       `json:"metadata"`
 	Platforms        []string     `json:"platforms,omitempty"`
 	PublishedAt      time.Time    `json:"publishedAt"`
-	PublishStartedAt *time.Time    `json:"publishStartedAt,omitempty"`
+	PublishStartedAt *time.Time   `json:"publishStartedAt,omitempty"`
 	SourceRef        string       `json:"sourceRef,omitempty"`
 	Repository       string       `json:"repository,omitempty"`
 	Publication      *Publication `json:"publication,omitempty"`
