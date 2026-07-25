@@ -22,7 +22,7 @@ const (
 	FailedReasonWorkflowFailed = "workflow_failed"
 	FailedReasonStale          = "stale"
 
-	PendingStaleAfter = 30 * time.Minute
+	PendingStaleAfter = 2 * time.Hour
 	FailedRetainFor   = 30 * 24 * time.Hour
 )
 
@@ -250,7 +250,7 @@ func PrunePendingIndex(pending *PendingIndex, failed *FailedIndex, published *In
 			pendingChanged = true
 			continue
 		}
-		if now.Sub(entry.UpdatedAt.UTC()) > PendingStaleAfter {
+		if now.Sub(entry.StartedAt.UTC()) > PendingStaleAfter {
 			failed.Failed[version] = failedVersionFromPending(entry, now, FailedReasonStale)
 			delete(pending.Pending, version)
 			pendingChanged = true
@@ -291,6 +291,20 @@ func failedVersionFromPending(entry PendingVersion, failedAt time.Time, reason s
 		Reason:      reason,
 		Publication: clonePublication(entry.Publication),
 	}
+}
+
+// RemoveFailedVersion deletes one failed entry. The second return value reports
+// whether the version was present.
+func RemoveFailedVersion(index *FailedIndex, version string) bool {
+	if index == nil || index.Failed == nil {
+		return false
+	}
+	version = strings.TrimSpace(version)
+	if _, ok := index.Failed[version]; !ok {
+		return false
+	}
+	delete(index.Failed, version)
+	return true
 }
 
 // UpsertPendingVersion inserts or updates one pending version. startedAt is

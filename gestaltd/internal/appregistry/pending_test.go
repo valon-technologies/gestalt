@@ -10,7 +10,7 @@ func TestPrunePendingIndex_MovesStaleEntryToFailed(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)
-	staleUpdatedAt := now.Add(-31 * time.Minute)
+	staleStartedAt := now.Add(-2*time.Hour - time.Minute)
 	pending := &PendingIndex{
 		SchemaVersion: PendingIndexSchemaVersion,
 		App:           "traffic-cop",
@@ -18,8 +18,8 @@ func TestPrunePendingIndex_MovesStaleEntryToFailed(t *testing.T) {
 			"0.0.0-snapshot.gabc123": {
 				Version:   "0.0.0-snapshot.gabc123",
 				SourceRef: "abc123def456abc123def456abc123def456abcd",
-				StartedAt: staleUpdatedAt,
-				UpdatedAt: staleUpdatedAt,
+				StartedAt: staleStartedAt,
+				UpdatedAt: now.Add(-30 * time.Minute),
 				Phase:     PendingPhasePublishing,
 			},
 		},
@@ -39,6 +39,54 @@ func TestPrunePendingIndex_MovesStaleEntryToFailed(t *testing.T) {
 	}
 	if entry.Reason != FailedReasonStale || !entry.FailedAt.Equal(now) {
 		t.Fatalf("failed entry = %#v", entry)
+	}
+}
+
+func TestPrunePendingIndex_KeepsInFlightEntryWithinStaleWindow(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)
+	inFlightStartedAt := now.Add(-90 * time.Minute)
+	pending := &PendingIndex{
+		SchemaVersion: PendingIndexSchemaVersion,
+		App:           "traffic-cop",
+		Pending: map[string]PendingVersion{
+			"0.0.0-snapshot.gabc123": {
+				Version:   "0.0.0-snapshot.gabc123",
+				SourceRef: "abc123def456abc123def456abc123def456abcd",
+				StartedAt: inFlightStartedAt,
+				UpdatedAt: inFlightStartedAt,
+				Phase:     PendingPhasePublishing,
+			},
+		},
+	}
+	failed := NewEmptyFailedIndex("traffic-cop")
+
+	pendingChanged, failedChanged := PrunePendingIndex(pending, failed, NewEmptyIndex(), now)
+	if pendingChanged || failedChanged {
+		t.Fatalf("pendingChanged=%v failedChanged=%v", pendingChanged, failedChanged)
+	}
+	if len(pending.Pending) != 1 {
+		t.Fatalf("pending = %#v", pending.Pending)
+	}
+}
+
+func TestRemoveFailedVersion(t *testing.T) {
+	t.Parallel()
+
+	failed := &FailedIndex{
+		Failed: map[string]FailedVersion{
+			"0.0.1": {Version: "0.0.1"},
+		},
+	}
+	if !RemoveFailedVersion(failed, "0.0.1") {
+		t.Fatal("expected remove to succeed")
+	}
+	if len(failed.Failed) != 0 {
+		t.Fatalf("failed = %#v", failed.Failed)
+	}
+	if RemoveFailedVersion(failed, "0.0.1") {
+		t.Fatal("expected second remove to be a no-op")
 	}
 }
 

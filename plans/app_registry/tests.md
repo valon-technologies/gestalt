@@ -86,12 +86,14 @@ go test ./internal/daemon/e2e/app_publish -run 'AppRegistryPublish|AppPublish' -
 
 ### `internal/appregistry/pending_test.go`
 
-- **`TestPrunePendingIndex_MovesStaleEntryToFailed`** — pending `updatedAt` older than 30 minutes moves to `failed.json` with `reason=stale`.
+- **`TestPrunePendingIndex_MovesStaleEntryToFailed`** — pending `startedAt` older than 2 hours moves to `failed.json` with `reason=stale`.
+- **`TestPrunePendingIndex_KeepsInFlightEntryWithinStaleWindow`** — in-flight pending younger than 2 hours is not stale-pruned.
 - **`TestPrunePendingIndex_DropsAlreadyPublishedVersion`** — pending entry is removed when the version is already in `index.json`.
 - **`TestPruneFailedIndex_RemovesOldAndPublishedEntries`** — failed entries older than 30 days or already published are pruned.
 - **`TestUpsertPendingVersion_PreservesStartedAt`** — `pending set` refresh keeps the original `startedAt`.
 - **`TestRecordFailedVersion_IsIdempotent`** — `pending fail` does not overwrite an existing failed entry.
 - **`TestDecodePendingAndFailedIndexRoundTrip`** — JSON encode/decode validates catalog shapes.
+- **`TestRemoveFailedVersion`** — `pending set` clears a prior `failed.{version}` on workflow retry.
 - **`TestPublishStartedAtFromPending`** — publish reads `startedAt` from a matching pending entry.
 - **`TestUpsertAppIndex_CopiesPublishStartedAt`** — published index entries copy `publishStartedAt` from the version metadata.
 
