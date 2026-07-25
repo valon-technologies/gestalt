@@ -256,16 +256,16 @@ func mutateAppRegistryPendingCatalog(registry config.AppRegistryConfig, appName,
 		if !state.pendingChanged && !state.failedChanged {
 			return nil
 		}
-		if state.failedChanged {
-			if err := uploadAppRegistryCatalogDocument(failedURL, sourceRef, state.failedGen, state.failed); err != nil {
+		if state.pendingChanged {
+			if err := uploadAppRegistryCatalogDocument(pendingURL, sourceRef, state.pendingGen, state.pending); err != nil {
 				if appPublishPreconditionFailed(err) && attempt < appRegistryCatalogUpdateAttempts {
 					continue
 				}
 				return err
 			}
 		}
-		if state.pendingChanged {
-			if err := uploadAppRegistryCatalogDocument(pendingURL, sourceRef, state.pendingGen, state.pending); err != nil {
+		if state.failedChanged {
+			if err := uploadAppRegistryCatalogDocument(failedURL, sourceRef, state.failedGen, state.failed); err != nil {
 				if appPublishPreconditionFailed(err) && attempt < appRegistryCatalogUpdateAttempts {
 					continue
 				}
