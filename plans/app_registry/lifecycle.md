@@ -688,6 +688,12 @@ Rules:
 - `publishedVersions` comes from the registry index, newest `publishedAt` first.
   Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication`
   when recorded. Legacy versions may omit `publication`.
+- `pendingVersions` and `failedVersions` come from `pending.json` and
+  `failed.json`. See [pending-publish.md](./pending-publish.md#read-path).
+- When the same version appears in more than one catalog (race or missed cleanup),
+  apply merge precedence **published** > **pending** > **failed** before
+  returning the response. See
+  [pending-publish.md — Merge rules](./pending-publish.md#app-admin-api).
 - `selectionDisabled` is true only while rollout state is `enrolling` or
   `restarting`.
 
