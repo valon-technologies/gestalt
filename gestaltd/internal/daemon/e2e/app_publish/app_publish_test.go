@@ -15,6 +15,7 @@ func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
 	rootDir := t.TempDir()
 	pluginDir := newAppRegistryPublishFixture(t, rootDir)
 	initProviderPublishGitRepo(t, rootDir, "https://github.com/testowner/apps.git")
+	fakeGcloudEnv := installFakeGcloudForAppPublishDryRun(t)
 	outputDir := t.TempDir()
 	const version = "0.0.0-snapshot.g651a5c30feb995c9364c38f63d0d5c3880bc2055"
 	const ref = "651a5c30feb995c9364c38f63d0d5c3880bc2055"
@@ -23,7 +24,7 @@ func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	stdout, stderr, err := runAppCommandStreams(rootDir,
+	stdout, stderr, err := runAppCommandStreamsWithEnv(rootDir, fakeGcloudEnv,
 		"publish",
 		"--bucket", "gs://gestalt-app-registry",
 		"--app", releaseTestAppName,
@@ -162,5 +163,51 @@ exit 1
 	}
 	if strings.Contains(gotStderr, "not found") || strings.Contains(gotStderr, "precondition failed") {
 		t.Fatalf("raw gcloud diagnostics leaked into normal stderr:\n%s", gotStderr)
+	}
+	if !strings.Contains(gotStderr, "gestaltd app publish is deprecated; use gestaltd app registry publish") {
+		t.Fatalf("app publish stderr missing deprecation warning:\n%s", gotStderr)
+	}
+}
+
+func TestRun_AppRegistryPublishDryRunMatchesDeprecatedAlias(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	pluginDir := newAppRegistryPublishFixture(t, rootDir)
+	initProviderPublishGitRepo(t, rootDir, "https://github.com/testowner/apps.git")
+	fakeGcloudEnv := installFakeGcloudForAppPublishDryRun(t)
+	outputDir := t.TempDir()
+	const version = "0.0.0-snapshot.g651a5c30feb995c9364c38f63d0d5c3880bc2055"
+	const ref = "651a5c30feb995c9364c38f63d0d5c3880bc2055"
+	runProviderPackageCommand(t, pluginDir,
+		"--version", version,
+		"--output", outputDir,
+	)
+
+	stdout, stderr, err := runAppCommandStreamsWithEnv(rootDir, fakeGcloudEnv,
+		"registry", "publish",
+		"--bucket", "gs://gestalt-app-registry",
+		"--app", releaseTestAppName,
+		"--version", version,
+		"--ref", ref,
+		"--dist-dir", outputDir,
+		"--dry-run",
+	)
+	if err != nil {
+		t.Fatalf("app registry publish failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if strings.Contains(string(stderr), "gestaltd app publish is deprecated") {
+		t.Fatalf("registry publish should not print deprecation warning:\n%s", stderr)
+	}
+	var plan struct {
+		Schema  string `json:"schema"`
+		AppName string `json:"appName"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(stdout, &plan); err != nil {
+		t.Fatalf("decode app registry publish plan: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if plan.Schema != "gestaltd.app.publish.plan.v1" || plan.AppName != releaseTestAppName || plan.Version != version {
+		t.Fatalf("plan = %#v", plan)
 	}
 }

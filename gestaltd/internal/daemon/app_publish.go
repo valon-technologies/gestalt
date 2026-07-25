@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -62,9 +63,13 @@ type appPublishObject struct {
 	SHA256     string `json:"sha256,omitempty"`
 }
 
-func runAppPublish(args []string) (err error) {
-	fs := flag.NewFlagSet("gestaltd app publish", flag.ContinueOnError)
-	fs.Usage = func() { printAppPublishUsage(fs.Output()) }
+func runAppPublish(args []string) error {
+	return runAppPublishCommand("gestaltd app publish", printAppPublishUsage, args)
+}
+
+func runAppPublishCommand(commandName string, usage func(io.Writer), args []string) error {
+	fs := flag.NewFlagSet(commandName, flag.ContinueOnError)
+	fs.Usage = func() { usage(fs.Output()) }
 	bucket := fs.String("bucket", "", "GCS bucket name for registry uploads")
 	appName := fs.String("app", "", "app name under apps/{app}/manifest.yaml")
 	version := fs.String("version", "", "semantic version guard")
@@ -168,18 +173,21 @@ func runAppPublish(args []string) (err error) {
 		return err
 	}
 
+	publishStartedAt := loadAppRegistryPublishStartedAt(registry, strings.TrimSpace(*appName), strings.TrimSpace(*version))
+
 	plan, err := buildAppPublishPlan(appPublishPlanInput{
-		Registry:     registry,
-		DisplayName:  sourceManifest.DisplayName,
-		Description:  sourceManifest.Description,
-		Version:      *version,
-		SourceRef:    sourceRef,
-		ManifestPath: sourceInfo.ManifestPath,
-		Publication:  publication,
-		Manifest:     sourceManifest,
-		Release:      releaseMetadata,
-		Archives:     releaseArchives,
-		MetadataPath: filepath.Join(tmpDir, providerrelease.MetadataFile),
+		Registry:         registry,
+		DisplayName:      sourceManifest.DisplayName,
+		Description:      sourceManifest.Description,
+		Version:          *version,
+		SourceRef:        sourceRef,
+		ManifestPath:     sourceInfo.ManifestPath,
+		Publication:      publication,
+		Manifest:         sourceManifest,
+		Release:          releaseMetadata,
+		Archives:         releaseArchives,
+		MetadataPath:     filepath.Join(tmpDir, providerrelease.MetadataFile),
+		PublishStartedAt: publishStartedAt,
 	})
 	if err != nil {
 		return err
@@ -326,17 +334,18 @@ func gitRootFromWorkingDirectory() (string, error) {
 }
 
 type appPublishPlanInput struct {
-	Registry     config.AppRegistryConfig
-	DisplayName  string
-	Description  string
-	Version      string
-	SourceRef    string
-	ManifestPath string
-	Publication  *appregistry.Publication
-	Manifest     *providermanifestv1.Manifest
-	Release      *providerrelease.Metadata
-	Archives     []releaseArchive
-	MetadataPath string
+	Registry         config.AppRegistryConfig
+	DisplayName      string
+	Description      string
+	Version          string
+	SourceRef        string
+	ManifestPath     string
+	Publication      *appregistry.Publication
+	Manifest         *providermanifestv1.Manifest
+	Release          *providerrelease.Metadata
+	Archives         []releaseArchive
+	MetadataPath     string
+	PublishStartedAt time.Time
 }
 
 func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
@@ -391,13 +400,14 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 	}
 
 	entry, err := appregistry.BuildEntry(appregistry.BuildEntryInput{
-		Manifest:     input.Manifest,
-		Version:      input.Version,
-		SourceRef:    input.SourceRef,
-		ManifestPath: input.ManifestPath,
-		Publication:  input.Publication,
-		Release:      input.Release,
-		Artifacts:    publishArtifacts,
+		Manifest:         input.Manifest,
+		Version:          input.Version,
+		SourceRef:        input.SourceRef,
+		ManifestPath:     input.ManifestPath,
+		Publication:      input.Publication,
+		Release:          input.Release,
+		Artifacts:        publishArtifacts,
+		PublishStartedAt: input.PublishStartedAt,
 	})
 	if err != nil {
 		return appPublishPlan{}, err
@@ -670,6 +680,27 @@ func appPublishPreconditionFailed(err error) bool {
 	return strings.Contains(text, "precondition") ||
 		strings.Contains(text, "generation") ||
 		strings.Contains(text, "412")
+}
+
+func loadAppRegistryPublishStartedAt(registry config.AppRegistryConfig, appName, version string) time.Time {
+	storageRoot, err := registry.StorageURL()
+	if err != nil {
+		return time.Time{}
+	}
+	pendingURL := appregistry.StorageURL(storageRoot, appregistry.AppPendingPath(appName))
+	_, pendingData, err := downloadAppRegistryObject(pendingURL)
+	if err != nil || len(pendingData) == 0 {
+		return time.Time{}
+	}
+	pending, err := appregistry.DecodePendingIndex(pendingData)
+	if err != nil {
+		return time.Time{}
+	}
+	startedAt, ok := appregistry.PublishStartedAtFromPending(pending, version)
+	if !ok {
+		return time.Time{}
+	}
+	return startedAt
 }
 
 func downloadAppRegistryObject(storageURL string) (int64, []byte, error) {
