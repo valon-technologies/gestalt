@@ -10,8 +10,7 @@ Related docs:
 - [admin.md](./admin.md) — app admin UI capabilities
 - [service.md](./service.md) — Go publish/read helpers
 - [lifecycle.md](./lifecycle.md) — app-admin HTTP API
-
----
+- [tests.md](./tests.md#pending-catalog-write-path) — write-path and admin tests
 
 ## Problem
 
@@ -23,8 +22,6 @@ During CI (`publish-app-registry.yml`), operators see nothing on the admin page
 while a publish is running — even though the version string and workflow run are
 already known. There is no registry signal between “workflow started” and
 “index updated”.
-
----
 
 ## Goals
 
@@ -41,11 +38,11 @@ Operators on `/apps/{app}/admin` should be able to answer:
 | Did a recent publish fail? | Row with status **Failed** and `failedAt` |
 | Why did it fail? | `reason` on the failed entry (`workflow_failed` or `stale`) |
 
----
-
 ## Design summary
 
-Add mutable `pending.json` and `failed.json` catalogs in GCS per app.
+Add mutable `pending.json` and `failed.json` catalogs in GCS per app. Scope is
+app-scoped `/apps/{app}/admin` only — the embedded fleet `/admin` registry UI does
+not show publishing state.
 
 - **Start** — CI calls `gestaltd app registry pending set` when the publish
   workflow starts.
@@ -62,8 +59,6 @@ in the snapshots table.
 Pending and failed versions are **not** installable. Install-time validation
 continues to read only `versions/{version}.json` via the published index
 contract.
-
----
 
 ## Publish duration
 
@@ -88,8 +83,6 @@ The app-admin API may include `publishingForSeconds` on pending rows and
 `publishDurationSeconds` on published and failed rows. Omit these fields when the
 start timestamp is missing.
 
----
-
 ## GCS layout
 
 Extend the per-app registry tree:
@@ -109,8 +102,6 @@ apps/{app}/
 `pending.json` and `failed.json` are mutable catalogs (like `index.json`), not
 immutable release objects. Use the same optimistic-concurrency update pattern as
 index writes: read generation, merge, upload with `if-generation-match`.
-
----
 
 ## PendingIndex
 
@@ -132,8 +123,6 @@ On workflow failure, `gestaltd app registry pending fail` removes the pending
 entry and upserts `failed.json` with `failedAt` and `reason=workflow_failed`.
 The workflow run URL remains the failure audit trail.
 
----
-
 ## FailedIndex
 
 `failed.json` document shape, fields, and example:
@@ -145,8 +134,6 @@ The workflow run URL remains the failure audit trail.
 |----------|---------|
 | `workflow_failed` | CI called `gestaltd app registry pending fail` after packaging or publish failed |
 | `stale` | Pending `startedAt` was older than 30 minutes when `PrunePendingIndex` ran |
-
----
 
 ## Self-healing
 
@@ -197,8 +184,6 @@ Every app publish workflow self-heals stuck pending entries on the next merge to
 Prune is idempotent and safe to run concurrently with an in-flight publish:
 generation-match retries apply.
 
----
-
 ## Publish lifecycle
 
 ```text
@@ -236,24 +221,12 @@ entry to `failed.json` with `reason=stale`.
 
 ### CLI
 
-`gestaltd app registry` gains:
-
-```text
-gestaltd app registry pending set|clear|fail
-gestaltd app registry publish
-```
-
 `gestaltd app registry publish` replaces `gestaltd app publish` for immutable
-uploads only. `gestaltd app registry pending` owns the mutable `pending.json` and
-`failed.json` catalogs. Keep `gestaltd app publish` as a deprecated alias for
-`gestaltd app registry publish` during migration, then remove it.
-
-**`gestaltd app registry pending`** — write or update `pending.json` and
-`failed.json`. `pending set` runs `PrunePendingIndex` and `PruneFailedIndex`
-before upserting.
+uploads. `gestaltd app registry pending` owns `pending.json` and `failed.json`.
+Keep `gestaltd app publish` as a deprecated alias during migration.
 
 ```bash
-# Workflow start — record pending publish (prunes stuck entries first)
+# Workflow start
 gestaltd app registry pending set \
   --bucket gs://… \
   --app traffic-cop \
@@ -262,32 +235,19 @@ gestaltd app registry pending set \
   --workflow-run-url … \
   [--trigger-pr-number … --trigger-pr-url …]
 
-# Workflow end — success (idempotent)
+# Workflow end — success
 gestaltd app registry pending clear \
   --bucket gs://… \
   --app traffic-cop \
   --version 0.0.0-snapshot.g…
 
-# Workflow end — failure (idempotent)
+# Workflow end — failure
 gestaltd app registry pending fail \
   --bucket gs://… \
   --app traffic-cop \
   --version 0.0.0-snapshot.g…
-```
 
-`pending set` writes `phase=publishing`. It is idempotent for the same
-`(app, version)`: refresh `updatedAt` and merge `publication` on re-run.
-`pending clear` is idempotent when the version is already absent from pending.
-`pending fail` is idempotent when the version is already absent from pending; an
-existing `failed.json` entry is left unchanged.
-
-**`gestaltd app registry publish`** — upload artifacts and version metadata,
-update `index.json` only. Does not write `pending.json` or `failed.json`. Reads
-`pending.json` when present to copy `startedAt` into `publishStartedAt` on the
-uploaded version metadata and index entry. Same flags as today's
-`gestaltd app publish`; requires `--dist-dir`.
-
-```bash
+# After packaging
 gestaltd app registry publish \
   --bucket gs://… \
   --app traffic-cop \
@@ -298,18 +258,11 @@ gestaltd app registry publish \
   [publication flags]
 ```
 
-CI runs `gestaltd app registry pending set` at workflow start,
-`gestaltd app registry publish` after packaging, and
-`gestaltd app registry pending clear` or `gestaltd app registry pending fail` in
-`always()` at workflow end depending on outcome. Manual publishes can call
-`gestaltd app registry pending set` first and `gestaltd app registry pending
-clear` or `gestaltd app registry pending fail` afterward when they want admin
-UI visibility.
-
-Implementation extends `gestaltd/internal/daemon/app_publish.go` and reuses the
-index upload helper (generation-match retries).
-
----
+`pending set` writes `phase=publishing`. It is idempotent for the same
+`(app, version)`: refresh `updatedAt` and merge `publication` on re-run.
+`pending clear` and `pending fail` are idempotent when the version is already
+absent from pending. `pending fail` does not overwrite an existing `failed.json`
+entry.
 
 ## Read path
 
@@ -366,27 +319,18 @@ Extend `GET /api/v1/apps/{app}/admin/registry` response:
 
 Merge rules:
 
-- Each version appears in **at most one** of `pendingVersions`, `failedVersions`,
-  and `publishedVersions` in the API response and snapshots table.
-- **Precedence** (when a race or missed cleanup leaves duplicates in GCS):
-  **published** > **pending** > **failed**. Keep the highest-precedence row and
-  omit the others. Example: a version in both `pending.json` and `failed.json`
-  during a workflow retry surfaces as **Publishing**, not **Failed**.
+- Each version appears in at most one of `pendingVersions`, `failedVersions`, and
+  `publishedVersions`.
+- When catalogs disagree, precedence is **published** > **pending** > **failed**.
 - `pendingVersions` sorted by `startedAt` descending (newest first).
 - `failedVersions` sorted by `failedAt` descending (newest first).
-- Published rows may include `publishStartedAt`. Pending, published, and failed
-  rows may include computed duration fields. See [Publish duration](#publish-duration).
+- Published rows may include `publishStartedAt`. Duration fields: [Publish duration](#publish-duration).
 
 Install and upgrade handlers ignore `pending.json` and `failed.json` entirely.
 
----
-
 ## UI changes (`/apps/{app}/admin`)
 
-Update the snapshots table to render pending and failed entries alongside
-published entries (single newest-first list with a status column). Apply merge
-precedence (**published** > **pending** > **failed**) before choosing each row's
-status — see [Merge rules](#app-admin-api) above.
+Wireframes, columns, and row layout: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 
 | Status | Condition |
 |--------|-----------|
@@ -396,32 +340,9 @@ status — see [Merge rules](#app-admin-api) above.
 | **Rolling out** | Active rollout for this version (unchanged) |
 | **Available** | Published, not desired (unchanged) |
 
-Pending entries:
-
-- Show PR / commit provenance when present (same columns as published)
-- **Published** column shows elapsed publish time from `startedAt`
-- **Action** column: Deploy disabled; optional “View workflow” link using
-  `publication.workflowRunUrl`
-
-Failed entries:
-
-- Show PR / commit provenance when present
-- **Published** column shows `failedAt`, total time before failure, and a reason
-  label (`workflow_failed` → “Workflow failed”, `stale` → “Timed out”)
-- **Action** column: Deploy disabled; “View workflow” when
-  `publication.workflowRunUrl` is present
-
-Published entries without `publishStartedAt` show `publishedAt` only. See
-[Publish duration](#publish-duration) for timing labels on all row types.
-
-Polling: extend `AppAdminPageClient` to poll every **12s** while
-`pendingVersions.length > 0` or fleet rollout is non-terminal. **Do not poll
-solely because `failedVersions` is non-empty** — failed rows are retained for
-30 days for visibility but are not in-flight; load them on page fetch and after
-deploy actions. Stop polling when no pending versions remain and rollout is
-terminal.
-
----
+Apply [merge rules](#app-admin-api) before assigning status. Poll every **12s**
+while `pendingVersions.length > 0` or fleet rollout is non-terminal. Do not poll
+solely because `failedVersions` is non-empty — load failed rows on page fetch.
 
 ## CI changes (`publish-app-registry.yml`)
 
@@ -439,8 +360,6 @@ In `toolshed` (and any repo using the shared workflow):
 Install `gestaltd` before step 1 (today it is installed only in the publish job;
 move or duplicate install earlier so pending can be recorded at workflow start).
 
----
-
 ## Safety and invariants
 
 | Invariant | Enforcement |
@@ -455,7 +374,14 @@ move or duplicate install earlier so pending can be recorded at workflow start).
 | Duplicate version across catalogs | API and UI apply **published** > **pending** > **failed** precedence; see [Merge rules](#app-admin-api) |
 | Old failed entries are pruned | `PruneFailedIndex` on `pending set`; 30-day `failedAt` threshold |
 
----
+Implementation:
+
+- Pending/failed types and prune — `gestaltd/internal/appregistry/pending.go`
+- `gestaltd app registry pending` CLI — `gestaltd/internal/daemon/app_registry_pending.go`
+- `gestaltd app registry publish` CLI — `gestaltd/internal/daemon/app_registry_publish.go`, `gestaltd/internal/daemon/app_publish.go`
+- App-admin registry API — `gestaltd/internal/server/handlers_app_admin_registry.go` (PR 2)
+- Registry fetch — `gestaltd/internal/appregistry/reader.go` (PR 2)
+- App admin snapshots UI — `gestalt-providers` (PR 4)
 
 ## Implementation path
 
@@ -494,9 +420,8 @@ Depends on **PR 1**. Exposes pending and failed catalog state to the admin page.
 
 - `FetchPendingIndex` and `FetchFailedIndex` in `gestaltd/internal/appregistry/`.
 - Extend `getAppAdminRegistry` with `pendingVersions[]` and `failedVersions[]`.
-- Apply merge precedence (**published** > **pending** > **failed**) when building
-  the response. Expose `publishStartedAt` and computed duration fields per
-  [Publish duration](#publish-duration).
+- Apply [merge rules](#app-admin-api). Expose `publishStartedAt` and computed
+  duration fields per [Publish duration](#publish-duration).
 - Tests: fetch helpers via `registrytest` HTTP fixture; handler returns pending
   and failed entries alongside published. Extend [tests.md](./tests.md).
 
@@ -519,39 +444,7 @@ operators get correct GCS state before the UI exists.
 Depends on **PR 2**. Completes admin visibility.
 
 - **Publishing** and **Failed** rows in the `gestalt-providers` app admin
-  snapshots table. Timing labels per [Publish duration](#publish-duration).
-- Poll every ~12s while any pending version exists or rollout is non-terminal.
-  Apply merge precedence (**published** > **pending** > **failed**) when building
-  the snapshots table.
+  snapshots table. See [admin.md](./admin.md#app-admin-ui-appsappadmin).
+- Poll while pending versions exist or rollout is non-terminal. Apply
+  [merge rules](#app-admin-api).
 - Manual / browser smoke per [tests.md](./tests.md) when implementing.
-
----
-
-## Decisions
-
-**Scope:** Pending publish visibility is **app-scoped only** — `/apps/{app}/admin`.
-The embedded fleet `/admin` registry list does not show a publishing indicator.
-
-**CLI:** `gestaltd app registry pending` (`set`, `clear`, `fail`) owns
-`pending.json` and `failed.json`. `gestaltd app registry publish` uploads
-immutable artifacts and `index.json` (replaces `gestaltd app publish`); it may
-read `pending.json` to copy `publishStartedAt` but does not mutate pending or
-failed catalogs. CI calls `pending clear` on success and `pending fail` on
-failure.
-
-**Failed retention:** `failed.json` entries are kept for **30 days**, then pruned
-on `pending set`. Stale pending (`startedAt` older than 30 minutes) records
-`failedAt` with `reason=stale`.
-
-**Single phase:** Pending entries use `phase=publishing` from workflow start.
-
-**Workflow start:** `publish-app-registry.yml` should call
-`gestaltd app registry pending set` as early as possible (once `PACKAGE_VERSION`,
-GCP auth, and `gestaltd` are available), not only when artifacts are ready.
-
-**Publish duration:** `publishStartedAt` on published registry objects; elapsed
-and total time derived at read/UI time. See [Publish duration](#publish-duration).
-
-**Catalog merge precedence:** When the same version appears in more than one GCS
-catalog, the app-admin API and snapshots table keep **published** over
-**pending** over **failed**. See [Merge rules](#app-admin-api).
