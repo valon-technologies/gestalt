@@ -366,9 +366,12 @@ Extend `GET /api/v1/apps/{app}/admin/registry` response:
 
 Merge rules:
 
-- A version MUST NOT appear in more than one of `pendingVersions`,
-  `failedVersions`, and `publishedVersions`. If multiple exist (race or missed
-  cleanup), prefer **published**, then **pending**, then **failed**.
+- Each version appears in **at most one** of `pendingVersions`, `failedVersions`,
+  and `publishedVersions` in the API response and snapshots table.
+- **Precedence** (when a race or missed cleanup leaves duplicates in GCS):
+  **published** > **pending** > **failed**. Keep the highest-precedence row and
+  omit the others. Example: a version in both `pending.json` and `failed.json`
+  during a workflow retry surfaces as **Publishing**, not **Failed**.
 - `pendingVersions` sorted by `startedAt` descending (newest first).
 - `failedVersions` sorted by `failedAt` descending (newest first).
 - Published rows may include `publishStartedAt`. Pending, published, and failed
@@ -381,7 +384,9 @@ Install and upgrade handlers ignore `pending.json` and `failed.json` entirely.
 ## UI changes (`/apps/{app}/admin`)
 
 Update the snapshots table to render pending and failed entries alongside
-published entries (single newest-first list with a status column).
+published entries (single newest-first list with a status column). Apply merge
+precedence (**published** > **pending** > **failed**) before choosing each row's
+status — see [Merge rules](#app-admin-api) above.
 
 | Status | Condition |
 |--------|-----------|
@@ -447,6 +452,7 @@ move or duplicate install earlier so pending can be recorded at workflow start).
 | Concurrent publishes for one app | Rare; `pending` map holds multiple versions. CI concurrency is per `(app, sha)`; different SHAs produce different version strings |
 | Stuck pending entries become failed | `PrunePendingIndex` on `pending set`; 30-minute `startedAt` threshold writes `failedAt` with `reason=stale` |
 | Workflow retries clear prior failures | `pending set` removes `failed.{version}` for the version being upserted |
+| Duplicate version across catalogs | API and UI apply **published** > **pending** > **failed** precedence; see [Merge rules](#app-admin-api) |
 | Old failed entries are pruned | `PruneFailedIndex` on `pending set`; 30-day `failedAt` threshold |
 
 ---
@@ -488,7 +494,9 @@ Depends on **PR 1**. Exposes pending and failed catalog state to the admin page.
 
 - `FetchPendingIndex` and `FetchFailedIndex` in `gestaltd/internal/appregistry/`.
 - Extend `getAppAdminRegistry` with `pendingVersions[]` and `failedVersions[]`.
-- Expose `publishStartedAt` and computed duration fields per [Publish duration](#publish-duration).
+- Apply merge precedence (**published** > **pending** > **failed**) when building
+  the response. Expose `publishStartedAt` and computed duration fields per
+  [Publish duration](#publish-duration).
 - Tests: fetch helpers via `registrytest` HTTP fixture; handler returns pending
   and failed entries alongside published. Extend [tests.md](./tests.md).
 
@@ -513,7 +521,8 @@ Depends on **PR 2**. Completes admin visibility.
 - **Publishing** and **Failed** rows in the `gestalt-providers` app admin
   snapshots table. Timing labels per [Publish duration](#publish-duration).
 - Poll every ~12s while any pending version exists or rollout is non-terminal.
-  Prefer published entry when the same version appears in multiple lists.
+  Apply merge precedence (**published** > **pending** > **failed**) when building
+  the snapshots table.
 - Manual / browser smoke per [tests.md](./tests.md) when implementing.
 
 ---
@@ -542,3 +551,7 @@ GCP auth, and `gestaltd` are available), not only when artifacts are ready.
 
 **Publish duration:** `publishStartedAt` on published registry objects; elapsed
 and total time derived at read/UI time. See [Publish duration](#publish-duration).
+
+**Catalog merge precedence:** When the same version appears in more than one GCS
+catalog, the app-admin API and snapshots table keep **published** over
+**pending** over **failed**. See [Merge rules](#app-admin-api).

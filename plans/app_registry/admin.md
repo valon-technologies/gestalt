@@ -121,8 +121,11 @@ Selection is fleet-wide. It is not per-user or per-replica.
 The page header shows the app name, **App management** label, and registry
 binding. Below that: current **Desired version**, then the **Published
 snapshots** table (pending, failed, and published entries in one newest-first
-list). Each row has **Deploy** in the action column unless selection is disabled
-or the row is not deployable.
+list). When the same version appears in more than one catalog, apply
+**published** > **pending** > **failed** precedence — see
+[pending-publish.md — Merge rules](./pending-publish.md#app-admin-api). Each row
+has **Deploy** in the action column unless selection is disabled or the row is
+not deployable.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
