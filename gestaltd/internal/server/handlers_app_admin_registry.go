@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -25,18 +26,44 @@ type appAdminRegistryResponse struct {
 	DesiredVersion    string                     `json:"desiredVersion,omitempty"`
 	KnownVersions     []adminAppInstallationInfo `json:"knownVersions"`
 	PublishedVersions []appAdminPublishedVersion `json:"publishedVersions"`
+	PendingVersions   []appAdminPendingVersion   `json:"pendingVersions,omitempty"`
+	FailedVersions    []appAdminFailedVersion    `json:"failedVersions,omitempty"`
 	Rollout           *appAdminRollout           `json:"rollout,omitempty"`
 	SelectionDisabled bool                       `json:"selectionDisabled"`
 	DisabledReason    string                     `json:"disabledReason,omitempty"`
 }
 
 type appAdminPublishedVersion struct {
-	Version     string                   `json:"version"`
-	PublishedAt string                   `json:"publishedAt"`
-	Platforms   []string                 `json:"platforms,omitempty"`
-	SourceRef   string                   `json:"sourceRef,omitempty"`
-	SourceURL   string                   `json:"sourceUrl,omitempty"`
-	Publication *appregistry.Publication `json:"publication,omitempty"`
+	Version                string                   `json:"version"`
+	PublishedAt            string                   `json:"publishedAt"`
+	PublishStartedAt       string                   `json:"publishStartedAt,omitempty"`
+	PublishDurationSeconds *int64                   `json:"publishDurationSeconds,omitempty"`
+	Platforms              []string                 `json:"platforms,omitempty"`
+	SourceRef              string                   `json:"sourceRef,omitempty"`
+	SourceURL              string                   `json:"sourceUrl,omitempty"`
+	Publication            *appregistry.Publication `json:"publication,omitempty"`
+}
+
+type appAdminPendingVersion struct {
+	Version              string                   `json:"version"`
+	StartedAt            string                   `json:"startedAt"`
+	UpdatedAt            string                   `json:"updatedAt"`
+	Phase                string                   `json:"phase"`
+	PublishingForSeconds *int64                   `json:"publishingForSeconds,omitempty"`
+	SourceRef            string                   `json:"sourceRef,omitempty"`
+	SourceURL            string                   `json:"sourceUrl,omitempty"`
+	Publication          *appregistry.Publication `json:"publication,omitempty"`
+}
+
+type appAdminFailedVersion struct {
+	Version                string                   `json:"version"`
+	StartedAt              string                   `json:"startedAt"`
+	FailedAt               string                   `json:"failedAt"`
+	Reason                 string                   `json:"reason"`
+	PublishDurationSeconds *int64                   `json:"publishDurationSeconds,omitempty"`
+	SourceRef              string                   `json:"sourceRef,omitempty"`
+	SourceURL              string                   `json:"sourceUrl,omitempty"`
+	Publication            *appregistry.Publication `json:"publication,omitempty"`
 }
 
 type appAdminRollout struct {
@@ -158,17 +185,31 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry index")
 		return
 	}
+	pendingIndex, err := reader.FetchPendingIndex(r.Context(), publicRoot, app.name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to fetch app registry pending catalog")
+		return
+	}
+	failedIndex, err := reader.FetchFailedIndex(r.Context(), publicRoot, app.name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to fetch app registry failed catalog")
+		return
+	}
+	now := time.Now().UTC()
+	publishedKeys := appregistry.PublishedVersionKeys(index, app.name)
+	pendingKeys := appregistry.PendingVersionKeys(pendingIndex)
 	summaries := appregistry.VersionsFromIndex(index, app.name)
 	published := make([]appAdminPublishedVersion, 0, len(summaries))
-	for _, summary := range summaries {
-		published = append(published, appAdminPublishedVersion{
-			Version:     summary.Version,
-			PublishedAt: formatAdminTime(summary.PublishedAt),
-			Platforms:   append([]string(nil), summary.Platforms...),
-			SourceRef:   summary.SourceRef,
-			SourceURL:   appVersionSourceURL(summary.Repository, summary.SourceRef),
-			Publication: summary.Publication,
-		})
+	for i := range summaries {
+		published = append(published, appAdminPublishedVersionFromSummary(summaries[i]))
+	}
+	pendingVersions := make([]appAdminPendingVersion, 0)
+	for _, entry := range appregistry.PendingVersionsForAdmin(pendingIndex, publishedKeys) {
+		pendingVersions = append(pendingVersions, appAdminPendingVersionFromEntry(entry, now))
+	}
+	failedVersions := make([]appAdminFailedVersion, 0)
+	for _, entry := range appregistry.FailedVersionsForAdmin(failedIndex, publishedKeys, pendingKeys) {
+		failedVersions = append(failedVersions, appAdminFailedVersionFromEntry(entry))
 	}
 	knownVersions := make([]adminAppInstallationInfo, 0, len(known))
 	for _, installation := range known {
@@ -180,6 +221,8 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		DesiredVersion:    coredata.LatestKnownVersion(known),
 		KnownVersions:     knownVersions,
 		PublishedVersions: published,
+		PendingVersions:   pendingVersions,
+		FailedVersions:    failedVersions,
 	}
 	rollout, err := s.appRollouts.Get(r.Context(), app.name)
 	if err == nil {
@@ -288,4 +331,54 @@ func appVersionSourceURL(repository, sourceRef string) string {
 		repository = "https://" + repository
 	}
 	return repository + "/commit/" + sourceRef
+}
+
+func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary) appAdminPublishedVersion {
+	version := appAdminPublishedVersion{
+		Version:     summary.Version,
+		PublishedAt: formatAdminTime(summary.PublishedAt),
+		Platforms:   append([]string(nil), summary.Platforms...),
+		SourceRef:   summary.SourceRef,
+		SourceURL:   appVersionSourceURL(summary.Repository, summary.SourceRef),
+		Publication: summary.Publication,
+	}
+	if summary.PublishStartedAt != nil && !summary.PublishStartedAt.IsZero() {
+		version.PublishStartedAt = formatAdminTime(*summary.PublishStartedAt)
+		if seconds, ok := appregistry.DurationSecondsBetween(*summary.PublishStartedAt, summary.PublishedAt); ok {
+			version.PublishDurationSeconds = &seconds
+		}
+	}
+	return version
+}
+
+func appAdminPendingVersionFromEntry(entry appregistry.PendingVersion, now time.Time) appAdminPendingVersion {
+	version := appAdminPendingVersion{
+		Version:     entry.Version,
+		StartedAt:   formatAdminTime(entry.StartedAt),
+		UpdatedAt:   formatAdminTime(entry.UpdatedAt),
+		Phase:       entry.Phase,
+		SourceRef:   entry.SourceRef,
+		SourceURL:   appVersionSourceURL(entry.Repository, entry.SourceRef),
+		Publication: entry.Publication,
+	}
+	if seconds, ok := appregistry.DurationSecondsBetween(entry.StartedAt, now); ok {
+		version.PublishingForSeconds = &seconds
+	}
+	return version
+}
+
+func appAdminFailedVersionFromEntry(entry appregistry.FailedVersion) appAdminFailedVersion {
+	version := appAdminFailedVersion{
+		Version:     entry.Version,
+		StartedAt:   formatAdminTime(entry.StartedAt),
+		FailedAt:    formatAdminTime(entry.FailedAt),
+		Reason:      entry.Reason,
+		SourceRef:   entry.SourceRef,
+		SourceURL:   appVersionSourceURL(entry.Repository, entry.SourceRef),
+		Publication: entry.Publication,
+	}
+	if seconds, ok := appregistry.DurationSecondsBetween(entry.StartedAt, entry.FailedAt); ok {
+		version.PublishDurationSeconds = &seconds
+	}
+	return version
 }
