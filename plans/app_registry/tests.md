@@ -80,7 +80,7 @@ Run:
 
 ```bash
 cd gestaltd
-go test ./internal/appregistry -run 'Pending|Prune|Record|Upsert|DecodePending' -count=1
+go test ./internal/appregistry -run 'Pending|Prune|Record|Upsert|DecodePending|PublishStartedAt' -count=1
 go test ./internal/daemon/e2e/app_publish -run 'AppRegistryPublish|AppPublish' -count=1
 ```
 
@@ -92,6 +92,8 @@ go test ./internal/daemon/e2e/app_publish -run 'AppRegistryPublish|AppPublish' -
 - **`TestUpsertPendingVersion_PreservesStartedAt`** — `pending set` refresh keeps the original `startedAt`.
 - **`TestRecordFailedVersion_IsIdempotent`** — `pending fail` does not overwrite an existing failed entry.
 - **`TestDecodePendingAndFailedIndexRoundTrip`** — JSON encode/decode validates catalog shapes.
+- **`TestPublishStartedAtFromPending`** — publish reads `startedAt` from a matching pending entry.
+- **`TestUpsertAppIndex_CopiesPublishStartedAt`** — published index entries copy `publishStartedAt` from the version metadata.
 
 ### `internal/daemon/e2e/app_publish/app_publish_test.go`
 

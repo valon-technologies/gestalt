@@ -348,3 +348,16 @@ func RecordFailedVersion(index *FailedIndex, appName string, pending PendingVers
 	index.Failed[version] = failedVersionFromPending(pending, failedAt, reason)
 	return index, true
 }
+
+// PublishStartedAtFromPending returns the pending startedAt timestamp for a
+// version when present.
+func PublishStartedAtFromPending(index *PendingIndex, version string) (time.Time, bool) {
+	if index == nil || index.Pending == nil {
+		return time.Time{}, false
+	}
+	pending, ok := index.Pending[strings.TrimSpace(version)]
+	if !ok || pending.StartedAt.IsZero() {
+		return time.Time{}, false
+	}
+	return pending.StartedAt.UTC(), true
+}

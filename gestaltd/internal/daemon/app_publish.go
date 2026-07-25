@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -172,18 +173,24 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 		return err
 	}
 
+	publishStartedAt, err := loadAppRegistryPublishStartedAt(registry, strings.TrimSpace(*appName), strings.TrimSpace(*version))
+	if err != nil {
+		return err
+	}
+
 	plan, err := buildAppPublishPlan(appPublishPlanInput{
-		Registry:     registry,
-		DisplayName:  sourceManifest.DisplayName,
-		Description:  sourceManifest.Description,
-		Version:      *version,
-		SourceRef:    sourceRef,
-		ManifestPath: sourceInfo.ManifestPath,
-		Publication:  publication,
-		Manifest:     sourceManifest,
-		Release:      releaseMetadata,
-		Archives:     releaseArchives,
-		MetadataPath: filepath.Join(tmpDir, providerrelease.MetadataFile),
+		Registry:         registry,
+		DisplayName:      sourceManifest.DisplayName,
+		Description:      sourceManifest.Description,
+		Version:          *version,
+		SourceRef:        sourceRef,
+		ManifestPath:     sourceInfo.ManifestPath,
+		Publication:      publication,
+		Manifest:         sourceManifest,
+		Release:          releaseMetadata,
+		Archives:         releaseArchives,
+		MetadataPath:     filepath.Join(tmpDir, providerrelease.MetadataFile),
+		PublishStartedAt: publishStartedAt,
 	})
 	if err != nil {
 		return err
@@ -330,17 +337,18 @@ func gitRootFromWorkingDirectory() (string, error) {
 }
 
 type appPublishPlanInput struct {
-	Registry     config.AppRegistryConfig
-	DisplayName  string
-	Description  string
-	Version      string
-	SourceRef    string
-	ManifestPath string
-	Publication  *appregistry.Publication
-	Manifest     *providermanifestv1.Manifest
-	Release      *providerrelease.Metadata
-	Archives     []releaseArchive
-	MetadataPath string
+	Registry         config.AppRegistryConfig
+	DisplayName      string
+	Description      string
+	Version          string
+	SourceRef        string
+	ManifestPath     string
+	Publication      *appregistry.Publication
+	Manifest         *providermanifestv1.Manifest
+	Release          *providerrelease.Metadata
+	Archives         []releaseArchive
+	MetadataPath     string
+	PublishStartedAt time.Time
 }
 
 func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
@@ -395,13 +403,14 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 	}
 
 	entry, err := appregistry.BuildEntry(appregistry.BuildEntryInput{
-		Manifest:     input.Manifest,
-		Version:      input.Version,
-		SourceRef:    input.SourceRef,
-		ManifestPath: input.ManifestPath,
-		Publication:  input.Publication,
-		Release:      input.Release,
-		Artifacts:    publishArtifacts,
+		Manifest:         input.Manifest,
+		Version:          input.Version,
+		SourceRef:        input.SourceRef,
+		ManifestPath:     input.ManifestPath,
+		Publication:      input.Publication,
+		Release:          input.Release,
+		Artifacts:        publishArtifacts,
+		PublishStartedAt: input.PublishStartedAt,
 	})
 	if err != nil {
 		return appPublishPlan{}, err
@@ -674,6 +683,30 @@ func appPublishPreconditionFailed(err error) bool {
 	return strings.Contains(text, "precondition") ||
 		strings.Contains(text, "generation") ||
 		strings.Contains(text, "412")
+}
+
+func loadAppRegistryPublishStartedAt(registry config.AppRegistryConfig, appName, version string) (time.Time, error) {
+	storageRoot, err := registry.StorageURL()
+	if err != nil {
+		return time.Time{}, err
+	}
+	pendingURL := appregistry.StorageURL(storageRoot, appregistry.AppPendingPath(appName))
+	_, pendingData, err := downloadAppRegistryObject(pendingURL)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if len(pendingData) == 0 {
+		return time.Time{}, nil
+	}
+	pending, err := appregistry.DecodePendingIndex(pendingData)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("decode pending catalog: %w", err)
+	}
+	startedAt, ok := appregistry.PublishStartedAtFromPending(pending, version)
+	if !ok {
+		return time.Time{}, nil
+	}
+	return startedAt, nil
 }
 
 func downloadAppRegistryObject(storageURL string) (int64, []byte, error) {

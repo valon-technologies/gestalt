@@ -238,3 +238,57 @@ func TestRecordFailedVersion_IsIdempotent(t *testing.T) {
 		t.Fatal("expected second record to be a no-op")
 	}
 }
+
+func TestPublishStartedAtFromPending(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 7, 24, 19, 0, 0, 0, time.UTC)
+	index := &PendingIndex{
+		Pending: map[string]PendingVersion{
+			"0.0.1": {Version: "0.0.1", StartedAt: startedAt},
+		},
+	}
+
+	got, ok := PublishStartedAtFromPending(index, "0.0.1")
+	if !ok || !got.Equal(startedAt) {
+		t.Fatalf("PublishStartedAtFromPending() = (%v, %v), want (%v, true)", got, ok, startedAt)
+	}
+	if _, ok := PublishStartedAtFromPending(index, "missing"); ok {
+		t.Fatal("expected missing version to return false")
+	}
+	if _, ok := PublishStartedAtFromPending(nil, "0.0.1"); ok {
+		t.Fatal("expected nil index to return false")
+	}
+}
+
+func TestUpsertAppIndex_CopiesPublishStartedAt(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 7, 24, 19, 0, 0, 0, time.UTC)
+	entry := Entry{
+		SchemaVersion:    EntrySchemaVersion,
+		App:              "traffic-cop",
+		Version:          "0.0.1",
+		SourceRef:        "651a5c30feb995c9364c38f63d0d5c3880bc2055",
+		ManifestPath:     "apps/traffic-cop/manifest.yaml",
+		Repository:       "github.com/valon-technologies/valon-tools",
+		PublishedAt:      time.Date(2026, 7, 24, 19, 4, 32, 0, time.UTC),
+		PublishStartedAt: startedAt,
+		Artifacts: map[string]Artifact{
+			"linux/amd64": {
+				URL:       "https://example.com/artifact.tar.gz",
+				PublicURL: "https://example.com/artifact.tar.gz",
+				SHA256:    "deadbeef",
+			},
+		},
+	}
+
+	index, changed, err := UpsertAppIndex(NewEmptyIndex(), entry, "apps/traffic-cop/versions/0.0.1.json", "", "")
+	if err != nil || !changed {
+		t.Fatalf("UpsertAppIndex() = changed %v, err %v", changed, err)
+	}
+	got := index.Apps["traffic-cop"].Versions["0.0.1"]
+	if !got.PublishStartedAt.Equal(startedAt) {
+		t.Fatalf("index publishStartedAt = %v, want %v", got.PublishStartedAt, startedAt)
+	}
+}

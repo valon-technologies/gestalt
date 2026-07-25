@@ -39,12 +39,13 @@ type AppVersions struct {
 }
 
 type IndexVersion struct {
-	Metadata    string       `json:"metadata"`
-	Platforms   []string     `json:"platforms,omitempty"`
-	PublishedAt time.Time    `json:"publishedAt"`
-	SourceRef   string       `json:"sourceRef,omitempty"`
-	Repository  string       `json:"repository,omitempty"`
-	Publication *Publication `json:"publication,omitempty"`
+	Metadata         string       `json:"metadata"`
+	Platforms        []string     `json:"platforms,omitempty"`
+	PublishedAt      time.Time    `json:"publishedAt"`
+	PublishStartedAt time.Time    `json:"publishStartedAt,omitempty"`
+	SourceRef        string       `json:"sourceRef,omitempty"`
+	Repository       string       `json:"repository,omitempty"`
+	Publication      *Publication `json:"publication,omitempty"`
 }
 
 type Entry struct {
@@ -58,8 +59,9 @@ type Entry struct {
 	Artifacts     map[string]Artifact `json:"artifacts"`
 	Interface     Interface           `json:"interface,omitempty"`
 	Requires      Requires            `json:"requires,omitempty"`
-	Compatibility Compatibility       `json:"compatibility,omitempty"`
-	PublishedAt   time.Time           `json:"publishedAt"`
+	Compatibility    Compatibility       `json:"compatibility,omitempty"`
+	PublishedAt      time.Time           `json:"publishedAt"`
+	PublishStartedAt time.Time           `json:"publishStartedAt,omitempty"`
 }
 
 type Publication struct {
@@ -256,6 +258,9 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		Compatibility: compatibility,
 		PublishedAt:   publishedAt.UTC(),
 	}
+	if !input.PublishStartedAt.IsZero() {
+		entry.PublishStartedAt = input.PublishStartedAt.UTC()
+	}
 	if err := validateEntry(&entry); err != nil {
 		return Entry{}, err
 	}
@@ -269,8 +274,9 @@ type BuildEntryInput struct {
 	ManifestPath string
 	Publication  *Publication
 	Release      *providerrelease.Metadata
-	Artifacts    []PublishArtifact
-	PublishedAt  time.Time
+	Artifacts         []PublishArtifact
+	PublishedAt       time.Time
+	PublishStartedAt  time.Time
 }
 
 func buildArtifacts(artifacts []PublishArtifact) (map[string]Artifact, error) {
@@ -367,10 +373,12 @@ func requiresFromProviderRelease(requires providerrelease.Requires) Requires {
 }
 
 // EntriesEqualIgnoringPublishedAt reports whether two entries are identical except
-// for publishedAt, which is ignored for idempotent republish checks.
+// for publishedAt and publishStartedAt, which are ignored for idempotent republish checks.
 func EntriesEqualIgnoringPublishedAt(a, b Entry) bool {
 	a.PublishedAt = time.Time{}
 	b.PublishedAt = time.Time{}
+	a.PublishStartedAt = time.Time{}
+	b.PublishStartedAt = time.Time{}
 	aData, err := json.Marshal(a)
 	if err != nil {
 		return false
@@ -578,12 +586,13 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 	platforms := artifactPlatforms(entry.Artifacts)
 	sort.Strings(platforms)
 	app.Versions[entry.Version] = IndexVersion{
-		Metadata:    strings.TrimSpace(metadataPath),
-		Platforms:   platforms,
-		PublishedAt: entry.PublishedAt.UTC(),
-		SourceRef:   strings.TrimSpace(entry.SourceRef),
-		Repository:  strings.TrimSpace(entry.Repository),
-		Publication: clonePublication(entry.Publication),
+		Metadata:         strings.TrimSpace(metadataPath),
+		Platforms:        platforms,
+		PublishedAt:      entry.PublishedAt.UTC(),
+		PublishStartedAt: entry.PublishStartedAt.UTC(),
+		SourceRef:        strings.TrimSpace(entry.SourceRef),
+		Repository:       strings.TrimSpace(entry.Repository),
+		Publication:      clonePublication(entry.Publication),
 	}
 	index.Apps[appName] = app
 	if err := validateIndex(index); err != nil {
