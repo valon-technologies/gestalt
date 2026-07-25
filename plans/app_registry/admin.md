@@ -111,7 +111,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
 - Show per-version `publishedAt`, linked source commit, triggering PR or commit, and publishing workflow run.
 - Show publish duration on published rows when `publishStartedAt` is recorded (“Published in 4m 32s”).
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
-- Disable the selector while a rollout is `enrolling` or `restarting`; refresh until terminal.
+- Disable deploy actions while a rollout is `enrolling` or `restarting`; refresh until terminal.
 - Render access denied on **403** without leaking registry metadata.
 - Show in-flight publishes (**Publishing**) with elapsed time since `startedAt`, and recent failed publishes
   (**Failed**) with total time before failure. See [pending-publish.md](./pending-publish.md).
@@ -120,31 +120,65 @@ Selection is fleet-wide. It is not per-user or per-replica.
 
 ### App admin page
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ g-issues                                      App management │
-│ registry: toolshed                                          │
-├─────────────────────────────────────────────────────────────┤
-│ Desired version                                             │
-│ [ 0.0.0-snapshot.gabc123                         ▾ ]         │
-│                                                             │
-│ Published 2026-07-22 15:00 · linux/amd64                    │
-│ Commit def456 · PR #3251 · workflow run                     │
-│                                                             │
-│                                      [ Select version ]      │
-└─────────────────────────────────────────────────────────────┘
-```
-
-During an active rollout:
+The page header shows the app name, **App management** label, and registry
+binding. Below that: current **Desired version**, then the **Published
+snapshots** table (pending, failed, and published entries in one newest-first
+list). Each row has **Deploy** in the action column unless selection is disabled
+or the row is not deployable.
 
 ```text
-│ Rollout enrolling: 0.0.0-snapshot.gdef456                  │
-│ [ 0.0.0-snapshot.gabc123                         ▾ ] disabled│
-│                                      [ Select version ] disabled
++-------------------------------------------------------------+
+| g-issues                               App management       |
+| registry: toolshed                                          |
++-------------------------------------------------------------+
+| Desired version: 0.0.0-snapshot.gabc123                     |
++-------------------------------------------------------------+
+| Published snapshots                                         |
+|                                                             |
+| Version                 Status       Timing       Action    |
+| ---------------------   ----------   -----------   -------- |
+| 0.0.0-snapshot.gnew     Publishing   for 4m       —         |
+|                         PR #3740 · workflow                 |
+| 0.0.0-snapshot.gdef456  Available    Jul 22 15:00  Deploy   |
+|                         in 4m 32s · PR #3251                |
+| 0.0.0-snapshot.gabc123  Deployed     Jul 21 12:00  —         |
+|                         PR #3200                              |
++-------------------------------------------------------------+
 ```
 
-After a successful selection, show the new rollout state and keep the selector
-disabled until that rollout reaches `complete` or `failed`.
+**Publishing** rows show elapsed time and provenance; **Deploy** is disabled.
+**Available** published rows show `publishedAt` and publish duration when
+`publishStartedAt` is recorded. **Deployed** marks the desired version.
+
+During an active rollout, disable deploy actions and show rollout state above the
+table:
+
+```text
++-------------------------------------------------------------+
+| g-issues                               App management       |
+| registry: toolshed                                          |
++-------------------------------------------------------------+
+| Desired version: 0.0.0-snapshot.gabc123                     |
+| Rollout enrolling: 0.0.0-snapshot.gdef456                   |
++-------------------------------------------------------------+
+| Published snapshots                                         |
+|                                                             |
+| Version                 Status       Timing       Action    |
+| ---------------------   ----------   -----------   -------- |
+| 0.0.0-snapshot.gdef456  Rolling out  Jul 22 15:00  disabled |
+| 0.0.0-snapshot.gabc123  Deployed     Jul 21 12:00  disabled |
++-------------------------------------------------------------+
+```
+
+A **Failed** row in the same table:
+
+```text
+| 0.0.0-snapshot.gdead    Failed       Jul 24 18:35   —         |
+|                         after 35m · Timed out · workflow    |
+```
+
+After a successful deploy selection, keep deploy actions disabled until the
+rollout reaches `complete` or `failed`.
 
 ---
 
