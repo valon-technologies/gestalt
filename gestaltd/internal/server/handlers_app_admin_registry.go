@@ -200,8 +200,8 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	pendingKeys := appregistry.PendingVersionKeys(pendingIndex)
 	summaries := appregistry.VersionsFromIndex(index, app.name)
 	published := make([]appAdminPublishedVersion, 0, len(summaries))
-	for _, summary := range summaries {
-		published = append(published, appAdminPublishedVersionFromSummary(summary))
+	for i := range summaries {
+		published = append(published, appAdminPublishedVersionFromSummary(summaries[i]))
 	}
 	pendingVersions := make([]appAdminPendingVersion, 0)
 	for _, entry := range appregistry.PendingVersionsForAdmin(pendingIndex, publishedKeys) {
