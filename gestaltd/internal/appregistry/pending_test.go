@@ -2,6 +2,7 @@ package appregistry
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -484,6 +485,7 @@ func TestUpsertAppIndex_CopiesPublishStartedAt(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 7, 24, 19, 0, 0, 0, time.UTC)
+	publishStartedAt := startedAt
 	entry := Entry{
 		SchemaVersion:    EntrySchemaVersion,
 		App:              "traffic-cop",
@@ -492,7 +494,7 @@ func TestUpsertAppIndex_CopiesPublishStartedAt(t *testing.T) {
 		ManifestPath:     "apps/traffic-cop/manifest.yaml",
 		Repository:       "github.com/valon-technologies/valon-tools",
 		PublishedAt:      time.Date(2026, 7, 24, 19, 4, 32, 0, time.UTC),
-		PublishStartedAt: startedAt,
+		PublishStartedAt: &publishStartedAt,
 		Artifacts: map[string]Artifact{
 			"linux/amd64": {
 				URL:       "https://example.com/artifact.tar.gz",
@@ -507,7 +509,35 @@ func TestUpsertAppIndex_CopiesPublishStartedAt(t *testing.T) {
 		t.Fatalf("UpsertAppIndex() = changed %v, err %v", changed, err)
 	}
 	got := index.Apps["traffic-cop"].Versions["0.0.1"]
-	if !got.PublishStartedAt.Equal(startedAt) {
+	if got.PublishStartedAt == nil || !got.PublishStartedAt.Equal(startedAt) {
 		t.Fatalf("index publishStartedAt = %v, want %v", got.PublishStartedAt, startedAt)
+	}
+}
+
+func TestEntry_OmitsZeroPublishStartedAt(t *testing.T) {
+	t.Parallel()
+
+	entry := Entry{
+		SchemaVersion: EntrySchemaVersion,
+		App:           "traffic-cop",
+		Version:       "0.0.1",
+		SourceRef:     "651a5c30feb995c9364c38f63d0d5c3880bc2055",
+		ManifestPath:  "apps/traffic-cop/manifest.yaml",
+		Repository:    "github.com/valon-technologies/valon-tools",
+		PublishedAt:   time.Date(2026, 7, 24, 19, 4, 32, 0, time.UTC),
+		Artifacts: map[string]Artifact{
+			"linux/amd64": {
+				URL:       "https://example.com/artifact.tar.gz",
+				PublicURL: "https://example.com/artifact.tar.gz",
+				SHA256:    "deadbeef",
+			},
+		},
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal entry: %v", err)
+	}
+	if strings.Contains(string(data), "publishStartedAt") {
+		t.Fatalf("entry JSON should omit publishStartedAt: %s", data)
 	}
 }

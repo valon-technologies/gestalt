@@ -42,7 +42,7 @@ type IndexVersion struct {
 	Metadata         string       `json:"metadata"`
 	Platforms        []string     `json:"platforms,omitempty"`
 	PublishedAt      time.Time    `json:"publishedAt"`
-	PublishStartedAt time.Time    `json:"publishStartedAt,omitempty"`
+	PublishStartedAt *time.Time    `json:"publishStartedAt,omitempty"`
 	SourceRef        string       `json:"sourceRef,omitempty"`
 	Repository       string       `json:"repository,omitempty"`
 	Publication      *Publication `json:"publication,omitempty"`
@@ -61,7 +61,7 @@ type Entry struct {
 	Requires         Requires            `json:"requires,omitempty"`
 	Compatibility    Compatibility       `json:"compatibility,omitempty"`
 	PublishedAt      time.Time           `json:"publishedAt"`
-	PublishStartedAt time.Time           `json:"publishStartedAt,omitempty"`
+	PublishStartedAt *time.Time          `json:"publishStartedAt,omitempty"`
 }
 
 type Publication struct {
@@ -259,7 +259,8 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		PublishedAt:   publishedAt.UTC(),
 	}
 	if !input.PublishStartedAt.IsZero() {
-		entry.PublishStartedAt = input.PublishStartedAt.UTC()
+		startedAt := input.PublishStartedAt.UTC()
+		entry.PublishStartedAt = &startedAt
 	}
 	if err := validateEntry(&entry); err != nil {
 		return Entry{}, err
@@ -377,8 +378,8 @@ func requiresFromProviderRelease(requires providerrelease.Requires) Requires {
 func EntriesEqualIgnoringPublishedAt(a, b Entry) bool {
 	a.PublishedAt = time.Time{}
 	b.PublishedAt = time.Time{}
-	a.PublishStartedAt = time.Time{}
-	b.PublishStartedAt = time.Time{}
+	a.PublishStartedAt = nil
+	b.PublishStartedAt = nil
 	aData, err := json.Marshal(a)
 	if err != nil {
 		return false
@@ -586,15 +587,19 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 	applyAppIndexAppMetadata(&app, displayName, description)
 	platforms := artifactPlatforms(entry.Artifacts)
 	sort.Strings(platforms)
-	app.Versions[entry.Version] = IndexVersion{
-		Metadata:         strings.TrimSpace(metadataPath),
-		Platforms:        platforms,
-		PublishedAt:      entry.PublishedAt.UTC(),
-		PublishStartedAt: entry.PublishStartedAt.UTC(),
-		SourceRef:        strings.TrimSpace(entry.SourceRef),
-		Repository:       strings.TrimSpace(entry.Repository),
-		Publication:      clonePublication(entry.Publication),
+	indexVersion := IndexVersion{
+		Metadata:    strings.TrimSpace(metadataPath),
+		Platforms:   platforms,
+		PublishedAt: entry.PublishedAt.UTC(),
+		SourceRef:   strings.TrimSpace(entry.SourceRef),
+		Repository:  strings.TrimSpace(entry.Repository),
+		Publication: clonePublication(entry.Publication),
 	}
+	if entry.PublishStartedAt != nil && !entry.PublishStartedAt.IsZero() {
+		startedAt := entry.PublishStartedAt.UTC()
+		indexVersion.PublishStartedAt = &startedAt
+	}
+	app.Versions[entry.Version] = indexVersion
 	index.Apps[appName] = app
 	if err := validateIndex(index); err != nil {
 		return nil, false, err
