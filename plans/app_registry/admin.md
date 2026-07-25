@@ -109,11 +109,12 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
 - **Manage app** on the `/apps` catalog when the caller can administer that app.
 - Select the fleet-wide desired version: first install, upgrade, or revert to an older published version.
 - Show per-version `publishedAt`, linked source commit, triggering PR or commit, and publishing workflow run.
+- Show publish duration on published rows when `publishStartedAt` is recorded (“Published in 4m 32s”).
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable the selector while a rollout is `enrolling` or `restarting`; refresh until terminal.
 - Render access denied on **403** without leaking registry metadata.
-- Show in-flight publishes (**Publishing**) and recent failed publishes
-  (**Failed**) in the snapshots table. See [pending-publish.md](./pending-publish.md).
+- Show in-flight publishes (**Publishing**) with elapsed time since `startedAt`, and recent failed publishes
+  (**Failed**) with total time before failure. See [pending-publish.md](./pending-publish.md).
 
 Selection is fleet-wide. It is not per-user or per-replica.
 
