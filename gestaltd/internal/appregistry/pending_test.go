@@ -26,7 +26,7 @@ func TestPrunePendingIndex_MovesStaleEntryToFailed(t *testing.T) {
 	}
 	failed := NewEmptyFailedIndex("traffic-cop")
 
-	pendingChanged, failedChanged := PrunePendingIndex(pending, failed, NewEmptyIndex(), now)
+	pendingChanged, failedChanged := PrunePendingIndex(pending, failed, NewEmptyIndex(), now, "")
 	if !pendingChanged || !failedChanged {
 		t.Fatalf("pendingChanged=%v failedChanged=%v", pendingChanged, failedChanged)
 	}
@@ -62,11 +62,182 @@ func TestPrunePendingIndex_KeepsInFlightEntryWithinStaleWindow(t *testing.T) {
 	}
 	failed := NewEmptyFailedIndex("traffic-cop")
 
-	pendingChanged, failedChanged := PrunePendingIndex(pending, failed, NewEmptyIndex(), now)
+	pendingChanged, failedChanged := PrunePendingIndex(pending, failed, NewEmptyIndex(), now, "")
 	if pendingChanged || failedChanged {
 		t.Fatalf("pendingChanged=%v failedChanged=%v", pendingChanged, failedChanged)
 	}
 	if len(pending.Pending) != 1 {
+		t.Fatalf("pending = %#v", pending.Pending)
+	}
+}
+
+func TestPrunePendingIndex_SkipsExceptVersion(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)
+	staleStartedAt := now.Add(-31 * time.Minute)
+	version := "0.0.0-snapshot.gabc123"
+	pending := &PendingIndex{
+		SchemaVersion: PendingIndexSchemaVersion,
+		App:           "traffic-cop",
+		Pending: map[string]PendingVersion{
+			version: {
+				Version:   version,
+				SourceRef: "abc123def456abc123def456abc123def456abcd",
+				StartedAt: staleStartedAt,
+				UpdatedAt: staleStartedAt,
+				Phase:     PendingPhasePublishing,
+			},
+		},
+	}
+	failed := NewEmptyFailedIndex("traffic-cop")
+
+	pendingChanged, failedChanged := PrunePendingIndex(pending, failed, NewEmptyIndex(), now, version)
+	if pendingChanged || failedChanged {
+		t.Fatalf("pendingChanged=%v failedChanged=%v", pendingChanged, failedChanged)
+	}
+	if len(pending.Pending) != 1 || len(failed.Failed) != 0 {
+		t.Fatalf("pending=%#v failed=%#v", pending.Pending, failed.Failed)
+	}
+}
+
+func TestApplyPendingSet_RetryDoesNotDuplicateStaleFailedEntry(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)
+	staleStartedAt := now.Add(-31 * time.Minute)
+	version := "0.0.0-snapshot.gabc123"
+	pending := &PendingIndex{
+		SchemaVersion: PendingIndexSchemaVersion,
+		App:           "traffic-cop",
+		Pending: map[string]PendingVersion{
+			version: {
+				Version:   version,
+				SourceRef: "abc123def456abc123def456abc123def456abcd",
+				StartedAt: staleStartedAt,
+				UpdatedAt: staleStartedAt,
+				Phase:     PendingPhasePublishing,
+			},
+		},
+	}
+	failed := NewEmptyFailedIndex("traffic-cop")
+
+	pendingChanged, failedChanged := ApplyPendingSet(
+		pending,
+		failed,
+		NewEmptyIndex(),
+		"traffic-cop",
+		PendingVersion{
+			Version:   version,
+			SourceRef: "abc123def456abc123def456abc123def456abcd",
+		},
+		now,
+	)
+	if !pendingChanged || failedChanged {
+		t.Fatalf("pendingChanged=%v failedChanged=%v", pendingChanged, failedChanged)
+	}
+	if _, ok := pending.Pending[version]; !ok {
+		t.Fatalf("pending = %#v", pending.Pending)
+	}
+	if _, ok := failed.Failed[version]; ok {
+		t.Fatalf("failed = %#v", failed.Failed)
+	}
+	if !pending.Pending[version].StartedAt.Equal(now) {
+		t.Fatalf("startedAt = %v, want fresh timestamp %v", pending.Pending[version].StartedAt, now)
+	}
+}
+
+func TestApplyPendingSet_SkipsUpsertForPublishedVersion(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)
+	version := "0.0.0-snapshot.gabc123"
+	pending := &PendingIndex{
+		SchemaVersion: PendingIndexSchemaVersion,
+		App:           "traffic-cop",
+		Pending: map[string]PendingVersion{
+			version: {
+				Version:   version,
+				SourceRef: "abc123def456abc123def456abc123def456abcd",
+				StartedAt: now.Add(-time.Hour),
+				UpdatedAt: now.Add(-time.Hour),
+				Phase:     PendingPhasePublishing,
+			},
+		},
+	}
+	failed := NewEmptyFailedIndex("traffic-cop")
+	published := &Index{
+		SchemaVersion: IndexSchemaVersion,
+		Apps: map[string]AppVersions{
+			"traffic-cop": {
+				Versions: map[string]IndexVersion{
+					version: {
+						Metadata:    "apps/traffic-cop/versions/" + version + ".json",
+						PublishedAt: now,
+					},
+				},
+			},
+		},
+	}
+
+	pendingChanged, failedChanged := ApplyPendingSet(
+		pending,
+		failed,
+		published,
+		"traffic-cop",
+		PendingVersion{
+			Version:   version,
+			SourceRef: "abc123def456abc123def456abc123def456abcd",
+		},
+		now,
+	)
+	if !pendingChanged || failedChanged {
+		t.Fatalf("pendingChanged=%v failedChanged=%v", pendingChanged, failedChanged)
+	}
+	if len(pending.Pending) != 0 {
+		t.Fatalf("pending = %#v", pending.Pending)
+	}
+}
+
+func TestApplyPendingSet_PersistsFailedPrune(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)
+	staleVersion := "0.0.0-snapshot.gstale"
+	activeVersion := "0.0.0-snapshot.gactive"
+	pending := &PendingIndex{
+		SchemaVersion: PendingIndexSchemaVersion,
+		App:           "traffic-cop",
+		Pending: map[string]PendingVersion{
+			staleVersion: {
+				Version:   staleVersion,
+				SourceRef: "abc123def456abc123def456abc123def456abcd",
+				StartedAt: now.Add(-31 * time.Minute),
+				UpdatedAt: now.Add(-31 * time.Minute),
+				Phase:     PendingPhasePublishing,
+			},
+		},
+	}
+	failed := NewEmptyFailedIndex("traffic-cop")
+
+	pendingChanged, failedChanged := ApplyPendingSet(
+		pending,
+		failed,
+		NewEmptyIndex(),
+		"traffic-cop",
+		PendingVersion{
+			Version:   activeVersion,
+			SourceRef: "def456def456def456def456def456def456def4",
+		},
+		now,
+	)
+	if !pendingChanged || !failedChanged {
+		t.Fatalf("pendingChanged=%v failedChanged=%v", pendingChanged, failedChanged)
+	}
+	if _, ok := failed.Failed[staleVersion]; !ok {
+		t.Fatalf("failed = %#v", failed.Failed)
+	}
+	if _, ok := pending.Pending[activeVersion]; !ok {
 		t.Fatalf("pending = %#v", pending.Pending)
 	}
 }
@@ -121,7 +292,7 @@ func TestPrunePendingIndex_DropsAlreadyPublishedVersion(t *testing.T) {
 		},
 	}
 
-	pendingChanged, failedChanged := PrunePendingIndex(pending, NewEmptyFailedIndex("traffic-cop"), published, now)
+	pendingChanged, failedChanged := PrunePendingIndex(pending, NewEmptyFailedIndex("traffic-cop"), published, now, "")
 	if !pendingChanged || failedChanged {
 		t.Fatalf("pendingChanged=%v failedChanged=%v", pendingChanged, failedChanged)
 	}

@@ -112,18 +112,20 @@ func runAppRegistryPendingSet(args []string) error {
 	}
 
 	return mutateAppRegistryPendingCatalog(registry, appName, sourceRef, func(state *appRegistryPendingCatalogState) error {
-		if appregistry.RemoveFailedVersion(state.failed, *flags.version) {
-			state.failedChanged = true
-		}
-		pendingPruned, failedPruned := appregistry.PrunePendingIndex(state.pending, state.failed, state.published, now)
-		if pendingPruned {
+		pendingChanged, failedChanged := appregistry.ApplyPendingSet(
+			state.pending,
+			state.failed,
+			state.published,
+			appName,
+			pendingVersion,
+			now,
+		)
+		if pendingChanged {
 			state.pendingChanged = true
 		}
-		if appregistry.PruneFailedIndex(state.failed, state.published, now) || failedPruned {
+		if failedChanged {
 			state.failedChanged = true
 		}
-		state.pending, _ = appregistry.UpsertPendingVersion(state.pending, appName, pendingVersion, now)
-		state.pendingChanged = true
 		return nil
 	})
 }

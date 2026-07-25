@@ -229,12 +229,14 @@ func IndexContainsVersion(index *Index, appName, version string) bool {
 }
 
 // PrunePendingIndex moves stale pending entries to failed and drops entries for
-// versions already published. The second return value reports whether failed
-// changed.
-func PrunePendingIndex(pending *PendingIndex, failed *FailedIndex, published *Index, now time.Time) (bool, bool) {
+// versions already published. exceptVersion is skipped so a concurrent pending
+// set can refresh that version without stale-pruning it first. The second return
+// value reports whether failed changed.
+func PrunePendingIndex(pending *PendingIndex, failed *FailedIndex, published *Index, now time.Time, exceptVersion string) (bool, bool) {
 	if pending == nil || len(pending.Pending) == 0 {
 		return false, false
 	}
+	exceptVersion = strings.TrimSpace(exceptVersion)
 	if failed == nil {
 		failed = NewEmptyFailedIndex(pending.App)
 	}
@@ -245,6 +247,9 @@ func PrunePendingIndex(pending *PendingIndex, failed *FailedIndex, published *In
 	pendingChanged := false
 	failedChanged := false
 	for version, entry := range pending.Pending {
+		if version == exceptVersion {
+			continue
+		}
 		if IndexContainsVersion(published, pending.App, version) {
 			delete(pending.Pending, version)
 			pendingChanged = true
@@ -374,4 +379,41 @@ func PublishStartedAtFromPending(index *PendingIndex, version string) (time.Time
 		return time.Time{}, false
 	}
 	return pending.StartedAt.UTC(), true
+}
+
+// ApplyPendingSet updates pending and failed catalogs for pending set. It clears
+// a prior failed entry, prunes other versions, and upserts the target version.
+func ApplyPendingSet(pending *PendingIndex, failed *FailedIndex, published *Index, appName string, version PendingVersion, now time.Time) (bool, bool) {
+	versionKey := strings.TrimSpace(version.Version)
+	now = now.UTC()
+
+	pendingChanged := false
+	failedChanged := false
+	if RemoveFailedVersion(failed, versionKey) {
+		failedChanged = true
+	}
+	prunedPending, prunedFailed := PrunePendingIndex(pending, failed, published, now, versionKey)
+	if prunedPending {
+		pendingChanged = true
+	}
+	if prunedFailed {
+		failedChanged = true
+	}
+	if PruneFailedIndex(failed, published, now) {
+		failedChanged = true
+	}
+	if IndexContainsVersion(published, appName, versionKey) {
+		if _, ok := RemovePendingVersion(pending, versionKey); ok {
+			pendingChanged = true
+		}
+		return pendingChanged, failedChanged
+	}
+	if entry, ok := pending.Pending[versionKey]; ok && now.Sub(entry.StartedAt.UTC()) > PendingStaleAfter {
+		if _, ok := RemovePendingVersion(pending, versionKey); ok {
+			pendingChanged = true
+		}
+	}
+	_, _ = UpsertPendingVersion(pending, appName, version, now)
+	pendingChanged = true
+	return pendingChanged, failedChanged
 }
