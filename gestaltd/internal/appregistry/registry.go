@@ -39,27 +39,29 @@ type AppVersions struct {
 }
 
 type IndexVersion struct {
-	Metadata    string       `json:"metadata"`
-	Platforms   []string     `json:"platforms,omitempty"`
-	PublishedAt time.Time    `json:"publishedAt"`
-	SourceRef   string       `json:"sourceRef,omitempty"`
-	Repository  string       `json:"repository,omitempty"`
-	Publication *Publication `json:"publication,omitempty"`
+	Metadata         string       `json:"metadata"`
+	Platforms        []string     `json:"platforms,omitempty"`
+	PublishedAt      time.Time    `json:"publishedAt"`
+	PublishStartedAt *time.Time   `json:"publishStartedAt,omitempty"`
+	SourceRef        string       `json:"sourceRef,omitempty"`
+	Repository       string       `json:"repository,omitempty"`
+	Publication      *Publication `json:"publication,omitempty"`
 }
 
 type Entry struct {
-	SchemaVersion int                 `json:"schemaVersion"`
-	App           string              `json:"app"`
-	Version       string              `json:"version"`
-	SourceRef     string              `json:"sourceRef"`
-	ManifestPath  string              `json:"manifestPath"`
-	Repository    string              `json:"repository"`
-	Publication   *Publication        `json:"publication,omitempty"`
-	Artifacts     map[string]Artifact `json:"artifacts"`
-	Interface     Interface           `json:"interface,omitempty"`
-	Requires      Requires            `json:"requires,omitempty"`
-	Compatibility Compatibility       `json:"compatibility,omitempty"`
-	PublishedAt   time.Time           `json:"publishedAt"`
+	SchemaVersion    int                 `json:"schemaVersion"`
+	App              string              `json:"app"`
+	Version          string              `json:"version"`
+	SourceRef        string              `json:"sourceRef"`
+	ManifestPath     string              `json:"manifestPath"`
+	Repository       string              `json:"repository"`
+	Publication      *Publication        `json:"publication,omitempty"`
+	Artifacts        map[string]Artifact `json:"artifacts"`
+	Interface        Interface           `json:"interface,omitempty"`
+	Requires         Requires            `json:"requires,omitempty"`
+	Compatibility    Compatibility       `json:"compatibility,omitempty"`
+	PublishedAt      time.Time           `json:"publishedAt"`
+	PublishStartedAt *time.Time          `json:"publishStartedAt,omitempty"`
 }
 
 type Publication struct {
@@ -159,6 +161,11 @@ func AppNameFromManifestSource(source string) (string, error) {
 	return appName, err
 }
 
+func RepositoryFromManifestSource(source string) (string, error) {
+	_, repository, err := parseAppSource(source)
+	return repository, err
+}
+
 // RequirementAppName normalizes a requires.apps map key to the short fleet app name.
 // Manifest dependencies may use full source addresses (github.com/acme/apps/base)
 // while fleet catalog entries use short names (base).
@@ -251,6 +258,10 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		Compatibility: compatibility,
 		PublishedAt:   publishedAt.UTC(),
 	}
+	if !input.PublishStartedAt.IsZero() {
+		startedAt := input.PublishStartedAt.UTC()
+		entry.PublishStartedAt = &startedAt
+	}
 	if err := validateEntry(&entry); err != nil {
 		return Entry{}, err
 	}
@@ -258,14 +269,15 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 }
 
 type BuildEntryInput struct {
-	Manifest     *providermanifestv1.Manifest
-	Version      string
-	SourceRef    string
-	ManifestPath string
-	Publication  *Publication
-	Release      *providerrelease.Metadata
-	Artifacts    []PublishArtifact
-	PublishedAt  time.Time
+	Manifest         *providermanifestv1.Manifest
+	Version          string
+	SourceRef        string
+	ManifestPath     string
+	Publication      *Publication
+	Release          *providerrelease.Metadata
+	Artifacts        []PublishArtifact
+	PublishedAt      time.Time
+	PublishStartedAt time.Time
 }
 
 func buildArtifacts(artifacts []PublishArtifact) (map[string]Artifact, error) {
@@ -362,10 +374,12 @@ func requiresFromProviderRelease(requires providerrelease.Requires) Requires {
 }
 
 // EntriesEqualIgnoringPublishedAt reports whether two entries are identical except
-// for publishedAt, which is ignored for idempotent republish checks.
+// for publishedAt and publishStartedAt, which are ignored for idempotent republish checks.
 func EntriesEqualIgnoringPublishedAt(a, b Entry) bool {
 	a.PublishedAt = time.Time{}
 	b.PublishedAt = time.Time{}
+	a.PublishStartedAt = nil
+	b.PublishStartedAt = nil
 	aData, err := json.Marshal(a)
 	if err != nil {
 		return false
@@ -454,7 +468,8 @@ func validateIndex(index *Index) error {
 		if len(app.Versions) == 0 {
 			return fmt.Errorf("app registry index app %q has no versions", appName)
 		}
-		for version, release := range app.Versions {
+		for version := range app.Versions {
+			release := app.Versions[version]
 			if err := source.ValidateVersion(version); err != nil {
 				return fmt.Errorf("app registry index app %q version %q is invalid: %w", appName, version, err)
 			}
@@ -572,7 +587,7 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 	applyAppIndexAppMetadata(&app, displayName, description)
 	platforms := artifactPlatforms(entry.Artifacts)
 	sort.Strings(platforms)
-	app.Versions[entry.Version] = IndexVersion{
+	indexVersion := IndexVersion{
 		Metadata:    strings.TrimSpace(metadataPath),
 		Platforms:   platforms,
 		PublishedAt: entry.PublishedAt.UTC(),
@@ -580,6 +595,11 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 		Repository:  strings.TrimSpace(entry.Repository),
 		Publication: clonePublication(entry.Publication),
 	}
+	if entry.PublishStartedAt != nil && !entry.PublishStartedAt.IsZero() {
+		startedAt := entry.PublishStartedAt.UTC()
+		indexVersion.PublishStartedAt = &startedAt
+	}
+	app.Versions[entry.Version] = indexVersion
 	index.Apps[appName] = app
 	if err := validateIndex(index); err != nil {
 		return nil, false, err

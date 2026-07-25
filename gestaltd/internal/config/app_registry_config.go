@@ -37,7 +37,7 @@ func (c *AppRegistryConfig) UnmarshalYAML(value *yaml.Node) error {
 			case "publicUrl":
 				return fmt.Errorf("app registry publicUrl is derived from gcs.bucket")
 			case "publish":
-				return fmt.Errorf("app registry publish targets are passed to gestaltd app publish via --bucket")
+				return fmt.Errorf("app registry publish targets are passed to gestaltd app registry publish via --bucket")
 			}
 		}
 	}
