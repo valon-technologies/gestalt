@@ -10,7 +10,7 @@ func TestPrunePendingIndex_MovesStaleEntryToFailed(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)
-	staleStartedAt := now.Add(-2*time.Hour - time.Minute)
+	staleStartedAt := now.Add(-31 * time.Minute)
 	pending := &PendingIndex{
 		SchemaVersion: PendingIndexSchemaVersion,
 		App:           "traffic-cop",
@@ -46,7 +46,7 @@ func TestPrunePendingIndex_KeepsInFlightEntryWithinStaleWindow(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)
-	inFlightStartedAt := now.Add(-90 * time.Minute)
+	inFlightStartedAt := now.Add(-29 * time.Minute)
 	pending := &PendingIndex{
 		SchemaVersion: PendingIndexSchemaVersion,
 		App:           "traffic-cop",

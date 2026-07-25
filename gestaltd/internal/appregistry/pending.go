@@ -22,7 +22,7 @@ const (
 	FailedReasonWorkflowFailed = "workflow_failed"
 	FailedReasonStale          = "stale"
 
-	PendingStaleAfter = 2 * time.Hour
+	PendingStaleAfter = 30 * time.Minute
 	FailedRetainFor   = 30 * 24 * time.Hour
 )
 
