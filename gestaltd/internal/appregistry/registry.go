@@ -743,6 +743,14 @@ func clonePublication(value *Publication) *Publication {
 	return &out
 }
 
+func cloneTimePtr(value *time.Time) *time.Time {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+	cloned := value.UTC()
+	return &cloned
+}
+
 func CatalogOperationContracts(cat *catalog.Catalog) map[string]OperationContract {
 	if cat == nil {
 		return nil

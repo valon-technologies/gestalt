@@ -54,6 +54,56 @@ func (r *RegistryReader) fetchJSON(ctx context.Context, url string, notFoundEmpt
 	return body, nil
 }
 
+// FetchPendingIndex downloads apps/{app}/pending.json from a registry public root.
+func (r *RegistryReader) FetchPendingIndex(ctx context.Context, publicRoot, appName string) (*PendingIndex, error) {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return nil, fmt.Errorf("app name is required")
+	}
+	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+		return nil, err
+	}
+	publicRoot = strings.TrimRight(strings.TrimSpace(publicRoot), "/")
+	if publicRoot == "" {
+		return nil, fmt.Errorf("registry public URL is required")
+	}
+
+	url := PublicURL(publicRoot, AppPendingPath(appName))
+	body, err := r.fetchJSON(ctx, url, true)
+	if err != nil {
+		return nil, err
+	}
+	if body == nil {
+		return NewEmptyPendingIndex(appName), nil
+	}
+	return DecodePendingIndex(body)
+}
+
+// FetchFailedIndex downloads apps/{app}/failed.json from a registry public root.
+func (r *RegistryReader) FetchFailedIndex(ctx context.Context, publicRoot, appName string) (*FailedIndex, error) {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return nil, fmt.Errorf("app name is required")
+	}
+	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+		return nil, err
+	}
+	publicRoot = strings.TrimRight(strings.TrimSpace(publicRoot), "/")
+	if publicRoot == "" {
+		return nil, fmt.Errorf("registry public URL is required")
+	}
+
+	url := PublicURL(publicRoot, AppFailedPath(appName))
+	body, err := r.fetchJSON(ctx, url, true)
+	if err != nil {
+		return nil, err
+	}
+	if body == nil {
+		return NewEmptyFailedIndex(appName), nil
+	}
+	return DecodeFailedIndex(body)
+}
+
 // FetchAppIndex downloads apps/{app}/index.json from a registry public root.
 func (r *RegistryReader) FetchAppIndex(ctx context.Context, publicRoot, appName string) (*Index, error) {
 	appName = strings.TrimSpace(appName)
@@ -107,13 +157,14 @@ func (r *RegistryReader) FetchEntry(ctx context.Context, publicRoot, appName, ve
 
 // VersionSummary is a lightweight view of one published app version from an index.
 type VersionSummary struct {
-	Version     string       `json:"version"`
-	Metadata    string       `json:"metadata"`
-	Platforms   []string     `json:"platforms,omitempty"`
-	PublishedAt time.Time    `json:"publishedAt"`
-	SourceRef   string       `json:"sourceRef,omitempty"`
-	Repository  string       `json:"repository,omitempty"`
-	Publication *Publication `json:"publication,omitempty"`
+	Version          string       `json:"version"`
+	Metadata         string       `json:"metadata"`
+	Platforms        []string     `json:"platforms,omitempty"`
+	PublishedAt      time.Time    `json:"publishedAt"`
+	PublishStartedAt *time.Time   `json:"publishStartedAt,omitempty"`
+	SourceRef        string       `json:"sourceRef,omitempty"`
+	Repository       string       `json:"repository,omitempty"`
+	Publication      *Publication `json:"publication,omitempty"`
 }
 
 // VersionsFromIndex returns version summaries for appName, newest first.
@@ -129,13 +180,14 @@ func VersionsFromIndex(index *Index, appName string) []VersionSummary {
 	for version := range appVersions.Versions {
 		summary := appVersions.Versions[version]
 		out = append(out, VersionSummary{
-			Version:     version,
-			Metadata:    summary.Metadata,
-			Platforms:   append([]string(nil), summary.Platforms...),
-			PublishedAt: summary.PublishedAt.UTC(),
-			SourceRef:   summary.SourceRef,
-			Repository:  summary.Repository,
-			Publication: clonePublication(summary.Publication),
+			Version:          version,
+			Metadata:         summary.Metadata,
+			Platforms:        append([]string(nil), summary.Platforms...),
+			PublishedAt:      summary.PublishedAt.UTC(),
+			PublishStartedAt: cloneTimePtr(summary.PublishStartedAt),
+			SourceRef:        summary.SourceRef,
+			Repository:       summary.Repository,
+			Publication:      clonePublication(summary.Publication),
 		})
 	}
 	sortVersionsNewestFirst(out)

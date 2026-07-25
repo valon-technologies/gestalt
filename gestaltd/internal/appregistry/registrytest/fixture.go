@@ -27,6 +27,14 @@ type InstallFixture struct {
 	Version      string
 	SHA256       string
 	ArchiveBytes []byte
+	indexJSON    []byte
+	entryJSON    []byte
+}
+
+// CatalogDocuments holds optional pending and failed catalog JSON for test readers.
+type CatalogDocuments struct {
+	PendingJSON []byte
+	FailedJSON  []byte
 }
 
 // NewInstallFixture builds a mock GCS registry with one installable app version.
@@ -171,7 +179,47 @@ func NewInstallFixture(t *testing.T) InstallFixture {
 		Version:      version,
 		SHA256:       archiveSHA,
 		ArchiveBytes: archiveBytes,
+		indexJSON:    indexJSON,
+		entryJSON:    entryJSON,
 	}
+}
+
+// NewReaderWithCatalogs returns a reader backed by the install fixture plus
+// optional pending and failed catalog documents.
+func NewReaderWithCatalogs(t *testing.T, fixture InstallFixture, catalogs CatalogDocuments) *appregistry.RegistryReader {
+	t.Helper()
+
+	registrySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/" + Bucket + "/apps/g-issues/index.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(fixture.indexJSON)
+		case "/" + Bucket + "/apps/g-issues/versions/" + fixture.Version + ".json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(fixture.entryJSON)
+		case "/" + Bucket + "/apps/g-issues/artifacts/" + fixture.Version + "/artifact.tar.gz":
+			w.Header().Set("Content-Type", "application/gzip")
+			_, _ = w.Write(fixture.ArchiveBytes)
+		case "/" + Bucket + "/apps/g-issues/pending.json":
+			if len(catalogs.PendingJSON) == 0 {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(catalogs.PendingJSON)
+		case "/" + Bucket + "/apps/g-issues/failed.json":
+			if len(catalogs.FailedJSON) == 0 {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(catalogs.FailedJSON)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(registrySrv.Close)
+	return NewReaderForServer(t, registrySrv.URL)
 }
 
 // NewReaderForServer returns a reader that rewrites GCS public URLs to a test server.

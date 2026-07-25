@@ -209,3 +209,106 @@ func TestListAppsIncludesManagementPathForAppAdmin(t *testing.T) {
 		t.Fatalf("apps = %#v", apps)
 	}
 }
+
+func TestAppAdminRegistryIncludesPendingAndFailedVersions(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	reader := registrytest.NewReaderWithCatalogs(t, fixture, registrytest.CatalogDocuments{
+		PendingJSON: []byte(`{
+  "schemaVersion": 1,
+  "app": "g-issues",
+  "pending": {
+    "0.0.0-snapshot.gpending": {
+      "version": "0.0.0-snapshot.gpending",
+      "sourceRef": "abc123def456abc123def456abc123def456abcd",
+      "repository": "github.com/valon-technologies/valon-tools",
+      "startedAt": "2026-07-24T19:00:00Z",
+      "updatedAt": "2026-07-24T19:04:12Z",
+      "phase": "publishing"
+    },
+    "` + fixture.Version + `": {
+      "version": "` + fixture.Version + `",
+      "sourceRef": "abc123def456abc123def456abc123def456abcd",
+      "startedAt": "2026-07-24T19:00:00Z",
+      "updatedAt": "2026-07-24T19:04:12Z",
+      "phase": "publishing"
+    }
+  }
+}`),
+		FailedJSON: []byte(`{
+  "schemaVersion": 1,
+  "app": "g-issues",
+  "failed": {
+    "0.0.0-snapshot.gfailed": {
+      "version": "0.0.0-snapshot.gfailed",
+      "sourceRef": "abc123def456abc123def456abc123def456abcd",
+      "repository": "github.com/valon-technologies/valon-tools",
+      "startedAt": "2026-07-24T18:00:00Z",
+      "failedAt": "2026-07-24T18:35:00Z",
+      "reason": "stale"
+    }
+  }
+}`),
+	})
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET registry state: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET status = %d: %s", response.StatusCode, body)
+	}
+	var state struct {
+		PublishedVersions []struct {
+			Version string `json:"version"`
+		} `json:"publishedVersions"`
+		PendingVersions []struct {
+			Version              string `json:"version"`
+			PublishingForSeconds *int64 `json:"publishingForSeconds"`
+		} `json:"pendingVersions"`
+		FailedVersions []struct {
+			Version                string `json:"version"`
+			Reason                 string `json:"reason"`
+			PublishDurationSeconds *int64 `json:"publishDurationSeconds"`
+		} `json:"failedVersions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&state); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if len(state.PublishedVersions) != 1 || state.PublishedVersions[0].Version != fixture.Version {
+		t.Fatalf("publishedVersions = %#v", state.PublishedVersions)
+	}
+	if len(state.PendingVersions) != 1 || state.PendingVersions[0].Version != "0.0.0-snapshot.gpending" {
+		t.Fatalf("pendingVersions = %#v", state.PendingVersions)
+	}
+	if state.PendingVersions[0].PublishingForSeconds == nil {
+		t.Fatalf("pendingVersions missing publishingForSeconds: %#v", state.PendingVersions)
+	}
+	if len(state.FailedVersions) != 1 || state.FailedVersions[0].Version != "0.0.0-snapshot.gfailed" {
+		t.Fatalf("failedVersions = %#v", state.FailedVersions)
+	}
+	if state.FailedVersions[0].PublishDurationSeconds == nil || state.FailedVersions[0].Reason != "stale" {
+		t.Fatalf("failedVersions = %#v", state.FailedVersions)
+	}
+}

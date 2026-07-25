@@ -148,3 +148,58 @@ func TestVersionsFromIndex_RoundTripsPublishedAt(t *testing.T) {
 		t.Fatalf("publishedAt json = %s", got)
 	}
 }
+
+func TestRegistryReader_FetchPendingIndex(t *testing.T) {
+	t.Parallel()
+
+	pendingJSON := `{
+  "schemaVersion": 1,
+  "app": "g-issues",
+  "pending": {
+    "0.0.2": {
+      "version": "0.0.2",
+      "sourceRef": "abc123def456abc123def456abc123def456abcd",
+      "startedAt": "2026-07-24T19:00:00Z",
+      "updatedAt": "2026-07-24T19:04:12Z",
+      "phase": "publishing"
+    }
+  }
+}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/apps/g-issues/pending.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(pendingJSON))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	reader := &RegistryReader{HTTPClient: srv.Client()}
+	index, err := reader.FetchPendingIndex(t.Context(), srv.URL, "g-issues")
+	if err != nil {
+		t.Fatalf("FetchPendingIndex: %v", err)
+	}
+	if len(index.Pending) != 1 || index.Pending["0.0.2"].Phase != PendingPhasePublishing {
+		t.Fatalf("pending = %#v", index.Pending)
+	}
+}
+
+func TestRegistryReader_FetchFailedIndex_NotFoundReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	reader := &RegistryReader{HTTPClient: srv.Client()}
+	index, err := reader.FetchFailedIndex(t.Context(), srv.URL, "g-issues")
+	if err != nil {
+		t.Fatalf("FetchFailedIndex: %v", err)
+	}
+	if index == nil || len(index.Failed) != 0 {
+		t.Fatalf("failed = %#v, want empty catalog", index)
+	}
+}
