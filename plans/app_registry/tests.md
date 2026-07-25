@@ -72,6 +72,38 @@ Expected plan fields:
 
 ---
 
+## Pending catalog write path
+
+Planned in pending publish PR 1. See [pending-publish.md](./pending-publish.md#pr-1--models-and-write-path-gestalt).
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/appregistry -run 'Pending|Prune|Record|Upsert|DecodePending|PublishStartedAt' -count=1
+go test ./internal/daemon/e2e/app_publish -run 'AppRegistryPublish|AppPublish' -count=1
+```
+
+### `internal/appregistry/pending_test.go`
+
+- **`TestPrunePendingIndex_MovesStaleEntryToFailed`** — pending `startedAt` older than 30 minutes moves to `failed.json` with `reason=stale`.
+- **`TestPrunePendingIndex_KeepsInFlightEntryWithinStaleWindow`** — in-flight pending younger than 30 minutes is not stale-pruned.
+- **`TestPrunePendingIndex_DropsAlreadyPublishedVersion`** — pending entry is removed when the version is already in `index.json`.
+- **`TestPruneFailedIndex_RemovesOldAndPublishedEntries`** — failed entries older than 30 days or already published are pruned.
+- **`TestUpsertPendingVersion_PreservesStartedAt`** — `pending set` refresh keeps the original `startedAt`.
+- **`TestRecordFailedVersion_IsIdempotent`** — `pending fail` does not overwrite an existing failed entry.
+- **`TestDecodePendingAndFailedIndexRoundTrip`** — JSON encode/decode validates catalog shapes.
+- **`TestRemoveFailedVersion`** — `pending set` clears a prior `failed.{version}` on workflow retry.
+- **`TestPublishStartedAtFromPending`** — publish reads `startedAt` from a matching pending entry.
+- **`TestUpsertAppIndex_CopiesPublishStartedAt`** — published index entries copy `publishStartedAt` from the version metadata.
+
+### `internal/daemon/e2e/app_publish/app_publish_test.go`
+
+- **`TestRun_AppRegistryPublishDryRunMatchesDeprecatedAlias`** — `gestaltd app registry publish --dry-run` emits the same plan as the deprecated `gestaltd app publish` command.
+- **`TestRun_AppPublishUploadsAndRetriesIndexWithProgress`** — deprecated `gestaltd app publish` prints a stderr deprecation warning.
+
+---
+
 ## Add and upgrade HTTP integration
 
 Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (`POST …/install`). Registry-only apps use separate `add` and `upgrade` routes — see [lifecycle.md](./lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
