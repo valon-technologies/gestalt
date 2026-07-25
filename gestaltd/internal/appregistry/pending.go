@@ -388,10 +388,7 @@ func ApplyPendingSet(pending *PendingIndex, failed *FailedIndex, published *Inde
 	now = now.UTC()
 
 	pendingChanged := false
-	failedChanged := false
-	if RemoveFailedVersion(failed, versionKey) {
-		failedChanged = true
-	}
+	failedChanged := RemoveFailedVersion(failed, versionKey)
 	prunedPending, prunedFailed := PrunePendingIndex(pending, failed, published, now, versionKey)
 	if prunedPending {
 		pendingChanged = true

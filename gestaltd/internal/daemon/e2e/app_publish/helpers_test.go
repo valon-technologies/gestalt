@@ -20,6 +20,25 @@ const (
 	releaseTestSource  = "github.com/testowner/apps/apps/release-test"
 )
 
+func installFakeGcloudForAppPublishDryRun(t *testing.T) {
+	t.Helper()
+
+	binDir := t.TempDir()
+	fakeGcloud := filepath.Join(binDir, "gcloud")
+	if err := os.WriteFile(fakeGcloud, []byte(`#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = "storage" ] && [ "$2" = "objects" ] && [ "$3" = "describe" ]; then
+  echo "not found" >&2
+  exit 1
+fi
+echo "unexpected gcloud command: $*" >&2
+exit 1
+`), 0o755); err != nil {
+		t.Fatalf("write fake gcloud: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
 func gestaltdCommand(args ...string) *exec.Cmd {
 	return exec.Command(gestaltdBin, args...)
 }
