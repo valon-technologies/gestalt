@@ -277,7 +277,7 @@ Fetches `apps/{app}/index.json` from the configured registry's `publicUrl` and r
 | Parameter | Description |
 |-----------|-------------|
 | `registry` | Name of a configured registry (`appRegistries` key) |
-| `app` | Published app name (same rules as `gestaltd app publish --app`) |
+| `app` | Published app name (same rules as `gestaltd app registry publish --app`) |
 
 App names must match `providerregistry.ValidateRepositoryName`: lowercase letters, digits, dots, underscores, and hyphens only. Invalid names (including path traversal such as `..`) return `400`.
 
@@ -688,6 +688,10 @@ Rules:
 - `publishedVersions` comes from the registry index, newest `publishedAt` first.
   Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication`
   when recorded. Legacy versions may omit `publication`.
+- `pendingVersions` and `failedVersions` come from `pending.json` and
+  `failed.json`. See [pending-publish.md](./pending-publish.md#read-path).
+- When the same version appears in more than one catalog, apply
+  [merge rules](./pending-publish.md#app-admin-api).
 - `selectionDisabled` is true only while rollout state is `enrolling` or
   `restarting`.
 

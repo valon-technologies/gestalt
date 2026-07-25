@@ -7,6 +7,7 @@ Related docs:
 - [plan.md](./plan.md) — implementation path
 - [lifecycle.md](./lifecycle.md) — HTTP APIs, admission checks, and rollout behavior
 - [indexeddb.md](./indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
+- [pending-publish.md](./pending-publish.md) — in-flight publish visibility on app admin
 - [tests.md](./tests.md#admin-observability-tests) — observability HTTP and UI tests; [app version selection tests](./tests.md#app-version-selection-tests)
 
 ---
@@ -108,39 +109,71 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
 - **Manage app** on the `/apps` catalog when the caller can administer that app.
 - Select the fleet-wide desired version: first install, upgrade, or revert to an older published version.
 - Show per-version `publishedAt`, linked source commit, triggering PR or commit, and publishing workflow run.
+- Show in-flight (**Publishing**) and recent failed (**Failed**) publishes with elapsed or total publish time. See [pending-publish.md](./pending-publish.md).
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
-- Disable the selector while a rollout is `enrolling` or `restarting`; refresh until terminal.
+- Disable deploy actions while a rollout is `enrolling` or `restarting`; refresh until terminal.
 - Render access denied on **403** without leaking registry metadata.
 
 Selection is fleet-wide. It is not per-user or per-replica.
 
 ### App admin page
 
+The page header shows the app name, **App management** label, and registry
+binding. Below that: current **Desired version**, then the **Published
+snapshots** table (pending, failed, and published entries in one newest-first
+list). See [pending-publish.md](./pending-publish.md) for merge rules, polling,
+and timing labels. Each row has **Deploy** in the action column unless selection
+is disabled or the row is not deployable.
+
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ g-issues                                      App management │
+│ g-issues                               App management       │
 │ registry: toolshed                                          │
 ├─────────────────────────────────────────────────────────────┤
-│ Desired version                                             │
-│ [ 0.0.0-snapshot.gabc123                         ▾ ]         │
+│ Desired version: 0.0.0-snapshot.gabc123                     │
+├─────────────────────────────────────────────────────────────┤
+│ Published snapshots                                         │
 │                                                             │
-│ Published 2026-07-22 15:00 · linux/amd64                    │
-│ Commit def456 · PR #3251 · workflow run                     │
-│                                                             │
-│                                      [ Select version ]      │
+│ Version                 Status       Published    Action    │
+│ 0.0.0-snapshot.g…       Publishing   for 4m       —         │
+│                                      PR #3740 · workflow    │
+│ 0.0.0-snapshot.g…       Available    Jul 22 15:00 Deploy    │
+│                                      in 4m 32s · PR #3251   │
+│ 0.0.0-snapshot.g…       Deployed     Jul 21 12:00 —         │
+│                                      PR #3200               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-During an active rollout:
+Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is disabled on **Publishing** and **Failed** rows. **Deployed** marks the desired version.
+
+During an active rollout, disable deploy actions and show rollout state above the
+table:
 
 ```text
-│ Rollout enrolling: 0.0.0-snapshot.gdef456                  │
-│ [ 0.0.0-snapshot.gabc123                         ▾ ] disabled│
-│                                      [ Select version ] disabled
+┌─────────────────────────────────────────────────────────────┐
+│ g-issues                               App management       │
+│ registry: toolshed                                          │
+├─────────────────────────────────────────────────────────────┤
+│ Desired version: 0.0.0-snapshot.gabc123                     │
+│ Rollout enrolling: 0.0.0-snapshot.gdef456                   │
+├─────────────────────────────────────────────────────────────┤
+│ Published snapshots                                         │
+│                                                             │
+│ Version                 Status       Published    Action    │
+│ 0.0.0-snapshot.g…       Rolling out  Jul 22 15:00 disabled  │
+│ 0.0.0-snapshot.g…       Deployed     Jul 21 12:00 disabled  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-After a successful selection, show the new rollout state and keep the selector
-disabled until that rollout reaches `complete` or `failed`.
+A **Failed** row in the same table:
+
+```text
+│ 0.0.0-snapshot.g…       Failed       Jul 24 18:35 —         │
+│                                      after 35m · Timed out  │
+```
+
+After a successful deploy selection, keep deploy actions disabled until the
+rollout reaches `complete` or `failed`.
 
 ---
 

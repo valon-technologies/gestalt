@@ -42,7 +42,7 @@ Each published version should include immutable metadata and artifact references
 
 `config.yaml` defines where Gestalt **reads** installable apps (`appRegistries`). That is the deploy/runtime reader config.
 
-CI **publishes** with CLI flags — `gestaltd app publish --bucket BUCKET` — not a publisher block in config. Immutability is enforced by the publish command. See [config.md](./config.md).
+CI **publishes** with CLI flags — `gestaltd app registry publish --bucket BUCKET` — not a publisher block in config. Immutability is enforced by the publish command. See [config.md](./config.md).
 
 Registries may be public or private. A private registry may require credentials or a configured secrets provider.
 
@@ -59,7 +59,7 @@ appRegistries:
 Publish example (CI workflow):
 
 ```bash
-gestaltd app publish \
+gestaltd app registry publish \
   --bucket gs://gitlab-peach-street-gestalt-app-registry \
   --app g-issues \
   --version 0.0.1 \
@@ -67,7 +67,7 @@ gestaltd app publish \
   --dist-dir dist/
 ```
 
-`gestaltd app publish` writes immutable objects under `apps/{app}/` in the bucket:
+`gestaltd app registry publish` writes immutable objects under `apps/{app}/` in the bucket:
 
 ```text
 apps/{app}/
@@ -203,7 +203,7 @@ Store schema and service API: [indexeddb.md](./indexeddb.md#store-app_version_ch
 
 Validation should happen in two phases.
 
-At publish time, `gestaltd provider package`, `gestaltd provider publish`, or `gestaltd app publish` should validate the app version before writing it to the registry.
+At publish time, `gestaltd provider package`, `gestaltd provider publish`, or `gestaltd app registry publish` should validate the app version before writing it to the registry.
 
 Publish-time validation should ensure:
 
@@ -249,7 +249,7 @@ Core recovery paths must not depend on dynamically installed apps.
 
 ## Implementation Path
 
-1. Prototype a GCS registry and publish a single app there (`publish-app-registry.yml` + `gestaltd app publish --bucket`).
+1. Prototype a GCS registry and publish a single app there (`publish-app-registry.yml` + `gestaltd app registry publish --bucket`).
 2. Use a parallel path to `publish-app-snapshot.yml` so normal app publishing is not interrupted.
 3. Start with publishing `g-issues`.
 4. Prototype a Gestalt endpoint that lists available versions in configured registries. See [lifecycle.md](./lifecycle.md).
@@ -267,6 +267,13 @@ Core recovery paths must not depend on dynamically installed apps.
 
 ## Future work
 
+### Pending publish visibility
+
+Show in-flight and recently failed CI publishes on `/apps/{app}/admin` before
+and after `index.json` is updated. Add mutable `apps/{app}/pending.json` and
+`apps/{app}/failed.json` in GCS, CI lifecycle hooks, and pending/failed rows in
+the app-admin API and snapshots table. See [pending-publish.md](./pending-publish.md).
+
 ### Packaged workflow metadata
 
 Packaged apps declare workflow definitions in provider source. Bootstrap registers them from `DeclaredWorkflowDefinitions` after install — too late to reject a bad version before fleet accept.
@@ -276,7 +283,7 @@ Install validation should read workflow app-call targets from `versions/{version
 At publish time:
 
 - derive `workflows.yaml` during `gestaltd provider package` (`GESTALT_APP_WRITE_WORKFLOWS`), including when `catalog.yaml` already exists
-- copy app-call steps into the registry entry at `gestaltd app publish`
+- copy app-call steps into the registry entry at `gestaltd app registry publish`
 - require identical workflow metadata across platform archives (same rule as static catalog)
 
 At install time, validate `entry.workflows` before `AppendRequest` — see [validation.md](./validation.md). Config-managed `workflows.definitions` stay separate and are validated at config load.

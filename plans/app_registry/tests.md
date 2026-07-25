@@ -36,7 +36,7 @@ Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.
 
 ## Publish dry-run E2E
 
-Added in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) (GCS app registry + `gestaltd app publish`).
+Added in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) (GCS app registry + `gestaltd app registry publish`).
 
 Run:
 
@@ -45,7 +45,7 @@ cd gestaltd
 go test ./internal/daemon/e2e/appregistry -count=1
 ```
 
-This is a **behavioral** test: the compiled `gestaltd` binary runs as a subprocess through `provider package` → `app publish --dry-run`. No real GCS uploads.
+This is a **behavioral** test: the compiled `gestaltd` binary runs as a subprocess through `provider package` → `app registry publish --dry-run`. No real GCS uploads.
 
 `--dry-run` always prints a JSON plan (`gestaltd.app.publish.plan.v1`) to stdout.
 
@@ -58,7 +58,7 @@ Flow:
 1. Create a temp app fixture at `apps/release-test/` (`newAppRegistryPublishFixture`)
 2. Initialize a git repo (`initProviderPublishGitRepo`)
 3. Run `gestaltd provider package --version … --output dist/`
-4. Run `gestaltd app publish --bucket gs://gestalt-app-registry --app release-test --version … --ref … --dist-dir dist/ --dry-run`
+4. Run `gestaltd app registry publish --bucket gs://gestalt-app-registry --app release-test --version … --ref … --dist-dir dist/ --dry-run`
 5. Decode and assert the JSON plan
 
 Expected plan fields:
@@ -69,6 +69,38 @@ Expected plan fields:
 - `entryObject.publicUrl` → `https://storage.googleapis.com/gestalt-app-registry/apps/release-test/versions/{version}.json`
 - `artifactObjects[0].storageUrl` → `gs://gestalt-app-registry/apps/release-test/artifacts/{version}/gestalt-app-release-test_v{version}_{os}_{arch}.tar.gz`
 - `indexObject.storageUrl` → `gs://gestalt-app-registry/apps/release-test/index.json`
+
+---
+
+## Pending catalog write path
+
+Planned in pending publish PR 1. See [pending-publish.md](./pending-publish.md#pr-1--models-and-write-path-gestalt).
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/appregistry -run 'Pending|Prune|Record|Upsert|DecodePending|PublishStartedAt' -count=1
+go test ./internal/daemon/e2e/app_publish -run 'AppRegistryPublish|AppPublish' -count=1
+```
+
+### `internal/appregistry/pending_test.go`
+
+- **`TestPrunePendingIndex_MovesStaleEntryToFailed`** — pending `startedAt` older than 30 minutes moves to `failed.json` with `reason=stale`.
+- **`TestPrunePendingIndex_KeepsInFlightEntryWithinStaleWindow`** — in-flight pending younger than 30 minutes is not stale-pruned.
+- **`TestPrunePendingIndex_DropsAlreadyPublishedVersion`** — pending entry is removed when the version is already in `index.json`.
+- **`TestPruneFailedIndex_RemovesOldAndPublishedEntries`** — failed entries older than 30 days or already published are pruned.
+- **`TestUpsertPendingVersion_PreservesStartedAt`** — `pending set` refresh keeps the original `startedAt`.
+- **`TestRecordFailedVersion_IsIdempotent`** — `pending fail` does not overwrite an existing failed entry.
+- **`TestDecodePendingAndFailedIndexRoundTrip`** — JSON encode/decode validates catalog shapes.
+- **`TestRemoveFailedVersion`** — `pending set` clears a prior `failed.{version}` on workflow retry.
+- **`TestPublishStartedAtFromPending`** — publish reads `startedAt` from a matching pending entry.
+- **`TestUpsertAppIndex_CopiesPublishStartedAt`** — published index entries copy `publishStartedAt` from the version metadata.
+
+### `internal/daemon/e2e/app_publish/app_publish_test.go`
+
+- **`TestRun_AppRegistryPublishDryRunMatchesDeprecatedAlias`** — `gestaltd app registry publish --dry-run` emits the same plan as the deprecated `gestaltd app publish` command.
+- **`TestRun_AppPublishUploadsAndRetriesIndexWithProgress`** — deprecated `gestaltd app publish` prints a stderr deprecation warning.
 
 ---
 

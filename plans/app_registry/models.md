@@ -1,17 +1,20 @@
 # App Registry Models
 
-Reference for the JSON documents stored in a GCS app registry by `gestaltd app publish`.
+Reference for the JSON documents stored in a GCS app registry by `gestaltd app registry publish`.
 
 For deploy reader config (`appRegistries`), see [config.md](./config.md). For broader goals (runtime install, IndexedDB state, validation phases), see [plan.md](./plan.md). For the Go package API that reads and writes these documents, see [service.md](./service.md).
 
 ## Overview
 
-The registry stores two kinds of JSON per app.
+The registry stores published release JSON plus mutable pending and failed
+catalogs per app.
 
 Immutable app archives live alongside published versions:
 
     apps/{app}/
     ├── index.json
+    ├── pending.json
+    ├── failed.json
     ├── versions/
     │   └── {version}.json
     └── artifacts/
@@ -21,9 +24,11 @@ Immutable app archives live alongside published versions:
 | Document | Path | Purpose |
 |----------|------|---------|
 | **Index** | `apps/{app}/index.json` | Lightweight catalog of published versions |
+| **PendingIndex** | `apps/{app}/pending.json` | In-flight publishes (not installable). See [pending-publish.md](./pending-publish.md). |
+| **FailedIndex** | `apps/{app}/failed.json` | Recent failed publishes (not installable). See [pending-publish.md](./pending-publish.md). |
 | **PublishedVersion** | `apps/{app}/versions/{version}.json` | Full metadata and install contract for one version |
 
-Document type is implied by path. Each JSON document has a root `schemaVersion` field (currently `1` for both index and published version). Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
+Document type is implied by path. Each JSON document has a root `schemaVersion` field (currently `1` for index, pending index, and published version). Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
 
 Implementation: `gestaltd/internal/appregistry/`.
 
@@ -47,6 +52,7 @@ Answers: *what versions exist, where is their metadata, which platforms were pub
           "metadata": "apps/g-issues/versions/0.0.0-snapshot.gabc123.json",
           "platforms": ["linux/amd64"],
           "publishedAt": "2026-07-09T12:00:00Z",
+          "publishStartedAt": "2026-07-09T11:55:28Z",
           "sourceRef": "abc123def456abc123def456abc123def456abcd",
           "repository": "github.com/valon-technologies/valon-tools",
           "publication": {
@@ -76,6 +82,7 @@ Nested objects are keyed by maps in JSON. Arrows show the Go type at each level 
             ├── metadata
             ├── platforms
             ├── publishedAt
+            ├── publishStartedAt
             ├── sourceRef
             ├── repository
             └── publication
@@ -110,9 +117,177 @@ Each key in `versions` is a published version string (e.g. 0.0.0-snapshot.gabc12
 | `metadata` | string | yes | Relative path to the full published version JSON, e.g. `apps/g-issues/versions/0.0.1.json`. |
 | `platforms` | string array | no | Build targets available for this version (see example JSON). Derived from published version artifact keys at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
+| `publishStartedAt` | RFC 3339 timestamp | no | When CI recorded the version as pending. Copied from `PendingVersion.startedAt` at publish time. Present on CI publishes after `pending set`; omitted on legacy entries and manual publishes without a pending entry. See [pending-publish.md](./pending-publish.md#publish-duration). |
 | `sourceRef` | string | no | Packaged commit SHA. Copied from `PublishedVersion.sourceRef`. |
 | `repository` | string | no | Source repository. Copied from `PublishedVersion.repository`. |
 | `publication` | object | no | Publish workflow provenance. Copied from `PublishedVersion.publication`. |
+
+---
+
+## PendingIndex
+
+**Path:** `apps/{app}/pending.json`
+
+Answers: *which versions are currently being published for this app, and what
+provenance is known so far?*
+
+Mutable catalog updated by CI at publish start. Removed on successful publish via
+`gestaltd app registry pending clear`, or recorded in `failed.json` via
+`gestaltd app registry pending fail` or stale prune. Pending versions are **not**
+installable. See [pending-publish.md](./pending-publish.md).
+
+```json
+{
+  "schemaVersion": 1,
+  "app": "traffic-cop",
+  "pending": {
+    "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd": {
+      "version": "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd",
+      "sourceRef": "abc123def456abc123def456abc123def456abcd",
+      "repository": "github.com/valon-technologies/toolshed",
+      "startedAt": "2026-07-24T19:00:00Z",
+      "updatedAt": "2026-07-24T19:04:12Z",
+      "phase": "publishing",
+      "publication": {
+        "workflowRunUrl": "https://github.com/valon-technologies/toolshed/actions/runs/123456789",
+        "triggerPullRequest": {
+          "number": 3740,
+          "url": "https://github.com/valon-technologies/toolshed/pull/3740",
+          "title": "Wire traffic-cop to app registry"
+        }
+      }
+    }
+  }
+}
+```
+
+For comparison, the same app's `index.json` entry for a completed publish uses
+`apps` nesting and `publishedAt` / `metadata` instead of `phase` / `startedAt`.
+See [Index](#index).
+
+### Object hierarchy
+
+    PendingIndex
+    ├── schemaVersion
+    ├── app
+    └── pending: map[version] to PendingVersion
+        ├── version
+        ├── sourceRef
+        ├── repository
+        ├── startedAt
+        ├── updatedAt
+        ├── phase
+        └── publication
+
+### Fields
+
+#### Root · `PendingIndex`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `schemaVersion` | int | yes | Pending index document format version. Start at `1`. |
+| `app` | string | yes | App name. Must match the `{app}` path segment. |
+| `pending` | map | yes | Version string → `PendingVersion`. Empty map when no publishes are in flight. |
+
+#### `PendingIndex.pending` · `PendingVersion`
+
+Each key in `pending` is a version string being published (e.g.
+`0.0.0-snapshot.gabc123`). The value is a `PendingVersion` summary.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | string | yes | Snapshot version being published. Same semver rules as published versions. |
+| `sourceRef` | string | yes | Commit SHA the publish is building from. |
+| `repository` | string | no | Source repository. Same format as `IndexVersion.repository`. |
+| `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (UTC). |
+| `updatedAt` | RFC 3339 timestamp | yes | Last phase or metadata update (UTC). |
+| `phase` | string | yes | Always `publishing` while the version is pending. See [pending-publish.md](./pending-publish.md#phases). |
+| `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
+
+Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
+generation, merge, upload with `if-generation-match`). `gestaltd app registry
+pending set` runs `PrunePendingIndex` and `PruneFailedIndex` before upserting.
+See [pending-publish.md](./pending-publish.md#self-healing).
+
+---
+
+## FailedIndex
+
+**Path:** `apps/{app}/failed.json`
+
+Answers: *which recent publish attempts failed for this app, and when?*
+
+Mutable catalog updated when CI calls `gestaltd app registry pending fail` or
+when `PrunePendingIndex` moves a stale pending entry. Failed versions are **not**
+installable. See [pending-publish.md](./pending-publish.md).
+
+```json
+{
+  "schemaVersion": 1,
+  "app": "traffic-cop",
+  "failed": {
+    "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd": {
+      "version": "0.0.0-snapshot.gabc123def456abc123def456abc123def456abcd",
+      "sourceRef": "abc123def456abc123def456abc123def456abcd",
+      "repository": "github.com/valon-technologies/toolshed",
+      "startedAt": "2026-07-24T19:00:00Z",
+      "failedAt": "2026-07-24T19:35:00Z",
+      "reason": "stale",
+      "publication": {
+        "workflowRunUrl": "https://github.com/valon-technologies/toolshed/actions/runs/123456789",
+        "triggerPullRequest": {
+          "number": 3740,
+          "url": "https://github.com/valon-technologies/toolshed/pull/3740",
+          "title": "Wire traffic-cop to app registry"
+        }
+      }
+    }
+  }
+}
+```
+
+### Object hierarchy
+
+    FailedIndex
+    ├── schemaVersion
+    ├── app
+    └── failed: map[version] to FailedVersion
+        ├── version
+        ├── sourceRef
+        ├── repository
+        ├── startedAt
+        ├── failedAt
+        ├── reason
+        └── publication
+
+### Fields
+
+#### Root · `FailedIndex`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `schemaVersion` | int | yes | Failed index document format version. Start at `1`. |
+| `app` | string | yes | App name. Must match the `{app}` path segment. |
+| `failed` | map | yes | Version string → `FailedVersion`. Empty map when there are no recent failures. |
+
+#### `FailedIndex.failed` · `FailedVersion`
+
+Each key is a version string whose publish attempt failed.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | string | yes | Snapshot version that failed to publish. |
+| `sourceRef` | string | yes | Commit SHA the publish was building from. |
+| `repository` | string | no | Source repository. Same format as `IndexVersion.repository`. |
+| `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (copied from pending). |
+| `failedAt` | RFC 3339 timestamp | yes | When the failure was recorded (UTC). |
+| `reason` | string | yes | `workflow_failed` — CI called `pending fail`. `stale` — pending `startedAt` exceeded 30 minutes during `PrunePendingIndex`. |
+| `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Copied from the pending row when present. |
+
+Writes use the same optimistic-concurrency pattern as `pending.json`.
+`PruneFailedIndex` removes entries older than 30 days on
+`gestaltd app registry pending set`. See
+[pending-publish.md](./pending-publish.md#prunefailedindex).
 
 ---
 
@@ -167,7 +342,8 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
   "compatibility": {
     "minGestaltdVersion": "0.20.0"
   },
-  "publishedAt": "2026-07-09T12:00:00Z"
+  "publishedAt": "2026-07-09T12:00:00Z",
+  "publishStartedAt": "2026-07-09T11:55:28Z"
 }
 ```
 
@@ -181,6 +357,7 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
     ├── manifestPath
     ├── repository
     ├── publishedAt
+    ├── publishStartedAt
     ├── publication
     │   ├── workflowRunUrl
     │   ├── triggerPullRequest
@@ -223,6 +400,7 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
 | `requires` | object | no | Declared dependencies on other apps. Copied from the provider release `staticValidation.requires` block at publish time. |
 | `compatibility` | object | no | Runtime constraints, e.g. minimum `gestaltd` version. Copied from the provider release `staticValidation.compatibility` block at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
+| `publishStartedAt` | RFC 3339 timestamp | no | When CI recorded the version as pending. Copied from `PendingVersion.startedAt` at publish time. Present on CI publishes after `pending set`; omitted on legacy entries and manual publishes without a pending entry. See [pending-publish.md](./pending-publish.md#publish-duration). |
 
 #### `PublishedVersion.publication` · `Publication`
 
