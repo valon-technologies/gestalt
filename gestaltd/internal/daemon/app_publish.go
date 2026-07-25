@@ -173,10 +173,7 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 		return err
 	}
 
-	publishStartedAt, err := loadAppRegistryPublishStartedAt(registry, strings.TrimSpace(*appName), strings.TrimSpace(*version))
-	if err != nil {
-		return err
-	}
+	publishStartedAt := loadAppRegistryPublishStartedAt(registry, strings.TrimSpace(*appName), strings.TrimSpace(*version))
 
 	plan, err := buildAppPublishPlan(appPublishPlanInput{
 		Registry:         registry,
@@ -685,28 +682,25 @@ func appPublishPreconditionFailed(err error) bool {
 		strings.Contains(text, "412")
 }
 
-func loadAppRegistryPublishStartedAt(registry config.AppRegistryConfig, appName, version string) (time.Time, error) {
+func loadAppRegistryPublishStartedAt(registry config.AppRegistryConfig, appName, version string) time.Time {
 	storageRoot, err := registry.StorageURL()
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}
 	}
 	pendingURL := appregistry.StorageURL(storageRoot, appregistry.AppPendingPath(appName))
 	_, pendingData, err := downloadAppRegistryObject(pendingURL)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if len(pendingData) == 0 {
-		return time.Time{}, nil
+	if err != nil || len(pendingData) == 0 {
+		return time.Time{}
 	}
 	pending, err := appregistry.DecodePendingIndex(pendingData)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("decode pending catalog: %w", err)
+		return time.Time{}
 	}
 	startedAt, ok := appregistry.PublishStartedAtFromPending(pending, version)
 	if !ok {
-		return time.Time{}, nil
+		return time.Time{}
 	}
-	return startedAt, nil
+	return startedAt
 }
 
 func downloadAppRegistryObject(storageURL string) (int64, []byte, error) {
