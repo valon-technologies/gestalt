@@ -17,8 +17,8 @@ are never fleet-known; many that were desired once are superseded quickly.
 
 ## Goals
 
-- Configurable **default retention** on each registry binding (`unusedRetention`,
-  `deployedRetention`), with optional per-app overrides.
+- Configurable retention on each registry binding (`unusedRetention`,
+  `deployedRetention`).
 - Mutable `retention.json` per app tracking `lastUsedAt`, `everDeployed`, and
   optional `pinned`.
 - **Unused retention** (default `72h`) — delete published versions that were
@@ -38,17 +38,11 @@ On `appRegistries.{name}`:
 
 ```yaml
 retention:
-  default:
-    unusedRetention: 72h
-    deployedRetention: 168h
-  apps:
-    g-issues:
-      unusedRetention: 48h
-      deployedRetention: 336h
+  unusedRetention: 72h
+  deployedRetention: 168h
 ```
 
-Precedence: `retention.apps.{app}` → `retention.default` → built-in (`72h` /
-`168h`). See [config.md](./config.md).
+Defaults: `72h` / `168h` when omitted. See [config.md](./config.md).
 
 ## Schema and storage
 

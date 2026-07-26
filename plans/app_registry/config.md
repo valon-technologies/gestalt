@@ -36,13 +36,12 @@ appRegistries:
     gcs:
       bucket: gs://gestalt-app-registry
     retention:
-      default:
-        unusedRetention: 72h
-        deployedRetention: 168h
+      unusedRetention: 72h
+      deployedRetention: 168h
 ```
 
-See [retention.md](./retention.md) for policy semantics, per-app overrides, and
-the `retention.json` overlay.
+See [retention.md](./retention.md) for policy semantics and the `retention.json`
+overlay.
 
 `gcs.bucket` accepts a bare bucket name or `gs://{bucket}`. Gestalt derives both URL forms:
 
