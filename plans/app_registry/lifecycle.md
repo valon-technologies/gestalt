@@ -13,7 +13,6 @@ Related docs:
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
-- [service.md](./service.md) — Go publish/read helpers behind the registry bucket
 - [tests.md](./tests.md) — convergence unit tests
 
 Implementation:

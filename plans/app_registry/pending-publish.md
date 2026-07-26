@@ -9,7 +9,6 @@ Related docs:
 - [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [models.md](./models.md) — [PendingIndex](./models.md#pendingindex) and [FailedIndex](./models.md#failedindex)
 - [admin.md](./admin.md) — app admin UI capabilities
-- [service.md](./service.md) — Go publish/read helpers
 - [lifecycle.md](./lifecycle.md) — app-admin HTTP API
 - [tests.md](./tests.md#pending-catalog-write-path) — write-path and admin tests
 

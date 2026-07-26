@@ -14,7 +14,6 @@ Related docs:
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 - [models.md](./models.md) — JSON documents stored in the registry bucket
 - [retention.md](./retention.md) — version cleanup policy and `retention` config
-- [service.md](./service.md) — Go API for building those documents
 
 Implementation: `gestaltd/internal/config/` (`AppRegistryConfig`, `validateAppRegistries`).
 

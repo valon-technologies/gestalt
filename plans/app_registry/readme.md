@@ -16,7 +16,6 @@ Related references:
 - [models.md](./models.md) — JSON documents stored in GCS
 - [pending-publish.md](./pending-publish.md) — in-flight and failed publish visibility
 - [retention.md](./retention.md) — version cleanup and retention policy
-- [service.md](./service.md) — Go package API for publish and validation
 - [tests.md](./tests.md) — behavioral test coverage
 - [validation.md](./validation.md) — install-time validation before fleet accept
 

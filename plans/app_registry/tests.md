@@ -9,7 +9,6 @@ Related docs:
 - [validation.md](./validation.md) — install-time validation
 - [admin.md](./admin.md) — admin UI capabilities
 - [models.md](./models.md) — JSON documents exercised by publish and install
-- [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 
