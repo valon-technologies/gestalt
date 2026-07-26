@@ -65,16 +65,16 @@ Auto-refresh every 10–15s while any listed rollout is non-terminal.
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │ g-issues                                    rollout: Complete │
-│ registry: toolshed                                          │
+│ registry: toolshed                                            │
 ├─────────────────────────────────────────────────────────────┤
-│ Desired:  0.0.0-snapshot.gcd9d741…   installed 2026-07-21 …  │
-│ Published latest: 0.0.0-snapshot.gcd9d741… (same)           │
+│ Desired: 0.0.0-snapshot.gcd9d741…      installed 2026-07-21 … │
+│ Published latest: 0.0.0-snapshot.gcd9d741… (same)             │
 ├─────────────────────────────────────────────────────────────┤
-│ Replicas                                                    │
-│ instanceId               mat.   restart   attempts  error   │
-│ gestaltd-…-ncnq6         ✓     ✓         0                   │
-│ gestaltd-…-hdnx2         ✓     ✓         0                   │
-│ gestaltd-…-smmq7         ✓     ✓         0                   │
+│ Replicas                                                      │
+│ instanceId                 mat.  restart  att  error          │
+│ gestaltd-…-ncnq6           ✓     ✓        0                   │
+│ gestaltd-…-hdnx2           ✓     ✓        0                   │
+│ gestaltd-…-smmq7           ✓     ✓        0                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
