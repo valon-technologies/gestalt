@@ -14,9 +14,9 @@ const (
 	RetentionIndexSchemaVersion = 1
 	RetentionFileName           = "retention.json"
 
-	DefaultUnusedRetention    = 72 * time.Hour
-	DefaultDeployedRetention  = 720 * time.Hour
-	FirstInstallFromVersion   = "registry:first-install"
+	DefaultUnusedRetention   = 72 * time.Hour
+	DefaultDeployedRetention = 720 * time.Hour
+	FirstInstallFromVersion  = "registry:first-install"
 )
 
 const (
@@ -28,7 +28,7 @@ const (
 )
 
 type RetentionIndex struct {
-	SchemaVersion int                        `json:"schemaVersion"`
+	SchemaVersion int                         `json:"schemaVersion"`
 	Versions      map[string]RetentionVersion `json:"versions"`
 }
 
