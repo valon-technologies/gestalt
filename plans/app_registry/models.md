@@ -13,6 +13,7 @@ Immutable app archives live alongside published versions:
 
     apps/{app}/
     ├── index.json
+    ├── retention.json
     ├── pending.json
     ├── failed.json
     ├── versions/
@@ -24,6 +25,7 @@ Immutable app archives live alongside published versions:
 | Document | Path | Purpose |
 |----------|------|---------|
 | **Index** | `apps/{app}/index.json` | Lightweight catalog of published versions |
+| **RetentionIndex** | `apps/{app}/retention.json` | Mutable usage timestamps for retention pruning. See [retention.md](./retention.md). |
 | **PendingIndex** | `apps/{app}/pending.json` | In-flight publishes (not installable). See [pending-publish.md](./pending-publish.md). |
 | **FailedIndex** | `apps/{app}/failed.json` | Recent failed publishes (not installable). See [pending-publish.md](./pending-publish.md). |
 | **PublishedVersion** | `apps/{app}/versions/{version}.json` | Full metadata and install contract for one version |
@@ -288,6 +290,50 @@ Writes use the same optimistic-concurrency pattern as `pending.json`.
 `PruneFailedIndex` removes entries older than 30 days on
 `gestaltd app registry pending set`. See
 [pending-publish.md](./pending-publish.md#prunefailedindex).
+
+---
+
+## RetentionIndex
+
+**Path:** `apps/{app}/retention.json`
+
+Answers: *when was each published version last used, has it ever been deployed,
+and is it operator-pinned?*
+
+Mutable overlay used by retention pruning. Not installable metadata. See
+[retention.md](./retention.md) for policy rules and cleanup scope.
+
+```json
+{
+  "schemaVersion": 1,
+  "versions": {
+    "0.0.0-snapshot.gabc123": {
+      "lastUsedAt": "2026-07-22T14:00:00Z",
+      "firstDeployedAt": "2026-07-22T14:00:00Z",
+      "everDeployed": true,
+      "pinned": false
+    }
+  }
+}
+```
+
+### Fields
+
+#### Root · `RetentionIndex`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `schemaVersion` | int | yes | Retention overlay format version. Currently `1`. |
+| `versions` | map | yes | Version string → `RetentionVersion`. |
+
+#### `RetentionIndex.versions` · `RetentionVersion`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `lastUsedAt` | RFC 3339 timestamp | yes | Last qualifying fleet use; initialized to `publishedAt` on publish. |
+| `firstDeployedAt` | RFC 3339 timestamp | no | First fleet admission. |
+| `everDeployed` | bool | yes | Sticky flag; once true, deployed retention applies. |
+| `pinned` | bool | no | Operator pin; default `false`. |
 
 ---
 

@@ -8,6 +8,7 @@ Related docs:
 - [lifecycle.md](./lifecycle.md) — HTTP APIs, admission checks, and rollout behavior
 - [indexeddb.md](./indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
 - [pending-publish.md](./pending-publish.md) — in-flight publish visibility on app admin
+- [retention.md](./retention.md) — version cleanup policy and optional retention UI
 - [tests.md](./tests.md#admin-observability-tests) — observability HTTP and UI tests; [app version selection tests](./tests.md#app-version-selection-tests)
 
 ---
