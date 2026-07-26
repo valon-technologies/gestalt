@@ -5,12 +5,12 @@ before `index.json` is updated at the end of CI.
 
 Related docs:
 
-- [readme.md](./readme.md) — registry architecture and future work
-- [changelog.md](./changelog.md) — implementation milestones and pull requests
-- [models.md](./models.md) — [PendingIndex](./models.md#pendingindex) and [FailedIndex](./models.md#failedindex)
+- [readme.md](../readme.md) — registry architecture and future work
+- [changelog.md](../project/changelog.md) — implementation milestones and pull requests
+- [models.md](../architecture/models.md) — [PendingIndex](../architecture/models.md#pendingindex) and [FailedIndex](../architecture/models.md#failedindex)
 - [admin.md](./admin.md) — app admin UI capabilities
 - [lifecycle.md](./lifecycle.md) — app-admin HTTP API
-- [tests.md](./tests.md#pending-catalog-write-path) — write-path and admin tests
+- [tests.md](../project/tests.md#pending-catalog-write-path) — write-path and admin tests
 
 ## Overview
 
@@ -53,8 +53,8 @@ apps/{app}/
 `pending.json` and `failed.json` are mutable catalogs. Updates use optimistic
 concurrency: read generation, merge, upload with `if-generation-match`.
 
-Document shapes: [PendingIndex](./models.md#pendingindex),
-[FailedIndex](./models.md#failedindex).
+Document shapes: [PendingIndex](../architecture/models.md#pendingindex),
+[FailedIndex](../architecture/models.md#failedindex).
 
 ### Phases and failure reasons
 
@@ -70,7 +70,7 @@ Document shapes: [PendingIndex](./models.md#pendingindex),
 ## Publish duration
 
 Durations are computed at read/UI time — not stored as separate GCS fields.
-Field definitions: [`publishStartedAt`](./models.md#publishedversion).
+Field definitions: [`publishStartedAt`](../architecture/models.md#publishedversion).
 
 | Row status | Start | End | Status label |
 |------------|-------|-----|--------------|

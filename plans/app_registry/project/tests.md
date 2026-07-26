@@ -4,13 +4,13 @@ Reference for behavioral tests in the app registry plan.
 
 Related docs:
 
-- [readme.md](./readme.md) — architecture and future work
+- [readme.md](../readme.md) — architecture and future work
 - [changelog.md](./changelog.md) — implementation milestones and pull requests
-- [validation.md](./validation.md) — install-time validation
-- [admin.md](./admin.md) — admin UI capabilities
-- [models.md](./models.md) — JSON documents exercised by publish and install
-- [config.md](./config.md) — `appRegistries` deploy reader config
-- [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
+- [validation.md](../architecture/validation.md) — install-time validation
+- [admin.md](../operations/admin.md) — admin UI capabilities
+- [models.md](../architecture/models.md) — JSON documents exercised by publish and install
+- [config.md](../architecture/config.md) — `appRegistries` deploy reader config
+- [lifecycle.md](../operations/lifecycle.md) — replica startup, background controller, admin HTTP API
 
 ---
 
@@ -74,7 +74,7 @@ Expected plan fields:
 
 ## Pending catalog write path
 
-Shipped in [gestalt#2932](https://github.com/valon-technologies/gestalt/pull/2932). See [pending-publish.md](./pending-publish.md).
+Shipped in [gestalt#2932](https://github.com/valon-technologies/gestalt/pull/2932). See [pending-publish.md](../operations/pending-publish.md).
 
 Run:
 
@@ -106,7 +106,7 @@ go test ./internal/daemon/e2e/app_publish -run 'AppRegistryPublish|AppPublish' -
 
 ## Add and upgrade HTTP integration
 
-Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (`POST …/install`). Registry-only apps use separate `add` and `upgrade` routes — see [lifecycle.md](./lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
+Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (`POST …/install`). Registry-only apps use separate `add` and `upgrade` routes — see [lifecycle.md](../operations/lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
 
 Run:
 
@@ -314,7 +314,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ## Install-time validation tests
 
-Implemented in [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887). Checks: [validation.md](./validation.md).
+Implemented in [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887). Checks: [validation.md](../architecture/validation.md).
 
 Run:
 
@@ -389,7 +389,7 @@ Source-address `requires.apps` keys are covered by `accepts_dependencies/source_
 
 ## Admin observability tests
 
-API shapes: [lifecycle.md](./lifecycle.md#admin-observability-api). UI wireframes: [admin.md](./admin.md#embedded-admin-ui-admin).
+API shapes: [lifecycle.md](../operations/lifecycle.md#admin-observability-api). UI wireframes: [admin.md](../operations/admin.md#embedded-admin-ui-admin).
 
 Run:
 
@@ -421,7 +421,7 @@ Manual or Playwright-style check against a local multi-replica harness:
 
 ## App version selection tests
 
-API: [lifecycle.md](./lifecycle.md#app-admin-version-selection). UI: [admin.md](./admin.md#app-admin-ui-appsappadmin).
+API: [lifecycle.md](../operations/lifecycle.md#app-admin-version-selection). UI: [admin.md](../operations/admin.md#app-admin-ui-appsappadmin).
 
 ### Gestalt API tests
 

@@ -9,11 +9,11 @@ This does **not** change the app author's `manifest.yaml`.
 
 Related docs:
 
-- [readme.md](./readme.md) — architecture and future work
-- [changelog.md](./changelog.md) — implementation milestones and pull requests
-- [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
+- [readme.md](../readme.md) — architecture and future work
+- [changelog.md](../project/changelog.md) — implementation milestones and pull requests
+- [lifecycle.md](../operations/lifecycle.md) — replica startup, background controller, admin HTTP API
 - [models.md](./models.md) — JSON documents stored in the registry bucket
-- [retention.md](./retention.md) — version cleanup policy and `retention` config
+- [retention.md](../operations/retention.md) — version cleanup policy and `retention` config
 
 Implementation: `gestaltd/internal/config/` (`AppRegistryConfig`, `validateAppRegistries`).
 
@@ -40,7 +40,7 @@ appRegistries:
       deployedRetention: 168h
 ```
 
-See [retention.md](./retention.md) for policy semantics and the `retention.json`
+See [retention.md](../operations/retention.md) for policy semantics and the `retention.json`
 overlay.
 
 `gcs.bucket` accepts a bare bucket name or `gs://{bucket}`. Gestalt derives both URL forms:
@@ -148,7 +148,7 @@ apps:
 
 Because no package exists during config loading, validation must not require a resolved provider manifest, operation catalog, or static root for a registry-only app.
 
-`gestalt lock` and `gestalt sync` skip snapshot resolution and artifact download for registry-only apps. Runtime behavior — bootstrap, `add`, and `upgrade` — is documented in [lifecycle.md](./lifecycle.md).
+`gestalt lock` and `gestalt sync` skip snapshot resolution and artifact download for registry-only apps. Runtime behavior — bootstrap, `add`, and `upgrade` — is documented in [lifecycle.md](../operations/lifecycle.md).
 
 ### Reconciliation retry limit
 

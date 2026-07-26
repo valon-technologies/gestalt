@@ -6,14 +6,14 @@ Install is change-request-only; per-replica convergence (ack → download → re
 
 Related docs:
 
-- [readme.md](./readme.md) — registry architecture and future work
-- [changelog.md](./changelog.md) — implementation milestones and pull requests
-- [validation.md](./validation.md) — install-time validation
+- [readme.md](../readme.md) — registry architecture and future work
+- [changelog.md](../project/changelog.md) — implementation milestones and pull requests
+- [validation.md](../architecture/validation.md) — install-time validation
 - [admin.md](./admin.md) — admin UI capabilities
-- [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
-- [config.md](./config.md) — `appRegistries` deploy reader config
-- [models.md](./models.md) — index and published version JSON stored in GCS
-- [tests.md](./tests.md) — convergence unit tests
+- [indexeddb.md](../architecture/indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
+- [config.md](../architecture/config.md) — `appRegistries` deploy reader config
+- [models.md](../architecture/models.md) — index and published version JSON stored in GCS
+- [tests.md](../project/tests.md) — convergence unit tests
 
 Implementation:
 
@@ -39,7 +39,7 @@ When `gestaltd serve` starts:
 
 Bootstrap does not fetch registry indexes or prefetch version metadata. The source of truth for registry configuration remains the config file on disk; gestaltd does not persist `appRegistries` elsewhere.
 
-Apps with a deploy-time source pin (`source.git`, `source.path`, etc.) bind into the provider graph during the normal startup provider build. Registry-only apps (`source.registry`) are different — see [config.md](./config.md#registry-only-app-source). They have no resolved manifest or baked artifact at deploy time, so bootstrap excludes them from that build loop.
+Apps with a deploy-time source pin (`source.git`, `source.path`, etc.) bind into the provider graph during the normal startup provider build. Registry-only apps (`source.registry`) are different — see [config.md](../architecture/config.md#registry-only-app-source). They have no resolved manifest or baked artifact at deploy time, so bootstrap excludes them from that build loop.
 
 At `StartAppProviders`, each registry-only app:
 
@@ -66,7 +66,7 @@ This document uses these names for local runtime state:
 - **`active-version` marker** — the local file that selects the materialized static bundle for an app.
 - **Rollout-progress row** — an `app_instance_materializations` record; it describes previously recorded rollout work, not current provider state.
 
-Bootstrap and the poller must both use `LatestKnownVersion` to select the same desired installation. See [indexeddb.md](./indexeddb.md#accepted-changes-and-projections) for the version-ordering rule.
+Bootstrap and the poller must both use `LatestKnownVersion` to select the same desired installation. See [indexeddb.md](../architecture/indexeddb.md#accepted-changes-and-projections) for the version-ordering rule.
 
 Each replica materializes and retains only that latest desired version. Older fleet-known versions remain visible in catalog history, but a replica that advances past them does not download their artifacts. After the desired version starts successfully, Gestalt removes superseded registry-installed package directories for that app.
 
@@ -310,7 +310,7 @@ App names must match `providerregistry.ValidateRepositoryName`: lowercase letter
 
 When the app has no index or no versions yet, `versions` is `[]` (not `null`). A missing `apps/{app}/index.json` object is treated as an empty catalog.
 
-`metadata` points at the immutable published version document described in [models.md](./models.md). These routes do not inline published version fields (artifacts, interface, dependencies).
+`metadata` points at the immutable published version document described in [models.md](../architecture/models.md). These routes do not inline published version fields (artifacts, interface, dependencies).
 
 1. `listAdminAppRegistryAppVersions` reads `{registry}` and `{app}` from the URL.
 2. Validate `app` (`providerregistry.ValidateRepositoryName`). Look up `{registry}` in `s.appRegistries`; reject unknown registries and non-`gcs` kinds.
@@ -411,7 +411,7 @@ Synchronous on the handling instance. The HTTP response is sent after the catalo
    2. **`add`** — reject when `ListKnownVersionsByApp` is non-empty (`409`). **`upgrade`** — reject when the projection is empty (`400`).
    3. If `(app, version)` is already known in `app_version_change_requests`, return `400`.
    4. `RegistryReader.FetchEntry` — HTTP `GET` the published version document from the configured registry (validate the version exists; **no artifact download**).
-   5. **`InstallValidator.Validate`** — reject incompatible or unsatisfied candidates (**400**); see [validation.md](./validation.md).
+   5. **`InstallValidator.Validate`** — reject incompatible or unsatisfied candidates (**400**); see [validation.md](../architecture/validation.md).
    6. `Rollouts.Create` — start fleet rollout (`409` when another rollout is active).
    7. Append `change request` to `app_version_change_requests`. Set `from_version` server-side: `registry:first-install` on `add`, `LatestKnownVersion` on `upgrade`. Callers never send `from_version`. Mark rollout `failed` if append fails.
    8. Release the install lock (always, via defer). On failure before the change request is appended, return an HTTP error; no change request is written.
@@ -421,7 +421,7 @@ Per-replica convergence via the background catalog controller (see Polling). Ind
 
 #### `GET /admin/api/v1/app-installations`
 
-Returns all **known versions** projected from `change request` catalog records. See [indexeddb.md](./indexeddb.md).
+Returns all **known versions** projected from `change request` catalog records. See [indexeddb.md](../architecture/indexeddb.md).
 
 **Response `200`**
 
@@ -739,7 +739,7 @@ A request is accepted only when all checks pass:
 6. Reject when the selected version equals the current desired version with
    **400** and no writes.
 7. Fetch the published version from the configured registry and run install-time
-   validation ([validation.md](./validation.md)).
+   validation ([validation.md](../architecture/validation.md)).
 8. Create the rollout and append the change request (`add` on first selection;
    `upgrade` on later selections, including revert to an older known version).
 9. Release the install lock.

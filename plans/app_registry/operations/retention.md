@@ -5,8 +5,8 @@ configurable retention windows on `appRegistries`.
 
 Related docs:
 
-- [config.md](./config.md) — `retention` fields on `appRegistries`
-- [models.md](./models.md) — [RetentionIndex](./models.md#retentionindex)
+- [config.md](../architecture/config.md) — `retention` fields on `appRegistries`
+- [models.md](../architecture/models.md) — [RetentionIndex](../architecture/models.md#retentionindex)
 - [lifecycle.md](./lifecycle.md) — fleet admission (`POST …/add`, `POST …/upgrade`)
 - [pending-publish.md](./pending-publish.md) — `pending.json` / `failed.json` pruning
 
@@ -41,7 +41,7 @@ retention:
   deployedRetention: 168h
 ```
 
-Defaults: `72h` / `168h` when omitted. See [config.md](./config.md).
+Defaults: `72h` / `168h` when omitted. See [config.md](../architecture/config.md).
 
 ## Schema and storage
 
@@ -56,7 +56,7 @@ apps/{app}/
 ```
 
 `retention.json` is a mutable catalog. Shape and fields:
-[models.md — RetentionIndex](./models.md#retentionindex). Updates use the same
+[models.md — RetentionIndex](../architecture/models.md#retentionindex). Updates use the same
 optimistic-concurrency pattern as `index.json` (`if-generation-match`).
 
 ## Who writes and who deletes

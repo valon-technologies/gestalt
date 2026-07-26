@@ -4,9 +4,9 @@ Checks on `POST …/add` and `POST …/upgrade` after the registry entry is fetc
 
 Related docs:
 
-- [lifecycle.md](./lifecycle.md) — handler pipeline
+- [lifecycle.md](../operations/lifecycle.md) — handler pipeline
 - [models.md](./models.md) — `requires` and `compatibility` on published version JSON
-- [tests.md](./tests.md#install-time-validation-tests) — tests
+- [tests.md](../project/tests.md#install-time-validation-tests) — tests
 
 ## Checks
 
@@ -48,9 +48,9 @@ These are **not** `InstallValidationError` and are enforced outside `InstallVali
 | Candidate `versions/{version}.json` not found (installer fetch) | **404** | none |
 | Registry transport or infra error fetching the candidate | **502** | none |
 | Registry named in a fleet-known installation is missing from gestaltd config (`ErrAppRegistryNotConfigured`) | **502** | none |
-| Active rollout, install lock, duplicate version, `add`/`upgrade` mode mismatch | **409** / **400** | none — see [lifecycle.md](./lifecycle.md) |
+| Active rollout, install lock, duplicate version, `add`/`upgrade` mode mismatch | **409** / **400** | none — see [lifecycle.md](../operations/lifecycle.md) |
 
-Missing dependency or reverse-dependent `versions/{version}.json` documents during validation return **400** (or are skipped when the dependent is unrelated). They must not map to **404** just because the error text contains “registry not found”. Only the candidate's own missing version document surfaces **404** — see [lifecycle.md](./lifecycle.md#errors).
+Missing dependency or reverse-dependent `versions/{version}.json` documents during validation return **400** (or are skipped when the dependent is unrelated). They must not map to **404** just because the error text contains “registry not found”. Only the candidate's own missing version document surfaces **404** — see [lifecycle.md](../operations/lifecycle.md#errors).
 
 ## Running gestaltd version
 
@@ -129,4 +129,4 @@ Fleet versions commonly use snapshot prereleases (`2.0.0-snapshot.gabc123`, `0.0
 | Reverse dependents (operations) | Upgrading `slack` to a version that removes `postMessage` from its published `interface` while fleet-known `g-issues` still requires that operation. |
 | Registry not configured | Fleet-known `g-issues` references registry `toolshed`, but gestaltd config has no `toolshed` entry — **502**, not **404**. |
 
-Other admission rules (registry binding, `add`/`upgrade` mode, duplicate version, active rollout, install lock) are enforced in `Installer.install` — see [lifecycle.md](./lifecycle.md).
+Other admission rules (registry binding, `add`/`upgrade` mode, duplicate version, active rollout, install lock) are enforced in `Installer.install` — see [lifecycle.md](../operations/lifecycle.md).
