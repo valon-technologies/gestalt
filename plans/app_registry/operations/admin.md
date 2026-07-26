@@ -50,7 +50,7 @@ The embedded shell at `/admin` keeps the Prometheus metrics viewer and adds an *
 
 | App      | Registry | Desired version     | Rollout  | Cohort        |
 | -------- | -------- | ------------------- | -------- | ------------- |
-| g-issues | toolshed | `0.0.0-snapshot.g…` | complete | 3/3 restarted |
+| g-issues | toolshed | `0.0.0-snapshot.g…` | Complete | 3/3 restarted |
 
 Show configured registry-only apps even when the fleet catalog is empty (desired version "—", status "not installed").
 
@@ -64,17 +64,17 @@ Auto-refresh every 10–15s while any listed rollout is non-terminal.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ g-issues                                    rollout: complete │
-│ registry: toolshed                                          │
+│ g-issues                                    rollout: Complete │
+│ registry: toolshed                                            │
 ├─────────────────────────────────────────────────────────────┤
-│ Desired:  0.0.0-snapshot.gcd9d741…   installed 2026-07-21 …  │
-│ Published latest: 0.0.0-snapshot.gcd9d741… (same)           │
+│ Desired: 0.0.0-snapshot.gcd9d741…      installed 2026-07-21 … │
+│ Published latest: 0.0.0-snapshot.gcd9d741… (same)             │
 ├─────────────────────────────────────────────────────────────┤
-│ Replicas                                                    │
-│ instanceId               mat.   restart   attempts  error   │
-│ gestaltd-…-ncnq6         ✓     ✓         0                   │
-│ gestaltd-…-hdnx2         ✓     ✓         0                   │
-│ gestaltd-…-smmq7         ✓     ✓         0                   │
+│ Replicas                                                      │
+│ instanceId                 mat.  restart  att  error          │
+│ gestaltd-…-ncnq6           ✓     ✓        0                   │
+│ gestaltd-…-hdnx2           ✓     ✓        0                   │
+│ gestaltd-…-smmq7           ✓     ✓        0                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -110,22 +110,22 @@ The page header shows the app name, **App management** label, registry binding, 
 See [pending-publish.md](./pending-publish.md) for snapshot merge rules, polling, and timing labels.
 
 ```text
-g-issues                                                        App management
+g-issues                                                                 App management
 registry: toolshed
 
 Desired version: 0.0.0-snapshot.gabc123
 
 Published snapshots
 
-Pull request       | Snapshot               | Status                   | Last update    | Action
------------------- | ---------------------- | ------------------------ | -------------- | --------
-PR #3740 · Title   | 0.0.0-snapshot.g…     | Publishing · for 4m      | 4 minutes ago  | —
-PR #3251 · Title   | 0.0.0-snapshot.g…     | Available                | Jul 22 15:00   | Deploy
-                    |                        | Published in 4m 32s      |                |
-PR #3200 · Title   | 0.0.0-snapshot.g…     | Deployed                 | Jul 21 12:00   | —
-PR #3100 · Title   | 0.0.0-snapshot.g…     | Redeployable · 12d left  | Jul 18 09:00   | Deploy
-PR #3000 · Title   | 0.0.0-snapshot.g…     | Locked                   | Jun 10 09:00   | —
-PR #2900 · Title   | 0.0.0-snapshot.g…     | Expired                  | Jun 01 09:00   | —
+Pull request     | Snapshot          | Status                  | Last update   | Action
+---------------- | ----------------- | ----------------------- | ------------- | ------
+PR #3740 · Title | 0.0.0-snapshot.g… | Publishing · for 4m     | 4 minutes ago | —
+PR #3251 · Title | 0.0.0-snapshot.g… | Available               | Jul 22 15:00  | Deploy
+                 |                   | Published in 4m 32s     |               |
+PR #3200 · Title | 0.0.0-snapshot.g… | Deployed                | Jul 21 12:00  | —
+PR #3100 · Title | 0.0.0-snapshot.g… | Redeployable · 12d left | Jul 18 09:00  | Deploy
+PR #3000 · Title | 0.0.0-snapshot.g… | Locked                  | Jun 10 09:00  | —
+PR #2900 · Title | 0.0.0-snapshot.g… | Expired                 | Jun 01 09:00  | —
 ```
 
 Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is unavailable on **Publishing**, **Failed**, **Deployed**, **Locked**, and **Expired** rows. **Deployed** marks the desired version. **Redeployable** shows the fixed deadline or remaining duration.
@@ -133,27 +133,27 @@ Row timing labels: [pending-publish.md — Publish duration](./pending-publish.m
 During an active rollout, disable deploy actions and show rollout state above the table:
 
 ```text
-g-issues                                                        App management
+g-issues                                                                 App management
 registry: toolshed
 
 Desired version: 0.0.0-snapshot.gabc123
-Rollout enrolling: 0.0.0-snapshot.gdef456
+Rollout Enrolling: 0.0.0-snapshot.gdef456
 
 Published snapshots
 
-Pull request       | Snapshot               | Status       | Last update   | Action
------------------- | ---------------------- | ------------ | ------------- | --------
-PR #3251 · Title   | 0.0.0-snapshot.g…     | Rolling out  | Jul 22 15:00  | disabled
-PR #3200 · Title   | 0.0.0-snapshot.g…     | Deployed     | Jul 21 12:00  | disabled
+Pull request     | Snapshot          | Status      | Last update  | Action
+---------------- | ----------------- | ----------- | ------------ | --------
+PR #3251 · Title | 0.0.0-snapshot.g… | Rolling out | Jul 22 15:00 | disabled
+PR #3200 · Title | 0.0.0-snapshot.g… | Deployed    | Jul 21 12:00 | disabled
 ```
 
 A **Failed** row in the same table:
 
 ```text
-Pull request       | Snapshot               | Status            | Last update   | Action
------------------- | ---------------------- | ----------------- | ------------- | ------
-PR #3740 · Title   | 0.0.0-snapshot.g…     | Failed            | Jul 24 18:35  | —
-                    |                        | Failed after 35m  |               |
+Pull request     | Snapshot          | Status           | Last update  | Action
+---------------- | ----------------- | ---------------- | ------------ | ------
+PR #3740 · Title | 0.0.0-snapshot.g… | Failed           | Jul 24 18:35 | —
+                 |                   | Failed after 35m |              |
 ```
 
 After a successful deploy selection, keep deploy actions disabled until the rollout reaches `complete` or `failed`.
@@ -165,11 +165,11 @@ The Revision history tab displays `app_version_change_requests` as an immutable 
 ```text
 Revision history
 
-Deployed at    | Transition                           | Availability  | Deployed by
--------------- | ------------------------------------ | ------------- | ----------------
-Jul 25 09:10   | gdef456 → gabc123 (downgrade)       | Current       | alice@valon.com
-Jul 24 16:42   | gabc123 → gdef456 (upgrade)         | Redeployable  | alice@valon.com
-Jul 21 12:00   | First deployment → gabc123          | Current       | bob@valon.com
+Deployed at  | Transition                    | Availability | Deployed by
+------------ | ----------------------------- | ------------ | ---------------
+Jul 25 09:10 | gdef456 → gabc123 (downgrade) | Current      | alice@valon.com
+Jul 24 16:42 | gabc123 → gdef456 (upgrade)   | Redeployable | alice@valon.com
+Jul 21 12:00 | First deployment → gabc123    | Current      | bob@valon.com
 ```
 
 Each row links to the source commit and, when recorded, the triggering pull request and publish workflow. **Availability** shows the selected version's present-day state, so repeated entries for the same version have the same value. The current desired version is **Current**; other versions are **Redeployable** or **Locked**. The history tab itself has no deploy action because availability is an attribute of a version, not an individual event. Eligible selection remains on Published snapshots.
@@ -197,7 +197,9 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 <pre>
 ├── <a href="../project/changelog.md#changelog-14">14 — Fleet Admin Observability</a>
 ├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
-└── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
+├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
+├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
+└── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
 </pre>
 
 ### Related Docs
@@ -209,5 +211,5 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 ├── <a href="../architecture/indexeddb.md">indexeddb.md</a> — app_rollouts, app_instance_materializations, change-request projections
 ├── <a href="./pending-publish.md">pending-publish.md</a> — in-flight publish visibility on app admin
 ├── <a href="./retention.md">retention.md</a> — version cleanup policy, redeploy windows, and revision-history preservation
-└── <a href="../project/tests.md#admin-observability-tests">tests.md</a> — observability HTTP and UI tests; <a href="../project/tests.md#app-version-selection-tests">app version selection tests</a>
+└── <a href="../project/tests.md#admin-observability-tests">tests.md</a> — observability HTTP and UI tests; <a href="../project/tests.md#app-version-selection-and-revision-history-tests">app version selection and revision history tests</a>
 </pre>
