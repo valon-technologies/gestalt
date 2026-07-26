@@ -297,7 +297,7 @@ Writes use the same optimistic-concurrency pattern as `pending.json`.
 
 **Path:** `apps/{app}/retention.json`
 
-Answers: *when was each published version last used, has it ever been deployed,
+Answers: *when was each published version last used, was it ever fleet-known,
 and is it operator-pinned?*
 
 Mutable overlay used by retention pruning. Not installable metadata. See
@@ -330,7 +330,7 @@ Mutable overlay used by retention pruning. Not installable metadata. See
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `lastUsedAt` | RFC 3339 timestamp | yes | Last qualifying fleet use; initialized to `publishedAt` on publish. |
+| `lastUsedAt` | RFC 3339 timestamp | yes | Last fleet use; initialized to `publishedAt` on publish. |
 | `firstDeployedAt` | RFC 3339 timestamp | no | First fleet admission. |
 | `everDeployed` | bool | yes | Sticky flag; once true, deployed retention applies. |
 | `pinned` | bool | no | Operator pin; default `false`. |

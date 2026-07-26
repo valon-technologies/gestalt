@@ -278,10 +278,11 @@ the app-admin API and snapshots table. See [pending-publish.md](./pending-publis
 ### Version retention and cleanup
 
 Automatically delete published versions that are no longer needed, with
-configurable **default retention** windows: unused versions after 3 days (default),
-ever-deployed versions after 7 days idle since last qualifying use (timer resets
-on reuse). Add `apps/{app}/retention.json`, fleet usage tracking on install, and
-`gestaltd app registry retention prune`. See [retention.md](./retention.md).
+configurable **default retention** windows: unused snapshots after 3 days
+(default), previously fleet-known snapshots after 7 days idle since last fleet
+use (timer resets on reuse). Add `apps/{app}/retention.json`, fleet-use
+tracking on install, and reader-owned `gestaltd app registry retention prune`.
+See [retention.md](./retention.md).
 
 ### Packaged workflow metadata
 
