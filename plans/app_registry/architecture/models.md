@@ -391,8 +391,7 @@ Answers: _what exactly is this version — artifacts, operations, dependencies, 
     │   ├── workflowRunUrl
     │   ├── triggerPullRequest
     │   │   ├── number
-    │   │   ├── url
-    │   │   └── title
+    │   │   └── url
     │   └── triggerCommit
     │       ├── sha
     │       └── url

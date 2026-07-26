@@ -50,7 +50,7 @@ The embedded shell at `/admin` keeps the Prometheus metrics viewer and adds an *
 
 | App      | Registry | Desired version     | Rollout  | Cohort        |
 | -------- | -------- | ------------------- | -------- | ------------- |
-| g-issues | toolshed | `0.0.0-snapshot.g…` | Complete | 3/3 restarted |
+| g-issues | toolshed | `0.0.0-snapshot.g…` | complete | 3/3 restarted |
 
 Show configured registry-only apps even when the fleet catalog is empty (desired version "—", status "not installed").
 
@@ -64,7 +64,7 @@ Auto-refresh every 10–15s while any listed rollout is non-terminal.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ g-issues                                    rollout: Complete │
+│ g-issues                                    rollout: complete │
 │ registry: toolshed                                          │
 ├─────────────────────────────────────────────────────────────┤
 │ Desired:  0.0.0-snapshot.gcd9d741…   installed 2026-07-21 …  │
@@ -137,7 +137,7 @@ g-issues                                                        App management
 registry: toolshed
 
 Desired version: 0.0.0-snapshot.gabc123
-Rollout Enrolling: 0.0.0-snapshot.gdef456
+Rollout enrolling: 0.0.0-snapshot.gdef456
 
 Published snapshots
 
@@ -197,9 +197,7 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 <pre>
 ├── <a href="../project/changelog.md#changelog-14">14 — Fleet Admin Observability</a>
 ├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
-├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
-├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
-└── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
+└── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
 </pre>
 
 ### Related Docs
@@ -211,5 +209,5 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 ├── <a href="../architecture/indexeddb.md">indexeddb.md</a> — app_rollouts, app_instance_materializations, change-request projections
 ├── <a href="./pending-publish.md">pending-publish.md</a> — in-flight publish visibility on app admin
 ├── <a href="./retention.md">retention.md</a> — version cleanup policy, redeploy windows, and revision-history preservation
-└── <a href="../project/tests.md#admin-observability-tests">tests.md</a> — observability HTTP and UI tests; <a href="../project/tests.md#app-version-selection-and-revision-history-tests">app version selection and revision history tests</a>
+└── <a href="../project/tests.md#admin-observability-tests">tests.md</a> — observability HTTP and UI tests; <a href="../project/tests.md#app-version-selection-tests">app version selection tests</a>
 </pre>

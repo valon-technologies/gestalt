@@ -68,7 +68,7 @@ gestaltd app registry retention prune \
   [--dry-run]
 ```
 
-Run on a schedule from the deploy reader. Toolshed runs [app-registry-retention-prune.yml](https://github.com/valon-technologies/toolshed/blob/main/.github/workflows/app-registry-retention-prune.yml) daily for every registry-only app in `valon-tools/deploy/config.yaml`, invoking `gestaltd app registry retention prune --bucket … --app …` with the pinned gestaltd release. Do not run from `gestaltd serve` request handlers or from publish CI.
+Run on a schedule from the deploy reader (for example a daily `gestaltd` cron). Do not run from `gestaltd serve` request handlers.
 
 ## Retention States
 
@@ -83,14 +83,13 @@ Run on a schedule from the deploy reader. Toolshed runs [app-registry-retention-
 
 The Revision history tab always shows deployed transitions, including locked versions. Deployment controls live on Published snapshots and expose **Deploy** only for unexpired never-deployed or still-redeployable versions. See [admin.md](./admin.md#revision-history-tab) and [lifecycle.md](./lifecycle.md#revision-history).
 
-## Shipped In
+## Implementation Path
 
-- [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) — `RetentionIndex`, config validation, and reader-side transition writes
-- [gestalt#2938](https://github.com/valon-technologies/gestalt/pull/2938) — `gestaltd app registry retention prune`
-- [toolshed#3786](https://github.com/valon-technologies/toolshed/pull/3786) — daily scheduled prune for registry-only apps
-- [gestalt#2939](https://github.com/valon-technologies/gestalt/pull/2939) — revision history API and deployment-state projection
-- [gestalt#2941](https://github.com/valon-technologies/gestalt/pull/2941) — `deployedBy` email resolution
-- [gestalt-providers#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163) — Revision history tab on app admin
+1. **PR 1 — Models and write path** (`gestalt`) — `RetentionIndex`, config validation, desired-version transition updates, and fixed redeploy deadlines.
+2. **PR 2 — Prune command** (`gestalt`) — `gestaltd app registry retention prune` with `--dry-run`, app-scoped install locking, unused deletion, historical locking/artifact cleanup, and change-request cross-checks.
+3. **PR 3 — Scheduler** (deploy / ops) — scheduled `retention prune` per registry-only app.
+4. **PR 4 — Revision history API** (`gestalt`) — paginated deploy-chain API with `deployedBy` and deployment-state projection.
+5. **PR 5 — Revision history UI** (`gestalt-providers`) — read-only Revision history tab on the app-admin page.
 
 ---
 
@@ -99,8 +98,7 @@ The Revision history tab always shows deployed transitions, including locked ver
 ### Related Changelogs
 
 <pre>
-├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
-└── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
+└── None — planned work
 </pre>
 
 ### Related Docs

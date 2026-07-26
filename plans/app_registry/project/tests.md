@@ -16,10 +16,6 @@ Reference for behavioral tests in the app registry plan.
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
 | `internal/appregistry` | `install_validator_test.go`, `install_validation_errors_test.go` | — | Unit | [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887) |
 | `internal/server` | `handlers_admin_app_rollout_test.go` | — | HTTP integration | [gestalt#2890](https://github.com/valon-technologies/gestalt/pull/2890) |
-| `internal/server` | `handlers_app_admin_registry_test.go` | 4 | HTTP integration | [gestalt#2909](https://github.com/valon-technologies/gestalt/pull/2909) · [gestalt#2931](https://github.com/valon-technologies/gestalt/pull/2931) · [gestalt#2939](https://github.com/valon-technologies/gestalt/pull/2939) |
-| `internal/config` | `app_registry_retention_test.go` | 3 | Unit | [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) |
-| `internal/appregistry` | `retention_test.go`, `retention_prune_test.go` | 2 | Unit | [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) · [gestalt#2938](https://github.com/valon-technologies/gestalt/pull/2938) |
-| `gestalt-providers/app/default` | `e2e/app-admin-mock.spec.ts` | — | Playwright mock | [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142) · [gestalt-providers#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163) |
 | `services/ui/adminui` | registry UI smoke | — | Manual / browser | planned |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
@@ -407,69 +403,59 @@ Manual or Playwright-style check against a local multi-replica harness:
 
 1. Open `/admin/registry` while authenticated as a `gestaltAdmin` user.
 2. Confirm `g-issues` appears with desired version after `POST …/add`.
-3. Watch rollout badge transition `Enrolling` → `Restarting` → `Complete` and replica rows populate.
+3. Watch rollout badge transition `enrolling` → `restarting` → `complete` and replica rows populate.
 
 ---
 
-## Retention Tests
+## Planned Retention Tests
 
-Policy: [retention.md](../operations/retention.md). Implemented in [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) and [gestalt#2938](https://github.com/valon-technologies/gestalt/pull/2938).
+Policy: [retention.md](../operations/retention.md).
 
-Run:
-
-```bash
-cd gestaltd
-go test ./internal/config/... -run TestAppRegistryRetention -count=1
-go test ./internal/appregistry/... -run 'TestVersionDeploymentState|TestEvaluateRetentionPrune' -count=1
-```
-
-### `retention_test.go`
-
-- **`TestVersionDeploymentState`** — desired version returns `desired`; never-deployed expired versions return `expired`; historical versions before `deployableUntil` return `redeployable`; after the deadline return `locked`.
-
-### `retention_prune_test.go`
-
-- **`TestEvaluateRetentionPrune`** — never-deployed versions past `unusedRetention` are eligible for full deletion; locked historical versions may have artifacts pruned while index and retention rows remain; deployed versions are cross-checked against the change-request chain.
-
-### `app_registry_retention_test.go`
-
-- Default `unusedRetention` / `deployedRetention` values and validation for registry config overlays.
-
-Scheduled prune behavior in production is exercised by [toolshed#3786](https://github.com/valon-technologies/toolshed/pull/3786). End-to-end GCS prune integration is not yet covered in gestalt tests.
+- A never-deployed version older than `unusedRetention` is eligible for pruning and its index entry, metadata, artifact objects, and retention row are removed.
+- The current desired version and active rollout target retain all objects regardless of age.
+- A historical version whose `deployableUntil` deadline has not passed retains its artifact and remains selectable.
+- A historical version after `deployableUntil` becomes permanently locked; its artifact may be removed, but its index summary, version metadata, retention row, and change requests remain.
+- A deployed version is never fully deleted even when `retention.json` is missing or incorrectly says `everDeployed: false`; the change-request chain is the fail-safe.
+- Changing `deployedRetention` does not alter a deadline already captured on a transition or unlock a version whose deadline passed.
+- Prune acquires the app-scoped install lock and cannot delete or lock a version concurrently with selection for the same app.
+- Pruning never modifies change requests, pending/failed catalogs, or another app's objects.
+- `--dry-run` reports the same eligibility decisions without writes.
 
 ---
 
-## App Version Selection and Revision History Tests
+## Planned App Version Selection Tests
 
 API: [lifecycle.md](../operations/lifecycle.md#app-admin-version-selection). UI: [admin.md](../operations/admin.md#app-admin-ui-appsappadmin).
 
-### Gestalt API Tests (`handlers_app_admin_registry_test.go`)
+### Gestalt API Tests
 
-Implemented in [gestalt#2909](https://github.com/valon-technologies/gestalt/pull/2909), [gestalt#2931](https://github.com/valon-technologies/gestalt/pull/2931), and [gestalt#2939](https://github.com/valon-technologies/gestalt/pull/2939).
-
-Run:
-
-```bash
-cd gestaltd
-go test ./internal/server/... -run TestAppAdminRegistry -count=1
-```
+Add focused server tests for:
 
 | Test | Expected behavior |
 | --- | --- |
-| `TestAppAdminRegistrySelectAndRead` | App admin can select a published version, starts rollout, and reads registry state with `selectionDisabled` while rollout is active |
-| `TestAppAdminRegistryFailsClosed` | Unauthenticated, unauthorized, and missing-authorization-provider requests fail closed |
-| `TestAppAdminRegistryIncludesPendingAndFailedVersions` | Registry state merges pending and failed catalogs with published versions |
-| `TestAppAdminRegistryHistory` | History returns raw change requests newest-first, paginates with opaque cursor, omits `previousVersion` for first install, resolves `deployedBy` to subject email, and projects publication metadata from the registry index |
-
-Not yet covered in gestalt server tests:
-
-| Gap | Expected behavior |
-| --- | --- |
+| Unauthenticated read/write | **401** |
+| Non-user principal | **403** |
+| User without `admin` on `app/{app}` | **403** |
+| Global `gestaltAdmin` without app admin | **403** |
+| Authorization provider unavailable | **503**; fail closed |
+| App admin reads registry state | **200** with desired, fleet-known, published (including provenance), and rollout fields |
+| Snapshot-pinned or unknown app | **404** |
+| Rollout admission | Active `enrolling` / `restarting` rollout: GET sets `selectionDisabled`; POST returns **409** before registry fetch, validation, rollout creation, or change-request append; terminal `complete` / `failed` rollout leaves selection enabled |
+| First selection | Uses add semantics and appends the first change request |
+| Upgrade | Appends a change request; stored actor is the authenticated user subject |
 | Downgrade within redeploy window | Appends a repeated-version change request and makes the historical version desired |
-| Select expired never-deployed / locked historical version | **400** before registry fetch, validation, rollout creation, or change-request append |
+| Select expired never-deployed version before prune | **400** based on `publishedAt + unusedRetention`; no writes |
+| Select expired historical version | **400** and no writes |
 | Select current desired version | **400** and no writes |
+| Validation failure | Existing typed validation error; no rollout or change request |
 | Concurrent selections | Exactly one passes admission; the other returns **409** |
-| Validation failure on selection | Typed validation error; no rollout or change request |
+| Revision history ordering | Returns every raw change request by `(timestamp, id)` descending, including repeated versions |
+| Revision history pagination | Applies the opaque cursor without gaps or duplicate rows; default 50, maximum 100 |
+| Revision history availability | Repeated entries for one version share its present-day `deploymentState` and `deployableUntil` |
+| First deployment history | Omits `previousVersion` for the `registry:first-install` sentinel |
+| Revision history authorization | Uses the same **401**, **403**, and **503** fail-closed behavior as registry state |
+
+The downgrade test seeds `v1 → v2`, selects `v1` before its deadline, and asserts the chain becomes `v1 → v2 → v1`. The expired-version test advances past the fixed deadline and rejects before registry fetch, validation, rollout creation, or change-request append.
 
 `POST …/registry/version` rejects unknown fields (including `actor`, `registry`, and `fromVersion`).
 
@@ -477,31 +463,19 @@ Not yet covered in gestalt server tests:
 
 ### Default App UI Tests (`gestalt-providers`)
 
-Implemented in [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142), [gestalt-providers#1158](https://github.com/valon-technologies/gestalt-providers/pull/1158)–[#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163), and [gestalt-providers#1165](https://github.com/valon-technologies/gestalt-providers/pull/1165).
-
-Run:
-
-```bash
-cd gestalt-providers/app/default
-npm run test:e2e -- e2e/app-admin-mock.spec.ts
-```
-
-Covered behaviors:
+Add route/component tests for:
 
 - **Manage app** appears only when `managementPath` is returned
 - published versions render newest first with desired version selected
-- pending, failed, and published rows share one snapshots table with status and timing labels
-- the Revision history tab loads lazily, renders newest-first transitions, paginates older rows, and shows **No deployments yet** for an empty chain
-- active rollout or **409** after a stale page disables deploy actions until rollout is terminal
-- successful selection renders the new active rollout with sentence-case rollout labels (`Enrolling`, `Complete`)
+- expired never-deployed snapshots show **Expired** without a deploy action, even before scheduled pruning removes them
+- historical snapshots show **Redeployable** with a deadline and a deploy action, or **Locked** without one
+- version detail shows `publishedAt`, linked commit, trigger PR or commit, and workflow run; legacy entries without `publication` link the commit and show **not recorded** for workflow/PR
+- the Revision history tab loads lazily, renders newest-first transitions, preserves repeated upgrade/downgrade entries, gives repeated versions the same present-day availability, and paginates older rows
+- revision history renders **First deployment** for the sentinel and **No deployments yet** for an empty chain
+- no desired version renders first-install copy
+- active rollout or **409** after a stale page disables the selector and submit button until rollout is terminal
+- successful selection renders the new active rollout
 - **403** renders access denied without registry metadata
-- publication labels link only the PR number; titles render as plain muted text when present
-
-Not yet covered in Playwright mocks:
-
-- expired never-deployed snapshots show **Expired** without a deploy action
-- historical snapshots show **Redeployable** with a deadline and deploy action, or **Locked** without one
-- legacy published versions without `publication` show **not recorded** for workflow/PR fields
 
 ### Manual Smoke
 
@@ -516,8 +490,6 @@ Publish tests do not exercise real GCS uploads; upload-path tests use test stora
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
 - Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
-- Retention prune GCS integration and install-lock concurrency tests
-- App-admin selection tests for expired, locked, downgrade, and concurrent admission paths
 - Multi-replica materialization acknowledgement E2E (see [planned section above](#planned-multi-replica-materialization-acknowledgement-e2e))
 - Per-replica **observed** running version heartbeats
 - Deployed verification that catalog restarts serve the newly mounted binary
