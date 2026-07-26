@@ -74,7 +74,7 @@ Expected plan fields:
 
 ## Pending catalog write path
 
-Planned in pending publish PR 1. See [pending-publish.md](./pending-publish.md#pr-1--models-and-write-path-gestalt).
+Shipped in [gestalt#2932](https://github.com/valon-technologies/gestalt/pull/2932). See [pending-publish.md](./pending-publish.md).
 
 Run:
 

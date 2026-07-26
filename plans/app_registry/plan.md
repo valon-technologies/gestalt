@@ -265,15 +265,9 @@ Core recovery paths must not depend on dynamically installed apps.
 13. Install-time validation before fleet accept: platform artifact, `gestaltd` compatibility, and declared app dependencies. No dedicated rollback API — revert via `upgrade` to an older published version. See [validation.md](./validation.md), [tests.md](./tests.md#install-time-validation-tests).
 14. Admin observability for registry-only apps: read APIs for rollouts and per-replica materializations, and an App Registry section in the `/admin` UI. **Done.** See [admin.md](./admin.md), [lifecycle.md](./lifecycle.md#admin-observability-api), [tests.md](./tests.md#admin-observability-tests).
 15. App-admin version selection for registry-only apps: `/apps/{app}/admin` selector with published-version provenance, app-scoped `admin` auth, and rollout admission. See [admin.md](./admin.md#app-admin-ui-appsappadmin), [lifecycle.md](./lifecycle.md#app-admin-version-selection), [tests.md](./tests.md#app-version-selection-tests).
+16. Pending publish visibility: `pending.json` / `failed.json`, CI lifecycle, and pending/failed rows on app admin. **Done.** See [pending-publish.md](./pending-publish.md).
 
 ## Future work
-
-### Pending publish visibility
-
-Show in-flight and recently failed CI publishes on `/apps/{app}/admin` before
-and after `index.json` is updated. Add mutable `apps/{app}/pending.json` and
-`apps/{app}/failed.json` in GCS, CI lifecycle hooks, and pending/failed rows in
-the app-admin API and snapshots table. See [pending-publish.md](./pending-publish.md).
 
 ### Version retention and cleanup
 
