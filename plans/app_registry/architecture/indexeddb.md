@@ -34,6 +34,11 @@ Implementation:
 
 `AppInstallation` in `core/types.go` is the projected shape returned by admin HTTP and install handlers, not a direct IndexedDB row.
 
+The ordered change requests are also the permanent **revision history** for an
+app. They are never removed by registry retention. The history API returns the
+raw transition sequence rather than the deduplicated known-version projection,
+so each accepted `from_version` → `to_version` change remains auditable.
+
 IndexedDB stores accepted version changes and each replica's rollout progress. It does not store a single "current fleet version" or "currently running version."
 
 Gestalt derives the desired version from the latest change-request timestamp. If two requests have the same timestamp, it chooses the lexicographically greatest version string so every replica selects the same version. Bootstrap and polling both compare the requests using this rule; they do not assume that the first or last record returned by IndexedDB is the newest.
@@ -151,14 +156,26 @@ Primary key: `id` (UUID).
     "artifact_checksums": {
       "linux/amd64": "deadbeef…"
     },
+    "publication": {
+      "workflow_run_url": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
+      "trigger_pull_request": {
+        "number": 3251,
+        "url": "https://github.com/valon-technologies/valon-tools/pull/3251"
+      }
+    },
     "installed_at": "2026-07-10T02:20:00Z"
   }
 }
 ```
 
-`metadata_json` carries the install contract snapshot used to project `AppInstallation` for HTTP responses.
+`metadata_json` carries the immutable install contract and publication
+provenance snapshot used to project `AppInstallation` and revision-history
+responses. Legacy rows may omit `publication`.
 
-Re-installing an already-known `to_version` returns **400** from `POST …/add` or `POST …/upgrade` (`HasKnownVersion` guard); no duplicate change request is appended.
+Re-installing an already-known `to_version` returns **400** from every version
+selection route (`HasKnownVersion` guard); no duplicate change request is
+appended. Historical versions remain visible through revision history but
+cannot become desired again.
 
 ### Indexes
 
@@ -175,7 +192,7 @@ Re-installing an already-known `to_version` returns **400** from `POST …/add` 
 | Method | Description |
 |--------|-------------|
 | `AppendRequest(ctx, request)` | Insert one change request (`Add`; fails if `id` collides). |
-| `ListRequestsByApp(ctx, app)` | Requests for an app in `timestamp` order. |
+| `ListRequestsByApp(ctx, app)` | Requests for an app in `timestamp` order; backs the permanent revision-history API. |
 | `HasKnownVersion(ctx, app, version)` | Whether a change request exists for `(app, to_version)`. |
 | `ListKnownVersionsByApp(ctx, app)` | Projected known versions for one app. |
 | `ListAllKnownVersions(ctx)` | Projected known versions across all apps. |

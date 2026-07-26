@@ -299,7 +299,8 @@ Writes use the same optimistic-concurrency pattern as `pending.json`.
 
 **Path:** `apps/{app}/retention.json`
 
-Answers: *when was each published version last used, and was it ever fleet-known?*
+Answers: *when was each published version created, and did it ever enter the
+fleet deploy chain?*
 
 Mutable overlay used by retention pruning. Not installable metadata. See
 [retention.md](../operations/retention.md) for policy rules and cleanup scope.
@@ -330,9 +331,9 @@ Mutable overlay used by retention pruning. Not installable metadata. See
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `lastUsedAt` | RFC 3339 timestamp | yes | Last fleet use; initialized to `publishedAt` on publish. |
+| `lastUsedAt` | RFC 3339 timestamp | yes | Retention clock for a never-deployed version; initialized to `publishedAt`. |
 | `firstDeployedAt` | RFC 3339 timestamp | no | First fleet admission. |
-| `everDeployed` | bool | yes | Sticky flag; once true, deployed retention applies. |
+| `everDeployed` | bool | yes | Sticky flag; once true, the index entry, version metadata, and artifacts are permanently protected from pruning. |
 
 ---
 

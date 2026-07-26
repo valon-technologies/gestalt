@@ -619,6 +619,7 @@ App-scoped routes on the authenticated public API. UI capabilities:
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/apps/{app}/admin/registry` | Load published/known versions, desired version, and rollout admission state |
+| `GET` | `/api/v1/apps/{app}/admin/registry/history` | Load the permanent deploy chain for the Revision history tab |
 | `POST` | `/api/v1/apps/{app}/admin/registry/version` | Select the fleet-wide desired version |
 
 #### Authorization
@@ -660,6 +661,7 @@ user, and the caller has `admin` on `app/{app}`.
       "platforms": ["linux/amd64"],
       "sourceRef": "def456def456def456def456def456def456def4",
       "sourceUrl": "https://github.com/valon-technologies/valon-tools/commit/def456def456def456def456def456def456def4",
+      "previouslyDeployed": false,
       "publication": {
         "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
         "triggerPullRequest": {
@@ -688,12 +690,67 @@ Rules:
 - `publishedVersions` comes from the registry index, newest `publishedAt` first.
   Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication`
   when recorded. Legacy versions may omit `publication`.
+- `publishedVersions[].previouslyDeployed` is true when
+  `HasKnownVersion(app, version)` finds the version anywhere in the permanent
+  deploy chain. The UI never offers **Deploy** for that row.
 - `pendingVersions` and `failedVersions` come from `pending.json` and
   `failed.json`. See [pending-publish.md](./pending-publish.md#read-path).
 - When the same version appears in more than one catalog, apply
   [merge rules](./pending-publish.md#app-admin-api).
 - `selectionDisabled` is true only while rollout state is `enrolling` or
   `restarting`.
+
+#### Revision history
+
+`GET /api/v1/apps/{app}/admin/registry/history?limit=50&cursor=…` returns the
+append-only `app_version_change_requests` sequence in reverse chronological
+order.
+
+**Response `200`**
+
+```json
+{
+  "app": "g-issues",
+  "revisions": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "version": "0.0.0-snapshot.gdef456",
+      "previousVersion": "0.0.0-snapshot.gabc123",
+      "deployedAt": "2026-07-24T20:42:00Z",
+      "deployedBy": "user:alice",
+      "sourceRef": "def456def456def456def456def456def456def4",
+      "sourceUrl": "https://github.com/valon-technologies/valon-tools/commit/def456def456def456def456def456def456def4",
+      "publication": {
+        "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
+        "triggerPullRequest": {
+          "number": 3251,
+          "url": "https://github.com/valon-technologies/valon-tools/pull/3251"
+        }
+      },
+      "current": true
+    }
+  ],
+  "nextCursor": "2026-07-24T20:42:00Z:550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+Rules:
+
+- The endpoint reads raw change requests, not `knownVersions`, so repeated
+  projections cannot collapse accepted transitions.
+- Sort by `(timestamp, id)` descending. The opaque cursor contains that pair;
+  default `limit` is 50 and maximum is 100.
+- The first deployment omits `previousVersion` when stored `from_version` is
+  `registry:first-install`.
+- `current` is true only for the request that produced `LatestKnownVersion`.
+- `deployedAt`, `deployedBy`, source fields, and publication provenance come
+  from the change request and its immutable `metadata_json` install-contract
+  snapshot. New admissions snapshot publication provenance; legacy rows may
+  omit it.
+- An app with no change requests returns `revisions: []`. The route has the
+  same app-admin authorization and fail-closed behavior as the registry-state
+  route.
+- The endpoint performs no writes and exposes no deploy or rollback action.
 
 #### `POST /api/v1/apps/{app}/admin/registry/version`
 
@@ -736,28 +793,29 @@ A request is accepted only when all checks pass:
    registry fetch, install-time validation, rollout creation, or change-request
    append occurs on this path. Terminal `complete` or `failed` rollouts do not
    block a new selection.
-6. Reject when the selected version equals the current desired version with
-   **400** and no writes.
-7. Fetch the published version from the configured registry and run install-time
+6. Reject when the selected version appears anywhere in
+   `app_version_change_requests` with **400** and no writes. This includes the
+   current desired version and every historical deployed version.
+7. Fetch the never-deployed published version from the configured registry and run install-time
    validation ([validation.md](../architecture/validation.md)).
 8. Create the rollout and append the change request (`add` on first selection;
-   `upgrade` on later selections, including revert to an older known version).
+   `upgrade` on later selections).
 9. Release the install lock.
 
 The rollout check in step 5 is authoritative. Concurrent selection requests
 must recheck under the install lock so only one admission succeeds.
 
-#### Revert to an older known version
+#### Historical versions are not deployable
 
-Reject only when the selected version equals the **current desired version**.
-Allow a new change request whose `to_version` is an older, previously known
-version.
+Version selection is forward-only with respect to the deploy chain: once a
+version has appeared as `to_version`, it cannot be selected again. This keeps
+the permanent revision history separate from deployment controls and prevents
+an old retained artifact from becoming an implicit rollback mechanism.
 
-On reconciliation, treat per-replica materialization rows whose
-`acknowledged_at` predates the new rollout's `created_at` as stale: reset
-materialization, stop, restart, attempt, and error fields before acknowledging
-the new rollout. Count cohort membership and convergence only from timestamps at
-or after the current rollout's `created_at`.
+The server enforces this with `HasKnownVersion` while holding the app-scoped
+install lock. UI suppression is not the security boundary. Recovery requires a
+newly published version, even when its code intentionally matches an older
+revision.
 
 ### Errors
 
@@ -778,7 +836,7 @@ App-admin routes use the same `{ "error": "…" }` envelope.
 
 | Status | When |
 |--------|------|
-| `400` | Selected version is already desired; unknown request fields; install-time validation failure |
+| `400` | Selected version is current or previously deployed; unknown request fields; install-time validation failure |
 | `401` | Missing or invalid authentication |
 | `403` | Authenticated user lacks `admin` on `app/{app}` |
 | `404` | App is not registry-only; published version does not exist |

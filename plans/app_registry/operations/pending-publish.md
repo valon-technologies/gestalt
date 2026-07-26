@@ -75,7 +75,7 @@ Field definitions: [`publishStartedAt`](../architecture/models.md#publishedversi
 | Row status | Start | End | Status label |
 |------------|-------|-----|--------------|
 | **Publishing** | `startedAt` | now | `Publishing` + `for 4m` |
-| **Available** / **Deployed** | `publishStartedAt` | `publishedAt` | `Published in 4m 32s` |
+| **Available** / **Deployed** / **Previously deployed** | `publishStartedAt` | `publishedAt` | `Published in 4m 32s` |
 | **Failed** | `startedAt` | `failedAt` | `Failed after 35m` |
 
 `gestaltd app registry publish` reads `pending.json` and copies
@@ -199,7 +199,11 @@ Wireframes and columns: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 | **Failed** | Entry from `failedVersions` |
 | **Deployed** | `version === desiredVersion` |
 | **Rolling out** | Active rollout for this version |
-| **Available** | Published, not desired |
+| **Previously deployed** | Published, not desired, and `previouslyDeployed` |
+| **Available** | Published, not desired, and never deployed |
+
+Only **Available** rows expose **Deploy**. Revision history is read-only and
+appears on its own tab; see [admin.md](./admin.md#revision-history-tab).
 
 Polling (`gestalt-providers`):
 

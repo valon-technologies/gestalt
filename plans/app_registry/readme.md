@@ -168,8 +168,8 @@ without writing a row.
 
 Gestalt projects known versions from change requests through
 `ListKnownVersionsByApp` and `ListAllKnownVersions`. There is no separate fleet
-head or promotion record. Reverting selects an older published version through
-the upgrade path.
+head or promotion record. The ordered change requests form the permanent
+revision history. A version already in that history cannot be selected again.
 
 Per-replica rollout progress lives in `app_instance_materializations`; fleet
 rollout state lives in `app_rollouts`. See [indexeddb.md](./architecture/indexeddb.md).
@@ -201,18 +201,18 @@ Each replica materializes the latest desired registry version under
 cold starts may need to materialize the package again.
 
 A dynamic app failure does not prevent Gestalt from serving core functionality.
-Operators can select a previously published version to recover. Core recovery
-paths do not depend on registry-only apps.
+Recovery publishes a new version, even when its code intentionally matches an
+older revision. Core recovery paths do not depend on registry-only apps.
 
 ## Future work
 
 ### Version retention and cleanup
 
-Automatically delete published versions that are no longer needed, with
-configurable retention windows: unused snapshots after 3 days (default), and
-previously fleet-known snapshots after 7 days since last fleet use. Add
-`apps/{app}/retention.json`, fleet-use tracking, and reader-owned
-`gestaltd app registry retention prune`. See [retention.md](./operations/retention.md).
+Automatically delete never-deployed snapshots after 3 days by default. Retain
+every version that entered the fleet deploy chain permanently, including its
+metadata and artifacts. Add `apps/{app}/retention.json`, fleet-use tracking,
+reader-owned `gestaltd app registry retention prune`, and a read-only Revision
+history tab on the app-admin page. See [retention.md](./operations/retention.md).
 
 ### Packaged workflow metadata
 

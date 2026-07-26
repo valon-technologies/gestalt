@@ -109,9 +109,12 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
 ### Capabilities
 
 - **Manage app** on the `/apps` catalog when the caller can administer that app.
-- Select the fleet-wide desired version: first install, upgrade, or revert to an older published version.
+- Select a never-deployed published version as the fleet-wide desired version.
 - Show per-version `publishedAt`, linked source commit, triggering PR or commit, and publishing workflow run.
 - Show in-flight (**Publishing**) and recent failed (**Failed**) publishes with elapsed or total publish time. See [pending-publish.md](./pending-publish.md).
+- Show the permanent, read-only deploy chain in a **Revision history** tab.
+- Mark previously deployed versions as historical and never offer a deploy
+  action for them.
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable deploy actions while a rollout is `enrolling` or `restarting`; refresh until terminal.
 - Render access denied on **403** without leaking registry metadata.
@@ -120,12 +123,17 @@ Selection is fleet-wide. It is not per-user or per-replica.
 
 ### App admin page
 
-The page header shows the app name, **App management** label, and registry
-binding. Below that: current **Desired version**, then the **Published
-snapshots** table (pending, failed, and published entries in one newest-first
-list). See [pending-publish.md](./pending-publish.md) for merge rules, polling,
-and timing labels. Each row has **Deploy** in the action column unless selection
-is disabled or the row is not deployable.
+The page header shows the app name, **App management** label, registry binding,
+and current **Desired version**. Two tabs separate deployment from audit:
+
+- **Published snapshots** — pending, failed, and published entries in one
+  newest-first list. A published row has **Deploy** only when it has never
+  appeared in the deploy chain and selection is enabled.
+- **Revision history** — accepted fleet version changes in reverse
+  chronological order. This tab is always read-only.
+
+See [pending-publish.md](./pending-publish.md) for snapshot merge rules,
+polling, and timing labels.
 
 ```text
 g-issues                                                        App management
@@ -141,9 +149,12 @@ PR #3740 · Title     0.0.0-snapshot.g…       Publishing · for 4m    4 minute
 PR #3251 · Title     0.0.0-snapshot.g…       Available              Jul 22 15:00      Deploy
                                               Published in 4m 32s
 PR #3200 · Title     0.0.0-snapshot.g…       Deployed               Jul 21 12:00      —
+PR #3100 · Title     0.0.0-snapshot.g…       Previously deployed    Jul 18 09:00      —
 ```
 
-Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is disabled on **Publishing** and **Failed** rows. **Deployed** marks the desired version.
+Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration).
+**Deploy** is unavailable on **Publishing**, **Failed**, **Deployed**, and
+**Previously deployed** rows. **Deployed** marks the desired version.
 
 During an active rollout, disable deploy actions and show rollout state above the
 table:
@@ -174,6 +185,31 @@ PR #3740 · Title     0.0.0-snapshot.g…       Failed                 Jul 24 18
 
 After a successful deploy selection, keep deploy actions disabled until the
 rollout reaches `complete` or `failed`.
+
+### Revision history tab
+
+The Revision history tab displays `app_version_change_requests` as an immutable
+deploy ledger. It is not built from the deduplicated `knownVersions`
+projection: every accepted transition appears exactly once.
+
+```text
+Revision history
+
+Deployed at       Version                    Previous version            Deployed by
+----------------  -------------------------  --------------------------  ----------------
+Jul 24 16:42      0.0.0-snapshot.gdef456    0.0.0-snapshot.gabc123     alice@valon.com
+Jul 21 12:00      0.0.0-snapshot.gabc123    First deployment            bob@valon.com
+```
+
+Each row links to the source commit and, when recorded, the triggering pull
+request and publish workflow. The current desired revision is labeled
+**Current**; earlier rows are labeled **Historical**. Neither the row nor its
+detail view has a deploy action.
+
+Load the newest page when the tab opens and paginate older entries with a
+cursor. An empty deploy chain renders **No deployments yet**. Registry
+retention permanently preserves the metadata and artifacts for every version
+in this table; see [retention.md](./retention.md).
 
 ---
 

@@ -419,6 +419,22 @@ Manual or Playwright-style check against a local multi-replica harness:
 
 ---
 
+## Retention tests
+
+Policy: [retention.md](../operations/retention.md).
+
+- A never-deployed version older than `unusedRetention` is eligible and its
+  index entry, metadata, artifact objects, and retention row are removed.
+- A version with `everDeployed: true` is never eligible, regardless of age.
+- A version present as `to_version` in `app_version_change_requests` is never
+  eligible even when `retention.json` is missing or incorrectly says
+  `everDeployed: false`.
+- Pruning never modifies change requests, pending/failed catalogs, or another
+  app's objects.
+- `--dry-run` reports the same eligibility decisions without writes.
+
+---
+
 ## App version selection tests
 
 API: [lifecycle.md](../operations/lifecycle.md#app-admin-version-selection). UI: [admin.md](../operations/admin.md#app-admin-ui-appsappadmin).
@@ -439,15 +455,19 @@ Add focused server tests for:
 | Rollout admission | Active `enrolling` / `restarting` rollout: GET sets `selectionDisabled`; POST returns **409** before registry fetch, validation, rollout creation, or change-request append; terminal `complete` / `failed` rollout leaves selection enabled |
 | First selection | Uses add semantics and appends the first change request |
 | Upgrade | Appends a change request; stored actor is the authenticated user subject |
-| Revert to previously known version | Appends a new change request, resets stale replica progress, and makes the older version desired |
+| Select previously deployed version | **400** and no writes, even when the version is not currently desired |
 | Select current desired version | **400** and no writes |
 | Validation failure | Existing typed validation error; no rollout or change request |
 | Concurrent selections | Exactly one passes admission; the other returns **409** |
+| Revision history ordering | Returns every raw change request by `(timestamp, id)` descending without deduplicating versions |
+| Revision history pagination | Applies the opaque cursor without gaps or duplicate rows; default 50, maximum 100 |
+| First deployment history | Omits `previousVersion` for the `registry:first-install` sentinel |
+| Revision history authorization | Uses the same **401**, **403**, and **503** fail-closed behavior as registry state |
 
-The revert test must seed completed materialization rows from the older
-version's first rollout. The new rollout must not count those timestamps as
-current convergence: every replica acknowledges again, performs the restart,
-and records timestamps at or after the new rollout's `created_at`.
+The previously-deployed test seeds an older change request, advances to a newer
+desired version, then attempts to select the older version. The handler must
+reject through `HasKnownVersion` before registry fetch, validation, rollout
+creation, or change-request append.
 
 `POST …/registry/version` rejects unknown fields (including `actor`, `registry`,
 and `fromVersion`).
@@ -461,9 +481,15 @@ Add route/component tests for:
 
 - **Manage app** appears only when `managementPath` is returned
 - published versions render newest first with desired version selected
+- previously deployed snapshots render without a deploy action
 - version detail shows `publishedAt`, linked commit, trigger PR or commit, and
   workflow run; legacy entries without `publication` link the commit and show
   **not recorded** for workflow/PR
+- the Revision history tab loads lazily, renders newest-first transitions,
+  labels the desired revision **Current**, paginates older rows, and exposes no
+  deploy action
+- revision history renders **First deployment** for the sentinel and
+  **No deployments yet** for an empty chain
 - no desired version renders first-install copy
 - active rollout or **409** after a stale page disables the selector and submit
   button until rollout is terminal
@@ -472,8 +498,9 @@ Add route/component tests for:
 
 ### Manual smoke
 
-App admin without `gestaltAdmin` can open `/apps/{app}/admin`, select a version,
-and see rollout progress.
+App admin without `gestaltAdmin` can open `/apps/{app}/admin`, select a
+never-deployed version, see rollout progress, and inspect the read-only Revision
+history tab.
 
 ---
 
