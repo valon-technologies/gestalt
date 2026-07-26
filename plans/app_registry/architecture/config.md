@@ -37,12 +37,14 @@ appRegistries:
       bucket: gs://gestalt-app-registry
     retention:
       unusedRetention: 72h
+      deployedRetention: 720h
 ```
 
 See [retention.md](../operations/retention.md) for policy semantics and the `retention.json`
-overlay. `unusedRetention` applies only to versions that have never entered the
-fleet deploy chain. Deployed versions have no retention window and remain
-permanently available for revision history.
+overlay. `unusedRetention` applies to never-deployed versions.
+`deployedRetention` controls how long an inactive historical version can be
+selected again after it stops being desired. Its audit metadata remains
+permanent after that deployability window closes.
 
 `gcs.bucket` accepts a bare bucket name or `gs://{bucket}`. Gestalt derives both URL forms:
 

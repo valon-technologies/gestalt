@@ -169,7 +169,8 @@ without writing a row.
 Gestalt projects known versions from change requests through
 `ListKnownVersionsByApp` and `ListAllKnownVersions`. There is no separate fleet
 head or promotion record. The ordered change requests form the permanent
-revision history. A version already in that history cannot be selected again.
+revision history, including upgrades and downgrades that revisit an earlier
+version.
 
 Per-replica rollout progress lives in `app_instance_materializations`; fleet
 rollout state lives in `app_rollouts`. See [indexeddb.md](./architecture/indexeddb.md).
@@ -201,18 +202,21 @@ Each replica materializes the latest desired registry version under
 cold starts may need to materialize the package again.
 
 A dynamic app failure does not prevent Gestalt from serving core functionality.
-Recovery publishes a new version, even when its code intentionally matches an
-older revision. Core recovery paths do not depend on registry-only apps.
+Operators can select a historical version for 30 days after it last stopped
+being desired. After that configurable window it is permanently locked and
+recovery requires a new publish. Core recovery paths do not depend on
+registry-only apps.
 
 ## Future work
 
 ### Version retention and cleanup
 
 Automatically delete never-deployed snapshots after 3 days by default. Retain
-every version that entered the fleet deploy chain permanently, including its
-metadata and artifacts. Add `apps/{app}/retention.json`, fleet-use tracking,
-reader-owned `gestaltd app registry retention prune`, and a read-only Revision
-history tab on the app-admin page. See [retention.md](./operations/retention.md).
+the complete deploy chain and deployed version metadata permanently. Keep
+historical versions redeployable for 30 days after last use, then lock them and
+allow artifact cleanup. Add `apps/{app}/retention.json`, fleet-use tracking,
+reader-owned `gestaltd app registry retention prune`, and a Revision history
+tab on the app-admin page. See [retention.md](./operations/retention.md).
 
 ### Packaged workflow metadata
 

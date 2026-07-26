@@ -661,7 +661,7 @@ user, and the caller has `admin` on `app/{app}`.
       "platforms": ["linux/amd64"],
       "sourceRef": "def456def456def456def456def456def456def4",
       "sourceUrl": "https://github.com/valon-technologies/valon-tools/commit/def456def456def456def456def456def456def4",
-      "previouslyDeployed": false,
+      "deploymentState": "available",
       "publication": {
         "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
         "triggerPullRequest": {
@@ -690,9 +690,11 @@ Rules:
 - `publishedVersions` comes from the registry index, newest `publishedAt` first.
   Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication`
   when recorded. Legacy versions may omit `publication`.
-- `publishedVersions[].previouslyDeployed` is true when
-  `HasKnownVersion(app, version)` finds the version anywhere in the permanent
-  deploy chain. The UI never offers **Deploy** for that row.
+- `publishedVersions[].deploymentState` is `available` for never-deployed
+  versions, `desired` for the current version, `redeployable` for historical
+  versions before `deployableUntil`, or `locked` after the deadline.
+- `deployableUntil` is returned for historical versions. The UI offers
+  **Deploy** only for `available` and `redeployable`.
 - `pendingVersions` and `failedVersions` come from `pending.json` and
   `failed.json`. See [pending-publish.md](./pending-publish.md#read-path).
 - When the same version appears in more than one catalog, apply
@@ -742,7 +744,9 @@ Rules:
   default `limit` is 50 and maximum is 100.
 - The first deployment omits `previousVersion` when stored `from_version` is
   `registry:first-install`.
-- `current` is true only for the request that produced `LatestKnownVersion`.
+- `current` is true only for the latest request that produced
+  `LatestKnownVersion`. Earlier requests remain historical even when they
+  selected the same version.
 - `deployedAt`, `deployedBy`, source fields, and publication provenance come
   from the change request and its immutable `metadata_json` install-contract
   snapshot. New admissions snapshot publication provenance; legacy rows may
@@ -750,7 +754,8 @@ Rules:
 - An app with no change requests returns `revisions: []`. The route has the
   same app-admin authorization and fail-closed behavior as the registry-state
   route.
-- The endpoint performs no writes and exposes no deploy or rollback action.
+- The endpoint performs no writes and exposes no deploy action. Eligible
+  historical versions are selected from Published snapshots.
 
 #### `POST /api/v1/apps/{app}/admin/registry/version`
 
@@ -793,29 +798,46 @@ A request is accepted only when all checks pass:
    registry fetch, install-time validation, rollout creation, or change-request
    append occurs on this path. Terminal `complete` or `failed` rollouts do not
    block a new selection.
-6. Reject when the selected version appears anywhere in
-   `app_version_change_requests` with **400** and no writes. This includes the
-   current desired version and every historical deployed version.
-7. Fetch the never-deployed published version from the configured registry and run install-time
+6. Reject when the selected version equals the current desired version with
+   **400** and no writes.
+7. Resolve deployment state from `retention.json` and the change-request chain:
+   - accept a never-deployed published version before unused pruning
+   - accept a historical version only before `deployableUntil` and when
+     `lockedAt` is unset
+   - reject an expired or locked historical version with **400** and no writes
+8. Fetch the published version from the configured registry and run install-time
    validation ([validation.md](../architecture/validation.md)).
-8. Create the rollout and append the change request (`add` on first selection;
-   `upgrade` on later selections).
-9. Release the install lock.
+9. Create the rollout and append the change request (`add` on first selection;
+   `upgrade` on later selections, including a downgrade or repeated version).
+   The request records the outgoing version's fixed `deployableUntil`; the
+   append-only chain is authoritative for this deadline.
+10. Mirror the transition into `retention.json` for pruning. If that write
+    fails, repair it from the change-request chain; do not lose or rewrite the
+    accepted transition.
+11. Release the install lock.
 
 The rollout check in step 5 is authoritative. Concurrent selection requests
 must recheck under the install lock so only one admission succeeds.
 
-#### Historical versions are not deployable
+#### Historical redeployment and locking
 
-Version selection is forward-only with respect to the deploy chain: once a
-version has appeared as `to_version`, it cannot be selected again. This keeps
-the permanent revision history separate from deployment controls and prevents
-an old retained artifact from becoming an implicit rollback mechanism.
+When `v1 → v2` is accepted, `v1.lastUsedAt` is the transition time and
+`v1.deployableUntil` is that time plus the configured `deployedRetention`
+(default 30 days). `v2` is desired, so no historical deadline runs for it.
 
-The server enforces this with `HasKnownVersion` while holding the app-scoped
-install lock. UI suppression is not the security boundary. Recovery requires a
-newly published version, even when its code intentionally matches an older
-revision.
+Selecting `v1` before its deadline appends a new `v2 → v1` request. The chain
+retains both transitions. When `v1` later stops being desired, it receives a
+new deadline. Once a deadline passes, the version is permanently locked and
+cannot be selected again, though every history event and its metadata remains
+visible.
+
+For a repeated version, reset per-replica materialization rows whose
+`acknowledged_at` predates the new rollout's `created_at`. Count cohort
+membership and convergence only from timestamps at or after the current
+rollout's `created_at`.
+
+The server enforces the deadline while holding the app-scoped install lock. UI
+suppression is not the security boundary.
 
 ### Errors
 
@@ -836,7 +858,7 @@ App-admin routes use the same `{ "error": "…" }` envelope.
 
 | Status | When |
 |--------|------|
-| `400` | Selected version is current or previously deployed; unknown request fields; install-time validation failure |
+| `400` | Selected version is current, expired, or permanently locked; unknown request fields; install-time validation failure |
 | `401` | Missing or invalid authentication |
 | `403` | Authenticated user lacks `admin` on `app/{app}` |
 | `404` | App is not registry-only; published version does not exist |

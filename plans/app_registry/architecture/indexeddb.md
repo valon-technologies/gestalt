@@ -37,7 +37,9 @@ Implementation:
 The ordered change requests are also the permanent **revision history** for an
 app. They are never removed by registry retention. The history API returns the
 raw transition sequence rather than the deduplicated known-version projection,
-so each accepted `from_version` → `to_version` change remains auditable.
+so each accepted `from_version` → `to_version` change remains auditable,
+including repeated versions in upgrade and downgrade chains such as
+`v1 → v2 → v1`.
 
 IndexedDB stores accepted version changes and each replica's rollout progress. It does not store a single "current fleet version" or "currently running version."
 
@@ -109,6 +111,7 @@ app_version_change_requests
   - to_version
   - actor
   - timestamp
+  - from_version_deployable_until # fixed deadline for the outgoing version; omitted on first install
   - metadata_json                  # install contract snapshot
 ```
 
@@ -116,7 +119,8 @@ Primary key: `id` (UUID).
 
 `app` is the **app name** (for example `g-issues`), matching `app_shas.id`.
 
-**Required fields** — must be present on every row:
+**Required transition fields** — `from_version_deployable_until` is required
+when `from_version` is runnable and omitted for the first-install sentinel:
 
 ```json
 {
@@ -124,7 +128,8 @@ Primary key: `id` (UUID).
   "app": "g-issues",
   "from_version": "0.0.0-snapshot.gdeadbeef",
   "to_version": "0.0.0-snapshot.gabc123",
-  "timestamp": "2026-07-10T02:20:00Z"
+  "timestamp": "2026-07-10T02:20:00Z",
+  "from_version_deployable_until": "2026-08-09T02:20:00Z"
 }
 ```
 
@@ -143,6 +148,13 @@ Primary key: `id` (UUID).
 ```
 
 `registry:first-install` is an audit sentinel only. Projection helpers must not treat it as a runnable version.
+
+`from_version_deployable_until` captures the configured
+`deployedRetention` deadline when the outgoing version stops being desired.
+It is immutable with the transition, so later config changes cannot shorten,
+extend, or reopen that historical version's window. The latest transition
+whose `from_version` matches a non-current version defines that version's
+redeploy deadline.
 
 **Optional fields**:
 
@@ -172,10 +184,11 @@ Primary key: `id` (UUID).
 provenance snapshot used to project `AppInstallation` and revision-history
 responses. Legacy rows may omit `publication`.
 
-Re-installing an already-known `to_version` returns **400** from every version
-selection route (`HasKnownVersion` guard); no duplicate change request is
-appended. Historical versions remain visible through revision history but
-cannot become desired again.
+The low-level `POST …/add` and `POST …/upgrade` routes reject an already-known
+`to_version`. App-admin version selection may append the same `to_version`
+again when that historical version is still inside its configured redeploy
+window. After `deployableUntil`, selection returns **400** and no row is
+appended.
 
 ### Indexes
 

@@ -425,10 +425,18 @@ Policy: [retention.md](../operations/retention.md).
 
 - A never-deployed version older than `unusedRetention` is eligible and its
   index entry, metadata, artifact objects, and retention row are removed.
-- A version with `everDeployed: true` is never eligible, regardless of age.
-- A version present as `to_version` in `app_version_change_requests` is never
-  eligible even when `retention.json` is missing or incorrectly says
-  `everDeployed: false`.
+- The current desired version and active rollout target retain all objects
+  regardless of age.
+- A historical version before `deployableUntil` retains its artifact and
+  remains selectable.
+- A historical version after `deployableUntil` becomes permanently locked; its
+  artifact may be removed, but its index summary, version metadata, retention
+  row, and change requests remain.
+- A deployed version is never fully deleted even when `retention.json` is
+  missing or incorrectly says `everDeployed: false`; the change-request chain
+  is the fail-safe.
+- Changing `deployedRetention` does not alter a deadline already captured on a
+  transition or unlock a version whose deadline passed.
 - Pruning never modifies change requests, pending/failed catalogs, or another
   app's objects.
 - `--dry-run` reports the same eligibility decisions without writes.
@@ -455,18 +463,19 @@ Add focused server tests for:
 | Rollout admission | Active `enrolling` / `restarting` rollout: GET sets `selectionDisabled`; POST returns **409** before registry fetch, validation, rollout creation, or change-request append; terminal `complete` / `failed` rollout leaves selection enabled |
 | First selection | Uses add semantics and appends the first change request |
 | Upgrade | Appends a change request; stored actor is the authenticated user subject |
-| Select previously deployed version | **400** and no writes, even when the version is not currently desired |
+| Downgrade within redeploy window | Appends a repeated-version change request and makes the historical version desired |
+| Select expired historical version | **400** and no writes |
 | Select current desired version | **400** and no writes |
 | Validation failure | Existing typed validation error; no rollout or change request |
 | Concurrent selections | Exactly one passes admission; the other returns **409** |
-| Revision history ordering | Returns every raw change request by `(timestamp, id)` descending without deduplicating versions |
+| Revision history ordering | Returns every raw change request by `(timestamp, id)` descending, including repeated versions |
 | Revision history pagination | Applies the opaque cursor without gaps or duplicate rows; default 50, maximum 100 |
 | First deployment history | Omits `previousVersion` for the `registry:first-install` sentinel |
 | Revision history authorization | Uses the same **401**, **403**, and **503** fail-closed behavior as registry state |
 
-The previously-deployed test seeds an older change request, advances to a newer
-desired version, then attempts to select the older version. The handler must
-reject through `HasKnownVersion` before registry fetch, validation, rollout
+The downgrade test seeds `v1 → v2`, selects `v1` before its deadline, and
+asserts the chain becomes `v1 → v2 → v1`. The expired-version test advances
+past the fixed deadline and rejects before registry fetch, validation, rollout
 creation, or change-request append.
 
 `POST …/registry/version` rejects unknown fields (including `actor`, `registry`,
@@ -481,13 +490,14 @@ Add route/component tests for:
 
 - **Manage app** appears only when `managementPath` is returned
 - published versions render newest first with desired version selected
-- previously deployed snapshots render without a deploy action
+- historical snapshots show **Redeployable** with a deadline and a deploy
+  action, or **Locked** without one
 - version detail shows `publishedAt`, linked commit, trigger PR or commit, and
   workflow run; legacy entries without `publication` link the commit and show
   **not recorded** for workflow/PR
 - the Revision history tab loads lazily, renders newest-first transitions,
-  labels the desired revision **Current**, paginates older rows, and exposes no
-  deploy action
+  preserves repeated upgrade/downgrade entries, labels the desired revision
+  **Current**, and paginates older rows
 - revision history renders **First deployment** for the sentinel and
   **No deployments yet** for an empty chain
 - no desired version renders first-install copy
@@ -499,8 +509,8 @@ Add route/component tests for:
 ### Manual smoke
 
 App admin without `gestaltAdmin` can open `/apps/{app}/admin`, select a
-never-deployed version, see rollout progress, and inspect the read-only Revision
-history tab.
+never-deployed or still-redeployable version, see rollout progress, and inspect
+the read-only Revision history tab.
 
 ---
 

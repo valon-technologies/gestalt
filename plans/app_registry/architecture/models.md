@@ -299,8 +299,8 @@ Writes use the same optimistic-concurrency pattern as `pending.json`.
 
 **Path:** `apps/{app}/retention.json`
 
-Answers: *when was each published version created, and did it ever enter the
-fleet deploy chain?*
+Answers: *was this version deployed, when did it last stop being desired, and
+is it still eligible for historical redeployment?*
 
 Mutable overlay used by retention pruning. Not installable metadata. See
 [retention.md](../operations/retention.md) for policy rules and cleanup scope.
@@ -310,7 +310,9 @@ Mutable overlay used by retention pruning. Not installable metadata. See
   "schemaVersion": 1,
   "versions": {
     "0.0.0-snapshot.gabc123": {
+      "publishedAt": "2026-07-20T12:00:00Z",
       "lastUsedAt": "2026-07-22T14:00:00Z",
+      "deployableUntil": "2026-08-21T14:00:00Z",
       "firstDeployedAt": "2026-07-22T14:00:00Z",
       "everDeployed": true
     }
@@ -331,9 +333,12 @@ Mutable overlay used by retention pruning. Not installable metadata. See
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `lastUsedAt` | RFC 3339 timestamp | yes | Retention clock for a never-deployed version; initialized to `publishedAt`. |
+| `publishedAt` | RFC 3339 timestamp | yes | Starts the unused-version retention window. |
+| `lastUsedAt` | RFC 3339 timestamp | no | Most recent time this version stopped being desired. Omitted while it has never been deactivated. |
+| `deployableUntil` | RFC 3339 timestamp | no | Fixed historical-redeploy deadline captured as `lastUsedAt + deployedRetention`. Cleared while this version is desired. |
 | `firstDeployedAt` | RFC 3339 timestamp | no | First fleet admission. |
-| `everDeployed` | bool | yes | Sticky flag; once true, the index entry, version metadata, and artifacts are permanently protected from pruning. |
+| `everDeployed` | bool | yes | Sticky flag; once true, deploy-chain records and version metadata are permanently protected from pruning. |
+| `lockedAt` | RFC 3339 timestamp | no | Sticky timestamp recorded after `deployableUntil`; the version can no longer become desired. |
 
 ---
 
