@@ -2,7 +2,7 @@
 
 How each `gestaltd` replica observes fleet install state, materializes app artifacts locally, and serves registry-installed app versions.
 
-Install is change-request-only; per-replica convergence (ack → download → restart → mount) is planned via polling below. List/get install endpoints expose **projected known versions** from change requests.
+Install is change-request-only; per-replica convergence (acknowledge → download → restart → mount) is handled by the polling process described below. List/get install endpoints expose **projected fleet-known versions** from change requests.
 
 Implementation:
 
@@ -33,7 +33,7 @@ Apps with a deploy-time source pin (`source.git`, `source.path`, etc.) bind into
 At `StartAppProviders`, each registry-only app:
 
 1. Read fleet-known versions via `ListKnownVersionsByApp`. When the projection is empty, skip the app — nothing is running until the first `POST …/add`.
-2. Take the latest fleet-known version (`LatestKnownVersion`).
+2. Take the desired version selected by `LatestKnownVersion`.
 3. Materialize the registry artifact to `{artifactsDir}/registry-installed/{app}/{version}` when the tree is missing or incomplete.
 4. Start the provider through `StartApp` with the registry-mounted binary — the same mount path used by catalog-driven restarts.
 
@@ -59,13 +59,13 @@ Bootstrap and the poller must both use `LatestKnownVersion` to select the same d
 
 Each replica materializes and retains only that latest desired version. Older fleet-known versions remain visible in catalog history, but a replica that advances past them does not download their artifacts. After the desired version starts successfully, Gestalt removes superseded registry-installed package directories for that app.
 
-`app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a known registry app from starting.
+`app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a registry-only app from starting.
 
 ### Bootstrap Before Polling
 
 Bootstrap finishes its registry-app startup attempts before the catalog poller begins:
 
-1. Bootstrap materializes and starts the desired fleet-known version without updating `app_rollouts` or `app_instance_materializations`; the poller owns those rollout-accounting writes.
+1. Bootstrap materializes and starts the desired version without updating `app_rollouts` or `app_instance_materializations`; the poller owns those rollout-accounting writes.
 2. After the exact package is validated and its provider starts successfully, bootstrap records the app and version in this process's running-version map and local `active-version` marker. Static and runtime handlers may then serve that version. If provider startup fails, neither the running-version map nor the `active-version` marker may identify the requested version as running.
 3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
 4. The poller then starts and runs its first reconciliation pass immediately.
@@ -123,7 +123,7 @@ Failure and retry behavior:
 1. Reconciliation operations are idempotent: materializing an already valid package, stopping an absent provider, starting the already-running desired version, and repeating a rollout-progress write must succeed without duplicating work.
 2. When an app reconciliation fails, the poller calls `RecordFailure` on the desired version's `app_instance_materializations` row. This atomically increments `attempt_count` and stores `last_error_at` and `last_error_message`. The poller then releases that app's lifecycle lease and continues reconciling other apps. If the failure itself cannot be written to IndexedDB, the poller logs that write error.
 3. While `attempt_count` is below `server.appRegistry.maxReconcileAttempts`, the next poll retries that app from the beginning. It inspects the current provider registry, running-version map, `active-version` marker, and rollout-progress rows rather than relying on in-memory progress from the failed attempt. If stopping had begun, the app may remain unavailable until retry succeeds.
-4. When `attempt_count` reaches the configured maximum, the poller stops retrying materialization and provider lifecycle work for that desired version on this replica. The limit does not apply to bootstrap: after a process restart, bootstrap still attempts the latest fleet-known version without consulting `attempt_count`. If bootstrap succeeds, the poller may record that observed convergence despite its retry limit because no additional materialization or provider lifecycle attempt is required. The poller may likewise record convergence for a non-restartable app.
+4. When `attempt_count` reaches the configured maximum, the poller stops retrying materialization and provider lifecycle work for that desired version on this replica. The limit does not apply to bootstrap: after a process restart, bootstrap still attempts the desired version selected by `LatestKnownVersion` without consulting `attempt_count`. If bootstrap succeeds, the poller may record that observed convergence despite its retry limit because no additional materialization or provider lifecycle attempt is required. The poller may likewise record convergence for a non-restartable app.
 5. A newly accepted desired version gets a new row and a fresh attempt count. Increasing the configured maximum also permits retry when the stored count is below the new value.
 6. Updates to the local `active-version` marker are atomic. A failed replacement leaves the previous valid marker in place.
 7. If Gestalt cannot determine or clean up the local provider state safely, it marks the process unhealthy and terminates so the process supervisor can restart it.
@@ -142,7 +142,7 @@ Runtime handlers determine availability from the local provider registry, runnin
 
 ## Runtime
 
-Admin HTTP under `/admin/api/v1` on the same listener as the other admin API (for example `/admin/api/v1/runtime/providers`). In deployments that split public and management listeners, call the management base URL.
+The admin HTTP API is served under `/admin/api/v1` on the same listener as the other admin API (for example `/admin/api/v1/runtime/providers`). In deployments that split public and management listeners, call the management base URL.
 
 ### How to Invoke
 
@@ -166,7 +166,7 @@ List published versions for one app:
 curl -sS "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issues/versions" | jq .
 ```
 
-Add the app to the fleet catalog (first known version):
+Add the app to the fleet-known projection:
 
 ```bash
 curl -sS -X POST "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issues/add" \
@@ -182,7 +182,7 @@ curl -sS -X POST "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issu
   -d '{"version":"0.0.0-snapshot.gdef456","actor":"user:alice"}' | jq .
 ```
 
-List known installed versions (fleet-wide):
+List fleet-known versions:
 
 ```bash
 curl -sS "$GESTALTD_URL/admin/api/v1/app-installations" | jq .
@@ -211,7 +211,7 @@ Install routes additionally require:
 - IndexedDB `app_version_change_requests` service configured on the server (`AppVersionChangeRequestsService`)
 - IndexedDB `app_version_install_locks` service configured on the server (`AppVersionInstallLockService`)
 
-List/get install endpoints project known versions from `app_version_change_requests` only.
+List/get install endpoints project fleet-known versions from `app_version_change_requests` only.
 
 ### Endpoints
 
@@ -221,8 +221,8 @@ List/get install endpoints project known versions from `app_version_change_reque
 | `GET` | `/admin/api/v1/app-registries/{registry}/apps/{app}/versions` | List published versions for one app |
 | `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/add` | Record the first fleet-known version for an app |
 | `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/upgrade` | Record a new fleet-known version when the app is already in the catalog |
-| `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
-| `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
+| `GET` | `/admin/api/v1/app-installations` | List all **fleet-known versions** across apps |
+| `GET` | `/admin/api/v1/app-installations/{app}` | List **fleet-known versions** for one app |
 
 List routes are read-only (`GET` only). `add` and `upgrade` use `POST` on a separate route group with a longer request timeout (10 minutes).
 
@@ -306,7 +306,7 @@ When the app has no index or no versions yet, `versions` is `[]` (not `null`). A
 3. `RegistryReader.FetchAppIndex` — HTTP `GET` `apps/{app}/index.json` from the configured registry (live fetch on every request).
 4. Respond `200` with `{ registry, app, versions }`.
 
-No IndexedDB read or write. Lists **published** versions in the registry bucket, not fleet-installed versions from `app_version_change_requests`.
+No IndexedDB read or write. Lists **published** versions in the registry bucket, not fleet-known versions from `app_version_change_requests`.
 
 #### `POST /admin/api/v1/app-registries/{registry}/apps/{app}/add`
 
@@ -396,7 +396,7 @@ Synchronous on the handling instance. The HTTP response is sent after the catalo
 1. Handler reads `{registry}` and `{app}` from the URL and `{ version, actor }` from the JSON body.
 2. Validate path params and look up `{registry}` in `s.appRegistries`.
 3. `Installer.Add` or `Installer.Upgrade` on the handling instance:
-   1. Claim a fleet install lock in `app_version_install_locks` for `(app, version)` (`409` if another holder holds a non-expired lock).
+   1. Claim the app-scoped fleet install lock in `app_version_install_locks`; the version is diagnostic metadata (`409` if another holder holds a non-expired lock).
    2. **`add`** — reject when `ListKnownVersionsByApp` is non-empty (`409`). **`upgrade`** — reject when the projection is empty (`400`).
    3. If `(app, version)` is already known in `app_version_change_requests`, return `400`.
    4. `RegistryReader.FetchEntry` — HTTP `GET` the published version document from the configured registry (validate the version exists; **no artifact download**).
@@ -410,7 +410,7 @@ Per-replica convergence via the background catalog controller (see Polling). Ind
 
 #### `GET /admin/api/v1/app-installations`
 
-Returns all **known versions** projected from `change request` catalog records. See [indexeddb.md](../architecture/indexeddb.md).
+Returns all **fleet-known versions** projected from change requests. See [indexeddb.md](../architecture/indexeddb.md).
 
 **Response `200`**
 
@@ -431,18 +431,18 @@ Returns all **known versions** projected from `change request` catalog records. 
 ]
 ```
 
-When no versions are known yet, the response is `[]` (not `null`).
+When no fleet-known versions exist, the response is `[]` (not `null`).
 
 1. `listAdminAppInstallations` requires `AppVersionChangeRequests` on the server; otherwise respond `503`.
-2. `ChangeRequests.ListAllKnownVersions` — read `app_version_change_requests` and project known `(app, to_version)` pairs.
+2. `ChangeRequests.ListAllKnownVersions` — read `app_version_change_requests` and project fleet-known `(app, to_version)` pairs.
 3. Map each projection to `{ app, version, sourceRef, registry, providerReleaseUrl, artifactChecksums, installedBy, installedAt, updatedAt }`.
-4. Respond `200` with the JSON array (empty if nothing installed fleet-wide).
+4. Respond `200` with the JSON array (empty when no fleet-known versions exist).
 
 IndexedDB read only. No GCS fetch.
 
 #### `GET /admin/api/v1/app-installations/{app}`
 
-Returns **known versions** for one app.
+Returns **fleet-known versions** for one app.
 
 **Response `200`** — array of objects with the same shape as one element of the fleet list response above.
 
@@ -450,8 +450,8 @@ Returns **known versions** for one app.
 
 1. `getAdminAppInstallation` reads `{app}` from the URL and validates the app name.
 2. Requires `AppVersionChangeRequests` on the server; otherwise respond `503`.
-3. `ChangeRequests.ListKnownVersionsByApp` — read `app_version_change_requests` and project known versions for that app.
-4. If no known versions, respond `404`.
+3. `ChangeRequests.ListKnownVersionsByApp` — read `app_version_change_requests` and project fleet-known versions for that app.
+4. If no fleet-known versions exist, respond `404`.
 5. Otherwise map results to the same installation object shape and respond `200` with a JSON array.
 
 IndexedDB read only. No GCS fetch.
@@ -605,7 +605,7 @@ App-scoped routes on the authenticated public API. UI capabilities: [admin.md](.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/v1/apps/{app}/admin/registry` | Load published/known versions, desired version, and rollout admission state |
+| `GET` | `/api/v1/apps/{app}/admin/registry` | Load pending, failed, published, and fleet-known versions, the desired version, and rollout admission state |
 | `GET` | `/api/v1/apps/{app}/admin/registry/history` | Load the permanent deploy chain for the Revision history tab |
 | `POST` | `/api/v1/apps/{app}/admin/registry/version` | Select the fleet-wide desired version |
 
@@ -637,6 +637,8 @@ Do not reuse the mounted-UI fallback when no authorization provider exists.
       "installedBy": "user:alice"
     }
   ],
+  "pendingVersions": [],
+  "failedVersions": [],
   "publishedVersions": [
     {
       "version": "0.0.0-snapshot.gdef456",
@@ -782,8 +784,8 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | Status | When |
 | --- | --- |
 | `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions; **install-time validation failed** |
-| `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
-| `409` | Another instance is already installing this `(app, version)` (install lock held and not expired); `add` called when the app already has fleet-known versions |
+| `404` | Unknown `registry` name; published version not found; no fleet-known versions for `{app}`; no `appRegistries` configured |
+| `409` | Another instance holds the install lock for this app; `add` called when the app already has fleet-known versions |
 | `502` | Published version fetch failed; registry fetch failed during install validation; registry named in a fleet-known installation is missing from gestaltd config; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
@@ -817,15 +819,15 @@ Example:
 ### Related Changelogs
 
 <pre>
-├── <a href="../project/changelog.md#changelog-06">06 — Registry installation prototype</a>
-├── <a href="../project/changelog.md#changelog-07">07 — Catalog-only admission</a>
-├── <a href="../project/changelog.md#changelog-08">08 — Per-replica catalog polling</a>
-├── <a href="../project/changelog.md#changelog-09">09 — Coordinated provider restarts</a>
-├── <a href="../project/changelog.md#changelog-10">10 — Materialize before restart</a>
-├── <a href="../project/changelog.md#changelog-11">11 — Mount the registry-installed package</a>
-├── <a href="../project/changelog.md#changelog-12">12 — Complete registry-only lifecycle</a>
-├── <a href="../project/changelog.md#changelog-14">14 — Fleet admin observability</a>
-└── <a href="../project/changelog.md#changelog-15">15 — App-scoped version selection</a>
+├── <a href="../project/changelog.md#changelog-06">06 — Registry Installation Prototype</a>
+├── <a href="../project/changelog.md#changelog-07">07 — Catalog-Only Admission</a>
+├── <a href="../project/changelog.md#changelog-08">08 — Per-Replica Catalog Polling</a>
+├── <a href="../project/changelog.md#changelog-09">09 — Coordinated Provider Restarts</a>
+├── <a href="../project/changelog.md#changelog-10">10 — Materialize Before Restart</a>
+├── <a href="../project/changelog.md#changelog-11">11 — Mount the Registry-Installed Package</a>
+├── <a href="../project/changelog.md#changelog-12">12 — Complete Registry-Only Lifecycle</a>
+├── <a href="../project/changelog.md#changelog-14">14 — Fleet Admin Observability</a>
+└── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
 </pre>
 
 ### Related Docs

@@ -27,7 +27,7 @@ Immutable app archives live alongside published versions:
 | **FailedIndex** | `apps/{app}/failed.json` | Recent failed publishes (not installable). See [pending-publish.md](../operations/pending-publish.md). |
 | **PublishedVersion** | `apps/{app}/versions/{version}.json` | Full metadata and install contract for one version |
 
-Document type is implied by path. Each JSON document has a root `schemaVersion` field (currently `1` for index, pending index, and published version). Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
+Document type is implied by path. Each JSON document has a root `schemaVersion` field, currently `1` for `Index`, `PendingIndex`, `FailedIndex`, `RetentionIndex`, and `PublishedVersion`. Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
 
 Implementation: `gestaltd/internal/appregistry/`.
 
@@ -193,7 +193,7 @@ Each key in `pending` is a version string being published (e.g. `0.0.0-snapshot.
 | `repository` | string | no | Source repository. Same format as `IndexVersion.repository`. |
 | `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (UTC). |
 | `updatedAt` | RFC 3339 timestamp | yes | Last phase or metadata update (UTC). |
-| `phase` | string | yes | Always `publishing` while the version is pending. See [pending-publish.md](../operations/pending-publish.md#phases). |
+| `phase` | string | yes | Always `publishing` while the version is pending. See [pending-publish.md](../operations/pending-publish.md#phases-and-failure-reasons). |
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS generation, merge, upload with `if-generation-match`). `gestaltd app registry pending set` runs `PrunePendingIndex` and `PruneFailedIndex` before upserting. See [pending-publish.md](../operations/pending-publish.md#self-healing).
@@ -271,7 +271,7 @@ Each key is a version string whose publish attempt failed.
 | `reason` | string | yes | `workflow_failed` — CI called `pending fail`. `stale` — pending `startedAt` exceeded 30 minutes during `PrunePendingIndex`. |
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Copied from the pending row when present. |
 
-Writes use the same optimistic-concurrency pattern as `pending.json`. `PruneFailedIndex` removes entries older than 30 days on `gestaltd app registry pending set`. See [pending-publish.md](../operations/pending-publish.md#prunefailedindex).
+Writes use the same optimistic-concurrency pattern as `pending.json`. `PruneFailedIndex` removes entries older than 30 days on `gestaltd app registry pending set`. See [pending-publish.md](../operations/pending-publish.md#self-healing).
 
 ---
 
@@ -332,7 +332,7 @@ Answers: _what exactly is this version — artifacts, operations, dependencies, 
   "app": "g-issues",
   "version": "0.0.0-snapshot.gabc123",
   "sourceRef": "abc123def456abc123def456abc123def456abcd",
-  "manifestPath": "valon-tools/apps/g-issues/manifest.yaml",
+  "manifestPath": "apps/g-issues/manifest.yaml",
   "repository": "github.com/valon-technologies/valon-tools",
   "publication": {
     "workflowRunUrl": "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
@@ -418,10 +418,10 @@ Answers: _what exactly is this version — artifacts, operations, dependencies, 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `schemaVersion` | int | yes | Published version document format version. Currently `1`. |
-| `app` | string | yes | Short app id, e.g. `g-issues`. Must match the app segment in manifest `source` (`apps/{app}`). |
+| `app` | string | yes | Published app name, e.g. `g-issues`. Must match the app segment in manifest `source` (`apps/{app}`). |
 | `version` | string | yes | Published version identifier. Must pass Gestalt semver validation (including snapshot forms like `0.0.0-snapshot.gabc123`). |
 | `sourceRef` | string | yes | 40-character lowercase git commit SHA the release was built from. |
-| `manifestPath` | string | yes | Repo-relative path to `manifest.yaml`, e.g. `valon-tools/apps/g-issues/manifest.yaml`. |
+| `manifestPath` | string | yes | Repo-relative path to `manifest.yaml`, e.g. `apps/g-issues/manifest.yaml`. |
 | `repository` | string | yes | Source repository as `host/owner/repo`, e.g. `github.com/valon-technologies/valon-tools`. The manifest `source` must be `{repository}/apps/{app}`. |
 | `publication` | object | no | Publish workflow run and trigger. Required for new publishes; omitted on legacy entries. |
 | `artifacts` | map | yes | Platform target → `Artifact`. At least one artifact is required. |
@@ -508,8 +508,8 @@ Each key in `operations` is an operation id on the dependency app (e.g. `chat.po
 ### Related Changelogs
 
 <pre>
-├── <a href="../project/changelog.md#changelog-01">01 — GCS registry and publish command</a>
-└── <a href="../project/changelog.md#changelog-16">16 — Pending and failed publish visibility</a>
+├── <a href="../project/changelog.md#changelog-01">01 — GCS Registry and Publish Command</a>
+└── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
 </pre>
 
 ### Related Docs

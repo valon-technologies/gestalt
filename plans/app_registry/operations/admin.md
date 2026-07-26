@@ -6,14 +6,14 @@ Operator-facing visibility for registry-only apps and app-scoped fleet version s
 
 Operators installing registry apps should answer these questions without reading pod logs or querying IndexedDB directly:
 
-| Question                                 | Admin surface                 |
-| ---------------------------------------- | ----------------------------- |
-| Which apps are registry-only?            | Embedded admin apps list      |
-| What is the desired fleet-known version? | Desired version on app detail |
-| Is the rollout still in progress?        | Rollout status badge          |
-| Which replicas have converged?           | Replica convergence table     |
+| Question                          | Admin surface                 |
+| --------------------------------- | ----------------------------- |
+| Which apps are registry-only?     | Embedded admin apps list      |
+| What is the desired version?      | Desired version on app detail |
+| Is the rollout still in progress? | Rollout status badge          |
+| Which replicas have converged?    | Replica convergence table     |
 
-App admins additionally select the fleet-wide desired version and inspect what published each candidate version.
+App admins additionally select the fleet-wide desired version and inspect each candidate version's publication provenance.
 
 ---
 
@@ -60,7 +60,7 @@ Auto-refresh every 10–15s while any listed rollout is non-terminal.
 
 1. **Summary** — registry binding, desired version, latest published version (if available), install metadata (`installedBy`, `installedAt`).
 2. **Rollout** — state badge, timestamps, enrollment deadline, failure reason when `failed`.
-3. **Replicas** — per-replica rollout progress (`instanceId`, ack / materialized / stopped / restarted, `attemptCount`, last error). Sort by `instanceId`.
+3. **Replicas** — per-replica rollout progress (`instanceId`, acknowledged / materialized / stopped / restarted, `attemptCount`, last error). Sort by `instanceId`.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -195,9 +195,9 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 ### Related Changelogs
 
 <pre>
-├── <a href="../project/changelog.md#changelog-14">14 — Fleet admin observability</a>
-├── <a href="../project/changelog.md#changelog-15">15 — App-scoped version selection</a>
-└── <a href="../project/changelog.md#changelog-16">16 — Pending and failed publish visibility</a>
+├── <a href="../project/changelog.md#changelog-14">14 — Fleet Admin Observability</a>
+├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
+└── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
 </pre>
 
 ### Related Docs
@@ -208,6 +208,6 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 ├── <a href="./lifecycle.md">lifecycle.md</a> — HTTP APIs, admission checks, and rollout behavior
 ├── <a href="../architecture/indexeddb.md">indexeddb.md</a> — app_rollouts, app_instance_materializations, change-request projections
 ├── <a href="./pending-publish.md">pending-publish.md</a> — in-flight publish visibility on app admin
-├── <a href="./retention.md">retention.md</a> — version cleanup policy and optional retention UI
+├── <a href="./retention.md">retention.md</a> — version cleanup policy, redeploy windows, and revision-history preservation
 └── <a href="../project/tests.md#admin-observability-tests">tests.md</a> — observability HTTP and UI tests; <a href="../project/tests.md#app-version-selection-tests">app version selection tests</a>
 </pre>

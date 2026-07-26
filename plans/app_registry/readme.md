@@ -134,7 +134,7 @@ Registry-only apps are materialized at runtime and do not participate in the dep
 
 `app_version_change_requests` is the append-only source of truth for fleet version changes (`from_version` → `to_version`). Successful admission appends a change request with the install contract. Failed validation rejects the request without writing a row.
 
-Gestalt projects known versions from change requests through `ListKnownVersionsByApp` and `ListAllKnownVersions`. There is no separate fleet head or promotion record. The ordered change requests form the permanent revision history, including upgrades and downgrades that revisit an earlier version.
+Gestalt projects fleet-known versions from change requests through `ListKnownVersionsByApp` and `ListAllKnownVersions`. There is no separate fleet head or promotion record. The ordered change requests form the permanent revision history, including upgrades and downgrades that revisit an earlier version.
 
 Per-replica rollout progress lives in `app_instance_materializations`; fleet rollout state lives in `app_rollouts`. See [indexeddb.md](./architecture/indexeddb.md).
 
@@ -158,7 +158,7 @@ See [validation.md](./architecture/validation.md) and [lifecycle.md](./operation
 
 Each replica materializes the latest desired registry version under `{artifactsDir}/registry-installed/{app}/{version}`. Local disk is ephemeral, so cold starts may need to materialize the package again.
 
-A dynamic app failure does not prevent Gestalt from serving core functionality. Operators can select a historical version for 30 days after it last stopped being desired. After that configurable window it is permanently locked and recovery requires a new publish. Core recovery paths do not depend on registry-only apps.
+A dynamic app failure does not prevent Gestalt from serving core functionality. Operators can select a historical version during the configured redeploy window (30 days by default) after it last stopped being desired. After that window it is permanently locked and recovery requires a new publish. Core recovery paths do not depend on registry-only apps.
 
 ## Future Work
 

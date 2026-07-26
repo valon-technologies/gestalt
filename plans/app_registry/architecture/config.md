@@ -107,7 +107,7 @@ gestaltd provider package \
 
 ## Registry-Only App Source
 
-Registry-managed apps declare the **app slot** in deploy config — authorization, indexeddb, static mount, MCP, and so on — without pinning a git ref or baking a snapshot into the gestaltd image. The running binary version comes from the app registry.
+Registry-managed apps declare the **app slot** in deploy config — authorization, IndexedDB, static mounts, MCP, and so on — without pinning a git ref or baking a snapshot into the gestaltd image. The running binary version comes from the app registry.
 
 ```yaml
 apps:
@@ -151,7 +151,7 @@ server:
 
 `server.appRegistry.maxReconcileAttempts` is the maximum failed background-poller reconciliation attempts for one `(replica, app, desired version)`. It defaults to `3` and must be a positive integer. When the corresponding `app_instance_materializations.attempt_count` reaches this value, the poller stops retrying materialization and provider lifecycle work for that desired version.
 
-This limit does not apply to bootstrap. Bootstrap never consults rollout-progress rows or `attempt_count`, so a process restart still attempts to start the latest fleet-known version. If bootstrap succeeds, the poller may record that observed convergence despite its retry limit because no additional materialization or provider lifecycle attempt is required.
+This limit does not apply to bootstrap. Bootstrap never consults rollout-progress rows or `attempt_count`, so a process restart still attempts to start the desired version selected by `LatestKnownVersion`. If bootstrap succeeds, the poller may record that observed convergence despite its retry limit because no additional materialization or provider lifecycle attempt is required.
 
 A newly accepted desired version uses a new materialization row and starts with zero failed attempts. Increasing the configured limit allows rows below the new limit to resume retrying.
 
@@ -176,8 +176,8 @@ Registry-only apps appear in `gestalt.lock.json` with a registry binding and no 
 ### Related Changelogs
 
 <pre>
-├── <a href="../project/changelog.md#changelog-01">01 — GCS registry and publish command</a>
-└── <a href="../project/changelog.md#changelog-12">12 — Complete registry-only lifecycle</a>
+├── <a href="../project/changelog.md#changelog-01">01 — GCS Registry and Publish Command</a>
+└── <a href="../project/changelog.md#changelog-12">12 — Complete Registry-Only Lifecycle</a>
 </pre>
 
 ### Related Docs

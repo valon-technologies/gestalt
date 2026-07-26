@@ -2,7 +2,7 @@
 
 Reference for the host IndexedDB stores used for app registry installation and per-replica convergence.
 
-The install HTTP API and installer append only to `app_version_change_requests`. Admin list/get endpoints project known versions from those requests.
+The install HTTP API and installer append only to `app_version_change_requests`. Admin list/get endpoints project fleet-known versions from those requests.
 
 Implementation:
 
@@ -21,17 +21,17 @@ Implementation:
 | **Stored records** | `app_version_change_requests` | Append-only accepted version changes per app (`from_version` → `to_version`) |
 | **Materialized views** | `ListKnownVersionsByApp`, `ListAllKnownVersions` | Computed in Go from change requests |
 
-**Known versions** — one projected entry per `(app, to_version)` pair from the latest change request for that pair. Failed validation rejects the install HTTP request; no row is written.
+**Fleet-known versions** — one projected entry per `(app, to_version)` pair from the latest change request for that pair. Failed validation rejects the install HTTP request; no row is written.
 
 `AppInstallation` in `core/types.go` is the projected shape returned by admin HTTP and install handlers, not a direct IndexedDB row.
 
-The ordered change requests are also the permanent **revision history** for an app. They are never removed by registry retention. The history API returns the raw transition sequence rather than the deduplicated known-version projection, so each accepted `from_version` → `to_version` change remains auditable, including repeated versions in upgrade and downgrade chains such as `v1 → v2 → v1`.
+The ordered change requests are also the permanent **revision history** for an app. They are never removed by registry retention. The history API returns the raw transition sequence rather than the deduplicated fleet-known projection, so each accepted `from_version` → `to_version` change remains auditable, including repeated versions in upgrade and downgrade chains such as `v1 → v2 → v1`.
 
 IndexedDB stores accepted version changes and each replica's rollout progress. It does not store a single "current fleet version" or "currently running version."
 
 Gestalt derives the desired version from the latest change-request timestamp. If two requests have the same timestamp, it chooses the lexicographically greatest version string so every replica selects the same version. Bootstrap and polling both compare the requests using this rule; they do not assume that the first or last record returned by IndexedDB is the newest.
 
-Each replica materializes and retains only this desired version. Older projected versions remain catalog history; their per-replica rows may be acknowledged and marked restarted when the replica reconciles past them without ever receiving `materialized_at`.
+Each replica materializes and retains only this desired version. Older fleet-known versions remain catalog history; their per-replica rows may be acknowledged and marked restarted when the replica reconciles past them without ever receiving `materialized_at`.
 
 Each Gestalt process separately tracks the version its provider is currently serving. It uses an in-process running-version map and a local `active-version` marker in the artifacts directory, and updates both with provider start and stop. `app_instance_materializations` is not used for current runtime state because it contains historical rollout progress for multiple versions and can become stale after a process exits or crashes.
 
@@ -62,7 +62,7 @@ App registry stores:
 app_version_change_requests      ← accepted version changes (append-only)
 app_version_install_locks        ← install admission lock per app
 app_rollouts                     ← current rollout per app
-app_instance_materializations    ← per-replica ack of fleet-known versions
+app_instance_materializations    ← per-replica acknowledgement of fleet-known versions
 ```
 
 Other host stores created at bootstrap include `users`, `managed_subjects`, `app_shas`, etc.
@@ -73,7 +73,7 @@ When `SkipSchemaBootstrap` is true (main-db is **delegated** to a remote gestalt
 
 ### What Bootstrap Does _Not_ Do on Startup
 
-Bootstrap does **not** write change requests. After deploy the store is empty until an install request (or tests) append data.
+Bootstrap does **not** write change requests. After deployment, the store is empty until an install request or test appends data.
 
 Access install services after bootstrap via `Result.Services` / `prepared.Services`:
 
@@ -181,8 +181,8 @@ The low-level `POST …/add` and `POST …/upgrade` routes reject an already-kno
 | `AppendRequest(ctx, request)` | Insert one change request (`Add`; fails if `id` collides). |
 | `ListRequestsByApp(ctx, app)` | Requests for an app in `timestamp` order; backs the permanent revision-history API. |
 | `HasKnownVersion(ctx, app, version)` | Whether a change request exists for `(app, to_version)`. |
-| `ListKnownVersionsByApp(ctx, app)` | Projected known versions for one app. |
-| `ListAllKnownVersions(ctx)` | Projected known versions across all apps. |
+| `ListKnownVersionsByApp(ctx, app)` | Projected fleet-known versions for one app. |
+| `ListAllKnownVersions(ctx)` | Projected fleet-known versions across all apps. |
 
 Projection helpers live in `app_version_change_requests_projection.go`.
 
@@ -308,9 +308,9 @@ In this table, `restarted_at` on `v1` means "reconciled through this catalog ver
 
 | Method | Description |
 | --- | --- |
-| `HasAcknowledged(ctx, instanceID, app, version)` | Whether this replica already acked the pair. |
+| `HasAcknowledged(ctx, instanceID, app, version)` | Whether this replica already acknowledged the pair. |
 | `Get(ctx, instanceID, app, version)` | Load the per-replica materialization row. |
-| `Acknowledge(ctx, materialization)` | Insert ack row; idempotent if already present. |
+| `Acknowledge(ctx, materialization)` | Insert an acknowledgement row; idempotent if already present. |
 | `MarkMaterialized(ctx, instanceID, app, version, materializedAt)` | Record when download and extraction completed at the canonical local path. |
 | `ListByAppVersion(ctx, app, version)` | List the replicas that acknowledged one rollout. |
 | `MarkStopped(ctx, instanceID, app, version, stoppedAt)` | Record when the app provider was stopped for this fleet version. |
@@ -319,7 +319,7 @@ In this table, `restarted_at` on `v1` means "reconciled through this catalog ver
 
 Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).
 
-`app_instance_materializations` rows are rollout-progress records; they do not decide which version a replica starts during boot. Bootstrap may start the latest fleet-known version without waiting for the poller to create or update one of these rows. When the poller runs later, it checks the version that is actually running. If the replica is already running that latest version, the poller validates and records materialization for that desired version, marks superseded pending rows converged without downloading them, and does not restart the app again.
+`app_instance_materializations` rows are rollout-progress records; they do not decide which version a replica starts during boot. Bootstrap may start the desired version selected by `LatestKnownVersion` without waiting for the poller to create or update one of these rows. When the poller runs later, it checks the version that is actually running. If the replica is already running that desired version, the poller validates and records materialization for it, marks superseded pending rows converged without downloading them, and does not restart the app again.
 
 `ListByAppVersion` backs `GET /admin/api/v1/app-rollouts/{app}/materializations`. See [lifecycle.md](../operations/lifecycle.md#admin-observability-api).
 
@@ -330,12 +330,12 @@ Written by the background catalog poller (`gestaltd/internal/appregistry/poller.
 ### Related Changelogs
 
 <pre>
-├── <a href="../project/changelog.md#changelog-05">05 — Installation state in IndexedDB</a>
-├── <a href="../project/changelog.md#changelog-06">06 — Registry installation prototype</a>
-├── <a href="../project/changelog.md#changelog-07">07 — Catalog-only admission</a>
-├── <a href="../project/changelog.md#changelog-08">08 — Per-replica catalog polling</a>
-├── <a href="../project/changelog.md#changelog-09">09 — Coordinated provider restarts</a>
-└── <a href="../project/changelog.md#changelog-15">15 — App-scoped version selection</a>
+├── <a href="../project/changelog.md#changelog-05">05 — Installation State in IndexedDB</a>
+├── <a href="../project/changelog.md#changelog-06">06 — Registry Installation Prototype</a>
+├── <a href="../project/changelog.md#changelog-07">07 — Catalog-Only Admission</a>
+├── <a href="../project/changelog.md#changelog-08">08 — Per-Replica Catalog Polling</a>
+├── <a href="../project/changelog.md#changelog-09">09 — Coordinated Provider Restarts</a>
+└── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
 </pre>
 
 ### Related Docs

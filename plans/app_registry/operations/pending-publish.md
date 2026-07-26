@@ -208,7 +208,7 @@ Implementation:
 ### Related Changelogs
 
 <pre>
-└── <a href="../project/changelog.md#changelog-16">16 — Pending and failed publish visibility</a>
+└── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
 </pre>
 
 ### Related Docs

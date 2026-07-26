@@ -11,7 +11,7 @@ Published versions and artifacts accumulate in GCS indefinitely. Never-deployed 
 - Configurable retention on each registry binding (`unusedRetention`, `deployedRetention`).
 - Mutable `retention.json` per app tracking deployment and lock state.
 - **Unused retention** (default `72h`) — delete published versions that were never deployed within the window after publication.
-- **Permanent deploy history** — retain every version that appears as `to_version` in `app_version_change_requests`, including upgrades and downgrades. Retain deployed version metadata permanently.
+- **Permanent deploy history** — permanently retain every deployed version's change requests and metadata, including upgrades and downgrades.
 - **Historical redeploy window** (default `720h`, or 30 days) — after a version stops being desired, allow it to be selected again until its fixed `deployableUntil` deadline. After the deadline it is permanently locked.
 - Keep artifacts while a version is desired or historically redeployable. Locked historical versions may have artifacts pruned, while their index summary, version metadata, retention row, and change requests remain.
 - `gestaltd app registry retention prune` to delete eligible versions from GCS.
@@ -51,13 +51,13 @@ apps/{app}/
 | Action | Owner | What |
 | --- | --- | --- |
 | Publish | **Publisher** (`gestaltd app registry publish`) | Upsert `retention.json` with `publishedAt` and `everDeployed = false` |
-| Fleet selection | **Reader** (`POST …/add`, `POST …/upgrade`) | Set `everDeployed = true`, set `firstDeployedAt` when absent, and clear the incoming version's historical deadline while desired |
+| Fleet selection | **Reader** (`POST …/admin/registry/version`; low-level `POST …/add` and `POST …/upgrade` for initial admission) | Set `everDeployed = true`, set `firstDeployedAt` when absent, and clear the incoming version's historical deadline while desired |
 | Desired version changes | **Reader** | On the outgoing version, set `lastDeactivatedAt = now` and `deployableUntil = now + deployedRetention`; on the incoming version, clear its active deadline |
-| Lock historical version | **Reader / prune** | Once `deployableUntil` passes, set sticky `lockedAt`; future config changes do not unlock it |
-| Delete unused version | **Reader / prune** | Remove a never-deployed expired version from `index.json`, `retention.json`, `versions/{version}.json`, and `artifacts/{version}/` |
-| Prune locked artifact | **Reader / prune** | Remove `artifacts/{version}/` only; retain index summary, version metadata, retention row, and change requests |
+| Lock historical version | **Scheduled prune job** (`gestaltd app registry retention prune`) | Once `deployableUntil` passes, set sticky `lockedAt`; future config changes do not unlock it |
+| Delete unused version | **Scheduled prune job** (`gestaltd app registry retention prune`) | Remove a never-deployed expired version from `index.json`, `retention.json`, `versions/{version}.json`, and `artifacts/{version}/` |
+| Prune locked artifact | **Scheduled prune job** (`gestaltd app registry retention prune`) | Remove `artifacts/{version}/` only; retain index summary, version metadata, retention row, and change requests |
 
-Admission checks the selected version while holding the app-scoped install lock. A historical version is eligible only when it is not locked and the request arrives before `deployableUntil`. Selecting it appends another change request and makes it desired; when it later stops being desired, it receives a new 30-day deadline.
+Admission checks the selected version while holding the app-scoped install lock. A historical version is eligible only when it is not locked and the request arrives before `deployableUntil`. Selecting it appends another change request and makes it desired; when it later stops being desired, it receives a new deadline based on the configured `deployedRetention`.
 
 Prune acquires the same app-scoped install lock used by version selection and holds it while evaluating and mutating that app's registry objects. It cross-checks `retention.json` against `app_version_change_requests` before fully deleting any version. If either source says the version was deployed, only locked artifacts may be removed. Prune never modifies `pending.json`, `failed.json`, version metadata for deployed versions, or change requests.
 
@@ -105,6 +105,6 @@ The Revision history tab always shows deployed transitions, including locked ver
 <pre>
 ├── <a href="../architecture/config.md">config.md</a> — retention fields on appRegistries
 ├── <a href="../architecture/models.md#retentionindex">models.md</a> — RetentionIndex
-├── <a href="./lifecycle.md">lifecycle.md</a> — fleet admission (POST …/add, POST …/upgrade)
+├── <a href="./lifecycle.md">lifecycle.md</a> — app-admin version selection and low-level fleet admission
 └── <a href="./pending-publish.md">pending-publish.md</a> — pending.json / failed.json pruning
 </pre>

@@ -15,7 +15,7 @@ Reference for behavioral tests in the app registry plan.
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
 | `internal/appregistry` | `install_validator_test.go`, `install_validation_errors_test.go` | — | Unit | [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887) |
-| `internal/server` | `handlers_admin_app_rollout_test.go` | — | HTTP integration | planned |
+| `internal/server` | `handlers_admin_app_rollout_test.go` | — | HTTP integration | [gestalt#2890](https://github.com/valon-technologies/gestalt/pull/2890) |
 | `services/ui/adminui` | registry UI smoke | — | Manual / browser | planned |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
@@ -107,7 +107,7 @@ All subtests use `newTestServer` (`httptest.NewServer` on localhost), `testutil.
 
 ### `handlers_admin_app_install_test.go`
 
-- **`TestAdminAppRegistryAdd/adds_and_lists_known_version`** — `POST …/add` returns 200 with known version; `GET …/app-installations` lists one known version.
+- **`TestAdminAppRegistryAdd/adds_and_lists_known_version`** — `POST …/add` returns 200 with a fleet-known version; `GET …/app-installations` lists that version.
 
 - **`TestAdminAppRegistryAdd/rejects_when_catalog_not_empty`** — `POST …/add` returns **409** when the app already has fleet-known versions.
 
@@ -119,23 +119,23 @@ All subtests use `newTestServer` (`httptest.NewServer` on localhost), `testutil.
 
 - **`TestAdminAppRegistryUpgrade/already_installed_returns_bad_request`** — Re-installing a known `to_version` returns **400**.
 
-- **`TestAdminAppRegistryAdd/get_versions_by_app`** — `GET …/app-installations/{app}` returns an array of known versions after a successful add.
+- **`TestAdminAppRegistryAdd/get_versions_by_app`** — `GET …/app-installations/{app}` returns an array of fleet-known versions after a successful add.
 
 ---
 
-## [PLANNED] Multi-Replica Materialization Ack E2E
+## Planned: Multi-Replica Materialization Acknowledgement E2E
 
 End-to-end test for fleet install convergence across replicas. Replaces isolated catalog poller unit tests.
 
-**Goal:** After a new version is installed fleet-wide, every running replica acknowledges the `(app, version)` pair in `app_instance_materializations`.
+**Goal:** After a new version is admitted, every running replica acknowledges the `(app, version)` pair in `app_instance_materializations`.
 
 **Flow:**
 
 1. Start multiple `gestaltd` replicas against shared IndexedDB (or a test harness that simulates distinct `instance_id` values with the catalog poller enabled).
 2. `POST /admin/api/v1/app-registries/{registry}/apps/{app}/add` or `…/upgrade` with a new version.
 3. Assert `app_version_change_requests` contains the change request.
-4. Poll `GET /admin/api/v1/app-rollouts/{app}/materializations` until every replica has an ack row for `(app, version)`.
-5. Assert ack timestamps are recent and `instance_id` values are distinct per replica.
+4. Poll `GET /admin/api/v1/app-rollouts/{app}/materializations` until every replica has an acknowledgement row for `(app, version)`.
+5. Assert acknowledgement timestamps are recent and `instance_id` values are distinct per replica.
 
 **Not in scope for the first cut:** end-to-end verification that every replica serves the newly mounted binary after restart.
 
@@ -207,16 +207,16 @@ go test ./internal/bootstrap -run 'TestAppProvider(Restarter|Lifecycle)' -count=
 
 ### `poller_test.go`
 
-- **`TestCatalogPollerReconcileOnceAcknowledgesAndRestarts`** — with the delay explicitly disabled, one reconcile pass acks, stops, and starts the configured app.
+- **`TestCatalogPollerReconcileOnceAcknowledgesAndRestarts`** — with the delay explicitly disabled, one reconcile pass acknowledges, stops, and starts the configured app.
 - **`TestCatalogPollerReconcileOnceWaitsForRestartDelay`** — an unset `RestartDelay` uses the one-minute default and defers start until `stopped_at + RestartDelay`.
 - **`TestCatalogPollerReconcileOncePreservesDelayAfterStoppedAtWriteFailure`** — retrying a failed `stopped_at` write preserves the original stop time without stopping again.
 - **`TestCatalogPollerReconcileOncePropagatesRestartErrors`** — start failures leave `restarted_at` unset after `stopped_at` was recorded.
 - **`TestCatalogPollerReconcileOnceRestartsOnceForMultipleVersions`** — multiple unrestarted fleet versions for one app trigger one stop/start cycle and mark every pending row restarted.
 - **`TestCatalogPollerReconcileOnceRetriesStartAfterRecordedStop`** — a later pass resumes at `StartApp` when `stopped_at` is already persisted.
-- **`TestCatalogPollerReconcileOnceDefersRestartUntilProvidersReady`** — ack proceeds while `RestartReady` is open; stop/start wait until startup providers load.
+- **`TestCatalogPollerReconcileOnceDefersRestartUntilProvidersReady`** — acknowledgement proceeds while `RestartReady` is open; stop/start wait until startup providers load.
 - **`TestCatalogPollerReconcileOnceDoesNotResetRestartDelayForNewVersion`** — a newly fleet-known version during the restart delay does not stop again or push back `StartApp`.
-- **`TestCatalogPollerReconcileOnceDoesNotConvergeWithoutAppRestarter`** — without `AppRestarter`, ack runs but restart timestamps stay unset.
-- **`TestCatalogPollerReconcileOnceMarksNonLocalAppsConverged`** — non-local apps are acked and marked converged without stop/start.
+- **`TestCatalogPollerReconcileOnceDoesNotConvergeWithoutAppRestarter`** — without `AppRestarter`, acknowledgement runs but restart timestamps stay unset.
+- **`TestCatalogPollerReconcileOnceMarksNonLocalAppsConverged`** — non-local apps are acknowledged and marked converged without stop/start.
 - **`TestCatalogPollerReconcileOnceDoesNotConvergeWhenRestartModeFails`** — an unconfigured app is not mistaken for a non-local app and remains pending.
 - **`TestCatalogPollerReconcileOnceReportsEveryFailingApp`** — errors from multiple apps are joined instead of hiding all but one.
 
@@ -270,12 +270,12 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ### Add and Upgrade
 
-- **`add`** accepts only an empty catalog, records server-written `from_version: "registry:first-install"`, and returns **409** when a version is already known.
-- **`upgrade`** requires a non-empty catalog, sets `from_version` to `LatestKnownVersion`, and returns **400** when the catalog is empty.
+- **`add`** accepts only an empty fleet-known projection, records server-written `from_version: "registry:first-install"`, and returns **409** when the projection is non-empty.
+- **`upgrade`** requires a non-empty fleet-known projection, sets `from_version` to `LatestKnownVersion`, and returns **400** when the projection is empty.
 
 ### Bootstrap Startup
 
-- Starts the same deterministic latest version as the poller only when its registry matches `source.registry`; an empty projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
+- Starts the same deterministic desired version selected by `LatestKnownVersion` as the poller only when its registry matches `source.registry`; an empty projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
 - Attempts every registry app without consulting rollout-progress rows or `attempt_count`, including after the poller reached its retry limit; keeps core boot available after an individual failure; and starts the poller only after all startup attempts finish.
 - A replica that misses rollout enrollment during bootstrap converges on its first poll without reopening the terminal rollout.
 
@@ -315,14 +315,14 @@ go test ./internal/server/... -run TestAdminAppRegistryInstall/validation_failur
 
 ### `install_validator_test.go`
 
-Table-driven `TestInstallValidator` with stub fleet catalog (`AppVersionChangeRequests`) and synthetic `Entry` documents served over `httptest`.
+Table-driven `TestInstallValidator` with a stub fleet-known projection (`AppVersionChangeRequests`) and synthetic `Entry` documents served over `httptest`.
 
 | Subtest | Reason code | Covers |
 | --- | --- | --- |
 | `accepts_dependencies/release_with_operations` | — | Happy path: fleet-known dependency version and published `interface` satisfy declared `requires` (version + operation + `inputSchemaHash`) |
 | `accepts_dependencies/snapshot_version` | — | Fleet-known dependency at `2.0.0-snapshot.*` satisfies candidate `requires` at `^2.0.0` |
 | `accepts_dependencies/source_address_key` | — | Candidate `requires.apps` key is a full manifest source address (`github.com/…/apps/slack`); validator resolves to short fleet name `slack` |
-| `rejects_platform_artifact/missing_host_platform` | `platform_artifact_missing` | Candidate `entry.Artifacts` has no artifact for gestaltd host platform |
+| `rejects_platform_artifact/missing_host_platform` | `platform_artifact_missing` | Candidate `entry.artifacts` has no artifact for the gestaltd host platform |
 | `rejects_platform_artifact/incomplete_sha256` | `platform_artifact_missing` | Platform key exists but artifact URL or SHA256 is incomplete (detail preserved from `resolveRegistryArtifact`) |
 | `gestaltd_version/incompatible` | `gestaltd_version_incompatible` | `entry.compatibility.minGestaltdVersion` above `InstallValidator.GestaltdVersion` |
 | `gestaltd_version/ci_stamp_skipped` | — | `minGestaltdVersion` check skipped for CI build stamp `0.0.0-ci+g…` |
@@ -393,8 +393,8 @@ Use the same `newTestServer` harness as install tests with in-memory IndexedDB s
 - **`TestAdminRegistryApps/lists_registry_managed_apps`** — `GET …/registry-apps` returns registry-only apps with `source.registry` from deploy config; includes apps with an empty fleet-known projection.
 - **`TestAdminRegistryApps/merges_desired_version_and_rollout`** — with fleet-known state, list/detail include `desiredVersion`, rollout `state`, and cohort counts.
 - **`TestAdminAppRollouts/lists_active_rollout`** — `GET …/app-rollouts` returns enrolling/restarting rollouts.
-- **`TestAdminAppRolloutsMaterializations/lists_replica_rows`** — `GET …/app-rollouts/{app}/materializations` returns distinct `instanceId` rows with ack/materialized/restarted timestamps after poller convergence.
-- **`TestAdminAppRolloutsMaterializations/labels_cohort_membership`** — replicas that ack after `enrollment_ends_at` have `inCohort: false` and do not block rollout completion in the API summary.
+- **`TestAdminAppRolloutsMaterializations/lists_replica_rows`** — `GET …/app-rollouts/{app}/materializations` returns distinct `instanceId` rows with acknowledgement, materialization, and restart timestamps after poller convergence.
+- **`TestAdminAppRolloutsMaterializations/labels_cohort_membership`** — replicas acknowledged after `enrollment_ends_at` have `inCohort: false` and do not block rollout completion in the API summary.
 - **`TestAdminRegistryApps/rejects_non_registry_app`** — `GET …/registry-apps/{app}` returns **404** for non-registry-only (snapshot-pinned) apps.
 
 ### Admin UI Smoke
@@ -407,13 +407,13 @@ Manual or Playwright-style check against a local multi-replica harness:
 
 ---
 
-## Retention Tests
+## Planned Retention Tests
 
 Policy: [retention.md](../operations/retention.md).
 
 - A never-deployed version older than `unusedRetention` is eligible for pruning and its index entry, metadata, artifact objects, and retention row are removed.
 - The current desired version and active rollout target retain all objects regardless of age.
-- A historical version before `deployableUntil` retains its artifact and remains selectable.
+- A historical version whose `deployableUntil` deadline has not passed retains its artifact and remains selectable.
 - A historical version after `deployableUntil` becomes permanently locked; its artifact may be removed, but its index summary, version metadata, retention row, and change requests remain.
 - A deployed version is never fully deleted even when `retention.json` is missing or incorrectly says `everDeployed: false`; the change-request chain is the fail-safe.
 - Changing `deployedRetention` does not alter a deadline already captured on a transition or unlock a version whose deadline passed.
@@ -423,7 +423,7 @@ Policy: [retention.md](../operations/retention.md).
 
 ---
 
-## App Version Selection Tests
+## Planned App Version Selection Tests
 
 API: [lifecycle.md](../operations/lifecycle.md#app-admin-version-selection). UI: [admin.md](../operations/admin.md#app-admin-ui-appsappadmin).
 
@@ -438,7 +438,7 @@ Add focused server tests for:
 | User without `admin` on `app/{app}` | **403** |
 | Global `gestaltAdmin` without app admin | **403** |
 | Authorization provider unavailable | **503**; fail closed |
-| App admin reads registry state | **200** with desired, known, published (including provenance), and rollout fields |
+| App admin reads registry state | **200** with desired, fleet-known, published (including provenance), and rollout fields |
 | Snapshot-pinned or unknown app | **404** |
 | Rollout admission | Active `enrolling` / `restarting` rollout: GET sets `selectionDisabled`; POST returns **409** before registry fetch, validation, rollout creation, or change-request append; terminal `complete` / `failed` rollout leaves selection enabled |
 | First selection | Uses add semantics and appends the first change request |
@@ -485,11 +485,11 @@ App admin without `gestaltAdmin` can open `/apps/{app}/admin`, select an unexpir
 
 ## What Is Not Covered Yet
 
-Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, get-by-app, and one validation-failure case — but not:
+Publish tests do not exercise real GCS uploads; upload-path tests use test storage. Install HTTP tests cover the happy path, 404 on missing version, get-by-app, and one validation-failure case — but not:
 
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
 - Full install-time validation reason-code matrix (see [install-time validation tests](#install-time-validation-tests))
-- Multi-replica materialization ack E2E (see [PLANNED section above](#planned-multi-replica-materialization-ack-e2e))
+- Multi-replica materialization acknowledgement E2E (see [planned section above](#planned-multi-replica-materialization-acknowledgement-e2e))
 - Per-replica **observed** running version heartbeats
 - Deployed verification that catalog restarts serve the newly mounted binary

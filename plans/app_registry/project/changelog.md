@@ -7,23 +7,23 @@ The app registry has implementation details across `gestalt`, `toolshed`, and `g
 The `Completed` timestamp is the merge time of the PR that delivered the milestone's main outcome.
 
 | `Step` | `Completed (UTC)` | `Milestone` | `Tags` |
-| ---: | :--- | :--- | :--- |
-| `01` | `🗓️ Jul 10 · 00:30` | `GCS registry and publish command` | [`config.md`](../architecture/config.md) [`models.md`](../architecture/models.md) |
-| `02` | `🗓️ Jul 10 · 02:05` | `Parallel registry publishing` | [`config.md`](../architecture/config.md) |
-| `03` | `🗓️ Jul 10 · 02:14` | `First automatically published app` | [`config.md`](../architecture/config.md) |
-| `04` | `🗓️ Jul 10 · 03:22` | `Registry listing API` | [`lifecycle.md`](../operations/lifecycle.md) |
-| `05` | `🗓️ Jul 10 · 16:52` | `Installation state in IndexedDB` | [`indexeddb.md`](../architecture/indexeddb.md) |
-| `06` | `🗓️ Jul 11 · 23:41` | `Registry installation prototype` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
-| `07` | `🗓️ Jul 13 · 21:04` | `Catalog-only admission` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
-| `08` | `🗓️ Jul 13 · 22:38` | `Per-replica catalog polling` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
-| `09` | `🗓️ Jul 16 · 21:24` | `Coordinated provider restarts` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
-| `10` | `🗓️ Jul 17 · 19:52` | `Materialize before restart` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
-| `11` | `🗓️ Jul 20 · 16:19` | `Mount the registry-installed package` | [`lifecycle.md`](../operations/lifecycle.md) |
-| `12` | `🗓️ Jul 21 · 11:44` | `Complete registry-only lifecycle` | [`config.md`](../architecture/config.md) [`lifecycle.md`](../operations/lifecycle.md) |
-| `13` | `🗓️ Jul 22 · 04:16` | `Install-time validation` | [`validation.md`](../architecture/validation.md) |
-| `14` | `🗓️ Jul 22 · 15:51` | `Fleet admin observability` | [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) |
-| `15` | `🗓️ Jul 23 · 16:33` | `App-scoped version selection` | [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
-| `16` | `🗓️ Jul 26 · 00:18` | `Pending and failed publish visibility` | [`admin.md`](../operations/admin.md) [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
+| --: | :-- | :-- | :-- |
+| `01` | `🗓️ Jul 10 · 00:30` | `GCS Registry and Publish Command` | [`config.md`](../architecture/config.md) [`models.md`](../architecture/models.md) |
+| `02` | `🗓️ Jul 10 · 02:05` | `Parallel Registry Publishing` | [`config.md`](../architecture/config.md) |
+| `03` | `🗓️ Jul 10 · 02:14` | `First Automatically Published App` | [`config.md`](../architecture/config.md) |
+| `04` | `🗓️ Jul 10 · 03:22` | `Registry Listing API` | [`lifecycle.md`](../operations/lifecycle.md) |
+| `05` | `🗓️ Jul 10 · 16:52` | `Installation State in IndexedDB` | [`indexeddb.md`](../architecture/indexeddb.md) |
+| `06` | `🗓️ Jul 11 · 23:41` | `Registry Installation Prototype` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `07` | `🗓️ Jul 13 · 21:04` | `Catalog-Only Admission` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `08` | `🗓️ Jul 13 · 22:38` | `Per-Replica Catalog Polling` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `09` | `🗓️ Jul 16 · 21:24` | `Coordinated Provider Restarts` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `10` | `🗓️ Jul 17 · 19:52` | `Materialize Before Restart` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `11` | `🗓️ Jul 20 · 16:19` | `Mount the Registry-Installed Package` | [`lifecycle.md`](../operations/lifecycle.md) |
+| `12` | `🗓️ Jul 21 · 11:44` | `Complete Registry-Only Lifecycle` | [`config.md`](../architecture/config.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `13` | `🗓️ Jul 22 · 04:16` | `Install-Time Validation` | [`validation.md`](../architecture/validation.md) |
+| `14` | `🗓️ Jul 22 · 15:51` | `Fleet Admin Observability` | [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `15` | `🗓️ Jul 23 · 16:33` | `App-Scoped Version Selection` | [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `16` | `🗓️ Jul 26 · 00:18` | `Pending and Failed Publish Visibility` | [`admin.md`](../operations/admin.md) [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
 
 ## Tag Glossary
 
@@ -85,7 +85,7 @@ Added the HTTP registry reader and admin endpoints for listing configured regist
 
 **Tags:** [`indexeddb.md`](../architecture/indexeddb.md)
 
-Added shared installation stores and services. The model later converged on the append-only `app_version_change_requests` log and known-version projections.
+Added shared installation stores and services. The model later converged on the append-only `app_version_change_requests` log and fleet-known projections.
 
 **Merged:** [gestalt#2718](https://github.com/valon-technologies/gestalt/pull/2718) · [gestalt#2753](https://github.com/valon-technologies/gestalt/pull/2753)
 
@@ -95,7 +95,7 @@ Added shared installation stores and services. The model later converged on the 
 
 **Tags:** [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-Implemented fleet install locking, registry validation, materialization on the request-handling instance, known-version writes, and admin install endpoints. Milestone 07 replaced the synchronous materialization behavior.
+Implemented fleet install locking, registry validation, materialization on the request-handling instance, fleet-known writes, and admin install endpoints. Milestone 07 replaced the synchronous materialization behavior.
 
 **Merged:** [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730)
 
@@ -155,7 +155,7 @@ Changed restart to bind `{artifactsDir}/registry-installed/{app}/{version}`, mak
 
 **Tags:** [`config.md`](../architecture/config.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-Added `source.registry`, separate add/upgrade routes, bootstrap startup, latest-version-only materialization, retry limits, and local cleanup of superseded packages.
+Added `source.registry`, separate add/upgrade routes, bootstrap startup, desired-version-only materialization, retry limits, and local cleanup of superseded packages.
 
 **Merged:** [gestalt#2868](https://github.com/valon-technologies/gestalt/pull/2868) · [gestalt#2878](https://github.com/valon-technologies/gestalt/pull/2878) · [gestalt#2879](https://github.com/valon-technologies/gestalt/pull/2879)
 
@@ -185,7 +185,7 @@ Added authenticated app summaries, rollout and per-replica materialization APIs,
 
 **Tags:** [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-Added app-scoped authorization and APIs for first install, upgrade, and safe revert. Added `/apps/{app}/admin`, publication provenance, the snapshots table, and the production `g-issues` registry binding.
+Added app-scoped authorization and APIs for first install, upgrade, and safe downgrade. Added `/apps/{app}/admin`, publication provenance, the snapshots table, and the production `g-issues` registry binding.
 
 **Merged:** [gestalt#2897](https://github.com/valon-technologies/gestalt/pull/2897) · [gestalt#2909](https://github.com/valon-technologies/gestalt/pull/2909) · [gestalt#2914](https://github.com/valon-technologies/gestalt/pull/2914) · [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142) · [gestalt-providers#1146](https://github.com/valon-technologies/gestalt-providers/pull/1146) · [toolshed#3696](https://github.com/valon-technologies/toolshed/pull/3696)
 
@@ -195,7 +195,7 @@ Added app-scoped authorization and APIs for first install, upgrade, and safe rev
 
 **Tags:** [`admin.md`](../operations/admin.md) [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md)
 
-Added `pending.json` and `failed.json`, CI lifecycle commands, early pending recording, app-admin API rows, publish duration, bootstrap polling, and the final status/last-update presentation.
+Added `pending.json` and `failed.json`, CI lifecycle commands, early pending recording, app-admin API rows, publish duration, bootstrap polling, and the final status and last-update presentation.
 
 **Registry and CI:** [gestalt#2927](https://github.com/valon-technologies/gestalt/pull/2927) · [gestalt#2932](https://github.com/valon-technologies/gestalt/pull/2932) · [gestalt#2931](https://github.com/valon-technologies/gestalt/pull/2931) · [toolshed#3772](https://github.com/valon-technologies/toolshed/pull/3772) · [toolshed#3775](https://github.com/valon-technologies/toolshed/pull/3775)
 

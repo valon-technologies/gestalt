@@ -1,12 +1,12 @@
 # Install-Time Validation
 
-Checks on `POST …/add` and `POST …/upgrade` after the registry entry is fetched and before `Rollouts.Create` and `AppendRequest`. Validation failures return **400**, write nothing to IndexedDB, and wrap `ErrInstallValidationFailed` with a stable **reason** code (see below).
+Checks on low-level `POST …/add`, `POST …/upgrade`, and app-admin version selection after the registry entry is fetched and before `Rollouts.Create` and `AppendRequest`. Validation failures return **400**, write nothing to IndexedDB, and wrap `ErrInstallValidationFailed` with a stable **reason** code (see below).
 
 ## Checks
 
 | Check | Source | Reason code |
 | --- | --- | --- |
-| Platform artifact | `entry.Artifacts` for gestaltd host OS/arch | `platform_artifact_missing` |
+| Platform artifact | `entry.artifacts` for gestaltd host OS/arch | `platform_artifact_missing` |
 | gestaltd version | `entry.compatibility.minGestaltdVersion` vs running gestaltd | `gestaltd_version_incompatible`, `gestaltd_version_invalid`, `gestaltd_version_unknown` |
 | Dependency present | Each `entry.requires.apps` entry has a fleet-known version, or a deploy-pinned non-registry provider | `dependency_not_installed` |
 | Dependency version | Fleet-known version satisfies `requires.apps.{app}.version` | `dependency_version_unsatisfied` |
@@ -19,7 +19,7 @@ Each failure is an `InstallValidationError` with a stable `InstallValidationReas
 
 | Reason | HTTP | IndexedDB | When |
 | --- | --- | --- | --- |
-| `platform_artifact_missing` | **400** | none | Candidate `entry.Artifacts` has no usable artifact for the gestaltd host platform (missing platform key, URL, or SHA256) |
+| `platform_artifact_missing` | **400** | none | Candidate `entry.artifacts` has no usable artifact for the gestaltd host platform (missing platform key, URL, or SHA256) |
 | `gestaltd_version_incompatible` | **400** | none | Running gestaltd is older than `entry.compatibility.minGestaltdVersion` |
 | `gestaltd_version_invalid` | **400** | none | Candidate declares an unparseable `minGestaltdVersion` |
 | `gestaltd_version_unknown` | **400** | none | Running gestaltd version is not semver and not a skipped non-production stamp (see [Running gestaltd version](#running-gestaltd-version)) |
@@ -79,7 +79,7 @@ Dependency metadata is not fetched when the candidate declares only a version co
 
 ### Deploy-Pinned Dependencies
 
-When `config.yaml` pins a dependency app with a non-registry source (git, package, local, etc.), install validation skips presence checks for that app. Fleet-known registry versions are not required.
+When deploy config pins a dependency app with a non-registry source (git, package, local, etc.), install validation skips presence checks for that app. Fleet-known registry versions are not required.
 
 ## Reverse Dependents
 
@@ -114,7 +114,7 @@ Fleet versions commonly use snapshot prereleases (`2.0.0-snapshot.gabc123`, `0.0
 | Platform artifact | Upgrading `g-issues` to a version published with only `darwin/arm64` while gestaltd runs on `linux/amd64` in Kubernetes. |
 | Platform artifact (incomplete) | Candidate has a `linux/amd64` artifact entry but `sha256` is empty. |
 | gestaltd version | Candidate sets `compatibility.minGestaltdVersion: "0.7.0"` but the handling replica is running gestaltd `0.6.2`. |
-| Dependency present | Candidate `requires.apps.slack` but `slack` has no fleet-known version and is not a deploy-pinned provider in `config.yaml`. |
+| Dependency present | Candidate `requires.apps.slack` but `slack` has no fleet-known version and is not a deploy-pinned provider in deploy config. |
 | Dependency present (source address key) | Candidate `requires.apps["github.com/org/repo/apps/slack"]` with fleet-known `slack` at `2.0.0`. |
 | Dependency version | Candidate requires `slack` at `^2.0.0` but the fleet-known slack version is `1.4.0`. |
 | Dependency version (snapshot) | Candidate requires `slack` at `^2.0.0` and fleet-known slack is `2.0.0-snapshot.gabc123`. |
@@ -132,7 +132,7 @@ Other admission rules (registry binding, `add`/`upgrade` mode, duplicate version
 ### Related Changelogs
 
 <pre>
-└── <a href="../project/changelog.md#changelog-13">13 — Install-time validation</a>
+└── <a href="../project/changelog.md#changelog-13">13 — Install-Time Validation</a>
 </pre>
 
 ### Related Docs
