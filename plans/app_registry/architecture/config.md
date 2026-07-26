@@ -1,19 +1,11 @@
 # App Registry Config
 
-Reference for app registry configuration in `gestaltd.yaml` / `config.yaml` from [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) commit 2.
+Reference for app registry configuration in `gestaltd.yaml` / `config.yaml`.
 
 - **`appRegistries`** in deploy config — where `gestaltd` reads app metadata and artifacts at deploy/runtime
 - **`gestaltd app registry publish`** — takes `--bucket` on the CLI; no publisher config block. Replaces `gestaltd app publish`.
 
 This does **not** change the app author's `manifest.yaml`.
-
-Related docs:
-
-- [readme.md](../readme.md) — architecture and future work
-- [changelog.md](../project/changelog.md) — implementation milestones and pull requests
-- [lifecycle.md](../operations/lifecycle.md) — replica startup, background controller, admin HTTP API
-- [models.md](./models.md) — JSON documents stored in the registry bucket
-- [retention.md](../operations/retention.md) — version cleanup policy and `retention` config
 
 Implementation: `gestaltd/internal/config/` (`AppRegistryConfig`, `validateAppRegistries`).
 
@@ -40,11 +32,7 @@ appRegistries:
       deployedRetention: 720h
 ```
 
-See [retention.md](../operations/retention.md) for policy semantics and the `retention.json`
-overlay. `unusedRetention` applies to never-deployed versions.
-`deployedRetention` controls how long an inactive historical version can be
-selected again after it stops being desired. Its audit metadata remains
-permanent after that deployability window closes.
+See [retention.md](../operations/retention.md) for policy semantics and the `retention.json` overlay. `unusedRetention` applies to never-deployed versions. `deployedRetention` controls how long an inactive historical version can be selected again after it stops being desired. Each deactivation captures a fixed deadline; later config changes do not alter it. Audit metadata remains permanent after the deployability window closes.
 
 `gcs.bucket` accepts a bare bucket name or `gs://{bucket}`. Gestalt derives both URL forms:
 
@@ -101,7 +89,7 @@ gestaltd app registry publish \
 - `--ref` — 40-character git commit SHA for registry `sourceRef` and GCS upload metadata
 - `--dist-dir` — directory containing `*.tar.gz` files from `provider package` (default output: `dist/`)
 
-### Follow-up
+### Follow-Up
 
 `--ref` is passed at publish time today, but source commit provenance logically belongs with the build. A follow-up is to record the ref during packaging instead:
 
@@ -117,7 +105,7 @@ gestaltd provider package \
 
 ---
 
-## Registry-only app source
+## Registry-Only App Source
 
 Registry-managed apps declare the **app slot** in deploy config — authorization, indexeddb, static mount, MCP, and so on — without pinning a git ref or baking a snapshot into the gestaltd image. The running binary version comes from the app registry.
 
@@ -138,13 +126,13 @@ apps:
 ```
 
 | Field | Meaning |
-|-------|---------|
+| --- | --- |
 | `source.registry` | Registry name from `appRegistries`. Must name a configured entry. Mutually exclusive with `source.git`, `source.path`, and other source modes. |
 
 `source.registry` is valid only for entries under `apps`; runtime-provider entries cannot use it. Across upgrades, the app's entry in the Gestalt YAML deploy configuration remains authoritative for how the app integrates with Gestalt. The registry package supplies the version-specific executable and static assets:
 
 | Gestalt YAML fields | Gestalt YAML responsibility | Registry package responsibility |
-|---------------------|----------------------------|---------------------------------|
+| --- | --- | --- |
 | `authorizationPolicy`, `indexeddb`, `mcp`, `http`, and `config` | Defines the app's capabilities and integration settings. These remain unchanged across package upgrades. | None — controlled entirely by Gestalt YAML. |
 | `static.mount`, visibility, and theme | Defines the URL, access policy, and theme for the app's UI. These remain unchanged across package upgrades. | Supplies the version-specific HTML, JavaScript, CSS, and other static assets served at that URL. |
 | `source.registry` | Defines the registry from which this app may be installed. | Must come from that registry. Catalog history associated with a different registry is not eligible to run. |
@@ -153,7 +141,7 @@ Because no package exists during config loading, validation must not require a r
 
 `gestalt lock` and `gestalt sync` skip snapshot resolution and artifact download for registry-only apps. Runtime behavior — bootstrap, `add`, and `upgrade` — is documented in [lifecycle.md](../operations/lifecycle.md).
 
-### Reconciliation retry limit
+### Reconciliation Retry Limit
 
 ```yaml
 server:
@@ -181,3 +169,23 @@ Registry-only apps appear in `gestalt.lock.json` with a registry binding and no 
 }
 ```
 
+---
+
+## Appendix
+
+### Related Changelogs
+
+<pre>
+├── <a href="../project/changelog.md#changelog-01">01 — GCS registry and publish command</a>
+└── <a href="../project/changelog.md#changelog-12">12 — Complete registry-only lifecycle</a>
+</pre>
+
+### Related Docs
+
+<pre>
+├── <a href="../readme.md">readme.md</a> — architecture and future work
+├── <a href="../project/changelog.md">changelog.md</a> — implementation milestones and pull requests
+├── <a href="../operations/lifecycle.md">lifecycle.md</a> — replica startup, background controller, admin HTTP API
+├── <a href="./models.md">models.md</a> — JSON documents stored in the registry bucket
+└── <a href="../operations/retention.md">retention.md</a> — version cleanup policy and retention config
+</pre>

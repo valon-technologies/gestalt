@@ -1,8 +1,6 @@
 # App Registry
 
-The app registry decouples app publishing from Gestalt deployments. Publishing
-a new app version makes it available for installation without rebuilding or
-redeploying the `gestaltd` Cloud Run service.
+The app registry decouples app publishing from Gestalt deployments. Publishing a new app version makes it available for installation without rebuilding or redeploying the `gestaltd` Cloud Run service.
 
 ## Documentation
 
@@ -24,26 +22,9 @@ app_registry/
     └── <a href="./project/tests.md">tests.md</a>
 </pre>
 
-### Architecture
+Start with the [implementation changelog](./project/changelog.md) for the feature history and pull requests behind each milestone.
 
-- [Configuration](./architecture/config.md) — deploy reader config and CI publish flags
-- [IndexedDB state](./architecture/indexeddb.md) — fleet version changes and rollout state
-- [Registry models](./architecture/models.md) — JSON documents stored in GCS
-- [Install-time validation](./architecture/validation.md) — admission checks before fleet acceptance
-
-### Operations
-
-- [Administration](./operations/admin.md) — admin UI capabilities
-- [Replica lifecycle](./operations/lifecycle.md) — startup, background controller, and admin HTTP API
-- [Pending publishes](./operations/pending-publish.md) — in-flight and failed publish visibility
-- [Retention](./operations/retention.md) — version cleanup and retention policy
-
-### Project history
-
-- [Implementation changelog](./project/changelog.md) — milestones and pull requests
-- [Tests](./project/tests.md) — behavioral test coverage
-
-## Registry responsibilities
+## Registry Responsibilities
 
 App registries:
 
@@ -59,14 +40,11 @@ App registries:
 - Allow registry-only apps to be installed.
 - Allow Gestalt to validate app dependencies before fleet admission.
 
-The registry is a versioned contract registry for installable apps, not only an
-artifact bucket.
+The registry is a versioned contract registry for installable apps, not only an artifact bucket.
 
-## Published versions are immutable
+## Published Versions Are Immutable
 
-Once an app is published under a version identifier, that version cannot
-change. A published version includes immutable metadata and artifact references,
-including archive checksums. App changes require a new version.
+Once an app is published under a version identifier, that version cannot change. A published version includes immutable metadata and artifact references, including archive checksums. App changes require a new version.
 
 `gestaltd app registry publish` writes:
 
@@ -86,7 +64,7 @@ apps/{app}/
 
 See [models.md](./architecture/models.md) for document shapes.
 
-## Registry configuration
+## Registry Configuration
 
 Deploy config defines where `gestaltd` reads installable apps:
 
@@ -111,7 +89,7 @@ gestaltd app registry publish \
 
 See [config.md](./architecture/config.md).
 
-## Registry metadata includes app contracts
+## Registry Metadata Includes App Contracts
 
 Each published version describes its artifacts and app contract:
 
@@ -123,9 +101,7 @@ Each published version describes its artifacts and app contract:
 - compatible `gestaltd` versions
 - publication timestamp and provenance
 
-Apps that invoke other apps declare those dependencies in their manifest or
-package metadata. Publishing validates and copies the declarations into the
-registry entry's `requires` metadata:
+Apps that invoke other apps declare those dependencies in their manifest or package metadata. Publishing validates and copies the declarations into the registry entry's `requires` metadata:
 
 ```yaml
 dependencies:
@@ -137,15 +113,11 @@ dependencies:
           inputSchemaHash: sha256:...
 ```
 
-Generated typed SDKs are not required. Apps can use the existing SDK invocation
-style while package and install validation verify referenced operations and
-declared input shapes.
+Generated typed SDKs are not required. Apps can use the existing SDK invocation style while package and install validation verify referenced operations and declared input shapes.
 
-## Core providers remain deploy-pinned
+## Core Providers Remain Deploy-Pinned
 
-Providers required for Gestalt to boot, authorize requests, store installation
-state, or recover from a broken runtime app remain pinned in `config.yaml` and
-`gestalt.lock.json` and are materialized into the deployment image.
+Providers required for Gestalt to boot, authorize requests, store installation state, or recover from a broken runtime app remain pinned in `config.yaml` and `gestalt.lock.json` and are materialized into the deployment image.
 
 Examples:
 
@@ -156,85 +128,54 @@ Examples:
 - Registry/admin app
 - Minimal recovery UI
 
-Registry-only apps are materialized at runtime and do not participate in the
-deploy-time provider graph.
+Registry-only apps are materialized at runtime and do not participate in the deploy-time provider graph.
 
-## Installation state lives in IndexedDB
+## Installation State Lives in IndexedDB
 
-`app_version_change_requests` is the append-only source of truth for fleet
-version changes (`from_version` → `to_version`). Successful admission appends a
-change request with the install contract. Failed validation rejects the request
-without writing a row.
+`app_version_change_requests` is the append-only source of truth for fleet version changes (`from_version` → `to_version`). Successful admission appends a change request with the install contract. Failed validation rejects the request without writing a row.
 
-Gestalt projects known versions from change requests through
-`ListKnownVersionsByApp` and `ListAllKnownVersions`. There is no separate fleet
-head or promotion record. The ordered change requests form the permanent
-revision history, including upgrades and downgrades that revisit an earlier
-version.
+Gestalt projects known versions from change requests through `ListKnownVersionsByApp` and `ListAllKnownVersions`. There is no separate fleet head or promotion record. The ordered change requests form the permanent revision history, including upgrades and downgrades that revisit an earlier version.
 
-Per-replica rollout progress lives in `app_instance_materializations`; fleet
-rollout state lives in `app_rollouts`. See [indexeddb.md](./architecture/indexeddb.md).
+Per-replica rollout progress lives in `app_instance_materializations`; fleet rollout state lives in `app_rollouts`. See [indexeddb.md](./architecture/indexeddb.md).
 
-## Validation and activation
+## Validation and Activation
 
 Validation happens in two phases:
 
-1. Publish validates the app manifest and packaged contract before writing the
-   version.
-2. Install or upgrade validates platform artifacts, `gestaltd` compatibility,
-   dependencies, and reverse dependents against the running fleet.
+1. Publish validates the app manifest and packaged contract before writing the version.
+2. Install or upgrade validates platform artifacts, `gestaltd` compatibility, dependencies, and reverse dependents against the running fleet.
 
 After admission:
 
 1. Gestalt appends a change request to `app_version_change_requests`.
 2. Each replica acknowledges the desired version.
-3. Each replica downloads and validates the artifact before stopping the
-   current app.
-4. Each replica restarts with the registry-materialized package and records
-   convergence.
+3. Each replica downloads and validates the artifact before stopping the current app.
+4. Each replica restarts with the registry-materialized package and records convergence.
 
 See [validation.md](./architecture/validation.md) and [lifecycle.md](./operations/lifecycle.md).
 
-## Runtime materialization and failure handling
+## Runtime Materialization and Failure Handling
 
-Each replica materializes the latest desired registry version under
-`{artifactsDir}/registry-installed/{app}/{version}`. Local disk is ephemeral, so
-cold starts may need to materialize the package again.
+Each replica materializes the latest desired registry version under `{artifactsDir}/registry-installed/{app}/{version}`. Local disk is ephemeral, so cold starts may need to materialize the package again.
 
-A dynamic app failure does not prevent Gestalt from serving core functionality.
-Operators can select a historical version for 30 days after it last stopped
-being desired. After that configurable window it is permanently locked and
-recovery requires a new publish. Core recovery paths do not depend on
-registry-only apps.
+A dynamic app failure does not prevent Gestalt from serving core functionality. Operators can select a historical version for 30 days after it last stopped being desired. After that configurable window it is permanently locked and recovery requires a new publish. Core recovery paths do not depend on registry-only apps.
 
-## Future work
+## Future Work
 
-### Version retention and cleanup
+### Version Retention and Cleanup
 
-Automatically delete never-deployed snapshots after 3 days by default. Retain
-the complete deploy chain and deployed version metadata permanently. Keep
-historical versions redeployable for 30 days after last use, then lock them and
-allow artifact cleanup. Add `apps/{app}/retention.json`, fleet-use tracking,
-reader-owned `gestaltd app registry retention prune`, and a Revision history
-tab on the app-admin page. See [retention.md](./operations/retention.md).
+Automatically delete never-deployed snapshots after 3 days by default. Retain the complete deploy chain and deployed version metadata permanently. Keep historical versions redeployable for 30 days after they stop being desired, then lock them and allow artifact cleanup. Add `apps/{app}/retention.json`, deactivation tracking, reader-owned `gestaltd app registry retention prune`, and a Revision history tab on the app-admin page. See [retention.md](./operations/retention.md).
 
-### Packaged workflow metadata
+### Packaged Workflow Metadata
 
-Packaged apps declare workflow definitions in provider source. Bootstrap
-registers them from `DeclaredWorkflowDefinitions` after install, which is too
-late to reject a bad version before fleet admission.
+Packaged apps declare workflow definitions in provider source. Bootstrap registers them from `DeclaredWorkflowDefinitions` after install, which is too late to reject a bad version before fleet admission.
 
-Install validation should read workflow app-call targets from
-`versions/{version}.json`, like `interface` and `requires`, without downloading
-artifacts or running providers.
+Install validation should read workflow app-call targets from `versions/{version}.json`, like `interface` and `requires`, without downloading artifacts or running providers.
 
 At publish time:
 
-- derive `workflows.yaml` during `gestaltd provider package`
-  (`GESTALT_APP_WRITE_WORKFLOWS`), including when `catalog.yaml` already exists
+- derive `workflows.yaml` during `gestaltd provider package` (`GESTALT_APP_WRITE_WORKFLOWS`), including when `catalog.yaml` already exists
 - copy app-call steps into the registry entry
 - require identical workflow metadata across platform archives
 
-At install time, validate `entry.workflows` before `AppendRequest`. Config-managed
-`workflows.definitions` remain separate and are validated at config load. When
-`entry.workflows` is absent, skip workflow checks.
+At install time, validate `entry.workflows` before `AppendRequest`. Config-managed `workflows.definitions` remain separate and are validated at config load. When `entry.workflows` is absent, skip workflow checks.

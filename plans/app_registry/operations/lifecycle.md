@@ -4,17 +4,6 @@ How each `gestaltd` replica observes fleet install state, materializes app artif
 
 Install is change-request-only; per-replica convergence (ack → download → restart → mount) is planned via polling below. List/get install endpoints expose **projected known versions** from change requests.
 
-Related docs:
-
-- [readme.md](../readme.md) — registry architecture and future work
-- [changelog.md](../project/changelog.md) — implementation milestones and pull requests
-- [validation.md](../architecture/validation.md) — install-time validation
-- [admin.md](./admin.md) — admin UI capabilities
-- [indexeddb.md](../architecture/indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
-- [config.md](../architecture/config.md) — `appRegistries` deploy reader config
-- [models.md](../architecture/models.md) — index and published version JSON stored in GCS
-- [tests.md](../project/tests.md) — convergence unit tests
-
 Implementation:
 
 - Registry list handlers — `gestaltd/internal/server/handlers_admin_app_registry.go`
@@ -50,7 +39,7 @@ At `StartAppProviders`, each registry-only app:
 
 The catalog poller still handles first install and upgrades on replicas that were skipped at boot or join after a rollout.
 
-### Runtime version invariants
+### Runtime Version Invariants
 
 The lifecycle uses four distinct states. They must not be treated as interchangeable:
 
@@ -72,7 +61,7 @@ Each replica materializes and retains only that latest desired version. Older fl
 
 `app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a known registry app from starting.
 
-### Bootstrap before polling
+### Bootstrap Before Polling
 
 Bootstrap finishes its registry-app startup attempts before the catalog poller begins:
 
@@ -95,7 +84,7 @@ After startup-provider initialization completes, every replica starts one backgr
 
 The controller is **pull-based** and **local**: each replica reads `app_version_change_requests` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
 
-### Rollout admission and completion
+### Rollout Admission and Completion
 
 Only one rollout per app may be active across the fleet. `POST …/add` and `POST …/upgrade` hold the app-scoped install lock while they reject an existing `enrolling` or `restarting` rollout, validate the candidate, create the new rollout, and append its change request. Different apps may roll out concurrently.
 
@@ -139,7 +128,7 @@ Failure and retry behavior:
 6. Updates to the local `active-version` marker are atomic. A failed replacement leaves the previous valid marker in place.
 7. If Gestalt cannot determine or clean up the local provider state safely, it marks the process unhealthy and terminates so the process supervisor can restart it.
 
-### Runtime behavior of configured app surfaces
+### Runtime Behavior of Configured App Surfaces
 
 A registry-only app does not have to expose a static UI, HTTP bindings, MCP, or any other particular surface. The following rules apply only to surfaces enabled for that app in the Gestalt YAML deploy configuration.
 
@@ -155,7 +144,7 @@ Runtime handlers determine availability from the local provider registry, runnin
 
 Admin HTTP under `/admin/api/v1` on the same listener as the other admin API (for example `/admin/api/v1/runtime/providers`). In deployments that split public and management listeners, call the management base URL.
 
-### How to invoke
+### How to Invoke
 
 ```bash
 # Local dev (default public port)
@@ -227,7 +216,7 @@ List/get install endpoints project known versions from `app_version_change_reque
 ### Endpoints
 
 | Method | Path | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | `GET` | `/admin/api/v1/app-registries` | List registries from config |
 | `GET` | `/admin/api/v1/app-registries/{registry}/apps/{app}/versions` | List published versions for one app |
 | `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/add` | Record the first fleet-known version for an app |
@@ -253,10 +242,10 @@ Returns the named registries configured in `appRegistries`, sorted by name.
 ]
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Registry key from `appRegistries` |
-| `kind` | string | Registry backend (`gcs` today) |
+| Field       | Type   | Description                              |
+| ----------- | ------ | ---------------------------------------- |
+| `name`      | string | Registry key from `appRegistries`        |
+| `kind`      | string | Registry backend (`gcs` today)           |
 | `publicUrl` | string | HTTPS root used to fetch index documents |
 
 When no registries are configured, the response is an empty array `[]` (not `null`).
@@ -275,7 +264,7 @@ Fetches `apps/{app}/index.json` from the configured registry's `publicUrl` and r
 **Path parameters**
 
 | Parameter | Description |
-|-----------|-------------|
+| --- | --- |
 | `registry` | Name of a configured registry (`appRegistries` key) |
 | `app` | Published app name (same rules as `gestaltd app registry publish --app`) |
 
@@ -299,7 +288,7 @@ App names must match `providerregistry.ValidateRepositoryName`: lowercase letter
 ```
 
 | Field | Type | Description |
-|-------|------|-------------|
+| --- | --- | --- |
 | `registry` | string | Registry name from the path |
 | `app` | string | App name from the path |
 | `versions` | array | Version summaries, newest `publishedAt` first |
@@ -325,10 +314,10 @@ Record the **first** fleet-known version for an app. Use when `ListKnownVersions
 
 **Path parameters**
 
-| Parameter | Description |
-|-----------|-------------|
+| Parameter  | Description                                         |
+| ---------- | --------------------------------------------------- |
 | `registry` | Name of a configured registry (`appRegistries` key) |
-| `app` | Published app name |
+| `app`      | Published app name                                  |
 
 **Request body**
 
@@ -339,10 +328,10 @@ Record the **first** fleet-known version for an app. Use when `ListKnownVersions
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `version` | string | yes | Published version to add |
-| `actor` | string | no | Actor recorded on catalog records |
+| Field     | Type   | Required | Description                       |
+| --------- | ------ | -------- | --------------------------------- |
+| `version` | string | yes      | Published version to add          |
+| `actor`   | string | no       | Actor recorded on catalog records |
 
 **Response `200`** — same shape as upgrade below.
 
@@ -354,10 +343,10 @@ Record a new fleet-known version when the app is already in the catalog.
 
 **Path parameters**
 
-| Parameter | Description |
-|-----------|-------------|
+| Parameter  | Description                                         |
+| ---------- | --------------------------------------------------- |
 | `registry` | Name of a configured registry (`appRegistries` key) |
-| `app` | Published app name |
+| `app`      | Published app name                                  |
 
 **Request body**
 
@@ -368,10 +357,10 @@ Record a new fleet-known version when the app is already in the catalog.
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `version` | string | yes | Published version to upgrade to |
-| `actor` | string | no | Actor recorded on catalog records |
+| Field     | Type   | Required | Description                       |
+| --------- | ------ | -------- | --------------------------------- |
+| `version` | string | yes      | Published version to upgrade to   |
+| `actor`   | string | no       | Actor recorded on catalog records |
 
 **Response `200`**
 
@@ -395,7 +384,7 @@ Record a new fleet-known version when the app is already in the catalog.
 ```
 
 | Field | Type | Description |
-|-------|------|-------------|
+| --- | --- | --- |
 | `registry` | string | Registry name from the path |
 | `app` | string | App name from the path |
 | `installation` | object | Known version after a successful add or upgrade (from the `change request` record) |
@@ -467,15 +456,14 @@ Returns **known versions** for one app.
 
 IndexedDB read only. No GCS fetch.
 
-### Admin observability API
+### Admin Observability API
 
-Read-only routes under `/admin/api/v1` with `gestaltAdmin` auth. UI wireframes:
-[admin.md](./admin.md#embedded-admin-ui-admin).
+Read-only routes under `/admin/api/v1` with `gestaltAdmin` auth. UI wireframes: [admin.md](./admin.md#embedded-admin-ui-admin).
 
 These routes expose IndexedDB rollout state that the catalog poller already writes. They do not change install or convergence behavior.
 
 | Method | Path | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | `GET` | `/admin/api/v1/registry-apps` | Registry-only apps from deploy config, merged with desired version and rollout summary |
 | `GET` | `/admin/api/v1/registry-apps/{app}` | One registry-only app: fleet-known versions, rollout, optional latest published registry version |
 | `GET` | `/admin/api/v1/app-rollouts` | List active and recent terminal rollouts |
@@ -512,7 +500,7 @@ List deploy-configured registry-only apps (`source.registry`), merged with fleet
 ```
 
 | Field | Type | Description |
-|-------|------|-------------|
+| --- | --- | --- |
 | `app` | string | App name from deploy `apps` |
 | `registry` | string | `source.registry` binding |
 | `desiredVersion` | string | `LatestKnownVersion`; omitted when the fleet catalog is empty |
@@ -537,7 +525,7 @@ Detail view for one registry-only app. Same fields as one list element, plus:
       "installedBy": "user:michael.wang@valon.com"
     }
   ],
-  "rollout": { },
+  "rollout": {},
   "latestPublished": {
     "version": "0.0.0-snapshot.gcd9d741…",
     "publishedAt": "2026-07-21T15:36:47Z"
@@ -577,7 +565,7 @@ Per-replica rollout-progress rows for one app rollout.
 **Query parameters**
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+| --- | --- | --- |
 | `version` | string | Fleet-known version. Defaults to the current rollout's `version`, else `desiredVersion`. |
 
 **Response `200`**
@@ -605,38 +593,33 @@ Per-replica rollout-progress rows for one app rollout.
 ```
 
 | Field | Type | Description |
-|-------|------|-------------|
+| --- | --- | --- |
 | `inCohort` | boolean | `acknowledged_at < rollout.enrollment_ends_at` |
 | `converged` | boolean | `restarted_at` set and not after `rollout.deadline` while rollout is active; when terminal, `restarted_at` present |
 
 The embedded `/admin` UI includes a read-only **App Registry** section that consumes these endpoints.
 
-### App-admin version selection
+### App-Admin Version Selection
 
-App-scoped routes on the authenticated public API. UI capabilities:
-[admin.md](./admin.md#app-admin-ui-appsappadmin).
+App-scoped routes on the authenticated public API. UI capabilities: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 
 | Method | Path | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | `GET` | `/api/v1/apps/{app}/admin/registry` | Load published/known versions, desired version, and rollout admission state |
 | `GET` | `/api/v1/apps/{app}/admin/registry/history` | Load the permanent deploy chain for the Revision history tab |
 | `POST` | `/api/v1/apps/{app}/admin/registry/version` | Select the fleet-wide desired version |
 
 #### Authorization
 
-Only an authenticated **user** with explicit `admin` on `app/{app}` may call
-these routes. Fail closed:
+Only an authenticated **user** with explicit `admin` on `app/{app}` may call these routes. Fail closed:
 
 - **401** when unauthenticated
-- **403** when authenticated but not an app admin (including global
-  `gestaltAdmin` without app admin)
+- **403** when authenticated but not an app admin (including global `gestaltAdmin` without app admin)
 - **503** when authorization is unavailable
 
 Do not reuse the mounted-UI fallback when no authorization provider exists.
 
-`GET /api/v1/apps` exposes optional `managementPath` (for example
-`/apps/g-issues/admin`) only when the app is registry-only, the caller is a
-user, and the caller has `admin` on `app/{app}`.
+`GET /api/v1/apps` exposes optional `managementPath` (for example `/apps/g-issues/admin`) only when the app is registry-only, the caller is a user, and the caller has `admin` on `app/{app}`.
 
 #### `GET /api/v1/apps/{app}/admin/registry`
 
@@ -679,34 +662,22 @@ user, and the caller has `admin` on `app/{app}`.
 }
 ```
 
-When a rollout is active, `selectionDisabled` is `true` and `disabledReason` is
-`"rollout in progress"`.
+When a rollout is active, `selectionDisabled` is `true` and `disabledReason` is `"rollout in progress"`.
 
 Rules:
 
 - `{app}` must be deploy-configured with `source.registry`.
-- `knownVersions` comes from the change-request projection; `desiredVersion` is
-  `LatestKnownVersion` and is omitted before first install.
-- `publishedVersions` comes from the registry index, newest `publishedAt` first.
-  Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication`
-  when recorded. Legacy versions may omit `publication`.
-- `publishedVersions[].deploymentState` is `available` for never-deployed
-  versions, `desired` for the current version, `redeployable` for historical
-  versions before `deployableUntil`, or `locked` after the deadline.
-- `deployableUntil` is returned for historical versions. The UI offers
-  **Deploy** only for `available` and `redeployable`.
-- `pendingVersions` and `failedVersions` come from `pending.json` and
-  `failed.json`. See [pending-publish.md](./pending-publish.md#read-path).
-- When the same version appears in more than one catalog, apply
-  [merge rules](./pending-publish.md#app-admin-api).
-- `selectionDisabled` is true only while rollout state is `enrolling` or
-  `restarting`.
+- `knownVersions` comes from the change-request projection; `desiredVersion` is `LatestKnownVersion` and is omitted before first install.
+- `publishedVersions` comes from the registry index, newest `publishedAt` first. Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication` when recorded. Legacy versions may omit `publication`.
+- `publishedVersions[].deploymentState` is `available` for never-deployed versions before `publishedAt + unusedRetention`, `expired` for never-deployed versions after that deadline but before pruning, `desired` for the current version, `redeployable` for historical versions before `deployableUntil`, or `locked` after the deadline.
+- `deployableUntil` is returned for historical versions. The UI offers **Deploy** only for `available` and `redeployable`.
+- `pendingVersions` and `failedVersions` come from `pending.json` and `failed.json`. See [pending-publish.md](./pending-publish.md#read-path).
+- When the same version appears in more than one catalog, apply [merge rules](./pending-publish.md#app-admin-api).
+- `selectionDisabled` is true only while rollout state is `enrolling` or `restarting`.
 
-#### Revision history
+#### Revision History
 
-`GET /api/v1/apps/{app}/admin/registry/history?limit=50&cursor=…` returns the
-append-only `app_version_change_requests` sequence in reverse chronological
-order.
+`GET /api/v1/apps/{app}/admin/registry/history?limit=50&cursor=…` returns the append-only `app_version_change_requests` sequence in reverse chronological order.
 
 **Response `200`**
 
@@ -729,6 +700,7 @@ order.
           "url": "https://github.com/valon-technologies/valon-tools/pull/3251"
         }
       },
+      "deploymentState": "desired",
       "current": true
     }
   ],
@@ -738,24 +710,14 @@ order.
 
 Rules:
 
-- The endpoint reads raw change requests, not `knownVersions`, so repeated
-  projections cannot collapse accepted transitions.
-- Sort by `(timestamp, id)` descending. The opaque cursor contains that pair;
-  default `limit` is 50 and maximum is 100.
-- The first deployment omits `previousVersion` when stored `from_version` is
-  `registry:first-install`.
-- `current` is true only for the latest request that produced
-  `LatestKnownVersion`. Earlier requests remain historical even when they
-  selected the same version.
-- `deployedAt`, `deployedBy`, source fields, and publication provenance come
-  from the change request and its immutable `metadata_json` install-contract
-  snapshot. New admissions snapshot publication provenance; legacy rows may
-  omit it.
-- An app with no change requests returns `revisions: []`. The route has the
-  same app-admin authorization and fail-closed behavior as the registry-state
-  route.
-- The endpoint performs no writes and exposes no deploy action. Eligible
-  historical versions are selected from Published snapshots.
+- The endpoint reads raw change requests, not `knownVersions`, so repeated projections cannot collapse accepted transitions.
+- Sort by `(timestamp, id)` descending. The opaque cursor contains that pair; default `limit` is 50 and maximum is 100.
+- The first deployment omits `previousVersion` when stored `from_version` is `registry:first-install`.
+- `current` is true only for the latest request that produced `LatestKnownVersion`. Earlier requests remain historical even when they selected the same version.
+- `deploymentState` is the selected version's present-day eligibility: `desired`, `redeployable`, or `locked`. Repeated entries for the same version share the same value. Historical entries include `deployableUntil` when applicable.
+- `deployedAt`, `deployedBy`, source fields, and publication provenance come from the change request and its immutable `metadata_json` install-contract snapshot. New admissions snapshot publication provenance; legacy rows may omit it.
+- An app with no change requests returns `revisions: []`. The route has the same app-admin authorization and fail-closed behavior as the registry-state route.
+- The endpoint performs no writes and exposes no deploy action. Eligible historical versions are selected from Published snapshots.
 
 #### `POST /api/v1/apps/{app}/admin/registry/version`
 
@@ -767,9 +729,7 @@ Rules:
 }
 ```
 
-The request accepts no `actor`, `registry`, or `fromVersion`; unknown fields
-return **400**. The server derives `actor` from the authenticated user,
-`registry` from deploy config, and `fromVersion` from `LatestKnownVersion`.
+The request accepts no `actor`, `registry`, or `fromVersion`; unknown fields return **400**. The server derives `actor` from the authenticated user, `registry` from deploy config, and `fromVersion` from `LatestKnownVersion`.
 
 **Response `200`**
 
@@ -788,63 +748,39 @@ return **400**. The server derives `actor` from the authenticated user,
 
 A request is accepted only when all checks pass:
 
-1. Authenticate the caller and authorize `admin` on `app/{app}` (**401** /
-   **403**; **503** when authorization is unavailable).
-2. Validate `{app}` is deploy-configured with `source.registry` (**404** when
-   not registry-only).
+1. Authenticate the caller and authorize `admin` on `app/{app}` (**401** / **403**; **503** when authorization is unavailable).
+2. Validate `{app}` is deploy-configured with `source.registry` (**404** when not registry-only).
 3. Claim the app-scoped install lock.
 4. Read the current rollout while holding the lock.
-5. Reject when rollout state is `enrolling` or `restarting` with **409**. No
-   registry fetch, install-time validation, rollout creation, or change-request
-   append occurs on this path. Terminal `complete` or `failed` rollouts do not
-   block a new selection.
-6. Reject when the selected version equals the current desired version with
-   **400** and no writes.
+5. Reject when rollout state is `enrolling` or `restarting` with **409**. No registry fetch, install-time validation, rollout creation, or change-request append occurs on this path. Terminal `complete` or `failed` rollouts do not block a new selection.
+6. Reject when the selected version equals the current desired version with **400** and no writes.
 7. Resolve deployment state from `retention.json` and the change-request chain:
-   - accept a never-deployed published version before unused pruning
-   - accept a historical version only before `deployableUntil` and when
-     `lockedAt` is unset
-   - reject an expired or locked historical version with **400** and no writes
-8. Fetch the published version from the configured registry and run install-time
-   validation ([validation.md](../architecture/validation.md)).
-9. Create the rollout and append the change request (`add` on first selection;
-   `upgrade` on later selections, including a downgrade or repeated version).
-   The request records the outgoing version's fixed `deployableUntil`; the
-   append-only chain is authoritative for this deadline.
-10. Mirror the transition into `retention.json` for pruning. If that write
-    fails, repair it from the change-request chain; do not lose or rewrite the
-    accepted transition.
+   - accept a never-deployed published version only before `publishedAt + unusedRetention`, even when scheduled pruning has not run
+   - accept a historical version only before `deployableUntil` and when `lockedAt` is unset
+   - reject an expired never-deployed version or an expired/locked historical version with **400** and no writes
+8. Fetch the published version from the configured registry and run install-time validation ([validation.md](../architecture/validation.md)).
+9. Create the rollout and append the change request (`add` on first selection; `upgrade` on later selections, including a downgrade or repeated version). The request records the outgoing version's fixed `deployableUntil`; the append-only chain is authoritative for this deadline.
+10. Mirror the transition into `retention.json` for pruning. If that write fails, repair it from the change-request chain; do not lose or rewrite the accepted transition.
 11. Release the install lock.
 
-The rollout check in step 5 is authoritative. Concurrent selection requests
-must recheck under the install lock so only one admission succeeds.
+The rollout check in step 5 is authoritative. Concurrent selection requests must recheck under the install lock so only one admission succeeds.
 
-#### Historical redeployment and locking
+#### Historical Redeployment and Locking
 
-When `v1 → v2` is accepted, `v1.lastUsedAt` is the transition time and
-`v1.deployableUntil` is that time plus the configured `deployedRetention`
-(default 30 days). `v2` is desired, so no historical deadline runs for it.
+When `v1 → v2` is accepted, `v1.lastDeactivatedAt` is the transition time and `v1.deployableUntil` is that time plus the configured `deployedRetention` (default 30 days). `v2` is desired, so no historical deadline runs for it.
 
-Selecting `v1` before its deadline appends a new `v2 → v1` request. The chain
-retains both transitions. When `v1` later stops being desired, it receives a
-new deadline. Once a deadline passes, the version is permanently locked and
-cannot be selected again, though every history event and its metadata remains
-visible.
+Selecting `v1` before its deadline appends a new `v2 → v1` request. The chain retains both transitions. When `v1` later stops being desired, it receives a new deadline. Once a deadline passes, the version is permanently locked and cannot be selected again, though every history event and its metadata remains visible.
 
-For a repeated version, reset per-replica materialization rows whose
-`acknowledged_at` predates the new rollout's `created_at`. Count cohort
-membership and convergence only from timestamps at or after the current
-rollout's `created_at`.
+For a repeated version, reset per-replica materialization rows whose `acknowledged_at` predates the new rollout's `created_at`. Count cohort membership and convergence only from timestamps at or after the current rollout's `created_at`.
 
-The server enforces the deadline while holding the app-scoped install lock. UI
-suppression is not the security boundary.
+The server enforces the deadline while holding the app-scoped install lock. UI suppression is not the security boundary.
 
 ### Errors
 
 Errors use the standard gestaltd admin API error envelope (`error` field).
 
 | Status | When |
-|--------|------|
+| --- | --- |
 | `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions; **install-time validation failed** |
 | `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
 | `409` | Another instance is already installing this `(app, version)` (install lock held and not expired); `add` called when the app already has fleet-known versions |
@@ -852,12 +788,12 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
 
-#### App-admin errors
+#### App-Admin Errors
 
 App-admin routes use the same `{ "error": "…" }` envelope.
 
 | Status | When |
-|--------|------|
+| --- | --- |
 | `400` | Selected version is current, expired, or permanently locked; unknown request fields; install-time validation failure |
 | `401` | Missing or invalid authentication |
 | `403` | Authenticated user lacks `admin` on `app/{app}` |
@@ -873,3 +809,34 @@ Example:
   "error": "app registry not found"
 }
 ```
+
+---
+
+## Appendix
+
+### Related Changelogs
+
+<pre>
+├── <a href="../project/changelog.md#changelog-06">06 — Registry installation prototype</a>
+├── <a href="../project/changelog.md#changelog-07">07 — Catalog-only admission</a>
+├── <a href="../project/changelog.md#changelog-08">08 — Per-replica catalog polling</a>
+├── <a href="../project/changelog.md#changelog-09">09 — Coordinated provider restarts</a>
+├── <a href="../project/changelog.md#changelog-10">10 — Materialize before restart</a>
+├── <a href="../project/changelog.md#changelog-11">11 — Mount the registry-installed package</a>
+├── <a href="../project/changelog.md#changelog-12">12 — Complete registry-only lifecycle</a>
+├── <a href="../project/changelog.md#changelog-14">14 — Fleet admin observability</a>
+└── <a href="../project/changelog.md#changelog-15">15 — App-scoped version selection</a>
+</pre>
+
+### Related Docs
+
+<pre>
+├── <a href="../readme.md">readme.md</a> — registry architecture and future work
+├── <a href="../project/changelog.md">changelog.md</a> — implementation milestones and pull requests
+├── <a href="../architecture/validation.md">validation.md</a> — install-time validation
+├── <a href="./admin.md">admin.md</a> — admin UI capabilities
+├── <a href="../architecture/indexeddb.md">indexeddb.md</a> — app_version_change_requests, app_instance_materializations, install locks
+├── <a href="../architecture/config.md">config.md</a> — appRegistries deploy reader config
+├── <a href="../architecture/models.md">models.md</a> — index and published version JSON stored in GCS
+└── <a href="../project/tests.md">tests.md</a> — convergence unit tests
+</pre>
