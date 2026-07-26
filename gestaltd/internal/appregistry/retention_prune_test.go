@@ -47,8 +47,3 @@ func TestDeployedVersionsFromChangeRequests(t *testing.T) {
 		t.Fatalf("versions = %#v", versions)
 	}
 }
-
-func ptrTime(value time.Time) *time.Time {
-	value = value.UTC()
-	return &value
-}
