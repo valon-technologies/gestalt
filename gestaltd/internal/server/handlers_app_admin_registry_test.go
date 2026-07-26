@@ -322,6 +322,8 @@ func TestAppAdminRegistryHistory(t *testing.T) {
 
 	fixture := registrytest.NewInstallFixture(t)
 	services := testutil.NewStubServices(t)
+	alice := seedUser(t, services, "alice@valon.com")
+	aliceActor := principal.UserSubjectID(alice.ID)
 	subjectID := principal.UserSubjectID("alice")
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
@@ -351,7 +353,7 @@ func TestAppAdminRegistryHistory(t *testing.T) {
 			App:         "g-issues",
 			FromVersion: fromVersion,
 			ToVersion:   toVersion,
-			Actor:       "user:alice",
+			Actor:       aliceActor,
 			Timestamp:   at,
 			Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
 				AppName:   "g-issues",
@@ -403,7 +405,7 @@ func TestAppAdminRegistryHistory(t *testing.T) {
 	}
 	if history.Revisions[0].ID != thirdID || history.Revisions[0].Version != fixture.Version ||
 		history.Revisions[0].PreviousVersion != otherVersion || !history.Revisions[0].Current ||
-		history.Revisions[0].DeploymentState != "desired" || history.Revisions[0].DeployedBy != "user:alice" {
+		history.Revisions[0].DeploymentState != "desired" || history.Revisions[0].DeployedBy != "alice@valon.com" {
 		t.Fatalf("newest revision = %#v", history.Revisions[0])
 	}
 	if history.Revisions[2].ID != firstID || history.Revisions[2].PreviousVersion != "" {
