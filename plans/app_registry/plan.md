@@ -9,6 +9,7 @@ Related references:
 - [validation.md](./validation.md) — install-time validation before fleet accept
 - [admin.md](./admin.md) — admin UI capabilities
 - [models.md](./models.md) — JSON document shapes stored in GCS
+- [retention.md](./retention.md) — version cleanup and default retention policy
 - [service.md](./service.md) — Go package API for publish and validation
 
 ## Registry Responsibilities
@@ -273,6 +274,15 @@ Show in-flight and recently failed CI publishes on `/apps/{app}/admin` before
 and after `index.json` is updated. Add mutable `apps/{app}/pending.json` and
 `apps/{app}/failed.json` in GCS, CI lifecycle hooks, and pending/failed rows in
 the app-admin API and snapshots table. See [pending-publish.md](./pending-publish.md).
+
+### Version retention and cleanup
+
+Automatically delete published versions that are no longer needed, with
+configurable **default retention** windows: unused snapshots after 3 days
+(default), previously fleet-known snapshots after 7 days idle since last fleet
+use (timer resets on reuse). Add `apps/{app}/retention.json`, fleet-use
+tracking on install, and reader-owned `gestaltd app registry retention prune`.
+See [retention.md](./retention.md).
 
 ### Packaged workflow metadata
 

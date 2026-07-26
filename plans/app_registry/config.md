@@ -12,6 +12,7 @@ Related docs:
 - [plan.md](./plan.md) — product goals
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 - [models.md](./models.md) — JSON documents stored in the registry bucket
+- [retention.md](./retention.md) — version cleanup policy and `retention` config
 - [service.md](./service.md) — Go API for building those documents
 
 Implementation: `gestaltd/internal/config/` (`AppRegistryConfig`, `validateAppRegistries`).
@@ -34,7 +35,13 @@ appRegistries:
     kind: gcs
     gcs:
       bucket: gs://gestalt-app-registry
+    retention:
+      unusedRetention: 72h
+      deployedRetention: 168h
 ```
+
+See [retention.md](./retention.md) for policy semantics and the `retention.json`
+overlay.
 
 `gcs.bucket` accepts a bare bucket name or `gs://{bucket}`. Gestalt derives both URL forms:
 
