@@ -58,6 +58,9 @@ func (s *AppVersionChangeRequestService) AppendRequest(ctx context.Context, requ
 		"timestamp":     timestamp,
 		"metadata_json": jsonValue(request.Metadata),
 	}
+	if request.FromVersionDeployableUntil != nil && !request.FromVersionDeployableUntil.IsZero() {
+		rec["from_version_deployable_until"] = request.FromVersionDeployableUntil.UTC().Truncate(time.Millisecond)
+	}
 	if err := s.store.Add(ctx, rec); err != nil {
 		return nil, fmt.Errorf("append app version change request: %w", err)
 	}
@@ -108,13 +111,18 @@ func (s *AppVersionChangeRequestService) HasKnownVersion(ctx context.Context, ap
 }
 
 func recordToAppVersionChangeRequest(rec idb.Record) *core.AppVersionChangeRequest {
+	var deployableUntil *time.Time
+	if value := recTime(rec, "from_version_deployable_until"); !value.IsZero() {
+		deployableUntil = &value
+	}
 	return &core.AppVersionChangeRequest{
-		ID:          recString(rec, "id"),
-		App:         recString(rec, "app"),
-		FromVersion: recString(rec, "from_version"),
-		ToVersion:   recString(rec, "to_version"),
-		Actor:       recString(rec, "actor"),
-		Timestamp:   recTime(rec, "timestamp"),
-		Metadata:    recAnyMap(rec, "metadata_json"),
+		ID:                         recString(rec, "id"),
+		App:                        recString(rec, "app"),
+		FromVersion:                recString(rec, "from_version"),
+		ToVersion:                  recString(rec, "to_version"),
+		Actor:                      recString(rec, "actor"),
+		Timestamp:                  recTime(rec, "timestamp"),
+		FromVersionDeployableUntil: deployableUntil,
+		Metadata:                   recAnyMap(rec, "metadata_json"),
 	}
 }

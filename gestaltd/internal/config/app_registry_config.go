@@ -3,17 +3,31 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 const AppRegistryKindGCS = "gcs"
 
-const defaultGCSAppRegistryPublicURLPrefix = "https://storage.googleapis.com/"
+const (
+	defaultGCSAppRegistryPublicURLPrefix = "https://storage.googleapis.com/"
+	defaultAppRegistryUnusedRetention    = 72 * time.Hour
+	defaultAppRegistryDeployedRetention  = 720 * time.Hour
+)
 
 type AppRegistryConfig struct {
-	Kind string                `yaml:"kind,omitempty"`
-	GCS  *AppRegistryGCSConfig `yaml:"gcs,omitempty"`
+	Kind      string                      `yaml:"kind,omitempty"`
+	GCS       *AppRegistryGCSConfig       `yaml:"gcs,omitempty"`
+	Retention *AppRegistryRetentionConfig `yaml:"retention,omitempty"`
+}
+
+type AppRegistryRetentionConfig struct {
+	UnusedRetention   string `yaml:"unusedRetention,omitempty"`
+	DeployedRetention string `yaml:"deployedRetention,omitempty"`
+
+	unusedRetentionSet   bool
+	deployedRetentionSet bool
 }
 
 type AppRegistryGCSConfig struct {
@@ -21,8 +35,9 @@ type AppRegistryGCSConfig struct {
 }
 
 type appRegistryConfigYAML struct {
-	Kind string                `yaml:"kind,omitempty"`
-	GCS  *AppRegistryGCSConfig `yaml:"gcs,omitempty"`
+	Kind      string                      `yaml:"kind,omitempty"`
+	GCS       *AppRegistryGCSConfig       `yaml:"gcs,omitempty"`
+	Retention *AppRegistryRetentionConfig `yaml:"retention,omitempty"`
 }
 
 func (c *AppRegistryConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -47,7 +62,67 @@ func (c *AppRegistryConfig) UnmarshalYAML(value *yaml.Node) error {
 	}
 	c.Kind = raw.Kind
 	c.GCS = raw.GCS
+	c.Retention = raw.Retention
 	return nil
+}
+
+func (c *AppRegistryRetentionConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil {
+		return nil
+	}
+	var raw struct {
+		UnusedRetention   string `yaml:"unusedRetention,omitempty"`
+		DeployedRetention string `yaml:"deployedRetention,omitempty"`
+	}
+	if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
+		return err
+	}
+	if strings.TrimSpace(raw.UnusedRetention) != "" {
+		c.UnusedRetention = strings.TrimSpace(raw.UnusedRetention)
+		c.unusedRetentionSet = true
+	}
+	if strings.TrimSpace(raw.DeployedRetention) != "" {
+		c.DeployedRetention = strings.TrimSpace(raw.DeployedRetention)
+		c.deployedRetentionSet = true
+	}
+	return nil
+}
+
+// UnusedRetentionDuration returns the configured unused snapshot retention window.
+func (c AppRegistryConfig) UnusedRetentionDuration() (time.Duration, error) {
+	if c.Retention == nil || strings.TrimSpace(c.Retention.UnusedRetention) == "" {
+		return defaultAppRegistryUnusedRetention, nil
+	}
+	duration, err := ParseDuration(strings.TrimSpace(c.Retention.UnusedRetention))
+	if err != nil {
+		return 0, fmt.Errorf("retention.unusedRetention: %w", err)
+	}
+	return duration, nil
+}
+
+// DeployedRetentionDuration returns the configured historical redeploy window.
+func (c AppRegistryConfig) DeployedRetentionDuration() (time.Duration, error) {
+	if c.Retention == nil || strings.TrimSpace(c.Retention.DeployedRetention) == "" {
+		return defaultAppRegistryDeployedRetention, nil
+	}
+	duration, err := ParseDuration(strings.TrimSpace(c.Retention.DeployedRetention))
+	if err != nil {
+		return 0, fmt.Errorf("retention.deployedRetention: %w", err)
+	}
+	return duration, nil
+}
+
+// RetentionPolicy returns both retention durations for one registry binding.
+func (c AppRegistryConfig) RetentionPolicy() (unused, deployed time.Duration, err error) {
+	unused, err = c.UnusedRetentionDuration()
+	if err != nil {
+		return 0, 0, err
+	}
+	deployed, err = c.DeployedRetentionDuration()
+	if err != nil {
+		return 0, 0, err
+	}
+	return unused, deployed, nil
 }
 
 func (c *AppRegistryGCSConfig) UnmarshalYAML(value *yaml.Node) error {

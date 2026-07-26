@@ -26,14 +26,15 @@ const (
 const installWorkTimeoutBuffer = 30 * time.Second
 
 type Installer struct {
-	Registries      map[string]config.AppRegistryConfig
-	ConfigApps      map[string]*config.ProviderEntry
-	Reader          *RegistryReader
-	ChangeRequests  *coredata.AppVersionChangeRequestService
-	Locks           *coredata.AppVersionInstallLockService
-	Rollouts        *coredata.AppRolloutService
-	GestaltdVersion string
-	Now             func() time.Time
+	Registries       map[string]config.AppRegistryConfig
+	ConfigApps       map[string]*config.ProviderEntry
+	Reader           *RegistryReader
+	ChangeRequests   *coredata.AppVersionChangeRequestService
+	Locks            *coredata.AppVersionInstallLockService
+	Rollouts         *coredata.AppRolloutService
+	RetentionCatalog RetentionCatalogStore
+	GestaltdVersion  string
+	Now              func() time.Time
 }
 
 type InstallInput struct {
@@ -180,6 +181,29 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if reader == nil {
 		reader = &RegistryReader{}
 	}
+	registryConfig, ok := i.Registries[registryName]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrAppRegistryNotConfigured, registryName)
+	}
+	policy, err := retentionPolicyFromConfig(registryConfig)
+	if err != nil {
+		return nil, err
+	}
+	publicRoot, err := registryConfig.PublicURL()
+	if err != nil {
+		return nil, fmt.Errorf("resolve registry public URL: %w", err)
+	}
+	retentionIndex, err := reader.FetchRetentionIndex(installCtx, publicRoot, appName)
+	if err != nil {
+		return nil, fmt.Errorf("fetch retention index: %w", err)
+	}
+	currentDesired := coredata.LatestKnownVersion(knownVersions)
+	if mode == installModeSelect || mode == installModeUpgrade || mode == installModeAdd {
+		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now()); err != nil {
+			return nil, err
+		}
+	}
+
 	source, err := fetchConfiguredRegistryEntry(installCtx, i.Registries, reader, registryName, appName, version)
 	if err != nil {
 		return nil, err
@@ -194,6 +218,11 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	checksums := artifactChecksumsFromEntry(*entry)
 
 	requestedAt := i.now()
+	var fromVersionDeployableUntil *time.Time
+	if fromVersion != "" && fromVersion != FirstInstallFromVersion {
+		deadline := requestedAt.Add(policy.DeployedRetention)
+		fromVersionDeployableUntil = &deadline
+	}
 	known := &core.AppInstallation{
 		AppName:            appName,
 		Version:            version,
@@ -221,17 +250,19 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	}
 
 	addedRequest, err := i.ChangeRequests.AppendRequest(installCtx, &core.AppVersionChangeRequest{
-		App:         appName,
-		FromVersion: fromVersion,
-		ToVersion:   version,
-		Actor:       actor,
-		Timestamp:   requestedAt,
-		Metadata:    coredata.ChangeRequestMetadata(known),
+		App:                        appName,
+		FromVersion:                fromVersion,
+		ToVersion:                  version,
+		Actor:                      actor,
+		Timestamp:                  requestedAt,
+		FromVersionDeployableUntil: fromVersionDeployableUntil,
+		Metadata:                   coredata.ChangeRequestMetadata(known),
 	})
 	if err != nil {
 		_, _ = i.Rollouts.MarkFailed(context.WithoutCancel(installCtx), appName, version, i.now())
 		return nil, fmt.Errorf("append change request: %w", err)
 	}
+	i.mirrorRetentionTransition(installCtx, registryName, appName, fromVersion, version, policy, requestedAt)
 
 	return &InstallOutput{
 		Installation: coredata.InstallationFromChangeRequest(addedRequest),
@@ -282,4 +313,27 @@ func installWorkTimeout(lockTTL time.Duration) time.Duration {
 		return lockTTL
 	}
 	return lockTTL - installWorkTimeoutBuffer
+}
+
+func retentionPolicyFromConfig(registry config.AppRegistryConfig) (RetentionPolicy, error) {
+	unused, deployed, err := registry.RetentionPolicy()
+	if err != nil {
+		return RetentionPolicy{}, err
+	}
+	return RetentionPolicy{
+		UnusedRetention:   unused,
+		DeployedRetention: deployed,
+	}, nil
+}
+
+func (i *Installer) mirrorRetentionTransition(ctx context.Context, registryName, appName, fromVersion, toVersion string, policy RetentionPolicy, now time.Time) {
+	if i == nil || i.RetentionCatalog == nil {
+		return
+	}
+	_ = i.RetentionCatalog.MutateRetention(ctx, registryName, appName, func(index *RetentionIndex) (bool, error) {
+		if index == nil {
+			return false, nil
+		}
+		return ApplyDesiredVersionTransition(index, fromVersion, toVersion, policy, now), nil
+	})
 }

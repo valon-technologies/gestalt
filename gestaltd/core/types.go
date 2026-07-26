@@ -37,13 +37,14 @@ type AppInstallation struct {
 }
 
 type AppVersionChangeRequest struct {
-	ID          string
-	App         string
-	FromVersion string
-	ToVersion   string
-	Actor       string
-	Timestamp   time.Time
-	Metadata    map[string]any
+	ID                         string
+	App                        string
+	FromVersion                string
+	ToVersion                  string
+	Actor                      string
+	Timestamp                  time.Time
+	FromVersionDeployableUntil *time.Time
+	Metadata                   map[string]any
 }
 
 type AppInstanceMaterialization struct {
