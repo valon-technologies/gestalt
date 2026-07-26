@@ -127,21 +127,19 @@ and timing labels. Each row has **Deploy** in the action column unless selection
 is disabled or the row is not deployable.
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ g-issues                                            App management       │
-│ registry: toolshed                                                       │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Desired version: 0.0.0-snapshot.gabc123                                  │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Published snapshots                                                      │
-│                                                                          │
-│ Pull request          Snapshot            Status          Last update  Action │
-│ PR #3740 · Title      0.0.0-snapshot.g…  Publishing    4 minutes ago  —       │
-│                       (spinner) for 4m                                   │
-│ PR #3251 · Title      0.0.0-snapshot.g…  Available      Jul 22 15:00  Deploy  │
-│                       Published in 4m 32s                                │
-│ PR #3200 · Title      0.0.0-snapshot.g…  Deployed       Jul 21 12:00  —       │
-└──────────────────────────────────────────────────────────────────────────┘
+g-issues                                                        App management
+registry: toolshed
+
+Desired version: 0.0.0-snapshot.gabc123
+
+Published snapshots
+
+Pull request         Snapshot                 Status                 Last update       Action
+-------------------  -----------------------  ---------------------  ----------------  ------
+PR #3740 · Title     0.0.0-snapshot.g…       Publishing · for 4m    4 minutes ago     —
+PR #3251 · Title     0.0.0-snapshot.g…       Available              Jul 22 15:00      Deploy
+                                              Published in 4m 32s
+PR #3200 · Title     0.0.0-snapshot.g…       Deployed               Jul 21 12:00      —
 ```
 
 Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is disabled on **Publishing** and **Failed** rows. **Deployed** marks the desired version.
@@ -150,26 +148,27 @@ During an active rollout, disable deploy actions and show rollout state above th
 table:
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ g-issues                                            App management       │
-│ registry: toolshed                                                       │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Desired version: 0.0.0-snapshot.gabc123                                  │
-│ Rollout enrolling: 0.0.0-snapshot.gdef456                                │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Published snapshots                                                      │
-│                                                                          │
-│ Pull request     Snapshot            Status         Last update    Action │
-│ PR #3251 · …     0.0.0-snapshot.g… Rolling out    Jul 22 15:00   disabled │
-│ PR #3200 · …     0.0.0-snapshot.g… Deployed      Jul 21 12:00   disabled │
-└──────────────────────────────────────────────────────────────────────────┘
+g-issues                                                        App management
+registry: toolshed
+
+Desired version: 0.0.0-snapshot.gabc123
+Rollout enrolling: 0.0.0-snapshot.gdef456
+
+Published snapshots
+
+Pull request         Snapshot                 Status                 Last update       Action
+-------------------  -----------------------  ---------------------  ----------------  --------
+PR #3251 · Title     0.0.0-snapshot.g…       Rolling out            Jul 22 15:00      disabled
+PR #3200 · Title     0.0.0-snapshot.g…       Deployed               Jul 21 12:00      disabled
 ```
 
 A **Failed** row in the same table:
 
 ```text
-│ PR #3740 · Title  0.0.0-snapshot.g…  Failed         Jul 24 18:35   —       │
-│                                    Failed after 35m                      │
+Pull request         Snapshot                 Status                 Last update       Action
+-------------------  -----------------------  ---------------------  ----------------  ------
+PR #3740 · Title     0.0.0-snapshot.g…       Failed                 Jul 24 18:35      —
+                                              Failed after 35m
 ```
 
 After a successful deploy selection, keep deploy actions disabled until the
