@@ -6,13 +6,13 @@ Install is change-request-only; per-replica convergence (ack → download → re
 
 Related docs:
 
-- [plan.md](./plan.md) — install flow, catalog model, rollout steps
+- [readme.md](./readme.md) — registry architecture and future work
+- [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [validation.md](./validation.md) — install-time validation
 - [admin.md](./admin.md) — admin UI capabilities
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
-- [service.md](./service.md) — Go publish/read helpers behind the registry bucket
 - [tests.md](./tests.md) — convergence unit tests
 
 Implementation:

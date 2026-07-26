@@ -4,11 +4,11 @@ Reference for behavioral tests in the app registry plan.
 
 Related docs:
 
-- [plan.md](./plan.md) — implementation path and goals
+- [readme.md](./readme.md) — architecture and future work
+- [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [validation.md](./validation.md) — install-time validation
 - [admin.md](./admin.md) — admin UI capabilities
 - [models.md](./models.md) — JSON documents exercised by publish and install
-- [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 
@@ -74,7 +74,7 @@ Expected plan fields:
 
 ## Pending catalog write path
 
-Planned in pending publish PR 1. See [pending-publish.md](./pending-publish.md#pr-1--models-and-write-path-gestalt).
+Shipped in [gestalt#2932](https://github.com/valon-technologies/gestalt/pull/2932). See [pending-publish.md](./pending-publish.md).
 
 Run:
 

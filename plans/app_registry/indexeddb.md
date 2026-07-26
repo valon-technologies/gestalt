@@ -6,7 +6,8 @@ The first PR adds store schemas, bootstrap (`CreateObjectStore`), and Go service
 
 Related docs:
 
-- [plan.md](./plan.md) — install flow, multi-instance convergence, planned `app_instance_materializations`
+- [readme.md](./readme.md) — registry architecture and future work
+- [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 - [validation.md](./validation.md) — install-time validation
 - [admin.md](./admin.md) — admin UI capabilities

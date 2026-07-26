@@ -9,11 +9,11 @@ This does **not** change the app author's `manifest.yaml`.
 
 Related docs:
 
-- [plan.md](./plan.md) — product goals
+- [readme.md](./readme.md) — architecture and future work
+- [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 - [models.md](./models.md) — JSON documents stored in the registry bucket
 - [retention.md](./retention.md) — version cleanup policy and `retention` config
-- [service.md](./service.md) — Go API for building those documents
 
 Implementation: `gestaltd/internal/config/` (`AppRegistryConfig`, `validateAppRegistries`).
 
