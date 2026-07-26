@@ -297,8 +297,7 @@ Writes use the same optimistic-concurrency pattern as `pending.json`.
 
 **Path:** `apps/{app}/retention.json`
 
-Answers: *when was each published version last used, was it ever fleet-known,
-and is it operator-pinned?*
+Answers: *when was each published version last used, and was it ever fleet-known?*
 
 Mutable overlay used by retention pruning. Not installable metadata. See
 [retention.md](./retention.md) for policy rules and cleanup scope.
@@ -310,8 +309,7 @@ Mutable overlay used by retention pruning. Not installable metadata. See
     "0.0.0-snapshot.gabc123": {
       "lastUsedAt": "2026-07-22T14:00:00Z",
       "firstDeployedAt": "2026-07-22T14:00:00Z",
-      "everDeployed": true,
-      "pinned": false
+      "everDeployed": true
     }
   }
 }
@@ -333,7 +331,6 @@ Mutable overlay used by retention pruning. Not installable metadata. See
 | `lastUsedAt` | RFC 3339 timestamp | yes | Last fleet use; initialized to `publishedAt` on publish. |
 | `firstDeployedAt` | RFC 3339 timestamp | no | First fleet admission. |
 | `everDeployed` | bool | yes | Sticky flag; once true, deployed retention applies. |
-| `pinned` | bool | no | Operator pin; default `false`. |
 
 ---
 

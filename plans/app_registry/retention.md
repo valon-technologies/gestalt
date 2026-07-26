@@ -19,8 +19,7 @@ are never fleet-known; many that were desired once are superseded quickly.
 
 - Configurable retention on each registry binding (`unusedRetention`,
   `deployedRetention`).
-- Mutable `retention.json` per app tracking `lastUsedAt`, `everDeployed`, and
-  optional `pinned`.
+- Mutable `retention.json` per app tracking `lastUsedAt` and `everDeployed`.
 - **Unused retention** (default `72h`) — delete published versions that were
   never fleet-known and idle longer than the window.
 - **Deployed retention** (default `168h`) — delete previously fleet-known versions
@@ -29,8 +28,8 @@ are never fleet-known; many that were desired once are superseded quickly.
 - Scheduled prune from the **deploy reader** side (not publish CI).
 - Optional: retention metadata on the app-admin registry API and `/apps/{app}/admin`.
 
-Fleet use is fleet admission, becoming **desired version**, or an operator pin.
-Publishing alone does not count.
+Fleet use is fleet admission or becoming **desired version**. Publishing alone
+does not count.
 
 ## Config
 
@@ -91,7 +90,6 @@ Do not delete while any guard holds:
 | `version === desiredVersion` | |
 | Active rollout target (`enrolling` or `restarting`) | |
 | Entry in `pending.json` | |
-| `retention.pinned: true` | |
 | Last published version when `knownVersions` is empty | |
 
 ## Implementation path
