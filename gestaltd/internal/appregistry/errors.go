@@ -28,3 +28,9 @@ var ErrAppRegistryNotConfigured = errors.New("app registry is not configured")
 
 // ErrInstallTimedOut means install work exceeded the bounded post-lock timeout.
 var ErrInstallTimedOut = errors.New("app version install timed out")
+
+// ErrAppVersionExpired means a never-deployed version is past unused retention.
+var ErrAppVersionExpired = errors.New("app version is expired")
+
+// ErrAppVersionLocked means a historical version is permanently locked.
+var ErrAppVersionLocked = errors.New("app version is permanently locked")

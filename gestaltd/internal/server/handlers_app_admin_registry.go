@@ -42,6 +42,9 @@ type appAdminPublishedVersion struct {
 	SourceRef              string                   `json:"sourceRef,omitempty"`
 	SourceURL              string                   `json:"sourceUrl,omitempty"`
 	Publication            *appregistry.Publication `json:"publication,omitempty"`
+	DeploymentState        string                   `json:"deploymentState,omitempty"`
+	DeployableUntil        string                   `json:"deployableUntil,omitempty"`
+	Current                bool                     `json:"current,omitempty"`
 }
 
 type appAdminPendingVersion struct {
@@ -195,13 +198,24 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry failed catalog")
 		return
 	}
+	retentionIndex, err := reader.FetchRetentionIndex(r.Context(), publicRoot, app.name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to fetch app registry retention catalog")
+		return
+	}
+	policy, err := retentionPolicyFromRegistry(registry)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry is unavailable")
+		return
+	}
 	now := time.Now().UTC()
 	publishedKeys := appregistry.PublishedVersionKeys(index, app.name)
 	pendingKeys := appregistry.PendingVersionKeys(pendingIndex)
 	summaries := appregistry.VersionsFromIndex(index, app.name)
 	published := make([]appAdminPublishedVersion, 0, len(summaries))
+	desiredVersion := coredata.LatestKnownVersion(known)
 	for i := range summaries {
-		published = append(published, appAdminPublishedVersionFromSummary(summaries[i]))
+		published = append(published, appAdminPublishedVersionFromSummary(summaries[i], desiredVersion, retentionIndex, policy, now))
 	}
 	pendingVersions := make([]appAdminPendingVersion, 0)
 	for _, entry := range appregistry.PendingVersionsForAdmin(pendingIndex, publishedKeys) {
@@ -218,7 +232,7 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	response := appAdminRegistryResponse{
 		App:               app.name,
 		Registry:          app.registry,
-		DesiredVersion:    coredata.LatestKnownVersion(known),
+		DesiredVersion:    desiredVersion,
 		KnownVersions:     knownVersions,
 		PublishedVersions: published,
 		PendingVersions:   pendingVersions,
@@ -306,7 +320,9 @@ func writeAppAdminRegistryInstallError(w http.ResponseWriter, err error) {
 	status := http.StatusBadGateway
 	switch {
 	case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled),
-		errors.Is(err, appregistry.ErrInstallValidationFailed):
+		errors.Is(err, appregistry.ErrInstallValidationFailed),
+		errors.Is(err, appregistry.ErrAppVersionExpired),
+		errors.Is(err, appregistry.ErrAppVersionLocked):
 		status = http.StatusBadRequest
 	case errors.Is(err, appregistry.ErrRegistryDocumentNotFound):
 		status = http.StatusNotFound
@@ -333,7 +349,7 @@ func appVersionSourceURL(repository, sourceRef string) string {
 	return repository + "/commit/" + sourceRef
 }
 
-func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary) appAdminPublishedVersion {
+func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary, desiredVersion string, retention *appregistry.RetentionIndex, policy appregistry.RetentionPolicy, now time.Time) appAdminPublishedVersion {
 	version := appAdminPublishedVersion{
 		Version:     summary.Version,
 		PublishedAt: formatAdminTime(summary.PublishedAt),
@@ -342,6 +358,12 @@ func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary) app
 		SourceURL:   appVersionSourceURL(summary.Repository, summary.SourceRef),
 		Publication: summary.Publication,
 	}
+	state, deployableUntil := appregistry.VersionDeploymentState(summary.Version, desiredVersion, retention, policy, now)
+	version.DeploymentState = state
+	if deployableUntil != nil && !deployableUntil.IsZero() {
+		version.DeployableUntil = formatAdminTime(*deployableUntil)
+	}
+	version.Current = summary.Version == desiredVersion && desiredVersion != ""
 	if summary.PublishStartedAt != nil && !summary.PublishStartedAt.IsZero() {
 		version.PublishStartedAt = formatAdminTime(*summary.PublishStartedAt)
 		if seconds, ok := appregistry.DurationSecondsBetween(*summary.PublishStartedAt, summary.PublishedAt); ok {
@@ -349,6 +371,17 @@ func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary) app
 		}
 	}
 	return version
+}
+
+func retentionPolicyFromRegistry(registry config.AppRegistryConfig) (appregistry.RetentionPolicy, error) {
+	unused, deployed, err := registry.RetentionPolicy()
+	if err != nil {
+		return appregistry.RetentionPolicy{}, err
+	}
+	return appregistry.RetentionPolicy{
+		UnusedRetention:   unused,
+		DeployedRetention: deployed,
+	}, nil
 }
 
 func appAdminPendingVersionFromEntry(entry appregistry.PendingVersion, now time.Time) appAdminPendingVersion {

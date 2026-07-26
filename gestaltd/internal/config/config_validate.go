@@ -225,6 +225,14 @@ func validateAppRegistryLocation(prefix, name string, registry AppRegistryConfig
 	if _, err := registry.PublicURL(); err != nil {
 		return fmt.Errorf("config validation: %s.%s: %w", prefix, name, err)
 	}
+	if registry.Retention != nil {
+		if _, err := registry.UnusedRetentionDuration(); err != nil {
+			return fmt.Errorf("config validation: %s.%s: %w", prefix, name, err)
+		}
+		if _, err := registry.DeployedRetentionDuration(); err != nil {
+			return fmt.Errorf("config validation: %s.%s: %w", prefix, name, err)
+		}
+	}
 	return nil
 }
 

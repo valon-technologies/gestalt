@@ -104,6 +104,31 @@ func (r *RegistryReader) FetchFailedIndex(ctx context.Context, publicRoot, appNa
 	return DecodeFailedIndex(body)
 }
 
+// FetchRetentionIndex downloads apps/{app}/retention.json from a registry public root.
+func (r *RegistryReader) FetchRetentionIndex(ctx context.Context, publicRoot, appName string) (*RetentionIndex, error) {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return nil, fmt.Errorf("app name is required")
+	}
+	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+		return nil, err
+	}
+	publicRoot = strings.TrimRight(strings.TrimSpace(publicRoot), "/")
+	if publicRoot == "" {
+		return nil, fmt.Errorf("registry public URL is required")
+	}
+
+	url := PublicURL(publicRoot, AppRetentionPath(appName))
+	body, err := r.fetchJSON(ctx, url, true)
+	if err != nil {
+		return nil, err
+	}
+	if body == nil {
+		return NewEmptyRetentionIndex(), nil
+	}
+	return DecodeRetentionIndex(body)
+}
+
 // FetchAppIndex downloads apps/{app}/index.json from a registry public root.
 func (r *RegistryReader) FetchAppIndex(ctx context.Context, publicRoot, appName string) (*Index, error) {
 	appName = strings.TrimSpace(appName)

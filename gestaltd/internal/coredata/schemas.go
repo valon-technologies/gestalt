@@ -72,6 +72,7 @@ var AppVersionChangeRequestsSchema = idb.ObjectStoreOptions{
 		{Name: "to_version", Type: idb.TypeString, NotNull: true},
 		{Name: "actor", Type: idb.TypeString},
 		{Name: "timestamp", Type: idb.TypeTime, NotNull: true},
+		{Name: "from_version_deployable_until", Type: idb.TypeTime},
 		{Name: "metadata_json", Type: idb.TypeJSON},
 	},
 }
