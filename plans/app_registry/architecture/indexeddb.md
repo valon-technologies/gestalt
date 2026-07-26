@@ -6,11 +6,11 @@ The first PR adds store schemas, bootstrap (`CreateObjectStore`), and Go service
 
 Related docs:
 
-- [readme.md](./readme.md) — registry architecture and future work
-- [changelog.md](./changelog.md) — implementation milestones and pull requests
-- [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
+- [readme.md](../readme.md) — registry architecture and future work
+- [changelog.md](../project/changelog.md) — implementation milestones and pull requests
+- [lifecycle.md](../operations/lifecycle.md) — replica startup, background controller, admin HTTP API
 - [validation.md](./validation.md) — install-time validation
-- [admin.md](./admin.md) — admin UI capabilities
+- [admin.md](../operations/admin.md) — admin UI capabilities
 - [models.md](./models.md) — GCS registry entry JSON that change requests reference
 
 Implementation:
@@ -94,7 +94,7 @@ Services.DB                         ← underlying main-db handle
 
 ## Store: `app_version_change_requests` (accepted version changes)
 
-Append-only fleet requests to move one app from `from_version` to `to_version`. `from_version` is required on every row and is set server-side — callers never send it. `POST …/add` writes `from_version: "registry:first-install"` when the app has no fleet-known versions. `POST …/upgrade` sets `from_version` to the latest fleet-known `to_version` (`LatestKnownVersion`). See [lifecycle.md](./lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
+Append-only fleet requests to move one app from `from_version` to `to_version`. `from_version` is required on every row and is set server-side — callers never send it. `POST …/add` writes `from_version: "registry:first-install"` when the app has no fleet-known versions. `POST …/upgrade` sets `from_version` to the latest fleet-known `to_version` (`LatestKnownVersion`). See [lifecycle.md](../operations/lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
 
 ```text
 app_version_change_requests
@@ -257,7 +257,7 @@ A terminal record may be replaced when the next version is admitted. A non-termi
 | `MarkComplete(ctx, app, version, completedAt)` | Record successful cohort convergence. |
 | `MarkFailed(ctx, app, version, failedAt)` | Record that the rollout missed its deadline. |
 
-**Admin exposure:** `Get` and `ListActive` back `GET /admin/api/v1/app-rollouts` and rollout summaries on `GET /admin/api/v1/registry-apps`. See [lifecycle.md](./lifecycle.md#admin-observability-api).
+**Admin exposure:** `Get` and `ListActive` back `GET /admin/api/v1/app-rollouts` and rollout summaries on `GET /admin/api/v1/registry-apps`. See [lifecycle.md](../operations/lifecycle.md#admin-observability-api).
 
 ---
 
@@ -317,4 +317,4 @@ Written by the background catalog poller (`gestaltd/internal/appregistry/poller.
 
 `app_instance_materializations` rows are rollout-progress records; they do not decide which version a replica starts during boot. Bootstrap may start the latest fleet-known version without waiting for the poller to create or update one of these rows. When the poller runs later, it checks the version that is actually running. If the replica is already running that latest version, the poller validates and records materialization for that desired version, marks superseded pending rows converged without downloading them, and does not restart the app again.
 
-`ListByAppVersion` backs `GET /admin/api/v1/app-rollouts/{app}/materializations`. See [lifecycle.md](./lifecycle.md#admin-observability-api).
+`ListByAppVersion` backs `GET /admin/api/v1/app-rollouts/{app}/materializations`. See [lifecycle.md](../operations/lifecycle.md#admin-observability-api).

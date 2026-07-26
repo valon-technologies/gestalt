@@ -3,8 +3,8 @@
 Reference for the JSON documents stored in a GCS app registry by `gestaltd app registry publish`.
 
 For deploy reader config (`appRegistries`), see [config.md](./config.md). For the
-broader architecture, see [readme.md](./readme.md). For the implementation
-history, see [changelog.md](./changelog.md).
+broader architecture, see [readme.md](../readme.md). For the implementation
+history, see [changelog.md](../project/changelog.md).
 
 ## Overview
 
@@ -27,9 +27,9 @@ Immutable app archives live alongside published versions:
 | Document | Path | Purpose |
 |----------|------|---------|
 | **Index** | `apps/{app}/index.json` | Lightweight catalog of published versions |
-| **RetentionIndex** | `apps/{app}/retention.json` | Mutable usage timestamps for retention pruning. See [retention.md](./retention.md). |
-| **PendingIndex** | `apps/{app}/pending.json` | In-flight publishes (not installable). See [pending-publish.md](./pending-publish.md). |
-| **FailedIndex** | `apps/{app}/failed.json` | Recent failed publishes (not installable). See [pending-publish.md](./pending-publish.md). |
+| **RetentionIndex** | `apps/{app}/retention.json` | Mutable usage timestamps for retention pruning. See [retention.md](../operations/retention.md). |
+| **PendingIndex** | `apps/{app}/pending.json` | In-flight publishes (not installable). See [pending-publish.md](../operations/pending-publish.md). |
+| **FailedIndex** | `apps/{app}/failed.json` | Recent failed publishes (not installable). See [pending-publish.md](../operations/pending-publish.md). |
 | **PublishedVersion** | `apps/{app}/versions/{version}.json` | Full metadata and install contract for one version |
 
 Document type is implied by path. Each JSON document has a root `schemaVersion` field (currently `1` for index, pending index, and published version). Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
@@ -121,7 +121,7 @@ Each key in `versions` is a published version string (e.g. 0.0.0-snapshot.gabc12
 | `metadata` | string | yes | Relative path to the full published version JSON, e.g. `apps/g-issues/versions/0.0.1.json`. |
 | `platforms` | string array | no | Build targets available for this version (see example JSON). Derived from published version artifact keys at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
-| `publishStartedAt` | RFC 3339 timestamp | no | When CI recorded the version as pending. Copied from `PendingVersion.startedAt` at publish time. Present on CI publishes after `pending set`; omitted on legacy entries and manual publishes without a pending entry. See [pending-publish.md](./pending-publish.md#publish-duration). |
+| `publishStartedAt` | RFC 3339 timestamp | no | When CI recorded the version as pending. Copied from `PendingVersion.startedAt` at publish time. Present on CI publishes after `pending set`; omitted on legacy entries and manual publishes without a pending entry. See [pending-publish.md](../operations/pending-publish.md#publish-duration). |
 | `sourceRef` | string | no | Packaged commit SHA. Copied from `PublishedVersion.sourceRef`. |
 | `repository` | string | no | Source repository. Copied from `PublishedVersion.repository`. |
 | `publication` | object | no | Publish workflow provenance. Copied from `PublishedVersion.publication`. |
@@ -138,7 +138,7 @@ provenance is known so far?*
 Mutable catalog updated by CI at publish start. Removed on successful publish via
 `gestaltd app registry pending clear`, or recorded in `failed.json` via
 `gestaltd app registry pending fail` or stale prune. Pending versions are **not**
-installable. See [pending-publish.md](./pending-publish.md).
+installable. See [pending-publish.md](../operations/pending-publish.md).
 
 ```json
 {
@@ -205,13 +205,13 @@ Each key in `pending` is a version string being published (e.g.
 | `repository` | string | no | Source repository. Same format as `IndexVersion.repository`. |
 | `startedAt` | RFC 3339 timestamp | yes | When the pending record was created (UTC). |
 | `updatedAt` | RFC 3339 timestamp | yes | Last phase or metadata update (UTC). |
-| `phase` | string | yes | Always `publishing` while the version is pending. See [pending-publish.md](./pending-publish.md#phases). |
+| `phase` | string | yes | Always `publishing` while the version is pending. See [pending-publish.md](../operations/pending-publish.md#phases). |
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Written at pending start so the UI can link the workflow run immediately. |
 
 Writes use the same optimistic-concurrency pattern as `index.json` (read GCS
 generation, merge, upload with `if-generation-match`). `gestaltd app registry
 pending set` runs `PrunePendingIndex` and `PruneFailedIndex` before upserting.
-See [pending-publish.md](./pending-publish.md#self-healing).
+See [pending-publish.md](../operations/pending-publish.md#self-healing).
 
 ---
 
@@ -223,7 +223,7 @@ Answers: *which recent publish attempts failed for this app, and when?*
 
 Mutable catalog updated when CI calls `gestaltd app registry pending fail` or
 when `PrunePendingIndex` moves a stale pending entry. Failed versions are **not**
-installable. See [pending-publish.md](./pending-publish.md).
+installable. See [pending-publish.md](../operations/pending-publish.md).
 
 ```json
 {
@@ -291,7 +291,7 @@ Each key is a version string whose publish attempt failed.
 Writes use the same optimistic-concurrency pattern as `pending.json`.
 `PruneFailedIndex` removes entries older than 30 days on
 `gestaltd app registry pending set`. See
-[pending-publish.md](./pending-publish.md#prunefailedindex).
+[pending-publish.md](../operations/pending-publish.md#prunefailedindex).
 
 ---
 
@@ -302,7 +302,7 @@ Writes use the same optimistic-concurrency pattern as `pending.json`.
 Answers: *when was each published version last used, and was it ever fleet-known?*
 
 Mutable overlay used by retention pruning. Not installable metadata. See
-[retention.md](./retention.md) for policy rules and cleanup scope.
+[retention.md](../operations/retention.md) for policy rules and cleanup scope.
 
 ```json
 {
@@ -445,7 +445,7 @@ Answers: *what exactly is this version — artifacts, operations, dependencies, 
 | `requires` | object | no | Declared dependencies on other apps. Copied from the provider release `staticValidation.requires` block at publish time. |
 | `compatibility` | object | no | Runtime constraints, e.g. minimum `gestaltd` version. Copied from the provider release `staticValidation.compatibility` block at publish time. |
 | `publishedAt` | RFC 3339 timestamp | yes | When this version was published (UTC). |
-| `publishStartedAt` | RFC 3339 timestamp | no | When CI recorded the version as pending. Copied from `PendingVersion.startedAt` at publish time. Present on CI publishes after `pending set`; omitted on legacy entries and manual publishes without a pending entry. See [pending-publish.md](./pending-publish.md#publish-duration). |
+| `publishStartedAt` | RFC 3339 timestamp | no | When CI recorded the version as pending. Copied from `PendingVersion.startedAt` at publish time. Present on CI publishes after `pending set`; omitted on legacy entries and manual publishes without a pending entry. See [pending-publish.md](../operations/pending-publish.md#publish-duration). |
 
 #### `PublishedVersion.publication` · `Publication`
 

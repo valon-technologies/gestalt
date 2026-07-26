@@ -4,20 +4,44 @@ The app registry decouples app publishing from Gestalt deployments. Publishing
 a new app version makes it available for installation without rebuilding or
 redeploying the `gestaltd` Cloud Run service.
 
-The completed implementation milestones and their pull requests are in
-[changelog.md](./changelog.md).
+## Documentation
 
-Related references:
+<pre>
+app_registry/
+├── <a href="./readme.md">readme.md</a>
+├── architecture/
+│   ├── <a href="./architecture/config.md">config.md</a>
+│   ├── <a href="./architecture/indexeddb.md">indexeddb.md</a>
+│   ├── <a href="./architecture/models.md">models.md</a>
+│   └── <a href="./architecture/validation.md">validation.md</a>
+├── operations/
+│   ├── <a href="./operations/admin.md">admin.md</a>
+│   ├── <a href="./operations/lifecycle.md">lifecycle.md</a>
+│   ├── <a href="./operations/pending-publish.md">pending-publish.md</a>
+│   └── <a href="./operations/retention.md">retention.md</a>
+└── project/
+    ├── <a href="./project/changelog.md">changelog.md</a>
+    └── <a href="./project/tests.md">tests.md</a>
+</pre>
 
-- [admin.md](./admin.md) — admin UI capabilities
-- [config.md](./config.md) — deploy reader config and CI publish flags
-- [indexeddb.md](./indexeddb.md) — fleet version changes and rollout state
-- [lifecycle.md](./lifecycle.md) — replica startup, background controller, and admin HTTP API
-- [models.md](./models.md) — JSON documents stored in GCS
-- [pending-publish.md](./pending-publish.md) — in-flight and failed publish visibility
-- [retention.md](./retention.md) — version cleanup and retention policy
-- [tests.md](./tests.md) — behavioral test coverage
-- [validation.md](./validation.md) — install-time validation before fleet accept
+### Architecture
+
+- [Configuration](./architecture/config.md) — deploy reader config and CI publish flags
+- [IndexedDB state](./architecture/indexeddb.md) — fleet version changes and rollout state
+- [Registry models](./architecture/models.md) — JSON documents stored in GCS
+- [Install-time validation](./architecture/validation.md) — admission checks before fleet acceptance
+
+### Operations
+
+- [Administration](./operations/admin.md) — admin UI capabilities
+- [Replica lifecycle](./operations/lifecycle.md) — startup, background controller, and admin HTTP API
+- [Pending publishes](./operations/pending-publish.md) — in-flight and failed publish visibility
+- [Retention](./operations/retention.md) — version cleanup and retention policy
+
+### Project history
+
+- [Implementation changelog](./project/changelog.md) — milestones and pull requests
+- [Tests](./project/tests.md) — behavioral test coverage
 
 ## Registry responsibilities
 
@@ -60,7 +84,7 @@ apps/{app}/
 - `versions/{version}.json` — full metadata and install contract
 - `artifacts/{version}/…` — platform archives
 
-See [models.md](./models.md) for document shapes.
+See [models.md](./architecture/models.md) for document shapes.
 
 ## Registry configuration
 
@@ -85,7 +109,7 @@ gestaltd app registry publish \
   --dist-dir dist/
 ```
 
-See [config.md](./config.md).
+See [config.md](./architecture/config.md).
 
 ## Registry metadata includes app contracts
 
@@ -148,7 +172,7 @@ head or promotion record. Reverting selects an older published version through
 the upgrade path.
 
 Per-replica rollout progress lives in `app_instance_materializations`; fleet
-rollout state lives in `app_rollouts`. See [indexeddb.md](./indexeddb.md).
+rollout state lives in `app_rollouts`. See [indexeddb.md](./architecture/indexeddb.md).
 
 ## Validation and activation
 
@@ -168,7 +192,7 @@ After admission:
 4. Each replica restarts with the registry-materialized package and records
    convergence.
 
-See [validation.md](./validation.md) and [lifecycle.md](./lifecycle.md).
+See [validation.md](./architecture/validation.md) and [lifecycle.md](./operations/lifecycle.md).
 
 ## Runtime materialization and failure handling
 
@@ -188,7 +212,7 @@ Automatically delete published versions that are no longer needed, with
 configurable retention windows: unused snapshots after 3 days (default), and
 previously fleet-known snapshots after 7 days since last fleet use. Add
 `apps/{app}/retention.json`, fleet-use tracking, and reader-owned
-`gestaltd app registry retention prune`. See [retention.md](./retention.md).
+`gestaltd app registry retention prune`. See [retention.md](./operations/retention.md).
 
 ### Packaged workflow metadata
 
