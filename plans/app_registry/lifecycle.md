@@ -6,7 +6,8 @@ Install is change-request-only; per-replica convergence (ack → download → re
 
 Related docs:
 
-- [plan.md](./plan.md) — install flow, catalog model, rollout steps
+- [readme.md](./readme.md) — registry architecture and future work
+- [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [validation.md](./validation.md) — install-time validation
 - [admin.md](./admin.md) — admin UI capabilities
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks

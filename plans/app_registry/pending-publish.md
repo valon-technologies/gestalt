@@ -5,7 +5,8 @@ before `index.json` is updated at the end of CI.
 
 Related docs:
 
-- [plan.md](./plan.md) — registry goals and implementation path
+- [readme.md](./readme.md) — registry architecture and future work
+- [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [models.md](./models.md) — [PendingIndex](./models.md#pendingindex) and [FailedIndex](./models.md#failedindex)
 - [admin.md](./admin.md) — app admin UI capabilities
 - [service.md](./service.md) — Go publish/read helpers

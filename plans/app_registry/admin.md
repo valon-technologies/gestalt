@@ -4,7 +4,8 @@ Operator-facing visibility for registry-only apps and app-scoped fleet version s
 
 Related docs:
 
-- [plan.md](./plan.md) — implementation path
+- [readme.md](./readme.md) — architecture and future work
+- [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [lifecycle.md](./lifecycle.md) — HTTP APIs, admission checks, and rollout behavior
 - [indexeddb.md](./indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
 - [pending-publish.md](./pending-publish.md) — in-flight publish visibility on app admin

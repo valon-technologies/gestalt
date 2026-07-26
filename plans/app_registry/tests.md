@@ -4,7 +4,8 @@ Reference for behavioral tests in the app registry plan.
 
 Related docs:
 
-- [plan.md](./plan.md) — implementation path and goals
+- [readme.md](./readme.md) — architecture and future work
+- [changelog.md](./changelog.md) — implementation milestones and pull requests
 - [validation.md](./validation.md) — install-time validation
 - [admin.md](./admin.md) — admin UI capabilities
 - [models.md](./models.md) — JSON documents exercised by publish and install

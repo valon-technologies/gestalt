@@ -2,7 +2,10 @@
 
 Reference for the JSON documents stored in a GCS app registry by `gestaltd app registry publish`.
 
-For deploy reader config (`appRegistries`), see [config.md](./config.md). For broader goals (runtime install, IndexedDB state, validation phases), see [plan.md](./plan.md). For the Go package API that reads and writes these documents, see [service.md](./service.md).
+For deploy reader config (`appRegistries`), see [config.md](./config.md). For the
+broader architecture, see [readme.md](./readme.md). For the implementation
+history, see [changelog.md](./changelog.md). For the Go package API that reads
+and writes these documents, see [service.md](./service.md).
 
 ## Overview
 
