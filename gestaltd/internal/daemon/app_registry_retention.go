@@ -74,7 +74,8 @@ func runAppRegistryRetentionPrune(args []string) error {
 		lockSvc   *coredata.AppVersionInstallLockService
 		desired   string
 	)
-	if len(*flags.configPaths) > 0 {
+	switch {
+	case len(*flags.configPaths) > 0:
 		cfg, err := config.LoadPaths([]string(*flags.configPaths))
 		if err != nil {
 			return err
@@ -104,9 +105,9 @@ func runAppRegistryRetentionPrune(args []string) error {
 			return fmt.Errorf("list known versions: %w", err)
 		}
 		desired = coredata.LatestKnownVersion(known)
-	} else if strings.TrimSpace(*flags.bucket) == "" {
+	case strings.TrimSpace(*flags.bucket) == "":
 		return fmt.Errorf("--config or --bucket is required")
-	} else {
+	default:
 		var err error
 		registry, err = config.NewGCSAppRegistry(*flags.bucket)
 		if err != nil {
