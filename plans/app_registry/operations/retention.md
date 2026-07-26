@@ -88,7 +88,8 @@ The Revision history tab always shows deployed transitions, including locked ver
 1. **PR 1 — Models and write path** (`gestalt`) — `RetentionIndex`, config validation, desired-version transition updates, and fixed redeploy deadlines.
 2. **PR 2 — Prune command** (`gestalt`) — `gestaltd app registry retention prune` with `--dry-run`, app-scoped install locking, unused deletion, historical locking/artifact cleanup, and change-request cross-checks.
 3. **PR 3 — Scheduler** (deploy / ops) — scheduled `retention prune` per registry-only app.
-4. **PR 4 — Revision history API/UI** (`gestalt`, `gestalt-providers`) — paginated deploy-chain API and read-only app-admin tab.
+4. **PR 4 — Revision history API** (`gestalt`) — paginated deploy-chain API with `deployedBy` and deployment-state projection.
+5. **PR 5 — Revision history UI** (`gestalt-providers`) — read-only Revision history tab on the app-admin page.
 
 ---
 
