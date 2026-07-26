@@ -1,179 +1,202 @@
 # App Registry Implementation Changelog
 
-The app registry was delivered as sixteen implementation milestones. This file
-records the purpose and merged pull requests for each milestone.
+The app registry has implementation details across `gestalt`, `toolshed`, and `gestalt-providers`.
 
-## 1. GCS registry and publish command
+## At a Glance
 
-Introduced the GCS-backed registry model, immutable version metadata and
-artifacts, registry configuration, and the original app publish CLI.
+The `Completed` timestamp is the merge time of the PR that delivered the milestone's main outcome.
 
-PRs:
+| `Step` | `Completed (UTC)` | `Milestone` | `Tags` |
+| --: | :-- | :-- | :-- |
+| `01` | `🗓️ Jul 10 · 00:30` | `GCS Registry and Publish Command` | [`config.md`](../architecture/config.md) [`models.md`](../architecture/models.md) |
+| `02` | `🗓️ Jul 10 · 02:05` | `Parallel Registry Publishing` | [`config.md`](../architecture/config.md) |
+| `03` | `🗓️ Jul 10 · 02:14` | `First Automatically Published App` | [`config.md`](../architecture/config.md) |
+| `04` | `🗓️ Jul 10 · 03:22` | `Registry Listing API` | [`lifecycle.md`](../operations/lifecycle.md) |
+| `05` | `🗓️ Jul 10 · 16:52` | `Installation State in IndexedDB` | [`indexeddb.md`](../architecture/indexeddb.md) |
+| `06` | `🗓️ Jul 11 · 23:41` | `Registry Installation Prototype` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `07` | `🗓️ Jul 13 · 21:04` | `Catalog-Only Admission` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `08` | `🗓️ Jul 13 · 22:38` | `Per-Replica Catalog Polling` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `09` | `🗓️ Jul 16 · 21:24` | `Coordinated Provider Restarts` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `10` | `🗓️ Jul 17 · 19:52` | `Materialize Before Restart` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `11` | `🗓️ Jul 20 · 16:19` | `Mount the Registry-Installed Package` | [`lifecycle.md`](../operations/lifecycle.md) |
+| `12` | `🗓️ Jul 21 · 11:44` | `Complete Registry-Only Lifecycle` | [`config.md`](../architecture/config.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `13` | `🗓️ Jul 22 · 04:16` | `Install-Time Validation` | [`validation.md`](../architecture/validation.md) |
+| `14` | `🗓️ Jul 22 · 15:51` | `Fleet Admin Observability` | [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `15` | `🗓️ Jul 23 · 16:33` | `App-Scoped Version Selection` | [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `16` | `🗓️ Jul 26 · 00:18` | `Pending and Failed Publish Visibility` | [`admin.md`](../operations/admin.md) [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
 
-- [gestalt#2709 — Prototype gestaltd app publish for GCS app registries](https://github.com/valon-technologies/gestalt/pull/2709)
+## Tag Glossary
 
-## 2. Parallel registry publish workflow
+- [`admin.md`](../operations/admin.md)
+- [`config.md`](../architecture/config.md)
+- [`indexeddb.md`](../architecture/indexeddb.md)
+- [`lifecycle.md`](../operations/lifecycle.md)
+- [`models.md`](../architecture/models.md)
+- [`pending-publish.md`](../operations/pending-publish.md)
+- [`validation.md`](../architecture/validation.md)
 
-Added a toolshed registry publish workflow alongside the existing snapshot
-workflow so the registry could be tested without disrupting normal publishing.
+---
 
-PRs:
+## Changes
 
-- [toolshed#3220 — Add parallel app registry publish workflow](https://github.com/valon-technologies/toolshed/pull/3220)
+<a id="changelog-01"></a>
 
-## 3. Automatic `g-issues` publishing
+### 01 — GCS Registry and Publish Command
 
-Enrolled `g-issues` as the first registry app and automatically published a
-registry version when it changed on `main`.
+**Tags:** [`config.md`](../architecture/config.md) [`models.md`](../architecture/models.md)
 
-PRs:
+Established the GCS registry layout, immutable version metadata and artifacts, registry configuration, and the original app publish CLI.
 
-- [toolshed#3221 — Auto-publish g-issues to the app registry](https://github.com/valon-technologies/toolshed/pull/3221)
+**Merged:** [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709)
 
-## 4. Registry version listing API
+<a id="changelog-02"></a>
 
-Added the registry HTTP reader and admin endpoints for listing configured
-registries and published versions.
+### 02 — Parallel Registry Publishing
 
-PRs:
+**Tags:** [`config.md`](../architecture/config.md)
 
-- [gestalt#2716 — List app registry versions via admin API](https://github.com/valon-technologies/gestalt/pull/2716)
+Added a toolshed registry workflow alongside snapshot publishing so the new path could be exercised without disrupting existing releases.
 
-## 5. Fleet installation state
+**Merged:** [toolshed#3220](https://github.com/valon-technologies/toolshed/pull/3220)
 
-Added IndexedDB stores and services for shared app installation state. The
-model later converged on append-only `app_version_change_requests` and
-known-version projections.
+<a id="changelog-03"></a>
 
-PRs:
+### 03 — First Automatically Published App
 
-- [gestalt#2718 — Add IndexedDB install state for registry app versions](https://github.com/valon-technologies/gestalt/pull/2718)
-- [gestalt#2753 — Rename app_version_catalog to app_version_change_requests](https://github.com/valon-technologies/gestalt/pull/2753)
+**Tags:** [`config.md`](../architecture/config.md)
 
-## 6. Registry app installation prototype
+Enrolled `g-issues` as the first registry app and published a new registry version whenever it changed on `main`.
 
-Implemented fleet install locking, registry artifact validation and
-materialization on the handling instance, known-version writes, and admin
-install endpoints. The later catalog-only flow replaced local materialization
-on the request handler.
+**Merged:** [toolshed#3221](https://github.com/valon-technologies/toolshed/pull/3221)
 
-PRs:
+<a id="changelog-04"></a>
 
-- [gestalt#2730 — Registry app install with app_version_catalog](https://github.com/valon-technologies/gestalt/pull/2730)
+### 04 — Registry Listing API
 
-## 7. Catalog-only install admission
+**Tags:** [`lifecycle.md`](../operations/lifecycle.md)
 
-Separated fleet admission from local materialization. The install endpoint
-validates registry metadata and appends a version change request; replicas
-perform runtime work asynchronously.
+Added the HTTP registry reader and admin endpoints for listing configured registries and their published versions.
 
-PRs:
+**Merged:** [gestalt#2716](https://github.com/valon-technologies/gestalt/pull/2716)
 
-- [gestalt#2748 — App registry lifecycle docs and catalog-only install](https://github.com/valon-technologies/gestalt/pull/2748)
+<a id="changelog-05"></a>
 
-## 8. Per-replica catalog polling
+### 05 — Installation State in IndexedDB
 
-Added `app_instance_materializations` and a background controller on every
-replica to acknowledge new fleet-known app versions.
+**Tags:** [`indexeddb.md`](../architecture/indexeddb.md)
 
-PRs:
+Added shared installation stores and services. The model later converged on the append-only `app_version_change_requests` log and fleet-known projections.
 
-- [gestalt#2750 — Per-replica catalog polling](https://github.com/valon-technologies/gestalt/pull/2750)
+**Merged:** [gestalt#2718](https://github.com/valon-technologies/gestalt/pull/2718) · [gestalt#2753](https://github.com/valon-technologies/gestalt/pull/2753)
 
-## 9. Coordinated provider restarts
+<a id="changelog-06"></a>
 
-Added one active rollout per app, dynamic replica enrollment, rollout cohorts,
-and coordinated stop/start behavior with persistent convergence state.
+### 06 — Registry Installation Prototype
 
-PRs:
+**Tags:** [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-- [gestalt#2812 — Coordinate provider restarts across replicas](https://github.com/valon-technologies/gestalt/pull/2812)
+Implemented fleet install locking, registry validation, materialization on the request-handling instance, fleet-known writes, and admin install endpoints. Milestone 07 replaced the synchronous materialization behavior.
 
-## 10. Materialize before restart
+**Merged:** [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730)
 
-Changed the catalog controller to download and validate the desired registry
-artifact before stopping the running app, recording `materialized_at` per
-replica.
+<a id="changelog-07"></a>
 
-PRs:
+### 07 — Catalog-Only Admission
 
-- [gestalt#2829 — Materialize artifacts before restart](https://github.com/valon-technologies/gestalt/pull/2829)
+**Tags:** [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-## 11. Mount the registry-installed package
+Separated fleet admission from local runtime work. The install endpoint validates registry metadata and appends a version change request; replicas materialize asynchronously.
 
-Changed catalog-driven restart to bind the package at
-`{artifactsDir}/registry-installed/{app}/{version}` so the restarted provider
-uses the selected binary, manifest, and static assets.
+**Merged:** [gestalt#2748](https://github.com/valon-technologies/gestalt/pull/2748)
 
-PRs:
+<a id="changelog-08"></a>
 
-- [gestalt#2838 — Mount registry-installed binary on restart](https://github.com/valon-technologies/gestalt/pull/2838)
+### 08 — Per-Replica Catalog Polling
 
-## 12. Registry-only app lifecycle
+**Tags:** [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-Added `source.registry`, separate add/upgrade admission routes, bootstrap
-startup for registry-only apps, latest-version-only materialization, retry
-limits, and cleanup of superseded local packages.
+Added `app_instance_materializations` and a background controller on every replica to acknowledge newly fleet-known app versions.
 
-PRs:
+**Merged:** [gestalt#2750](https://github.com/valon-technologies/gestalt/pull/2750)
 
-- [gestalt#2868 — Document registry-only source and conditional bootstrap](https://github.com/valon-technologies/gestalt/pull/2868)
-- [gestalt#2878 — Clarify latest-only app registry materialization](https://github.com/valon-technologies/gestalt/pull/2878)
-- [gestalt#2879 — Implement app registry step 12](https://github.com/valon-technologies/gestalt/pull/2879)
+<a id="changelog-09"></a>
 
-## 13. Install-time validation
+### 09 — Coordinated Provider Restarts
 
-Added typed admission checks for platform artifacts, `gestaltd`
-compatibility, declared dependencies, and reverse dependents. Validation
-failures reject admission without changing fleet state.
+**Tags:** [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-PRs:
+Added one active rollout per app, dynamic replica enrollment, rollout cohorts, and coordinated stop/start behavior with persistent convergence state.
 
-- [gestalt#2885 — Document app registry step 13 install-time validation](https://github.com/valon-technologies/gestalt/pull/2885)
-- [gestalt#2889 — Document app registry install-time validation](https://github.com/valon-technologies/gestalt/pull/2889)
-- [gestalt#2887 — Implement app registry install-time validation](https://github.com/valon-technologies/gestalt/pull/2887)
+**Merged:** [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812)
 
-## 14. Fleet admin observability
+<a id="changelog-10"></a>
 
-Added authenticated registry-only app summaries, rollout and per-replica
-materialization APIs, and App Registry list/detail views in the embedded admin
-UI.
+### 10 — Materialize Before Restart
 
-PRs:
+**Tags:** [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-- [gestalt#2886 — Document app registry admin observability](https://github.com/valon-technologies/gestalt/pull/2886)
-- [gestalt#2890 — Implement app registry admin observability](https://github.com/valon-technologies/gestalt/pull/2890)
+Changed the catalog controller to download and validate the desired artifact before stopping the running app, recording `materialized_at` per replica.
 
-## 15. App-scoped version selection
+**Merged:** [gestalt#2829](https://github.com/valon-technologies/gestalt/pull/2829)
 
-Added app-scoped authorization and APIs for first install, upgrade, and safe
-revert. Added `/apps/{app}/admin`, publication provenance, and the published
-snapshots table used to select the desired fleet version.
+<a id="changelog-11"></a>
 
-PRs:
+### 11 — Mount the Registry-Installed Package
 
-- [gestalt#2897 — Document app registry version selection](https://github.com/valon-technologies/gestalt/pull/2897)
-- [gestalt#2909 — Implement app registry version selection](https://github.com/valon-technologies/gestalt/pull/2909)
-- [gestalt#2914 — Add app admin snapshot table API support](https://github.com/valon-technologies/gestalt/pull/2914)
-- [gestalt-providers#1142 — Add app registry admin UI](https://github.com/valon-technologies/gestalt-providers/pull/1142)
-- [gestalt-providers#1146 — Replace app admin version dropdown with snapshots table](https://github.com/valon-technologies/gestalt-providers/pull/1146)
-- [toolshed#3696 — Switch g-issues to app registry source](https://github.com/valon-technologies/toolshed/pull/3696)
+**Tags:** [`lifecycle.md`](../operations/lifecycle.md)
 
-## 16. Pending and failed publish visibility
+Changed restart to bind `{artifactsDir}/registry-installed/{app}/{version}`, making the selected binary, manifest, and static assets active.
 
-Added `pending.json` and `failed.json`, CI lifecycle commands, early pending
-recording, app-admin API rows, publishing duration, polling, and the final
-status/last-update presentation.
+**Merged:** [gestalt#2838](https://github.com/valon-technologies/gestalt/pull/2838)
 
-PRs:
+<a id="changelog-12"></a>
 
-- [gestalt#2927 — Document pending publish visibility](https://github.com/valon-technologies/gestalt/pull/2927)
-- [gestalt#2932 — Add app registry pending write path](https://github.com/valon-technologies/gestalt/pull/2932)
-- [gestalt#2931 — Expose pending and failed catalogs in app-admin registry API](https://github.com/valon-technologies/gestalt/pull/2931)
-- [toolshed#3772 — Wire pending lifecycle into the publish workflow](https://github.com/valon-technologies/toolshed/pull/3772)
-- [toolshed#3775 — Record pending earlier in the publish workflow](https://github.com/valon-technologies/toolshed/pull/3775)
-- [gestalt-providers#1158 — Show pending and failed rows](https://github.com/valon-technologies/gestalt-providers/pull/1158)
-- [gestalt-providers#1159 — Poll app admin registry during bootstrap window](https://github.com/valon-technologies/gestalt-providers/pull/1159)
-- [gestalt-providers#1160 — Improve app admin snapshot published column labels](https://github.com/valon-technologies/gestalt-providers/pull/1160)
-- [gestalt-providers#1161 — Fix publishing spinner visibility](https://github.com/valon-technologies/gestalt-providers/pull/1161)
-- [gestalt-providers#1162 — Add the Last update column](https://github.com/valon-technologies/gestalt-providers/pull/1162)
+### 12 — Complete Registry-Only Lifecycle
+
+**Tags:** [`config.md`](../architecture/config.md) [`lifecycle.md`](../operations/lifecycle.md)
+
+Added `source.registry`, separate add/upgrade routes, bootstrap startup, desired-version-only materialization, retry limits, and local cleanup of superseded packages.
+
+**Merged:** [gestalt#2868](https://github.com/valon-technologies/gestalt/pull/2868) · [gestalt#2878](https://github.com/valon-technologies/gestalt/pull/2878) · [gestalt#2879](https://github.com/valon-technologies/gestalt/pull/2879)
+
+<a id="changelog-13"></a>
+
+### 13 — Install-Time Validation
+
+**Tags:** [`validation.md`](../architecture/validation.md)
+
+Added typed admission checks for platform artifacts, `gestaltd` compatibility, declared dependencies, and reverse dependents. Failed validation leaves fleet state unchanged.
+
+**Merged:** [gestalt#2885](https://github.com/valon-technologies/gestalt/pull/2885) · [gestalt#2889](https://github.com/valon-technologies/gestalt/pull/2889) · [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887)
+
+<a id="changelog-14"></a>
+
+### 14 — Fleet Admin Observability
+
+**Tags:** [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md)
+
+Added authenticated app summaries, rollout and per-replica materialization APIs, and App Registry list/detail views in the embedded admin UI.
+
+**Merged:** [gestalt#2886](https://github.com/valon-technologies/gestalt/pull/2886) · [gestalt#2890](https://github.com/valon-technologies/gestalt/pull/2890)
+
+<a id="changelog-15"></a>
+
+### 15 — App-Scoped Version Selection
+
+**Tags:** [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
+
+Added app-scoped authorization and APIs for first install, upgrade, and safe downgrade. Added `/apps/{app}/admin`, publication provenance, the snapshots table, and the production `g-issues` registry binding.
+
+**Merged:** [gestalt#2897](https://github.com/valon-technologies/gestalt/pull/2897) · [gestalt#2909](https://github.com/valon-technologies/gestalt/pull/2909) · [gestalt#2914](https://github.com/valon-technologies/gestalt/pull/2914) · [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142) · [gestalt-providers#1146](https://github.com/valon-technologies/gestalt-providers/pull/1146) · [toolshed#3696](https://github.com/valon-technologies/toolshed/pull/3696)
+
+<a id="changelog-16"></a>
+
+### 16 — Pending and Failed Publish Visibility
+
+**Tags:** [`admin.md`](../operations/admin.md) [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md)
+
+Added `pending.json` and `failed.json`, CI lifecycle commands, early pending recording, app-admin API rows, publish duration, bootstrap polling, and the final status and last-update presentation.
+
+**Registry and CI:** [gestalt#2927](https://github.com/valon-technologies/gestalt/pull/2927) · [gestalt#2932](https://github.com/valon-technologies/gestalt/pull/2932) · [gestalt#2931](https://github.com/valon-technologies/gestalt/pull/2931) · [toolshed#3772](https://github.com/valon-technologies/toolshed/pull/3772) · [toolshed#3775](https://github.com/valon-technologies/toolshed/pull/3775)
+
+**App UI:** [gestalt-providers#1158](https://github.com/valon-technologies/gestalt-providers/pull/1158) · [gestalt-providers#1159](https://github.com/valon-technologies/gestalt-providers/pull/1159) · [gestalt-providers#1160](https://github.com/valon-technologies/gestalt-providers/pull/1160) · [gestalt-providers#1161](https://github.com/valon-technologies/gestalt-providers/pull/1161) · [gestalt-providers#1162](https://github.com/valon-technologies/gestalt-providers/pull/1162)

@@ -2,31 +2,18 @@
 
 Operator-facing visibility for registry-only apps and app-scoped fleet version selection.
 
-Related docs:
-
-- [readme.md](../readme.md) — architecture and future work
-- [changelog.md](../project/changelog.md) — implementation milestones and pull requests
-- [lifecycle.md](./lifecycle.md) — HTTP APIs, admission checks, and rollout behavior
-- [indexeddb.md](../architecture/indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
-- [pending-publish.md](./pending-publish.md) — in-flight publish visibility on app admin
-- [retention.md](./retention.md) — version cleanup policy and optional retention UI
-- [tests.md](../project/tests.md#admin-observability-tests) — observability HTTP and UI tests; [app version selection tests](../project/tests.md#app-version-selection-tests)
-
----
-
 ## Goals
 
 Operators installing registry apps should answer these questions without reading pod logs or querying IndexedDB directly:
 
-| Question | Admin surface |
-|----------|---------------|
-| Which apps are registry-only? | Embedded admin apps list |
-| What is the desired fleet-known version? | Desired version on app detail |
-| Is the rollout still in progress? | Rollout status badge |
-| Which replicas have converged? | Replica convergence table |
+| Question                          | Admin surface                 |
+| --------------------------------- | ----------------------------- |
+| Which apps are registry-only?     | Embedded admin apps list      |
+| What is the desired version?      | Desired version on app detail |
+| Is the rollout still in progress? | Rollout status badge          |
+| Which replicas have converged?    | Replica convergence table     |
 
-App admins additionally select the fleet-wide desired version and inspect what
-published each candidate version.
+App admins additionally select the fleet-wide desired version and inspect each candidate version's publication provenance.
 
 ---
 
@@ -43,14 +30,11 @@ Label **converged** as rollout progress, not current runtime state.
 
 ---
 
-## Embedded admin UI (`/admin`)
+## Embedded Admin UI (`/admin`)
 
-Read-only fleet observability for registry-only apps. Requires global
-`gestaltAdmin`. API shapes: [lifecycle.md](./lifecycle.md#admin-observability-api).
+Read-only fleet observability for registry-only apps. Requires global `gestaltAdmin`. API shapes: [lifecycle.md](./lifecycle.md#admin-observability-api).
 
-The embedded shell at `/admin` keeps the Prometheus metrics viewer and adds an
-**App Registry** section. It does not install, upgrade, publish, or mutate
-rollouts.
+The embedded shell at `/admin` keeps the Prometheus metrics viewer and adds an **App Registry** section. It does not install, upgrade, publish, or mutate rollouts.
 
 ### Navigation
 
@@ -62,22 +46,21 @@ rollouts.
     └── App detail: {app}
 ```
 
-### Apps list (`/admin/registry`)
+### Apps List (`/admin/registry`)
 
-| App | Registry | Desired version | Rollout | Cohort |
-|-----|----------|-----------------|---------|--------|
+| App      | Registry | Desired version     | Rollout  | Cohort        |
+| -------- | -------- | ------------------- | -------- | ------------- |
 | g-issues | toolshed | `0.0.0-snapshot.g…` | complete | 3/3 restarted |
 
-Show configured registry-only apps even when the fleet catalog is empty (desired
-version "—", status "not installed").
+Show configured registry-only apps even when the fleet catalog is empty (desired version "—", status "not installed").
 
 Auto-refresh every 10–15s while any listed rollout is non-terminal.
 
-### App detail (`/admin/registry/{app}`)
+### App Detail (`/admin/registry/{app}`)
 
 1. **Summary** — registry binding, desired version, latest published version (if available), install metadata (`installedBy`, `installedAt`).
 2. **Rollout** — state badge, timestamps, enrollment deadline, failure reason when `failed`.
-3. **Replicas** — per-replica rollout progress (`instanceId`, ack / materialized / stopped / restarted, `attemptCount`, last error). Sort by `instanceId`.
+3. **Replicas** — per-replica rollout progress (`instanceId`, acknowledged / materialized / stopped / restarted, `attemptCount`, last error). Sort by `instanceId`.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -97,35 +80,34 @@ Auto-refresh every 10–15s while any listed rollout is non-terminal.
 
 ---
 
-## App admin UI (`/apps/{app}/admin`)
+## App Admin UI (`/apps/{app}/admin`)
 
-Fleet version selection for one registry-only app. Requires `admin` on
-`app/{app}`. API shapes and admission checks:
-[lifecycle.md](./lifecycle.md#app-admin-version-selection).
+Fleet version selection for one registry-only app. Requires `admin` on `app/{app}`. API shapes and admission checks: [lifecycle.md](./lifecycle.md#app-admin-version-selection).
 
-Implemented in `gestalt-providers` (default `/apps` UI), not the embedded
-`/admin` shell.
+Implemented in `gestalt-providers` (default `/apps` UI), not the embedded `/admin` shell.
 
 ### Capabilities
 
 - **Manage app** on the `/apps` catalog when the caller can administer that app.
-- Select the fleet-wide desired version: first install, upgrade, or revert to an older published version.
+- Select a never-deployed version before its unused-retention deadline or a historical version inside its redeploy window as the fleet-wide desired version.
 - Show per-version `publishedAt`, linked source commit, triggering PR or commit, and publishing workflow run.
 - Show in-flight (**Publishing**) and recent failed (**Failed**) publishes with elapsed or total publish time. See [pending-publish.md](./pending-publish.md).
+- Show the permanent, read-only deploy chain in a **Revision history** tab.
+- Show whether historical versions are still redeployable or permanently locked.
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable deploy actions while a rollout is `enrolling` or `restarting`; refresh until terminal.
 - Render access denied on **403** without leaking registry metadata.
 
 Selection is fleet-wide. It is not per-user or per-replica.
 
-### App admin page
+### App Admin Page
 
-The page header shows the app name, **App management** label, and registry
-binding. Below that: current **Desired version**, then the **Published
-snapshots** table (pending, failed, and published entries in one newest-first
-list). See [pending-publish.md](./pending-publish.md) for merge rules, polling,
-and timing labels. Each row has **Deploy** in the action column unless selection
-is disabled or the row is not deployable.
+The page header shows the app name, **App management** label, registry binding, and current **Desired version**. Two tabs separate deployment from audit:
+
+- **Published snapshots** — pending, failed, and published entries in one newest-first list. A published row has **Deploy** when it is never deployed and before `publishedAt + unusedRetention`, or historical and before `deployableUntil`.
+- **Revision history** — accepted fleet version changes in reverse chronological order. This tab is always read-only.
+
+See [pending-publish.md](./pending-publish.md) for snapshot merge rules, polling, and timing labels.
 
 ```text
 g-issues                                                        App management
@@ -135,18 +117,20 @@ Desired version: 0.0.0-snapshot.gabc123
 
 Published snapshots
 
-Pull request         Snapshot                 Status                 Last update       Action
--------------------  -----------------------  ---------------------  ----------------  ------
-PR #3740 · Title     0.0.0-snapshot.g…       Publishing · for 4m    4 minutes ago     —
-PR #3251 · Title     0.0.0-snapshot.g…       Available              Jul 22 15:00      Deploy
-                                              Published in 4m 32s
-PR #3200 · Title     0.0.0-snapshot.g…       Deployed               Jul 21 12:00      —
+Pull request       | Snapshot               | Status                   | Last update    | Action
+------------------ | ---------------------- | ------------------------ | -------------- | --------
+PR #3740 · Title   | 0.0.0-snapshot.g…     | Publishing · for 4m      | 4 minutes ago  | —
+PR #3251 · Title   | 0.0.0-snapshot.g…     | Available                | Jul 22 15:00   | Deploy
+                    |                        | Published in 4m 32s      |                |
+PR #3200 · Title   | 0.0.0-snapshot.g…     | Deployed                 | Jul 21 12:00   | —
+PR #3100 · Title   | 0.0.0-snapshot.g…     | Redeployable · 12d left  | Jul 18 09:00   | Deploy
+PR #3000 · Title   | 0.0.0-snapshot.g…     | Locked                   | Jun 10 09:00   | —
+PR #2900 · Title   | 0.0.0-snapshot.g…     | Expired                  | Jun 01 09:00   | —
 ```
 
-Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is disabled on **Publishing** and **Failed** rows. **Deployed** marks the desired version.
+Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is unavailable on **Publishing**, **Failed**, **Deployed**, **Locked**, and **Expired** rows. **Deployed** marks the desired version. **Redeployable** shows the fixed deadline or remaining duration.
 
-During an active rollout, disable deploy actions and show rollout state above the
-table:
+During an active rollout, disable deploy actions and show rollout state above the table:
 
 ```text
 g-issues                                                        App management
@@ -157,27 +141,44 @@ Rollout enrolling: 0.0.0-snapshot.gdef456
 
 Published snapshots
 
-Pull request         Snapshot                 Status                 Last update       Action
--------------------  -----------------------  ---------------------  ----------------  --------
-PR #3251 · Title     0.0.0-snapshot.g…       Rolling out            Jul 22 15:00      disabled
-PR #3200 · Title     0.0.0-snapshot.g…       Deployed               Jul 21 12:00      disabled
+Pull request       | Snapshot               | Status       | Last update   | Action
+------------------ | ---------------------- | ------------ | ------------- | --------
+PR #3251 · Title   | 0.0.0-snapshot.g…     | Rolling out  | Jul 22 15:00  | disabled
+PR #3200 · Title   | 0.0.0-snapshot.g…     | Deployed     | Jul 21 12:00  | disabled
 ```
 
 A **Failed** row in the same table:
 
 ```text
-Pull request         Snapshot                 Status                 Last update       Action
--------------------  -----------------------  ---------------------  ----------------  ------
-PR #3740 · Title     0.0.0-snapshot.g…       Failed                 Jul 24 18:35      —
-                                              Failed after 35m
+Pull request       | Snapshot               | Status            | Last update   | Action
+------------------ | ---------------------- | ----------------- | ------------- | ------
+PR #3740 · Title   | 0.0.0-snapshot.g…     | Failed            | Jul 24 18:35  | —
+                    |                        | Failed after 35m  |               |
 ```
 
-After a successful deploy selection, keep deploy actions disabled until the
-rollout reaches `complete` or `failed`.
+After a successful deploy selection, keep deploy actions disabled until the rollout reaches `complete` or `failed`.
+
+### Revision History Tab
+
+The Revision history tab displays `app_version_change_requests` as an immutable deploy ledger. It is not built from the deduplicated `knownVersions` projection: every accepted transition appears exactly once, including upgrades and downgrades that revisit an earlier version.
+
+```text
+Revision history
+
+Deployed at    | Transition                           | Availability  | Deployed by
+-------------- | ------------------------------------ | ------------- | ----------------
+Jul 25 09:10   | gdef456 → gabc123 (downgrade)       | Current       | alice@valon.com
+Jul 24 16:42   | gabc123 → gdef456 (upgrade)         | Redeployable  | alice@valon.com
+Jul 21 12:00   | First deployment → gabc123          | Current       | bob@valon.com
+```
+
+Each row links to the source commit and, when recorded, the triggering pull request and publish workflow. **Availability** shows the selected version's present-day state, so repeated entries for the same version have the same value. The current desired version is **Current**; other versions are **Redeployable** or **Locked**. The history tab itself has no deploy action because availability is an attribute of a version, not an individual event. Eligible selection remains on Published snapshots.
+
+Load the newest page when the tab opens and paginate older entries with a cursor. An empty deploy chain renders **No deployments yet**. Registry retention permanently preserves the chain and version metadata. Artifacts for locked revisions may be pruned; see [retention.md](./retention.md).
 
 ---
 
-## Out of scope
+## Out of Scope
 
 - Per-replica observed running version (runtime heartbeats)
 - Installing or upgrading from the embedded `/admin` UI
@@ -186,3 +187,27 @@ rollout reaches `complete` or `failed`.
 - Granting or editing app authorization relationships
 - Selecting a version for only one user or one replica
 - Replacing `kubectl logs` for provider crash diagnostics
+
+---
+
+## Appendix
+
+### Related Changelogs
+
+<pre>
+├── <a href="../project/changelog.md#changelog-14">14 — Fleet Admin Observability</a>
+├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
+└── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
+</pre>
+
+### Related Docs
+
+<pre>
+├── <a href="../readme.md">readme.md</a> — architecture and future work
+├── <a href="../project/changelog.md">changelog.md</a> — implementation milestones and pull requests
+├── <a href="./lifecycle.md">lifecycle.md</a> — HTTP APIs, admission checks, and rollout behavior
+├── <a href="../architecture/indexeddb.md">indexeddb.md</a> — app_rollouts, app_instance_materializations, change-request projections
+├── <a href="./pending-publish.md">pending-publish.md</a> — in-flight publish visibility on app admin
+├── <a href="./retention.md">retention.md</a> — version cleanup policy, redeploy windows, and revision-history preservation
+└── <a href="../project/tests.md#admin-observability-tests">tests.md</a> — observability HTTP and UI tests; <a href="../project/tests.md#app-version-selection-tests">app version selection tests</a>
+</pre>
