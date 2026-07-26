@@ -24,6 +24,9 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `14` | `🗓️ Jul 22 · 15:51` | `Fleet Admin Observability` | [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) |
 | `15` | `🗓️ Jul 23 · 16:33` | `App-Scoped Version Selection` | [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
 | `16` | `🗓️ Jul 26 · 00:18` | `Pending and Failed Publish Visibility` | [`admin.md`](../operations/admin.md) [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
+| `17` | `🗓️ Jul 26 · 14:02` | `Version Retention and Cleanup` | [`config.md`](../architecture/config.md) [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) |
+| `18` | `🗓️ Jul 26 · 15:48` | `Revision History and Redeploy Windows` | [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) [`retention.md`](../operations/retention.md) |
+| `19` | `🗓️ Jul 26 · 19:34` | `Publication PR Title Provenance` | [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
 
 ## Tag Glossary
 
@@ -33,6 +36,7 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 - [`lifecycle.md`](../operations/lifecycle.md)
 - [`models.md`](../architecture/models.md)
 - [`pending-publish.md`](../operations/pending-publish.md)
+- [`retention.md`](../operations/retention.md)
 - [`validation.md`](../architecture/validation.md)
 
 ---
@@ -200,3 +204,33 @@ Added `pending.json` and `failed.json`, CI lifecycle commands, early pending rec
 **Registry and CI:** [gestalt#2927](https://github.com/valon-technologies/gestalt/pull/2927) · [gestalt#2932](https://github.com/valon-technologies/gestalt/pull/2932) · [gestalt#2931](https://github.com/valon-technologies/gestalt/pull/2931) · [toolshed#3772](https://github.com/valon-technologies/toolshed/pull/3772) · [toolshed#3775](https://github.com/valon-technologies/toolshed/pull/3775)
 
 **App UI:** [gestalt-providers#1158](https://github.com/valon-technologies/gestalt-providers/pull/1158) · [gestalt-providers#1159](https://github.com/valon-technologies/gestalt-providers/pull/1159) · [gestalt-providers#1160](https://github.com/valon-technologies/gestalt-providers/pull/1160) · [gestalt-providers#1161](https://github.com/valon-technologies/gestalt-providers/pull/1161) · [gestalt-providers#1162](https://github.com/valon-technologies/gestalt-providers/pull/1162)
+
+<a id="changelog-17"></a>
+
+### 17 — Version Retention and Cleanup
+
+**Tags:** [`config.md`](../architecture/config.md) [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md)
+
+Added `retention.json`, config validation for `unusedRetention` and `deployedRetention`, reader-side transition updates on fleet selection, `gestaltd app registry retention prune`, and a daily scheduled prune workflow for registry-only apps in toolshed.
+
+**Merged:** [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) · [gestalt#2938](https://github.com/valon-technologies/gestalt/pull/2938) · [toolshed#3786](https://github.com/valon-technologies/toolshed/pull/3786)
+
+<a id="changelog-18"></a>
+
+### 18 — Revision History and Redeploy Windows
+
+**Tags:** [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) [`retention.md`](../operations/retention.md)
+
+Added paginated `GET …/admin/registry/history`, deployment-state projection from `retention.json`, subject-email `deployedBy` labels, and the read-only Revision history tab on `/apps/{app}/admin`. Published snapshots now expose `available`, `redeployable`, `locked`, and `expired` states with `deployableUntil`.
+
+**Merged:** [gestalt#2939](https://github.com/valon-technologies/gestalt/pull/2939) · [gestalt#2941](https://github.com/valon-technologies/gestalt/pull/2941) · [gestalt-providers#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163) · [gestalt-providers#1164](https://github.com/valon-technologies/gestalt-providers/pull/1164) · [gestalt-providers#1165](https://github.com/valon-technologies/gestalt-providers/pull/1165) · [gestalt-providers#1166](https://github.com/valon-technologies/gestalt-providers/pull/1166)
+
+<a id="changelog-19"></a>
+
+### 19 — Publication PR Title Provenance
+
+**Tags:** [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md)
+
+Recorded `publication.triggerPullRequest.title` during publish and pending writes. When `gh pr view` is unavailable in CI, toolshed falls back to the squash-merge commit subject before `(#N)`.
+
+**Merged:** [toolshed#3782](https://github.com/valon-technologies/toolshed/pull/3782) · [toolshed#3790](https://github.com/valon-technologies/toolshed/pull/3790) · [toolshed#3792](https://github.com/valon-technologies/toolshed/pull/3792)

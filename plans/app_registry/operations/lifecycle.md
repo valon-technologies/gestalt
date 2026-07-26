@@ -827,7 +827,9 @@ Example:
 ├── <a href="../project/changelog.md#changelog-11">11 — Mount the Registry-Installed Package</a>
 ├── <a href="../project/changelog.md#changelog-12">12 — Complete Registry-Only Lifecycle</a>
 ├── <a href="../project/changelog.md#changelog-14">14 — Fleet Admin Observability</a>
-└── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
+├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
+├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
+└── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
 </pre>
 
 ### Related Docs
