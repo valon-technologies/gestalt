@@ -39,6 +39,7 @@ App registries:
   - publication metadata
 - Allow registry-only apps to be installed.
 - Allow Gestalt to validate app dependencies before fleet admission.
+- Enforce unused and deployed retention windows through `retention.json` and scheduled prune. See [retention.md](./operations/retention.md).
 
 The registry is a versioned contract registry for installable apps, not only an artifact bucket.
 
@@ -161,10 +162,6 @@ Each replica materializes the latest desired registry version under `{artifactsD
 A dynamic app failure does not prevent Gestalt from serving core functionality. Operators can select a historical version during the configured redeploy window (30 days by default) after it last stopped being desired. After that window it is permanently locked and recovery requires a new publish. Core recovery paths do not depend on registry-only apps.
 
 ## Future Work
-
-### Version Retention and Cleanup
-
-Automatically delete never-deployed snapshots after 3 days by default. Retain the complete deploy chain and deployed version metadata permanently. Keep historical versions redeployable for 30 days after they stop being desired, then lock them and allow artifact cleanup. Add `apps/{app}/retention.json`, deactivation tracking, reader-owned `gestaltd app registry retention prune`, and a Revision history tab on the app-admin page. See [retention.md](./operations/retention.md).
 
 ### Packaged Workflow Metadata
 
