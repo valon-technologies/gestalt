@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,9 +87,31 @@ type appAdminRegistryVersionResponse struct {
 	Rollout        appAdminRollout `json:"rollout"`
 }
 
+type appAdminRegistryHistoryResponse struct {
+	App        string                     `json:"app"`
+	Revisions  []appAdminRegistryRevision `json:"revisions"`
+	NextCursor string                     `json:"nextCursor,omitempty"`
+}
+
+type appAdminRegistryRevision struct {
+	ID              string                   `json:"id"`
+	Version         string                   `json:"version"`
+	PreviousVersion string                   `json:"previousVersion,omitempty"`
+	DeployedAt      string                   `json:"deployedAt"`
+	DeployedBy      string                   `json:"deployedBy,omitempty"`
+	SourceRef       string                   `json:"sourceRef,omitempty"`
+	SourceURL       string                   `json:"sourceUrl,omitempty"`
+	Publication     *appregistry.Publication `json:"publication,omitempty"`
+	DeploymentState string                   `json:"deploymentState,omitempty"`
+	DeployableUntil string                   `json:"deployableUntil,omitempty"`
+	Current         bool                     `json:"current,omitempty"`
+}
+
 func (s *Server) mountAppAdminRegistryRoutes(r chi.Router) {
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
 		Get("/apps/{app}/admin/registry", s.getAppAdminRegistry)
+	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+		Get("/apps/{app}/admin/registry/history", s.getAppAdminRegistryHistory)
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
 		Post("/apps/{app}/admin/registry/version", s.selectAppAdminRegistryVersion)
 }
@@ -250,6 +273,88 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Request) {
+	app, registry, ok := s.appAdminRegistryConfig(w, r)
+	if !ok {
+		return
+	}
+	if s.appVersionChanges == nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	limit := parseAppAdminHistoryLimit(r.URL.Query().Get("limit"))
+	cursor := strings.TrimSpace(r.URL.Query().Get("cursor"))
+	page, err := s.appVersionChanges.ListRequestsByAppPage(r.Context(), app.name, limit, cursor)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid revision history cursor") {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+
+	publicRoot, err := registry.PublicURL()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry is unavailable")
+		return
+	}
+	reader := s.appRegistryReader
+	if reader == nil {
+		reader = &appregistry.RegistryReader{}
+	}
+	index, err := reader.FetchAppIndex(r.Context(), publicRoot, app.name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to fetch app registry index")
+		return
+	}
+	retentionIndex, err := reader.FetchRetentionIndex(r.Context(), publicRoot, app.name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to fetch app registry retention catalog")
+		return
+	}
+	policy, err := retentionPolicyFromRegistry(registry)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry is unavailable")
+		return
+	}
+
+	known, err := s.appVersionChanges.ListKnownVersionsByApp(r.Context(), app.name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	desiredVersion := coredata.LatestKnownVersion(known)
+	currentRevisionID, err := s.appVersionChanges.LatestDesiredRevisionID(r.Context(), app.name, desiredVersion)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	publishedByVersion := publishedVersionSummaryMap(index, app.name)
+	now := time.Now().UTC()
+
+	revisions := make([]appAdminRegistryRevision, 0, len(page.Requests))
+	for _, request := range page.Requests {
+		if request == nil {
+			continue
+		}
+		revisions = append(revisions, appAdminRegistryRevisionFromRequest(
+			request,
+			desiredVersion,
+			currentRevisionID,
+			retentionIndex,
+			policy,
+			publishedByVersion,
+			now,
+		))
+	}
+	writeJSON(w, http.StatusOK, appAdminRegistryHistoryResponse{
+		App:        app.name,
+		Revisions:  revisions,
+		NextCursor: page.NextCursor,
+	})
 }
 
 func (s *Server) selectAppAdminRegistryVersion(w http.ResponseWriter, r *http.Request) {
@@ -414,4 +519,84 @@ func appAdminFailedVersionFromEntry(entry appregistry.FailedVersion) appAdminFai
 		version.PublishDurationSeconds = &seconds
 	}
 	return version
+}
+
+func parseAppAdminHistoryLimit(raw string) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return coredata.DefaultAppVersionChangeRequestPageLimit
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit <= 0 {
+		return coredata.DefaultAppVersionChangeRequestPageLimit
+	}
+	return limit
+}
+
+func publishedVersionSummaryMap(index *appregistry.Index, appName string) map[string]appregistry.VersionSummary {
+	summaries := appregistry.VersionsFromIndex(index, appName)
+	out := make(map[string]appregistry.VersionSummary, len(summaries))
+	for i := range summaries {
+		out[summaries[i].Version] = summaries[i]
+	}
+	return out
+}
+
+func appAdminRegistryRevisionFromRequest(
+	request *core.AppVersionChangeRequest,
+	desiredVersion string,
+	currentRevisionID string,
+	retention *appregistry.RetentionIndex,
+	policy appregistry.RetentionPolicy,
+	publishedByVersion map[string]appregistry.VersionSummary,
+	now time.Time,
+) appAdminRegistryRevision {
+	version := strings.TrimSpace(request.ToVersion)
+	revision := appAdminRegistryRevision{
+		ID:         request.ID,
+		Version:    version,
+		DeployedAt: formatAdminTime(request.Timestamp),
+		DeployedBy: strings.TrimSpace(request.Actor),
+		Current:    request.ID == currentRevisionID,
+	}
+	fromVersion := strings.TrimSpace(request.FromVersion)
+	if fromVersion != "" && fromVersion != appregistry.FirstInstallFromVersion {
+		revision.PreviousVersion = fromVersion
+	}
+
+	installation := coredata.InstallationFromChangeRequest(request)
+	sourceRef := ""
+	repository := ""
+	if installation != nil {
+		sourceRef = strings.TrimSpace(installation.SourceRef)
+	}
+	if summary, ok := publishedByVersion[version]; ok {
+		if sourceRef == "" {
+			sourceRef = strings.TrimSpace(summary.SourceRef)
+		}
+		repository = strings.TrimSpace(summary.Repository)
+		revision.Publication = summary.Publication
+	}
+	revision.SourceRef = sourceRef
+	revision.SourceURL = appVersionSourceURL(repository, sourceRef)
+
+	state, deployableUntil := appregistry.VersionDeploymentState(version, desiredVersion, retention, policy, now)
+	revision.DeploymentState = historyDeploymentState(state)
+	if deployableUntil != nil && !deployableUntil.IsZero() {
+		revision.DeployableUntil = formatAdminTime(*deployableUntil)
+	}
+	return revision
+}
+
+func historyDeploymentState(state string) string {
+	switch state {
+	case appregistry.DeploymentStateDesired:
+		return "desired"
+	case appregistry.DeploymentStateRedeployable:
+		return "redeployable"
+	case appregistry.DeploymentStateLocked:
+		return "locked"
+	default:
+		return state
+	}
 }

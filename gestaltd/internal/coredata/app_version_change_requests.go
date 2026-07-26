@@ -3,6 +3,7 @@ package coredata
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,6 +13,16 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
+
+const (
+	DefaultAppVersionChangeRequestPageLimit = 50
+	MaxAppVersionChangeRequestPageLimit     = 100
+)
+
+type AppVersionChangeRequestPage struct {
+	Requests   []*core.AppVersionChangeRequest
+	NextCursor string
+}
 
 type AppVersionChangeRequestService struct {
 	store idb.ObjectStore
@@ -89,6 +100,125 @@ func (s *AppVersionChangeRequestService) ListRequestsByApp(ctx context.Context, 
 		out = append(out, recordToAppVersionChangeRequest(rec))
 	}
 	return out, nil
+}
+
+func (s *AppVersionChangeRequestService) ListRequestsByAppPage(ctx context.Context, appName string, limit int, cursor string) (*AppVersionChangeRequestPage, error) {
+	requests, err := s.ListRequestsByApp(ctx, appName)
+	if err != nil {
+		return nil, err
+	}
+	sortChangeRequestsDesc(requests)
+
+	cursorTime, cursorID, err := parseAppVersionChangeRequestCursor(cursor)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = DefaultAppVersionChangeRequestPageLimit
+	}
+	if limit > MaxAppVersionChangeRequestPageLimit {
+		limit = MaxAppVersionChangeRequestPageLimit
+	}
+
+	filtered := make([]*core.AppVersionChangeRequest, 0, len(requests))
+	for _, request := range requests {
+		if request == nil {
+			continue
+		}
+		if !cursorTime.IsZero() && !changeRequestBeforeCursor(request, cursorTime, cursorID) {
+			continue
+		}
+		filtered = append(filtered, request)
+	}
+
+	page := &AppVersionChangeRequestPage{
+		Requests: filtered,
+	}
+	if len(filtered) > limit {
+		last := filtered[limit-1]
+		page.Requests = filtered[:limit]
+		page.NextCursor = formatAppVersionChangeRequestCursor(last.Timestamp, last.ID)
+	}
+	return page, nil
+}
+
+func (s *AppVersionChangeRequestService) LatestDesiredRevisionID(ctx context.Context, appName, desiredVersion string) (string, error) {
+	requests, err := s.ListRequestsByApp(ctx, appName)
+	if err != nil {
+		return "", err
+	}
+	return latestDesiredRevisionID(requests, desiredVersion), nil
+}
+
+func latestDesiredRevisionID(requests []*core.AppVersionChangeRequest, desiredVersion string) string {
+	desiredVersion = strings.TrimSpace(desiredVersion)
+	if desiredVersion == "" {
+		return ""
+	}
+	var latestID string
+	var latestTime time.Time
+	for _, request := range requests {
+		if request == nil || strings.TrimSpace(request.ToVersion) != desiredVersion {
+			continue
+		}
+		if latestID == "" || request.Timestamp.After(latestTime) ||
+			(request.Timestamp.Equal(latestTime) && request.ID > latestID) {
+			latestID = request.ID
+			latestTime = request.Timestamp
+		}
+	}
+	return latestID
+}
+
+func sortChangeRequestsDesc(requests []*core.AppVersionChangeRequest) {
+	sort.Slice(requests, func(i, j int) bool {
+		left := requests[i]
+		right := requests[j]
+		if left == nil {
+			return false
+		}
+		if right == nil {
+			return true
+		}
+		if left.Timestamp.Equal(right.Timestamp) {
+			return left.ID > right.ID
+		}
+		return left.Timestamp.After(right.Timestamp)
+	})
+}
+
+func parseAppVersionChangeRequestCursor(cursor string) (time.Time, string, error) {
+	cursor = strings.TrimSpace(cursor)
+	if cursor == "" {
+		return time.Time{}, "", nil
+	}
+	separator := strings.LastIndex(cursor, ":")
+	if separator <= 0 {
+		return time.Time{}, "", fmt.Errorf("invalid revision history cursor")
+	}
+	timestamp, err := time.Parse(time.RFC3339, cursor[:separator])
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("invalid revision history cursor: %w", err)
+	}
+	id := strings.TrimSpace(cursor[separator+1:])
+	if id == "" {
+		return time.Time{}, "", fmt.Errorf("invalid revision history cursor")
+	}
+	return timestamp.UTC(), id, nil
+}
+
+func formatAppVersionChangeRequestCursor(timestamp time.Time, id string) string {
+	return timestamp.UTC().Format(time.RFC3339) + ":" + strings.TrimSpace(id)
+}
+
+func changeRequestBeforeCursor(request *core.AppVersionChangeRequest, cursorTime time.Time, cursorID string) bool {
+	if request.Timestamp.After(cursorTime) {
+		return false
+	}
+	if request.Timestamp.Before(cursorTime) {
+		return true
+	}
+	return request.ID < cursorID
 }
 
 func (s *AppVersionChangeRequestService) HasKnownVersion(ctx context.Context, appName, version string) (bool, error) {

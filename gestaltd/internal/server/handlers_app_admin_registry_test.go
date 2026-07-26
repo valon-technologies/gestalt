@@ -2,15 +2,19 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -310,5 +314,149 @@ func TestAppAdminRegistryIncludesPendingAndFailedVersions(t *testing.T) {
 	}
 	if state.FailedVersions[0].PublishDurationSeconds == nil || state.FailedVersions[0].Reason != "stale" {
 		t.Fatalf("failedVersions = %#v", state.FailedVersions)
+	}
+}
+
+func TestAppAdminRegistryHistory(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	firstAt := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	secondAt := time.Date(2026, 7, 24, 16, 42, 0, 0, time.UTC)
+	thirdAt := time.Date(2026, 7, 25, 9, 10, 0, 0, time.UTC)
+	otherVersion := "0.0.0-snapshot.gdef456"
+
+	appendHistoryRequest := func(fromVersion, toVersion string, at time.Time) string {
+		t.Helper()
+		request, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+			App:         "g-issues",
+			FromVersion: fromVersion,
+			ToVersion:   toVersion,
+			Actor:       "user:alice",
+			Timestamp:   at,
+			Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+				AppName:   "g-issues",
+				Version:   toVersion,
+				SourceRef: "abc123def456abc123def456abc123def456abcd",
+				Registry:  "toolshed",
+			}),
+		})
+		if err != nil {
+			t.Fatalf("AppendRequest: %v", err)
+		}
+		return request.ID
+	}
+
+	firstID := appendHistoryRequest(appregistry.FirstInstallFromVersion, fixture.Version, firstAt)
+	appendHistoryRequest(fixture.Version, otherVersion, secondAt)
+	thirdID := appendHistoryRequest(otherVersion, fixture.Version, thirdAt)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry/history", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET history: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET status = %d: %s", response.StatusCode, body)
+	}
+	var history struct {
+		Revisions []struct {
+			ID              string `json:"id"`
+			Version         string `json:"version"`
+			PreviousVersion string `json:"previousVersion"`
+			DeployedBy      string `json:"deployedBy"`
+			DeploymentState string `json:"deploymentState"`
+			Current         bool   `json:"current"`
+			Publication     struct {
+				WorkflowRunURL string `json:"workflowRunUrl"`
+			} `json:"publication"`
+		} `json:"revisions"`
+		NextCursor string `json:"nextCursor"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history.Revisions) != 3 {
+		t.Fatalf("revisions = %#v", history.Revisions)
+	}
+	if history.Revisions[0].ID != thirdID || history.Revisions[0].Version != fixture.Version ||
+		history.Revisions[0].PreviousVersion != otherVersion || !history.Revisions[0].Current ||
+		history.Revisions[0].DeploymentState != "desired" || history.Revisions[0].DeployedBy != "user:alice" {
+		t.Fatalf("newest revision = %#v", history.Revisions[0])
+	}
+	if history.Revisions[2].ID != firstID || history.Revisions[2].PreviousVersion != "" {
+		t.Fatalf("oldest revision = %#v", history.Revisions[2])
+	}
+	if history.Revisions[0].Publication.WorkflowRunURL == "" {
+		t.Fatalf("publication missing on newest revision: %#v", history.Revisions[0])
+	}
+
+	request, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry/history?limit=1", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET history page 1: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET page 1 status = %d: %s", response.StatusCode, body)
+	}
+	var page1 struct {
+		Revisions []struct {
+			ID string `json:"id"`
+		} `json:"revisions"`
+		NextCursor string `json:"nextCursor"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&page1); err != nil {
+		t.Fatalf("decode page 1: %v", err)
+	}
+	if len(page1.Revisions) != 1 || page1.Revisions[0].ID != thirdID || page1.NextCursor == "" {
+		t.Fatalf("page1 = %#v", page1)
+	}
+
+	request, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry/history?limit=1&cursor="+page1.NextCursor, nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET history page 2: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET page 2 status = %d: %s", response.StatusCode, body)
+	}
+	var page2 struct {
+		Revisions []struct {
+			ID string `json:"id"`
+		} `json:"revisions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&page2); err != nil {
+		t.Fatalf("decode page 2: %v", err)
+	}
+	if len(page2.Revisions) != 1 || page2.Revisions[0].ID == thirdID {
+		t.Fatalf("page2 = %#v", page2)
 	}
 }
