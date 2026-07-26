@@ -95,7 +95,7 @@ metadata
 
 Publication flags (`--workflow-run-url`, `--trigger-pr-number`, `--trigger-pr-url`, `--trigger-pr-title`, or commit trigger fields) are built by [toolshed `.github/scripts/write_app_registry_publication_args.sh`](https://github.com/valon-technologies/toolshed/blob/main/.github/scripts/write_app_registry_publication_args.sh) and passed to both `pending set` and `gestaltd app registry publish`.
 
-The script prefers `gh pr view` for `triggerPullRequest.title`. When that call fails under CI token policy, it falls back to the squash-merge commit subject with the trailing `(#N)` suffix removed. Legacy published versions may still have PR number and URL without a title.
+The script derives `triggerPullRequest.title` from the squash-merge commit subject on `main`, with the trailing `(#N)` suffix removed. Legacy published versions may still have PR number and URL without a title.
 
 `gestaltd app registry publish` does not touch `pending.json` or `failed.json`. `gestaltd app publish` remains a deprecated alias.
 
@@ -202,7 +202,7 @@ Implementation:
 - [gestalt#2931](https://github.com/valon-technologies/gestalt/pull/2931) — read path and app-admin API
 - [toolshed#3775](https://github.com/valon-technologies/toolshed/pull/3775) — `record-pending` job and CI lifecycle
 - [gestalt-providers#1159](https://github.com/valon-technologies/gestalt-providers/pull/1159)–[#1161](https://github.com/valon-technologies/gestalt-providers/pull/1161) — app admin UI (pending/failed rows, polling, status column)
-- [toolshed#3782](https://github.com/valon-technologies/toolshed/pull/3782) · [toolshed#3790](https://github.com/valon-technologies/toolshed/pull/3790) · [toolshed#3792](https://github.com/valon-technologies/toolshed/pull/3792) — PR title recording and squash-merge fallback
+- [toolshed#3782](https://github.com/valon-technologies/toolshed/pull/3782) · [toolshed#3790](https://github.com/valon-technologies/toolshed/pull/3790) · [toolshed#3792](https://github.com/valon-technologies/toolshed/pull/3792) — PR title recording from squash-merge commit subject
 - [gestalt-providers#1165](https://github.com/valon-technologies/gestalt-providers/pull/1165) — linked PR number with plain-text title in app admin tables
 
 ---

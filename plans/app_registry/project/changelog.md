@@ -231,6 +231,6 @@ Added paginated `GET …/admin/registry/history`, deployment-state projection fr
 
 **Tags:** [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md)
 
-Recorded `publication.triggerPullRequest.title` during publish and pending writes. When `gh pr view` is unavailable in CI, toolshed falls back to the squash-merge commit subject before `(#N)`.
+Recorded `publication.triggerPullRequest.title` during publish and pending writes from the squash-merge commit subject on `main` (trailing `(#N)` removed).
 
 **Merged:** [toolshed#3782](https://github.com/valon-technologies/toolshed/pull/3782) · [toolshed#3790](https://github.com/valon-technologies/toolshed/pull/3790) · [toolshed#3792](https://github.com/valon-technologies/toolshed/pull/3792)
