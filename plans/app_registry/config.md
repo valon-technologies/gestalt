@@ -37,8 +37,8 @@ appRegistries:
       bucket: gs://gestalt-app-registry
     retention:
       default:
-        unusedRetention: 72h    # 3 days — never-deployed versions
-        deployedRetention: 168h # 7 days — ever-deployed versions since last use
+        unusedRetention: 72h
+        deployedRetention: 168h
 ```
 
 See [retention.md](./retention.md) for policy semantics, per-app overrides, and

@@ -132,8 +132,8 @@ appRegistries:
       bucket: gitlab-peach-street-gestalt-app-registry
     retention:
       default:
-        unusedRetention: 72h    # 3 days
-        deployedRetention: 168h   # 7 days
+        unusedRetention: 72h
+        deployedRetention: 168h
       apps:
         g-issues:
           unusedRetention: 48h    # optional per-app override
