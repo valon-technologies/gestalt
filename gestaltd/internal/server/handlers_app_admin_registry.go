@@ -336,6 +336,7 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 	now := time.Now().UTC()
 
 	revisions := make([]appAdminRegistryRevision, 0, len(page.Requests))
+	actorLabels := s.resolveRevisionActorLabels(r.Context(), page.Requests)
 	for _, request := range page.Requests {
 		if request == nil {
 			continue
@@ -347,6 +348,7 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 			retentionIndex,
 			policy,
 			publishedByVersion,
+			actorLabels[strings.TrimSpace(request.Actor)],
 			now,
 		))
 	}
@@ -549,6 +551,7 @@ func appAdminRegistryRevisionFromRequest(
 	retention *appregistry.RetentionIndex,
 	policy appregistry.RetentionPolicy,
 	publishedByVersion map[string]appregistry.VersionSummary,
+	deployedBy string,
 	now time.Time,
 ) appAdminRegistryRevision {
 	version := strings.TrimSpace(request.ToVersion)
@@ -556,7 +559,7 @@ func appAdminRegistryRevisionFromRequest(
 		ID:         request.ID,
 		Version:    version,
 		DeployedAt: formatAdminTime(request.Timestamp),
-		DeployedBy: strings.TrimSpace(request.Actor),
+		DeployedBy: deployedBy,
 		Current:    request.ID == currentRevisionID,
 	}
 	fromVersion := strings.TrimSpace(request.FromVersion)
@@ -598,5 +601,66 @@ func historyDeploymentState(state string) string {
 		return "locked"
 	default:
 		return state
+	}
+}
+
+func (s *Server) resolveRevisionActorLabels(ctx context.Context, requests []*core.AppVersionChangeRequest) map[string]string {
+	labels := make(map[string]string)
+	if s == nil {
+		return labels
+	}
+	seen := make(map[string]struct{})
+	for _, request := range requests {
+		if request == nil {
+			continue
+		}
+		actor := strings.TrimSpace(request.Actor)
+		if actor == "" {
+			continue
+		}
+		if _, ok := seen[actor]; ok {
+			continue
+		}
+		seen[actor] = struct{}{}
+		labels[actor] = s.resolveRevisionActorLabel(ctx, actor)
+	}
+	return labels
+}
+
+func (s *Server) resolveRevisionActorLabel(ctx context.Context, actor string) string {
+	actor = strings.TrimSpace(actor)
+	if actor == "" {
+		return ""
+	}
+	kind, id, ok := core.ParseSubjectID(actor)
+	if !ok {
+		return actor
+	}
+	switch kind {
+	case string(principal.KindUser):
+		if strings.Contains(id, "@") {
+			return id
+		}
+		if s.users != nil {
+			user, err := s.users.GetUser(ctx, id)
+			if err == nil && user != nil {
+				if email := strings.TrimSpace(user.Email); email != "" {
+					return email
+				}
+			}
+		}
+		return id
+	case coredata.ManagedSubjectKindServiceAccount:
+		if s.managedSubjects != nil {
+			subject, err := s.managedSubjects.GetManagedSubject(ctx, actor)
+			if err == nil && subject != nil {
+				if displayName := strings.TrimSpace(subject.DisplayName); displayName != "" {
+					return displayName
+				}
+			}
+		}
+		return id
+	default:
+		return id
 	}
 }
