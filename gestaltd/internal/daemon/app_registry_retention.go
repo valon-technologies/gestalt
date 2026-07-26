@@ -69,10 +69,10 @@ func runAppRegistryRetentionPrune(args []string) error {
 	}
 
 	var (
-		registry     config.AppRegistryConfig
-		changeSvc    *coredata.AppVersionChangeRequestService
-		lockSvc      *coredata.AppVersionInstallLockService
-		desired      string
+		registry  config.AppRegistryConfig
+		changeSvc *coredata.AppVersionChangeRequestService
+		lockSvc   *coredata.AppVersionInstallLockService
+		desired   string
 	)
 	if len(*flags.configPaths) > 0 {
 		cfg, err := config.LoadPaths([]string(*flags.configPaths))
