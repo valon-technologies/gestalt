@@ -425,7 +425,9 @@ func TestAppAdminRegistryHistory(t *testing.T) {
 		t.Fatalf("GET page 1 status = %d: %s", response.StatusCode, body)
 	}
 	var page1 struct {
-		Revisions  []struct{ ID string `json:"id"` } `json:"revisions"`
+		Revisions []struct {
+			ID string `json:"id"`
+		} `json:"revisions"`
 		NextCursor string `json:"nextCursor"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&page1); err != nil {
@@ -447,7 +449,9 @@ func TestAppAdminRegistryHistory(t *testing.T) {
 		t.Fatalf("GET page 2 status = %d: %s", response.StatusCode, body)
 	}
 	var page2 struct {
-		Revisions []struct{ ID string `json:"id"` } `json:"revisions"`
+		Revisions []struct {
+			ID string `json:"id"`
+		} `json:"revisions"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&page2); err != nil {
 		t.Fatalf("decode page 2: %v", err)

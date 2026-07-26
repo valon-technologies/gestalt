@@ -88,9 +88,9 @@ type appAdminRegistryVersionResponse struct {
 }
 
 type appAdminRegistryHistoryResponse struct {
-	App        string                       `json:"app"`
-	Revisions  []appAdminRegistryRevision   `json:"revisions"`
-	NextCursor string                       `json:"nextCursor,omitempty"`
+	App        string                     `json:"app"`
+	Revisions  []appAdminRegistryRevision `json:"revisions"`
+	NextCursor string                     `json:"nextCursor,omitempty"`
 }
 
 type appAdminRegistryRevision struct {
@@ -536,8 +536,8 @@ func parseAppAdminHistoryLimit(raw string) int {
 func publishedVersionSummaryMap(index *appregistry.Index, appName string) map[string]appregistry.VersionSummary {
 	summaries := appregistry.VersionsFromIndex(index, appName)
 	out := make(map[string]appregistry.VersionSummary, len(summaries))
-	for _, summary := range summaries {
-		out[summary.Version] = summary
+	for i := range summaries {
+		out[summaries[i].Version] = summaries[i]
 	}
 	return out
 }
