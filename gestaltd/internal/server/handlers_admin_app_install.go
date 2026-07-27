@@ -238,10 +238,10 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		ConfigApps:       cfg.AppDefs,
 		Reader:           reader,
 		ChangeRequests:   cfg.Services.AppVersionChangeRequests,
-		Locks:           cfg.Services.AppVersionInstallLocks,
-		Rollouts:        cfg.Services.AppRollouts,
+		Locks:            cfg.Services.AppVersionInstallLocks,
+		Rollouts:         cfg.Services.AppRollouts,
 		RetentionCatalog: appregistryRetentionCatalog(cfg.AppRegistries),
-		GestaltdVersion: cfg.GestaltdVersion,
+		GestaltdVersion:  cfg.GestaltdVersion,
 	}
 }
 

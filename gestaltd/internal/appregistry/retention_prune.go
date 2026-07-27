@@ -92,21 +92,21 @@ func DeployedVersionsFromChangeRequests(requests []*core.AppVersionChangeRequest
 // ApplyRetentionPruneAction mutates in-memory catalogs for one prune action.
 func ApplyRetentionPruneAction(index *Index, retention *RetentionIndex, appName string, action RetentionPruneAction, now time.Time) bool {
 	_ = now
+	if action.Kind != RetentionPruneDeleteUnused {
+		return false
+	}
 	changed := false
-	switch action.Kind {
-	case RetentionPruneDeleteUnused:
-		if index != nil {
-			if appVersions, ok := index.Apps[appName]; ok {
-				if _, exists := appVersions.Versions[action.Version]; exists {
-					delete(appVersions.Versions, action.Version)
-					index.Apps[appName] = appVersions
-					changed = true
-				}
+	if index != nil {
+		if appVersions, ok := index.Apps[appName]; ok {
+			if _, exists := appVersions.Versions[action.Version]; exists {
+				delete(appVersions.Versions, action.Version)
+				index.Apps[appName] = appVersions
+				changed = true
 			}
 		}
-		if RemoveRetentionVersion(retention, action.Version) {
-			changed = true
-		}
+	}
+	if RemoveRetentionVersion(retention, action.Version) {
+		changed = true
 	}
 	return changed
 }

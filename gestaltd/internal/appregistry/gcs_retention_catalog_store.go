@@ -104,7 +104,7 @@ func readRetentionObject(ctx context.Context, client *storage.Client, bucket, ob
 	if err != nil {
 		return 0, nil, fmt.Errorf("open retention object: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	body, err := io.ReadAll(reader)
 	if err != nil {
 		return 0, nil, fmt.Errorf("read retention object: %w", err)
