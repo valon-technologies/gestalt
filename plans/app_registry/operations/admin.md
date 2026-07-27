@@ -95,7 +95,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded `/admi
 - Show the permanent, read-only deploy chain in a **Revision history** tab.
 - Show whether historical versions are still redeployable or permanently locked.
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
-- Disable deploy actions while a rollout is `enrolling` or `restarting`; refresh until terminal.
+- Disable deploy actions while a rollout is `enrolling` or `restarting`; poll registry state every **3s** and refresh until rollout is terminal.
 - Render access denied on **403** without leaking registry metadata.
 
 Selection is fleet-wide. It is not per-user or per-replica.
@@ -107,7 +107,7 @@ The page header shows the app name, **App management** label, registry binding, 
 - **Published snapshots** — pending, failed, and published entries in one newest-first list. A published row has **Deploy** when it is never deployed and before `publishedAt + unusedRetention`, or historical and before `deployableUntil`.
 - **Revision history** — accepted fleet version changes in reverse chronological order. This tab is always read-only.
 
-See [pending-publish.md](./pending-publish.md) for snapshot merge rules, polling, and timing labels.
+See [pending-publish.md](./pending-publish.md) for snapshot merge rules, **3s** registry polling during bootstrap and active publish/rollout, and live **Publishing** duration labels.
 
 ```text
 g-issues                                                                 App management

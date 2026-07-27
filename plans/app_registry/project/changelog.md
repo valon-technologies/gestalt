@@ -27,6 +27,7 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `17` | `🗓️ Jul 26 · 14:02` | `Version Retention and Cleanup` | [`config.md`](../architecture/config.md) [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) |
 | `18` | `🗓️ Jul 26 · 15:48` | `Revision History and Redeploy Windows` | [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) [`retention.md`](../operations/retention.md) |
 | `19` | `🗓️ Jul 26 · 19:34` | `Publication PR Title Provenance` | [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
+| `20` | `🗓️ Jul 27 · 19:12` | `Responsive App Admin Registry Polling` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 
 ## Tag Glossary
 
@@ -234,3 +235,15 @@ Added paginated `GET …/admin/registry/history`, deployment-state projection fr
 Recorded `publication.triggerPullRequest.title` during publish and pending writes from the squash-merge commit subject on `main` (trailing `(#N)` removed).
 
 **Merged:** [toolshed#3782](https://github.com/valon-technologies/toolshed/pull/3782) · [toolshed#3790](https://github.com/valon-technologies/toolshed/pull/3790) · [toolshed#3792](https://github.com/valon-technologies/toolshed/pull/3792)
+
+<a id="changelog-20"></a>
+
+### 20 — Responsive App Admin Registry Polling
+
+**Tags:** [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md)
+
+Poll `GET /api/v1/apps/{app}/admin/registry` every **3s** (was **12s**) during the bootstrap window and while publish or rollout is active. Tick **Publishing** duration and last-update labels every **1s** client-side from `startedAt` via `useLiveNow`.
+
+**App UI:** [gestalt-providers#1177](https://github.com/valon-technologies/gestalt-providers/pull/1177) · [gestalt-providers#1178](https://github.com/valon-technologies/gestalt-providers/pull/1178)
+
+**Docs and deploy:** gestalt (this PR) · toolshed deploy bump for `apps.home`
