@@ -477,8 +477,6 @@ Not yet covered in gestalt server tests:
 
 ### Default App UI Tests (`gestalt-providers`)
 
-Implemented in [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142), [gestalt-providers#1158](https://github.com/valon-technologies/gestalt-providers/pull/1158)–[#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163), [gestalt-providers#1165](https://github.com/valon-technologies/gestalt-providers/pull/1165), [gestalt-providers#1177](https://github.com/valon-technologies/gestalt-providers/pull/1177), and [gestalt-providers#1178](https://github.com/valon-technologies/gestalt-providers/pull/1178).
-
 Run:
 
 ```bash
