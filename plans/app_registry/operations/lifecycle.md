@@ -758,20 +758,20 @@ A request is accepted only when all checks pass:
 6. Reject when the selected version equals the current desired version with **400** and no writes.
 7. Resolve deployment state from `retention.json`:
    - accept a never-deployed published version only before `expiresAt`
-   - accept a historical version only before `expiresAt`, or when `expiresAt` is cleared (desired / lean keep)
+   - accept a historical version only before `expiresAt`, or when `expiresAt` is omitted on a previously deployed version
    - reject an expired never-deployed version or an expired historical version with **400** and no writes
 8. Fetch the published version from the configured registry and run install-time validation ([validation.md](../architecture/validation.md)).
 9. Create the rollout and append the change request (`add` on first selection; `upgrade` on later selections, including a downgrade or repeated version). The change request may record `from_version_deployable_until` for audit; admission does not read it.
-10. Mirror the transition into `retention.json` through `RetentionCatalog` (incoming: clear `expiresAt`; outgoing: set `expiresAt = now + deployedRetention`).
+10. Mirror the transition into `retention.json` (clear `expiresAt` on the version that becomes desired; set `expiresAt = now + deployedRetention` on the version that stops being desired).
 11. Release the install lock.
 
 The rollout check in step 5 is authoritative. Concurrent selection requests must recheck under the install lock so only one admission succeeds.
 
 #### Historical Redeployment and Locking
 
-When `v1 → v2` is accepted, `v1.expiresAt` is set to the transition time plus the configured `deployedRetention` (default 30 days). `v2` is desired, so `expiresAt` is cleared.
+When `v1 → v2` is accepted, `v1.expiresAt` is set to `now + deployedRetention` (default 30 days). `v2` is desired, so `expiresAt` is cleared.
 
-Selecting `v1` before its deadline appends a new `v2 → v1` request. The chain retains both transitions. When `v1` later stops being desired, it receives a new deadline. Once a deadline passes, the version is permanently locked and cannot be selected again, though every history event and its metadata remains visible.
+Selecting `v1` before `expiresAt` appends a new `v2 → v1` request. The chain retains both transitions. When `v1` later stops being desired, it receives a new `expiresAt`. Once `expiresAt` passes, the version is permanently locked and cannot be selected again, though every history event and its metadata remains visible.
 
 For a repeated version, reset per-replica materialization rows whose `acknowledged_at` predates the new rollout's `created_at`. Count cohort membership and convergence only from timestamps at or after the current rollout's `created_at`.
 

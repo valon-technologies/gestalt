@@ -164,8 +164,8 @@ Wireframes and columns: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 | **Deployed** | `version === desiredVersion` and no active rollout for this version |
 | **Redeployable** | Historical, not desired, and before `expiresAt` |
 | **Locked** | Historical and past `expiresAt` |
-| **Expired** | Never deployed and past `publishedAt + unusedRetention`, pending prune |
-| **Available** | Never deployed and before `publishedAt + unusedRetention` |
+| **Expired** | Never deployed and past `expiresAt`, pending prune |
+| **Available** | Never deployed and before `expiresAt` |
 
 **Available** and **Redeployable** rows expose **Deploy**. Rollout stepper and selected-version row affordance: [admin.md](./admin.md#rollout-phase-stepper). Revision history is read-only and appears on its own tab; see [admin.md](./admin.md#revision-history-tab).
 

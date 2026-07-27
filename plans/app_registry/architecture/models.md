@@ -311,7 +311,7 @@ Mutable overlay used by retention pruning and fleet admission. Not installable m
 | --- | --- | --- | --- |
 | `publishedAt` | RFC 3339 timestamp | yes | Publication time. Starts the unused-version window on first publish. |
 | `everDeployed` | bool | yes | Sticky flag; once true, deploy-chain records and version metadata are permanently protected from full deletion. |
-| `expiresAt` | RFC 3339 timestamp | no | Single expiry clock. Set to `publishedAt + unusedRetention` on publish. Cleared while the version is desired. Overwritten with `now + deployedRetention` each time another version becomes desired. Omitted or cleared while active. Readers treat a missing `expiresAt` on a deployed version as still redeployable (lean keep). |
+| `expiresAt` | RFC 3339 timestamp | no | Expiry clock for unused cleanup and historical redeploy. Set to `publishedAt + unusedRetention` on publish. Cleared while the version is desired. Overwritten with `now + deployedRetention` each time the version stops being desired. Omitted while desired. Readers treat omitted `expiresAt` on a deployed version as redeployable until the next mirror write. |
 
 Legacy rows may still carry `deployableUntil`; readers map it to `expiresAt` until the next write.
 

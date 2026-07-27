@@ -270,4 +270,4 @@ Replace the rollout text banner with a three-phase stepper on `/apps/{app}/admin
 
 **Tags:** [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-Simplify `retention.json` to `publishedAt`, `everDeployed`, and `expiresAt`. Publish sets `expiresAt` from `unusedRetention`; fleet selection clears it on the incoming version and sets it on the outgoing version from `deployedRetention`. Wire `RetentionCatalog` in `gestaltd serve` so deploy mirrors reach GCS. Prune evaluates `expiresAt` only and re-reads before destructive work to avoid races with redeploy.
+Simplify `retention.json` to `publishedAt`, `everDeployed`, and `expiresAt`. Publish writes `expiresAt = publishedAt + unusedRetention`. Fleet selection clears `expiresAt` on the version that becomes desired and writes `expiresAt = now + deployedRetention` on the version that stops being desired. Prune evaluates `expiresAt` only and re-reads the catalog before destructive work.

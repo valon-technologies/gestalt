@@ -97,7 +97,7 @@ app_version_change_requests
   - to_version
   - actor
   - timestamp
-  - from_version_deployable_until # fixed deadline for the outgoing version; omitted on first install
+  - from_version_deployable_until # audit copy of outgoing expiresAt at transition; omitted on first install
   - metadata_json                  # install contract snapshot
 ```
 
