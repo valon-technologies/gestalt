@@ -102,22 +102,59 @@ For **Publishing** rows, prefer `startedAt` + `liveNow` over `publishingForSecon
 
 ---
 
+## Implementation PRs
+
+This plan PR ([gestalt#2949](https://github.com/valon-technologies/gestalt/pull/2949)) is docs only. Ship step **20** with the PRs below.
+
+| # | Repo | Scope | Touches |
+| --- | --- | --- | --- |
+| **1** | `gestalt-providers` | 3s registry polling | `polling.ts`, `lib/queries/app-admin.ts`, `e2e/app-admin-mock.spec.ts` |
+| **2** | `gestalt-providers` | Live **Publishing** duration labels | `hooks/use-live-now.ts`, `app-admin-snapshots-table.tsx`, `snapshot-rows.ts` |
+| **3** | `gestalt` | App registry docs for step **20** | `pending-publish.md`, `admin.md`, `changelog.md`, `tests.md`, `responsive-app-admin.md` (Shipped In) |
+
+**Merge order:** **1** and **2** may land in either order or as one `gestalt-providers` PR if the diff stays small. Merge **3** after **1** and **2** so the shipped polling interval and `useLiveNow` behavior match the docs.
+
+No `gestaltd` or `toolshed` changes — the app-admin API and GCS layout are unchanged.
+
+### PR 1 — `gestalt-providers` (registry polling)
+
+- Add `APP_ADMIN_POLL_INTERVAL_MS = 3_000` in `polling.ts`
+- Replace the local `12_000` constant in `lib/queries/app-admin.ts` with the shared export
+- `useAppAdminRegistryQuery` `refetchInterval` unchanged except interval value
+- E2E: `polls for pending publish without manual refresh` timeout **15s → 6s**
+
+### PR 2 — `gestalt-providers` (live duration labels)
+
+- Add `useLiveNow` in `hooks/use-live-now.ts`
+- `app-admin-snapshots-table.tsx` — enable while any `pending` row exists; pass `liveNow` to formatters
+- `snapshot-rows.ts` — **Publishing** duration from `startedAt` + `liveNow` (not `publishingForSeconds`)
+- Optional E2E: duration label advances between frozen registry responses
+
+### PR 3 — `gestalt` (documentation)
+
+- [pending-publish.md](./pending-publish.md) — polling bullets (**3s** bootstrap and active)
+- [admin.md](./admin.md) — refresh-until-terminal wording
+- [changelog.md](../project/changelog.md) — step **20** entry with links to PRs **1**–**3**
+- [tests.md](../project/tests.md) — UI polling and live-clock coverage
+- [responsive-app-admin.md](./responsive-app-admin.md) — add **Shipped In**; remove planned-only wording
+
+Optional follow-up (not required for step **20**):
+
+| Repo | Scope |
+| --- | --- |
+| `gestalt-providers` | Pause registry polling when `document.visibilityState === "hidden"` |
+
+---
+
 ## Implementation
 
 ### `gestalt-providers`
 
-- `APP_ADMIN_POLL_INTERVAL_MS = 3_000` in `polling.ts`; wire through `useAppAdminRegistryQuery` (`refetchInterval`)
-- `useLiveNow` — `hooks/use-live-now.ts`
-- `app-admin-snapshots-table.tsx` — pass `liveNow` into duration formatters
-- `snapshot-rows.ts` — pending duration from `startedAt` + `liveNow`
-- `e2e/app-admin-mock.spec.ts` — pending visibility timeout **15s → 6s**
+See [Implementation PRs](#implementation-prs) **1** and **2**.
 
 ### Docs (on ship)
 
-- [pending-publish.md](./pending-publish.md) — polling bullets (**3s** bootstrap and active)
-- [admin.md](./admin.md) — refresh-until-terminal wording
-- [changelog.md](../project/changelog.md) — step `20`
-- [tests.md](../project/tests.md) — UI polling tests
+See [Implementation PRs](#implementation-prs) **3**.
 
 ---
 
