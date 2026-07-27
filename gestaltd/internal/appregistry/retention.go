@@ -195,21 +195,13 @@ func ApplyDesiredVersionTransition(index *RetentionIndex, fromVersion, toVersion
 	return changed
 }
 
-// VersionDeploymentChain carries fleet deployment facts from the append-only
-// change-request chain. Redeploy deadlines and deploy history are read only
-// from change requests; retention.json supplies publish timestamps, unused
-// retention, and sticky prune locks.
 type VersionDeploymentChain struct {
 	Deployed  map[string]struct{}
 	Deadlines VersionDeploymentDeadlines
 }
 
-// VersionDeploymentDeadlines maps a deactivated version to its fixed redeploy
-// deadline recorded as from_version_deployable_until on the change request.
 type VersionDeploymentDeadlines map[string]time.Time
 
-// VersionDeploymentChainFromChangeRequests projects deploy history and redeploy
-// deadlines from fleet change requests.
 func VersionDeploymentChainFromChangeRequests(requests []*core.AppVersionChangeRequest) VersionDeploymentChain {
 	return VersionDeploymentChain{
 		Deployed:  DeployedVersionsFromChangeRequests(requests),
@@ -217,8 +209,6 @@ func VersionDeploymentChainFromChangeRequests(requests []*core.AppVersionChangeR
 	}
 }
 
-// DeployableUntilDeadlinesFromChangeRequests projects each outgoing version's
-// fixed redeploy deadline from fleet change requests.
 func DeployableUntilDeadlinesFromChangeRequests(requests []*core.AppVersionChangeRequest) VersionDeploymentDeadlines {
 	deadlines := VersionDeploymentDeadlines{}
 	if len(requests) == 0 {
