@@ -67,9 +67,9 @@ Whenever the UI is polling (landing or active), use the same interval — **3s**
 
 Implement `computePollMode(registry, landingPollUntilMs)` → `landing` | `active` | `quiet` in `gestalt-providers/app/default/src/features/registry/polling.ts`.
 
-Constants: `POLL_INTERVAL_MS = 3_000` whenever `shouldPollAppAdminRegistry` is true. Keep `APP_ADMIN_BOOTSTRAP_POLL_MS` as the landing-window duration (internal constant name).
+Constants: `APP_ADMIN_POLL_INTERVAL_MS = 3_000` whenever `shouldPollAppAdminRegistry` is true. Keep `APP_ADMIN_BOOTSTRAP_POLL_MS` as the landing-window duration (internal constant name).
 
-Replace the chained `setTimeout` in `AppAdminPageClient.tsx` with `setInterval` (or React Query `refetchInterval`) keyed on poll mode. Pause polling when `document.visibilityState === "hidden"`; catch up once when visible again.
+Wire the interval through `useAppAdminRegistryQuery` (`refetchInterval` in `lib/queries/app-admin.ts`). Pause polling when `document.visibilityState === "hidden"`; catch up once when visible again.
 
 ### Continuous duration labels (local clock)
 
@@ -97,11 +97,11 @@ Pass `liveNow` into `snapshotStatusTimer` and `snapshotLastUpdatedLabel` in `sna
 
 ### gestalt-providers
 
-- [x] `APP_ADMIN_POLL_INTERVAL_MS = 3_000` in `polling.ts`; wired through `useAppAdminRegistryQuery` (`refetchInterval`)
-- [x] `useLiveNow` in `hooks/use-live-now.ts`
-- [x] Pass `liveNow` into `AppAdminSnapshotsTable` → `snapshotStatusTimer` / `snapshotLastUpdatedLabel`
-- [x] Pending duration from `startedAt` + `liveNow` (not stale `publishingForSeconds` from last poll)
-- [x] E2E: pending visibility timeout **15s → 6s**
+- [ ] `APP_ADMIN_POLL_INTERVAL_MS = 3_000` in `polling.ts`; wire through `useAppAdminRegistryQuery` (`refetchInterval`)
+- [ ] `useLiveNow` in `hooks/use-live-now.ts`
+- [ ] Pass `liveNow` into `AppAdminSnapshotsTable` → `snapshotStatusTimer` / `snapshotLastUpdatedLabel`
+- [ ] Pending duration from `startedAt` + `liveNow` (not stale `publishingForSeconds` from last poll)
+- [ ] E2E: pending visibility timeout **15s → 6s**
 - [ ] Pause registry polling when tab is hidden (optional follow-up)
 
 ### docs (on ship)
@@ -127,6 +127,7 @@ Pass `liveNow` into `snapshotStatusTimer` and `snapshotLastUpdatedLabel` in `sna
 | --- | --- |
 | `polls for pending publish without manual refresh` | Pending row within **6s** |
 | `publishing timer ticks between polls` | Optional: frozen pending `startedAt`, label advances over 2s |
+
 ---
 
 ## Future Work (out of scope)
