@@ -29,6 +29,7 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `19` | `🗓️ Jul 26 · 19:34` | `Publication PR Title Provenance` | [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `20` | `🗓️ Jul 27 · 19:12` | `Responsive App Admin Registry Polling` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `21` | `🗓️ Jul 27 · 20:59` | `Rollout Phase Stepper and Selected Version Row` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
+| `22` | — | `Fleet Retention Prune` | [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) [`retention.md`](../operations/retention.md) |
 
 ## Tag Glossary
 
@@ -262,3 +263,13 @@ Replace the rollout text banner with a three-phase stepper on `/apps/{app}/admin
 **App UI:** [gestalt-providers#1184](https://github.com/valon-technologies/gestalt-providers/pull/1184)
 
 **Deploy:** [toolshed#3824](https://github.com/valon-technologies/toolshed/pull/3824) — bump `apps.home` snapshot to `0d5f672`
+
+<a id="changelog-22"></a>
+
+### 22 — Fleet Retention Prune
+
+**Tags:** [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) [`retention.md`](../operations/retention.md)
+
+Remove `retention.json`. Prune, deployment-state projection, and admission read `publishedAt` from `index.json` and deploy history from `app_version_change_requests`. `gestaltd app registry retention prune` requires `--config` and `--app`, runs on the gestaltd fleet with IndexedDB access, and uses the install lock plus optimistic `index.json` concurrency for race safety.
+
+**Merged:** (pending)

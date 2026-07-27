@@ -39,7 +39,7 @@ App registries:
   - publication metadata
 - Allow registry-only apps to be installed.
 - Allow Gestalt to validate app dependencies before fleet admission.
-- Enforce unused and deployed retention windows through `retention.json` and scheduled prune. See [retention.md](./operations/retention.md).
+- Enforce unused and deployed retention windows from `index.json`, the deploy chain, and fleet-scheduled prune. See [retention.md](./operations/retention.md).
 
 The registry is a versioned contract registry for installable apps, not only an artifact bucket.
 

@@ -10,7 +10,6 @@ Immutable app archives live alongside published versions:
 
     apps/{app}/
     ├── index.json
-    ├── retention.json
     ├── pending.json
     ├── failed.json
     ├── versions/
@@ -22,12 +21,11 @@ Immutable app archives live alongside published versions:
 | Document | Path | Purpose |
 | --- | --- | --- |
 | **Index** | `apps/{app}/index.json` | Lightweight catalog of published versions |
-| **RetentionIndex** | `apps/{app}/retention.json` | Mutable usage timestamps for retention pruning. See [retention.md](../operations/retention.md). |
 | **PendingIndex** | `apps/{app}/pending.json` | In-flight publishes (not installable). See [pending-publish.md](../operations/pending-publish.md). |
 | **FailedIndex** | `apps/{app}/failed.json` | Recent failed publishes (not installable). See [pending-publish.md](../operations/pending-publish.md). |
 | **PublishedVersion** | `apps/{app}/versions/{version}.json` | Full metadata and install contract for one version |
 
-Document type is implied by path. Each JSON document has a root `schemaVersion` field, currently `1` for `Index`, `PendingIndex`, `FailedIndex`, `RetentionIndex`, and `PublishedVersion`. Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
+Document type is implied by path. Each JSON document has a root `schemaVersion` field, currently `1` for `Index`, `PendingIndex`, `FailedIndex`, and `PublishedVersion`. Readers should reject unsupported values; bump it when the JSON shape changes incompatibly.
 
 Implementation: `gestaltd/internal/appregistry/`.
 
@@ -272,51 +270,6 @@ Each key is a version string whose publish attempt failed.
 | `publication` | object | no | Same `Publication` shape as `PublishedVersion.publication`. Copied from the pending row when present. |
 
 Writes use the same optimistic-concurrency pattern as `pending.json`. `PruneFailedIndex` removes entries older than 30 days on `gestaltd app registry pending set`. See [pending-publish.md](../operations/pending-publish.md#self-healing).
-
----
-
-## RetentionIndex
-
-**Path:** `apps/{app}/retention.json`
-
-Answers: _was this version deployed, when did it last stop being desired, and is it still eligible for historical redeployment?_
-
-Mutable overlay used by retention pruning. Not installable metadata. See [retention.md](../operations/retention.md) for policy rules and cleanup scope.
-
-```json
-{
-  "schemaVersion": 1,
-  "versions": {
-    "0.0.0-snapshot.gabc123": {
-      "publishedAt": "2026-07-20T12:00:00Z",
-      "lastDeactivatedAt": "2026-07-22T14:00:00Z",
-      "deployableUntil": "2026-08-21T14:00:00Z",
-      "firstDeployedAt": "2026-07-22T14:00:00Z",
-      "everDeployed": true
-    }
-  }
-}
-```
-
-### Fields
-
-#### Root · `RetentionIndex`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `schemaVersion` | int | yes | Retention overlay format version. Currently `1`. |
-| `versions` | map | yes | Version string → `RetentionVersion`. |
-
-#### `RetentionIndex.versions` · `RetentionVersion`
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `publishedAt` | RFC 3339 timestamp | yes | Starts the unused-version retention window. |
-| `lastDeactivatedAt` | RFC 3339 timestamp | no | Most recent time this version stopped being desired. Omitted while it has never been deactivated. |
-| `deployableUntil` | RFC 3339 timestamp | no | Historical-redeploy deadline captured as `lastDeactivatedAt + deployedRetention` for the current deactivation interval. Cleared while this version is desired. |
-| `firstDeployedAt` | RFC 3339 timestamp | no | First fleet admission. |
-| `everDeployed` | bool | yes | Sticky flag; once true, deploy-chain records and version metadata are permanently protected from pruning. |
-| `lockedAt` | RFC 3339 timestamp | no | Sticky timestamp recorded after `deployableUntil`; the version can no longer become desired. |
 
 ---
 

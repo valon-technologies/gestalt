@@ -429,7 +429,7 @@ go test ./internal/appregistry/... -run 'TestVersionDeploymentState|TestEvaluate
 
 ### `retention_prune_test.go`
 
-- **`TestEvaluateRetentionPrune`** — never-deployed versions past `unusedRetention` are eligible for full deletion; locked historical versions may have artifacts pruned while index and retention rows remain; deployed versions are cross-checked against the change-request chain.
+- **`TestEvaluateRetentionPrune`** — never-deployed versions past `unusedRetention` are eligible for full deletion; locked historical versions may have artifacts pruned while index rows and version metadata remain; deployed versions are cross-checked against the change-request chain.
 
 ### `app_registry_retention_test.go`
 
