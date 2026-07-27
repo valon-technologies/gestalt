@@ -276,7 +276,6 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	restartBlocked := false
 	if rollout != nil {
 		version := strings.TrimSpace(rollout.Version)
-		inTargetCohort := rolloutTargetsSourceVersion(rollout, p.SourceVersion)
 		if findInstallation(installations, version) == nil {
 			if !p.now().Before(rollout.Deadline) {
 				if _, err := p.Rollouts.MarkFailed(ctx, appName, version, p.now()); err != nil {
@@ -290,7 +289,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		}
 		if rollout.State == core.AppRolloutStateEnrolling {
 			if p.now().Before(rollout.EnrollmentEndsAt) {
-				restartBlocked = inTargetCohort
+				restartBlocked = true
 			} else {
 				var err error
 				rollout, err = p.Rollouts.MarkRestarting(ctx, appName, version)
@@ -744,14 +743,6 @@ func (p *CatalogPoller) ensureAcknowledged(ctx context.Context, instanceID, appN
 		return nil, fmt.Errorf("acknowledge %s@%s: %w", appName, version, err)
 	}
 	return materialization, nil
-}
-
-func rolloutTargetsSourceVersion(rollout *core.AppRollout, sourceVersion string) bool {
-	if rollout == nil {
-		return false
-	}
-	target := strings.TrimSpace(rollout.TargetSourceVersion)
-	return target == "" || target == strings.TrimSpace(sourceVersion)
 }
 
 func (p *CatalogPoller) beginInflight(key string) bool {

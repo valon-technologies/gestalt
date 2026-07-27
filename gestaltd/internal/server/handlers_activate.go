@@ -26,11 +26,12 @@ func (s *Server) activateAppProvidersHandler(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		var err error
-		if phase == "candidate" {
+		switch phase {
+		case "candidate":
 			_, err = s.gestaltdSourceVersions.BeginPromotion(r.Context(), s.sourceVersion, s.now())
-		} else if phase == "rollback" {
+		case "rollback":
 			_, err = s.gestaltdSourceVersions.CancelPromotion(r.Context(), s.sourceVersion, s.now())
-		} else {
+		default:
 			_, err = s.gestaltdSourceVersions.Promote(
 				r.Context(),
 				s.sourceVersion,
