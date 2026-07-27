@@ -763,14 +763,14 @@ A request is accepted only when all checks pass:
    - reject an expired never-deployed version or an expired/locked historical version with **400** and no writes
 8. Fetch the published version from the configured registry and run install-time validation ([validation.md](../architecture/validation.md)).
 9. Create the rollout and append the change request (`add` on first selection; `upgrade` on later selections, including a downgrade or repeated version). The request records the outgoing version's fixed `deployableUntil` as `from_version_deployable_until`; the append-only change-request chain is authoritative for this deadline.
-10. Mirror the transition into `retention.json` for pruning when possible. A failed mirror does not affect admission or deployment-state projection; prune cross-checks `app_version_change_requests`.
+10. Mirror the transition into `retention.json` for pruning. A failed mirror does not affect admission or deployment-state projection; prune cross-checks `app_version_change_requests`.
 11. Release the install lock.
 
 The rollout check in step 5 is authoritative. Concurrent selection requests must recheck under the install lock so only one admission succeeds.
 
 #### Historical Redeployment and Locking
 
-When `v1 → v2` is accepted, the change request records `from_version_deployable_until` for `v1` at transition time plus the configured `deployedRetention` (default 30 days). `v2` is desired, so no historical deadline runs for it. The **Reader** may mirror `lastDeactivatedAt` and `deployableUntil` into `retention.json` for pruning.
+When `v1 → v2` is accepted, the change request records `from_version_deployable_until` for `v1` at transition time plus the configured `deployedRetention` (default 30 days). `v2` is desired, so no historical deadline runs for it. The **Reader** sets `lastDeactivatedAt` and `deployableUntil` on the outgoing version in `retention.json`.
 
 Selecting `v1` before its deadline appends a new `v2 → v1` request. The chain retains both transitions. When `v1` later stops being desired, it receives a new deadline. Once a deadline passes, the version is permanently locked and cannot be selected again, though every history event and its metadata remains visible.
 
