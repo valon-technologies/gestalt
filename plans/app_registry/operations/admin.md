@@ -10,7 +10,7 @@ Operators installing registry apps should answer these questions without reading
 | --------------------------------- | ----------------------------- |
 | Which apps are registry-only?     | Embedded admin apps list      |
 | What is the desired version?      | Desired version on app detail |
-| Is the rollout still in progress? | Rollout status badge (embedded `/admin`); rollout phase stepper (`/apps/{app}/admin`) |
+| Is the rollout still in progress? | Rollout phase stepper (`/apps/{app}/admin`); rollout badge (embedded `/admin`) |
 | Which replicas have converged?    | Replica convergence table     |
 
 App admins additionally select the fleet-wide desired version and inspect each candidate version's publication provenance.
@@ -96,8 +96,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded `/admi
 - Show whether historical versions are still redeployable or permanently locked.
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable deploy actions while a rollout is `enrolling` or `restarting`; poll registry state every **3s** and refresh until rollout is terminal.
-- Show rollout progress as a three-phase stepper at the top of the page (`enrolling` → `restarting` → `available` | `failed`). Materialization is not a separate phase; it runs during enrollment. See [Rollout phase stepper](#rollout-phase-stepper).
-- Highlight the rollout target snapshot row with a tint and leading arrow instead of a **Rolling out** status badge. The affordance persists after rollout completes. See [Deploying row affordance](#deploying-row-affordance).
+- Show rollout progress and the admitted version on the snapshots tab. See [Rollout phase stepper](#rollout-phase-stepper) and [Selected version row](#selected-version-row).
 - Render access denied on **403** without leaking registry metadata.
 
 Selection is fleet-wide. It is not per-user or per-replica.
@@ -132,58 +131,29 @@ PR #2900 · Title | 0.0.0-snapshot.g… | Expired                 | Jun 01 09:00
 
 Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is unavailable on **Publishing**, **Failed**, **Deployed**, **Locked**, and **Expired** rows. **Deployed** marks the desired version. **Redeployable** shows the fixed deadline or remaining duration.
 
-### Rollout Phase Stepper
+### Rollout phase stepper
 
-Replace the current `Rollout {state}: {version}` text banner with a horizontal three-phase marker directly under the page header (above the tabs). The stepper is always visible on `/apps/{app}/admin`.
+Replace the `Rollout {state}: {version}` text banner with a horizontal three-phase marker under the page header (above the tabs). Always visible on `/apps/{app}/admin`.
 
-Map backend rollout state to three operator-facing phases:
-
-| Phase | Backend `rollout.state` | Label |
-| --- | --- | --- |
+| Phase | `rollout.state` | Label |
+| ----- | --------------- | ----- |
 | 1 | `enrolling` | **Enrolling** |
 | 2 | `restarting` | **Restarting** |
 | 3 | `complete` | **Available** |
 | 3 | `failed` | **Failed** |
 
-Do **not** add a fourth phase for materialization. Per-replica artifact download during enrollment is part of phase 1; see [lifecycle.md](./lifecycle.md#rollout-admission-and-completion).
+Do **not** add a materialization phase. Per-replica artifact download during enrollment is part of phase 1; see [lifecycle.md](./lifecycle.md#rollout-admission-and-completion).
 
-#### Layout
+During `enrolling` or `restarting`, emphasize the current phase node, mark completed phases yellow, and leave future phases as yellow outline markers. Connector segments before the current phase are solid; later segments are muted.
 
-```text
-o----------------------o-------------------------o
-Enrolling              Restarting                Available
-```
-
-When `rollout.state` is `failed`, the rightmost label reads **Failed** instead of **Available**.
-
-#### Active rollout (`enrolling` or `restarting`)
-
-- The **current** phase node is emphasized (filled accent).
-- **Future** phases use yellow circle markers.
-- **Completed** phases within the same rollout use yellow filled markers.
-- Connector segments before the current phase are solid; segments after it are muted.
+When rollout is terminal or absent, show **Enrolling** and **Restarting** as yellow completed nodes. The rightmost node is **green** on `complete`, **red** on `failed`, or muted when the app has never been deployed.
 
 ```text
-During enrolling:
-
-●----------------------○-------------------------○
-Enrolling              Restarting                Available
-
 During restarting:
 
 ○----------------------●-------------------------○
 Enrolling              Restarting                Available
-```
 
-#### Terminal idle (no active rollout)
-
-When rollout is `complete` or `failed`, or no rollout exists yet:
-
-- **Enrolling** and **Restarting** nodes are yellow (completed path).
-- The rightmost node is **green** when the latest rollout is `complete`, or **red** when it is `failed`.
-- When the app has never been deployed, all three nodes are muted and the rightmost label stays **Available**.
-
-```text
 Rollout complete:
 
 ○----------------------○-------------------------●
@@ -195,64 +165,21 @@ Rollout failed:
 Enrolling              Restarting                Failed
 ```
 
-The stepper reads `registry.rollout.state` and `registry.rollout.version`. It does not duplicate replica-level materialization progress from the embedded `/admin` UI.
+The stepper reads `registry.rollout.state` and `registry.rollout.version`. It does not duplicate replica-level materialization from the embedded `/admin` UI.
 
-### Deploying Row Affordance
+### Selected version row
 
-Once an operator selects a version, keep a leading arrow and row tint on that version through rollout and after it finishes. The target is `registry.rollout.version` while a rollout exists; after terminal `complete` or `failed`, keep highlighting the same version until a newer rollout replaces it.
+Once an operator selects a version, keep a leading arrow (`→`) and row tint on that version through rollout and after it finishes. Target `registry.rollout.version` while a rollout exists; after terminal `complete` or `failed`, keep the affordance until a newer rollout replaces it. Do not use a **Rolling out** badge in the **Status** column.
 
-Do **not** add a **Rolling out** badge in the **Status** column. Use row-level affordance instead.
+| `rollout.state` | Row tint | Arrow | Action |
+| --------------- | -------- | ----- | ------ |
+| `enrolling`, `restarting` | Accent, slow pulse (**~2s** cycle) | Pulses with row | **Deploying...** (disabled) |
+| `complete` | Solid success | Static | `—` |
+| `failed` | Solid error | Static | **Deploy** when still selectable, otherwise `—` |
 
-#### Visual states
+Deploy actions stay disabled on every row while rollout is active (`selectionDisabled` or local `deployingVersion`). Only the admitted version shows **Deploying...**.
 
-| Rollout state | Row tint | Leading arrow | Action column |
-| --- | --- | --- | --- |
-| `enrolling` or `restarting` | Accent tint with a **slow pulse** (~1.5–2s cycle; do not flash faster than ~1 Hz) | Visible, pulses with the row | Disabled **Deploying...** |
-| `complete` | Solid success tint (no animation) | Visible, static | `—` (**Deployed**) |
-| `failed` | Solid error/destructive tint (no animation) | Visible, static | **Deploy** when the version is still selectable, otherwise `—` |
-
-Deploy actions stay disabled on every row while rollout is active (`selectionDisabled` or local `deployingVersion`). Only the rollout target shows **Deploying...**; other rows show **Deploy** disabled or `—` without that label.
-
-The pulse should be noticeable but calm — enough to draw attention during an in-flight rollout without feeling like an alarm.
-
-#### During active rollout
-
-```text
-Published snapshots
-
-→ Pull request     | Snapshot          | Status    | Last update  | Action
------------------- | ----------------- | --------- | ------------ | ---------------
-  PR #3251 · Title | 0.0.0-snapshot.g… | Available | Jul 22 15:00 | Deploying...
-  PR #3200 · Title | 0.0.0-snapshot.g… | Deployed  | Jul 21 12:00 | —
-```
-
-(`→` and row background pulse slowly during `enrolling` / `restarting`.)
-
-#### After successful rollout
-
-Keep the arrow and a **solid** success tint on the version that was just admitted. **Status** becomes **Deployed**.
-
-```text
-→ Pull request     | Snapshot          | Status   | Last update  | Action
------------------- | ----------------- | -------- | ------------ | ------
-  PR #3251 · Title | 0.0.0-snapshot.g… | Deployed | Jul 22 15:00 | —
-  PR #3200 · Title | 0.0.0-snapshot.g… | Available| Jul 21 12:00 | Deploy
-```
-
-#### After failed rollout
-
-Keep the arrow and apply a **solid error tint** on the version that failed to roll out.
-
-```text
-→ Pull request     | Snapshot          | Status      | Last update  | Action
------------------- | ----------------- | ----------- | ------------ | ------
-  PR #3251 · Title | 0.0.0-snapshot.g… | Available   | Jul 22 15:00 | Deploy
-  PR #3200 · Title | 0.0.0-snapshot.g… | Deployed    | Jul 21 12:00 | —
-```
-
-The fleet may still be running the previous desired version; the highlighted row shows which admission attempt failed.
-
-#### Active rollout (full page)
+During an active rollout:
 
 ```text
 g-issues                                                                 App management
@@ -265,15 +192,15 @@ Enrolling              Restarting                Available
 
 Published snapshots
 
-→ Pull request     | Snapshot          | Status    | Last update  | Action
------------------- | ----------------- | --------- | ------------ | ---------------
-  PR #3251 · Title | 0.0.0-snapshot.g… | Available | Jul 22 15:00 | Deploying...
-  PR #3200 · Title | 0.0.0-snapshot.g… | Deployed  | Jul 21 12:00 | —
+Pull request     | Snapshot          | Status    | Last update  | Action
+---------------- | ----------------- | --------- | ------------ | ---------------
+→ PR #3251 · …   | 0.0.0-snapshot.g… | Available | Jul 22 15:00 | Deploying...
+PR #3200 · …     | 0.0.0-snapshot.g… | Deployed  | Jul 21 12:00 | —
 ```
 
-When the operator selects another version, move the arrow and tint to the new rollout target and reset the prior row to the default background.
+(`→` and row tint pulse slowly during `enrolling` / `restarting`.)
 
-Replace the prior wireframe that showed `Rollout Enrolling: …` above the table and a **Rolling out** status badge.
+After `complete`, the admitted row keeps a solid success tint and **Deployed** status. After `failed`, keep a solid error tint on the failed admission; the fleet may still run the previous desired version.
 
 A **Failed** row in the same table:
 
@@ -328,7 +255,7 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 ├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
 ├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
 ├── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
-└── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Deploying Row Affordance</a> (planned)
+└── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Selected Version Row</a>
 </pre>
 
 ### Related Docs

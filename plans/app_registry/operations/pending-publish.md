@@ -167,9 +167,7 @@ Wireframes and columns: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 | **Expired** | Never deployed and past `publishedAt + unusedRetention`, pending prune |
 | **Available** | Never deployed and before `publishedAt + unusedRetention` |
 
-**Available** and **Redeployable** rows expose **Deploy**. During an active rollout, the target row uses a slow-pulsing tint, a leading arrow, and a **Deploying...** action label instead of a **Rolling out** status badge. After rollout completes, keep the arrow and switch to a solid success or error tint; see [admin.md — Deploying row affordance](./admin.md#deploying-row-affordance). Revision history is read-only and appears on its own tab; see [admin.md](./admin.md#revision-history-tab).
-
-Rollout progress uses the three-phase stepper at the top of the page; see [admin.md — Rollout phase stepper](./admin.md#rollout-phase-stepper).
+**Available** and **Redeployable** rows expose **Deploy**. Rollout stepper and selected-version row affordance: [admin.md](./admin.md#rollout-phase-stepper). Revision history is read-only and appears on its own tab; see [admin.md](./admin.md#revision-history-tab).
 
 Polling (`gestalt-providers`):
 
@@ -227,7 +225,7 @@ Implementation:
 <pre>
 ├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
 ├── <a href="../project/changelog.md#changelog-19">19 — Publication PR Title Provenance</a>
-└── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Deploying Row Affordance</a> (planned)
+└── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Selected Version Row</a>
 </pre>
 
 ### Related Docs
