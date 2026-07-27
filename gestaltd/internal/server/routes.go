@@ -62,6 +62,9 @@ func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 	if s.frpsHandler != nil {
 		r.Handle("/~!frp", s.frpsHandler)
 	}
+	if s.frpsConnectHandler != nil {
+		r.Handle("/~!frp/connect", s.frpsConnectHandler)
+	}
 	switch exposure {
 	case metricsAuthenticated:
 		r.Group(func(r chi.Router) {

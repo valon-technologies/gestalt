@@ -143,6 +143,7 @@ type Server struct {
 	publicGRPCHandler      http.Handler
 	publicRESTHandler      http.Handler
 	frpsHandler            http.Handler
+	frpsConnectHandler     http.Handler
 	publicGatewayConn      *publicrpc.InProcessConn
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3sdk.S3
@@ -223,6 +224,7 @@ type Config struct {
 	IndexedDB              indexeddb.IndexedDB
 	RemoteManagement       proto.RemoteManagementServer
 	FrpsHandler            http.Handler
+	FrpsConnectHandler     http.Handler
 }
 
 func New(cfg Config) (*Server, error) {
@@ -452,6 +454,7 @@ func New(cfg Config) (*Server, error) {
 		s.publicRESTHandler = restHandler
 	}
 	s.frpsHandler = cfg.FrpsHandler
+	s.frpsConnectHandler = cfg.FrpsConnectHandler
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}

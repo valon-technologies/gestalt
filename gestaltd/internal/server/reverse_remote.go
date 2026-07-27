@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"os"
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -30,6 +31,7 @@ type reverseRemoteSetup struct {
 	publisher        *remotepublish.Publisher
 	frps             *tunnel.Server
 	frpsHandler      http.Handler
+	frpsConnectHandler http.Handler
 	// groups is the publication plan computed once from config. It is passed
 	// to startReversePublisher so there is a single source of truth.
 	groups []remotepublish.PublicationGroup
@@ -68,6 +70,7 @@ func setupReverseRemoteUpstream(ctx context.Context, cfg *config.Config, service
 		return nil, err
 	}
 	result.frpsHandler = result.frps.HTTPHandler()
+	result.frpsConnectHandler = result.frps.ConnectHandler()
 
 	var identity *tunnel.Identity
 	identity, err = tunnel.NewIdentity()
@@ -94,6 +97,7 @@ func setupReverseRemoteUpstream(ctx context.Context, cfg *config.Config, service
 				LeaseDuration: durationpb.New(defaultReverseLeaseDuration),
 			},
 			LeaseDuration: defaultReverseLeaseDuration,
+			ConnectURL:     connectURLForPod(cfg),
 		},
 	)
 	if err != nil {
@@ -122,6 +126,13 @@ func startReversePublisher(ctx context.Context, providers *registry.ProviderMap[
 	setup.publisher = publisher
 	setup.mu.Unlock()
 	return nil
+}
+
+func connectURLForPod(cfg *config.Config) string {
+	if podIP := strings.TrimSpace(os.Getenv("GESTALTD_POD_IP")); podIP != "" {
+		return "http://" + net.JoinHostPort(podIP, strconv.Itoa(cfg.Server.PublicListener().Port))
+	}
+	return ""
 }
 
 func advertisedURL(cfg *config.Config) string {

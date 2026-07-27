@@ -29,6 +29,7 @@ type RemoteRegistration struct {
 	TunnelHost                string
 	TunnelCertificate         []byte
 	ServerSPKISHA256          string
+	ConnectURL                string
 	LeaseExpiresAt            time.Time
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
@@ -622,6 +623,7 @@ func remoteRegistrationRecord(reg *RemoteRegistration) idb.Record {
 		"tunnel_host":        reg.TunnelHost,
 		"tunnel_certificate": append([]byte(nil), reg.TunnelCertificate...),
 		"server_spki_sha256": reg.ServerSPKISHA256,
+		"connect_url":        reg.ConnectURL,
 		"lease_expires_at":   reg.LeaseExpiresAt,
 		"created_at":         reg.CreatedAt,
 		"updated_at":         reg.UpdatedAt,
@@ -657,6 +659,7 @@ func recordToRemoteRegistration(rec idb.Record) *RemoteRegistration {
 		TunnelHost:                recString(rec, "tunnel_host"),
 		TunnelCertificate:         recBytes(rec, "tunnel_certificate"),
 		ServerSPKISHA256:          recString(rec, "server_spki_sha256"),
+		ConnectURL:                recString(rec, "connect_url"),
 		LeaseExpiresAt:            recTime(rec, "lease_expires_at"),
 		CreatedAt:                 recTime(rec, "created_at"),
 		UpdatedAt:                 recTime(rec, "updated_at"),
