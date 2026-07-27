@@ -161,14 +161,15 @@ Wireframes and columns: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 | --- | --- |
 | **Publishing** | Entry from `pendingVersions` |
 | **Failed** | Entry from `failedVersions` |
-| **Deployed** | `version === desiredVersion` |
-| **Rolling out** | Active rollout for this version |
+| **Deployed** | `version === desiredVersion` and no active rollout for this version |
 | **Redeployable** | Historical, not desired, and before `deployableUntil` |
 | **Locked** | Historical and past `deployableUntil` or `lockedAt` is set |
 | **Expired** | Never deployed and past `publishedAt + unusedRetention`, pending prune |
 | **Available** | Never deployed and before `publishedAt + unusedRetention` |
 
-**Available** and **Redeployable** rows expose **Deploy**. Revision history is read-only and appears on its own tab; see [admin.md](./admin.md#revision-history-tab).
+**Available** and **Redeployable** rows expose **Deploy**. During an active rollout, the target row uses a slow-pulsing tint, a leading arrow, and a **Deploying...** action label instead of a **Rolling out** status badge. After rollout completes, keep the arrow and switch to a solid success or error tint; see [admin.md — Deploying row affordance](./admin.md#deploying-row-affordance). Revision history is read-only and appears on its own tab; see [admin.md](./admin.md#revision-history-tab).
+
+Rollout progress uses the three-phase stepper at the top of the page; see [admin.md — Rollout phase stepper](./admin.md#rollout-phase-stepper).
 
 Polling (`gestalt-providers`):
 
@@ -225,7 +226,8 @@ Implementation:
 
 <pre>
 ├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
-└── <a href="../project/changelog.md#changelog-19">19 — Publication PR Title Provenance</a>
+├── <a href="../project/changelog.md#changelog-19">19 — Publication PR Title Provenance</a>
+└── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Deploying Row Affordance</a> (planned)
 </pre>
 
 ### Related Docs

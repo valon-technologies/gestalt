@@ -28,6 +28,7 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `18` | `🗓️ Jul 26 · 15:48` | `Revision History and Redeploy Windows` | [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) [`retention.md`](../operations/retention.md) |
 | `19` | `🗓️ Jul 26 · 19:34` | `Publication PR Title Provenance` | [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `20` | `🗓️ Jul 27 · 19:12` | `Responsive App Admin Registry Polling` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
+| `21` | — | `Rollout Phase Stepper and Deploying Row Affordance` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 
 ## Tag Glossary
 
@@ -247,3 +248,13 @@ Poll `GET /api/v1/apps/{app}/admin/registry` every **3s** (was **12s**) during t
 **App UI:** [gestalt-providers#1177](https://github.com/valon-technologies/gestalt-providers/pull/1177) · [gestalt-providers#1178](https://github.com/valon-technologies/gestalt-providers/pull/1178)
 
 **Docs and deploy:** gestalt (this PR) · toolshed deploy bump for `apps.home`
+
+<a id="changelog-21"></a>
+
+### 21 — Rollout Phase Stepper and Deploying Row Affordance
+
+**Tags:** [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md)
+
+**Planned.** Replace the rollout text banner with a three-phase stepper at the top of `/apps/{app}/admin`. Highlight the selected snapshot row with a leading arrow and tint that pulses slowly during rollout, then stays solid (success or error) after terminal `complete` or `failed`.
+
+**App UI:** gestalt-providers (planned)
