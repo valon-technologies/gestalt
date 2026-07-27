@@ -15,6 +15,7 @@ import (
 
 var (
 	ErrAppRolloutActive          = errors.New("app rollout is active")
+	ErrAppRolloutEpochMismatch   = errors.New("app rollout epoch does not match")
 	ErrAppRolloutVersionMismatch = errors.New("app rollout version does not match")
 )
 
@@ -136,18 +137,43 @@ func (s *AppRolloutService) ListActiveAndRecentTerminal(ctx context.Context, sin
 }
 
 func (s *AppRolloutService) MarkRestarting(ctx context.Context, app, version string) (*core.AppRollout, error) {
-	return s.transition(ctx, app, version, core.AppRolloutStateRestarting, time.Time{})
+	return s.transition(ctx, app, version, core.AppRolloutStateRestarting, time.Time{}, nil)
 }
 
 func (s *AppRolloutService) MarkComplete(ctx context.Context, app, version string, completedAt time.Time) (*core.AppRollout, error) {
-	return s.transition(ctx, app, version, core.AppRolloutStateComplete, completedAt)
+	return s.transition(ctx, app, version, core.AppRolloutStateComplete, completedAt, nil)
 }
 
 func (s *AppRolloutService) MarkFailed(ctx context.Context, app, version string, failedAt time.Time) (*core.AppRollout, error) {
-	return s.transition(ctx, app, version, core.AppRolloutStateFailed, failedAt)
+	return s.transition(ctx, app, version, core.AppRolloutStateFailed, failedAt, nil)
 }
 
-func (s *AppRolloutService) transition(ctx context.Context, app, version string, state core.AppRolloutState, at time.Time) (*core.AppRollout, error) {
+func (s *AppRolloutService) MarkRestartingForRollout(ctx context.Context, expected *core.AppRollout) (*core.AppRollout, error) {
+	return s.transitionForRollout(ctx, expected, core.AppRolloutStateRestarting, time.Time{})
+}
+
+func (s *AppRolloutService) MarkCompleteForRollout(ctx context.Context, expected *core.AppRollout, completedAt time.Time) (*core.AppRollout, error) {
+	return s.transitionForRollout(ctx, expected, core.AppRolloutStateComplete, completedAt)
+}
+
+func (s *AppRolloutService) MarkFailedForRollout(ctx context.Context, expected *core.AppRollout, failedAt time.Time) (*core.AppRollout, error) {
+	return s.transitionForRollout(ctx, expected, core.AppRolloutStateFailed, failedAt)
+}
+
+func (s *AppRolloutService) transitionForRollout(ctx context.Context, expected *core.AppRollout, state core.AppRolloutState, at time.Time) (*core.AppRollout, error) {
+	if expected == nil {
+		return nil, fmt.Errorf("transition app rollout: expected rollout is required")
+	}
+	return s.transition(ctx, expected.App, expected.Version, state, at, expected)
+}
+
+func (s *AppRolloutService) transition(
+	ctx context.Context,
+	app, version string,
+	state core.AppRolloutState,
+	at time.Time,
+	expected *core.AppRollout,
+) (*core.AppRollout, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("transition app rollout: service is not configured")
 	}
@@ -174,6 +200,11 @@ func (s *AppRolloutService) transition(ctx context.Context, app, version string,
 	rollout := recordToAppRollout(rec)
 	if strings.TrimSpace(rollout.Version) != version {
 		return nil, ErrAppRolloutVersionMismatch
+	}
+	if expected != nil &&
+		(!rollout.CreatedAt.Equal(expected.CreatedAt) ||
+			strings.TrimSpace(rollout.TargetSourceVersion) != strings.TrimSpace(expected.TargetSourceVersion)) {
+		return nil, ErrAppRolloutEpochMismatch
 	}
 	if rollout.State == state {
 		if err := tx.Commit(ctx); err != nil {

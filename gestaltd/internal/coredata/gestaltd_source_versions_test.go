@@ -24,7 +24,7 @@ func TestGestaltdSourceVersionPromotionRetargetsActiveRollouts(t *testing.T) {
 	if _, err := services.GestaltdSourceVersionState.Promote(ctx, "source-old", start, 2*time.Minute, 15*time.Minute); err != nil {
 		t.Fatalf("Promote old: %v", err)
 	}
-	if _, err := services.AppRollouts.Create(ctx, &core.AppRollout{
+	original, err := services.AppRollouts.Create(ctx, &core.AppRollout{
 		App:                 "g-issues",
 		Version:             "v2",
 		State:               core.AppRolloutStateEnrolling,
@@ -32,7 +32,8 @@ func TestGestaltdSourceVersionPromotionRetargetsActiveRollouts(t *testing.T) {
 		CreatedAt:           start.Add(time.Minute),
 		EnrollmentEndsAt:    start.Add(3 * time.Minute),
 		Deadline:            start.Add(16 * time.Minute),
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("Create rollout: %v", err)
 	}
 
@@ -55,6 +56,15 @@ func TestGestaltdSourceVersionPromotionRetargetsActiveRollouts(t *testing.T) {
 	}
 	if _, err := services.GestaltdSourceVersionState.Promote(ctx, "source-new", promotedAt, 2*time.Minute, 15*time.Minute); err != nil {
 		t.Fatalf("Promote new: %v", err)
+	}
+	if _, err := services.AppRollouts.MarkRestartingForRollout(ctx, original); !errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+		t.Fatalf("stale MarkRestartingForRollout error = %v, want epoch mismatch", err)
+	}
+	if _, err := services.AppRollouts.MarkCompleteForRollout(ctx, original, promotedAt); !errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+		t.Fatalf("stale MarkCompleteForRollout error = %v, want epoch mismatch", err)
+	}
+	if _, err := services.AppRollouts.MarkFailedForRollout(ctx, original, promotedAt); !errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+		t.Fatalf("stale MarkFailedForRollout error = %v, want epoch mismatch", err)
 	}
 
 	current, err := services.GestaltdSourceVersionState.CurrentForAdmission(ctx)
