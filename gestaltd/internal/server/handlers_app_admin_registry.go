@@ -237,8 +237,14 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	summaries := appregistry.VersionsFromIndex(index, app.name)
 	published := make([]appAdminPublishedVersion, 0, len(summaries))
 	desiredVersion := coredata.LatestKnownVersion(known)
+	changeRequests, err := s.appVersionChanges.ListRequestsByApp(r.Context(), app.name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	deadlines := appregistry.DeployableUntilDeadlinesFromChangeRequests(changeRequests)
 	for i := range summaries {
-		published = append(published, appAdminPublishedVersionFromSummary(summaries[i], desiredVersion, retentionIndex, policy, now))
+		published = append(published, appAdminPublishedVersionFromSummary(summaries[i], desiredVersion, retentionIndex, policy, now, deadlines))
 	}
 	pendingVersions := make([]appAdminPendingVersion, 0)
 	for _, entry := range appregistry.PendingVersionsForAdmin(pendingIndex, publishedKeys) {
@@ -332,6 +338,12 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}
+	allChangeRequests, err := s.appVersionChanges.ListRequestsByApp(r.Context(), app.name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	deadlines := appregistry.DeployableUntilDeadlinesFromChangeRequests(allChangeRequests)
 	publishedByVersion := publishedVersionSummaryMap(index, app.name)
 	now := time.Now().UTC()
 
@@ -350,6 +362,7 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 			publishedByVersion,
 			actorLabels[strings.TrimSpace(request.Actor)],
 			now,
+			deadlines,
 		))
 	}
 	writeJSON(w, http.StatusOK, appAdminRegistryHistoryResponse{
@@ -456,7 +469,7 @@ func appVersionSourceURL(repository, sourceRef string) string {
 	return repository + "/commit/" + sourceRef
 }
 
-func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary, desiredVersion string, retention *appregistry.RetentionIndex, policy appregistry.RetentionPolicy, now time.Time) appAdminPublishedVersion {
+func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary, desiredVersion string, retention *appregistry.RetentionIndex, policy appregistry.RetentionPolicy, now time.Time, deadlines appregistry.VersionDeploymentDeadlines) appAdminPublishedVersion {
 	version := appAdminPublishedVersion{
 		Version:     summary.Version,
 		PublishedAt: formatAdminTime(summary.PublishedAt),
@@ -465,7 +478,7 @@ func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary, des
 		SourceURL:   appVersionSourceURL(summary.Repository, summary.SourceRef),
 		Publication: summary.Publication,
 	}
-	state, deployableUntil := appregistry.VersionDeploymentState(summary.Version, desiredVersion, retention, policy, now)
+	state, deployableUntil := appregistry.VersionDeploymentState(summary.Version, desiredVersion, retention, policy, now, deadlines)
 	version.DeploymentState = state
 	if deployableUntil != nil && !deployableUntil.IsZero() {
 		version.DeployableUntil = formatAdminTime(*deployableUntil)
@@ -553,6 +566,7 @@ func appAdminRegistryRevisionFromRequest(
 	publishedByVersion map[string]appregistry.VersionSummary,
 	deployedBy string,
 	now time.Time,
+	deadlines appregistry.VersionDeploymentDeadlines,
 ) appAdminRegistryRevision {
 	version := strings.TrimSpace(request.ToVersion)
 	revision := appAdminRegistryRevision{
@@ -583,7 +597,7 @@ func appAdminRegistryRevisionFromRequest(
 	revision.SourceRef = sourceRef
 	revision.SourceURL = appVersionSourceURL(repository, sourceRef)
 
-	state, deployableUntil := appregistry.VersionDeploymentState(version, desiredVersion, retention, policy, now)
+	state, deployableUntil := appregistry.VersionDeploymentState(version, desiredVersion, retention, policy, now, deadlines)
 	revision.DeploymentState = historyDeploymentState(state)
 	if deployableUntil != nil && !deployableUntil.IsZero() {
 		revision.DeployableUntil = formatAdminTime(*deployableUntil)

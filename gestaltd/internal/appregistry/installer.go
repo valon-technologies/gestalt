@@ -198,8 +198,13 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		return nil, fmt.Errorf("fetch retention index: %w", err)
 	}
 	currentDesired := coredata.LatestKnownVersion(knownVersions)
+	changeRequests, err := i.ChangeRequests.ListRequestsByApp(installCtx, appName)
+	if err != nil {
+		return nil, fmt.Errorf("list app version change requests: %w", err)
+	}
+	deadlines := DeployableUntilDeadlinesFromChangeRequests(changeRequests)
 	if mode == installModeSelect || mode == installModeUpgrade || mode == installModeAdd {
-		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now()); err != nil {
+		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now(), deadlines); err != nil {
 			return nil, err
 		}
 	}
