@@ -29,6 +29,7 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `19` | `🗓️ Jul 26 · 19:34` | `Publication PR Title Provenance` | [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `20` | `🗓️ Jul 27 · 19:12` | `Responsive App Admin Registry Polling` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `21` | `🗓️ Jul 27 · 20:59` | `Rollout Phase Stepper and Selected Version Row` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
+| `23` | `🗓️ Jul 27` | `Retention expiresAt and Fleet Mirror` | [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) [`lifecycle.md`](../operations/lifecycle.md) |
 
 ## Tag Glossary
 
@@ -262,3 +263,11 @@ Replace the rollout text banner with a three-phase stepper on `/apps/{app}/admin
 **App UI:** [gestalt-providers#1184](https://github.com/valon-technologies/gestalt-providers/pull/1184)
 
 **Deploy:** [toolshed#3824](https://github.com/valon-technologies/toolshed/pull/3824) — bump `apps.home` snapshot to `0d5f672`
+
+<a id="changelog-23"></a>
+
+### 23 — Retention expiresAt and Fleet Mirror
+
+**Tags:** [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) [`lifecycle.md`](../operations/lifecycle.md)
+
+Simplify `retention.json` to `publishedAt`, `everDeployed`, and `expiresAt`. Publish sets `expiresAt` from `unusedRetention`; fleet selection clears it on the incoming version and sets it on the outgoing version from `deployedRetention`. Wire `RetentionCatalog` in `gestaltd serve` so deploy mirrors reach GCS. Prune evaluates `expiresAt` only and re-reads before destructive work to avoid races with redeploy.

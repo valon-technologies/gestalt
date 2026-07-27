@@ -162,7 +162,7 @@ Primary key: `id` (UUID).
 
 `metadata_json` carries the immutable install contract and publication provenance snapshot used to project `AppInstallation` and revision-history responses. Legacy rows may omit `publication`.
 
-The low-level `POST …/add` and `POST …/upgrade` routes reject an already-known `to_version`. App-admin version selection may append the same `to_version` again when that historical version is still inside its configured redeploy window. After `deployableUntil`, selection returns **400** and no row is appended.
+The low-level `POST …/add` and `POST …/upgrade` routes reject an already-known `to_version`. App-admin version selection may append the same `to_version` again when that historical version is still before `expiresAt`. After `expiresAt`, selection returns **400** and no row is appended.
 
 ### Indexes
 

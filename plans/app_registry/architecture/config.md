@@ -32,7 +32,7 @@ appRegistries:
       deployedRetention: 720h
 ```
 
-See [retention.md](../operations/retention.md) for policy semantics and the `retention.json` overlay. `unusedRetention` applies to never-deployed versions. `deployedRetention` controls how long an inactive historical version can be selected again after it stops being desired. Each deactivation captures a fixed deadline; later config changes do not alter it. Audit metadata remains permanent after the deployability window closes.
+See [retention.md](../operations/retention.md) for policy semantics and the `retention.json` overlay. `unusedRetention` is written as `expiresAt` on publish. `deployedRetention` is written as `expiresAt` when a version stops being desired. Each captured `expiresAt` is fixed; later config changes do not alter it. Audit metadata remains permanent after the deployability window closes.
 
 `gcs.bucket` accepts a bare bucket name or `gs://{bucket}`. Gestalt derives both URL forms:
 

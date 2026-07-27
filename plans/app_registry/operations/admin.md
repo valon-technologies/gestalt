@@ -105,7 +105,7 @@ Selection is fleet-wide. It is not per-user or per-replica.
 
 The page header shows the app name, **App management** label, registry binding, and current **Desired version**. Two tabs separate deployment from audit:
 
-- **Published snapshots** — pending, failed, and published entries in one newest-first list. A published row has **Deploy** when it is never deployed and before `publishedAt + unusedRetention`, or historical and before `deployableUntil`.
+- **Published snapshots** — pending, failed, and published entries in one newest-first list. A published row has **Deploy** when `expiresAt` has not passed (never deployed or historical).
 - **Revision history** — accepted fleet version changes in reverse chronological order. This tab is always read-only.
 
 See [pending-publish.md](./pending-publish.md) for snapshot merge rules, **3s** registry polling during bootstrap and active publish/rollout, and live **Publishing** duration labels.

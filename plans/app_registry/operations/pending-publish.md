@@ -162,8 +162,8 @@ Wireframes and columns: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 | **Publishing** | Entry from `pendingVersions` |
 | **Failed** | Entry from `failedVersions` |
 | **Deployed** | `version === desiredVersion` and no active rollout for this version |
-| **Redeployable** | Historical, not desired, and before `deployableUntil` |
-| **Locked** | Historical and past `deployableUntil` or `lockedAt` is set |
+| **Redeployable** | Historical, not desired, and before `expiresAt` |
+| **Locked** | Historical and past `expiresAt` |
 | **Expired** | Never deployed and past `publishedAt + unusedRetention`, pending prune |
 | **Available** | Never deployed and before `publishedAt + unusedRetention` |
 

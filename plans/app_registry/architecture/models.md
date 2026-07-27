@@ -279,9 +279,9 @@ Writes use the same optimistic-concurrency pattern as `pending.json`. `PruneFail
 
 **Path:** `apps/{app}/retention.json`
 
-Answers: _was this version deployed, when did it last stop being desired, and is it still eligible for historical redeployment?_
+Answers: _was this version deployed, and when does it expire from the registry?_
 
-Mutable overlay used by retention pruning. Not installable metadata. See [retention.md](../operations/retention.md) for policy rules and cleanup scope.
+Mutable overlay used by retention pruning and fleet admission. Not installable metadata. See [retention.md](../operations/retention.md) for policy rules and cleanup scope.
 
 ```json
 {
@@ -289,10 +289,8 @@ Mutable overlay used by retention pruning. Not installable metadata. See [retent
   "versions": {
     "0.0.0-snapshot.gabc123": {
       "publishedAt": "2026-07-20T12:00:00Z",
-      "lastDeactivatedAt": "2026-07-22T14:00:00Z",
-      "deployableUntil": "2026-08-21T14:00:00Z",
-      "firstDeployedAt": "2026-07-22T14:00:00Z",
-      "everDeployed": true
+      "everDeployed": true,
+      "expiresAt": "2026-08-21T14:00:00Z"
     }
   }
 }
@@ -311,12 +309,11 @@ Mutable overlay used by retention pruning. Not installable metadata. See [retent
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `publishedAt` | RFC 3339 timestamp | yes | Starts the unused-version retention window. |
-| `lastDeactivatedAt` | RFC 3339 timestamp | no | Most recent time this version stopped being desired. Omitted while it has never been deactivated. |
-| `deployableUntil` | RFC 3339 timestamp | no | Historical-redeploy deadline captured as `lastDeactivatedAt + deployedRetention` for the current deactivation interval. Cleared while this version is desired. |
-| `firstDeployedAt` | RFC 3339 timestamp | no | First fleet admission. |
-| `everDeployed` | bool | yes | Sticky flag; once true, deploy-chain records and version metadata are permanently protected from pruning. |
-| `lockedAt` | RFC 3339 timestamp | no | Sticky timestamp recorded after `deployableUntil`; the version can no longer become desired. |
+| `publishedAt` | RFC 3339 timestamp | yes | Publication time. Starts the unused-version window on first publish. |
+| `everDeployed` | bool | yes | Sticky flag; once true, deploy-chain records and version metadata are permanently protected from full deletion. |
+| `expiresAt` | RFC 3339 timestamp | no | Single expiry clock. Set to `publishedAt + unusedRetention` on publish. Cleared while the version is desired. Set to `now + deployedRetention` when another version becomes desired. Omitted or cleared while active. Readers treat a missing `expiresAt` on a deployed version as still redeployable (lean keep). |
+
+Legacy rows may still carry `deployableUntil`; readers map it to `expiresAt` until the next write.
 
 ---
 
