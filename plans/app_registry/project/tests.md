@@ -19,7 +19,7 @@ Reference for behavioral tests in the app registry plan.
 | `internal/server` | `handlers_app_admin_registry_test.go` | 4 | HTTP integration | [gestalt#2909](https://github.com/valon-technologies/gestalt/pull/2909) · [gestalt#2931](https://github.com/valon-technologies/gestalt/pull/2931) · [gestalt#2939](https://github.com/valon-technologies/gestalt/pull/2939) |
 | `internal/config` | `app_registry_retention_test.go` | 3 | Unit | [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) |
 | `internal/appregistry` | `retention_test.go`, `retention_prune_test.go` | 2 | Unit | [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) · [gestalt#2938](https://github.com/valon-technologies/gestalt/pull/2938) |
-| `gestalt-providers/app/default` | `e2e/app-admin-mock.spec.ts` | — | Playwright mock | [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142) · [gestalt-providers#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163) · [gestalt-providers#1177](https://github.com/valon-technologies/gestalt-providers/pull/1177) · [gestalt-providers#1178](https://github.com/valon-technologies/gestalt-providers/pull/1178) |
+| `gestalt-providers/app/default` | `e2e/app-admin-mock.spec.ts` | — | Playwright mock | [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142) · [gestalt-providers#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163) |
 | `services/ui/adminui` | registry UI smoke | — | Manual / browser | planned |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
@@ -489,8 +489,6 @@ Covered behaviors:
 - **Manage app** appears only when `managementPath` is returned
 - published versions render newest first with desired version selected
 - pending, failed, and published rows share one snapshots table with status and timing labels
-- **Publishing** row appears within **6s** without manual refresh while registry polling is active ([gestalt-providers#1177](https://github.com/valon-technologies/gestalt-providers/pull/1177))
-- in-flight **Publishing** duration labels advance client-side between frozen registry poll responses ([gestalt-providers#1178](https://github.com/valon-technologies/gestalt-providers/pull/1178))
 - the Revision history tab loads lazily, renders newest-first transitions, paginates older rows, and shows **No deployments yet** for an empty chain
 - active rollout or **409** after a stale page disables deploy actions until rollout is terminal
 - successful selection renders the new active rollout with sentence-case rollout labels (`Enrolling`, `Complete`)
