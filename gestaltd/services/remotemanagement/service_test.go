@@ -28,7 +28,7 @@ func TestNewRejectsNonPositiveLeaseDuration(t *testing.T) {
 	}
 	for _, d := range []time.Duration{0, -time.Second} {
 		if _, err := remotemanagement.New(
-			services.RemoteRegistrations, nil, &fakeValidator{}, remotemanagement.Config{LeaseDuration: d},
+			services.RemoteRegistrations, nil, nil, &fakeValidator{}, remotemanagement.Config{LeaseDuration: d},
 		); err == nil {
 			t.Fatalf("New(LeaseDuration=%v) succeeded, want error", d)
 		}
@@ -45,7 +45,7 @@ func newRemoteService(t *testing.T, authz core.AuthorizationProvider) *remoteman
 	services.RemoteRegistrations.SetClock(func() time.Time { return start })
 	validate := &fakeValidator{}
 	svc, err := remotemanagement.New(
-		services.RemoteRegistrations, authz, validate, remotemanagement.Config{LeaseDuration: testLease},
+		services.RemoteRegistrations, authz, services.Users, validate, remotemanagement.Config{LeaseDuration: testLease},
 	)
 	if err != nil {
 		t.Fatalf("remotemanagement.New: %v", err)
@@ -93,7 +93,7 @@ func (f *fakeValidator) Validate(ctx context.Context, tunnel *proto.TunnelEndpoi
 
 func TestCreateRemoteGenerationMatrix(t *testing.T) {
 	t.Parallel()
-	ctx := withPrincipal(context.Background(), "user:alice@example.com")
+	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 
 	t.Run("create_at_generation_zero", func(t *testing.T) {
 		t.Parallel()
@@ -109,8 +109,8 @@ func TestCreateRemoteGenerationMatrix(t *testing.T) {
 		if remote.Generation != 1 {
 			t.Fatalf("generation = %d, want 1", remote.Generation)
 		}
-		if remote.OwnerSubjectId != "user:alice@example.com" {
-			t.Fatalf("owner = %q, want user:alice@example.com", remote.OwnerSubjectId)
+		if remote.OwnerSubjectId != "user:alice-uuid" {
+			t.Fatalf("owner = %q, want user:alice-uuid", remote.OwnerSubjectId)
 		}
 	})
 
@@ -166,8 +166,8 @@ func TestCreateRemoteGenerationMatrix(t *testing.T) {
 func TestCreateRemoteCrossOwnerConflict(t *testing.T) {
 	t.Parallel()
 	svc := newRemoteService(t, nil)
-	alice := withPrincipal(context.Background(), "user:alice@example.com")
-	bob := withPrincipal(context.Background(), "user:bob@example.com")
+	alice := withPrincipal(context.Background(), "user:alice-uuid")
+	bob := withPrincipal(context.Background(), "user:bob-uuid")
 
 	if _, err := svc.CreateRemote(alice, &proto.CreateRemoteRequest{
 		Tunnel: validTunnel(), Providers: []*proto.RemoteProviderDefinition{appProvider("app", "test-app")}, ExpectedGeneration: 0,
@@ -184,7 +184,7 @@ func TestCreateRemoteCrossOwnerConflict(t *testing.T) {
 
 func TestCreateRemoteRejectsForbiddenKinds(t *testing.T) {
 	t.Parallel()
-	ctx := withPrincipal(context.Background(), "user:alice@example.com")
+	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 	svc := newRemoteService(t, nil)
 
 	for _, kind := range []string{"identity", "authorization"} {
@@ -199,7 +199,7 @@ func TestCreateRemoteRejectsForbiddenKinds(t *testing.T) {
 
 func TestDeleteRemoteGenerationRequiredAndNotFound(t *testing.T) {
 	t.Parallel()
-	ctx := withPrincipal(context.Background(), "user:alice@example.com")
+	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 	svc := newRemoteService(t, nil)
 
 	if _, err := svc.DeleteRemote(ctx, &proto.DeleteRemoteRequest{Id: "reg-1", ExpectedGeneration: 0}); codeOf(t, err) != codes.InvalidArgument {
@@ -212,7 +212,7 @@ func TestDeleteRemoteGenerationRequiredAndNotFound(t *testing.T) {
 
 func TestListRemotesEmptyAndAfterCreate(t *testing.T) {
 	t.Parallel()
-	ctx := withPrincipal(context.Background(), "user:alice@example.com")
+	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 	svc := newRemoteService(t, nil)
 
 	resp, err := svc.ListRemotes(ctx, &proto.ListRemotesRequest{})
@@ -244,7 +244,7 @@ func TestListRemotesEmptyAndAfterCreate(t *testing.T) {
 
 func TestAdminAuthorizationStates(t *testing.T) {
 	t.Parallel()
-	ctx := withPrincipal(context.Background(), "user:alice@example.com")
+	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 
 	t.Run("omitted_provider_allows", func(t *testing.T) {
 		t.Parallel()
@@ -292,7 +292,7 @@ func TestCreateRemoteUnauthenticatedWithoutPrincipal(t *testing.T) {
 
 func TestCreateRemoteValidationFailureIsFailedPrecondition(t *testing.T) {
 	t.Parallel()
-	ctx := withPrincipal(context.Background(), "user:alice@example.com")
+	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 	svc := newRemoteService(t, nil)
 	svc.SetValidator(&fakeValidator{fail: true})
 	_, err := svc.CreateRemote(ctx, &proto.CreateRemoteRequest{
@@ -318,7 +318,7 @@ func TestDeleteRemoteRequiresPrincipalEvenWithoutAuthz(t *testing.T) {
 
 func TestListRemotesOmitsExpiredRegistration(t *testing.T) {
 	t.Parallel()
-	ctx := withPrincipal(context.Background(), "user:alice@example.com")
+	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 	svc := newRemoteService(t, nil)
 	if _, err := svc.CreateRemote(ctx, &proto.CreateRemoteRequest{
 		Tunnel: validTunnel(), Providers: []*proto.RemoteProviderDefinition{appProvider("app", "test-app")}, ExpectedGeneration: 0,
@@ -338,7 +338,7 @@ func TestListRemotesOmitsExpiredRegistration(t *testing.T) {
 
 func TestCreateRemoteRejectsDuplicateProviders(t *testing.T) {
 	t.Parallel()
-	ctx := withPrincipal(context.Background(), "user:alice@example.com")
+	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 	svc := newRemoteService(t, nil)
 	dup := appProvider("app", "test-app")
 	_, err := svc.CreateRemote(ctx, &proto.CreateRemoteRequest{

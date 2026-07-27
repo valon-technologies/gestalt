@@ -79,6 +79,7 @@ func newUpstreamHarness(t *testing.T) (*upstreamHarness, context.Context, func()
 	rmService, err := remotemanagement.New(
 		services.RemoteRegistrations,
 		nil,
+		services.Users,
 		validator,
 		remotemanagement.Config{
 			ServerIdentity: &proto.ServerIdentity{ClientSpkiSha256: upstreamID.SPKISHA256},
