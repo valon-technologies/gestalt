@@ -122,7 +122,7 @@ func NewInstallFixture(t *testing.T) InstallFixture {
 				SHA256:    archiveSHA,
 			},
 		},
-		PublishedAt: time.Date(2026, 7, 10, 2, 21, 54, 0, time.UTC),
+		PublishedAt: time.Now().UTC().Add(-1 * time.Hour),
 	}
 	entryJSON, err := json.Marshal(entry)
 	if err != nil {

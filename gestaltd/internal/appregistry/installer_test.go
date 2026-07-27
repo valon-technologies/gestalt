@@ -248,16 +248,25 @@ func TestInstallerSelectAllowsRevertingToKnownVersion(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	fixture := registrytest.NewInstallFixture(t)
 	start := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	for index, version := range []string{fixture.Version, "2.0.0"} {
-		if _, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
-			App:         "g-issues",
-			FromVersion: "previous",
-			ToVersion:   version,
-			Actor:       "user:alice",
-			Timestamp:   start.Add(time.Duration(index) * time.Hour),
-		}); err != nil {
-			t.Fatalf("AppendRequest(%s): %v", version, err)
-		}
+	deployableUntil := start.Add(30 * 24 * time.Hour)
+	if _, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: appregistry.FirstInstallFromVersion,
+		ToVersion:   fixture.Version,
+		Actor:       "user:alice",
+		Timestamp:   start,
+	}); err != nil {
+		t.Fatalf("AppendRequest(%s): %v", fixture.Version, err)
+	}
+	if _, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+		App:                        "g-issues",
+		FromVersion:                fixture.Version,
+		ToVersion:                  "2.0.0",
+		Actor:                      "user:alice",
+		Timestamp:                  start.Add(time.Hour),
+		FromVersionDeployableUntil: &deployableUntil,
+	}); err != nil {
+		t.Fatalf("AppendRequest(2.0.0): %v", err)
 	}
 	installer := &appregistry.Installer{
 		Registries: map[string]config.AppRegistryConfig{

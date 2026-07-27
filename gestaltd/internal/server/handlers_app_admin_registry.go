@@ -221,16 +221,17 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry failed catalog")
 		return
 	}
-	retentionIndex, err := reader.FetchRetentionIndex(r.Context(), publicRoot, app.name)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to fetch app registry retention catalog")
-		return
-	}
 	policy, err := retentionPolicyFromRegistry(registry)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "app registry is unavailable")
 		return
 	}
+	changeRequests, err := s.appVersionChanges.ListRequestsByApp(r.Context(), app.name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	chain := appregistry.VersionDeploymentChainFromChangeRequests(changeRequests)
 	now := time.Now().UTC()
 	publishedKeys := appregistry.PublishedVersionKeys(index, app.name)
 	pendingKeys := appregistry.PendingVersionKeys(pendingIndex)
@@ -238,7 +239,7 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	published := make([]appAdminPublishedVersion, 0, len(summaries))
 	desiredVersion := coredata.LatestKnownVersion(known)
 	for i := range summaries {
-		published = append(published, appAdminPublishedVersionFromSummary(summaries[i], desiredVersion, retentionIndex, policy, now))
+		published = append(published, appAdminPublishedVersionFromSummary(summaries[i], desiredVersion, policy, now, chain))
 	}
 	pendingVersions := make([]appAdminPendingVersion, 0)
 	for _, entry := range appregistry.PendingVersionsForAdmin(pendingIndex, publishedKeys) {
@@ -310,11 +311,6 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry index")
 		return
 	}
-	retentionIndex, err := reader.FetchRetentionIndex(r.Context(), publicRoot, app.name)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to fetch app registry retention catalog")
-		return
-	}
 	policy, err := retentionPolicyFromRegistry(registry)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "app registry is unavailable")
@@ -326,6 +322,12 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}
+	allChangeRequests, err := s.appVersionChanges.ListRequestsByApp(r.Context(), app.name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	chain := appregistry.VersionDeploymentChainFromChangeRequests(allChangeRequests)
 	desiredVersion := coredata.LatestKnownVersion(known)
 	currentRevisionID, err := s.appVersionChanges.LatestDesiredRevisionID(r.Context(), app.name, desiredVersion)
 	if err != nil {
@@ -345,7 +347,7 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 			request,
 			desiredVersion,
 			currentRevisionID,
-			retentionIndex,
+			chain,
 			policy,
 			publishedByVersion,
 			actorLabels[strings.TrimSpace(request.Actor)],
@@ -456,7 +458,7 @@ func appVersionSourceURL(repository, sourceRef string) string {
 	return repository + "/commit/" + sourceRef
 }
 
-func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary, desiredVersion string, retention *appregistry.RetentionIndex, policy appregistry.RetentionPolicy, now time.Time) appAdminPublishedVersion {
+func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary, desiredVersion string, policy appregistry.RetentionPolicy, now time.Time, chain appregistry.VersionDeploymentChain) appAdminPublishedVersion {
 	version := appAdminPublishedVersion{
 		Version:     summary.Version,
 		PublishedAt: formatAdminTime(summary.PublishedAt),
@@ -465,7 +467,7 @@ func appAdminPublishedVersionFromSummary(summary appregistry.VersionSummary, des
 		SourceURL:   appVersionSourceURL(summary.Repository, summary.SourceRef),
 		Publication: summary.Publication,
 	}
-	state, deployableUntil := appregistry.VersionDeploymentState(summary.Version, desiredVersion, retention, policy, now)
+	state, deployableUntil := appregistry.VersionDeploymentState(summary.Version, desiredVersion, summary.PublishedAt, policy, now, chain)
 	version.DeploymentState = state
 	if deployableUntil != nil && !deployableUntil.IsZero() {
 		version.DeployableUntil = formatAdminTime(*deployableUntil)
@@ -548,7 +550,7 @@ func appAdminRegistryRevisionFromRequest(
 	request *core.AppVersionChangeRequest,
 	desiredVersion string,
 	currentRevisionID string,
-	retention *appregistry.RetentionIndex,
+	chain appregistry.VersionDeploymentChain,
 	policy appregistry.RetentionPolicy,
 	publishedByVersion map[string]appregistry.VersionSummary,
 	deployedBy string,
@@ -583,7 +585,11 @@ func appAdminRegistryRevisionFromRequest(
 	revision.SourceRef = sourceRef
 	revision.SourceURL = appVersionSourceURL(repository, sourceRef)
 
-	state, deployableUntil := appregistry.VersionDeploymentState(version, desiredVersion, retention, policy, now)
+	publishedAt := time.Time{}
+	if summary, ok := publishedByVersion[version]; ok {
+		publishedAt = summary.PublishedAt
+	}
+	state, deployableUntil := appregistry.VersionDeploymentState(version, desiredVersion, publishedAt, policy, now, chain)
 	revision.DeploymentState = historyDeploymentState(state)
 	if deployableUntil != nil && !deployableUntil.IsZero() {
 		revision.DeployableUntil = formatAdminTime(*deployableUntil)

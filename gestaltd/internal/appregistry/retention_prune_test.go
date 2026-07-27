@@ -20,17 +20,14 @@ func TestEvaluateRetentionPrune(t *testing.T) {
 			"v-old":    {PublishedAt: now.Add(-800 * time.Hour)},
 		},
 	}
-	retention := appregistry.NewEmptyRetentionIndex()
-	appregistry.UpsertPublishedRetention(retention, "v-unused", now.Add(-96*time.Hour))
-	retention.Versions["v-old"] = appregistry.RetentionVersion{
-		PublishedAt:       now.Add(-800 * time.Hour),
-		EverDeployed:      true,
-		DeployableUntil:   ptrTime(now.Add(-1 * time.Hour)),
-		FirstDeployedAt:   ptrTime(now.Add(-800 * time.Hour)),
-		LastDeactivatedAt: ptrTime(now.Add(-40 * 24 * time.Hour)),
+	chain := appregistry.VersionDeploymentChain{
+		Deployed: map[string]struct{}{"v-old": {}},
+		Deadlines: map[string]time.Time{
+			"v-old": now.Add(-1 * time.Hour),
+		},
 	}
 
-	actions := appregistry.EvaluateRetentionPrune(index, retention, "g-issues", "v-current", map[string]struct{}{"v-old": {}}, policy, now)
+	actions := appregistry.EvaluateRetentionPrune(index, "g-issues", "v-current", chain, policy, now)
 	if len(actions) < 2 {
 		t.Fatalf("actions = %#v", actions)
 	}
@@ -45,5 +42,31 @@ func TestDeployedVersionsFromChangeRequests(t *testing.T) {
 	})
 	if _, ok := versions["v1"]; !ok || len(versions) != 2 {
 		t.Fatalf("versions = %#v", versions)
+	}
+}
+
+func TestEvaluateRetentionPrune_skipsDeleteUnusedForDeployedVersion(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	policy := appregistry.RetentionPolicy{UnusedRetention: 72 * time.Hour, DeployedRetention: 720 * time.Hour}
+	index := appregistry.NewEmptyIndex()
+	index.Apps["g-issues"] = appregistry.AppVersions{
+		Versions: map[string]appregistry.IndexVersion{
+			"v-old": {PublishedAt: now.Add(-96 * time.Hour)},
+		},
+	}
+	chain := appregistry.VersionDeploymentChain{
+		Deployed: map[string]struct{}{"v-old": {}},
+		Deadlines: map[string]time.Time{
+			"v-old": now.Add(24 * time.Hour),
+		},
+	}
+
+	actions := appregistry.EvaluateRetentionPrune(index, "g-issues", "v-current", chain, policy, now)
+	for _, action := range actions {
+		if action.Kind == appregistry.RetentionPruneDeleteUnused {
+			t.Fatalf("unexpected delete_unused for deployed version: %#v", actions)
+		}
 	}
 }

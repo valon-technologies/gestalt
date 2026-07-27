@@ -526,10 +526,7 @@ func uploadAppPublishPlan(plan appPublishPlan, sourceRef string) error {
 	if err := uploadAppPublishImmutableObjects(plan, sourceRef); err != nil {
 		return err
 	}
-	if err := uploadAppRegistryIndex(plan, sourceRef); err != nil {
-		return err
-	}
-	return uploadAppRegistryRetention(plan, sourceRef)
+	return uploadAppRegistryIndex(plan, sourceRef)
 }
 
 func uploadAppPublishImmutableObjects(plan appPublishPlan, sourceRef string) error {
@@ -657,54 +654,6 @@ func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
 		return nil
 	}
 	return fmt.Errorf("update %s: exceeded retry limit after concurrent index updates", indexPath)
-}
-
-func uploadAppRegistryRetention(plan appPublishPlan, sourceRef string) error {
-	storageRoot := strings.TrimSuffix(plan.IndexObject.StorageURL, appregistry.AppIndexPath(plan.AppName))
-	retentionPath := appregistry.StorageURL(storageRoot, appregistry.AppRetentionPath(plan.AppName))
-	progress := startCommandProgress("Updating app registry retention catalog")
-	for attempt := 1; attempt <= appPublishIndexUpdateAttempts; attempt++ {
-		if attempt > 1 {
-			progress.status("App registry retention catalog changed concurrently; retrying attempt %d/%d", attempt, appPublishIndexUpdateAttempts)
-		}
-		generation, existing, err := downloadAppRegistryObject(retentionPath)
-		if err != nil {
-			return err
-		}
-		var index *appregistry.RetentionIndex
-		if len(existing) == 0 {
-			index = appregistry.NewEmptyRetentionIndex()
-		} else {
-			index, err = appregistry.DecodeRetentionIndex(existing)
-			if err != nil {
-				return fmt.Errorf("decode existing retention index: %w", err)
-			}
-		}
-		if !appregistry.UpsertPublishedRetention(index, plan.Version, plan.Entry.PublishedAt) {
-			progress.done("App registry retention catalog unchanged")
-			return nil
-		}
-		data, err := json.MarshalIndent(index, "", "  ")
-		if err != nil {
-			return err
-		}
-		tmpPath, err := writeTempJSON("gestalt-app-retention-*", append(data, '\n'))
-		if err != nil {
-			return err
-		}
-		if err := uploadAppRegistryIndexFile(tmpPath, retentionPath, sourceRef, generation); err != nil {
-			_ = os.Remove(tmpPath)
-			if appPublishPreconditionFailed(err) && attempt < appPublishIndexUpdateAttempts {
-				continue
-			}
-			return err
-		}
-		_ = os.Remove(tmpPath)
-		progress.done("Updated app registry retention catalog")
-		_, _ = fmt.Fprintf(os.Stdout, "updated %s\n", retentionPath)
-		return nil
-	}
-	return fmt.Errorf("update %s: exceeded retry limit after concurrent retention updates", retentionPath)
 }
 
 func uploadAppRegistryIndexFile(localPath, storageURL, sourceRef string, generation int64) error {
