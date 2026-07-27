@@ -160,9 +160,18 @@ func (s *GestaltdSourceVersionService) BeginPromotion(ctx context.Context, sourc
 	} else if !errors.Is(getErr, idb.ErrNotFound) {
 		return nil, fmt.Errorf("begin gestaltd source version promotion: load state: %w", getErr)
 	}
-	if candidate := strings.TrimSpace(state.CandidateSourceVersion); state.State == core.GestaltdSourceVersionStatePromoting &&
-		candidate != "" && candidate != sourceVersion {
-		return nil, ErrGestaltdSourceVersionMismatch
+	candidate := strings.TrimSpace(state.CandidateSourceVersion)
+	if state.State == core.GestaltdSourceVersionStatePromoting {
+		if candidate != "" && candidate != sourceVersion {
+			return nil, ErrGestaltdSourceVersionMismatch
+		}
+		if candidate == sourceVersion {
+			if err := tx.Commit(ctx); err != nil {
+				return nil, fmt.Errorf("begin gestaltd source version promotion: commit retry: %w", err)
+			}
+			committed = true
+			return state, nil
+		}
 	}
 	state.CandidateSourceVersion = sourceVersion
 	state.State = core.GestaltdSourceVersionStatePromoting

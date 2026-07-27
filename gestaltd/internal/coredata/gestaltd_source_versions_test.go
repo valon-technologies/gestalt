@@ -143,7 +143,15 @@ func TestGestaltdSourceVersionPromotionReopensRolloutCompletedDuringPromotion(t 
 	if _, err := services.AppRollouts.MarkComplete(ctx, "g-issues", "v2", promotionStartedAt.Add(time.Minute)); err != nil {
 		t.Fatalf("MarkComplete: %v", err)
 	}
-	promotedAt := promotionStartedAt.Add(2 * time.Minute)
+	retryAt := promotionStartedAt.Add(2 * time.Minute)
+	state, err := services.GestaltdSourceVersionState.BeginPromotion(ctx, "source-new", retryAt)
+	if err != nil {
+		t.Fatalf("retry BeginPromotion: %v", err)
+	}
+	if !state.UpdatedAt.Equal(promotionStartedAt) {
+		t.Fatalf("promotion started at = %v after retry, want %v", state.UpdatedAt, promotionStartedAt)
+	}
+	promotedAt := promotionStartedAt.Add(3 * time.Minute)
 	if _, err := services.GestaltdSourceVersionState.Promote(ctx, "source-new", promotedAt, 2*time.Minute, 15*time.Minute); err != nil {
 		t.Fatalf("Promote new: %v", err)
 	}
