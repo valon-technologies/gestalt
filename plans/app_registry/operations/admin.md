@@ -24,6 +24,7 @@ Use the same names as [lifecycle.md](./lifecycle.md#runtime-version-invariants):
 - **Fleet-known** — an accepted `(app, version)` projected from `app_version_change_requests`.
 - **Desired version** — latest fleet-known version for an app (`LatestKnownVersion`).
 - **Rollout** — fleet-wide execution record in `app_rollouts` (`enrolling` → `restarting` → `complete` | `failed`).
+- **Target deployment** — Toolshed `SOURCE_VERSION` whose replicas determine the rollout outcome.
 - **Converged** — the poller recorded `restarted_at` for the replica and version. Rollout accounting, not proof the provider is still running that version.
 
 Label **converged** as rollout progress, not current runtime state.
@@ -59,8 +60,8 @@ Auto-refresh every 10–15s while any listed rollout is non-terminal.
 ### App Detail (`/admin/registry/{app}`)
 
 1. **Summary** — registry binding, desired version, latest published version (if available), install metadata (`installedBy`, `installedAt`).
-2. **Rollout** — state badge, timestamps, enrollment deadline, failure reason when `failed`.
-3. **Replicas** — per-replica rollout progress (`instanceId`, acknowledged / materialized / stopped / restarted, `attemptCount`, last error). Sort by `instanceId`.
+2. **Rollout** — state badge, target deployment, target Cloud Run revision, timestamps, enrollment deadline, failure reason when `failed`.
+3. **Replicas** — per-replica rollout progress (`instanceId`, `deploymentId`, `cloudRunRevision`, `inCohort`, acknowledged / materialized / stopped / restarted, `attemptCount`, last error). Group by deployment and sort by `instanceId`.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -70,13 +71,16 @@ Auto-refresh every 10–15s while any listed rollout is non-terminal.
 │ Desired: 0.0.0-snapshot.gcd9d741…      installed 2026-07-21 … │
 │ Published latest: 0.0.0-snapshot.gcd9d741… (same)             │
 ├─────────────────────────────────────────────────────────────┤
-│ Replicas                                                      │
-│ instanceId                 mat.  restart  att  error          │
-│ gestaltd-…-ncnq6           ✓     ✓        0                   │
-│ gestaltd-…-hdnx2           ✓     ✓        0                   │
-│ gestaltd-…-smmq7           ✓     ✓        0                   │
+│ Replicas — deployment 61885be… (target)          3/3 restarted │
+│ instanceId                 mat.  restart  att  error           │
+│ gestaltd-…-ncnq6           ✓     ✓        0                    │
+│ gestaltd-…-hdnx2           ✓     ✓        0                    │
+│ gestaltd-…-smmq7           ✓     ✓        0                    │
+│ Deployment 574fe77… (superseded)                 1/3 restarted │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+The apps-list denominator includes only target-deployment replicas. Superseded deployment rows remain on app detail so an operator can explain Cloud Run overlap without treating terminated old revisions as rollout failures.
 
 ---
 
