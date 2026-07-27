@@ -161,14 +161,13 @@ Wireframes and columns: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 | --- | --- |
 | **Publishing** | Entry from `pendingVersions` |
 | **Failed** | Entry from `failedVersions` |
-| **Deployed** | `version === desiredVersion` |
-| **Rolling out** | Active rollout for this version |
+| **Deployed** | `version === desiredVersion` and no active rollout for this version |
 | **Redeployable** | Historical, not desired, and before `deployableUntil` |
 | **Locked** | Historical and past `deployableUntil` or `lockedAt` is set |
 | **Expired** | Never deployed and past `publishedAt + unusedRetention`, pending prune |
 | **Available** | Never deployed and before `publishedAt + unusedRetention` |
 
-**Available** and **Redeployable** rows expose **Deploy**. Revision history is read-only and appears on its own tab; see [admin.md](./admin.md#revision-history-tab).
+**Available** and **Redeployable** rows expose **Deploy**. Rollout stepper and selected-version row affordance: [admin.md](./admin.md#rollout-phase-stepper). Revision history is read-only and appears on its own tab; see [admin.md](./admin.md#revision-history-tab).
 
 Polling (`gestalt-providers`):
 
@@ -225,7 +224,8 @@ Implementation:
 
 <pre>
 ├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
-└── <a href="../project/changelog.md#changelog-19">19 — Publication PR Title Provenance</a>
+├── <a href="../project/changelog.md#changelog-19">19 — Publication PR Title Provenance</a>
+└── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Selected Version Row</a>
 </pre>
 
 ### Related Docs

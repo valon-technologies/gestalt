@@ -491,12 +491,15 @@ Covered behaviors:
 - pending, failed, and published rows share one snapshots table with status and timing labels
 - the Revision history tab loads lazily, renders newest-first transitions, paginates older rows, and shows **No deployments yet** for an empty chain
 - active rollout or **409** after a stale page disables deploy actions until rollout is terminal
-- successful selection renders the new active rollout with sentence-case rollout labels (`Enrolling`, `Complete`)
 - **403** renders access denied without registry metadata
 - publication labels link only the PR number; titles render as plain muted text when present
 
 Not yet covered in Playwright mocks:
 
+- rollout phase stepper shows **Enrolling** / **Restarting** / **Available** or **Failed**
+- active rollout highlights the admitted row with a slow pulse and **Deploying...** action label
+- completed rollout keeps a solid success tint and arrow on the deployed version
+- failed rollout keeps a solid error tint and arrow on the failed admission target
 - expired never-deployed snapshots show **Expired** without a deploy action
 - historical snapshots show **Redeployable** with a deadline and deploy action, or **Locked** without one
 - legacy published versions without `publication` show **not recorded** for workflow/PR fields

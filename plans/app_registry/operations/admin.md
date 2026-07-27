@@ -10,7 +10,7 @@ Operators installing registry apps should answer these questions without reading
 | --------------------------------- | ----------------------------- |
 | Which apps are registry-only?     | Embedded admin apps list      |
 | What is the desired version?      | Desired version on app detail |
-| Is the rollout still in progress? | Rollout status badge          |
+| Is the rollout still in progress? | Rollout phase stepper (`/apps/{app}/admin`); rollout badge (embedded `/admin`) |
 | Which replicas have converged?    | Replica convergence table     |
 
 App admins additionally select the fleet-wide desired version and inspect each candidate version's publication provenance.
@@ -96,6 +96,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded `/admi
 - Show whether historical versions are still redeployable or permanently locked.
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable deploy actions while a rollout is `enrolling` or `restarting`; poll registry state every **3s** and refresh until rollout is terminal.
+- Show rollout progress and the admitted version on the snapshots tab. See [Rollout phase stepper](#rollout-phase-stepper) and [Selected version row](#selected-version-row).
 - Render access denied on **403** without leaking registry metadata.
 
 Selection is fleet-wide. It is not per-user or per-replica.
@@ -130,22 +131,76 @@ PR #2900 · Title | 0.0.0-snapshot.g… | Expired                 | Jun 01 09:00
 
 Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is unavailable on **Publishing**, **Failed**, **Deployed**, **Locked**, and **Expired** rows. **Deployed** marks the desired version. **Redeployable** shows the fixed deadline or remaining duration.
 
-During an active rollout, disable deploy actions and show rollout state above the table:
+### Rollout phase stepper
+
+Replace the `Rollout {state}: {version}` text banner with a horizontal three-phase marker under the page header (above the tabs). Always visible on `/apps/{app}/admin`.
+
+| Phase | `rollout.state` | Label |
+| ----- | --------------- | ----- |
+| 1 | `enrolling` | **Enrolling** |
+| 2 | `restarting` | **Restarting** |
+| 3 | `complete` | **Available** |
+| 3 | `failed` | **Failed** |
+
+Do **not** add a materialization phase. Per-replica artifact download during enrollment is part of phase 1; see [lifecycle.md](./lifecycle.md#rollout-admission-and-completion).
+
+During `enrolling` or `restarting`, emphasize the current phase node, mark completed phases yellow, and leave future phases as yellow outline markers. Connector segments before the current phase are solid; later segments are muted.
+
+When rollout is terminal or absent, show **Enrolling** and **Restarting** as yellow completed nodes. The rightmost node is **green** on `complete`, **red** on `failed`, or muted when the app has never been deployed.
+
+```text
+During restarting:
+
+○----------------------●-------------------------○
+Enrolling              Restarting                Available
+
+Rollout complete:
+
+○----------------------○-------------------------●
+Enrolling              Restarting                Available
+
+Rollout failed:
+
+○----------------------○-------------------------●
+Enrolling              Restarting                Failed
+```
+
+The stepper reads `registry.rollout.state` and `registry.rollout.version`. It does not duplicate replica-level materialization from the embedded `/admin` UI.
+
+### Selected version row
+
+Once an operator selects a version, keep a leading arrow (`→`) and row tint on that version through rollout and after it finishes. Target `registry.rollout.version` while a rollout exists; after terminal `complete` or `failed`, keep the affordance until a newer rollout replaces it. Do not use a **Rolling out** badge in the **Status** column.
+
+| `rollout.state` | Row tint | Arrow | Action |
+| --------------- | -------- | ----- | ------ |
+| `enrolling`, `restarting` | Accent, slow pulse (**~2s** cycle) | Pulses with row | **Deploying...** (disabled) |
+| `complete` | Solid success | Static | `—` |
+| `failed` | Solid error | Static | **Deploy** when still selectable, otherwise `—` |
+
+Deploy actions stay disabled on every row while rollout is active (`selectionDisabled` or local `deployingVersion`). Only the admitted version shows **Deploying...**.
+
+During an active rollout:
 
 ```text
 g-issues                                                                 App management
 registry: toolshed
 
-Desired version: 0.0.0-snapshot.gabc123
-Rollout Enrolling: 0.0.0-snapshot.gdef456
+Desired version: 0.0.0-snapshot.gdef456
+
+○----------------------●-------------------------○
+Enrolling              Restarting                Available
 
 Published snapshots
 
-Pull request     | Snapshot          | Status      | Last update  | Action
----------------- | ----------------- | ----------- | ------------ | --------
-PR #3251 · Title | 0.0.0-snapshot.g… | Rolling out | Jul 22 15:00 | disabled
-PR #3200 · Title | 0.0.0-snapshot.g… | Deployed    | Jul 21 12:00 | disabled
+Pull request     | Snapshot          | Status    | Last update  | Action
+---------------- | ----------------- | --------- | ------------ | ---------------
+→ PR #3251 · …   | 0.0.0-snapshot.g… | Available | Jul 22 15:00 | Deploying...
+PR #3200 · …     | 0.0.0-snapshot.g… | Deployed  | Jul 21 12:00 | —
 ```
+
+(`→` and row tint pulse slowly during `enrolling` / `restarting`.)
+
+After `complete`, the admitted row keeps a solid success tint and **Deployed** status. After `failed`, keep a solid error tint on the failed admission; the fleet may still run the previous desired version.
 
 A **Failed** row in the same table:
 
@@ -199,7 +254,8 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 ├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
 ├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
 ├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
-└── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
+├── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
+└── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Selected Version Row</a>
 </pre>
 
 ### Related Docs
