@@ -120,7 +120,7 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 	})
 	testutil.CloseOnCleanup(t, srv)
 
-	resp, err := http.Post(srv.URL+"/activate", "", nil)
+	resp, err := http.Post(srv.URL+"/activate?source_version=source-new", "", nil)
 	if err != nil {
 		t.Fatalf("POST /activate: %v", err)
 	}
@@ -144,6 +144,32 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("activation calls = %d, want 1", calls.Load())
+	}
+}
+
+func TestActivateEndpointRequiresMatchingSourceVersion(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.SourceVersion = "source-new"
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	for _, tc := range []struct {
+		path       string
+		wantStatus int
+	}{
+		{path: "/activate", wantStatus: http.StatusBadRequest},
+		{path: "/activate?source_version=source-old", wantStatus: http.StatusConflict},
+	} {
+		resp, err := http.Post(srv.URL+tc.path, "", nil)
+		if err != nil {
+			t.Fatalf("POST %s: %v", tc.path, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != tc.wantStatus {
+			t.Fatalf("POST %s status = %d, want %d", tc.path, resp.StatusCode, tc.wantStatus)
+		}
 	}
 }
 

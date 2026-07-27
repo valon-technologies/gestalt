@@ -239,9 +239,9 @@ Primary key: `id` = `gestaltd`.
 
 The source version is the Toolshed commit SHA injected into each process as `SOURCE_VERSION`. `updated_at` records the last source change or explicit deployment retry.
 
-Toolshed calls the candidate's tagged `POST /activate` endpoint before shifting traffic. Activation atomically updates `current_source_version` and retargets active app rollouts with fresh timestamps. A repeated activation for the same source is idempotent.
+Toolshed calls the candidate's tagged `POST /activate?source_version={SOURCE_VERSION}` endpoint before shifting traffic. The handler rejects a source-version mismatch so an old revision reached through a stale URL cannot move the target backward. Activation atomically updates `current_source_version` and retargets active app rollouts with fresh timestamps. A repeated activation for the same source is idempotent.
 
-If deployment fails after activation, traffic rollback does not update this record. A workflow retry calls `POST /activate?retry=true`, updates `updated_at`, refreshes active rollout epochs, and reopens rollouts for this source that failed after the previous activation. The retry does not append another change request.
+If deployment fails after activation, traffic rollback does not update this record. A workflow retry calls `POST /activate?source_version={SOURCE_VERSION}&retry=true`, updates `updated_at`, refreshes active rollout epochs, and reopens rollouts for this source that failed after the previous activation. The retry does not append another change request.
 
 ---
 

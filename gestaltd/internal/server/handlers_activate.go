@@ -19,6 +19,15 @@ func (s *Server) activateAppProvidersHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if s.sourceVersion != "" {
+		expectedSourceVersion := strings.TrimSpace(r.URL.Query().Get("source_version"))
+		if expectedSourceVersion == "" {
+			writeError(w, http.StatusBadRequest, "source_version is required")
+			return
+		}
+		if expectedSourceVersion != s.sourceVersion {
+			writeError(w, http.StatusConflict, "source_version does not match this gestaltd revision")
+			return
+		}
 		if s.gestaltdSourceVersions == nil {
 			writeError(w, http.StatusServiceUnavailable, "gestaltd source version service is unavailable")
 			return

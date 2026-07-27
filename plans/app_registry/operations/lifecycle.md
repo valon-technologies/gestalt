@@ -110,11 +110,11 @@ The replica handling the version-selection HTTP request does not choose the targ
 
 Toolshed deployment orchestration owns shared source-version state:
 
-1. After the candidate passes readiness, call `POST /activate` on its tagged management URL before shifting traffic. Activation atomically records its `SOURCE_VERSION` as current and retargets active app rollouts with a fresh enrollment epoch.
+1. After the candidate passes readiness, call `POST /activate?source_version={SOURCE_VERSION}` on its tagged management URL before shifting traffic. The candidate rejects the request unless the expected source version matches its local value. Activation atomically records that `SOURCE_VERSION` as current and retargets active app rollouts with a fresh enrollment epoch.
 2. App admission reads the current source-version record while holding the app install lock and copies it to the rollout.
 3. Shift 100% traffic to the candidate.
 
-A repeated activation for the same source version is idempotent. If deployment fails after activation, rollback restores Cloud Run and Temporal traffic but does not restore the previous source-version record. Until the deployment is retried, a new app rollout may target the unavailable candidate and fail. Retrying the failed deployment calls `POST /activate?retry=true`; this refreshes active rollout epochs and reopens rollouts for that source version that failed since its previous activation before traffic is shifted again.
+A repeated activation for the same source version is idempotent. If deployment fails after activation, rollback restores Cloud Run and Temporal traffic but does not restore the previous source-version record. Until the deployment is retried, a new app rollout may target the unavailable candidate and fail. Retrying the failed deployment calls `POST /activate?source_version={SOURCE_VERSION}&retry=true`; this refreshes active rollout epochs and reopens rollouts for that source version that failed since its previous activation before traffic is shifted again.
 
 If a new source version becomes current while an app rollout is active, retarget the rollout and open a fresh enrollment window. Rollout transitions are fenced by target source version and enrollment epoch so a poller that sampled the old rollout cannot complete, fail, or advance the new one. The desired app version and change request do not change. Materialization rows from the superseded source version remain diagnostic and have `inCohort: false`.
 
