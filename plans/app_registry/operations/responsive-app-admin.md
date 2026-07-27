@@ -15,6 +15,8 @@ Scope is `/apps/{app}/admin` only — the embedded fleet `/admin` registry UI do
 
 Planned changelog step: **20**. See [changelog.md](../project/changelog.md).
 
+This file is **plan-only** for [gestalt#2949](https://github.com/valon-technologies/gestalt/pull/2949). On ship, fold its content into [pending-publish.md](./pending-publish.md), [admin.md](./admin.md), [changelog.md](../project/changelog.md), and [tests.md](../project/tests.md), then delete this file and remove the link from [readme.md](../readme.md).
+
 ## Goals
 
 - Poll `GET /api/v1/apps/{app}/admin/registry` every **3s** while the bootstrap window is open or publish/rollout is active (today: **12s**).
@@ -110,10 +112,10 @@ This plan PR ([gestalt#2949](https://github.com/valon-technologies/gestalt/pull/
 | --- | --- | --- | --- |
 | **1** | `gestalt-providers` | 3s registry polling | `polling.ts`, `lib/queries/app-admin.ts`, `e2e/app-admin-mock.spec.ts` |
 | **2** | `gestalt-providers` | Live **Publishing** duration labels | `hooks/use-live-now.ts`, `app-admin-snapshots-table.tsx`, `snapshot-rows.ts` |
-| **3** | `toolshed` | Deploy bump | `valon-tools/deploy/config.yaml` — `apps.home.source.git.ref` to the merged `gestalt-providers` commit |
-| **4** | `gestalt` | App registry docs for step **20** | `pending-publish.md`, `admin.md`, `changelog.md`, `tests.md`, `responsive-app-admin.md` (Shipped In) |
+| **3** | `gestalt` | App registry docs for step **20** | Fold this plan into `pending-publish.md`, `admin.md`, `changelog.md`, `tests.md`; delete `responsive-app-admin.md` |
+| **4** | `toolshed` | Deploy bump | `valon-tools/deploy/config.yaml` — `apps.home.source.git.ref` to the merged `gestalt-providers` commit |
 
-**Merge order:** **1** and **2** may land in either order or as one `gestalt-providers` PR if the diff stays small. Merge **3** after **1** and **2** so production serves the new default app UI. Merge **4** last so shipped docs match the deployed behavior.
+**Merge order:** **1** and **2** may land in either order or as one `gestalt-providers` PR if the diff stays small. Merge **3** after **1** and **2** so shipped docs match the implementation. Merge **4** after **1** and **2** so production serves the new default app UI (**3** and **4** may land in either order).
 
 No `gestaltd` changes — the app-admin API and GCS layout are unchanged.
 
@@ -131,19 +133,21 @@ No `gestaltd` changes — the app-admin API and GCS layout are unchanged.
 - `snapshot-rows.ts` — **Publishing** duration from `startedAt` + `liveNow` (not `publishingForSeconds`)
 - Optional E2E: duration label advances between frozen registry responses
 
-### PR 3 — `toolshed` (deploy bump)
+### PR 3 — `gestalt` (documentation)
+
+Fold this plan into the existing app registry docs, then remove this file:
+
+- [pending-publish.md](./pending-publish.md) — polling interval (**3s** bootstrap and active), `useLiveNow` / publish-duration behavior
+- [admin.md](./admin.md) — refresh-until-terminal wording on `/apps/{app}/admin`
+- [changelog.md](../project/changelog.md) — step **20** entry with links to PRs **1**–**4**
+- [tests.md](../project/tests.md) — UI polling and live-clock coverage
+- Delete [responsive-app-admin.md](./responsive-app-admin.md) and remove its link from [readme.md](../readme.md)
+
+### PR 4 — `toolshed` (deploy bump)
 
 - Bump `apps.home.source.git.ref` in `valon-tools/deploy/config.yaml` to the `gestalt-providers` commit that includes **1** and **2**
 - `apps.home` is the default `/apps` shell that serves `/apps/{app}/admin` for registry-only apps such as `g-issues`
 - No workflow or registry publish changes — UI-only deploy pin
-
-### PR 4 — `gestalt` (documentation)
-
-- [pending-publish.md](./pending-publish.md) — polling bullets (**3s** bootstrap and active)
-- [admin.md](./admin.md) — refresh-until-terminal wording
-- [changelog.md](../project/changelog.md) — step **20** entry with links to PRs **1**–**4**
-- [tests.md](../project/tests.md) — UI polling and live-clock coverage
-- [responsive-app-admin.md](./responsive-app-admin.md) — add **Shipped In**; remove planned-only wording
 
 Optional follow-up (not required for step **20**):
 
@@ -161,7 +165,7 @@ See [Implementation PRs](#implementation-prs) **1** and **2**.
 
 ### Docs (on ship)
 
-See [Implementation PRs](#implementation-prs) **4**.
+See [Implementation PRs](#implementation-prs) **3**.
 
 ---
 
