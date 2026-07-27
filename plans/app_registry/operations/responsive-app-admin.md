@@ -50,12 +50,14 @@ Per open tab only — closing the tab stops all polling. There is no server-side
 
 | What you see | Mode | Background refresh |
 | --- | --- | --- |
-| Page just opened; waiting to see if a publish starts | **Landing** | `GET …/admin/registry` every **12s** (first 5 minutes) |
+| Page just opened; waiting to see if a publish starts | **Landing** | `GET …/admin/registry` every **3s** (first 5 minutes) |
 | A publish, rollout, or deploy lock is in progress | **Active** | `GET …/admin/registry` every **3s** |
 | Quiet page — nothing moving, been open > 5 minutes | **Quiet** | None — table is static until you refresh or click Deploy |
 | Tab closed | — | Nothing runs |
 
-**Landing** ends after 5 minutes or as soon as an active signal appears (whichever comes first).
+**Landing** ends after 5 minutes unless an active signal keeps polling beyond that window.
+
+Whenever the UI is polling (landing or active), use the same interval — **3s**. Landing and active differ only in *why* polling continues past the first response, not in cadence.
 
 **Active signals** (from the registry response — not a mode field on the app):
 
@@ -65,7 +67,7 @@ Per open tab only — closing the tab stops all polling. There is no server-side
 
 Implement `computePollMode(registry, landingPollUntilMs)` → `landing` | `active` | `quiet` in `gestalt-providers/app/default/src/features/registry/polling.ts`.
 
-Constants: `POLL_INTERVAL_ACTIVE_MS = 3_000`, `POLL_INTERVAL_LANDING_MS = 12_000`. Keep `APP_ADMIN_BOOTSTRAP_POLL_MS` as the landing-window duration (internal constant name).
+Constants: `POLL_INTERVAL_MS = 3_000` whenever `shouldPollAppAdminRegistry` is true. Keep `APP_ADMIN_BOOTSTRAP_POLL_MS` as the landing-window duration (internal constant name).
 
 Replace the chained `setTimeout` in `AppAdminPageClient.tsx` with `setInterval` (or React Query `refetchInterval`) keyed on poll mode. Pause polling when `document.visibilityState === "hidden"`; catch up once when visible again.
 
@@ -103,7 +105,7 @@ Pass `liveNow` into `snapshotStatusTimer` and `snapshotLastUpdatedLabel` in `sna
 
 ### docs (on ship)
 
-- [ ] [pending-publish.md](./pending-publish.md) — polling section (3s active / 12s landing)
+- [ ] [pending-publish.md](./pending-publish.md) — polling section (3s while landing or active)
 - [ ] [admin.md](./admin.md) — app admin timing
 - [ ] [changelog.md](../project/changelog.md) — step `20`
 - [ ] [tests.md](../project/tests.md) — UI polling tests
