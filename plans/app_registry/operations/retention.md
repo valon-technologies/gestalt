@@ -30,7 +30,7 @@ retention:
   deployedRetention: 720h
 ```
 
-Defaults are `72h` and `720h` when omitted. Each deactivation captures a fixed `expiresAt`; later config changes do not alter an already captured deadline or unlock an expired version. See [config.md](../architecture/config.md).
+Defaults are `72h` and `720h` when omitted. Each time a version stops being desired, the outgoing row gets `expiresAt = now + deployedRetention`. Becoming desired again clears `expiresAt`; a later deactivation overwrites it with a new deadline. Config changes take effect on the next publish or deactivation write, not on rows that already have an `expiresAt` until then. See [config.md](../architecture/config.md).
 
 ## Schema and Storage
 
