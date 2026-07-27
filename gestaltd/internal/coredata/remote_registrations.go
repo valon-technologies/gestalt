@@ -394,7 +394,11 @@ func (s *RemoteRegistrationService) ListByOwner(ctx context.Context, ownerSubjec
 
 	providerRecs, err := tx.ObjectStore(StoreRemoteProviders).Index("by_registration").GetAll(ctx, reg.ID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list remote registration by owner: %w", err)
+		if errors.Is(err, idb.ErrNotFound) {
+			providerRecs = nil
+		} else {
+			return nil, nil, fmt.Errorf("list remote registration by owner: %w", err)
+		}
 	}
 	providers := make([]*RemoteProvider, 0, len(providerRecs))
 	for _, rec := range providerRecs {
@@ -518,6 +522,9 @@ func removeRegistrationAndProviders(ctx context.Context, regStore, providerStore
 func deleteProvidersForRegistration(ctx context.Context, store idb.TransactionObjectStore, registrationID string) error {
 	recs, err := store.Index("by_registration").GetAll(ctx, registrationID)
 	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return nil
+		}
 		return err
 	}
 	for _, rec := range recs {
