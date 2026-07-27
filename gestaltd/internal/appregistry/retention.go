@@ -33,12 +33,29 @@ type RetentionIndex struct {
 }
 
 type RetentionVersion struct {
-	PublishedAt       time.Time  `json:"publishedAt"`
-	LastDeactivatedAt *time.Time `json:"lastDeactivatedAt,omitempty"`
-	DeployableUntil   *time.Time `json:"deployableUntil,omitempty"`
-	FirstDeployedAt   *time.Time `json:"firstDeployedAt,omitempty"`
-	EverDeployed      bool       `json:"everDeployed"`
-	LockedAt          *time.Time `json:"lockedAt,omitempty"`
+	PublishedAt  time.Time  `json:"publishedAt"`
+	EverDeployed bool       `json:"everDeployed"`
+	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
+}
+
+func (v *RetentionVersion) UnmarshalJSON(data []byte) error {
+	type retentionVersionJSON struct {
+		PublishedAt     time.Time  `json:"publishedAt"`
+		EverDeployed    bool       `json:"everDeployed"`
+		ExpiresAt       *time.Time `json:"expiresAt,omitempty"`
+		DeployableUntil *time.Time `json:"deployableUntil,omitempty"`
+	}
+	var raw retentionVersionJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("decode retention version: %w", err)
+	}
+	v.PublishedAt = raw.PublishedAt
+	v.EverDeployed = raw.EverDeployed
+	v.ExpiresAt = raw.ExpiresAt
+	if v.ExpiresAt == nil && raw.DeployableUntil != nil && !raw.DeployableUntil.IsZero() {
+		v.ExpiresAt = cloneTimePtr(raw.DeployableUntil)
+	}
+	return nil
 }
 
 type RetentionPolicy struct {
@@ -104,23 +121,14 @@ func validateRetentionVersion(mapKey string, entry RetentionVersion) error {
 	if entry.PublishedAt.IsZero() {
 		return fmt.Errorf("publishedAt is required")
 	}
-	if entry.LastDeactivatedAt != nil && entry.LastDeactivatedAt.IsZero() {
-		return fmt.Errorf("lastDeactivatedAt must not be zero")
-	}
-	if entry.DeployableUntil != nil && entry.DeployableUntil.IsZero() {
-		return fmt.Errorf("deployableUntil must not be zero")
-	}
-	if entry.FirstDeployedAt != nil && entry.FirstDeployedAt.IsZero() {
-		return fmt.Errorf("firstDeployedAt must not be zero")
-	}
-	if entry.LockedAt != nil && entry.LockedAt.IsZero() {
-		return fmt.Errorf("lockedAt must not be zero")
+	if entry.ExpiresAt != nil && entry.ExpiresAt.IsZero() {
+		return fmt.Errorf("expiresAt must not be zero")
 	}
 	return nil
 }
 
 // UpsertPublishedRetention records a newly published version in the retention overlay.
-func UpsertPublishedRetention(index *RetentionIndex, version string, publishedAt time.Time) bool {
+func UpsertPublishedRetention(index *RetentionIndex, version string, publishedAt time.Time, policy RetentionPolicy) bool {
 	if index == nil {
 		return false
 	}
@@ -129,17 +137,22 @@ func UpsertPublishedRetention(index *RetentionIndex, version string, publishedAt
 	}
 	version = strings.TrimSpace(version)
 	publishedAt = publishedAt.UTC()
+	expiresAt := publishedAt.Add(policy.UnusedRetention)
 	if existing, ok := index.Versions[version]; ok {
-		if existing.PublishedAt.Equal(publishedAt) {
+		if existing.PublishedAt.Equal(publishedAt) && timePtrEqual(existing.ExpiresAt, &expiresAt) {
 			return false
 		}
 		existing.PublishedAt = publishedAt
+		if !existing.EverDeployed {
+			existing.ExpiresAt = cloneTimePtr(&expiresAt)
+		}
 		index.Versions[version] = existing
 		return true
 	}
 	index.Versions[version] = RetentionVersion{
 		PublishedAt:  publishedAt,
 		EverDeployed: false,
+		ExpiresAt:    cloneTimePtr(&expiresAt),
 	}
 	return true
 }
@@ -163,14 +176,8 @@ func ApplyDesiredVersionTransition(index *RetentionIndex, fromVersion, toVersion
 			entry = RetentionVersion{PublishedAt: now, EverDeployed: true}
 		}
 		entry.EverDeployed = true
-		if entry.FirstDeployedAt == nil || entry.FirstDeployedAt.IsZero() {
-			firstDeployed := now
-			entry.FirstDeployedAt = &firstDeployed
-		}
-		deactivated := now
-		entry.LastDeactivatedAt = &deactivated
 		deadline := now.Add(policy.DeployedRetention)
-		entry.DeployableUntil = &deadline
+		entry.ExpiresAt = cloneTimePtr(&deadline)
 		index.Versions[fromVersion] = entry
 		changed = true
 	}
@@ -181,12 +188,7 @@ func ApplyDesiredVersionTransition(index *RetentionIndex, fromVersion, toVersion
 			entry = RetentionVersion{PublishedAt: now}
 		}
 		entry.EverDeployed = true
-		if entry.FirstDeployedAt == nil || entry.FirstDeployedAt.IsZero() {
-			firstDeployed := now
-			entry.FirstDeployedAt = &firstDeployed
-		}
-		entry.LastDeactivatedAt = nil
-		entry.DeployableUntil = nil
+		entry.ExpiresAt = nil
 		index.Versions[toVersion] = entry
 		changed = true
 	}
@@ -205,17 +207,20 @@ func VersionDeploymentState(version string, desiredVersion string, retention *Re
 	if !ok {
 		return DeploymentStateAvailable, nil
 	}
-	if entry.LockedAt != nil && !entry.LockedAt.IsZero() {
-		return DeploymentStateLocked, cloneTimePtr(entry.DeployableUntil)
-	}
 	if entry.EverDeployed {
-		if entry.DeployableUntil != nil && now.Before(entry.DeployableUntil.UTC()) {
-			return DeploymentStateRedeployable, cloneTimePtr(entry.DeployableUntil)
+		if entry.ExpiresAt == nil || entry.ExpiresAt.IsZero() {
+			return DeploymentStateRedeployable, nil
 		}
-		if entry.DeployableUntil != nil && !entry.DeployableUntil.IsZero() {
-			return DeploymentStateLocked, cloneTimePtr(entry.DeployableUntil)
+		if now.Before(entry.ExpiresAt.UTC()) {
+			return DeploymentStateRedeployable, cloneTimePtr(entry.ExpiresAt)
 		}
-		return DeploymentStateLocked, nil
+		return DeploymentStateLocked, cloneTimePtr(entry.ExpiresAt)
+	}
+	if entry.ExpiresAt != nil && !entry.ExpiresAt.IsZero() {
+		if now.Before(entry.ExpiresAt.UTC()) {
+			return DeploymentStateAvailable, nil
+		}
+		return DeploymentStateExpired, nil
 	}
 	unusedDeadline := entry.PublishedAt.UTC().Add(policy.UnusedRetention)
 	if now.Before(unusedDeadline) {
@@ -263,32 +268,13 @@ func DeployedVersionsFromRetention(index *RetentionIndex) map[string]struct{} {
 	return out
 }
 
-// LockExpiredVersions sets lockedAt on historical versions whose deployableUntil passed.
-func LockExpiredVersions(index *RetentionIndex, desiredVersion string, now time.Time) bool {
-	if index == nil || len(index.Versions) == 0 {
+// RetentionExpired reports whether a version's expiresAt deadline has passed.
+// Missing expiresAt is treated as not expired (lean keep).
+func RetentionExpired(entry RetentionVersion, now time.Time) bool {
+	if entry.ExpiresAt == nil || entry.ExpiresAt.IsZero() {
 		return false
 	}
-	now = now.UTC()
-	desiredVersion = strings.TrimSpace(desiredVersion)
-	changed := false
-	for version, entry := range index.Versions {
-		if version == desiredVersion {
-			continue
-		}
-		if entry.LockedAt != nil && !entry.LockedAt.IsZero() {
-			continue
-		}
-		if !entry.EverDeployed || entry.DeployableUntil == nil {
-			continue
-		}
-		if !now.Before(entry.DeployableUntil.UTC()) {
-			lockedAt := now
-			entry.LockedAt = &lockedAt
-			index.Versions[version] = entry
-			changed = true
-		}
-	}
-	return changed
+	return !now.UTC().Before(entry.ExpiresAt.UTC())
 }
 
 // RemoveRetentionVersion deletes one retention row.
@@ -304,10 +290,20 @@ func RemoveRetentionVersion(index *RetentionIndex, version string) bool {
 	return true
 }
 
-// UnusedVersionExpired reports whether a never-deployed version is past unused retention.
+// UnusedVersionExpired reports whether a never-deployed version is past its expiry.
 func UnusedVersionExpired(entry RetentionVersion, policy RetentionPolicy, now time.Time) bool {
 	if entry.EverDeployed {
 		return false
 	}
+	if entry.ExpiresAt != nil && !entry.ExpiresAt.IsZero() {
+		return RetentionExpired(entry, now)
+	}
 	return !now.UTC().Before(entry.PublishedAt.UTC().Add(policy.UnusedRetention))
+}
+
+func timePtrEqual(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.UTC().Equal(b.UTC())
 }

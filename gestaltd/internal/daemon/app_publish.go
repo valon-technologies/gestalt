@@ -680,7 +680,7 @@ func uploadAppRegistryRetention(plan appPublishPlan, sourceRef string) error {
 				return fmt.Errorf("decode existing retention index: %w", err)
 			}
 		}
-		if !appregistry.UpsertPublishedRetention(index, plan.Version, plan.Entry.PublishedAt) {
+		if !appregistry.UpsertPublishedRetention(index, plan.Version, plan.Entry.PublishedAt, appregistry.DefaultRetentionPolicy()) {
 			progress.done("App registry retention catalog unchanged")
 			return nil
 		}

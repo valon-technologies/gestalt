@@ -13,6 +13,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 )
 
@@ -233,12 +234,20 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		reader = &appregistry.RegistryReader{}
 	}
 	return &appregistry.Installer{
-		Registries:      cloneAppRegistryConfig(cfg.AppRegistries),
-		ConfigApps:      cfg.AppDefs,
-		Reader:          reader,
-		ChangeRequests:  cfg.Services.AppVersionChangeRequests,
+		Registries:       cloneAppRegistryConfig(cfg.AppRegistries),
+		ConfigApps:       cfg.AppDefs,
+		Reader:           reader,
+		ChangeRequests:   cfg.Services.AppVersionChangeRequests,
 		Locks:           cfg.Services.AppVersionInstallLocks,
 		Rollouts:        cfg.Services.AppRollouts,
+		RetentionCatalog: appregistryRetentionCatalog(cfg.AppRegistries),
 		GestaltdVersion: cfg.GestaltdVersion,
 	}
+}
+
+func appregistryRetentionCatalog(registries map[string]config.AppRegistryConfig) appregistry.RetentionCatalogStore {
+	if len(registries) == 0 {
+		return nil
+	}
+	return appregistry.NewGCSCatalogStore(cloneAppRegistryConfig(registries))
 }
