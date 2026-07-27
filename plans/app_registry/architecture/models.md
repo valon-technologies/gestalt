@@ -279,9 +279,9 @@ Writes use the same optimistic-concurrency pattern as `pending.json`. `PruneFail
 
 **Path:** `apps/{app}/retention.json`
 
-Answers: _was this version deployed, when did it last stop being desired, and is it still eligible for historical redeployment?_
+Answers: _was this version deployed, when did it last stop being desired, and has it been pruned?_
 
-Mutable overlay used by retention pruning. Not installable metadata. See [retention.md](../operations/retention.md) for policy rules and cleanup scope.
+Mutable overlay used by retention pruning. Deployment-state projection and admission read historical redeploy deadlines from the change-request chain; this overlay supplies `publishedAt`, unused retention, and sticky `lockedAt`. Not installable metadata. See [retention.md](../operations/retention.md) for policy rules and cleanup scope.
 
 ```json
 {
