@@ -278,7 +278,9 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		version := strings.TrimSpace(rollout.Version)
 		if findInstallation(installations, version) == nil {
 			if !p.now().Before(rollout.Deadline) {
-				if _, err := p.Rollouts.MarkFailed(ctx, appName, version, p.now()); err != nil {
+				if _, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+					return nil
+				} else if err != nil {
 					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, version, err)
 				}
 			}
@@ -292,7 +294,10 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 				restartBlocked = true
 			} else {
 				var err error
-				rollout, err = p.Rollouts.MarkRestarting(ctx, appName, version)
+				rollout, err = p.Rollouts.MarkRestartingForRollout(ctx, rollout)
+				if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+					return nil
+				}
 				if err != nil {
 					return fmt.Errorf("start rollout restart phase for %s@%s: %w", appName, version, err)
 				}
@@ -540,13 +545,17 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		converged = false
 	}
 	if converged {
-		if _, err := p.Rollouts.MarkComplete(ctx, rollout.App, rollout.Version, p.now()); err != nil {
+		if _, err := p.Rollouts.MarkCompleteForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+			return false, nil
+		} else if err != nil {
 			return false, fmt.Errorf("complete rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
 		return true, nil
 	}
 	if !p.now().Before(rollout.Deadline) {
-		if _, err := p.Rollouts.MarkFailed(ctx, rollout.App, rollout.Version, p.now()); err != nil {
+		if _, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+			return false, nil
+		} else if err != nil {
 			return false, fmt.Errorf("fail rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
 		return true, nil

@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -97,10 +96,11 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 		cfg.ActivateAppProviders = func(context.Context) { calls.Add(1) }
 		services = cfg.Services
 		ctx := context.Background()
-		if _, err := services.GestaltdSourceVersionState.Promote(
+		if _, err := services.GestaltdSourceVersionState.Activate(
 			ctx,
 			"source-old",
 			start,
+			false,
 			appregistry.DefaultRolloutEnrollmentWindow,
 			appregistry.DefaultRolloutTimeout,
 		); err != nil {
@@ -120,22 +120,7 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 	})
 	testutil.CloseOnCleanup(t, srv)
 
-	resp, err := http.Post(srv.URL+"/activate?phase=candidate", "", nil)
-	if err != nil {
-		t.Fatalf("POST candidate /activate: %v", err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("candidate status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if _, err := services.GestaltdSourceVersionState.CurrentForAdmission(context.Background()); !errors.Is(err, coredata.ErrGestaltdSourceVersionPromoting) {
-		t.Fatalf("CurrentForAdmission error = %v, want promoting", err)
-	}
-	if calls.Load() != 0 {
-		t.Fatalf("candidate activation calls = %d, want 0", calls.Load())
-	}
-
-	resp, err = http.Post(srv.URL+"/activate", "", nil)
+	resp, err := http.Post(srv.URL+"/activate", "", nil)
 	if err != nil {
 		t.Fatalf("POST /activate: %v", err)
 	}
@@ -150,7 +135,30 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 	if rollout.TargetSourceVersion != "source-new" || rollout.State != core.AppRolloutStateEnrolling {
 		t.Fatalf("retargeted rollout = %#v", rollout)
 	}
+	current, err := services.GestaltdSourceVersionState.CurrentForAdmission(context.Background())
+	if err != nil {
+		t.Fatalf("CurrentForAdmission: %v", err)
+	}
+	if current != "source-new" {
+		t.Fatalf("current source version = %q, want source-new", current)
+	}
 	if calls.Load() != 1 {
 		t.Fatalf("activation calls = %d, want 1", calls.Load())
+	}
+}
+
+func TestActivateEndpointRejectsInvalidRetry(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t)
+	testutil.CloseOnCleanup(t, srv)
+
+	resp, err := http.Post(srv.URL+"/activate?retry=false", "", nil)
+	if err != nil {
+		t.Fatalf("POST /activate: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 }

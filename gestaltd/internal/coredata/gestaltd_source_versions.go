@@ -15,11 +15,7 @@ import (
 
 const gestaltdSourceVersionStateID = "gestaltd"
 
-var (
-	ErrGestaltdSourceVersionPromoting   = errors.New("gestaltd deployment is in progress")
-	ErrGestaltdSourceVersionUnavailable = errors.New("gestaltd source version is unavailable")
-	ErrGestaltdSourceVersionMismatch    = errors.New("gestaltd source version does not match candidate")
-)
+var ErrGestaltdSourceVersionUnavailable = errors.New("gestaltd source version is unavailable")
 
 type GestaltdSourceVersionService struct {
 	db    indexeddb.IndexedDB
@@ -54,9 +50,6 @@ func (s *GestaltdSourceVersionService) CurrentForAdmission(ctx context.Context) 
 			return "", ErrGestaltdSourceVersionUnavailable
 		}
 		return "", err
-	}
-	if state.State == core.GestaltdSourceVersionStatePromoting {
-		return "", ErrGestaltdSourceVersionPromoting
 	}
 	current := strings.TrimSpace(state.CurrentSourceVersion)
 	if current == "" {
@@ -97,9 +90,6 @@ func (s *GestaltdSourceVersionService) CreateAppRollout(ctx context.Context, rol
 		return nil, fmt.Errorf("create source-version app rollout: load source version: %w", err)
 	}
 	state := recordToGestaltdSourceVersionState(stateRec)
-	if state.State == core.GestaltdSourceVersionStatePromoting {
-		return nil, ErrGestaltdSourceVersionPromoting
-	}
 	current := strings.TrimSpace(state.CurrentSourceVersion)
 	if current == "" {
 		return nil, ErrGestaltdSourceVersionUnavailable
@@ -134,116 +124,24 @@ func (s *GestaltdSourceVersionService) CreateAppRollout(ctx context.Context, rol
 	return rollout, nil
 }
 
-func (s *GestaltdSourceVersionService) BeginPromotion(ctx context.Context, sourceVersion string, at time.Time) (*core.GestaltdSourceVersionState, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("begin gestaltd source version promotion: service is not configured")
-	}
-	sourceVersion = strings.TrimSpace(sourceVersion)
-	if sourceVersion == "" {
-		return nil, fmt.Errorf("begin gestaltd source version promotion: source version is required")
-	}
-	tx, err := s.db.Transaction(ctx, []string{StoreGestaltdSourceVersionState}, idb.TransactionReadwrite, idb.TransactionOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("begin gestaltd source version promotion: begin transaction: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Abort(context.WithoutCancel(ctx))
-		}
-	}()
-
-	store := tx.ObjectStore(StoreGestaltdSourceVersionState)
-	state := &core.GestaltdSourceVersionState{}
-	if rec, getErr := store.Get(ctx, gestaltdSourceVersionStateID); getErr == nil {
-		state = recordToGestaltdSourceVersionState(rec)
-	} else if !errors.Is(getErr, idb.ErrNotFound) {
-		return nil, fmt.Errorf("begin gestaltd source version promotion: load state: %w", getErr)
-	}
-	candidate := strings.TrimSpace(state.CandidateSourceVersion)
-	if state.State == core.GestaltdSourceVersionStatePromoting {
-		if candidate != "" && candidate != sourceVersion {
-			return nil, ErrGestaltdSourceVersionMismatch
-		}
-		if candidate == sourceVersion {
-			if err := tx.Commit(ctx); err != nil {
-				return nil, fmt.Errorf("begin gestaltd source version promotion: commit retry: %w", err)
-			}
-			committed = true
-			return state, nil
-		}
-	}
-	state.CandidateSourceVersion = sourceVersion
-	state.State = core.GestaltdSourceVersionStatePromoting
-	state.UpdatedAt = normalizedSourceVersionTime(at)
-	if err := store.Put(ctx, gestaltdSourceVersionStateRecord(state)); err != nil {
-		return nil, fmt.Errorf("begin gestaltd source version promotion: write state: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("begin gestaltd source version promotion: commit: %w", err)
-	}
-	committed = true
-	return state, nil
-}
-
-func (s *GestaltdSourceVersionService) CancelPromotion(ctx context.Context, sourceVersion string, at time.Time) (*core.GestaltdSourceVersionState, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("cancel gestaltd source version promotion: service is not configured")
-	}
-	sourceVersion = strings.TrimSpace(sourceVersion)
-	if sourceVersion == "" {
-		return nil, fmt.Errorf("cancel gestaltd source version promotion: source version is required")
-	}
-	tx, err := s.db.Transaction(ctx, []string{StoreGestaltdSourceVersionState}, idb.TransactionReadwrite, idb.TransactionOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("cancel gestaltd source version promotion: begin transaction: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Abort(context.WithoutCancel(ctx))
-		}
-	}()
-
-	store := tx.ObjectStore(StoreGestaltdSourceVersionState)
-	rec, err := store.Get(ctx, gestaltdSourceVersionStateID)
-	if err != nil {
-		return nil, fmt.Errorf("cancel gestaltd source version promotion: load state: %w", err)
-	}
-	state := recordToGestaltdSourceVersionState(rec)
-	if candidate := strings.TrimSpace(state.CandidateSourceVersion); candidate != "" && candidate != sourceVersion {
-		return nil, ErrGestaltdSourceVersionMismatch
-	}
-	state.CandidateSourceVersion = ""
-	state.State = core.GestaltdSourceVersionStateStable
-	state.UpdatedAt = normalizedSourceVersionTime(at)
-	if err := store.Put(ctx, gestaltdSourceVersionStateRecord(state)); err != nil {
-		return nil, fmt.Errorf("cancel gestaltd source version promotion: write state: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("cancel gestaltd source version promotion: commit: %w", err)
-	}
-	committed = true
-	return state, nil
-}
-
-func (s *GestaltdSourceVersionService) Promote(
+func (s *GestaltdSourceVersionService) Activate(
 	ctx context.Context,
 	sourceVersion string,
 	at time.Time,
+	retry bool,
 	enrollmentWindow time.Duration,
 	rolloutTimeout time.Duration,
 ) (*core.GestaltdSourceVersionState, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("promote gestaltd source version: service is not configured")
+		return nil, fmt.Errorf("activate gestaltd source version: service is not configured")
 	}
 	sourceVersion = strings.TrimSpace(sourceVersion)
 	if sourceVersion == "" {
-		return nil, fmt.Errorf("promote gestaltd source version: source version is required")
+		return nil, fmt.Errorf("activate gestaltd source version: source version is required")
 	}
 	at = normalizedSourceVersionTime(at)
 	if enrollmentWindow <= 0 || rolloutTimeout <= enrollmentWindow {
-		return nil, fmt.Errorf("promote gestaltd source version: invalid rollout windows")
+		return nil, fmt.Errorf("activate gestaltd source version: invalid rollout windows")
 	}
 
 	tx, err := s.db.Transaction(
@@ -253,7 +151,7 @@ func (s *GestaltdSourceVersionService) Promote(
 		idb.TransactionOptions{},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("promote gestaltd source version: begin transaction: %w", err)
+		return nil, fmt.Errorf("activate gestaltd source version: begin transaction: %w", err)
 	}
 	committed := false
 	defer func() {
@@ -267,31 +165,23 @@ func (s *GestaltdSourceVersionService) Promote(
 	if rec, getErr := stateStore.Get(ctx, gestaltdSourceVersionStateID); getErr == nil {
 		state = recordToGestaltdSourceVersionState(rec)
 	} else if !errors.Is(getErr, idb.ErrNotFound) {
-		return nil, fmt.Errorf("promote gestaltd source version: load state: %w", getErr)
+		return nil, fmt.Errorf("activate gestaltd source version: load state: %w", getErr)
 	}
-	if candidate := strings.TrimSpace(state.CandidateSourceVersion); candidate != "" && candidate != sourceVersion {
-		return nil, ErrGestaltdSourceVersionMismatch
-	}
-
-	if strings.TrimSpace(state.CurrentSourceVersion) != sourceVersion {
-		promotionStartedAt := time.Time{}
-		if state.State == core.GestaltdSourceVersionStatePromoting {
-			promotionStartedAt = state.UpdatedAt
-		}
+	sourceChanged := strings.TrimSpace(state.CurrentSourceVersion) != sourceVersion
+	if sourceChanged || retry {
 		rolloutStore := tx.ObjectStore(StoreAppRollouts)
 		recs, listErr := rolloutStore.GetAll(ctx, nil)
 		if listErr != nil {
-			return nil, fmt.Errorf("promote gestaltd source version: list app rollouts: %w", listErr)
+			return nil, fmt.Errorf("activate gestaltd source version: list app rollouts: %w", listErr)
 		}
 		for _, rec := range recs {
 			rollout := recordToAppRollout(rec)
-			retarget := isActiveRolloutState(rollout.State)
-			if !retarget && strings.TrimSpace(rollout.TargetSourceVersion) != sourceVersion && !promotionStartedAt.IsZero() {
-				terminalAt := rollout.CompletedAt
-				if rollout.State == core.AppRolloutStateFailed {
-					terminalAt = rollout.FailedAt
-				}
-				retarget = !terminalAt.IsZero() && !terminalAt.Before(promotionStartedAt)
+			retarget := sourceChanged && isActiveRolloutState(rollout.State)
+			if retry && strings.TrimSpace(rollout.TargetSourceVersion) == sourceVersion {
+				retarget = isActiveRolloutState(rollout.State) ||
+					(rollout.State == core.AppRolloutStateFailed &&
+						!rollout.FailedAt.IsZero() &&
+						!rollout.FailedAt.Before(state.UpdatedAt))
 			}
 			if !retarget {
 				continue
@@ -304,20 +194,20 @@ func (s *GestaltdSourceVersionService) Promote(
 			rollout.CompletedAt = time.Time{}
 			rollout.FailedAt = time.Time{}
 			if err := rolloutStore.Put(ctx, appRolloutRecord(rollout)); err != nil {
-				return nil, fmt.Errorf("promote gestaltd source version: retarget rollout %s: %w", rollout.App, err)
+				return nil, fmt.Errorf("activate gestaltd source version: retarget rollout %s: %w", rollout.App, err)
 			}
 		}
 	}
 
 	state.CurrentSourceVersion = sourceVersion
-	state.CandidateSourceVersion = ""
-	state.State = core.GestaltdSourceVersionStateStable
-	state.UpdatedAt = at
+	if sourceChanged || retry || state.UpdatedAt.IsZero() {
+		state.UpdatedAt = at
+	}
 	if err := stateStore.Put(ctx, gestaltdSourceVersionStateRecord(state)); err != nil {
-		return nil, fmt.Errorf("promote gestaltd source version: write state: %w", err)
+		return nil, fmt.Errorf("activate gestaltd source version: write state: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("promote gestaltd source version: commit: %w", err)
+		return nil, fmt.Errorf("activate gestaltd source version: commit: %w", err)
 	}
 	committed = true
 	return state, nil
@@ -331,23 +221,16 @@ func normalizedSourceVersionTime(value time.Time) time.Time {
 }
 
 func gestaltdSourceVersionStateRecord(state *core.GestaltdSourceVersionState) idb.Record {
-	rec := idb.Record{
+	return idb.Record{
 		"id":                     gestaltdSourceVersionStateID,
 		"current_source_version": strings.TrimSpace(state.CurrentSourceVersion),
-		"state":                  strings.TrimSpace(state.State),
 		"updated_at":             normalizedSourceVersionTime(state.UpdatedAt),
 	}
-	if candidate := strings.TrimSpace(state.CandidateSourceVersion); candidate != "" {
-		rec["candidate_source_version"] = candidate
-	}
-	return rec
 }
 
 func recordToGestaltdSourceVersionState(rec idb.Record) *core.GestaltdSourceVersionState {
 	return &core.GestaltdSourceVersionState{
-		CurrentSourceVersion:   recString(rec, "current_source_version"),
-		CandidateSourceVersion: recString(rec, "candidate_source_version"),
-		State:                  recString(rec, "state"),
-		UpdatedAt:              recTime(rec, "updated_at"),
+		CurrentSourceVersion: recString(rec, "current_source_version"),
+		UpdatedAt:            recTime(rec, "updated_at"),
 	}
 }

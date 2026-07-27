@@ -275,7 +275,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		Metadata:                   coredata.ChangeRequestMetadata(known),
 	})
 	if err != nil {
-		_, _ = i.Rollouts.MarkFailed(context.WithoutCancel(installCtx), appName, version, i.now())
+		_, _ = i.Rollouts.MarkFailedForRollout(context.WithoutCancel(installCtx), rollout, i.now())
 		return nil, fmt.Errorf("append change request: %w", err)
 	}
 	i.mirrorRetentionTransition(installCtx, registryName, appName, fromVersion, version, policy, requestedAt)

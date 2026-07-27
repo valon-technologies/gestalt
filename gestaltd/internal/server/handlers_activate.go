@@ -1,13 +1,11 @@
 package server
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 func (s *Server) mountActivateRoute(r chi.Router) {
@@ -15,9 +13,9 @@ func (s *Server) mountActivateRoute(r chi.Router) {
 }
 
 func (s *Server) activateAppProvidersHandler(w http.ResponseWriter, r *http.Request) {
-	phase := strings.TrimSpace(r.URL.Query().Get("phase"))
-	if phase != "" && phase != "candidate" && phase != "rollback" {
-		writeError(w, http.StatusBadRequest, "phase must be candidate or rollback when provided")
+	retryParam := strings.TrimSpace(r.URL.Query().Get("retry"))
+	if retryParam != "" && retryParam != "true" {
+		writeError(w, http.StatusBadRequest, "retry must be true when provided")
 		return
 	}
 	if s.sourceVersion != "" {
@@ -25,33 +23,18 @@ func (s *Server) activateAppProvidersHandler(w http.ResponseWriter, r *http.Requ
 			writeError(w, http.StatusServiceUnavailable, "gestaltd source version service is unavailable")
 			return
 		}
-		var err error
-		switch phase {
-		case "candidate":
-			_, err = s.gestaltdSourceVersions.BeginPromotion(r.Context(), s.sourceVersion, s.now())
-		case "rollback":
-			_, err = s.gestaltdSourceVersions.CancelPromotion(r.Context(), s.sourceVersion, s.now())
-		default:
-			_, err = s.gestaltdSourceVersions.Promote(
-				r.Context(),
-				s.sourceVersion,
-				s.now(),
-				appregistry.DefaultRolloutEnrollmentWindow,
-				appregistry.DefaultRolloutTimeout,
-			)
-		}
+		_, err := s.gestaltdSourceVersions.Activate(
+			r.Context(),
+			s.sourceVersion,
+			s.now(),
+			retryParam == "true",
+			appregistry.DefaultRolloutEnrollmentWindow,
+			appregistry.DefaultRolloutTimeout,
+		)
 		if err != nil {
-			status := http.StatusInternalServerError
-			if errors.Is(err, coredata.ErrGestaltdSourceVersionMismatch) {
-				status = http.StatusConflict
-			}
-			writeError(w, status, err.Error())
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-	}
-	if phase != "" {
-		writeJSON(w, http.StatusOK, map[string]string{"status": phase})
-		return
 	}
 	if s.activateAppProviders != nil {
 		s.activateAppProviders(r.Context())

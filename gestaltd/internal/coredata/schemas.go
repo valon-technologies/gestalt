@@ -97,8 +97,6 @@ var GestaltdSourceVersionStateSchema = idb.ObjectStoreOptions{
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "current_source_version", Type: idb.TypeString},
-		{Name: "candidate_source_version", Type: idb.TypeString},
-		{Name: "state", Type: idb.TypeString, NotNull: true},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},
 }

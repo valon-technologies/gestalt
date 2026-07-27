@@ -83,16 +83,9 @@ type AppRollout struct {
 }
 
 type GestaltdSourceVersionState struct {
-	CurrentSourceVersion   string
-	CandidateSourceVersion string
-	State                  string
-	UpdatedAt              time.Time
+	CurrentSourceVersion string
+	UpdatedAt            time.Time
 }
-
-const (
-	GestaltdSourceVersionStateStable    = "stable"
-	GestaltdSourceVersionStatePromoting = "promoting"
-)
 
 type ExternalCredentialGrant struct {
 	AccessToken       string
