@@ -61,7 +61,7 @@ App registry stores:
 ```text
 app_version_change_requests      ← accepted version changes (append-only)
 app_version_install_locks        ← install admission lock per app
-gestaltd_deployment_state        ← Toolshed deployment selected for rollout accounting
+gestaltd_source_version_state    ← Toolshed source version selected for rollout accounting
 app_rollouts                     ← current rollout per app
 app_instance_materializations    ← per-replica acknowledgement of fleet-known versions
 ```
@@ -80,7 +80,7 @@ Access install services after bootstrap via `Result.Services` / `prepared.Servic
 
 ```text
 Services.AppVersionChangeRequests   ← install prototype
-Services.GestaltdDeploymentState    ← current and candidate deployment identity
+Services.GestaltdSourceVersionState ← current and candidate Toolshed source version
 Services.AppRollouts                ← rollout state
 Services.DB                         ← underlying main-db handle
 ```
@@ -223,34 +223,32 @@ Used by `POST …/add` and `POST …/upgrade` while each checks rollout admissio
 
 ---
 
-## Store: `gestaltd_deployment_state` (Rollout Deployment Target)
+## Store: `gestaltd_source_version_state` (Rollout Source-Version Target)
 
-Tracks the Toolshed deployment that app rollouts use for cohort membership. Toolshed deployment orchestration is the only writer; a `gestaltd` process must not elect its own deployment current.
+Tracks the Toolshed `SOURCE_VERSION` that app rollouts use for cohort membership. Toolshed deployment orchestration is the only writer; a `gestaltd` process must not elect its own source version current.
 
 Primary key: `id` = `gestaltd`.
 
 ```json
 {
   "id": "gestaltd",
-  "current_deployment_id": "574fe7704ed67fc15d44f76698755bb94ad33d43",
-  "current_cloud_run_revision": "valon-tools-api-01234-abc",
-  "candidate_deployment_id": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
-  "candidate_cloud_run_revision": "valon-tools-api-01235-def",
+  "current_source_version": "574fe7704ed67fc15d44f76698755bb94ad33d43",
+  "candidate_source_version": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
   "state": "promoting",
   "updated_at": "2026-07-27T22:30:00Z"
 }
 ```
 
-`deployment_id` is the Toolshed commit SHA injected as `SOURCE_VERSION`. `cloud_run_revision` copies `K_REVISION` for diagnostics.
+The source version is the Toolshed commit SHA injected into each process as `SOURCE_VERSION`.
 
 States:
 
-- `stable` — `current_deployment_id` is authoritative for new app rollouts.
+- `stable` — `current_source_version` is authoritative for new app rollouts.
 - `promoting` — a candidate is being activated; app version selection returns **409 Conflict**.
 
-After shifting traffic and activating the candidate, Toolshed atomically copies the candidate fields to the current fields, clears the candidate fields, and sets `state: "stable"`. If promotion fails, it clears the candidate and leaves the previous deployment current.
+After shifting traffic and activating the candidate, Toolshed atomically copies `candidate_source_version` to `current_source_version`, clears the candidate, and sets `state: "stable"`. If promotion fails, it clears the candidate and leaves the previous source version current.
 
-If promotion finishes while an app rollout is active, update that rollout's target and timestamps in the same transaction used to publish the new current deployment. The rollout opens a fresh enrollment epoch without appending another change request.
+If promotion finishes while an app rollout is active, update that rollout's target and timestamps in the same transaction used to publish the new current source version. The rollout opens a fresh enrollment epoch without appending another change request.
 
 ---
 
@@ -266,8 +264,7 @@ Primary key: `id` = `app`.
   "app": "g-issues",
   "version": "0.0.0-snapshot.gabc123",
   "state": "enrolling",
-  "target_deployment_id": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
-  "target_cloud_run_revision": "valon-tools-api-01235-def",
+  "target_source_version": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
   "created_at": "2026-07-13T21:00:00Z",
   "enrollment_ends_at": "2026-07-13T21:02:00Z",
   "deadline": "2026-07-13T21:15:00Z"
@@ -276,14 +273,14 @@ Primary key: `id` = `app`.
 
 States:
 
-- `enrolling` — replicas from `target_deployment_id` may join by acknowledging it.
+- `enrolling` — replicas from `target_source_version` may join by acknowledging it.
 - `restarting` — the acknowledged cohort is frozen and is converging.
 - `complete` — the target cohort is non-empty and every member recorded `restarted_at`.
 - `failed` — the target cohort did not converge before the deadline, or remained empty.
 
 A terminal record may be replaced when the next version is admitted. A non-terminal record causes `POST …/add` or `POST …/upgrade` for the same app to return **409 Conflict**. Terminal transitions record `completed_at` or `failed_at`.
 
-`target_deployment_id` determines cohort membership. `target_cloud_run_revision` is optional diagnostic metadata and does not participate in completion.
+`target_source_version` determines cohort membership.
 
 ### Service API
 
@@ -312,8 +309,7 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "instance_id": "cloud-run-revision-pod",
-  "deployment_id": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
-  "cloud_run_revision": "valon-tools-api-01235-def",
+  "source_version": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
   "app": "g-issues",
   "version": "0.0.0-snapshot.gabc123",
   "acknowledged_at": "2026-07-13T21:00:00Z",
@@ -328,9 +324,9 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 
 `instance_id` defaults to the process hostname (`os.Hostname()`).
 
-`deployment_id` groups replicas for rollout accounting. Toolshed uses `SOURCE_VERSION`; outside Toolshed use `GESTALT_DEPLOYMENT_ID`, then `K_REVISION` as a Cloud Run fallback. `cloud_run_revision` separately records `K_REVISION` when present.
+`source_version` groups replicas for rollout accounting and copies `SOURCE_VERSION` from the process environment.
 
-Keep `instance_id` process-unique. Replacing it with `deployment_id` would collapse every replica in one deployment into one row and falsely report convergence after a single process restarts.
+Keep `instance_id` process-unique. Replacing it with `source_version` would collapse every replica running one Toolshed version into one row and falsely report convergence after a single process restarts.
 
 `materialized_at` is set only when that version was the replica's desired version and its package was validated locally. A superseded row can have `restarted_at` without `materialized_at`: this means the replica reconciled past that catalog change while running a newer desired version, not that the superseded version ran.
 

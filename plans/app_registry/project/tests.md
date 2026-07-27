@@ -250,10 +250,10 @@ go test ./internal/appregistry -run 'Test(Installer|CatalogPollerRollout)' -coun
 
 - Install admission and app-scoped lock tests allow one active rollout per app while allowing different apps concurrently.
 - Poller tests cover enrollment, cohort completion, missed deadlines, and late-replica convergence.
-- Deployment-cohort tests use five old and five candidate processes. Both deployments acknowledge the version, but only rows whose `deployment_id` matches `target_deployment_id` have `inCohort: true`; candidate convergence completes at `5/5` even when terminated old processes never restart.
+- Source-version-cohort tests use five old and five candidate processes. Both source versions acknowledge the app version, but only rows whose `source_version` matches `target_source_version` have `inCohort: true`; candidate convergence completes at `5/5` even when terminated old processes never restart.
 - Target-selection tests prove that an old revision handling an in-flight request cannot select itself, an empty target cohort cannot complete, and a completed old cohort cannot hide a target-cohort failure.
-- Promotion tests retarget an active rollout with a fresh enrollment epoch while preserving the desired app version and change request. Rollback restores the previous deployment target.
-- Identity tests verify `SOURCE_VERSION` precedence over `GESTALT_DEPLOYMENT_ID` and `K_REVISION`, while instance IDs remain distinct within one deployment.
+- Promotion tests retarget an active rollout with a fresh enrollment epoch while preserving the desired app version and change request. Rollback restores the previous source-version target.
+- Identity tests require `SOURCE_VERSION` while instance IDs remain distinct within one source version.
 
 ---
 
