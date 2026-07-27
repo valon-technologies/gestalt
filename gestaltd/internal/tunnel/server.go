@@ -76,18 +76,21 @@ func StartServer(ctx context.Context) (*Server, error) {
 // as the public API.
 func (s *Server) HTTPHandler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle(FrpsWebsocketPath, websocket.Handler(func(c *websocket.Conn) {
-		c.PayloadType = websocket.BinaryFrame
-		backend, err := net.Dial("tcp", s.controlAddr)
-		if err != nil {
-			return
-		}
-		defer func() { _ = backend.Close() }()
-		done := make(chan struct{}, 2)
-		go func() { _, _ = io.Copy(backend, c); done <- struct{}{} }()
-		go func() { _, _ = io.Copy(c, backend); done <- struct{}{} }()
-		<-done
-	}))
+	mux.Handle(FrpsWebsocketPath, websocket.Server{
+		Handler: func(c *websocket.Conn) {
+			c.PayloadType = websocket.BinaryFrame
+			backend, err := net.Dial("tcp", s.controlAddr)
+			if err != nil {
+				return
+			}
+			defer func() { _ = backend.Close() }()
+			done := make(chan struct{}, 2)
+			go func() { _, _ = io.Copy(backend, c); done <- struct{}{} }()
+			go func() { _, _ = io.Copy(c, backend); done <- struct{}{} }()
+			<-done
+		},
+		Handshake: func(_ *websocket.Config, _ *http.Request) error { return nil },
+	})
 	return mux
 }
 
