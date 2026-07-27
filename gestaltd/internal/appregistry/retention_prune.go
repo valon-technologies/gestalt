@@ -15,7 +15,6 @@ type RetentionPruneAction struct {
 
 const (
 	RetentionPruneDeleteUnused   = "delete_unused"
-	RetentionPruneLockHistorical = "lock_historical"
 	RetentionPruneDeleteArtifact = "delete_artifact"
 )
 
@@ -29,6 +28,7 @@ func EvaluateRetentionPrune(
 	policy RetentionPolicy,
 	now time.Time,
 ) []RetentionPruneAction {
+	_ = policy
 	if retention == nil || len(retention.Versions) == 0 {
 		return nil
 	}
@@ -44,26 +44,31 @@ func EvaluateRetentionPrune(
 		if _, deployed := deployedVersions[version]; deployed {
 			entry.EverDeployed = true
 		}
+		if !RetentionExpired(entry, now) {
+			continue
+		}
 		if !entry.EverDeployed {
-			if UnusedVersionExpired(entry, policy, now) {
-				actions = append(actions, RetentionPruneAction{Version: version, Kind: RetentionPruneDeleteUnused})
-			}
+			actions = append(actions, RetentionPruneAction{Version: version, Kind: RetentionPruneDeleteUnused})
 			continue
 		}
-		if entry.LockedAt != nil && !entry.LockedAt.IsZero() {
-			if _, ok := published[version]; ok {
-				actions = append(actions, RetentionPruneAction{Version: version, Kind: RetentionPruneDeleteArtifact})
-			}
-			continue
-		}
-		if entry.DeployableUntil != nil && !now.Before(entry.DeployableUntil.UTC()) {
-			actions = append(actions, RetentionPruneAction{Version: version, Kind: RetentionPruneLockHistorical})
-			if _, ok := published[version]; ok {
-				actions = append(actions, RetentionPruneAction{Version: version, Kind: RetentionPruneDeleteArtifact})
-			}
+		if _, ok := published[version]; ok {
+			actions = append(actions, RetentionPruneAction{Version: version, Kind: RetentionPruneDeleteArtifact})
 		}
 	}
 	return actions
+}
+
+// ShouldApplyRetentionPruneAction re-checks one action against a fresh retention row.
+// Lean toward keeping versions when expiresAt was cleared or extended concurrently.
+func ShouldApplyRetentionPruneAction(action RetentionPruneAction, entry RetentionVersion, now time.Time) bool {
+	switch action.Kind {
+	case RetentionPruneDeleteUnused:
+		return !entry.EverDeployed && RetentionExpired(entry, now)
+	case RetentionPruneDeleteArtifact:
+		return entry.EverDeployed && RetentionExpired(entry, now)
+	default:
+		return false
+	}
 }
 
 // DeployedVersionsFromChangeRequests returns versions that entered the deploy chain.
@@ -86,31 +91,22 @@ func DeployedVersionsFromChangeRequests(requests []*core.AppVersionChangeRequest
 
 // ApplyRetentionPruneAction mutates in-memory catalogs for one prune action.
 func ApplyRetentionPruneAction(index *Index, retention *RetentionIndex, appName string, action RetentionPruneAction, now time.Time) bool {
+	_ = now
+	if action.Kind != RetentionPruneDeleteUnused {
+		return false
+	}
 	changed := false
-	switch action.Kind {
-	case RetentionPruneDeleteUnused:
-		if index != nil {
-			if appVersions, ok := index.Apps[appName]; ok {
-				if _, exists := appVersions.Versions[action.Version]; exists {
-					delete(appVersions.Versions, action.Version)
-					index.Apps[appName] = appVersions
-					changed = true
-				}
-			}
-		}
-		if RemoveRetentionVersion(retention, action.Version) {
-			changed = true
-		}
-	case RetentionPruneLockHistorical:
-		if retention != nil && retention.Versions != nil {
-			entry, ok := retention.Versions[action.Version]
-			if ok && (entry.LockedAt == nil || entry.LockedAt.IsZero()) {
-				lockedAt := now.UTC()
-				entry.LockedAt = &lockedAt
-				retention.Versions[action.Version] = entry
+	if index != nil {
+		if appVersions, ok := index.Apps[appName]; ok {
+			if _, exists := appVersions.Versions[action.Version]; exists {
+				delete(appVersions.Versions, action.Version)
+				index.Apps[appName] = appVersions
 				changed = true
 			}
 		}
+	}
+	if RemoveRetentionVersion(retention, action.Version) {
+		changed = true
 	}
 	return changed
 }

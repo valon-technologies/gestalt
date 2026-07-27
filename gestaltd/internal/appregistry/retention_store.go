@@ -74,9 +74,6 @@ func cloneRetentionIndex(index *RetentionIndex) *RetentionIndex {
 func cloneRetentionVersion(entry RetentionVersion) RetentionVersion {
 	out := entry
 	out.PublishedAt = entry.PublishedAt.UTC()
-	out.LastDeactivatedAt = cloneTimePtr(entry.LastDeactivatedAt)
-	out.DeployableUntil = cloneTimePtr(entry.DeployableUntil)
-	out.FirstDeployedAt = cloneTimePtr(entry.FirstDeployedAt)
-	out.LockedAt = cloneTimePtr(entry.LockedAt)
+	out.ExpiresAt = cloneTimePtr(entry.ExpiresAt)
 	return out
 }

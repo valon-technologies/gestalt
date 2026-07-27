@@ -198,11 +198,16 @@ func pruneAppRegistryRetention(registry config.AppRegistryConfig, appName, desir
 					continue
 				}
 			}
+			entry, ok, err := freshRetentionEntryForPrune(retentionURL, action.Version)
+			if err != nil {
+				return err
+			}
+			if !ok || !appregistry.ShouldApplyRetentionPruneAction(action, entry, now) {
+				continue
+			}
 			if appregistry.ApplyRetentionPruneAction(index, retention, appName, action, now) {
-				if action.Kind == appregistry.RetentionPruneDeleteUnused || action.Kind == appregistry.RetentionPruneLockHistorical {
-					retentionChanged = true
-				}
 				if action.Kind == appregistry.RetentionPruneDeleteUnused {
+					retentionChanged = true
 					indexChanged = true
 				}
 			}
@@ -265,6 +270,22 @@ func pruneAppRegistryRetention(registry config.AppRegistryConfig, appName, desir
 	return fmt.Errorf("prune retention for %s: exceeded retry limit after concurrent updates", appName)
 }
 
+func freshRetentionEntryForPrune(retentionURL, version string) (appregistry.RetentionVersion, bool, error) {
+	_, retentionData, err := downloadAppRegistryObject(retentionURL)
+	if err != nil {
+		return appregistry.RetentionVersion{}, false, err
+	}
+	if len(retentionData) == 0 {
+		return appregistry.RetentionVersion{}, false, nil
+	}
+	retention, err := appregistry.DecodeRetentionIndex(retentionData)
+	if err != nil {
+		return appregistry.RetentionVersion{}, false, fmt.Errorf("decode retention: %w", err)
+	}
+	entry, ok := retention.Versions[version]
+	return entry, ok, nil
+}
+
 func deleteAppRegistryObject(storageURL string) error {
 	_, err := runProviderPublishCommand("gcloud", "storage", "rm", storageURL)
 	return err
@@ -280,7 +301,7 @@ func printAppRegistryRetentionUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd app registry retention <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
-	writeUsageLine(w, "  prune     Delete or lock eligible published versions")
+	writeUsageLine(w, "  prune     Delete eligible published versions and prune locked artifacts")
 }
 
 func printAppRegistryRetentionPruneUsage(w io.Writer) {
