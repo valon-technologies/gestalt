@@ -204,3 +204,12 @@ func (t *restUnaryTransport) ServerStream(
 		Message: fmt.Sprintf("publicclient: method %s is not available on the REST transport; use a gRPC client", method.FullMethod),
 	}
 }
+
+// NewRESTTransport creates a REST transport for generated clients.
+func NewRESTTransport(baseURL string, auth Auth) (generated.Transport, error) {
+	normalized, err := normalizeAddress(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	return &restUnaryTransport{baseURL: normalized, auth: auth, client: http.DefaultClient}, nil
+}

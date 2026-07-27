@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -16,6 +17,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	coredata "github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/tunnel"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -31,8 +33,9 @@ type upstreamHarness struct {
 	remoteCfg *config.RemoteConfig
 	providers *registry.ProviderMap[core.Provider]
 	frps      *tunnel.Server
-	grpcLn    net.Listener
-	grpcSrv   *grpc.Server
+	conn      *publicrpc.InProcessConn
+	httpLn    net.Listener
+	httpSrv   *http.Server
 }
 
 func newUpstreamHarness(t *testing.T) (*upstreamHarness, context.Context, func()) {
@@ -100,20 +103,39 @@ func newUpstreamHarness(t *testing.T) (*upstreamHarness, context.Context, func()
 		ctx = principal.WithPrincipal(ctx, &principal.Principal{SubjectID: "user:alice@example.com"})
 		return handler(ctx, req)
 	}))
-	proto.RegisterRemoteManagementServer(grpcSrv, rmService)
+	publicrpc.RegisterPublicServers(grpcSrv, publicrpc.Servers{
+		RemoteManagement: rmService,
+	})
+	conn, err := publicrpc.NewInProcessConn(grpcSrv)
+	if err != nil {
+		cancel()
+		frps.Close()
+		t.Fatalf("in-process conn: %v", err)
+	}
+	mux := runtime.NewServeMux()
+	if err := publicrpc.RegisterRESTGateway(context.Background(), mux, conn.ClientConn(), publicrpc.Servers{
+		RemoteManagement: rmService,
+	}); err != nil {
+		conn.Close()
+		cancel()
+		frps.Close()
+		t.Fatalf("register REST gateway: %v", err)
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		conn.Close()
 		cancel()
 		frps.Close()
 		t.Fatalf("upstream listen: %v", err)
 	}
-	go func() { _ = grpcSrv.Serve(ln) }()
+	httpSrv := &http.Server{Handler: mux}
+	go func() { _ = httpSrv.Serve(ln) }()
 
 	providers := registry.New()
 	if err := providers.Providers.Register("test-app", &mockProvider{name: "test-app"}); err != nil {
 		cancel()
 		frps.Close()
-		grpcSrv.GracefulStop()
+		conn.Close()
 		t.Fatalf("register provider: %v", err)
 	}
 
@@ -125,12 +147,14 @@ func newUpstreamHarness(t *testing.T) (*upstreamHarness, context.Context, func()
 		},
 		providers: &providers.Providers,
 		frps:      frps,
-		grpcLn:    ln,
-		grpcSrv:   grpcSrv,
+		conn:      conn,
+		httpLn:    ln,
+		httpSrv:   httpSrv,
 	}
 
 	cleanup := func() {
-		grpcSrv.GracefulStop()
+		_ = httpSrv.Close()
+		conn.Close()
 		_ = frpsHTTP.Close()
 		frps.Close()
 		cancel()

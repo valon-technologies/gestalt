@@ -12,9 +12,10 @@ import (
 	"google.golang.org/grpc"
 
 	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
+	"github.com/valon-technologies/gestalt/sdk/go/publicclient"
+	"github.com/valon-technologies/gestalt/sdk/go/publicclient/generated"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/tunnel"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -28,19 +29,22 @@ type RemoteClient interface {
 }
 
 type remoteClient struct {
-	rm   *gestaltclient.RemoteManagement
-	conn *grpc.ClientConn
+	rm *generated.RemoteManagementClient
 }
 
-func newRemoteClient(ctx context.Context, remoteCfg *config.RemoteConfig) (*remoteClient, error) {
-	conn, err := remote.Dial(ctx, remote.Config{
-		URL:   remoteCfg.URL,
-		Token: remoteCfg.Token,
-	})
+func newRemoteClient(_ context.Context, remoteCfg *config.RemoteConfig) (*remoteClient, error) {
+	token := strings.TrimSpace(remoteCfg.Token)
+	var auth publicclient.Auth
+	if token != "" {
+		auth = publicclient.Bearer(func(_ context.Context) (string, error) { return token, nil })
+	}
+	transport, err := publicclient.NewRESTTransport(remoteCfg.URL, auth)
 	if err != nil {
 		return nil, err
 	}
-	return &remoteClient{rm: gestaltclient.NewRemoteManagement(conn), conn: conn}, nil
+	return &remoteClient{
+		rm: generated.NewRemoteManagementClient(transport),
+	}, nil
 }
 
 func (c *remoteClient) ListRemotes(ctx context.Context, req *gestaltclient.ListRemotesRequest) (*gestaltclient.ListRemotesResponse, error) {
@@ -56,10 +60,7 @@ func (c *remoteClient) DeleteRemote(ctx context.Context, req *gestaltclient.Dele
 }
 
 func (c *remoteClient) Close() error {
-	if c == nil || c.conn == nil {
-		return nil
-	}
-	return c.conn.Close()
+	return nil
 }
 
 type PublicationGroup struct {
