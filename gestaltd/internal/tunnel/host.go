@@ -56,7 +56,7 @@ func (c *wssConnector) Open() error {
 	cfg.MaxStreamWindowSize = 6 * 1024 * 1024
 	session, err := fmux.Client(conn, cfg)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 	c.session = session
@@ -82,16 +82,20 @@ func (c *wssConnector) Close() error {
 }
 
 func (c *wssConnector) dial() (net.Conn, error) {
+	if err := c.ctx.Err(); err != nil {
+		return nil, fmt.Errorf("wss connector: %w", err)
+	}
 	host := c.cfg.ServerAddr
 	port := c.cfg.ServerPort
 	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 
-	rawConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	d := net.Dialer{}
+	rawConn, err := d.DialContext(c.ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("wss connector: dial tcp: %w", err)
 	}
 
-	var conn net.Conn = rawConn
+	conn := rawConn
 	wsScheme := "ws"
 	if c.useTLS {
 		sn := c.cfg.Transport.TLS.ServerName
@@ -99,30 +103,35 @@ func (c *wssConnector) dial() (net.Conn, error) {
 			sn = host
 		}
 		tlsCfg := &tls.Config{
-			ServerName:         sn,
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"http/1.1"},
+			ServerName: sn,
+			NextProtos: []string{"http/1.1"},
 		}
 		tlsConn := tls.Client(rawConn, tlsCfg)
 		if err := tlsConn.HandshakeContext(c.ctx); err != nil {
-			rawConn.Close()
+			_ = rawConn.Close()
 			return nil, fmt.Errorf("wss connector: tls handshake: %w", err)
 		}
 		conn = tlsConn
 		wsScheme = "wss"
 	}
 
-	wsURL := wsScheme + "://" + host + "/~!frp"
-	origin := "http://" + host
+	hostport := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+	wsURL := wsScheme + "://" + hostport + "/~!frp"
+	origin := "http://" + hostport
 	wsCfg, err := websocket.NewConfig(wsURL, origin)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("wss connector: websocket config: %w", err)
+	}
+
+	if err := c.ctx.Err(); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("wss connector: %w", err)
 	}
 
 	wsConn, err := websocket.NewClient(wsCfg, conn)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("wss connector: websocket handshake: %w", err)
 	}
 	wsConn.PayloadType = websocket.BinaryFrame
