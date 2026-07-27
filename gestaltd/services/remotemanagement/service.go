@@ -21,8 +21,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-const adminResourceType = "gestaltd"
-const adminResourceID = "system:gestaltd"
+const adminResourceType = "gestaltAdmin"
+const adminResourceID = "gestaltAdmin"
 
 // EndpointValidator dials a candidate tunnel and runs the tunnel-only
 // RegistrationLifecycle.Check. RR-6/RR-7 supply the real one; tests inject a fake.

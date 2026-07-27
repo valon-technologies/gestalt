@@ -79,6 +79,9 @@ func buildPublicServers(cfg publicGRPCConfig) publicrpc.Servers {
 	if cfg.ExternalCredentials != nil {
 		servers.ExternalCredentials = externalCredentialsProviderServer(cfg)
 	}
+	if cfg.RemoteManagement != nil {
+		servers.RemoteManagement = cfg.RemoteManagement
+	}
 	return servers
 }
 

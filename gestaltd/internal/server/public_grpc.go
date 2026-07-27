@@ -39,6 +39,7 @@ type publicGRPCConfig struct {
 	Authorization       core.AuthorizationProvider
 	IndexedDB           indexeddb.IndexedDB
 	ExternalCredentials core.ExternalCredentialProvider
+	RemoteManagement    proto.RemoteManagementServer
 }
 
 func appAccessServer(cfg publicGRPCConfig) proto.AppServer {
