@@ -279,9 +279,7 @@ Simplify `retention.json` to `publishedAt`, `everDeployed`, and `expiresAt`. Pub
 
 **Tags:** [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-During a Cloud Run deployment, old and candidate revisions polled shared IndexedDB at the same time and both joined an app rollout. A five-replica service could therefore enroll ten processes; after Cloud Run terminated the old revision, those processes could never record `restarted_at`, leaving a healthy candidate revision reported as `5/10` or `6/10` restarted and eventually `failed`.
-
-Scope app rollout membership and completion to the promoted Toolshed `SOURCE_VERSION`. Admission snapshots the shared current source version atomically with rollout creation, deployment activation retargets in-flight rollouts with a fresh enrollment epoch, and superseded Cloud Run replicas remain diagnostic without blocking the target cohort. Admin APIs and the embedded UI expose the target and per-replica source versions.
+Cloud Run deployment overlap allowed old and candidate revisions to enroll in the same app rollout, so a five-replica service could report `5/10` or `6/10` restarted and fail after the old revision was terminated. Scoped rollout membership and completion to the promoted Toolshed `SOURCE_VERSION`, atomically recorded `target_source_version` during admission, retargeted in-flight rollouts on promotion, and kept superseded rows diagnostic without blocking the target cohort. Added target and per-replica source-version observability to the admin APIs and embedded UI.
 
 **Design:** [gestalt#2965](https://github.com/valon-technologies/gestalt/pull/2965)
 
