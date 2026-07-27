@@ -54,13 +54,13 @@ Durations are computed at read/UI time — not stored as separate GCS fields. Fi
 
 | Row status | Start | End | Status label |
 | --- | --- | --- | --- |
-| **Publishing** | `startedAt` | now | `Publishing` + `for 4m` |
+| **Publishing** | `startedAt` | `liveNow` (client clock, 1s) | `Publishing` + `for 4m 12s` |
 | **Available** / **Expired** / **Deployed** / **Redeployable** / **Locked** | `publishStartedAt` | `publishedAt` | `Published in 4m 32s` |
 | **Failed** | `startedAt` | `failedAt` | `Failed after 35m` |
 
 `gestaltd app registry publish` reads `pending.json` and copies `PendingVersion.startedAt` into `publishStartedAt` on `versions/{version}.json` and `index.json`. The field is optional in the JSON schema so legacy entries and manual publishes that skipped `pending set` still decode.
 
-The app-admin API includes `publishingForSeconds` on pending rows and `publishDurationSeconds` on published and failed rows when start timestamps exist.
+The app-admin API includes `publishingForSeconds` on pending rows and `publishDurationSeconds` on published and failed rows when start timestamps exist. The app admin UI prefers `startedAt` + a client-side `liveNow` clock for in-flight **Publishing** labels so durations advance between registry polls; published and failed rows still use the static API fields.
 
 ## Self-Healing
 
@@ -172,9 +172,19 @@ Wireframes and columns: [admin.md](./admin.md#app-admin-ui-appsappadmin).
 
 Polling (`gestalt-providers`):
 
-- Every **12s** while `pendingVersions.length > 0`, rollout is non-terminal, or selection is disabled.
-- Every **12s** for **5 minutes** after page load (bootstrap window) so a CI-recorded pending row appears without manual refresh.
-- Do not poll solely because `failedVersions` is non-empty — failed rows load on page fetch.
+Per browser tab via `shouldPollAppAdminRegistry` in `polling.ts` and `useAppAdminRegistryQuery` (`refetchInterval`). Closing the tab stops refresh.
+
+| When | Registry refresh |
+| --- | --- |
+| **Bootstrap window** — first **5 minutes** after page load | `GET /api/v1/apps/{app}/admin/registry` every **3s** |
+| **Active publish or rollout** — `pendingVersions.length > 0`, rollout `enrolling` or `restarting`, or `selectionDisabled` | every **3s** |
+| **Idle** — past bootstrap window and no active signals | none until manual refresh or deploy |
+
+Constants: `APP_ADMIN_POLL_INTERVAL_MS = 3_000`, `APP_ADMIN_BOOTSTRAP_POLL_MS` for the bootstrap-window duration.
+
+Do not poll solely because `failedVersions` is non-empty — failed rows load on page fetch.
+
+`useLiveNow` (`hooks/use-live-now.ts`) ticks every **1s** while **Published snapshots** has at least one **Publishing** row (pauses when the tab is hidden). Pass `liveNow` into `snapshotStatusTimer` and `snapshotLastUpdatedLabel` so in-flight duration and last-update labels advance between polls without extra `gestaltd` requests.
 
 ## Safety and Invariants
 
@@ -194,7 +204,7 @@ Implementation:
 - `gestaltd app registry publish` CLI — `gestaltd/internal/daemon/app_registry_publish.go`, `gestaltd/internal/daemon/app_publish.go`
 - App-admin registry API — `gestaltd/internal/server/handlers_app_admin_registry.go`
 - Registry fetch — `gestaltd/internal/appregistry/reader.go`
-- App admin snapshots UI — `gestalt-providers/app/default` (`polling.ts`, `app-admin-snapshots-table.tsx`)
+- App admin snapshots UI — `gestalt-providers/app/default` (`polling.ts`, `lib/queries/app-admin.ts`, `hooks/use-live-now.ts`, `app-admin-snapshots-table.tsx`, `snapshot-rows.ts`)
 
 ## Shipped In
 
@@ -204,6 +214,8 @@ Implementation:
 - [gestalt-providers#1159](https://github.com/valon-technologies/gestalt-providers/pull/1159)–[#1161](https://github.com/valon-technologies/gestalt-providers/pull/1161) — app admin UI (pending/failed rows, polling, status column)
 - [toolshed#3782](https://github.com/valon-technologies/toolshed/pull/3782) · [toolshed#3790](https://github.com/valon-technologies/toolshed/pull/3790) · [toolshed#3792](https://github.com/valon-technologies/toolshed/pull/3792) — PR title recording from squash-merge commit subject
 - [gestalt-providers#1165](https://github.com/valon-technologies/gestalt-providers/pull/1165) — linked PR number with plain-text title in app admin tables
+- [gestalt-providers#1177](https://github.com/valon-technologies/gestalt-providers/pull/1177) — 3s registry polling during bootstrap and active publish/rollout
+- [gestalt-providers#1178](https://github.com/valon-technologies/gestalt-providers/pull/1178) — live **Publishing** duration labels via `useLiveNow`
 
 ---
 
