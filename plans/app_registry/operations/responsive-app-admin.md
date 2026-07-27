@@ -80,102 +80,52 @@ Reuse the existing `appAdminPendingVersion` / `appAdminFailedVersion` structs an
 
 ### UI lifecycle
 
-The page keeps one **registry snapshot** in memory (published rows, pending, rollout, deploy buttons). Two APIs feed it:
+The page holds one **registry snapshot**. The server returns facts; the UI derives polling mode and escalation — there is no `pollingMode` on the app.
 
-| API | Purpose | Poll cadence |
+| Layer | Endpoint | When |
 | --- | --- | --- |
-| **Full** `GET …/admin/registry` | Complete snapshot — what is published, deployable, and locked | On load, after deploy, and on **escalation** |
-| **Status** `GET …/admin/registry/status` | In-flight state only — pending, failed, rollout, desired version | Every **3s** while something is moving |
-| **Local clock** | Smooth duration labels (`Publishing · for 4m 12s`) | Every **1s** while a pending row exists (no server call) |
+| **Full** | `GET …/admin/registry` | Page load, deploy click, **escalation** |
+| **Status** | `GET …/admin/registry/status` | **Active** poll mode (3s) |
+| **Local clock** | — | Pending rows only (1s; uses `startedAt`) |
 
-**Mental model:** load the full snapshot once, watch cheaply with status while publish or rollout is active, and reload full when status tells you the table needs new published data or deploy rules.
+#### Poll mode
 
-```text
-open page ──► full (once)
-                 │
-     ┌───────────┴────────────┐
-     │                        │
-  idle (<5 min)            active
-  full every 12s           status every 3s
-  (bootstrap watch)        + 1s local timer if publishing
-     │                        │
-     └───────────┬────────────┘
-                 │
-         escalation? ──yes──► full (once) ──► resume or stop polling
-                 │
-                no
-                 │
-            keep current mode
-```
+Derived after every fetch from the snapshot plus one local value (`bootstrapPollUntilMs`, 5 minutes after page load):
 
-| Phase | What happens |
-| --- | --- |
-| **Land** | Full fetch; render table; start 5-minute bootstrap watch |
-| **Bootstrap** (first 5 minutes, nothing active) | Full every **12s** — catches a CI pending row that appears after you opened the page |
-| **Active publish** (`pendingVersions.length > 0`) | Status every **3s**; local clock ticks **Publishing · for …** every **1s** |
-| **Active rollout** or deploy locked (`selectionDisabled`) | Status every **3s**; rollout banner and disabled Deploy buttons stay current |
-| **After deploy click** | Full once (fresh rollout + lock state), then status every **3s** |
-| **Idle** (no pending, no rollout, past bootstrap) | Stop polling |
+| Mode | Condition | Poll |
+| --- | --- | --- |
+| **Stopped** | Past bootstrap and no active signals | none |
+| **Bootstrap** | Within bootstrap window, no active signals | full, 12s |
+| **Active** | Any active signal below | status, 3s |
+
+**Active signals** (from the API response, not a separate mode field):
+
+- `pendingVersions.length > 0`
+- `rollout.state` is `enrolling` or `restarting`
+- `selectionDisabled` is `true` (server sets this when rollout is active)
 
 #### Escalation
 
-**Escalation** is a one-time full registry fetch triggered when a status poll detects that the snapshots table needs data the status endpoint does not carry — published version metadata, deployment state (`Available` / `Redeployable` / `Locked`), `deployableUntil`, and deploy-button eligibility.
+**Escalation** is not a poll mode. It is a one-time **full** fetch during **active** status polling when the status response changes in a way status alone cannot reflect in the table (published rows, deploy buttons, **Deployed** badge).
 
-Status polling answers “is something still in flight?” Full registry answers “what does the table show now?”
+Compare the new status response to the previous one. Escalate if any of:
 
-Escalate (call full, replace snapshot) when status reports any of:
-
-| Trigger | Why full is required |
+| Diff | Example |
 | --- | --- |
-| A `pendingVersions` entry disappears | Publish finished or was pruned — build the **Available** or remove the **Publishing** row |
-| A new `failedVersions` entry appears | Surface the **Failed** row with full provenance |
-| Rollout reaches `complete` or `failed` | Re-enable Deploy and refresh rollout badges |
-| `desiredVersion` changes | Update which row is **Deployed** |
+| Pending version removed | Publish completed |
+| New failed version | Workflow failed or stale prune |
+| Rollout became terminal | `enrolling`/`restarting` → `complete`/`failed` |
+| `desiredVersion` changed | Deploy landed |
 
-After escalation, return to the current polling mode: status every 3s if still active, bootstrap full every 12s if within the window, otherwise stop.
+After escalation, recompute poll mode from the updated snapshot.
 
-### 2. Adaptive polling intervals
+### 2. Polling implementation
 
-Replace the single `POLL_INTERVAL_MS = 12_000` with two constants:
+Constants: `POLL_INTERVAL_ACTIVE_MS = 3_000`, `POLL_INTERVAL_IDLE_MS = 12_000`.
 
-| Constant | Value | Used when |
-| --- | ---: | --- |
-| `POLL_INTERVAL_ACTIVE_MS` | `3_000` | `shouldPollAppAdminRegistry` is true **and** at least one active trigger is present (pending, rollout, or `selectionDisabled`) |
-| `POLL_INTERVAL_IDLE_MS` | `12_000` | bootstrap window only (no pending / rollout / selection lock) |
+Implement `computePollMode` and `shouldEscalateToFullRegistry` in `gestalt-providers/app/default/src/features/registry/polling.ts`. Replace the chained `setTimeout` in `AppAdminPageClient.tsx` with `setInterval` (or React Query `refetchInterval`) keyed on poll mode.
 
-Update `shouldPollAppAdminRegistry` in `gestalt-providers/app/default/src/features/registry/polling.ts`:
-
-```ts
-export function appAdminPollIntervalMs(
-  registry: AppAdminRegistryResponse,
-  bootstrapPollUntilMs: number,
-  now = Date.now(),
-): number | null {
-  if (!shouldPollAppAdminRegistry(registry, bootstrapPollUntilMs, now)) return null;
-  const active =
-    (registry.pendingVersions?.length ?? 0) > 0 ||
-    registry.selectionDisabled ||
-    (registry.rollout && isActiveRegistryRollout(registry.rollout.state));
-  return active ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_IDLE_MS;
-}
-```
-
-**Polling implementation:** replace the chained `setTimeout` in `AppAdminPageClient.tsx` (effect re-schedules only after `registry` changes) with a single `setInterval` (or React Query `refetchInterval`) keyed on the computed interval. Clear the timer on unmount and when polling stops.
-
-**Status vs full during active poll:**
-
-```ts
-const endpoint =
-  (registry.pendingVersions?.length ?? 0) > 0 ||
-  registry.rollout ||
-  registry.selectionDisabled
-    ? getAppAdminRegistryStatus
-    : getAppAdminRegistry; // bootstrap-only path
-```
-
-During bootstrap with no active signals, keep fetching the full registry at 12s so a not-yet-visible pending row still resolves without requiring the operator to refresh.
-
-Pause polling while `document.visibilityState === "hidden"`; run one catch-up fetch when the tab becomes visible again.
+Pause polling when `document.visibilityState === "hidden"`; catch up once when visible again.
 
 ### 3. Continuous duration labels (local clock)
 
@@ -230,36 +180,9 @@ Document the status route in [lifecycle.md](./lifecycle.md#app-admin-version-sel
 
 ---
 
-## UI State Machine
+## Client helpers
 
-```text
-[load] ──full──► registry state
-                    │
-        ┌───────────┴───────────┐
-        │ shouldPoll?           │
-        └───────────┬───────────┘
-                    │ yes
-        ┌───────────▼───────────┐
-        │ pick interval         │
-        │  3s active / 12s boot │
-        └───────────┬───────────┘
-                    │
-        ┌───────────▼───────────┐
-        │ pick endpoint         │
-        │  status vs full       │
-        └───────────┬───────────┘
-                    │
-        ┌───────────▼───────────┐
-        │ merge or escalate     │
-        └───────────┬───────────┘
-                    │
-        ┌───────────▼───────────┐
-        │ live clock (1s)       │
-        │ if pending rows       │
-        └───────────────────────┘
-```
-
-**Merge helper** (`mergeAppAdminRegistryStatus`):
+**`mergeAppAdminRegistryStatus`** — apply a status response onto the current full snapshot (pending, failed, rollout, selection fields only). Run `shouldEscalateToFullRegistry` before merge; on escalation, fetch full instead.
 
 ```ts
 function mergeAppAdminRegistryStatus(
@@ -278,8 +201,6 @@ function mergeAppAdminRegistryStatus(
 }
 ```
 
-Compare previous and next status to detect escalation triggers before merging.
-
 ---
 
 ## Implementation Checklist
@@ -294,7 +215,7 @@ Compare previous and next status to detect escalation triggers before merging.
 ### gestalt-providers
 
 - [ ] `getAppAdminRegistryStatus` in `lib/api.ts` + `AppAdminRegistryStatusResponse` type
-- [ ] `appAdminPollIntervalMs`, `mergeAppAdminRegistryStatus`, escalation detector in `polling.ts`
+- [ ] `computePollMode`, `shouldEscalateToFullRegistry`, `mergeAppAdminRegistryStatus` in `polling.ts`
 - [ ] `useLiveNow` hook (e.g. `hooks/use-live-now.ts`)
 - [ ] Refactor `AppAdminPageClient.tsx`: interval polling, status/full selection, escalation, visibility pause
 - [ ] Pass `liveNow` into `AppAdminSnapshotsTable` → `snapshotStatusTimer` / `snapshotLastUpdatedLabel`
@@ -324,7 +245,7 @@ Compare previous and next status to detect escalation triggers before merging.
 
 | Test | Asserts |
 | --- | --- |
-| `appAdminPollIntervalMs` | `3000` with pending; `12000` during bootstrap only; `null` when idle |
+| `computePollMode` | `active` with pending; `bootstrap` within 5 min only; `stopped` otherwise |
 | `shouldEscalateToFullRegistry` | pending cleared, new failed, terminal rollout, desired version change |
 | `snapshotStatusTimer` with advancing `now` | `for 59s` → `for 1m` → `for 1m 1s` without new API data |
 
