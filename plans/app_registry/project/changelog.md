@@ -30,6 +30,7 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `20` | `🗓️ Jul 27 · 19:12` | `Responsive App Admin Registry Polling` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `21` | `🗓️ Jul 27 · 20:59` | `Rollout Phase Stepper and Selected Version Row` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `23` | `🗓️ Jul 27` | `Retention expiresAt and Fleet Mirror` | [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `24` | `🗓️ Jul 27` | `SOURCE_VERSION-Scoped Rollout Cohorts` | [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
 
 ## Tag Glossary
 
@@ -271,3 +272,15 @@ Replace the rollout text banner with a three-phase stepper on `/apps/{app}/admin
 **Tags:** [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) [`lifecycle.md`](../operations/lifecycle.md)
 
 Simplify `retention.json` to `publishedAt`, `everDeployed`, and `expiresAt`. Publish writes `expiresAt = publishedAt + unusedRetention`. Fleet selection clears `expiresAt` on the version that becomes desired and writes `expiresAt = now + deployedRetention` on the version that stops being desired. Prune evaluates `expiresAt` only and re-reads the catalog before destructive work.
+
+<a id="changelog-24"></a>
+
+### 24 — SOURCE_VERSION-Scoped Rollout Cohorts
+
+**Tags:** [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
+
+Scope app rollout membership and completion to the promoted Toolshed `SOURCE_VERSION`. Admission snapshots the shared current source version atomically with rollout creation, deployment activation retargets in-flight rollouts with a fresh enrollment epoch, and superseded Cloud Run replicas remain diagnostic without blocking the target cohort. Admin APIs and the embedded UI expose the target and per-replica source versions.
+
+**Design:** [gestalt#2965](https://github.com/valon-technologies/gestalt/pull/2965)
+
+**Implementation:** [gestalt#2967](https://github.com/valon-technologies/gestalt/pull/2967)
