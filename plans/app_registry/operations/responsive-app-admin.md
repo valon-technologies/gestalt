@@ -1,150 +1,168 @@
-# Responsive App Admin Polling
+# App Admin Registry Polling
 
-Plan for changelog step **20**. Improves `/apps/{app}/admin` responsiveness during publish and rollout without changing GCS write paths, install behavior, or the app-admin API.
+Faster registry refresh and live publish-duration labels on `/apps/{app}/admin` during CI publish and fleet rollout.
 
-**Status:** planned (not shipped)
+## Overview
 
-## Problem
+Today `gestalt-providers` polls `GET /api/v1/apps/{app}/admin/registry` every **12 seconds** while publish or rollout is active. Each request makes `gestaltd serve` fetch `index.json`, `pending.json`, `failed.json`, and `retention.json` from GCS, plus IndexedDB reads for fleet state.
 
-Today the app admin UI polls `GET /api/v1/apps/{app}/admin/registry` every **12 seconds** while publish or rollout is active.
+Two operator-visible gaps follow:
 
-Two UX gaps follow:
-
-1. **Slow updates** — a pending row or publish completion can take up to ~12s to appear or flip status.
+1. **Slow table updates** — a CI-recorded **Publishing** row or a completed publish can take up to ~12s to appear or change status.
 2. **Frozen duration labels** — `Publishing · for 4m` only updates on poll. `publishingForSeconds` is computed server-side at request time, so the label jumps in 12-second steps even though `startedAt` is already on the row.
 
-Scope is `/apps/{app}/admin` only. The embedded fleet `/admin` registry UI is out of scope unless we later reuse the same polling helpers.
+Scope is `/apps/{app}/admin` only — the embedded fleet `/admin` registry UI does not show publishing state and is out of scope unless it later reuses the same helpers.
+
+Planned changelog step: **20**. See [changelog.md](../project/changelog.md).
 
 ## Goals
 
-| Goal | Target |
-| --- | --- |
-| Pending row appears after CI `pending set` | ≤ **3s** after page load (p95) |
-| Publish completion reflected in snapshots table | ≤ **3s** after `pending clear` + `index.json` update |
-| Publish-duration label | Updates every **1s** locally while a row is **Publishing** |
+- Poll `GET /api/v1/apps/{app}/admin/registry` every **3s** while the bootstrap window is open or publish/rollout is active (today: **12s**).
+- Show a **Publishing** row within **3s** (p95) after CI `pending set` when an operator already has the page open.
+- Reflect publish completion in **Published snapshots** within **3s** after `pending clear` and `index.json` update.
+- Tick **Publishing** duration labels every **1s** client-side from `startedAt`, without additional `gestaltd` requests.
 
 ## Non-Goals
 
-- New app-admin API routes (keep `GET …/admin/registry` for all polls)
+- New app-admin API routes
 - Push notifications (SSE, WebSocket, GCS Pub/Sub)
 - Server-side caching of registry documents
 - Faster catalog poller (replica convergence remains ~1 minute)
 - Embedded `/admin/registry` list auto-refresh (still one-shot today)
-- Polling solely because `failedVersions` is non-empty (unchanged)
+- Polling solely because `failedVersions` is non-empty (unchanged; see [pending-publish.md](./pending-publish.md))
 
 ---
 
-## Design
+## App-Admin API
 
-All polls use the existing endpoint:
+No API changes. All polls continue to use:
 
-```
-GET /api/v1/apps/{app}/admin/registry
-```
+`GET /api/v1/apps/{app}/admin/registry`
 
-Separate **data freshness** (poll cadence) from **display freshness** (local 1s clock for duration labels).
-
-### Poll mode
-
-Per open tab only — closing the tab stops all polling. There is no server-side idle state. The UI derives mode from the latest registry response plus one local value (`landingPollUntilMs`, 5 minutes after page load).
-
-| What you see | Mode | Background refresh |
-| --- | --- | --- |
-| Page just opened; waiting to see if a publish starts | **Landing** | `GET …/admin/registry` every **3s** (first 5 minutes) |
-| A publish, rollout, or deploy lock is in progress | **Active** | `GET …/admin/registry` every **3s** |
-| Quiet page — nothing moving, been open > 5 minutes | **Quiet** | None — table is static until you refresh or click Deploy |
-| Tab closed | — | Nothing runs |
-
-**Landing** ends after 5 minutes unless an active signal keeps polling beyond that window.
-
-Whenever the UI is polling (landing or active), use the same interval — **3s**. Landing and active differ only in *why* polling continues past the first response, not in cadence.
-
-**Active signals** (from the registry response — not a mode field on the app):
-
-- A row is **Publishing** (`pendingVersions` non-empty)
-- Rollout banner shows **Enrolling** or **Restarting**
-- Deploy buttons are disabled (`selectionDisabled`)
-
-Implement `computePollMode(registry, landingPollUntilMs)` → `landing` | `active` | `quiet` in `gestalt-providers/app/default/src/features/registry/polling.ts`.
-
-Constants: `APP_ADMIN_POLL_INTERVAL_MS = 3_000` whenever `shouldPollAppAdminRegistry` is true. Keep `APP_ADMIN_BOOTSTRAP_POLL_MS` as the landing-window duration (internal constant name).
-
-Wire the interval through `useAppAdminRegistryQuery` (`refetchInterval` in `lib/queries/app-admin.ts`). Pause polling when `document.visibilityState === "hidden"`; catch up once when visible again.
-
-### Continuous duration labels (local clock)
-
-Server fields name *when* something started; the UI computes *how long* from `startedAt` + client `now`. Ignore `publishingForSeconds` for display once the live clock is wired (field may remain on the API).
-
-**Hook:** `useLiveNow({ enabled, intervalMs = 1_000 })`
-
-- `enabled` when the snapshots table has at least one `pending` row.
-- Clears when no pending rows or tab is hidden.
-
-Pass `liveNow` into `snapshotStatusTimer` and `snapshotLastUpdatedLabel` in `snapshot-rows.ts` (both already accept an optional `now`).
-
-| Row | Label | Source |
-| --- | --- | --- |
-| **Publishing** | `for 4m 12s` | `durationSecondsBetween(pending.startedAt, liveNow)` |
-| **Available** (published) | `Published in 4m 32s` | static |
-| **Failed** | `Failed after 35m` | static |
-| **Last update** (pending) | `4 minutes ago` | `formatRegistryTimeAgo(pending.updatedAt, liveNow)` |
-
-**Do not** add a 1s poll to gestaltd. The continuous look is entirely client-side.
+Response shapes and merge rules: [pending-publish.md — App-Admin API](./pending-publish.md#app-admin-api). Wireframes and status labels: [admin.md — App Admin UI](./admin.md#app-admin-ui-appsappadmin).
 
 ---
 
-## Implementation Checklist
+## UI (`/apps/{app}/admin`)
 
-### gestalt-providers
+Implemented in `gestalt-providers` (`polling.ts`, `lib/queries/app-admin.ts`, `app-admin-snapshots-table.tsx`, `snapshot-rows.ts`).
 
-- [ ] `APP_ADMIN_POLL_INTERVAL_MS = 3_000` in `polling.ts`; wire through `useAppAdminRegistryQuery` (`refetchInterval`)
-- [ ] `useLiveNow` in `hooks/use-live-now.ts`
-- [ ] Pass `liveNow` into `AppAdminSnapshotsTable` → `snapshotStatusTimer` / `snapshotLastUpdatedLabel`
-- [ ] Pending duration from `startedAt` + `liveNow` (not stale `publishingForSeconds` from last poll)
-- [ ] E2E: pending visibility timeout **15s → 6s**
-- [ ] Pause registry polling when tab is hidden (optional follow-up)
+Separate **registry refresh** (poll cadence) from **duration display** (local 1s clock).
 
-### docs (on ship)
+### Polling
 
-- [ ] [pending-publish.md](./pending-publish.md) — polling section (3s while landing or active)
-- [ ] [admin.md](./admin.md) — app admin timing
-- [ ] [changelog.md](../project/changelog.md) — step `20`
-- [ ] [tests.md](../project/tests.md) — UI polling tests
+Polling is per browser tab. Closing the tab stops all refresh. `gestaltd` does not track a server-side poll mode.
+
+The UI already derives whether to poll from `shouldPollAppAdminRegistry` in `polling.ts` plus `APP_ADMIN_BOOTSTRAP_POLL_MS` (**5 minutes** after page load). This plan changes only the interval and duration-label behavior.
+
+| When | Registry refresh |
+| --- | --- |
+| **Bootstrap window** — first **5 minutes** after page load, no active signals yet | `GET /api/v1/apps/{app}/admin/registry` every **3s** |
+| **Active publish or rollout** — see signals below | every **3s** |
+| **Idle** — past bootstrap window and no active signals | none until manual refresh or deploy |
+| Tab closed | none |
+
+**Bootstrap window** ends after **5 minutes** unless an active signal keeps polling beyond that window.
+
+**Active signals** (from the registry response — not a field on the app):
+
+- `pendingVersions.length > 0`
+- `rollout.state` is `enrolling` or `restarting` (non-terminal rollout)
+- `selectionDisabled` is `true` (deploy actions locked while rollout is active)
+
+Planned constants:
+
+- `APP_ADMIN_POLL_INTERVAL_MS = 3_000` whenever `shouldPollAppAdminRegistry` returns true (today: `12_000` in `lib/queries/app-admin.ts`)
+- keep `APP_ADMIN_BOOTSTRAP_POLL_MS` for the bootstrap-window duration
+
+Wire `APP_ADMIN_POLL_INTERVAL_MS` through `useAppAdminRegistryQuery` (`refetchInterval`). Optional follow-up: pause polling when `document.visibilityState === "hidden"` and catch up once when visible again.
+
+Do not poll solely because `failedVersions` is non-empty — failed rows load on the initial page fetch.
+
+### Publish duration labels
+
+Durations are computed at read/UI time — not stored as separate GCS fields. Baseline rules: [pending-publish.md — Publish Duration](./pending-publish.md#publish-duration).
+
+This milestone adds a client-side clock so in-flight labels advance between registry polls:
+
+| Row status | Label | Source after this change |
+| --- | --- | --- |
+| **Publishing** | `Publishing` + `for 4m 12s` | `durationSecondsBetween(pending.startedAt, liveNow)` |
+| **Publishing** last update | `4 minutes ago` | `formatRegistryTimeAgo(pending.updatedAt, liveNow)` |
+| **Available** / **Deployed** / etc. | `Published in 4m 32s` | unchanged — static from `publishDurationSeconds` or `publishStartedAt` → `publishedAt` |
+| **Failed** | `Failed after 35m` | unchanged — static from `failedAt` − `startedAt` |
+
+Add `useLiveNow` in `hooks/use-live-now.ts`:
+
+- `enabled` when **Published snapshots** has at least one `pending` row
+- tick every **1s**; pause when the tab is hidden
+- pass `liveNow` into `snapshotStatusTimer` and `snapshotLastUpdatedLabel` (both already accept an optional `now` in `snapshot-rows.ts`)
+
+For **Publishing** rows, prefer `startedAt` + `liveNow` over `publishingForSeconds` from the last poll. Do not add a 1s poll to `gestaltd`.
+
+---
+
+## Implementation
+
+### `gestalt-providers`
+
+- `APP_ADMIN_POLL_INTERVAL_MS = 3_000` in `polling.ts`; wire through `useAppAdminRegistryQuery` (`refetchInterval`)
+- `useLiveNow` — `hooks/use-live-now.ts`
+- `app-admin-snapshots-table.tsx` — pass `liveNow` into duration formatters
+- `snapshot-rows.ts` — pending duration from `startedAt` + `liveNow`
+- `e2e/app-admin-mock.spec.ts` — pending visibility timeout **15s → 6s**
+
+### Docs (on ship)
+
+- [pending-publish.md](./pending-publish.md) — polling bullets (**3s** bootstrap and active)
+- [admin.md](./admin.md) — refresh-until-terminal wording
+- [changelog.md](../project/changelog.md) — step `20`
+- [tests.md](../project/tests.md) — UI polling tests
 
 ---
 
 ## Tests
 
-### UI unit
+Run app-admin E2E from `gestalt-providers/app/default`:
 
-| Test | Asserts |
+```bash
+cd gestalt-providers/app/default
+npm run test:e2e -- e2e/app-admin-mock.spec.ts
+```
+
+| Area | Asserts |
 | --- | --- |
-| `snapshotStatusTimer` with advancing `now` | `for 59s` → `for 1m` → `for 1m 1s` without new API data (add when app-default has a unit test runner) |
-
-### E2E (`app-admin-mock.spec.ts`)
-
-| Test | Asserts |
-| --- | --- |
-| `polls for pending publish without manual refresh` | Pending row within **6s** |
-| `publishing timer ticks between polls` | Optional: frozen pending `startedAt`, label advances over 2s |
+| `app-admin-mock.spec.ts` | **Publishing** row within **6s** without manual refresh |
+| `snapshot-rows.ts` | `for 59s` → `for 1m` → `for 1m 1s` with advancing `now` (add when app-default has a unit test runner) |
+| `app-admin-mock.spec.ts` (optional) | frozen pending `startedAt`; duration label advances over 2s between registry polls |
 
 ---
 
-## Future Work (out of scope)
+## Future Work
 
-- Lightweight `GET …/admin/registry/status` to reduce GCS reads per poll
-- Short TTL registry cache in gestaltd
-- SSE push on `pending set` / rollout transitions
+- Lightweight `GET /api/v1/apps/{app}/admin/registry/status` to reduce GCS reads per poll
+- Short TTL registry cache in `gestaltd`
+- SSE push on `pending set` or rollout transitions
 - Embedded `/admin/registry` adaptive polling (align with [admin.md](./admin.md#apps-list-adminregistry))
 
 ---
 
-## Related Docs
+## Appendix
+
+### Related Changelogs
 
 <pre>
-├── <a href="../project/changelog.md">changelog.md</a> — step 20 (on ship)
+├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
+└── <a href="../project/changelog.md">changelog.md</a> — step 20 (on ship)
+</pre>
+
+### Related Docs
+
+<pre>
+├── <a href="../readme.md">readme.md</a> — registry architecture and future work
+├── <a href="../project/changelog.md">changelog.md</a> — implementation milestones and pull requests
 ├── <a href="./pending-publish.md">pending-publish.md</a> — publish catalogs and current 12s polling
-├── <a href="./admin.md">admin.md</a> — app admin UI wireframes
-├── <a href="./lifecycle.md">lifecycle.md</a> — app-admin HTTP APIs
+├── <a href="./admin.md">admin.md</a> — app admin UI capabilities
+├── <a href="./lifecycle.md">lifecycle.md</a> — app-admin HTTP API
 └── <a href="../project/tests.md">tests.md</a> — test index (extend on ship)
 </pre>
