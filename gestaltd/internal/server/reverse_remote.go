@@ -83,6 +83,7 @@ func setupReverseRemoteUpstream(ctx context.Context, cfg *config.Config, service
 	result.remoteManagement, err = remotemanagement.New(
 		services.RemoteRegistrations,
 		authz,
+		services.Users,
 		validator,
 		remotemanagement.Config{
 			ServerIdentity: &proto.ServerIdentity{

@@ -42,17 +42,19 @@ type Service struct {
 
 	store    *coredata.RemoteRegistrationService
 	authz    core.AuthorizationProvider
+	users    principal.CredentialUserResolver
 	validate EndpointValidator
 	config   Config
 }
 
-func New(store *coredata.RemoteRegistrationService, authz core.AuthorizationProvider, validate EndpointValidator, config Config) (*Service, error) {
+func New(store *coredata.RemoteRegistrationService, authz core.AuthorizationProvider, users principal.CredentialUserResolver, validate EndpointValidator, config Config) (*Service, error) {
 	if config.LeaseDuration <= 0 {
 		return nil, status.Errorf(codes.FailedPrecondition, "remote management lease duration must be positive")
 	}
 	return &Service{
 		store:    store,
 		authz:    authz,
+		users:    users,
 		validate: validate,
 		config:   config,
 	}, nil
@@ -70,12 +72,12 @@ func (s *Service) CreateRemote(ctx context.Context, req *proto.CreateRemoteReque
 	}
 
 	p := principal.FromContext(ctx)
-	owner, err := ownerSubject(p)
-	if err != nil {
-		return nil, err
-	}
 	if err := s.authorizeAdmin(ctx, p, "create"); err != nil {
 		return nil, err
+	}
+	owner, err := principal.ResolveCredentialSubjectID(ctx, s.users, p)
+	if err != nil {
+		return nil, resolveSubjectError(err)
 	}
 
 	defs := req.GetProviders()
@@ -118,10 +120,9 @@ func (s *Service) ListRemotes(ctx context.Context, _ *proto.ListRemotesRequest) 
 	if err := s.authorizeAdmin(ctx, p, "read"); err != nil {
 		return nil, err
 	}
-
-	owner, err := ownerSubject(p)
+	owner, err := principal.ResolveCredentialSubjectID(ctx, s.users, p)
 	if err != nil {
-		return nil, err
+		return nil, resolveSubjectError(err)
 	}
 	reg, providers, err := s.store.ListByOwner(ctx, owner)
 	if err != nil {
@@ -157,6 +158,9 @@ func (s *Service) DeleteRemote(ctx context.Context, req *proto.DeleteRemoteReque
 		return nil, status.Error(codes.InvalidArgument, "expected_generation is required for delete")
 	}
 	p := principal.FromContext(ctx)
+	if p == nil {
+		return nil, status.Error(codes.Unauthenticated, "authenticated subject is required")
+	}
 	if err := s.authorizeAdmin(ctx, p, "delete"); err != nil {
 		return nil, err
 	}
@@ -166,15 +170,13 @@ func (s *Service) DeleteRemote(ctx context.Context, req *proto.DeleteRemoteReque
 	return &emptypb.Empty{}, nil
 }
 
-// authorizeAdmin checks the admin action on the gestaltd resource. A nil provider
-// means no check; every action still requires an authenticated subject.
 func (s *Service) authorizeAdmin(ctx context.Context, p *principal.Principal, action string) error {
-	subjectID, err := ownerSubject(p)
-	if err != nil {
-		return err
-	}
 	if s == nil || s.authz == nil {
 		return nil
+	}
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, s.users, p)
+	if err != nil {
+		return resolveSubjectError(err)
 	}
 	req := invocation.SubjectAccessRequest(subjectID, action, &proto.Resource{
 		Type: adminResourceType,
@@ -295,12 +297,11 @@ func remoteToProto(reg *coredata.RemoteRegistration, defs []*proto.RemoteProvide
 	return out
 }
 
-func ownerSubject(p *principal.Principal) (string, error) {
-	p = principal.Canonicalized(p)
-	if p == nil || strings.TrimSpace(p.SubjectID) == "" {
-		return "", status.Error(codes.Unauthenticated, "authenticated subject is required")
+func resolveSubjectError(err error) error {
+	if errors.Is(err, principal.ErrCredentialSubjectRequired) {
+		return status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
-	return p.SubjectID, nil
+	return status.Errorf(codes.Internal, "remote management: resolve credential subject: %v", err)
 }
 
 func mapStoreError(err error) error {
