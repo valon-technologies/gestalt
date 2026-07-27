@@ -28,7 +28,7 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `18` | `🗓️ Jul 26 · 15:48` | `Revision History and Redeploy Windows` | [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) [`retention.md`](../operations/retention.md) |
 | `19` | `🗓️ Jul 26 · 19:34` | `Publication PR Title Provenance` | [`models.md`](../architecture/models.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `20` | `🗓️ Jul 27 · 19:12` | `Responsive App Admin Registry Polling` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
-| `21` | — | `Rollout Phase Stepper and Selected Version Row` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
+| `21` | `🗓️ Jul 27 · 20:59` | `Rollout Phase Stepper and Selected Version Row` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 
 ## Tag Glossary
 
@@ -257,4 +257,8 @@ Poll `GET /api/v1/apps/{app}/admin/registry` every **3s** (was **12s**) during t
 
 Replace the rollout text banner with a three-phase stepper on `/apps/{app}/admin`. Highlight the admitted snapshot row with a leading arrow and tint that pulses during rollout, then stays solid after terminal `complete` or `failed`.
 
-**App UI:** gestalt-providers (planned)
+**Merged:** [gestalt#2956](https://github.com/valon-technologies/gestalt/pull/2956)
+
+**App UI:** [gestalt-providers#1184](https://github.com/valon-technologies/gestalt-providers/pull/1184)
+
+**Deploy:** [toolshed#3824](https://github.com/valon-technologies/toolshed/pull/3824) — bump `apps.home` snapshot to `0d5f672`
