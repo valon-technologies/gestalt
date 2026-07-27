@@ -78,35 +78,61 @@ GET /api/v1/apps/{app}/admin/registry/status
 
 Reuse the existing `appAdminPendingVersion` / `appAdminFailedVersion` structs and admin-catalog merge helpers from `handlers_app_admin_registry.go`. Do not duplicate merge precedence logic in the UI.
 
-**When the UI uses each endpoint:**
+### UI lifecycle
 
-| Situation | Endpoint | Interval |
+The page keeps one **registry snapshot** in memory (published rows, pending, rollout, deploy buttons). Two APIs feed it:
+
+| API | Purpose | Poll cadence |
 | --- | --- | --- |
-| Initial page load | `GET …/admin/registry` (full) | once |
-| After deploy selection | full | once, then active polling |
-| Active publish (`pendingVersions.length > 0`) | status | **3s** |
-| Active rollout or `selectionDisabled` (no pending) | status | **3s** |
-| Bootstrap window (first 5 minutes, idle) | full | **12s** |
-| Otherwise | none | — |
+| **Full** `GET …/admin/registry` | Complete snapshot — what is published, deployable, and locked | On load, after deploy, and on **escalation** |
+| **Status** `GET …/admin/registry/status` | In-flight state only — pending, failed, rollout, desired version | Every **3s** while something is moving |
+| **Local clock** | Smooth duration labels (`Publishing · for 4m 12s`) | Every **1s** while a pending row exists (no server call) |
 
-**Escalation to full registry:**
-
-The status endpoint cannot produce published snapshot rows (deployment state, `deployableUntil`, publication metadata on completed versions). The UI must call the full registry endpoint when:
-
-1. A `pendingVersions` entry disappears (publish succeeded or was pruned to failed).
-2. A new `failedVersions` entry appears that was not in the previous status snapshot (stale prune or workflow failure during an active session).
-3. Rollout reaches a terminal state (`complete` or `failed`).
-4. `desiredVersion` changes (deploy succeeded).
-
-After escalation, resume status polling if the new state is still active; otherwise stop.
+**Mental model:** load the full snapshot once, watch cheaply with status while publish or rollout is active, and reload full when status tells you the table needs new published data or deploy rules.
 
 ```text
-status poll (3s)
-  ├── pending cleared     → full registry → merge published row
-  ├── new failed version  → full registry → merge failed row
-  ├── rollout terminal    → full registry → unlock Deploy
-  └── desiredVersion Δ    → full registry → refresh Deployed badge
+open page ──► full (once)
+                 │
+     ┌───────────┴────────────┐
+     │                        │
+  idle (<5 min)            active
+  full every 12s           status every 3s
+  (bootstrap watch)        + 1s local timer if publishing
+     │                        │
+     └───────────┬────────────┘
+                 │
+         escalation? ──yes──► full (once) ──► resume or stop polling
+                 │
+                no
+                 │
+            keep current mode
 ```
+
+| Phase | What happens |
+| --- | --- |
+| **Land** | Full fetch; render table; start 5-minute bootstrap watch |
+| **Bootstrap** (first 5 minutes, nothing active) | Full every **12s** — catches a CI pending row that appears after you opened the page |
+| **Active publish** (`pendingVersions.length > 0`) | Status every **3s**; local clock ticks **Publishing · for …** every **1s** |
+| **Active rollout** or deploy locked (`selectionDisabled`) | Status every **3s**; rollout banner and disabled Deploy buttons stay current |
+| **After deploy click** | Full once (fresh rollout + lock state), then status every **3s** |
+| **Idle** (no pending, no rollout, past bootstrap) | Stop polling |
+
+#### Escalation
+
+**Escalation** is a one-time full registry fetch triggered when a status poll detects that the snapshots table needs data the status endpoint does not carry — published version metadata, deployment state (`Available` / `Redeployable` / `Locked`), `deployableUntil`, and deploy-button eligibility.
+
+Status polling answers “is something still in flight?” Full registry answers “what does the table show now?”
+
+Escalate (call full, replace snapshot) when status reports any of:
+
+| Trigger | Why full is required |
+| --- | --- |
+| A `pendingVersions` entry disappears | Publish finished or was pruned — build the **Available** or remove the **Publishing** row |
+| A new `failedVersions` entry appears | Surface the **Failed** row with full provenance |
+| Rollout reaches `complete` or `failed` | Re-enable Deploy and refresh rollout badges |
+| `desiredVersion` changes | Update which row is **Deployed** |
+
+After escalation, return to the current polling mode: status every 3s if still active, bootstrap full every 12s if within the window, otherwise stop.
 
 ### 2. Adaptive polling intervals
 
