@@ -36,6 +36,40 @@ func TestInstallerAddUsesFirstInstallSentinel(t *testing.T) {
 	}
 }
 
+func TestInstallerTargetsSharedCurrentSourceVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	now := time.Date(2026, 7, 27, 18, 0, 0, 0, time.UTC)
+	if _, err := svc.GestaltdSourceVersionState.Promote(
+		ctx,
+		"source-new",
+		now,
+		appregistry.DefaultRolloutEnrollmentWindow,
+		appregistry.DefaultRolloutTimeout,
+	); err != nil {
+		t.Fatalf("Promote source version: %v", err)
+	}
+	installer := newRegistryOnlyInstaller(svc, fixture)
+	installer.SourceVersions = svc.GestaltdSourceVersionState
+	installer.SourceVersion = "source-old"
+	installer.Now = func() time.Time { return now }
+
+	result, err := installer.Add(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if result.Rollout.TargetSourceVersion != "source-new" {
+		t.Fatalf("target source version = %q, want source-new", result.Rollout.TargetSourceVersion)
+	}
+}
+
 func TestInstallerAddAndUpgradeRequireCorrectCatalogState(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

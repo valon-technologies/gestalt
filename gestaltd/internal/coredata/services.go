@@ -14,6 +14,7 @@ type Services struct {
 	ManagedSubjects             *ManagedSubjectService
 	AppVersionChangeRequests    *AppVersionChangeRequestService
 	AppVersionInstallLocks      *AppVersionInstallLockService
+	GestaltdSourceVersionState  *GestaltdSourceVersionService
 	AppRollouts                 *AppRolloutService
 	AppInstanceMaterializations *AppInstanceMaterializationService
 	RemoteRegistrations         *RemoteRegistrationService
@@ -55,6 +56,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionInstallLocks, AppVersionInstallLocksSchema); err != nil {
 			return nil, fmt.Errorf("create app_version_install_locks store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreGestaltdSourceVersionState, GestaltdSourceVersionStateSchema); err != nil {
+			return nil, fmt.Errorf("create gestaltd_source_version_state store: %w", err)
+		}
 		if _, err := ds.CreateObjectStore(ctx, StoreAppRollouts, AppRolloutsSchema); err != nil {
 			return nil, fmt.Errorf("create app_rollouts store: %w", err)
 		}
@@ -72,6 +76,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	managedSubjects := NewManagedSubjectService(ds)
 	appVersionChangeRequests := NewAppVersionChangeRequestService(ds)
 	appVersionInstallLocks := NewAppVersionInstallLockService(ds)
+	gestaltdSourceVersions := NewGestaltdSourceVersionService(ds)
 	appRollouts := NewAppRolloutService(ds)
 	appInstanceMaterializations := NewAppInstanceMaterializationService(ds)
 	remoteRegistrations := NewRemoteRegistrationService(ds)
@@ -81,6 +86,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		ManagedSubjects:             managedSubjects,
 		AppVersionChangeRequests:    appVersionChangeRequests,
 		AppVersionInstallLocks:      appVersionInstallLocks,
+		GestaltdSourceVersionState:  gestaltdSourceVersions,
 		AppRollouts:                 appRollouts,
 		AppInstanceMaterializations: appInstanceMaterializations,
 		RemoteRegistrations:         remoteRegistrations,

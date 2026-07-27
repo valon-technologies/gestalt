@@ -229,6 +229,7 @@ func normalizeAppRollout(rollout *core.AppRollout) *core.AppRollout {
 	copy := *rollout
 	copy.App = strings.TrimSpace(copy.App)
 	copy.Version = strings.TrimSpace(copy.Version)
+	copy.TargetSourceVersion = strings.TrimSpace(copy.TargetSourceVersion)
 	copy.CreatedAt = normalizedRolloutTime(copy.CreatedAt)
 	copy.EnrollmentEndsAt = normalizedRolloutTime(copy.EnrollmentEndsAt)
 	copy.Deadline = normalizedRolloutTime(copy.Deadline)
@@ -248,13 +249,14 @@ func isActiveRolloutState(state core.AppRolloutState) bool {
 
 func appRolloutRecord(rollout *core.AppRollout) idb.Record {
 	rec := idb.Record{
-		"id":                 rollout.App,
-		"app":                rollout.App,
-		"version":            rollout.Version,
-		"state":              string(rollout.State),
-		"created_at":         rollout.CreatedAt,
-		"enrollment_ends_at": rollout.EnrollmentEndsAt,
-		"deadline":           rollout.Deadline,
+		"id":                    rollout.App,
+		"app":                   rollout.App,
+		"version":               rollout.Version,
+		"state":                 string(rollout.State),
+		"target_source_version": rollout.TargetSourceVersion,
+		"created_at":            rollout.CreatedAt,
+		"enrollment_ends_at":    rollout.EnrollmentEndsAt,
+		"deadline":              rollout.Deadline,
 	}
 	if !rollout.CompletedAt.IsZero() {
 		rec["completed_at"] = rollout.CompletedAt
@@ -267,13 +269,14 @@ func appRolloutRecord(rollout *core.AppRollout) idb.Record {
 
 func recordToAppRollout(rec idb.Record) *core.AppRollout {
 	return &core.AppRollout{
-		App:              recString(rec, "app"),
-		Version:          recString(rec, "version"),
-		State:            core.AppRolloutState(recString(rec, "state")),
-		CreatedAt:        recTime(rec, "created_at"),
-		EnrollmentEndsAt: recTime(rec, "enrollment_ends_at"),
-		Deadline:         recTime(rec, "deadline"),
-		CompletedAt:      recTime(rec, "completed_at"),
-		FailedAt:         recTime(rec, "failed_at"),
+		App:                 recString(rec, "app"),
+		Version:             recString(rec, "version"),
+		State:               core.AppRolloutState(recString(rec, "state")),
+		TargetSourceVersion: recString(rec, "target_source_version"),
+		CreatedAt:           recTime(rec, "created_at"),
+		EnrollmentEndsAt:    recTime(rec, "enrollment_ends_at"),
+		Deadline:            recTime(rec, "deadline"),
+		CompletedAt:         recTime(rec, "completed_at"),
+		FailedAt:            recTime(rec, "failed_at"),
 	}
 }

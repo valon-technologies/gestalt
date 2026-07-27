@@ -31,9 +31,11 @@ type Installer struct {
 	Reader           *RegistryReader
 	ChangeRequests   *coredata.AppVersionChangeRequestService
 	Locks            *coredata.AppVersionInstallLockService
+	SourceVersions   *coredata.GestaltdSourceVersionService
 	Rollouts         *coredata.AppRolloutService
 	RetentionCatalog RetentionCatalogStore
 	GestaltdVersion  string
+	SourceVersion    string
 	Now              func() time.Time
 }
 
@@ -176,6 +178,14 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if mode == installModeSelect && coredata.LatestKnownVersion(knownVersions) == version {
 		return nil, ErrAppVersionAlreadyInstalled
 	}
+	if strings.TrimSpace(i.SourceVersion) != "" {
+		if i.SourceVersions == nil {
+			return nil, fmt.Errorf("gestaltd source version service is not configured")
+		}
+		if _, err = i.SourceVersions.CurrentForAdmission(installCtx); err != nil {
+			return nil, fmt.Errorf("resolve app rollout target source version: %w", err)
+		}
+	}
 
 	reader := i.Reader
 	if reader == nil {
@@ -234,14 +244,20 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		InstalledAt:        requestedAt,
 		UpdatedAt:          requestedAt,
 	}
-	rollout, err := i.Rollouts.Create(installCtx, &core.AppRollout{
+	pendingRollout := &core.AppRollout{
 		App:              appName,
 		Version:          version,
 		State:            core.AppRolloutStateEnrolling,
 		CreatedAt:        requestedAt,
 		EnrollmentEndsAt: requestedAt.Add(DefaultRolloutEnrollmentWindow),
 		Deadline:         requestedAt.Add(DefaultRolloutTimeout),
-	})
+	}
+	var rollout *core.AppRollout
+	if strings.TrimSpace(i.SourceVersion) != "" {
+		rollout, err = i.SourceVersions.CreateAppRollout(installCtx, pendingRollout)
+	} else {
+		rollout, err = i.Rollouts.Create(installCtx, pendingRollout)
+	}
 	if err != nil {
 		if errors.Is(err, coredata.ErrAppRolloutActive) {
 			return nil, ErrAppRolloutActive

@@ -103,6 +103,7 @@ function RegistryAppDetailPage() {
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
               ["State", detail.rollout.state],
+              ["Target source version", detail.rollout.targetSourceVersion || "—"],
               ["Created", formatTime(detail.rollout.createdAt)],
               ["Enrollment ends", formatTime(detail.rollout.enrollmentEndsAt)],
               ["Deadline", formatTime(detail.rollout.deadline)],

@@ -5,6 +5,7 @@ export type RegistryAppSummary = {
   rollout?: {
     version: string;
     state: string;
+    targetSourceVersion?: string;
     createdAt: string;
     enrollmentEndsAt: string;
     deadline: string;
@@ -37,6 +38,7 @@ export type MaterializationsResponse = {
   rolloutState?: string;
   materializations: Array<{
     instanceId: string;
+    sourceVersion?: string;
     acknowledgedAt?: string | null;
     materializedAt?: string | null;
     stoppedAt?: string | null;

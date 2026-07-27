@@ -94,8 +94,8 @@ Replica membership is discovered rather than configured:
 
 1. App admission snapshots the current `SOURCE_VERSION` into `app_rollouts.target_source_version`.
 2. The rollout remains `enrolling` for a bounded window of at least two poll intervals.
-3. Replicas with that deployment ID join by writing `acknowledged_at` before `enrollment_ends_at` and download the rollout artifact during this window, recording `materialized_at` while the current provider keeps running.
-4. Replicas from another deployment still reconcile the durable desired version, but they are not members of the target cohort and do not affect its outcome.
+3. Replicas with that source version join by writing `acknowledged_at` before `enrollment_ends_at` and download the rollout artifact during this window, recording `materialized_at` while the current provider keeps running.
+4. Replicas from another source version still reconcile the durable desired version, but they are not members of the target cohort and do not affect its outcome.
 5. After enrollment, the target cohort is frozen and the rollout becomes `restarting`.
 6. The rollout completes when the target cohort is non-empty and every member records `restarted_at`.
 7. The rollout fails if a target-cohort replica does not restart before the deadline, or if no target replica acknowledges before the deadline.
@@ -110,12 +110,14 @@ The replica handling the version-selection HTTP request does not choose the targ
 
 Toolshed deployment orchestration owns shared source-version state:
 
-1. After the candidate passes readiness, record its `SOURCE_VERSION` as `candidate`.
+1. After the candidate passes readiness, call `POST /activate?phase=candidate` on its tagged management URL to record its `SOURCE_VERSION` as `candidate`.
 2. While the candidate is being promoted, reject app version selection with **409 Conflict** (`gestaltd deployment in progress`). Registry publishing remains available.
-3. Shift 100% traffic to the candidate, activate it, and atomically promote its source-version record to `current`.
+3. Shift 100% traffic to the candidate and call `POST /activate`; activation atomically promotes its source-version record to `current`.
 4. App admission reads the current source-version record while holding the app install lock and copies it to the rollout.
 
-If a new source version becomes current while an app rollout is active, retarget the rollout and open a fresh enrollment window. The desired app version and change request do not change. Materialization rows from the superseded source version remain diagnostic and have `inCohort: false`.
+If candidate promotion fails, call `POST /activate?phase=rollback` on the candidate's tagged management URL to clear it while preserving the previous current source version.
+
+If a new source version becomes current while an app rollout is active, retarget the rollout and open a fresh enrollment window. A rollout that reaches a terminal state after candidate promotion began is reopened on promotion so completion by the old cohort cannot hide failure of the target cohort. The desired app version and change request do not change. Materialization rows from the superseded source version remain diagnostic and have `inCohort: false`.
 
 Production rollout coordination requires `SOURCE_VERSION`. Local development may use a process-local value.
 

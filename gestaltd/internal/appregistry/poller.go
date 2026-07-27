@@ -20,6 +20,7 @@ const (
 	DefaultCatalogPollInterval = time.Minute
 	DefaultCatalogRestartDelay = time.Minute
 	instanceIDEnvVar           = "GESTALT_INSTANCE_ID"
+	sourceVersionEnvVar        = "SOURCE_VERSION"
 )
 
 var (
@@ -34,6 +35,7 @@ type CatalogPoller struct {
 	AppMaterializer      *Materializer
 	AppRestarter         AppRestarter
 	InstanceID           string
+	SourceVersion        string
 	Interval             time.Duration
 	RestartDelay         time.Duration
 	DisableRestartDelay  bool
@@ -59,6 +61,7 @@ type CatalogPollerConfig struct {
 	AppMaterializer      *Materializer
 	AppRestarter         AppRestarter
 	InstanceID           string
+	SourceVersion        string
 	Interval             time.Duration
 	RestartDelay         time.Duration
 	DisableRestartDelay  bool
@@ -76,6 +79,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 		AppMaterializer:      cfg.AppMaterializer,
 		AppRestarter:         cfg.AppRestarter,
 		InstanceID:           strings.TrimSpace(cfg.InstanceID),
+		SourceVersion:        strings.TrimSpace(cfg.SourceVersion),
 		Interval:             cfg.Interval,
 		RestartDelay:         cfg.RestartDelay,
 		DisableRestartDelay:  cfg.DisableRestartDelay,
@@ -94,6 +98,10 @@ func ResolveInstanceID() string {
 		resolvedInstanceID = resolveInstanceID(os.Getenv(instanceIDEnvVar), host)
 	})
 	return resolvedInstanceID
+}
+
+func ResolveSourceVersion() string {
+	return strings.TrimSpace(os.Getenv(sourceVersionEnvVar))
 }
 
 func resolveInstanceID(instanceIDEnv, hostname string) string {
@@ -268,6 +276,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	restartBlocked := false
 	if rollout != nil {
 		version := strings.TrimSpace(rollout.Version)
+		inTargetCohort := rolloutTargetsSourceVersion(rollout, p.SourceVersion)
 		if findInstallation(installations, version) == nil {
 			if !p.now().Before(rollout.Deadline) {
 				if _, err := p.Rollouts.MarkFailed(ctx, appName, version, p.now()); err != nil {
@@ -281,7 +290,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		}
 		if rollout.State == core.AppRolloutStateEnrolling {
 			if p.now().Before(rollout.EnrollmentEndsAt) {
-				restartBlocked = true
+				restartBlocked = inTargetCohort
 			} else {
 				var err error
 				rollout, err = p.Rollouts.MarkRestarting(ctx, appName, version)
@@ -517,6 +526,10 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 			!materialization.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
 			continue
 		}
+		if target := strings.TrimSpace(rollout.TargetSourceVersion); target != "" &&
+			strings.TrimSpace(materialization.SourceVersion) != target {
+			continue
+		}
 		cohortCount++
 		if materialization.RestartedAt.Before(rollout.CreatedAt) ||
 			materialization.RestartedAt.After(rollout.Deadline) {
@@ -715,6 +728,7 @@ func (p *CatalogPoller) ensureAcknowledged(ctx context.Context, instanceID, appN
 	acknowledgedAt := p.now()
 	input := &core.AppInstanceMaterialization{
 		InstanceID:     instanceID,
+		SourceVersion:  strings.TrimSpace(p.SourceVersion),
 		App:            appName,
 		Version:        version,
 		AcknowledgedAt: acknowledgedAt,
@@ -730,6 +744,14 @@ func (p *CatalogPoller) ensureAcknowledged(ctx context.Context, instanceID, appN
 		return nil, fmt.Errorf("acknowledge %s@%s: %w", appName, version, err)
 	}
 	return materialization, nil
+}
+
+func rolloutTargetsSourceVersion(rollout *core.AppRollout, sourceVersion string) bool {
+	if rollout == nil {
+		return false
+	}
+	target := strings.TrimSpace(rollout.TargetSourceVersion)
+	return target == "" || target == strings.TrimSpace(sourceVersion)
 }
 
 func (p *CatalogPoller) beginInflight(key string) bool {

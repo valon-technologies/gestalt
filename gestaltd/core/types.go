@@ -49,6 +49,7 @@ type AppVersionChangeRequest struct {
 
 type AppInstanceMaterialization struct {
 	InstanceID       string
+	SourceVersion    string
 	App              string
 	Version          string
 	AcknowledgedAt   time.Time
@@ -70,15 +71,28 @@ const (
 )
 
 type AppRollout struct {
-	App              string
-	Version          string
-	State            AppRolloutState
-	CreatedAt        time.Time
-	EnrollmentEndsAt time.Time
-	Deadline         time.Time
-	CompletedAt      time.Time
-	FailedAt         time.Time
+	App                 string
+	Version             string
+	State               AppRolloutState
+	TargetSourceVersion string
+	CreatedAt           time.Time
+	EnrollmentEndsAt    time.Time
+	Deadline            time.Time
+	CompletedAt         time.Time
+	FailedAt            time.Time
 }
+
+type GestaltdSourceVersionState struct {
+	CurrentSourceVersion   string
+	CandidateSourceVersion string
+	State                  string
+	UpdatedAt              time.Time
+}
+
+const (
+	GestaltdSourceVersionStateStable    = "stable"
+	GestaltdSourceVersionStatePromoting = "promoting"
+)
 
 type ExternalCredentialGrant struct {
 	AccessToken       string

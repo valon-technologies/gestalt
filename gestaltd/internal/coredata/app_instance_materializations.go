@@ -86,6 +86,7 @@ func (s *AppInstanceMaterializationService) acknowledge(ctx context.Context, mat
 		return nil, fmt.Errorf("acknowledge app instance materialization: record is required")
 	}
 	instanceID := strings.TrimSpace(materialization.InstanceID)
+	sourceVersion := strings.TrimSpace(materialization.SourceVersion)
 	app := strings.TrimSpace(materialization.App)
 	version := strings.TrimSpace(materialization.Version)
 	if instanceID == "" || app == "" || version == "" {
@@ -94,10 +95,24 @@ func (s *AppInstanceMaterializationService) acknowledge(ctx context.Context, mat
 
 	if existing, err := s.findByInstanceAppVersion(ctx, instanceID, app, version); err == nil {
 		current := recordToAppInstanceMaterialization(existing)
+		sourceVersionAdded := false
+		if current.SourceVersion == "" && sourceVersion != "" {
+			existing["source_version"] = sourceVersion
+			current.SourceVersion = sourceVersion
+			sourceVersionAdded = true
+		}
 		if rolloutCreatedAt.IsZero() || !current.AcknowledgedAt.Before(rolloutCreatedAt) {
+			if sourceVersionAdded {
+				if err := s.store.Put(ctx, existing); err != nil {
+					return nil, fmt.Errorf("acknowledge app instance materialization: persist source version: %w", err)
+				}
+			}
 			return current, nil
 		}
 		acknowledgedAt := acknowledgedAtForRollout(materialization.AcknowledgedAt, rolloutCreatedAt)
+		if sourceVersion != "" {
+			existing["source_version"] = sourceVersion
+		}
 		existing["acknowledged_at"] = acknowledgedAt
 		delete(existing, "materialized_at")
 		delete(existing, "stopped_at")
@@ -117,6 +132,7 @@ func (s *AppInstanceMaterializationService) acknowledge(ctx context.Context, mat
 	rec := idb.Record{
 		"id":              uuid.NewString(),
 		"instance_id":     instanceID,
+		"source_version":  sourceVersion,
 		"app":             app,
 		"version":         version,
 		"acknowledged_at": acknowledgedAt,
@@ -271,6 +287,7 @@ func (s *AppInstanceMaterializationService) findByInstanceAppVersion(ctx context
 func recordToAppInstanceMaterialization(rec idb.Record) *core.AppInstanceMaterialization {
 	return &core.AppInstanceMaterialization{
 		InstanceID:       recString(rec, "instance_id"),
+		SourceVersion:    recString(rec, "source_version"),
 		App:              recString(rec, "app"),
 		Version:          recString(rec, "version"),
 		AcknowledgedAt:   recTime(rec, "acknowledged_at"),
