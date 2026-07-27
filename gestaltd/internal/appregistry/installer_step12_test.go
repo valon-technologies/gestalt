@@ -43,14 +43,15 @@ func TestInstallerTargetsSharedCurrentSourceVersion(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	fixture := registrytest.NewInstallFixture(t)
 	now := time.Date(2026, 7, 27, 18, 0, 0, 0, time.UTC)
-	if _, err := svc.GestaltdSourceVersionState.Promote(
+	if _, err := svc.GestaltdSourceVersionState.Activate(
 		ctx,
 		"source-new",
 		now,
+		false,
 		appregistry.DefaultRolloutEnrollmentWindow,
 		appregistry.DefaultRolloutTimeout,
 	); err != nil {
-		t.Fatalf("Promote source version: %v", err)
+		t.Fatalf("Activate source version: %v", err)
 	}
 	installer := newRegistryOnlyInstaller(svc, fixture)
 	installer.SourceVersions = svc.GestaltdSourceVersionState

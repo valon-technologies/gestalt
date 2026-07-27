@@ -181,8 +181,6 @@ func (s *Server) changeAdminAppRegistryApp(w http.ResponseWriter, r *http.Reques
 			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppRolloutActive):
 			status = http.StatusConflict
-		case errors.Is(err, coredata.ErrGestaltdSourceVersionPromoting):
-			status = http.StatusConflict
 		case errors.Is(err, coredata.ErrGestaltdSourceVersionUnavailable):
 			status = http.StatusServiceUnavailable
 		case errors.Is(err, appregistry.ErrAppAlreadyAdded):
