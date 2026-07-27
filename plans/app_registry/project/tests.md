@@ -425,11 +425,11 @@ go test ./internal/appregistry/... -run 'TestVersionDeploymentState|TestEvaluate
 
 ### `retention_test.go`
 
-- **`TestVersionDeploymentState`** — desired version returns `desired`; never-deployed expired versions return `expired`; historical versions before `deployableUntil` return `redeployable`; after the deadline return `locked`.
+- **`TestVersionDeploymentState`** — desired version returns `desired`; never-deployed expired versions return `expired`; historical versions before `expiresAt` return `redeployable`; after `expiresAt` return `locked`; omitted `expiresAt` on deployed versions is treated as redeployable.
 
 ### `retention_prune_test.go`
 
-- **`TestEvaluateRetentionPrune`** — never-deployed versions past `unusedRetention` are eligible for full deletion; locked historical versions may have artifacts pruned while index and retention rows remain; deployed versions are cross-checked against the change-request chain.
+- **`TestEvaluateRetentionPrune`** — never-deployed versions past `expiresAt` are eligible for full deletion; historical versions past `expiresAt` may have artifacts pruned while index and retention rows remain; deployed versions are cross-checked against the change-request chain; re-read skips actions when `expiresAt` was cleared.
 
 ### `app_registry_retention_test.go`
 

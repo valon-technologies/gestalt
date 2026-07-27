@@ -671,8 +671,8 @@ Rules:
 - `{app}` must be deploy-configured with `source.registry`.
 - `knownVersions` comes from the change-request projection; `desiredVersion` is `LatestKnownVersion` and is omitted before first install.
 - `publishedVersions` comes from the registry index, newest `publishedAt` first. Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication` when recorded. Legacy versions may omit `publication`.
-- `publishedVersions[].deploymentState` is `available` for never-deployed versions before `publishedAt + unusedRetention`, `expired` for never-deployed versions after that deadline but before pruning, `desired` for the current version, `redeployable` for historical versions before `deployableUntil`, or `locked` after the deadline.
-- `deployableUntil` is returned for historical versions. The UI offers **Deploy** only for `available` and `redeployable`.
+- `publishedVersions[].deploymentState` is `available` for never-deployed versions before `expiresAt`, `expired` for never-deployed versions after `expiresAt` but before pruning, `desired` for the current version, `redeployable` for historical versions before `expiresAt`, or `locked` after `expiresAt`.
+- `deployableUntil` is returned for historical versions (mapped from `expiresAt`). The UI offers **Deploy** only for `available` and `redeployable`.
 - `pendingVersions` and `failedVersions` come from `pending.json` and `failed.json`. See [pending-publish.md](./pending-publish.md#read-path).
 - When the same version appears in more than one catalog, apply [merge rules](./pending-publish.md#app-admin-api).
 - `selectionDisabled` is true only while rollout state is `enrolling` or `restarting`.
@@ -716,7 +716,7 @@ Rules:
 - Sort by `(timestamp, id)` descending. The opaque cursor contains that pair; default `limit` is 50 and maximum is 100.
 - The first deployment omits `previousVersion` when stored `from_version` is `registry:first-install`.
 - `current` is true only for the latest request that produced `LatestKnownVersion`. Earlier requests remain historical even when they selected the same version.
-- `deploymentState` is the selected version's present-day eligibility: `desired`, `redeployable`, or `locked`. Repeated entries for the same version share the same value. Historical entries include `deployableUntil` when applicable.
+- `deploymentState` is the selected version's present-day eligibility: `desired`, `redeployable`, or `locked`. Repeated entries for the same version share the same value. Historical entries include `deployableUntil` (from `expiresAt`) when applicable.
 - `deployedAt`, `deployedBy`, source fields, and publication provenance come from the change request and its immutable `metadata_json` install-contract snapshot. New admissions snapshot publication provenance; legacy rows may omit it.
 - An app with no change requests returns `revisions: []`. The route has the same app-admin authorization and fail-closed behavior as the registry-state route.
 - The endpoint performs no writes and exposes no deploy action. Eligible historical versions are selected from Published snapshots.
@@ -756,22 +756,22 @@ A request is accepted only when all checks pass:
 4. Read the current rollout while holding the lock.
 5. Reject when rollout state is `enrolling` or `restarting` with **409**. No registry fetch, install-time validation, rollout creation, or change-request append occurs on this path. Terminal `complete` or `failed` rollouts do not block a new selection.
 6. Reject when the selected version equals the current desired version with **400** and no writes.
-7. Resolve deployment state from `retention.json` and the change-request chain:
-   - accept a never-deployed published version only before `publishedAt + unusedRetention`, even when scheduled pruning has not run
-   - accept a historical version only before `deployableUntil` and when `lockedAt` is unset
-   - reject an expired never-deployed version or an expired/locked historical version with **400** and no writes
+7. Resolve deployment state from `retention.json`:
+   - accept a never-deployed published version only before `expiresAt`
+   - accept a historical version only before `expiresAt`, or when `expiresAt` is omitted on a previously deployed version
+   - reject an expired never-deployed version or an expired historical version with **400** and no writes
 8. Fetch the published version from the configured registry and run install-time validation ([validation.md](../architecture/validation.md)).
-9. Create the rollout and append the change request (`add` on first selection; `upgrade` on later selections, including a downgrade or repeated version). The request records the outgoing version's fixed `deployableUntil`; the append-only chain is authoritative for this deadline.
-10. Mirror the transition into `retention.json` for pruning. If that write fails, repair it from the change-request chain; do not lose or rewrite the accepted transition.
+9. Create the rollout and append the change request (`add` on first selection; `upgrade` on later selections, including a downgrade or repeated version). The change request may record `from_version_deployable_until` for audit; admission does not read it.
+10. Mirror the transition into `retention.json` (clear `expiresAt` on the version that becomes desired; set `expiresAt = now + deployedRetention` on the version that stops being desired).
 11. Release the install lock.
 
 The rollout check in step 5 is authoritative. Concurrent selection requests must recheck under the install lock so only one admission succeeds.
 
 #### Historical Redeployment and Locking
 
-When `v1 → v2` is accepted, `v1.lastDeactivatedAt` is the transition time and `v1.deployableUntil` is that time plus the configured `deployedRetention` (default 30 days). `v2` is desired, so no historical deadline runs for it.
+When `v1 → v2` is accepted, `v1.expiresAt` is set to `now + deployedRetention` (default 30 days). `v2` is desired, so `expiresAt` is cleared.
 
-Selecting `v1` before its deadline appends a new `v2 → v1` request. The chain retains both transitions. When `v1` later stops being desired, it receives a new deadline. Once a deadline passes, the version is permanently locked and cannot be selected again, though every history event and its metadata remains visible.
+Selecting `v1` before `expiresAt` appends a new `v2 → v1` request. The chain retains both transitions. When `v1` later stops being desired, it receives a new `expiresAt`. Once `expiresAt` passes, the version is permanently locked and cannot be selected again, though every history event and its metadata remains visible.
 
 For a repeated version, reset per-replica materialization rows whose `acknowledged_at` predates the new rollout's `created_at`. Count cohort membership and convergence only from timestamps at or after the current rollout's `created_at`.
 

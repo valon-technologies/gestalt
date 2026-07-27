@@ -89,7 +89,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded `/admi
 ### Capabilities
 
 - **Manage app** on the `/apps` catalog when the caller can administer that app.
-- Select a never-deployed version before its unused-retention deadline or a historical version inside its redeploy window as the fleet-wide desired version.
+- Select a never-deployed version before `expiresAt` or a historical version before `expiresAt` as the fleet-wide desired version.
 - Show per-version `publishedAt`, linked source commit, triggering PR or commit, and publishing workflow run.
 - Show in-flight (**Publishing**) and recent failed (**Failed**) publishes with elapsed or total publish time. See [pending-publish.md](./pending-publish.md).
 - Show the permanent, read-only deploy chain in a **Revision history** tab.
@@ -105,7 +105,7 @@ Selection is fleet-wide. It is not per-user or per-replica.
 
 The page header shows the app name, **App management** label, registry binding, and current **Desired version**. Two tabs separate deployment from audit:
 
-- **Published snapshots** — pending, failed, and published entries in one newest-first list. A published row has **Deploy** when it is never deployed and before `publishedAt + unusedRetention`, or historical and before `deployableUntil`.
+- **Published snapshots** — pending, failed, and published entries in one newest-first list. A published row has **Deploy** when the version is **Available** or **Redeployable**.
 - **Revision history** — accepted fleet version changes in reverse chronological order. This tab is always read-only.
 
 See [pending-publish.md](./pending-publish.md) for snapshot merge rules, **3s** registry polling during bootstrap and active publish/rollout, and live **Publishing** duration labels.
@@ -129,7 +129,7 @@ PR #3000 · Title | 0.0.0-snapshot.g… | Locked                  | Jun 10 09:00
 PR #2900 · Title | 0.0.0-snapshot.g… | Expired                 | Jun 01 09:00  | —
 ```
 
-Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is unavailable on **Publishing**, **Failed**, **Deployed**, **Locked**, and **Expired** rows. **Deployed** marks the desired version. **Redeployable** shows the fixed deadline or remaining duration.
+Row timing labels: [pending-publish.md — Publish duration](./pending-publish.md#publish-duration). **Deploy** is unavailable on **Publishing**, **Failed**, **Deployed**, **Locked**, and **Expired** rows. **Deployed** marks the desired version. **Redeployable** shows the deadline or remaining duration.
 
 ### Rollout phase stepper
 
