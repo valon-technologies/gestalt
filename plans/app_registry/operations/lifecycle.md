@@ -671,7 +671,7 @@ Rules:
 - `{app}` must be deploy-configured with `source.registry`.
 - `knownVersions` comes from the change-request projection; `desiredVersion` is `LatestKnownVersion` and is omitted before first install.
 - `publishedVersions` comes from the registry index, newest `publishedAt` first. Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication` when recorded. Legacy versions may omit `publication`.
-- `publishedVersions[].deploymentState` is `available` for never-deployed versions before `publishedAt + unusedRetention`, `expired` for never-deployed versions after that deadline but before pruning, `desired` for the current version, `redeployable` for historical versions before `deployableUntil`, or `locked` after the deadline. When `retention.json` has not yet recorded `deployableUntil` for an outgoing version, the reader falls back to `from_version_deployable_until` on the change-request chain.
+- `publishedVersions[].deploymentState` is `available` for never-deployed versions before `publishedAt + unusedRetention`, `expired` for never-deployed versions after that deadline but before pruning, `desired` for the current version, `redeployable` for historical versions before `deployableUntil`, or `locked` after the deadline. For deployed versions, `deployableUntil` and deploy history come from the change-request chain (`from_version_deployable_until`); `retention.json` supplies `publishedAt`, unused retention, and sticky `lockedAt` only.
 - `deployableUntil` is returned for historical versions. The UI offers **Deploy** only for `available` and `redeployable`.
 - `pendingVersions` and `failedVersions` come from `pending.json` and `failed.json`. See [pending-publish.md](./pending-publish.md#read-path).
 - When the same version appears in more than one catalog, apply [merge rules](./pending-publish.md#app-admin-api).
@@ -756,20 +756,20 @@ A request is accepted only when all checks pass:
 4. Read the current rollout while holding the lock.
 5. Reject when rollout state is `enrolling` or `restarting` with **409**. No registry fetch, install-time validation, rollout creation, or change-request append occurs on this path. Terminal `complete` or `failed` rollouts do not block a new selection.
 6. Reject when the selected version equals the current desired version with **400** and no writes.
-7. Resolve deployment state from `retention.json`, falling back to the change-request chain when an outgoing version's `deployableUntil` is missing:
-   - accept a never-deployed published version only before `publishedAt + unusedRetention`, even when scheduled pruning has not run
-   - accept a historical version only before `deployableUntil` (from `retention.json` or `from_version_deployable_until`) and when `lockedAt` is unset
+7. Resolve deployment state from the change-request chain and `retention.json`:
+   - accept a never-deployed published version only before `publishedAt + unusedRetention` (from `retention.json`), even when scheduled pruning has not run
+   - accept a historical version only before `from_version_deployable_until` on the change-request chain and when `lockedAt` is unset in `retention.json`
    - reject an expired never-deployed version or an expired/locked historical version with **400** and no writes
 8. Fetch the published version from the configured registry and run install-time validation ([validation.md](../architecture/validation.md)).
-9. Create the rollout and append the change request (`add` on first selection; `upgrade` on later selections, including a downgrade or repeated version). The request records the outgoing version's fixed `deployableUntil`; the append-only chain is authoritative for this deadline.
-10. Mirror the transition into `retention.json` for pruning. If that write fails, repair it from the change-request chain; do not lose or rewrite the accepted transition.
+9. Create the rollout and append the change request (`add` on first selection; `upgrade` on later selections, including a downgrade or repeated version). The request records the outgoing version's fixed `from_version_deployable_until`; the append-only chain is authoritative for this deadline.
+10. Best-effort mirror the transition into `retention.json` for pruning. A failed mirror does not affect admission or deployability projection; prune cross-checks the change-request chain.
 11. Release the install lock.
 
 The rollout check in step 5 is authoritative. Concurrent selection requests must recheck under the install lock so only one admission succeeds.
 
 #### Historical Redeployment and Locking
 
-When `v1 → v2` is accepted, `v1.lastDeactivatedAt` is the transition time and `v1.deployableUntil` is that time plus the configured `deployedRetention` (default 30 days). `v2` is desired, so no historical deadline runs for it.
+When `v1 → v2` is accepted, the change request records `from_version_deployable_until` for `v1` as the transition time plus the configured `deployedRetention` (default 30 days). `v2` is desired, so no historical deadline runs for it. The reader may also mirror `lastDeactivatedAt` and `deployableUntil` into `retention.json` for prune bookkeeping.
 
 Selecting `v1` before its deadline appends a new `v2 → v1` request. The chain retains both transitions. When `v1` later stops being desired, it receives a new deadline. Once a deadline passes, the version is permanently locked and cannot be selected again, though every history event and its metadata remains visible.
 
