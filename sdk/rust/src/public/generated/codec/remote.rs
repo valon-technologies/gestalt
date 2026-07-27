@@ -397,6 +397,12 @@ pub(crate) fn encode_wire_remote_json(value: &v1::Remote) -> serde_json::Value {
             crate::public::proto_json::encode_timestamp(inner),
         );
     }
+    if !value.connect_url.is_empty() {
+        object.insert(
+            "connectUrl".into(),
+            serde_json::Value::String(value.connect_url.to_string()),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -466,6 +472,10 @@ pub(crate) fn decode_wire_remote_json(
             .get("leaseExpiresAt")
             .map(|value| crate::public::proto_json::decode_timestamp(value))
             .transpose()?,
+        connect_url: match object.get("connectUrl") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
         ..Default::default()
     })
 }

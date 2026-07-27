@@ -100,6 +100,7 @@ pub(crate) fn from_wire_remote(value: v1::Remote) -> Remote {
         last_successful_heartbeat_at: value.last_successful_heartbeat_at.map(from_wire_timestamp),
         last_error: value.last_error,
         lease_expires_at: value.lease_expires_at.map(from_wire_timestamp),
+        connect_url: value.connect_url,
     }
 }
 

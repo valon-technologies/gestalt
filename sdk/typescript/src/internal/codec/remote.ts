@@ -198,6 +198,7 @@ export function toWireRemote(value: Init<Remote>): wire.Remote {
     ...(value.leaseExpiresAt !== undefined
       ? { leaseExpiresAt: toWireTimestamp(value.leaseExpiresAt) }
       : {}),
+    connectUrl: value.connectUrl ?? "",
   });
 }
 
@@ -231,6 +232,7 @@ export function fromWireRemote(value: wire.Remote): Remote {
     ...(value.leaseExpiresAt !== undefined
       ? { leaseExpiresAt: fromWireTimestamp(value.leaseExpiresAt) }
       : {}),
+    connectUrl: value.connectUrl,
   };
 }
 

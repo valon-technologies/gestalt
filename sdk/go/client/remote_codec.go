@@ -190,6 +190,7 @@ func ToWireRemote(value *Remote) *proto.Remote {
 		LastSuccessfulHeartbeatAt: ToWireTimestamp(value.LastSuccessfulHeartbeatAt),
 		LastError:                 value.LastError,
 		LeaseExpiresAt:            ToWireTimestamp(value.LeaseExpiresAt),
+		ConnectUrl:                value.ConnectUrl,
 	}
 	for _, item := range value.Providers {
 		out.Providers = append(out.Providers, ToWireRemoteProviderSummary(item))
@@ -213,6 +214,7 @@ func FromWireRemote(value *proto.Remote) *Remote {
 		LastSuccessfulHeartbeatAt: FromWireTimestamp(value.LastSuccessfulHeartbeatAt),
 		LastError:                 value.LastError,
 		LeaseExpiresAt:            FromWireTimestamp(value.LeaseExpiresAt),
+		ConnectUrl:                value.ConnectUrl,
 	}
 	for _, item := range value.Providers {
 		out.Providers = append(out.Providers, FromWireRemoteProviderSummary(item))

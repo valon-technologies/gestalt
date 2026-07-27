@@ -117,6 +117,8 @@ pub struct Remote {
     #[serde(with = "crate::serde_time")]
     /// The `lease_expires_at` field; None when unset.
     pub lease_expires_at: Option<std::time::SystemTime>,
+    /// The `connect_url` field.
+    pub connect_url: String,
 }
 
 /// Native message type for `gestalt.provider.v1.RemoteProviderDefinition`.

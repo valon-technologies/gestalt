@@ -35,6 +35,7 @@ type Config struct {
 	ServerIdentity *proto.ServerIdentity
 	Tunnel         *proto.TunnelBootstrap
 	LeaseDuration  time.Duration
+	ConnectURL     string
 }
 
 type Service struct {
@@ -92,6 +93,7 @@ func (s *Service) CreateRemote(ctx context.Context, req *proto.CreateRemoteReque
 		TunnelHost:        strings.TrimSpace(tunnel.GetHost()),
 		TunnelCertificate: append([]byte(nil), tunnel.GetCertificate()...),
 		ServerSPKISHA256:  strings.TrimSpace(tunnel.GetServerSpkiSha256()),
+		ConnectURL:        s.config.ConnectURL,
 		LeaseExpiresAt:    s.storeNow().Add(s.config.LeaseDuration),
 	}
 
@@ -283,6 +285,7 @@ func remoteToProto(reg *coredata.RemoteRegistration, defs []*proto.RemoteProvide
 		Generation:       reg.Generation,
 		Providers:        providers,
 		ServerSpkiSha256: reg.ServerSPKISHA256,
+		ConnectUrl:       reg.ConnectURL,
 		CreatedAt:        timestamppb.New(reg.CreatedAt),
 		UpdatedAt:        timestamppb.New(reg.UpdatedAt),
 		LastError:        reg.LastError,

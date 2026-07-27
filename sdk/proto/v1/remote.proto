@@ -95,6 +95,7 @@ message Remote {
   google.protobuf.Timestamp last_successful_heartbeat_at = 10;
   string last_error = 11;
   google.protobuf.Timestamp lease_expires_at = 12;
+  string connect_url = 13;
 }
 
 message ServerIdentity {
