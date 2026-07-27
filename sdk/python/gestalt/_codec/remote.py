@@ -162,6 +162,7 @@ def to_wire_remote(value: native.Remote) -> Any:
         lease_expires_at=None
         if value.lease_expires_at is None
         else to_wire_timestamp(value.lease_expires_at),
+        connect_url=value.connect_url,
     )
 
 
@@ -193,6 +194,7 @@ def from_wire_remote(value: Any) -> native.Remote:
         lease_expires_at=from_wire_timestamp(value.lease_expires_at)
         if value.HasField("lease_expires_at")
         else None,
+        connect_url=value.connect_url,
     )
 
 

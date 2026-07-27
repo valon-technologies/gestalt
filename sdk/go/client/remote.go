@@ -67,6 +67,7 @@ type Remote struct {
 	LastSuccessfulHeartbeatAt *time.Time
 	LastError                 string
 	LeaseExpiresAt            *time.Time
+	ConnectUrl                string
 }
 
 // RemoteProviderDefinition is the native message type for gestalt.provider.v1.RemoteProviderDefinition.

@@ -2884,6 +2884,8 @@ pub struct Remote {
     pub last_error: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "12")]
     pub lease_expires_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "13")]
+    pub connect_url: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ServerIdentity {

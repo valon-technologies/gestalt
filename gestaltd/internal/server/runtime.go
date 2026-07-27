@@ -135,6 +135,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		IndexedDB:            publicIndexedDB,
 		RemoteManagement:     reverseRemote.remoteManagement,
 		FrpsHandler:          reverseRemote.frpsHandler,
+		FrpsConnectHandler:   reverseRemote.frpsConnectHandler,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),

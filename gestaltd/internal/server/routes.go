@@ -10,6 +10,16 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
+func (s *Server) connectMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodConnect && s.frpsConnectHandler != nil {
+			s.frpsConnectHandler.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) routes() {
 	r := s.router
 	r.Use(requestMetaMiddleware)
@@ -18,6 +28,7 @@ func (s *Server) routes() {
 	r.Use(s.publicGRPCMiddleware)
 	r.Use(s.hostServiceRelayMiddleware)
 	r.Use(s.egressProxyMiddleware)
+	r.Use(s.connectMiddleware)
 	r.Use(maxBodyMiddleware(defaultMaxBodyBytes))
 
 	switch s.routeProfile {
@@ -62,6 +73,7 @@ func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 	if s.frpsHandler != nil {
 		r.Handle("/~!frp", s.frpsHandler)
 	}
+
 	switch exposure {
 	case metricsAuthenticated:
 		r.Group(func(r chi.Router) {

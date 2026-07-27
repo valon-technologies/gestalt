@@ -465,6 +465,7 @@ type Remote struct {
 	LastSuccessfulHeartbeatAt *timestamppb.Timestamp   `protobuf:"bytes,10,opt,name=last_successful_heartbeat_at,json=lastSuccessfulHeartbeatAt,proto3" json:"last_successful_heartbeat_at,omitempty"`
 	LastError                 string                   `protobuf:"bytes,11,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
 	LeaseExpiresAt            *timestamppb.Timestamp   `protobuf:"bytes,12,opt,name=lease_expires_at,json=leaseExpiresAt,proto3" json:"lease_expires_at,omitempty"`
+	ConnectUrl                string                   `protobuf:"bytes,13,opt,name=connect_url,json=connectUrl,proto3" json:"connect_url,omitempty"`
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
 }
@@ -581,6 +582,13 @@ func (x *Remote) GetLeaseExpiresAt() *timestamppb.Timestamp {
 		return x.LeaseExpiresAt
 	}
 	return nil
+}
+
+func (x *Remote) GetConnectUrl() string {
+	if x != nil {
+		return x.ConnectUrl
+	}
+	return ""
 }
 
 type ServerIdentity struct {
@@ -890,7 +898,7 @@ const file_v1_remote_proto_rawDesc = "" +
 	"\x12ListRemotesRequest\"L\n" +
 	"\x12RemoteReachability\x12\x1c\n" +
 	"\treachable\x18\x01 \x01(\bR\treachable\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xa3\x05\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xc4\x05\n" +
 	"\x06Remote\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12(\n" +
 	"\x10owner_subject_id\x18\x02 \x01(\tR\x0eownerSubjectId\x12\x1e\n" +
@@ -909,7 +917,9 @@ const file_v1_remote_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\x19lastSuccessfulHeartbeatAt\x12\x1d\n" +
 	"\n" +
 	"last_error\x18\v \x01(\tR\tlastError\x12D\n" +
-	"\x10lease_expires_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0eleaseExpiresAt\">\n" +
+	"\x10lease_expires_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0eleaseExpiresAt\x12\x1f\n" +
+	"\vconnect_url\x18\r \x01(\tR\n" +
+	"connectUrl\">\n" +
 	"\x0eServerIdentity\x12,\n" +
 	"\x12client_spki_sha256\x18\x01 \x01(\tR\x10clientSpkiSha256\"v\n" +
 	"\x0fTunnelBootstrap\x12!\n" +
