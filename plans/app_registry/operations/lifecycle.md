@@ -88,19 +88,42 @@ The controller is **pull-based** and **local**: each replica reads `app_version_
 
 Only one rollout per app may be active across the fleet. `POST …/add` and `POST …/upgrade` hold the app-scoped install lock while they reject an existing `enrolling` or `restarting` rollout, validate the candidate, create the new rollout, and append its change request. Different apps may roll out concurrently.
 
+Rollout membership is scoped to one Toolshed source version. `SOURCE_VERSION` is the commit SHA already injected into every Cloud Run process. Keep `instance_id` process-unique; using one source version as the instance ID would collapse five replicas into one row and falsely report convergence after one process restarts.
+
 Replica membership is discovered rather than configured:
 
-1. The rollout remains `enrolling` for a bounded window of at least two poll intervals.
-2. Replicas join by writing `acknowledged_at` before `enrollment_ends_at` and download the rollout artifact during this window, recording `materialized_at` while the current provider keeps running.
-3. After enrollment, the cohort is frozen and the rollout becomes `restarting`.
-4. The rollout completes when every cohort member records `restarted_at`.
-5. The rollout fails if an acknowledged replica does not restart before the deadline.
+1. App admission snapshots the current `SOURCE_VERSION` into `app_rollouts.target_source_version`.
+2. The rollout remains `enrolling` for a bounded window of at least two poll intervals.
+3. Replicas with that deployment ID join by writing `acknowledged_at` before `enrollment_ends_at` and download the rollout artifact during this window, recording `materialized_at` while the current provider keeps running.
+4. Replicas from another deployment still reconcile the durable desired version, but they are not members of the target cohort and do not affect its outcome.
+5. After enrollment, the target cohort is frozen and the rollout becomes `restarting`.
+6. The rollout completes when the target cohort is non-empty and every member records `restarted_at`.
+7. The rollout fails if a target-cohort replica does not restart before the deadline, or if no target replica acknowledges before the deadline.
 
-Replicas that do not acknowledge before enrollment closes are not cohort members and do not block completion. A late replica still converges locally but does not reopen a terminal rollout.
+This prevents a Cloud Run deployment from combining five old and five candidate processes into a ten-member cohort. When Cloud Run terminates the old deployment, those rows remain visible for diagnostics but do not block the candidate deployment from completing at `5/5 restarted`.
+
+Never declare success because any source-version cohort completed. The old source version could reach `5/5` while the promoted source version fails. Success is tied to `target_source_version`.
+
+#### Target Source Version Selection
+
+The replica handling the version-selection HTTP request does not choose the target from its own environment. During Cloud Run traffic migration, an old revision can still finish an in-flight request and would incorrectly target the source version being removed.
+
+Toolshed deployment orchestration owns shared source-version state:
+
+1. After the candidate passes readiness, record its `SOURCE_VERSION` as `candidate`.
+2. While the candidate is being promoted, reject app version selection with **409 Conflict** (`gestaltd deployment in progress`). Registry publishing remains available.
+3. Shift 100% traffic to the candidate, activate it, and atomically promote its source-version record to `current`.
+4. App admission reads the current source-version record while holding the app install lock and copies it to the rollout.
+
+If a new source version becomes current while an app rollout is active, retarget the rollout and open a fresh enrollment window. The desired app version and change request do not change. Materialization rows from the superseded source version remain diagnostic and have `inCohort: false`.
+
+Production rollout coordination requires `SOURCE_VERSION`. Local development may use a process-local value.
+
+Replicas that do not acknowledge before enrollment closes are not cohort members and do not block completion. A late target-source-version replica still converges locally but does not reopen a terminal rollout.
 
 Each pass:
 
-1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
+1. Acknowledge each new `(app, version)` in `app_instance_materializations`, including the process `SOURCE_VERSION`.
 2. Group pending versions by app and select one desired version with `LatestKnownVersion`.
 3. Download and extract only the desired registry artifact to the canonical `{artifactsDir}/registry-installed/{app}/{desiredVersion}` path, recording `materialized_at` on that version's row while the provider is still running. During an active rollout's enrollment window, replicas materialize but do not stop or restart until enrollment closes. Superseded pending rows remain without `materialized_at`. Re-validate the desired path on every pass; if the tree is missing or corrupt, re-download it before `StopApp`.
 4. After enrollment closes, stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. These timestamps mean the replica reconciled past those catalog changes; they do not mean every superseded version ran. `StartApp` receives the desired version and builds the provider from that materialized package instead of the deploy-time pin.
@@ -484,6 +507,7 @@ List deploy-configured registry-only apps (`source.registry`), merged with fleet
     "rollout": {
       "version": "0.0.0-snapshot.gcd9d741cc35728476426afce6c069e198799a8be",
       "state": "complete",
+      "targetSourceVersion": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
       "createdAt": "2026-07-21T17:06:12Z",
       "enrollmentEndsAt": "2026-07-21T17:08:12Z",
       "deadline": "2026-07-21T17:21:12Z",
@@ -505,7 +529,8 @@ List deploy-configured registry-only apps (`source.registry`), merged with fleet
 | `registry` | string | `source.registry` binding |
 | `desiredVersion` | string | `LatestKnownVersion`; omitted when the fleet catalog is empty |
 | `rollout` | object | Current or most recent rollout for this app; omitted when none |
-| `cohort` | object | Counts over `app_instance_materializations` rows for `rollout.version` that acknowledged before `enrollmentEndsAt` |
+| `rollout.targetSourceVersion` | string | Toolshed `SOURCE_VERSION` selected by deployment orchestration |
+| `cohort` | object | Counts over target-source-version materialization rows that acknowledged before `enrollmentEndsAt` |
 
 Apps with no fleet-known version still appear when configured with `source.registry`. IndexedDB read only. No GCS fetch.
 
@@ -578,6 +603,7 @@ Per-replica rollout-progress rows for one app rollout.
   "materializations": [
     {
       "instanceId": "gestaltd-8d9487869-ncnq6",
+      "sourceVersion": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
       "acknowledgedAt": "2026-07-21T17:08:12Z",
       "materializedAt": "2026-07-21T17:08:57Z",
       "stoppedAt": "2026-07-21T17:08:57Z",
@@ -594,7 +620,8 @@ Per-replica rollout-progress rows for one app rollout.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `inCohort` | boolean | `acknowledged_at < rollout.enrollment_ends_at` |
+| `sourceVersion` | string | Toolshed `SOURCE_VERSION` for this process |
+| `inCohort` | boolean | `sourceVersion` matches `targetSourceVersion` and acknowledgement is within the current enrollment epoch |
 | `converged` | boolean | `restarted_at` set and not after `rollout.deadline` while rollout is active; when terminal, `restarted_at` present |
 
 The embedded `/admin` UI includes a read-only **App Registry** section that consumes these endpoints.
@@ -785,7 +812,7 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | --- | --- |
 | `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions; **install-time validation failed** |
 | `404` | Unknown `registry` name; published version not found; no fleet-known versions for `{app}`; no `appRegistries` configured |
-| `409` | Another instance holds the install lock for this app; `add` called when the app already has fleet-known versions |
+| `409` | Another instance holds the install lock for this app; `add` called when the app already has fleet-known versions; a `gestaltd` deployment is being promoted |
 | `502` | Published version fetch failed; registry fetch failed during install validation; registry named in a fleet-known installation is missing from gestaltd config; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
@@ -800,7 +827,7 @@ App-admin routes use the same `{ "error": "…" }` envelope.
 | `401` | Missing or invalid authentication |
 | `403` | Authenticated user lacks `admin` on `app/{app}` |
 | `404` | App is not registry-only; published version does not exist |
-| `409` | Rollout is active; concurrent selection lost admission |
+| `409` | Rollout is active; concurrent selection lost admission; a `gestaltd` deployment is being promoted |
 | `502` | Registry index or version metadata fetch failed |
 | `503` | Authorization or registry installation services are unavailable |
 
