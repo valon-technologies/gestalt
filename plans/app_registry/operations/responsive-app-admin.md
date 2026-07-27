@@ -90,19 +90,22 @@ The page holds one **registry snapshot**. The server returns facts; the UI deriv
 
 #### Poll mode
 
-Derived after every fetch from the snapshot plus one local value (`bootstrapPollUntilMs`, 5 minutes after page load):
+Per open tab only — closing the tab stops all polling. There is no server-side idle state.
 
-| Mode | Condition | Poll |
+| What you see | Mode | Background refresh |
 | --- | --- | --- |
-| **Stopped** | Past bootstrap and no active signals | none |
-| **Bootstrap** | Within bootstrap window, no active signals | full, 12s |
-| **Active** | Any active signal below | status, 3s |
+| Page just opened; waiting to see if a publish starts | **Landing** | Full snapshot every **12s** (first 5 minutes) |
+| A publish, rollout, or deploy lock is in progress | **Active** | Lightweight status every **3s**; **Publishing · for …** ticks every **1s** locally |
+| Quiet page — nothing moving, been open > 5 minutes | **Quiet** | None — table is static until you refresh or click Deploy |
+| Tab closed | — | Nothing runs |
 
-**Active signals** (from the API response, not a separate mode field):
+**Landing** ends after 5 minutes or as soon as an active signal appears (whichever comes first).
 
-- `pendingVersions.length > 0`
-- `rollout.state` is `enrolling` or `restarting`
-- `selectionDisabled` is `true` (server sets this when rollout is active)
+**Active signals** (from the API — not a mode field on the app):
+
+- A row is **Publishing** (`pendingVersions` non-empty)
+- Rollout banner shows **Enrolling** or **Restarting**
+- Deploy buttons are disabled (`selectionDisabled`)
 
 #### Escalation
 
@@ -121,9 +124,9 @@ After escalation, recompute poll mode from the updated snapshot.
 
 ### 2. Polling implementation
 
-Constants: `POLL_INTERVAL_ACTIVE_MS = 3_000`, `POLL_INTERVAL_IDLE_MS = 12_000`.
+Constants: `POLL_INTERVAL_ACTIVE_MS = 3_000`, `POLL_INTERVAL_LANDING_MS = 12_000` (rename from `POLL_INTERVAL_IDLE_MS`).
 
-Implement `computePollMode` and `shouldEscalateToFullRegistry` in `gestalt-providers/app/default/src/features/registry/polling.ts`. Replace the chained `setTimeout` in `AppAdminPageClient.tsx` with `setInterval` (or React Query `refetchInterval`) keyed on poll mode.
+Implement `computePollMode` (`landing` | `active` | `quiet`) and `shouldEscalateToFullRegistry` in `gestalt-providers/app/default/src/features/registry/polling.ts`. Keep `APP_ADMIN_BOOTSTRAP_POLL_MS` as the landing-window duration (internal name; user-facing docs say **landing**).
 
 Pause polling when `document.visibilityState === "hidden"`; catch up once when visible again.
 
@@ -245,7 +248,7 @@ function mergeAppAdminRegistryStatus(
 
 | Test | Asserts |
 | --- | --- |
-| `computePollMode` | `active` with pending; `bootstrap` within 5 min only; `stopped` otherwise |
+| `computePollMode` | `active` with pending/rollout; `landing` within 5 min only; `quiet` otherwise |
 | `shouldEscalateToFullRegistry` | pending cleared, new failed, terminal rollout, desired version change |
 | `snapshotStatusTimer` with advancing `now` | `for 59s` → `for 1m` → `for 1m 1s` without new API data |
 
