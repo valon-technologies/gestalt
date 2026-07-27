@@ -252,7 +252,7 @@ go test ./internal/appregistry -run 'Test(Installer|CatalogPollerRollout)' -coun
 - Poller tests cover enrollment, cohort completion, missed deadlines, and late-replica convergence.
 - Source-version-cohort tests use five old and five candidate processes. Both source versions acknowledge the app version, but only rows whose `source_version` matches `target_source_version` have `inCohort: true`; candidate convergence completes at `5/5` even when terminated old processes never restart.
 - Target-selection tests prove that an old revision handling an in-flight request cannot select itself, an empty target cohort cannot complete, and a completed old cohort cannot hide a target-cohort failure.
-- Activation tests retarget an active rollout with a fresh enrollment epoch while preserving the desired app version and change request. Same-source activation is idempotent; an explicit deployment retry refreshes active epochs and reopens failures recorded since the previous activation.
+- Activation tests require the caller's expected source version to match the handling revision, retarget an active rollout with a fresh enrollment epoch, and preserve the desired app version and change request. Same-source activation is idempotent; an explicit deployment retry refreshes active epochs and reopens failures recorded since the previous activation.
 - Identity tests require `SOURCE_VERSION` while instance IDs remain distinct within one source version.
 
 ---
