@@ -248,6 +248,8 @@ States:
 
 A terminal record may be replaced when the next version is admitted. A non-terminal record causes `POST …/add` or `POST …/upgrade` for the same app to return **409 Conflict**. Terminal transitions record `completed_at` or `failed_at`.
 
+The current record has no deployment identity, so Cloud Run revision overlap can combine old and candidate processes into one cohort. The proposed [deployment-scoped cohort model](../operations/deployment-cohorts.md) adds `target_deployment_id`, sourced from the Toolshed `SOURCE_VERSION` hash selected by deployment orchestration.
+
 ### Service API
 
 `AppRolloutService` (`gestaltd/internal/coredata/app_rollouts.go`):
@@ -288,6 +290,8 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 ```
 
 `instance_id` defaults to the process hostname (`os.Hostname()`).
+
+The proposed deployment-scoped model keeps `instance_id` process-unique and additionally records `deployment_id` (`SOURCE_VERSION` in Toolshed) and `cloud_run_revision` (`K_REVISION`). `deployment_id` groups replicas for rollout accounting; it must not replace `instance_id`, because one shared row would hide replicas that failed to converge. See [deployment-cohorts.md](../operations/deployment-cohorts.md).
 
 `materialized_at` is set only when that version was the replica's desired version and its package was validated locally. A superseded row can have `restarted_at` without `materialized_at`: this means the replica reconciled past that catalog change while running a newer desired version, not that the superseded version ran.
 

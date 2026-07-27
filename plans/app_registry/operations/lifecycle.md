@@ -88,6 +88,8 @@ The controller is **pull-based** and **local**: each replica reads `app_version_
 
 Only one rollout per app may be active across the fleet. `POST …/add` and `POST …/upgrade` hold the app-scoped install lock while they reject an existing `enrolling` or `restarting` rollout, validate the candidate, create the new rollout, and append its change request. Different apps may roll out concurrently.
 
+> **Cloud Run deployment overlap:** The behavior below describes the current fleet-wide cohort implementation. A Toolshed deployment runs old and candidate Cloud Run revisions concurrently, so both revisions can enroll and terminated old-revision processes can incorrectly block completion. The proposed replacement records the Toolshed `SOURCE_VERSION` on each row and evaluates only the deployment promoted by Toolshed. See [deployment-cohorts.md](./deployment-cohorts.md).
+
 Replica membership is discovered rather than configured:
 
 1. The rollout remains `enrolling` for a bounded window of at least two poll intervals.

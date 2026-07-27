@@ -14,6 +14,7 @@ app_registry/
 │   └── <a href="./architecture/validation.md">validation.md</a>
 ├── operations/
 │   ├── <a href="./operations/admin.md">admin.md</a>
+│   ├── <a href="./operations/deployment-cohorts.md">deployment-cohorts.md</a>
 │   ├── <a href="./operations/lifecycle.md">lifecycle.md</a>
 │   ├── <a href="./operations/pending-publish.md">pending-publish.md</a>
 │   └── <a href="./operations/retention.md">retention.md</a>
@@ -138,6 +139,8 @@ Registry-only apps are materialized at runtime and do not participate in the dep
 Gestalt projects fleet-known versions from change requests through `ListKnownVersionsByApp` and `ListAllKnownVersions`. There is no separate fleet head or promotion record. The ordered change requests form the permanent revision history, including upgrades and downgrades that revisit an earlier version.
 
 Per-replica rollout progress lives in `app_instance_materializations`; fleet rollout state lives in `app_rollouts`. See [indexeddb.md](./architecture/indexeddb.md).
+
+The current implementation enrolls processes fleet-wide. Cloud Run deployments can temporarily run old and candidate revisions together, causing superseded processes to enter the cohort and block completion after they are terminated. The proposed [deployment-scoped cohort model](./operations/deployment-cohorts.md) groups replicas by the Toolshed `SOURCE_VERSION` hash and evaluates rollout success only against the deployment promoted by Toolshed.
 
 ## Validation and Activation
 
