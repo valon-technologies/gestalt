@@ -16,6 +16,7 @@ app_registry/
 │   ├── <a href="./operations/admin.md">admin.md</a>
 │   ├── <a href="./operations/lifecycle.md">lifecycle.md</a>
 │   ├── <a href="./operations/pending-publish.md">pending-publish.md</a>
+│   ├── <a href="./operations/responsive-app-admin.md">responsive-app-admin.md</a>
 │   └── <a href="./operations/retention.md">retention.md</a>
 └── project/
     ├── <a href="./project/changelog.md">changelog.md</a>
