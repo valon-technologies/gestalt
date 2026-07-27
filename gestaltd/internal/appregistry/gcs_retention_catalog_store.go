@@ -32,9 +32,9 @@ func NewGCSCatalogStore(registries map[string]config.AppRegistryConfig) *GCSCata
 	}
 }
 
-func (s *GCSCatalogStore) storageClient(ctx context.Context) (*storage.Client, error) {
+func (s *GCSCatalogStore) storageClient() (*storage.Client, error) {
 	s.clientOnce.Do(func() {
-		s.client, s.clientErr = storage.NewClient(ctx)
+		s.client, s.clientErr = storage.NewClient(context.Background())
 	})
 	return s.client, s.clientErr
 }
@@ -55,7 +55,7 @@ func (s *GCSCatalogStore) MutateRetention(ctx context.Context, registryName, app
 	if err != nil {
 		return err
 	}
-	client, err := s.storageClient(ctx)
+	client, err := s.storageClient()
 	if err != nil {
 		return fmt.Errorf("create storage client: %w", err)
 	}
@@ -120,7 +120,13 @@ func readRetentionObject(ctx context.Context, client *storage.Client, bucket, ob
 }
 
 func writeRetentionObject(ctx context.Context, client *storage.Client, bucket, object string, data []byte, generation int64, sourceRef string) error {
-	writer := client.Bucket(bucket).Object(object).If(storage.Conditions{GenerationMatch: generation}).NewWriter(ctx)
+	obj := client.Bucket(bucket).Object(object)
+	var writer *storage.Writer
+	if generation == 0 {
+		writer = obj.If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
+	} else {
+		writer = obj.If(storage.Conditions{GenerationMatch: generation}).NewWriter(ctx)
+	}
 	writer.ContentType = "application/json"
 	if sourceRef != "" {
 		writer.Metadata = map[string]string{"source-ref": sourceRef}

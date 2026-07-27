@@ -330,7 +330,8 @@ func (i *Installer) mirrorRetentionTransition(ctx context.Context, registryName,
 	if i == nil || i.RetentionCatalog == nil {
 		return
 	}
-	_ = i.RetentionCatalog.MutateRetention(ctx, registryName, appName, func(index *RetentionIndex) (bool, error) {
+	mirrorCtx := context.WithoutCancel(ctx)
+	_ = i.RetentionCatalog.MutateRetention(mirrorCtx, registryName, appName, func(index *RetentionIndex) (bool, error) {
 		if index == nil {
 			return false, nil
 		}

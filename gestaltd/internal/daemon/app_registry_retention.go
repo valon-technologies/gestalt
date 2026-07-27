@@ -198,7 +198,7 @@ func pruneAppRegistryRetention(registry config.AppRegistryConfig, appName, desir
 					continue
 				}
 			}
-			entry, ok, err := latestRetentionEntryForPrune(retentionURL, retention, action.Version)
+			entry, ok, err := freshRetentionEntryForPrune(retentionURL, action.Version)
 			if err != nil {
 				return err
 			}
@@ -270,22 +270,17 @@ func pruneAppRegistryRetention(registry config.AppRegistryConfig, appName, desir
 	return fmt.Errorf("prune retention for %s: exceeded retry limit after concurrent updates", appName)
 }
 
-func latestRetentionEntryForPrune(retentionURL string, cached *appregistry.RetentionIndex, version string) (appregistry.RetentionVersion, bool, error) {
+func freshRetentionEntryForPrune(retentionURL, version string) (appregistry.RetentionVersion, bool, error) {
 	_, retentionData, err := downloadAppRegistryObject(retentionURL)
 	if err != nil {
 		return appregistry.RetentionVersion{}, false, err
 	}
-	var retention *appregistry.RetentionIndex
 	if len(retentionData) == 0 {
-		retention = appregistry.NewEmptyRetentionIndex()
-	} else {
-		retention, err = appregistry.DecodeRetentionIndex(retentionData)
-		if err != nil {
-			return appregistry.RetentionVersion{}, false, fmt.Errorf("decode retention: %w", err)
-		}
+		return appregistry.RetentionVersion{}, false, nil
 	}
-	if cached != nil {
-		*cached = *retention
+	retention, err := appregistry.DecodeRetentionIndex(retentionData)
+	if err != nil {
+		return appregistry.RetentionVersion{}, false, fmt.Errorf("decode retention: %w", err)
 	}
 	entry, ok := retention.Versions[version]
 	return entry, ok, nil
