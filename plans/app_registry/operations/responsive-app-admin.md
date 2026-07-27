@@ -97,11 +97,12 @@ Pass `liveNow` into `snapshotStatusTimer` and `snapshotLastUpdatedLabel` in `sna
 
 ### gestalt-providers
 
-- [ ] `computePollMode` in `polling.ts`
-- [ ] `useLiveNow` hook (e.g. `hooks/use-live-now.ts`)
-- [ ] Refactor `AppAdminPageClient.tsx`: interval polling by mode, visibility pause
-- [ ] Pass `liveNow` into `AppAdminSnapshotsTable` → `snapshotStatusTimer` / `snapshotLastUpdatedLabel`
-- [ ] Update `e2e/app-admin-mock.spec.ts`: pending visibility timeout **15s → 5s**; live-clock unit test for `snapshotStatusTimer`
+- [x] `APP_ADMIN_POLL_INTERVAL_MS = 3_000` in `polling.ts`; wired through `useAppAdminRegistryQuery` (`refetchInterval`)
+- [x] `useLiveNow` in `hooks/use-live-now.ts`
+- [x] Pass `liveNow` into `AppAdminSnapshotsTable` → `snapshotStatusTimer` / `snapshotLastUpdatedLabel`
+- [x] Pending duration from `startedAt` + `liveNow` (not stale `publishingForSeconds` from last poll)
+- [x] E2E: pending visibility timeout **15s → 6s**
+- [ ] Pause registry polling when tab is hidden (optional follow-up)
 
 ### docs (on ship)
 
@@ -118,16 +119,14 @@ Pass `liveNow` into `snapshotStatusTimer` and `snapshotLastUpdatedLabel` in `sna
 
 | Test | Asserts |
 | --- | --- |
-| `computePollMode` | `active` with pending/rollout; `landing` within 5 min only; `quiet` otherwise |
-| `snapshotStatusTimer` with advancing `now` | `for 59s` → `for 1m` → `for 1m 1s` without new API data |
+| `snapshotStatusTimer` with advancing `now` | `for 59s` → `for 1m` → `for 1m 1s` without new API data (add when app-default has a unit test runner) |
 
 ### E2E (`app-admin-mock.spec.ts`)
 
 | Test | Asserts |
 | --- | --- |
-| `polls registry during publish` | Pending row within **5s** without manual refresh |
-| `publishing timer ticks between polls` | With frozen API, label changes over 2s |
-
+| `polls for pending publish without manual refresh` | Pending row within **6s** |
+| `publishing timer ticks between polls` | Optional: frozen pending `startedAt`, label advances over 2s |
 ---
 
 ## Future Work (out of scope)
