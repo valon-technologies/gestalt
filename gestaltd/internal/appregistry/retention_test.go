@@ -22,18 +22,24 @@ func TestVersionDeploymentState(t *testing.T) {
 		EverDeployed:      true,
 		FirstDeployedAt:   ptrTime(now.Add(-800 * time.Hour)),
 		LastDeactivatedAt: ptrTime(now.Add(-100 * time.Hour)),
-		DeployableUntil:   ptrTime(now.Add(-10 * time.Hour)),
+		DeployableUntil:   ptrTime(now.Add(30 * 24 * time.Hour)),
+	}
+	chain := appregistry.VersionDeploymentChain{
+		Deployed: map[string]struct{}{"v-old": {}},
+		Deadlines: map[string]time.Time{
+			"v-old": now.Add(-10 * time.Hour),
+		},
 	}
 
-	state, _ := appregistry.VersionDeploymentState("v-current", "v-current", retention, policy, now, nil)
+	state, _ := appregistry.VersionDeploymentState("v-current", "v-current", retention, policy, now, chain)
 	if state != appregistry.DeploymentStateDesired {
 		t.Fatalf("desired state = %q", state)
 	}
-	state, _ = appregistry.VersionDeploymentState("v-new", "v-current", retention, policy, now, nil)
+	state, _ = appregistry.VersionDeploymentState("v-new", "v-current", retention, policy, now, chain)
 	if state != appregistry.DeploymentStateExpired {
 		t.Fatalf("expired state = %q", state)
 	}
-	state, _ = appregistry.VersionDeploymentState("v-old", "v-current", retention, policy, now, nil)
+	state, _ = appregistry.VersionDeploymentState("v-old", "v-current", retention, policy, now, chain)
 	if state != appregistry.DeploymentStateLocked {
 		t.Fatalf("locked state = %q", state)
 	}

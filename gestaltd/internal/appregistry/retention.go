@@ -195,10 +195,27 @@ func ApplyDesiredVersionTransition(index *RetentionIndex, fromVersion, toVersion
 	return changed
 }
 
-// VersionDeploymentDeadlines carries redeploy deadlines from the append-only
-// change-request chain. retention.json is the prune overlay and may lag; these
-// deadlines are authoritative for admission and admin deployment state.
+// VersionDeploymentChain carries fleet deployment facts from the append-only
+// change-request chain. Redeploy deadlines and deploy history are read only
+// from change requests; retention.json supplies publish timestamps, unused
+// retention, and sticky prune locks.
+type VersionDeploymentChain struct {
+	Deployed  map[string]struct{}
+	Deadlines VersionDeploymentDeadlines
+}
+
+// VersionDeploymentDeadlines maps a deactivated version to its fixed redeploy
+// deadline recorded as from_version_deployable_until on the change request.
 type VersionDeploymentDeadlines map[string]time.Time
+
+// VersionDeploymentChainFromChangeRequests projects deploy history and redeploy
+// deadlines from fleet change requests.
+func VersionDeploymentChainFromChangeRequests(requests []*core.AppVersionChangeRequest) VersionDeploymentChain {
+	return VersionDeploymentChain{
+		Deployed:  DeployedVersionsFromChangeRequests(requests),
+		Deadlines:   DeployableUntilDeadlinesFromChangeRequests(requests),
+	}
+}
 
 // DeployableUntilDeadlinesFromChangeRequests projects each outgoing version's
 // fixed redeploy deadline from fleet change requests.
@@ -237,28 +254,34 @@ func DeployableUntilDeadlinesFromChangeRequests(requests []*core.AppVersionChang
 }
 
 // VersionDeploymentState resolves present-day deployability for one published version.
-func VersionDeploymentState(version string, desiredVersion string, retention *RetentionIndex, policy RetentionPolicy, now time.Time, deadlines VersionDeploymentDeadlines) (state string, deployableUntil *time.Time) {
+func VersionDeploymentState(version string, desiredVersion string, retention *RetentionIndex, policy RetentionPolicy, now time.Time, chain VersionDeploymentChain) (state string, deployableUntil *time.Time) {
 	version = strings.TrimSpace(version)
 	desiredVersion = strings.TrimSpace(desiredVersion)
 	now = now.UTC()
 	if version == desiredVersion && version != "" {
 		return DeploymentStateDesired, nil
 	}
+	if chain.Deployed != nil {
+		if _, wasDeployed := chain.Deployed[version]; wasDeployed {
+			entry, _ := retentionVersion(retention, version)
+			if entry.LockedAt != nil && !entry.LockedAt.IsZero() {
+				return DeploymentStateLocked, chain.deployableUntil(version)
+			}
+			deadline := chain.deployableUntil(version)
+			if deadline != nil && now.Before(deadline.UTC()) {
+				return DeploymentStateRedeployable, cloneTimePtr(deadline)
+			}
+			if deadline != nil && !deadline.IsZero() {
+				return DeploymentStateLocked, cloneTimePtr(deadline)
+			}
+			return DeploymentStateLocked, nil
+		}
+	}
 	entry, ok := retentionVersion(retention, version)
 	if !ok {
 		return DeploymentStateAvailable, nil
 	}
 	if entry.LockedAt != nil && !entry.LockedAt.IsZero() {
-		return DeploymentStateLocked, effectiveDeployableUntil(version, entry, deadlines)
-	}
-	if entry.EverDeployed || deadlines.Has(version) {
-		deadline := effectiveDeployableUntil(version, entry, deadlines)
-		if deadline != nil && now.Before(deadline.UTC()) {
-			return DeploymentStateRedeployable, cloneTimePtr(deadline)
-		}
-		if deadline != nil && !deadline.IsZero() {
-			return DeploymentStateLocked, cloneTimePtr(deadline)
-		}
 		return DeploymentStateLocked, nil
 	}
 	unusedDeadline := entry.PublishedAt.UTC().Add(policy.UnusedRetention)
@@ -268,27 +291,20 @@ func VersionDeploymentState(version string, desiredVersion string, retention *Re
 	return DeploymentStateExpired, nil
 }
 
-func effectiveDeployableUntil(version string, entry RetentionVersion, deadlines VersionDeploymentDeadlines) *time.Time {
-	if entry.DeployableUntil != nil && !entry.DeployableUntil.IsZero() {
-		return cloneTimePtr(entry.DeployableUntil)
+func (c VersionDeploymentChain) deployableUntil(version string) *time.Time {
+	if len(c.Deadlines) == 0 {
+		return nil
 	}
-	if deadline, ok := deadlines[version]; ok && !deadline.IsZero() {
-		return cloneTimePtr(&deadline)
+	deadline, ok := c.Deadlines[strings.TrimSpace(version)]
+	if !ok || deadline.IsZero() {
+		return nil
 	}
-	return nil
-}
-
-func (d VersionDeploymentDeadlines) Has(version string) bool {
-	if len(d) == 0 {
-		return false
-	}
-	_, ok := d[strings.TrimSpace(version)]
-	return ok
+	return cloneTimePtr(&deadline)
 }
 
 // VersionSelectable reports whether a version may be admitted while holding the install lock.
-func VersionSelectable(version, desiredVersion string, retention *RetentionIndex, policy RetentionPolicy, now time.Time, deadlines VersionDeploymentDeadlines) error {
-	state, _ := VersionDeploymentState(version, desiredVersion, retention, policy, now, deadlines)
+func VersionSelectable(version, desiredVersion string, retention *RetentionIndex, policy RetentionPolicy, now time.Time, chain VersionDeploymentChain) error {
+	state, _ := VersionDeploymentState(version, desiredVersion, retention, policy, now, chain)
 	switch state {
 	case DeploymentStateAvailable, DeploymentStateRedeployable:
 		return nil

@@ -202,9 +202,9 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if err != nil {
 		return nil, fmt.Errorf("list app version change requests: %w", err)
 	}
-	deadlines := DeployableUntilDeadlinesFromChangeRequests(changeRequests)
+	chain := VersionDeploymentChainFromChangeRequests(changeRequests)
 	if mode == installModeSelect || mode == installModeUpgrade || mode == installModeAdd {
-		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now(), deadlines); err != nil {
+		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now(), chain); err != nil {
 			return nil, err
 		}
 	}
