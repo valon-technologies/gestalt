@@ -15,6 +15,8 @@ import (
 	frpproxy "github.com/fatedier/frp/client/proxy"
 	frpsource "github.com/fatedier/frp/pkg/config/source"
 	v1 "github.com/fatedier/frp/pkg/config/v1"
+	fmux "github.com/hashicorp/yamux"
+	"golang.org/x/net/websocket"
 )
 
 // HostConfig runs the local side: an embedded frpc proxying the tunnel host to
@@ -34,6 +36,97 @@ type Host struct {
 	inner      net.Listener
 	closed     bool
 	mu         sync.Mutex
+}
+
+type wssConnector struct {
+	ctx     context.Context
+	cfg     *v1.ClientCommonConfig
+	useTLS  bool
+	session *fmux.Session
+	conn    net.Conn
+}
+
+func (c *wssConnector) Open() error {
+	conn, err := c.dial()
+	if err != nil {
+		return err
+	}
+	cfg := fmux.DefaultConfig()
+	cfg.KeepAliveInterval = 30 * time.Second
+	cfg.MaxStreamWindowSize = 6 * 1024 * 1024
+	session, err := fmux.Client(conn, cfg)
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	c.session = session
+	c.conn = conn
+	return nil
+}
+
+func (c *wssConnector) Connect() (net.Conn, error) {
+	if c.session != nil {
+		return c.session.OpenStream()
+	}
+	return c.dial()
+}
+
+func (c *wssConnector) Close() error {
+	if c.session != nil {
+		_ = c.session.Close()
+	}
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
+	return nil
+}
+
+func (c *wssConnector) dial() (net.Conn, error) {
+	host := c.cfg.ServerAddr
+	port := c.cfg.ServerPort
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+
+	rawConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("wss connector: dial tcp: %w", err)
+	}
+
+	var conn net.Conn = rawConn
+	wsScheme := "ws"
+	if c.useTLS {
+		sn := c.cfg.Transport.TLS.ServerName
+		if sn == "" {
+			sn = host
+		}
+		tlsCfg := &tls.Config{
+			ServerName:         sn,
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"http/1.1"},
+		}
+		tlsConn := tls.Client(rawConn, tlsCfg)
+		if err := tlsConn.HandshakeContext(c.ctx); err != nil {
+			rawConn.Close()
+			return nil, fmt.Errorf("wss connector: tls handshake: %w", err)
+		}
+		conn = tlsConn
+		wsScheme = "wss"
+	}
+
+	wsURL := wsScheme + "://" + host + "/~!frp"
+	origin := "http://" + host
+	wsCfg, err := websocket.NewConfig(wsURL, origin)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("wss connector: websocket config: %w", err)
+	}
+
+	wsConn, err := websocket.NewClient(wsCfg, conn)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("wss connector: websocket handshake: %w", err)
+	}
+	wsConn.PayloadType = websocket.BinaryFrame
+	return wsConn, nil
 }
 
 // StartHost starts the embedded frpc and the inner mTLS listener. The frpc
@@ -85,6 +178,7 @@ func StartHost(ctx context.Context, cfg HostConfig) (*Host, error) {
 	common := &v1.ClientCommonConfig{}
 	common.ServerAddr = hostFromURL(cfg.ServerURL)
 	common.ServerPort = portFromURL(cfg.ServerURL)
+	useTLS := isWssURL(cfg.ServerURL)
 	common.Transport.TCPMux = ptr(true)
 	if isWebsocketURL(cfg.ServerURL) {
 		common.Transport.Protocol = "websocket"
@@ -99,6 +193,9 @@ func StartHost(ctx context.Context, cfg HostConfig) (*Host, error) {
 	service, err := frpcclient.NewService(frpcclient.ServiceOptions{
 		Common:                 common,
 		ConfigSourceAggregator: frpsource.NewAggregator(configSource),
+		ConnectorCreator: func(ctx context.Context, cfg *v1.ClientCommonConfig) frpcclient.Connector {
+			return &wssConnector{ctx: ctx, cfg: cfg, useTLS: useTLS}
+		},
 	})
 	if err != nil {
 		_ = innerListener.Close()
@@ -171,6 +268,10 @@ func PeerIdentity(conn net.Conn) (string, bool) {
 func ptr[T any](v T) *T { return &v }
 
 // isWebsocketURL reports whether the URL uses ws:// or wss://.
+func isWssURL(rawURL string) bool {
+	return strings.HasPrefix(rawURL, "wss://")
+}
+
 func isWebsocketURL(rawURL string) bool {
 	return strings.HasPrefix(rawURL, "ws://") || strings.HasPrefix(rawURL, "wss://")
 }
