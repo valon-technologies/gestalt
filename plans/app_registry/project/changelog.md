@@ -227,6 +227,10 @@ Added paginated `GET …/admin/registry/history`, deployment-state projection fr
 
 **Merged:** [gestalt#2939](https://github.com/valon-technologies/gestalt/pull/2939) · [gestalt#2941](https://github.com/valon-technologies/gestalt/pull/2941) · [gestalt-providers#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163) · [gestalt-providers#1164](https://github.com/valon-technologies/gestalt-providers/pull/1164) · [gestalt-providers#1165](https://github.com/valon-technologies/gestalt-providers/pull/1165) · [gestalt-providers#1166](https://github.com/valon-technologies/gestalt-providers/pull/1166)
 
+**Addendum:** Deployment-state projection and admission now read historical redeploy deadlines from `from_version_deployable_until` on the append-only change-request chain instead of `retention.json`, fixing premature **Locked** labels when the retention overlay is stale. `retention.json` remains authoritative for `publishedAt`, unused retention, and sticky `lockedAt` after prune.
+
+**Addendum merged:** [gestalt#2958](https://github.com/valon-technologies/gestalt/pull/2958) · [gestalt#2959](https://github.com/valon-technologies/gestalt/pull/2959)
+
 <a id="changelog-19"></a>
 
 ### 19 — Publication PR Title Provenance
