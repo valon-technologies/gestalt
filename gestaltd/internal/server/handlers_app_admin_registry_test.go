@@ -208,6 +208,63 @@ func TestAppAdminRegistryAutoDeploy(t *testing.T) {
 	update(`{"enabled":true} {}`, http.StatusBadRequest)
 }
 
+func TestAppAdminRegistryAutoDeployNotifies(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	notified := make(chan string, 1)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+		cfg.AppAutoDeployNotify = func(app string) {
+			select {
+			case notified <- app:
+			default:
+			}
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(
+		http.MethodPut,
+		ts.URL+"/api/v1/apps/g-issues/admin/registry/auto-deploy",
+		bytes.NewBufferString(`{"enabled":true}`),
+	)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("PUT auto-deploy: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("PUT status = %d, want 200: %s", response.StatusCode, body)
+	}
+
+	select {
+	case app := <-notified:
+		if app != "g-issues" {
+			t.Fatalf("notified app = %q, want g-issues", app)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected auto-deploy notify after toggle update")
+	}
+}
+
 type appAdminAutoDeployTestResponse struct {
 	App        string `json:"app"`
 	AutoDeploy struct {

@@ -161,6 +161,7 @@ type Server struct {
 	appRollouts            *coredata.AppRolloutService
 	appMaterializations    *coredata.AppInstanceMaterializationService
 	autoDeploySettings     *coredata.AutoDeploySettingsService
+	appAutoDeployNotify    func(string)
 	artifactsDir           string
 	sourceVersion          string
 	appRuntimeState        AppRuntimeState
@@ -229,6 +230,8 @@ type Config struct {
 	RemoteManagement       proto.RemoteManagementServer
 	FrpsHandler            http.Handler
 	FrpsConnectHandler     http.Handler
+	// AppAutoDeployNotify requests prompt auto-deploy reconciliation for an app.
+	AppAutoDeployNotify func(app string)
 }
 
 func New(cfg Config) (*Server, error) {
@@ -418,6 +421,7 @@ func New(cfg Config) (*Server, error) {
 		appRollouts:            cfg.Services.AppRollouts,
 		appMaterializations:    cfg.Services.AppInstanceMaterializations,
 		autoDeploySettings:     cfg.Services.AutoDeploySettings,
+		appAutoDeployNotify:    cfg.AppAutoDeployNotify,
 		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
 		sourceVersion:          strings.TrimSpace(cfg.SourceVersion),
 		appRuntimeState:        cfg.AppRuntimeState,

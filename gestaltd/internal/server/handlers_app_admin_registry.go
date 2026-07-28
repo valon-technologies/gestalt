@@ -345,6 +345,7 @@ func (s *Server) updateAppAdminRegistryAutoDeploy(w http.ResponseWriter, r *http
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}
+	s.notifyAppAutoDeploy(app.name)
 	writeJSON(w, http.StatusOK, appAdminRegistryAutoDeployResponse{
 		App:        app.name,
 		AutoDeploy: appAdminAutoDeployFromCore(settings),
@@ -360,6 +361,17 @@ func appAdminAutoDeployFromCore(settings *core.AppAutoDeploySettings) appAdminAu
 		PendingVersion: settings.PendingVersion,
 		LastError:      settings.LastError,
 	}
+}
+
+func (s *Server) notifyAppAutoDeploy(app string) {
+	if s == nil || s.appAutoDeployNotify == nil {
+		return
+	}
+	app = strings.TrimSpace(app)
+	if app == "" {
+		return
+	}
+	s.appAutoDeployNotify(app)
 }
 
 func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Request) {
