@@ -162,10 +162,12 @@ func (s *GestaltdSourceVersionService) Activate(
 
 	stateStore := tx.ObjectStore(StoreGestaltdSourceVersionState)
 	state := &core.GestaltdSourceVersionState{}
-	if rec, getErr := stateStore.Get(ctx, gestaltdSourceVersionStateID); getErr == nil {
-		state = recordToGestaltdSourceVersionState(rec)
-	} else if !errors.Is(getErr, idb.ErrNotFound) {
+	stateRecs, getErr := stateStore.GetAll(ctx, gestaltdSourceVersionStateID, 1)
+	if getErr != nil {
 		return nil, fmt.Errorf("activate gestaltd source version: load state: %w", getErr)
+	}
+	if len(stateRecs) > 0 {
+		state = recordToGestaltdSourceVersionState(stateRecs[0])
 	}
 	sourceChanged := strings.TrimSpace(state.CurrentSourceVersion) != sourceVersion
 	if sourceChanged || retry {
