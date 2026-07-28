@@ -116,6 +116,7 @@ func TestAppAdminRegistryAutoDeploy(t *testing.T) {
 	services := testutil.NewStubServices(t)
 	if _, err := services.AutoDeploySettings.Update(context.Background(), "g-issues", func(settings *core.AppAutoDeploySettings) error {
 		settings.PendingVersion = "v2"
+		settings.LastSeenVersion = "v1"
 		settings.LastError = "previous failure"
 		return nil
 	}); err != nil {
@@ -170,6 +171,13 @@ func TestAppAdminRegistryAutoDeploy(t *testing.T) {
 	if enabled.App != "g-issues" || !enabled.AutoDeploy.Enabled ||
 		enabled.AutoDeploy.PendingVersion != "v2" || enabled.AutoDeploy.LastError != "" {
 		t.Fatalf("enabled response = %#v", enabled)
+	}
+	stored, err := services.AutoDeploySettings.Get(context.Background(), "g-issues")
+	if err != nil {
+		t.Fatalf("Get enabled settings: %v", err)
+	}
+	if stored.LastSeenVersion != "" {
+		t.Fatalf("lastSeenVersion = %q, want reset on enable", stored.LastSeenVersion)
 	}
 
 	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry", nil)

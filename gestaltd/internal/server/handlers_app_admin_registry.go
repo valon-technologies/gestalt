@@ -335,6 +335,7 @@ func (s *Server) updateAppAdminRegistryAutoDeploy(w http.ResponseWriter, r *http
 		settings.Enabled = *request.Enabled
 		if settings.Enabled {
 			settings.LastError = ""
+			settings.LastSeenVersion = ""
 		} else {
 			settings.PendingVersion = ""
 		}
