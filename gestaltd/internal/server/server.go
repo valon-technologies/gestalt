@@ -160,6 +160,7 @@ type Server struct {
 	gestaltdSourceVersions *coredata.GestaltdSourceVersionService
 	appRollouts            *coredata.AppRolloutService
 	appMaterializations    *coredata.AppInstanceMaterializationService
+	autoDeploySettings     *coredata.AutoDeploySettingsService
 	artifactsDir           string
 	sourceVersion          string
 	appRuntimeState        AppRuntimeState
@@ -416,6 +417,7 @@ func New(cfg Config) (*Server, error) {
 		gestaltdSourceVersions: cfg.Services.GestaltdSourceVersionState,
 		appRollouts:            cfg.Services.AppRollouts,
 		appMaterializations:    cfg.Services.AppInstanceMaterializations,
+		autoDeploySettings:     cfg.Services.AutoDeploySettings,
 		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
 		sourceVersion:          strings.TrimSpace(cfg.SourceVersion),
 		appRuntimeState:        cfg.AppRuntimeState,

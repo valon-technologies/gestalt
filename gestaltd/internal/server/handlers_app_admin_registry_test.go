@@ -83,6 +83,9 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 		DesiredVersion    string `json:"desiredVersion"`
 		SelectionDisabled bool   `json:"selectionDisabled"`
 		DisabledReason    string `json:"disabledReason"`
+		AutoDeploy        struct {
+			Enabled bool `json:"enabled"`
+		} `json:"autoDeploy"`
 		PublishedVersions []struct {
 			SourceRef   string `json:"sourceRef"`
 			SourceURL   string `json:"sourceUrl"`
@@ -97,9 +100,144 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 	if state.DesiredVersion != fixture.Version || !state.SelectionDisabled || state.DisabledReason != "rollout in progress" {
 		t.Fatalf("registry state = %#v", state)
 	}
+	if state.AutoDeploy.Enabled {
+		t.Fatalf("autoDeploy = %#v, want disabled default", state.AutoDeploy)
+	}
 	if len(state.PublishedVersions) != 1 || state.PublishedVersions[0].SourceRef == "" ||
 		state.PublishedVersions[0].SourceURL == "" || state.PublishedVersions[0].Publication.WorkflowRunURL == "" {
 		t.Fatalf("published versions = %#v", state.PublishedVersions)
+	}
+}
+
+func TestAppAdminRegistryAutoDeploy(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	if _, err := services.AutoDeploySettings.Update(context.Background(), "g-issues", func(settings *core.AppAutoDeploySettings) error {
+		settings.PendingVersion = "v2"
+		settings.LastError = "previous failure"
+		return nil
+	}); err != nil {
+		t.Fatalf("seed auto-deploy settings: %v", err)
+	}
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	update := func(body string, wantStatus int) appAdminAutoDeployTestResponse {
+		t.Helper()
+		request, _ := http.NewRequest(
+			http.MethodPut,
+			ts.URL+"/api/v1/apps/g-issues/admin/registry/auto-deploy",
+			bytes.NewBufferString(body),
+		)
+		request.Header.Set("Authorization", "Bearer alice-token")
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("PUT auto-deploy: %v", err)
+		}
+		defer func() { _ = response.Body.Close() }()
+		if response.StatusCode != wantStatus {
+			responseBody, _ := io.ReadAll(response.Body)
+			t.Fatalf("PUT status = %d, want %d: %s", response.StatusCode, wantStatus, responseBody)
+		}
+		var decoded appAdminAutoDeployTestResponse
+		if wantStatus == http.StatusOK {
+			if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+				t.Fatalf("decode PUT response: %v", err)
+			}
+		}
+		return decoded
+	}
+
+	enabled := update(`{"enabled":true}`, http.StatusOK)
+	if enabled.App != "g-issues" || !enabled.AutoDeploy.Enabled ||
+		enabled.AutoDeploy.PendingVersion != "v2" || enabled.AutoDeploy.LastError != "" {
+		t.Fatalf("enabled response = %#v", enabled)
+	}
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET registry state: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		responseBody, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET status = %d: %s", response.StatusCode, responseBody)
+	}
+	var state appAdminAutoDeployTestResponse
+	if err := json.NewDecoder(response.Body).Decode(&state); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if !state.AutoDeploy.Enabled || state.AutoDeploy.PendingVersion != "v2" || state.AutoDeploy.LastError != "" {
+		t.Fatalf("GET autoDeploy = %#v", state.AutoDeploy)
+	}
+
+	disabled := update(`{"enabled":false}`, http.StatusOK)
+	if disabled.AutoDeploy.Enabled || disabled.AutoDeploy.PendingVersion != "" {
+		t.Fatalf("disabled response = %#v", disabled)
+	}
+	update(`{}`, http.StatusBadRequest)
+	update(`{"enabled":true,"unexpected":true}`, http.StatusBadRequest)
+	update(`{"enabled":true} {}`, http.StatusBadRequest)
+}
+
+type appAdminAutoDeployTestResponse struct {
+	App        string `json:"app"`
+	AutoDeploy struct {
+		Enabled        bool   `json:"enabled"`
+		PendingVersion string `json:"pendingVersion"`
+		LastError      string `json:"lastError"`
+	} `json:"autoDeploy"`
+}
+
+func TestAppAdminRegistryAutoDeployRequiresAppAdmin(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	subjectID := principal.UserSubjectID("alice")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = &serverTestAuthorizationProvider{}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(
+		http.MethodPut,
+		ts.URL+"/api/v1/apps/g-issues/admin/registry/auto-deploy",
+		bytes.NewBufferString(`{"enabled":true}`),
+	)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("PUT auto-deploy: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d, want 403: %s", response.StatusCode, body)
 	}
 }
 

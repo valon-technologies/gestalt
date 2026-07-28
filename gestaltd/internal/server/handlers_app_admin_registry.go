@@ -30,8 +30,15 @@ type appAdminRegistryResponse struct {
 	PendingVersions   []appAdminPendingVersion   `json:"pendingVersions,omitempty"`
 	FailedVersions    []appAdminFailedVersion    `json:"failedVersions,omitempty"`
 	Rollout           *appAdminRollout           `json:"rollout,omitempty"`
+	AutoDeploy        appAdminAutoDeploy         `json:"autoDeploy"`
 	SelectionDisabled bool                       `json:"selectionDisabled"`
 	DisabledReason    string                     `json:"disabledReason,omitempty"`
+}
+
+type appAdminAutoDeploy struct {
+	Enabled        bool   `json:"enabled"`
+	PendingVersion string `json:"pendingVersion,omitempty"`
+	LastError      string `json:"lastError,omitempty"`
 }
 
 type appAdminPublishedVersion struct {
@@ -80,6 +87,15 @@ type appAdminRegistryVersionRequest struct {
 	Version string `json:"version"`
 }
 
+type appAdminRegistryAutoDeployRequest struct {
+	Enabled *bool `json:"enabled"`
+}
+
+type appAdminRegistryAutoDeployResponse struct {
+	App        string             `json:"app"`
+	AutoDeploy appAdminAutoDeploy `json:"autoDeploy"`
+}
+
 type appAdminRegistryVersionResponse struct {
 	App            string          `json:"app"`
 	Registry       string          `json:"registry"`
@@ -115,6 +131,8 @@ func (s *Server) mountAppAdminRegistryRoutes(r chi.Router) {
 		Get("/apps/{app}/admin/registry/history", s.getAppAdminRegistryHistory)
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
 		Post("/apps/{app}/admin/registry/version", s.selectAppAdminRegistryVersion)
+	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+		Put("/apps/{app}/admin/registry/auto-deploy", s.updateAppAdminRegistryAutoDeploy)
 }
 
 func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler {
@@ -189,7 +207,15 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.appVersionChanges == nil || s.appRollouts == nil {
+	if s.appVersionChanges == nil || s.appRollouts == nil || s.autoDeploySettings == nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	autoDeploy := appAdminAutoDeploy{}
+	settings, err := s.autoDeploySettings.Get(r.Context(), app.name)
+	if err == nil {
+		autoDeploy = appAdminAutoDeployFromCore(settings)
+	} else if !errors.Is(err, core.ErrNotFound) {
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}
@@ -261,6 +287,7 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		PublishedVersions: published,
 		PendingVersions:   pendingVersions,
 		FailedVersions:    failedVersions,
+		AutoDeploy:        autoDeploy,
 	}
 	rollout, err := s.appRollouts.Get(r.Context(), app.name)
 	if err == nil {
@@ -278,6 +305,60 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) updateAppAdminRegistryAutoDeploy(w http.ResponseWriter, r *http.Request) {
+	app, _, ok := s.appAdminRegistryConfig(w, r)
+	if !ok {
+		return
+	}
+	if s.autoDeploySettings == nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	var request appAdminRegistryAutoDeployRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if request.Enabled == nil {
+		writeError(w, http.StatusBadRequest, "enabled is required")
+		return
+	}
+	settings, err := s.autoDeploySettings.Update(r.Context(), app.name, func(settings *core.AppAutoDeploySettings) error {
+		settings.Enabled = *request.Enabled
+		if settings.Enabled {
+			settings.LastError = ""
+		} else {
+			settings.PendingVersion = ""
+		}
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, appAdminRegistryAutoDeployResponse{
+		App:        app.name,
+		AutoDeploy: appAdminAutoDeployFromCore(settings),
+	})
+}
+
+func appAdminAutoDeployFromCore(settings *core.AppAutoDeploySettings) appAdminAutoDeploy {
+	if settings == nil {
+		return appAdminAutoDeploy{}
+	}
+	return appAdminAutoDeploy{
+		Enabled:        settings.Enabled,
+		PendingVersion: settings.PendingVersion,
+		LastError:      settings.LastError,
+	}
 }
 
 func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Request) {
