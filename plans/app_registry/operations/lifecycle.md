@@ -814,58 +814,51 @@ The server enforces the deadline while holding the app-scoped install lock. UI s
 
 #### Auto-Deploy Published Snapshots
 
-App admins opt a registry-only app into **auto-deploy** on `/apps/{app}/admin`. When enabled, Gestalt admits the newest published snapshot as the fleet-wide desired version without a manual **Deploy** click. Auto-deploy uses the same admission path as `POST …/registry/version`: install lock, install-time validation, rollout creation, change-request append, and retention mirror. Per-replica convergence is unchanged.
+App admins opt a registry-only app into automatic fleet admission on `/apps/{app}/admin`. When enabled, Gestalt admits the newest published snapshot as the fleet-wide desired version without a manual **Deploy** click. Auto-deploy uses the same admission path as `POST /api/v1/apps/{app}/admin/registry/version`: install lock, install-time validation, rollout creation, change-request append, and retention mirror. Per-replica convergence is unchanged.
 
-Scope is `/apps/{app}/admin` only — not the embedded fleet `/admin` UI.
+Scope is `/apps/{app}/admin` only — not the embedded fleet `/admin` UI. Only an authenticated user with `admin` on `app/{app}` may enable or disable the policy. Auto-deploy does not bypass install-time validation, retention locks, or rollout admission checks.
 
-**Goals**
+Admission triggers on publish completion — when `index.json` includes the version (after `gestaltd app registry pending clear`). Pending and failed publishes do not trigger auto-deploy. See [pending-publish.md](./pending-publish.md). At most one rollout per app remains unchanged: while rollout state is `enrolling` or `restarting`, new publishes update the pending version but do not start another admission. When the rollout reaches `complete`, Gestalt admits the pending version if it differs from the current desired version; intermediate publishes are skipped. On rollout `failed`, Gestalt disables auto-deploy, clears pending state, and records `lastError` until an app admin deploys manually and re-enables the policy. Automatic admissions appear in revision history with actor `system:auto-deploy`.
 
-- App admins toggle auto-deploy per app (`admin` on `app/{app}`).
-- Trigger on publish completion — when `index.json` includes the version (after `gestaltd app registry pending clear`). Pending and failed publishes do not trigger auto-deploy.
-- At most one rollout per app (unchanged). While rollout state is `enrolling` or `restarting`, new publishes update the **pending target** but do not start another admission.
-- When the rollout reaches `complete`, admit the pending target if it differs from the current desired version. Intermediate publishes are skipped.
-- On rollout `failed`, disable auto-deploy and require manual intervention before any further automatic admissions.
-- Record auto-deploy admissions in revision history with actor `system:auto-deploy`.
+Fleet policy is stored in IndexedDB (`app_auto_deploy_settings`). See [indexeddb.md](../architecture/indexeddb.md#store-app_auto_deploy_settings-auto-deploy-policy).
 
-**Publish detection**
+##### Publish Detection
 
-For auto-deploy-enabled apps, a background watcher in `gestaltd serve` polls `apps/{app}/index.json` over HTTP from the registry `publicUrl` (public GCS). Each poll is one GET per enabled app. Admission still writes to IndexedDB and fetches `versions/{version}.json` only when coalescing starts an install.
+For enabled apps, a background auto-deploy controller in `gestaltd serve` polls `apps/{app}/index.json` over HTTP from the registry `publicUrl`. Each poll is one GET per enabled app. Admission still writes to IndexedDB and fetches `versions/{version}.json` only when coalescing starts an install.
 
-Default poll interval: **1 minute**, aligned with the catalog poller. Configurable via `server.appRegistry.autoDeployPollInterval` when set. Coalescing correctness does not depend on the interval. If `gestaltd serve` is unavailable at publish time, the next poll still converges on the latest version.
+Default poll interval is **1 minute**, aligned with the catalog poller. Override with `server.appRegistry.autoDeployPollInterval` when set. Coalescing correctness does not depend on the interval. If `gestaltd serve` is unavailable at publish time, the next poll still converges on the latest version.
 
 Each replica may poll independently today. Duplicate reads are acceptable at this rate; designate a single evaluator later if the enabled-app count grows.
 
-The watcher stores the last `ETag` per app in process memory. On each poll:
+The controller stores the last `ETag` per app in process memory. On each poll:
 
 1. Send `If-None-Match: {etag}` when a prior `ETag` exists.
-2. On **304 Not Modified**, skip publish detection, then continue coalescing any persisted pending target. This recovers if a rollout-terminal wakeup was missed.
+2. On **304 Not Modified**, skip publish detection, then continue coalescing any persisted pending version. This recovers if a rollout-terminal wakeup was missed.
 3. On **200**, parse the index, update the stored `ETag`, and compare the newest published version against `last_seen_version`.
 
 GCS returns `ETag` on every `index.json` response. A missing `ETag` on the first response falls back to an unconditional GET on the next poll.
 
-**Coalescing**
+##### Coalescing
 
-Per auto-deploy-enabled app, Gestalt tracks a **pending target**: the newest published version that should become desired once admission is possible.
+Per enabled app, Gestalt tracks a pending version: the newest published snapshot that should become desired once admission is possible.
 
-1. If auto-deploy is disabled, stop. Disabling clears `pendingTarget`.
-2. On publish detection or enable — set `pendingTarget` to the newest published version.
-3. On a new rollout `failed` transition — disable auto-deploy, clear `pendingTarget` and `last_seen_version`, record `lastError` and the handled failure timestamp; stop. The timestamp prevents the retained terminal rollout row from immediately disabling a later app-admin re-enable.
-4. If rollout state is `enrolling` or `restarting`, stop. `pendingTarget` is already updated.
-5. If `pendingTarget` is empty, stop.
-6. If `pendingTarget == desiredVersion`, clear `pendingTarget` and stop.
-7. Capture `pendingTarget` and attempt admission for that version (same as manual version selection). Run this step both after publish detection and on periodic or rollout-terminal reconciliation, including when the registry returns **304**.
-   - **Success** — clear `pendingTarget` only if it still equals the captured version. Preserve a newer target written concurrently by another replica.
-   - **Validation failure (400)** — clear `pendingTarget` and set `lastError` only if it still equals the captured version. Do not retry until the next publish or a manual deploy.
-   - **Active rollout (409)** — keep `pendingTarget`; retry when the rollout reaches `complete`.
+1. If auto-deploy is disabled, stop. Disabling clears `pending_version`.
+2. On publish detection or enable — set `pending_version` to the newest published version.
+3. On a new rollout `failed` transition — disable auto-deploy, clear `pending_version` and `last_seen_version`, record `last_error` and `last_failed_rollout_at`; stop. The timestamp prevents the retained terminal rollout row from immediately disabling a later app-admin re-enable.
+4. If rollout state is `enrolling` or `restarting`, stop. `pending_version` is already updated.
+5. If `pending_version` is empty, stop.
+6. If `pending_version` equals the desired version, clear `pending_version` and stop.
+7. Capture `pending_version` and attempt admission for that version (same as manual version selection). Run this step after publish detection and on periodic or rollout-terminal reconciliation, including when the registry returns **304**.
+   - **Success** — clear `pending_version` only if it still equals the captured version. Preserve a newer target written concurrently by another replica.
+   - **Validation failure (400)** — clear `pending_version` and set `last_error` only if it still equals the captured version. Do not retry until the next publish or a manual deploy.
+   - **Active rollout (409)** — keep `pending_version`; retry when the rollout reaches `complete`.
 
 | Action | Behavior |
 | --- | --- |
-| Disable | Clear the pending target and stop future automatic admissions. An in-flight rollout continues; the current desired version is unchanged. |
-| Enable | Run coalescing once. When no rollout is active and the newest published version is not desired, admit it. |
+| Disable | Clear the pending version and stop future automatic admissions. An in-flight rollout continues; the current desired version is unchanged. |
+| Enable | Run coalescing once. When no rollout is active and the newest published version is not desired, admit it. A successful enable notifies the background controller to reconcile immediately instead of waiting for the next poll. |
 
-Fleet policy is stored in IndexedDB (`app_auto_deploy_settings`). See [indexeddb.md](../architecture/indexeddb.md#store-app_auto_deploy_settings-auto-deploy-policy).
-
-**`PUT /api/v1/apps/{app}/admin/registry/auto-deploy`**
+##### `PUT /api/v1/apps/{app}/admin/registry/auto-deploy`
 
 **Request**
 
@@ -888,19 +881,17 @@ Fleet policy is stored in IndexedDB (`app_auto_deploy_settings`). See [indexeddb
 }
 ```
 
-Authorization matches version selection: `admin` on `app/{app}`. Auto-deploy does not bypass install-time validation, retention locks, or rollout admission checks. A successful enable notifies the background watcher to reconcile immediately instead of waiting for the next poll.
+`GET /api/v1/apps/{app}/admin/registry` projects `autoDeploy.enabled`, `autoDeploy.pendingVersion`, and `autoDeploy.lastError` alongside rollout and published-version state.
 
-**Edge cases**
+##### Edge Cases
 
 | Scenario | Behavior |
 | --- | --- |
 | Install-time validation fails | Clear pending; expose `lastError`. No automatic retry. |
-| Version expired or locked | Admission rejected (400); clear pending. |
+| Version expired or locked | Admission rejected (**400**); clear pending. |
 | No fleet-known version yet | First publish triggers `add`. |
 | Concurrent manual deploy | Install lock serializes; auto-deploy retries when the rollout reaches `complete`. |
 | Rollout `failed` | Disable auto-deploy, clear pending, record `lastError`. App admin must deploy manually and re-enable auto-deploy to resume automatic admissions. |
-
-**Out of scope:** auto-deploy for pending or failed publishes; per-replica or per-user deployment; cancelling an in-flight rollout to jump to a newer version; automatic rollback on rollout failure; notifications on validation failure.
 
 ### Errors
 

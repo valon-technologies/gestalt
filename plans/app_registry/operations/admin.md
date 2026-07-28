@@ -222,20 +222,12 @@ After a successful deploy selection, keep deploy actions disabled until the roll
 
 Fleet-wide automatic admission when a new snapshot is published. API and coalescing behavior: [lifecycle.md](./lifecycle.md#auto-deploy-published-snapshots).
 
-- Toggle label: **Automatically deploy new snapshots**, with an explicit **On** / **Off** state beside the switch.
-- When **On**, the snapshots tab description explains that new snapshots are admitted without manual deploy. Manual **Deploy** actions are disabled while auto-deploy is enabled.
+- **Automatically deploy new snapshots** — toggle with an explicit **On** / **Off** label beside the switch.
+- When **On**, the Published snapshots description explains that new snapshots are admitted without manual deploy. Manual **Deploy** actions are disabled while auto-deploy is enabled.
 - When **Off**, manual deploy remains available subject to rollout and retention rules.
 - Show `autoDeploy.lastError` under the toggle until an app admin re-enables auto-deploy or deploys manually. Auto-deploy turns **Off** automatically on rollout `failed`.
 - During an active rollout, show **Queued for deploy** on the snapshot row for `autoDeploy.pendingVersion`. This is distinct from **Deploying...** on the admitted version.
 - Revision history shows `system:auto-deploy` for automatic admissions.
-
-```text
-┌────────────────────────────────────────────────────────────────────┐
-│ Automatically deploy new snapshots                          On [●] │
-│ New published snapshots are admitted across the fleet              │
-│ automatically. Turn off to deploy manually.                        │
-└────────────────────────────────────────────────────────────────────┘
-```
 
 While auto-deploy is on and a newer snapshot is waiting behind an active rollout:
 
@@ -274,6 +266,10 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 - Publishing versions from either UI
 - Granting or editing app authorization relationships
 - Selecting a version for only one user or one replica
+- Automatic admission for pending or failed publishes
+- Cancelling an in-flight rollout to jump to a newer published version
+- Automatic rollback on rollout failure
+- Notifications on validation failure or rollout `failed`
 - Replacing `kubectl logs` for provider crash diagnostics
 
 ---

@@ -163,7 +163,7 @@ server:
     autoDeployPollInterval: 1m
 ```
 
-`server.appRegistry.autoDeployPollInterval` is the background watcher interval for auto-deploy-enabled apps. It defaults to `1m` and must be a positive duration. Coalescing correctness does not depend on the interval; a longer interval only delays detection of new publishes.
+`server.appRegistry.autoDeployPollInterval` is the poll interval for the background auto-deploy controller on enabled apps. It defaults to `1m` and must be a positive duration. Coalescing correctness does not depend on the interval; a longer interval only delays detection of new publishes.
 
 ### Lockfile
 

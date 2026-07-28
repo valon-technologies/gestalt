@@ -298,20 +298,8 @@ Cloud Run deployment overlap allowed old and candidate revisions to enroll in th
 
 **Tags:** [`admin.md`](../operations/admin.md) [`config.md`](../architecture/config.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-App admins opt registry-only apps into automatic fleet admission when a new snapshot is published. A background watcher polls `index.json` every **1 minute** with conditional GETs, coalesces publishes during active rollouts, and disables auto-deploy on rollout `failed`.
+App admins opt registry-only apps into automatic fleet admission when a new snapshot is published. A background auto-deploy controller polls `index.json` every **1 minute** with conditional GETs, coalesces publishes during active rollouts, and disables auto-deploy on rollout `failed`. Automatic admissions appear in revision history with actor `system:auto-deploy`.
 
 **Design:** [gestalt#2970](https://github.com/valon-technologies/gestalt/pull/2970)
 
-**State and conditional registry reads:** [gestalt#2971](https://github.com/valon-technologies/gestalt/pull/2971)
-
-**App-admin API:** [gestalt#2972](https://github.com/valon-technologies/gestalt/pull/2972) · [gestalt#2974](https://github.com/valon-technologies/gestalt/pull/2974) (API restoration)
-
-**Watcher and coalescing:** [gestalt#2973](https://github.com/valon-technologies/gestalt/pull/2973) · [gestalt#2976](https://github.com/valon-technologies/gestalt/pull/2976) (wake controller on toggle)
-
-**Production fixes:** [gestalt#2977](https://github.com/valon-technologies/gestalt/pull/2977) (ensure settings store) · [gestalt#2981](https://github.com/valon-technologies/gestalt/pull/2981) (relationaldb provider write path)
-
-**App admin UI:** [gestalt-providers#1197](https://github.com/valon-technologies/gestalt-providers/pull/1197) · [gestalt-providers#1200](https://github.com/valon-technologies/gestalt-providers/pull/1200) · [gestalt-providers#1201](https://github.com/valon-technologies/gestalt-providers/pull/1201)
-
-**Deploy:** [toolshed#3864](https://github.com/valon-technologies/toolshed/pull/3864) · [toolshed#3867](https://github.com/valon-technologies/toolshed/pull/3867) · [toolshed#3859](https://github.com/valon-technologies/toolshed/pull/3859)
-
-**Docs fold:** [gestalt#2984](https://github.com/valon-technologies/gestalt/pull/2984)
+**Merged:** [gestalt#2971](https://github.com/valon-technologies/gestalt/pull/2971) · [gestalt#2972](https://github.com/valon-technologies/gestalt/pull/2972) · [gestalt#2973](https://github.com/valon-technologies/gestalt/pull/2973) · [gestalt#2974](https://github.com/valon-technologies/gestalt/pull/2974) · [gestalt#2976](https://github.com/valon-technologies/gestalt/pull/2976) · [gestalt#2977](https://github.com/valon-technologies/gestalt/pull/2977) · [gestalt#2981](https://github.com/valon-technologies/gestalt/pull/2981) · [gestalt-providers#1197](https://github.com/valon-technologies/gestalt-providers/pull/1197) · [gestalt-providers#1200](https://github.com/valon-technologies/gestalt-providers/pull/1200) · [gestalt-providers#1201](https://github.com/valon-technologies/gestalt-providers/pull/1201) · [toolshed#3864](https://github.com/valon-technologies/toolshed/pull/3864) · [toolshed#3867](https://github.com/valon-technologies/toolshed/pull/3867) · [toolshed#3859](https://github.com/valon-technologies/toolshed/pull/3859) · [gestalt#2984](https://github.com/valon-technologies/gestalt/pull/2984)

@@ -296,7 +296,7 @@ A terminal record may be replaced when the next version is admitted. A non-termi
 
 ## Store: `app_auto_deploy_settings` (Auto-Deploy Policy)
 
-Per-app fleet policy for automatic admission of newly published snapshots. Writable only through the app-admin auto-deploy API; the background watcher reads and updates progress fields during coalescing.
+Per-app fleet policy for automatic admission of newly published snapshots. Writable only through the app-admin auto-deploy API; the background auto-deploy controller reads and updates progress fields during coalescing.
 
 Primary key: `app` (app name).
 
@@ -332,7 +332,7 @@ The store is created idempotently during bootstrap. When `SkipSchemaBootstrap` i
 | `Update(ctx, app, fn)` | Read-modify-write one app's settings. Missing rows start disabled with empty progress fields. |
 | `EnsureStore(ctx)` | Idempotently create the object store when schema bootstrap is skipped. |
 
-**App-admin exposure:** `Get` and `Update` back `GET` and `PUT /api/v1/apps/{app}/admin/registry/auto-deploy`. The registry-state route projects `enabled`, `pendingVersion`, and `lastError`.
+`Get` and `Update` back `GET` and `PUT /api/v1/apps/{app}/admin/registry/auto-deploy`. The registry-state route projects `enabled`, `pendingVersion`, and `lastError`.
 
 ---
 

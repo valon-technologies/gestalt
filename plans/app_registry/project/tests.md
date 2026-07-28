@@ -560,7 +560,7 @@ Implemented in [gestalt#2972](https://github.com/valon-technologies/gestalt/pull
 | Test | Expected behavior |
 | --- | --- |
 | `TestAppAdminRegistryAutoDeploy` | Registry state includes default `autoDeploy.enabled: false`; `PUT` enables and disables the policy |
-| `TestAppAdminRegistryAutoDeployNotifies` | Successful `PUT` notifies the background watcher to reconcile immediately |
+| `TestAppAdminRegistryAutoDeployNotifies` | Successful `PUT` notifies the background auto-deploy controller to reconcile immediately |
 | `TestAppAdminRegistryAutoDeployRequiresAppAdmin` | Unauthenticated and unauthorized callers fail closed |
 
 ### Default App UI Tests (`gestalt-providers`)
