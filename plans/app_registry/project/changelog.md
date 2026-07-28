@@ -303,6 +303,8 @@ App admins opt registry-only apps into automatic fleet admission when a new snap
 
 **Design (PR 1):** [auto-deploy.md](../operations/auto-deploy.md)
 
-**gestalt PR 2:** state and conditional registry reads · **PR 3:** app-admin API · **PR 4:** watcher and coalescing · **PR 6:** fold design into main docs
+**gestalt PR 2:** state and conditional registry reads · **PR 3:** app-admin API · **PR 4:** watcher and coalescing · **PR 7:** fold design into main docs
 
-**gestalt-providers PR 5:** app admin UI
+**gestalt-providers PR 5:** app admin UI (after gestalt PRs 1–4 merge)
+
+**toolshed PR 6:** deploy (after PRs 4–5 merge)

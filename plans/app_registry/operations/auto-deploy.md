@@ -18,7 +18,7 @@ Scope is `/apps/{app}/admin` only — not the embedded fleet `/admin` UI.
 - When the rollout reaches `complete`, admit the pending target if it differs from the current desired version. Intermediate publishes are skipped.
 - On rollout `failed`, disable auto-deploy and require manual intervention before any further automatic admissions.
 - Record auto-deploy admissions in revision history with actor `system:auto-deploy`.
-- Poll `apps/{app}/index.json` every **1 minute** (default; configurable via `server.appRegistry.autoDeployPollInterval`). Use conditional GETs with `If-None-Match` to skip unchanged indexes.
+- Detect new publishes via background `index.json` polling. See [Publish Detection](#publish-detection).
 
 ## Publish Detection
 
@@ -32,7 +32,7 @@ The watcher stores the last `ETag` per app in process memory. On each poll:
 
 1. Send `If-None-Match: {etag}` when a prior `ETag` exists.
 2. On **304 Not Modified**, stop — no new publish to process.
-3. On **200**, parse the index, update the stored `ETag`, and compare the newest published version against `auto_deploy_last_seen_version`.
+3. On **200**, parse the index, update the stored `ETag`, and compare the newest published version against `last_seen_version`.
 
 GCS returns `ETag` on every `index.json` response. A missing `ETag` on the first response falls back to an unconditional GET on the next poll.
 
@@ -63,9 +63,10 @@ Stored in IndexedDB (fleet policy, not GCS publish metadata):
 
 | Field | Purpose |
 | --- | --- |
-| `auto_deploy_enabled` | Per-app toggle; writable only via app-admin API |
-| `auto_deploy_pending_version` | Newest published version waiting for admission |
-| `auto_deploy_last_seen_version` | Deduplicate publish detection across polls |
+| `enabled` | Per-app toggle; writable only via app-admin API |
+| `pending_version` | Newest published version waiting for admission |
+| `last_seen_version` | Deduplicate publish detection across polls |
+| `last_error` | Last failure message; set on validation failure or rollout `failed` |
 
 The app-scoped install lock serializes concurrent manual and automatic admissions.
 
@@ -145,17 +146,56 @@ IndexedDB persistence, registry conditional GET support, and poll-interval confi
 - Implement [Coalescing](#coalescing). Actor `system:auto-deploy`. Hook rollout terminal transitions.
 - Tests: `autodeploy_test.go`
 
-**PR 6 — Fold design into main docs**
-
-Land after PRs 2–5. Merge this document into [lifecycle.md](./lifecycle.md), [admin.md](./admin.md), [config.md](../architecture/config.md), [indexeddb.md](../architecture/indexeddb.md), and [tests.md](../project/tests.md). Update [changelog.md](../project/changelog.md) with merged PR links. Remove this file.
-
 ### gestalt-providers
 
 **PR 5 — App admin UI**
 
+Land after gestalt PRs 1–4 merge.
+
 - Toggle, **Queued for deploy**, `lastError` affordance, `system:auto-deploy` in revision history.
 - Tests: `e2e/app-admin-mock.spec.ts`
-- Deploy: bump host app snapshot in `toolshed` when required.
+
+### toolshed
+
+**PR 6 — Deploy**
+
+Land after gestalt PR 4 and gestalt-providers PR 5. Bump `GESTALTD_PINNED_SHA` so the fleet runs the auto-deploy watcher. Bump `apps.home` snapshot so `/apps/{app}/admin` ships the toggle UI. Optionally set `server.appRegistry.autoDeployPollInterval` in deploy config.
+
+### gestalt (docs)
+
+**PR 7 — Fold design into main docs**
+
+Land after PRs 2–6. Merge this document into [lifecycle.md](./lifecycle.md), [admin.md](./admin.md), [config.md](../architecture/config.md), [indexeddb.md](../architecture/indexeddb.md), and [tests.md](../project/tests.md). Update [changelog.md](../project/changelog.md) with merged PR links. Remove this file.
+
+### Stacking
+
+```text
+main
+ ├── gestalt PR 1 — design doc
+ ├── gestalt PR 2 — state and conditional registry reads
+ │    ├── gestalt PR 3 — app-admin API
+ │    └── gestalt PR 4 — watcher and coalescing
+ ├── gestalt-providers PR 5 — app admin UI
+ ├── toolshed PR 6 — deploy
+ └── gestalt PR 7 — fold design into main docs
+```
+
+| PR | Repo | Base branch | Depends on |
+| --- | --- | --- | --- |
+| 1 | gestalt | `main` | — |
+| 2 | gestalt | `main` | — |
+| 3 | gestalt | PR 2 branch | PR 2 |
+| 4 | gestalt | PR 2 branch | PR 2 |
+| 5 | gestalt-providers | `main` | PRs 1–4 merged |
+| 6 | toolshed | `main` | PRs 4–5 merged |
+| 7 | gestalt | `main` | PRs 2–6 merged |
+
+### Process
+
+1. **gestalt (PRs 1–4)** — Implement PR 1 on `main`, then the PR 2 stack (PRs 3–4 on the PR 2 branch). Babysit until CI passes and Bugbot is clean on each. Present all four PRs together and get explicit approval on each before merging. Merge in order (1 → 2 → 3 → 4).
+2. **gestalt-providers (PR 5)** — Pin the merged gestalt version in gestalt-providers. Open PR 5. Babysit until CI passes and Bugbot is clean. Get approval and merge.
+3. **toolshed deploy (PR 6)** — Wait for the `apps.home` registry snapshot to publish. Open toolshed PR 6 (`GESTALTD_PINNED_SHA` and `apps.home` snapshot bump). Babysit until CI passes and Bugbot is clean. Get approval and merge.
+4. **gestalt docs (PR 7)** — Fold this document into the main app registry docs. Open PR 7. Babysit until CI passes and Bugbot is clean. Get approval and merge.
 
 ---
 
