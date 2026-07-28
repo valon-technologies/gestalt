@@ -2,6 +2,7 @@ package indexeddb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -481,6 +482,10 @@ func (tx *hostTx) sendOperation(op *proto.TransactionOperation) (*proto.Transact
 		return nil, tx.failLocked(fmt.Errorf("indexeddb: response request id %d does not match %d", opResp.GetRequestId(), op.GetRequestId()))
 	}
 	if err := rpcStatusErr(opResp.GetError()); err != nil {
+		if errors.Is(err, idb.ErrNotFound) && isReadOperation(op) {
+			tx.mu.Unlock()
+			return nil, err
+		}
 		tx.done = true
 		tx.err = err
 		tx.mu.Unlock()
@@ -489,6 +494,19 @@ func (tx *hostTx) sendOperation(op *proto.TransactionOperation) (*proto.Transact
 	}
 	tx.mu.Unlock()
 	return opResp, nil
+}
+
+func isReadOperation(op *proto.TransactionOperation) bool {
+	switch op.GetOperation().(type) {
+	case *proto.TransactionOperation_Get, *proto.TransactionOperation_GetKey,
+		*proto.TransactionOperation_GetAll, *proto.TransactionOperation_GetAllKeys,
+		*proto.TransactionOperation_IndexGet, *proto.TransactionOperation_IndexGetKey,
+		*proto.TransactionOperation_IndexGetAll, *proto.TransactionOperation_IndexGetAllKeys,
+		*proto.TransactionOperation_Count, *proto.TransactionOperation_IndexCount:
+		return true
+	default:
+		return false
+	}
 }
 
 func (tx *hostTx) failLocked(err error) error {

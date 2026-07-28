@@ -441,6 +441,14 @@ func (s *indexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) 
 		case *proto.TransactionClientMessage_Operation:
 			resp, opErr := s.executeTransactionOperation(stream.Context(), tx, body.Operation)
 			if opErr != nil {
+				if isReadOperation(body.Operation) && errors.Is(opErr, idb.ErrNotFound) && !isTransactionStoreDenied(opErr) {
+					if err := stream.Send(&proto.TransactionServerMessage{
+						Msg: &proto.TransactionServerMessage_Operation{Operation: transactionOperationError(body.Operation.GetRequestId(), opErr)},
+					}); err != nil {
+						return err
+					}
+					continue
+				}
 				finished = true
 				abortErr := tx.Abort(stream.Context())
 				if err := stream.Send(&proto.TransactionServerMessage{
@@ -480,6 +488,19 @@ func (s *indexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) 
 	}
 }
 
+func isReadOperation(op *proto.TransactionOperation) bool {
+	switch op.GetOperation().(type) {
+	case *proto.TransactionOperation_Get, *proto.TransactionOperation_GetKey,
+		*proto.TransactionOperation_GetAll, *proto.TransactionOperation_GetAllKeys,
+		*proto.TransactionOperation_IndexGet, *proto.TransactionOperation_IndexGetKey,
+		*proto.TransactionOperation_IndexGetAll, *proto.TransactionOperation_IndexGetAllKeys,
+		*proto.TransactionOperation_Count, *proto.TransactionOperation_IndexCount:
+		return true
+	default:
+		return false
+	}
+}
+
 func drainTransactionStream(stream proto.IndexedDB_TransactionServer) error {
 	for {
 		_, err := stream.Recv()
@@ -492,6 +513,12 @@ func drainTransactionStream(stream proto.IndexedDB_TransactionServer) error {
 	}
 }
 
+var errTransactionStoreDenied = errors.New("indexeddb: transaction store denied")
+
+func isTransactionStoreDenied(err error) bool {
+	return errors.Is(err, errTransactionStoreDenied)
+}
+
 func (s *indexedDBServer) transactionStores(stores []string) ([]string, error) {
 	if len(stores) == 0 {
 		return nil, idb.ErrInvalidTransaction
@@ -499,7 +526,7 @@ func (s *indexedDBServer) transactionStores(stores []string) ([]string, error) {
 	out := make([]string, len(stores))
 	for i, store := range stores {
 		if err := s.ensureAllowedStore(store); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errTransactionStoreDenied, err)
 		}
 		out[i] = s.storeName(store)
 	}
@@ -508,7 +535,7 @@ func (s *indexedDBServer) transactionStores(stores []string) ([]string, error) {
 
 func (s *indexedDBServer) transactionObjectStore(tx idb.Transaction, name string) (idb.TransactionObjectStore, error) {
 	if err := s.ensureAllowedStore(name); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errTransactionStoreDenied, err)
 	}
 	return tx.ObjectStore(s.storeName(name)), nil
 }
