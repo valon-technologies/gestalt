@@ -489,7 +489,7 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 			actorLabels[strings.TrimSpace(request.Actor)],
 			now,
 		)
-		applyRevisionRolloutFields(&revision, request, rollout, outcomesByID[request.ID], now)
+		applyRevisionRolloutFields(&revision, request, rollout, outcomesByID[request.ID], currentRevisionID, now)
 		revisions = append(revisions, revision)
 	}
 	writeJSON(w, http.StatusOK, appAdminRegistryHistoryResponse{
@@ -742,6 +742,7 @@ func applyRevisionRolloutFields(
 	request *core.AppVersionChangeRequest,
 	rollout *core.AppRollout,
 	outcome *core.AppVersionRolloutOutcome,
+	currentRevisionID string,
 	now time.Time,
 ) {
 	if revision == nil || request == nil {
@@ -755,11 +756,6 @@ func applyRevisionRolloutFields(
 	var state core.AppRolloutState
 	var completedAt, failedAt time.Time
 
-	if rollout != nil && strings.TrimSpace(rollout.Version) == version {
-		state = rollout.State
-		completedAt = rollout.CompletedAt
-		failedAt = rollout.FailedAt
-	}
 	if outcome != nil {
 		if !outcome.CompletedAt.IsZero() {
 			completedAt = outcome.CompletedAt
@@ -769,6 +765,13 @@ func applyRevisionRolloutFields(
 			failedAt = outcome.FailedAt
 			state = core.AppRolloutStateFailed
 		}
+	}
+	if state == "" && rollout != nil &&
+		strings.TrimSpace(rollout.Version) == version &&
+		request.ID == currentRevisionID {
+		state = rollout.State
+		completedAt = rollout.CompletedAt
+		failedAt = rollout.FailedAt
 	}
 	if state == "" {
 		return

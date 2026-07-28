@@ -284,12 +284,13 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		version := strings.TrimSpace(rollout.Version)
 		if findInstallation(installations, version) == nil {
 			if !p.now().Before(rollout.Deadline) {
-				if _, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+				updated, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now())
+				if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
 					return nil
 				} else if err != nil {
 					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, version, err)
 				}
-				p.recordRolloutOutcome(ctx, rollout, time.Time{}, p.now())
+				p.recordRolloutOutcome(ctx, updated)
 				p.notifyRolloutTerminal(appName)
 			}
 			return nil
@@ -553,22 +554,24 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		converged = false
 	}
 	if converged {
-		if _, err := p.Rollouts.MarkCompleteForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+		updated, err := p.Rollouts.MarkCompleteForRollout(ctx, rollout, p.now())
+		if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
 			return false, nil
 		} else if err != nil {
 			return false, fmt.Errorf("complete rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
-		p.recordRolloutOutcome(ctx, rollout, p.now(), time.Time{})
+		p.recordRolloutOutcome(ctx, updated)
 		p.notifyRolloutTerminal(rollout.App)
 		return true, nil
 	}
 	if !p.now().Before(rollout.Deadline) {
-		if _, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+		updated, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now())
+		if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
 			return false, nil
 		} else if err != nil {
 			return false, fmt.Errorf("fail rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
-		p.recordRolloutOutcome(ctx, rollout, time.Time{}, p.now())
+		p.recordRolloutOutcome(ctx, updated)
 		p.notifyRolloutTerminal(rollout.App)
 		return true, nil
 	}
@@ -581,8 +584,20 @@ func (p *CatalogPoller) notifyRolloutTerminal(app string) {
 	}
 }
 
-func (p *CatalogPoller) recordRolloutOutcome(ctx context.Context, rollout *core.AppRollout, completedAt, failedAt time.Time) {
+func (p *CatalogPoller) recordRolloutOutcome(ctx context.Context, rollout *core.AppRollout) {
 	if p == nil || p.RolloutOutcomes == nil || p.ChangeRequests == nil || rollout == nil {
+		return
+	}
+	var completedAt, failedAt time.Time
+	switch rollout.State {
+	case core.AppRolloutStateComplete:
+		completedAt = rollout.CompletedAt
+	case core.AppRolloutStateFailed:
+		failedAt = rollout.FailedAt
+	default:
+		return
+	}
+	if completedAt.IsZero() && failedAt.IsZero() {
 		return
 	}
 	changeRequestID, err := p.ChangeRequests.LatestRevisionIDForVersion(ctx, rollout.App, rollout.Version)
