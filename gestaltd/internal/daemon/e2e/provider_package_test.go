@@ -12,7 +12,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -610,7 +609,7 @@ func TestRun_ProviderPackageAndReleaseCopiesUISupportFiles(t *testing.T) {
 	if metadata.Kind != providermanifestv1.KindApp {
 		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindApp)
 	}
-	uiArtifact := providerReleaseArtifactForTarget(t, metadata, providerrelease.GenericTarget)
+	uiArtifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.PlatformString(runtime.GOOS, runtime.GOARCH))
 	uiDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
 	if err != nil {
 		t.Fatalf("hash ui archive: %v", err)
