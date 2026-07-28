@@ -248,6 +248,7 @@ func TestNew(t *testing.T) {
 			coredata.StoreAppVersionChangeRequests,
 			coredata.StoreAppVersionInstallLocks,
 			coredata.StoreAppRollouts,
+			coredata.StoreAppAutoDeploySettings,
 			coredata.StoreRemoteRegistrations,
 			coredata.StoreRemoteProviders,
 		} {

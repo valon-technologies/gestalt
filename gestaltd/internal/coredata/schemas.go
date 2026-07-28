@@ -14,6 +14,7 @@ const (
 	StoreGestaltdSourceVersionState    = "gestaltd_source_version_state"
 	StoreAppRollouts                   = "app_rollouts"
 	StoreAppInstanceMaterializations   = "app_instance_materializations"
+	StoreAppAutoDeploySettings         = "app_auto_deploy_settings"
 	StoreRemoteRegistrations           = "remote_registrations"
 	StoreRemoteProviders               = "remote_providers"
 )
@@ -138,6 +139,20 @@ var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
 		{Name: "attempt_count", Type: idb.TypeInt},
 		{Name: "last_error_at", Type: idb.TypeTime},
 		{Name: "last_error_message", Type: idb.TypeString},
+	},
+}
+
+var AppAutoDeploySettingsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_enabled", KeyPath: []string{"enabled"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "app", Type: idb.TypeString, NotNull: true, Unique: true},
+		{Name: "enabled", Type: idb.TypeBool, NotNull: true},
+		{Name: "pending_version", Type: idb.TypeString},
+		{Name: "last_seen_version", Type: idb.TypeString},
+		{Name: "last_error", Type: idb.TypeString},
 	},
 }
 

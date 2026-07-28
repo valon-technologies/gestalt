@@ -21,6 +21,12 @@ type RegistryReader struct {
 	HTTPClient *http.Client
 }
 
+type AppIndexFetchResult struct {
+	Index       *Index
+	ETag        string
+	NotModified bool
+}
+
 func (r *RegistryReader) client() *http.Client {
 	if r != nil && r.HTTPClient != nil {
 		return r.HTTPClient
@@ -131,6 +137,20 @@ func (r *RegistryReader) FetchRetentionIndex(ctx context.Context, publicRoot, ap
 
 // FetchAppIndex downloads apps/{app}/index.json from a registry public root.
 func (r *RegistryReader) FetchAppIndex(ctx context.Context, publicRoot, appName string) (*Index, error) {
+	result, err := r.FetchAppIndexConditional(ctx, publicRoot, appName, "")
+	if err != nil {
+		return nil, err
+	}
+	return result.Index, nil
+}
+
+// FetchAppIndexConditional downloads apps/{app}/index.json and optionally
+// sends an If-None-Match validator. A 304 response has NotModified set and no
+// decoded index.
+func (r *RegistryReader) FetchAppIndexConditional(
+	ctx context.Context,
+	publicRoot, appName, ifNoneMatch string,
+) (*AppIndexFetchResult, error) {
 	appName = strings.TrimSpace(appName)
 	if appName == "" {
 		return nil, fmt.Errorf("app name is required")
@@ -144,14 +164,40 @@ func (r *RegistryReader) FetchAppIndex(ctx context.Context, publicRoot, appName 
 	}
 
 	url := PublicURL(publicRoot, AppIndexPath(appName))
-	body, err := r.fetchJSON(ctx, url, true)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build app registry request: %w", err)
+	}
+	if ifNoneMatch = strings.TrimSpace(ifNoneMatch); ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
+	}
+	resp, err := r.client().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch app registry document %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	switch resp.StatusCode {
+	case http.StatusNotModified:
+		return &AppIndexFetchResult{NotModified: true}, nil
+	case http.StatusNotFound:
+		return &AppIndexFetchResult{Index: NewEmptyIndex()}, nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("fetch app registry document %s: unexpected status %s", url, resp.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read app registry document %s: %w", url, err)
+	}
+	index, err := DecodeIndex(body)
 	if err != nil {
 		return nil, err
 	}
-	if body == nil {
-		return NewEmptyIndex(), nil
-	}
-	return DecodeIndex(body)
+	return &AppIndexFetchResult{
+		Index: index,
+		ETag:  strings.TrimSpace(resp.Header.Get("ETag")),
+	}, nil
 }
 
 // FetchEntry downloads apps/{app}/versions/{version}.json from a registry public root.
