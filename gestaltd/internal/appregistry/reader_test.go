@@ -47,6 +47,101 @@ func TestRegistryReader_FetchAppIndex(t *testing.T) {
 	}
 }
 
+func TestRegistryReader_FetchAppIndexConditional(t *testing.T) {
+	t.Parallel()
+
+	const indexJSON = `{
+  "schemaVersion": 1,
+  "apps": {
+    "g-issues": {
+      "versions": {
+        "0.0.1": {
+          "metadata": "apps/g-issues/versions/0.0.1.json",
+          "publishedAt": "2026-07-10T02:00:00Z"
+        }
+      }
+    }
+  }
+}`
+
+	t.Run("not modified", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if got := r.Header.Get("If-None-Match"); got != `W/"current"` {
+				t.Errorf("If-None-Match = %q, want weak ETag", got)
+			}
+			w.WriteHeader(http.StatusNotModified)
+		}))
+		defer srv.Close()
+
+		result, err := (&RegistryReader{HTTPClient: srv.Client()}).
+			FetchAppIndexConditional(t.Context(), srv.URL, "g-issues", `W/"current"`)
+		if err != nil {
+			t.Fatalf("FetchAppIndexConditional: %v", err)
+		}
+		if !result.NotModified || result.Index != nil || result.ETag != "" {
+			t.Fatalf("result = %#v, want not modified", result)
+		}
+	})
+
+	t.Run("modified with etag", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if got := r.Header.Get("If-None-Match"); got != "" {
+				t.Errorf("If-None-Match = %q, want empty", got)
+			}
+			w.Header().Set("ETag", `"next"`)
+			_, _ = w.Write([]byte(indexJSON))
+		}))
+		defer srv.Close()
+
+		result, err := (&RegistryReader{HTTPClient: srv.Client()}).
+			FetchAppIndexConditional(t.Context(), srv.URL, "g-issues", "")
+		if err != nil {
+			t.Fatalf("FetchAppIndexConditional: %v", err)
+		}
+		if result.NotModified || result.ETag != `"next"` {
+			t.Fatalf("result = %#v", result)
+		}
+		versions := VersionsFromIndex(result.Index, "g-issues")
+		if len(versions) != 1 || versions[0].Version != "0.0.1" {
+			t.Fatalf("versions = %#v", versions)
+		}
+	})
+
+	t.Run("modified without etag", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(indexJSON))
+		}))
+		defer srv.Close()
+
+		result, err := (&RegistryReader{HTTPClient: srv.Client()}).
+			FetchAppIndexConditional(t.Context(), srv.URL, "g-issues", `"old"`)
+		if err != nil {
+			t.Fatalf("FetchAppIndexConditional: %v", err)
+		}
+		if result.NotModified || result.ETag != "" || result.Index == nil {
+			t.Fatalf("result = %#v", result)
+		}
+	})
+
+	t.Run("invalid json does not expose etag", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("ETag", `"bad"`)
+			_, _ = w.Write([]byte(`{`))
+		}))
+		defer srv.Close()
+
+		result, err := (&RegistryReader{HTTPClient: srv.Client()}).
+			FetchAppIndexConditional(t.Context(), srv.URL, "g-issues", "")
+		if err == nil || result != nil {
+			t.Fatalf("result, error = (%#v, %v), want decode error", result, err)
+		}
+	})
+}
+
 func TestVersionsFromIndex_SortsNewestFirst(t *testing.T) {
 	t.Parallel()
 

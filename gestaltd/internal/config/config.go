@@ -1963,11 +1963,21 @@ type ServerAppRegistryConfig struct {
 	RestartDelay string `yaml:"restartDelay,omitempty"`
 	// MaxReconcileAttempts bounds failed convergence attempts per app/version.
 	// Omission defaults to DefaultAppRegistryMaxReconcileAttempts.
-	MaxReconcileAttempts    int  `yaml:"maxReconcileAttempts,omitempty"`
-	maxReconcileAttemptsSet bool `yaml:"-"`
+	MaxReconcileAttempts    int    `yaml:"maxReconcileAttempts,omitempty"`
+	AutoDeployPollInterval  string `yaml:"autoDeployPollInterval,omitempty"`
+	maxReconcileAttemptsSet bool   `yaml:"-"`
 }
 
 const DefaultAppRegistryMaxReconcileAttempts = 3
+const DefaultAppRegistryAutoDeployPollInterval = time.Minute
+
+func (c ServerAppRegistryConfig) AutoDeployPollIntervalDuration() (time.Duration, error) {
+	raw := strings.TrimSpace(c.AutoDeployPollInterval)
+	if raw == "" {
+		return DefaultAppRegistryAutoDeployPollInterval, nil
+	}
+	return ParseDuration(raw)
+}
 
 type serverAppRegistryConfigFields ServerAppRegistryConfig
 

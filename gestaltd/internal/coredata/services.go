@@ -17,6 +17,7 @@ type Services struct {
 	GestaltdSourceVersionState  *GestaltdSourceVersionService
 	AppRollouts                 *AppRolloutService
 	AppInstanceMaterializations *AppInstanceMaterializationService
+	AutoDeploySettings          *AutoDeploySettingsService
 	RemoteRegistrations         *RemoteRegistrationService
 	DB                          indexeddb.IndexedDB
 }
@@ -65,6 +66,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppInstanceMaterializations, AppInstanceMaterializationsSchema); err != nil {
 			return nil, fmt.Errorf("create app_instance_materializations store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppAutoDeploySettings, AppAutoDeploySettingsSchema); err != nil {
+			return nil, fmt.Errorf("create app_auto_deploy_settings store: %w", err)
+		}
 		if _, err := ds.CreateObjectStore(ctx, StoreRemoteRegistrations, RemoteRegistrationsSchema); err != nil {
 			return nil, fmt.Errorf("create remote_registrations store: %w", err)
 		}
@@ -79,6 +83,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	gestaltdSourceVersions := NewGestaltdSourceVersionService(ds)
 	appRollouts := NewAppRolloutService(ds)
 	appInstanceMaterializations := NewAppInstanceMaterializationService(ds)
+	autoDeploySettings := NewAutoDeploySettingsService(ds)
 	remoteRegistrations := NewRemoteRegistrationService(ds)
 	return &Services{
 		ExternalCredentials:         nil,
@@ -89,6 +94,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		GestaltdSourceVersionState:  gestaltdSourceVersions,
 		AppRollouts:                 appRollouts,
 		AppInstanceMaterializations: appInstanceMaterializations,
+		AutoDeploySettings:          autoDeploySettings,
 		RemoteRegistrations:         remoteRegistrations,
 		DB:                          ds,
 	}, nil
