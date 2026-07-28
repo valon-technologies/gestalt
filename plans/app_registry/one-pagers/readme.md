@@ -7,3 +7,4 @@ When a feature ships, fold operational detail into [operations/](../operations/)
 | One-pager | Summary | Status |
 | --- | --- | --- |
 | [auto-deploy.md](./auto-deploy.md) | Automatic fleet admission when a new snapshot is published | Shipped — [changelog 25](../project/changelog.md#changelog-25) |
+| [revision-history-rollout.md](./revision-history-rollout.md) | Rollout status and duration on the Revision history tab | Planned addendum |

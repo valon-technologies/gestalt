@@ -19,7 +19,8 @@ app_registry/
 │   └── <a href="./operations/retention.md">retention.md</a>
 ├── one-pagers/
 │   ├── <a href="./one-pagers/readme.md">readme.md</a>
-│   └── <a href="./one-pagers/auto-deploy.md">auto-deploy.md</a>
+│   ├── <a href="./one-pagers/auto-deploy.md">auto-deploy.md</a>
+│   └── <a href="./one-pagers/revision-history-rollout.md">revision-history-rollout.md</a>
 └── project/
     ├── <a href="./project/changelog.md">changelog.md</a>
     └── <a href="./project/tests.md">tests.md</a>
