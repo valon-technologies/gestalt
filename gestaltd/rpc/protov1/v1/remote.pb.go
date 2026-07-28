@@ -688,11 +688,12 @@ func (x *TunnelBootstrap) GetLeaseDuration() *durationpb.Duration {
 }
 
 type ListRemotesResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Remotes        []*Remote              `protobuf:"bytes,1,rep,name=remotes,proto3" json:"remotes,omitempty"`
-	ServerIdentity *ServerIdentity        `protobuf:"bytes,2,opt,name=server_identity,json=serverIdentity,proto3" json:"server_identity,omitempty"`
-	Tunnel         *TunnelBootstrap       `protobuf:"bytes,3,opt,name=tunnel,proto3" json:"tunnel,omitempty"`
-	LeaseDuration  *durationpb.Duration   `protobuf:"bytes,4,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
+	state          protoimpl.MessageState    `protogen:"open.v1"`
+	Remotes        []*Remote                 `protobuf:"bytes,1,rep,name=remotes,proto3" json:"remotes,omitempty"`
+	ServerIdentity *ServerIdentity           `protobuf:"bytes,2,opt,name=server_identity,json=serverIdentity,proto3" json:"server_identity,omitempty"`
+	Tunnel         *TunnelBootstrap          `protobuf:"bytes,3,opt,name=tunnel,proto3" json:"tunnel,omitempty"`
+	LeaseDuration  *durationpb.Duration      `protobuf:"bytes,4,opt,name=lease_duration,json=leaseDuration,proto3" json:"lease_duration,omitempty"`
+	Capabilities   *RemoteServerCapabilities `protobuf:"bytes,5,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -751,6 +752,13 @@ func (x *ListRemotesResponse) GetTunnel() *TunnelBootstrap {
 func (x *ListRemotesResponse) GetLeaseDuration() *durationpb.Duration {
 	if x != nil {
 		return x.LeaseDuration
+	}
+	return nil
+}
+
+func (x *ListRemotesResponse) GetCapabilities() *RemoteServerCapabilities {
+	if x != nil {
+		return x.Capabilities
 	}
 	return nil
 }
@@ -867,6 +875,534 @@ func (x *RegistrationCheckResponse) GetMessage() string {
 	return ""
 }
 
+type RemoteServerCapabilities struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	PreparedRemoteSessions bool                   `protobuf:"varint,1,opt,name=prepared_remote_sessions,json=preparedRemoteSessions,proto3" json:"prepared_remote_sessions,omitempty"`
+	SessionScopedIndexeddb bool                   `protobuf:"varint,2,opt,name=session_scoped_indexeddb,json=sessionScopedIndexeddb,proto3" json:"session_scoped_indexeddb,omitempty"`
+	RemoteSessionHeartbeat bool                   `protobuf:"varint,3,opt,name=remote_session_heartbeat,json=remoteSessionHeartbeat,proto3" json:"remote_session_heartbeat,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *RemoteServerCapabilities) Reset() {
+	*x = RemoteServerCapabilities{}
+	mi := &file_v1_remote_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteServerCapabilities) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteServerCapabilities) ProtoMessage() {}
+
+func (x *RemoteServerCapabilities) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_remote_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteServerCapabilities.ProtoReflect.Descriptor instead.
+func (*RemoteServerCapabilities) Descriptor() ([]byte, []int) {
+	return file_v1_remote_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RemoteServerCapabilities) GetPreparedRemoteSessions() bool {
+	if x != nil {
+		return x.PreparedRemoteSessions
+	}
+	return false
+}
+
+func (x *RemoteServerCapabilities) GetSessionScopedIndexeddb() bool {
+	if x != nil {
+		return x.SessionScopedIndexeddb
+	}
+	return false
+}
+
+func (x *RemoteServerCapabilities) GetRemoteSessionHeartbeat() bool {
+	if x != nil {
+		return x.RemoteSessionHeartbeat
+	}
+	return false
+}
+
+type PrepareRemoteSessionRequest struct {
+	state              protoimpl.MessageState      `protogen:"open.v1"`
+	SessionId          string                      `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Providers          []*RemoteProviderDefinition `protobuf:"bytes,2,rep,name=providers,proto3" json:"providers,omitempty"`
+	ExpectedGeneration uint64                      `protobuf:"varint,3,opt,name=expected_generation,json=expectedGeneration,proto3" json:"expected_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PrepareRemoteSessionRequest) Reset() {
+	*x = PrepareRemoteSessionRequest{}
+	mi := &file_v1_remote_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareRemoteSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareRemoteSessionRequest) ProtoMessage() {}
+
+func (x *PrepareRemoteSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_remote_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareRemoteSessionRequest.ProtoReflect.Descriptor instead.
+func (*PrepareRemoteSessionRequest) Descriptor() ([]byte, []int) {
+	return file_v1_remote_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *PrepareRemoteSessionRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *PrepareRemoteSessionRequest) GetProviders() []*RemoteProviderDefinition {
+	if x != nil {
+		return x.Providers
+	}
+	return nil
+}
+
+func (x *PrepareRemoteSessionRequest) GetExpectedGeneration() uint64 {
+	if x != nil {
+		return x.ExpectedGeneration
+	}
+	return 0
+}
+
+type RemoteProviderCapability struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Provider      *ProviderRef               `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Indexeddb     *RemoteIndexedDBCapability `protobuf:"bytes,2,opt,name=indexeddb,proto3" json:"indexeddb,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoteProviderCapability) Reset() {
+	*x = RemoteProviderCapability{}
+	mi := &file_v1_remote_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteProviderCapability) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteProviderCapability) ProtoMessage() {}
+
+func (x *RemoteProviderCapability) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_remote_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteProviderCapability.ProtoReflect.Descriptor instead.
+func (*RemoteProviderCapability) Descriptor() ([]byte, []int) {
+	return file_v1_remote_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RemoteProviderCapability) GetProvider() *ProviderRef {
+	if x != nil {
+		return x.Provider
+	}
+	return nil
+}
+
+func (x *RemoteProviderCapability) GetIndexeddb() *RemoteIndexedDBCapability {
+	if x != nil {
+		return x.Indexeddb
+	}
+	return nil
+}
+
+type RemoteIndexedDBCapability struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	RelayToken          string                 `protobuf:"bytes,1,opt,name=relay_token,json=relayToken,proto3" json:"relay_token,omitempty"`
+	Provider            string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+	Database            string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	AllowedObjectStores []string               `protobuf:"bytes,4,rep,name=allowed_object_stores,json=allowedObjectStores,proto3" json:"allowed_object_stores,omitempty"`
+	TokenExpiresAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=token_expires_at,json=tokenExpiresAt,proto3" json:"token_expires_at,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *RemoteIndexedDBCapability) Reset() {
+	*x = RemoteIndexedDBCapability{}
+	mi := &file_v1_remote_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteIndexedDBCapability) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteIndexedDBCapability) ProtoMessage() {}
+
+func (x *RemoteIndexedDBCapability) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_remote_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteIndexedDBCapability.ProtoReflect.Descriptor instead.
+func (*RemoteIndexedDBCapability) Descriptor() ([]byte, []int) {
+	return file_v1_remote_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RemoteIndexedDBCapability) GetRelayToken() string {
+	if x != nil {
+		return x.RelayToken
+	}
+	return ""
+}
+
+func (x *RemoteIndexedDBCapability) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *RemoteIndexedDBCapability) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *RemoteIndexedDBCapability) GetAllowedObjectStores() []string {
+	if x != nil {
+		return x.AllowedObjectStores
+	}
+	return nil
+}
+
+func (x *RemoteIndexedDBCapability) GetTokenExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.TokenExpiresAt
+	}
+	return nil
+}
+
+type PreparedRemoteSession struct {
+	state          protoimpl.MessageState      `protogen:"open.v1"`
+	RegistrationId string                      `protobuf:"bytes,1,opt,name=registration_id,json=registrationId,proto3" json:"registration_id,omitempty"`
+	SessionId      string                      `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Generation     uint64                      `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
+	LeaseExpiresAt *timestamppb.Timestamp      `protobuf:"bytes,4,opt,name=lease_expires_at,json=leaseExpiresAt,proto3" json:"lease_expires_at,omitempty"`
+	Tunnel         *TunnelBootstrap            `protobuf:"bytes,5,opt,name=tunnel,proto3" json:"tunnel,omitempty"`
+	ServerIdentity *ServerIdentity             `protobuf:"bytes,6,opt,name=server_identity,json=serverIdentity,proto3" json:"server_identity,omitempty"`
+	Capabilities   []*RemoteProviderCapability `protobuf:"bytes,7,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PreparedRemoteSession) Reset() {
+	*x = PreparedRemoteSession{}
+	mi := &file_v1_remote_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreparedRemoteSession) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreparedRemoteSession) ProtoMessage() {}
+
+func (x *PreparedRemoteSession) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_remote_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreparedRemoteSession.ProtoReflect.Descriptor instead.
+func (*PreparedRemoteSession) Descriptor() ([]byte, []int) {
+	return file_v1_remote_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *PreparedRemoteSession) GetRegistrationId() string {
+	if x != nil {
+		return x.RegistrationId
+	}
+	return ""
+}
+
+func (x *PreparedRemoteSession) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *PreparedRemoteSession) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *PreparedRemoteSession) GetLeaseExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LeaseExpiresAt
+	}
+	return nil
+}
+
+func (x *PreparedRemoteSession) GetTunnel() *TunnelBootstrap {
+	if x != nil {
+		return x.Tunnel
+	}
+	return nil
+}
+
+func (x *PreparedRemoteSession) GetServerIdentity() *ServerIdentity {
+	if x != nil {
+		return x.ServerIdentity
+	}
+	return nil
+}
+
+func (x *PreparedRemoteSession) GetCapabilities() []*RemoteProviderCapability {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+type ActivateRemoteSessionRequest struct {
+	state              protoimpl.MessageState      `protogen:"open.v1"`
+	RegistrationId     string                      `protobuf:"bytes,1,opt,name=registration_id,json=registrationId,proto3" json:"registration_id,omitempty"`
+	SessionId          string                      `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ExpectedGeneration uint64                      `protobuf:"varint,3,opt,name=expected_generation,json=expectedGeneration,proto3" json:"expected_generation,omitempty"`
+	Tunnel             *TunnelEndpoint             `protobuf:"bytes,4,opt,name=tunnel,proto3" json:"tunnel,omitempty"`
+	Providers          []*RemoteProviderDefinition `protobuf:"bytes,5,rep,name=providers,proto3" json:"providers,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ActivateRemoteSessionRequest) Reset() {
+	*x = ActivateRemoteSessionRequest{}
+	mi := &file_v1_remote_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivateRemoteSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivateRemoteSessionRequest) ProtoMessage() {}
+
+func (x *ActivateRemoteSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_remote_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivateRemoteSessionRequest.ProtoReflect.Descriptor instead.
+func (*ActivateRemoteSessionRequest) Descriptor() ([]byte, []int) {
+	return file_v1_remote_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ActivateRemoteSessionRequest) GetRegistrationId() string {
+	if x != nil {
+		return x.RegistrationId
+	}
+	return ""
+}
+
+func (x *ActivateRemoteSessionRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ActivateRemoteSessionRequest) GetExpectedGeneration() uint64 {
+	if x != nil {
+		return x.ExpectedGeneration
+	}
+	return 0
+}
+
+func (x *ActivateRemoteSessionRequest) GetTunnel() *TunnelEndpoint {
+	if x != nil {
+		return x.Tunnel
+	}
+	return nil
+}
+
+func (x *ActivateRemoteSessionRequest) GetProviders() []*RemoteProviderDefinition {
+	if x != nil {
+		return x.Providers
+	}
+	return nil
+}
+
+type HeartbeatRemoteSessionRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RegistrationId string                 `protobuf:"bytes,1,opt,name=registration_id,json=registrationId,proto3" json:"registration_id,omitempty"`
+	SessionId      string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Generation     uint64                 `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *HeartbeatRemoteSessionRequest) Reset() {
+	*x = HeartbeatRemoteSessionRequest{}
+	mi := &file_v1_remote_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatRemoteSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatRemoteSessionRequest) ProtoMessage() {}
+
+func (x *HeartbeatRemoteSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_remote_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatRemoteSessionRequest.ProtoReflect.Descriptor instead.
+func (*HeartbeatRemoteSessionRequest) Descriptor() ([]byte, []int) {
+	return file_v1_remote_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *HeartbeatRemoteSessionRequest) GetRegistrationId() string {
+	if x != nil {
+		return x.RegistrationId
+	}
+	return ""
+}
+
+func (x *HeartbeatRemoteSessionRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *HeartbeatRemoteSessionRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+type HeartbeatRemoteSessionResponse struct {
+	state                 protoimpl.MessageState      `protogen:"open.v1"`
+	Remote                *Remote                     `protobuf:"bytes,1,opt,name=remote,proto3" json:"remote,omitempty"`
+	RefreshedCapabilities []*RemoteProviderCapability `protobuf:"bytes,2,rep,name=refreshed_capabilities,json=refreshedCapabilities,proto3" json:"refreshed_capabilities,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *HeartbeatRemoteSessionResponse) Reset() {
+	*x = HeartbeatRemoteSessionResponse{}
+	mi := &file_v1_remote_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatRemoteSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatRemoteSessionResponse) ProtoMessage() {}
+
+func (x *HeartbeatRemoteSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_remote_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatRemoteSessionResponse.ProtoReflect.Descriptor instead.
+func (*HeartbeatRemoteSessionResponse) Descriptor() ([]byte, []int) {
+	return file_v1_remote_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *HeartbeatRemoteSessionResponse) GetRemote() *Remote {
+	if x != nil {
+		return x.Remote
+	}
+	return nil
+}
+
+func (x *HeartbeatRemoteSessionResponse) GetRefreshedCapabilities() []*RemoteProviderCapability {
+	if x != nil {
+		return x.RefreshedCapabilities
+	}
+	return nil
+}
+
 var File_v1_remote_proto protoreflect.FileDescriptor
 
 const file_v1_remote_proto_rawDesc = "" +
@@ -924,12 +1460,13 @@ const file_v1_remote_proto_rawDesc = "" +
 	"\x12client_spki_sha256\x18\x01 \x01(\tR\x10clientSpkiSha256\"v\n" +
 	"\x0fTunnelBootstrap\x12!\n" +
 	"\ffrps_address\x18\x01 \x01(\tR\vfrpsAddress\x12@\n" +
-	"\x0elease_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\"\x9a\x02\n" +
+	"\x0elease_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\"\xed\x02\n" +
 	"\x13ListRemotesResponse\x125\n" +
 	"\aremotes\x18\x01 \x03(\v2\x1b.gestalt.provider.v1.RemoteR\aremotes\x12L\n" +
 	"\x0fserver_identity\x18\x02 \x01(\v2#.gestalt.provider.v1.ServerIdentityR\x0eserverIdentity\x12<\n" +
 	"\x06tunnel\x18\x03 \x01(\v2$.gestalt.provider.v1.TunnelBootstrapR\x06tunnel\x12@\n" +
-	"\x0elease_duration\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\"\xa3\x01\n" +
+	"\x0elease_duration\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\rleaseDuration\x12Q\n" +
+	"\fcapabilities\x18\x05 \x01(\v2-.gestalt.provider.v1.RemoteServerCapabilitiesR\fcapabilities\"\xa3\x01\n" +
 	"\x18RegistrationCheckRequest\x12'\n" +
 	"\x0fregistration_id\x18\x01 \x01(\tR\x0eregistrationId\x12\x1e\n" +
 	"\n" +
@@ -938,8 +1475,58 @@ const file_v1_remote_proto_rawDesc = "" +
 	"\tproviders\x18\x03 \x03(\v2 .gestalt.provider.v1.ProviderRefR\tproviders\"K\n" +
 	"\x19RegistrationCheckResponse\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\x9b\x03\n" +
-	"\x10RemoteManagement\x12\x7f\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xc8\x01\n" +
+	"\x18RemoteServerCapabilities\x128\n" +
+	"\x18prepared_remote_sessions\x18\x01 \x01(\bR\x16preparedRemoteSessions\x128\n" +
+	"\x18session_scoped_indexeddb\x18\x02 \x01(\bR\x16sessionScopedIndexeddb\x128\n" +
+	"\x18remote_session_heartbeat\x18\x03 \x01(\bR\x16remoteSessionHeartbeat\"\xba\x01\n" +
+	"\x1bPrepareRemoteSessionRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12K\n" +
+	"\tproviders\x18\x02 \x03(\v2-.gestalt.provider.v1.RemoteProviderDefinitionR\tproviders\x12/\n" +
+	"\x13expected_generation\x18\x03 \x01(\x04R\x12expectedGeneration\"\xa6\x01\n" +
+	"\x18RemoteProviderCapability\x12<\n" +
+	"\bprovider\x18\x01 \x01(\v2 .gestalt.provider.v1.ProviderRefR\bprovider\x12L\n" +
+	"\tindexeddb\x18\x02 \x01(\v2..gestalt.provider.v1.RemoteIndexedDBCapabilityR\tindexeddb\"\xee\x01\n" +
+	"\x19RemoteIndexedDBCapability\x12\x1f\n" +
+	"\vrelay_token\x18\x01 \x01(\tR\n" +
+	"relayToken\x12\x1a\n" +
+	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x1a\n" +
+	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x122\n" +
+	"\x15allowed_object_stores\x18\x04 \x03(\tR\x13allowedObjectStores\x12D\n" +
+	"\x10token_expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0etokenExpiresAt\"\xa4\x03\n" +
+	"\x15PreparedRemoteSession\x12'\n" +
+	"\x0fregistration_id\x18\x01 \x01(\tR\x0eregistrationId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x03 \x01(\x04R\n" +
+	"generation\x12D\n" +
+	"\x10lease_expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x0eleaseExpiresAt\x12<\n" +
+	"\x06tunnel\x18\x05 \x01(\v2$.gestalt.provider.v1.TunnelBootstrapR\x06tunnel\x12L\n" +
+	"\x0fserver_identity\x18\x06 \x01(\v2#.gestalt.provider.v1.ServerIdentityR\x0eserverIdentity\x12Q\n" +
+	"\fcapabilities\x18\a \x03(\v2-.gestalt.provider.v1.RemoteProviderCapabilityR\fcapabilities\"\xa1\x02\n" +
+	"\x1cActivateRemoteSessionRequest\x12'\n" +
+	"\x0fregistration_id\x18\x01 \x01(\tR\x0eregistrationId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12/\n" +
+	"\x13expected_generation\x18\x03 \x01(\x04R\x12expectedGeneration\x12;\n" +
+	"\x06tunnel\x18\x04 \x01(\v2#.gestalt.provider.v1.TunnelEndpointR\x06tunnel\x12K\n" +
+	"\tproviders\x18\x05 \x03(\v2-.gestalt.provider.v1.RemoteProviderDefinitionR\tproviders\"\x87\x01\n" +
+	"\x1dHeartbeatRemoteSessionRequest\x12'\n" +
+	"\x0fregistration_id\x18\x01 \x01(\tR\x0eregistrationId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x03 \x01(\x04R\n" +
+	"generation\"\xbb\x01\n" +
+	"\x1eHeartbeatRemoteSessionResponse\x123\n" +
+	"\x06remote\x18\x01 \x01(\v2\x1b.gestalt.provider.v1.RemoteR\x06remote\x12d\n" +
+	"\x16refreshed_capabilities\x18\x02 \x03(\v2-.gestalt.provider.v1.RemoteProviderCapabilityR\x15refreshedCapabilities2\xbe\a\n" +
+	"\x10RemoteManagement\x12\xa7\x01\n" +
+	"\x14PrepareRemoteSession\x120.gestalt.provider.v1.PrepareRemoteSessionRequest\x1a*.gestalt.provider.v1.PreparedRemoteSession\"1\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/api/v2/remotes:sessions\x12\xac\x01\n" +
+	"\x15ActivateRemoteSession\x121.gestalt.provider.v1.ActivateRemoteSessionRequest\x1a\x1b.gestalt.provider.v1.Remote\"C\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02/:\x01*\"*/api/v2/remotes/{registration_id}:activate\x12\xc7\x01\n" +
+	"\x16HeartbeatRemoteSession\x122.gestalt.provider.v1.HeartbeatRemoteSessionRequest\x1a3.gestalt.provider.v1.HeartbeatRemoteSessionResponse\"D\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x020:\x01*\"+/api/v2/remotes/{registration_id}:heartbeat\x12\x7f\n" +
 	"\fCreateRemote\x12(.gestalt.provider.v1.CreateRemoteRequest\x1a\x1b.gestalt.provider.v1.Remote\"(\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x14:\x01*\"\x0f/api/v2/remotes\x12\x87\x01\n" +
 	"\vListRemotes\x12'.gestalt.provider.v1.ListRemotesRequest\x1a(.gestalt.provider.v1.ListRemotesResponse\"%\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x11\x12\x0f/api/v2/remotes\x12|\n" +
 	"\fDeleteRemote\x12(.gestalt.provider.v1.DeleteRemoteRequest\x1a\x16.google.protobuf.Empty\"*\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x16*\x14/api/v2/remotes/{id}2\x7f\n" +
@@ -959,57 +1546,84 @@ func file_v1_remote_proto_rawDescGZIP() []byte {
 	return file_v1_remote_proto_rawDescData
 }
 
-var file_v1_remote_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_v1_remote_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_v1_remote_proto_goTypes = []any{
-	(*TunnelEndpoint)(nil),            // 0: gestalt.provider.v1.TunnelEndpoint
-	(*ProviderRef)(nil),               // 1: gestalt.provider.v1.ProviderRef
-	(*RemoteProviderDefinition)(nil),  // 2: gestalt.provider.v1.RemoteProviderDefinition
-	(*RemoteProviderSummary)(nil),     // 3: gestalt.provider.v1.RemoteProviderSummary
-	(*CreateRemoteRequest)(nil),       // 4: gestalt.provider.v1.CreateRemoteRequest
-	(*DeleteRemoteRequest)(nil),       // 5: gestalt.provider.v1.DeleteRemoteRequest
-	(*ListRemotesRequest)(nil),        // 6: gestalt.provider.v1.ListRemotesRequest
-	(*RemoteReachability)(nil),        // 7: gestalt.provider.v1.RemoteReachability
-	(*Remote)(nil),                    // 8: gestalt.provider.v1.Remote
-	(*ServerIdentity)(nil),            // 9: gestalt.provider.v1.ServerIdentity
-	(*TunnelBootstrap)(nil),           // 10: gestalt.provider.v1.TunnelBootstrap
-	(*ListRemotesResponse)(nil),       // 11: gestalt.provider.v1.ListRemotesResponse
-	(*RegistrationCheckRequest)(nil),  // 12: gestalt.provider.v1.RegistrationCheckRequest
-	(*RegistrationCheckResponse)(nil), // 13: gestalt.provider.v1.RegistrationCheckResponse
-	(*structpb.Struct)(nil),           // 14: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),     // 15: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),       // 16: google.protobuf.Duration
-	(*emptypb.Empty)(nil),             // 17: google.protobuf.Empty
+	(*TunnelEndpoint)(nil),                 // 0: gestalt.provider.v1.TunnelEndpoint
+	(*ProviderRef)(nil),                    // 1: gestalt.provider.v1.ProviderRef
+	(*RemoteProviderDefinition)(nil),       // 2: gestalt.provider.v1.RemoteProviderDefinition
+	(*RemoteProviderSummary)(nil),          // 3: gestalt.provider.v1.RemoteProviderSummary
+	(*CreateRemoteRequest)(nil),            // 4: gestalt.provider.v1.CreateRemoteRequest
+	(*DeleteRemoteRequest)(nil),            // 5: gestalt.provider.v1.DeleteRemoteRequest
+	(*ListRemotesRequest)(nil),             // 6: gestalt.provider.v1.ListRemotesRequest
+	(*RemoteReachability)(nil),             // 7: gestalt.provider.v1.RemoteReachability
+	(*Remote)(nil),                         // 8: gestalt.provider.v1.Remote
+	(*ServerIdentity)(nil),                 // 9: gestalt.provider.v1.ServerIdentity
+	(*TunnelBootstrap)(nil),                // 10: gestalt.provider.v1.TunnelBootstrap
+	(*ListRemotesResponse)(nil),            // 11: gestalt.provider.v1.ListRemotesResponse
+	(*RegistrationCheckRequest)(nil),       // 12: gestalt.provider.v1.RegistrationCheckRequest
+	(*RegistrationCheckResponse)(nil),      // 13: gestalt.provider.v1.RegistrationCheckResponse
+	(*RemoteServerCapabilities)(nil),       // 14: gestalt.provider.v1.RemoteServerCapabilities
+	(*PrepareRemoteSessionRequest)(nil),    // 15: gestalt.provider.v1.PrepareRemoteSessionRequest
+	(*RemoteProviderCapability)(nil),       // 16: gestalt.provider.v1.RemoteProviderCapability
+	(*RemoteIndexedDBCapability)(nil),      // 17: gestalt.provider.v1.RemoteIndexedDBCapability
+	(*PreparedRemoteSession)(nil),          // 18: gestalt.provider.v1.PreparedRemoteSession
+	(*ActivateRemoteSessionRequest)(nil),   // 19: gestalt.provider.v1.ActivateRemoteSessionRequest
+	(*HeartbeatRemoteSessionRequest)(nil),  // 20: gestalt.provider.v1.HeartbeatRemoteSessionRequest
+	(*HeartbeatRemoteSessionResponse)(nil), // 21: gestalt.provider.v1.HeartbeatRemoteSessionResponse
+	(*structpb.Struct)(nil),                // 22: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),          // 23: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),            // 24: google.protobuf.Duration
+	(*emptypb.Empty)(nil),                  // 25: google.protobuf.Empty
 }
 var file_v1_remote_proto_depIdxs = []int32{
-	14, // 0: gestalt.provider.v1.RemoteProviderDefinition.definition:type_name -> google.protobuf.Struct
+	22, // 0: gestalt.provider.v1.RemoteProviderDefinition.definition:type_name -> google.protobuf.Struct
 	0,  // 1: gestalt.provider.v1.CreateRemoteRequest.tunnel:type_name -> gestalt.provider.v1.TunnelEndpoint
 	2,  // 2: gestalt.provider.v1.CreateRemoteRequest.providers:type_name -> gestalt.provider.v1.RemoteProviderDefinition
 	3,  // 3: gestalt.provider.v1.Remote.providers:type_name -> gestalt.provider.v1.RemoteProviderSummary
 	7,  // 4: gestalt.provider.v1.Remote.reachability:type_name -> gestalt.provider.v1.RemoteReachability
-	15, // 5: gestalt.provider.v1.Remote.created_at:type_name -> google.protobuf.Timestamp
-	15, // 6: gestalt.provider.v1.Remote.updated_at:type_name -> google.protobuf.Timestamp
-	15, // 7: gestalt.provider.v1.Remote.last_checked_at:type_name -> google.protobuf.Timestamp
-	15, // 8: gestalt.provider.v1.Remote.last_successful_heartbeat_at:type_name -> google.protobuf.Timestamp
-	15, // 9: gestalt.provider.v1.Remote.lease_expires_at:type_name -> google.protobuf.Timestamp
-	16, // 10: gestalt.provider.v1.TunnelBootstrap.lease_duration:type_name -> google.protobuf.Duration
+	23, // 5: gestalt.provider.v1.Remote.created_at:type_name -> google.protobuf.Timestamp
+	23, // 6: gestalt.provider.v1.Remote.updated_at:type_name -> google.protobuf.Timestamp
+	23, // 7: gestalt.provider.v1.Remote.last_checked_at:type_name -> google.protobuf.Timestamp
+	23, // 8: gestalt.provider.v1.Remote.last_successful_heartbeat_at:type_name -> google.protobuf.Timestamp
+	23, // 9: gestalt.provider.v1.Remote.lease_expires_at:type_name -> google.protobuf.Timestamp
+	24, // 10: gestalt.provider.v1.TunnelBootstrap.lease_duration:type_name -> google.protobuf.Duration
 	8,  // 11: gestalt.provider.v1.ListRemotesResponse.remotes:type_name -> gestalt.provider.v1.Remote
 	9,  // 12: gestalt.provider.v1.ListRemotesResponse.server_identity:type_name -> gestalt.provider.v1.ServerIdentity
 	10, // 13: gestalt.provider.v1.ListRemotesResponse.tunnel:type_name -> gestalt.provider.v1.TunnelBootstrap
-	16, // 14: gestalt.provider.v1.ListRemotesResponse.lease_duration:type_name -> google.protobuf.Duration
-	1,  // 15: gestalt.provider.v1.RegistrationCheckRequest.providers:type_name -> gestalt.provider.v1.ProviderRef
-	4,  // 16: gestalt.provider.v1.RemoteManagement.CreateRemote:input_type -> gestalt.provider.v1.CreateRemoteRequest
-	6,  // 17: gestalt.provider.v1.RemoteManagement.ListRemotes:input_type -> gestalt.provider.v1.ListRemotesRequest
-	5,  // 18: gestalt.provider.v1.RemoteManagement.DeleteRemote:input_type -> gestalt.provider.v1.DeleteRemoteRequest
-	12, // 19: gestalt.provider.v1.RegistrationLifecycle.Check:input_type -> gestalt.provider.v1.RegistrationCheckRequest
-	8,  // 20: gestalt.provider.v1.RemoteManagement.CreateRemote:output_type -> gestalt.provider.v1.Remote
-	11, // 21: gestalt.provider.v1.RemoteManagement.ListRemotes:output_type -> gestalt.provider.v1.ListRemotesResponse
-	17, // 22: gestalt.provider.v1.RemoteManagement.DeleteRemote:output_type -> google.protobuf.Empty
-	13, // 23: gestalt.provider.v1.RegistrationLifecycle.Check:output_type -> gestalt.provider.v1.RegistrationCheckResponse
-	20, // [20:24] is the sub-list for method output_type
-	16, // [16:20] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	24, // 14: gestalt.provider.v1.ListRemotesResponse.lease_duration:type_name -> google.protobuf.Duration
+	14, // 15: gestalt.provider.v1.ListRemotesResponse.capabilities:type_name -> gestalt.provider.v1.RemoteServerCapabilities
+	1,  // 16: gestalt.provider.v1.RegistrationCheckRequest.providers:type_name -> gestalt.provider.v1.ProviderRef
+	2,  // 17: gestalt.provider.v1.PrepareRemoteSessionRequest.providers:type_name -> gestalt.provider.v1.RemoteProviderDefinition
+	1,  // 18: gestalt.provider.v1.RemoteProviderCapability.provider:type_name -> gestalt.provider.v1.ProviderRef
+	17, // 19: gestalt.provider.v1.RemoteProviderCapability.indexeddb:type_name -> gestalt.provider.v1.RemoteIndexedDBCapability
+	23, // 20: gestalt.provider.v1.RemoteIndexedDBCapability.token_expires_at:type_name -> google.protobuf.Timestamp
+	23, // 21: gestalt.provider.v1.PreparedRemoteSession.lease_expires_at:type_name -> google.protobuf.Timestamp
+	10, // 22: gestalt.provider.v1.PreparedRemoteSession.tunnel:type_name -> gestalt.provider.v1.TunnelBootstrap
+	9,  // 23: gestalt.provider.v1.PreparedRemoteSession.server_identity:type_name -> gestalt.provider.v1.ServerIdentity
+	16, // 24: gestalt.provider.v1.PreparedRemoteSession.capabilities:type_name -> gestalt.provider.v1.RemoteProviderCapability
+	0,  // 25: gestalt.provider.v1.ActivateRemoteSessionRequest.tunnel:type_name -> gestalt.provider.v1.TunnelEndpoint
+	2,  // 26: gestalt.provider.v1.ActivateRemoteSessionRequest.providers:type_name -> gestalt.provider.v1.RemoteProviderDefinition
+	8,  // 27: gestalt.provider.v1.HeartbeatRemoteSessionResponse.remote:type_name -> gestalt.provider.v1.Remote
+	16, // 28: gestalt.provider.v1.HeartbeatRemoteSessionResponse.refreshed_capabilities:type_name -> gestalt.provider.v1.RemoteProviderCapability
+	15, // 29: gestalt.provider.v1.RemoteManagement.PrepareRemoteSession:input_type -> gestalt.provider.v1.PrepareRemoteSessionRequest
+	19, // 30: gestalt.provider.v1.RemoteManagement.ActivateRemoteSession:input_type -> gestalt.provider.v1.ActivateRemoteSessionRequest
+	20, // 31: gestalt.provider.v1.RemoteManagement.HeartbeatRemoteSession:input_type -> gestalt.provider.v1.HeartbeatRemoteSessionRequest
+	4,  // 32: gestalt.provider.v1.RemoteManagement.CreateRemote:input_type -> gestalt.provider.v1.CreateRemoteRequest
+	6,  // 33: gestalt.provider.v1.RemoteManagement.ListRemotes:input_type -> gestalt.provider.v1.ListRemotesRequest
+	5,  // 34: gestalt.provider.v1.RemoteManagement.DeleteRemote:input_type -> gestalt.provider.v1.DeleteRemoteRequest
+	12, // 35: gestalt.provider.v1.RegistrationLifecycle.Check:input_type -> gestalt.provider.v1.RegistrationCheckRequest
+	18, // 36: gestalt.provider.v1.RemoteManagement.PrepareRemoteSession:output_type -> gestalt.provider.v1.PreparedRemoteSession
+	8,  // 37: gestalt.provider.v1.RemoteManagement.ActivateRemoteSession:output_type -> gestalt.provider.v1.Remote
+	21, // 38: gestalt.provider.v1.RemoteManagement.HeartbeatRemoteSession:output_type -> gestalt.provider.v1.HeartbeatRemoteSessionResponse
+	8,  // 39: gestalt.provider.v1.RemoteManagement.CreateRemote:output_type -> gestalt.provider.v1.Remote
+	11, // 40: gestalt.provider.v1.RemoteManagement.ListRemotes:output_type -> gestalt.provider.v1.ListRemotesResponse
+	25, // 41: gestalt.provider.v1.RemoteManagement.DeleteRemote:output_type -> google.protobuf.Empty
+	13, // 42: gestalt.provider.v1.RegistrationLifecycle.Check:output_type -> gestalt.provider.v1.RegistrationCheckResponse
+	36, // [36:43] is the sub-list for method output_type
+	29, // [29:36] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_v1_remote_proto_init() }
@@ -1023,7 +1637,7 @@ func file_v1_remote_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_remote_proto_rawDesc), len(file_v1_remote_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

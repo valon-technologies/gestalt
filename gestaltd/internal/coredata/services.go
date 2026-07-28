@@ -18,6 +18,7 @@ type Services struct {
 	AppRollouts                 *AppRolloutService
 	AppInstanceMaterializations *AppInstanceMaterializationService
 	RemoteRegistrations         *RemoteRegistrationService
+	RemoteIndexedDBNamespaces   *RemoteIndexedDBNamespaceService
 	DB                          indexeddb.IndexedDB
 }
 
@@ -71,6 +72,12 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreRemoteProviders, RemoteProvidersSchema); err != nil {
 			return nil, fmt.Errorf("create remote_providers store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreRemoteIndexedDBNamespaces, RemoteIndexedDBNamespacesSchema); err != nil {
+			return nil, fmt.Errorf("create remote_indexeddb_namespaces store: %w", err)
+		}
+		if _, err := ds.CreateObjectStore(ctx, StoreRemoteIndexedDBNamespaceStores, RemoteIndexedDBNamespaceStoresSchema); err != nil {
+			return nil, fmt.Errorf("create remote_indexeddb_namespace_stores store: %w", err)
+		}
 	}
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
@@ -80,6 +87,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	appRollouts := NewAppRolloutService(ds)
 	appInstanceMaterializations := NewAppInstanceMaterializationService(ds)
 	remoteRegistrations := NewRemoteRegistrationService(ds)
+	remoteIndexedDBNamespaces := NewRemoteIndexedDBNamespaceService(ds)
 	return &Services{
 		ExternalCredentials:         nil,
 		Users:                       users,
@@ -90,6 +98,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		AppRollouts:                 appRollouts,
 		AppInstanceMaterializations: appInstanceMaterializations,
 		RemoteRegistrations:         remoteRegistrations,
+		RemoteIndexedDBNamespaces:   remoteIndexedDBNamespaces,
 		DB:                          ds,
 	}, nil
 }

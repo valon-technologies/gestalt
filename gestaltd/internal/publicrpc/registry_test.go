@@ -103,6 +103,9 @@ DELETE /api/v2/identity/grants/{grant_id} /gestalt.provider.v1.Identity/RevokeGr
 POST /api/v2/remotes /gestalt.provider.v1.RemoteManagement/CreateRemote
 GET /api/v2/remotes /gestalt.provider.v1.RemoteManagement/ListRemotes
 DELETE /api/v2/remotes/{id} /gestalt.provider.v1.RemoteManagement/DeleteRemote
+POST /api/v2/remotes:sessions /gestalt.provider.v1.RemoteManagement/PrepareRemoteSession
+POST /api/v2/remotes/{registration_id}:activate /gestalt.provider.v1.RemoteManagement/ActivateRemoteSession
+POST /api/v2/remotes/{registration_id}:heartbeat /gestalt.provider.v1.RemoteManagement/HeartbeatRemoteSession
 `), "\n")
 	slices.Sort(got)
 	slices.Sort(want)

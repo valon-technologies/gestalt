@@ -5,17 +5,19 @@ import (
 )
 
 const (
-	StoreUsers                         = "users"
-	StoreManagedSubjects               = "managed_subjects"
-	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
-	StoreAppSHAs                       = "app_shas"
-	StoreAppVersionChangeRequests      = "app_version_change_requests"
-	StoreAppVersionInstallLocks        = "app_version_install_locks"
-	StoreGestaltdSourceVersionState    = "gestaltd_source_version_state"
-	StoreAppRollouts                   = "app_rollouts"
-	StoreAppInstanceMaterializations   = "app_instance_materializations"
-	StoreRemoteRegistrations           = "remote_registrations"
-	StoreRemoteProviders               = "remote_providers"
+	StoreUsers                          = "users"
+	StoreManagedSubjects                = "managed_subjects"
+	StoreAuthorizationDynamicFragments  = "authz_dynamic_fragments"
+	StoreAppSHAs                        = "app_shas"
+	StoreAppVersionChangeRequests       = "app_version_change_requests"
+	StoreAppVersionInstallLocks         = "app_version_install_locks"
+	StoreGestaltdSourceVersionState     = "gestaltd_source_version_state"
+	StoreAppRollouts                    = "app_rollouts"
+	StoreAppInstanceMaterializations    = "app_instance_materializations"
+	StoreRemoteRegistrations            = "remote_registrations"
+	StoreRemoteProviders                = "remote_providers"
+	StoreRemoteIndexedDBNamespaces      = "remote_indexeddb_namespaces"
+	StoreRemoteIndexedDBNamespaceStores = "remote_indexeddb_namespace_stores"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -173,5 +175,48 @@ var AuthorizationDynamicFragmentsSchema = idb.ObjectStoreOptions{
 		{Name: "audit_json", Type: idb.TypeString},
 		{Name: "created_at", Type: idb.TypeTime},
 		{Name: "updated_at", Type: idb.TypeTime},
+	},
+}
+
+var RemoteIndexedDBNamespacesSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_registration", KeyPath: []string{"registration_id"}},
+		{Name: "by_session_app", KeyPath: []string{"session_id", "app_name"}, Unique: true},
+		{Name: "by_cleanup_after", KeyPath: []string{"state", "cleanup_after"}},
+		{Name: "by_lease_expires_at", KeyPath: []string{"lease_expires_at"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "registration_id", Type: idb.TypeString, NotNull: true},
+		{Name: "generation", Type: idb.TypeInt, NotNull: true},
+		{Name: "session_id", Type: idb.TypeString, NotNull: true},
+		{Name: "owner_subject_id", Type: idb.TypeString, NotNull: true},
+		{Name: "app_name", Type: idb.TypeString, NotNull: true},
+		{Name: "provider_name", Type: idb.TypeString, NotNull: true},
+		{Name: "database_name", Type: idb.TypeString, NotNull: true},
+		{Name: "state", Type: idb.TypeString, NotNull: true},
+		{Name: "lease_expires_at", Type: idb.TypeTime},
+		{Name: "cleanup_after", Type: idb.TypeTime},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "cleanup_holder", Type: idb.TypeString},
+		{Name: "cleanup_lease_expires_at", Type: idb.TypeTime},
+		{Name: "cleanup_attempt_count", Type: idb.TypeInt},
+		{Name: "last_cleanup_error", Type: idb.TypeString},
+	},
+}
+
+var RemoteIndexedDBNamespaceStoresSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_namespace", KeyPath: []string{"namespace_id"}},
+		{Name: "by_namespace_logical", KeyPath: []string{"namespace_id", "logical_name"}, Unique: true},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "namespace_id", Type: idb.TypeString, NotNull: true},
+		{Name: "logical_name", Type: idb.TypeString, NotNull: true},
+		{Name: "physical_name", Type: idb.TypeString, NotNull: true},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "deleted_at", Type: idb.TypeTime},
 	},
 }

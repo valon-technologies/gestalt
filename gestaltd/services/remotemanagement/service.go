@@ -133,6 +133,7 @@ func (s *Service) ListRemotes(ctx context.Context, _ *proto.ListRemotesRequest) 
 				ServerIdentity: s.config.ServerIdentity,
 				Tunnel:         s.config.Tunnel,
 				LeaseDuration:  durationpb.New(s.config.LeaseDuration),
+				Capabilities:   remoteServerCapabilities(),
 			}, nil
 		}
 		return nil, mapStoreError(err)
@@ -142,6 +143,7 @@ func (s *Service) ListRemotes(ctx context.Context, _ *proto.ListRemotesRequest) 
 		ServerIdentity: s.config.ServerIdentity,
 		Tunnel:         s.config.Tunnel,
 		LeaseDuration:  durationpb.New(s.config.LeaseDuration),
+		Capabilities:   remoteServerCapabilities(),
 	}, nil
 }
 
@@ -334,4 +336,29 @@ func (s *Service) AdvanceClock(d time.Duration) {
 	}
 	base := s.store.Now()
 	s.store.SetClock(func() time.Time { return base.Add(d) })
+}
+
+func remoteServerCapabilities() *proto.RemoteServerCapabilities {
+	// Phase A: session-scoped IndexedDB infrastructure exists but is disabled
+	// until local clients and the activation data plane are ready.
+	return &proto.RemoteServerCapabilities{
+		PreparedRemoteSessions: false,
+		SessionScopedIndexeddb: false,
+		RemoteSessionHeartbeat: false,
+	}
+}
+
+// PrepareRemoteSession, ActivateRemoteSession, and HeartbeatRemoteSession are
+// not enabled in Phase A. They will be implemented once the local bootstrap and
+// tunnel activation data plane are wired.
+func (s *Service) PrepareRemoteSession(ctx context.Context, req *proto.PrepareRemoteSessionRequest) (*proto.PreparedRemoteSession, error) {
+	return nil, status.Error(codes.Unimplemented, "session-scoped remote preparation is not enabled")
+}
+
+func (s *Service) ActivateRemoteSession(ctx context.Context, req *proto.ActivateRemoteSessionRequest) (*proto.Remote, error) {
+	return nil, status.Error(codes.Unimplemented, "session-scoped remote activation is not enabled")
+}
+
+func (s *Service) HeartbeatRemoteSession(ctx context.Context, req *proto.HeartbeatRemoteSessionRequest) (*proto.HeartbeatRemoteSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "session-scoped remote heartbeat is not enabled")
 }

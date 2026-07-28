@@ -14,6 +14,32 @@ import "google/protobuf/struct.proto";
 // set to this upstream; ListRemotes and DeleteRemote read and remove it. REST
 // and gRPC dispatch through one implementation.
 service RemoteManagement {
+  rpc PrepareRemoteSession(PrepareRemoteSessionRequest)
+      returns (PreparedRemoteSession) {
+    option (google.api.http) = {
+      post: "/api/v2/remotes:sessions"
+      body: "*"
+    };
+    option (google.api.method_visibility) = { restriction: "PUBLIC" };
+  }
+
+  rpc ActivateRemoteSession(ActivateRemoteSessionRequest) returns (Remote) {
+    option (google.api.http) = {
+      post: "/api/v2/remotes/{registration_id}:activate"
+      body: "*"
+    };
+    option (google.api.method_visibility) = { restriction: "PUBLIC" };
+  }
+
+  rpc HeartbeatRemoteSession(HeartbeatRemoteSessionRequest)
+      returns (HeartbeatRemoteSessionResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/remotes/{registration_id}:heartbeat"
+      body: "*"
+    };
+    option (google.api.method_visibility) = { restriction: "PUBLIC" };
+  }
+
   rpc CreateRemote(CreateRemoteRequest) returns (Remote) {
     option (google.api.http) = {
       post: "/api/v2/remotes"
@@ -112,6 +138,7 @@ message ListRemotesResponse {
   ServerIdentity server_identity = 2;
   TunnelBootstrap tunnel = 3;
   google.protobuf.Duration lease_duration = 4;
+  RemoteServerCapabilities capabilities = 5;
 }
 
 message RegistrationCheckRequest {
@@ -123,4 +150,58 @@ message RegistrationCheckRequest {
 message RegistrationCheckResponse {
   bool ready = 1;
   string message = 2;
+}
+
+message RemoteServerCapabilities {
+  bool prepared_remote_sessions = 1;
+  bool session_scoped_indexeddb = 2;
+  bool remote_session_heartbeat = 3;
+}
+
+message PrepareRemoteSessionRequest {
+  string session_id = 1;
+  repeated RemoteProviderDefinition providers = 2;
+  uint64 expected_generation = 3;
+}
+
+message RemoteProviderCapability {
+  ProviderRef provider = 1;
+  RemoteIndexedDBCapability indexeddb = 2;
+}
+
+message RemoteIndexedDBCapability {
+  string relay_token = 1;
+  string provider = 2;
+  string database = 3;
+  repeated string allowed_object_stores = 4;
+  google.protobuf.Timestamp token_expires_at = 5;
+}
+
+message PreparedRemoteSession {
+  string registration_id = 1;
+  string session_id = 2;
+  uint64 generation = 3;
+  google.protobuf.Timestamp lease_expires_at = 4;
+  TunnelBootstrap tunnel = 5;
+  ServerIdentity server_identity = 6;
+  repeated RemoteProviderCapability capabilities = 7;
+}
+
+message ActivateRemoteSessionRequest {
+  string registration_id = 1;
+  string session_id = 2;
+  uint64 expected_generation = 3;
+  TunnelEndpoint tunnel = 4;
+  repeated RemoteProviderDefinition providers = 5;
+}
+
+message HeartbeatRemoteSessionRequest {
+  string registration_id = 1;
+  string session_id = 2;
+  uint64 generation = 3;
+}
+
+message HeartbeatRemoteSessionResponse {
+  Remote remote = 1;
+  repeated RemoteProviderCapability refreshed_capabilities = 2;
 }

@@ -20,9 +20,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RemoteManagement_CreateRemote_FullMethodName = "/gestalt.provider.v1.RemoteManagement/CreateRemote"
-	RemoteManagement_ListRemotes_FullMethodName  = "/gestalt.provider.v1.RemoteManagement/ListRemotes"
-	RemoteManagement_DeleteRemote_FullMethodName = "/gestalt.provider.v1.RemoteManagement/DeleteRemote"
+	RemoteManagement_PrepareRemoteSession_FullMethodName   = "/gestalt.provider.v1.RemoteManagement/PrepareRemoteSession"
+	RemoteManagement_ActivateRemoteSession_FullMethodName  = "/gestalt.provider.v1.RemoteManagement/ActivateRemoteSession"
+	RemoteManagement_HeartbeatRemoteSession_FullMethodName = "/gestalt.provider.v1.RemoteManagement/HeartbeatRemoteSession"
+	RemoteManagement_CreateRemote_FullMethodName           = "/gestalt.provider.v1.RemoteManagement/CreateRemote"
+	RemoteManagement_ListRemotes_FullMethodName            = "/gestalt.provider.v1.RemoteManagement/ListRemotes"
+	RemoteManagement_DeleteRemote_FullMethodName           = "/gestalt.provider.v1.RemoteManagement/DeleteRemote"
 )
 
 // RemoteManagementClient is the client API for RemoteManagement service.
@@ -34,6 +37,9 @@ const (
 // set to this upstream; ListRemotes and DeleteRemote read and remove it. REST
 // and gRPC dispatch through one implementation.
 type RemoteManagementClient interface {
+	PrepareRemoteSession(ctx context.Context, in *PrepareRemoteSessionRequest, opts ...grpc.CallOption) (*PreparedRemoteSession, error)
+	ActivateRemoteSession(ctx context.Context, in *ActivateRemoteSessionRequest, opts ...grpc.CallOption) (*Remote, error)
+	HeartbeatRemoteSession(ctx context.Context, in *HeartbeatRemoteSessionRequest, opts ...grpc.CallOption) (*HeartbeatRemoteSessionResponse, error)
 	CreateRemote(ctx context.Context, in *CreateRemoteRequest, opts ...grpc.CallOption) (*Remote, error)
 	ListRemotes(ctx context.Context, in *ListRemotesRequest, opts ...grpc.CallOption) (*ListRemotesResponse, error)
 	DeleteRemote(ctx context.Context, in *DeleteRemoteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -45,6 +51,36 @@ type remoteManagementClient struct {
 
 func NewRemoteManagementClient(cc grpc.ClientConnInterface) RemoteManagementClient {
 	return &remoteManagementClient{cc}
+}
+
+func (c *remoteManagementClient) PrepareRemoteSession(ctx context.Context, in *PrepareRemoteSessionRequest, opts ...grpc.CallOption) (*PreparedRemoteSession, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PreparedRemoteSession)
+	err := c.cc.Invoke(ctx, RemoteManagement_PrepareRemoteSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *remoteManagementClient) ActivateRemoteSession(ctx context.Context, in *ActivateRemoteSessionRequest, opts ...grpc.CallOption) (*Remote, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Remote)
+	err := c.cc.Invoke(ctx, RemoteManagement_ActivateRemoteSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *remoteManagementClient) HeartbeatRemoteSession(ctx context.Context, in *HeartbeatRemoteSessionRequest, opts ...grpc.CallOption) (*HeartbeatRemoteSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HeartbeatRemoteSessionResponse)
+	err := c.cc.Invoke(ctx, RemoteManagement_HeartbeatRemoteSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *remoteManagementClient) CreateRemote(ctx context.Context, in *CreateRemoteRequest, opts ...grpc.CallOption) (*Remote, error) {
@@ -86,6 +122,9 @@ func (c *remoteManagementClient) DeleteRemote(ctx context.Context, in *DeleteRem
 // set to this upstream; ListRemotes and DeleteRemote read and remove it. REST
 // and gRPC dispatch through one implementation.
 type RemoteManagementServer interface {
+	PrepareRemoteSession(context.Context, *PrepareRemoteSessionRequest) (*PreparedRemoteSession, error)
+	ActivateRemoteSession(context.Context, *ActivateRemoteSessionRequest) (*Remote, error)
+	HeartbeatRemoteSession(context.Context, *HeartbeatRemoteSessionRequest) (*HeartbeatRemoteSessionResponse, error)
 	CreateRemote(context.Context, *CreateRemoteRequest) (*Remote, error)
 	ListRemotes(context.Context, *ListRemotesRequest) (*ListRemotesResponse, error)
 	DeleteRemote(context.Context, *DeleteRemoteRequest) (*emptypb.Empty, error)
@@ -99,6 +138,15 @@ type RemoteManagementServer interface {
 // pointer dereference when methods are called.
 type UnimplementedRemoteManagementServer struct{}
 
+func (UnimplementedRemoteManagementServer) PrepareRemoteSession(context.Context, *PrepareRemoteSessionRequest) (*PreparedRemoteSession, error) {
+	return nil, status.Error(codes.Unimplemented, "method PrepareRemoteSession not implemented")
+}
+func (UnimplementedRemoteManagementServer) ActivateRemoteSession(context.Context, *ActivateRemoteSessionRequest) (*Remote, error) {
+	return nil, status.Error(codes.Unimplemented, "method ActivateRemoteSession not implemented")
+}
+func (UnimplementedRemoteManagementServer) HeartbeatRemoteSession(context.Context, *HeartbeatRemoteSessionRequest) (*HeartbeatRemoteSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method HeartbeatRemoteSession not implemented")
+}
 func (UnimplementedRemoteManagementServer) CreateRemote(context.Context, *CreateRemoteRequest) (*Remote, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateRemote not implemented")
 }
@@ -127,6 +175,60 @@ func RegisterRemoteManagementServer(s grpc.ServiceRegistrar, srv RemoteManagemen
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&RemoteManagement_ServiceDesc, srv)
+}
+
+func _RemoteManagement_PrepareRemoteSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareRemoteSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RemoteManagementServer).PrepareRemoteSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RemoteManagement_PrepareRemoteSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RemoteManagementServer).PrepareRemoteSession(ctx, req.(*PrepareRemoteSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RemoteManagement_ActivateRemoteSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ActivateRemoteSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RemoteManagementServer).ActivateRemoteSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RemoteManagement_ActivateRemoteSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RemoteManagementServer).ActivateRemoteSession(ctx, req.(*ActivateRemoteSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RemoteManagement_HeartbeatRemoteSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeartbeatRemoteSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RemoteManagementServer).HeartbeatRemoteSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RemoteManagement_HeartbeatRemoteSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RemoteManagementServer).HeartbeatRemoteSession(ctx, req.(*HeartbeatRemoteSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _RemoteManagement_CreateRemote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -190,6 +292,18 @@ var RemoteManagement_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "gestalt.provider.v1.RemoteManagement",
 	HandlerType: (*RemoteManagementServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "PrepareRemoteSession",
+			Handler:    _RemoteManagement_PrepareRemoteSession_Handler,
+		},
+		{
+			MethodName: "ActivateRemoteSession",
+			Handler:    _RemoteManagement_ActivateRemoteSession_Handler,
+		},
+		{
+			MethodName: "HeartbeatRemoteSession",
+			Handler:    _RemoteManagement_HeartbeatRemoteSession_Handler,
+		},
 		{
 			MethodName: "CreateRemote",
 			Handler:    _RemoteManagement_CreateRemote_Handler,

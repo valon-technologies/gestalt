@@ -168,4 +168,3 @@ func (s *routingIndexedDBServer) IndexDelete(ctx context.Context, req *proto.Ind
 	}
 	return server.IndexDelete(ctx, req)
 }
-

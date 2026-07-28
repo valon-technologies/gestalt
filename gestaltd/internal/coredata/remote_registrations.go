@@ -22,10 +22,20 @@ var (
 
 const remoteProviderIDSeparator = "\x1f"
 
+type RemoteRegistrationState string
+
+const (
+	RemoteRegistrationPreparing RemoteRegistrationState = "preparing"
+	RemoteRegistrationActive    RemoteRegistrationState = "active"
+	RemoteRegistrationDeleting  RemoteRegistrationState = "deleting"
+)
+
 type RemoteRegistration struct {
 	ID                        string
 	OwnerSubjectID            string
 	Generation                uint64
+	SessionID                 string
+	State                     RemoteRegistrationState
 	TunnelHost                string
 	TunnelCertificate         []byte
 	ServerSPKISHA256          string
@@ -560,10 +570,19 @@ func normalizedRemoteTime(value time.Time) time.Time {
 	return value.UTC().Truncate(time.Millisecond)
 }
 
-// registrationActive reports whether a registration's lease is still alive; reads and
-// writes share it so an expired lease resolves as unregistered uniformly.
+// registrationActive reports whether a registration's lease is still alive and
+// its state allows routing; reads and writes share it so an expired or
+// non-active registration resolves as unregistered uniformly.
 func registrationActive(reg *RemoteRegistration, now time.Time) bool {
-	return reg != nil && reg.LeaseExpiresAt.After(now)
+	if reg == nil || !reg.LeaseExpiresAt.After(now) {
+		return false
+	}
+	// Legacy registrations have an empty state and are treated as active.
+	state := reg.State
+	if state == "" {
+		state = RemoteRegistrationActive
+	}
+	return state == RemoteRegistrationActive
 }
 
 var (
@@ -586,10 +605,16 @@ func sanitizeRemoteRegistrationError(msg string) string {
 }
 
 func remoteRegistrationRecord(reg *RemoteRegistration) idb.Record {
+	state := reg.State
+	if state == "" {
+		state = RemoteRegistrationActive
+	}
 	rec := idb.Record{
 		"id":                 reg.ID,
 		"owner_subject_id":   reg.OwnerSubjectID,
 		"generation":         reg.Generation,
+		"session_id":         reg.SessionID,
+		"state":              string(state),
 		"tunnel_host":        reg.TunnelHost,
 		"tunnel_certificate": append([]byte(nil), reg.TunnelCertificate...),
 		"server_spki_sha256": reg.ServerSPKISHA256,
@@ -622,10 +647,16 @@ func remoteProviderRecord(kind, name, registrationID string, generation uint64, 
 }
 
 func recordToRemoteRegistration(rec idb.Record) *RemoteRegistration {
+	state := RemoteRegistrationState(recString(rec, "state"))
+	if state == "" {
+		state = RemoteRegistrationActive
+	}
 	return &RemoteRegistration{
 		ID:                        recString(rec, "id"),
 		OwnerSubjectID:            recString(rec, "owner_subject_id"),
 		Generation:                recUint64(rec, "generation"),
+		SessionID:                 recString(rec, "session_id"),
+		State:                     state,
 		TunnelHost:                recString(rec, "tunnel_host"),
 		TunnelCertificate:         recBytes(rec, "tunnel_certificate"),
 		ServerSPKISHA256:          recString(rec, "server_spki_sha256"),

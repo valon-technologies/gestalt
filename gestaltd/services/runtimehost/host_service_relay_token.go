@@ -18,6 +18,10 @@ const (
 	maxHostServiceRelayTokenTTL     = 30 * 24 * time.Hour
 	// DefaultInvocationCapabilityTTL scopes short-lived invocation capabilities.
 	DefaultInvocationCapabilityTTL = 5 * time.Minute
+
+	// indexedDBServiceMethodPrefix is the gRPC service path for the host-service
+	// IndexedDB service. Namespace claims are only valid for this service.
+	indexedDBServiceMethodPrefix = "/gestalt.provider.v1.IndexedDB"
 )
 
 // PrincipalClaims carries verified caller identity inside a host-service capability.
@@ -27,6 +31,20 @@ type PrincipalClaims struct {
 	Scopes    []string
 	ClientID  string
 	Audience  []string
+}
+
+// IndexedDBNamespaceClaims carries the upstream-created namespace authority for
+// a scoped remote-development IndexedDB capability. SessionID and AppName are
+// copied from the enclosing token envelope so the namespace resolver can verify
+// the live session and app binding without trusting additional context.
+type IndexedDBNamespaceClaims struct {
+	NamespaceID    string `json:"namespace_id"`
+	RegistrationID string `json:"registration_id"`
+	Generation     uint64 `json:"generation"`
+	ProviderName   string `json:"provider"`
+	DatabaseName   string `json:"database"`
+	SessionID      string `json:"session_id,omitempty"`
+	AppName        string `json:"app_name,omitempty"`
 }
 
 type HostServiceRelayTokenManager struct {
@@ -46,6 +64,8 @@ type HostServiceRelayTokenRequest struct {
 
 	Caller *PrincipalClaims
 
+	IndexedDBNamespace *IndexedDBNamespaceClaims
+
 	TTL time.Duration
 }
 
@@ -55,15 +75,18 @@ type HostServiceRelayTarget struct {
 	Service      string
 	MethodPrefix string
 	Caller       *PrincipalClaims
+
+	IndexedDBNamespace *IndexedDBNamespaceClaims
 }
 
 type hostServiceRelayTokenClaims struct {
 	jwt.RegisteredClaims
-	AppName      string           `json:"app,omitempty"`
-	SessionID    string           `json:"session_id,omitempty"`
-	Service      string           `json:"service,omitempty"`
-	MethodPrefix string           `json:"method_prefix,omitempty"`
-	Caller       *PrincipalClaims `json:"caller,omitempty"`
+	AppName            string                    `json:"app,omitempty"`
+	SessionID          string                    `json:"session_id,omitempty"`
+	Service            string                    `json:"service,omitempty"`
+	MethodPrefix       string                    `json:"method_prefix,omitempty"`
+	Caller             *PrincipalClaims          `json:"caller,omitempty"`
+	IndexedDBNamespace *IndexedDBNamespaceClaims `json:"indexeddb_namespace,omitempty"`
 }
 
 func NewHostServiceRelayTokenManager(secret []byte) (*HostServiceRelayTokenManager, error) {
@@ -113,6 +136,15 @@ func (m *HostServiceRelayTokenManager) MintToken(req HostServiceRelayTokenReques
 		}
 	}
 
+	indexedDBNamespace := cloneIndexedDBNamespaceClaims(req.IndexedDBNamespace)
+	if err := validateIndexedDBNamespaceClaims(req.AppName, req.SessionID, service, methodPrefix, indexedDBNamespace); err != nil {
+		return "", fmt.Errorf("host service relay token: %w", err)
+	}
+	if indexedDBNamespace != nil {
+		indexedDBNamespace.SessionID = strings.TrimSpace(req.SessionID)
+		indexedDBNamespace.AppName = strings.TrimSpace(req.AppName)
+	}
+
 	return m.signClaims(&hostServiceRelayTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.NewString(),
@@ -123,11 +155,12 @@ func (m *HostServiceRelayTokenManager) MintToken(req HostServiceRelayTokenReques
 			NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
-		AppName:      strings.TrimSpace(req.AppName),
-		SessionID:    strings.TrimSpace(req.SessionID),
-		Service:      service,
-		MethodPrefix: methodPrefix,
-		Caller:       caller,
+		AppName:            strings.TrimSpace(req.AppName),
+		SessionID:          strings.TrimSpace(req.SessionID),
+		Service:            service,
+		MethodPrefix:       methodPrefix,
+		Caller:             caller,
+		IndexedDBNamespace: indexedDBNamespace,
 	})
 }
 
@@ -144,11 +177,12 @@ func (m *HostServiceRelayTokenManager) ResolveToken(token string) (HostServiceRe
 		return HostServiceRelayTarget{}, fmt.Errorf("host service relay token is invalid or expired")
 	}
 	return HostServiceRelayTarget{
-		AppName:      strings.TrimSpace(claims.AppName),
-		SessionID:    strings.TrimSpace(claims.SessionID),
-		Service:      service,
-		MethodPrefix: methodPrefix,
-		Caller:       claims.Caller,
+		AppName:            strings.TrimSpace(claims.AppName),
+		SessionID:          strings.TrimSpace(claims.SessionID),
+		Service:            service,
+		MethodPrefix:       methodPrefix,
+		Caller:             claims.Caller,
+		IndexedDBNamespace: cloneIndexedDBNamespaceClaims(claims.IndexedDBNamespace),
 	}, nil
 }
 
@@ -205,4 +239,45 @@ func normalizeHostServiceRelayTarget(service, methodPrefix string) (string, stri
 		methodPrefix = "/" + methodPrefix
 	}
 	return service, methodPrefix, nil
+}
+
+func validateIndexedDBNamespaceClaims(appName, sessionID, service, methodPrefix string, ns *IndexedDBNamespaceClaims) error {
+	if ns == nil {
+		return nil
+	}
+	if strings.TrimSpace(appName) == "" || strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("indexeddb namespace claim requires app and session")
+	}
+	if service != "indexeddb" {
+		return fmt.Errorf("indexeddb namespace claim requires service indexeddb")
+	}
+	if methodPrefix == "/" {
+		return fmt.Errorf("indexeddb namespace claim requires a method-scoped prefix")
+	}
+	if methodPrefix != indexedDBServiceMethodPrefix && !strings.HasPrefix(methodPrefix, indexedDBServiceMethodPrefix+"/") {
+		return fmt.Errorf("indexeddb namespace claim requires an indexeddb method prefix")
+	}
+	ns.NamespaceID = strings.TrimSpace(ns.NamespaceID)
+	ns.RegistrationID = strings.TrimSpace(ns.RegistrationID)
+	ns.ProviderName = strings.TrimSpace(ns.ProviderName)
+	ns.DatabaseName = strings.TrimSpace(ns.DatabaseName)
+	if ns.NamespaceID == "" || ns.RegistrationID == "" || ns.ProviderName == "" || ns.DatabaseName == "" || ns.Generation == 0 {
+		return fmt.Errorf("indexeddb namespace claim is missing required fields")
+	}
+	return nil
+}
+
+func cloneIndexedDBNamespaceClaims(ns *IndexedDBNamespaceClaims) *IndexedDBNamespaceClaims {
+	if ns == nil {
+		return nil
+	}
+	return &IndexedDBNamespaceClaims{
+		NamespaceID:    strings.TrimSpace(ns.NamespaceID),
+		RegistrationID: strings.TrimSpace(ns.RegistrationID),
+		Generation:     ns.Generation,
+		ProviderName:   strings.TrimSpace(ns.ProviderName),
+		DatabaseName:   strings.TrimSpace(ns.DatabaseName),
+		SessionID:      strings.TrimSpace(ns.SessionID),
+		AppName:        strings.TrimSpace(ns.AppName),
+	}
 }
