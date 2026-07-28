@@ -75,6 +75,8 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreRemoteProviders, RemoteProvidersSchema); err != nil {
 			return nil, fmt.Errorf("create remote_providers store: %w", err)
 		}
+	} else if err := ensureAppAutoDeploySettingsStore(ctx, ds); err != nil {
+		return nil, err
 	}
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
@@ -106,4 +108,11 @@ func (s *Services) Ping(ctx context.Context) error {
 
 func (s *Services) Close() error {
 	return s.DB.Close()
+}
+
+func ensureAppAutoDeploySettingsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
+	if _, err := ds.CreateObjectStore(ctx, StoreAppAutoDeploySettings, AppAutoDeploySettingsSchema); err != nil {
+		return fmt.Errorf("ensure app_auto_deploy_settings store: %w", err)
+	}
+	return nil
 }

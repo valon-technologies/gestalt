@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -316,6 +317,11 @@ func (s *Server) updateAppAdminRegistryAutoDeploy(w http.ResponseWriter, r *http
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}
+	if err := s.autoDeploySettings.EnsureStore(r.Context()); err != nil {
+		slog.Error("app admin auto-deploy store unavailable", "app", app.name, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
 	var request appAdminRegistryAutoDeployRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -342,6 +348,7 @@ func (s *Server) updateAppAdminRegistryAutoDeploy(w http.ResponseWriter, r *http
 		return nil
 	})
 	if err != nil {
+		slog.Error("app admin auto-deploy update failed", "app", app.name, "error", err)
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}

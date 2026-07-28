@@ -270,8 +270,12 @@ func TestNew(t *testing.T) {
 		if _, err := coredata.NewWithOptions(context.Background(), db, coredata.NewOptions{SkipSchemaBootstrap: true}); err != nil {
 			t.Fatalf("coredata.NewWithOptions: %v", err)
 		}
-		if len(db.createdStoreContexts()) != 0 {
-			t.Fatalf("CreateObjectStore calls = %d, want 0", len(db.createdStoreContexts()))
+		contexts := db.createdStoreContexts()
+		if len(contexts) != 1 {
+			t.Fatalf("CreateObjectStore calls = %d, want 1", len(contexts))
+		}
+		if _, ok := contexts[coredata.StoreAppAutoDeploySettings]; !ok {
+			t.Fatalf("CreateObjectStore calls = %v, want only %q", contexts, coredata.StoreAppAutoDeploySettings)
 		}
 	})
 
