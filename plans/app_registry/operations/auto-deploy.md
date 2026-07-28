@@ -192,10 +192,11 @@ main
 
 ### Process
 
-1. **gestalt (PRs 1–4)** — Implement PR 1 on `main`, then the PR 2 stack (PRs 3–4 on the PR 2 branch). Babysit until CI passes and Bugbot is clean on each. Present all four PRs together and get explicit approval on each before merging. Merge in order (1 → 2 → 3 → 4).
-2. **gestalt-providers (PR 5)** — Pin the merged gestalt version in gestalt-providers. Open PR 5. Babysit until CI passes and Bugbot is clean. Get approval and merge.
-3. **toolshed deploy (PR 6)** — Wait for the `apps.home` registry snapshot to publish. Open toolshed PR 6 (`GESTALTD_PINNED_SHA` and `apps.home` snapshot bump). Babysit until CI passes and Bugbot is clean. Get approval and merge.
-4. **gestalt docs (PR 7)** — Fold this document into the main app registry docs. Open PR 7. Babysit until CI passes and Bugbot is clean. Get approval and merge.
+1. **gestalt (PRs 1–4)** — Implement PR 1 on `main`, then the PR 2 stack (PRs 3–4 on the PR 2 branch). Babysit until CI passes and Bugbot is clean on each. Present all four PRs together and get explicit approval on each.
+2. **gestalt merge** — Merge in order (1 → 2 → 3 → 4).
+3. **gestalt-providers (PR 5)** — Pin the merged gestalt version in gestalt-providers. Open PR 5. Babysit until CI passes and Bugbot is clean. Get approval and merge.
+4. **toolshed deploy (PR 6)** — Wait for the `apps.home` registry snapshot to publish. Open toolshed PR 6 (`GESTALTD_PINNED_SHA` and `apps.home` snapshot bump). Babysit until CI passes and Bugbot is clean. Get approval and merge.
+5. **gestalt docs (PR 7)** — Fold this document into the main app registry docs. Open PR 7. Babysit until CI passes and Bugbot is clean. Get approval and merge.
 
 ---
 
