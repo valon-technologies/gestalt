@@ -643,6 +643,9 @@ func (s *Server) resolveRevisionActorLabel(ctx context.Context, actor string) st
 	if actor == "" {
 		return ""
 	}
+	if strings.HasPrefix(actor, "system:") {
+		return actor
+	}
 	kind, id, ok := core.ParseSubjectID(actor)
 	if !ok {
 		return actor
