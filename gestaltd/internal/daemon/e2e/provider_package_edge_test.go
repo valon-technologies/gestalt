@@ -73,7 +73,7 @@ func TestRun_ProviderPackageAndReleaseStagesAppStaticBundle(t *testing.T) {
 			if len(metadata.Artifacts) != 1 {
 				t.Fatalf("release metadata artifacts = %+v, want 1 entry", metadata.Artifacts)
 			}
-			artifact := providerReleaseArtifactForTarget(t, metadata, providerrelease.GenericTarget)
+			artifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.PlatformString(runtime.GOOS, runtime.GOARCH))
 			if got := artifact.Path; got != archiveName {
 				t.Fatalf("release metadata artifact path = %q, want %q", got, archiveName)
 			}
