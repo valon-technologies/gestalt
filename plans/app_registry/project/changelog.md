@@ -31,10 +31,12 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `21` | `🗓️ Jul 27 · 20:59` | `Rollout Phase Stepper and Selected Version Row` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `23` | `🗓️ Jul 27 · 22:36` | `Retention expiresAt and Fleet Mirror` | [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) [`lifecycle.md`](../operations/lifecycle.md) |
 | `24` | `🗓️ Jul 27` | `SOURCE_VERSION-Scoped Rollout Cohorts` | [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `25` | — | `Auto-Deploy Published Snapshots` | [`auto-deploy.md`](../operations/auto-deploy.md) [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md) |
 
 ## Tag Glossary
 
 - [`admin.md`](../operations/admin.md)
+- [`auto-deploy.md`](../operations/auto-deploy.md)
 - [`config.md`](../architecture/config.md)
 - [`indexeddb.md`](../architecture/indexeddb.md)
 - [`lifecycle.md`](../operations/lifecycle.md)
@@ -290,3 +292,17 @@ Cloud Run deployment overlap allowed old and candidate revisions to enroll in th
 **Design:** [gestalt#2965](https://github.com/valon-technologies/gestalt/pull/2965)
 
 **Implementation:** [gestalt#2967](https://github.com/valon-technologies/gestalt/pull/2967)
+
+<a id="changelog-25"></a>
+
+### 25 — Auto-Deploy Published Snapshots
+
+**Tags:** [`auto-deploy.md`](../operations/auto-deploy.md) [`admin.md`](../operations/admin.md) [`lifecycle.md`](../operations/lifecycle.md)
+
+App admins opt registry-only apps into automatic fleet admission when a new snapshot is published. A background watcher polls `index.json` every **1 minute** with conditional GETs, coalesces publishes during active rollouts, and disables auto-deploy on rollout `failed`.
+
+**Design (PR 1):** [auto-deploy.md](../operations/auto-deploy.md)
+
+**gestalt PR 2:** state and conditional registry reads · **PR 3:** app-admin API · **PR 4:** watcher and coalescing · **PR 6:** fold design into main docs
+
+**gestalt-providers PR 5:** app admin UI
