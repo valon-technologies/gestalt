@@ -766,7 +766,7 @@ func applyRevisionRolloutFields(
 			state = core.AppRolloutStateFailed
 		}
 	}
-	if rollout != nil &&
+	if state == "" && rollout != nil &&
 		strings.TrimSpace(rollout.Version) == version &&
 		request.ID == currentRevisionID {
 		state = rollout.State
