@@ -25,6 +25,15 @@ func NewAutoDeploySettingsService(ds indexeddb.IndexedDB) *AutoDeploySettingsSer
 	}
 }
 
+// EnsureStore idempotently creates the app_auto_deploy_settings object store.
+// Existing deployments may have started before the store was added to bootstrap.
+func (s *AutoDeploySettingsService) EnsureStore(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("ensure app auto-deploy settings store: service is not configured")
+	}
+	return ensureAppAutoDeploySettingsStore(ctx, s.db)
+}
+
 func (s *AutoDeploySettingsService) Get(ctx context.Context, app string) (*core.AppAutoDeploySettings, error) {
 	if s == nil {
 		return nil, fmt.Errorf("get app auto-deploy settings: service is not configured")
@@ -74,6 +83,9 @@ func (s *AutoDeploySettingsService) Update(
 	}
 	if update == nil {
 		return nil, fmt.Errorf("update app auto-deploy settings: update function is required")
+	}
+	if err := s.EnsureStore(ctx); err != nil {
+		return nil, err
 	}
 
 	tx, err := s.db.Transaction(

@@ -24,6 +24,14 @@ func TestAutoDeploySettingsService(t *testing.T) {
 		}
 	})
 
+	t.Run("ensure store", func(t *testing.T) {
+		t.Parallel()
+		svc := testutil.NewStubServices(t).AutoDeploySettings
+		if err := svc.EnsureStore(ctx); err != nil {
+			t.Fatalf("EnsureStore: %v", err)
+		}
+	})
+
 	t.Run("update initializes and round trips", func(t *testing.T) {
 		t.Parallel()
 		svc := testutil.NewStubServices(t).AutoDeploySettings
