@@ -32,6 +32,7 @@ type CatalogPoller struct {
 	ChangeRequests       *coredata.AppVersionChangeRequestService
 	Materializations     *coredata.AppInstanceMaterializationService
 	Rollouts             *coredata.AppRolloutService
+	RolloutOutcomes      *coredata.AppVersionRolloutOutcomeService
 	AppMaterializer      *Materializer
 	AppRestarter         AppRestarter
 	InstanceID           string
@@ -59,6 +60,7 @@ type CatalogPollerConfig struct {
 	ChangeRequests       *coredata.AppVersionChangeRequestService
 	Materializations     *coredata.AppInstanceMaterializationService
 	Rollouts             *coredata.AppRolloutService
+	RolloutOutcomes      *coredata.AppVersionRolloutOutcomeService
 	AppMaterializer      *Materializer
 	AppRestarter         AppRestarter
 	InstanceID           string
@@ -78,6 +80,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 		ChangeRequests:       cfg.ChangeRequests,
 		Materializations:     cfg.Materializations,
 		Rollouts:             cfg.Rollouts,
+		RolloutOutcomes:      cfg.RolloutOutcomes,
 		AppMaterializer:      cfg.AppMaterializer,
 		AppRestarter:         cfg.AppRestarter,
 		InstanceID:           strings.TrimSpace(cfg.InstanceID),
@@ -281,11 +284,13 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		version := strings.TrimSpace(rollout.Version)
 		if findInstallation(installations, version) == nil {
 			if !p.now().Before(rollout.Deadline) {
-				if _, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+				updated, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now())
+				if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
 					return nil
 				} else if err != nil {
 					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, version, err)
 				}
+				p.recordRolloutOutcome(ctx, updated)
 				p.notifyRolloutTerminal(appName)
 			}
 			return nil
@@ -549,20 +554,24 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		converged = false
 	}
 	if converged {
-		if _, err := p.Rollouts.MarkCompleteForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+		updated, err := p.Rollouts.MarkCompleteForRollout(ctx, rollout, p.now())
+		if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
 			return false, nil
 		} else if err != nil {
 			return false, fmt.Errorf("complete rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
+		p.recordRolloutOutcome(ctx, updated)
 		p.notifyRolloutTerminal(rollout.App)
 		return true, nil
 	}
 	if !p.now().Before(rollout.Deadline) {
-		if _, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+		updated, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now())
+		if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
 			return false, nil
 		} else if err != nil {
 			return false, fmt.Errorf("fail rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
+		p.recordRolloutOutcome(ctx, updated)
 		p.notifyRolloutTerminal(rollout.App)
 		return true, nil
 	}
@@ -572,6 +581,53 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 func (p *CatalogPoller) notifyRolloutTerminal(app string) {
 	if p != nil && p.OnRolloutTerminal != nil {
 		p.OnRolloutTerminal(strings.TrimSpace(app))
+	}
+}
+
+func (p *CatalogPoller) recordRolloutOutcome(ctx context.Context, rollout *core.AppRollout) {
+	if p == nil || p.RolloutOutcomes == nil || p.ChangeRequests == nil || rollout == nil {
+		return
+	}
+	var completedAt, failedAt time.Time
+	switch rollout.State {
+	case core.AppRolloutStateComplete:
+		completedAt = rollout.CompletedAt
+	case core.AppRolloutStateFailed:
+		failedAt = rollout.FailedAt
+	default:
+		return
+	}
+	if completedAt.IsZero() && failedAt.IsZero() {
+		return
+	}
+	changeRequestID, err := p.ChangeRequests.LatestRevisionIDForVersion(ctx, rollout.App, rollout.Version)
+	if err != nil || changeRequestID == "" {
+		slog.Warn("record rollout outcome: change request not found",
+			"app", rollout.App,
+			"version", rollout.Version,
+			"error", err,
+		)
+		return
+	}
+	switch {
+	case !completedAt.IsZero():
+		if err := p.RolloutOutcomes.RecordComplete(ctx, changeRequestID, rollout.App, rollout.Version, completedAt); err != nil {
+			slog.Warn("record rollout outcome: complete",
+				"app", rollout.App,
+				"version", rollout.Version,
+				"change_request_id", changeRequestID,
+				"error", err,
+			)
+		}
+	case !failedAt.IsZero():
+		if err := p.RolloutOutcomes.RecordFailed(ctx, changeRequestID, rollout.App, rollout.Version, failedAt); err != nil {
+			slog.Warn("record rollout outcome: failed",
+				"app", rollout.App,
+				"version", rollout.Version,
+				"change_request_id", changeRequestID,
+				"error", err,
+			)
+		}
 	}
 }
 

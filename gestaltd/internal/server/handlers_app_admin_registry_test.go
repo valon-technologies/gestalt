@@ -665,3 +665,283 @@ func TestAppAdminRegistryHistory(t *testing.T) {
 		t.Fatalf("page2 = %#v", page2)
 	}
 }
+
+func TestAppAdminRegistryHistoryActiveRolloutFields(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	alice := seedUser(t, services, "alice@valon.com")
+	aliceActor := principal.UserSubjectID(alice.ID)
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	deployedAt := time.Date(2026, 7, 25, 9, 20, 0, 0, time.UTC)
+	request, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: appregistry.FirstInstallFromVersion,
+		ToVersion:   fixture.Version,
+		Actor:       aliceActor,
+		Timestamp:   deployedAt,
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName:   "g-issues",
+			Version:   fixture.Version,
+			SourceRef: "abc123def456abc123def456abc123def456abcd",
+			Registry:  "toolshed",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	if _, err := services.AppRollouts.Create(context.Background(), &core.AppRollout{
+		App:              "g-issues",
+		Version:          fixture.Version,
+		State:            core.AppRolloutStateEnrolling,
+		CreatedAt:        deployedAt,
+		EnrollmentEndsAt: deployedAt.Add(2 * time.Minute),
+		Deadline:         deployedAt.Add(15 * time.Minute),
+	}); err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+
+	httpRequest, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry/history", nil)
+	httpRequest.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		t.Fatalf("GET history: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET status = %d: %s", response.StatusCode, body)
+	}
+	var history struct {
+		Revisions []struct {
+			ID                     string `json:"id"`
+			RolloutState           string `json:"rolloutState"`
+			RolloutForSeconds      *int64 `json:"rolloutForSeconds"`
+			RolloutDurationSeconds *int64 `json:"rolloutDurationSeconds"`
+		} `json:"revisions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history.Revisions) != 1 || history.Revisions[0].ID != request.ID {
+		t.Fatalf("revisions = %#v", history.Revisions)
+	}
+	if history.Revisions[0].RolloutState != "enrolling" {
+		t.Fatalf("rolloutState = %q, want enrolling", history.Revisions[0].RolloutState)
+	}
+	if history.Revisions[0].RolloutForSeconds == nil || *history.Revisions[0].RolloutForSeconds < 0 {
+		t.Fatalf("rolloutForSeconds = %#v", history.Revisions[0].RolloutForSeconds)
+	}
+	if history.Revisions[0].RolloutDurationSeconds != nil {
+		t.Fatalf("rolloutDurationSeconds = %#v, want nil", history.Revisions[0].RolloutDurationSeconds)
+	}
+}
+
+func TestAppAdminRegistryHistoryStoredRolloutOutcomeFields(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	alice := seedUser(t, services, "alice@valon.com")
+	aliceActor := principal.UserSubjectID(alice.ID)
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	deployedAt := time.Date(2026, 7, 25, 9, 10, 0, 0, time.UTC)
+	request, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: appregistry.FirstInstallFromVersion,
+		ToVersion:   "0.0.0-snapshot.gother",
+		Actor:       aliceActor,
+		Timestamp:   deployedAt,
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName:   "g-issues",
+			Version:   "0.0.0-snapshot.gother",
+			SourceRef: "abc123def456abc123def456abc123def456abcd",
+			Registry:  "toolshed",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	completedAt := deployedAt.Add(3*time.Minute + 8*time.Second)
+	if err := services.AppVersionRolloutOutcomes.RecordComplete(context.Background(), request.ID, "g-issues", "0.0.0-snapshot.gother", completedAt); err != nil {
+		t.Fatalf("RecordComplete: %v", err)
+	}
+
+	httpRequest, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry/history", nil)
+	httpRequest.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		t.Fatalf("GET history: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET status = %d: %s", response.StatusCode, body)
+	}
+	var history struct {
+		Revisions []struct {
+			ID                     string `json:"id"`
+			RolloutState           string `json:"rolloutState"`
+			RolloutDurationSeconds *int64 `json:"rolloutDurationSeconds"`
+			RolloutCompletedAt     string `json:"rolloutCompletedAt"`
+		} `json:"revisions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history.Revisions) != 1 || history.Revisions[0].ID != request.ID {
+		t.Fatalf("revisions = %#v", history.Revisions)
+	}
+	revision := history.Revisions[0]
+	if revision.RolloutState != "complete" {
+		t.Fatalf("rolloutState = %q, want complete", revision.RolloutState)
+	}
+	if revision.RolloutDurationSeconds == nil || *revision.RolloutDurationSeconds != 188 {
+		t.Fatalf("rolloutDurationSeconds = %#v, want 188", revision.RolloutDurationSeconds)
+	}
+	if revision.RolloutCompletedAt == "" {
+		t.Fatalf("rolloutCompletedAt missing")
+	}
+}
+
+func TestAppAdminRegistryHistoryIgnoresLiveRolloutForOlderSameVersion(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	alice := seedUser(t, services, "alice@valon.com")
+	aliceActor := principal.UserSubjectID(alice.ID)
+	subjectID := principal.UserSubjectID("alice")
+	otherVersion := "0.0.0-snapshot.gother"
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	firstAt := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	secondAt := time.Date(2026, 7, 25, 9, 20, 0, 0, time.UTC)
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: appregistry.FirstInstallFromVersion,
+		ToVersion:   fixture.Version,
+		Actor:       aliceActor,
+		Timestamp:   firstAt,
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName: fixture.Version, Version: fixture.Version, Registry: "toolshed",
+		}),
+	}); err != nil {
+		t.Fatalf("first AppendRequest: %v", err)
+	}
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: fixture.Version,
+		ToVersion:   otherVersion,
+		Actor:       aliceActor,
+		Timestamp:   firstAt.Add(24 * time.Hour),
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName: "g-issues", Version: otherVersion, Registry: "toolshed",
+		}),
+	}); err != nil {
+		t.Fatalf("second AppendRequest: %v", err)
+	}
+	latestRequest, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: otherVersion,
+		ToVersion:   fixture.Version,
+		Actor:       aliceActor,
+		Timestamp:   secondAt,
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName: "g-issues", Version: fixture.Version, Registry: "toolshed",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("latest AppendRequest: %v", err)
+	}
+	if _, err := services.AppRollouts.Create(context.Background(), &core.AppRollout{
+		App:              "g-issues",
+		Version:          fixture.Version,
+		State:            core.AppRolloutStateEnrolling,
+		CreatedAt:        secondAt,
+		EnrollmentEndsAt: secondAt.Add(2 * time.Minute),
+		Deadline:         secondAt.Add(15 * time.Minute),
+	}); err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+
+	httpRequest, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry/history", nil)
+	httpRequest.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		t.Fatalf("GET history: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET status = %d: %s", response.StatusCode, body)
+	}
+	var history struct {
+		Revisions []struct {
+			ID           string `json:"id"`
+			RolloutState string `json:"rolloutState"`
+		} `json:"revisions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history.Revisions) != 3 {
+		t.Fatalf("revisions = %#v", history.Revisions)
+	}
+	if history.Revisions[0].ID != latestRequest.ID || history.Revisions[0].RolloutState != "enrolling" {
+		t.Fatalf("newest revision = %#v", history.Revisions[0])
+	}
+	if history.Revisions[2].RolloutState != "" {
+		t.Fatalf("oldest same-version revision should omit rollout state, got %#v", history.Revisions[2])
+	}
+}
