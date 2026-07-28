@@ -266,11 +266,11 @@ func resolveReleaseBuild(root string, manifest *providermanifestv1.Manifest) (*p
 }
 
 func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Manifest, build *providerpkg.ResolvedSourceReleaseBuild, value string, explicit bool) ([]releasePlatform, error) {
-	if build == nil {
+	if build == nil && !explicit {
 		return nil, nil
 	}
 
-	buildRequired := build.Mode.RequiresPlatformBuild() || providerpkg.ReleaseRequiresBuild(manifest)
+	buildRequired := build != nil && (build.Mode.RequiresPlatformBuild() || providerpkg.ReleaseRequiresBuild(manifest))
 	if !buildRequired && !explicit {
 		return nil, nil
 	}

@@ -206,7 +206,7 @@ func inspectReleaseArchive(archivePath string) (*providermanifestv1.Manifest, st
 	if err != nil {
 		return nil, "", fmt.Errorf("inspect release archive %s: %w", filepath.Base(archivePath), err)
 	}
-	target, err := releaseArchiveTargetFromManifest(manifest)
+	target, err := releaseArchiveTargetFromManifest(manifest, filepath.Base(archivePath))
 	if err != nil {
 		return nil, "", fmt.Errorf("release archive %s: %w", filepath.Base(archivePath), err)
 	}
@@ -226,7 +226,7 @@ func comparableProviderReleaseManifest(manifest *providermanifestv1.Manifest) ([
 	return json.Marshal(cloned)
 }
 
-func releaseArchiveTargetFromManifest(manifest *providermanifestv1.Manifest) (string, error) {
+func releaseArchiveTargetFromManifest(manifest *providermanifestv1.Manifest, archiveName string) (string, error) {
 	if manifest == nil {
 		return "", fmt.Errorf("manifest is required")
 	}
@@ -244,10 +244,45 @@ func releaseArchiveTargetFromManifest(manifest *providermanifestv1.Manifest) (st
 		}
 		target = candidate
 	}
-	if target == "" {
-		return providerrelease.GenericTarget, nil
+	if target != "" {
+		return target, nil
 	}
-	return target, nil
+
+	// Declarative and UI-only providers ship the same manifest on every platform;
+	// the archive filename carries the platform suffix produced by provider package.
+	if target, ok := releaseArchiveTargetFromName(manifest, archiveName); ok {
+		return target, nil
+	}
+	return providerrelease.GenericTarget, nil
+}
+
+func releaseArchiveTargetFromName(manifest *providermanifestv1.Manifest, archiveName string) (string, bool) {
+	if manifest == nil || strings.TrimSpace(manifest.Source) == "" || strings.TrimSpace(manifest.Version) == "" {
+		return "", false
+	}
+	src, err := source.Parse(manifest.Source)
+	if err != nil {
+		return "", false
+	}
+	appName := src.AppName()
+	base := strings.TrimSuffix(archiveName, ".tar.gz")
+	generic := fmt.Sprintf("gestalt-app-%s_v%s", appName, manifest.Version)
+	if base == generic {
+		return "", false
+	}
+	prefix := generic + "_"
+	if !strings.HasPrefix(base, prefix) {
+		return "", false
+	}
+	suffix := strings.TrimPrefix(base, prefix)
+	if strings.Count(suffix, "_") != 1 {
+		return "", false
+	}
+	platform := strings.ReplaceAll(suffix, "_", "/")
+	if _, _, err := packageio.ParsePlatformString(platform); err != nil {
+		return "", false
+	}
+	return platform, true
 }
 
 func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, rawManifest []byte, verbose bool) error {
