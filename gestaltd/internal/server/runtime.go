@@ -162,6 +162,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	var onRolloutTerminal func(string)
 	if autoDeployController != nil {
 		onRolloutTerminal = autoDeployController.Notify
+		baseConfig.AppAutoDeployNotify = autoDeployController.Notify
 	}
 	catalogPoller := startAppRegistryCatalogPoller(ctx, cfg, result, restartDelay, disableRestartDelay, onRolloutTerminal)
 	if catalogPoller != nil {
