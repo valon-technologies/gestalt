@@ -101,6 +101,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded `/admi
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable deploy actions while a rollout is `enrolling` or `restarting`; poll registry state every **3s** and refresh until rollout is terminal.
 - Show rollout progress and the admitted version on the snapshots tab. See [Rollout phase stepper](#rollout-phase-stepper) and [Selected version row](#selected-version-row).
+- Toggle **Automatically deploy new snapshots** on `/apps/{app}/admin`. When enabled, new published snapshots are admitted across the fleet without a manual **Deploy** click. See [Auto-deploy toggle](#auto-deploy-toggle).
 - Render access denied on **403** without leaking registry metadata.
 
 Selection is fleet-wide. It is not per-user or per-replica.
@@ -217,6 +218,26 @@ PR #3740 · Title | 0.0.0-snapshot.g… | Failed           | Jul 24 18:35 | —
 
 After a successful deploy selection, keep deploy actions disabled until the rollout reaches `complete` or `failed`.
 
+### Auto-deploy toggle
+
+Fleet-wide automatic admission when a new snapshot is published. API and coalescing behavior: [lifecycle.md](./lifecycle.md#auto-deploy-published-snapshots).
+
+- **Automatically deploy new snapshots** — toggle with an explicit **On** / **Off** label beside the switch.
+- When **On**, the Published snapshots description explains that new snapshots are admitted without manual deploy. Manual **Deploy** actions are disabled while auto-deploy is enabled.
+- When **Off**, manual deploy remains available subject to rollout and retention rules.
+- Show `autoDeploy.lastError` under the toggle until an app admin re-enables auto-deploy or deploys manually. Auto-deploy turns **Off** automatically on rollout `failed`.
+- During an active rollout, show **Queued for deploy** on the snapshot row for `autoDeploy.pendingVersion`. This is distinct from **Deploying...** on the admitted version.
+- Revision history shows `system:auto-deploy` for automatic admissions.
+
+While auto-deploy is on and a newer snapshot is waiting behind an active rollout:
+
+```text
+Pull request     | Snapshot          | Status              | Action
+---------------- | ----------------- | ------------------- | ------
+PR #3872 · Title | 0.0.0-snapshot.g… | Queued for deploy   | —
+→ PR #3860 · …   | 0.0.0-snapshot.g… | Deploying...        | —
+```
+
 ### Revision History Tab
 
 The Revision history tab displays `app_version_change_requests` as an immutable deploy ledger. It is not built from the deduplicated `knownVersions` projection: every accepted transition appears exactly once, including upgrades and downgrades that revisit an earlier version.
@@ -231,7 +252,7 @@ Jul 24 16:42 | gabc123 → gdef456 (upgrade)   | Redeployable | alice@valon.com
 Jul 21 12:00 | First deployment → gabc123    | Current      | bob@valon.com
 ```
 
-Each row links to the source commit and, when recorded, the triggering pull request and publish workflow. **Availability** shows the selected version's present-day state, so repeated entries for the same version have the same value. The current desired version is **Current**; other versions are **Redeployable** or **Locked**. The history tab itself has no deploy action because availability is an attribute of a version, not an individual event. Eligible selection remains on Published snapshots.
+Each row links to the source commit and, when recorded, the triggering pull request and publish workflow. **Availability** shows the selected version's present-day state, so repeated entries for the same version have the same value. The current desired version is **Current**; other versions are **Redeployable** or **Locked**. Automatic admissions show **system:auto-deploy** as the deployer. The history tab itself has no deploy action because availability is an attribute of a version, not an individual event. Eligible selection remains on Published snapshots.
 
 Load the newest page when the tab opens and paginate older entries with a cursor. An empty deploy chain renders **No deployments yet**. Registry retention permanently preserves the chain and version metadata. Artifacts for locked revisions may be pruned; see [retention.md](./retention.md).
 
@@ -245,6 +266,10 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 - Publishing versions from either UI
 - Granting or editing app authorization relationships
 - Selecting a version for only one user or one replica
+- Automatic admission for pending or failed publishes
+- Cancelling an in-flight rollout to jump to a newer published version
+- Automatic rollback on rollout failure
+- Notifications on validation failure or rollout `failed`
 - Replacing `kubectl logs` for provider crash diagnostics
 
 ---
@@ -259,7 +284,8 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 ├── <a href="../project/changelog.md#changelog-16">16 — Pending and Failed Publish Visibility</a>
 ├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
 ├── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
-└── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Selected Version Row</a>
+├── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Selected Version Row</a>
+└── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
 </pre>
 
 ### Related Docs

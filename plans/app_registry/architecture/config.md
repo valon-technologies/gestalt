@@ -155,6 +155,16 @@ This limit does not apply to bootstrap. Bootstrap never consults rollout-progres
 
 A newly accepted desired version uses a new materialization row and starts with zero failed attempts. Increasing the configured limit allows rows below the new limit to resume retrying.
 
+### Auto-Deploy Poll Interval
+
+```yaml
+server:
+  appRegistry:
+    autoDeployPollInterval: 1m
+```
+
+`server.appRegistry.autoDeployPollInterval` is the poll interval for the background auto-deploy controller on enabled apps. It defaults to `1m` and must be a positive duration. Coalescing correctness does not depend on the interval; a longer interval only delays detection of new publishes.
+
 ### Lockfile
 
 Registry-only apps appear in `gestalt.lock.json` with a registry binding and no baked artifacts:
@@ -177,7 +187,8 @@ Registry-only apps appear in `gestalt.lock.json` with a registry binding and no 
 
 <pre>
 ├── <a href="../project/changelog.md#changelog-01">01 — GCS Registry and Publish Command</a>
-└── <a href="../project/changelog.md#changelog-12">12 — Complete Registry-Only Lifecycle</a>
+├── <a href="../project/changelog.md#changelog-12">12 — Complete Registry-Only Lifecycle</a>
+└── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
 </pre>
 
 ### Related Docs

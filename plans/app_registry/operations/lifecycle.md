@@ -11,6 +11,7 @@ Implementation:
 - Registry fetcher — `gestaltd/internal/appregistry/reader.go`
 - Registry installer — `gestaltd/internal/appregistry/installer.go`
 - Catalog poller — `gestaltd/internal/appregistry/poller.go`
+- Auto-deploy controller — `gestaltd/internal/appregistry/autodeploy/controller.go`
 - Artifact materializer — `gestaltd/internal/appregistry/materializer.go`
 - Registry mount resolver — `gestaltd/internal/appregistry/mount.go`
 - App provider restarter — `gestaltd/internal/bootstrap/app_provider_restart.go`
@@ -633,9 +634,10 @@ App-scoped routes on the authenticated public API. UI capabilities: [admin.md](.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/v1/apps/{app}/admin/registry` | Load pending, failed, published, and fleet-known versions, the desired version, and rollout admission state |
+| `GET` | `/api/v1/apps/{app}/admin/registry` | Load pending, failed, published, and fleet-known versions, the desired version, rollout admission state, and auto-deploy settings |
 | `GET` | `/api/v1/apps/{app}/admin/registry/history` | Load the permanent deploy chain for the Revision history tab |
 | `POST` | `/api/v1/apps/{app}/admin/registry/version` | Select the fleet-wide desired version |
+| `PUT` | `/api/v1/apps/{app}/admin/registry/auto-deploy` | Enable or disable automatic admission of new published snapshots |
 
 #### Authorization
 
@@ -687,6 +689,11 @@ Do not reuse the mounted-UI fallback when no authorization provider exists.
   "rollout": {
     "version": "0.0.0-snapshot.gabc123",
     "state": "complete"
+  },
+  "autoDeploy": {
+    "enabled": false,
+    "pendingVersion": "0.0.0-snapshot.gdef456",
+    "lastError": null
   },
   "selectionDisabled": false
 }
@@ -805,6 +812,87 @@ For a repeated version, reset per-replica materialization rows whose `acknowledg
 
 The server enforces the deadline while holding the app-scoped install lock. UI suppression is not the security boundary.
 
+#### Auto-Deploy Published Snapshots
+
+App admins opt a registry-only app into automatic fleet admission on `/apps/{app}/admin`. When enabled, Gestalt admits the newest published snapshot as the fleet-wide desired version without a manual **Deploy** click. Auto-deploy uses the same admission path as `POST /api/v1/apps/{app}/admin/registry/version`: install lock, install-time validation, rollout creation, change-request append, and retention mirror. Per-replica convergence is unchanged.
+
+Scope is `/apps/{app}/admin` only — not the embedded fleet `/admin` UI. Only an authenticated user with `admin` on `app/{app}` may enable or disable the policy. Auto-deploy does not bypass install-time validation, retention locks, or rollout admission checks.
+
+Admission triggers on publish completion — when `index.json` includes the version (after `gestaltd app registry pending clear`). Pending and failed publishes do not trigger auto-deploy. See [pending-publish.md](./pending-publish.md). At most one rollout per app remains unchanged: while rollout state is `enrolling` or `restarting`, new publishes update the pending version but do not start another admission. When the rollout reaches `complete`, Gestalt admits the pending version if it differs from the current desired version; intermediate publishes are skipped. On rollout `failed`, Gestalt disables auto-deploy, clears pending state, and records `lastError` until an app admin deploys manually and re-enables the policy. Automatic admissions appear in revision history with actor `system:auto-deploy`.
+
+Fleet policy is stored in IndexedDB (`app_auto_deploy_settings`). See [indexeddb.md](../architecture/indexeddb.md#store-app_auto_deploy_settings-auto-deploy-policy).
+
+##### Publish Detection
+
+For enabled apps, a background auto-deploy controller in `gestaltd serve` polls `apps/{app}/index.json` over HTTP from the registry `publicUrl`. Each poll is one GET per enabled app. Admission still writes to IndexedDB and fetches `versions/{version}.json` only when coalescing starts an install.
+
+Default poll interval is **1 minute**, aligned with the catalog poller. Override with `server.appRegistry.autoDeployPollInterval` when set. Coalescing correctness does not depend on the interval. If `gestaltd serve` is unavailable at publish time, the next poll still converges on the latest version.
+
+Each replica may poll independently today. Duplicate reads are acceptable at this rate; designate a single evaluator later if the enabled-app count grows.
+
+The controller stores the last `ETag` per app in process memory. On each poll:
+
+1. Send `If-None-Match: {etag}` when a prior `ETag` exists.
+2. On **304 Not Modified**, skip publish detection, then continue coalescing any persisted pending version. This recovers if a rollout-terminal wakeup was missed.
+3. On **200**, parse the index, update the stored `ETag`, and compare the newest published version against `last_seen_version`.
+
+GCS returns `ETag` on every `index.json` response. A missing `ETag` on the first response falls back to an unconditional GET on the next poll.
+
+##### Coalescing
+
+Per enabled app, Gestalt tracks a pending version: the newest published snapshot that should become desired once admission is possible.
+
+1. If auto-deploy is disabled, stop. Disabling clears `pending_version`.
+2. On publish detection or enable — set `pending_version` to the newest published version.
+3. On a new rollout `failed` transition — disable auto-deploy, clear `pending_version` and `last_seen_version`, record `last_error` and `last_failed_rollout_at`; stop. The timestamp prevents the retained terminal rollout row from immediately disabling a later app-admin re-enable.
+4. If rollout state is `enrolling` or `restarting`, stop. `pending_version` is already updated.
+5. If `pending_version` is empty, stop.
+6. If `pending_version` equals the desired version, clear `pending_version` and stop.
+7. Capture `pending_version` and attempt admission for that version (same as manual version selection). Run this step after publish detection and on periodic or rollout-terminal reconciliation, including when the registry returns **304**.
+   - **Success** — clear `pending_version` only if it still equals the captured version. Preserve a newer target written concurrently by another replica.
+   - **Validation failure (400)** — clear `pending_version` and set `last_error` only if it still equals the captured version. Do not retry until the next publish or a manual deploy.
+   - **Active rollout (409)** — keep `pending_version`; retry when the rollout reaches `complete`.
+
+| Action | Behavior |
+| --- | --- |
+| Disable | Clear the pending version and stop future automatic admissions. An in-flight rollout continues; the current desired version is unchanged. |
+| Enable | Run coalescing once. When no rollout is active and the newest published version is not desired, admit it. A successful enable notifies the background controller to reconcile immediately instead of waiting for the next poll. |
+
+##### `PUT /api/v1/apps/{app}/admin/registry/auto-deploy`
+
+**Request**
+
+```json
+{
+  "enabled": true
+}
+```
+
+**Response `200`**
+
+```json
+{
+  "app": "g-issues",
+  "autoDeploy": {
+    "enabled": true,
+    "pendingVersion": "0.0.0-snapshot.gdef456",
+    "lastError": null
+  }
+}
+```
+
+`GET /api/v1/apps/{app}/admin/registry` projects `autoDeploy.enabled`, `autoDeploy.pendingVersion`, and `autoDeploy.lastError` alongside rollout and published-version state.
+
+##### Edge Cases
+
+| Scenario | Behavior |
+| --- | --- |
+| Install-time validation fails | Clear pending; expose `lastError`. No automatic retry. |
+| Version expired or locked | Admission rejected (**400**); clear pending. |
+| No fleet-known version yet | First publish triggers `add`. |
+| Concurrent manual deploy | Install lock serializes; auto-deploy retries when the rollout reaches `complete`. |
+| Rollout `failed` | Disable auto-deploy, clear pending, record `lastError`. App admin must deploy manually and re-enable auto-deploy to resume automatic admissions. |
+
 ### Errors
 
 Errors use the standard gestaltd admin API error envelope (`error` field).
@@ -857,7 +945,8 @@ Example:
 ├── <a href="../project/changelog.md#changelog-14">14 — Fleet Admin Observability</a>
 ├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
 ├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
-└── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
+├── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
+└── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
 </pre>
 
 ### Related Docs
