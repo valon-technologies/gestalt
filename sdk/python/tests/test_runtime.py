@@ -324,6 +324,30 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.idempotency_key, "")
         self.assertIsNone(request.context)
 
+    def test_relay_token_defaults_to_empty(self) -> None:
+        request = Request()
+        self.assertEqual(request.relay_token, "")
+
+    def test_plugin_request_extracts_relay_token_from_grpc_metadata(self) -> None:
+        from gestalt._gen.v1 import app_pb2
+        from gestalt._runtime import _plugin_request
+
+        context = mock.Mock()
+        context.invocation_metadata = mock.Mock(
+            return_value=[("x-gestalt-host-service-relay-token", "invocation-token")]
+        )
+        request = _plugin_request(app_pb2.ExecuteRequest(operation="op"), context)
+
+        self.assertEqual(request.relay_token, "invocation-token")
+
+    def test_plugin_request_relay_token_empty_without_metadata(self) -> None:
+        from gestalt._gen.v1 import app_pb2
+        from gestalt._runtime import _plugin_request
+
+        request = _plugin_request(app_pb2.ExecuteRequest(operation="op"), None)
+
+        self.assertEqual(request.relay_token, "")
+
 
 class MainEntrypointTests(unittest.TestCase):
     def test_writes_catalog_when_env_is_set(self) -> None:

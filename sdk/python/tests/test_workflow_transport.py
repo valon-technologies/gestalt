@@ -12,7 +12,6 @@ import grpc
 
 from gestalt import (
     ENV_HOST_SERVICE_SOCKET,
-    ENV_HOST_SERVICE_TOKEN,
     BoundWorkflowTarget,
     Request,
     Workflow,
@@ -167,7 +166,6 @@ def setUpModule() -> None:
     _server.start()
 
     os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
-    os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-py"
 
 
 def tearDownModule() -> None:
@@ -197,7 +195,8 @@ class WorkflowTransportTests(unittest.TestCase):
             Request(
                 context=app_pb2.RequestContext(
                     subject=app_pb2.SubjectContext(id="user:workflow-direct")
-                )
+                ),
+                relay_token="relay-token-py",
             )
         ) as manager:
             delivered = manager.deliver_event(
@@ -232,6 +231,7 @@ class WorkflowTransportTests(unittest.TestCase):
                 subject=app_pb2.SubjectContext(id="user:workflow-request")
             ),
             idempotency_key="workflow-request-key-py",
+            relay_token="relay-token-py",
         )
 
         with request.workflows() as manager:
