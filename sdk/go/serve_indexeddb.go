@@ -317,6 +317,12 @@ func (s indexedDBProviderServer) Transaction(stream proto.IndexedDB_TransactionS
 				resp, opErr = executeIndexedDBOperation(stream.Context(), tx, body.Operation)
 			}
 			if opErr != nil {
+				if isReadTransactionOperation(body.Operation) && transactionNotFound(opErr) {
+					if err := stream.Send(&proto.TransactionServerMessage{Msg: &proto.TransactionServerMessage_Operation{Operation: transactionOperationError(body.Operation.GetRequestId(), opErr)}}); err != nil {
+						return err
+					}
+					continue
+				}
 				finished = true
 				abortErr := tx.Abort(stream.Context())
 				if err := stream.Send(&proto.TransactionServerMessage{Msg: &proto.TransactionServerMessage_Operation{Operation: transactionOperationError(body.Operation.GetRequestId(), opErr)}}); err != nil {
@@ -715,6 +721,29 @@ func isWriteTransactionOperation(op *proto.TransactionOperation) bool {
 	default:
 		return false
 	}
+}
+
+func isReadTransactionOperation(op *proto.TransactionOperation) bool {
+	switch op.GetOperation().(type) {
+	case *proto.TransactionOperation_Get, *proto.TransactionOperation_GetKey,
+		*proto.TransactionOperation_GetAll, *proto.TransactionOperation_GetAllKeys,
+		*proto.TransactionOperation_IndexGet, *proto.TransactionOperation_IndexGetKey,
+		*proto.TransactionOperation_IndexGetAll, *proto.TransactionOperation_IndexGetAllKeys,
+		*proto.TransactionOperation_Count, *proto.TransactionOperation_IndexCount:
+		return true
+	default:
+		return false
+	}
+}
+
+func transactionNotFound(err error) bool {
+	if errors.Is(err, ErrNotFound) {
+		return true
+	}
+	if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+		return true
+	}
+	return false
 }
 
 func drainIndexedDBTransaction(stream proto.IndexedDB_TransactionServer) error {

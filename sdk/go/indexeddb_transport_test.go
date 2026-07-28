@@ -446,6 +446,38 @@ func TestTransport_TransactionReadCheckWriteCommit(t *testing.T) {
 	}
 }
 
+func TestTransport_TransactionGetMissingThenPut(t *testing.T) {
+	ctx := context.Background()
+	store := "tx_get_put_" + t.Name()
+	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+
+	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction: %v", err)
+	}
+	defer tx.Abort(ctx)
+
+	if _, err := tx.ObjectStore(store).Get(ctx, "new-row"); !errors.Is(err, gestalt.ErrNotFound) {
+		t.Fatalf("tx Get missing = %v, want ErrNotFound", err)
+	}
+	if err := tx.ObjectStore(store).Put(ctx, gestalt.Record{"id": "new-row", "enabled": true}); err != nil {
+		t.Fatalf("tx Put after missing Get: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	got, err := testClient.ObjectStore(store).Get(ctx, "new-row")
+	if err != nil {
+		t.Fatalf("Get committed row: %v", err)
+	}
+	if got["enabled"] != true {
+		t.Fatalf("row = %#v, want enabled=true", got)
+	}
+}
+
 func TestTransport_TransactionAbortRollsBack(t *testing.T) {
 	ctx := context.Background()
 	store := "tx_abort_" + t.Name()
