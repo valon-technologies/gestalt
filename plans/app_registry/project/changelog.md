@@ -30,6 +30,7 @@ The `Completed` timestamp is the merge time of the PR that delivered the milesto
 | `20` | `🗓️ Jul 27 · 19:12` | `Responsive App Admin Registry Polling` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `21` | `🗓️ Jul 27 · 20:59` | `Rollout Phase Stepper and Selected Version Row` | [`admin.md`](../operations/admin.md) [`pending-publish.md`](../operations/pending-publish.md) |
 | `23` | `🗓️ Jul 27 · 22:36` | `Retention expiresAt and Fleet Mirror` | [`models.md`](../architecture/models.md) [`retention.md`](../operations/retention.md) [`lifecycle.md`](../operations/lifecycle.md) |
+| `24` | `🗓️ Jul 27` | `SOURCE_VERSION-Scoped Rollout Cohorts` | [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md) |
 
 ## Tag Glossary
 
@@ -277,3 +278,15 @@ Simplify `retention.json` to `publishedAt`, `everDeployed`, and `expiresAt`. Pub
 **Addendum:** Review follow-ups on [gestalt#2964](https://github.com/valon-technologies/gestalt/pull/2964) — prune re-read checks only the target version entry (local deletions are not clobbered), the shared GCS client initializes with `context.Background()`, create-if-absent uses `DoesNotExist`, and mirror writes use `context.WithoutCancel`.
 
 **Deploy:** toolshed `GESTALTD_PINNED_SHA` → `a7c4d0c48` ([Deploy Valon Tools](https://github.com/valon-technologies/toolshed/actions/runs/30311971673))
+
+<a id="changelog-24"></a>
+
+### 24 — SOURCE_VERSION-Scoped Rollout Cohorts
+
+**Tags:** [`admin.md`](../operations/admin.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
+
+Cloud Run deployment overlap allowed old and candidate revisions to enroll in the same app rollout, so a five-replica service could report `5/10` or `6/10` restarted and fail after the old revision was terminated. Scoped rollout membership and completion to the activated Toolshed `SOURCE_VERSION`, atomically recorded `target_source_version` during admission, retargeted in-flight rollouts with fenced enrollment epochs, and kept superseded rows diagnostic without blocking the target cohort. Added explicit deployment-retry recovery and target and per-replica source-version observability to the admin APIs and embedded UI.
+
+**Design:** [gestalt#2965](https://github.com/valon-technologies/gestalt/pull/2965)
+
+**Implementation:** [gestalt#2967](https://github.com/valon-technologies/gestalt/pull/2967)
