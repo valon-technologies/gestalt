@@ -42,7 +42,7 @@ Per auto-deploy-enabled app, Gestalt tracks a **pending target**: the newest pub
 
 1. If auto-deploy is disabled, stop. Disabling clears `pendingTarget`.
 2. On publish detection or enable — set `pendingTarget` to the newest published version.
-3. On rollout `failed` — disable auto-deploy, clear `pendingTarget`, record `lastError`; stop.
+3. On a new rollout `failed` transition — disable auto-deploy, clear `pendingTarget` and `last_seen_version`, record `lastError` and the handled failure timestamp; stop. The timestamp prevents the retained terminal rollout row from immediately disabling a later app-admin re-enable.
 4. If rollout state is `enrolling` or `restarting`, stop. `pendingTarget` is already updated.
 5. If `pendingTarget == desiredVersion`, clear `pendingTarget` and stop.
 6. Otherwise attempt admission for `pendingTarget` (same as manual version selection). Run this step both after publish detection and on periodic or rollout-terminal reconciliation, including when the registry returns **304**.
@@ -67,6 +67,7 @@ Stored in IndexedDB (fleet policy, not GCS publish metadata):
 | `pending_version` | Newest published version waiting for admission |
 | `last_seen_version` | Deduplicate publish detection across polls |
 | `last_error` | Last failure message; set on validation failure or rollout `failed` |
+| `last_failed_rollout_at` | Deduplicate handling of a persisted failed rollout across disable and re-enable |
 
 The app-scoped install lock serializes concurrent manual and automatic admissions.
 
