@@ -88,25 +88,8 @@ func (s *AutoDeploySettingsService) Update(
 		return nil, err
 	}
 
-	tx, err := s.db.Transaction(
-		ctx,
-		[]string{StoreAppAutoDeploySettings},
-		idb.TransactionReadwrite,
-		idb.TransactionOptions{},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("update app auto-deploy settings: begin transaction: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Abort(context.WithoutCancel(ctx))
-		}
-	}()
-
-	store := tx.ObjectStore(StoreAppAutoDeploySettings)
 	settings := &core.AppAutoDeploySettings{App: app}
-	rec, err := store.Get(ctx, app)
+	rec, err := s.store.Get(ctx, app)
 	if err == nil {
 		settings = recordToAppAutoDeploySettings(rec)
 	} else if !errors.Is(err, idb.ErrNotFound) {
@@ -117,13 +100,9 @@ func (s *AutoDeploySettingsService) Update(
 	}
 	settings.App = app
 	normalizeAppAutoDeploySettings(settings)
-	if err := store.Put(ctx, appAutoDeploySettingsRecord(settings)); err != nil {
+	if err := s.store.Put(ctx, appAutoDeploySettingsRecord(settings)); err != nil {
 		return nil, fmt.Errorf("update app auto-deploy settings: write: %w", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("update app auto-deploy settings: commit: %w", err)
-	}
-	committed = true
 	return settings, nil
 }
 
