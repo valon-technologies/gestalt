@@ -187,13 +187,18 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 		return err
 	}
 	if rollout != nil && rollout.State == core.AppRolloutStateFailed {
-		_, updateErr := c.Settings.Update(ctx, appName, func(current *core.AppAutoDeploySettings) error {
-			current.Enabled = false
-			current.PendingVersion = ""
-			current.LastError = fmt.Sprintf("rollout for %s failed", rollout.Version)
-			return nil
-		})
-		return updateErr
+		failedAt := rollout.FailedAt.UTC().Truncate(time.Millisecond)
+		if settings.LastFailedRolloutAt.Before(failedAt) {
+			_, updateErr := c.Settings.Update(ctx, appName, func(current *core.AppAutoDeploySettings) error {
+				current.Enabled = false
+				current.PendingVersion = ""
+				current.LastSeenVersion = ""
+				current.LastError = fmt.Sprintf("rollout for %s failed", rollout.Version)
+				current.LastFailedRolloutAt = failedAt
+				return nil
+			})
+			return updateErr
+		}
 	}
 
 	result, err := c.Reader.FetchAppIndexConditional(

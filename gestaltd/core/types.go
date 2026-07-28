@@ -83,11 +83,12 @@ type AppRollout struct {
 }
 
 type AppAutoDeploySettings struct {
-	App             string
-	Enabled         bool
-	PendingVersion  string
-	LastSeenVersion string
-	LastError       string
+	App                 string
+	Enabled             bool
+	PendingVersion      string
+	LastSeenVersion     string
+	LastError           string
+	LastFailedRolloutAt time.Time
 }
 
 type GestaltdSourceVersionState struct {

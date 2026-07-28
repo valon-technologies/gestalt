@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -26,18 +27,21 @@ func TestAutoDeploySettingsService(t *testing.T) {
 	t.Run("update initializes and round trips", func(t *testing.T) {
 		t.Parallel()
 		svc := testutil.NewStubServices(t).AutoDeploySettings
+		failedAt := time.Date(2026, 7, 28, 12, 0, 0, 123456789, time.UTC)
 		got, err := svc.Update(ctx, " g-issues ", func(settings *core.AppAutoDeploySettings) error {
 			settings.Enabled = true
 			settings.PendingVersion = " v2 "
 			settings.LastSeenVersion = " v2 "
 			settings.LastError = " validation failed "
+			settings.LastFailedRolloutAt = failedAt
 			return nil
 		})
 		if err != nil {
 			t.Fatalf("Update: %v", err)
 		}
 		if got.App != "g-issues" || !got.Enabled || got.PendingVersion != "v2" ||
-			got.LastSeenVersion != "v2" || got.LastError != "validation failed" {
+			got.LastSeenVersion != "v2" || got.LastError != "validation failed" ||
+			!got.LastFailedRolloutAt.Equal(failedAt.Truncate(time.Millisecond)) {
 			t.Fatalf("updated settings = %#v", got)
 		}
 		stored, err := svc.Get(ctx, "g-issues")

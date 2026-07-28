@@ -117,11 +117,12 @@ func TestControllerDisablesOnFailedRollout(t *testing.T) {
 	if _, err := services.AppRollouts.MarkFailedForRollout(t.Context(), rollout, start.Add(15*time.Minute)); err != nil {
 		t.Fatalf("MarkFailed: %v", err)
 	}
-	controller := testController(
-		services,
-		&fakeReader{results: []*appregistry.AppIndexFetchResult{{Index: testIndex("g-issues", "v2")}}},
-		&fakeInstaller{},
-	)
+	reader := &fakeReader{results: []*appregistry.AppIndexFetchResult{
+		{Index: testIndex("g-issues", "v2")},
+		{Index: testIndex("g-issues", "v2")},
+	}}
+	installer := &fakeInstaller{}
+	controller := testController(services, reader, installer)
 
 	if err := controller.Reconcile(t.Context(), "g-issues"); err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -130,8 +131,27 @@ func TestControllerDisablesOnFailedRollout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get settings: %v", err)
 	}
-	if settings.Enabled || settings.PendingVersion != "" || settings.LastError == "" {
+	if settings.Enabled || settings.PendingVersion != "" || settings.LastSeenVersion != "" ||
+		settings.LastError == "" || !settings.LastFailedRolloutAt.Equal(start.Add(15*time.Minute)) {
 		t.Fatalf("settings = %#v", settings)
+	}
+
+	if _, err := services.AutoDeploySettings.Update(t.Context(), "g-issues", func(current *core.AppAutoDeploySettings) error {
+		current.Enabled = true
+		current.LastError = ""
+		return nil
+	}); err != nil {
+		t.Fatalf("re-enable: %v", err)
+	}
+	if err := controller.Reconcile(t.Context(), "g-issues"); err != nil {
+		t.Fatalf("Reconcile after re-enable: %v", err)
+	}
+	settings, err = services.AutoDeploySettings.Get(t.Context(), "g-issues")
+	if err != nil {
+		t.Fatalf("Get re-enabled settings: %v", err)
+	}
+	if !settings.Enabled || len(installer.inputs) != 1 || installer.inputs[0].Version != "v2" {
+		t.Fatalf("re-enabled settings = %#v, inputs = %#v", settings, installer.inputs)
 	}
 }
 
