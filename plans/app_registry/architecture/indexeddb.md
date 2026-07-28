@@ -64,6 +64,7 @@ app_version_install_locks        ← install admission lock per app
 gestaltd_source_version_state    ← Toolshed source version selected for rollout accounting
 app_rollouts                     ← current rollout per app
 app_instance_materializations    ← per-replica acknowledgement of fleet-known versions
+app_auto_deploy_settings         ← per-app auto-deploy policy
 ```
 
 Other host stores created at bootstrap include `users`, `managed_subjects`, `app_shas`, etc.
@@ -82,6 +83,7 @@ Access install services after bootstrap via `Result.Services` / `prepared.Servic
 Services.AppVersionChangeRequests   ← install prototype
 Services.GestaltdSourceVersionState ← current Toolshed source version and activation time
 Services.AppRollouts                ← rollout state
+Services.AutoDeploySettings         ← per-app auto-deploy policy
 Services.DB                         ← underlying main-db handle
 ```
 
@@ -292,6 +294,48 @@ A terminal record may be replaced when the next version is admitted. A non-termi
 
 ---
 
+## Store: `app_auto_deploy_settings` (Auto-Deploy Policy)
+
+Per-app fleet policy for automatic admission of newly published snapshots. Writable only through the app-admin auto-deploy API; the background watcher reads and updates progress fields during coalescing.
+
+Primary key: `app` (app name).
+
+```json
+{
+  "app": "g-issues",
+  "enabled": true,
+  "pending_version": "0.0.0-snapshot.gdef456",
+  "last_seen_version": "0.0.0-snapshot.gabc123",
+  "last_error": "",
+  "last_failed_rollout_at": null
+}
+```
+
+| Field | Purpose |
+| --- | --- |
+| `enabled` | Per-app toggle; writable only via app-admin API |
+| `pending_version` | Newest published version waiting for admission |
+| `last_seen_version` | Deduplicate publish detection across polls |
+| `last_error` | Last failure message; set on validation failure or rollout `failed` |
+| `last_failed_rollout_at` | Deduplicate handling of a persisted failed rollout across disable and re-enable |
+
+The store is created idempotently during bootstrap. When `SkipSchemaBootstrap` is true, `EnsureStore` runs before reads and writes so existing deployments that started before the store was added still converge. See [lifecycle.md](../operations/lifecycle.md#auto-deploy-published-snapshots).
+
+### Service API
+
+`AutoDeploySettingsService` (`gestaltd/internal/coredata/app_auto_deploy_settings.go`):
+
+| Method | Description |
+| --- | --- |
+| `Get(ctx, app)` | Load settings for one app. Returns `ErrNotFound` when no row exists. |
+| `ListEnabled(ctx)` | List apps with `enabled: true`. |
+| `Update(ctx, app, fn)` | Read-modify-write one app's settings. Missing rows start disabled with empty progress fields. |
+| `EnsureStore(ctx)` | Idempotently create the object store when schema bootstrap is skipped. |
+
+**App-admin exposure:** `Get` and `Update` back `GET` and `PUT /api/v1/apps/{app}/admin/registry/auto-deploy`. The registry-state route projects `enabled`, `pendingVersion`, and `lastError`.
+
+---
+
 ## Store: `app_instance_materializations` (Per-Replica Convergence)
 
 Records one replica's acknowledgement and catalog-convergence progress for a fleet-known `(app, version)`.
@@ -367,7 +411,8 @@ Written by the background catalog poller (`gestaltd/internal/appregistry/poller.
 ├── <a href="../project/changelog.md#changelog-07">07 — Catalog-Only Admission</a>
 ├── <a href="../project/changelog.md#changelog-08">08 — Per-Replica Catalog Polling</a>
 ├── <a href="../project/changelog.md#changelog-09">09 — Coordinated Provider Restarts</a>
-└── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
+├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
+└── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
 </pre>
 
 ### Related Docs

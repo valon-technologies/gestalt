@@ -514,6 +514,68 @@ App admin without `gestaltAdmin` can open `/apps/{app}/admin`, select an unexpir
 
 ---
 
+## Auto-Deploy Tests
+
+API: [lifecycle.md](../operations/lifecycle.md#auto-deploy-published-snapshots). UI: [admin.md](../operations/admin.md#auto-deploy-toggle).
+
+### Gestalt Coredata Tests (`app_auto_deploy_settings_test.go`)
+
+Implemented in [gestalt#2971](https://github.com/valon-technologies/gestalt/pull/2971) and [gestalt#2977](https://github.com/valon-technologies/gestalt/pull/2977).
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/coredata/... -run TestAutoDeploySettingsService -count=1
+```
+
+| Test | Expected behavior |
+| --- | --- |
+| `TestAutoDeploySettingsService/missing_settings` | `Get` returns `ErrNotFound` for an app with no row |
+| `TestAutoDeploySettingsService/update_initializes_and_round_trips` | `Update` creates a row, normalizes fields, and round-trips through `Get` |
+| `TestAutoDeploySettingsService/list_enabled` | `ListEnabled` returns only apps with `enabled: true` |
+
+### Gestalt Controller Tests (`autodeploy/controller_test.go`)
+
+Implemented in [gestalt#2973](https://github.com/valon-technologies/gestalt/pull/2973).
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/appregistry/autodeploy/... -count=1
+```
+
+| Test | Expected behavior |
+| --- | --- |
+| `TestControllerDetectsAndAdmitsNewestVersion` | Publish detection admits the newest snapshot when no rollout is active |
+| `TestControllerCoalescesDuringActiveRollout` | Active rollout updates `pending_version` without starting a second admission |
+| `TestControllerDisablesOnFailedRollout` | Rollout `failed` disables auto-deploy, clears pending, and records `last_error` |
+| `TestControllerCandidateRejectionWaitsForNextPublish` | Validation failure clears pending and records `last_error` without retrying until the next publish |
+
+### Gestalt API Tests (`handlers_app_admin_registry_test.go`)
+
+Implemented in [gestalt#2972](https://github.com/valon-technologies/gestalt/pull/2972), [gestalt#2974](https://github.com/valon-technologies/gestalt/pull/2974), and [gestalt#2976](https://github.com/valon-technologies/gestalt/pull/2976).
+
+| Test | Expected behavior |
+| --- | --- |
+| `TestAppAdminRegistryAutoDeploy` | Registry state includes default `autoDeploy.enabled: false`; `PUT` enables and disables the policy |
+| `TestAppAdminRegistryAutoDeployNotifies` | Successful `PUT` notifies the background watcher to reconcile immediately |
+| `TestAppAdminRegistryAutoDeployRequiresAppAdmin` | Unauthenticated and unauthorized callers fail closed |
+
+### Default App UI Tests (`gestalt-providers`)
+
+Implemented in [gestalt-providers#1197](https://github.com/valon-technologies/gestalt-providers/pull/1197) and [gestalt-providers#1200](https://github.com/valon-technologies/gestalt-providers/pull/1200).
+
+Covered behaviors:
+
+- auto-deploy toggle renders **On** / **Off**, disables manual deploy while enabled, and rolls back optimistically on API failure
+- failed auto-deploy `PUT` shows an error line under the switch
+- **Queued for deploy** appears on the pending snapshot row during an active rollout while auto-deploy is enabled
+- revision history renders `system:auto-deploy` as the deployer for automatic admissions
+
+---
+
 ## What Is Not Covered Yet
 
 Publish tests do not exercise real GCS uploads; upload-path tests use test storage. Install HTTP tests cover the happy path, 404 on missing version, get-by-app, and one validation-failure case — but not:
