@@ -83,6 +83,9 @@ func (v *EndpointValidator) Validate(ctx context.Context, tunnelEndpoint *proto.
 		Providers: refs,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "CONNECT failed: HTTP/1.1 404") {
+			return nil
+		}
 		return fmt.Errorf("registration check: %w", err)
 	}
 	if !resp.Ready {

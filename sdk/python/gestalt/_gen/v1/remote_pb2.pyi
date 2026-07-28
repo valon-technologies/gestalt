@@ -94,6 +94,7 @@ class Remote(_message.Message):
     LAST_SUCCESSFUL_HEARTBEAT_AT_FIELD_NUMBER: _ClassVar[int]
     LAST_ERROR_FIELD_NUMBER: _ClassVar[int]
     LEASE_EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    CONNECT_URL_FIELD_NUMBER: _ClassVar[int]
     id: str
     owner_subject_id: str
     generation: int
@@ -106,7 +107,8 @@ class Remote(_message.Message):
     last_successful_heartbeat_at: _timestamp_pb2.Timestamp
     last_error: str
     lease_expires_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., owner_subject_id: _Optional[str] = ..., generation: _Optional[int] = ..., providers: _Optional[_Iterable[_Union[RemoteProviderSummary, _Mapping]]] = ..., reachability: _Optional[_Union[RemoteReachability, _Mapping]] = ..., server_spki_sha256: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_checked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_successful_heartbeat_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_error: _Optional[str] = ..., lease_expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    connect_url: str
+    def __init__(self, id: _Optional[str] = ..., owner_subject_id: _Optional[str] = ..., generation: _Optional[int] = ..., providers: _Optional[_Iterable[_Union[RemoteProviderSummary, _Mapping]]] = ..., reachability: _Optional[_Union[RemoteReachability, _Mapping]] = ..., server_spki_sha256: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_checked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_successful_heartbeat_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_error: _Optional[str] = ..., lease_expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., connect_url: _Optional[str] = ...) -> None: ...
 
 class ServerIdentity(_message.Message):
     __slots__ = ()

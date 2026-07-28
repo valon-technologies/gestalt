@@ -895,6 +895,7 @@ export interface Remote {
   lastSuccessfulHeartbeatAt?: Date;
   lastError: string;
   leaseExpiresAt?: Date;
+  connectUrl: string;
 }
 
 export interface RemoteProviderDefinition {

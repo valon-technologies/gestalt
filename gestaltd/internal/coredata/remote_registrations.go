@@ -29,6 +29,7 @@ type RemoteRegistration struct {
 	TunnelHost                string
 	TunnelCertificate         []byte
 	ServerSPKISHA256          string
+	ConnectURL                string
 	LeaseExpiresAt            time.Time
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
@@ -91,30 +92,20 @@ func (s *RemoteRegistrationService) Replace(
 		return nil, fmt.Errorf("replace remote registration: %w", err)
 	}
 
-	tx, err := s.db.Transaction(ctx, []string{StoreRemoteRegistrations, StoreRemoteProviders}, idb.TransactionReadwrite, idb.TransactionOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("replace remote registration: begin transaction: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Abort(context.WithoutCancel(ctx))
-		}
-	}()
-
-	regStore := tx.ObjectStore(StoreRemoteRegistrations)
-	providerStore := tx.ObjectStore(StoreRemoteProviders)
+	regStore := s.db.ObjectStore(StoreRemoteRegistrations)
+	providerStore := s.db.ObjectStore(StoreRemoteProviders)
 
 	existing, err := getRegistrationByOwner(ctx, regStore, owner)
 	if err != nil {
 		return nil, fmt.Errorf("replace remote registration: load owner registration: %w", err)
 	}
 
-	// An expired lease is unregistered for writes too: sweep the stale row before the
-	// generation CAS so an expectedGeneration==0 create or takeover is not blocked.
 	now := normalizedRemoteTime(s.now())
 	if existing != nil && !registrationActive(existing, now) {
-		if err := removeRegistrationAndProviders(ctx, regStore, providerStore, existing.ID); err != nil {
+		if err := deleteProvidersForRegistration(ctx, providerStore, existing.ID); err != nil {
+			return nil, fmt.Errorf("replace remote registration: sweep expired: %w", err)
+		}
+		if err := regStore.Delete(ctx, existing.ID); err != nil && !errors.Is(err, idb.ErrNotFound) {
 			return nil, fmt.Errorf("replace remote registration: sweep expired: %w", err)
 		}
 		existing = nil
@@ -141,7 +132,7 @@ func (s *RemoteRegistrationService) Replace(
 		registrationID = existing.ID
 	}
 
-	if err := ensureProviderOwnership(ctx, providerStore, regStore, providers, registrationID, normalizedRemoteTime(s.now())); err != nil {
+	if err := s.ensureProviderOwnership(ctx, providerStore, regStore, providers, registrationID, now); err != nil {
 		return nil, err
 	}
 
@@ -163,6 +154,7 @@ func (s *RemoteRegistrationService) Replace(
 		TunnelHost:                strings.TrimSpace(reg.TunnelHost),
 		TunnelCertificate:         append([]byte(nil), reg.TunnelCertificate...),
 		ServerSPKISHA256:          strings.TrimSpace(reg.ServerSPKISHA256),
+		ConnectURL:                strings.TrimSpace(reg.ConnectURL),
 		LeaseExpiresAt:            leaseExpiresAt,
 		CreatedAt:                 now,
 		UpdatedAt:                 now,
@@ -172,11 +164,34 @@ func (s *RemoteRegistrationService) Replace(
 		stored.CreatedAt = existing.CreatedAt
 	}
 
-	if err := regStore.Put(ctx, remoteRegistrationRecord(stored)); err != nil {
+	tx, err := s.db.Transaction(ctx, []string{StoreRemoteRegistrations, StoreRemoteProviders}, idb.TransactionReadwrite, idb.TransactionOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("replace remote registration: begin write transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+
+	current, err := getRegistrationByID(ctx, tx.ObjectStore(StoreRemoteRegistrations), registrationID)
+	if err != nil {
+		return nil, fmt.Errorf("replace remote registration: re-check: %w", err)
+	}
+	if existing == nil {
+		if current != nil {
+			return nil, ErrGenerationMismatch
+		}
+	} else if current == nil || current.Generation != storedGeneration {
+		return nil, ErrGenerationMismatch
+	}
+
+	if err := tx.ObjectStore(StoreRemoteRegistrations).Put(ctx, remoteRegistrationRecord(stored)); err != nil {
 		return nil, fmt.Errorf("replace remote registration: store registration: %w", err)
 	}
 	for _, provider := range providers {
-		if err := providerStore.Put(ctx, remoteProviderRecord(
+		if err := tx.ObjectStore(StoreRemoteProviders).Put(ctx, remoteProviderRecord(
 			provider.ProviderKind,
 			provider.ProviderName,
 			registrationID,
@@ -223,19 +238,7 @@ func (s *RemoteRegistrationService) Delete(ctx context.Context, registrationID s
 		return fmt.Errorf("delete remote registration: registration id is required")
 	}
 
-	tx, err := s.db.Transaction(ctx, []string{StoreRemoteRegistrations, StoreRemoteProviders}, idb.TransactionReadwrite, idb.TransactionOptions{})
-	if err != nil {
-		return fmt.Errorf("delete remote registration: begin transaction: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Abort(context.WithoutCancel(ctx))
-		}
-	}()
-
-	regStore := tx.ObjectStore(StoreRemoteRegistrations)
-	providerStore := tx.ObjectStore(StoreRemoteProviders)
+	regStore := s.db.ObjectStore(StoreRemoteRegistrations)
 	reg, err := getRegistrationByID(ctx, regStore, registrationID)
 	if err != nil {
 		return fmt.Errorf("delete remote registration: %w", err)
@@ -246,15 +249,7 @@ func (s *RemoteRegistrationService) Delete(ctx context.Context, registrationID s
 	if reg.Generation != expectedGeneration {
 		return ErrGenerationMismatch
 	}
-
-	if err := removeRegistrationAndProviders(ctx, regStore, providerStore, registrationID); err != nil {
-		return fmt.Errorf("delete remote registration: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("delete remote registration: commit: %w", err)
-	}
-	committed = true
-	return nil
+	return s.removeRegistrationWithGenerationCheck(ctx, registrationID, expectedGeneration)
 }
 
 func (s *RemoteRegistrationService) Expire(ctx context.Context, registrationID string, generation uint64, observedDeadline time.Time) error {
@@ -270,19 +265,7 @@ func (s *RemoteRegistrationService) Expire(ctx context.Context, registrationID s
 		return fmt.Errorf("expire remote registration: observed deadline is required")
 	}
 
-	tx, err := s.db.Transaction(ctx, []string{StoreRemoteRegistrations, StoreRemoteProviders}, idb.TransactionReadwrite, idb.TransactionOptions{})
-	if err != nil {
-		return fmt.Errorf("expire remote registration: begin transaction: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Abort(context.WithoutCancel(ctx))
-		}
-	}()
-
-	regStore := tx.ObjectStore(StoreRemoteRegistrations)
-	providerStore := tx.ObjectStore(StoreRemoteProviders)
+	regStore := s.db.ObjectStore(StoreRemoteRegistrations)
 	reg, err := getRegistrationByID(ctx, regStore, registrationID)
 	if err != nil {
 		return fmt.Errorf("expire remote registration: %w", err)
@@ -290,15 +273,7 @@ func (s *RemoteRegistrationService) Expire(ctx context.Context, registrationID s
 	if reg == nil || reg.Generation != generation || !reg.LeaseExpiresAt.Equal(observedDeadline) || normalizedRemoteTime(s.now()).Before(reg.LeaseExpiresAt) {
 		return nil
 	}
-
-	if err := removeRegistrationAndProviders(ctx, regStore, providerStore, registrationID); err != nil {
-		return fmt.Errorf("expire remote registration: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("expire remote registration: commit: %w", err)
-	}
-	committed = true
-	return nil
+	return s.removeRegistrationWithGenerationCheck(ctx, registrationID, generation)
 }
 
 func (s *RemoteRegistrationService) ResolveProvider(ctx context.Context, kind, name string) (*RemoteProvider, *RemoteRegistration, error) {
@@ -311,15 +286,7 @@ func (s *RemoteRegistrationService) ResolveProvider(ctx context.Context, kind, n
 		return nil, nil, fmt.Errorf("resolve remote provider: kind and name are required")
 	}
 
-	// One readonly transaction so a concurrent mutator cannot remove the registration
-	// between the two reads.
-	tx, err := s.db.Transaction(ctx, []string{StoreRemoteRegistrations, StoreRemoteProviders}, idb.TransactionReadonly, idb.TransactionOptions{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolve remote provider: begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Abort(context.WithoutCancel(ctx)) }()
-
-	providerRec, err := tx.ObjectStore(StoreRemoteProviders).Get(ctx, remoteProviderID(kind, name))
+	providerRec, err := s.db.ObjectStore(StoreRemoteProviders).Get(ctx, remoteProviderID(kind, name))
 	if errors.Is(err, idb.ErrNotFound) {
 		return nil, nil, ErrNotRegistered
 	}
@@ -328,7 +295,7 @@ func (s *RemoteRegistrationService) ResolveProvider(ctx context.Context, kind, n
 	}
 	provider := recordToRemoteProvider(providerRec)
 
-	regRec, err := tx.ObjectStore(StoreRemoteRegistrations).Get(ctx, provider.RegistrationID)
+	regRec, err := s.db.ObjectStore(StoreRemoteRegistrations).Get(ctx, provider.RegistrationID)
 	if errors.Is(err, idb.ErrNotFound) {
 		return nil, nil, ErrNotRegistered
 	}
@@ -370,15 +337,7 @@ func (s *RemoteRegistrationService) ListByOwner(ctx context.Context, ownerSubjec
 		return nil, nil, fmt.Errorf("list remote registration by owner: owner is required")
 	}
 
-	// One readonly transaction so a concurrent mutator cannot change the provider set
-	// between the two reads.
-	tx, err := s.db.Transaction(ctx, []string{StoreRemoteRegistrations, StoreRemoteProviders}, idb.TransactionReadonly, idb.TransactionOptions{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("list remote registration by owner: begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Abort(context.WithoutCancel(ctx)) }()
-
-	regRec, err := tx.ObjectStore(StoreRemoteRegistrations).Index("by_owner_subject").Get(ctx, ownerSubjectID)
+	regRec, err := s.db.ObjectStore(StoreRemoteRegistrations).Index("by_owner_subject").Get(ctx, ownerSubjectID)
 	if errors.Is(err, idb.ErrNotFound) {
 		return nil, nil, ErrNotRegistered
 	}
@@ -386,13 +345,11 @@ func (s *RemoteRegistrationService) ListByOwner(ctx context.Context, ownerSubjec
 		return nil, nil, fmt.Errorf("list remote registration by owner: %w", err)
 	}
 	reg := recordToRemoteRegistration(regRec)
-	// An expired lease resolves as unregistered here too, so List does not surface a
-	// stale row that Replace and ResolveProvider already treat as absent.
 	if !registrationActive(reg, normalizedRemoteTime(s.now())) {
 		return nil, nil, ErrNotRegistered
 	}
 
-	providerRecs, err := tx.ObjectStore(StoreRemoteProviders).Index("by_registration").GetAll(ctx, reg.ID)
+	providerRecs, err := s.db.ObjectStore(StoreRemoteProviders).Index("by_registration").GetAll(ctx, reg.ID)
 	if err != nil {
 		if errors.Is(err, idb.ErrNotFound) {
 			providerRecs = nil
@@ -422,18 +379,7 @@ func (s *RemoteRegistrationService) updateRegistrationAtGeneration(
 		return fmt.Errorf("%s: registration id is required", op)
 	}
 
-	tx, err := s.db.Transaction(ctx, []string{StoreRemoteRegistrations}, idb.TransactionReadwrite, idb.TransactionOptions{})
-	if err != nil {
-		return fmt.Errorf("%s: begin transaction: %w", op, err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Abort(context.WithoutCancel(ctx))
-		}
-	}()
-
-	store := tx.ObjectStore(StoreRemoteRegistrations)
+	store := s.db.ObjectStore(StoreRemoteRegistrations)
 	reg, err := getRegistrationByID(ctx, store, registrationID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
@@ -445,13 +391,30 @@ func (s *RemoteRegistrationService) updateRegistrationAtGeneration(
 		return ErrGenerationMismatch
 	}
 	now := normalizedRemoteTime(s.now())
-	// An expired lease is unregistered for writes: a late heartbeat must not resurrect it.
 	if !registrationActive(reg, now) {
 		return ErrNotRegistered
 	}
 
 	mutate(reg, now)
-	if err := store.Put(ctx, remoteRegistrationRecord(reg)); err != nil {
+
+	tx, err := s.db.Transaction(ctx, []string{StoreRemoteRegistrations}, idb.TransactionReadwrite, idb.TransactionOptions{})
+	if err != nil {
+		return fmt.Errorf("%s: begin write transaction: %w", op, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+	current, err := getRegistrationByID(ctx, tx.ObjectStore(StoreRemoteRegistrations), registrationID)
+	if err != nil {
+		return fmt.Errorf("%s: re-check: %w", op, err)
+	}
+	if current == nil || current.Generation != generation {
+		return ErrGenerationMismatch
+	}
+	if err := tx.ObjectStore(StoreRemoteRegistrations).Put(ctx, remoteRegistrationRecord(reg)); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -461,7 +424,7 @@ func (s *RemoteRegistrationService) updateRegistrationAtGeneration(
 	return nil
 }
 
-func getRegistrationByOwner(ctx context.Context, store idb.TransactionObjectStore, owner string) (*RemoteRegistration, error) {
+func getRegistrationByOwner(ctx context.Context, store idb.ObjectStore, owner string) (*RemoteRegistration, error) {
 	rec, err := store.Index("by_owner_subject").Get(ctx, owner)
 	if errors.Is(err, idb.ErrNotFound) {
 		return nil, nil
@@ -472,7 +435,9 @@ func getRegistrationByOwner(ctx context.Context, store idb.TransactionObjectStor
 	return recordToRemoteRegistration(rec), nil
 }
 
-func getRegistrationByID(ctx context.Context, store idb.TransactionObjectStore, registrationID string) (*RemoteRegistration, error) {
+func getRegistrationByID(ctx context.Context, store interface {
+	Get(context.Context, string) (idb.Record, error)
+}, registrationID string) (*RemoteRegistration, error) {
 	rec, err := store.Get(ctx, registrationID)
 	if errors.Is(err, idb.ErrNotFound) {
 		return nil, nil
@@ -483,7 +448,7 @@ func getRegistrationByID(ctx context.Context, store idb.TransactionObjectStore, 
 	return recordToRemoteRegistration(rec), nil
 }
 
-func ensureProviderOwnership(ctx context.Context, store, regStore idb.TransactionObjectStore, providers []*RemoteProvider, registrationID string, now time.Time) error {
+func (s *RemoteRegistrationService) ensureProviderOwnership(ctx context.Context, store, regStore idb.ObjectStore, providers []*RemoteProvider, registrationID string, now time.Time) error {
 	for _, provider := range providers {
 		rec, err := store.Get(ctx, remoteProviderID(provider.ProviderKind, provider.ProviderName))
 		if errors.Is(err, idb.ErrNotFound) {
@@ -496,8 +461,6 @@ func ensureProviderOwnership(ctx context.Context, store, regStore idb.Transactio
 		if owner.RegistrationID == registrationID {
 			continue
 		}
-		// A provider owned by an expired (or missing) registration is free to claim; sweep
-		// the expired owner so the takeover leaves no stale row.
 		ownerReg, err := getRegistrationByID(ctx, regStore, owner.RegistrationID)
 		if err != nil {
 			return fmt.Errorf("check provider ownership: load owner registration: %w", err)
@@ -505,21 +468,29 @@ func ensureProviderOwnership(ctx context.Context, store, regStore idb.Transactio
 		if ownerReg != nil && registrationActive(ownerReg, now) {
 			return ErrProviderOwnedElsewhere
 		}
-		if err := removeRegistrationAndProviders(ctx, regStore, store, owner.RegistrationID); err != nil {
+		if err := deleteProvidersForRegistration(ctx, store, owner.RegistrationID); err != nil {
+			return fmt.Errorf("check provider ownership: sweep expired owner: %w", err)
+		}
+		if err := regStore.Delete(ctx, owner.RegistrationID); err != nil && !errors.Is(err, idb.ErrNotFound) {
 			return fmt.Errorf("check provider ownership: sweep expired owner: %w", err)
 		}
 	}
 	return nil
 }
 
-func removeRegistrationAndProviders(ctx context.Context, regStore, providerStore idb.TransactionObjectStore, registrationID string) error {
+func (s *RemoteRegistrationService) removeRegistrationWithGenerationCheck(ctx context.Context, registrationID string, expectedGeneration uint64) error {
+	regStore := s.db.ObjectStore(StoreRemoteRegistrations)
+	providerStore := s.db.ObjectStore(StoreRemoteProviders)
+	if err := deleteProvidersForRegistration(ctx, providerStore, registrationID); err != nil {
+		return fmt.Errorf("sweep providers: %w", err)
+	}
 	if err := regStore.Delete(ctx, registrationID); err != nil && !errors.Is(err, idb.ErrNotFound) {
 		return err
 	}
-	return deleteProvidersForRegistration(ctx, providerStore, registrationID)
+	return nil
 }
 
-func deleteProvidersForRegistration(ctx context.Context, store idb.TransactionObjectStore, registrationID string) error {
+func deleteProvidersForRegistration(ctx context.Context, store idb.ObjectStore, registrationID string) error {
 	recs, err := store.Index("by_registration").GetAll(ctx, registrationID)
 	if err != nil {
 		if errors.Is(err, idb.ErrNotFound) {
@@ -622,6 +593,7 @@ func remoteRegistrationRecord(reg *RemoteRegistration) idb.Record {
 		"tunnel_host":        reg.TunnelHost,
 		"tunnel_certificate": append([]byte(nil), reg.TunnelCertificate...),
 		"server_spki_sha256": reg.ServerSPKISHA256,
+		"connect_url":        reg.ConnectURL,
 		"lease_expires_at":   reg.LeaseExpiresAt,
 		"created_at":         reg.CreatedAt,
 		"updated_at":         reg.UpdatedAt,
@@ -657,6 +629,7 @@ func recordToRemoteRegistration(rec idb.Record) *RemoteRegistration {
 		TunnelHost:                recString(rec, "tunnel_host"),
 		TunnelCertificate:         recBytes(rec, "tunnel_certificate"),
 		ServerSPKISHA256:          recString(rec, "server_spki_sha256"),
+		ConnectURL:                recString(rec, "connect_url"),
 		LeaseExpiresAt:            recTime(rec, "lease_expires_at"),
 		CreatedAt:                 recTime(rec, "created_at"),
 		UpdatedAt:                 recTime(rec, "updated_at"),

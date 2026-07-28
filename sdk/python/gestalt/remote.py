@@ -74,6 +74,7 @@ class Remote:
     last_successful_heartbeat_at: datetime.datetime | None = None
     last_error: str = ""
     lease_expires_at: datetime.datetime | None = None
+    connect_url: str = ""
 
 
 @dataclass(frozen=True, slots=True)

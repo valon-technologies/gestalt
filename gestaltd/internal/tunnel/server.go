@@ -94,6 +94,61 @@ func (s *Server) HTTPHandler() http.Handler {
 	return mux
 }
 
+// ConnectHandler returns an http.Handler that proxies HTTP CONNECT
+// requests to the frps tcpmux listener. Mount this on the main HTTP server
+// so cross-replica tunnel dial-backs can reach the tcpmux via port 8080
+// instead of the random local connectPort.
+func (s *Server) ConnectHandler() http.Handler {
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(s.connectPort))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr
+		}
+		if ip := net.ParseIP(host); ip != nil && !ip.IsLoopback() && !isPrivateOrLoopback(ip) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		backend, err := net.Dial("tcp", addr)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			_ = backend.Close()
+			http.Error(w, "hijack not supported", http.StatusInternalServerError)
+			return
+		}
+		_, err = fmt.Fprintf(backend, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", r.Host, r.Host)
+		if err != nil {
+			_ = backend.Close()
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		client, _, err := hj.Hijack()
+		if err != nil {
+			_ = backend.Close()
+			return
+		}
+		done := make(chan struct{}, 2)
+		go func() { _, _ = io.Copy(backend, client); done <- struct{}{} }()
+		go func() { _, _ = io.Copy(client, backend); done <- struct{}{} }()
+		<-done
+		<-done
+		_ = backend.Close()
+		_ = client.Close()
+	})
+}
+
+func isPrivateOrLoopback(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+}
+
 func (s *Server) ConnectAddr() string {
 	return net.JoinHostPort("127.0.0.1", strconv.Itoa(s.connectPort))
 }
