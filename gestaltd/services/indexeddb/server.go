@@ -441,9 +441,10 @@ func (s *indexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) 
 		case *proto.TransactionClientMessage_Operation:
 			resp, opErr := s.executeTransactionOperation(stream.Context(), tx, body.Operation)
 			if opErr != nil {
-				if isReadOperation(body.Operation) && errors.Is(opErr, idb.ErrNotFound) && !isTransactionStoreDenied(opErr) {
+				normalizedErr := idb.RPCError(opErr)
+				if isReadOperation(body.Operation) && errors.Is(normalizedErr, idb.ErrNotFound) && !isTransactionStoreDenied(opErr) {
 					if err := stream.Send(&proto.TransactionServerMessage{
-						Msg: &proto.TransactionServerMessage_Operation{Operation: transactionOperationError(body.Operation.GetRequestId(), opErr)},
+						Msg: &proto.TransactionServerMessage_Operation{Operation: transactionOperationError(body.Operation.GetRequestId(), normalizedErr)},
 					}); err != nil {
 						return err
 					}
