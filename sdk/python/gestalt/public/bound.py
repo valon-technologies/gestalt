@@ -12,7 +12,6 @@ from gestalt._api import native_request_context
 from gestalt._codec.app import to_wire_request_context
 from gestalt._grpc_transport import (
     ENV_HOST_SERVICE_SOCKET,
-    ENV_HOST_SERVICE_TOKEN,
     host_service_channel,
 )
 
@@ -43,8 +42,8 @@ def gestalt_from_request(
     target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "").strip()
     if not target:
         raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-    token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
-    channel = host_service_channel("app", target, token=token)
+    relay_token = getattr(request, "relay_token", "").strip()
+    channel = host_service_channel("app", target, token=relay_token)
     native = native_request_context(getattr(request, "context", None))
     wire_context = to_wire_request_context(native) if native is not None else None
     resolved_caller = caller_bearer_token.strip() or getattr(request, "token", "")

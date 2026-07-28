@@ -31,7 +31,6 @@ from ._gen.v1 import workflow_pb2 as _pb
 from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
     ENV_HOST_SERVICE_SOCKET,
-    ENV_HOST_SERVICE_TOKEN,
     host_service_channel,
 )
 from ._protocol import (
@@ -2382,9 +2381,9 @@ class Workflow:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"workflow: {ENV_HOST_SERVICE_SOCKET} is not set")
-        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
-
-        self._channel = host_service_channel("workflow", target, token=relay_token)
+        self._channel = host_service_channel(
+            "workflow", target, token=request.relay_token
+        )
         self._stub = pb_grpc.WorkflowStub(self._channel)
         self._timeout = timeout
         self._context = request.context

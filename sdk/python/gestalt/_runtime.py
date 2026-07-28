@@ -26,7 +26,10 @@ from ._catalog import catalog_to_proto
 from ._codec import authorization as _authorization_codec
 from ._codec import identity as _identity_codec
 from ._codec import s3 as _s3_codec
-from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
+from ._grpc_transport import (
+    _HOST_SERVICE_RELAY_TOKEN_HEADER,
+    INTERNAL_GRPC_MESSAGE_OPTIONS,
+)
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE, JSON_CONTENT_TYPE
 from ._protocol import string_lists_from_proto_map
@@ -1427,7 +1430,7 @@ def _provider_servicer(*, app: App) -> Any:
                         message=request.params,
                         request=request,
                     ),
-                    _plugin_request(request),
+                    _plugin_request(request, _context),
                 )
             except Exception as error:
                 traceback.print_exception(error)
@@ -1451,7 +1454,7 @@ def _provider_servicer(*, app: App) -> Any:
             try:
                 subject = app.resolve_http_subject(
                     _http_subject_request(getattr(request, "request", None)),
-                    _plugin_request(request),
+                    _plugin_request(request, context),
                 )
             except HTTPSubjectResolutionError as error:
                 return app_pb2.ResolveHTTPSubjectResponse(
@@ -1483,7 +1486,7 @@ def _provider_servicer(*, app: App) -> Any:
                 )
 
             try:
-                catalog = app.catalog_for_request(_plugin_request(request))
+                catalog = app.catalog_for_request(_plugin_request(request, context))
             except Exception as error:
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,
@@ -1896,7 +1899,7 @@ def _cache_servicer(*, provider: AppProvider) -> Any:
     return CacheServicer()
 
 
-def _plugin_request(request: Any) -> Request:
+def _plugin_request(request: Any, grpc_context: Any = None) -> Request:
     request_context = getattr(request, "context", None)
     tool_refs, tool_refs_set = _tool_refs_from_proto(request_context)
     return Request(
@@ -1912,7 +1915,23 @@ def _plugin_request(request: Any) -> Request:
         tool_refs_set=tool_refs_set,
         idempotency_key=getattr(request, "idempotency_key", "").strip(),
         context=request_context,
+        relay_token=_relay_token_from_context(grpc_context),
     )
+
+
+def _relay_token_from_context(grpc_context: Any) -> str:
+    if grpc_context is None:
+        return ""
+    get_metadata = getattr(grpc_context, "invocation_metadata", None)
+    if not callable(get_metadata):
+        return ""
+    try:
+        for key, value in get_metadata():
+            if key.lower() == _HOST_SERVICE_RELAY_TOKEN_HEADER:
+                return str(value).strip()
+    except (TypeError, AttributeError):
+        return ""
+    return ""
 
 
 def _http_subject_request(request: Any) -> HTTPSubjectRequest:

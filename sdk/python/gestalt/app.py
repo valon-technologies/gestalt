@@ -16,7 +16,6 @@ from ._codec import support as _support
 from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
 from ._grpc_transport import (
     ENV_HOST_SERVICE_SOCKET,
-    ENV_HOST_SERVICE_TOKEN,
     host_service_channel,
 )
 from .invoke_support import decode_app_result
@@ -497,13 +496,13 @@ class App:
         *,
         context: RequestContext | None = None,
         timeout: float | None = None,
+        relay_token: str = "",
     ) -> App:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         channel = host_service_channel(
-            "app", target, token=token.strip(), binding=(name or "").strip()
+            "app", target, token=relay_token.strip(), binding=(name or "").strip()
         )
         client = cls(channel, context=context, timeout=timeout)
         client._owns_channel = True
