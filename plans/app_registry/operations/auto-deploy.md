@@ -44,10 +44,11 @@ Per auto-deploy-enabled app, Gestalt tracks a **pending target**: the newest pub
 2. On publish detection or enable — set `pendingTarget` to the newest published version.
 3. On a new rollout `failed` transition — disable auto-deploy, clear `pendingTarget` and `last_seen_version`, record `lastError` and the handled failure timestamp; stop. The timestamp prevents the retained terminal rollout row from immediately disabling a later app-admin re-enable.
 4. If rollout state is `enrolling` or `restarting`, stop. `pendingTarget` is already updated.
-5. If `pendingTarget == desiredVersion`, clear `pendingTarget` and stop.
-6. Otherwise attempt admission for `pendingTarget` (same as manual version selection). Run this step both after publish detection and on periodic or rollout-terminal reconciliation, including when the registry returns **304**.
-   - **Success** — clear `pendingTarget`.
-   - **Validation failure (400)** — clear `pendingTarget`; expose `lastError` on registry GET. Do not retry until the next publish or a manual deploy.
+5. If `pendingTarget` is empty, stop.
+6. If `pendingTarget == desiredVersion`, clear `pendingTarget` and stop.
+7. Capture `pendingTarget` and attempt admission for that version (same as manual version selection). Run this step both after publish detection and on periodic or rollout-terminal reconciliation, including when the registry returns **304**.
+   - **Success** — clear `pendingTarget` only if it still equals the captured version. Preserve a newer target written concurrently by another replica.
+   - **Validation failure (400)** — clear `pendingTarget` and set `lastError` only if it still equals the captured version. Do not retry until the next publish or a manual deploy.
    - **Active rollout (409)** — keep `pendingTarget`; retry when the rollout reaches `complete`.
 
 ### Toggle
