@@ -91,6 +91,14 @@ type AppAutoDeploySettings struct {
 	LastFailedRolloutAt time.Time
 }
 
+type AppVersionRolloutOutcome struct {
+	ID          string
+	App         string
+	Version     string
+	CompletedAt time.Time
+	FailedAt    time.Time
+}
+
 type GestaltdSourceVersionState struct {
 	CurrentSourceVersion string
 	UpdatedAt            time.Time
