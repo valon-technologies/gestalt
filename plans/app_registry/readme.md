@@ -17,6 +17,9 @@ app_registry/
 │   ├── <a href="./operations/lifecycle.md">lifecycle.md</a>
 │   ├── <a href="./operations/pending-publish.md">pending-publish.md</a>
 │   └── <a href="./operations/retention.md">retention.md</a>
+├── one-pagers/
+│   ├── <a href="./one-pagers/readme.md">readme.md</a>
+│   └── <a href="./one-pagers/auto-deploy.md">auto-deploy.md</a>
 └── project/
     ├── <a href="./project/changelog.md">changelog.md</a>
     └── <a href="./project/tests.md">tests.md</a>
