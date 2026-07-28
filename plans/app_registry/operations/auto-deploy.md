@@ -31,7 +31,7 @@ Each replica may poll independently today. Duplicate reads are acceptable at thi
 The watcher stores the last `ETag` per app in process memory. On each poll:
 
 1. Send `If-None-Match: {etag}` when a prior `ETag` exists.
-2. On **304 Not Modified**, stop — no new publish to process.
+2. On **304 Not Modified**, skip publish detection, then continue coalescing any persisted pending target. This recovers if a rollout-terminal wakeup was missed.
 3. On **200**, parse the index, update the stored `ETag`, and compare the newest published version against `last_seen_version`.
 
 GCS returns `ETag` on every `index.json` response. A missing `ETag` on the first response falls back to an unconditional GET on the next poll.
@@ -40,12 +40,12 @@ GCS returns `ETag` on every `index.json` response. A missing `ETag` on the first
 
 Per auto-deploy-enabled app, Gestalt tracks a **pending target**: the newest published version that should become desired once admission is possible.
 
-1. On publish detection or enable — set `pendingTarget` to the newest published version.
-2. On rollout `failed` — disable auto-deploy, clear `pendingTarget`, record `lastError`; stop.
-3. On rollout `complete` — set `pendingTarget` to the newest published version.
+1. If auto-deploy is disabled, stop. Disabling clears `pendingTarget`.
+2. On publish detection or enable — set `pendingTarget` to the newest published version.
+3. On rollout `failed` — disable auto-deploy, clear `pendingTarget`, record `lastError`; stop.
 4. If rollout state is `enrolling` or `restarting`, stop. `pendingTarget` is already updated.
 5. If `pendingTarget == desiredVersion`, clear `pendingTarget` and stop.
-6. Otherwise attempt admission for `pendingTarget` (same as manual version selection).
+6. Otherwise attempt admission for `pendingTarget` (same as manual version selection). Run this step both after publish detection and on periodic or rollout-terminal reconciliation, including when the registry returns **304**.
    - **Success** — clear `pendingTarget`.
    - **Validation failure (400)** — clear `pendingTarget`; expose `lastError` on registry GET. Do not retry until the next publish or a manual deploy.
    - **Active rollout (409)** — keep `pendingTarget`; retry when the rollout reaches `complete`.
@@ -54,7 +54,7 @@ Per auto-deploy-enabled app, Gestalt tracks a **pending target**: the newest pub
 
 | Action | Behavior |
 | --- | --- |
-| Disable | Stop future automatic admissions. An in-flight rollout continues; the current desired version is unchanged. |
+| Disable | Clear the pending target and stop future automatic admissions. An in-flight rollout continues; the current desired version is unchanged. |
 | Enable | Run coalescing once. When no rollout is active and the newest published version is not desired, admit it. |
 
 ## State
