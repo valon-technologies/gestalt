@@ -18,7 +18,6 @@ type Services struct {
 	AppRollouts                 *AppRolloutService
 	AppInstanceMaterializations *AppInstanceMaterializationService
 	AutoDeploySettings          *AutoDeploySettingsService
-	AppVersionRolloutOutcomes   *AppVersionRolloutOutcomeService
 	RemoteRegistrations         *RemoteRegistrationService
 	DB                          indexeddb.IndexedDB
 }
@@ -70,16 +69,13 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppAutoDeploySettings, AppAutoDeploySettingsSchema); err != nil {
 			return nil, fmt.Errorf("create app_auto_deploy_settings store: %w", err)
 		}
-		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionRolloutOutcomes, AppVersionRolloutOutcomesSchema); err != nil {
-			return nil, fmt.Errorf("create app_version_rollout_outcomes store: %w", err)
-		}
 		if _, err := ds.CreateObjectStore(ctx, StoreRemoteRegistrations, RemoteRegistrationsSchema); err != nil {
 			return nil, fmt.Errorf("create remote_registrations store: %w", err)
 		}
 		if _, err := ds.CreateObjectStore(ctx, StoreRemoteProviders, RemoteProvidersSchema); err != nil {
 			return nil, fmt.Errorf("create remote_providers store: %w", err)
 		}
-	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
+	} else if err := ensureAppAutoDeploySettingsStore(ctx, ds); err != nil {
 		return nil, err
 	}
 	users := NewUserService(ds)
@@ -90,7 +86,6 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	appRollouts := NewAppRolloutService(ds)
 	appInstanceMaterializations := NewAppInstanceMaterializationService(ds)
 	autoDeploySettings := NewAutoDeploySettingsService(ds)
-	appVersionRolloutOutcomes := NewAppVersionRolloutOutcomeService(ds)
 	remoteRegistrations := NewRemoteRegistrationService(ds)
 	return &Services{
 		ExternalCredentials:         nil,
@@ -102,7 +97,6 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		AppRollouts:                 appRollouts,
 		AppInstanceMaterializations: appInstanceMaterializations,
 		AutoDeploySettings:          autoDeploySettings,
-		AppVersionRolloutOutcomes:   appVersionRolloutOutcomes,
 		RemoteRegistrations:         remoteRegistrations,
 		DB:                          ds,
 	}, nil
@@ -114,16 +108,6 @@ func (s *Services) Ping(ctx context.Context) error {
 
 func (s *Services) Close() error {
 	return s.DB.Close()
-}
-
-func ensureDeferredAppRegistryStores(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if err := ensureAppAutoDeploySettingsStore(ctx, ds); err != nil {
-		return err
-	}
-	if err := ensureAppVersionRolloutOutcomesStore(ctx, ds); err != nil {
-		return err
-	}
-	return nil
 }
 
 func ensureAppAutoDeploySettingsStore(ctx context.Context, ds indexeddb.IndexedDB) error {

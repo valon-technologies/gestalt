@@ -15,7 +15,6 @@ const (
 	StoreAppRollouts                   = "app_rollouts"
 	StoreAppInstanceMaterializations   = "app_instance_materializations"
 	StoreAppAutoDeploySettings         = "app_auto_deploy_settings"
-	StoreAppVersionRolloutOutcomes     = "app_version_rollout_outcomes"
 	StoreRemoteRegistrations           = "remote_registrations"
 	StoreRemoteProviders               = "remote_providers"
 )
@@ -155,16 +154,6 @@ var AppAutoDeploySettingsSchema = idb.ObjectStoreOptions{
 		{Name: "last_seen_version", Type: idb.TypeString},
 		{Name: "last_error", Type: idb.TypeString},
 		{Name: "last_failed_rollout_at", Type: idb.TypeTime},
-	},
-}
-
-var AppVersionRolloutOutcomesSchema = idb.ObjectStoreOptions{
-	Columns: []idb.ColumnDef{
-		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "app", Type: idb.TypeString, NotNull: true},
-		{Name: "version", Type: idb.TypeString, NotNull: true},
-		{Name: "completed_at", Type: idb.TypeTime},
-		{Name: "failed_at", Type: idb.TypeTime},
 	},
 }
 

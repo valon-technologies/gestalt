@@ -112,22 +112,17 @@ type appAdminRegistryHistoryResponse struct {
 }
 
 type appAdminRegistryRevision struct {
-	ID                     string                   `json:"id"`
-	Version                string                   `json:"version"`
-	PreviousVersion        string                   `json:"previousVersion,omitempty"`
-	DeployedAt             string                   `json:"deployedAt"`
-	DeployedBy             string                   `json:"deployedBy,omitempty"`
-	SourceRef              string                   `json:"sourceRef,omitempty"`
-	SourceURL              string                   `json:"sourceUrl,omitempty"`
-	Publication            *appregistry.Publication `json:"publication,omitempty"`
-	DeploymentState        string                   `json:"deploymentState,omitempty"`
-	DeployableUntil        string                   `json:"deployableUntil,omitempty"`
-	Current                bool                     `json:"current,omitempty"`
-	RolloutState           string                   `json:"rolloutState,omitempty"`
-	RolloutForSeconds      *int64                   `json:"rolloutForSeconds,omitempty"`
-	RolloutDurationSeconds *int64                   `json:"rolloutDurationSeconds,omitempty"`
-	RolloutCompletedAt     string                   `json:"rolloutCompletedAt,omitempty"`
-	RolloutFailedAt        string                   `json:"rolloutFailedAt,omitempty"`
+	ID              string                   `json:"id"`
+	Version         string                   `json:"version"`
+	PreviousVersion string                   `json:"previousVersion,omitempty"`
+	DeployedAt      string                   `json:"deployedAt"`
+	DeployedBy      string                   `json:"deployedBy,omitempty"`
+	SourceRef       string                   `json:"sourceRef,omitempty"`
+	SourceURL       string                   `json:"sourceUrl,omitempty"`
+	Publication     *appregistry.Publication `json:"publication,omitempty"`
+	DeploymentState string                   `json:"deploymentState,omitempty"`
+	DeployableUntil string                   `json:"deployableUntil,omitempty"`
+	Current         bool                     `json:"current,omitempty"`
 }
 
 func (s *Server) mountAppAdminRegistryRoutes(r chi.Router) {
@@ -446,40 +441,13 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 	publishedByVersion := publishedVersionSummaryMap(index, app.name)
 	now := time.Now().UTC()
 
-	var rollout *core.AppRollout
-	if s.appRollouts != nil {
-		currentRollout, rolloutErr := s.appRollouts.Get(r.Context(), app.name)
-		if rolloutErr == nil {
-			rollout = currentRollout
-		} else if !errors.Is(rolloutErr, core.ErrNotFound) {
-			writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
-			return
-		}
-	}
-
-	changeRequestIDs := make([]string, 0, len(page.Requests))
-	for _, request := range page.Requests {
-		if request != nil && strings.TrimSpace(request.ID) != "" {
-			changeRequestIDs = append(changeRequestIDs, request.ID)
-		}
-	}
-	outcomesByID := map[string]*core.AppVersionRolloutOutcome{}
-	if s.appRolloutOutcomes != nil && len(changeRequestIDs) > 0 {
-		var outcomesErr error
-		outcomesByID, outcomesErr = s.appRolloutOutcomes.GetMany(r.Context(), changeRequestIDs)
-		if outcomesErr != nil {
-			writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
-			return
-		}
-	}
-
 	revisions := make([]appAdminRegistryRevision, 0, len(page.Requests))
 	actorLabels := s.resolveRevisionActorLabels(r.Context(), page.Requests)
 	for _, request := range page.Requests {
 		if request == nil {
 			continue
 		}
-		revision := appAdminRegistryRevisionFromRequest(
+		revisions = append(revisions, appAdminRegistryRevisionFromRequest(
 			request,
 			desiredVersion,
 			currentRevisionID,
@@ -488,9 +456,7 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 			publishedByVersion,
 			actorLabels[strings.TrimSpace(request.Actor)],
 			now,
-		)
-		applyRevisionRolloutFields(&revision, request, rollout, outcomesByID[request.ID], now)
-		revisions = append(revisions, revision)
+		))
 	}
 	writeJSON(w, http.StatusOK, appAdminRegistryHistoryResponse{
 		App:        app.name,
@@ -735,70 +701,6 @@ func appAdminRegistryRevisionFromRequest(
 		revision.DeployableUntil = formatAdminTime(*deployableUntil)
 	}
 	return revision
-}
-
-func applyRevisionRolloutFields(
-	revision *appAdminRegistryRevision,
-	request *core.AppVersionChangeRequest,
-	rollout *core.AppRollout,
-	outcome *core.AppVersionRolloutOutcome,
-	now time.Time,
-) {
-	if revision == nil || request == nil {
-		return
-	}
-	version := strings.TrimSpace(request.ToVersion)
-	if version == "" {
-		return
-	}
-
-	var state core.AppRolloutState
-	var completedAt, failedAt time.Time
-
-	if rollout != nil && strings.TrimSpace(rollout.Version) == version {
-		state = rollout.State
-		completedAt = rollout.CompletedAt
-		failedAt = rollout.FailedAt
-	}
-	if outcome != nil {
-		if !outcome.CompletedAt.IsZero() {
-			completedAt = outcome.CompletedAt
-			state = core.AppRolloutStateComplete
-		}
-		if !outcome.FailedAt.IsZero() {
-			failedAt = outcome.FailedAt
-			state = core.AppRolloutStateFailed
-		}
-	}
-	if state == "" {
-		return
-	}
-
-	revision.RolloutState = string(state)
-	switch state {
-	case core.AppRolloutStateEnrolling, core.AppRolloutStateRestarting:
-		if seconds := rolloutDurationSeconds(request.Timestamp, now); seconds != nil {
-			revision.RolloutForSeconds = seconds
-		}
-	case core.AppRolloutStateComplete:
-		if !completedAt.IsZero() {
-			revision.RolloutCompletedAt = formatAdminTime(completedAt)
-			revision.RolloutDurationSeconds = rolloutDurationSeconds(request.Timestamp, completedAt)
-		}
-	case core.AppRolloutStateFailed:
-		if !failedAt.IsZero() {
-			revision.RolloutFailedAt = formatAdminTime(failedAt)
-			revision.RolloutDurationSeconds = rolloutDurationSeconds(request.Timestamp, failedAt)
-		}
-	}
-}
-
-func rolloutDurationSeconds(start, end time.Time) *int64 {
-	if start.IsZero() || end.IsZero() || end.Before(start) {
-		return nil
-	}
-	seconds := int64(end.Sub(start).Round(time.Second) / time.Second)
-	return &seconds
 }
 
 func historyDeploymentState(state string) string {

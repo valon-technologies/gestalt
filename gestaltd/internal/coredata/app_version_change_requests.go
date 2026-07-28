@@ -150,14 +150,6 @@ func (s *AppVersionChangeRequestService) LatestDesiredRevisionID(ctx context.Con
 	return latestDesiredRevisionID(requests, desiredVersion), nil
 }
 
-func (s *AppVersionChangeRequestService) LatestRevisionIDForVersion(ctx context.Context, appName, version string) (string, error) {
-	requests, err := s.ListRequestsByApp(ctx, appName)
-	if err != nil {
-		return "", err
-	}
-	return latestDesiredRevisionID(requests, version), nil
-}
-
 func latestDesiredRevisionID(requests []*core.AppVersionChangeRequest, desiredVersion string) string {
 	desiredVersion = strings.TrimSpace(desiredVersion)
 	if desiredVersion == "" {

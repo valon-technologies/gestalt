@@ -555,7 +555,6 @@ func startAppRegistryCatalogPoller(
 		ChangeRequests:       changeRequests,
 		Materializations:     materializations,
 		Rollouts:             rollouts,
-		RolloutOutcomes:      result.Services.AppVersionRolloutOutcomes,
 		AppMaterializer:      materializer,
 		AppRestarter:         result.AppRestarter,
 		InstanceID:           appregistry.ResolveInstanceID(),
