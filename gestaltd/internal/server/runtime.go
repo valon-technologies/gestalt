@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry/autodeploy"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -151,7 +152,18 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
-	catalogPoller := startAppRegistryCatalogPoller(ctx, cfg, result, restartDelay, disableRestartDelay)
+	autoDeployController, err := startAppRegistryAutoDeployController(ctx, cfg, result, gestaltdVersion)
+	if err != nil {
+		return err
+	}
+	if autoDeployController != nil {
+		defer autoDeployController.Stop()
+	}
+	var onRolloutTerminal func(string)
+	if autoDeployController != nil {
+		onRolloutTerminal = autoDeployController.Notify
+	}
+	catalogPoller := startAppRegistryCatalogPoller(ctx, cfg, result, restartDelay, disableRestartDelay, onRolloutTerminal)
 	if catalogPoller != nil {
 		defer catalogPoller.Stop()
 	}
@@ -511,7 +523,14 @@ func (h *switchableHandler) Set(handler http.Handler) {
 	h.mu.Unlock()
 }
 
-func startAppRegistryCatalogPoller(ctx context.Context, cfg *config.Config, result *bootstrap.Result, restartDelay time.Duration, disableRestartDelay bool) *appregistry.CatalogPoller {
+func startAppRegistryCatalogPoller(
+	ctx context.Context,
+	cfg *config.Config,
+	result *bootstrap.Result,
+	restartDelay time.Duration,
+	disableRestartDelay bool,
+	onRolloutTerminal func(string),
+) *appregistry.CatalogPoller {
 	if result == nil || result.Services == nil {
 		return nil
 	}
@@ -544,9 +563,76 @@ func startAppRegistryCatalogPoller(ctx context.Context, cfg *config.Config, resu
 		RestartReady:         result.AppProvidersInitialized,
 		BootstrapReady:       result.AppProvidersInitialized,
 		MaxReconcileAttempts: cfg.Server.AppRegistry.MaxReconcileAttempts,
+		OnRolloutTerminal:    onRolloutTerminal,
 	})
 	poller.Start(ctx)
 	return poller
+}
+
+func startAppRegistryAutoDeployController(
+	ctx context.Context,
+	cfg *config.Config,
+	result *bootstrap.Result,
+	gestaltdVersion string,
+) (*autodeploy.Controller, error) {
+	if cfg == nil || result == nil || result.Services == nil {
+		return nil, nil
+	}
+	services := result.Services
+	if services.AutoDeploySettings == nil || services.AppRollouts == nil ||
+		services.AppVersionChangeRequests == nil || services.AppVersionInstallLocks == nil {
+		return nil, nil
+	}
+	apps := make(map[string]autodeploy.AppConfig)
+	for name, entry := range cfg.Apps {
+		if entry == nil || !entry.Source.IsRegistry() {
+			continue
+		}
+		registryName := strings.TrimSpace(entry.Source.Registry)
+		registry, ok := cfg.AppRegistries[registryName]
+		if !ok || strings.TrimSpace(registry.Kind) != config.AppRegistryKindGCS {
+			continue
+		}
+		publicRoot, err := registry.PublicURL()
+		if err != nil {
+			return nil, fmt.Errorf("configure app registry auto-deploy for %s: %w", name, err)
+		}
+		apps[name] = autodeploy.AppConfig{
+			Registry:   registryName,
+			PublicRoot: publicRoot,
+		}
+	}
+	if len(apps) == 0 {
+		return nil, nil
+	}
+	interval, err := cfg.Server.AppRegistry.AutoDeployPollIntervalDuration()
+	if err != nil {
+		return nil, fmt.Errorf("server.appRegistry.autoDeployPollInterval: %w", err)
+	}
+	reader := &appregistry.RegistryReader{}
+	installer := &appregistry.Installer{
+		Registries:       cfg.AppRegistries,
+		ConfigApps:       cfg.Apps,
+		Reader:           reader,
+		ChangeRequests:   services.AppVersionChangeRequests,
+		Locks:            services.AppVersionInstallLocks,
+		SourceVersions:   services.GestaltdSourceVersionState,
+		Rollouts:         services.AppRollouts,
+		RetentionCatalog: appregistry.NewGCSCatalogStore(cfg.AppRegistries),
+		GestaltdVersion:  strings.TrimSpace(gestaltdVersion),
+		SourceVersion:    appregistry.ResolveSourceVersion(),
+	}
+	controller := autodeploy.New(
+		services.AutoDeploySettings,
+		services.AppRollouts,
+		services.AppVersionChangeRequests,
+		reader,
+		installer,
+		apps,
+		interval,
+	)
+	controller.Start(ctx)
+	return controller, nil
 }
 
 func appRegistryRestartDelay(cfg *config.Config) (time.Duration, bool, error) {

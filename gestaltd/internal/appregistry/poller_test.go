@@ -397,10 +397,12 @@ func TestCatalogPollerCompletedOldSourceCannotCompleteTargetRollout(t *testing.T
 	if err != nil {
 		t.Fatalf("MarkRestarting: %v", err)
 	}
+	var terminalApp string
 	poller := NewCatalogPoller(CatalogPollerConfig{
-		Materializations: services.AppInstanceMaterializations,
-		Rollouts:         services.AppRollouts,
-		Now:              func() time.Time { return start.Add(15 * time.Minute) },
+		Materializations:  services.AppInstanceMaterializations,
+		Rollouts:          services.AppRollouts,
+		Now:               func() time.Time { return start.Add(15 * time.Minute) },
+		OnRolloutTerminal: func(app string) { terminalApp = app },
 	})
 	terminal, err := poller.updateRolloutOutcome(ctx, rollout)
 	if err != nil {
@@ -415,6 +417,9 @@ func TestCatalogPollerCompletedOldSourceCannotCompleteTargetRollout(t *testing.T
 	}
 	if rollout.State != core.AppRolloutStateFailed {
 		t.Fatalf("state = %q, want failed", rollout.State)
+	}
+	if terminalApp != "g-issues" {
+		t.Fatalf("terminal callback app = %q, want g-issues", terminalApp)
 	}
 }
 

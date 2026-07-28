@@ -43,6 +43,7 @@ type CatalogPoller struct {
 	BootstrapReady       <-chan struct{}
 	MaxReconcileAttempts int
 	Now                  func() time.Time
+	OnRolloutTerminal    func(string)
 
 	startOnce sync.Once
 	startMu   sync.Mutex
@@ -69,6 +70,7 @@ type CatalogPollerConfig struct {
 	BootstrapReady       <-chan struct{}
 	MaxReconcileAttempts int
 	Now                  func() time.Time
+	OnRolloutTerminal    func(string)
 }
 
 func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
@@ -87,6 +89,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 		BootstrapReady:       cfg.BootstrapReady,
 		MaxReconcileAttempts: cfg.MaxReconcileAttempts,
 		Now:                  cfg.Now,
+		OnRolloutTerminal:    cfg.OnRolloutTerminal,
 		inflight:             make(map[string]struct{}),
 		stoppedAt:            make(map[string]time.Time),
 	}
@@ -283,6 +286,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 				} else if err != nil {
 					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, version, err)
 				}
+				p.notifyRolloutTerminal(appName)
 			}
 			return nil
 		}
@@ -550,6 +554,7 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		} else if err != nil {
 			return false, fmt.Errorf("complete rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
+		p.notifyRolloutTerminal(rollout.App)
 		return true, nil
 	}
 	if !p.now().Before(rollout.Deadline) {
@@ -558,9 +563,16 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		} else if err != nil {
 			return false, fmt.Errorf("fail rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
+		p.notifyRolloutTerminal(rollout.App)
 		return true, nil
 	}
 	return false, nil
+}
+
+func (p *CatalogPoller) notifyRolloutTerminal(app string) {
+	if p != nil && p.OnRolloutTerminal != nil {
+		p.OnRolloutTerminal(strings.TrimSpace(app))
+	}
 }
 
 func (p *CatalogPoller) restartReady() bool {

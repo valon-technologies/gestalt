@@ -153,6 +153,7 @@ var AppAutoDeploySettingsSchema = idb.ObjectStoreOptions{
 		{Name: "pending_version", Type: idb.TypeString},
 		{Name: "last_seen_version", Type: idb.TypeString},
 		{Name: "last_error", Type: idb.TypeString},
+		{Name: "last_failed_rollout_at", Type: idb.TypeTime},
 	},
 }
 

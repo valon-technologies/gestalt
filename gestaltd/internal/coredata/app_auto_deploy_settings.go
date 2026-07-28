@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
@@ -119,26 +120,31 @@ func normalizeAppAutoDeploySettings(settings *core.AppAutoDeploySettings) {
 	settings.PendingVersion = strings.TrimSpace(settings.PendingVersion)
 	settings.LastSeenVersion = strings.TrimSpace(settings.LastSeenVersion)
 	settings.LastError = strings.TrimSpace(settings.LastError)
+	if !settings.LastFailedRolloutAt.IsZero() {
+		settings.LastFailedRolloutAt = settings.LastFailedRolloutAt.UTC().Truncate(time.Millisecond)
+	}
 }
 
 func appAutoDeploySettingsRecord(settings *core.AppAutoDeploySettings) idb.Record {
 	return idb.Record{
-		"id":                settings.App,
-		"app":               settings.App,
-		"enabled":           settings.Enabled,
-		"pending_version":   settings.PendingVersion,
-		"last_seen_version": settings.LastSeenVersion,
-		"last_error":        settings.LastError,
+		"id":                     settings.App,
+		"app":                    settings.App,
+		"enabled":                settings.Enabled,
+		"pending_version":        settings.PendingVersion,
+		"last_seen_version":      settings.LastSeenVersion,
+		"last_error":             settings.LastError,
+		"last_failed_rollout_at": settings.LastFailedRolloutAt,
 	}
 }
 
 func recordToAppAutoDeploySettings(rec idb.Record) *core.AppAutoDeploySettings {
 	enabled, _ := rec["enabled"].(bool)
 	return &core.AppAutoDeploySettings{
-		App:             recString(rec, "app"),
-		Enabled:         enabled,
-		PendingVersion:  recString(rec, "pending_version"),
-		LastSeenVersion: recString(rec, "last_seen_version"),
-		LastError:       recString(rec, "last_error"),
+		App:                 recString(rec, "app"),
+		Enabled:             enabled,
+		PendingVersion:      recString(rec, "pending_version"),
+		LastSeenVersion:     recString(rec, "last_seen_version"),
+		LastError:           recString(rec, "last_error"),
+		LastFailedRolloutAt: recTime(rec, "last_failed_rollout_at"),
 	}
 }
