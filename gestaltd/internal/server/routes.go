@@ -191,6 +191,7 @@ func (s *Server) mountMCPRoutes(r chi.Router) {
 
 func (s *Server) mountAPIRoutes(r chi.Router) {
 	r.Route("/api/v1", func(r chi.Router) {
+		s.mountAuthenticatedStreamRoutes(r)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(s.apiRouteTimeout))
 			s.mountAuthRoutes(r)

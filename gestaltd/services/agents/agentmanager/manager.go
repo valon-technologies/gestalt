@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentroute"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -123,6 +124,7 @@ type Service interface {
 type Config struct {
 	Providers         *registry.ProviderMap[core.Provider]
 	Agent             AgentControl
+	Routes            agentroute.Store
 	WorkflowTools     WorkflowSystemTools
 	TurnScopes        *agentturnscope.Store
 	ToolIDs           *agenttoolid.Codec
@@ -137,6 +139,7 @@ type Config struct {
 type Manager struct {
 	providers         *registry.ProviderMap[core.Provider]
 	agent             AgentControl
+	routes            agentroute.Store
 	workflowTools     WorkflowSystemTools
 	turnScopes        *agentturnscope.Store
 	toolIDs           *agenttoolid.Codec
@@ -152,6 +155,7 @@ func New(cfg Config) *Manager {
 	return &Manager{
 		providers:         cfg.Providers,
 		agent:             cfg.Agent,
+		routes:            cfg.Routes,
 		workflowTools:     cfg.WorkflowTools,
 		turnScopes:        cfg.TurnScopes,
 		toolIDs:           cfg.ToolIDs,

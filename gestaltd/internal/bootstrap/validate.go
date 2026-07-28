@@ -86,6 +86,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	prepared.AgentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
 		Agent:             prepared.Deps.AgentRuntime,
+		Routes:            prepared.Deps.AgentRoutes,
 		WorkflowTools:     workflowTools,
 		TurnScopes:        prepared.Deps.AgentTurnScopes,
 		ToolIDs:           prepared.Deps.AgentToolIDs,

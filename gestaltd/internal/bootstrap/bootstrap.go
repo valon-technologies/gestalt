@@ -28,6 +28,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentroute"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
@@ -178,6 +179,7 @@ type Deps struct {
 	Authorization           core.AuthorizationProvider
 	WorkflowRuntime         *workflowRuntime
 	AgentRuntime            *agentRuntime
+	AgentRoutes             agentroute.Store
 	AgentTurnScopes         *agentturnscope.Store
 	AgentToolIDs            *agenttoolid.Codec
 	WorkflowManager         workflowmanager.Service
@@ -1034,6 +1036,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)
 	}
+	agentRoutes, routesErr := agentroute.NewIndexedDBStore(ctx, store)
+	if routesErr != nil {
+		_ = svc.Close()
+		return nil, fmt.Errorf("bootstrap: agent routes from resource %q: %w", selectedIndexedDBName, routesErr)
+	}
+	deps.AgentRoutes = agentRoutes
 	indexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
 	var extraIndexedDBs []indexeddb.IndexedDB
 	for name, entry := range cfg.Providers.IndexedDB {
@@ -1338,6 +1346,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
 		Agent:             prepared.Deps.AgentRuntime,
+		Routes:            prepared.Deps.AgentRoutes,
 		WorkflowTools:     workflowTools,
 		TurnScopes:        prepared.Deps.AgentTurnScopes,
 		ToolIDs:           prepared.Deps.AgentToolIDs,

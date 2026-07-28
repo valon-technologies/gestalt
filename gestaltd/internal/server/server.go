@@ -110,6 +110,7 @@ type Server struct {
 	workflowSchedules      *workflowmanager.Manager
 	workflowProviderName   string
 	agentRuns              agentmanager.Service
+	agentContract          agentmanager.ContractService
 	providers              *registry.ProviderMap[core.Provider]
 	workflow               bootstrap.WorkflowControl
 	pluginRuntimes         bootstrap.RuntimeInspector
@@ -427,6 +428,9 @@ func New(cfg Config) (*Server, error) {
 		appRuntimeState:        cfg.AppRuntimeState,
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,
+	}
+	if contract, ok := cfg.AgentManager.(agentmanager.ContractService); ok {
+		s.agentContract = contract
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,
