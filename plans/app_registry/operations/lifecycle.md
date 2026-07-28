@@ -94,8 +94,8 @@ Replica membership is discovered rather than configured:
 
 1. App admission snapshots the current `SOURCE_VERSION` into `app_rollouts.target_source_version`.
 2. The rollout remains `enrolling` for a bounded window of at least two poll intervals.
-3. Replicas with that deployment ID join by writing `acknowledged_at` before `enrollment_ends_at` and download the rollout artifact during this window, recording `materialized_at` while the current provider keeps running.
-4. Replicas from another deployment still reconcile the durable desired version, but they are not members of the target cohort and do not affect its outcome.
+3. Replicas with that source version join by writing `acknowledged_at` before `enrollment_ends_at` and download the rollout artifact during this window, recording `materialized_at` while the current provider keeps running.
+4. Replicas from another source version still reconcile the durable desired version, but they are not members of the target cohort and do not affect its outcome.
 5. After enrollment, the target cohort is frozen and the rollout becomes `restarting`.
 6. The rollout completes when the target cohort is non-empty and every member records `restarted_at`.
 7. The rollout fails if a target-cohort replica does not restart before the deadline, or if no target replica acknowledges before the deadline.
@@ -110,12 +110,13 @@ The replica handling the version-selection HTTP request does not choose the targ
 
 Toolshed deployment orchestration owns shared source-version state:
 
-1. After the candidate passes readiness, record its `SOURCE_VERSION` as `candidate`.
-2. While the candidate is being promoted, reject app version selection with **409 Conflict** (`gestaltd deployment in progress`). Registry publishing remains available.
-3. Shift 100% traffic to the candidate, activate it, and atomically promote its source-version record to `current`.
-4. App admission reads the current source-version record while holding the app install lock and copies it to the rollout.
+1. After the candidate passes readiness, call `POST /activate?source_version={SOURCE_VERSION}` on its tagged management URL before shifting traffic. The candidate rejects the request unless the expected source version matches its local value. Activation atomically records that `SOURCE_VERSION` as current and retargets active app rollouts with a fresh enrollment epoch.
+2. App admission reads the current source-version record while holding the app install lock and copies it to the rollout.
+3. Shift 100% traffic to the candidate.
 
-If a new source version becomes current while an app rollout is active, retarget the rollout and open a fresh enrollment window. The desired app version and change request do not change. Materialization rows from the superseded source version remain diagnostic and have `inCohort: false`.
+A repeated activation for the same source version is idempotent. If deployment fails after activation, rollback restores Cloud Run and Temporal traffic but does not restore the previous source-version record. Until the deployment is retried, a new app rollout may target the unavailable candidate and fail. Retrying the failed deployment calls `POST /activate?source_version={SOURCE_VERSION}&retry=true`; this refreshes active rollout epochs and reopens rollouts for that source version that failed since its previous activation before traffic is shifted again.
+
+If a new source version becomes current while an app rollout is active, retarget the rollout and open a fresh enrollment window. Rollout transitions are fenced by target source version and enrollment epoch so a poller that sampled the old rollout cannot complete, fail, or advance the new one. The desired app version and change request do not change. Materialization rows from the superseded source version remain diagnostic and have `inCohort: false`.
 
 Production rollout coordination requires `SOURCE_VERSION`. Local development may use a process-local value.
 
@@ -812,7 +813,7 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | --- | --- |
 | `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions; **install-time validation failed** |
 | `404` | Unknown `registry` name; published version not found; no fleet-known versions for `{app}`; no `appRegistries` configured |
-| `409` | Another instance holds the install lock for this app; `add` called when the app already has fleet-known versions; a `gestaltd` deployment is being promoted |
+| `409` | Another instance holds the install lock for this app; `add` called when the app already has fleet-known versions |
 | `502` | Published version fetch failed; registry fetch failed during install validation; registry named in a fleet-known installation is missing from gestaltd config; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
@@ -827,7 +828,7 @@ App-admin routes use the same `{ "error": "…" }` envelope.
 | `401` | Missing or invalid authentication |
 | `403` | Authenticated user lacks `admin` on `app/{app}` |
 | `404` | App is not registry-only; published version does not exist |
-| `409` | Rollout is active; concurrent selection lost admission; a `gestaltd` deployment is being promoted |
+| `409` | Rollout is active; concurrent selection lost admission |
 | `502` | Registry index or version metadata fetch failed |
 | `503` | Authorization or registry installation services are unavailable |
 

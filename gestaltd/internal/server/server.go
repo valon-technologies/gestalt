@@ -157,9 +157,11 @@ type Server struct {
 	appRegistryReader      *appregistry.RegistryReader
 	appRegistryInstaller   *appregistry.Installer
 	appVersionChanges      *coredata.AppVersionChangeRequestService
+	gestaltdSourceVersions *coredata.GestaltdSourceVersionService
 	appRollouts            *coredata.AppRolloutService
 	appMaterializations    *coredata.AppInstanceMaterializationService
 	artifactsDir           string
+	sourceVersion          string
 	appRuntimeState        AppRuntimeState
 	routeProfile           RouteProfile
 	activateAppProviders   func(context.Context)
@@ -216,6 +218,7 @@ type Config struct {
 	AppRegistryReader      *appregistry.RegistryReader
 	ArtifactsDir           string
 	GestaltdVersion        string
+	SourceVersion          string
 	AppRuntimeState        AppRuntimeState
 	RouteProfile           RouteProfile
 	MeterProvider          metric.MeterProvider
@@ -410,9 +413,11 @@ func New(cfg Config) (*Server, error) {
 		appRegistryReader:      cfg.AppRegistryReader,
 		appRegistryInstaller:   newAppRegistryInstaller(cfg),
 		appVersionChanges:      cfg.Services.AppVersionChangeRequests,
+		gestaltdSourceVersions: cfg.Services.GestaltdSourceVersionState,
 		appRollouts:            cfg.Services.AppRollouts,
 		appMaterializations:    cfg.Services.AppInstanceMaterializations,
 		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
+		sourceVersion:          strings.TrimSpace(cfg.SourceVersion),
 		appRuntimeState:        cfg.AppRuntimeState,
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,

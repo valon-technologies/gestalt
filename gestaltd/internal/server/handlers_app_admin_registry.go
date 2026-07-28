@@ -71,8 +71,9 @@ type appAdminFailedVersion struct {
 }
 
 type appAdminRollout struct {
-	Version string `json:"version"`
-	State   string `json:"state"`
+	Version             string `json:"version"`
+	State               string `json:"state"`
+	TargetSourceVersion string `json:"targetSourceVersion,omitempty"`
 }
 
 type appAdminRegistryVersionRequest struct {
@@ -263,7 +264,11 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	}
 	rollout, err := s.appRollouts.Get(r.Context(), app.name)
 	if err == nil {
-		response.Rollout = &appAdminRollout{Version: rollout.Version, State: string(rollout.State)}
+		response.Rollout = &appAdminRollout{
+			Version:             rollout.Version,
+			State:               string(rollout.State),
+			TargetSourceVersion: rollout.TargetSourceVersion,
+		}
 		response.SelectionDisabled = isActiveAdminRollout(rollout.State)
 		if response.SelectionDisabled {
 			response.DisabledReason = "rollout in progress"
@@ -400,7 +405,11 @@ func (s *Server) selectAppAdminRegistryVersion(w http.ResponseWriter, r *http.Re
 		Registry:       app.registry,
 		FromVersion:    result.FromVersion,
 		DesiredVersion: result.Installation.Version,
-		Rollout:        appAdminRollout{Version: result.Rollout.Version, State: string(result.Rollout.State)},
+		Rollout: appAdminRollout{
+			Version:             result.Rollout.Version,
+			State:               string(result.Rollout.State),
+			TargetSourceVersion: result.Rollout.TargetSourceVersion,
+		},
 	})
 }
 
@@ -436,6 +445,8 @@ func writeAppAdminRegistryInstallError(w http.ResponseWriter, err error) {
 	case errors.Is(err, appregistry.ErrInstallVersionLocked),
 		errors.Is(err, appregistry.ErrAppRolloutActive):
 		status = http.StatusConflict
+	case errors.Is(err, coredata.ErrGestaltdSourceVersionUnavailable):
+		status = http.StatusServiceUnavailable
 	case errors.Is(err, appregistry.ErrRegistrySourceMismatch):
 		status = http.StatusNotFound
 	case strings.Contains(err.Error(), "not configured"):

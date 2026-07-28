@@ -80,7 +80,7 @@ Access install services after bootstrap via `Result.Services` / `prepared.Servic
 
 ```text
 Services.AppVersionChangeRequests   ← install prototype
-Services.GestaltdSourceVersionState ← current and candidate Toolshed source version
+Services.GestaltdSourceVersionState ← current Toolshed source version and activation time
 Services.AppRollouts                ← rollout state
 Services.DB                         ← underlying main-db handle
 ```
@@ -233,22 +233,15 @@ Primary key: `id` = `gestaltd`.
 {
   "id": "gestaltd",
   "current_source_version": "574fe7704ed67fc15d44f76698755bb94ad33d43",
-  "candidate_source_version": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
-  "state": "promoting",
   "updated_at": "2026-07-27T22:30:00Z"
 }
 ```
 
-The source version is the Toolshed commit SHA injected into each process as `SOURCE_VERSION`.
+The source version is the Toolshed commit SHA injected into each process as `SOURCE_VERSION`. `updated_at` records the last source change or explicit deployment retry.
 
-States:
+Toolshed calls the candidate's tagged `POST /activate?source_version={SOURCE_VERSION}` endpoint before shifting traffic. The handler rejects a source-version mismatch so an old revision reached through a stale URL cannot move the target backward. Activation atomically updates `current_source_version` and retargets active app rollouts with fresh timestamps. A repeated activation for the same source is idempotent.
 
-- `stable` — `current_source_version` is authoritative for new app rollouts.
-- `promoting` — a candidate is being activated; app version selection returns **409 Conflict**.
-
-After shifting traffic and activating the candidate, Toolshed atomically copies `candidate_source_version` to `current_source_version`, clears the candidate, and sets `state: "stable"`. If promotion fails, it clears the candidate and leaves the previous source version current.
-
-If promotion finishes while an app rollout is active, update that rollout's target and timestamps in the same transaction used to publish the new current source version. The rollout opens a fresh enrollment epoch without appending another change request.
+If deployment fails after activation, traffic rollback does not update this record. A workflow retry calls `POST /activate?source_version={SOURCE_VERSION}&retry=true`, updates `updated_at`, refreshes active rollout epochs, and reopens rollouts for this source that failed after the previous activation. The retry does not append another change request.
 
 ---
 

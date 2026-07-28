@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 )
 
@@ -180,6 +181,8 @@ func (s *Server) changeAdminAppRegistryApp(w http.ResponseWriter, r *http.Reques
 			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppRolloutActive):
 			status = http.StatusConflict
+		case errors.Is(err, coredata.ErrGestaltdSourceVersionUnavailable):
+			status = http.StatusServiceUnavailable
 		case errors.Is(err, appregistry.ErrAppAlreadyAdded):
 			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppNotAdded),
@@ -239,9 +242,11 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		Reader:           reader,
 		ChangeRequests:   cfg.Services.AppVersionChangeRequests,
 		Locks:            cfg.Services.AppVersionInstallLocks,
+		SourceVersions:   cfg.Services.GestaltdSourceVersionState,
 		Rollouts:         cfg.Services.AppRollouts,
 		RetentionCatalog: appregistryRetentionCatalog(cfg.AppRegistries),
 		GestaltdVersion:  cfg.GestaltdVersion,
+		SourceVersion:    cfg.SourceVersion,
 	}
 }
 

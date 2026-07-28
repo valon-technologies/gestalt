@@ -26,6 +26,7 @@ func TestAdminRegistryApps(t *testing.T) {
 		appendKnownVersion(t, services, "g-issues", "1.2.3", start)
 		rollout := createRollout(t, services, "g-issues", "1.2.3", start)
 		acknowledgeMaterialization(t, services, "replica-a", rollout, start.Add(10*time.Second), true)
+		acknowledgeMaterializationWithSource(t, services, "replica-old", "source-old", rollout, start.Add(10*time.Second), false)
 		acknowledgeMaterialization(t, services, "replica-late", rollout, rollout.EnrollmentEndsAt.Add(time.Second), false)
 
 		ts := newRegistryObservabilityTestServer(t, services)
@@ -43,7 +44,8 @@ func TestAdminRegistryApps(t *testing.T) {
 			Registry       string `json:"registry"`
 			DesiredVersion string `json:"desiredVersion"`
 			Rollout        struct {
-				State string `json:"state"`
+				State               string `json:"state"`
+				TargetSourceVersion string `json:"targetSourceVersion"`
 			} `json:"rollout"`
 			Cohort struct {
 				Acknowledged int `json:"acknowledged"`
@@ -66,6 +68,9 @@ func TestAdminRegistryApps(t *testing.T) {
 		}
 		if got.Rollout.State != string(core.AppRolloutStateEnrolling) {
 			t.Fatalf("rollout state = %q", got.Rollout.State)
+		}
+		if got.Rollout.TargetSourceVersion != "source-target" {
+			t.Fatalf("target source version = %q", got.Rollout.TargetSourceVersion)
 		}
 		if got.Cohort.Acknowledged != 1 || got.Cohort.Materialized != 1 || got.Cohort.Restarted != 1 {
 			t.Fatalf("cohort = %#v, want only on-time replica counted", got.Cohort)
@@ -94,14 +99,16 @@ func TestAdminRegistryApps(t *testing.T) {
 			DesiredVersion string                     `json:"desiredVersion"`
 			KnownVersions  []adminAppInstallationJSON `json:"knownVersions"`
 			Rollout        struct {
-				Version string `json:"version"`
-				State   string `json:"state"`
+				Version             string `json:"version"`
+				State               string `json:"state"`
+				TargetSourceVersion string `json:"targetSourceVersion"`
 			} `json:"rollout"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode registry app: %v", err)
 		}
-		if payload.App != "g-issues" || payload.DesiredVersion != "1.2.3" || payload.Rollout.Version != "1.2.3" || payload.Rollout.State != "enrolling" {
+		if payload.App != "g-issues" || payload.DesiredVersion != "1.2.3" || payload.Rollout.Version != "1.2.3" ||
+			payload.Rollout.State != "enrolling" || payload.Rollout.TargetSourceVersion != "source-target" {
 			t.Fatalf("registry app = %#v", payload)
 		}
 		if len(payload.KnownVersions) != 1 || payload.KnownVersions[0].Version != "1.2.3" {
@@ -200,14 +207,16 @@ func TestAdminAppRollouts(t *testing.T) {
 		t.Fatalf("status = %d: %s", resp.StatusCode, body)
 	}
 	var payload []struct {
-		App     string `json:"app"`
-		Version string `json:"version"`
-		State   string `json:"state"`
+		App                 string `json:"app"`
+		Version             string `json:"version"`
+		State               string `json:"state"`
+		TargetSourceVersion string `json:"targetSourceVersion"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode app rollouts: %v", err)
 	}
-	if len(payload) != 1 || payload[0].App != "g-issues" || payload[0].Version != "1.2.3" || payload[0].State != "enrolling" {
+	if len(payload) != 1 || payload[0].App != "g-issues" || payload[0].Version != "1.2.3" ||
+		payload[0].State != "enrolling" || payload[0].TargetSourceVersion != "source-target" {
 		t.Fatalf("rollouts = %#v", payload)
 	}
 }
@@ -237,11 +246,12 @@ func TestAdminAppRolloutMaterializations(t *testing.T) {
 		Version          string `json:"version"`
 		RolloutState     string `json:"rolloutState"`
 		Materializations []struct {
-			InstanceID   string  `json:"instanceId"`
-			RestartedAt  *string `json:"restartedAt"`
-			InCohort     bool    `json:"inCohort"`
-			Converged    bool    `json:"converged"`
-			AttemptCount int     `json:"attemptCount"`
+			InstanceID    string  `json:"instanceId"`
+			SourceVersion string  `json:"sourceVersion"`
+			RestartedAt   *string `json:"restartedAt"`
+			InCohort      bool    `json:"inCohort"`
+			Converged     bool    `json:"converged"`
+			AttemptCount  int     `json:"attemptCount"`
 		} `json:"materializations"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -255,6 +265,9 @@ func TestAdminAppRolloutMaterializations(t *testing.T) {
 	}
 	if payload.Materializations[0].InCohort || payload.Materializations[0].Converged {
 		t.Fatalf("late replica = %#v, want out of cohort and not converged", payload.Materializations[0])
+	}
+	if payload.Materializations[0].SourceVersion != "source-target" || payload.Materializations[1].SourceVersion != "source-target" {
+		t.Fatalf("source versions = %#v", payload.Materializations)
 	}
 	if !payload.Materializations[1].InCohort || !payload.Materializations[1].Converged || payload.Materializations[1].RestartedAt == nil {
 		t.Fatalf("on-time replica = %#v, want converged cohort member", payload.Materializations[1])
@@ -292,12 +305,13 @@ func appendKnownVersion(t *testing.T, services *coredata.Services, app, version 
 func createRollout(t *testing.T, services *coredata.Services, app, version string, start time.Time) *core.AppRollout {
 	t.Helper()
 	rollout, err := services.AppRollouts.Create(context.Background(), &core.AppRollout{
-		App:              app,
-		Version:          version,
-		State:            core.AppRolloutStateEnrolling,
-		CreatedAt:        start,
-		EnrollmentEndsAt: start.Add(time.Minute),
-		Deadline:         start.Add(15 * time.Minute),
+		App:                 app,
+		Version:             version,
+		State:               core.AppRolloutStateEnrolling,
+		TargetSourceVersion: "source-target",
+		CreatedAt:           start,
+		EnrollmentEndsAt:    start.Add(time.Minute),
+		Deadline:            start.Add(15 * time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("Create rollout: %v", err)
@@ -307,9 +321,15 @@ func createRollout(t *testing.T, services *coredata.Services, app, version strin
 
 func acknowledgeMaterialization(t *testing.T, services *coredata.Services, instanceID string, rollout *core.AppRollout, acknowledgedAt time.Time, converged bool) {
 	t.Helper()
+	acknowledgeMaterializationWithSource(t, services, instanceID, rollout.TargetSourceVersion, rollout, acknowledgedAt, converged)
+}
+
+func acknowledgeMaterializationWithSource(t *testing.T, services *coredata.Services, instanceID, sourceVersion string, rollout *core.AppRollout, acknowledgedAt time.Time, converged bool) {
+	t.Helper()
 	ctx := context.Background()
 	if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
 		InstanceID:     instanceID,
+		SourceVersion:  sourceVersion,
 		App:            rollout.App,
 		Version:        rollout.Version,
 		AcknowledgedAt: acknowledgedAt,

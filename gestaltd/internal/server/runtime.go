@@ -143,6 +143,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		AppRegistries:   cfg.AppRegistries,
 		ArtifactsDir:    cfg.Server.ArtifactsDir,
 		GestaltdVersion: strings.TrimSpace(gestaltdVersion),
+		SourceVersion:   appregistry.ResolveSourceVersion(),
 		AppRuntimeState: appRuntimeState,
 	}
 
@@ -537,6 +538,7 @@ func startAppRegistryCatalogPoller(ctx context.Context, cfg *config.Config, resu
 		AppMaterializer:      materializer,
 		AppRestarter:         result.AppRestarter,
 		InstanceID:           appregistry.ResolveInstanceID(),
+		SourceVersion:        appregistry.ResolveSourceVersion(),
 		RestartDelay:         restartDelay,
 		DisableRestartDelay:  disableRestartDelay,
 		RestartReady:         result.AppProvidersInitialized,

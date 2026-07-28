@@ -20,6 +20,7 @@ const (
 	DefaultCatalogPollInterval = time.Minute
 	DefaultCatalogRestartDelay = time.Minute
 	instanceIDEnvVar           = "GESTALT_INSTANCE_ID"
+	sourceVersionEnvVar        = "SOURCE_VERSION"
 )
 
 var (
@@ -34,6 +35,7 @@ type CatalogPoller struct {
 	AppMaterializer      *Materializer
 	AppRestarter         AppRestarter
 	InstanceID           string
+	SourceVersion        string
 	Interval             time.Duration
 	RestartDelay         time.Duration
 	DisableRestartDelay  bool
@@ -59,6 +61,7 @@ type CatalogPollerConfig struct {
 	AppMaterializer      *Materializer
 	AppRestarter         AppRestarter
 	InstanceID           string
+	SourceVersion        string
 	Interval             time.Duration
 	RestartDelay         time.Duration
 	DisableRestartDelay  bool
@@ -76,6 +79,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 		AppMaterializer:      cfg.AppMaterializer,
 		AppRestarter:         cfg.AppRestarter,
 		InstanceID:           strings.TrimSpace(cfg.InstanceID),
+		SourceVersion:        strings.TrimSpace(cfg.SourceVersion),
 		Interval:             cfg.Interval,
 		RestartDelay:         cfg.RestartDelay,
 		DisableRestartDelay:  cfg.DisableRestartDelay,
@@ -94,6 +98,10 @@ func ResolveInstanceID() string {
 		resolvedInstanceID = resolveInstanceID(os.Getenv(instanceIDEnvVar), host)
 	})
 	return resolvedInstanceID
+}
+
+func ResolveSourceVersion() string {
+	return strings.TrimSpace(os.Getenv(sourceVersionEnvVar))
 }
 
 func resolveInstanceID(instanceIDEnv, hostname string) string {
@@ -270,7 +278,9 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		version := strings.TrimSpace(rollout.Version)
 		if findInstallation(installations, version) == nil {
 			if !p.now().Before(rollout.Deadline) {
-				if _, err := p.Rollouts.MarkFailed(ctx, appName, version, p.now()); err != nil {
+				if _, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+					return nil
+				} else if err != nil {
 					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, version, err)
 				}
 			}
@@ -284,7 +294,10 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 				restartBlocked = true
 			} else {
 				var err error
-				rollout, err = p.Rollouts.MarkRestarting(ctx, appName, version)
+				rollout, err = p.Rollouts.MarkRestartingForRollout(ctx, rollout)
+				if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+					return nil
+				}
 				if err != nil {
 					return fmt.Errorf("start rollout restart phase for %s@%s: %w", appName, version, err)
 				}
@@ -517,6 +530,10 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 			!materialization.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
 			continue
 		}
+		if target := strings.TrimSpace(rollout.TargetSourceVersion); target != "" &&
+			strings.TrimSpace(materialization.SourceVersion) != target {
+			continue
+		}
 		cohortCount++
 		if materialization.RestartedAt.Before(rollout.CreatedAt) ||
 			materialization.RestartedAt.After(rollout.Deadline) {
@@ -528,13 +545,17 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		converged = false
 	}
 	if converged {
-		if _, err := p.Rollouts.MarkComplete(ctx, rollout.App, rollout.Version, p.now()); err != nil {
+		if _, err := p.Rollouts.MarkCompleteForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+			return false, nil
+		} else if err != nil {
 			return false, fmt.Errorf("complete rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
 		return true, nil
 	}
 	if !p.now().Before(rollout.Deadline) {
-		if _, err := p.Rollouts.MarkFailed(ctx, rollout.App, rollout.Version, p.now()); err != nil {
+		if _, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now()); errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+			return false, nil
+		} else if err != nil {
 			return false, fmt.Errorf("fail rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
 		return true, nil
@@ -715,6 +736,7 @@ func (p *CatalogPoller) ensureAcknowledged(ctx context.Context, instanceID, appN
 	acknowledgedAt := p.now()
 	input := &core.AppInstanceMaterialization{
 		InstanceID:     instanceID,
+		SourceVersion:  strings.TrimSpace(p.SourceVersion),
 		App:            appName,
 		Version:        version,
 		AcknowledgedAt: acknowledgedAt,

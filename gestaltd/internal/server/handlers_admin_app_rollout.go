@@ -36,14 +36,15 @@ type adminPublishedVersionInfo struct {
 }
 
 type adminAppRolloutInfo struct {
-	App              string `json:"app,omitempty"`
-	Version          string `json:"version"`
-	State            string `json:"state"`
-	CreatedAt        string `json:"createdAt"`
-	EnrollmentEndsAt string `json:"enrollmentEndsAt"`
-	Deadline         string `json:"deadline"`
-	CompletedAt      string `json:"completedAt,omitempty"`
-	FailedAt         string `json:"failedAt,omitempty"`
+	App                 string `json:"app,omitempty"`
+	Version             string `json:"version"`
+	State               string `json:"state"`
+	TargetSourceVersion string `json:"targetSourceVersion,omitempty"`
+	CreatedAt           string `json:"createdAt"`
+	EnrollmentEndsAt    string `json:"enrollmentEndsAt"`
+	Deadline            string `json:"deadline"`
+	CompletedAt         string `json:"completedAt,omitempty"`
+	FailedAt            string `json:"failedAt,omitempty"`
 }
 
 type adminRolloutCohortInfo struct {
@@ -62,6 +63,7 @@ type adminAppRolloutMaterializationsResponse struct {
 
 type adminAppMaterializationInfo struct {
 	InstanceID       string  `json:"instanceId"`
+	SourceVersion    string  `json:"sourceVersion,omitempty"`
 	AcknowledgedAt   *string `json:"acknowledgedAt"`
 	MaterializedAt   *string `json:"materializedAt"`
 	StoppedAt        *string `json:"stoppedAt"`
@@ -223,6 +225,9 @@ func (s *Server) listAdminAppRolloutMaterializations(w http.ResponseWriter, r *h
 		return
 	}
 	slices.SortFunc(rows, func(a, b *core.AppInstanceMaterialization) int {
+		if bySourceVersion := strings.Compare(a.SourceVersion, b.SourceVersion); bySourceVersion != 0 {
+			return bySourceVersion
+		}
 		return strings.Compare(a.InstanceID, b.InstanceID)
 	})
 	out := make([]adminAppMaterializationInfo, 0, len(rows))
@@ -337,13 +342,14 @@ func adminAppRolloutFromCore(rollout *core.AppRollout, includeApp bool) adminApp
 		return adminAppRolloutInfo{}
 	}
 	out := adminAppRolloutInfo{
-		Version:          rollout.Version,
-		State:            string(rollout.State),
-		CreatedAt:        formatAdminTime(rollout.CreatedAt),
-		EnrollmentEndsAt: formatAdminTime(rollout.EnrollmentEndsAt),
-		Deadline:         formatAdminTime(rollout.Deadline),
-		CompletedAt:      formatAdminTime(rollout.CompletedAt),
-		FailedAt:         formatAdminTime(rollout.FailedAt),
+		Version:             rollout.Version,
+		State:               string(rollout.State),
+		TargetSourceVersion: rollout.TargetSourceVersion,
+		CreatedAt:           formatAdminTime(rollout.CreatedAt),
+		EnrollmentEndsAt:    formatAdminTime(rollout.EnrollmentEndsAt),
+		Deadline:            formatAdminTime(rollout.Deadline),
+		CompletedAt:         formatAdminTime(rollout.CompletedAt),
+		FailedAt:            formatAdminTime(rollout.FailedAt),
 	}
 	if includeApp {
 		out.App = rollout.App
@@ -377,6 +383,7 @@ func adminRolloutCohortFromRows(rows []*core.AppInstanceMaterialization, rollout
 func adminAppMaterializationFromCore(row *core.AppInstanceMaterialization, rollout *core.AppRollout) adminAppMaterializationInfo {
 	out := adminAppMaterializationInfo{
 		InstanceID:       row.InstanceID,
+		SourceVersion:    row.SourceVersion,
 		AcknowledgedAt:   formatAdminTimePtr(row.AcknowledgedAt),
 		MaterializedAt:   formatAdminTimePtr(row.MaterializedAt),
 		StoppedAt:        formatAdminTimePtr(row.StoppedAt),
@@ -399,6 +406,8 @@ func adminAppMaterializationFromCore(row *core.AppInstanceMaterialization, rollo
 
 func materializationInRolloutCohort(row *core.AppInstanceMaterialization, rollout *core.AppRollout) bool {
 	return row != nil && rollout != nil &&
+		(strings.TrimSpace(rollout.TargetSourceVersion) == "" ||
+			strings.TrimSpace(row.SourceVersion) == strings.TrimSpace(rollout.TargetSourceVersion)) &&
 		materializationTimestampIsCurrent(row.AcknowledgedAt, rollout) &&
 		row.AcknowledgedAt.Before(rollout.EnrollmentEndsAt)
 }

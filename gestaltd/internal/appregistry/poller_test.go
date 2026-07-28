@@ -3,6 +3,7 @@ package appregistry
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -250,6 +251,170 @@ func TestCatalogPollerRolloutWaitsForEveryEnrolledReplica(t *testing.T) {
 	}
 	if rollout.State != core.AppRolloutStateComplete {
 		t.Fatalf("state = %q, want complete", rollout.State)
+	}
+}
+
+func TestCatalogPollerRolloutOnlyWaitsForTargetSourceVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	clock := start
+	appendRolloutFixture(t, services, "g-issues", "v1", start)
+	if _, err := services.AppRollouts.Create(ctx, &core.AppRollout{
+		App:                 "g-issues",
+		Version:             "v1",
+		State:               core.AppRolloutStateEnrolling,
+		TargetSourceVersion: "source-new",
+		CreatedAt:           start,
+		EnrollmentEndsAt:    start.Add(2 * time.Minute),
+		Deadline:            start.Add(15 * time.Minute),
+	}); err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+	for replica := 0; replica < 5; replica++ {
+		if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+			InstanceID:     "old-replica-" + strconv.Itoa(replica),
+			SourceVersion:  "source-old",
+			App:            "g-issues",
+			Version:        "v1",
+			AcknowledgedAt: start.Add(time.Minute),
+		}); err != nil {
+			t.Fatalf("Acknowledge old replica %d: %v", replica, err)
+		}
+	}
+	pollers := make([]*CatalogPoller, 0, 5)
+	for replica := 0; replica < 5; replica++ {
+		poller := NewCatalogPoller(CatalogPollerConfig{
+			ChangeRequests:      services.AppVersionChangeRequests,
+			Materializations:    services.AppInstanceMaterializations,
+			Rollouts:            services.AppRollouts,
+			AppRestarter:        &recordingAppRestarter{},
+			InstanceID:          "new-replica-" + strconv.Itoa(replica),
+			SourceVersion:       "source-new",
+			DisableRestartDelay: true,
+			Now:                 func() time.Time { return clock },
+		})
+		pollers = append(pollers, poller)
+		if err := poller.ReconcileOnce(ctx); err != nil {
+			t.Fatalf("enrollment pass %d: %v", replica, err)
+		}
+	}
+
+	clock = start.Add(2 * time.Minute)
+	for replica, poller := range pollers {
+		if err := poller.ReconcileOnce(ctx); err != nil {
+			t.Fatalf("restart pass %d: %v", replica, err)
+		}
+	}
+
+	rollout, err := services.AppRollouts.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateComplete {
+		t.Fatalf("state = %q, want complete", rollout.State)
+	}
+	for replica := 0; replica < 5; replica++ {
+		oldReplica, err := services.AppInstanceMaterializations.Get(ctx, "old-replica-"+strconv.Itoa(replica), "g-issues", "v1")
+		if err != nil {
+			t.Fatalf("Get old replica %d: %v", replica, err)
+		}
+		if !oldReplica.RestartedAt.IsZero() {
+			t.Fatalf("old replica %d restarted_at = %v, want zero", replica, oldReplica.RestartedAt)
+		}
+	}
+}
+
+func TestCatalogPollerNonTargetSourceWaitsDuringEnrollment(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	appendRolloutFixture(t, services, "g-issues", "v1", start)
+	if _, err := services.AppRollouts.Create(ctx, &core.AppRollout{
+		App:                 "g-issues",
+		Version:             "v1",
+		State:               core.AppRolloutStateEnrolling,
+		TargetSourceVersion: "source-new",
+		CreatedAt:           start,
+		EnrollmentEndsAt:    start.Add(2 * time.Minute),
+		Deadline:            start.Add(15 * time.Minute),
+	}); err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+	restarter := &recordingAppRestarter{}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        restarter,
+		InstanceID:          "old-replica",
+		SourceVersion:       "source-old",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return start.Add(time.Minute) },
+	})
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if len(restarter.stopCalls) != 0 || len(restarter.startCalls) != 0 {
+		t.Fatalf("non-target restarted during enrollment: stop=%v start=%v", restarter.stopCalls, restarter.startCalls)
+	}
+}
+
+func TestCatalogPollerCompletedOldSourceCannotCompleteTargetRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	if _, err := services.AppRollouts.Create(ctx, &core.AppRollout{
+		App:                 "g-issues",
+		Version:             "v1",
+		State:               core.AppRolloutStateEnrolling,
+		TargetSourceVersion: "source-new",
+		CreatedAt:           start,
+		EnrollmentEndsAt:    start.Add(2 * time.Minute),
+		Deadline:            start.Add(15 * time.Minute),
+	}); err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+		InstanceID:     "old-replica",
+		SourceVersion:  "source-old",
+		App:            "g-issues",
+		Version:        "v1",
+		AcknowledgedAt: start.Add(time.Minute),
+	}); err != nil {
+		t.Fatalf("Acknowledge old replica: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.MarkRestarted(ctx, "old-replica", "g-issues", "v1", start.Add(3*time.Minute)); err != nil {
+		t.Fatalf("MarkRestarted old replica: %v", err)
+	}
+	rollout, err := services.AppRollouts.MarkRestarting(ctx, "g-issues", "v1")
+	if err != nil {
+		t.Fatalf("MarkRestarting: %v", err)
+	}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		Materializations: services.AppInstanceMaterializations,
+		Rollouts:         services.AppRollouts,
+		Now:              func() time.Time { return start.Add(15 * time.Minute) },
+	})
+	terminal, err := poller.updateRolloutOutcome(ctx, rollout)
+	if err != nil {
+		t.Fatalf("updateRolloutOutcome: %v", err)
+	}
+	if !terminal {
+		t.Fatal("updateRolloutOutcome terminal = false, want true")
+	}
+	rollout, err = services.AppRollouts.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateFailed {
+		t.Fatalf("state = %q, want failed", rollout.State)
 	}
 }
 
