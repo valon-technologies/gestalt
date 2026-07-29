@@ -288,27 +288,6 @@ func catalogOperationIDs(cat *catalog.Catalog) map[string]struct{} {
 	return ids
 }
 
-// UnknownAllowedOperations returns allowed_operations entries that are not
-// present in the provided catalog.
-func UnknownAllowedOperations(allowed map[string]*OperationOverride, cat *catalog.Catalog) []string {
-	if len(allowed) == 0 {
-		return nil
-	}
-	available := catalogOperationIDs(cat)
-	unknown := make([]string, 0)
-	for name := range allowed {
-		if len(available) == 0 {
-			unknown = append(unknown, name)
-			continue
-		}
-		if _, ok := available[name]; !ok {
-			unknown = append(unknown, name)
-		}
-	}
-	slices.Sort(unknown)
-	return unknown
-}
-
 // MatchingAllowedOperations returns the subset of allowed operations that are
 // present in the provided catalog. It returns nil when either input is empty or
 // when no allowed operations match the catalog.

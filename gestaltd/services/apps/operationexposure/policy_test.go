@@ -48,7 +48,7 @@ func TestMatchingAllowedOperationsPreservesEmptyMap(t *testing.T) {
 	}
 }
 
-func TestUnknownAllowedOperations(t *testing.T) {
+func TestMatchingAllowedOperationsIgnoresUnknown(t *testing.T) {
 	t.Parallel()
 
 	cat := &catalog.Catalog{
@@ -57,23 +57,15 @@ func TestUnknownAllowedOperations(t *testing.T) {
 			{ID: "get_item"},
 		},
 	}
-	unknown := UnknownAllowedOperations(map[string]*OperationOverride{
+	matched := MatchingAllowedOperations(map[string]*OperationOverride{
 		"get_item":       nil,
 		"get_review_ctx": nil,
 	}, cat)
-	if len(unknown) != 1 || unknown[0] != "get_review_ctx" {
-		t.Fatalf("unknown = %#v, want [get_review_ctx]", unknown)
+	if len(matched) != 1 {
+		t.Fatalf("matched = %#v, want only get_item", matched)
 	}
-}
-
-func TestUnknownAllowedOperationsEmptyCatalog(t *testing.T) {
-	t.Parallel()
-
-	unknown := UnknownAllowedOperations(map[string]*OperationOverride{
-		"get_item": nil,
-	}, &catalog.Catalog{Name: "example"})
-	if len(unknown) != 1 || unknown[0] != "get_item" {
-		t.Fatalf("unknown = %#v, want [get_item]", unknown)
+	if _, ok := matched["get_item"]; !ok {
+		t.Fatalf("matched = %#v, want get_item", matched)
 	}
 }
 

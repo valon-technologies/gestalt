@@ -1078,15 +1078,7 @@ func applyAllowedOperations(name string, allowedOperations map[string]*config.Op
 	if allowedOperations == nil {
 		return pluginProv, nil
 	}
-	providerCatalog := pluginProv.Catalog()
-	if unknown := operationexposure.UnknownAllowedOperations(allowedOperations, providerCatalog); len(unknown) > 0 {
-		slog.Warn(
-			"allowed_operations references operations not in provider catalog; ignoring until catalog includes them",
-			"integration", name,
-			"operations", unknown,
-		)
-	}
-	matched := operationexposure.MatchingAllowedOperations(allowedOperations, providerCatalog)
+	matched := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 	if matched == nil {
 		return nil, fmt.Errorf("integration %q plugin: allowed_operations has no matching catalog operations", name)
 	}
