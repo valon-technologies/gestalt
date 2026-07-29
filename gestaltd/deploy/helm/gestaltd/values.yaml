@@ -30,6 +30,15 @@ serviceAccount:
 service:
   type: ClusterIP
   port: 8080
+  # Pin a clusterIP to keep it stable across reinstalls. Without this, deleting
+  # and recreating the Service assigns a new ClusterIP, and clients that cache
+  # the resolved address (e.g. cloudflared) keep dialing the dead old IP until
+  # DNS re-resolves, extending 5xx past the actual rollout window.
+  clusterIP: ""
+  # Keep false so kube-proxy only routes to pods that pass readiness. This
+  # pairs with RollingUpdate (maxUnavailable: 0) to guarantee an endpoint is
+  # always available during deploys.
+  publishNotReadyAddresses: false
 
 managementService:
   enabled: false
@@ -74,7 +83,11 @@ persistence:
   size: 1Gi
 
 updateStrategy:
-  type: Recreate
+  # RollingUpdate keeps old pods serving until new ones pass readiness, so
+  # multi-replica shared environments (dev/stage/prod with DB-backed state and
+  # emptyDir volumes) deploy with no downtime. Single-replica local deploys that
+  # mount a ReadWriteOnce PVC should override this to Recreate.
+  type: RollingUpdate
   rollingUpdate:
     maxUnavailable: 0
     maxSurge: 1

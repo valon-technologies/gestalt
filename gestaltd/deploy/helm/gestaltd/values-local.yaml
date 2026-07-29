@@ -15,3 +15,9 @@ config:
         source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml
         config:
           dsn: "sqlite:///data/gestalt.db"
+
+# Single replica on a ReadWriteOnce PVC: Recreate avoids a RollingUpdate surge
+# pod waiting on a PVC the old pod still holds. Shared multi-replica
+# environments use the chart default (RollingUpdate) instead.
+updateStrategy:
+  type: Recreate

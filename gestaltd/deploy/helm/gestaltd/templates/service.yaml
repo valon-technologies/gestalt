@@ -6,6 +6,10 @@ metadata:
     {{- include "gestaltd.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
+  {{- with .Values.service.clusterIP }}
+  clusterIP: {{ . }}
+  {{- end }}
+  publishNotReadyAddresses: {{ .Values.service.publishNotReadyAddresses | default false }}
   ports:
     - port: {{ .Values.service.port }}
       targetPort: http
