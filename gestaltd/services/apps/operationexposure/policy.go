@@ -277,6 +277,26 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 	return filtered
 }
 
+// UnknownAllowedOperations returns allowed_operations entries that are not
+// present in the provided catalog.
+func UnknownAllowedOperations(allowed map[string]*OperationOverride, cat *catalog.Catalog) []string {
+	if len(allowed) == 0 {
+		return nil
+	}
+	matched := MatchingAllowedOperations(allowed, cat)
+	unknown := make([]string, 0)
+	for name := range allowed {
+		if matched != nil {
+			if _, ok := matched[name]; ok {
+				continue
+			}
+		}
+		unknown = append(unknown, name)
+	}
+	slices.Sort(unknown)
+	return unknown
+}
+
 // MatchingAllowedOperations returns the subset of allowed operations that are
 // present in the provided catalog. It returns nil when either input is empty or
 // when no allowed operations match the catalog.

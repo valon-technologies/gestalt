@@ -1077,15 +1077,24 @@ func loadSpecDefinition(ctx context.Context, name string, resolved config.Resolv
 }
 
 func applyAllowedOperations(name string, allowedOperations map[string]*config.OperationOverride, pluginProv core.Provider) (core.Provider, error) {
-	policy, err := operationexposure.New(allowedOperations)
+	if allowedOperations == nil {
+		return pluginProv, nil
+	}
+	catalog := pluginProv.Catalog()
+	for _, operation := range operationexposure.UnknownAllowedOperations(allowedOperations, catalog) {
+		slog.Warn(
+			"allowed_operations references operation not in provider catalog; ignoring until catalog includes it",
+			"integration", name,
+			"operation", operation,
+		)
+	}
+	matched := operationexposure.MatchingAllowedOperations(allowedOperations, catalog)
+	policy, err := operationexposure.New(matched)
 	if err != nil {
 		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
 	}
 	if policy == nil {
 		return pluginProv, nil
-	}
-	if err := policy.ValidateCatalog(pluginProv.Catalog()); err != nil {
-		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
 	}
 	return policy.Wrap(pluginProv), nil
 }
