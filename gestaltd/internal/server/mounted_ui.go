@@ -116,18 +116,27 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	if inner == nil {
 		return http.NotFoundHandler()
 	}
+	// Build the static-serving layer. When a tunnel registration exists for
+	// this app, the tunnel proxy replaces the local static handler. The proxy
+	// is wrapped by theme/strip-prefix (for the local fallback path only) and
+	// then by auth, so tunnel-proxied UIs require the same authorization as
+	// local UIs.
+	if strings.TrimSpace(mounted.AppName) != "" {
+		inner = s.tunnelUIProxyHandler(mounted.AppName, mounted.Path, inner)
+	}
 	if mounted.IsDev {
 		if mounted.ThemeStylesheet != "" || mounted.ThemeAssetsDir != "" {
 			inner = mountedUIThemeHandlerFullPath(mounted, inner)
 		}
-		h := mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
-		return withDevContentSecurityPolicy(h)
+		inner = mountedUITelemetryHandler(mounted, inner)
+		return withDevContentSecurityPolicy(s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 	}
 	inner = mountedUIThemeHandler(mounted, inner)
 	if mounted.Path != "/" {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}
-	return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
+	inner = mountedUITelemetryHandler(mounted, inner)
+	return s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
 }
 
 func (s *Server) adminUIHandler() http.Handler {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/grpcutil"
 	"github.com/valon-technologies/gestalt/server/services/hostserviceingress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
@@ -63,12 +64,9 @@ func (s *Server) hostServiceRelayToken(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get(runtimehost.HostServiceRelayTokenHeader))
 }
 
+// isGRPCRequest delegates to grpcutil.IsGRPCRequest.
 func isGRPCRequest(r *http.Request) bool {
-	if r == nil || r.Method != http.MethodPost {
-		return false
-	}
-	contentType := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type")))
-	return strings.HasPrefix(contentType, "application/grpc")
+	return grpcutil.IsGRPCRequest(r)
 }
 
 func writeGRPCTrailersOnly(w http.ResponseWriter, code codes.Code, message string) {

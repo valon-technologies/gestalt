@@ -258,7 +258,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 	}
 
-	prov, err := b.providers.Get(providerName)
+	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
@@ -416,7 +416,7 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 		}
 	}
 
-	prov, err := b.providers.Get(providerName)
+	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return fail(fmt.Errorf("%w: %q", ErrProviderNotFound, providerName))
@@ -597,7 +597,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 		}
 	}
 
-	prov, err := b.providers.Get(providerName)
+	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return fail(fmt.Errorf("%w: %q", ErrProviderNotFound, providerName))
@@ -858,7 +858,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 		}
 	}
 
-	prov, err := b.providers.Get(providerName)
+	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
@@ -948,7 +948,7 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
 	}
 	ctx = withResolvedPrincipal(ctx, p)
-	prov, err := b.providers.Get(providerName)
+	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return ctx, "", fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
@@ -970,7 +970,7 @@ func (b *Broker) providerDelegatesRemoteAuthorization(providerName string) bool 
 	if b == nil || b.providers == nil {
 		return false
 	}
-	provider, err := b.providers.Get(providerName)
+	provider, err := b.providers.Get(providerName) // no request context available
 	return err == nil && providerDelegatesRemoteAuthorization(provider)
 }
 
@@ -1058,7 +1058,7 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 		return nil, fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
 	}
 	ctx = withResolvedPrincipal(ctx, p)
-	prov, err := b.providers.Get(providerName)
+	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return nil, fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)

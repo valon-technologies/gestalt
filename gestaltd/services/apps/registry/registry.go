@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -8,11 +10,21 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
+// RemoteResolver resolves a provider name to a remote (tunnel-registered)
+// provider. When set on a ProviderMap, Get consults the resolver before the
+// local map; if the resolver returns a provider, it takes precedence (tunnel
+// always wins). This implements reverse-tunnel traffic forwarding: a
+// tunnel-registered app shadows any local provider with the same name.
+type RemoteResolver[T any] interface {
+	ResolveProvider(ctx context.Context, name string) (T, error)
+}
+
 // ProviderMap is a thread-safe, named collection of providers of a single type.
 type ProviderMap[T any] struct {
-	mu    sync.RWMutex
-	items map[string]T
-	kind  string
+	mu       sync.RWMutex
+	items    map[string]T
+	kind     string
+	resolver RemoteResolver[T]
 }
 
 func newProviderMap[T any](kind string) ProviderMap[T] {
@@ -46,6 +58,27 @@ func (m *ProviderMap[T]) Remove(name string) {
 }
 
 func (m *ProviderMap[T]) Get(name string) (T, error) {
+	return m.GetWithContext(context.Background(), name)
+}
+
+// GetWithContext resolves a provider by name. If a RemoteResolver is set, it is
+// consulted first (tunnel always wins). If the resolver returns a provider, it
+// shadows any local provider with the same name. If the resolver returns
+// core.ErrNotFound (no tunnel registration exists), the local map is consulted
+// as a fallback. Any other resolver error (registration exists but proxy
+// construction failed) is propagated to the caller so the request fails rather
+// than silently serving a local provider.
+func (m *ProviderMap[T]) GetWithContext(ctx context.Context, name string) (T, error) {
+	if m != nil && m.resolver != nil {
+		val, err := m.resolver.ResolveProvider(ctx, name)
+		if err == nil {
+			return val, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) {
+			var zero T
+			return zero, err
+		}
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	val, ok := m.items[name]
@@ -54,6 +87,18 @@ func (m *ProviderMap[T]) Get(name string) (T, error) {
 		return zero, fmt.Errorf("%s %q: %w", m.kind, name, core.ErrNotFound)
 	}
 	return val, nil
+}
+
+// SetRemoteResolver sets the remote resolver consulted by GetWithContext. Once
+// set, tunnel-registered providers take precedence over local providers for the
+// same name. Pass nil to disable.
+func (m *ProviderMap[T]) SetRemoteResolver(r RemoteResolver[T]) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.resolver = r
+	m.mu.Unlock()
 }
 
 // List returns all registered names, sorted alphabetically.

@@ -158,6 +158,7 @@ func StartHost(ctx context.Context, cfg HostConfig) (*Host, error) {
 	tlsCfg := &tls.Config{
 		Certificates: []tls.Certificate{cfg.Identity.Certificate},
 		MinVersion:   tls.VersionTLS13,
+		NextProtos:   []string{"h2", "http/1.1"},
 		ClientAuth:   tls.RequireAnyClientCert,
 		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			if len(rawCerts) == 0 {

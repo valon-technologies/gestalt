@@ -144,6 +144,7 @@ type Server struct {
 	publicRESTHandler      http.Handler
 	frpsHandler            http.Handler
 	frpsConnectHandler     http.Handler
+	tunnelResolver         *tunnelProviderResolver
 	publicGatewayConn      *publicrpc.InProcessConn
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3sdk.S3
@@ -231,6 +232,7 @@ type Config struct {
 	RemoteManagement       proto.RemoteManagementServer
 	FrpsHandler            http.Handler
 	FrpsConnectHandler     http.Handler
+	TunnelResolver         TunnelResolverConfig
 	// AppAutoDeployNotify requests prompt auto-deploy reconciliation for an app.
 	AppAutoDeployNotify func(app string)
 }
@@ -365,6 +367,10 @@ func New(cfg Config) (*Server, error) {
 	if err := validatePublicHostServices(cfg.PublicHostServices.Snapshot()); err != nil {
 		return nil, fmt.Errorf("init public host services: %w", err)
 	}
+	tunnelResolver := newTunnelProviderResolver(cfg.TunnelResolver)
+	if tunnelResolver != nil && cfg.Providers != nil {
+		cfg.Providers.SetRemoteResolver(tunnelResolver)
+	}
 	s := &Server{
 		router:                 router,
 		handler:                withRequestTelemetryProviders(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider, cfg.TracerProvider),
@@ -380,6 +386,7 @@ func New(cfg Config) (*Server, error) {
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		providers:              cfg.Providers,
+		tunnelResolver:         tunnelResolver,
 		workflow:               cfg.Workflow,
 		pluginRuntimes:         cfg.Runtimes,
 		resolver:               resolver,
@@ -482,11 +489,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Close releases in-process public gateway resources.
 func (s *Server) Close() {
-	if s == nil || s.publicGatewayConn == nil {
+	if s == nil {
 		return
 	}
-	s.publicGatewayConn.Close()
-	s.publicGatewayConn = nil
+	if s.tunnelResolver != nil {
+		s.tunnelResolver.Close()
+	}
+	if s.publicGatewayConn != nil {
+		s.publicGatewayConn.Close()
+		s.publicGatewayConn = nil
+	}
 }
 
 func withRequestTelemetryProviders(next http.Handler, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) http.Handler {
