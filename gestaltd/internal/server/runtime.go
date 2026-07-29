@@ -90,11 +90,16 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		publicIndexedDB = result.Services.DB
 	}
 	appRuntimeState, _ := result.AppRestarter.(AppRuntimeState)
-	reverseRemote, err := setupReverseRemoteUpstream(ctx, cfg, result.Services, authorizationProvider)
-	if err != nil {
-		return err
+	var reverseRemote *reverseRemoteSetup
+	if cfg.Server.Dev {
+		reverseRemote, err = setupReverseRemoteUpstream(ctx, cfg, result.Services, authorizationProvider)
+		if err != nil {
+			return err
+		}
+		defer reverseRemote.shutdown(context.Background())
+	} else {
+		reverseRemote = &reverseRemoteSetup{}
 	}
-	defer reverseRemote.shutdown(context.Background())
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
@@ -406,7 +411,7 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		case <-ctx.Done():
 		}
 
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && cfg.Server.Dev {
 			if err := startReversePublisher(ctx, result.Providers, reverseRemote, slog.Default()); err != nil {
 				workflowErr <- err
 				return
