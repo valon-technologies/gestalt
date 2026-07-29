@@ -713,11 +713,27 @@ func matchingPluginKeys(plugins map[string]*config.ProviderEntry, targetManifest
 
 	var matches []string
 	for name, entry := range plugins {
-		if !providerEntryMatchesTarget(entry, targetCanonical) {
-			continue
+		if providerEntryMatchesTarget(entry, targetCanonical) {
+			matches = append(matches, name)
 		}
-		matches = append(matches, name)
 	}
+
+	if len(matches) == 0 {
+		if _, manifest, err := providerpkg.ReadSourceManifestFile(targetManifestPath); err == nil && manifest != nil {
+			if src, err := source.Parse(manifest.Source); err == nil {
+				appName := strings.TrimSpace(src.AppName())
+				sanitized := sanitizeDerivedPluginKey(appName)
+				for _, candidate := range []string{appName, sanitized} {
+					if candidate != "" {
+						if _, ok := plugins[candidate]; ok && !slices.Contains(matches, candidate) {
+							matches = append(matches, candidate)
+						}
+					}
+				}
+			}
+		}
+	}
+
 	slices.Sort(matches)
 	return matches, nil
 }
