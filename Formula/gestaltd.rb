@@ -3,30 +3,30 @@
 class Gestaltd < Formula
   desc "Gestalt server daemon"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.2-alpha.51"
+  version "0.0.2-alpha.52"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.51/gestaltd-macos-arm64.tar.gz"
-      sha256 "33c62e47b28c5b3c416889640a399f44d59ea59f2da709067f24d259bb084567"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.52/gestaltd-macos-arm64.tar.gz"
+      sha256 "5fa8d8e3eb0492ceb342a0ff9453c389ec9a237cf75b55f61f9b0793643670e2"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.51/gestaltd-macos-x86_64.tar.gz"
-      sha256 "354c920c5a842c6ade94f042be9f87c74962468174a69ad3916cd41e3111a220"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.52/gestaltd-macos-x86_64.tar.gz"
+      sha256 "dd6ec0041ed87b2e905055f1e2a6ae9332325b7ad77f0e833d14b1541135610b"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.51/gestaltd-linux-arm64.tar.gz"
-      sha256 "bc1c746bdeee99eb885fd5b2909d8b126ea4abeb40dfc436b98b02a052d135bf"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.52/gestaltd-linux-arm64.tar.gz"
+      sha256 "6701ba0227781df0be8e477a13ff164da52980620fc65f0366a2c3d359e7282d"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.51/gestaltd-linux-x86_64.tar.gz"
-      sha256 "4710c4a71dca1a453d53d26d3f4f2ef04d05b0d1454d3172a07d5ee866346b74"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.52/gestaltd-linux-x86_64.tar.gz"
+      sha256 "d94804b1f4a9350c63750eb4a5d8fa36aca07fed10388fc03289229e594b5819"
     end
   end
 
