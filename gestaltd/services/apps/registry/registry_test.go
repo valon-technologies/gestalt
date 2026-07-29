@@ -38,11 +38,11 @@ func TestProviderMapRemoteResolverPrecedence(t *testing.T) {
 		t.Fatalf("Get with resolver: got %d, err %v (want 99)", val, err)
 	}
 
-	// When the resolver returns an error, fall back to local.
-	m.SetRemoteResolver(&stubRemoteResolver[int]{err: errors.New("not found")})
+	// When the resolver returns ErrNotFound, fall back to local.
+	m.SetRemoteResolver(&stubRemoteResolver[int]{err: core.ErrNotFound})
 	val, err = m.Get("foo")
 	if err != nil || val != 42 {
-		t.Fatalf("Get with failing resolver: got %d, err %v (want 42)", val, err)
+		t.Fatalf("Get with ErrNotFound resolver: got %d, err %v (want 42)", val, err)
 	}
 }
 
@@ -71,5 +71,28 @@ func TestProviderMapNoResolverStillWorks(t *testing.T) {
 	_, err = m.Get("missing")
 	if !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("Get missing: expected ErrNotFound, got %v", err)
+	}
+}
+
+// TestProviderMapRemoteResolverNonErrNotFoundErrorPropagates verifies that
+// when the resolver returns a non-ErrNotFound error (e.g. tunnel registration
+// exists but proxy construction failed), the error is propagated to the caller
+// rather than silently falling back to the local provider.
+func TestProviderMapRemoteResolverNonErrNotFoundErrorPropagates(t *testing.T) {
+	t.Parallel()
+	m := newProviderMap[int]("test")
+	if err := m.Register("foo", 42); err != nil {
+		t.Fatal(err)
+	}
+
+	// A non-ErrNotFound error must propagate, not fall back to local.
+	tunnelErr := errors.New("tunnel provider is registered but unavailable")
+	m.SetRemoteResolver(&stubRemoteResolver[int]{err: tunnelErr})
+	_, err := m.Get("foo")
+	if err == nil {
+		t.Fatal("Get with non-ErrNotFound error should propagate, not fall back")
+	}
+	if !errors.Is(err, tunnelErr) {
+		t.Fatalf("Get should propagate the resolver error, got: %v", err)
 	}
 }

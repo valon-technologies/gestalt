@@ -46,13 +46,19 @@ func (s *Server) hasTunnelRegistration(ctx context.Context, appName string) bool
 // newTunnelUIReverseProxy creates a reverse proxy that forwards requests
 // through the tunnel dialer to the tunnel's HTTP UI handler. Returns nil if
 // the tunnel resolver is not configured.
+//
+// The transport uses DialTLSContext because the tunnel dialer returns an
+// already-TLS'd connection (ALPN negotiated to http/1.1). The Director sets
+// URL.Scheme to https and URL.Host to the tunnel host so http.Transport can
+// route the request. ALPN is restricted to http/1.1 so the tunnel's HTTP UI
+// path (not the gRPC h2 path) is selected.
 func newTunnelUIReverseProxy(resolver *tunnelProviderResolver, appName, mountPath string) *httputil.ReverseProxy {
 	if resolver == nil || strings.TrimSpace(appName) == "" {
 		return nil
 	}
 
 	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		DialTLSContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			_, reg, err := resolver.cfg.RemoteRegistrations.ResolveProvider(ctx, "app", appName)
 			if err != nil || reg == nil {
 				return nil, &tunnelProxyError{"no tunnel registration for app " + appName}
@@ -62,9 +68,12 @@ func newTunnelUIReverseProxy(resolver *tunnelProviderResolver, appName, mountPat
 				TunnelHost:     reg.TunnelHost,
 				PinnedSPKI:     reg.ServerSPKISHA256,
 				ClientIdentity: resolver.cfg.ClientIdentity,
+				ALPNProtos:     []string{"http/1.1"},
 			})
 			return dialer.DialContext(ctx, "tcp", "")
 		},
+		// Disable HTTP/2 in the transport; the tunnel UI path is HTTP/1.1.
+		ForceAttemptHTTP2: false,
 	}
 
 	proxy := &httputil.ReverseProxy{
@@ -74,6 +83,8 @@ func newTunnelUIReverseProxy(resolver *tunnelProviderResolver, appName, mountPat
 				rest = "/"
 			}
 			r.URL.Path = "/ui/" + appName + rest
+			r.URL.Scheme = "https"
+			r.URL.Host = "tunnel"
 			r.Host = appName
 		},
 		Transport: transport,

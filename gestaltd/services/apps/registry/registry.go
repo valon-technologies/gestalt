@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -63,11 +64,19 @@ func (m *ProviderMap[T]) Get(name string) (T, error) {
 // GetWithContext resolves a provider by name. If a RemoteResolver is set, it is
 // consulted first (tunnel always wins). If the resolver returns a provider, it
 // shadows any local provider with the same name. If the resolver returns
-// ErrNotFound, the local map is consulted as a fallback.
+// core.ErrNotFound (no tunnel registration exists), the local map is consulted
+// as a fallback. Any other resolver error (registration exists but proxy
+// construction failed) is propagated to the caller so the request fails rather
+// than silently serving a local provider.
 func (m *ProviderMap[T]) GetWithContext(ctx context.Context, name string) (T, error) {
 	if m != nil && m.resolver != nil {
-		if val, err := m.resolver.ResolveProvider(ctx, name); err == nil {
+		val, err := m.resolver.ResolveProvider(ctx, name)
+		if err == nil {
 			return val, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) {
+			var zero T
+			return zero, err
 		}
 	}
 	m.mu.RLock()

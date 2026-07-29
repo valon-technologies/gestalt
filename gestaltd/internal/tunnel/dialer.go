@@ -17,6 +17,10 @@ type DialerConfig struct {
 	TunnelHost     string          // from the registration
 	PinnedSPKI     string          // registration's server_spki_sha256
 	ClientIdentity tls.Certificate // upstream client identity (ServerIdentity keypair)
+	// ALPNProtos overrides the default ["h2", "http/1.1"] ALPN negotiation.
+	// Set to ["http/1.1"] for HTTP UI proxying so the tunnel selects the
+	// HTTP/1.1 handler instead of the gRPC (h2) handler.
+	ALPNProtos []string
 }
 
 // Dialer opens tunneled connections to a reverse-remote host. It satisfies
@@ -55,12 +59,16 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 		return nil, fmt.Errorf("tunnel dialer: CONNECT %s: %w", d.cfg.TunnelHost, err)
 	}
 
+	alpn := d.cfg.ALPNProtos
+	if len(alpn) == 0 {
+		alpn = []string{"h2", "http/1.1"}
+	}
 	tlsCfg := &tls.Config{
 		Certificates:       []tls.Certificate{d.cfg.ClientIdentity},
 		ServerName:         d.cfg.TunnelHost,
 		InsecureSkipVerify: true, // SPKI pinning below; we do not use system roots.
 		MinVersion:         tls.VersionTLS13,
-		NextProtos:         []string{"h2", "http/1.1"},
+		NextProtos:         alpn,
 	}
 	// Wrap the bufio.Reader so any bytes buffered after the 200 response are not
 	// lost when the connection is handed to the TLS client.
