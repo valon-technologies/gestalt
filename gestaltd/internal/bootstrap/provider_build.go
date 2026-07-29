@@ -617,7 +617,6 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 	}
 	workflowDeclarations := appservice.DeclaredWorkflowDefinitions(pluginProv)
 	allowedOperations := entry.EffectiveAllowedOperations()
-	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 
 	if manifestApp.IsDeclarative() {
 		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestApp)
@@ -625,7 +624,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			closeIfPossible(pluginProv)
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
-		filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
+		filteredPluginProv, err := applyAllowedOperations(name, allowedOperations, pluginProv)
 		if err != nil {
 			closeIfPossible(pluginProv)
 			return nil, err
@@ -643,8 +642,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			closeIfPossible(pluginProv)
 			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
 		}
-		apiAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, declarative.Catalog())
-		apiProv, err := applyAllowedOperations(name, apiAllowedOperations, declarative)
+		apiProv, err := applyAllowedOperations(name, allowedOperations, declarative)
 		if err != nil {
 			closeIfPossible(apiProv, pluginProv)
 			return nil, err
@@ -687,7 +685,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 		result.WorkflowDeclarations = workflowDeclarations
 		return result, nil
 	}
-	filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
+	filteredPluginProv, err := applyAllowedOperations(name, allowedOperations, pluginProv)
 	if err != nil {
 		closeIfPossible(pluginProv)
 		return nil, err
@@ -1077,14 +1075,15 @@ func loadSpecDefinition(ctx context.Context, name string, resolved config.Resolv
 }
 
 func applyAllowedOperations(name string, allowedOperations map[string]*config.OperationOverride, pluginProv core.Provider) (core.Provider, error) {
-	policy, err := operationexposure.New(allowedOperations)
-	if err != nil {
-		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
-	}
-	if policy == nil {
+	if allowedOperations == nil {
 		return pluginProv, nil
 	}
-	if err := policy.ValidateCatalog(pluginProv.Catalog()); err != nil {
+	matched := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
+	if matched == nil {
+		return nil, fmt.Errorf("integration %q plugin: allowed_operations has no matching catalog operations", name)
+	}
+	policy, err := operationexposure.New(matched)
+	if err != nil {
 		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
 	}
 	return policy.Wrap(pluginProv), nil

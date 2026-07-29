@@ -277,6 +277,17 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 	return filtered
 }
 
+func catalogOperationIDs(cat *catalog.Catalog) map[string]struct{} {
+	if cat == nil || len(cat.Operations) == 0 {
+		return nil
+	}
+	ids := make(map[string]struct{}, len(cat.Operations))
+	for i := range cat.Operations {
+		ids[cat.Operations[i].ID] = struct{}{}
+	}
+	return ids
+}
+
 // MatchingAllowedOperations returns the subset of allowed operations that are
 // present in the provided catalog. It returns nil when either input is empty or
 // when no allowed operations match the catalog.
@@ -287,10 +298,7 @@ func MatchingAllowedOperations(allowed map[string]*OperationOverride, cat *catal
 	if len(allowed) == 0 {
 		return allowed
 	}
-	available := make(map[string]struct{}, len(cat.Operations))
-	for i := range cat.Operations {
-		available[cat.Operations[i].ID] = struct{}{}
-	}
+	available := catalogOperationIDs(cat)
 	filtered := make(map[string]*OperationOverride)
 	for name, override := range allowed {
 		if _, ok := available[name]; ok {

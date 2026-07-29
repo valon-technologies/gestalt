@@ -48,6 +48,27 @@ func TestMatchingAllowedOperationsPreservesEmptyMap(t *testing.T) {
 	}
 }
 
+func TestMatchingAllowedOperationsIgnoresUnknown(t *testing.T) {
+	t.Parallel()
+
+	cat := &catalog.Catalog{
+		Name: "example",
+		Operations: []catalog.CatalogOperation{
+			{ID: "get_item"},
+		},
+	}
+	matched := MatchingAllowedOperations(map[string]*OperationOverride{
+		"get_item":       nil,
+		"get_review_ctx": nil,
+	}, cat)
+	if len(matched) != 1 {
+		t.Fatalf("matched = %#v, want only get_item", matched)
+	}
+	if _, ok := matched["get_item"]; !ok {
+		t.Fatalf("matched = %#v, want get_item", matched)
+	}
+}
+
 func TestPolicyValidateAndApply(t *testing.T) {
 	t.Parallel()
 
