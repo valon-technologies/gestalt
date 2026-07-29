@@ -1954,6 +1954,9 @@ type ServerConfig struct {
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
+	// Dev is set programmatically when gestaltd is launched via the dev
+	// subcommand. It gates CLI config resolution and reverse-tunnel startup.
+	Dev bool `yaml:"-"`
 }
 
 // TODO(app-registry-step-9): Remove this temporary rollout configuration after step 9 is complete.

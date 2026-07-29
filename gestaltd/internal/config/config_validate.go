@@ -891,9 +891,21 @@ func ValidateRemoteGestaltd(cfg *Config) error {
 
 // ApplyServeRemoteOverrides applies gestaltd serve CLI overrides for remote
 // gestaltd delegation and validates the resolved remote configuration.
-func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
+// When dev is true, empty remote and remoteToken values are resolved from
+// the gestalt CLI config (~/.config/gestalt/config.json and credentials.json)
+// before applying overrides, so `gestaltd dev` users can omit --remote/--remote-token.
+func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string, dev bool) error {
 	if cfg == nil {
 		return nil
+	}
+	cfg.Server.Dev = dev
+	if dev {
+		if remote == "" {
+			remote, _ = defaultRemoteURL()
+		}
+		if remoteToken == "" {
+			remoteToken, _ = defaultRemoteToken()
+		}
 	}
 	if len(cfg.Server.Remotes) > 0 {
 		_, defaultRemote, ok := cfg.DefaultRemoteEntry()
@@ -919,7 +931,8 @@ func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
 	}
 	// Resolve a missing default-remote token from the environment or stored
 	// credentials, but only when the default is actually referenced — an
-	// unreferenced default needs no token.
+	// unreferenced default needs no token. This runs for both serve and dev;
+	// for dev the token was already resolved above, so this is a no-op.
 	if defaultName, defaultRemote, ok := cfg.DefaultRemoteEntry(); ok && defaultRemote != nil {
 		if strings.TrimSpace(defaultRemote.Token) == "" && slices.Contains(cfg.ReferencedRemoteNames(), defaultName) {
 			token, err := defaultRemoteToken()
@@ -962,6 +975,60 @@ func gestaltCredentialsPath() string {
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		return filepath.Join(home, ".config", "gestalt", "credentials.json")
+	}
+	return ""
+}
+
+func defaultRemoteURL() (string, error) {
+	raw := strings.TrimSpace(os.Getenv("GESTALT_URL"))
+	if raw == "" {
+		path := gestaltConfigPath()
+		if path == "" {
+			return "", nil
+		}
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("config validation: read Gestalt config: %w", err)
+		}
+		var cfg map[string]string
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return "", fmt.Errorf("config validation: parse Gestalt config: %w", err)
+		}
+		raw = strings.TrimSpace(cfg["url"])
+	}
+	if raw == "" {
+		return "", nil
+	}
+	return normalizeRemoteURL(raw), nil
+}
+
+// normalizeRemoteURL mirrors the gestalt CLI's URL normalization: adds an
+// http/https scheme when missing and strips a trailing slash.
+func normalizeRemoteURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimRight(raw, "/")
+	if strings.Contains(raw, "://") {
+		return raw
+	}
+	scheme := "https"
+	if parsed, err := url.Parse("http://" + raw); err == nil && parsed.Host != "" {
+		switch parsed.Hostname() {
+		case "localhost", "127.0.0.1", "::1":
+			scheme = "http"
+		}
+	}
+	return scheme + "://" + raw
+}
+
+func gestaltConfigPath() string {
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
+		return filepath.Join(xdg, "gestalt", "config.json")
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".config", "gestalt", "config.json")
 	}
 	return ""
 }
