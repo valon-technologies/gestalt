@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -36,7 +35,7 @@ func TestApplyAllowedOperationsIgnoresUnknownOperations(t *testing.T) {
 	}
 }
 
-func TestApplyAllowedOperationsRejectsAllUnknown(t *testing.T) {
+func TestApplyAllowedOperationsSkipsRestrictionWhenNoMatches(t *testing.T) {
 	t.Parallel()
 
 	prov := &coretesting.StubIntegration{
@@ -49,13 +48,18 @@ func TestApplyAllowedOperationsRejectsAllUnknown(t *testing.T) {
 		},
 	}
 
-	_, err := applyAllowedOperations("example", map[string]*config.OperationOverride{
+	wrapped, err := applyAllowedOperations("example", map[string]*config.OperationOverride{
 		"get_review_ctx": nil,
 	}, prov)
-	if err == nil {
-		t.Fatal("expected error when all allowed operations are unknown")
+	if err != nil {
+		t.Fatalf("applyAllowedOperations: %v", err)
 	}
-	if !strings.Contains(err.Error(), "no matching catalog operations") {
-		t.Fatalf("error = %q, want no matching catalog operations", err.Error())
+	if wrapped != prov {
+		t.Fatal("expected provider to remain unwrapped when no allowed operations match")
+	}
+
+	filtered := wrapped.Catalog()
+	if len(filtered.Operations) != 1 || filtered.Operations[0].ID != "get_item" {
+		t.Fatalf("catalog operations = %#v, want unrestricted get_item", filtered.Operations)
 	}
 }

@@ -1080,7 +1080,7 @@ func applyAllowedOperations(name string, allowedOperations map[string]*config.Op
 	}
 	matched := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 	if matched == nil {
-		return nil, fmt.Errorf("integration %q plugin: allowed_operations has no matching catalog operations", name)
+		return pluginProv, nil
 	}
 	policy, err := operationexposure.New(matched)
 	if err != nil {
