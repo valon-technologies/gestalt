@@ -617,7 +617,6 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 	}
 	workflowDeclarations := appservice.DeclaredWorkflowDefinitions(pluginProv)
 	allowedOperations := entry.EffectiveAllowedOperations()
-	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 
 	if manifestApp.IsDeclarative() {
 		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestApp)
@@ -625,7 +624,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			closeIfPossible(pluginProv)
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
-		filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
+		filteredPluginProv, err := applyAllowedOperations(name, allowedOperations, pluginProv)
 		if err != nil {
 			closeIfPossible(pluginProv)
 			return nil, err
@@ -643,8 +642,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			closeIfPossible(pluginProv)
 			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
 		}
-		apiAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, declarative.Catalog())
-		apiProv, err := applyAllowedOperations(name, apiAllowedOperations, declarative)
+		apiProv, err := applyAllowedOperations(name, allowedOperations, declarative)
 		if err != nil {
 			closeIfPossible(apiProv, pluginProv)
 			return nil, err
@@ -687,7 +685,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 		result.WorkflowDeclarations = workflowDeclarations
 		return result, nil
 	}
-	filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
+	filteredPluginProv, err := applyAllowedOperations(name, allowedOperations, pluginProv)
 	if err != nil {
 		closeIfPossible(pluginProv)
 		return nil, err
@@ -1080,21 +1078,21 @@ func applyAllowedOperations(name string, allowedOperations map[string]*config.Op
 	if allowedOperations == nil {
 		return pluginProv, nil
 	}
-	catalog := pluginProv.Catalog()
-	for _, operation := range operationexposure.UnknownAllowedOperations(allowedOperations, catalog) {
+	providerCatalog := pluginProv.Catalog()
+	if unknown := operationexposure.UnknownAllowedOperations(allowedOperations, providerCatalog); len(unknown) > 0 {
 		slog.Warn(
-			"allowed_operations references operation not in provider catalog; ignoring until catalog includes it",
+			"allowed_operations references operations not in provider catalog; ignoring until catalog includes them",
 			"integration", name,
-			"operation", operation,
+			"operations", unknown,
 		)
 	}
-	matched := operationexposure.MatchingAllowedOperations(allowedOperations, catalog)
+	matched := operationexposure.MatchingAllowedOperations(allowedOperations, providerCatalog)
+	if matched == nil {
+		return nil, fmt.Errorf("integration %q plugin: allowed_operations has no matching catalog operations", name)
+	}
 	policy, err := operationexposure.New(matched)
 	if err != nil {
 		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
-	}
-	if policy == nil {
-		return pluginProv, nil
 	}
 	return policy.Wrap(pluginProv), nil
 }

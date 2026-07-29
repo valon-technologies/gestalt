@@ -58,11 +58,22 @@ func TestUnknownAllowedOperations(t *testing.T) {
 		},
 	}
 	unknown := UnknownAllowedOperations(map[string]*OperationOverride{
-		"get_item":        nil,
-		"get_review_ctx":  nil,
+		"get_item":       nil,
+		"get_review_ctx": nil,
 	}, cat)
 	if len(unknown) != 1 || unknown[0] != "get_review_ctx" {
 		t.Fatalf("unknown = %#v, want [get_review_ctx]", unknown)
+	}
+}
+
+func TestUnknownAllowedOperationsEmptyCatalog(t *testing.T) {
+	t.Parallel()
+
+	unknown := UnknownAllowedOperations(map[string]*OperationOverride{
+		"get_item": nil,
+	}, &catalog.Catalog{Name: "example"})
+	if len(unknown) != 1 || unknown[0] != "get_item" {
+		t.Fatalf("unknown = %#v, want [get_item]", unknown)
 	}
 }
 

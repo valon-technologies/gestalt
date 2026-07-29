@@ -277,21 +277,33 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 	return filtered
 }
 
+func catalogOperationIDs(cat *catalog.Catalog) map[string]struct{} {
+	if cat == nil || len(cat.Operations) == 0 {
+		return nil
+	}
+	ids := make(map[string]struct{}, len(cat.Operations))
+	for i := range cat.Operations {
+		ids[cat.Operations[i].ID] = struct{}{}
+	}
+	return ids
+}
+
 // UnknownAllowedOperations returns allowed_operations entries that are not
 // present in the provided catalog.
 func UnknownAllowedOperations(allowed map[string]*OperationOverride, cat *catalog.Catalog) []string {
 	if len(allowed) == 0 {
 		return nil
 	}
-	matched := MatchingAllowedOperations(allowed, cat)
+	available := catalogOperationIDs(cat)
 	unknown := make([]string, 0)
 	for name := range allowed {
-		if matched != nil {
-			if _, ok := matched[name]; ok {
-				continue
-			}
+		if len(available) == 0 {
+			unknown = append(unknown, name)
+			continue
 		}
-		unknown = append(unknown, name)
+		if _, ok := available[name]; !ok {
+			unknown = append(unknown, name)
+		}
 	}
 	slices.Sort(unknown)
 	return unknown
@@ -307,10 +319,7 @@ func MatchingAllowedOperations(allowed map[string]*OperationOverride, cat *catal
 	if len(allowed) == 0 {
 		return allowed
 	}
-	available := make(map[string]struct{}, len(cat.Operations))
-	for i := range cat.Operations {
-		available[cat.Operations[i].ID] = struct{}{}
-	}
+	available := catalogOperationIDs(cat)
 	filtered := make(map[string]*OperationOverride)
 	for name, override := range allowed {
 		if _, ok := available[name]; ok {
