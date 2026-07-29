@@ -18,21 +18,22 @@ type stubProvider struct {
 	name string
 }
 
-func (s *stubProvider) Name() string                                   { return s.name }
-func (s *stubProvider) DisplayName() string                            { return s.name }
-func (s *stubProvider) Description() string                            { return "" }
-func (s *stubProvider) ConnectionMode() core.ConnectionMode            { return core.ConnectionModeNone }
-func (s *stubProvider) AuthTypes() []string                            { return nil }
+func (s *stubProvider) Name() string                                            { return s.name }
+func (s *stubProvider) DisplayName() string                                     { return s.name }
+func (s *stubProvider) Description() string                                     { return "" }
+func (s *stubProvider) ConnectionMode() core.ConnectionMode                     { return core.ConnectionModeNone }
+func (s *stubProvider) AuthTypes() []string                                     { return nil }
 func (s *stubProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef { return nil }
-func (s *stubProvider) CredentialFields() []core.CredentialFieldDef   { return nil }
-func (s *stubProvider) DiscoveryConfig() *core.DiscoveryConfig         { return nil }
-func (s *stubProvider) ConnectionForOperation(string) string           { return "" }
-func (s *stubProvider) Catalog() *catalog.Catalog                      { return nil }
+func (s *stubProvider) CredentialFields() []core.CredentialFieldDef             { return nil }
+func (s *stubProvider) DiscoveryConfig() *core.DiscoveryConfig                  { return nil }
+func (s *stubProvider) ConnectionForOperation(string) string                    { return "" }
+func (s *stubProvider) Catalog() *catalog.Catalog                               { return nil }
 func (s *stubProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 	return &core.OperationResult{Status: 200, Body: []byte(`{"app":"` + s.name + `"}`)}, nil
 }
 
 func TestTunnelAppProviderServerDispatchByMetadata(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	providers := &reg.Providers
 	if err := providers.Register("ci-cd", &stubProvider{name: "ci-cd"}); err != nil {
@@ -65,6 +66,7 @@ func TestTunnelAppProviderServerDispatchByMetadata(t *testing.T) {
 }
 
 func TestTunnelAppProviderServerMissingMetadata(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	providers := &reg.Providers
 	server := NewTunnelAppProviderServer(providers)
@@ -77,6 +79,7 @@ func TestTunnelAppProviderServerMissingMetadata(t *testing.T) {
 }
 
 func TestTunnelAppProviderServerUnknownApp(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	providers := &reg.Providers
 	server := NewTunnelAppProviderServer(providers)

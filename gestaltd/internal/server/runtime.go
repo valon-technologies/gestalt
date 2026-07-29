@@ -667,7 +667,6 @@ func appRegistryRestartDelay(cfg *config.Config) (time.Duration, bool, error) {
 	return delay, false, nil
 }
 
-
 // remoteRegistrations returns the RemoteRegistrationService from the bootstrap
 // result if available, or nil. The tunnel resolver uses it to look up
 // tunnel-registered apps.

@@ -78,19 +78,19 @@ type ProviderPublication struct {
 }
 
 type PublisherConfig struct {
-	Groups           []PublicationGroup
-	Providers        *registry.ProviderMap[core.Provider]
-	Logger           *slog.Logger
+	Groups             []PublicationGroup
+	Providers          *registry.ProviderMap[core.Provider]
+	Logger             *slog.Logger
 	DevHandlerResolver func(string) http.Handler
 }
 
 type Publisher struct {
-	groups           []*groupState
-	providers        *registry.ProviderMap[core.Provider]
+	groups             []*groupState
+	providers          *registry.ProviderMap[core.Provider]
 	devHandlerResolver func(string) http.Handler
-	logger           *slog.Logger
-	mu               sync.Mutex
-	started          bool
+	logger             *slog.Logger
+	mu                 sync.Mutex
+	started            bool
 }
 
 type groupState struct {

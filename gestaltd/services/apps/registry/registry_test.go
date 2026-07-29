@@ -19,6 +19,7 @@ func (r *stubRemoteResolver[T]) ResolveProvider(_ context.Context, _ string) (T,
 }
 
 func TestProviderMapRemoteResolverPrecedence(t *testing.T) {
+	t.Parallel()
 	m := newProviderMap[int]("test")
 	if err := m.Register("foo", 42); err != nil {
 		t.Fatal(err)
@@ -46,6 +47,7 @@ func TestProviderMapRemoteResolverPrecedence(t *testing.T) {
 }
 
 func TestProviderMapRemoteResolverOnlyRemote(t *testing.T) {
+	t.Parallel()
 	m := newProviderMap[int]("test")
 	m.SetRemoteResolver(&stubRemoteResolver[int]{provider: 77})
 
@@ -57,6 +59,7 @@ func TestProviderMapRemoteResolverOnlyRemote(t *testing.T) {
 }
 
 func TestProviderMapNoResolverStillWorks(t *testing.T) {
+	t.Parallel()
 	m := newProviderMap[int]("test")
 	if err := m.Register("local", 1); err != nil {
 		t.Fatal(err)

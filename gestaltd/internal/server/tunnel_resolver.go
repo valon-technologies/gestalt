@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"time"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coredata "github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -27,10 +27,10 @@ type TunnelResolverConfig struct {
 // (and caches) a TunnelProxyProvider for each. Tunnel registrations always
 // take precedence over local providers (tunnel always wins).
 type tunnelProviderResolver struct {
-	cfg          TunnelResolverConfig
-	mu           sync.Mutex
-	cache        map[string]*remotepublish.TunnelProxyProvider
-	cacheGen     map[string]uint64
+	cfg      TunnelResolverConfig
+	mu       sync.Mutex
+	cache    map[string]*remotepublish.TunnelProxyProvider
+	cacheGen map[string]uint64
 }
 
 func newTunnelProviderResolver(cfg TunnelResolverConfig) *tunnelProviderResolver {

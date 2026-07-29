@@ -7,6 +7,7 @@ import (
 )
 
 func TestIsGRPCRequest(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		method      string
 		contentType string
@@ -31,6 +32,7 @@ func TestIsGRPCRequest(t *testing.T) {
 }
 
 func TestTunnelUIAppFromPath(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path string
 		want string

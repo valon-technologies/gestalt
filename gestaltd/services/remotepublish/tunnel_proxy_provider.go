@@ -18,8 +18,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/internal/tunnel"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
@@ -106,11 +106,11 @@ func NewTunnelProxyProvider(ctx context.Context, cfg TunnelProxyConfig) (*Tunnel
 		provider.connParams = make(map[string]core.ConnectionParamDef, len(meta.GetConnectionParams()))
 		for name, def := range meta.GetConnectionParams() {
 			provider.connParams[name] = core.ConnectionParamDef{
-				Required:     def.GetRequired(),
-				Description:  def.GetDescription(),
-				Default:      def.GetDefaultValue(),
-				From:         def.GetFrom(),
-				Field:        def.GetField(),
+				Required:    def.GetRequired(),
+				Description: def.GetDescription(),
+				Default:     def.GetDefaultValue(),
+				From:        def.GetFrom(),
+				Field:       def.GetField(),
 			}
 		}
 	}
