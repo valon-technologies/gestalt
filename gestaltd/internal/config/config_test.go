@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -5048,7 +5049,7 @@ func TestLoadConfigRemoteGestaltd(t *testing.T) {
 				"linear": {Remote: DefaultRemoteName},
 			},
 		}
-		return cfg, ApplyServeRemoteOverrides(cfg, "", "")
+		return cfg, ApplyServeRemoteOverrides(cfg, "", "", false)
 	}
 
 	t.Run("accepts and trims remote url", func(t *testing.T) {
@@ -5148,7 +5149,7 @@ server:
 				"local-tool": {},
 			},
 		}
-		if err := ApplyServeRemoteOverrides(cfg, "https://new.test", ""); err != nil {
+		if err := ApplyServeRemoteOverrides(cfg, "https://new.test", "", false); err != nil {
 			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
 		}
 		if got := cfg.Server.Remotes["prod"].URL; got != "https://new.test" {
@@ -5180,7 +5181,7 @@ server:
 				"linear": {Remote: "prod"},
 			},
 		}
-		err := ApplyServeRemoteOverrides(cfg, "https://override.test", "")
+		err := ApplyServeRemoteOverrides(cfg, "https://override.test", "", false)
 		if err == nil {
 			t.Fatal("ApplyServeRemoteOverrides: expected error, got nil")
 		}
@@ -5202,7 +5203,7 @@ server:
 				"linear": {},
 			},
 		}
-		if err := ApplyServeRemoteOverrides(cfg, "https://remote.test", "test-token"); err != nil {
+		if err := ApplyServeRemoteOverrides(cfg, "https://remote.test", "test-token", false); err != nil {
 			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
 		}
 		if got := cfg.Apps["linear"].Remote; got != DefaultRemoteName {
@@ -5218,7 +5219,7 @@ server:
 				RemoteToken: "configured-token",
 			},
 		}
-		if err := ApplyServeRemoteOverrides(cfg, "https://new.test", ""); err != nil {
+		if err := ApplyServeRemoteOverrides(cfg, "https://new.test", "", false); err != nil {
 			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
 		}
 		if got := cfg.Server.Remote; got != "https://new.test" {
@@ -5373,8 +5374,151 @@ providers:
 				"local-tool": {},
 			},
 		}
-		if err := ApplyServeRemoteOverrides(cfg, "", ""); err != nil {
+		if err := ApplyServeRemoteOverrides(cfg, "", "", false); err != nil {
 			t.Fatalf("ApplyServeRemoteOverrides with unreferenced default: %v", err)
+		}
+	})
+}
+
+func TestApplyServeRemoteOverridesAlpha(t *testing.T) {
+
+	writeGestaltConfig := func(t *testing.T, dir string, url string) {
+		t.Helper()
+		configDir := filepath.Join(dir, "gestalt")
+		if err := os.MkdirAll(configDir, 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		data, _ := json.Marshal(map[string]string{"url": url})
+		if err := os.WriteFile(filepath.Join(configDir, "config.json"), data, 0o600); err != nil {
+			t.Fatalf("write config.json: %v", err)
+		}
+	}
+
+	writeGestaltCredentials := func(t *testing.T, dir string, token string) {
+		t.Helper()
+		configDir := filepath.Join(dir, "gestalt")
+		if err := os.MkdirAll(configDir, 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		data, _ := json.Marshal(map[string]string{"api_token": token})
+		if err := os.WriteFile(filepath.Join(configDir, "credentials.json"), data, 0o600); err != nil {
+			t.Fatalf("write credentials.json: %v", err)
+		}
+	}
+
+	t.Run("alpha resolves url and token from CLI config", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", dir)
+		writeGestaltConfig(t, dir, "https://alpha.test")
+		writeGestaltCredentials(t, dir, "alpha-token")
+
+		cfg := &Config{
+			Server: ServerConfig{
+				Remote: "https://valon.tools",
+			},
+			Apps: map[string]*ProviderEntry{
+				"linear": {Remote: DefaultRemoteName},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "", "", true); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides alpha: %v", err)
+		}
+		_, defaultRemote, ok := cfg.DefaultRemoteEntry()
+		if !ok || defaultRemote == nil {
+			t.Fatal("expected default remote entry")
+		}
+		if defaultRemote.URL != "https://alpha.test" {
+			t.Fatalf("url = %q, want %q", defaultRemote.URL, "https://alpha.test")
+		}
+		if defaultRemote.Token != "alpha-token" {
+			t.Fatalf("token = %q, want %q", defaultRemote.Token, "alpha-token")
+		}
+	})
+
+	t.Run("explicit flags override alpha config", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", dir)
+		writeGestaltConfig(t, dir, "https://alpha.test")
+		writeGestaltCredentials(t, dir, "alpha-token")
+
+		cfg := &Config{
+			Server: ServerConfig{
+				Remote: "https://valon.tools",
+			},
+			Apps: map[string]*ProviderEntry{
+				"linear": {Remote: DefaultRemoteName},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "https://explicit.test", "explicit-token", true); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
+		}
+		_, defaultRemote, ok := cfg.DefaultRemoteEntry()
+		if !ok || defaultRemote == nil {
+			t.Fatal("expected default remote entry")
+		}
+		if defaultRemote.URL != "https://explicit.test" {
+			t.Fatalf("url = %q, want %q", defaultRemote.URL, "https://explicit.test")
+		}
+		if defaultRemote.Token != "explicit-token" {
+			t.Fatalf("token = %q, want %q", defaultRemote.Token, "explicit-token")
+		}
+	})
+
+	t.Run("alpha without config files is non-fatal", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+		cfg := &Config{
+			Server: ServerConfig{
+				Remote:      "https://valon.tools",
+				RemoteToken: "existing-token",
+			},
+			Apps: map[string]*ProviderEntry{
+				"linear": {Remote: DefaultRemoteName},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "", "", true); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides alpha with no config: %v", err)
+		}
+		_, defaultRemote, ok := cfg.DefaultRemoteEntry()
+		if !ok || defaultRemote == nil {
+			t.Fatal("expected default remote entry")
+		}
+		// URL falls back to config server.remote, token to server.remoteToken
+		if defaultRemote.URL != "https://valon.tools" {
+			t.Fatalf("url = %q, want %q", defaultRemote.URL, "https://valon.tools")
+		}
+		if defaultRemote.Token != "existing-token" {
+			t.Fatalf("token = %q, want %q", defaultRemote.Token, "existing-token")
+		}
+	})
+
+	t.Run("alpha false does not read CLI config", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", dir)
+		writeGestaltConfig(t, dir, "https://alpha.test")
+		writeGestaltCredentials(t, dir, "alpha-token")
+
+		cfg := &Config{
+			Server: ServerConfig{
+				Remote:      "https://valon.tools",
+				RemoteToken: "config-token",
+			},
+			Apps: map[string]*ProviderEntry{
+				"linear": {Remote: DefaultRemoteName},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "", "", false); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
+		}
+		_, defaultRemote, ok := cfg.DefaultRemoteEntry()
+		if !ok || defaultRemote == nil {
+			t.Fatal("expected default remote entry")
+		}
+		if defaultRemote.URL != "https://valon.tools" {
+			t.Fatalf("url = %q, want %q", defaultRemote.URL, "https://valon.tools")
+		}
+		if defaultRemote.Token != "config-token" {
+			t.Fatalf("token = %q, want %q", defaultRemote.Token, "config-token")
 		}
 	})
 }

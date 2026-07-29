@@ -891,9 +891,20 @@ func ValidateRemoteGestaltd(cfg *Config) error {
 
 // ApplyServeRemoteOverrides applies gestaltd serve CLI overrides for remote
 // gestaltd delegation and validates the resolved remote configuration.
-func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
+// When alpha is true, empty remote and remoteToken values are resolved from
+// the gestalt CLI config (~/.config/gestalt/config.json and credentials.json)
+// before applying overrides, so --alpha users can omit --remote/--remote-token.
+func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string, alpha bool) error {
 	if cfg == nil {
 		return nil
+	}
+	if alpha {
+		if remote == "" {
+			remote, _ = defaultRemoteURL()
+		}
+		if remoteToken == "" {
+			remoteToken, _ = defaultRemoteToken()
+		}
 	}
 	if len(cfg.Server.Remotes) > 0 {
 		_, defaultRemote, ok := cfg.DefaultRemoteEntry()
@@ -962,6 +973,38 @@ func gestaltCredentialsPath() string {
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		return filepath.Join(home, ".config", "gestalt", "credentials.json")
+	}
+	return ""
+}
+
+func defaultRemoteURL() (string, error) {
+	if url := strings.TrimSpace(os.Getenv("GESTALT_URL")); url != "" {
+		return url, nil
+	}
+	path := gestaltConfigPath()
+	if path == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("config validation: read Gestalt config: %w", err)
+	}
+	var raw map[string]string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return "", fmt.Errorf("config validation: parse Gestalt config: %w", err)
+	}
+	return strings.TrimSpace(raw["url"]), nil
+}
+
+func gestaltConfigPath() string {
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
+		return filepath.Join(xdg, "gestalt", "config.json")
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".config", "gestalt", "config.json")
 	}
 	return ""
 }

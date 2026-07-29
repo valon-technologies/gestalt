@@ -410,7 +410,7 @@ func TestRunLockSyncLayeredConfigs(t *testing.T) {
 		t.Fatalf("runSync with layered configs: %v", err)
 	}
 
-	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, lockPath, artifactsDir, true, false, "", "")
+	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, lockPath, artifactsDir, true, false, "", "", false)
 	if err != nil {
 		t.Fatalf("setupBootstrapWithConfigPaths locked layered configs: %v", err)
 	}
@@ -449,7 +449,7 @@ func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfigForExecutionAtPaths locked with --lockfile: %v", err)
 	}
-	if err := config.ApplyServeRemoteOverrides(cfg, "", "test-token"); err != nil {
+	if err := config.ApplyServeRemoteOverrides(cfg, "", "test-token", false); err != nil {
 		t.Fatalf("ApplyServeRemoteOverrides: %v", err)
 	}
 	if _, defaultRemote, ok := cfg.DefaultRemoteEntry(); !ok || defaultRemote == nil {

@@ -38,6 +38,7 @@ type providerLocalCommandOptions struct {
 	NoSync          bool
 	Remote          string
 	RemoteToken     string
+	Alpha           bool
 	ArtifactsDir    string
 	LockfilePath    string
 	GestaltdVersion string
@@ -129,7 +130,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	if session.Locked {
 		forcedDevAppKeys = session.DevAppKeys
 	}
-	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, opts.Remote, opts.RemoteToken, forcedDevAppKeys...)
+	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, opts.Remote, opts.RemoteToken, opts.Alpha, forcedDevAppKeys...)
 	if err != nil {
 		return err
 	}

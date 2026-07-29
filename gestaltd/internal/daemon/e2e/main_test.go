@@ -26,7 +26,7 @@ func TestE2ECLIHelp(t *testing.T) {
 			name:      "root",
 			args:      []string{"--help"},
 			wantParts: []string{"gestaltd validate", "gestaltd lock", "gestaltd sync [--locked]", "gestaltd agent <command> [flags]", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked", "--no-sync", "[--config PATH]...", "--lockfile PATH"},
-			notWant:   []string{"gestaltd lock [--config PATH]... [--lockfile PATH] [--platform", "gestaltd bundle", "gestaltd dev", "gestaltd init", "\n  init"},
+			notWant:   []string{"gestaltd lock [--config PATH]... [--lockfile PATH] [--platform", "gestaltd bundle", "gestaltd init", "\n  init"},
 		},
 		{
 			name:      "validate",
@@ -48,12 +48,17 @@ func TestE2ECLIHelp(t *testing.T) {
 			name:      "provider",
 			args:      []string{"provider", "--help"},
 			wantParts: []string{"gestaltd provider <command> [flags]", "add", "info", "list", "remove", "repo", "search", "upgrade", "validate", "release"},
-			notWant:   []string{"  dev         ", "attach"},
+			notWant:   []string{"attach"},
 		},
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
 			wantParts: []string{"gestaltd serve [PATH]", "--port PORT", "--no-sync", "run:"},
+		},
+		{
+			name:      "dev",
+			args:      []string{"dev", "--help"},
+			wantParts: []string{"gestaltd dev [PATH]", "gestalt CLI config", "gestalt init", "gestalt auth login"},
 		},
 		{
 			name:      "provider repo",
