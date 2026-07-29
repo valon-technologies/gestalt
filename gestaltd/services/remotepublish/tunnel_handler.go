@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/grpcutil"
 	"google.golang.org/grpc"
 )
 
@@ -12,7 +13,7 @@ import (
 // UI handler. This mirrors the main server's publicGRPCMiddleware pattern.
 func newTunnelDispatchHandler(grpcServer *grpc.Server, uiHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isGRPCRequest(r) {
+		if grpcutil.IsGRPCRequest(r) {
 			grpcServer.ServeHTTP(w, r)
 			return
 		}
@@ -22,14 +23,6 @@ func newTunnelDispatchHandler(grpcServer *grpc.Server, uiHandler http.Handler) h
 		}
 		http.NotFound(w, r)
 	})
-}
-
-func isGRPCRequest(r *http.Request) bool {
-	if r == nil || r.Method != http.MethodPost {
-		return false
-	}
-	contentType := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type")))
-	return strings.HasPrefix(contentType, "application/grpc")
 }
 
 // newTunnelUIHandler builds an http.Handler that serves static UI assets for

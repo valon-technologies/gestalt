@@ -34,13 +34,12 @@ func (s *Server) tunnelUIProxyHandler(appName, mountPath string, fallback http.H
 }
 
 // hasTunnelRegistration checks whether a tunnel registration exists for the
-// given app name.
+// given app name via the resolver's canonical lookup.
 func (s *Server) hasTunnelRegistration(ctx context.Context, appName string) bool {
 	if s == nil || s.tunnelResolver == nil {
 		return false
 	}
-	_, _, err := s.tunnelResolver.cfg.RemoteRegistrations.ResolveProvider(ctx, "app", appName)
-	return err == nil
+	return s.tunnelResolver.HasRegistration(ctx, appName)
 }
 
 // newTunnelUIReverseProxy creates a reverse proxy that forwards requests

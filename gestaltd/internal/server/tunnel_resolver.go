@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +26,7 @@ type TunnelResolverConfig struct {
 
 // tunnelProviderResolver implements registry.RemoteResolver[core.Provider]. It
 // consults the RemoteRegistrationService for tunnel-registered apps and builds
-// (and caches) a TunnelProxyProvider for each. Tunnel registrations always
+// (and caches) a tunnel proxy provider for each. Tunnel registrations always
 // take precedence over local providers (tunnel always wins).
 //
 // When a registration exists but proxy construction fails (e.g. the tunnel is
@@ -34,7 +35,7 @@ type TunnelResolverConfig struct {
 type tunnelProviderResolver struct {
 	cfg      TunnelResolverConfig
 	mu       sync.Mutex
-	cache    map[string]*remotepublish.TunnelProxyProvider
+	cache    map[string]core.Provider
 	cacheGen map[string]uint64
 	group    singleflight.Group
 }
@@ -45,7 +46,7 @@ func newTunnelProviderResolver(cfg TunnelResolverConfig) *tunnelProviderResolver
 	}
 	return &tunnelProviderResolver{
 		cfg:      cfg,
-		cache:    make(map[string]*remotepublish.TunnelProxyProvider),
+		cache:    make(map[string]core.Provider),
 		cacheGen: make(map[string]uint64),
 	}
 }
@@ -117,7 +118,7 @@ func (r *tunnelProviderResolver) ResolveProvider(ctx context.Context, name strin
 		r.mu.Unlock()
 
 		if old != nil && old != provider {
-			_ = old.Close()
+			closeQuietly(old)
 		}
 
 		return provider, nil
@@ -128,6 +129,17 @@ func (r *tunnelProviderResolver) ResolveProvider(ctx context.Context, name strin
 	return val.(core.Provider), nil
 }
 
+// HasRegistration checks whether a tunnel registration exists for the given app
+// name without building a proxy provider. Used by the UI proxy to decide
+// whether to proxy or serve local static assets.
+func (r *tunnelProviderResolver) HasRegistration(ctx context.Context, appName string) bool {
+	if r == nil || r.cfg.RemoteRegistrations == nil {
+		return false
+	}
+	_, _, err := r.cfg.RemoteRegistrations.ResolveProvider(ctx, "app", appName)
+	return err == nil
+}
+
 // Close shuts down all cached tunnel proxy providers.
 func (r *tunnelProviderResolver) Close() {
 	if r == nil {
@@ -136,9 +148,15 @@ func (r *tunnelProviderResolver) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, p := range r.cache {
-		_ = p.Close()
+		closeQuietly(p)
 	}
 	r.cache = nil
+}
+
+func closeQuietly(p core.Provider) {
+	if c, ok := p.(io.Closer); ok {
+		_ = c.Close()
+	}
 }
 
 var _ registry.RemoteResolver[core.Provider] = (*tunnelProviderResolver)(nil)

@@ -489,11 +489,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Close releases in-process public gateway resources.
 func (s *Server) Close() {
-	if s == nil || s.publicGatewayConn == nil {
+	if s == nil {
 		return
 	}
-	s.publicGatewayConn.Close()
-	s.publicGatewayConn = nil
+	if s.tunnelResolver != nil {
+		s.tunnelResolver.Close()
+	}
+	if s.publicGatewayConn != nil {
+		s.publicGatewayConn.Close()
+		s.publicGatewayConn = nil
+	}
 }
 
 func withRequestTelemetryProviders(next http.Handler, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) http.Handler {

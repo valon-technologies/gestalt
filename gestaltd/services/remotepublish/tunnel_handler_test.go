@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/grpcutil"
 )
 
 func TestIsGRPCRequest(t *testing.T) {
@@ -25,8 +27,8 @@ func TestIsGRPCRequest(t *testing.T) {
 		if tc.contentType != "" {
 			req.Header.Set("Content-Type", tc.contentType)
 		}
-		if got := isGRPCRequest(req); got != tc.want {
-			t.Errorf("isGRPCRequest(method=%s, ct=%s) = %v, want %v", tc.method, tc.contentType, got, tc.want)
+		if got := grpcutil.IsGRPCRequest(req); got != tc.want {
+			t.Errorf("grpcutil.IsGRPCRequest(method=%s, ct=%s) = %v, want %v", tc.method, tc.contentType, got, tc.want)
 		}
 	}
 }

@@ -144,7 +144,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		FrpsHandler:          reverseRemote.frpsHandler,
 		FrpsConnectHandler:   reverseRemote.frpsConnectHandler,
 		TunnelResolver: TunnelResolverConfig{
-			RemoteRegistrations: remoteRegistrations(reverseRemote, result),
+			RemoteRegistrations: tunnelRemoteRegistrations(reverseRemote, result),
 			ConnectAddr:         reverseRemote.connectAddr,
 			ClientIdentity:      tunnelClientIdentity(reverseRemote),
 		},
@@ -667,11 +667,10 @@ func appRegistryRestartDelay(cfg *config.Config) (time.Duration, bool, error) {
 	return delay, false, nil
 }
 
-// remoteRegistrations returns the RemoteRegistrationService from the bootstrap
-// result if available, or nil. The tunnel resolver uses it to look up
-// tunnel-registered apps.
-func remoteRegistrations(_ *reverseRemoteSetup, result *bootstrap.Result) *coredata.RemoteRegistrationService {
-	if result == nil || result.Services == nil {
+// tunnelRemoteRegistrations returns the RemoteRegistrationService when the
+// reverse remote setup has one (dev mode with coredata), or nil otherwise.
+func tunnelRemoteRegistrations(setup *reverseRemoteSetup, result *bootstrap.Result) *coredata.RemoteRegistrationService {
+	if setup == nil || setup.frps == nil || result == nil || result.Services == nil {
 		return nil
 	}
 	return result.Services.RemoteRegistrations

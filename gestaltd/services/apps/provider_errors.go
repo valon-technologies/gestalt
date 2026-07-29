@@ -21,7 +21,7 @@ func providerExecuteError(err error) error {
 	}
 }
 
-func RemoteProviderExecuteError(err error) error {
+func remoteProviderExecuteError(err error) error {
 	if err == nil {
 		return nil
 	}

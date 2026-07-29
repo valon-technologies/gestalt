@@ -116,23 +116,30 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	if inner == nil {
 		return http.NotFoundHandler()
 	}
-	// If a tunnel registration exists for this app, proxy UI requests through
-	// the tunnel instead of serving local static assets.
-	if strings.TrimSpace(mounted.AppName) != "" {
-		inner = s.tunnelUIProxyHandler(mounted.AppName, mounted.Path, inner)
-	}
+	// Build the full local handler chain (theme, strip-prefix, auth, telemetry,
+	// CSP). The tunnel proxy wraps this entire chain so that when a tunnel
+	// registration exists, requests are proxied directly without local
+	// theme/CSP post-processing on the proxied response.
+	var local http.Handler
 	if mounted.IsDev {
 		if mounted.ThemeStylesheet != "" || mounted.ThemeAssetsDir != "" {
 			inner = mountedUIThemeHandlerFullPath(mounted, inner)
 		}
 		h := mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
-		return withDevContentSecurityPolicy(h)
+		local = withDevContentSecurityPolicy(h)
+	} else {
+		inner = mountedUIThemeHandler(mounted, inner)
+		if mounted.Path != "/" {
+			inner = http.StripPrefix(mounted.Path, inner)
+		}
+		local = mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 	}
-	inner = mountedUIThemeHandler(mounted, inner)
-	if mounted.Path != "/" {
-		inner = http.StripPrefix(mounted.Path, inner)
+	// Wrap with tunnel proxy: if a registration exists, proxy through the
+	// tunnel; otherwise serve the full local chain.
+	if strings.TrimSpace(mounted.AppName) != "" {
+		return s.tunnelUIProxyHandler(mounted.AppName, mounted.Path, local)
 	}
-	return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
+	return local
 }
 
 func (s *Server) adminUIHandler() http.Handler {
