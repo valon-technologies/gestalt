@@ -116,30 +116,27 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	if inner == nil {
 		return http.NotFoundHandler()
 	}
-	// Build the full local handler chain (theme, strip-prefix, auth, telemetry,
-	// CSP). The tunnel proxy wraps this entire chain so that when a tunnel
-	// registration exists, requests are proxied directly without local
-	// theme/CSP post-processing on the proxied response.
-	var local http.Handler
+	// Build the static-serving layer. When a tunnel registration exists for
+	// this app, the tunnel proxy replaces the local static handler. The proxy
+	// is wrapped by theme/strip-prefix (for the local fallback path only) and
+	// then by auth, so tunnel-proxied UIs require the same authorization as
+	// local UIs.
+	if strings.TrimSpace(mounted.AppName) != "" {
+		inner = s.tunnelUIProxyHandler(mounted.AppName, mounted.Path, inner)
+	}
 	if mounted.IsDev {
 		if mounted.ThemeStylesheet != "" || mounted.ThemeAssetsDir != "" {
 			inner = mountedUIThemeHandlerFullPath(mounted, inner)
 		}
-		h := mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
-		local = withDevContentSecurityPolicy(h)
-	} else {
-		inner = mountedUIThemeHandler(mounted, inner)
-		if mounted.Path != "/" {
-			inner = http.StripPrefix(mounted.Path, inner)
-		}
-		local = mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
+		inner = mountedUITelemetryHandler(mounted, inner)
+		return withDevContentSecurityPolicy(s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 	}
-	// Wrap with tunnel proxy: if a registration exists, proxy through the
-	// tunnel; otherwise serve the full local chain.
-	if strings.TrimSpace(mounted.AppName) != "" {
-		return s.tunnelUIProxyHandler(mounted.AppName, mounted.Path, local)
+	inner = mountedUIThemeHandler(mounted, inner)
+	if mounted.Path != "/" {
+		inner = http.StripPrefix(mounted.Path, inner)
 	}
-	return local
+	inner = mountedUITelemetryHandler(mounted, inner)
+	return s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
 }
 
 func (s *Server) adminUIHandler() http.Handler {

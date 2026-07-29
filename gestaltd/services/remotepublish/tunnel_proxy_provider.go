@@ -92,11 +92,11 @@ func (c *metadataAppProviderClient) withApp(ctx context.Context) context.Context
 }
 
 func (c *metadataAppProviderClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*proto.ProviderMetadata, error) {
-	return c.inner.GetMetadata(ctx, in, opts...)
+	return c.inner.GetMetadata(c.withApp(ctx), in, opts...)
 }
 
 func (c *metadataAppProviderClient) StartProvider(ctx context.Context, in *proto.StartProviderRequest, opts ...grpc.CallOption) (*proto.StartProviderResponse, error) {
-	return c.inner.StartProvider(ctx, in, opts...)
+	return c.inner.StartProvider(c.withApp(ctx), in, opts...)
 }
 
 func (c *metadataAppProviderClient) Execute(ctx context.Context, in *proto.ExecuteRequest, opts ...grpc.CallOption) (*proto.OperationResult, error) {
