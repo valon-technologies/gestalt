@@ -63,6 +63,7 @@ app_version_change_requests      ← accepted version changes (append-only)
 app_version_install_locks        ← install admission lock per app
 gestaltd_source_version_state    ← Toolshed source version selected for rollout accounting
 app_rollouts                     ← current rollout per app
+app_version_rollout_outcomes     ← terminal rollout timing per change request
 app_instance_materializations    ← per-replica acknowledgement of fleet-known versions
 app_auto_deploy_settings         ← per-app auto-deploy policy
 ```
@@ -83,6 +84,7 @@ Access install services after bootstrap via `Result.Services` / `prepared.Servic
 Services.AppVersionChangeRequests   ← install prototype
 Services.GestaltdSourceVersionState ← current Toolshed source version and activation time
 Services.AppRollouts                ← rollout state
+Services.AppVersionRolloutOutcomes  ← terminal rollout timing per change request
 Services.AutoDeploySettings         ← per-app auto-deploy policy
 Services.DB                         ← underlying main-db handle
 ```
@@ -291,6 +293,49 @@ A terminal record may be replaced when the next version is admitted. A non-termi
 | `MarkFailed(ctx, app, version, failedAt)` | Record that the rollout missed its deadline. |
 
 **Admin exposure:** `Get` and `ListActive` back `GET /admin/api/v1/app-rollouts` and rollout summaries on `GET /admin/api/v1/registry-apps`. See [lifecycle.md](../operations/lifecycle.md#admin-observability-api).
+
+---
+
+## Store: `app_version_rollout_outcomes` (Terminal Rollout Timing)
+
+Persists when each admitted version finished or failed its fleet rollout. `app_version_change_requests` stays append-only; this sidecar supplies terminal `completed_at` or `failed_at` for revision-history rows after `app_rollouts` is replaced by a later admission.
+
+Primary key: `id` = change-request `id`.
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "app": "g-issues",
+  "version": "0.0.0-snapshot.gdef456",
+  "completed_at": "2026-07-24T20:45:08Z"
+}
+```
+
+or, on failure:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "app": "g-issues",
+  "version": "0.0.0-snapshot.gdef456",
+  "failed_at": "2026-07-24T20:54:41Z"
+}
+```
+
+The catalog poller writes the row exactly once when `MarkCompleteForRollout` or `MarkFailedForRollout` succeeds, resolving the change request by `(app, version)` using the latest request for that `to_version` at transition time.
+
+### Service API
+
+`AppVersionRolloutOutcomeService` (`gestaltd/internal/coredata/app_version_rollout_outcomes.go`):
+
+| Method | Description |
+| --- | --- |
+| `Get(ctx, changeRequestID)` | Load one outcome by change-request `id`. |
+| `GetMany(ctx, changeRequestIDs)` | Batch-load outcomes for history enrichment. |
+| `RecordComplete(ctx, changeRequestID, app, version, completedAt)` | Persist a successful rollout end time. |
+| `RecordFailed(ctx, changeRequestID, app, version, failedAt)` | Persist a failed rollout end time. |
+
+**Admin exposure:** `GetMany` backs rollout duration fields on `GET /api/v1/apps/{app}/admin/registry/history`. See [lifecycle.md](../operations/lifecycle.md#revision-history).
 
 ---
 

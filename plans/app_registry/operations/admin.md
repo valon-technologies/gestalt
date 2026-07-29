@@ -96,7 +96,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded `/admi
 - Select a never-deployed version before `expiresAt` or a historical version before `expiresAt` as the fleet-wide desired version.
 - Show per-version `publishedAt`, linked source commit, triggering PR or commit, and publishing workflow run.
 - Show in-flight (**Publishing**) and recent failed (**Failed**) publishes with elapsed or total publish time. See [pending-publish.md](./pending-publish.md).
-- Show the permanent, read-only deploy chain in a **Revision history** tab.
+- Show the permanent, read-only deploy chain in a **Revision history** tab with rollout status and duration on each admission.
 - Show whether historical versions are still redeployable or permanently locked.
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable deploy actions while a rollout is `enrolling` or `restarting`; poll registry state every **3s** and refresh until rollout is terminal.
@@ -111,7 +111,7 @@ Selection is fleet-wide. It is not per-user or per-replica.
 The page header shows the app name, **App management** label, registry binding, and current **Desired version**. Two tabs separate deployment from audit:
 
 - **Published snapshots** — pending, failed, and published entries in one newest-first list. A published row has **Deploy** when the version is **Available** or **Redeployable**.
-- **Revision history** — accepted fleet version changes in reverse chronological order. This tab is always read-only.
+- **Revision history** — accepted fleet version changes in reverse chronological order with rollout status and duration. This tab is always read-only.
 
 See [pending-publish.md](./pending-publish.md) for snapshot merge rules, **3s** registry polling during bootstrap and active publish/rollout, and live **Publishing** duration labels.
 
@@ -242,19 +242,31 @@ PR #3872 · Title | 0.0.0-snapshot.g… | Queued for deploy   | —
 
 The Revision history tab displays `app_version_change_requests` as an immutable deploy ledger. It is not built from the deduplicated `knownVersions` projection: every accepted transition appears exactly once, including upgrades and downgrades that revisit an earlier version.
 
+Fleet admission appends a change request immediately, but the version is not fleet-available until rollout reaches `complete`. Each row shows rollout status and duration labels that mirror the **Publishing** / **Published in** pattern on Published snapshots. See [pending-publish.md](./pending-publish.md#publish-duration) and [lifecycle.md](./lifecycle.md#revision-history).
+
+| Row status | Start | End | Status label |
+| --- | --- | --- | --- |
+| **Rolling out** | `deployedAt` | `liveNow` (client clock, 1s) | `Rolling out` + `for 2m 14s` |
+| **Available** | `deployedAt` | `rolloutCompletedAt` | `Available in 3m 08s` |
+| **Failed** | `deployedAt` | `rolloutFailedAt` | `Failed after 12m 41s` |
+
 ```text
 Revision history
 
-Deployed at  | Transition                    | Availability | Deployed by
------------- | ----------------------------- | ------------ | ---------------
-Jul 25 09:10 | gdef456 → gabc123 (downgrade) | Current      | alice@valon.com
-Jul 24 16:42 | gabc123 → gdef456 (upgrade)   | Redeployable | alice@valon.com
-Jul 21 12:00 | First deployment → gabc123    | Current      | bob@valon.com
+Deployed at  | Transition                    | Status                    | Deployed by
+------------ | ----------------------------- | ------------------------- | ---------------
+2 minutes ago| gabc123 → gdef456 (upgrade)   | Rolling out · for 2m 14s  | alice@valon.com
+Jul 24 16:42 | gdef456 → gabc123 (downgrade) | Available in 3m 08s       | alice@valon.com
+Jul 21 12:00 | First deployment → gabc123    | Available in 1m 52s       | bob@valon.com
 ```
 
-Each row links to the source commit and, when recorded, the triggering pull request and publish workflow. **Availability** shows the selected version's present-day state, so repeated entries for the same version have the same value. The current desired version is **Current**; other versions are **Redeployable** or **Locked**. Automatic admissions show **system:auto-deploy** as the deployer. The history tab itself has no deploy action because availability is an attribute of a version, not an individual event. Eligible selection remains on Published snapshots.
+Each row links to the source commit and, when recorded, the triggering pull request and publish workflow. The newest revision row shows **Rolling out** while `registry.rollout` is `enrolling` or `restarting` for the current admission. Older rows for the same version omit live rollout decoration. Terminal durations come from the `app_version_rollout_outcomes` sidecar when present. Automatic admissions show **system:auto-deploy** as the deployer; rollout status is independent of actor.
+
+Enable `useLiveNow` while the history table has at least one in-flight rollout row so **Rolling out** durations advance between registry polls. The parent registry query already polls every **3s** during active rollout; the history query does not need its own interval.
 
 Load the newest page when the tab opens and paginate older entries with a cursor. An empty deploy chain renders **No deployments yet**. Registry retention permanently preserves the chain and version metadata. Artifacts for locked revisions may be pruned; see [retention.md](./retention.md).
+
+Legacy revisions admitted before rollout-outcome persistence omit rollout status and duration; `deployedAt` only.
 
 ---
 
@@ -285,7 +297,8 @@ Load the newest page when the tab opens and paginate older entries with a cursor
 ├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
 ├── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
 ├── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Selected Version Row</a>
-└── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
+├── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
+└── <a href="../project/changelog.md#changelog-26">26 — Revision History Rollout Visibility</a>
 </pre>
 
 ### Related Docs
