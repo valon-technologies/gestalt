@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -142,6 +143,11 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		RemoteManagement:     reverseRemote.remoteManagement,
 		FrpsHandler:          reverseRemote.frpsHandler,
 		FrpsConnectHandler:   reverseRemote.frpsConnectHandler,
+		TunnelResolver: TunnelResolverConfig{
+			RemoteRegistrations: remoteRegistrations(reverseRemote, result),
+			ConnectAddr:         reverseRemote.connectAddr,
+			ClientIdentity:      tunnelClientIdentity(reverseRemote),
+		},
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
@@ -412,7 +418,11 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		}
 
 		if ctx.Err() == nil && cfg.Server.Dev {
-			if err := startReversePublisher(ctx, result.Providers, reverseRemote, slog.Default()); err != nil {
+			var devHandlerResolver func(string) http.Handler
+			if devSupervisor != nil {
+				devHandlerResolver = devSupervisor.DevHandler
+			}
+			if err := startReversePublisher(ctx, result.Providers, reverseRemote, devHandlerResolver, slog.Default()); err != nil {
 				workflowErr <- err
 				return
 			}
@@ -655,4 +665,24 @@ func appRegistryRestartDelay(cfg *config.Config) (time.Duration, bool, error) {
 		return 0, false, fmt.Errorf("server.appRegistry.restartDelay: %w", err)
 	}
 	return delay, false, nil
+}
+
+
+// remoteRegistrations returns the RemoteRegistrationService from the bootstrap
+// result if available, or nil. The tunnel resolver uses it to look up
+// tunnel-registered apps.
+func remoteRegistrations(_ *reverseRemoteSetup, result *bootstrap.Result) *coredata.RemoteRegistrationService {
+	if result == nil || result.Services == nil {
+		return nil
+	}
+	return result.Services.RemoteRegistrations
+}
+
+// tunnelClientIdentity returns the TLS certificate from the reverse remote
+// setup's identity, or a zero certificate if not configured.
+func tunnelClientIdentity(setup *reverseRemoteSetup) tls.Certificate {
+	if setup == nil || setup.clientIdentity == nil {
+		return tls.Certificate{}
+	}
+	return setup.clientIdentity.Certificate
 }

@@ -60,6 +60,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 		ServerName:         d.cfg.TunnelHost,
 		InsecureSkipVerify: true, // SPKI pinning below; we do not use system roots.
 		MinVersion:         tls.VersionTLS13,
+		NextProtos:         []string{"h2", "http/1.1"},
 	}
 	// Wrap the bufio.Reader so any bytes buffered after the 200 response are not
 	// lost when the connection is handed to the TLS client.

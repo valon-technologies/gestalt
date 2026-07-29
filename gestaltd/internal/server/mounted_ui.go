@@ -116,6 +116,11 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	if inner == nil {
 		return http.NotFoundHandler()
 	}
+	// If a tunnel registration exists for this app, proxy UI requests through
+	// the tunnel instead of serving local static assets.
+	if strings.TrimSpace(mounted.AppName) != "" {
+		inner = s.tunnelUIProxyHandler(mounted.AppName, mounted.Path, inner)
+	}
 	if mounted.IsDev {
 		if mounted.ThemeStylesheet != "" || mounted.ThemeAssetsDir != "" {
 			inner = mountedUIThemeHandlerFullPath(mounted, inner)

@@ -1,0 +1,72 @@
+package registry
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/valon-technologies/gestalt/server/core"
+)
+
+// stubRemoteResolver returns a fixed provider for a given name.
+type stubRemoteResolver[T any] struct {
+	provider T
+	err      error
+}
+
+func (r *stubRemoteResolver[T]) ResolveProvider(_ context.Context, _ string) (T, error) {
+	return r.provider, r.err
+}
+
+func TestProviderMapRemoteResolverPrecedence(t *testing.T) {
+	m := newProviderMap[int]("test")
+	if err := m.Register("foo", 42); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without a remote resolver, Get returns the local value.
+	val, err := m.Get("foo")
+	if err != nil || val != 42 {
+		t.Fatalf("Get without resolver: got %d, err %v", val, err)
+	}
+
+	// With a remote resolver that returns a value, the remote takes precedence.
+	m.SetRemoteResolver(&stubRemoteResolver[int]{provider: 99})
+	val, err = m.Get("foo")
+	if err != nil || val != 99 {
+		t.Fatalf("Get with resolver: got %d, err %v (want 99)", val, err)
+	}
+
+	// When the resolver returns an error, fall back to local.
+	m.SetRemoteResolver(&stubRemoteResolver[int]{err: errors.New("not found")})
+	val, err = m.Get("foo")
+	if err != nil || val != 42 {
+		t.Fatalf("Get with failing resolver: got %d, err %v (want 42)", val, err)
+	}
+}
+
+func TestProviderMapRemoteResolverOnlyRemote(t *testing.T) {
+	m := newProviderMap[int]("test")
+	m.SetRemoteResolver(&stubRemoteResolver[int]{provider: 77})
+
+	// A name not in the local map should resolve via the remote resolver.
+	val, err := m.Get("remote-only")
+	if err != nil || val != 77 {
+		t.Fatalf("Get remote-only: got %d, err %v (want 77)", val, err)
+	}
+}
+
+func TestProviderMapNoResolverStillWorks(t *testing.T) {
+	m := newProviderMap[int]("test")
+	if err := m.Register("local", 1); err != nil {
+		t.Fatal(err)
+	}
+	val, err := m.Get("local")
+	if err != nil || val != 1 {
+		t.Fatalf("Get without resolver: got %d, err %v", val, err)
+	}
+	_, err = m.Get("missing")
+	if !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("Get missing: expected ErrNotFound, got %v", err)
+	}
+}

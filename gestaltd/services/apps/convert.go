@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
+func CatalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 	if src == nil {
 		return nil, nil
 	}

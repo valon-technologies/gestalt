@@ -242,7 +242,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		Context:          reqCtx,
 	})
 	if err != nil {
-		return nil, remoteProviderExecuteError(err)
+		return nil, RemoteProviderExecuteError(err)
 	}
 	return &core.OperationResult{
 		Status:  int(resp.GetStatus()),
@@ -276,7 +276,7 @@ func (p *remoteProviderBase) ExecuteStream(ctx context.Context, operation string
 		Context:          reqCtx,
 	})
 	if err != nil {
-		return nil, remoteProviderExecuteError(err)
+		return nil, RemoteProviderExecuteError(err)
 	}
 	return &remoteStreamReader{stream: stream}, nil
 }
@@ -384,7 +384,7 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	if err != nil {
 		return nil, err
 	}
-	cat, err := catalogFromProto(resp.GetCatalog())
+	cat, err := CatalogFromProto(resp.GetCatalog())
 	if err != nil {
 		return nil, err
 	}
@@ -573,7 +573,7 @@ func (p *gestaltRemoteProvider) Execute(ctx context.Context, operation string, p
 		IdempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
 	})
 	if err != nil {
-		return nil, remoteProviderExecuteError(err)
+		return nil, RemoteProviderExecuteError(err)
 	}
 	return remoteOperationResult(resp), nil
 }
@@ -593,7 +593,7 @@ func (p *gestaltRemoteProvider) InvokeGraphQL(ctx context.Context, request core.
 		IdempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
 	})
 	if err != nil {
-		return nil, remoteProviderExecuteError(err)
+		return nil, RemoteProviderExecuteError(err)
 	}
 	return remoteOperationResult(resp), nil
 }

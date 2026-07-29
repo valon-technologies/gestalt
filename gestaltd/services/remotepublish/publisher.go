@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"net/http"
+
 	"google.golang.org/grpc"
 
 	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
@@ -76,17 +78,19 @@ type ProviderPublication struct {
 }
 
 type PublisherConfig struct {
-	Groups    []PublicationGroup
-	Providers *registry.ProviderMap[core.Provider]
-	Logger    *slog.Logger
+	Groups           []PublicationGroup
+	Providers        *registry.ProviderMap[core.Provider]
+	Logger           *slog.Logger
+	DevHandlerResolver func(string) http.Handler
 }
 
 type Publisher struct {
-	groups    []*groupState
-	providers *registry.ProviderMap[core.Provider]
-	logger    *slog.Logger
-	mu        sync.Mutex
-	started   bool
+	groups           []*groupState
+	providers        *registry.ProviderMap[core.Provider]
+	devHandlerResolver func(string) http.Handler
+	logger           *slog.Logger
+	mu               sync.Mutex
+	started          bool
 }
 
 type groupState struct {
@@ -94,6 +98,7 @@ type groupState struct {
 	client     RemoteClient
 	host       *tunnel.Host
 	grpcServer *grpc.Server
+	httpServer *http.Server
 	remote     *gestaltclient.Remote
 	published  bool
 	cancel     context.CancelFunc
@@ -109,7 +114,7 @@ func NewPublisher(cfg PublisherConfig) *Publisher {
 	for _, g := range cfg.Groups {
 		groups = append(groups, &groupState{group: g})
 	}
-	return &Publisher{groups: groups, providers: cfg.Providers, logger: logger}
+	return &Publisher{groups: groups, providers: cfg.Providers, devHandlerResolver: cfg.DevHandlerResolver, logger: logger}
 }
 
 func (p *Publisher) ReadinessReason() string {
@@ -250,7 +255,7 @@ func (p *Publisher) publishOnce(ctx context.Context, gs *groupState) (err error)
 	grpcServer := grpc.NewServer()
 	proto.RegisterRegistrationLifecycleServer(grpcServer,
 		newRegistrationLifecycleServer(gs.group.Providers, &providerLookup{providers: p.providers}))
-	go func() { _ = grpcServer.Serve(host.Listener()) }()
+	proto.RegisterAppProviderServer(grpcServer, NewTunnelAppProviderServer(p.providers))
 	gs.grpcServer = grpcServer
 	defer func() {
 		if err != nil {
@@ -258,6 +263,24 @@ func (p *Publisher) publishOnce(ctx context.Context, gs *groupState) (err error)
 			gs.grpcServer = nil
 		}
 	}()
+
+	// Serve both gRPC (app operations + registration lifecycle) and HTTP (UI
+	// static assets) on the single tunnel listener. gRPC requests are
+	// dispatched by Content-Type, mirroring the main server's
+	// publicGRPCMiddleware pattern.
+	uiHandler := newTunnelUIHandler(p.devHandlerResolver, gs.group.Providers)
+	handler := newTunnelDispatchHandler(grpcServer, uiHandler)
+	httpServer := &http.Server{
+		Handler: handler,
+	}
+	gs.httpServer = httpServer
+	defer func() {
+		if err != nil {
+			_ = httpServer.Close()
+			gs.httpServer = nil
+		}
+	}()
+	go func() { _ = httpServer.Serve(host.Listener()) }()
 
 	providerDefs := make([]*gestaltclient.RemoteProviderDefinition, 0, len(gs.group.Providers))
 	for _, pub := range gs.group.Providers {
@@ -298,6 +321,9 @@ func (p *Publisher) shutdownGroup(ctx context.Context, gs *groupState) {
 	}
 	if gs.grpcServer != nil {
 		stopGRPC(gs.grpcServer)
+	}
+	if gs.httpServer != nil {
+		_ = gs.httpServer.Close()
 	}
 	if gs.host != nil {
 		_ = gs.host.Close()

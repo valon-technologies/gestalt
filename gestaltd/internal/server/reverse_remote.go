@@ -32,6 +32,8 @@ type reverseRemoteSetup struct {
 	frps               *tunnel.Server
 	frpsHandler        http.Handler
 	frpsConnectHandler http.Handler
+	clientIdentity     *tunnel.Identity
+	connectAddr        string
 	// groups is the publication plan computed once from config. It is passed
 	// to startReversePublisher so there is a single source of truth.
 	groups []remotepublish.PublicationGroup
@@ -78,6 +80,9 @@ func setupReverseRemoteUpstream(ctx context.Context, cfg *config.Config, service
 		return nil, err
 	}
 
+	result.clientIdentity = identity
+	result.connectAddr = result.frps.ConnectAddr()
+
 	validator := remotepublish.NewEndpointValidator(remotepublish.EndpointValidatorConfig{
 		ConnectAddr:    result.frps.ConnectAddr(),
 		ClientIdentity: identity,
@@ -107,14 +112,15 @@ func setupReverseRemoteUpstream(ctx context.Context, cfg *config.Config, service
 	return result, nil
 }
 
-func startReversePublisher(ctx context.Context, providers *registry.ProviderMap[core.Provider], setup *reverseRemoteSetup, logger *slog.Logger) error {
+func startReversePublisher(ctx context.Context, providers *registry.ProviderMap[core.Provider], setup *reverseRemoteSetup, devHandlerResolver func(string) http.Handler, logger *slog.Logger) error {
 	if setup == nil || len(setup.groups) == 0 {
 		return nil
 	}
 	publisher := remotepublish.NewPublisher(remotepublish.PublisherConfig{
-		Groups:    setup.groups,
-		Providers: providers,
-		Logger:    logger,
+		Groups:             setup.groups,
+		Providers:          providers,
+		Logger:             logger,
+		DevHandlerResolver: devHandlerResolver,
 	})
 	if err := publisher.Start(ctx); err != nil {
 		setup.mu.Lock()

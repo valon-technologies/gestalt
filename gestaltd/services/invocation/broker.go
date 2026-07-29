@@ -258,7 +258,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 	}
 
-	prov, err := b.providers.Get(providerName)
+	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
@@ -858,7 +858,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 		}
 	}
 
-	prov, err := b.providers.Get(providerName)
+	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
