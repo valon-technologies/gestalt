@@ -494,6 +494,8 @@ Covered behaviors:
 - published versions render newest first with desired version selected
 - pending, failed, and published rows share one snapshots table with status and timing labels
 - the Revision history tab loads lazily, renders newest-first transitions, paginates older rows, and shows **No deployments yet** for an empty chain
+- revision history shows **Rolling out**, **Available**, and **Failed** rollout status with duration labels on matching rows
+- revision history omits live rollout status from older same-version rows when a version is re-admitted
 - active rollout or **409** after a stale page disables deploy actions until rollout is terminal
 - **403** renders access denied without registry metadata
 - publication labels link only the PR number; titles render as plain muted text when present
@@ -573,6 +575,64 @@ Covered behaviors:
 - failed auto-deploy `PUT` shows an error line under the switch
 - **Queued for deploy** appears on the pending snapshot row during an active rollout while auto-deploy is enabled
 - revision history renders `system:auto-deploy` as the deployer for automatic admissions
+
+---
+
+## Revision History Rollout Tests
+
+API: [lifecycle.md](../operations/lifecycle.md#revision-history). UI: [admin.md](../operations/admin.md#revision-history-tab).
+
+### Gestalt Coredata Tests (`app_version_rollout_outcomes_test.go`)
+
+Implemented in [gestalt#2989](https://github.com/valon-technologies/gestalt/pull/2989).
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/coredata/... -run TestAppVersionRolloutOutcome -count=1
+```
+
+| Test | Expected behavior |
+| --- | --- |
+| `TestAppVersionRolloutOutcomeServiceRecordCompleteIsIdempotent` | `RecordComplete` persists and repeated writes are idempotent |
+| `TestAppVersionRolloutOutcomeServiceRecordFailed` | `RecordFailed` persists and `Get` returns `failed_at` |
+| `TestAppVersionRolloutOutcomeServiceGetMissing` | `Get` returns `ErrNotFound` when no outcome exists |
+
+### Gestalt Handler Tests (`handlers_app_admin_registry_test.go`)
+
+Implemented in [gestalt#2989](https://github.com/valon-technologies/gestalt/pull/2989).
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/server/... -run TestAppAdminRegistryHistory -count=1
+```
+
+| Test | Expected behavior |
+| --- | --- |
+| `TestAppAdminRegistryHistoryActiveRolloutFields` | Current revision includes live `rolloutState` and `rolloutForSeconds` |
+| `TestAppAdminRegistryHistoryStoredRolloutOutcomeFields` | Terminal duration comes from the outcome sidecar |
+| `TestAppAdminRegistryHistoryIgnoresLiveRolloutForOlderSameVersion` | Older same-version row omits live rollout state |
+| `TestAppAdminRegistryHistoryPrefersStoredOutcomeOverLiveRollout` | Stored terminal outcome wins over live `app_rollouts` |
+
+### Default App UI Tests (`gestalt-providers`)
+
+Implemented in [gestalt-providers#1206](https://github.com/valon-technologies/gestalt-providers/pull/1206).
+
+Run:
+
+```bash
+cd gestalt-providers/app/default
+npm run test:e2e -- e2e/app-admin-mock.spec.ts -g "rollout status"
+```
+
+Covered behaviors:
+
+- revision history **Status** column shows **Rolling out** with a live timer during active rollout
+- terminal rows show **Available** with **Available in** duration
+- older same-version revision omits rollout status when a version is re-admitted
 
 ---
 

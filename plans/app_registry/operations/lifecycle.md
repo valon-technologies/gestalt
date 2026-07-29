@@ -101,6 +101,8 @@ Replica membership is discovered rather than configured:
 6. The rollout completes when the target cohort is non-empty and every member records `restarted_at`.
 7. The rollout fails if a target-cohort replica does not restart before the deadline, or if no target replica acknowledges before the deadline.
 
+When the catalog poller transitions a rollout to `complete` or `failed`, it writes one `app_version_rollout_outcomes` row keyed by the latest change request for `(app, version)`. Duplicate writes for the same change-request `id` are ignored. The poller records an outcome only when the transition succeeds; no-op transitions on an already-terminal rollout do not write. Terminal durations on the revision-history API prefer this sidecar over the live `app_rollouts` record.
+
 This prevents a Cloud Run deployment from combining five old and five candidate processes into a ten-member cohort. When Cloud Run terminates the old deployment, those rows remain visible for diagnostics but do not block the candidate deployment from completing at `5/5 restarted`.
 
 Never declare success because any source-version cohort completed. The old source version could reach `5/5` while the promoted source version fails. Success is tied to `target_source_version`.
@@ -714,6 +716,8 @@ Rules:
 
 #### Revision History
 
+<a id="revision-history"></a>
+
 `GET /api/v1/apps/{app}/admin/registry/history?limit=50&cursor=…` returns the append-only `app_version_change_requests` sequence in reverse chronological order.
 
 **Response `200`**
@@ -738,7 +742,12 @@ Rules:
         }
       },
       "deploymentState": "desired",
-      "current": true
+      "current": true,
+      "rolloutState": "restarting",
+      "rolloutForSeconds": 134,
+      "rolloutDurationSeconds": null,
+      "rolloutCompletedAt": null,
+      "rolloutFailedAt": null
     }
   ],
   "nextCursor": "2026-07-24T20:42:00Z:550e8400-e29b-41d4-a716-446655440000"
@@ -753,6 +762,13 @@ Rules:
 - `current` is true only for the latest request that produced `LatestKnownVersion`. Earlier requests remain historical even when they selected the same version.
 - `deploymentState` is the selected version's present-day eligibility: `desired`, `redeployable`, or `locked`. Repeated entries for the same version share the same value. Historical entries include `deployableUntil` (from `expiresAt`) when applicable.
 - `deployedAt`, `deployedBy`, source fields, and publication provenance come from the change request and its immutable `metadata_json` install-contract snapshot. New admissions snapshot publication provenance; legacy rows may omit it.
+- Omit rollout fields when no rollout exists for the revision and no outcome sidecar is stored.
+- `rolloutState` is `enrolling`, `restarting`, `complete`, or `failed`.
+- For active rollouts, project `rolloutState` from `app_rollouts` only on the current revision (`id` matches the latest change request). Older same-version rows do not inherit the live rollout.
+- For terminal rows, prefer the `app_version_rollout_outcomes` sidecar. Fall back to `app_rollouts` when the rollout record is still terminal and versions match.
+- `rolloutForSeconds` is set only while state is `enrolling` or `restarting`.
+- `rolloutDurationSeconds`, `rolloutCompletedAt`, and `rolloutFailedAt` are set only for terminal states.
+- Legacy revisions without a stored outcome omit terminal duration fields.
 - An app with no change requests returns `revisions: []`. The route has the same app-admin authorization and fail-closed behavior as the registry-state route.
 - The endpoint performs no writes and exposes no deploy action. Eligible historical versions are selected from Published snapshots.
 
