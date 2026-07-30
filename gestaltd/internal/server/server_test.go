@@ -71,6 +71,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+	"gopkg.in/yaml.v3"
 )
 
 func mustStruct(t *testing.T, fields map[string]any) *structpb.Struct {
@@ -4156,20 +4157,25 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 func TestListIntegrations_IncludesPromptExamples(t *testing.T) {
 	t.Parallel()
 
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>home</html>")
 	stub := &coretesting.StubIntegration{N: "gmail", DN: "Gmail"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.AppDefs = testPluginDefsForConnections("gmail", "default")
-		if cfg.AppDefs["gmail"] != nil {
-			cfg.AppDefs["gmail"].ResolvedManifest = &providermanifestv1.Manifest{
-				Spec: &providermanifestv1.Spec{
-					UI: &providermanifestv1.ManifestUI{
-						PromptExamples: []string{
-							"Draft a short reply to my latest unread email",
-						},
-					},
-				},
-			}
+		var promptConfig yaml.Node
+		if err := yaml.Unmarshal([]byte(`
+prompts:
+  gmail:
+    - id: draft-reply
+      text: Draft a short reply to my latest unread email
+`), &promptConfig); err != nil {
+			t.Fatalf("yaml.Unmarshal: %v", err)
+		}
+		cfg.AppDefs["home"] = &config.ProviderEntry{
+			Static:             &config.AppStaticConfig{Mount: "/"},
+			ResolvedStaticRoot: rootDir,
+			Config:             promptConfig,
 		}
 		cfg.Services = testutil.NewStubServices(t)
 	})

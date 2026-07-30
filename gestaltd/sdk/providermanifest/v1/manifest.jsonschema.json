@@ -386,24 +386,6 @@
         "assetRoot": {
           "type": "string",
           "minLength": 1
-        },
-        "ui": {
-          "$ref": "#/$defs/manifestUI"
-        }
-      }
-    },
-    "manifestUI": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "promptExamples": {
-          "type": "array",
-          "maxItems": 5,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 280
-          }
         }
       }
     },

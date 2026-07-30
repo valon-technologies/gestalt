@@ -483,31 +483,6 @@ type Spec struct {
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
-	UI                *ManifestUI                           `json:"ui,omitempty" yaml:"ui,omitempty"`
-}
-
-// ManifestUI holds console/discovery presentation metadata for an app provider.
-type ManifestUI struct {
-	// PromptExamples are `@DisplayName …` bodies shown on the app workspace overview.
-	PromptExamples []string `json:"promptExamples,omitempty" yaml:"promptExamples,omitempty"`
-}
-
-// PromptExamples returns trimmed non-empty prompt bodies from a manifest, if any.
-func PromptExamples(manifest *Manifest) []string {
-	if manifest == nil || manifest.Spec == nil || manifest.Spec.UI == nil {
-		return nil
-	}
-	out := make([]string, 0, len(manifest.Spec.UI.PromptExamples))
-	for _, body := range manifest.Spec.UI.PromptExamples {
-		trimmed := strings.TrimSpace(body)
-		if trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 type RouteAuthRef struct {
@@ -946,7 +921,6 @@ type specJSONWire struct {
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty"`
 	Requires          []string                              `json:"requires,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty"`
-	UI                *ManifestUI                           `json:"ui,omitempty"`
 }
 
 type specYAMLWire struct {
@@ -965,7 +939,6 @@ type specYAMLWire struct {
 	Pagination        *ManifestPaginationConfig             `yaml:"pagination,omitempty"`
 	Requires          []string                              `yaml:"requires,omitempty"`
 	AssetRoot         string                                `yaml:"assetRoot,omitempty"`
-	UI                *ManifestUI                           `yaml:"ui,omitempty"`
 }
 
 type specWire struct {
@@ -984,7 +957,6 @@ type specWire struct {
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
-	UI                *ManifestUI                           `json:"ui,omitempty" yaml:"ui,omitempty"`
 }
 
 func (s *Spec) UnmarshalJSON(data []byte) error {
@@ -1013,7 +985,6 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 		Pagination:        raw.Pagination,
 		Requires:          raw.Requires,
 		AssetRoot:         raw.AssetRoot,
-		UI:                raw.UI,
 	}
 
 	*s = spec
@@ -1061,7 +1032,6 @@ func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
 		Pagination:        raw.Pagination,
 		Requires:          raw.Requires,
 		AssetRoot:         raw.AssetRoot,
-		UI:                raw.UI,
 	}
 
 	*s = spec
@@ -1092,7 +1062,6 @@ func (s Spec) canonicalWire() (specWire, error) {
 		Pagination:        s.Pagination,
 		Requires:          s.Requires,
 		AssetRoot:         s.AssetRoot,
-		UI:                s.UI,
 	}, nil
 }
 
@@ -1283,7 +1252,6 @@ var specWireFields = map[string]struct{}{
 	"pagination":        {},
 	"requires":          {},
 	"assetRoot":         {},
-	"ui":                {},
 }
 
 //go:embed manifest.jsonschema.json

@@ -1084,6 +1084,9 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return fmt.Errorf("config validation: app %q requires a source", name)
 	}
+	if err := validateRootAppPromptConfig(entry); err != nil {
+		return fmt.Errorf("config validation: apps.%s.config.prompts: %w", name, err)
+	}
 	if entry.Default {
 		return fmt.Errorf("config validation: apps.%s.default is not supported on apps", name)
 	}

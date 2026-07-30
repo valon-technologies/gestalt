@@ -240,9 +240,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil && entry.Static != nil {
 			info.MountedPath = strings.TrimSpace(entry.Static.Mount)
 		}
-		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
-			info.PromptExamples = providermanifestv1.PromptExamples(entry.ResolvedManifest)
-		}
+		info.PromptExamples = s.appPromptExamples[name]
 		instances := connected[name]
 		authTypes := s.populateIntegrationSettings(&info, instances, p)
 		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
@@ -270,6 +268,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			HealthState:     healthStateUnknown,
 			Actions:         []string{},
 			ManagementPath:  managementPath,
+			PromptExamples:  s.appPromptExamples[app.name],
 		}
 		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil && entry.Static != nil {
 			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))
