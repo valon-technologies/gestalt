@@ -177,6 +177,102 @@ func TestAppVersionRecoveryObservationServiceRecordIfCurrentFailedIsConcurrentSa
 	}
 }
 
+func TestAppVersionRecoveryObservationFenceMatchesDesiredVersionTimestampTie(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services, now := recoveryFenceServices(t)
+	requests := []*core.AppVersionChangeRequest{
+		{
+			ID:          "z-id-low-version",
+			App:         "g-issues",
+			FromVersion: "v0",
+			ToVersion:   "v1",
+			Timestamp:   now,
+		},
+		{
+			ID:          "a-id-high-version",
+			App:         "g-issues",
+			FromVersion: "v1",
+			ToVersion:   "v2",
+			Timestamp:   now,
+		},
+	}
+	for _, request := range requests {
+		if _, err := services.AppVersionChangeRequests.AppendRequest(ctx, request); err != nil {
+			t.Fatalf("AppendRequest(%s): %v", request.ID, err)
+		}
+	}
+	known, err := services.AppVersionChangeRequests.ListKnownVersionsByApp(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("ListKnownVersionsByApp: %v", err)
+	}
+	if desired := coredata.LatestKnownVersion(known); desired != "v2" {
+		t.Fatalf("LatestKnownVersion = %q, want v2", desired)
+	}
+	if err := services.AppVersionRolloutOutcomes.RecordFailed(
+		ctx, "a-id-high-version", "g-issues", "v2", now.Add(time.Minute),
+	); err != nil {
+		t.Fatalf("RecordFailed: %v", err)
+	}
+
+	recorded, ok, err := services.AppVersionRecoveryObservations.RecordIfCurrentFailed(
+		ctx,
+		recoveryObservationFor("a-id-high-version", "v2", now.Add(2*time.Minute)),
+	)
+	if err != nil {
+		t.Fatalf("RecordIfCurrentFailed: %v", err)
+	}
+	if !ok || recorded == nil || recorded.ID != "a-id-high-version" {
+		t.Fatalf("recorded = %#v, ok=%v", recorded, ok)
+	}
+}
+
+func TestAppVersionRecoveryObservationFenceBreaksSameVersionTieByRevisionID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services, now := recoveryFenceServices(t)
+	for _, id := range []string{"a-revision", "z-revision"} {
+		if _, err := services.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+			ID:          id,
+			App:         "g-issues",
+			FromVersion: "v1",
+			ToVersion:   "v2",
+			Timestamp:   now,
+		}); err != nil {
+			t.Fatalf("AppendRequest(%s): %v", id, err)
+		}
+		if err := services.AppVersionRolloutOutcomes.RecordFailed(
+			ctx, id, "g-issues", "v2", now.Add(time.Minute),
+		); err != nil {
+			t.Fatalf("RecordFailed(%s): %v", id, err)
+		}
+	}
+
+	recorded, ok, err := services.AppVersionRecoveryObservations.RecordIfCurrentFailed(
+		ctx,
+		recoveryObservationFor("a-revision", "v2", now.Add(2*time.Minute)),
+	)
+	if err != nil {
+		t.Fatalf("RecordIfCurrentFailed(stale revision): %v", err)
+	}
+	if ok || recorded != nil {
+		t.Fatalf("stale same-version revision recorded: %#v, ok=%v", recorded, ok)
+	}
+
+	recorded, ok, err = services.AppVersionRecoveryObservations.RecordIfCurrentFailed(
+		ctx,
+		recoveryObservationFor("z-revision", "v2", now.Add(2*time.Minute)),
+	)
+	if err != nil {
+		t.Fatalf("RecordIfCurrentFailed(latest revision): %v", err)
+	}
+	if !ok || recorded == nil || recorded.ID != "z-revision" {
+		t.Fatalf("latest same-version revision = %#v, ok=%v", recorded, ok)
+	}
+}
+
 func recoveryServiceFixture(t *testing.T) (*coredata.Services, time.Time) {
 	t.Helper()
 	ctx := context.Background()
@@ -204,11 +300,28 @@ func recoveryServiceFixture(t *testing.T) (*coredata.Services, time.Time) {
 	return services, now
 }
 
+func recoveryFenceServices(t *testing.T) (*coredata.Services, time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Date(2026, 7, 30, 13, 52, 15, 0, time.UTC)
+	services := testutil.NewStubServices(t)
+	if _, err := services.GestaltdSourceVersionState.Activate(
+		ctx, "source-a", now.Add(-time.Hour), false, time.Minute, 15*time.Minute, 5,
+	); err != nil {
+		t.Fatalf("Activate source: %v", err)
+	}
+	return services, now
+}
+
 func recoveryObservation(now time.Time) *core.AppVersionRecoveryObservation {
+	return recoveryObservationFor("request-v2", "v2", now)
+}
+
+func recoveryObservationFor(id, version string, now time.Time) *core.AppVersionRecoveryObservation {
 	return &core.AppVersionRecoveryObservation{
-		ID:                      "request-v2",
+		ID:                      id,
 		App:                     "g-issues",
-		Version:                 "v2",
+		Version:                 version,
 		RecoveredAt:             now,
 		SourceVersion:           "source-a",
 		LiveInstances:           5,

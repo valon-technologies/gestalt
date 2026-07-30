@@ -132,11 +132,13 @@ func (s *AppVersionRecoveryObservationService) RecordIfCurrentFailed(
 	if err != nil {
 		return nil, false, fmt.Errorf("record fenced app version recovery observation: load change requests: %w", err)
 	}
-	latest := latestChangeRequestRecord(requests)
-	if latest == nil ||
-		recString(latest, "id") != normalized.ID ||
-		recString(latest, "app") != normalized.App ||
-		recString(latest, "to_version") != normalized.Version {
+	changeRequests := make([]*core.AppVersionChangeRequest, 0, len(requests))
+	for _, request := range requests {
+		changeRequests = append(changeRequests, recordToAppVersionChangeRequest(request))
+	}
+	desiredVersion := LatestKnownVersion(knownVersionsFromRequests(changeRequests))
+	desiredRevisionID := latestDesiredRevisionID(changeRequests, desiredVersion)
+	if desiredVersion != normalized.Version || desiredRevisionID != normalized.ID {
 		return nil, false, nil
 	}
 
@@ -194,19 +196,6 @@ func (s *AppVersionRecoveryObservationService) RecordIfCurrentFailed(
 	}
 	committed = true
 	return normalized, true, nil
-}
-
-func latestChangeRequestRecord(records []idb.Record) idb.Record {
-	var latest idb.Record
-	for _, rec := range records {
-		if latest == nil ||
-			recTime(rec, "timestamp").After(recTime(latest, "timestamp")) ||
-			(recTime(rec, "timestamp").Equal(recTime(latest, "timestamp")) &&
-				recString(rec, "id") > recString(latest, "id")) {
-			latest = rec
-		}
-	}
-	return latest
 }
 
 func appVersionRecoveryObservationRecord(observation *core.AppVersionRecoveryObservation) (idb.Record, *core.AppVersionRecoveryObservation, error) {
