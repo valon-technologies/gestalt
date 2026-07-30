@@ -324,8 +324,10 @@ Show in-flight and completed rollout timing on the **Revision history** tab on `
 
 **Tags:** [`admin.md`](../operations/admin.md) [`config.md`](../architecture/config.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
 
-Replace frozen process-identity enrollment with live, source-version-scoped replica heartbeats. Derive current fleet health from fresh observations of the provider registry, running-version map, and active-version marker; require the activated minimum replica count; allow replacement replicas to satisfy departed capacity; and preserve failed rollout outcomes while recording later recovery.
+Shipped live, source-version-scoped replica heartbeats and replacement-aware rollout completion. Current fleet health now comes from fresh observations of the provider registry, running-version map, and `active-version` marker; activation supplies minimum capacity; and a failed immutable rollout outcome may have a separate later recovery observation.
 
 **Design:** [runtime-heartbeats.md](../one-pagers/runtime-heartbeats.md)
 
-**Status:** Proposed
+**Merged:** [gestalt#3005](https://github.com/valon-technologies/gestalt/pull/3005) · [gestalt#3006](https://github.com/valon-technologies/gestalt/pull/3006) · [gestalt#3007](https://github.com/valon-technologies/gestalt/pull/3007) · [gestalt#3008](https://github.com/valon-technologies/gestalt/pull/3008) · [gestalt#3009](https://github.com/valon-technologies/gestalt/pull/3009) · schema hotfix [gestalt#3015](https://github.com/valon-technologies/gestalt/pull/3015) · [gestalt-providers#1221](https://github.com/valon-technologies/gestalt-providers/pull/1221) · [toolshed#3922](https://github.com/valon-technologies/toolshed/pull/3922) · [toolshed#3924](https://github.com/valon-technologies/toolshed/pull/3924) · [toolshed#3925](https://github.com/valon-technologies/toolshed/pull/3925)
+
+**Status:** Shipped. Toolshed first deployed heartbeat observability with enrollment completion and rollback reactivation, rolled forward the RelationalDB-compatible schema hotfix, verified current-source heartbeats and minimum capacity across multiple freshness windows, then enabled `rolloutMode: heartbeat` in an isolated config-only change. Restoring `rolloutMode: enrollment` remains the completion rollback switch.

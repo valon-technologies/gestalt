@@ -165,6 +165,32 @@ server:
 
 `server.appRegistry.autoDeployPollInterval` is the poll interval for the background auto-deploy controller on enabled apps. It defaults to `1m` and must be a positive duration. Coalescing correctness does not depend on the interval; a longer interval only delays detection of new publishes.
 
+### Runtime Heartbeats and Rollout Mode
+
+```yaml
+server:
+  appRegistry:
+    heartbeatInterval: 15s
+    heartbeatTtl: 45s
+    healthyStabilityWindow: 1m
+    heartbeatRetention: 24h
+    rolloutMode: heartbeat
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `heartbeatInterval` | `15s` | Period between full per-process runtime snapshots; the first write occurs immediately after startup-provider initialization. |
+| `heartbeatTtl` | `45s` | Freshness lease used for current fleet membership and heartbeat rollout evaluation. |
+| `healthyStabilityWindow` | `1m` | Continuous healthy time required before a heartbeat rollout completes or a failed rollout records recovery. |
+| `heartbeatRetention` | `24h` | Age after which stale heartbeat rows are eligible for pruning. |
+| `rolloutMode` | `enrollment` | Completion algorithm for newly admitted or activation-retargeted rollouts: `enrollment` or `heartbeat`. |
+
+All durations must be positive. `heartbeatTtl` must be greater than `heartbeatInterval`, and `healthyStabilityWindow` must be greater than `heartbeatTtl`. These constraints ensure at least one missed heartbeat can be tolerated without allowing the stability decision to fit entirely inside one lease.
+
+The Gestalt default remains `enrollment` for compatibility, while Toolshed production explicitly sets `heartbeat` after operational verification. Changing the deploy config back to `enrollment` is the rollout-completion rollback switch; it does not disable heartbeat writes, current fleet projection, or recovery visibility. The selected mode is stored on each rollout, so activation must retarget an already-active rollout before that rollout adopts a changed mode.
+
+Cloud Run deployment orchestration separately supplies `minimum_healthy_instances` to `/activate`; it is not a static Gestalt config value. Heartbeat-mode activation requires a positive minimum. Current fleet state is `unknown` when the activated source or minimum basis is absent.
+
 ### Lockfile
 
 Registry-only apps appear in `gestalt.lock.json` with a registry binding and no baked artifacts:
@@ -188,7 +214,8 @@ Registry-only apps appear in `gestalt.lock.json` with a registry binding and no 
 <pre>
 ├── <a href="../project/changelog.md#changelog-01">01 — GCS Registry and Publish Command</a>
 ├── <a href="../project/changelog.md#changelog-12">12 — Complete Registry-Only Lifecycle</a>
-└── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
+├── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
+└── <a href="../project/changelog.md#changelog-27">27 — Runtime Heartbeats and Fleet State</a>
 </pre>
 
 ### Related Docs
@@ -197,6 +224,7 @@ Registry-only apps appear in `gestalt.lock.json` with a registry binding and no 
 ├── <a href="../readme.md">readme.md</a> — architecture and future work
 ├── <a href="../project/changelog.md">changelog.md</a> — implementation milestones and pull requests
 ├── <a href="../operations/lifecycle.md">lifecycle.md</a> — replica startup, background controller, admin HTTP API
+├── <a href="../one-pagers/runtime-heartbeats.md">runtime-heartbeats.md</a> — canonical heartbeat design
 ├── <a href="./models.md">models.md</a> — JSON documents stored in the registry bucket
 └── <a href="../operations/retention.md">retention.md</a> — version cleanup policy and retention config
 </pre>
