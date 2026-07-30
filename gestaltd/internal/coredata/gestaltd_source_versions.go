@@ -147,11 +147,12 @@ func (s *GestaltdSourceVersionService) Activate(
 	if len(minimumHealthyInstances) > 1 {
 		return nil, fmt.Errorf("activate gestaltd source version: minimum healthy instances may only be provided once")
 	}
-	minimumHealthy := 0
-	if len(minimumHealthyInstances) == 1 {
-		minimumHealthy = minimumHealthyInstances[0]
+	minimumProvided := len(minimumHealthyInstances) == 1
+	requestedMinimumHealthy := 0
+	if minimumProvided {
+		requestedMinimumHealthy = minimumHealthyInstances[0]
 	}
-	if minimumHealthy < 0 {
+	if requestedMinimumHealthy < 0 {
 		return nil, fmt.Errorf("activate gestaltd source version: minimum healthy instances must not be negative")
 	}
 
@@ -181,8 +182,12 @@ func (s *GestaltdSourceVersionService) Activate(
 		state = recordToGestaltdSourceVersionState(stateRecs[0])
 	}
 	sourceChanged := strings.TrimSpace(state.CurrentSourceVersion) != sourceVersion
-	minimumChanged := state.MinimumHealthyInstances != minimumHealthy
-	if sourceChanged || retry {
+	effectiveMinimumHealthy := requestedMinimumHealthy
+	if !minimumProvided && !sourceChanged {
+		effectiveMinimumHealthy = state.MinimumHealthyInstances
+	}
+	minimumChanged := state.MinimumHealthyInstances != effectiveMinimumHealthy
+	if sourceChanged || minimumChanged || retry {
 		rolloutStore := tx.ObjectStore(StoreAppRollouts)
 		recs, listErr := rolloutStore.GetAll(ctx, nil)
 		if listErr != nil {
@@ -190,7 +195,7 @@ func (s *GestaltdSourceVersionService) Activate(
 		}
 		for _, rec := range recs {
 			rollout := recordToAppRollout(rec)
-			retarget := sourceChanged && isActiveRolloutState(rollout.State)
+			retarget := (sourceChanged || minimumChanged) && isActiveRolloutState(rollout.State)
 			if retry && strings.TrimSpace(rollout.TargetSourceVersion) == sourceVersion {
 				retarget = isActiveRolloutState(rollout.State) ||
 					(rollout.State == core.AppRolloutStateFailed &&
@@ -214,7 +219,7 @@ func (s *GestaltdSourceVersionService) Activate(
 	}
 
 	state.CurrentSourceVersion = sourceVersion
-	state.MinimumHealthyInstances = minimumHealthy
+	state.MinimumHealthyInstances = effectiveMinimumHealthy
 	if sourceChanged || minimumChanged || retry || state.UpdatedAt.IsZero() {
 		state.UpdatedAt = at
 	}

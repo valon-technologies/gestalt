@@ -260,8 +260,12 @@ func validateServerAppRegistry(cfg *Config) error {
 	if heartbeatTTL <= heartbeatInterval {
 		return fmt.Errorf("config validation: server.appRegistry.heartbeatTtl must be greater than heartbeatInterval")
 	}
-	if _, err := cfg.Server.AppRegistry.HealthyStabilityWindowDuration(); err != nil {
+	healthyStabilityWindow, err := cfg.Server.AppRegistry.HealthyStabilityWindowDuration()
+	if err != nil {
 		return fmt.Errorf("config validation: server.appRegistry.healthyStabilityWindow: %w", err)
+	}
+	if healthyStabilityWindow <= heartbeatTTL {
+		return fmt.Errorf("config validation: server.appRegistry.healthyStabilityWindow must be greater than heartbeatTtl")
 	}
 	if _, err := cfg.Server.AppRegistry.HeartbeatRetentionDuration(); err != nil {
 		return fmt.Errorf("config validation: server.appRegistry.heartbeatRetention: %w", err)

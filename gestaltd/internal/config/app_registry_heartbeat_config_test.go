@@ -16,7 +16,7 @@ func TestAppRegistryHeartbeatConfigDefaults(t *testing.T) {
 	}
 	assertAppRegistryDuration(t, "heartbeat interval", cfg.Server.AppRegistry.HeartbeatIntervalDuration, 15*time.Second)
 	assertAppRegistryDuration(t, "heartbeat TTL", cfg.Server.AppRegistry.HeartbeatTTLDuration, 45*time.Second)
-	assertAppRegistryDuration(t, "healthy stability window", cfg.Server.AppRegistry.HealthyStabilityWindowDuration, 30*time.Second)
+	assertAppRegistryDuration(t, "healthy stability window", cfg.Server.AppRegistry.HealthyStabilityWindowDuration, 60*time.Second)
 	assertAppRegistryDuration(t, "heartbeat retention", cfg.Server.AppRegistry.HeartbeatRetentionDuration, 24*time.Hour)
 	if cfg.Server.AppRegistry.RolloutMode != AppRegistryRolloutModeEnrollment {
 		t.Fatalf("rollout mode = %q, want %q", cfg.Server.AppRegistry.RolloutMode, AppRegistryRolloutModeEnrollment)
@@ -31,7 +31,7 @@ server:
   appRegistry:
     heartbeatInterval: 10s
     heartbeatTtl: 35s
-    healthyStabilityWindow: 20s
+    healthyStabilityWindow: 50s
     heartbeatRetention: 12h
     rolloutMode: heartbeat
 `)
@@ -41,7 +41,7 @@ server:
 	}
 	assertAppRegistryDuration(t, "heartbeat interval", cfg.Server.AppRegistry.HeartbeatIntervalDuration, 10*time.Second)
 	assertAppRegistryDuration(t, "heartbeat TTL", cfg.Server.AppRegistry.HeartbeatTTLDuration, 35*time.Second)
-	assertAppRegistryDuration(t, "healthy stability window", cfg.Server.AppRegistry.HealthyStabilityWindowDuration, 20*time.Second)
+	assertAppRegistryDuration(t, "healthy stability window", cfg.Server.AppRegistry.HealthyStabilityWindowDuration, 50*time.Second)
 	assertAppRegistryDuration(t, "heartbeat retention", cfg.Server.AppRegistry.HeartbeatRetentionDuration, 12*time.Hour)
 	if cfg.Server.AppRegistry.RolloutMode != AppRegistryRolloutModeHeartbeat {
 		t.Fatalf("rollout mode = %q, want heartbeat", cfg.Server.AppRegistry.RolloutMode)
@@ -60,6 +60,8 @@ func TestAppRegistryHeartbeatConfigValidation(t *testing.T) {
 		{name: "ttl positive", config: "heartbeatTtl: -1s", wantErr: "heartbeatTtl"},
 		{name: "ttl exceeds interval", config: "heartbeatInterval: 15s\n    heartbeatTtl: 15s", wantErr: "must be greater than heartbeatInterval"},
 		{name: "stability positive", config: "healthyStabilityWindow: 0s", wantErr: "healthyStabilityWindow"},
+		{name: "stability equals ttl", config: "heartbeatTtl: 45s\n    healthyStabilityWindow: 45s", wantErr: "must be greater than heartbeatTtl"},
+		{name: "stability shorter than ttl", config: "heartbeatTtl: 45s\n    healthyStabilityWindow: 30s", wantErr: "must be greater than heartbeatTtl"},
 		{name: "retention positive", config: "heartbeatRetention: invalid", wantErr: "heartbeatRetention"},
 		{name: "rollout mode", config: "rolloutMode: other", wantErr: "rolloutMode"},
 	} {

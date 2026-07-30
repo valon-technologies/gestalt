@@ -20,19 +20,19 @@ func (s *Server) activateAppProvidersHandler(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "retry must be true when provided")
 		return
 	}
-	minimumHealthyInstances := 0
+	var minimumHealthyInstances []int
 	if query.Has("minimum_healthy_instances") {
 		values := query["minimum_healthy_instances"]
 		if len(values) != 1 {
 			writeError(w, http.StatusBadRequest, "minimum_healthy_instances must be provided once")
 			return
 		}
-		var err error
-		minimumHealthyInstances, err = strconv.Atoi(strings.TrimSpace(values[0]))
-		if err != nil || minimumHealthyInstances <= 0 {
+		minimumHealthy, err := strconv.Atoi(strings.TrimSpace(values[0]))
+		if err != nil || minimumHealthy <= 0 {
 			writeError(w, http.StatusBadRequest, "minimum_healthy_instances must be a positive integer")
 			return
 		}
+		minimumHealthyInstances = []int{minimumHealthy}
 	}
 	if s.sourceVersion != "" {
 		expectedSourceVersion := strings.TrimSpace(query.Get("source_version"))
@@ -55,7 +55,7 @@ func (s *Server) activateAppProvidersHandler(w http.ResponseWriter, r *http.Requ
 			retryParam == "true",
 			appregistry.DefaultRolloutEnrollmentWindow,
 			appregistry.DefaultRolloutTimeout,
-			minimumHealthyInstances,
+			minimumHealthyInstances...,
 		)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())

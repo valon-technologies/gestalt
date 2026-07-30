@@ -1980,7 +1980,7 @@ const DefaultAppRegistryMaxReconcileAttempts = 3
 const DefaultAppRegistryAutoDeployPollInterval = time.Minute
 const DefaultAppRegistryHeartbeatInterval = 15 * time.Second
 const DefaultAppRegistryHeartbeatTTL = 45 * time.Second
-const DefaultAppRegistryHealthyStabilityWindow = 30 * time.Second
+const DefaultAppRegistryHealthyStabilityWindow = 60 * time.Second
 const DefaultAppRegistryHeartbeatRetention = 24 * time.Hour
 
 type AppRegistryRolloutMode string
