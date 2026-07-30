@@ -5,7 +5,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
@@ -22,33 +21,26 @@ func eagerHostServiceTestDeps(registry *runtimehost.PublicHostServiceRegistry) D
 	}
 }
 
-func appIndexedDBRegistered(registry *runtimehost.PublicHostServiceRegistry, appName string) bool {
+func appHostServiceRegistered(registry *runtimehost.PublicHostServiceRegistry) bool {
 	for _, service := range registry.Snapshot() {
-		if service.AppName == appName && service.Service.Name == "indexeddb" {
+		if service.AppName == appInvocationPublicProviderKey && service.Service.Name == "app" {
 			return true
 		}
 	}
 	return false
 }
 
-func TestRegisterConfiguredAppPublicHostServicesRegistersDefaultRuntimeApp(t *testing.T) {
+func TestRegisterGlobalAppInvocationPublicHostServiceRegistersOnce(t *testing.T) {
 	t.Parallel()
 
 	registry := runtimehost.NewPublicHostServiceRegistry()
 	deps := eagerHostServiceTestDeps(registry)
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"gIssues": {
-				IndexedDB: &config.IndexedDBBindingConfig{Provider: "main"},
-			},
-		},
-	}
 
-	cleanup := registerConfiguredAppPublicHostServices(cfg, deps)
+	cleanup := registerGlobalAppInvocationPublicHostService(deps)
 
-	assertPublicHostServicesVerified(t, registry, "indexeddb")
-	if !appIndexedDBRegistered(registry, "gIssues") {
-		t.Fatalf("registry = %#v, want indexeddb host service for gIssues before activation", registry.Snapshot())
+	assertPublicHostServicesVerified(t, registry, "app")
+	if !appHostServiceRegistered(registry) {
+		t.Fatalf("registry = %#v, want global app host service under %q", registry.Snapshot(), appInvocationPublicProviderKey)
 	}
 
 	cleanup()
@@ -57,42 +49,14 @@ func TestRegisterConfiguredAppPublicHostServicesRegistersDefaultRuntimeApp(t *te
 	}
 }
 
-func TestRegisterConfiguredAppPublicHostServicesRegistersDevActiveWithoutSupervisor(t *testing.T) {
-	t.Parallel()
-
-	registry := runtimehost.NewPublicHostServiceRegistry()
-	deps := eagerHostServiceTestDeps(registry)
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"gIssues": {
-				DevActive: true,
-				IndexedDB: &config.IndexedDBBindingConfig{Provider: "main"},
-			},
-		},
-	}
-
-	registerConfiguredAppPublicHostServices(cfg, deps)
-
-	if !appIndexedDBRegistered(registry, "gIssues") {
-		t.Fatalf("registry = %#v, want indexeddb host service registered without a DevSupervisor", registry.Snapshot())
-	}
-}
-
-func TestRegisterConfiguredAppPublicHostServicesNoopWithoutRelay(t *testing.T) {
+func TestRegisterGlobalAppInvocationPublicHostServiceNoopWithoutRelay(t *testing.T) {
 	t.Parallel()
 
 	registry := runtimehost.NewPublicHostServiceRegistry()
 	deps := eagerHostServiceTestDeps(registry)
 	deps.EncryptionKey = nil
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"gIssues": {
-				IndexedDB: &config.IndexedDBBindingConfig{Provider: "main"},
-			},
-		},
-	}
 
-	registerConfiguredAppPublicHostServices(cfg, deps)
+	registerGlobalAppInvocationPublicHostService(deps)
 
 	if services := registry.Snapshot(); len(services) != 0 {
 		t.Fatalf("registry = %#v, want no registration when the public relay is unavailable", services)

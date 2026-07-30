@@ -997,11 +997,10 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	deps.AppInvocation = pluginInvoker
 	deps.WorkflowManager = workflowManager
 	deps.AgentManager = agentManager
-	deps.PublicHostServices = publicHostServices
+	deps.PublicHostServices = runtimehost.NewPublicHostServiceRegistry()
 	deps.AppWorkflowDeclarations = newAppWorkflowDeclarations()
 	if factories != nil {
 		deps.DevSupervisor = factories.DevSupervisor
@@ -1184,7 +1183,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		AppInvocation:        pluginInvoker,
 		WorkflowManager:      workflowManager,
 		AgentManager:         agentManager,
-		PublicHostServices:   publicHostServices,
+		PublicHostServices:   deps.PublicHostServices,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1352,7 +1351,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
-	appHostServiceCleanup := registerConfiguredAppPublicHostServices(cfg, prepared.Deps)
+	appHostServiceCleanup := registerGlobalAppInvocationPublicHostService(prepared.Deps)
 	// Build workflow/agent providers before app providers: they establish their
 	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)

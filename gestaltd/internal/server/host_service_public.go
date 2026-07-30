@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 )
@@ -72,8 +73,19 @@ func (k hostServiceHandlerKey) String() string {
 	return k.pluginName
 }
 
+const appInvocationPublicProviderKey = "app"
+
+var appServiceMethodPrefix = "/" + proto.App_ServiceDesc.ServiceName + "/"
+
+func hostServiceRelayPluginName(target runtimehost.HostServiceRelayTarget, methodPath string) string {
+	if strings.HasPrefix(methodPath, appServiceMethodPrefix) {
+		return appInvocationPublicProviderKey
+	}
+	return strings.TrimSpace(target.AppName)
+}
+
 func (s *Server) unifiedHostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
-	pluginName := strings.TrimSpace(target.AppName)
+	pluginName := hostServiceRelayPluginName(target, methodPath)
 	if s == nil || pluginName == "" {
 		return nil, nil
 	}

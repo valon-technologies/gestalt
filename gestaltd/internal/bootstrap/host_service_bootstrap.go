@@ -72,7 +72,7 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 		hostServices = append(hostServices, authenticationHostService)
 	}
 	hostServices = append(hostServices,
-		buildAppInvocationHostService(name, deps),
+		buildAppInvocationHostService(name, deps, nil),
 		buildWorkflowProviderHostService(name, deps),
 		buildPluginAgentProviderHostService(name, deps),
 	)
@@ -182,15 +182,20 @@ func grpcMethodPrefix(serviceName string) string {
 }
 
 func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostServices []runtimehost.HostService, deps Deps) (map[string]string, string, error) {
-	if len(hostServices) == 0 {
-		return nil, "", nil
-	}
+	publicHostServices := make([]runtimehost.HostService, 0, len(hostServices))
 	for _, hostService := range hostServices {
-		if strings.TrimSpace(hostService.Name) == "" || len(hostService.MethodPrefixes) == 0 {
+		if len(hostService.MethodPrefixes) == 0 {
+			continue
+		}
+		if strings.TrimSpace(hostService.Name) == "" {
 			return nil, "", fmt.Errorf("host service %q requires public host service relay support", hostService.Name)
 		}
+		publicHostServices = append(publicHostServices, hostService)
 	}
-	serviceLabel := strings.ReplaceAll(strings.TrimSpace(hostServices[0].Name), "_", " ")
+	if len(publicHostServices) == 0 {
+		return nil, "", nil
+	}
+	serviceLabel := strings.ReplaceAll(strings.TrimSpace(publicHostServices[0].Name), "_", " ")
 	relayDialTarget, relayEnv, relayHost, ok, err := buildHostedRuntimePublicHostServiceRelay(
 		providerName,
 		sessionID,
@@ -242,37 +247,22 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 	return registerVerifiedPublicHostServices(providerName, hostServices, deps, runtimeHostServiceSessionVerifier{}, false)
 }
 
-func registerConfiguredAppPublicHostServices(cfg *config.Config, deps Deps) func() {
-	if cfg == nil || !hostCanRelayRuntimeHostServices(deps) {
+const appInvocationPublicProviderKey = "app"
+
+func registerGlobalAppInvocationPublicHostService(deps Deps) func() {
+	if !hostCanRelayRuntimeHostServices(deps) {
 		return func() {}
 	}
-	var cleanups []func()
-	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
-		entry := cfg.Apps[name]
-		if !config.EntryBuildsLocal(entry) {
-			continue
-		}
-		if entry != nil && entry.DevActive && deps.DevSupervisor != nil {
-			continue
-		}
-		hostServices, err := buildProviderHostServices(name, appProviderHostServiceDeps(entry, deps))
+	cleanup, err := registerPublicRuntimeHostServices(appInvocationPublicProviderKey, []runtimehost.HostService{
+		buildAppInvocationHostService("", deps, []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)}),
+	}, deps)
+	if err != nil || cleanup == nil {
 		if err != nil {
-			slog.Warn("eager public host service registration skipped", "provider", name, "error", err)
-			continue
+			slog.Warn("global app invocation public host service registration failed", "error", err)
 		}
-		if len(hostServices) == 0 {
-			continue
-		}
-		cleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps)
-		if err != nil {
-			slog.Warn("eager public host service registration failed", "provider", name, "error", err)
-			continue
-		}
-		if cleanup != nil {
-			cleanups = append(cleanups, cleanup)
-		}
+		return func() {}
 	}
-	return chainCleanup(cleanups...)
+	return cleanup
 }
 
 type workflowProviderHostServiceSessionVerifier struct{}
@@ -508,20 +498,23 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 	}
 }
 
-func buildAppInvocationHostService(appName string, deps Deps) runtimehost.HostService {
+func buildAppInvocationHostService(callerName string, deps Deps, methodPrefixes []string) runtimehost.HostService {
 	invoker := deps.AppInvocation
 	if invoker == nil {
 		invoker = unavailableAppInvocation{}
 	}
+	var opts []appaccessservice.AppServerOption
+	if deps.AgentManager != nil {
+		opts = append(opts, appaccessservice.WithAgentAppInvocationAuthorizer(deps.AgentManager))
+	}
+	if callerName != "" {
+		opts = append(opts, appaccessservice.WithCallerApp(callerName))
+	}
 	return runtimehost.HostService{
 		Name:           "app",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)},
+		MethodPrefixes: methodPrefixes,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAppServer(srv, appaccessservice.NewServer(
-				invoker,
-				appaccessservice.WithAgentAppInvocationAuthorizer(deps.AgentManager),
-				appaccessservice.WithCallerApp(appName),
-			))
+			proto.RegisterAppServer(srv, appaccessservice.NewAppServer(invoker, opts...))
 		},
 	}
 }

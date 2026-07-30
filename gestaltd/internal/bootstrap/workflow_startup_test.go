@@ -121,7 +121,7 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 	}
 
 	names := hostServiceNames(hostServices)
-	for _, want := range []string{"app", "workflow", "agent", "external_credentials", "authorization"} {
+	for _, want := range []string{"workflow", "agent", "external_credentials", "authorization"} {
 		if !hasHostServiceName(names, want) {
 			t.Fatalf("provider host services missing %q: %v", want, names)
 		}
