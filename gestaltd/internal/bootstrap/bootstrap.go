@@ -905,10 +905,6 @@ func resolveConfigSecrets(
 }
 
 func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
-	return prepareCoreWithRegistry(ctx, cfg, factories, requireEncryptionKey, nil)
-}
-
-func prepareCoreWithRegistry(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool, publicHostServices *runtimehost.PublicHostServiceRegistry) (*preparedCore, error) {
 	registry, err := publicrpc.NewGeneratedRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("public rpc registry: %w", err)
@@ -998,13 +994,10 @@ func prepareCoreWithRegistry(ctx context.Context, cfg *config.Config, factories 
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
-	if publicHostServices == nil {
-		publicHostServices = runtimehost.NewPublicHostServiceRegistry()
-	}
-	deps.PublicHostServices = publicHostServices
 	deps.AppInvocation = pluginInvoker
 	deps.WorkflowManager = workflowManager
 	deps.AgentManager = agentManager
+	deps.PublicHostServices = runtimehost.NewPublicHostServiceRegistry()
 	deps.AppWorkflowDeclarations = newAppWorkflowDeclarations()
 	if factories != nil {
 		deps.DevSupervisor = factories.DevSupervisor
@@ -1187,7 +1180,7 @@ func prepareCoreWithRegistry(ctx context.Context, cfg *config.Config, factories 
 		AppInvocation:        pluginInvoker,
 		WorkflowManager:      workflowManager,
 		AgentManager:         agentManager,
-		PublicHostServices:   publicHostServices,
+		PublicHostServices:   deps.PublicHostServices,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1243,10 +1236,6 @@ func (p *preparedCore) Close(ctx context.Context) error {
 type BootstrapOptions struct {
 	DeferAppProviderStartup bool
 	RegistryResolver        RegistryInstalledResolver
-	// PublicHostServices injects the public host-service registry bootstrap
-	// registers into. Tests use it to stand up a relay endpoint against the
-	// same registry before bootstrap completes. Nil creates a fresh registry.
-	PublicHostServices *runtimehost.PublicHostServiceRegistry
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
@@ -1254,7 +1243,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 }
 
 func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, opts BootstrapOptions) (*Result, error) {
-	prepared, err := prepareCoreWithRegistry(ctx, cfg, factories, true, opts.PublicHostServices)
+	prepared, err := prepareCore(ctx, cfg, factories, true)
 	if err != nil {
 		return nil, err
 	}

@@ -73,8 +73,7 @@ func TestUnifiedHostServiceHandlerRoutesAppServiceToGlobalRegistration(t *testin
 	})
 	s := &Server{publicHostServices: registry}
 
-	// The token's AppName is the caller (no per-caller registration exists);
-	// App/* RPCs still resolve to the single global registration.
+	// The token's AppName is the caller; App/* RPCs resolve to the global registration.
 	handler, err := s.unifiedHostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
 		AppName:   "agent-trace-viewer",
 		SessionID: "session-1",
@@ -87,7 +86,7 @@ func TestUnifiedHostServiceHandlerRoutesAppServiceToGlobalRegistration(t *testin
 		t.Fatal("handler = nil, want global app handler")
 	}
 
-	// Non-App services stay keyed by the token's provider name.
+	// Non-App services stay keyed by the caller provider name.
 	handler, err = s.unifiedHostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
 		AppName:   "agent-trace-viewer",
 		SessionID: "session-1",

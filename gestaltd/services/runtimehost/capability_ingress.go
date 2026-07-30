@@ -18,9 +18,8 @@ var errHostServiceCapabilityRequired = status.Error(codes.Unauthenticated, "host
 type relayAuthenticatedContextKey struct{}
 
 // WithRelayAuthenticated marks a context as already authenticated by the
-// relay ingress (token resolved and capability applied). The host-service
-// interceptor trusts it instead of re-resolving the per-RPC token, which the
-// relay strips before forwarding.
+// relay ingress, which strips the per-RPC token before forwarding, so the
+// host-service interceptor trusts it instead of re-resolving the token.
 func WithRelayAuthenticated(ctx context.Context) context.Context {
 	return context.WithValue(ctx, relayAuthenticatedContextKey{}, true)
 }

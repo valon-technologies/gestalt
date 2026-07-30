@@ -121,8 +121,6 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 	}
 
 	names := hostServiceNames(hostServices)
-	// The app-invocation host service is registered once, globally, by
-	// bootstrap; per-provider host services no longer include it.
 	for _, want := range []string{"workflow", "agent", "external_credentials", "authorization"} {
 		if !hasHostServiceName(names, want) {
 			t.Fatalf("provider host services missing %q: %v", want, names)

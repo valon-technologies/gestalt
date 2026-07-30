@@ -2812,10 +2812,7 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	// Mirror gestaltd bootstrap: the app-invocation host service is registered
-	// once, globally, against the shared invoker.
-	appCleanup := registerGlobalAppInvocationPublicHostService(deps)
-	t.Cleanup(appCleanup)
+	registerGlobalAppInvocationForTest(t, deps)
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -2937,10 +2934,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	// Mirror gestaltd bootstrap: the app-invocation host service is registered
-	// once, globally, against the shared invoker.
-	appCleanup := registerGlobalAppInvocationPublicHostService(deps)
-	t.Cleanup(appCleanup)
+	registerGlobalAppInvocationForTest(t, deps)
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -6070,8 +6064,7 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	appCleanup := registerGlobalAppInvocationPublicHostService(deps)
-	t.Cleanup(appCleanup)
+	registerGlobalAppInvocationForTest(t, deps)
 	assertPublicHostServicesVerified(t, publicHostServices, "app")
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
@@ -6416,6 +6409,13 @@ func TestRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
 	if got := startRequests[0].GetEnv()[runtimehost.HostServiceTokenEnv]; got == "" {
 		t.Fatalf("StartApp env missing %s", runtimehost.HostServiceTokenEnv)
 	}
+}
+
+// registerGlobalAppInvocationForTest mirrors gestaltd bootstrap registering
+// the app-invocation host service once, globally, against the shared invoker.
+func registerGlobalAppInvocationForTest(t *testing.T, deps Deps) {
+	t.Helper()
+	t.Cleanup(registerGlobalAppInvocationPublicHostService(deps))
 }
 
 func assertPublicHostServicesVerified(t *testing.T, registry *runtimehost.PublicHostServiceRegistry, serviceName string) {

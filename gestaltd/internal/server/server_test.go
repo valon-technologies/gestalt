@@ -1144,11 +1144,8 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	invoker := &relayTestInvoker{}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("relay-session")
-	// The app-invocation host service is registered once, globally, under the
-	// well-known "app" key rather than per caller name; the relay token's
-	// AppName ("agent-trace-viewer") deliberately has no registration of its
-	// own, mirroring the cross-replica declarative-target miss that used to
-	// return host-service-relay-unavailable.
+	// Registered under the global "app" key; the relay token's AppName
+	// (the caller) deliberately has no registration of its own.
 	publicHostServices.RegisterVerified("app", sessionVerifier, runtimehost.HostService{
 		Name:           "app",
 		MethodPrefixes: []string{"/" + proto.App_ServiceDesc.ServiceName + "/"},
@@ -1195,13 +1192,14 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppInvocation.Invoke via registered relay: %v", err)
 	}
-	if call := invoker.snapshot(); call.calls != 1 || call.providerName != "gcs" || call.operation != "load_trace_url" || call.instance != "prod" {
+	call := invoker.snapshot()
+	if call.calls != 1 || call.providerName != "gcs" || call.operation != "load_trace_url" || call.instance != "prod" {
 		t.Fatalf("plugin invoker call = %+v, want gcs load_trace_url/prod", call)
 	}
-	if call := invoker.snapshot(); call.callerProvider != "agent-trace-viewer" || call.callerKind != string(invocation.ProviderKindApp) {
+	if call.callerProvider != "agent-trace-viewer" || call.callerKind != string(invocation.ProviderKindApp) {
 		t.Fatalf("plugin invoker caller = %s/%s, want restored caller provider agent-trace-viewer/app", call.callerProvider, call.callerKind)
 	}
-	if call := invoker.snapshot(); call.callerSubjectID != "user:relay-test" {
+	if call.callerSubjectID != "user:relay-test" {
 		t.Fatalf("plugin invoker principal = %q, want subject restored from the verified token", call.callerSubjectID)
 	}
 
