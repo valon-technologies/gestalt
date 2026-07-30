@@ -4,13 +4,31 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Code } from "@/components/ui/code";
 import {
   SectionHeader,
+  SectionHeaderActions,
   SectionHeaderContent,
   SectionHeaderDescription,
   SectionHeaderTitle,
 } from "@/components/ui/section-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  FleetStateBadge,
+  fleetCapacityLabel,
+  fleetDiagnostic,
+  fleetRolloutSeparation,
+  heartbeatAgeLabel,
+  replicaSourceLabel,
+} from "@/features/registry/fleet-state";
 import { registryQueries } from "@/features/registry/queries";
 import { RolloutBadge } from "@/features/registry/rollout-badge";
+import type { FleetReplica } from "@/features/registry/types";
 
 export const Route = createFileRoute("/registry/$app")({
   component: RegistryAppDetailPage,
@@ -35,20 +53,62 @@ function SummaryField({
   );
 }
 
+function ReplicaTable({ replicas }: { replicas: FleetReplica[] }) {
+  if (replicas.length === 0) {
+    return <p className="text-sm text-muted-foreground">No replica observations.</p>;
+  }
+  return (
+    <div className="overflow-hidden rounded-md border border-border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Instance</TableHead>
+            <TableHead>Source</TableHead>
+            <TableHead>Heartbeat</TableHead>
+            <TableHead>Running version</TableHead>
+            <TableHead>Runtime state</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {replicas.map((replica) => (
+            <TableRow key={replica.instanceId}>
+              <TableCell><Code>{replica.instanceId}</Code></TableCell>
+              <TableCell>
+                <div className="space-y-1">
+                  <Code>{replica.sourceVersion}</Code>
+                  <div className="text-xs text-muted-foreground">
+                    {replicaSourceLabel(replica.sourceStatus)}
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>{heartbeatAgeLabel(replica.heartbeatAgeSeconds, replica.fresh)}</TableCell>
+              <TableCell><Code>{replica.appObservation?.runningVersion || "—"}</Code></TableCell>
+              <TableCell>
+                <div className="space-y-1">
+                  <span>{replica.appObservation?.state || "unknown"}</span>
+                  {replica.appObservation?.lastError ? (
+                    <div className="max-w-72 text-xs text-destructive">{replica.appObservation.lastError}</div>
+                  ) : null}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 function RegistryAppDetailPage() {
   const { app } = Route.useParams();
   const appQuery = useQuery(registryQueries.app(app));
 
-  const active =
-    appQuery.data?.rollout?.state === "enrolling" || appQuery.data?.rollout?.state === "restarting";
-
   useEffect(() => {
-    if (!active) return undefined;
     const timer = window.setTimeout(() => {
       void appQuery.refetch();
-    }, 12_000);
+    }, 15_000);
     return () => window.clearTimeout(timer);
-  }, [active, appQuery]);
+  }, [appQuery]);
 
   if (appQuery.isPending) {
     return <Skeleton className="h-64 w-full" />;
@@ -59,6 +119,7 @@ function RegistryAppDetailPage() {
 
   const detail = appQuery.data;
   const desired = detail.knownVersions.find((item) => item.version === detail.desiredVersion);
+  const fleetRolloutNote = fleetRolloutSeparation(detail.fleetState, detail.rollout?.state);
 
   return (
     <div className="min-w-0 space-y-8">
@@ -96,6 +157,40 @@ function RegistryAppDetailPage() {
       <section className="space-y-4 rounded-lg border border-border bg-card p-4">
         <SectionHeader>
           <SectionHeaderContent>
+            <SectionHeaderTitle>Current fleet</SectionHeaderTitle>
+            <SectionHeaderDescription>
+              Live runtime observations, independent from the historical rollout outcome.
+            </SectionHeaderDescription>
+          </SectionHeaderContent>
+          <SectionHeaderActions>
+            <FleetStateBadge fleet={detail.fleetState} />
+          </SectionHeaderActions>
+        </SectionHeader>
+        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryField label="Capacity">
+            <span className="text-sm">{fleetCapacityLabel(detail.fleetState)}</span>
+          </SummaryField>
+          <SummaryField label="Running desired">
+            <span className="text-sm">
+              {detail.fleetState.runningDesiredVersion}/{detail.fleetState.liveInstances}
+            </span>
+          </SummaryField>
+          <SummaryField label="Current source">
+            <Code className="block w-full">{detail.fleetState.sourceVersion || "unavailable"}</Code>
+          </SummaryField>
+          <SummaryField label="Desired version">
+            <Code className="block w-full">{detail.fleetState.desiredVersion || "unavailable"}</Code>
+          </SummaryField>
+          <SummaryField label="Evaluation">
+            <span className="text-sm">{fleetDiagnostic(detail.fleetState)}</span>
+          </SummaryField>
+        </dl>
+        {fleetRolloutNote ? <p className="text-sm text-muted-foreground">{fleetRolloutNote}</p> : null}
+      </section>
+
+      <section className="space-y-4 rounded-lg border border-border bg-card p-4">
+        <SectionHeader>
+          <SectionHeaderContent>
             <SectionHeaderTitle>Rollout</SectionHeaderTitle>
           </SectionHeaderContent>
         </SectionHeader>
@@ -119,6 +214,25 @@ function RegistryAppDetailPage() {
         ) : (
           <p className="text-sm text-muted-foreground">No rollout has started.</p>
         )}
+      </section>
+
+      <section className="space-y-5 rounded-lg border border-border bg-card p-4">
+        <SectionHeader>
+          <SectionHeaderContent>
+            <SectionHeaderTitle>Replica observations</SectionHeaderTitle>
+            <SectionHeaderDescription>
+              Heartbeat freshness and app state by process. Superseded sources do not count toward fleet health.
+            </SectionHeaderDescription>
+          </SectionHeaderContent>
+        </SectionHeader>
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Fresh heartbeats</h3>
+          <ReplicaTable replicas={detail.freshReplicas} />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Stale heartbeats</h3>
+          <ReplicaTable replicas={detail.staleReplicas} />
+        </div>
       </section>
 
       <section className="space-y-4 rounded-lg border border-border bg-card p-4">
