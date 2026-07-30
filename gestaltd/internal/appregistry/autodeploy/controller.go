@@ -201,11 +201,15 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 		}
 	}
 
+	ifNoneMatch := c.etags[appName]
+	if settings.LastSeenVersion == "" {
+		ifNoneMatch = ""
+	}
 	result, err := c.Reader.FetchAppIndexConditional(
 		ctx,
 		app.PublicRoot,
 		appName,
-		c.etags[appName],
+		ifNoneMatch,
 	)
 	if err != nil {
 		return err

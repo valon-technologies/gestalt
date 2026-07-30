@@ -51,6 +51,56 @@ func TestControllerDetectsAndAdmitsNewestVersion(t *testing.T) {
 	}
 }
 
+func TestControllerReenableBypassesCachedETagWhenLastSeenVersionIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	enableAutoDeploy(t, services, "g-issues")
+	reader := &fakeReader{results: []*appregistry.AppIndexFetchResult{
+		{Index: testIndex("g-issues", "v2"), ETag: `"unchanged"`},
+		{Index: testIndex("g-issues", "v2"), ETag: `"unchanged"`},
+	}}
+	installer := &fakeInstaller{}
+	controller := testController(services, reader, installer)
+
+	if err := controller.Reconcile(t.Context(), "g-issues"); err != nil {
+		t.Fatalf("prime Reconcile: %v", err)
+	}
+
+	if _, err := services.AutoDeploySettings.Update(t.Context(), "g-issues", func(settings *core.AppAutoDeploySettings) error {
+		settings.Enabled = false
+		settings.PendingVersion = ""
+		return nil
+	}); err != nil {
+		t.Fatalf("disable auto-deploy: %v", err)
+	}
+	if _, err := services.AppVersionChangeRequests.AppendRequest(t.Context(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "v2",
+		ToVersion:   "v1",
+		Timestamp:   time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("record manual rollback: %v", err)
+	}
+	if _, err := services.AutoDeploySettings.Update(t.Context(), "g-issues", func(settings *core.AppAutoDeploySettings) error {
+		settings.Enabled = true
+		settings.LastSeenVersion = ""
+		return nil
+	}); err != nil {
+		t.Fatalf("re-enable auto-deploy: %v", err)
+	}
+
+	if err := controller.Reconcile(t.Context(), "g-issues"); err != nil {
+		t.Fatalf("Reconcile after re-enable: %v", err)
+	}
+	if len(reader.ifNoneMatch) != 2 || reader.ifNoneMatch[1] != "" {
+		t.Fatalf("If-None-Match values = %#v, want unconditional fetch after re-enable", reader.ifNoneMatch)
+	}
+	if len(installer.inputs) != 2 || installer.inputs[1].Version != "v2" {
+		t.Fatalf("install inputs = %#v, want latest admitted after re-enable", installer.inputs)
+	}
+}
+
 func TestControllerCoalescesDuringActiveRollout(t *testing.T) {
 	t.Parallel()
 
