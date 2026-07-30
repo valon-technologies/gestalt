@@ -231,7 +231,7 @@ The heartbeat evaluator may set `healthy_since` when:
 
 If the condition becomes false, clear `healthy_since`.
 
-Mark the rollout `complete` only after the condition remains true for a **30-second stability window**. Terminal transitions remain fenced by app, version, target source version, and activation epoch so concurrent evaluators cannot complete a stale rollout.
+Mark the rollout `complete` only after the condition remains true for a **60-second stability window**. The stability window must be longer than the heartbeat freshness lease so a replica that dies immediately after `healthy_since` is set expires before completion can succeed. Terminal transitions remain fenced by app, version, target source version, and activation epoch so concurrent evaluators cannot complete a stale rollout.
 
 Mark the rollout `failed` when its deadline passes without stable health. Include a structured failure summary:
 
@@ -275,7 +275,7 @@ Record recovery once when:
 
 - the latest rollout outcome for the current desired-version change request is `failed`
 - that version is still desired
-- current fleet state satisfies the same 30-second healthy stability window
+- current fleet state satisfies the same 60-second healthy stability window
 
 Recovery does not change rollout state, append a change request, reset retention, or trigger auto-deploy coalescing. It is observability, not a second admission.
 
@@ -541,12 +541,12 @@ main
 | ------------------------------------ | --------------------------------- |
 | Heartbeat interval                   | 15 seconds                        |
 | Heartbeat freshness lease            | 45 seconds                        |
-| Healthy stability window             | 30 seconds                        |
+| Healthy stability window             | 60 seconds                        |
 | Heartbeat row retention              | 24 hours                          |
 | Production minimum healthy instances | Supplied by deployment activation |
 | Local minimum healthy instances      | 1                                 |
 
-Make the timing values configurable under `server.appRegistry` for tests and non-production deployments. Validate that the freshness lease is greater than the heartbeat interval and the stability window is positive.
+Make the timing values configurable under `server.appRegistry` for tests and non-production deployments. Validate that the freshness lease is greater than the heartbeat interval and that the stability window is greater than the freshness lease.
 
 ## Out of Scope
 
