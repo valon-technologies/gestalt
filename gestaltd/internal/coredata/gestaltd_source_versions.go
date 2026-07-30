@@ -131,6 +131,7 @@ func (s *GestaltdSourceVersionService) Activate(
 	retry bool,
 	enrollmentWindow time.Duration,
 	rolloutTimeout time.Duration,
+	minimumHealthyInstances ...int,
 ) (*core.GestaltdSourceVersionState, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("activate gestaltd source version: service is not configured")
@@ -142,6 +143,16 @@ func (s *GestaltdSourceVersionService) Activate(
 	at = normalizedSourceVersionTime(at)
 	if enrollmentWindow <= 0 || rolloutTimeout <= enrollmentWindow {
 		return nil, fmt.Errorf("activate gestaltd source version: invalid rollout windows")
+	}
+	if len(minimumHealthyInstances) > 1 {
+		return nil, fmt.Errorf("activate gestaltd source version: minimum healthy instances may only be provided once")
+	}
+	minimumHealthy := 0
+	if len(minimumHealthyInstances) == 1 {
+		minimumHealthy = minimumHealthyInstances[0]
+	}
+	if minimumHealthy < 0 {
+		return nil, fmt.Errorf("activate gestaltd source version: minimum healthy instances must not be negative")
 	}
 
 	tx, err := s.db.Transaction(
@@ -170,6 +181,7 @@ func (s *GestaltdSourceVersionService) Activate(
 		state = recordToGestaltdSourceVersionState(stateRecs[0])
 	}
 	sourceChanged := strings.TrimSpace(state.CurrentSourceVersion) != sourceVersion
+	minimumChanged := state.MinimumHealthyInstances != minimumHealthy
 	if sourceChanged || retry {
 		rolloutStore := tx.ObjectStore(StoreAppRollouts)
 		recs, listErr := rolloutStore.GetAll(ctx, nil)
@@ -202,7 +214,8 @@ func (s *GestaltdSourceVersionService) Activate(
 	}
 
 	state.CurrentSourceVersion = sourceVersion
-	if sourceChanged || retry || state.UpdatedAt.IsZero() {
+	state.MinimumHealthyInstances = minimumHealthy
+	if sourceChanged || minimumChanged || retry || state.UpdatedAt.IsZero() {
 		state.UpdatedAt = at
 	}
 	if err := stateStore.Put(ctx, gestaltdSourceVersionStateRecord(state)); err != nil {
@@ -224,15 +237,17 @@ func normalizedSourceVersionTime(value time.Time) time.Time {
 
 func gestaltdSourceVersionStateRecord(state *core.GestaltdSourceVersionState) idb.Record {
 	return idb.Record{
-		"id":                     gestaltdSourceVersionStateID,
-		"current_source_version": strings.TrimSpace(state.CurrentSourceVersion),
-		"updated_at":             normalizedSourceVersionTime(state.UpdatedAt),
+		"id":                        gestaltdSourceVersionStateID,
+		"current_source_version":    strings.TrimSpace(state.CurrentSourceVersion),
+		"minimum_healthy_instances": state.MinimumHealthyInstances,
+		"updated_at":                normalizedSourceVersionTime(state.UpdatedAt),
 	}
 }
 
 func recordToGestaltdSourceVersionState(rec idb.Record) *core.GestaltdSourceVersionState {
 	return &core.GestaltdSourceVersionState{
-		CurrentSourceVersion: recString(rec, "current_source_version"),
-		UpdatedAt:            recTime(rec, "updated_at"),
+		CurrentSourceVersion:    recString(rec, "current_source_version"),
+		MinimumHealthyInstances: recordInt(rec, "minimum_healthy_instances"),
+		UpdatedAt:               recTime(rec, "updated_at"),
 	}
 }

@@ -1966,18 +1966,58 @@ type ServerAppRegistryConfig struct {
 	RestartDelay string `yaml:"restartDelay,omitempty"`
 	// MaxReconcileAttempts bounds failed convergence attempts per app/version.
 	// Omission defaults to DefaultAppRegistryMaxReconcileAttempts.
-	MaxReconcileAttempts    int    `yaml:"maxReconcileAttempts,omitempty"`
-	AutoDeployPollInterval  string `yaml:"autoDeployPollInterval,omitempty"`
-	maxReconcileAttemptsSet bool   `yaml:"-"`
+	MaxReconcileAttempts    int                    `yaml:"maxReconcileAttempts,omitempty"`
+	AutoDeployPollInterval  string                 `yaml:"autoDeployPollInterval,omitempty"`
+	HeartbeatInterval       string                 `yaml:"heartbeatInterval,omitempty"`
+	HeartbeatTTL            string                 `yaml:"heartbeatTtl,omitempty"`
+	HealthyStabilityWindow  string                 `yaml:"healthyStabilityWindow,omitempty"`
+	HeartbeatRetention      string                 `yaml:"heartbeatRetention,omitempty"`
+	RolloutMode             AppRegistryRolloutMode `yaml:"rolloutMode,omitempty"`
+	maxReconcileAttemptsSet bool                   `yaml:"-"`
 }
 
 const DefaultAppRegistryMaxReconcileAttempts = 3
 const DefaultAppRegistryAutoDeployPollInterval = time.Minute
+const DefaultAppRegistryHeartbeatInterval = 15 * time.Second
+const DefaultAppRegistryHeartbeatTTL = 45 * time.Second
+const DefaultAppRegistryHealthyStabilityWindow = 30 * time.Second
+const DefaultAppRegistryHeartbeatRetention = 24 * time.Hour
+
+type AppRegistryRolloutMode string
+
+const (
+	AppRegistryRolloutModeEnrollment AppRegistryRolloutMode = "enrollment"
+	AppRegistryRolloutModeHeartbeat  AppRegistryRolloutMode = "heartbeat"
+)
 
 func (c ServerAppRegistryConfig) AutoDeployPollIntervalDuration() (time.Duration, error) {
 	raw := strings.TrimSpace(c.AutoDeployPollInterval)
 	if raw == "" {
 		return DefaultAppRegistryAutoDeployPollInterval, nil
+	}
+	return ParseDuration(raw)
+}
+
+func (c ServerAppRegistryConfig) HeartbeatIntervalDuration() (time.Duration, error) {
+	return appRegistryDuration(c.HeartbeatInterval, DefaultAppRegistryHeartbeatInterval)
+}
+
+func (c ServerAppRegistryConfig) HeartbeatTTLDuration() (time.Duration, error) {
+	return appRegistryDuration(c.HeartbeatTTL, DefaultAppRegistryHeartbeatTTL)
+}
+
+func (c ServerAppRegistryConfig) HealthyStabilityWindowDuration() (time.Duration, error) {
+	return appRegistryDuration(c.HealthyStabilityWindow, DefaultAppRegistryHealthyStabilityWindow)
+}
+
+func (c ServerAppRegistryConfig) HeartbeatRetentionDuration() (time.Duration, error) {
+	return appRegistryDuration(c.HeartbeatRetention, DefaultAppRegistryHeartbeatRetention)
+}
+
+func appRegistryDuration(raw string, defaultValue time.Duration) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultValue, nil
 	}
 	return ParseDuration(raw)
 }

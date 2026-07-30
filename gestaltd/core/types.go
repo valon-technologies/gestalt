@@ -61,6 +61,32 @@ type AppInstanceMaterialization struct {
 	LastErrorMessage string
 }
 
+type GestaltdInstanceAppState string
+
+const (
+	GestaltdInstanceAppStateRunning    GestaltdInstanceAppState = "running"
+	GestaltdInstanceAppStateStarting   GestaltdInstanceAppState = "starting"
+	GestaltdInstanceAppStateNotRunning GestaltdInstanceAppState = "not_running"
+	GestaltdInstanceAppStateError      GestaltdInstanceAppState = "error"
+	GestaltdInstanceAppStateUnknown    GestaltdInstanceAppState = "unknown"
+)
+
+type GestaltdInstanceAppHeartbeat struct {
+	State          GestaltdInstanceAppState `json:"state"`
+	DesiredVersion string                   `json:"desired_version,omitempty"`
+	RunningVersion string                   `json:"running_version,omitempty"`
+	ObservedAt     time.Time                `json:"observed_at"`
+	LastError      string                   `json:"last_error,omitempty"`
+}
+
+type GestaltdInstanceHeartbeat struct {
+	InstanceID    string
+	SourceVersion string
+	StartedAt     time.Time
+	HeartbeatAt   time.Time
+	Apps          map[string]GestaltdInstanceAppHeartbeat
+}
+
 type AppRolloutState string
 
 const (
@@ -99,9 +125,20 @@ type AppVersionRolloutOutcome struct {
 	FailedAt    time.Time
 }
 
+type AppVersionRecoveryObservation struct {
+	ID                      string
+	App                     string
+	Version                 string
+	RecoveredAt             time.Time
+	SourceVersion           string
+	LiveInstances           int
+	MinimumHealthyInstances int
+}
+
 type GestaltdSourceVersionState struct {
-	CurrentSourceVersion string
-	UpdatedAt            time.Time
+	CurrentSourceVersion    string
+	MinimumHealthyInstances int
+	UpdatedAt               time.Time
 }
 
 type ExternalCredentialGrant struct {
