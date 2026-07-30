@@ -76,6 +76,34 @@ func TestServerInstallerWiringPreservesConfiguredRolloutMode(t *testing.T) {
 		})
 	}
 }
+
+func TestCatalogPollerWiringPreservesCatalogCadence(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	cfg.Server.AppRegistry.HeartbeatInterval = "7s"
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	poller := startAppRegistryCatalogPoller(
+		ctx,
+		cfg,
+		&bootstrap.Result{Services: testutil.NewStubServices(t)},
+		0,
+		false,
+		nil,
+	)
+	if poller == nil {
+		t.Fatal("catalog poller is nil")
+	}
+	poller.Stop()
+	if poller.Interval != 0 {
+		t.Fatalf("catalog interval = %v, want default %v", poller.Interval, appregistry.DefaultCatalogPollInterval)
+	}
+	if poller.HeartbeatEvaluationInterval != 7*time.Second {
+		t.Fatalf("heartbeat evaluation interval = %v, want 7s", poller.HeartbeatEvaluationInterval)
+	}
+}
+
 func (*startupRecordingRestarter) AbortRestarts() {}
 
 type serverRuntimeSnapshotter struct{}

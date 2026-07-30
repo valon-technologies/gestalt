@@ -13,7 +13,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
-const gestaltdSourceVersionStateID = "gestaltd"
+const (
+	gestaltdSourceVersionStateID                   = "gestaltd"
+	defaultHeartbeatRolloutMinimumHealthyInstances = 1
+)
 
 var ErrGestaltdSourceVersionUnavailable = errors.New("gestaltd source version is unavailable")
 
@@ -193,6 +196,14 @@ func (s *GestaltdSourceVersionService) ActivateWithRolloutMode(
 	if requestedMinimumHealthy < 0 {
 		return nil, fmt.Errorf("activate gestaltd source version: minimum healthy instances must not be negative")
 	}
+	if rolloutMode == core.AppRolloutModeHeartbeat {
+		switch {
+		case minimumProvided && requestedMinimumHealthy <= 0:
+			return nil, fmt.Errorf("activate gestaltd source version: heartbeat minimum healthy instances must be positive")
+		case !minimumProvided:
+			requestedMinimumHealthy = defaultHeartbeatRolloutMinimumHealthyInstances
+		}
+	}
 
 	tx, err := s.db.Transaction(
 		ctx,
@@ -221,7 +232,7 @@ func (s *GestaltdSourceVersionService) ActivateWithRolloutMode(
 	}
 	sourceChanged := strings.TrimSpace(state.CurrentSourceVersion) != sourceVersion
 	effectiveMinimumHealthy := requestedMinimumHealthy
-	if !minimumProvided && !sourceChanged {
+	if !minimumProvided && !sourceChanged && state.MinimumHealthyInstances > 0 {
 		effectiveMinimumHealthy = state.MinimumHealthyInstances
 	}
 	minimumChanged := state.MinimumHealthyInstances != effectiveMinimumHealthy
