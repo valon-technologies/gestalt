@@ -61,6 +61,7 @@ func (r *tunnelProviderResolver) ResolveProvider(ctx context.Context, name strin
 	if r == nil || r.cfg.RemoteRegistrations == nil {
 		return nil, core.ErrNotFound
 	}
+	name = normalizeTunnelAppName(name)
 
 	remoteProvider, reg, err := r.cfg.RemoteRegistrations.ResolveProvider(ctx, "app", name)
 	if err != nil {
@@ -136,8 +137,17 @@ func (r *tunnelProviderResolver) HasRegistration(ctx context.Context, appName st
 	if r == nil || r.cfg.RemoteRegistrations == nil {
 		return false
 	}
-	_, _, err := r.cfg.RemoteRegistrations.ResolveProvider(ctx, "app", appName)
+	_, _, err := r.cfg.RemoteRegistrations.ResolveProvider(ctx, "app", normalizeTunnelAppName(appName))
 	return err == nil
+}
+
+// normalizeTunnelAppName converts hyphens to underscores to match the app key
+// convention used by sanitizeDerivedPluginKey on the dev side. A dev client
+// registers its app under the sanitized key (e.g. "vds_forge"), but the remote's
+// config may use hyphens (e.g. "vds-forge") for the same app. Without this
+// normalization the remote's tunnel resolver would never match the registration.
+func normalizeTunnelAppName(name string) string {
+	return strings.ReplaceAll(strings.TrimSpace(name), "-", "_")
 }
 
 // Close shuts down all cached tunnel proxy providers.
