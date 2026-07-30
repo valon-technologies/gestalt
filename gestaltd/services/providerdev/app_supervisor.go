@@ -401,8 +401,28 @@ func (a *appManaged) frontendHandler() http.Handler {
 			http.Error(w, "dev server unavailable", http.StatusBadGateway)
 			return
 		}
+		ensureBasePathPrefix(r, a.target.BasePath)
 		proxy.ServeHTTP(w, r)
 	})
+}
+
+// ensureBasePathPrefix roots the request path at basePath, the prefix the dev
+// server is configured to serve under. Already-prefixed paths are unchanged.
+func ensureBasePathPrefix(r *http.Request, basePath string) {
+	base := "/" + strings.Trim(strings.TrimSpace(basePath), "/")
+	if base == "/" {
+		return
+	}
+	p := r.URL.Path
+	if p == base || strings.HasPrefix(p, base+"/") {
+		return
+	}
+	rest := strings.TrimPrefix(p, "/")
+	if rest == "" {
+		r.URL.Path = base + "/"
+		return
+	}
+	r.URL.Path = base + "/" + rest
 }
 
 func (a *appManaged) reverseProxy() (*httputil.ReverseProxy, error) {

@@ -52,6 +52,55 @@ func TestSupervisorProxiesHTTP(t *testing.T) {
 	}
 }
 
+func TestSupervisorAppProxiesStrippedTunnelPath(t *testing.T) {
+	t.Parallel()
+	workdir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	telemetry := telemetrynoop.New()
+	prepared, err := runtimehost.PrepareExternalProviderSockets(runtimehost.ProcessConfig{
+		ProviderName: "combo",
+		Telemetry:    telemetry,
+	})
+	if err != nil {
+		t.Fatalf("PrepareExternalProviderSockets: %v", err)
+	}
+	t.Cleanup(prepared.Cleanup)
+
+	sup, err := providerdev.Start(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(sup.Stop)
+
+	handle, err := sup.StartApp(ctx, providerdev.AppTarget{
+		Name:       "combo",
+		BasePath:   "/combo",
+		SocketPath: prepared.PluginSocket,
+		BaseEnv:    prepared.Env,
+		Commands: []providerdev.AppCommand{
+			{Workdir: workdir, Command: []string{buildTestdataBinary(t, "fakebackend")}, ReadyTimeout: 15 * time.Second},
+			{Workdir: workdir, Command: []string{buildFakeDevServer(t)}, ReadyTimeout: 15 * time.Second},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartApp: %v", err)
+	}
+
+	handler := handle.FrontendHandler()
+	waitForHandlerReady(t, handler, "/combo/")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/src/main.tsx", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tunnel asset path status = %d, want 200 (re-rooted under base)", rec.Code)
+	}
+	if got := rec.Body.String(); got != "dev-ok" {
+		t.Fatalf("tunnel asset body = %q, want dev-ok", got)
+	}
+}
+
 func TestSupervisorNotReadyReturns503(t *testing.T) {
 	t.Parallel()
 
