@@ -71,6 +71,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+	"gopkg.in/yaml.v3"
 )
 
 func mustStruct(t *testing.T, fields map[string]any) *structpb.Struct {
@@ -4168,6 +4169,64 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	}
 	if integrations[0].MountedPath != "/github" {
 		t.Fatalf("expected mounted path /github, got %q", integrations[0].MountedPath)
+	}
+}
+
+func TestListIntegrations_IncludesPrompts(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>home</html>")
+	stub := &coretesting.StubIntegration{N: "gmail", DN: "Gmail"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.AppDefs = testPluginDefsForConnections("gmail", "default")
+		var promptConfig yaml.Node
+		if err := yaml.Unmarshal([]byte(`
+prompts:
+  gmail:
+    - id: draft-reply
+      text: Draft a short reply to my latest unread email
+`), &promptConfig); err != nil {
+			t.Fatalf("yaml.Unmarshal: %v", err)
+		}
+		cfg.AppDefs["home"] = &config.ProviderEntry{
+			Static:             &config.AppStaticConfig{Mount: "/"},
+			ResolvedStaticRoot: rootDir,
+			Config:             promptConfig,
+		}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name    string `json:"name"`
+		Prompts []struct {
+			ID   string `json:"id"`
+			Text string `json:"text"`
+		} `json:"prompts"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if len(integrations[0].Prompts) != 1 ||
+		integrations[0].Prompts[0].ID != "draft-reply" ||
+		integrations[0].Prompts[0].Text != "Draft a short reply to my latest unread email" {
+		t.Fatalf("prompts = %v", integrations[0].Prompts)
 	}
 }
 

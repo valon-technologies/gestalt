@@ -92,11 +92,17 @@ type integrationInfo struct {
 	IconSVG         string              `json:"iconSvg,omitempty"`
 	MountedPath     string              `json:"mountedPath,omitempty"`
 	ManagementPath  string              `json:"managementPath,omitempty"`
+	Prompts         []appPromptInfo     `json:"prompts,omitempty"`
 	Connections     []connectionDefInfo `json:"connections"`
 	Status          string              `json:"status"`
 	CredentialState string              `json:"credentialState"`
 	HealthState     string              `json:"healthState"`
 	Actions         []string            `json:"actions"`
+}
+
+type appPromptInfo struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
 }
 
 type connectionParamInfo struct {
@@ -239,6 +245,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil && entry.Static != nil {
 			info.MountedPath = strings.TrimSpace(entry.Static.Mount)
 		}
+		info.Prompts = s.appPrompts[name]
 		instances := connected[name]
 		authTypes := s.populateIntegrationSettings(&info, instances, p)
 		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
@@ -266,6 +273,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			HealthState:     healthStateUnknown,
 			Actions:         []string{},
 			ManagementPath:  managementPath,
+			Prompts:         s.appPrompts[app.name],
 		}
 		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil && entry.Static != nil {
 			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))

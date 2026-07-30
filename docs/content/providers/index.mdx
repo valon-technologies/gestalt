@@ -107,6 +107,34 @@ apps:
       mount: /dashboard
 ```
 
+### Root app prompts
+
+The app mounted at `/` owns the app workspace's curated prompt examples. Put
+them in that app's deployment `config.prompts` block. The app key is
+deployment-defined (`home` in this example); Gestalt identifies the root app by
+its `/` mount.
+
+```yaml
+apps:
+  home:
+    source: ./apps/default/manifest.yaml
+    static:
+      mount: /
+    config:
+      prompts:
+        gmail:
+          - id: draft-reply
+            text: Draft a short reply to my latest unread email
+        google_drive:
+          - id: summarize-deck
+            text: Find the deck I edited yesterday and summarize the changes
+```
+
+Each app may define up to five prompts. Every prompt needs a unique `id` within
+that app and a non-empty `text` of at most 280 characters. Gestalt exposes the
+validated prompt definitions to the Home UI through `/api/v1/apps`; the rest of
+the root app config remains provider-owned.
+
 ### Exact sources
 
 Exact sources point at one release's `provider-release.yaml`. Use them for
