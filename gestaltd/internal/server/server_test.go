@@ -4154,7 +4154,7 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	}
 }
 
-func TestListIntegrations_IncludesPromptExamples(t *testing.T) {
+func TestListIntegrations_IncludesPrompts(t *testing.T) {
 	t.Parallel()
 
 	rootDir := t.TempDir()
