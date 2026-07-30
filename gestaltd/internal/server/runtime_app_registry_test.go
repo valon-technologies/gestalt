@@ -34,6 +34,14 @@ func (r *startupRecordingRestarter) StartApp(_ context.Context, app, version str
 }
 func (*startupRecordingRestarter) AbortRestarts() {}
 
+type serverRuntimeSnapshotter struct{}
+
+func (serverRuntimeSnapshotter) SnapshotRegistryApps() map[string]core.RegistryAppRuntimeObservation {
+	return map[string]core.RegistryAppRuntimeObservation{
+		"g-issues": {State: core.GestaltdInstanceAppStateNotRunning},
+	}
+}
+
 func TestRegistryAppStartupMaterializesAndStartsKnownVersion(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -107,4 +115,47 @@ func TestRegistryAppStartupStopsEmptyProjection(t *testing.T) {
 	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
 		t.Fatalf("old version stat error = %v, want not exist", err)
 	}
+}
+
+func TestStartAppRegistryHeartbeatWriterUsesBootstrapReadiness(t *testing.T) {
+	t.Setenv("SOURCE_VERSION", "source-v3")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	services := testutil.NewStubServices(t)
+	ready := make(chan struct{})
+	cfg := &config.Config{
+		Apps: map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		},
+	}
+	result := &bootstrap.Result{
+		Services:                services,
+		AppProvidersInitialized: ready,
+		AppRuntimeSnapshotter:   serverRuntimeSnapshotter{},
+	}
+	writer, err := startAppRegistryHeartbeatWriter(ctx, cfg, result)
+	if err != nil {
+		t.Fatalf("startAppRegistryHeartbeatWriter: %v", err)
+	}
+	if writer == nil {
+		t.Fatal("writer = nil")
+	}
+	t.Cleanup(writer.Stop)
+	time.Sleep(20 * time.Millisecond)
+	if heartbeats, err := services.GestaltdInstanceHeartbeats.List(ctx); err != nil || len(heartbeats) != 0 {
+		t.Fatalf("heartbeats before ready = %#v, err %v", heartbeats, err)
+	}
+	close(ready)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		heartbeats, listErr := services.GestaltdInstanceHeartbeats.List(ctx)
+		if listErr == nil && len(heartbeats) == 1 {
+			if heartbeats[0].SourceVersion != "source-v3" {
+				t.Fatalf("source version = %q", heartbeats[0].SourceVersion)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("heartbeat was not written after bootstrap readiness")
 }

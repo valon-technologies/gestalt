@@ -87,6 +87,38 @@ type GestaltdInstanceHeartbeat struct {
 	Apps          map[string]GestaltdInstanceAppHeartbeat
 }
 
+// RegistryAppRuntimeObservation is a coherent, local-only observation of a
+// configured registry app. DesiredVersion and ObservedAt are added by the
+// heartbeat writer because they come from coredata and the writer's clock.
+type RegistryAppRuntimeObservation struct {
+	State          GestaltdInstanceAppState
+	RunningVersion string
+	LastError      string
+}
+
+type AppFleetState string
+
+const (
+	AppFleetStateHealthy    AppFleetState = "healthy"
+	AppFleetStateConverging AppFleetState = "converging"
+	AppFleetStateDegraded   AppFleetState = "degraded"
+	AppFleetStateUnknown    AppFleetState = "unknown"
+)
+
+type AppFleetProjection struct {
+	App                     string
+	State                   AppFleetState
+	SourceVersion           string
+	DesiredVersion          string
+	MinimumHealthyInstances int
+	LiveInstances           int
+	RunningDesiredVersion   int
+	Mismatched              int
+	Errors                  int
+	HeartbeatTTL            time.Duration
+	EvaluatedAt             time.Time
+}
+
 type AppRolloutState string
 
 const (

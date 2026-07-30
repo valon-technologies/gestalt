@@ -15,11 +15,15 @@ import (
 )
 
 type GestaltdInstanceHeartbeatService struct {
+	db    indexeddb.IndexedDB
 	store idb.ObjectStore
 }
 
 func NewGestaltdInstanceHeartbeatService(ds indexeddb.IndexedDB) *GestaltdInstanceHeartbeatService {
-	return &GestaltdInstanceHeartbeatService{store: ds.ObjectStore(StoreGestaltdInstanceHeartbeats)}
+	return &GestaltdInstanceHeartbeatService{
+		db:    ds,
+		store: ds.ObjectStore(StoreGestaltdInstanceHeartbeats),
+	}
 }
 
 func (s *GestaltdInstanceHeartbeatService) Get(ctx context.Context, instanceID string) (*core.GestaltdInstanceHeartbeat, error) {
@@ -66,6 +70,32 @@ func (s *GestaltdInstanceHeartbeatService) ListBySourceVersion(ctx context.Conte
 	return recordsToGestaltdInstanceHeartbeats(recs), nil
 }
 
+func (s *GestaltdInstanceHeartbeatService) ListFreshBySourceVersion(
+	ctx context.Context,
+	sourceVersion string,
+	cutoff time.Time,
+) ([]*core.GestaltdInstanceHeartbeat, error) {
+	if s == nil {
+		return nil, fmt.Errorf("list fresh gestaltd instance heartbeats: service is not configured")
+	}
+	sourceVersion = strings.TrimSpace(sourceVersion)
+	if sourceVersion == "" {
+		return nil, fmt.Errorf("list fresh gestaltd instance heartbeats: source version is required")
+	}
+	cutoff = cutoff.UTC()
+	query := idb.Bound(
+		[]any{sourceVersion, cutoff},
+		[]any{sourceVersion, indexedDBMaxTime},
+		false,
+		false,
+	)
+	recs, err := s.store.Index("by_source_version_heartbeat_at").GetAll(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list fresh gestaltd instance heartbeats: %w", err)
+	}
+	return recordsToGestaltdInstanceHeartbeats(recs), nil
+}
+
 func (s *GestaltdInstanceHeartbeatService) Upsert(ctx context.Context, heartbeat *core.GestaltdInstanceHeartbeat) (*core.GestaltdInstanceHeartbeat, error) {
 	if s == nil {
 		return nil, fmt.Errorf("upsert gestaltd instance heartbeat: service is not configured")
@@ -92,6 +122,48 @@ func (s *GestaltdInstanceHeartbeatService) Delete(ctx context.Context, instanceI
 		return fmt.Errorf("delete gestaltd instance heartbeat: %w", err)
 	}
 	return nil
+}
+
+func (s *GestaltdInstanceHeartbeatService) PruneBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("prune gestaltd instance heartbeats: service is not configured")
+	}
+	tx, err := s.db.Transaction(
+		ctx,
+		[]string{StoreGestaltdInstanceHeartbeats},
+		idb.TransactionReadwrite,
+		idb.TransactionOptions{},
+	)
+	if err != nil {
+		return 0, fmt.Errorf("prune gestaltd instance heartbeats: begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+	store := tx.ObjectStore(StoreGestaltdInstanceHeartbeats)
+	recs, err := store.Index("by_heartbeat_at").GetAll(ctx, idb.UpperBound(cutoff.UTC(), true))
+	if err != nil {
+		return 0, fmt.Errorf("prune gestaltd instance heartbeats: list expired rows: %w", err)
+	}
+	pruned := 0
+	for _, rec := range recs {
+		instanceID := recString(rec, "instance_id")
+		if instanceID == "" {
+			continue
+		}
+		if err := store.Delete(ctx, instanceID); err != nil && !errors.Is(err, idb.ErrNotFound) {
+			return pruned, fmt.Errorf("prune gestaltd instance heartbeats: delete %q: %w", instanceID, err)
+		}
+		pruned++
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return pruned, fmt.Errorf("prune gestaltd instance heartbeats: commit: %w", err)
+	}
+	committed = true
+	return pruned, nil
 }
 
 func gestaltdInstanceHeartbeatRecord(heartbeat *core.GestaltdInstanceHeartbeat) (idb.Record, *core.GestaltdInstanceHeartbeat, error) {
