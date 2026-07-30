@@ -29,22 +29,25 @@ var (
 )
 
 type CatalogPoller struct {
-	ChangeRequests       *coredata.AppVersionChangeRequestService
-	Materializations     *coredata.AppInstanceMaterializationService
-	Rollouts             *coredata.AppRolloutService
-	RolloutOutcomes      *coredata.AppVersionRolloutOutcomeService
-	AppMaterializer      *Materializer
-	AppRestarter         AppRestarter
-	InstanceID           string
-	SourceVersion        string
-	Interval             time.Duration
-	RestartDelay         time.Duration
-	DisableRestartDelay  bool
-	RestartReady         <-chan struct{}
-	BootstrapReady       <-chan struct{}
-	MaxReconcileAttempts int
-	Now                  func() time.Time
-	OnRolloutTerminal    func(string)
+	ChangeRequests         *coredata.AppVersionChangeRequestService
+	Materializations       *coredata.AppInstanceMaterializationService
+	Rollouts               *coredata.AppRolloutService
+	RolloutOutcomes        *coredata.AppVersionRolloutOutcomeService
+	Heartbeats             *coredata.GestaltdInstanceHeartbeatService
+	AppMaterializer        *Materializer
+	AppRestarter           AppRestarter
+	InstanceID             string
+	SourceVersion          string
+	Interval               time.Duration
+	RestartDelay           time.Duration
+	DisableRestartDelay    bool
+	RestartReady           <-chan struct{}
+	BootstrapReady         <-chan struct{}
+	MaxReconcileAttempts   int
+	Now                    func() time.Time
+	OnRolloutTerminal      func(string)
+	HeartbeatTTL           time.Duration
+	HealthyStabilityWindow time.Duration
 
 	startOnce sync.Once
 	startMu   sync.Mutex
@@ -57,44 +60,50 @@ type CatalogPoller struct {
 }
 
 type CatalogPollerConfig struct {
-	ChangeRequests       *coredata.AppVersionChangeRequestService
-	Materializations     *coredata.AppInstanceMaterializationService
-	Rollouts             *coredata.AppRolloutService
-	RolloutOutcomes      *coredata.AppVersionRolloutOutcomeService
-	AppMaterializer      *Materializer
-	AppRestarter         AppRestarter
-	InstanceID           string
-	SourceVersion        string
-	Interval             time.Duration
-	RestartDelay         time.Duration
-	DisableRestartDelay  bool
-	RestartReady         <-chan struct{}
-	BootstrapReady       <-chan struct{}
-	MaxReconcileAttempts int
-	Now                  func() time.Time
-	OnRolloutTerminal    func(string)
+	ChangeRequests         *coredata.AppVersionChangeRequestService
+	Materializations       *coredata.AppInstanceMaterializationService
+	Rollouts               *coredata.AppRolloutService
+	RolloutOutcomes        *coredata.AppVersionRolloutOutcomeService
+	Heartbeats             *coredata.GestaltdInstanceHeartbeatService
+	AppMaterializer        *Materializer
+	AppRestarter           AppRestarter
+	InstanceID             string
+	SourceVersion          string
+	Interval               time.Duration
+	RestartDelay           time.Duration
+	DisableRestartDelay    bool
+	RestartReady           <-chan struct{}
+	BootstrapReady         <-chan struct{}
+	MaxReconcileAttempts   int
+	Now                    func() time.Time
+	OnRolloutTerminal      func(string)
+	HeartbeatTTL           time.Duration
+	HealthyStabilityWindow time.Duration
 }
 
 func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 	return &CatalogPoller{
-		ChangeRequests:       cfg.ChangeRequests,
-		Materializations:     cfg.Materializations,
-		Rollouts:             cfg.Rollouts,
-		RolloutOutcomes:      cfg.RolloutOutcomes,
-		AppMaterializer:      cfg.AppMaterializer,
-		AppRestarter:         cfg.AppRestarter,
-		InstanceID:           strings.TrimSpace(cfg.InstanceID),
-		SourceVersion:        strings.TrimSpace(cfg.SourceVersion),
-		Interval:             cfg.Interval,
-		RestartDelay:         cfg.RestartDelay,
-		DisableRestartDelay:  cfg.DisableRestartDelay,
-		RestartReady:         cfg.RestartReady,
-		BootstrapReady:       cfg.BootstrapReady,
-		MaxReconcileAttempts: cfg.MaxReconcileAttempts,
-		Now:                  cfg.Now,
-		OnRolloutTerminal:    cfg.OnRolloutTerminal,
-		inflight:             make(map[string]struct{}),
-		stoppedAt:            make(map[string]time.Time),
+		ChangeRequests:         cfg.ChangeRequests,
+		Materializations:       cfg.Materializations,
+		Rollouts:               cfg.Rollouts,
+		RolloutOutcomes:        cfg.RolloutOutcomes,
+		Heartbeats:             cfg.Heartbeats,
+		AppMaterializer:        cfg.AppMaterializer,
+		AppRestarter:           cfg.AppRestarter,
+		InstanceID:             strings.TrimSpace(cfg.InstanceID),
+		SourceVersion:          strings.TrimSpace(cfg.SourceVersion),
+		Interval:               cfg.Interval,
+		RestartDelay:           cfg.RestartDelay,
+		DisableRestartDelay:    cfg.DisableRestartDelay,
+		RestartReady:           cfg.RestartReady,
+		BootstrapReady:         cfg.BootstrapReady,
+		MaxReconcileAttempts:   cfg.MaxReconcileAttempts,
+		Now:                    cfg.Now,
+		OnRolloutTerminal:      cfg.OnRolloutTerminal,
+		HeartbeatTTL:           cfg.HeartbeatTTL,
+		HealthyStabilityWindow: cfg.HealthyStabilityWindow,
+		inflight:               make(map[string]struct{}),
+		stoppedAt:              make(map[string]time.Time),
 	}
 }
 
@@ -283,6 +292,10 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	if rollout != nil {
 		version := strings.TrimSpace(rollout.Version)
 		if findInstallation(installations, version) == nil {
+			if rollout.Mode == core.AppRolloutModeHeartbeat {
+				_, err := p.updateHeartbeatRolloutOutcome(ctx, rollout)
+				return err
+			}
 			if !p.now().Before(rollout.Deadline) {
 				updated, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now())
 				if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
@@ -528,6 +541,9 @@ func findInstallation(installations []*core.AppInstallation, version string) *co
 }
 
 func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.AppRollout) (bool, error) {
+	if rollout != nil && rollout.Mode == core.AppRolloutModeHeartbeat {
+		return p.updateHeartbeatRolloutOutcome(ctx, rollout)
+	}
 	materializations, err := p.Materializations.ListByAppVersion(ctx, rollout.App, rollout.Version)
 	if err != nil {
 		return false, fmt.Errorf("list rollout cohort for %s@%s: %w", rollout.App, rollout.Version, err)
@@ -576,6 +592,56 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		return true, nil
 	}
 	return false, nil
+}
+
+func (p *CatalogPoller) updateHeartbeatRolloutOutcome(ctx context.Context, rollout *core.AppRollout) (bool, error) {
+	if p.Heartbeats == nil {
+		return false, fmt.Errorf("evaluate heartbeat rollout %s@%s: heartbeat service is not configured", rollout.App, rollout.Version)
+	}
+	if p.HeartbeatTTL <= 0 || p.HealthyStabilityWindow <= 0 {
+		return false, fmt.Errorf("evaluate heartbeat rollout %s@%s: heartbeat timing is not configured", rollout.App, rollout.Version)
+	}
+	now := p.now()
+	heartbeats, err := p.Heartbeats.ListFreshBySourceVersion(
+		ctx,
+		rollout.TargetSourceVersion,
+		now.Add(-p.HeartbeatTTL),
+	)
+	if err != nil {
+		return false, fmt.Errorf("list heartbeat rollout fleet for %s@%s: %w", rollout.App, rollout.Version, err)
+	}
+	projection := EvaluateFleetState(FleetEvaluation{
+		App:                     rollout.App,
+		DesiredVersion:          rollout.Version,
+		SourceVersion:           rollout.TargetSourceVersion,
+		MinimumHealthyInstances: rollout.MinimumHealthyInstances,
+		Cutoff:                  now.Add(-p.HeartbeatTTL),
+		EvaluatedAt:             now,
+		Heartbeats:              heartbeats,
+	})
+	updated, transitioned, err := p.Rollouts.EvaluateHeartbeatRollout(ctx, rollout, coredata.HeartbeatRolloutEvaluation{
+		Healthy:         projection.State == core.AppFleetStateHealthy,
+		StabilityWindow: p.HealthyStabilityWindow,
+		EvaluatedAt:     now,
+		FailureSummary: core.AppRolloutFailureSummary{
+			LiveInstances:         projection.LiveInstances,
+			RunningDesiredVersion: projection.RunningDesiredVersion,
+			Mismatched:            projection.Mismatched,
+			Errors:                projection.Errors,
+		},
+	})
+	if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("evaluate heartbeat rollout %s@%s: %w", rollout.App, rollout.Version, err)
+	}
+	if !transitioned {
+		return false, nil
+	}
+	p.recordRolloutOutcome(ctx, updated)
+	p.notifyRolloutTerminal(updated.App)
+	return true, nil
 }
 
 func (p *CatalogPoller) notifyRolloutTerminal(app string) {

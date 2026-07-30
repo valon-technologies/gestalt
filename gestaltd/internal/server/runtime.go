@@ -154,6 +154,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		},
 		AppRegistries:           cfg.AppRegistries,
 		AppRegistryHeartbeatTTL: heartbeatTTL,
+		AppRegistryRolloutMode:  cfg.Server.AppRegistry.RolloutMode,
 		ArtifactsDir:            cfg.Server.ArtifactsDir,
 		GestaltdVersion:         strings.TrimSpace(gestaltdVersion),
 		SourceVersion:           appregistry.ResolveSourceVersion(),
@@ -581,21 +582,37 @@ func startAppRegistryCatalogPoller(
 			}
 		}
 	}
+	heartbeatInterval, err := cfg.Server.AppRegistry.HeartbeatIntervalDuration()
+	if err != nil {
+		heartbeatInterval = config.DefaultAppRegistryHeartbeatInterval
+	}
+	heartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
+	if err != nil {
+		heartbeatTTL = config.DefaultAppRegistryHeartbeatTTL
+	}
+	stabilityWindow, err := cfg.Server.AppRegistry.HealthyStabilityWindowDuration()
+	if err != nil {
+		stabilityWindow = config.DefaultAppRegistryHealthyStabilityWindow
+	}
 	poller := appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
-		ChangeRequests:       changeRequests,
-		Materializations:     materializations,
-		Rollouts:             rollouts,
-		RolloutOutcomes:      result.Services.AppVersionRolloutOutcomes,
-		AppMaterializer:      materializer,
-		AppRestarter:         result.AppRestarter,
-		InstanceID:           appregistry.ResolveInstanceID(),
-		SourceVersion:        appregistry.ResolveSourceVersion(),
-		RestartDelay:         restartDelay,
-		DisableRestartDelay:  disableRestartDelay,
-		RestartReady:         result.AppProvidersInitialized,
-		BootstrapReady:       result.AppProvidersInitialized,
-		MaxReconcileAttempts: cfg.Server.AppRegistry.MaxReconcileAttempts,
-		OnRolloutTerminal:    onRolloutTerminal,
+		ChangeRequests:         changeRequests,
+		Materializations:       materializations,
+		Rollouts:               rollouts,
+		RolloutOutcomes:        result.Services.AppVersionRolloutOutcomes,
+		Heartbeats:             result.Services.GestaltdInstanceHeartbeats,
+		AppMaterializer:        materializer,
+		AppRestarter:           result.AppRestarter,
+		InstanceID:             appregistry.ResolveInstanceID(),
+		SourceVersion:          appregistry.ResolveSourceVersion(),
+		Interval:               heartbeatInterval,
+		HeartbeatTTL:           heartbeatTTL,
+		HealthyStabilityWindow: stabilityWindow,
+		RestartDelay:           restartDelay,
+		DisableRestartDelay:    disableRestartDelay,
+		RestartReady:           result.AppProvidersInitialized,
+		BootstrapReady:         result.AppProvidersInitialized,
+		MaxReconcileAttempts:   cfg.Server.AppRegistry.MaxReconcileAttempts,
+		OnRolloutTerminal:      onRolloutTerminal,
 	})
 	poller.Start(ctx)
 	return poller
@@ -734,6 +751,7 @@ func startAppRegistryAutoDeployController(
 		RetentionCatalog: appregistry.NewGCSCatalogStore(cfg.AppRegistries),
 		GestaltdVersion:  strings.TrimSpace(gestaltdVersion),
 		SourceVersion:    appregistry.ResolveSourceVersion(),
+		RolloutMode:      core.AppRolloutMode(cfg.Server.AppRegistry.RolloutMode),
 	}
 	controller := autodeploy.New(
 		services.AutoDeploySettings,

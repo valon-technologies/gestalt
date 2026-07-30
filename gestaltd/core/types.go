@@ -128,16 +128,39 @@ const (
 	AppRolloutStateFailed     AppRolloutState = "failed"
 )
 
+type AppRolloutMode string
+
+const (
+	AppRolloutModeEnrollment AppRolloutMode = "enrollment"
+	AppRolloutModeHeartbeat  AppRolloutMode = "heartbeat"
+)
+
+type AppRolloutFailureSummary struct {
+	LiveInstances           int       `json:"live_instances"`
+	MinimumHealthyInstances int       `json:"minimum_healthy_instances"`
+	RunningDesiredVersion   int       `json:"running_desired_version"`
+	Mismatched              int       `json:"mismatched"`
+	Errors                  int       `json:"errors"`
+	SourceVersion           string    `json:"source_version"`
+	Version                 string    `json:"version"`
+	EvaluatedAt             time.Time `json:"evaluated_at"`
+}
+
 type AppRollout struct {
-	App                 string
-	Version             string
-	State               AppRolloutState
-	TargetSourceVersion string
-	CreatedAt           time.Time
-	EnrollmentEndsAt    time.Time
-	Deadline            time.Time
-	CompletedAt         time.Time
-	FailedAt            time.Time
+	App                     string
+	Version                 string
+	State                   AppRolloutState
+	Mode                    AppRolloutMode
+	TargetSourceVersion     string
+	MinimumHealthyInstances int
+	CreatedAt               time.Time
+	EnrollmentEndsAt        time.Time
+	Deadline                time.Time
+	HealthySince            time.Time
+	HeartbeatEvaluatedAt    time.Time
+	CompletedAt             time.Time
+	FailedAt                time.Time
+	FailureSummary          *AppRolloutFailureSummary
 }
 
 type AppAutoDeploySettings struct {

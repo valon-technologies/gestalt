@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 )
 
@@ -48,13 +49,14 @@ func (s *Server) activateAppProvidersHandler(w http.ResponseWriter, r *http.Requ
 			writeError(w, http.StatusServiceUnavailable, "gestaltd source version service is unavailable")
 			return
 		}
-		_, err := s.gestaltdSourceVersions.Activate(
+		_, err := s.gestaltdSourceVersions.ActivateWithRolloutMode(
 			r.Context(),
 			s.sourceVersion,
 			s.now(),
 			retryParam == "true",
 			appregistry.DefaultRolloutEnrollmentWindow,
 			appregistry.DefaultRolloutTimeout,
+			core.AppRolloutMode(s.appRegistryRolloutMode),
 			minimumHealthyInstances...,
 		)
 		if err != nil {

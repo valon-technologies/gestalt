@@ -191,6 +191,49 @@ func TestInstaller_creates_one_active_rollout_per_app(t *testing.T) {
 	}
 }
 
+func TestInstallerHeartbeatAdmissionSnapshotsSourceAndMinimum(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	if _, err := svc.GestaltdSourceVersionState.ActivateWithRolloutMode(
+		ctx, "source-a", now.Add(-time.Minute), false,
+		appregistry.DefaultRolloutEnrollmentWindow, appregistry.DefaultRolloutTimeout,
+		core.AppRolloutModeHeartbeat, 4,
+	); err != nil {
+		t.Fatalf("ActivateWithRolloutMode: %v", err)
+	}
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		SourceVersions: svc.GestaltdSourceVersionState,
+		Rollouts:       svc.AppRollouts,
+		SourceVersion:  "source-a",
+		RolloutMode:    core.AppRolloutModeHeartbeat,
+		Now:            func() time.Time { return now },
+	}
+	output, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
+	})
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	rollout := output.Rollout
+	if rollout.Mode != core.AppRolloutModeHeartbeat ||
+		rollout.State != core.AppRolloutStateRestarting ||
+		rollout.TargetSourceVersion != "source-a" ||
+		rollout.MinimumHealthyInstances != 4 {
+		t.Fatalf("heartbeat rollout = %#v", rollout)
+	}
+}
+
 func configEntryWithResolvedVersion(version string) *config.ProviderEntry {
 	entry := &config.ProviderEntry{}
 	entry.Source.SetResolvedPackage("", version)

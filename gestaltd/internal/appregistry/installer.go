@@ -36,6 +36,7 @@ type Installer struct {
 	RetentionCatalog RetentionCatalogStore
 	GestaltdVersion  string
 	SourceVersion    string
+	RolloutMode      core.AppRolloutMode
 	Now              func() time.Time
 }
 
@@ -244,10 +245,19 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		InstalledAt:        requestedAt,
 		UpdatedAt:          requestedAt,
 	}
+	rolloutMode := i.RolloutMode
+	if rolloutMode == "" {
+		rolloutMode = core.AppRolloutModeEnrollment
+	}
+	rolloutState := core.AppRolloutStateEnrolling
+	if rolloutMode == core.AppRolloutModeHeartbeat {
+		rolloutState = core.AppRolloutStateRestarting
+	}
 	pendingRollout := &core.AppRollout{
 		App:              appName,
 		Version:          version,
-		State:            core.AppRolloutStateEnrolling,
+		State:            rolloutState,
+		Mode:             rolloutMode,
 		CreatedAt:        requestedAt,
 		EnrollmentEndsAt: requestedAt.Add(DefaultRolloutEnrollmentWindow),
 		Deadline:         requestedAt.Add(DefaultRolloutTimeout),
