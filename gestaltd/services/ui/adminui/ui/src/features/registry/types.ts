@@ -11,10 +11,13 @@ export type FleetState = {
   evaluatedAt: string;
 };
 
+export type FleetReplicaSourceStatus = "current" | "superseded" | "unavailable";
+
 export type FleetReplica = {
   instanceId: string;
   sourceVersion: string;
   currentSource: boolean;
+  sourceStatus: FleetReplicaSourceStatus;
   fresh: boolean;
   startedAt?: string;
   heartbeatAt: string;

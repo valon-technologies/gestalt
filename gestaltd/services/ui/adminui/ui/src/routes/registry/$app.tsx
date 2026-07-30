@@ -77,7 +77,7 @@ function ReplicaTable({ replicas }: { replicas: FleetReplica[] }) {
                 <div className="space-y-1">
                   <Code>{replica.sourceVersion}</Code>
                   <div className="text-xs text-muted-foreground">
-                    {replicaSourceLabel(replica.currentSource)}
+                    {replicaSourceLabel(replica.sourceStatus)}
                   </div>
                 </div>
               </TableCell>

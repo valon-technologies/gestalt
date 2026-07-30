@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import type { FleetState } from "@/features/registry/types";
+import type { FleetReplicaSourceStatus, FleetState } from "@/features/registry/types";
 
 type BadgeVariant = "success" | "warning" | "destructive" | "muted";
 
@@ -42,8 +42,15 @@ export function heartbeatAgeLabel(seconds: number, fresh: boolean) {
   return `${age}s ago`;
 }
 
-export function replicaSourceLabel(currentSource: boolean) {
-  return currentSource ? "current source" : "superseded source";
+export function replicaSourceLabel(status: FleetReplicaSourceStatus) {
+  switch (status) {
+    case "current":
+      return "current source";
+    case "superseded":
+      return "superseded source";
+    default:
+      return "source status unavailable";
+  }
 }
 
 export function fleetRolloutSeparation(fleet: FleetState, rolloutState?: string) {

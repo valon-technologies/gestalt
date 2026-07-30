@@ -62,6 +62,7 @@ test("explains unknown fleet basis and degraded observations", () => {
 test("labels heartbeat freshness explicitly", () => {
   assert.equal(heartbeatAgeLabel(4, true), "4s ago");
   assert.equal(heartbeatAgeLabel(61, false), "stale · 61s ago");
-  assert.equal(replicaSourceLabel(true), "current source");
-  assert.equal(replicaSourceLabel(false), "superseded source");
+  assert.equal(replicaSourceLabel("current"), "current source");
+  assert.equal(replicaSourceLabel("superseded"), "superseded source");
+  assert.equal(replicaSourceLabel("unavailable"), "source status unavailable");
 });

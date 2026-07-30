@@ -150,6 +150,10 @@ func TestAdminRegistryApps(t *testing.T) {
 			t.Fatalf("GET registry app: %v", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d: %s", resp.StatusCode, body)
+		}
 		var payload struct {
 			Cohort adminRolloutCohortJSON `json:"cohort"`
 		}
@@ -241,10 +245,15 @@ func TestAdminRegistryAppFleetObservability(t *testing.T) {
 		if len(payload.Fresh) != 3 || len(payload.Stale) != 1 {
 			t.Fatalf("fresh/stale replicas = %#v / %#v", payload.Fresh, payload.Stale)
 		}
-		if payload.Fresh[2].InstanceID != "superseded-fresh" || payload.Fresh[2].CurrentSource {
+		if payload.Fresh[2].InstanceID != "superseded-fresh" ||
+			payload.Fresh[2].CurrentSource ||
+			payload.Fresh[2].SourceStatus != "superseded" {
 			t.Fatalf("superseded replica = %#v", payload.Fresh[2])
 		}
-		if payload.Stale[0].InstanceID != "current-stale" || payload.Stale[0].Fresh || !payload.Stale[0].CurrentSource {
+		if payload.Stale[0].InstanceID != "current-stale" ||
+			payload.Stale[0].Fresh ||
+			!payload.Stale[0].CurrentSource ||
+			payload.Stale[0].SourceStatus != "current" {
 			t.Fatalf("stale current-source replica = %#v", payload.Stale[0])
 		}
 	})
@@ -290,9 +299,36 @@ func TestAdminRegistryAppFleetObservability(t *testing.T) {
 		t.Parallel()
 		services := testutil.NewStubServices(t)
 		appendKnownVersion(t, services, "g-issues", "1.2.3", now.Add(-time.Hour))
-		got := getAdminFleetState(t, newRegistryObservabilityTestServerAt(t, services, now))
-		if got.State != "unknown" || got.SourceVersion != "" || got.MinimumHealthyInstances != 0 || got.LiveInstances != 0 {
-			t.Fatalf("fleet state = %#v", got)
+		upsertFleetHeartbeat(t, services, "replica-without-basis", "observed-source", now, "g-issues", core.GestaltdInstanceAppHeartbeat{
+			State: core.GestaltdInstanceAppStateRunning, RunningVersion: "1.2.3", ObservedAt: now,
+		})
+		ts := newRegistryObservabilityTestServerAt(t, services, now)
+		resp, err := http.Get(ts.URL + "/admin/api/v1/registry-apps/g-issues")
+		if err != nil {
+			t.Fatalf("GET registry app: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d: %s", resp.StatusCode, body)
+		}
+		var payload struct {
+			FleetState adminFleetStateJSON     `json:"fleetState"`
+			Fresh      []adminFleetReplicaJSON `json:"freshReplicas"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode registry app: %v", err)
+		}
+		if payload.FleetState.State != "unknown" ||
+			payload.FleetState.SourceVersion != "" ||
+			payload.FleetState.MinimumHealthyInstances != 0 ||
+			payload.FleetState.LiveInstances != 0 {
+			t.Fatalf("fleet state = %#v", payload.FleetState)
+		}
+		if len(payload.Fresh) != 1 ||
+			payload.Fresh[0].CurrentSource ||
+			payload.Fresh[0].SourceStatus != "unavailable" {
+			t.Fatalf("replicas = %#v, want source status unavailable", payload.Fresh)
 		}
 	})
 
@@ -330,6 +366,7 @@ type adminFleetStateJSON struct {
 type adminFleetReplicaJSON struct {
 	InstanceID    string `json:"instanceId"`
 	CurrentSource bool   `json:"currentSource"`
+	SourceStatus  string `json:"sourceStatus"`
 	Fresh         bool   `json:"fresh"`
 }
 

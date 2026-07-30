@@ -73,15 +73,24 @@ type adminAppFleetStateInfo struct {
 }
 
 type adminFleetReplicaInfo struct {
-	InstanceID          string                       `json:"instanceId"`
-	SourceVersion       string                       `json:"sourceVersion"`
-	CurrentSource       bool                         `json:"currentSource"`
-	Fresh               bool                         `json:"fresh"`
-	StartedAt           string                       `json:"startedAt,omitempty"`
-	HeartbeatAt         string                       `json:"heartbeatAt"`
-	HeartbeatAgeSeconds int64                        `json:"heartbeatAgeSeconds"`
-	AppObservation      adminFleetAppObservationInfo `json:"appObservation"`
+	InstanceID          string                        `json:"instanceId"`
+	SourceVersion       string                        `json:"sourceVersion"`
+	CurrentSource       bool                          `json:"currentSource"`
+	SourceStatus        adminFleetReplicaSourceStatus `json:"sourceStatus"`
+	Fresh               bool                          `json:"fresh"`
+	StartedAt           string                        `json:"startedAt,omitempty"`
+	HeartbeatAt         string                        `json:"heartbeatAt"`
+	HeartbeatAgeSeconds int64                         `json:"heartbeatAgeSeconds"`
+	AppObservation      adminFleetAppObservationInfo  `json:"appObservation"`
 }
+
+type adminFleetReplicaSourceStatus string
+
+const (
+	adminFleetReplicaSourceCurrent     adminFleetReplicaSourceStatus = "current"
+	adminFleetReplicaSourceSuperseded  adminFleetReplicaSourceStatus = "superseded"
+	adminFleetReplicaSourceUnavailable adminFleetReplicaSourceStatus = "unavailable"
+)
 
 type adminFleetAppObservationInfo struct {
 	State          string `json:"state"`
@@ -415,10 +424,12 @@ func adminFleetReplicaFromCore(
 	if age < 0 {
 		age = 0
 	}
+	sourceStatus := adminFleetReplicaSourceStatusFor(heartbeat.SourceVersion, currentSource)
 	out := adminFleetReplicaInfo{
 		InstanceID:          heartbeat.InstanceID,
 		SourceVersion:       heartbeat.SourceVersion,
-		CurrentSource:       currentSource != "" && strings.TrimSpace(heartbeat.SourceVersion) == strings.TrimSpace(currentSource),
+		CurrentSource:       sourceStatus == adminFleetReplicaSourceCurrent,
+		SourceStatus:        sourceStatus,
 		Fresh:               !heartbeat.HeartbeatAt.Before(cutoff),
 		StartedAt:           formatAdminTime(heartbeat.StartedAt),
 		HeartbeatAt:         formatAdminTime(heartbeat.HeartbeatAt),
@@ -437,19 +448,38 @@ func adminFleetReplicaFromCore(
 	return out
 }
 
+func adminFleetReplicaSourceStatusFor(sourceVersion, currentSource string) adminFleetReplicaSourceStatus {
+	currentSource = strings.TrimSpace(currentSource)
+	if currentSource == "" {
+		return adminFleetReplicaSourceUnavailable
+	}
+	if strings.TrimSpace(sourceVersion) == currentSource {
+		return adminFleetReplicaSourceCurrent
+	}
+	return adminFleetReplicaSourceSuperseded
+}
+
 func sortAdminFleetReplicas(rows []adminFleetReplicaInfo) {
 	slices.SortFunc(rows, func(a, b adminFleetReplicaInfo) int {
-		if a.CurrentSource != b.CurrentSource {
-			if a.CurrentSource {
-				return -1
-			}
-			return 1
+		if bySourceStatus := adminFleetReplicaSourceStatusRank(a.SourceStatus) - adminFleetReplicaSourceStatusRank(b.SourceStatus); bySourceStatus != 0 {
+			return bySourceStatus
 		}
 		if byHeartbeat := strings.Compare(b.HeartbeatAt, a.HeartbeatAt); byHeartbeat != 0 {
 			return byHeartbeat
 		}
 		return strings.Compare(a.InstanceID, b.InstanceID)
 	})
+}
+
+func adminFleetReplicaSourceStatusRank(status adminFleetReplicaSourceStatus) int {
+	switch status {
+	case adminFleetReplicaSourceCurrent:
+		return 0
+	case adminFleetReplicaSourceUnavailable:
+		return 1
+	default:
+		return 2
+	}
 }
 
 func (s *Server) latestPublishedVersion(r *http.Request, app configuredRegistryApp) *adminPublishedVersionInfo {
