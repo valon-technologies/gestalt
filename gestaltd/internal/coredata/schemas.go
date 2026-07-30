@@ -115,12 +115,17 @@ var AppRolloutsSchema = idb.ObjectStoreOptions{
 		{Name: "app", Type: idb.TypeString, NotNull: true, Unique: true},
 		{Name: "version", Type: idb.TypeString, NotNull: true},
 		{Name: "state", Type: idb.TypeString, NotNull: true},
+		{Name: "rollout_mode", Type: idb.TypeString},
 		{Name: "target_source_version", Type: idb.TypeString},
+		{Name: "minimum_healthy_instances", Type: idb.TypeInt},
 		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "enrollment_ends_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "deadline", Type: idb.TypeTime, NotNull: true},
+		{Name: "healthy_since", Type: idb.TypeTime},
+		{Name: "heartbeat_evaluated_at", Type: idb.TypeTime},
 		{Name: "completed_at", Type: idb.TypeTime},
 		{Name: "failed_at", Type: idb.TypeTime},
+		{Name: "failure_summary", Type: idb.TypeJSON},
 	},
 }
 

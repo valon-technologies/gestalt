@@ -169,6 +169,7 @@ type Server struct {
 	appAutoDeployNotify    func(string)
 	artifactsDir           string
 	sourceVersion          string
+	appRegistryRolloutMode config.AppRegistryRolloutMode
 	appRuntimeState        AppRuntimeState
 	routeProfile           RouteProfile
 	activateAppProviders   func(context.Context)
@@ -225,6 +226,7 @@ type Config struct {
 	AppRegistryReader       *appregistry.RegistryReader
 	AppFleetProjector       *appregistry.FleetProjector
 	AppRegistryHeartbeatTTL time.Duration
+	AppRegistryRolloutMode  config.AppRegistryRolloutMode
 	ArtifactsDir            string
 	GestaltdVersion         string
 	SourceVersion           string
@@ -456,6 +458,7 @@ func New(cfg Config) (*Server, error) {
 		appAutoDeployNotify:    cfg.AppAutoDeployNotify,
 		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
 		sourceVersion:          strings.TrimSpace(cfg.SourceVersion),
+		appRegistryRolloutMode: cfg.AppRegistryRolloutMode,
 		appRuntimeState:        cfg.AppRuntimeState,
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,

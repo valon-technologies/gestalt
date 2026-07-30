@@ -32,6 +32,78 @@ func (r *startupRecordingRestarter) StartApp(_ context.Context, app, version str
 	r.startedVersion = version
 	return nil
 }
+
+func TestServerInstallerWiringPreservesConfiguredRolloutMode(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []config.AppRegistryRolloutMode{
+		config.AppRegistryRolloutModeEnrollment,
+		config.AppRegistryRolloutModeHeartbeat,
+	} {
+		mode := mode
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+			services := testutil.NewStubServices(t)
+			manual := newAppRegistryInstaller(Config{
+				Services:               services,
+				AppRegistryRolloutMode: mode,
+			})
+			if manual == nil || manual.RolloutMode != core.AppRolloutMode(mode) {
+				t.Fatalf("manual installer mode = %#v", manual)
+			}
+
+			fixture := registrytest.NewInstallFixture(t)
+			cfg := &config.Config{
+				AppRegistries: map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+				Apps: map[string]*config.ProviderEntry{
+					"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+				},
+			}
+			cfg.Server.AppRegistry.RolloutMode = mode
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			controller, err := startAppRegistryAutoDeployController(ctx, cfg, &bootstrap.Result{Services: services}, "0.1.0")
+			if err != nil {
+				t.Fatalf("startAppRegistryAutoDeployController: %v", err)
+			}
+			if controller == nil {
+				t.Fatal("auto-deploy controller is nil")
+			}
+			defer controller.Stop()
+			autoInstaller, ok := controller.Installer.(*appregistry.Installer)
+			if !ok || autoInstaller.RolloutMode != core.AppRolloutMode(mode) {
+				t.Fatalf("auto-deploy installer = %#v", controller.Installer)
+			}
+		})
+	}
+}
+
+func TestCatalogPollerWiringPreservesCatalogCadence(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	cfg.Server.AppRegistry.HeartbeatInterval = "7s"
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	poller := startAppRegistryCatalogPoller(
+		ctx,
+		cfg,
+		&bootstrap.Result{Services: testutil.NewStubServices(t)},
+		0,
+		false,
+		nil,
+	)
+	if poller == nil {
+		t.Fatal("catalog poller is nil")
+	}
+	poller.Stop()
+	if poller.Interval != 0 {
+		t.Fatalf("catalog interval = %v, want default %v", poller.Interval, appregistry.DefaultCatalogPollInterval)
+	}
+	if poller.HeartbeatEvaluationInterval != 7*time.Second {
+		t.Fatalf("heartbeat evaluation interval = %v, want 7s", poller.HeartbeatEvaluationInterval)
+	}
+}
+
 func (*startupRecordingRestarter) AbortRestarts() {}
 
 type serverRuntimeSnapshotter struct{}

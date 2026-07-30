@@ -247,6 +247,7 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		RetentionCatalog: appregistryRetentionCatalog(cfg.AppRegistries),
 		GestaltdVersion:  cfg.GestaltdVersion,
 		SourceVersion:    cfg.SourceVersion,
+		RolloutMode:      core.AppRolloutMode(cfg.AppRegistryRolloutMode),
 	}
 }
 

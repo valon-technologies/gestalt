@@ -125,6 +125,9 @@ func (s *AppVersionRolloutOutcomeService) record(
 		rec["failed_at"] = failedAt.UTC().Truncate(time.Millisecond)
 	}
 	if err := s.store.Add(ctx, rec); err != nil {
+		if errors.Is(err, idb.ErrAlreadyExists) {
+			return nil
+		}
 		return fmt.Errorf("record app version rollout outcome: %w", err)
 	}
 	return nil

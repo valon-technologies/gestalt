@@ -318,3 +318,43 @@ func TestGestaltdSourceVersionActivationWithoutMinimumRemainsCompatible(t *testi
 		t.Fatalf("minimum healthy instances = %d, want zero when unspecified", state.MinimumHealthyInstances)
 	}
 }
+
+func TestHeartbeatSourceVersionActivationDefaultsOmittedMinimum(t *testing.T) {
+	t.Parallel()
+
+	state, err := testutil.NewStubServices(t).GestaltdSourceVersionState.ActivateWithRolloutMode(
+		context.Background(),
+		"source-a",
+		time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC),
+		false,
+		2*time.Minute,
+		15*time.Minute,
+		core.AppRolloutModeHeartbeat,
+	)
+	if err != nil {
+		t.Fatalf("ActivateWithRolloutMode: %v", err)
+	}
+	if state.MinimumHealthyInstances != 1 {
+		t.Fatalf("minimum healthy instances = %d, want local default 1", state.MinimumHealthyInstances)
+	}
+}
+
+func TestHeartbeatSourceVersionActivationRejectsNonPositiveMinimum(t *testing.T) {
+	t.Parallel()
+
+	for _, minimum := range []int{0, -1} {
+		_, err := testutil.NewStubServices(t).GestaltdSourceVersionState.ActivateWithRolloutMode(
+			context.Background(),
+			"source-a",
+			time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC),
+			false,
+			2*time.Minute,
+			15*time.Minute,
+			core.AppRolloutModeHeartbeat,
+			minimum,
+		)
+		if err == nil {
+			t.Fatalf("minimum healthy instances %d: expected error", minimum)
+		}
+	}
+}

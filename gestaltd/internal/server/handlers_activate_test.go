@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -151,6 +152,99 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("activation calls = %d, want 1", calls.Load())
+	}
+}
+
+func TestActivateEndpointRetargetsIntoConfiguredHeartbeatMode(t *testing.T) {
+	t.Parallel()
+
+	var services *coredata.Services
+	start := time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.SourceVersion = "source-new"
+		cfg.AppRegistryRolloutMode = config.AppRegistryRolloutModeHeartbeat
+		cfg.Now = func() time.Time { return start.Add(5 * time.Minute) }
+		services = cfg.Services
+		if _, err := services.GestaltdSourceVersionState.Activate(
+			context.Background(), "source-old", start, false,
+			appregistry.DefaultRolloutEnrollmentWindow, appregistry.DefaultRolloutTimeout, 2,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := services.GestaltdSourceVersionState.CreateAppRollout(context.Background(), &core.AppRollout{
+			App: "g-issues", Version: "v2", State: core.AppRolloutStateEnrolling,
+			CreatedAt: start, EnrollmentEndsAt: start.Add(2 * time.Minute), Deadline: start.Add(15 * time.Minute),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	resp, err := http.Post(srv.URL+"/activate?source_version=source-new&minimum_healthy_instances=5", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	rollout, err := services.AppRollouts.Get(context.Background(), "g-issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rollout.Mode != core.AppRolloutModeHeartbeat ||
+		rollout.State != core.AppRolloutStateRestarting ||
+		rollout.TargetSourceVersion != "source-new" ||
+		rollout.MinimumHealthyInstances != 5 {
+		t.Fatalf("retargeted rollout = %#v", rollout)
+	}
+}
+
+func TestActivateEndpointDefaultsOmittedHeartbeatMinimum(t *testing.T) {
+	t.Parallel()
+
+	var services *coredata.Services
+	start := time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.SourceVersion = "source-new"
+		cfg.AppRegistryRolloutMode = config.AppRegistryRolloutModeHeartbeat
+		cfg.Now = func() time.Time { return start.Add(5 * time.Minute) }
+		services = cfg.Services
+		if _, err := services.GestaltdSourceVersionState.ActivateWithRolloutMode(
+			context.Background(), "source-old", start, false,
+			appregistry.DefaultRolloutEnrollmentWindow, appregistry.DefaultRolloutTimeout,
+			core.AppRolloutModeHeartbeat, 2,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := services.GestaltdSourceVersionState.CreateAppRollout(context.Background(), &core.AppRollout{
+			App: "g-issues", Version: "v2", State: core.AppRolloutStateRestarting,
+			Mode: core.AppRolloutModeHeartbeat, CreatedAt: start,
+			EnrollmentEndsAt: start.Add(2 * time.Minute), Deadline: start.Add(15 * time.Minute),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	resp, err := http.Post(srv.URL+"/activate?source_version=source-new", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	state, err := services.GestaltdSourceVersionState.Get(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollout, err := services.AppRollouts.Get(context.Background(), "g-issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.MinimumHealthyInstances != 1 || rollout.MinimumHealthyInstances != 1 {
+		t.Fatalf("state minimum = %d, rollout minimum = %d, want 1", state.MinimumHealthyInstances, rollout.MinimumHealthyInstances)
 	}
 }
 

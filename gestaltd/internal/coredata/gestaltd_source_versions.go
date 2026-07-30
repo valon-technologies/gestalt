@@ -13,7 +13,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
-const gestaltdSourceVersionStateID = "gestaltd"
+const (
+	gestaltdSourceVersionStateID                   = "gestaltd"
+	defaultHeartbeatRolloutMinimumHealthyInstances = 1
+)
 
 var ErrGestaltdSourceVersionUnavailable = errors.New("gestaltd source version is unavailable")
 
@@ -62,8 +65,8 @@ func (s *GestaltdSourceVersionService) CreateAppRollout(ctx context.Context, rol
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("create source-version app rollout: service is not configured")
 	}
-	if err := validateAppRollout(rollout); err != nil {
-		return nil, fmt.Errorf("create source-version app rollout: %w", err)
+	if rollout == nil {
+		return nil, fmt.Errorf("create source-version app rollout: record is required")
 	}
 
 	tx, err := s.db.Transaction(
@@ -95,8 +98,18 @@ func (s *GestaltdSourceVersionService) CreateAppRollout(ctx context.Context, rol
 		return nil, ErrGestaltdSourceVersionUnavailable
 	}
 
-	rollout = normalizeAppRollout(rollout)
-	rollout.TargetSourceVersion = current
+	pending := *rollout
+	pending.TargetSourceVersion = current
+	if pending.Mode == core.AppRolloutModeHeartbeat {
+		if state.MinimumHealthyInstances <= 0 {
+			return nil, fmt.Errorf("create source-version app rollout: minimum healthy instances is unavailable")
+		}
+		pending.MinimumHealthyInstances = state.MinimumHealthyInstances
+	}
+	if err := validateAppRollout(&pending); err != nil {
+		return nil, fmt.Errorf("create source-version app rollout: %w", err)
+	}
+	rollout = normalizeAppRollout(&pending)
 	rolloutStore := tx.ObjectStore(StoreAppRollouts)
 	existing, err := rolloutStore.GetAll(ctx, rollout.App, 1)
 	switch {
@@ -133,6 +146,28 @@ func (s *GestaltdSourceVersionService) Activate(
 	rolloutTimeout time.Duration,
 	minimumHealthyInstances ...int,
 ) (*core.GestaltdSourceVersionState, error) {
+	return s.ActivateWithRolloutMode(
+		ctx,
+		sourceVersion,
+		at,
+		retry,
+		enrollmentWindow,
+		rolloutTimeout,
+		core.AppRolloutModeEnrollment,
+		minimumHealthyInstances...,
+	)
+}
+
+func (s *GestaltdSourceVersionService) ActivateWithRolloutMode(
+	ctx context.Context,
+	sourceVersion string,
+	at time.Time,
+	retry bool,
+	enrollmentWindow time.Duration,
+	rolloutTimeout time.Duration,
+	rolloutMode core.AppRolloutMode,
+	minimumHealthyInstances ...int,
+) (*core.GestaltdSourceVersionState, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("activate gestaltd source version: service is not configured")
 	}
@@ -144,6 +179,12 @@ func (s *GestaltdSourceVersionService) Activate(
 	if enrollmentWindow <= 0 || rolloutTimeout <= enrollmentWindow {
 		return nil, fmt.Errorf("activate gestaltd source version: invalid rollout windows")
 	}
+	if rolloutMode == "" {
+		rolloutMode = core.AppRolloutModeEnrollment
+	}
+	if rolloutMode != core.AppRolloutModeEnrollment && rolloutMode != core.AppRolloutModeHeartbeat {
+		return nil, fmt.Errorf("activate gestaltd source version: invalid rollout mode %q", rolloutMode)
+	}
 	if len(minimumHealthyInstances) > 1 {
 		return nil, fmt.Errorf("activate gestaltd source version: minimum healthy instances may only be provided once")
 	}
@@ -154,6 +195,14 @@ func (s *GestaltdSourceVersionService) Activate(
 	}
 	if requestedMinimumHealthy < 0 {
 		return nil, fmt.Errorf("activate gestaltd source version: minimum healthy instances must not be negative")
+	}
+	if rolloutMode == core.AppRolloutModeHeartbeat {
+		switch {
+		case minimumProvided && requestedMinimumHealthy <= 0:
+			return nil, fmt.Errorf("activate gestaltd source version: heartbeat minimum healthy instances must be positive")
+		case !minimumProvided:
+			requestedMinimumHealthy = defaultHeartbeatRolloutMinimumHealthyInstances
+		}
 	}
 
 	tx, err := s.db.Transaction(
@@ -183,7 +232,7 @@ func (s *GestaltdSourceVersionService) Activate(
 	}
 	sourceChanged := strings.TrimSpace(state.CurrentSourceVersion) != sourceVersion
 	effectiveMinimumHealthy := requestedMinimumHealthy
-	if !minimumProvided && !sourceChanged {
+	if !minimumProvided && !sourceChanged && state.MinimumHealthyInstances > 0 {
 		effectiveMinimumHealthy = state.MinimumHealthyInstances
 	}
 	minimumChanged := state.MinimumHealthyInstances != effectiveMinimumHealthy
@@ -206,12 +255,21 @@ func (s *GestaltdSourceVersionService) Activate(
 				continue
 			}
 			rollout.TargetSourceVersion = sourceVersion
+			rollout.Mode = rolloutMode
+			rollout.MinimumHealthyInstances = 0
 			rollout.State = core.AppRolloutStateEnrolling
 			rollout.CreatedAt = at
 			rollout.EnrollmentEndsAt = at.Add(enrollmentWindow)
+			if rolloutMode == core.AppRolloutModeHeartbeat {
+				rollout.State = core.AppRolloutStateRestarting
+				rollout.MinimumHealthyInstances = effectiveMinimumHealthy
+			}
 			rollout.Deadline = at.Add(rolloutTimeout)
+			rollout.HealthySince = time.Time{}
+			rollout.HeartbeatEvaluatedAt = time.Time{}
 			rollout.CompletedAt = time.Time{}
 			rollout.FailedAt = time.Time{}
+			rollout.FailureSummary = nil
 			if err := rolloutStore.Put(ctx, appRolloutRecord(rollout)); err != nil {
 				return nil, fmt.Errorf("activate gestaltd source version: retarget rollout %s: %w", rollout.App, err)
 			}
