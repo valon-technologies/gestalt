@@ -31,6 +31,8 @@ type appAdminRegistryResponse struct {
 	PendingVersions   []appAdminPendingVersion   `json:"pendingVersions,omitempty"`
 	FailedVersions    []appAdminFailedVersion    `json:"failedVersions,omitempty"`
 	Rollout           *appAdminRollout           `json:"rollout,omitempty"`
+	FleetState        *appAdminFleetState        `json:"fleetState,omitempty"`
+	Recovery          *appAdminRecovery          `json:"recovery,omitempty"`
 	AutoDeploy        appAdminAutoDeploy         `json:"autoDeploy"`
 	SelectionDisabled bool                       `json:"selectionDisabled"`
 	DisabledReason    string                     `json:"disabledReason,omitempty"`
@@ -84,6 +86,26 @@ type appAdminRollout struct {
 	TargetSourceVersion string `json:"targetSourceVersion,omitempty"`
 }
 
+type appAdminFleetState struct {
+	State                   string `json:"state"`
+	SourceVersion           string `json:"sourceVersion,omitempty"`
+	DesiredVersion          string `json:"desiredVersion,omitempty"`
+	MinimumHealthyInstances int    `json:"minimumHealthyInstances"`
+	LiveInstances           int    `json:"liveInstances"`
+	RunningDesiredVersion   int    `json:"runningDesiredVersion"`
+	Mismatched              int    `json:"mismatched"`
+	Errors                  int    `json:"errors"`
+	HeartbeatTTLSeconds     int64  `json:"heartbeatTtlSeconds"`
+	EvaluatedAt             string `json:"evaluatedAt"`
+}
+
+type appAdminRecovery struct {
+	RecoveredAt             string `json:"recoveredAt"`
+	SourceVersion           string `json:"sourceVersion"`
+	LiveInstances           int    `json:"liveInstances"`
+	MinimumHealthyInstances int    `json:"minimumHealthyInstances"`
+}
+
 type appAdminRegistryVersionRequest struct {
 	Version string `json:"version"`
 }
@@ -108,6 +130,7 @@ type appAdminRegistryVersionResponse struct {
 type appAdminRegistryHistoryResponse struct {
 	App        string                     `json:"app"`
 	Revisions  []appAdminRegistryRevision `json:"revisions"`
+	FleetState *appAdminFleetState        `json:"fleetState,omitempty"`
 	NextCursor string                     `json:"nextCursor,omitempty"`
 }
 
@@ -128,6 +151,7 @@ type appAdminRegistryRevision struct {
 	RolloutDurationSeconds *int64                   `json:"rolloutDurationSeconds,omitempty"`
 	RolloutCompletedAt     string                   `json:"rolloutCompletedAt,omitempty"`
 	RolloutFailedAt        string                   `json:"rolloutFailedAt,omitempty"`
+	Recovery               *appAdminRecovery        `json:"recovery,omitempty"`
 }
 
 func (s *Server) mountAppAdminRegistryRoutes(r chi.Router) {
@@ -310,6 +334,27 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}
+	response.FleetState, err = s.projectAppAdminFleetState(r.Context(), app.name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
+	if desiredVersion != "" && s.recoveryObservations != nil {
+		currentRevisionID, revisionErr := s.appVersionChanges.LatestDesiredRevisionID(r.Context(), app.name, desiredVersion)
+		if revisionErr != nil {
+			writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+			return
+		}
+		if currentRevisionID != "" {
+			recovery, recoveryErr := s.recoveryObservations.Get(r.Context(), currentRevisionID)
+			if recoveryErr == nil {
+				response.Recovery = appAdminRecoveryFromCore(recovery)
+			} else if !errors.Is(recoveryErr, core.ErrNotFound) {
+				writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+				return
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, response)
 }
 
@@ -372,6 +417,43 @@ func appAdminAutoDeployFromCore(settings *core.AppAutoDeploySettings) appAdminAu
 		Enabled:        settings.Enabled,
 		PendingVersion: settings.PendingVersion,
 		LastError:      settings.LastError,
+	}
+}
+
+func (s *Server) projectAppAdminFleetState(ctx context.Context, app string) (*appAdminFleetState, error) {
+	if s == nil || s.appFleetProjector == nil {
+		return nil, nil
+	}
+	projection, err := s.appFleetProjector.Project(ctx, app)
+	if err != nil {
+		return nil, err
+	}
+	if projection == nil {
+		return nil, nil
+	}
+	return &appAdminFleetState{
+		State:                   string(projection.State),
+		SourceVersion:           projection.SourceVersion,
+		DesiredVersion:          projection.DesiredVersion,
+		MinimumHealthyInstances: projection.MinimumHealthyInstances,
+		LiveInstances:           projection.LiveInstances,
+		RunningDesiredVersion:   projection.RunningDesiredVersion,
+		Mismatched:              projection.Mismatched,
+		Errors:                  projection.Errors,
+		HeartbeatTTLSeconds:     int64(projection.HeartbeatTTL / time.Second),
+		EvaluatedAt:             formatAdminTime(projection.EvaluatedAt),
+	}, nil
+}
+
+func appAdminRecoveryFromCore(observation *core.AppVersionRecoveryObservation) *appAdminRecovery {
+	if observation == nil || observation.RecoveredAt.IsZero() {
+		return nil
+	}
+	return &appAdminRecovery{
+		RecoveredAt:             formatAdminTime(observation.RecoveredAt),
+		SourceVersion:           strings.TrimSpace(observation.SourceVersion),
+		LiveInstances:           observation.LiveInstances,
+		MinimumHealthyInstances: observation.MinimumHealthyInstances,
 	}
 }
 
@@ -472,6 +554,20 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
+	recoveriesByID := map[string]*core.AppVersionRecoveryObservation{}
+	if s.recoveryObservations != nil && len(changeRequestIDs) > 0 {
+		var recoveriesErr error
+		recoveriesByID, recoveriesErr = s.recoveryObservations.GetMany(r.Context(), changeRequestIDs)
+		if recoveriesErr != nil {
+			writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+			return
+		}
+	}
+	fleetState, err := s.projectAppAdminFleetState(r.Context(), app.name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
+		return
+	}
 
 	revisions := make([]appAdminRegistryRevision, 0, len(page.Requests))
 	actorLabels := s.resolveRevisionActorLabels(r.Context(), page.Requests)
@@ -490,11 +586,13 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 			now,
 		)
 		applyRevisionRolloutFields(&revision, request, rollout, outcomesByID[request.ID], currentRevisionID, now)
+		revision.Recovery = appAdminRecoveryFromCore(recoveriesByID[request.ID])
 		revisions = append(revisions, revision)
 	}
 	writeJSON(w, http.StatusOK, appAdminRegistryHistoryResponse{
 		App:        app.name,
 		Revisions:  revisions,
+		FleetState: fleetState,
 		NextCursor: page.NextCursor,
 	})
 }

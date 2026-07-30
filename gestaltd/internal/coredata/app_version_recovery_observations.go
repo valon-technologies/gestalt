@@ -14,11 +14,15 @@ import (
 )
 
 type AppVersionRecoveryObservationService struct {
+	db    indexeddb.IndexedDB
 	store idb.ObjectStore
 }
 
 func NewAppVersionRecoveryObservationService(ds indexeddb.IndexedDB) *AppVersionRecoveryObservationService {
-	return &AppVersionRecoveryObservationService{store: ds.ObjectStore(StoreAppVersionRecoveryObservations)}
+	return &AppVersionRecoveryObservationService{
+		db:    ds,
+		store: ds.ObjectStore(StoreAppVersionRecoveryObservations),
+	}
 }
 
 func (s *AppVersionRecoveryObservationService) Get(ctx context.Context, changeRequestID string) (*core.AppVersionRecoveryObservation, error) {
@@ -78,6 +82,120 @@ func (s *AppVersionRecoveryObservationService) Record(ctx context.Context, obser
 		return nil, fmt.Errorf("record app version recovery observation: %w", err)
 	}
 	return normalized, nil
+}
+
+// RecordIfCurrentFailed atomically verifies that observation still describes
+// the current desired-version change request and source-capacity epoch, that
+// its immutable rollout outcome is failed, and that no recovery was previously
+// recorded. A stale fence returns (nil, false, nil). A duplicate returns the
+// original observation with recorded=true.
+func (s *AppVersionRecoveryObservationService) RecordIfCurrentFailed(
+	ctx context.Context,
+	observation *core.AppVersionRecoveryObservation,
+) (*core.AppVersionRecoveryObservation, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: service is not configured")
+	}
+	rec, normalized, err := appVersionRecoveryObservationRecord(observation)
+	if err != nil {
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: %w", err)
+	}
+	stores := []string{
+		StoreAppVersionChangeRequests,
+		StoreAppVersionRolloutOutcomes,
+		StoreGestaltdSourceVersionState,
+		StoreAppVersionRecoveryObservations,
+	}
+	tx, err := s.db.Transaction(ctx, stores, idb.TransactionReadwrite, idb.TransactionOptions{})
+	if err != nil {
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+
+	recoveryStore := tx.ObjectStore(StoreAppVersionRecoveryObservations)
+	existing, err := recoveryStore.Get(ctx, normalized.ID)
+	if err == nil {
+		return recordToAppVersionRecoveryObservation(existing), true, nil
+	}
+	if !errors.Is(err, idb.ErrNotFound) {
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: load existing: %w", err)
+	}
+
+	requests, err := tx.ObjectStore(StoreAppVersionChangeRequests).
+		Index("by_app").
+		GetAll(ctx, idb.Only(normalized.App))
+	if err != nil {
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: load change requests: %w", err)
+	}
+	changeRequests := make([]*core.AppVersionChangeRequest, 0, len(requests))
+	for _, request := range requests {
+		changeRequests = append(changeRequests, recordToAppVersionChangeRequest(request))
+	}
+	desiredVersion := LatestKnownVersion(knownVersionsFromRequests(changeRequests))
+	desiredRevisionID := latestDesiredRevisionID(changeRequests, desiredVersion)
+	if desiredVersion != normalized.Version || desiredRevisionID != normalized.ID {
+		return nil, false, nil
+	}
+
+	outcomeRec, err := tx.ObjectStore(StoreAppVersionRolloutOutcomes).Get(ctx, normalized.ID)
+	if errors.Is(err, idb.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: load rollout outcome: %w", err)
+	}
+	outcome := recordToAppVersionRolloutOutcome(outcomeRec)
+	if outcome.App != normalized.App ||
+		outcome.Version != normalized.Version ||
+		outcome.FailedAt.IsZero() ||
+		!outcome.CompletedAt.IsZero() {
+		return nil, false, nil
+	}
+
+	sourceRec, err := tx.ObjectStore(StoreGestaltdSourceVersionState).Get(ctx, gestaltdSourceVersionStateID)
+	if errors.Is(err, idb.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: load source state: %w", err)
+	}
+	source := recordToGestaltdSourceVersionState(sourceRec)
+	if strings.TrimSpace(source.CurrentSourceVersion) != normalized.SourceVersion ||
+		source.MinimumHealthyInstances != normalized.MinimumHealthyInstances {
+		return nil, false, nil
+	}
+
+	if err := recoveryStore.Add(ctx, rec); err != nil {
+		if errors.Is(err, idb.ErrAlreadyExists) {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+			committed = true
+			existing, getErr := s.Get(context.WithoutCancel(ctx), normalized.ID)
+			if getErr != nil {
+				return nil, false, fmt.Errorf("record fenced app version recovery observation: load concurrent observation: %w", getErr)
+			}
+			return existing, true, nil
+		}
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: add: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		if errors.Is(err, idb.ErrAlreadyExists) {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+			committed = true
+			existing, getErr := s.Get(context.WithoutCancel(ctx), normalized.ID)
+			if getErr != nil {
+				return nil, false, fmt.Errorf("record fenced app version recovery observation: load concurrent observation: %w", getErr)
+			}
+			return existing, true, nil
+		}
+		return nil, false, fmt.Errorf("record fenced app version recovery observation: commit: %w", err)
+	}
+	committed = true
+	return normalized, true, nil
 }
 
 func appVersionRecoveryObservationRecord(observation *core.AppVersionRecoveryObservation) (idb.Record, *core.AppVersionRecoveryObservation, error) {

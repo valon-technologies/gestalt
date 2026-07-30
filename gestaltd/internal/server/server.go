@@ -165,6 +165,7 @@ type Server struct {
 	appMaterializations    *coredata.AppInstanceMaterializationService
 	autoDeploySettings     *coredata.AutoDeploySettingsService
 	appRolloutOutcomes     *coredata.AppVersionRolloutOutcomeService
+	recoveryObservations   *coredata.AppVersionRecoveryObservationService
 	appAutoDeployNotify    func(string)
 	artifactsDir           string
 	sourceVersion          string
@@ -451,6 +452,7 @@ func New(cfg Config) (*Server, error) {
 		appMaterializations:    cfg.Services.AppInstanceMaterializations,
 		autoDeploySettings:     cfg.Services.AutoDeploySettings,
 		appRolloutOutcomes:     cfg.Services.AppVersionRolloutOutcomes,
+		recoveryObservations:   cfg.Services.AppVersionRecoveryObservations,
 		appAutoDeployNotify:    cfg.AppAutoDeployNotify,
 		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
 		sourceVersion:          strings.TrimSpace(cfg.SourceVersion),

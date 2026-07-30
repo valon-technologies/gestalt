@@ -187,6 +187,13 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if heartbeatWriter != nil {
 		defer heartbeatWriter.Stop()
 	}
+	recoveryObserver, err := startAppRegistryRecoveryObserver(ctx, cfg, result)
+	if err != nil {
+		return err
+	}
+	if recoveryObserver != nil {
+		defer recoveryObserver.Stop()
+	}
 
 	publicConfig := baseConfig
 	if managementAddr == "" {
@@ -630,6 +637,49 @@ func startAppRegistryHeartbeatWriter(
 	})
 	writer.Start(ctx)
 	return writer, nil
+}
+
+func startAppRegistryRecoveryObserver(
+	ctx context.Context,
+	cfg *config.Config,
+	result *bootstrap.Result,
+) (*appregistry.RecoveryObserver, error) {
+	if cfg == nil || result == nil || result.Services == nil {
+		return nil, nil
+	}
+	services := result.Services
+	if services.AppVersionChangeRequests == nil ||
+		services.AppVersionRolloutOutcomes == nil ||
+		services.AppVersionRecoveryObservations == nil ||
+		services.GestaltdSourceVersionState == nil ||
+		services.GestaltdInstanceHeartbeats == nil {
+		return nil, nil
+	}
+	interval, err := cfg.Server.AppRegistry.HeartbeatIntervalDuration()
+	if err != nil {
+		return nil, fmt.Errorf("server.appRegistry.heartbeatInterval: %w", err)
+	}
+	ttl, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
+	if err != nil {
+		return nil, fmt.Errorf("server.appRegistry.heartbeatTtl: %w", err)
+	}
+	stabilityWindow, err := cfg.Server.AppRegistry.HealthyStabilityWindowDuration()
+	if err != nil {
+		return nil, fmt.Errorf("server.appRegistry.healthyStabilityWindow: %w", err)
+	}
+	observer := appregistry.NewRecoveryObserver(appregistry.RecoveryObserverConfig{
+		ChangeRequests:  services.AppVersionChangeRequests,
+		Outcomes:        services.AppVersionRolloutOutcomes,
+		Observations:    services.AppVersionRecoveryObservations,
+		SourceVersions:  services.GestaltdSourceVersionState,
+		Heartbeats:      services.GestaltdInstanceHeartbeats,
+		HeartbeatTTL:    ttl,
+		StabilityWindow: stabilityWindow,
+		Interval:        interval,
+		Ready:           result.AppProvidersInitialized,
+	})
+	observer.Start(ctx)
+	return observer, nil
 }
 
 func startAppRegistryAutoDeployController(
