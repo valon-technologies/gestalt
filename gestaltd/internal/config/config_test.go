@@ -5585,6 +5585,64 @@ func TestApplyServeRemoteOverridesDev(t *testing.T) {
 			t.Fatalf("url = %q, want %q", defaultRemote.URL, "http://localhost:8080")
 		}
 	})
+
+	t.Run("dev stamps default remote onto dev-active apps for tunnel publication", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("GESTALT_URL", "")
+		t.Setenv("GESTALT_API_KEY", "")
+
+		cfg := &Config{
+			Server: ServerConfig{
+				Remote:      "https://valon.tools",
+				RemoteToken: "token",
+			},
+			Apps: map[string]*ProviderEntry{
+				"vds-forge":  {DevActive: true},
+				"local-only": {Local: true},
+				"delegated":  {},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "", "", true); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides dev: %v", err)
+		}
+		// Dev-active app gets the default remote so the reverse-tunnel
+		// publisher includes it in its publication plan.
+		if got := cfg.Apps["vds-forge"].Remote; got != DefaultRemoteName {
+			t.Fatalf("dev-active app remote = %q, want %q", got, DefaultRemoteName)
+		}
+		// Local-only apps are never stamped.
+		if got := cfg.Apps["local-only"].Remote; got != "" {
+			t.Fatalf("local-only app remote = %q, want empty", got)
+		}
+		// Non-dev apps are stamped as before.
+		if got := cfg.Apps["delegated"].Remote; got != DefaultRemoteName {
+			t.Fatalf("delegated app remote = %q, want %q", got, DefaultRemoteName)
+		}
+	})
+
+	t.Run("non-dev mode does not stamp dev-active apps", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("GESTALT_URL", "")
+		t.Setenv("GESTALT_API_KEY", "")
+
+		cfg := &Config{
+			Server: ServerConfig{
+				Remote:      "https://valon.tools",
+				RemoteToken: "token",
+			},
+			Apps: map[string]*ProviderEntry{
+				"vds-forge": {DevActive: true},
+			},
+		}
+		if err := ApplyServeRemoteOverrides(cfg, "", "", false); err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides serve: %v", err)
+		}
+		// In serve mode, dev-active apps are NOT stamped — they are not
+		// published to a remote.
+		if got := cfg.Apps["vds-forge"].Remote; got != "" {
+			t.Fatalf("dev-active app remote = %q, want empty in serve mode", got)
+		}
+	})
 }
 
 func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
