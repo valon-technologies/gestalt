@@ -15,6 +15,21 @@ type CapabilityIngressDecorator func(context.Context, HostServiceRelayTarget) co
 
 var errHostServiceCapabilityRequired = status.Error(codes.Unauthenticated, "host service relay token is required")
 
+type relayAuthenticatedContextKey struct{}
+
+// WithRelayAuthenticated marks a context as already authenticated by the
+// relay ingress (token resolved and capability applied). The host-service
+// interceptor trusts it instead of re-resolving the per-RPC token, which the
+// relay strips before forwarding.
+func WithRelayAuthenticated(ctx context.Context) context.Context {
+	return context.WithValue(ctx, relayAuthenticatedContextKey{}, true)
+}
+
+func relayAuthenticated(ctx context.Context) bool {
+	v, _ := ctx.Value(relayAuthenticatedContextKey{}).(bool)
+	return v
+}
+
 // SetCapabilityIngressDecorator configures post-verification context restoration.
 func (m *HostServiceRelayTokenManager) SetCapabilityIngressDecorator(fn CapabilityIngressDecorator) {
 	if m == nil {
@@ -27,6 +42,9 @@ func (m *HostServiceRelayTokenManager) SetCapabilityIngressDecorator(fn Capabili
 // Non-caller-dependent methods may proceed without a token; caller-dependent methods
 // require a capability with embedded caller claims.
 func (m *HostServiceRelayTokenManager) AuthenticateGRPC(ctx context.Context, fullMethod string) (context.Context, error) {
+	if relayAuthenticated(ctx) {
+		return ctx, nil
+	}
 	requireCaller := CallerCapabilityRequiredMethod(fullMethod)
 	if requireCaller && callerCapabilityAuthenticated(ctx) {
 		return ctx, nil

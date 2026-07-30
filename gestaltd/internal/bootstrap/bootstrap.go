@@ -905,6 +905,10 @@ func resolveConfigSecrets(
 }
 
 func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
+	return prepareCoreWithRegistry(ctx, cfg, factories, requireEncryptionKey, nil)
+}
+
+func prepareCoreWithRegistry(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool, publicHostServices *runtimehost.PublicHostServiceRegistry) (*preparedCore, error) {
 	registry, err := publicrpc.NewGeneratedRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("public rpc registry: %w", err)
@@ -994,11 +998,13 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	if publicHostServices == nil {
+		publicHostServices = runtimehost.NewPublicHostServiceRegistry()
+	}
+	deps.PublicHostServices = publicHostServices
 	deps.AppInvocation = pluginInvoker
 	deps.WorkflowManager = workflowManager
 	deps.AgentManager = agentManager
-	deps.PublicHostServices = publicHostServices
 	deps.AppWorkflowDeclarations = newAppWorkflowDeclarations()
 	if factories != nil {
 		deps.DevSupervisor = factories.DevSupervisor
@@ -1237,6 +1243,10 @@ func (p *preparedCore) Close(ctx context.Context) error {
 type BootstrapOptions struct {
 	DeferAppProviderStartup bool
 	RegistryResolver        RegistryInstalledResolver
+	// PublicHostServices injects the public host-service registry bootstrap
+	// registers into. Tests use it to stand up a relay endpoint against the
+	// same registry before bootstrap completes. Nil creates a fresh registry.
+	PublicHostServices *runtimehost.PublicHostServiceRegistry
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
@@ -1244,7 +1254,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 }
 
 func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, opts BootstrapOptions) (*Result, error) {
-	prepared, err := prepareCore(ctx, cfg, factories, true)
+	prepared, err := prepareCoreWithRegistry(ctx, cfg, factories, true, opts.PublicHostServices)
 	if err != nil {
 		return nil, err
 	}
@@ -1349,7 +1359,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
-	appHostServiceCleanup := registerConfiguredAppPublicHostServices(cfg, prepared.Deps)
+	appHostServiceCleanup := registerGlobalAppInvocationPublicHostService(prepared.Deps)
 	// Build workflow/agent providers before app providers: they establish their
 	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)

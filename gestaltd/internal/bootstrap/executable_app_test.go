@@ -50,6 +50,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
+	"github.com/valon-technologies/gestalt/server/services/hostserviceingress"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
@@ -2801,15 +2802,20 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+	deps := testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
 		AppInvocation: bridge,
 		Authorization: newAllowAllAuthorizationProvider(),
-	}))
+	})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), deps)
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
+	// Mirror gestaltd bootstrap: the app-invocation host service is registered
+	// once, globally, against the shared invoker.
+	appCleanup := registerGlobalAppInvocationPublicHostService(deps)
+	t.Cleanup(appCleanup)
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -2921,15 +2927,20 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	}
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+	deps := testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
 		AppInvocation: bridge,
 		Authorization: newAllowAllAuthorizationProvider(),
-	}))
+	})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), deps)
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
+	// Mirror gestaltd bootstrap: the app-invocation host service is registered
+	// once, globally, against the shared invoker.
+	appCleanup := registerGlobalAppInvocationPublicHostService(deps)
+	t.Cleanup(appCleanup)
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -6059,6 +6070,8 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
+	appCleanup := registerGlobalAppInvocationPublicHostService(deps)
+	t.Cleanup(appCleanup)
 	assertPublicHostServicesVerified(t, publicHostServices, "app")
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
@@ -6444,6 +6457,10 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServ
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.PermissionDenied, "host-service-relay-method-not-allowed")
 			return
 		}
+		if runtimehost.CallerCapabilityRequiredMethod(r.URL.Path) && target.Caller == nil && strings.TrimSpace(target.MethodPrefix) != "/" {
+			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-token")
+			return
+		}
 		handler, err := runtimeRelayPublicHostServiceHandler(r.Context(), publicHostServices, target, r.URL.Path)
 		if err != nil {
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
@@ -6453,7 +6470,7 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServ
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
 			return
 		}
-		relayReq := r.Clone(r.Context())
+		relayReq := r.Clone(hostserviceingress.ApplyCapability(runtimehost.WithRelayAuthenticated(r.Context()), target))
 		relayReq.Header = r.Header.Clone()
 		relayReq.Header.Del(runtimehost.HostServiceRelayTokenHeader)
 		handler.ServeHTTP(w, relayReq)
@@ -6539,8 +6556,12 @@ func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *runtime
 	if registry == nil {
 		return nil, nil
 	}
+	pluginName := strings.TrimSpace(target.AppName)
+	if strings.HasPrefix(methodPath, "/"+proto.App_ServiceDesc.ServiceName+"/") {
+		pluginName = appInvocationPublicProviderKey
+	}
 	for _, entry := range registry.Snapshot() {
-		if strings.TrimSpace(entry.AppName) != strings.TrimSpace(target.AppName) {
+		if strings.TrimSpace(entry.AppName) != pluginName {
 			continue
 		}
 		if !entry.Service.AllowsMethod(methodPath) {

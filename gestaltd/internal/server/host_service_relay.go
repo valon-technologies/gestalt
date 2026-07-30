@@ -32,7 +32,7 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 			writeGRPCTrailersOnly(w, codes.PermissionDenied, "host-service-relay-method-not-allowed")
 			return
 		}
-		if runtimehost.CallerCapabilityRequiredMethod(r.URL.Path) && capability.Caller == nil {
+		if runtimehost.CallerCapabilityRequiredMethod(r.URL.Path) && capability.Caller == nil && strings.TrimSpace(capability.MethodPrefix) != "/" {
 			writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-token")
 			return
 		}
@@ -47,7 +47,7 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := r.Context()
+		ctx := runtimehost.WithRelayAuthenticated(r.Context())
 		ctx = hostserviceingress.ApplyCapability(ctx, capability)
 
 		relayReq := r.Clone(ctx)

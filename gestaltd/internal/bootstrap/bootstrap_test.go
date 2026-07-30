@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -24,12 +25,15 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
+	serverservice "github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -45,6 +49,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -599,6 +604,7 @@ func (p *recordingAgentProvider) CancelTurnRequests() []*proto.CancelAgentProvid
 type callbackAgentProvider struct {
 	*recordingAgentProvider
 	started                *runtimehost.StartedHostServices
+	dialApp                func(context.Context) (*grpc.ClientConn, error)
 	relayTokenManager      *runtimehost.HostServiceRelayTokenManager
 	toolBodies             []string
 	sessionToolRefs        map[string]*proto.AgentToolRef
@@ -644,8 +650,80 @@ func newCallbackAgentProvider(started *runtimehost.StartedHostServices, encrypti
 	return &callbackAgentProvider{
 		recordingAgentProvider: newRecordingAgentProvider(),
 		started:                started,
+		dialApp:                dialHostServiceSocketApp(started),
 		relayTokenManager:      tokenManager,
 	}, nil
+}
+
+func dialHostServiceSocketApp(started *runtimehost.StartedHostServices) func(context.Context) (*grpc.ClientConn, error) {
+	return func(ctx context.Context) (*grpc.ClientConn, error) {
+		socketPath := strings.TrimSpace(started.SocketBinding().SocketPath)
+		if socketPath == "" {
+			return nil, fmt.Errorf("host service socket binding is missing")
+		}
+		return grpc.NewClient(
+			"passthrough:///localhost",
+			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", socketPath)
+			}),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+	}
+}
+
+func newRelayTokenManager(t *testing.T, key []byte) *runtimehost.HostServiceRelayTokenManager {
+	t.Helper()
+	manager, err := runtimehost.NewHostServiceRelayTokenManager(key)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	return manager
+}
+
+// dialPublicRelayApp dials the test public relay endpoint for app-invocation
+// callbacks, matching how production agent tool calls reach the global app
+// host service through the public relay.
+func dialPublicRelayApp(relaySrv *httptest.Server) func(context.Context) (*grpc.ClientConn, error) {
+	return func(context.Context) (*grpc.ClientConn, error) {
+		return grpc.NewClient(
+			strings.TrimPrefix(relaySrv.URL, "https://"),
+			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})),
+		)
+	}
+}
+
+// relayUnavailableInvoker satisfies server.Config.Invoker; the relay test
+// server only exercises the host-service relay routes, so any app invocation
+// that slips through fails loudly.
+type relayUnavailableInvoker struct{}
+
+func (relayUnavailableInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+	return nil, fmt.Errorf("app invocation is unavailable on the relay test server")
+}
+
+// newAppCallbackRelayServer serves the public host-service relay against the
+// given registry (which includes the single global app-invocation
+// registration once bootstrap runs), so agent tool callbacks resolve exactly
+// as they do against a multi-replica gestaltd deployment.
+func newAppCallbackRelayServer(t *testing.T, registry *runtimehost.PublicHostServiceRegistry, encryptionKey []byte) *httptest.Server {
+	t.Helper()
+	srv, err := serverservice.New(serverservice.Config{
+		Services:           testutil.NewStubServices(t),
+		RouteProfile:       serverservice.RouteProfilePublic,
+		StateSecret:        encryptionKey,
+		PublicHostServices: registry,
+		Invoker:            relayUnavailableInvoker{},
+	})
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	t.Cleanup(srv.Close)
+	ts := httptest.NewUnstartedServer(srv)
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	t.Cleanup(ts.Close)
+	return ts
 }
 
 func relayTokenHostServiceOptions(encryptionKey []byte) []runtimehost.HostServicesOption {
@@ -724,19 +802,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 	toolRef := p.sessionToolRefs[req.GetSessionId()]
 	p.mu.Unlock()
 	if toolRef != nil {
-		socketPath := strings.TrimSpace(p.started.SocketBinding().SocketPath)
-		if socketPath == "" {
-			cleanupPendingTurn()
-			return nil, fmt.Errorf("host service socket binding is missing")
-		}
-		conn, err := grpc.NewClient(
-			"passthrough:///localhost",
-			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-				var d net.Dialer
-				return d.DialContext(ctx, "unix", socketPath)
-			}),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		)
+		conn, err := p.dialApp(ctx)
 		if err != nil {
 			cleanupPendingTurn()
 			return nil, fmt.Errorf("dial app host: %w", err)
@@ -2183,8 +2249,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		},
 	)
 
-	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+	callbackAgents := map[string]*callbackAgentProvider{}
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
@@ -2194,16 +2260,28 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 			_ = started.Close()
 			return nil, err
 		}
-		provider = value
+		callbackAgents[name] = value
 		return value, nil
 	}
 
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	registry := runtimehost.NewPublicHostServiceRegistry()
+	relayKey := corecrypto.DeriveKey(cfg.Server.EncryptionKey)
+	relaySrv := newAppCallbackRelayServer(t, registry, relayKey)
+	cfg.Server.Runtime.RelayBaseURL = relaySrv.URL
+
+	result, err := bootstrap.BootstrapWithOptions(context.Background(), cfg, factories, bootstrap.BootstrapOptions{
+		PublicHostServices: registry,
+	})
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
+	provider := callbackAgents["managed"]
+	if provider.relayTokenManager, err = runtimehost.NewHostServiceRelayTokenManager(relayKey); err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	provider.dialApp = dialPublicRelayApp(relaySrv)
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
 		{
@@ -2482,8 +2560,8 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		},
 	)
 
-	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+	callbackAgents := map[string]*callbackAgentProvider{}
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
@@ -2493,16 +2571,28 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 			_ = started.Close()
 			return nil, err
 		}
-		provider = value
+		callbackAgents[name] = value
 		return value, nil
 	}
 
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	registry := runtimehost.NewPublicHostServiceRegistry()
+	relayKey := corecrypto.DeriveKey(cfg.Server.EncryptionKey)
+	relaySrv := newAppCallbackRelayServer(t, registry, relayKey)
+	cfg.Server.Runtime.RelayBaseURL = relaySrv.URL
+
+	result, err := bootstrap.BootstrapWithOptions(context.Background(), cfg, factories, bootstrap.BootstrapOptions{
+		PublicHostServices: registry,
+	})
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
+	provider := callbackAgents["managed"]
+	if provider.relayTokenManager, err = runtimehost.NewHostServiceRelayTokenManager(relayKey); err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	provider.dialApp = dialPublicRelayApp(relaySrv)
 
 	permissions := []core.AccessPermission{
 		{
@@ -3317,7 +3407,9 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	<-result.ProvidersReady
 
 	got := hostEnvs["basic"]
-	for _, want := range []string{"agent", "identity", "indexeddb", "app", "workflow"} {
+	// The app-invocation host service is registered once, globally, by
+	// bootstrap; per-provider host services no longer include it.
+	for _, want := range []string{"agent", "identity", "indexeddb", "workflow"} {
 		if !slices.Contains(got, want) {
 			t.Fatalf("workflow provider host services = %v, want %q", got, want)
 		}

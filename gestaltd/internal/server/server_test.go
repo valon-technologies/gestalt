@@ -675,6 +675,13 @@ func (i *relayTestInvoker) Invoke(ctx context.Context, _ *principal.Principal, p
 		idempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
 		params:         maps.Clone(params),
 	}
+	if caller := invocation.CallerProviderFromContext(ctx); caller.Name != "" {
+		call.callerProvider = caller.Name
+		call.callerKind = string(caller.Kind)
+	}
+	if p := principal.FromContext(ctx); p != nil {
+		call.callerSubjectID = p.SubjectID
+	}
 	i.history = append(i.history, call)
 	i.providerName = providerName
 	i.instance = instance
@@ -685,12 +692,15 @@ func (i *relayTestInvoker) Invoke(ctx context.Context, _ *principal.Principal, p
 }
 
 type relayTestInvokerCall struct {
-	calls          int
-	providerName   string
-	instance       string
-	operation      string
-	idempotencyKey string
-	params         map[string]any
+	calls           int
+	providerName    string
+	instance        string
+	operation       string
+	idempotencyKey  string
+	params          map[string]any
+	callerProvider  string
+	callerKind      string
+	callerSubjectID string
 }
 
 func (i *relayTestInvoker) snapshot() relayTestInvokerCall {
@@ -736,10 +746,14 @@ func (i *principalRecordingInvoker) subjectIDValue() string {
 }
 
 func relayAppRequestContext() *proto.RequestContext {
+	return relayAppRequestContextForCaller("support")
+}
+
+func relayAppRequestContextForCaller(caller string) *proto.RequestContext {
 	return &proto.RequestContext{
 		Caller: &proto.ProviderContext{
 			Kind: string(invocation.ProviderKindApp),
-			Name: "support",
+			Name: caller,
 		},
 		Subject: &proto.SubjectContext{
 			Id: "user:test-user",
@@ -1130,14 +1144,16 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	invoker := &relayTestInvoker{}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("relay-session")
-	publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
+	// The app-invocation host service is registered once, globally, under the
+	// well-known "app" key rather than per caller name; the relay token's
+	// AppName ("agent-trace-viewer") deliberately has no registration of its
+	// own, mirroring the cross-replica declarative-target miss that used to
+	// return host-service-relay-unavailable.
+	publicHostServices.RegisterVerified("app", sessionVerifier, runtimehost.HostService{
 		Name:           "app",
 		MethodPrefixes: []string{"/" + proto.App_ServiceDesc.ServiceName + "/"},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAppServer(srv, appaccessservice.NewServer(
-				invoker,
-				appaccessservice.WithCallerApp("support"),
-			))
+			proto.RegisterAppServer(srv, appaccessservice.NewServer(invoker))
 		},
 	})
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
@@ -1154,7 +1170,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:      "support",
+		AppName:      "agent-trace-viewer",
 		SessionID:    "relay-session",
 		Service:      "app",
 		MethodPrefix: "/" + proto.App_ServiceDesc.ServiceName + "/",
@@ -1170,17 +1186,23 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(relayToken))
 	_, err = proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
-		Context:        relayAppRequestContext(),
-		App:            "slack",
-		Operation:      "events.reply",
+		Context:        relayAppRequestContextForCaller("agent-trace-viewer"),
+		App:            "gcs",
+		Operation:      "load_trace_url",
 		Instance:       "prod",
 		IdempotencyKey: "relay-call",
 	})
 	if err != nil {
 		t.Fatalf("AppInvocation.Invoke via registered relay: %v", err)
 	}
-	if call := invoker.snapshot(); call.calls != 1 || call.providerName != "slack" || call.operation != "events.reply" || call.instance != "prod" {
-		t.Fatalf("plugin invoker call = %+v, want slack events.reply/prod", call)
+	if call := invoker.snapshot(); call.calls != 1 || call.providerName != "gcs" || call.operation != "load_trace_url" || call.instance != "prod" {
+		t.Fatalf("plugin invoker call = %+v, want gcs load_trace_url/prod", call)
+	}
+	if call := invoker.snapshot(); call.callerProvider != "agent-trace-viewer" || call.callerKind != string(invocation.ProviderKindApp) {
+		t.Fatalf("plugin invoker caller = %s/%s, want restored caller provider agent-trace-viewer/app", call.callerProvider, call.callerKind)
+	}
+	if call := invoker.snapshot(); call.callerSubjectID != "user:relay-test" {
+		t.Fatalf("plugin invoker principal = %q, want subject restored from the verified token", call.callerSubjectID)
 	}
 
 	sessionVerifier.setActive("relay-session", false)
@@ -1188,9 +1210,9 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	defer staleCancel()
 	staleCtx = metadata.NewOutgoingContext(staleCtx, relayTestMetadata(relayToken))
 	_, err = proto.NewAppClient(conn).Invoke(staleCtx, &proto.AppInvokeRequest{
-		Context:   relayAppRequestContext(),
-		App:       "slack",
-		Operation: "events.reply",
+		Context:   relayAppRequestContextForCaller("agent-trace-viewer"),
+		App:       "gcs",
+		Operation: "load_trace_url",
 	})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
 		t.Fatalf("AppInvocation.Invoke stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)

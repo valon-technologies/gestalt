@@ -97,7 +97,7 @@ func TestAppServerInvokeOpenInvocationPropagatesRequestContext(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithCallerApp("caller"))
+	server := NewAppServer(invoker)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -147,7 +147,7 @@ func TestAppServerInvokeAppliesRequestRunAs(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithCallerApp("caller"))
+	server := NewAppServer(invoker)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -178,7 +178,7 @@ func TestAppServerInvokeIgnoresEmptyRequestRunAs(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithCallerApp("caller"))
+	server := NewAppServer(invoker)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -230,7 +230,6 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	server := NewAppServer(
 		invoker,
 		WithAgentAppInvocationAuthorizer(agentAuth),
-		WithCallerApp("alpha"),
 	)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
@@ -307,7 +306,6 @@ func TestAppServerInvokeRejectsRequestRunAsForAgentCaller(t *testing.T) {
 				Principal: &principal.Principal{SubjectID: "user:runner"},
 			},
 		}),
-		WithCallerApp("alpha"),
 	)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
@@ -335,7 +333,7 @@ func TestAppServerInvokeRejectsRequestRunAsForAgentCaller(t *testing.T) {
 func TestAppServerInvokeRejectsRequestRunAsForWorkflowCaller(t *testing.T) {
 	t.Parallel()
 
-	server := NewAppServer(&recordingAppInvocation{}, WithCallerApp("temporal"))
+	server := NewAppServer(&recordingAppInvocation{})
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -380,9 +378,12 @@ func TestAppServerInvokeRejectsRequestRunAsForWorkflowCaller(t *testing.T) {
 	}
 }
 
-func TestAppServerInvokeRejectsAgentContextOnWrongHostService(t *testing.T) {
+func TestAppServerInvokeResolvesAgentProviderFromCaller(t *testing.T) {
 	t.Parallel()
 
+	// The app-invocation host service is registered once, globally, so the
+	// agent provider is resolved from the caller context instead of a
+	// registration-baked serving provider.
 	agentAuth := &recordingAgentAppAuthorizer{
 		response: invocation.AgentAppAuthorization{
 			Principal: &principal.Principal{SubjectID: "user:runner"},
@@ -391,7 +392,6 @@ func TestAppServerInvokeRejectsAgentContextOnWrongHostService(t *testing.T) {
 	server := NewAppServer(
 		&recordingAppInvocation{},
 		WithAgentAppInvocationAuthorizer(agentAuth),
-		WithCallerApp("beta"),
 	)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
@@ -408,11 +408,14 @@ func TestAppServerInvokeRejectsAgentContextOnWrongHostService(t *testing.T) {
 		Operation: "chat.postMessage",
 		Context:   reqCtx,
 	})
-	if got := status.Code(err); got != codes.PermissionDenied {
-		t.Fatalf("Invoke status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
 	}
-	if len(agentAuth.requests) != 0 {
-		t.Fatalf("agent authorization requests = %d, want 0", len(agentAuth.requests))
+	if len(agentAuth.requests) != 1 {
+		t.Fatalf("agent authorization requests = %d, want 1", len(agentAuth.requests))
+	}
+	if got := agentAuth.requests[0].AgentProviderName; got != "alpha" {
+		t.Fatalf("agent authorization agent provider = %q, want alpha from the agent invocation context", got)
 	}
 }
 
@@ -420,7 +423,7 @@ func TestAppServerInvokeGraphQLAllowsOpenSurfaceInvocation(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithCallerApp("caller"))
+	server := NewAppServer(invoker)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -450,7 +453,7 @@ func TestAppServerInvokeGraphQLRejectsWorkflowCaller(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithCallerApp("temporal"))
+	server := NewAppServer(invoker)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -495,7 +498,7 @@ func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithCallerApp("temporal"))
+	server := NewAppServer(invoker)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -557,11 +560,18 @@ func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
 	}
 }
 
-func TestAppServerInvokeRejectsWrongCaller(t *testing.T) {
+func TestAppServerInvokeRejectsForgedCallerMismatchingVerifiedCaller(t *testing.T) {
 	t.Parallel()
 
-	server := NewAppServer(&recordingAppInvocation{}, WithCallerApp("caller"))
-	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+	// On the relay path the verified token stamps the caller provider in the
+	// request context; a forged proto caller must not override it.
+	server := NewAppServer(&recordingAppInvocation{})
+	// Simulate the relay restoring the verified caller-provider from the
+	// token before the request reaches the app host service.
+	restoreVerifiedCaller := grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		return handler(invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, "caller"), req)
+	})
+	client := proto.NewAppClient(newBufconnConnWithOptions(t, []grpc.ServerOption{restoreVerifiedCaller}, nil, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
 	_, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
@@ -652,7 +662,7 @@ func (r *sliceStreamReader) Recv() (*core.InvokeFrame, error) {
 func TestAppServerInvokeStream(t *testing.T) {
 	t.Parallel()
 	rec := &recordingAppInvocation{}
-	server := NewAppServer(rec, WithCallerApp("caller"))
+	server := NewAppServer(rec)
 	stream := &invokeStreamServerStub{ctx: context.Background()}
 	err := server.InvokeStream(&proto.AppInvokeRequest{
 		App:       "example",

@@ -62,6 +62,45 @@ func TestUnifiedHostServiceHandlerRoutesByGRPCMethod(t *testing.T) {
 	}
 }
 
+func TestUnifiedHostServiceHandlerRoutesAppServiceToGlobalRegistration(t *testing.T) {
+	t.Parallel()
+
+	registry := runtimehost.NewPublicHostServiceRegistry()
+	registry.RegisterVerified(appInvocationPublicProviderKey, allowHostServiceSessionVerifier{}, runtimehost.HostService{
+		Name:           "app",
+		MethodPrefixes: []string{"/gestalt.provider.v1.App/"},
+		Register:       func(*grpc.Server) {},
+	})
+	s := &Server{publicHostServices: registry}
+
+	// The token's AppName is the caller (no per-caller registration exists);
+	// App/* RPCs still resolve to the single global registration.
+	handler, err := s.unifiedHostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
+		AppName:   "agent-trace-viewer",
+		SessionID: "session-1",
+		Service:   "app",
+	}, "/gestalt.provider.v1.App/Invoke")
+	if err != nil {
+		t.Fatalf("unifiedHostServiceHandler: %v", err)
+	}
+	if handler == nil {
+		t.Fatal("handler = nil, want global app handler")
+	}
+
+	// Non-App services stay keyed by the token's provider name.
+	handler, err = s.unifiedHostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
+		AppName:   "agent-trace-viewer",
+		SessionID: "session-1",
+		Service:   "cache",
+	}, "/gestalt.provider.v1.Cache/Get")
+	if err != nil {
+		t.Fatalf("unifiedHostServiceHandler cache: %v", err)
+	}
+	if handler != nil {
+		t.Fatal("handler for caller-keyed service is non-nil, want no leak into the global app key")
+	}
+}
+
 func TestValidatePublicHostServicesRejectsProviderWideServiceWithoutVerifier(t *testing.T) {
 	t.Parallel()
 
