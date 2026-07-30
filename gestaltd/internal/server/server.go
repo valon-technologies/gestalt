@@ -169,6 +169,10 @@ type Server struct {
 	appRuntimeState        AppRuntimeState
 	routeProfile           RouteProfile
 	activateAppProviders   func(context.Context)
+
+	appRecoveryObservations *coredata.AppVersionRecoveryObservationService
+	gestaltdHeartbeats      *coredata.GestaltdInstanceHeartbeatService
+	appRegistryHeartbeatTTL time.Duration
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -235,6 +239,8 @@ type Config struct {
 	TunnelResolver         TunnelResolverConfig
 	// AppAutoDeployNotify requests prompt auto-deploy reconciliation for an app.
 	AppAutoDeployNotify func(app string)
+
+	AppRegistryHeartbeatTTL time.Duration
 }
 
 func New(cfg Config) (*Server, error) {
@@ -436,6 +442,13 @@ func New(cfg Config) (*Server, error) {
 		appRuntimeState:        cfg.AppRuntimeState,
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,
+
+		appRecoveryObservations: cfg.Services.AppVersionRecoveryObservations,
+		gestaltdHeartbeats:      cfg.Services.GestaltdInstanceHeartbeats,
+		appRegistryHeartbeatTTL: cfg.AppRegistryHeartbeatTTL,
+	}
+	if s.appRegistryHeartbeatTTL <= 0 {
+		s.appRegistryHeartbeatTTL = config.DefaultAppRegistryHeartbeatTTL
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,

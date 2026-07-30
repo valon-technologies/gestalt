@@ -839,6 +839,177 @@ func TestAppAdminRegistryHistoryStoredRolloutOutcomeFields(t *testing.T) {
 	}
 }
 
+func TestAppAdminRegistryFleetStateAndRecoveryResponseShapes(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("alice")
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	now := time.Date(2026, 7, 30, 13, 52, 20, 0, time.UTC)
+	deployedAt := now.Add(-20 * time.Minute)
+	failedAt := now.Add(-5 * time.Minute)
+	recoveredAt := now.Add(-time.Minute)
+	request, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		ID:          "request-recovered",
+		App:         "g-issues",
+		FromVersion: appregistry.FirstInstallFromVersion,
+		ToVersion:   fixture.Version,
+		Timestamp:   deployedAt,
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName:  "g-issues",
+			Version:  fixture.Version,
+			Registry: "toolshed",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	if _, err := services.GestaltdSourceVersionState.Activate(
+		context.Background(), "source-a", deployedAt, false, time.Minute, 15*time.Minute, 1,
+	); err != nil {
+		t.Fatalf("Activate source: %v", err)
+	}
+	rollout, err := services.GestaltdSourceVersionState.CreateAppRollout(context.Background(), &core.AppRollout{
+		App:              "g-issues",
+		Version:          fixture.Version,
+		State:            core.AppRolloutStateEnrolling,
+		CreatedAt:        deployedAt,
+		EnrollmentEndsAt: deployedAt.Add(time.Minute),
+		Deadline:         failedAt,
+	})
+	if err != nil {
+		t.Fatalf("CreateAppRollout: %v", err)
+	}
+	if _, err := services.AppRollouts.MarkFailedForRollout(context.Background(), rollout, failedAt); err != nil {
+		t.Fatalf("MarkFailedForRollout: %v", err)
+	}
+	if err := services.AppVersionRolloutOutcomes.RecordFailed(
+		context.Background(), request.ID, "g-issues", fixture.Version, failedAt,
+	); err != nil {
+		t.Fatalf("RecordFailed: %v", err)
+	}
+	if _, err := services.AppVersionRecoveryObservations.Record(context.Background(), &core.AppVersionRecoveryObservation{
+		ID:                      request.ID,
+		App:                     "g-issues",
+		Version:                 fixture.Version,
+		RecoveredAt:             recoveredAt,
+		SourceVersion:           "source-a",
+		LiveInstances:           1,
+		MinimumHealthyInstances: 1,
+	}); err != nil {
+		t.Fatalf("Record recovery: %v", err)
+	}
+	if _, err := services.GestaltdInstanceHeartbeats.Upsert(context.Background(), &core.GestaltdInstanceHeartbeat{
+		InstanceID:    "instance-a",
+		SourceVersion: "source-a",
+		StartedAt:     deployedAt,
+		HeartbeatAt:   now.Add(-5 * time.Second),
+		Apps: map[string]core.GestaltdInstanceAppHeartbeat{
+			"g-issues": {
+				State:          core.GestaltdInstanceAppStateRunning,
+				DesiredVersion: fixture.Version,
+				RunningVersion: fixture.Version,
+				ObservedAt:     now.Add(-5 * time.Second),
+			},
+		},
+	}); err != nil {
+		t.Fatalf("Upsert heartbeat: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.Now = func() time.Time { return now }
+		cfg.AppRegistryHeartbeatTTL = 45 * time.Second
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	var current struct {
+		Rollout struct {
+			State string `json:"state"`
+		} `json:"rollout"`
+		FleetState struct {
+			State                   string `json:"state"`
+			SourceVersion           string `json:"sourceVersion"`
+			MinimumHealthyInstances int    `json:"minimumHealthyInstances"`
+			LiveInstances           int    `json:"liveInstances"`
+			RunningDesiredVersion   int    `json:"runningDesiredVersion"`
+			EvaluatedAt             string `json:"evaluatedAt"`
+		} `json:"fleetState"`
+		Recovery struct {
+			RecoveredAt   string `json:"recoveredAt"`
+			SourceVersion string `json:"sourceVersion"`
+		} `json:"recovery"`
+	}
+	getAppAdminRegistryJSON(t, ts.URL+"/api/v1/apps/g-issues/admin/registry", &current)
+	if current.Rollout.State != "failed" ||
+		current.FleetState.State != "healthy" ||
+		current.FleetState.SourceVersion != "source-a" ||
+		current.FleetState.MinimumHealthyInstances != 1 ||
+		current.FleetState.LiveInstances != 1 ||
+		current.FleetState.RunningDesiredVersion != 1 ||
+		current.FleetState.EvaluatedAt == "" {
+		t.Fatalf("current registry state = %#v", current)
+	}
+	if current.Recovery.RecoveredAt != recoveredAt.Format(time.RFC3339) ||
+		current.Recovery.SourceVersion != "source-a" {
+		t.Fatalf("current recovery = %#v", current.Recovery)
+	}
+
+	var history struct {
+		FleetState struct {
+			State string `json:"state"`
+		} `json:"fleetState"`
+		Revisions []struct {
+			RolloutState    string `json:"rolloutState"`
+			RolloutFailedAt string `json:"rolloutFailedAt"`
+			Recovery        struct {
+				RecoveredAt string `json:"recoveredAt"`
+			} `json:"recovery"`
+		} `json:"revisions"`
+	}
+	getAppAdminRegistryJSON(t, ts.URL+"/api/v1/apps/g-issues/admin/registry/history", &history)
+	if history.FleetState.State != "healthy" || len(history.Revisions) != 1 {
+		t.Fatalf("history = %#v", history)
+	}
+	revision := history.Revisions[0]
+	if revision.RolloutState != "failed" ||
+		revision.RolloutFailedAt != failedAt.Format(time.RFC3339) ||
+		revision.Recovery.RecoveredAt != recoveredAt.Format(time.RFC3339) ||
+		revision.RolloutFailedAt == revision.Recovery.RecoveredAt {
+		t.Fatalf("history timing fields = %#v", revision)
+	}
+}
+
+func getAppAdminRegistryJSON(t *testing.T, url string, out any) {
+	t.Helper()
+	request, _ := http.NewRequest(http.MethodGet, url, nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET %s status = %d: %s", url, response.StatusCode, body)
+	}
+	if err := json.NewDecoder(response.Body).Decode(out); err != nil {
+		t.Fatalf("decode GET %s: %v", url, err)
+	}
+}
+
 func TestAppAdminRegistryHistoryIgnoresLiveRolloutForOlderSameVersion(t *testing.T) {
 	t.Parallel()
 
