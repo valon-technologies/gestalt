@@ -200,13 +200,14 @@ func resolveProviderLocalAppMount(configPaths []string, resolvedKey, targetManif
 	if loadErr != nil {
 		return "", fmt.Errorf("load provider overlay config: %w", loadErr)
 	}
-	entry := loadedCfg.Apps[resolvedKey]
-	if entry == nil || entry.Static == nil {
-		return "", nil
+	mountPath = ""
+	if commands, err := providerpkg.SourceRunCommands(targetManifestPath); err == nil && len(commands) > 1 {
+		mountPath = defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
 	}
-	mountPath = defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
-	if configured := strings.TrimSpace(entry.Static.Mount); configured != "" {
-		mountPath = configured
+	if entry := loadedCfg.Apps[resolvedKey]; entry != nil && entry.Static != nil {
+		if configured := strings.TrimSpace(entry.Static.Mount); configured != "" {
+			mountPath = configured
+		}
 	}
 	if err := ensureNoPublicStaticPathCollision(loadedCfg, resolvedKey, mountPath); err != nil {
 		return "", err

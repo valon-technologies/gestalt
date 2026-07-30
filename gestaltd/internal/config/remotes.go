@@ -143,11 +143,8 @@ func canonicalizeLegacyRemoteConfig(cfg *Config) error {
 }
 
 // stampDefaultRemote sets remote to defaultName on every entry that does not
-// already name a remote and is not explicitly local. Dev-active entries are
-// normally skipped (they run locally and are not remote-delegated), but when
-// dev is true they are stamped too so the reverse-tunnel publisher includes
-// them in its publication plan — the remote then forwards operations and UI
-// traffic back through the tunnel to the dev machine.
+// already name a remote and is not explicitly local or dev-active (unless dev
+// is true, in which case dev-active entries are stamped for tunnel publication).
 func stampDefaultRemote(entries map[string]*ProviderEntry, defaultName string, dev bool) {
 	for _, entry := range entries {
 		if entry == nil || entry.Local {
