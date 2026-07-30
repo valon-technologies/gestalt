@@ -218,7 +218,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	seen := make(map[string]struct{}, len(names))
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
-		prov, err := s.providers.Get(name)
+		prov, err := s.providers.GetWithContext(r.Context(), name)
 		if err != nil {
 			continue
 		}
@@ -423,7 +423,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := s.getProvider(w, name); !ok {
+	if _, ok := s.getProvider(r.Context(), w, name); !ok {
 		auditErr = errors.New("integration not found")
 		return
 	}
@@ -541,8 +541,8 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
 }
 
-func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider, bool) {
-	prov, err := s.providers.Get(name)
+func (s *Server) getProvider(ctx context.Context, w http.ResponseWriter, name string) (core.Provider, bool) {
+	prov, err := s.providers.GetWithContext(ctx, name)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", name))
@@ -614,7 +614,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	const operation = "operations.list"
 
 	name := chi.URLParam(r, "name")
-	prov, ok := s.getProvider(w, name)
+	prov, ok := s.getProvider(r.Context(), w, name)
 	if !ok {
 		return
 	}
@@ -694,7 +694,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	operationName := chi.URLParam(r, "operation")
 
 	p := PrincipalFromContext(r.Context())
-	prov, ok := s.getProvider(w, providerName)
+	prov, ok := s.getProvider(r.Context(), w, providerName)
 	if !ok {
 		return
 	}

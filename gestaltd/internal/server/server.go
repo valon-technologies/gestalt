@@ -518,9 +518,6 @@ func (s *Server) Close() {
 	if s == nil {
 		return
 	}
-	if s.tunnelResolver != nil {
-		s.tunnelResolver.Close()
-	}
 	if s.publicGatewayConn != nil {
 		s.publicGatewayConn.Close()
 		s.publicGatewayConn = nil

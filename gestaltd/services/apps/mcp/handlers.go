@@ -11,7 +11,7 @@ func validateToolInvocation(ctx context.Context, cfg Config, provName, opName st
 	if cfg.InvocationValidator == nil || cfg.Providers == nil {
 		return nil
 	}
-	prov, err := cfg.Providers.Get(provName)
+	prov, err := cfg.Providers.GetWithContext(ctx, provName)
 	if err != nil {
 		return err
 	}

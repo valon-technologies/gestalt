@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -168,7 +169,7 @@ func providerOperationIDs(providers *registry.ProviderMap[core.Provider], plugin
 	if providers == nil {
 		return nil, nil
 	}
-	provider, err := providers.Get(pluginName)
+	provider, err := providers.GetWithContext(context.Background(), pluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +300,7 @@ func (s *Server) withRegistryAppRuntime(app string, invoke func()) bool {
 	}
 	invoked := false
 	err := s.appRuntimeState.WithRunningVersion(app, func(version string) error {
-		if _, err := s.providers.Get(app); err != nil {
+		if _, err := s.providers.GetWithContext(context.Background(), app); err != nil {
 			return err
 		}
 		raw, err := os.ReadFile(filepath.Join(s.artifactsDir, appregistry.RegistryInstallSubdir, app, "active-version"))
