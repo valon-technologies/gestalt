@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "v1/app.proto";
+
+// This file introduces the target AgentProvider contract additively. The
+// existing alpha Agent service remains available until a coordinated cutover.
+//
+// AgentService is the authenticated Gestalt control-plane API used by clients.
+// Its caller identity comes from the transport and is never accepted in a
+// request body.
+// AgentProvider is the remote runtime API implemented by providers.
+
+enum AgentLifecycleState {
+  AGENT_LIFECYCLE_STATE_UNSPECIFIED = 0;
+  AGENT_LIFECYCLE_STATE_ACTIVE = 1;
+  AGENT_LIFECYCLE_STATE_ARCHIVED = 2;
+}
+
+enum AgentRunStatus {
+  AGENT_RUN_STATUS_UNSPECIFIED = 0;
+  AGENT_RUN_STATUS_PENDING = 1;
+  AGENT_RUN_STATUS_RUNNING = 2;
+  AGENT_RUN_STATUS_WAITING_FOR_INPUT = 3;
+  AGENT_RUN_STATUS_SUCCEEDED = 4;
+  AGENT_RUN_STATUS_FAILED = 5;
+  AGENT_RUN_STATUS_CANCELED = 6;
+}
+
+message AgentConfigInput {
+  // Optional creation-time routing key for a configured AgentProvider.
+  string provider_name = 1;
+  // Optional provider-supported model override.
+  string model = 2;
+  string instructions = 3;
+}
+
+message AgentResource {
+  // Gestalt-minted durable conversation ID and provider session ID.
+  string id = 1;
+  string provider_name = 2;
+  AgentLifecycleState state = 3;
+  string config_revision = 4;
+  string created_by_subject_id = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  google.protobuf.Timestamp last_run_at = 8;
+}
+
+message CreateAgentRequest {
+  AgentConfigInput config = 1;
+  string idempotency_key = 2;
+}
+
+message GetAgentRequest {
+  string agent_id = 1;
+}
+
+message AgentRunOutput {
+  string text = 1;
+  google.protobuf.Value structured = 2;
+}
+
+message AgentRunResource {
+  string id = 1;
+  string agent_id = 2;
+  string provider_name = 3;
+  string config_revision = 4;
+  AgentRunStatus status = 5;
+  string status_message = 6;
+  AgentRunOutput output = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp started_at = 9;
+  google.protobuf.Timestamp completed_at = 10;
+}
+
+message CreateAgentRunRequest {
+  string agent_id = 1;
+  // The public surface always authors this as a user message.
+  string message = 2;
+  string idempotency_key = 3;
+}
+
+message GetAgentRunRequest {
+  string agent_id = 1;
+  string run_id = 2;
+}
+
+message CancelAgentRunRequest {
+  string agent_id = 1;
+  string run_id = 2;
+  string reason = 3;
+  string idempotency_key = 4;
+}
+
+// The provider receives an immutable, Gestalt-resolved configuration rather
+// than public selectors. Tool, skill, workspace, and history fields are added
+// in their dedicated contract slices.
+message AgentResolvedConfigRevision {
+  string id = 1;
+  string parent_revision = 2;
+  string model = 3;
+  string instructions = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message AgentProviderCreateSessionRequest {
+  string session_id = 1;
+  string idempotency_key = 2;
+  AgentResolvedConfigRevision initial_config = 3;
+  string created_by_subject_id = 4;
+  RequestContext context = 5;
+}
+
+message AgentProviderGetSessionRequest {
+  string session_id = 1;
+  RequestContext context = 2;
+}
+
+message AgentProviderCreateRunRequest {
+  string session_id = 1;
+  string run_id = 2;
+  string idempotency_key = 3;
+  string message = 4;
+  string config_revision = 5;
+  string execution_ref = 6;
+  string authority_ref = 7;
+  string created_by_subject_id = 8;
+  RequestContext context = 9;
+}
+
+message AgentProviderGetRunRequest {
+  string session_id = 1;
+  string run_id = 2;
+  RequestContext context = 3;
+}
+
+message AgentProviderCancelRunRequest {
+  string session_id = 1;
+  string run_id = 2;
+  string reason = 3;
+  string idempotency_key = 4;
+  RequestContext context = 5;
+}
+
+message AgentContractCapabilities {
+  // V1 providers report 1. Incompatible major versions are rejected before
+  // AgentManager routes lifecycle traffic.
+  int32 protocol_version = 1;
+}
+
+message GetAgentContractCapabilitiesRequest {}
+
+service AgentService {
+  rpc CreateAgent(CreateAgentRequest) returns (AgentResource);
+  rpc GetAgent(GetAgentRequest) returns (AgentResource);
+
+  rpc CreateRun(CreateAgentRunRequest) returns (AgentRunResource);
+  rpc GetRun(GetAgentRunRequest) returns (AgentRunResource);
+  rpc CancelRun(CancelAgentRunRequest) returns (AgentRunResource);
+}
+
+service AgentProvider {
+  rpc CreateSession(AgentProviderCreateSessionRequest) returns (AgentResource);
+  rpc GetSession(AgentProviderGetSessionRequest) returns (AgentResource);
+
+  rpc CreateRun(AgentProviderCreateRunRequest) returns (AgentRunResource);
+  rpc GetRun(AgentProviderGetRunRequest) returns (AgentRunResource);
+  rpc CancelRun(AgentProviderCancelRunRequest) returns (AgentRunResource);
+
+  rpc GetCapabilities(GetAgentContractCapabilitiesRequest) returns (AgentContractCapabilities);
+}
