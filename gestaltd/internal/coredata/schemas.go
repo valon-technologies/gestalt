@@ -97,11 +97,13 @@ var AppVersionInstallLocksSchema = idb.ObjectStoreOptions{
 	},
 }
 
+// Keep existing-store schemas limited to the metadata already deployed.
+// relationaldb persists complete record blobs, including undeclared fields, but
+// requires exact schema metadata equality when a store is opened.
 var GestaltdSourceVersionStateSchema = idb.ObjectStoreOptions{
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "current_source_version", Type: idb.TypeString},
-		{Name: "minimum_healthy_instances", Type: idb.TypeInt},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},
 }
@@ -115,17 +117,12 @@ var AppRolloutsSchema = idb.ObjectStoreOptions{
 		{Name: "app", Type: idb.TypeString, NotNull: true, Unique: true},
 		{Name: "version", Type: idb.TypeString, NotNull: true},
 		{Name: "state", Type: idb.TypeString, NotNull: true},
-		{Name: "rollout_mode", Type: idb.TypeString},
 		{Name: "target_source_version", Type: idb.TypeString},
-		{Name: "minimum_healthy_instances", Type: idb.TypeInt},
 		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "enrollment_ends_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "deadline", Type: idb.TypeTime, NotNull: true},
-		{Name: "healthy_since", Type: idb.TypeTime},
-		{Name: "heartbeat_evaluated_at", Type: idb.TypeTime},
 		{Name: "completed_at", Type: idb.TypeTime},
 		{Name: "failed_at", Type: idb.TypeTime},
-		{Name: "failure_summary", Type: idb.TypeJSON},
 	},
 }
 
