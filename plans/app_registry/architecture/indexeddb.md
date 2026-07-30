@@ -1,6 +1,6 @@
 # App Registry IndexedDB Install State
 
-Reference for the host IndexedDB stores used for app registry installation and per-replica convergence.
+Reference for the host IndexedDB stores used for app registry installation, per-replica convergence, runtime heartbeats, and recovery observations.
 
 The install HTTP API and installer append only to `app_version_change_requests`. Admin list/get endpoints project fleet-known versions from those requests.
 
@@ -27,7 +27,7 @@ Implementation:
 
 The ordered change requests are also the permanent **revision history** for an app. They are never removed by registry retention. The history API returns the raw transition sequence rather than the deduplicated fleet-known projection, so each accepted `from_version` → `to_version` change remains auditable, including repeated versions in upgrade and downgrade chains such as `v1 → v2 → v1`.
 
-IndexedDB stores accepted version changes and each replica's rollout progress. It does not store a single "current fleet version" or "currently running version."
+IndexedDB stores accepted version changes, rollout execution, each replica's historical progress, and one current runtime snapshot per process. It does not store a single authoritative "current fleet version": fleet state is derived from the desired change request, activated source/capacity, and fresh heartbeat rows.
 
 Gestalt derives the desired version from the latest change-request timestamp. If two requests have the same timestamp, it chooses the lexicographically greatest version string so every replica selects the same version. Bootstrap and polling both compare the requests using this rule; they do not assume that the first or last record returned by IndexedDB is the newest.
 
@@ -66,6 +66,8 @@ app_rollouts                     ← current rollout per app
 app_version_rollout_outcomes     ← terminal rollout timing per change request
 app_instance_materializations    ← per-replica acknowledgement of fleet-known versions
 app_auto_deploy_settings         ← per-app auto-deploy policy
+gestaltd_instance_heartbeats     ← current per-process runtime snapshots
+app_version_recovery_observations ← stable recovery facts for failed revisions
 ```
 
 Other host stores created at bootstrap include `users`, `managed_subjects`, `app_shas`, etc.
@@ -86,6 +88,8 @@ Services.GestaltdSourceVersionState ← current Toolshed source version and acti
 Services.AppRollouts                ← rollout state
 Services.AppVersionRolloutOutcomes  ← terminal rollout timing per change request
 Services.AutoDeploySettings         ← per-app auto-deploy policy
+Services.GestaltdInstanceHeartbeats ← per-process runtime snapshots
+Services.AppVersionRecoveryObservations ← immutable failed-rollout recovery facts
 Services.DB                         ← underlying main-db handle
 ```
 
@@ -227,9 +231,9 @@ Used by `POST …/add` and `POST …/upgrade` while each checks rollout admissio
 
 ---
 
-## Store: `gestaltd_source_version_state` (Rollout Source-Version Target)
+## Store: `gestaltd_source_version_state` (Activated Source and Capacity)
 
-Tracks the Toolshed `SOURCE_VERSION` that app rollouts use for cohort membership. Toolshed deployment orchestration is the only writer; a `gestaltd` process must not elect its own source version current.
+Tracks the Toolshed `SOURCE_VERSION` used for current fleet reads and rollout membership, plus the Cloud Run minimum capacity required for health. Toolshed deployment orchestration is the only writer; a `gestaltd` process must not elect its own source version current.
 
 Primary key: `id` = `gestaltd`.
 
@@ -237,15 +241,16 @@ Primary key: `id` = `gestaltd`.
 {
   "id": "gestaltd",
   "current_source_version": "574fe7704ed67fc15d44f76698755bb94ad33d43",
+  "minimum_healthy_instances": 5,
   "updated_at": "2026-07-27T22:30:00Z"
 }
 ```
 
-The source version is the Toolshed commit SHA injected into each process as `SOURCE_VERSION`. `updated_at` records the last source change or explicit deployment retry.
+The source version is the Toolshed commit SHA injected into each process as `SOURCE_VERSION`. `minimum_healthy_instances` comes from the activated Cloud Run revision's minimum scale. `updated_at` records the last source/minimum change or explicit deployment retry.
 
-Toolshed calls the candidate's tagged `POST /activate?source_version={SOURCE_VERSION}` endpoint before shifting traffic. The handler rejects a source-version mismatch so an old revision reached through a stale URL cannot move the target backward. Activation atomically updates `current_source_version` and retargets active app rollouts with fresh timestamps. A repeated activation for the same source is idempotent.
+Toolshed calls the candidate's tagged `POST /activate?source_version={SOURCE_VERSION}&minimum_healthy_instances={MIN_SCALE}` endpoint before shifting traffic. The handler rejects a source-version mismatch and invalid capacity. Activation atomically updates both values and retargets active app rollouts with a fresh evaluation epoch. A repeated activation for the same values is idempotent.
 
-If deployment fails after activation, traffic rollback does not update this record. A workflow retry calls `POST /activate?source_version={SOURCE_VERSION}&retry=true`, updates `updated_at`, refreshes active rollout epochs, and reopens rollouts for this source that failed after the previous activation. The retry does not append another change request.
+If deployment fails after activation, rollback reactivates the restored revision and its minimum after traffic restoration. A workflow retry includes `retry=true`, updates `updated_at`, refreshes active rollout epochs, and may reopen rollouts for that source that failed after its previous activation. Neither operation appends another change request.
 
 ---
 
@@ -260,24 +265,28 @@ Primary key: `id` = `app`.
   "id": "g-issues",
   "app": "g-issues",
   "version": "0.0.0-snapshot.gabc123",
-  "state": "enrolling",
+  "state": "restarting",
+  "mode": "heartbeat",
   "target_source_version": "61885becf49a25a4a8c0063a4d9dd9643b28c2a6",
+  "minimum_healthy_instances": 5,
   "created_at": "2026-07-13T21:00:00Z",
   "enrollment_ends_at": "2026-07-13T21:02:00Z",
-  "deadline": "2026-07-13T21:15:00Z"
+  "deadline": "2026-07-13T21:15:00Z",
+  "healthy_since": "2026-07-13T21:03:00Z",
+  "heartbeat_evaluated_at": "2026-07-13T21:03:15Z"
 }
 ```
 
 States:
 
-- `enrolling` — replicas from `target_source_version` may join by acknowledging it.
-- `restarting` — the acknowledged cohort is frozen and is converging.
-- `complete` — the target cohort is non-empty and every member recorded `restarted_at`.
-- `failed` — the target cohort did not converge before the deadline, or remained empty.
+- `enrolling` — enrollment-mode replicas may join by acknowledging before the window closes.
+- `restarting` — providers are converging. In heartbeat mode this is the initial state and live membership is not frozen.
+- `complete` — the stored mode's completion condition remained satisfied.
+- `failed` — the stored mode did not satisfy completion before the deadline.
 
 A terminal record may be replaced when the next version is admitted. A non-terminal record causes `POST …/add` or `POST …/upgrade` for the same app to return **409 Conflict**. Terminal transitions record `completed_at` or `failed_at`.
 
-`target_source_version` determines cohort membership.
+`mode` is `enrollment` or `heartbeat`. Heartbeat rollouts snapshot `minimum_healthy_instances`; `healthy_since` is set while every fresh target-source heartbeat reports the rollout version and cleared on any regression. `heartbeat_evaluated_at` and `failure_summary` preserve the latest evaluation and structured deadline diagnostics. Activation retargeting resets these fields, the deadline, and the evaluation epoch.
 
 ### Service API
 
@@ -291,6 +300,7 @@ A terminal record may be replaced when the next version is admitted. A non-termi
 | `MarkRestarting(ctx, app, version)` | Freeze the acknowledged cohort after enrollment. |
 | `MarkComplete(ctx, app, version, completedAt)` | Record successful cohort convergence. |
 | `MarkFailed(ctx, app, version, failedAt)` | Record that the rollout missed its deadline. |
+| `EvaluateHeartbeatRollout(ctx, rollout, evaluation)` | Transactionally advance/reset stability or complete/fail a heartbeat rollout, fenced by the rollout epoch. |
 
 **Admin exposure:** `Get` and `ListActive` back `GET /admin/api/v1/app-rollouts` and rollout summaries on `GET /admin/api/v1/registry-apps`. See [lifecycle.md](../operations/lifecycle.md#admin-observability-api).
 
@@ -336,6 +346,78 @@ The catalog poller writes the row exactly once when `MarkCompleteForRollout` or 
 | `RecordFailed(ctx, changeRequestID, app, version, failedAt)` | Persist a failed rollout end time. |
 
 **Admin exposure:** `GetMany` backs rollout duration fields on `GET /api/v1/apps/{app}/admin/registry/history`. See [lifecycle.md](../operations/lifecycle.md#revision-history).
+
+---
+
+## Store: `gestaltd_instance_heartbeats` (Per-Replica Runtime State)
+
+One row per process contains an atomic observation of every deploy-configured registry-only app. Primary key `id` and unique index `by_instance` both use the process-unique `instance_id`; source and timestamp indexes support fresh-fleet reads.
+
+```json
+{
+  "id": "8dfcdc5b-cea7-4869-a2e8-5a51d29e8996",
+  "instance_id": "8dfcdc5b-cea7-4869-a2e8-5a51d29e8996",
+  "source_version": "4f71afddf31d2c452ecd248779a04c905a7b9988",
+  "started_at": "2026-07-30T13:48:41Z",
+  "heartbeat_at": "2026-07-30T13:52:15Z",
+  "apps": {
+    "g-issues": {
+      "state": "running",
+      "desired_version": "0.0.0-snapshot.gd15d64d",
+      "running_version": "0.0.0-snapshot.gd15d64d",
+      "observed_at": "2026-07-30T13:52:15Z",
+      "last_error": ""
+    }
+  }
+}
+```
+
+The `apps` JSON value makes one heartbeat a coherent process snapshot. A configured app missing from the runtime snapshot is written as `unknown`; `desired_version` is diagnostic, while only `state: running` plus an exact `running_version` match is affirmative runtime evidence.
+
+Observation states are `running` (all runtime markers agree), `starting`, `not_running`, `error`, and `unknown`. `last_error` carries the latest diagnostic for an error/unknown observation. Collection is passive and never changes provider lifecycle state.
+
+Rows older than the configured retention are pruned for storage hygiene. Membership uses the shorter freshness lease and current source filter, so stale rows may remain available for diagnosis without affecting health.
+
+### Service API
+
+| Method | Description |
+| --- | --- |
+| `Upsert(ctx, heartbeat)` | Replace one process's full runtime snapshot. |
+| `List(ctx)` | List all retained rows for fresh/stale admin detail. |
+| `ListFreshBySourceVersion(ctx, source, cutoff)` | Load current candidates for fleet projection and rollout/recovery evaluation. |
+| `PruneBefore(ctx, cutoff)` | Delete rows older than retention. |
+
+---
+
+## Store: `app_version_recovery_observations` (Post-Failure Recovery)
+
+Persists one recovery fact keyed by change-request `id` when the still-desired version has a failed rollout outcome and later remains healthy for the configured stability window.
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "app": "g-issues",
+  "version": "0.0.0-snapshot.gdef456",
+  "recovered_at": "2026-07-30T13:52:15Z",
+  "source_version": "4f71afddf31d2c452ecd248779a04c905a7b9988",
+  "live_instances": 5,
+  "minimum_healthy_instances": 5
+}
+```
+
+`RecordIfCurrentFailed` fences the write against the current desired revision and its failed immutable outcome. Concurrent replica observers are idempotent. A recovery row does not mutate `app_version_rollout_outcomes`, `app_rollouts`, retention, or auto-deploy state.
+
+`Get`, `GetMany`, and `RecordIfCurrentFailed` back app-admin current state and revision-history recovery fields.
+
+---
+
+## Legacy RelationalDB Schema Compatibility
+
+RelationalDB requires exact object-store schema metadata equality at `CreateObjectStore`, but stores each complete record in `record_blob`. Runtime Heartbeats therefore keeps the deployed schema declarations for the existing `gestaltd_source_version_state` and `app_rollouts` stores unchanged.
+
+The new source-capacity and heartbeat-rollout fields are non-key, non-indexed record fields. Services read and write them in the full record blob even though they are intentionally absent from the declared column metadata. This permits old and new gestaltd revisions to bootstrap against the same stores during a rolling deployment. The two genuinely new stores, `gestaltd_instance_heartbeats` and `app_version_recovery_observations`, are still created normally.
+
+Do not add the non-indexed Runtime Heartbeats fields to those two existing schema declarations without an explicit mixed-version migration design. [gestalt#3015](https://github.com/valon-technologies/gestalt/pull/3015) added regression coverage for initial and repeated bootstrap plus field round trips under the legacy metadata.
 
 ---
 
@@ -457,7 +539,8 @@ Written by the background catalog poller (`gestaltd/internal/appregistry/poller.
 ├── <a href="../project/changelog.md#changelog-08">08 — Per-Replica Catalog Polling</a>
 ├── <a href="../project/changelog.md#changelog-09">09 — Coordinated Provider Restarts</a>
 ├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
-└── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
+├── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
+└── <a href="../project/changelog.md#changelog-27">27 — Runtime Heartbeats and Fleet State</a>
 </pre>
 
 ### Related Docs
@@ -468,5 +551,6 @@ Written by the background catalog poller (`gestaltd/internal/appregistry/poller.
 ├── <a href="../operations/lifecycle.md">lifecycle.md</a> — replica startup, background controller, admin HTTP API
 ├── <a href="./validation.md">validation.md</a> — install-time validation
 ├── <a href="../operations/admin.md">admin.md</a> — admin UI capabilities
+├── <a href="../one-pagers/runtime-heartbeats.md">runtime-heartbeats.md</a> — canonical design
 └── <a href="./models.md">models.md</a> — GCS registry entry JSON that change requests reference
 </pre>

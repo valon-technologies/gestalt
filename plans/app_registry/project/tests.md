@@ -12,6 +12,8 @@ Reference for behavioral tests in the app registry plan.
 | `internal/appregistry` | `materializer_test.go` | 5 | Unit | — |
 | `internal/appregistry` | `mount_test.go` | 4 | Unit | — |
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
+| `internal/coredata` | heartbeat, recovery, source activation, and schema compatibility tests | — | Unit/integration | [gestalt#3005](https://github.com/valon-technologies/gestalt/pull/3005) · [gestalt#3009](https://github.com/valon-technologies/gestalt/pull/3009) · [gestalt#3015](https://github.com/valon-technologies/gestalt/pull/3015) |
+| `internal/appregistry` | `heartbeat_writer_test.go`, `fleet_state_test.go`, `recovery_observer_test.go`, `poller_heartbeat_test.go` | — | Unit | [gestalt#3006](https://github.com/valon-technologies/gestalt/pull/3006) · [gestalt#3008](https://github.com/valon-technologies/gestalt/pull/3008) · [gestalt#3009](https://github.com/valon-technologies/gestalt/pull/3009) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
 | `internal/appregistry` | `install_validator_test.go`, `install_validation_errors_test.go` | — | Unit | [gestalt#2887](https://github.com/valon-technologies/gestalt/pull/2887) |
@@ -19,8 +21,8 @@ Reference for behavioral tests in the app registry plan.
 | `internal/server` | `handlers_app_admin_registry_test.go` | 4 | HTTP integration | [gestalt#2909](https://github.com/valon-technologies/gestalt/pull/2909) · [gestalt#2931](https://github.com/valon-technologies/gestalt/pull/2931) · [gestalt#2939](https://github.com/valon-technologies/gestalt/pull/2939) |
 | `internal/config` | `app_registry_retention_test.go` | 3 | Unit | [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) |
 | `internal/appregistry` | `retention_test.go`, `retention_prune_test.go` | 2 | Unit | [gestalt#2937](https://github.com/valon-technologies/gestalt/pull/2937) · [gestalt#2938](https://github.com/valon-technologies/gestalt/pull/2938) |
-| `gestalt-providers/app/default` | `e2e/app-admin-mock.spec.ts` | — | Playwright mock | [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142) · [gestalt-providers#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163) |
-| `services/ui/adminui` | registry UI smoke | — | Manual / browser | planned |
+| `gestalt-providers/app/default` | `e2e/app-admin-mock.spec.ts` | — | Playwright mock | [gestalt-providers#1142](https://github.com/valon-technologies/gestalt-providers/pull/1142) · [gestalt-providers#1163](https://github.com/valon-technologies/gestalt-providers/pull/1163) · [gestalt-providers#1221](https://github.com/valon-technologies/gestalt-providers/pull/1221) |
+| `services/ui/adminui` | fleet-state component and registry UI tests | — | Unit / build | [gestalt#3007](https://github.com/valon-technologies/gestalt/pull/3007) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -249,11 +251,63 @@ go test ./internal/appregistry -run 'Test(Installer|CatalogPollerRollout)' -coun
 ```
 
 - Install admission and app-scoped lock tests allow one active rollout per app while allowing different apps concurrently.
-- Poller tests cover enrollment, cohort completion, missed deadlines, and late-replica convergence.
+- Poller tests preserve enrollment-mode cohort completion and add heartbeat-mode completion behind the stored rollout mode.
 - Source-version-cohort tests use five old and five candidate processes. Both source versions acknowledge the app version, but only rows whose `source_version` matches `target_source_version` have `inCohort: true`; candidate convergence completes at `5/5` even when terminated old processes never restart.
 - Target-selection tests prove that an old revision handling an in-flight request cannot select itself, an empty target cohort cannot complete, and a completed old cohort cannot hide a target-cohort failure.
 - Activation tests require the caller's expected source version to match the handling revision, retarget an active rollout with a fresh enrollment epoch, and preserve the desired app version and change request. Same-source activation is idempotent; an explicit deployment retry refreshes active epochs and reopens failures recorded since the previous activation.
 - Identity tests require `SOURCE_VERSION` while instance IDs remain distinct within one source version.
+
+---
+
+## Runtime Heartbeat, Recovery, and Replacement Tests
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/config/... -run TestAppRegistryHeartbeat -count=1
+go test ./internal/coredata/... -run 'Test(Heartbeat|GestaltdSourceVersion|RuntimeHeartbeatFields)' -count=1
+go test ./internal/appregistry/... -run 'Test(Heartbeat|Fleet|Recovery|CatalogPoller.*Heartbeat)' -count=1
+go test ./internal/server/... -run 'Test(AdminRegistryApps|AdminAppRollout|AppAdminRegistry.*Fleet|Activate)' -count=1
+```
+
+### Heartbeat Writer and Fleet Projection
+
+- The writer waits for startup-provider initialization, writes immediately, then writes at the configured interval without overlapping passes.
+- One row contains every configured registry-only app with one observation time. Provider registry, running-version map, and `active-version` marker agreement is required for `running`; missing runtime state is `unknown`.
+- Write failure logs and retries on the next interval. Retention pruning is coarse and independent from lease-based membership.
+- Projection filters by activated source and lease, requires the activated minimum, and counts every fresh autoscaled replica. Too few live rows is `unknown`; one fresh mismatch/error is `degraded`; only unanimous exact-version observations are `healthy`.
+- Config tests assert positive durations, `heartbeatTtl > heartbeatInterval`, `healthyStabilityWindow > heartbeatTtl`, valid rollout modes, and defaults of 15s / 45s / 1m / 24h.
+
+### Replacement-Aware Rollouts
+
+- Heartbeat admissions start in `restarting` and snapshot source, minimum, mode, deadline, and evaluation epoch.
+- A departed replica blocks only while its heartbeat is fresh. After lease expiry, a replacement on the target source can satisfy capacity; a fresh unhealthy replica still blocks completion above the minimum.
+- Continuous health sets `healthy_since`; regression clears it. Completion occurs only after the configured stability window.
+- Deadline failure persists structured capacity, running, mismatch, error, source, version, and evaluation fields.
+- Source/minimum activation retargeting resets stability and fences stale evaluators. Concurrent evaluators produce one terminal transition and one immutable outcome.
+- Enrollment-mode tests remain to support rollback and active legacy records.
+
+### Recovery Observations
+
+- A failed current desired revision records one recovery only after the fleet remains healthy for the stability window.
+- A newer desired revision, changed source/minimum, health regression, non-failed outcome, or missing capacity resets/blocks recovery.
+- Concurrent observers are idempotent. Recovery does not overwrite the failed rollout outcome or mutate retention and auto-deploy state.
+- App-admin registry and history responses expose `fleetState` and recovery separately from rollout fields; embedded detail separates fresh and stale replicas.
+
+### Legacy RelationalDB Schema Compatibility
+
+`TestRuntimeHeartbeatFieldsRoundTripWithLegacyStoreSchemas` models RelationalDB's exact metadata comparison. It proves that bootstrap retains deployed `gestaltd_source_version_state` and `app_rollouts` schemas while non-indexed Runtime Heartbeats fields round-trip through full record blobs, including after a second mixed-version bootstrap. The new heartbeat and recovery stores are still created.
+
+### Operational Verification
+
+The production sequence was deliberately split:
+
+1. [toolshed#3922](https://github.com/valon-technologies/toolshed/pull/3922) deployed writers, APIs, UIs, activation capacity, and rollback reactivation while keeping `rolloutMode: enrollment`.
+2. The schema issue was covered by [gestalt#3015](https://github.com/valon-technologies/gestalt/pull/3015), then [toolshed#3924](https://github.com/valon-technologies/toolshed/pull/3924) rolled forward the compatible binary without changing app snapshots or rollout mode.
+3. After current-source heartbeats and expected capacity were verified across multiple lease windows, [toolshed#3925](https://github.com/valon-technologies/toolshed/pull/3925) changed only `rolloutMode` to `heartbeat` and added a config assertion. Reverting that setting to `enrollment` is the completion rollback.
+
+For future deploys, verify source/minimum activation, fresh replica count and exact versions, stale expiry after replacement, independent rollout/recovery presentation, and restored-source reactivation on rollback.
 
 ---
 
@@ -646,5 +700,4 @@ Publish tests do not exercise real GCS uploads; upload-path tests use test stora
 - Retention prune GCS integration and install-lock concurrency tests
 - App-admin selection tests for expired, locked, downgrade, and concurrent admission paths
 - Multi-replica materialization acknowledgement E2E (see [planned section above](#planned-multi-replica-materialization-acknowledgement-e2e))
-- Per-replica **observed** running version heartbeats
 - Deployed verification that catalog restarts serve the newly mounted binary

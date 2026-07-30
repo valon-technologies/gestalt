@@ -6,12 +6,14 @@ Operator-facing visibility for registry-only apps and app-scoped fleet version s
 
 Operators installing registry apps should answer these questions without reading pod logs or querying IndexedDB directly:
 
-| Question                          | Admin surface                 |
-| --------------------------------- | ----------------------------- |
-| Which apps are registry-only?     | Embedded admin apps list      |
-| What is the desired version?      | Desired version on app detail |
-| Is the rollout still in progress? | Rollout phase stepper (`/apps/{app}/admin`); rollout badge (embedded `/admin`) |
-| Which replicas have converged?    | Replica convergence table     |
+| Question                            | Admin surface                                                           |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| Which apps are registry-only?       | Embedded admin apps list                                                |
+| What is the desired version?        | Desired version on app detail                                           |
+| Is the rollout still in progress?   | Rollout phase stepper (`/apps/{app}/admin`); badge (embedded `/admin`)   |
+| Is the current fleet healthy?       | Heartbeat-derived fleet status on both admin surfaces                   |
+| What is each live replica serving?  | Fresh/stale replica observations on embedded app detail                 |
+| How far did enrollment convergence get? | Replica pool totals and rollout-progress API                        |
 
 App admins additionally select the fleet-wide desired version and inspect each candidate version's publication provenance.
 
@@ -26,8 +28,10 @@ Use the same names as [lifecycle.md](./lifecycle.md#runtime-version-invariants):
 - **Rollout** — fleet-wide execution record in `app_rollouts` (`enrolling` → `restarting` → `complete` | `failed`).
 - **Target source version** — Toolshed `SOURCE_VERSION` whose replicas determine the rollout outcome.
 - **Converged** — the poller recorded `restarted_at` for the replica and version. Rollout accounting, not proof the provider is still running that version.
+- **Current fleet state** — a read-time projection over fresh heartbeats for the activated source and desired version.
+- **Recovery** — an immutable observation that a failed desired-version rollout later became stably healthy.
 
-Label **converged** as rollout progress, not current runtime state.
+Label **converged** as rollout progress, not current runtime state. Never relabel a failed rollout as complete because the current fleet later becomes healthy.
 
 ---
 
@@ -49,38 +53,40 @@ The embedded shell at `/admin` keeps the Prometheus metrics viewer and adds an *
 
 ### Apps List (`/admin/registry`)
 
-| App      | Registry | Desired version     | Rollout  | Cohort        |
-| -------- | -------- | ------------------- | -------- | ------------- |
-| g-issues | toolshed | `0.0.0-snapshot.g…` | Complete | 3/3 restarted |
+| App      | Registry | Desired version     | Current fleet | Rollout  | Cohort        |
+| -------- | -------- | ------------------- | ------------- | -------- | ------------- |
+| g-issues | toolshed | `0.0.0-snapshot.g…` | Healthy · 5/5 | Complete | 3/3 restarted |
 
 Show configured registry-only apps even when the fleet catalog is empty (desired version "—", status "not installed").
 
-Auto-refresh every 10–15s while any listed rollout is non-terminal.
+Current fleet is `healthy` only when the live count meets the activated minimum and every fresh current-source replica reports the desired version. Show `converging`, `degraded`, or `unknown` independently from the rollout badge; insufficient fresh replicas is `unknown`, never healthy.
 
 ### App Detail (`/admin/registry/{app}`)
 
 1. **Summary** — registry binding, desired version, latest published version (if available), install metadata (`installedBy`, `installedAt`).
-2. **Rollout** — state badge, target source version, timestamps, enrollment deadline, failure reason when `failed`.
-3. **Replicas** — per-replica rollout progress (`instanceId`, `sourceVersion`, `inCohort`, acknowledged / materialized / stopped / restarted, `attemptCount`, last error). Group by source version and sort by `instanceId`.
+2. **Current fleet** — health, current source, minimum/live/running counts, heartbeat lease, and evaluation time.
+3. **Runtime replicas** — fresh observations first, with instance ID, source version, heartbeat age, state, running version, and error. Show expired and superseded-source rows separately as stale diagnostics.
+4. **Rollout** — execution status, target source, and timestamps. Keep its terminal historical outcome visually distinct from current fleet health.
+5. **Replica pool** — enrollment cohort totals for rollout-progress accounting. The API retains per-replica materialization details; the UI's per-replica table is the current runtime heartbeat view.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ g-issues                                    rollout: Complete │
+│ g-issues                              current fleet: Healthy │
 │ registry: toolshed                                            │
 ├─────────────────────────────────────────────────────────────┤
 │ Desired: 0.0.0-snapshot.gcd9d741…      installed 2026-07-21 … │
 │ Published latest: 0.0.0-snapshot.gcd9d741… (same)             │
 ├─────────────────────────────────────────────────────────────┤
-│ Replicas — source 61885be… (target)              3/3 restarted │
-│ instanceId                 mat.  restart  att  error           │
-│ gestaltd-…-ncnq6           ✓     ✓        0                    │
-│ gestaltd-…-hdnx2           ✓     ✓        0                    │
-│ gestaltd-…-smmq7           ✓     ✓        0                    │
-│ Source 574fe77… (superseded)                     1/3 restarted │
+│ Source 61885be… · 3/3 live · lease 45s                        │
+│ instanceId                 age   runtime   running version     │
+│ gestaltd-…-ncnq6           4s    Running   gcd9d741…           │
+│ gestaltd-…-hdnx2           9s    Running   gcd9d741…           │
+│ gestaltd-…-smmq7           12s   Running   gcd9d741…           │
+│ Stale: gestaltd-…-old · superseded source · process exited     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The apps-list denominator includes only target-source-version replicas. Superseded source-version rows remain on app detail so an operator can explain Cloud Run overlap without treating terminated old revisions as rollout failures.
+Freshness is based on the configured lease, not the browser refresh time. Superseded-source and expired rows remain on app detail so an operator can explain Cloud Run overlap and replacement without counting them toward current health.
 
 ---
 
@@ -101,6 +107,7 @@ Implemented in `gestalt-providers` (default `/apps` UI), not the embedded `/admi
 - Legacy published versions without workflow metadata still link the commit and show **not recorded** for workflow/PR fields.
 - Disable deploy actions while a rollout is `enrolling` or `restarting`; poll registry state every **3s** and refresh until rollout is terminal.
 - Show rollout progress and the admitted version on the snapshots tab. See [Rollout phase stepper](#rollout-phase-stepper) and [Selected version row](#selected-version-row).
+- Show **Current fleet** separately from the rollout stepper, including minimum/live counts and source version. A healthy fleet after failure renders **Recovered after failed rollout** while the stepper remains **Failed**.
 - Toggle **Automatically deploy new snapshots** on `/apps/{app}/admin`. When enabled, new published snapshots are admitted across the fleet without a manual **Deploy** click. See [Auto-deploy toggle](#auto-deploy-toggle).
 - Render access denied on **403** without leaking registry metadata.
 
@@ -114,6 +121,21 @@ The page header shows the app name, **App management** label, registry binding, 
 - **Revision history** — accepted fleet version changes in reverse chronological order with rollout status and duration. This tab is always read-only.
 
 See [pending-publish.md](./pending-publish.md) for snapshot merge rules, **3s** registry polling during bootstrap and active publish/rollout, and live **Publishing** duration labels.
+
+### Current Fleet and Recovery
+
+The page header consumes `fleetState` from `GET /api/v1/apps/{app}/admin/registry` and renders it independently from `rollout`:
+
+```text
+Current fleet: Healthy · 5/5 running gcd9d741… on 61885be…
+Last rollout: Failed after 15m · Recovered Jul 30 at 13:52
+```
+
+- `healthy` means every fresh current-source replica reports the desired version and the activated minimum capacity is present.
+- `unknown` covers a missing source/minimum basis or too few fresh replicas.
+- `degraded` covers fresh errors, unknown observations, missing apps, or version mismatches; `converging` applies while a matching rollout is active before its deadline.
+- Recovery timing comes from `app_version_recovery_observations`. It does not alter the failed rollout row or its duration.
+- During mixed-version deploys, older clients may omit these fields; the UI keeps rollout presentation functional and waits for the next poll.
 
 ```text
 g-issues                                                                 App management
@@ -272,7 +294,6 @@ Legacy revisions admitted before rollout-outcome persistence omit rollout status
 
 ## Out of Scope
 
-- Per-replica observed running version (runtime heartbeats)
 - Installing or upgrading from the embedded `/admin` UI
 - Canceling or force-completing a rollout from either UI
 - Publishing versions from either UI
@@ -298,7 +319,8 @@ Legacy revisions admitted before rollout-outcome persistence omit rollout status
 ├── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
 ├── <a href="../project/changelog.md#changelog-21">21 — Rollout Phase Stepper and Selected Version Row</a>
 ├── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
-└── <a href="../project/changelog.md#changelog-26">26 — Revision History Rollout Visibility</a>
+├── <a href="../project/changelog.md#changelog-26">26 — Revision History Rollout Visibility</a>
+└── <a href="../project/changelog.md#changelog-27">27 — Runtime Heartbeats and Fleet State</a>
 </pre>
 
 ### Related Docs

@@ -15,6 +15,8 @@ Implementation:
 - Artifact materializer — `gestaltd/internal/appregistry/materializer.go`
 - Registry mount resolver — `gestaltd/internal/appregistry/mount.go`
 - App provider restarter — `gestaltd/internal/bootstrap/app_provider_restart.go`
+- Runtime heartbeat writer and fleet projection — `gestaltd/internal/appregistry/heartbeat_writer.go`, `fleet_state.go`
+- Recovery observer — `gestaltd/internal/appregistry/recovery_observer.go`
 - Change request projections — `gestaltd/internal/coredata/app_version_change_requests_projection.go`
 - Rollout state — `gestaltd/internal/coredata/app_rollouts.go`
 
@@ -69,11 +71,12 @@ Bootstrap finishes its registry-app startup attempts before the catalog poller b
 1. Bootstrap materializes and starts the desired version without updating `app_rollouts` or `app_instance_materializations`; the poller owns those rollout-accounting writes.
 2. After the exact package is validated and its provider starts successfully, bootstrap records the app and version in this process's running-version map and local `active-version` marker. Static and runtime handlers may then serve that version. If provider startup fails, neither the running-version map nor the `active-version` marker may identify the requested version as running.
 3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
-4. The poller then starts and runs its first reconciliation pass immediately.
-5. The poller compares the desired version from `app_version_change_requests` with this process's provider registry and running-version map:
+4. The runtime heartbeat writer then publishes one full-process snapshot immediately and every configured heartbeat interval. It observes every registry-only app; it does not start, stop, materialize, or relabel providers.
+5. The poller starts and runs its first reconciliation pass immediately.
+6. The poller compares the desired version from `app_version_change_requests` with this process's provider registry and running-version map:
    - **Match** — the desired version is already running. The poller validates that version's local package and records its `materialized_at`, then sets `restarted_at` on every pending row without downloading superseded versions or restarting the app.
    - **Missing or different** — if another version is running, the poller stops it; then it starts the desired version and updates the rollout-progress rows. A historical `stopped_at` in `app_instance_materializations` does not prove that the provider is still absent, because those rows record previous rollout writes rather than current process state.
-6. An empty fleet-known projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
+7. An empty fleet-known projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
 
 A replica does not acknowledge a rollout while it is bootstrapping. If rollout enrollment closes before that replica starts polling, the replica is not part of the rollout cohort. Its first poll still reads the persisted change request and converges locally without reopening the terminal rollout.
 
@@ -89,23 +92,28 @@ The controller is **pull-based** and **local**: each replica reads `app_version_
 
 Only one rollout per app may be active across the fleet. `POST …/add` and `POST …/upgrade` hold the app-scoped install lock while they reject an existing `enrolling` or `restarting` rollout, validate the candidate, create the new rollout, and append its change request. Different apps may roll out concurrently.
 
-Rollout membership is scoped to one Toolshed source version. `SOURCE_VERSION` is the commit SHA already injected into every Cloud Run process. Keep `instance_id` process-unique; using one source version as the instance ID would collapse five replicas into one row and falsely report convergence after one process restarts.
+Rollout membership is scoped to one Toolshed source version. `SOURCE_VERSION` is the commit SHA injected into every Cloud Run process, while `instance_id` remains process-unique so each replica has its own heartbeat and rollout-progress records.
 
-Replica membership is discovered rather than configured:
+`server.appRegistry.rolloutMode` selects completion behavior for newly admitted or activation-retargeted rollouts:
 
-1. App admission snapshots the current `SOURCE_VERSION` into `app_rollouts.target_source_version`.
-2. The rollout remains `enrolling` for a bounded window of at least two poll intervals.
-3. Replicas with that source version join by writing `acknowledged_at` before `enrollment_ends_at` and download the rollout artifact during this window, recording `materialized_at` while the current provider keeps running.
-4. Replicas from another source version still reconcile the durable desired version, but they are not members of the target cohort and do not affect its outcome.
-5. After enrollment, the target cohort is frozen and the rollout becomes `restarting`.
-6. The rollout completes when the target cohort is non-empty and every member records `restarted_at`.
-7. The rollout fails if a target-cohort replica does not restart before the deadline, or if no target replica acknowledges before the deadline.
+- **`heartbeat`** — the shipped Toolshed setting. New rollouts start in `restarting`, snapshot `target_source_version` and `minimum_healthy_instances`, and complete from the live fleet rather than a frozen identity set.
+- **`enrollment`** — the compatibility and rollback setting. It retains the bounded `enrolling` window, frozen acknowledged cohort, and `restarted_at` completion semantics described by historical rollout records.
+
+In heartbeat mode:
+
+1. Every process writes one atomic `gestaltd_instance_heartbeats` snapshot immediately after startup-provider initialization and every **15 seconds** by default. Each configured registry app reports its observed state and running version from the provider registry, running-version map, and `active-version` marker.
+2. A heartbeat is live only when its source matches the rollout target and it is no older than the configured lease (**45 seconds** by default). A departed identity stops counting when its lease expires.
+3. The rollout is healthy only when at least its snapshotted minimum capacity is live and every fresh target-source replica reports `running` at the rollout version. A missing app, error, unknown state, or mismatched fresh replica blocks completion even when the fleet is above the minimum.
+4. Healthy state must remain continuous for the configured stability window (**60 seconds** by default). A regression clears `healthy_since`.
+5. The rollout completes after stable health, or fails at its deadline with the observed source, capacity, running, mismatch, and error counts. Transitions are fenced by the complete rollout epoch so concurrent or stale evaluators are idempotent.
+
+Replica identity is diagnostic rather than a required slot: after replica A expires, replacement B on the same target source can satisfy the minimum and complete the rollout once the entire fresh fleet is stable. `app_instance_materializations` continues to describe local reconciliation progress, but it does not decide heartbeat rollout completion.
 
 When the catalog poller transitions a rollout to `complete` or `failed`, it writes one `app_version_rollout_outcomes` row keyed by the latest change request for `(app, version)`. Duplicate writes for the same change-request `id` are ignored. The poller records an outcome only when the transition succeeds; no-op transitions on an already-terminal rollout do not write. Terminal durations on the revision-history API prefer this sidecar over the live `app_rollouts` record.
 
-This prevents a Cloud Run deployment from combining five old and five candidate processes into a ten-member cohort. When Cloud Run terminates the old deployment, those rows remain visible for diagnostics but do not block the candidate deployment from completing at `5/5 restarted`.
+Current fleet state and rollout outcome are separate facts. `fleetState` is evaluated at read time from fresh heartbeats for the currently activated source; `app_version_rollout_outcomes` is immutable history for one admission. A failed rollout remains failed even if the desired version later becomes healthy.
 
-Never declare success because any source-version cohort completed. The old source version could reach `5/5` while the promoted source version fails. Success is tied to `target_source_version`.
+For that case, the recovery observer requires the same continuous healthy stability window and records one `app_version_recovery_observations` row for the failed change-request ID. Recovery does not rewrite the outcome, append a change request, reset retention, or trigger auto-deploy.
 
 #### Target Source Version Selection
 
@@ -113,17 +121,17 @@ The replica handling the version-selection HTTP request does not choose the targ
 
 Toolshed deployment orchestration owns shared source-version state:
 
-1. After the candidate passes readiness, call `POST /activate?source_version={SOURCE_VERSION}` on its tagged management URL before shifting traffic. The candidate rejects the request unless the expected source version matches its local value. Activation atomically records that `SOURCE_VERSION` as current and retargets active app rollouts with a fresh enrollment epoch.
+1. After the candidate passes readiness, call `POST /activate?source_version={SOURCE_VERSION}&minimum_healthy_instances={MIN_SCALE}` on its tagged management URL before shifting traffic. The candidate rejects a source-version mismatch or non-positive minimum. Activation atomically records the source and Cloud Run minimum capacity and retargets active app rollouts with a fresh epoch.
 2. App admission reads the current source-version record while holding the app install lock and copies it to the rollout.
 3. Shift 100% traffic to the candidate.
 
-A repeated activation for the same source version is idempotent. If deployment fails after activation, rollback restores Cloud Run and Temporal traffic but does not restore the previous source-version record. Until the deployment is retried, a new app rollout may target the unavailable candidate and fail. Retrying the failed deployment calls `POST /activate?source_version={SOURCE_VERSION}&retry=true`; this refreshes active rollout epochs and reopens rollouts for that source version that failed since its previous activation before traffic is shifted again.
+A repeated activation for the same source and minimum is idempotent. Deployment rollback treats traffic and app-registry source state as one promotion unit: after restoring Cloud Run traffic, orchestration calls the restored revision's `/activate` endpoint with its own `SOURCE_VERSION`, minimum capacity, and `retry=true`. This prevents current fleet reads and new admissions from remaining pointed at the failed candidate. A deployment retry similarly refreshes the epoch and may reopen rollouts for that source that failed since its prior activation.
 
-If a new source version becomes current while an app rollout is active, retarget the rollout and open a fresh enrollment window. Rollout transitions are fenced by target source version and enrollment epoch so a poller that sampled the old rollout cannot complete, fail, or advance the new one. The desired app version and change request do not change. Materialization rows from the superseded source version remain diagnostic and have `inCohort: false`.
+If a new source version or minimum becomes current while an app rollout is active, activation retargets it, resets its deadline and health epoch, and applies the configured rollout mode. The desired app version and change request do not change. Materialization and heartbeat rows from superseded sources remain diagnostic but do not participate in current health or completion.
 
 Production rollout coordination requires `SOURCE_VERSION`. Local development may use a process-local value.
 
-Replicas that do not acknowledge before enrollment closes are not cohort members and do not block completion. A late target-source-version replica still converges locally but does not reopen a terminal rollout.
+Changing `rolloutMode` back to `enrollment` is the operational completion rollback switch; heartbeat and recovery data remain available. The mode is applied at admission or activation, so activation is required to retarget an already-active heartbeat rollout into enrollment semantics. Legacy enrollment rollouts otherwise retain their stored mode until terminal.
 
 Each pass:
 
@@ -170,6 +178,18 @@ Runtime handlers determine availability from the local provider registry, runnin
 ## Runtime
 
 The admin HTTP API is served under `/admin/api/v1` on the same listener as the other admin API (for example `/admin/api/v1/runtime/providers`). In deployments that split public and management listeners, call the management base URL.
+
+### Operational Verification
+
+After activation or replacement, verify the live system through the registry-app APIs rather than interpreting materialization timestamps as liveness:
+
+1. Confirm `fleetState.sourceVersion` equals the activated Cloud Run revision, `minimumHealthyInstances` equals its configured minimum scale, and `heartbeatTtlSeconds` is the expected lease.
+2. Observe for at least two lease windows. `liveInstances` must stay at or above the minimum, and every fresh replica must report the desired version; a replaced process should move to `staleReplicas` after the lease while its replacement appears in `freshReplicas`.
+3. Confirm the embedded and app-admin surfaces agree on current fleet state while preserving the separate rollout result and any recovery time.
+4. Before enabling heartbeat completion, ensure no app rollout is active. After enablement, exercise one registry-app rollout and verify stable-health completion does not depend on a departed instance ID.
+5. For rollback, confirm traffic returns to the previous revision and activation updates both `sourceVersion` and minimum capacity to that restored revision.
+
+The production rollout followed this sequence: [toolshed#3922](https://github.com/valon-technologies/toolshed/pull/3922) deployed heartbeat observability under enrollment semantics, [gestalt#3015](https://github.com/valon-technologies/gestalt/pull/3015) and [toolshed#3924](https://github.com/valon-technologies/toolshed/pull/3924) rolled forward schema-compatible binaries, and [toolshed#3925](https://github.com/valon-technologies/toolshed/pull/3925) enabled heartbeat completion after fleet verification.
 
 ### How to Invoke
 
@@ -487,12 +507,12 @@ IndexedDB read only. No GCS fetch.
 
 Read-only routes under `/admin/api/v1` with `gestaltAdmin` auth. UI wireframes: [admin.md](./admin.md#embedded-admin-ui-admin).
 
-These routes expose IndexedDB rollout state that the catalog poller already writes. They do not change install or convergence behavior.
+These routes expose rollout history and current heartbeat-derived fleet state. They do not change install or convergence behavior.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/admin/api/v1/registry-apps` | Registry-only apps from deploy config, merged with desired version and rollout summary |
-| `GET` | `/admin/api/v1/registry-apps/{app}` | One registry-only app: fleet-known versions, rollout, optional latest published registry version |
+| `GET` | `/admin/api/v1/registry-apps` | Registry-only apps from deploy config, merged with desired version, rollout summary, and current `fleetState` |
+| `GET` | `/admin/api/v1/registry-apps/{app}` | One registry-only app: fleet-known versions, rollout, current fleet state, fresh/stale replicas, and optional latest published version |
 | `GET` | `/admin/api/v1/app-rollouts` | List active and recent terminal rollouts |
 | `GET` | `/admin/api/v1/app-rollouts/{app}/materializations` | Per-replica rollout-progress rows for one `(app, version)` |
 
@@ -535,6 +555,7 @@ List deploy-configured registry-only apps (`source.registry`), merged with fleet
 | `rollout` | object | Current or most recent rollout for this app; omitted when none |
 | `rollout.targetSourceVersion` | string | Toolshed `SOURCE_VERSION` selected by deployment orchestration |
 | `cohort` | object | Counts over target-source-version materialization rows that acknowledged before `enrollmentEndsAt` |
+| `fleetState` | object | Current heartbeat-derived state, source, desired version, minimum/live/running counts, errors, lease, and evaluation time |
 
 Apps with no fleet-known version still appear when configured with `source.registry`. IndexedDB read only. No GCS fetch.
 
@@ -565,6 +586,8 @@ Detail view for one registry-only app. Same fields as one list element, plus:
 `knownVersions` lists fleet-known `(app, version)` pairs projected from `app_version_change_requests`.
 
 `latestPublished` is optional. The handler may fetch the registry index and return the newest `publishedAt` entry so operators can compare **published** vs **fleet-known** vs **converged**.
+
+`freshReplicas` contains observations within the lease for the current source. `staleReplicas` retains expired and superseded-source observations for diagnosis; neither stale category contributes to `fleetState` or rollout completion.
 
 **Response `404`** when `{app}` is not a registry-only app in deploy config.
 
@@ -707,6 +730,7 @@ Rules:
 
 - `{app}` must be deploy-configured with `source.registry`.
 - `knownVersions` comes from the change-request projection; `desiredVersion` is `LatestKnownVersion` and is omitted before first install.
+- `fleetState` is current heartbeat-derived state and is independent of `rollout`. `recovery`, when present, identifies a failed current revision that later reached stable fleet health.
 - `publishedVersions` comes from the registry index, newest `publishedAt` first. Each entry includes `publishedAt`, `sourceRef`, `sourceUrl`, and `publication` when recorded. Legacy versions may omit `publication`.
 - `publishedVersions[].deploymentState` is `available` for never-deployed versions before `expiresAt`, `expired` for never-deployed versions after `expiresAt` but before pruning, `desired` for the current version, `redeployable` for historical versions before `expiresAt`, or `locked` after `expiresAt`.
 - `deployableUntil` is returned for historical versions (mapped from `expiresAt`). The UI offers **Deploy** only for `available` and `redeployable`.
@@ -766,6 +790,7 @@ Rules:
 - `rolloutState` is `enrolling`, `restarting`, `complete`, or `failed`.
 - For active rollouts, project `rolloutState` from `app_rollouts` only on the current revision (`id` matches the latest change request). Older same-version rows do not inherit the live rollout.
 - For terminal rows, prefer the `app_version_rollout_outcomes` sidecar. Fall back to `app_rollouts` when the rollout record is still terminal and versions match.
+- A revision-level `recovery` is additive: it never changes `rolloutState: failed`. The history response's top-level `fleetState` describes the fleet now, not at the revision timestamp.
 - `rolloutForSeconds` is set only while state is `enrolling` or `restarting`.
 - `rolloutDurationSeconds`, `rolloutCompletedAt`, and `rolloutFailedAt` are set only for terminal states.
 - Legacy revisions without a stored outcome omit terminal duration fields.
@@ -962,7 +987,8 @@ Example:
 ├── <a href="../project/changelog.md#changelog-15">15 — App-Scoped Version Selection</a>
 ├── <a href="../project/changelog.md#changelog-17">17 — Version Retention and Cleanup</a>
 ├── <a href="../project/changelog.md#changelog-18">18 — Revision History and Redeploy Windows</a>
-└── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
+├── <a href="../project/changelog.md#changelog-25">25 — Auto-Deploy Published Snapshots</a>
+└── <a href="../project/changelog.md#changelog-27">27 — Runtime Heartbeats and Fleet State</a>
 </pre>
 
 ### Related Docs
