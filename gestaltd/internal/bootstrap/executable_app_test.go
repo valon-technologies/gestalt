@@ -6411,8 +6411,6 @@ func TestRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
 	}
 }
 
-// registerGlobalAppInvocationForTest mirrors gestaltd bootstrap registering
-// the app-invocation host service once, globally, against the shared invoker.
 func registerGlobalAppInvocationForTest(t *testing.T, deps Deps) {
 	t.Helper()
 	t.Cleanup(registerGlobalAppInvocationPublicHostService(deps))

@@ -1144,8 +1144,6 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	invoker := &relayTestInvoker{}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("relay-session")
-	// Registered under the global "app" key; the relay token's AppName
-	// (the caller) deliberately has no registration of its own.
 	publicHostServices.RegisterVerified("app", sessionVerifier, runtimehost.HostService{
 		Name:           "app",
 		MethodPrefixes: []string{"/" + proto.App_ServiceDesc.ServiceName + "/"},

@@ -72,7 +72,7 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 		hostServices = append(hostServices, authenticationHostService)
 	}
 	hostServices = append(hostServices,
-		buildLocalAppInvocationHostService(name, deps),
+		buildAppInvocationHostService(name, deps, nil),
 		buildWorkflowProviderHostService(name, deps),
 		buildPluginAgentProviderHostService(name, deps),
 	)
@@ -182,8 +182,6 @@ func grpcMethodPrefix(serviceName string) string {
 }
 
 func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostServices []runtimehost.HostService, deps Deps) (map[string]string, string, error) {
-	// Host services with no MethodPrefixes are local-only; the relay routes
-	// their RPCs to a global registration instead.
 	publicHostServices := make([]runtimehost.HostService, 0, len(hostServices))
 	for _, hostService := range hostServices {
 		if len(hostService.MethodPrefixes) == 0 {
@@ -249,20 +247,14 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 	return registerVerifiedPublicHostServices(providerName, hostServices, deps, runtimeHostServiceSessionVerifier{}, false)
 }
 
-// appInvocationPublicProviderKey is the well-known registration key for the
-// single, global app-invocation host service. Relay routing matches App RPCs
-// to this registration by gRPC service name, so it must stay stable.
 const appInvocationPublicProviderKey = "app"
 
-// registerGlobalAppInvocationPublicHostService must run after deps.AppInvocation
-// is set to the guarded shared invoker so app-to-app invokes route through the
-// shared invocation broker.
 func registerGlobalAppInvocationPublicHostService(deps Deps) func() {
 	if !hostCanRelayRuntimeHostServices(deps) {
 		return func() {}
 	}
 	cleanup, err := registerPublicRuntimeHostServices(appInvocationPublicProviderKey, []runtimehost.HostService{
-		buildAppInvocationHostService("", deps),
+		buildAppInvocationHostService("", deps, []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)}),
 	}, deps)
 	if err != nil || cleanup == nil {
 		if err != nil {
@@ -506,21 +498,7 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 	}
 }
 
-// buildAppInvocationHostService builds the app-invocation host service. With
-// a caller name it enforces that the caller matches; with an empty caller name
-// (the global registration) caller identity comes from the verified relay
-// token instead.
-func buildAppInvocationHostService(callerName string, deps Deps) runtimehost.HostService {
-	return buildAppInvocationHostServiceWithPrefixes(callerName, deps, []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)})
-}
-
-// buildLocalAppInvocationHostService is the per-caller unix-socket variant:
-// no method prefixes, so it stays off the public relay registry.
-func buildLocalAppInvocationHostService(callerName string, deps Deps) runtimehost.HostService {
-	return buildAppInvocationHostServiceWithPrefixes(callerName, deps, nil)
-}
-
-func buildAppInvocationHostServiceWithPrefixes(callerName string, deps Deps, methodPrefixes []string) runtimehost.HostService {
+func buildAppInvocationHostService(callerName string, deps Deps, methodPrefixes []string) runtimehost.HostService {
 	invoker := deps.AppInvocation
 	if invoker == nil {
 		invoker = unavailableAppInvocation{}
@@ -536,7 +514,7 @@ func buildAppInvocationHostServiceWithPrefixes(callerName string, deps Deps, met
 		Name:           "app",
 		MethodPrefixes: methodPrefixes,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAppServer(srv, appaccessservice.NewServer(invoker, opts...))
+			proto.RegisterAppServer(srv, appaccessservice.NewAppServer(invoker, opts...))
 		},
 	}
 }

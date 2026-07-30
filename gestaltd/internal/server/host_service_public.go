@@ -73,16 +73,10 @@ func (k hostServiceHandlerKey) String() string {
 	return k.pluginName
 }
 
-// appInvocationPublicProviderKey is the well-known registration key for the
-// single, global app-invocation host service registered by gestaltd bootstrap.
 const appInvocationPublicProviderKey = "app"
 
 var appServiceMethodPrefix = "/" + proto.App_ServiceDesc.ServiceName + "/"
 
-// hostServiceRelayPluginName routes App/* RPCs to the single global
-// app-invocation host service: the token's AppName is the caller, not the
-// serving provider, and caller identity comes from the verified token. All
-// other services stay keyed by the caller's provider name.
 func hostServiceRelayPluginName(target runtimehost.HostServiceRelayTarget, methodPath string) string {
 	if strings.HasPrefix(methodPath, appServiceMethodPrefix) {
 		return appInvocationPublicProviderKey

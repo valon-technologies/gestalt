@@ -445,8 +445,6 @@ func (s *AppServer) requestContext(ctx context.Context, reqCtx *proto.RequestCon
 			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match serving provider %q", callerName, expected)
 		}
 	}
-	// The verified relay token is authoritative for the caller identity;
-	// the proto caller is the fallback for direct (non-relay) calls.
 	if verified := invocation.CallerProviderFromContext(ctx); verified.Name != "" && verified.Name != callerName {
 		return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match verified caller %q", callerName, verified.Name)
 	}
@@ -465,8 +463,6 @@ func (s *AppServer) authorizeAgentAppInvocation(ctx context.Context, callCtx req
 	if s == nil || s.agentAppAuth == nil {
 		return invocation.AgentAppAuthorization{}, status.Error(codes.FailedPrecondition, "agent app invocation authorizer is required")
 	}
-	// The agent invocation context carries the agent provider; the caller is
-	// the orchestrating workflow/app that launched the turn.
 	agentProviderName := strings.TrimSpace(callCtx.agent.ProviderName)
 	if agentProviderName == "" {
 		agentProviderName = strings.TrimSpace(callCtx.callerName)

@@ -381,8 +381,6 @@ func TestAppServerInvokeRejectsRequestRunAsForWorkflowCaller(t *testing.T) {
 func TestAppServerInvokeResolvesAgentProviderFromCaller(t *testing.T) {
 	t.Parallel()
 
-	// The agent provider resolves from the caller context now that the app
-	// host service is registered globally without a baked-in serving provider.
 	agentAuth := &recordingAgentAppAuthorizer{
 		response: invocation.AgentAppAuthorization{
 			Principal: &principal.Principal{SubjectID: "user:runner"},
@@ -562,7 +560,6 @@ func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
 func TestAppServerInvokeRejectsForgedCallerMismatchingVerifiedCaller(t *testing.T) {
 	t.Parallel()
 
-	// A forged proto caller must not override the verified relay-token caller.
 	server := NewAppServer(&recordingAppInvocation{})
 	restoreVerifiedCaller := grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		return handler(invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, "caller"), req)
