@@ -72,6 +72,7 @@ func TestRootAppPromptExamplesValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var node yaml.Node
 			if err := yaml.Unmarshal([]byte(tt.yaml), &node); err != nil {
 				t.Fatalf("yaml.Unmarshal: %v", err)
