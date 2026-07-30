@@ -157,22 +157,21 @@ type Server struct {
 	appRegistries          map[string]config.AppRegistryConfig
 	appRegistryReader      *appregistry.RegistryReader
 	appRegistryInstaller   *appregistry.Installer
+	appFleetProjector      *appregistry.FleetProjector
 	appVersionChanges      *coredata.AppVersionChangeRequestService
 	gestaltdSourceVersions *coredata.GestaltdSourceVersionService
+	instanceHeartbeats     *coredata.GestaltdInstanceHeartbeatService
 	appRollouts            *coredata.AppRolloutService
 	appMaterializations    *coredata.AppInstanceMaterializationService
 	autoDeploySettings     *coredata.AutoDeploySettingsService
 	appRolloutOutcomes     *coredata.AppVersionRolloutOutcomeService
+	recoveryObservations   *coredata.AppVersionRecoveryObservationService
 	appAutoDeployNotify    func(string)
 	artifactsDir           string
 	sourceVersion          string
 	appRuntimeState        AppRuntimeState
 	routeProfile           RouteProfile
 	activateAppProviders   func(context.Context)
-
-	appRecoveryObservations *coredata.AppVersionRecoveryObservationService
-	gestaltdHeartbeats      *coredata.GestaltdInstanceHeartbeatService
-	appRegistryHeartbeatTTL time.Duration
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -185,62 +184,62 @@ func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 }
 
 type Config struct {
-	Auth                   core.IdentityProvider
-	SelectedAuthProvider   string
-	AuthProviders          map[string]core.IdentityProvider
-	Authorization          core.AuthorizationProvider
-	ProviderKinds          map[string]invocation.ProviderKind
-	AuditSink              core.AuditSink
-	Services               *coredata.Services
-	Providers              *registry.ProviderMap[core.Provider]
-	Agent                  bootstrap.AgentControl
-	AgentManager           agentmanager.Service
-	Workflow               bootstrap.WorkflowControl
-	Runtimes               bootstrap.RuntimeInspector
-	Invoker                invocation.Invoker
-	AppInvocation          invocation.Invoker
-	DefaultConnection      map[string]string
-	CatalogConnection      map[string]string
-	MCPConnection          map[string]string
-	ConnectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
-	ManualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
-	AppDefs                map[string]*config.ProviderEntry
-	PublicBaseURL          string
-	ManagementBaseURL      string
-	SecureCookies          bool
-	StateSecret            []byte
-	APIRouteTimeout        time.Duration
-	Now                    func() time.Time
-	Readiness              ReadinessChecker
-	PrometheusMetrics      http.Handler
-	MCPHandler             http.Handler
-	PublicHostServices     *runtimehost.PublicHostServiceRegistry
-	PublicGatewayTransport *providergateway.ProviderGatewayTransport
-	S3                     map[string]s3sdk.S3
-	MountedUIs             []MountedUI
-	DevHandlerResolver     func(name string) http.Handler
-	Admin                  AdminRouteConfig
-	AdminUI                http.Handler
-	BuiltinAdminUI         *BuiltinAdminUIOptions
-	AppRegistries          map[string]config.AppRegistryConfig
-	AppRegistryReader      *appregistry.RegistryReader
-	ArtifactsDir           string
-	GestaltdVersion        string
-	SourceVersion          string
-	AppRuntimeState        AppRuntimeState
-	RouteProfile           RouteProfile
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	ActivateAppProviders   func(context.Context)
-	IndexedDB              indexeddb.IndexedDB
-	RemoteManagement       proto.RemoteManagementServer
-	FrpsHandler            http.Handler
-	FrpsConnectHandler     http.Handler
-	TunnelResolver         TunnelResolverConfig
+	Auth                    core.IdentityProvider
+	SelectedAuthProvider    string
+	AuthProviders           map[string]core.IdentityProvider
+	Authorization           core.AuthorizationProvider
+	ProviderKinds           map[string]invocation.ProviderKind
+	AuditSink               core.AuditSink
+	Services                *coredata.Services
+	Providers               *registry.ProviderMap[core.Provider]
+	Agent                   bootstrap.AgentControl
+	AgentManager            agentmanager.Service
+	Workflow                bootstrap.WorkflowControl
+	Runtimes                bootstrap.RuntimeInspector
+	Invoker                 invocation.Invoker
+	AppInvocation           invocation.Invoker
+	DefaultConnection       map[string]string
+	CatalogConnection       map[string]string
+	MCPConnection           map[string]string
+	ConnectionAuth          func() map[string]map[string]bootstrap.OAuthHandler
+	ManualConnectionAuth    func() map[string]map[string]bootstrap.ManualTokenExchanger
+	AppDefs                 map[string]*config.ProviderEntry
+	PublicBaseURL           string
+	ManagementBaseURL       string
+	SecureCookies           bool
+	StateSecret             []byte
+	APIRouteTimeout         time.Duration
+	Now                     func() time.Time
+	Readiness               ReadinessChecker
+	PrometheusMetrics       http.Handler
+	MCPHandler              http.Handler
+	PublicHostServices      *runtimehost.PublicHostServiceRegistry
+	PublicGatewayTransport  *providergateway.ProviderGatewayTransport
+	S3                      map[string]s3sdk.S3
+	MountedUIs              []MountedUI
+	DevHandlerResolver      func(name string) http.Handler
+	Admin                   AdminRouteConfig
+	AdminUI                 http.Handler
+	BuiltinAdminUI          *BuiltinAdminUIOptions
+	AppRegistries           map[string]config.AppRegistryConfig
+	AppRegistryReader       *appregistry.RegistryReader
+	AppFleetProjector       *appregistry.FleetProjector
+	AppRegistryHeartbeatTTL time.Duration
+	ArtifactsDir            string
+	GestaltdVersion         string
+	SourceVersion           string
+	AppRuntimeState         AppRuntimeState
+	RouteProfile            RouteProfile
+	MeterProvider           metric.MeterProvider
+	TracerProvider          trace.TracerProvider
+	ActivateAppProviders    func(context.Context)
+	IndexedDB               indexeddb.IndexedDB
+	RemoteManagement        proto.RemoteManagementServer
+	FrpsHandler             http.Handler
+	FrpsConnectHandler      http.Handler
+	TunnelResolver          TunnelResolverConfig
 	// AppAutoDeployNotify requests prompt auto-deploy reconciliation for an app.
 	AppAutoDeployNotify func(app string)
-
-	AppRegistryHeartbeatTTL time.Duration
 }
 
 func New(cfg Config) (*Server, error) {
@@ -377,6 +376,21 @@ func New(cfg Config) (*Server, error) {
 	if tunnelResolver != nil && cfg.Providers != nil {
 		cfg.Providers.SetRemoteResolver(tunnelResolver)
 	}
+	fleetProjector := cfg.AppFleetProjector
+	if fleetProjector == nil {
+		heartbeatTTL := cfg.AppRegistryHeartbeatTTL
+		if heartbeatTTL <= 0 {
+			heartbeatTTL = config.DefaultAppRegistryHeartbeatTTL
+		}
+		fleetProjector = &appregistry.FleetProjector{
+			ChangeRequests: cfg.Services.AppVersionChangeRequests,
+			SourceVersions: cfg.Services.GestaltdSourceVersionState,
+			Heartbeats:     cfg.Services.GestaltdInstanceHeartbeats,
+			Rollouts:       cfg.Services.AppRollouts,
+			HeartbeatTTL:   heartbeatTTL,
+			Now:            now,
+		}
+	}
 	s := &Server{
 		router:                 router,
 		handler:                withRequestTelemetryProviders(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider, cfg.TracerProvider),
@@ -430,25 +444,21 @@ func New(cfg Config) (*Server, error) {
 		appRegistries:          cloneAppRegistryConfig(cfg.AppRegistries),
 		appRegistryReader:      cfg.AppRegistryReader,
 		appRegistryInstaller:   newAppRegistryInstaller(cfg),
+		appFleetProjector:      fleetProjector,
 		appVersionChanges:      cfg.Services.AppVersionChangeRequests,
 		gestaltdSourceVersions: cfg.Services.GestaltdSourceVersionState,
+		instanceHeartbeats:     cfg.Services.GestaltdInstanceHeartbeats,
 		appRollouts:            cfg.Services.AppRollouts,
 		appMaterializations:    cfg.Services.AppInstanceMaterializations,
 		autoDeploySettings:     cfg.Services.AutoDeploySettings,
 		appRolloutOutcomes:     cfg.Services.AppVersionRolloutOutcomes,
+		recoveryObservations:   cfg.Services.AppVersionRecoveryObservations,
 		appAutoDeployNotify:    cfg.AppAutoDeployNotify,
 		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
 		sourceVersion:          strings.TrimSpace(cfg.SourceVersion),
 		appRuntimeState:        cfg.AppRuntimeState,
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,
-
-		appRecoveryObservations: cfg.Services.AppVersionRecoveryObservations,
-		gestaltdHeartbeats:      cfg.Services.GestaltdInstanceHeartbeats,
-		appRegistryHeartbeatTTL: cfg.AppRegistryHeartbeatTTL,
-	}
-	if s.appRegistryHeartbeatTTL <= 0 {
-		s.appRegistryHeartbeatTTL = config.DefaultAppRegistryHeartbeatTTL
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,

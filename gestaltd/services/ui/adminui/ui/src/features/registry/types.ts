@@ -1,3 +1,36 @@
+export type FleetState = {
+  state: "healthy" | "converging" | "degraded" | "unknown";
+  sourceVersion?: string;
+  desiredVersion?: string;
+  minimumHealthyInstances: number;
+  liveInstances: number;
+  runningDesiredVersion: number;
+  mismatched: number;
+  errors: number;
+  heartbeatTtlSeconds: number;
+  evaluatedAt: string;
+};
+
+export type FleetReplicaSourceStatus = "current" | "superseded" | "unavailable";
+
+export type FleetReplica = {
+  instanceId: string;
+  sourceVersion: string;
+  currentSource: boolean;
+  sourceStatus: FleetReplicaSourceStatus;
+  fresh: boolean;
+  startedAt?: string;
+  heartbeatAt: string;
+  heartbeatAgeSeconds: number;
+  appObservation: {
+    state: "running" | "starting" | "not_running" | "error" | "unknown";
+    desiredVersion?: string;
+    runningVersion?: string;
+    observedAt?: string;
+    lastError?: string;
+  };
+};
+
 export type RegistryAppSummary = {
   app: string;
   registry: string;
@@ -18,6 +51,7 @@ export type RegistryAppSummary = {
     restarted: number;
     failed: number;
   };
+  fleetState: FleetState;
 };
 
 export type RegistryAppDetail = RegistryAppSummary & {
@@ -30,6 +64,8 @@ export type RegistryAppDetail = RegistryAppSummary & {
     version: string;
     publishedAt: string;
   };
+  freshReplicas: FleetReplica[];
+  staleReplicas: FleetReplica[];
 };
 
 export type MaterializationsResponse = {

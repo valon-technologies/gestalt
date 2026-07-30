@@ -97,9 +97,9 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		return err
 	}
 	defer reverseRemote.shutdown(context.Background())
-	appRegistryHeartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
+	heartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
 	if err != nil {
-		return fmt.Errorf("server.appRegistry.heartbeatTtl: %w", err)
+		return fmt.Errorf("resolve app registry heartbeat TTL: %w", err)
 	}
 	baseConfig := Config{
 		Auth:                 result.Auth,
@@ -152,13 +152,12 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
 		},
-		AppRegistries:   cfg.AppRegistries,
-		ArtifactsDir:    cfg.Server.ArtifactsDir,
-		GestaltdVersion: strings.TrimSpace(gestaltdVersion),
-		SourceVersion:   appregistry.ResolveSourceVersion(),
-		AppRuntimeState: appRuntimeState,
-
-		AppRegistryHeartbeatTTL: appRegistryHeartbeatTTL,
+		AppRegistries:           cfg.AppRegistries,
+		AppRegistryHeartbeatTTL: heartbeatTTL,
+		ArtifactsDir:            cfg.Server.ArtifactsDir,
+		GestaltdVersion:         strings.TrimSpace(gestaltdVersion),
+		SourceVersion:           appregistry.ResolveSourceVersion(),
+		AppRuntimeState:         appRuntimeState,
 	}
 
 	result.RegistryAppStartup = registryAppStartup(cfg, result, nil)

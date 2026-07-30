@@ -339,14 +339,14 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}
-	if desiredVersion != "" && s.appRecoveryObservations != nil {
+	if desiredVersion != "" && s.recoveryObservations != nil {
 		currentRevisionID, revisionErr := s.appVersionChanges.LatestDesiredRevisionID(r.Context(), app.name, desiredVersion)
 		if revisionErr != nil {
 			writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 			return
 		}
 		if currentRevisionID != "" {
-			recovery, recoveryErr := s.appRecoveryObservations.Get(r.Context(), currentRevisionID)
+			recovery, recoveryErr := s.recoveryObservations.Get(r.Context(), currentRevisionID)
 			if recoveryErr == nil {
 				response.Recovery = appAdminRecoveryFromCore(recovery)
 			} else if !errors.Is(recoveryErr, core.ErrNotFound) {
@@ -421,20 +421,10 @@ func appAdminAutoDeployFromCore(settings *core.AppAutoDeploySettings) appAdminAu
 }
 
 func (s *Server) projectAppAdminFleetState(ctx context.Context, app string) (*appAdminFleetState, error) {
-	if s == nil ||
-		s.appVersionChanges == nil ||
-		s.gestaltdSourceVersions == nil ||
-		s.gestaltdHeartbeats == nil {
+	if s == nil || s.appFleetProjector == nil {
 		return nil, nil
 	}
-	projection, err := (&appregistry.FleetProjector{
-		ChangeRequests: s.appVersionChanges,
-		SourceVersions: s.gestaltdSourceVersions,
-		Heartbeats:     s.gestaltdHeartbeats,
-		Rollouts:       s.appRollouts,
-		HeartbeatTTL:   s.appRegistryHeartbeatTTL,
-		Now:            s.now,
-	}).Project(ctx, app)
+	projection, err := s.appFleetProjector.Project(ctx, app)
 	if err != nil {
 		return nil, err
 	}
@@ -565,9 +555,9 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	recoveriesByID := map[string]*core.AppVersionRecoveryObservation{}
-	if s.appRecoveryObservations != nil && len(changeRequestIDs) > 0 {
+	if s.recoveryObservations != nil && len(changeRequestIDs) > 0 {
 		var recoveriesErr error
-		recoveriesByID, recoveriesErr = s.appRecoveryObservations.GetMany(r.Context(), changeRequestIDs)
+		recoveriesByID, recoveriesErr = s.recoveryObservations.GetMany(r.Context(), changeRequestIDs)
 		if recoveriesErr != nil {
 			writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 			return
