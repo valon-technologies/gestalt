@@ -117,7 +117,7 @@ type Server struct {
 	authResolvers          map[string]*principal.Resolver
 	invoker                invocation.Invoker
 	pluginInvoker          invocation.Invoker
-	appPromptExamples      map[string][]string
+	appPrompts             map[string][]appPromptInfo
 	apiRouteTimeout        time.Duration
 	defaultConnection      map[string]string
 	catalogConnection      map[string]string
@@ -249,9 +249,17 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Invoker == nil {
 		return nil, fmt.Errorf("invoker is required")
 	}
-	appPromptExamples, err := config.RootAppPromptExamples(cfg.AppDefs)
+	rootPrompts, err := config.RootAppPrompts(cfg.AppDefs)
 	if err != nil {
 		return nil, fmt.Errorf("resolve root app prompts: %w", err)
+	}
+	appPrompts := make(map[string][]appPromptInfo, len(rootPrompts))
+	for appName, prompts := range rootPrompts {
+		infos := make([]appPromptInfo, 0, len(prompts))
+		for _, prompt := range prompts {
+			infos = append(infos, appPromptInfo{ID: prompt.ID, Text: prompt.Text})
+		}
+		appPrompts[appName] = infos
 	}
 	pluginInvoker := cfg.AppInvocation
 	if pluginInvoker == nil {
@@ -420,7 +428,7 @@ func New(cfg Config) (*Server, error) {
 		authResolvers:          authResolvers,
 		invoker:                cfg.Invoker,
 		pluginInvoker:          pluginInvoker,
-		appPromptExamples:      appPromptExamples,
+		appPrompts:             appPrompts,
 		apiRouteTimeout:        apiRouteTimeout,
 		defaultConnection:      cfg.DefaultConnection,
 		catalogConnection:      cfg.CatalogConnection,

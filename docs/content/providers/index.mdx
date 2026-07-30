@@ -131,8 +131,8 @@ apps:
 ```
 
 Each app may define up to five prompts. Every prompt needs a unique `id` within
-that app and a non-empty `text` of at most 280 characters. Gestalt exposes only
-the validated prompt text to the Home UI through `/api/v1/apps`; the rest of
+that app and a non-empty `text` of at most 280 characters. Gestalt exposes the
+validated prompt definitions to the Home UI through `/api/v1/apps`; the rest of
 the root app config remains provider-owned.
 
 ### Exact sources

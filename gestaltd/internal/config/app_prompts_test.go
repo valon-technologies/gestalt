@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestRootAppPromptExamples(t *testing.T) {
+func TestRootAppPrompts(t *testing.T) {
 	t.Parallel()
 
 	var node yaml.Node
@@ -23,24 +23,24 @@ prompts:
 		t.Fatalf("yaml.Unmarshal: %v", err)
 	}
 
-	got, err := RootAppPromptExamples(map[string]*ProviderEntry{
+	got, err := RootAppPrompts(map[string]*ProviderEntry{
 		"home": {
 			Static: &AppStaticConfig{Mount: "/"},
 			Config: node,
 		},
 	})
 	if err != nil {
-		t.Fatalf("RootAppPromptExamples: %v", err)
+		t.Fatalf("RootAppPrompts: %v", err)
 	}
-	if got["gmail"][0] != "Draft a short reply to my latest unread email" {
-		t.Fatalf("gmail prompt = %q", got["gmail"][0])
+	if got["gmail"][0].ID != "draft-reply" || got["gmail"][0].Text != "Draft a short reply to my latest unread email" {
+		t.Fatalf("gmail prompt = %#v", got["gmail"][0])
 	}
-	if got["google_drive"][0] != "Find the deck I edited yesterday and summarize the changes" {
-		t.Fatalf("google_drive prompt = %q", got["google_drive"][0])
+	if got["google_drive"][0].ID != "summarize-deck" || got["google_drive"][0].Text != "Find the deck I edited yesterday and summarize the changes" {
+		t.Fatalf("google_drive prompt = %#v", got["google_drive"][0])
 	}
 }
 
-func TestRootAppPromptExamplesValidation(t *testing.T) {
+func TestRootAppPromptsValidation(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -77,7 +77,7 @@ func TestRootAppPromptExamplesValidation(t *testing.T) {
 			if err := yaml.Unmarshal([]byte(tt.yaml), &node); err != nil {
 				t.Fatalf("yaml.Unmarshal: %v", err)
 			}
-			_, err := RootAppPromptExamples(map[string]*ProviderEntry{
+			_, err := RootAppPrompts(map[string]*ProviderEntry{
 				"home": {Static: &AppStaticConfig{Mount: "/"}, Config: node},
 			})
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -87,18 +87,18 @@ func TestRootAppPromptExamplesValidation(t *testing.T) {
 	}
 }
 
-func TestRootAppPromptExamplesIgnoresNonRootApps(t *testing.T) {
+func TestRootAppPromptsIgnoresNonRootApps(t *testing.T) {
 	t.Parallel()
 
 	var node yaml.Node
 	if err := yaml.Unmarshal([]byte(`prompts: {gmail: [{id: reply, text: Reply}]}`), &node); err != nil {
 		t.Fatalf("yaml.Unmarshal: %v", err)
 	}
-	got, err := RootAppPromptExamples(map[string]*ProviderEntry{
+	got, err := RootAppPrompts(map[string]*ProviderEntry{
 		"gmail": {Static: &AppStaticConfig{Mount: "/gmail"}, Config: node},
 	})
 	if err != nil {
-		t.Fatalf("RootAppPromptExamples: %v", err)
+		t.Fatalf("RootAppPrompts: %v", err)
 	}
 	if got != nil {
 		t.Fatalf("got prompts for non-root app: %v", got)

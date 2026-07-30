@@ -4193,8 +4193,11 @@ prompts:
 	}
 
 	var integrations []struct {
-		Name           string   `json:"name"`
-		PromptExamples []string `json:"promptExamples"`
+		Name    string `json:"name"`
+		Prompts []struct {
+			ID   string `json:"id"`
+			Text string `json:"text"`
+		} `json:"prompts"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -4202,9 +4205,10 @@ prompts:
 	if len(integrations) != 1 {
 		t.Fatalf("expected 1 integration, got %d", len(integrations))
 	}
-	if len(integrations[0].PromptExamples) != 1 ||
-		integrations[0].PromptExamples[0] != "Draft a short reply to my latest unread email" {
-		t.Fatalf("promptExamples = %v", integrations[0].PromptExamples)
+	if len(integrations[0].Prompts) != 1 ||
+		integrations[0].Prompts[0].ID != "draft-reply" ||
+		integrations[0].Prompts[0].Text != "Draft a short reply to my latest unread email" {
+		t.Fatalf("prompts = %v", integrations[0].Prompts)
 	}
 }
 
