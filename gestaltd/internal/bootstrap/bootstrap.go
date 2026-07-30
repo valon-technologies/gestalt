@@ -275,6 +275,9 @@ type Result struct {
 		StartApp(context.Context, string, string) error
 		AbortRestarts()
 	}
+	AppRuntimeSnapshotter interface {
+		SnapshotRegistryApps() map[string]core.RegistryAppRuntimeObservation
+	}
 	RegistryAppStartup func(context.Context)
 
 	runtimeRegistry                     *runtimeRegistry
@@ -1550,6 +1553,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		PublicGatewayTransport:         publicGatewayTransport,
 		DevSupervisor:                  prepared.Deps.DevSupervisor,
 		AppRestarter:                   appRestarter,
+		AppRuntimeSnapshotter:          appRestarter,
 		runtimeRegistry:                prepared.runtimeRegistry,
 		workflowConfigReconcileTasks:   deferredWorkflowConfigReconcileTasks,
 		startupWorkflowConfigReconcile: startupWorkflowConfigReconcile,

@@ -175,6 +175,13 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if catalogPoller != nil {
 		defer catalogPoller.Stop()
 	}
+	heartbeatWriter, err := startAppRegistryHeartbeatWriter(ctx, cfg, result)
+	if err != nil {
+		return err
+	}
+	if heartbeatWriter != nil {
+		defer heartbeatWriter.Stop()
+	}
 
 	publicConfig := baseConfig
 	if managementAddr == "" {
@@ -580,6 +587,44 @@ func startAppRegistryCatalogPoller(
 	})
 	poller.Start(ctx)
 	return poller
+}
+
+func startAppRegistryHeartbeatWriter(
+	ctx context.Context,
+	cfg *config.Config,
+	result *bootstrap.Result,
+) (*appregistry.HeartbeatWriter, error) {
+	if cfg == nil || result == nil || result.Services == nil ||
+		result.Services.GestaltdInstanceHeartbeats == nil ||
+		result.Services.AppVersionChangeRequests == nil ||
+		result.AppRuntimeSnapshotter == nil {
+		return nil, nil
+	}
+	sourceVersion := appregistry.ResolveSourceVersion()
+	if sourceVersion == "" {
+		return nil, nil
+	}
+	interval, err := cfg.Server.AppRegistry.HeartbeatIntervalDuration()
+	if err != nil {
+		return nil, fmt.Errorf("server.appRegistry.heartbeatInterval: %w", err)
+	}
+	retention, err := cfg.Server.AppRegistry.HeartbeatRetentionDuration()
+	if err != nil {
+		return nil, fmt.Errorf("server.appRegistry.heartbeatRetention: %w", err)
+	}
+	writer := appregistry.NewHeartbeatWriter(appregistry.HeartbeatWriterConfig{
+		Heartbeats:     result.Services.GestaltdInstanceHeartbeats,
+		ChangeRequests: result.Services.AppVersionChangeRequests,
+		ConfiguredApps: cfg.Apps,
+		Runtime:        result.AppRuntimeSnapshotter,
+		InstanceID:     appregistry.ResolveInstanceID(),
+		SourceVersion:  sourceVersion,
+		Ready:          result.AppProvidersInitialized,
+		Interval:       interval,
+		Retention:      retention,
+	})
+	writer.Start(ctx)
+	return writer, nil
 }
 
 func startAppRegistryAutoDeployController(

@@ -94,6 +94,43 @@ func TestGestaltdInstanceHeartbeatServiceListsBySourceVersion(t *testing.T) {
 	}
 }
 
+func TestGestaltdInstanceHeartbeatServiceListsFreshAndPrunesByIndexedTime(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t).GestaltdInstanceHeartbeats
+	now := time.Date(2026, 7, 30, 14, 0, 0, 0, time.UTC)
+	for _, heartbeat := range []*core.GestaltdInstanceHeartbeat{
+		{InstanceID: "boundary", SourceVersion: "source-a", StartedAt: now.Add(-time.Hour), HeartbeatAt: now.Add(-45 * time.Second), Apps: map[string]core.GestaltdInstanceAppHeartbeat{}},
+		{InstanceID: "stale", SourceVersion: "source-a", StartedAt: now.Add(-time.Hour), HeartbeatAt: now.Add(-46 * time.Second), Apps: map[string]core.GestaltdInstanceAppHeartbeat{}},
+		{InstanceID: "other", SourceVersion: "source-b", StartedAt: now.Add(-time.Hour), HeartbeatAt: now, Apps: map[string]core.GestaltdInstanceAppHeartbeat{}},
+	} {
+		if _, err := svc.Upsert(ctx, heartbeat); err != nil {
+			t.Fatalf("Upsert(%s): %v", heartbeat.InstanceID, err)
+		}
+	}
+	fresh, err := svc.ListFreshBySourceVersion(ctx, "source-a", now.Add(-45*time.Second))
+	if err != nil {
+		t.Fatalf("ListFreshBySourceVersion: %v", err)
+	}
+	if len(fresh) != 1 || fresh[0].InstanceID != "boundary" {
+		t.Fatalf("fresh heartbeats = %#v", fresh)
+	}
+	pruned, err := svc.PruneBefore(ctx, now.Add(-45*time.Second))
+	if err != nil {
+		t.Fatalf("PruneBefore: %v", err)
+	}
+	if pruned != 1 {
+		t.Fatalf("pruned = %d, want 1", pruned)
+	}
+	all, err := svc.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("remaining heartbeats = %#v", all)
+	}
+}
+
 func TestGestaltdInstanceHeartbeatServiceValidatesRecord(t *testing.T) {
 	t.Parallel()
 

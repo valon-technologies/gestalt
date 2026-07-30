@@ -256,6 +256,92 @@ func (r *AppProviderRestarter) RunningVersion(app string) (string, bool) {
 	return version, ok && version != ""
 }
 
+// SnapshotRegistryApps observes all configured registry apps at one lifecycle
+// instant. ProviderMap.List is deliberately used instead of Get: Get may resolve
+// a remote tunnel, while runtime heartbeats must describe only this process.
+//
+// StartApp and StopApp hold lifecycleMu for their full transition, so a
+// partially-started provider is intentionally unobservable. The snapshot
+// reports only running, not_running, error, or unknown rather than inventing a
+// "starting" state that this synchronization model cannot observe.
+func (r *AppProviderRestarter) SnapshotRegistryApps() map[string]core.RegistryAppRuntimeObservation {
+	if r == nil {
+		return nil
+	}
+	r.lifecycleMu.RLock()
+	defer r.lifecycleMu.RUnlock()
+
+	localProviders := make(map[string]struct{})
+	if r.providers != nil {
+		for _, name := range r.providers.List() {
+			localProviders[name] = struct{}{}
+		}
+	}
+	observations := make(map[string]core.RegistryAppRuntimeObservation)
+	if r.cfg == nil {
+		return observations
+	}
+	for app, entry := range r.cfg.Apps {
+		if entry == nil || !entry.Source.IsRegistry() {
+			continue
+		}
+		_, registered := localProviders[app]
+		runningVersion := strings.TrimSpace(r.runningVersions[app])
+		activeVersion, markerErr := r.activeVersionMarker(app)
+		switch {
+		case markerErr != nil:
+			observations[app] = core.RegistryAppRuntimeObservation{
+				State:     core.GestaltdInstanceAppStateUnknown,
+				LastError: markerErr.Error(),
+			}
+		case !registered && runningVersion == "" && activeVersion == "":
+			observations[app] = core.RegistryAppRuntimeObservation{
+				State: core.GestaltdInstanceAppStateNotRunning,
+			}
+		case !registered:
+			observations[app] = core.RegistryAppRuntimeObservation{
+				State:     core.GestaltdInstanceAppStateError,
+				LastError: "local provider is not registered but runtime version state remains",
+			}
+		case runningVersion == "":
+			observations[app] = core.RegistryAppRuntimeObservation{
+				State:     core.GestaltdInstanceAppStateError,
+				LastError: "local provider is registered without a running version",
+			}
+		case activeVersion == "":
+			observations[app] = core.RegistryAppRuntimeObservation{
+				State:     core.GestaltdInstanceAppStateError,
+				LastError: "local provider is registered without an active-version marker",
+			}
+		case runningVersion != activeVersion:
+			observations[app] = core.RegistryAppRuntimeObservation{
+				State:     core.GestaltdInstanceAppStateError,
+				LastError: fmt.Sprintf("running version %q does not match active-version marker %q", runningVersion, activeVersion),
+			}
+		default:
+			observations[app] = core.RegistryAppRuntimeObservation{
+				State:          core.GestaltdInstanceAppStateRunning,
+				RunningVersion: runningVersion,
+			}
+		}
+	}
+	return observations
+}
+
+func (r *AppProviderRestarter) activeVersionMarker(app string) (string, error) {
+	if r.artifactsDir == "" {
+		return "", nil
+	}
+	value, err := os.ReadFile(filepath.Join(r.artifactsDir, "registry-installed", app, "active-version"))
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read active-version marker: %w", err)
+	}
+	return strings.TrimSpace(string(value)), nil
+}
+
 func (r *AppProviderRestarter) WithRunningVersion(app string, fn func(string) error) error {
 	if r == nil || fn == nil {
 		return fmt.Errorf("app runtime state is not configured")
