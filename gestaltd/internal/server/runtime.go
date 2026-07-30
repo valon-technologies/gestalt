@@ -92,15 +92,17 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	}
 	appRuntimeState, _ := result.AppRestarter.(AppRuntimeState)
 	var reverseRemote *reverseRemoteSetup
-	if cfg.Server.Dev {
-		reverseRemote, err = setupReverseRemoteUpstream(ctx, cfg, result.Services, authorizationProvider)
-		if err != nil {
-			return err
-		}
-		defer reverseRemote.shutdown(context.Background())
-	} else {
-		reverseRemote = &reverseRemoteSetup{}
+	// Set up the reverse-remote upstream (embedded frps, RemoteManagement
+	// service, and tunnel identity) whenever coredata is available, not only in
+	// dev mode. A non-dev gestaltd acts as the upstream that `gestaltd dev`
+	// clients register to; gating this on Dev left the remote with no frps, no
+	// /api/v2/remotes endpoint, and an inactive tunnel resolver. The function
+	// self-guards by returning an empty setup when RemoteRegistrations is nil.
+	reverseRemote, err = setupReverseRemoteUpstream(ctx, cfg, result.Services, authorizationProvider)
+	if err != nil {
+		return err
 	}
+	defer reverseRemote.shutdown(context.Background())
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
