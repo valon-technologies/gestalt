@@ -317,3 +317,15 @@ Show in-flight and completed rollout timing on the **Revision history** tab on `
 **Merged:** [gestalt#2989](https://github.com/valon-technologies/gestalt/pull/2989) · [gestalt-providers#1206](https://github.com/valon-technologies/gestalt-providers/pull/1206) · [toolshed#3874](https://github.com/valon-technologies/toolshed/pull/3874)
 
 **Deploy:** toolshed `GESTALTD_PINNED_SHA` → `e770552fb` ([Deploy Valon Tools](https://github.com/valon-technologies/toolshed/actions/workflows/deploy-valon-tools.yml))
+
+<a id="changelog-27"></a>
+
+### 27 — Runtime Heartbeats and Fleet State
+
+**Tags:** [`admin.md`](../operations/admin.md) [`config.md`](../architecture/config.md) [`indexeddb.md`](../architecture/indexeddb.md) [`lifecycle.md`](../operations/lifecycle.md)
+
+Replace frozen process-identity enrollment with live, source-version-scoped replica heartbeats. Derive current fleet health from fresh observations of the provider registry, running-version map, and active-version marker; require the activated minimum replica count; allow replacement replicas to satisfy departed capacity; and preserve failed rollout outcomes while recording later recovery.
+
+**Design:** [runtime-heartbeats.md](../one-pagers/runtime-heartbeats.md)
+
+**Status:** Proposed

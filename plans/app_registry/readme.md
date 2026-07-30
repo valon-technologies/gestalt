@@ -20,7 +20,8 @@ app_registry/
 ├── one-pagers/
 │   ├── <a href="./one-pagers/readme.md">readme.md</a>
 │   ├── <a href="./one-pagers/auto-deploy.md">auto-deploy.md</a>
-│   └── <a href="./one-pagers/revision-history-rollout.md">revision-history-rollout.md</a>
+│   ├── <a href="./one-pagers/revision-history-rollout.md">revision-history-rollout.md</a>
+│   └── <a href="./one-pagers/runtime-heartbeats.md">runtime-heartbeats.md</a>
 └── project/
     ├── <a href="./project/changelog.md">changelog.md</a>
     └── <a href="./project/tests.md">tests.md</a>
