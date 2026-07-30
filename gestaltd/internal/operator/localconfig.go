@@ -120,6 +120,7 @@ server:
 providers:
   indexeddb:
     main:
+      local: true
       source: %s
       config:
         dsn: %q
@@ -156,10 +157,12 @@ server:
 providers:
   externalCredentials:
     default:
+      local: true
       source:
         path: %q
   indexeddb:
     main:
+      local: true
       source:
         path: %q
       config:
