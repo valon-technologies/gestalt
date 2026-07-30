@@ -211,3 +211,30 @@ func TestPrepareProviderLocalSessionLeavesAppWithoutUIUnmounted(t *testing.T) {
 		t.Fatalf("Apps[%q].Static = %#v, want nil", session.TargetKey, app.Static)
 	}
 }
+
+func TestWriteProviderLocalBaseConfigMarksIndexedDBLocal(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "base.yaml")
+	dbPath := filepath.Join(dir, "provider.db")
+	if err := writeProviderLocalBaseConfig(cfgPath, dbPath); err != nil {
+		t.Fatalf("writeProviderLocalBaseConfig: %v", err)
+	}
+
+	cfg, err := config.LoadPaths([]string{cfgPath})
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+
+	name, entry, err := cfg.SelectedIndexedDBProvider()
+	if err != nil {
+		t.Fatalf("SelectedIndexedDBProvider: %v", err)
+	}
+	if entry == nil {
+		t.Fatalf("IndexedDB entry %q is nil", name)
+	}
+	if !entry.Local {
+		t.Fatalf("IndexedDB entry %q: Local = false, want true (prevents remote stamping in dev mode)", name)
+	}
+}

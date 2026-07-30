@@ -413,11 +413,13 @@ func writeProviderLocalBaseConfig(path, dbPath string) error {
 		"providers": map[string]any{
 			"externalCredentials": map[string]any{
 				config.DefaultProviderInstance: map[string]any{
+					"local":  true,
 					"source": providerLocalExternalCredentialsSourceConfig(),
 				},
 			},
 			"indexeddb": map[string]any{
 				providerLocalIndexedDBName: map[string]any{
+					"local":  true,
 					"source": providerLocalIndexedDBSourceConfig(),
 					"config": map[string]any{
 						"dsn": "sqlite://" + dbPath,
