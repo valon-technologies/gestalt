@@ -158,3 +158,163 @@ func TestGestaltdSourceVersionRetryReopensFailuresSinceActivation(t *testing.T) 
 		t.Fatalf("older rollout state = %q, want failed", older.State)
 	}
 }
+
+func TestGestaltdSourceVersionActivationPersistsMinimumHealthyInstances(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC)
+	state, err := services.GestaltdSourceVersionState.Activate(
+		ctx,
+		"source-a",
+		start,
+		false,
+		2*time.Minute,
+		15*time.Minute,
+		5,
+	)
+	if err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+	if state.MinimumHealthyInstances != 5 {
+		t.Fatalf("minimum healthy instances = %d, want 5", state.MinimumHealthyInstances)
+	}
+	stored, err := services.GestaltdSourceVersionState.Get(ctx)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if stored.MinimumHealthyInstances != 5 {
+		t.Fatalf("stored minimum healthy instances = %d, want 5", stored.MinimumHealthyInstances)
+	}
+
+	retryAt := start.Add(time.Minute)
+	retried, err := services.GestaltdSourceVersionState.Activate(
+		ctx,
+		"source-a",
+		retryAt,
+		true,
+		2*time.Minute,
+		15*time.Minute,
+		7,
+	)
+	if err != nil {
+		t.Fatalf("retry Activate: %v", err)
+	}
+	if retried.MinimumHealthyInstances != 7 || !retried.UpdatedAt.Equal(retryAt) {
+		t.Fatalf("retried state = %#v", retried)
+	}
+}
+
+func TestGestaltdSourceVersionActivationPreservesOmittedMinimumOnSameSource(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC)
+	if _, err := services.GestaltdSourceVersionState.Activate(
+		ctx, "source-a", start, false, 2*time.Minute, 15*time.Minute, 5,
+	); err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+
+	unchanged, err := services.GestaltdSourceVersionState.Activate(
+		ctx, "source-a", start.Add(time.Minute), false, 2*time.Minute, 15*time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("same-source Activate: %v", err)
+	}
+	if unchanged.MinimumHealthyInstances != 5 || !unchanged.UpdatedAt.Equal(start) {
+		t.Fatalf("same-source state = %#v", unchanged)
+	}
+
+	retryAt := start.Add(2 * time.Minute)
+	retried, err := services.GestaltdSourceVersionState.Activate(
+		ctx, "source-a", retryAt, true, 2*time.Minute, 15*time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("same-source retry Activate: %v", err)
+	}
+	if retried.MinimumHealthyInstances != 5 || !retried.UpdatedAt.Equal(retryAt) {
+		t.Fatalf("retry state = %#v", retried)
+	}
+}
+
+func TestGestaltdSourceVersionMinimumChangeRetargetsOnlyActiveRollouts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC)
+	if _, err := services.GestaltdSourceVersionState.Activate(
+		ctx, "source-a", start, false, 2*time.Minute, 15*time.Minute, 5,
+	); err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+	for _, app := range []string{"active-app", "terminal-app"} {
+		if _, err := services.GestaltdSourceVersionState.CreateAppRollout(ctx, &core.AppRollout{
+			App:              app,
+			Version:          "v2",
+			State:            core.AppRolloutStateEnrolling,
+			CreatedAt:        start.Add(time.Minute),
+			EnrollmentEndsAt: start.Add(3 * time.Minute),
+			Deadline:         start.Add(16 * time.Minute),
+		}); err != nil {
+			t.Fatalf("Create rollout %s: %v", app, err)
+		}
+	}
+	completedAt := start.Add(2 * time.Minute)
+	terminalBefore, err := services.AppRollouts.MarkComplete(ctx, "terminal-app", "v2", completedAt)
+	if err != nil {
+		t.Fatalf("MarkComplete terminal rollout: %v", err)
+	}
+
+	changedAt := start.Add(5 * time.Minute)
+	state, err := services.GestaltdSourceVersionState.Activate(
+		ctx, "source-a", changedAt, false, 2*time.Minute, 15*time.Minute, 7,
+	)
+	if err != nil {
+		t.Fatalf("change minimum Activate: %v", err)
+	}
+	if state.MinimumHealthyInstances != 7 || !state.UpdatedAt.Equal(changedAt) {
+		t.Fatalf("changed state = %#v", state)
+	}
+	active, err := services.AppRollouts.Get(ctx, "active-app")
+	if err != nil {
+		t.Fatalf("Get active rollout: %v", err)
+	}
+	if active.State != core.AppRolloutStateEnrolling ||
+		!active.CreatedAt.Equal(changedAt) ||
+		!active.EnrollmentEndsAt.Equal(changedAt.Add(2*time.Minute)) ||
+		!active.Deadline.Equal(changedAt.Add(15*time.Minute)) {
+		t.Fatalf("retargeted active rollout = %#v", active)
+	}
+	terminalAfter, err := services.AppRollouts.Get(ctx, "terminal-app")
+	if err != nil {
+		t.Fatalf("Get terminal rollout: %v", err)
+	}
+	if terminalAfter.State != core.AppRolloutStateComplete ||
+		!terminalAfter.CreatedAt.Equal(terminalBefore.CreatedAt) ||
+		!terminalAfter.CompletedAt.Equal(terminalBefore.CompletedAt) {
+		t.Fatalf("terminal rollout changed = %#v", terminalAfter)
+	}
+}
+
+func TestGestaltdSourceVersionActivationWithoutMinimumRemainsCompatible(t *testing.T) {
+	t.Parallel()
+
+	state, err := testutil.NewStubServices(t).GestaltdSourceVersionState.Activate(
+		context.Background(),
+		"source-a",
+		time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC),
+		false,
+		2*time.Minute,
+		15*time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+	if state.MinimumHealthyInstances != 0 {
+		t.Fatalf("minimum healthy instances = %d, want zero when unspecified", state.MinimumHealthyInstances)
+	}
+}

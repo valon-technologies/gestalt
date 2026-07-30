@@ -120,7 +120,7 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 	})
 	testutil.CloseOnCleanup(t, srv)
 
-	resp, err := http.Post(srv.URL+"/activate?source_version=source-new", "", nil)
+	resp, err := http.Post(srv.URL+"/activate?source_version=source-new&minimum_healthy_instances=5", "", nil)
 	if err != nil {
 		t.Fatalf("POST /activate: %v", err)
 	}
@@ -141,6 +141,13 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 	}
 	if current != "source-new" {
 		t.Fatalf("current source version = %q, want source-new", current)
+	}
+	state, err := services.GestaltdSourceVersionState.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get source version state: %v", err)
+	}
+	if state.MinimumHealthyInstances != 5 {
+		t.Fatalf("minimum healthy instances = %d, want 5", state.MinimumHealthyInstances)
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("activation calls = %d, want 1", calls.Load())
@@ -186,5 +193,63 @@ func TestActivateEndpointRejectsInvalidRetry(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestActivateEndpointValidatesMinimumHealthyInstances(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t)
+	testutil.CloseOnCleanup(t, srv)
+
+	for _, value := range []string{"", "0", "-1", "1.5", "many&minimum_healthy_instances=2"} {
+		resp, err := http.Post(srv.URL+"/activate?minimum_healthy_instances="+value, "", nil)
+		if err != nil {
+			t.Fatalf("POST /activate with %q: %v", value, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("minimum_healthy_instances=%q status = %d, want %d", value, resp.StatusCode, http.StatusBadRequest)
+		}
+	}
+}
+
+func TestActivateEndpointPreservesMinimumWhenRetryOmitsParameter(t *testing.T) {
+	t.Parallel()
+
+	var services *coredata.Services
+	start := time.Date(2026, 7, 30, 18, 0, 0, 0, time.UTC)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.SourceVersion = "source-a"
+		cfg.Now = func() time.Time { return start.Add(time.Minute) }
+		services = cfg.Services
+		if _, err := services.GestaltdSourceVersionState.Activate(
+			context.Background(),
+			"source-a",
+			start,
+			false,
+			appregistry.DefaultRolloutEnrollmentWindow,
+			appregistry.DefaultRolloutTimeout,
+			5,
+		); err != nil {
+			t.Fatalf("seed source version: %v", err)
+		}
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	resp, err := http.Post(srv.URL+"/activate?source_version=source-a&retry=true", "", nil)
+	if err != nil {
+		t.Fatalf("POST /activate: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	state, err := services.GestaltdSourceVersionState.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get source version state: %v", err)
+	}
+	if state.MinimumHealthyInstances != 5 {
+		t.Fatalf("minimum healthy instances = %d, want 5", state.MinimumHealthyInstances)
 	}
 }

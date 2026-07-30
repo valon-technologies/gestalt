@@ -5,19 +5,21 @@ import (
 )
 
 const (
-	StoreUsers                         = "users"
-	StoreManagedSubjects               = "managed_subjects"
-	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
-	StoreAppSHAs                       = "app_shas"
-	StoreAppVersionChangeRequests      = "app_version_change_requests"
-	StoreAppVersionInstallLocks        = "app_version_install_locks"
-	StoreGestaltdSourceVersionState    = "gestaltd_source_version_state"
-	StoreAppRollouts                   = "app_rollouts"
-	StoreAppInstanceMaterializations   = "app_instance_materializations"
-	StoreAppAutoDeploySettings         = "app_auto_deploy_settings"
-	StoreAppVersionRolloutOutcomes     = "app_version_rollout_outcomes"
-	StoreRemoteRegistrations           = "remote_registrations"
-	StoreRemoteProviders               = "remote_providers"
+	StoreUsers                          = "users"
+	StoreManagedSubjects                = "managed_subjects"
+	StoreAuthorizationDynamicFragments  = "authz_dynamic_fragments"
+	StoreAppSHAs                        = "app_shas"
+	StoreAppVersionChangeRequests       = "app_version_change_requests"
+	StoreAppVersionInstallLocks         = "app_version_install_locks"
+	StoreGestaltdSourceVersionState     = "gestaltd_source_version_state"
+	StoreAppRollouts                    = "app_rollouts"
+	StoreAppInstanceMaterializations    = "app_instance_materializations"
+	StoreAppAutoDeploySettings          = "app_auto_deploy_settings"
+	StoreAppVersionRolloutOutcomes      = "app_version_rollout_outcomes"
+	StoreGestaltdInstanceHeartbeats     = "gestaltd_instance_heartbeats"
+	StoreAppVersionRecoveryObservations = "app_version_recovery_observations"
+	StoreRemoteRegistrations            = "remote_registrations"
+	StoreRemoteProviders                = "remote_providers"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -99,6 +101,7 @@ var GestaltdSourceVersionStateSchema = idb.ObjectStoreOptions{
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "current_source_version", Type: idb.TypeString},
+		{Name: "minimum_healthy_instances", Type: idb.TypeInt},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},
 }
@@ -165,6 +168,39 @@ var AppVersionRolloutOutcomesSchema = idb.ObjectStoreOptions{
 		{Name: "version", Type: idb.TypeString, NotNull: true},
 		{Name: "completed_at", Type: idb.TypeTime},
 		{Name: "failed_at", Type: idb.TypeTime},
+	},
+}
+
+var GestaltdInstanceHeartbeatsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_instance", KeyPath: []string{"instance_id"}, Unique: true},
+		{Name: "by_source_version", KeyPath: []string{"source_version"}},
+		{Name: "by_heartbeat_at", KeyPath: []string{"heartbeat_at"}},
+		{Name: "by_source_version_heartbeat_at", KeyPath: []string{"source_version", "heartbeat_at"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "instance_id", Type: idb.TypeString, NotNull: true, Unique: true},
+		{Name: "source_version", Type: idb.TypeString, NotNull: true},
+		{Name: "started_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "heartbeat_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "apps", Type: idb.TypeJSON, NotNull: true},
+	},
+}
+
+var AppVersionRecoveryObservationsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_app", KeyPath: []string{"app"}},
+		{Name: "by_app_version", KeyPath: []string{"app", "version"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "app", Type: idb.TypeString, NotNull: true},
+		{Name: "version", Type: idb.TypeString, NotNull: true},
+		{Name: "recovered_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "source_version", Type: idb.TypeString, NotNull: true},
+		{Name: "live_instances", Type: idb.TypeInt, NotNull: true},
+		{Name: "minimum_healthy_instances", Type: idb.TypeInt, NotNull: true},
 	},
 }
 

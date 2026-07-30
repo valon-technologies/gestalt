@@ -250,6 +250,8 @@ func TestNew(t *testing.T) {
 			coredata.StoreAppRollouts,
 			coredata.StoreAppAutoDeploySettings,
 			coredata.StoreAppVersionRolloutOutcomes,
+			coredata.StoreGestaltdInstanceHeartbeats,
+			coredata.StoreAppVersionRecoveryObservations,
 			coredata.StoreRemoteRegistrations,
 			coredata.StoreRemoteProviders,
 		} {
@@ -272,12 +274,14 @@ func TestNew(t *testing.T) {
 			t.Fatalf("coredata.NewWithOptions: %v", err)
 		}
 		contexts := db.createdStoreContexts()
-		if len(contexts) != 2 {
-			t.Fatalf("CreateObjectStore calls = %d, want 2", len(contexts))
+		if len(contexts) != 4 {
+			t.Fatalf("CreateObjectStore calls = %d, want 4", len(contexts))
 		}
 		for _, store := range []string{
 			coredata.StoreAppAutoDeploySettings,
 			coredata.StoreAppVersionRolloutOutcomes,
+			coredata.StoreGestaltdInstanceHeartbeats,
+			coredata.StoreAppVersionRecoveryObservations,
 		} {
 			if _, ok := contexts[store]; !ok {
 				t.Fatalf("CreateObjectStore calls = %v, want %q", contexts, store)

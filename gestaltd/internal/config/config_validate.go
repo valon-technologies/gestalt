@@ -249,6 +249,40 @@ func validateServerAppRegistry(cfg *Config) error {
 	if _, err := cfg.Server.AppRegistry.AutoDeployPollIntervalDuration(); err != nil {
 		return fmt.Errorf("config validation: server.appRegistry.autoDeployPollInterval: %w", err)
 	}
+	heartbeatInterval, err := cfg.Server.AppRegistry.HeartbeatIntervalDuration()
+	if err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.heartbeatInterval: %w", err)
+	}
+	heartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
+	if err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.heartbeatTtl: %w", err)
+	}
+	if heartbeatTTL <= heartbeatInterval {
+		return fmt.Errorf("config validation: server.appRegistry.heartbeatTtl must be greater than heartbeatInterval")
+	}
+	healthyStabilityWindow, err := cfg.Server.AppRegistry.HealthyStabilityWindowDuration()
+	if err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.healthyStabilityWindow: %w", err)
+	}
+	if healthyStabilityWindow <= heartbeatTTL {
+		return fmt.Errorf("config validation: server.appRegistry.healthyStabilityWindow must be greater than heartbeatTtl")
+	}
+	if _, err := cfg.Server.AppRegistry.HeartbeatRetentionDuration(); err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.heartbeatRetention: %w", err)
+	}
+	cfg.Server.AppRegistry.RolloutMode = AppRegistryRolloutMode(strings.TrimSpace(string(cfg.Server.AppRegistry.RolloutMode)))
+	if cfg.Server.AppRegistry.RolloutMode == "" {
+		cfg.Server.AppRegistry.RolloutMode = AppRegistryRolloutModeEnrollment
+	}
+	switch cfg.Server.AppRegistry.RolloutMode {
+	case AppRegistryRolloutModeEnrollment, AppRegistryRolloutModeHeartbeat:
+	default:
+		return fmt.Errorf(
+			"config validation: server.appRegistry.rolloutMode must be %q or %q",
+			AppRegistryRolloutModeEnrollment,
+			AppRegistryRolloutModeHeartbeat,
+		)
+	}
 	return nil
 }
 
