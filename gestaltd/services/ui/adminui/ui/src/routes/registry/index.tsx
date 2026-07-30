@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { registryQueries } from "@/features/registry/queries";
+import { FleetStateBadge, fleetCapacityLabel } from "@/features/registry/fleet-state";
 import { RolloutBadge } from "@/features/registry/rollout-badge";
 
 export const Route = createFileRoute("/registry/")({
@@ -38,7 +39,7 @@ function RegistryAppsPage() {
         <PageHeaderContent>
           <PageHeaderTitle>App Registry</PageHeaderTitle>
           <PageHeaderDescription>
-            Fleet-known versions, rollout progress, and replica pool cohorts.
+            Current fleet health, desired versions, and historical rollout progress.
           </PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>
@@ -68,6 +69,7 @@ function RegistryAppsPage() {
               <TableRow>
                 <TableHead>App</TableHead>
                 <TableHead>Version</TableHead>
+                <TableHead>Current fleet</TableHead>
                 <TableHead>Rollout</TableHead>
                 <TableHead>Cohort</TableHead>
               </TableRow>
@@ -89,6 +91,12 @@ function RegistryAppsPage() {
                   </TableCell>
                   <TableCell>
                     <Code>{app.desiredVersion || "not installed"}</Code>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <FleetStateBadge fleet={app.fleetState} />
+                      <div className="text-xs text-muted-foreground">{fleetCapacityLabel(app.fleetState)}</div>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <RolloutBadge app={app} />

@@ -22,12 +22,15 @@ type adminRegistryAppSummary struct {
 	DesiredVersion string                  `json:"desiredVersion,omitempty"`
 	Rollout        *adminAppRolloutInfo    `json:"rollout,omitempty"`
 	Cohort         *adminRolloutCohortInfo `json:"cohort,omitempty"`
+	FleetState     adminAppFleetStateInfo  `json:"fleetState"`
 }
 
 type adminRegistryAppDetail struct {
 	adminRegistryAppSummary
 	KnownVersions   []adminAppInstallationInfo `json:"knownVersions"`
 	LatestPublished *adminPublishedVersionInfo `json:"latestPublished,omitempty"`
+	FreshReplicas   []adminFleetReplicaInfo    `json:"freshReplicas"`
+	StaleReplicas   []adminFleetReplicaInfo    `json:"staleReplicas"`
 }
 
 type adminPublishedVersionInfo struct {
@@ -52,6 +55,40 @@ type adminRolloutCohortInfo struct {
 	Materialized int `json:"materialized"`
 	Restarted    int `json:"restarted"`
 	Failed       int `json:"failed"`
+}
+
+type adminAppFleetStateInfo struct {
+	State                   string `json:"state"`
+	SourceVersion           string `json:"sourceVersion,omitempty"`
+	DesiredVersion          string `json:"desiredVersion,omitempty"`
+	MinimumHealthyInstances int    `json:"minimumHealthyInstances"`
+	LiveInstances           int    `json:"liveInstances"`
+	RunningDesiredVersion   int    `json:"runningDesiredVersion"`
+	Mismatched              int    `json:"mismatched"`
+	Errors                  int    `json:"errors"`
+	HeartbeatTTLSeconds     int64  `json:"heartbeatTtlSeconds"`
+	EvaluatedAt             string `json:"evaluatedAt"`
+	heartbeatTTL            time.Duration
+	evaluatedAt             time.Time
+}
+
+type adminFleetReplicaInfo struct {
+	InstanceID          string                       `json:"instanceId"`
+	SourceVersion       string                       `json:"sourceVersion"`
+	CurrentSource       bool                         `json:"currentSource"`
+	Fresh               bool                         `json:"fresh"`
+	StartedAt           string                       `json:"startedAt,omitempty"`
+	HeartbeatAt         string                       `json:"heartbeatAt"`
+	HeartbeatAgeSeconds int64                        `json:"heartbeatAgeSeconds"`
+	AppObservation      adminFleetAppObservationInfo `json:"appObservation"`
+}
+
+type adminFleetAppObservationInfo struct {
+	State          string `json:"state"`
+	DesiredVersion string `json:"desiredVersion,omitempty"`
+	RunningVersion string `json:"runningVersion,omitempty"`
+	ObservedAt     string `json:"observedAt,omitempty"`
+	LastError      string `json:"lastError,omitempty"`
 }
 
 type adminAppRolloutMaterializationsResponse struct {
@@ -133,10 +170,17 @@ func (s *Server) getAdminRegistryApp(w http.ResponseWriter, r *http.Request) {
 	for _, installation := range known {
 		knownVersions = append(knownVersions, adminAppInstallationFromCore(installation))
 	}
+	freshReplicas, staleReplicas, err := s.loadAdminFleetReplicas(r, appName, summary.FleetState)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load registry app fleet observations")
+		return
+	}
 	writeJSON(w, http.StatusOK, adminRegistryAppDetail{
 		adminRegistryAppSummary: summary,
 		KnownVersions:           knownVersions,
 		LatestPublished:         s.latestPublishedVersion(r, app),
+		FreshReplicas:           freshReplicas,
+		StaleReplicas:           staleReplicas,
 	})
 }
 
@@ -290,6 +334,11 @@ func (s *Server) loadAdminRegistryAppSummary(r *http.Request, app configuredRegi
 		Registry:       app.registry,
 		DesiredVersion: coredata.LatestKnownVersion(known),
 	}
+	projection, err := s.appFleetProjector.Project(r.Context(), app.name)
+	if err != nil {
+		return adminRegistryAppSummary{}, err
+	}
+	summary.FleetState = adminAppFleetStateFromCore(projection)
 	rollout, err := s.appRollouts.Get(r.Context(), app.name)
 	if errors.Is(err, core.ErrNotFound) {
 		return summary, nil
@@ -304,6 +353,103 @@ func (s *Server) loadAdminRegistryAppSummary(r *http.Request, app configuredRegi
 	summary.Rollout = ptr(adminAppRolloutFromCore(rollout, false))
 	summary.Cohort = ptr(adminRolloutCohortFromRows(rows, rollout))
 	return summary, nil
+}
+
+func (s *Server) loadAdminFleetReplicas(
+	r *http.Request,
+	app string,
+	fleetState adminAppFleetStateInfo,
+) ([]adminFleetReplicaInfo, []adminFleetReplicaInfo, error) {
+	rows, err := s.instanceHeartbeats.List(r.Context())
+	if err != nil {
+		return nil, nil, err
+	}
+	evaluatedAt := fleetState.evaluatedAt
+	cutoff := evaluatedAt.Add(-fleetState.heartbeatTTL)
+	fresh := make([]adminFleetReplicaInfo, 0, len(rows))
+	stale := make([]adminFleetReplicaInfo, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		item := adminFleetReplicaFromCore(row, app, fleetState.SourceVersion, cutoff, evaluatedAt)
+		if item.Fresh {
+			fresh = append(fresh, item)
+		} else {
+			stale = append(stale, item)
+		}
+	}
+	sortAdminFleetReplicas(fresh)
+	sortAdminFleetReplicas(stale)
+	return fresh, stale, nil
+}
+
+func adminAppFleetStateFromCore(projection *core.AppFleetProjection) adminAppFleetStateInfo {
+	if projection == nil {
+		return adminAppFleetStateInfo{State: string(core.AppFleetStateUnknown)}
+	}
+	return adminAppFleetStateInfo{
+		State:                   string(projection.State),
+		SourceVersion:           projection.SourceVersion,
+		DesiredVersion:          projection.DesiredVersion,
+		MinimumHealthyInstances: projection.MinimumHealthyInstances,
+		LiveInstances:           projection.LiveInstances,
+		RunningDesiredVersion:   projection.RunningDesiredVersion,
+		Mismatched:              projection.Mismatched,
+		Errors:                  projection.Errors,
+		HeartbeatTTLSeconds:     int64(projection.HeartbeatTTL / time.Second),
+		EvaluatedAt:             formatAdminTime(projection.EvaluatedAt),
+		heartbeatTTL:            projection.HeartbeatTTL,
+		evaluatedAt:             projection.EvaluatedAt,
+	}
+}
+
+func adminFleetReplicaFromCore(
+	heartbeat *core.GestaltdInstanceHeartbeat,
+	app string,
+	currentSource string,
+	cutoff time.Time,
+	evaluatedAt time.Time,
+) adminFleetReplicaInfo {
+	age := evaluatedAt.Sub(heartbeat.HeartbeatAt.UTC())
+	if age < 0 {
+		age = 0
+	}
+	out := adminFleetReplicaInfo{
+		InstanceID:          heartbeat.InstanceID,
+		SourceVersion:       heartbeat.SourceVersion,
+		CurrentSource:       currentSource != "" && strings.TrimSpace(heartbeat.SourceVersion) == strings.TrimSpace(currentSource),
+		Fresh:               !heartbeat.HeartbeatAt.Before(cutoff),
+		StartedAt:           formatAdminTime(heartbeat.StartedAt),
+		HeartbeatAt:         formatAdminTime(heartbeat.HeartbeatAt),
+		HeartbeatAgeSeconds: int64(age / time.Second),
+		AppObservation:      adminFleetAppObservationInfo{State: string(core.GestaltdInstanceAppStateUnknown)},
+	}
+	if observation, ok := heartbeat.Apps[app]; ok {
+		out.AppObservation = adminFleetAppObservationInfo{
+			State:          string(observation.State),
+			DesiredVersion: observation.DesiredVersion,
+			RunningVersion: observation.RunningVersion,
+			ObservedAt:     formatAdminTime(observation.ObservedAt),
+			LastError:      observation.LastError,
+		}
+	}
+	return out
+}
+
+func sortAdminFleetReplicas(rows []adminFleetReplicaInfo) {
+	slices.SortFunc(rows, func(a, b adminFleetReplicaInfo) int {
+		if a.CurrentSource != b.CurrentSource {
+			if a.CurrentSource {
+				return -1
+			}
+			return 1
+		}
+		if byHeartbeat := strings.Compare(b.HeartbeatAt, a.HeartbeatAt); byHeartbeat != 0 {
+			return byHeartbeat
+		}
+		return strings.Compare(a.InstanceID, b.InstanceID)
+	})
 }
 
 func (s *Server) latestPublishedVersion(r *http.Request, app configuredRegistryApp) *adminPublishedVersionInfo {
@@ -334,7 +480,11 @@ func (s *Server) latestPublishedVersion(r *http.Request, app configuredRegistryA
 }
 
 func (s *Server) appObservabilityAvailable() bool {
-	return s.appVersionChanges != nil && s.appRollouts != nil && s.appMaterializations != nil
+	return s.appVersionChanges != nil &&
+		s.appRollouts != nil &&
+		s.appMaterializations != nil &&
+		s.appFleetProjector != nil &&
+		s.instanceHeartbeats != nil
 }
 
 func adminAppRolloutFromCore(rollout *core.AppRollout, includeApp bool) adminAppRolloutInfo {

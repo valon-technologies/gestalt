@@ -3,6 +3,7 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -178,6 +180,179 @@ func TestAdminRegistryApps(t *testing.T) {
 	})
 }
 
+func TestAdminRegistryAppFleetObservability(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 30, 16, 0, 0, 0, time.UTC)
+
+	t.Run("keeps failed rollout separate from healthy fleet and classifies replicas", func(t *testing.T) {
+		t.Parallel()
+		services := testutil.NewStubServices(t)
+		appendKnownVersion(t, services, "g-issues", "1.2.3", now.Add(-time.Hour))
+		if _, err := services.GestaltdSourceVersionState.Activate(
+			context.Background(), "source-target", now.Add(-time.Hour), false, time.Minute, 15*time.Minute, 2,
+		); err != nil {
+			t.Fatalf("Activate: %v", err)
+		}
+		rollout := createRollout(t, services, "g-issues", "1.2.3", now.Add(-30*time.Minute))
+		if _, err := services.AppRollouts.MarkFailed(context.Background(), rollout.App, rollout.Version, now.Add(-15*time.Minute)); err != nil {
+			t.Fatalf("MarkFailed: %v", err)
+		}
+		upsertFleetHeartbeat(t, services, "current-a", "source-target", now.Add(-5*time.Second), "g-issues", core.GestaltdInstanceAppHeartbeat{
+			State: core.GestaltdInstanceAppStateRunning, DesiredVersion: "1.2.3", RunningVersion: "1.2.3", ObservedAt: now.Add(-5 * time.Second),
+		})
+		upsertFleetHeartbeat(t, services, "current-b", "source-target", now.Add(-10*time.Second), "g-issues", core.GestaltdInstanceAppHeartbeat{
+			State: core.GestaltdInstanceAppStateRunning, DesiredVersion: "1.2.3", RunningVersion: "1.2.3", ObservedAt: now.Add(-10 * time.Second),
+		})
+		upsertFleetHeartbeat(t, services, "current-stale", "source-target", now.Add(-time.Minute), "g-issues", core.GestaltdInstanceAppHeartbeat{
+			State: core.GestaltdInstanceAppStateRunning, RunningVersion: "1.2.3", ObservedAt: now.Add(-time.Minute),
+		})
+		upsertFleetHeartbeat(t, services, "superseded-fresh", "source-old", now.Add(-3*time.Second), "g-issues", core.GestaltdInstanceAppHeartbeat{
+			State: core.GestaltdInstanceAppStateError, LastError: "old revision error", ObservedAt: now.Add(-3 * time.Second),
+		})
+
+		ts := newRegistryObservabilityTestServerAt(t, services, now)
+		resp, err := http.Get(ts.URL + "/admin/api/v1/registry-apps/g-issues")
+		if err != nil {
+			t.Fatalf("GET registry app: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d: %s", resp.StatusCode, body)
+		}
+		var payload struct {
+			Rollout struct {
+				State string `json:"state"`
+			} `json:"rollout"`
+			FleetState adminFleetStateJSON     `json:"fleetState"`
+			Fresh      []adminFleetReplicaJSON `json:"freshReplicas"`
+			Stale      []adminFleetReplicaJSON `json:"staleReplicas"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode registry app: %v", err)
+		}
+		if payload.Rollout.State != "failed" || payload.FleetState.State != "healthy" {
+			t.Fatalf("rollout/fleet = %q/%q, want failed/healthy", payload.Rollout.State, payload.FleetState.State)
+		}
+		if payload.FleetState.LiveInstances != 2 || payload.FleetState.RunningDesiredVersion != 2 ||
+			payload.FleetState.MinimumHealthyInstances != 2 || payload.FleetState.SourceVersion != "source-target" {
+			t.Fatalf("fleet state = %#v", payload.FleetState)
+		}
+		if len(payload.Fresh) != 3 || len(payload.Stale) != 1 {
+			t.Fatalf("fresh/stale replicas = %#v / %#v", payload.Fresh, payload.Stale)
+		}
+		if payload.Fresh[2].InstanceID != "superseded-fresh" || payload.Fresh[2].CurrentSource {
+			t.Fatalf("superseded replica = %#v", payload.Fresh[2])
+		}
+		if payload.Stale[0].InstanceID != "current-stale" || payload.Stale[0].Fresh || !payload.Stale[0].CurrentSource {
+			t.Fatalf("stale current-source replica = %#v", payload.Stale[0])
+		}
+	})
+
+	for _, tc := range []struct {
+		name        string
+		minimum     int
+		observation core.GestaltdInstanceAppHeartbeat
+		wantState   string
+		wantLive    int
+		wantErrors  int
+	}{
+		{
+			name: "degraded runtime error", minimum: 1,
+			observation: core.GestaltdInstanceAppHeartbeat{State: core.GestaltdInstanceAppStateError, LastError: "provider unavailable", ObservedAt: now},
+			wantState:   "degraded", wantLive: 1, wantErrors: 1,
+		},
+		{
+			name: "insufficient capacity is unknown", minimum: 2,
+			observation: core.GestaltdInstanceAppHeartbeat{State: core.GestaltdInstanceAppStateRunning, RunningVersion: "1.2.3", ObservedAt: now},
+			wantState:   "unknown", wantLive: 1,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			services := testutil.NewStubServices(t)
+			appendKnownVersion(t, services, "g-issues", "1.2.3", now.Add(-time.Hour))
+			if _, err := services.GestaltdSourceVersionState.Activate(
+				context.Background(), "source-target", now.Add(-time.Hour), false, time.Minute, 15*time.Minute, tc.minimum,
+			); err != nil {
+				t.Fatalf("Activate: %v", err)
+			}
+			upsertFleetHeartbeat(t, services, "replica", "source-target", now, "g-issues", tc.observation)
+			got := getAdminFleetState(t, newRegistryObservabilityTestServerAt(t, services, now))
+			if got.State != tc.wantState || got.LiveInstances != tc.wantLive || got.Errors != tc.wantErrors {
+				t.Fatalf("fleet state = %#v", got)
+			}
+		})
+	}
+
+	t.Run("missing source and minimum remains unknown", func(t *testing.T) {
+		t.Parallel()
+		services := testutil.NewStubServices(t)
+		appendKnownVersion(t, services, "g-issues", "1.2.3", now.Add(-time.Hour))
+		got := getAdminFleetState(t, newRegistryObservabilityTestServerAt(t, services, now))
+		if got.State != "unknown" || got.SourceVersion != "" || got.MinimumHealthyInstances != 0 || got.LiveInstances != 0 {
+			t.Fatalf("fleet state = %#v", got)
+		}
+	})
+
+	t.Run("storage read failure returns an error instead of healthy", func(t *testing.T) {
+		t.Parallel()
+		db := &coretesting.StubIndexedDB{}
+		services, err := coredata.New(db)
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		testutil.AttachStubExternalCredentials(services)
+		ts := newRegistryObservabilityTestServerAt(t, services, now)
+		db.Err = errors.New("indexeddb unavailable")
+		resp, err := http.Get(ts.URL + "/admin/api/v1/registry-apps/g-issues")
+		if err != nil {
+			t.Fatalf("GET registry app: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusInternalServerError {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want 500: %s", resp.StatusCode, body)
+		}
+	})
+}
+
+type adminFleetStateJSON struct {
+	State                   string `json:"state"`
+	SourceVersion           string `json:"sourceVersion"`
+	MinimumHealthyInstances int    `json:"minimumHealthyInstances"`
+	LiveInstances           int    `json:"liveInstances"`
+	RunningDesiredVersion   int    `json:"runningDesiredVersion"`
+	Errors                  int    `json:"errors"`
+}
+
+type adminFleetReplicaJSON struct {
+	InstanceID    string `json:"instanceId"`
+	CurrentSource bool   `json:"currentSource"`
+	Fresh         bool   `json:"fresh"`
+}
+
+func getAdminFleetState(t *testing.T, ts *httptest.Server) adminFleetStateJSON {
+	t.Helper()
+	resp, err := http.Get(ts.URL + "/admin/api/v1/registry-apps/g-issues")
+	if err != nil {
+		t.Fatalf("GET registry app: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d: %s", resp.StatusCode, body)
+	}
+	var payload struct {
+		FleetState adminFleetStateJSON `json:"fleetState"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode registry app: %v", err)
+	}
+	return payload.FleetState
+}
+
 type adminAppInstallationJSON struct {
 	Version string `json:"version"`
 }
@@ -276,8 +451,19 @@ func TestAdminAppRolloutMaterializations(t *testing.T) {
 
 func newRegistryObservabilityTestServer(t *testing.T, services *coredata.Services) *httptest.Server {
 	t.Helper()
+	return newRegistryObservabilityTestServerWithClock(t, services, time.Now)
+}
+
+func newRegistryObservabilityTestServerAt(t *testing.T, services *coredata.Services, now time.Time) *httptest.Server {
+	t.Helper()
+	return newRegistryObservabilityTestServerWithClock(t, services, func() time.Time { return now })
+}
+
+func newRegistryObservabilityTestServerWithClock(t *testing.T, services *coredata.Services, now func() time.Time) *httptest.Server {
+	t.Helper()
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Services = services
+		cfg.Now = now
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"g-empty":      {Source: config.ProviderSource{Registry: "toolshed"}},
 			"g-issues":     {Source: config.ProviderSource{Registry: "toolshed"}},
@@ -286,6 +472,32 @@ func newRegistryObservabilityTestServer(t *testing.T, services *coredata.Service
 	})
 	testutil.CloseOnCleanup(t, ts)
 	return ts
+}
+
+func upsertFleetHeartbeat(
+	t *testing.T,
+	services *coredata.Services,
+	instanceID string,
+	sourceVersion string,
+	heartbeatAt time.Time,
+	app string,
+	observation core.GestaltdInstanceAppHeartbeat,
+) {
+	t.Helper()
+	if observation.ObservedAt.IsZero() {
+		observation.ObservedAt = heartbeatAt
+	}
+	if _, err := services.GestaltdInstanceHeartbeats.Upsert(context.Background(), &core.GestaltdInstanceHeartbeat{
+		InstanceID:    instanceID,
+		SourceVersion: sourceVersion,
+		StartedAt:     heartbeatAt.Add(-time.Hour),
+		HeartbeatAt:   heartbeatAt,
+		Apps: map[string]core.GestaltdInstanceAppHeartbeat{
+			app: observation,
+		},
+	}); err != nil {
+		t.Fatalf("Upsert heartbeat: %v", err)
+	}
 }
 
 func appendKnownVersion(t *testing.T, services *coredata.Services, app, version string, at time.Time) {
