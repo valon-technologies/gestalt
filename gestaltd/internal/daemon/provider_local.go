@@ -612,35 +612,12 @@ func canonicalPath(path string) (string, error) {
 func derivedPluginKey(manifest *providermanifestv1.Manifest, manifestPath string) string {
 	if manifest != nil {
 		if src, err := source.Parse(manifest.Source); err == nil {
-			if name := sanitizeDerivedPluginKey(src.AppName()); name != "" {
+			if name := strings.TrimSpace(src.AppName()); name != "" {
 				return name
 			}
 		}
 	}
-	return sanitizeDerivedPluginKey(filepath.Base(filepath.Dir(manifestPath)))
-}
-
-func sanitizeDerivedPluginKey(value string) string {
-	value = strings.TrimSpace(strings.ToLower(value))
-	var b strings.Builder
-	previousUnderscore := false
-	for _, r := range value {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-			previousUnderscore = false
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-			previousUnderscore = false
-		default:
-			if previousUnderscore || b.Len() == 0 {
-				continue
-			}
-			b.WriteByte('_')
-			previousUnderscore = true
-		}
-	}
-	return strings.Trim(b.String(), "_")
+	return sanitizeProviderLocalMountSlug(filepath.Base(filepath.Dir(manifestPath)))
 }
 
 func defaultProviderLocalMountPath(manifest *providermanifestv1.Manifest, manifestPath, fallbackKey string) string {
@@ -724,12 +701,9 @@ func matchingPluginKeys(plugins map[string]*config.ProviderEntry, targetManifest
 		if _, manifest, err := providerpkg.ReadSourceManifestFile(targetManifestPath); err == nil && manifest != nil {
 			if src, err := source.Parse(manifest.Source); err == nil {
 				appName := strings.TrimSpace(src.AppName())
-				sanitized := sanitizeDerivedPluginKey(appName)
-				for _, candidate := range []string{appName, sanitized} {
-					if candidate != "" {
-						if _, ok := plugins[candidate]; ok && !slices.Contains(matches, candidate) {
-							matches = append(matches, candidate)
-						}
+				if appName != "" {
+					if _, ok := plugins[appName]; ok && !slices.Contains(matches, appName) {
+						matches = append(matches, appName)
 					}
 				}
 			}

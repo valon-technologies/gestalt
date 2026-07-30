@@ -135,7 +135,7 @@ spec:
 	_, err := prepareProviderLocalSession(providerLocalCommandOptions{
 		Paths: []string{uiDir},
 	})
-	if err == nil || (!strings.Contains(err.Error(), "apps.demo_ui.static") && !strings.Contains(err.Error(), `manifest kind "ui" is not valid`)) {
+	if err == nil || (!strings.Contains(err.Error(), "apps.demo-ui.static") && !strings.Contains(err.Error(), `manifest kind "ui" is not valid`)) {
 		t.Fatalf("error = %v, want ui kind rejection", err)
 	}
 }

@@ -399,7 +399,7 @@ func runProviderAdd(args []string) error {
 	}
 	entryName := strings.TrimSpace(*name)
 	if entryName == "" {
-		entryName = sanitizeDerivedPluginKey(providerregistry.PackageName(resolved.Package))
+		entryName = sanitizeProviderLocalMountSlug(providerregistry.PackageName(resolved.Package))
 	}
 	if entryName == "" {
 		return fmt.Errorf("--name is required")
