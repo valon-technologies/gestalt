@@ -64,7 +64,7 @@ func TestHeartbeatRolloutEvaluationStabilityDeadlineAndSummary(t *testing.T) {
 
 	services = testutil.NewStubServices(t)
 	rollout = createHeartbeatRollout(t, services, start, start.Add(3*time.Minute))
-	got, _ = evaluate(start.Add(2*time.Minute+time.Second), true)
+	_, _ = evaluate(start.Add(2*time.Minute+time.Second), true)
 	got, transitioned = evaluate(start.Add(3*time.Minute), true)
 	if !transitioned || got.State != core.AppRolloutStateFailed || got.FailureSummary == nil {
 		t.Fatalf("deadline failure = %#v, transitioned=%v", got, transitioned)
