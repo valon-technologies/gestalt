@@ -429,7 +429,7 @@ func TestE2EProviderValidateStaticApp(t *testing.T) {
 	if !strings.Contains(string(out), "config ok") {
 		t.Fatalf("expected validate success, got: %s", out)
 	}
-	if !strings.Contains(string(out), "app=roadmap_review") {
+	if !strings.Contains(string(out), "app=roadmap.review") {
 		t.Fatalf("expected app validation summary, got: %s", out)
 	}
 }
