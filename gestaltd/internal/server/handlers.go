@@ -92,6 +92,7 @@ type integrationInfo struct {
 	IconSVG         string              `json:"iconSvg,omitempty"`
 	MountedPath     string              `json:"mountedPath,omitempty"`
 	ManagementPath  string              `json:"managementPath,omitempty"`
+	PromptExamples  []string            `json:"promptExamples,omitempty"`
 	Connections     []connectionDefInfo `json:"connections"`
 	Status          string              `json:"status"`
 	CredentialState string              `json:"credentialState"`
@@ -238,6 +239,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		}
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil && entry.Static != nil {
 			info.MountedPath = strings.TrimSpace(entry.Static.Mount)
+		}
+		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
+			info.PromptExamples = providermanifestv1.PromptExamples(entry.ResolvedManifest)
 		}
 		instances := connected[name]
 		authTypes := s.populateIntegrationSettings(&info, instances, p)

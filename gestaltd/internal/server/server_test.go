@@ -4153,6 +4153,55 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_IncludesPromptExamples(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "gmail", DN: "Gmail"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.AppDefs = testPluginDefsForConnections("gmail", "default")
+		if cfg.AppDefs["gmail"] != nil {
+			cfg.AppDefs["gmail"].ResolvedManifest = &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					UI: &providermanifestv1.ManifestUI{
+						PromptExamples: []string{
+							"Draft a short reply to my latest unread email",
+						},
+					},
+				},
+			}
+		}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name           string   `json:"name"`
+		PromptExamples []string `json:"promptExamples"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if len(integrations[0].PromptExamples) != 1 ||
+		integrations[0].PromptExamples[0] != "Draft a short reply to my latest unread email" {
+		t.Fatalf("promptExamples = %v", integrations[0].PromptExamples)
+	}
+}
+
 func TestListIntegrationsShowsConnected(t *testing.T) {
 	t.Parallel()
 
