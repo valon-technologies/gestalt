@@ -128,7 +128,8 @@ func canonicalizeLegacyRemoteConfig(cfg *Config) error {
 		Token:   strings.TrimSpace(cfg.Server.RemoteToken),
 		Default: true,
 	}
-	stampDefaultRemote(cfg.Apps, DefaultRemoteName)
+	dev := cfg.Server.Dev
+	stampDefaultRemote(cfg.Apps, DefaultRemoteName, dev)
 	for _, entries := range []map[string]*ProviderEntry{
 		cfg.Providers.Identity,
 		cfg.Providers.Authorization,
@@ -136,16 +137,23 @@ func canonicalizeLegacyRemoteConfig(cfg *Config) error {
 		cfg.Providers.Workflow,
 		cfg.Providers.Agent,
 	} {
-		stampDefaultRemote(entries, DefaultRemoteName)
+		stampDefaultRemote(entries, DefaultRemoteName, dev)
 	}
 	return nil
 }
 
 // stampDefaultRemote sets remote to defaultName on every entry that does not
-// already name a remote and is not explicitly local or dev-active.
-func stampDefaultRemote(entries map[string]*ProviderEntry, defaultName string) {
+// already name a remote and is not explicitly local. Dev-active entries are
+// normally skipped (they run locally and are not remote-delegated), but when
+// dev is true they are stamped too so the reverse-tunnel publisher includes
+// them in its publication plan — the remote then forwards operations and UI
+// traffic back through the tunnel to the dev machine.
+func stampDefaultRemote(entries map[string]*ProviderEntry, defaultName string, dev bool) {
 	for _, entry := range entries {
-		if entry == nil || entry.Local || entry.DevActive {
+		if entry == nil || entry.Local {
+			continue
+		}
+		if entry.DevActive && !dev {
 			continue
 		}
 		if strings.TrimSpace(entry.Remote) != "" {
