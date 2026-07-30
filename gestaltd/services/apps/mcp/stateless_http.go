@@ -175,7 +175,7 @@ func (h *StatelessHTTPHandler) listTools(ctx context.Context, req mcpgo.ListTool
 	p := principal.FromContext(ctx)
 	tools := make([]mcpgo.Tool, 0)
 	for _, provName := range h.providerNames {
-		prov, ok := h.provider(provName)
+		prov, ok := h.provider(ctx, provName)
 		if !ok {
 			continue
 		}
@@ -212,7 +212,7 @@ func (h *StatelessHTTPHandler) callTool(ctx context.Context, req mcpgo.CallToolR
 	if provName == "" {
 		return nil, fmt.Errorf("%w: %q", invocation.ErrOperationNotFound, req.Params.Name)
 	}
-	prov, ok := h.provider(provName)
+	prov, ok := h.provider(ctx, provName)
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", core.ErrNotFound, provName)
 	}
@@ -317,7 +317,7 @@ func statelessToolMap(cfg Config, provName string, cat *catalog.Catalog) (map[st
 	return tools, refs
 }
 
-func (h *StatelessHTTPHandler) provider(provName string) (core.Provider, bool) {
+func (h *StatelessHTTPHandler) provider(ctx context.Context, provName string) (core.Provider, bool) {
 	if h.cfg.Providers == nil {
 		return nil, false
 	}
@@ -326,7 +326,7 @@ func (h *StatelessHTTPHandler) provider(provName string) (core.Provider, bool) {
 			return nil, false
 		}
 	}
-	prov, err := h.cfg.Providers.Get(provName)
+	prov, err := h.cfg.Providers.GetWithContext(ctx, provName)
 	return prov, err == nil && prov != nil
 }
 

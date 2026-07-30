@@ -135,7 +135,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	if m == nil || m.providers == nil {
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: workflow providers are not configured", invocation.ErrInternal)
 	}
-	prov, err := m.providers.Get(appName)
+	prov, err := m.providers.GetWithContext(ctx, appName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return coreworkflow.AppCall{}, fmt.Errorf("%w: %q", invocation.ErrProviderNotFound, appName)

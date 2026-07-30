@@ -448,7 +448,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	tm := state.Credential
 	tm.MetadataJSON = merged
-	prov, ok := s.getProvider(w, state.Credential.Integration)
+	prov, ok := s.getProvider(r.Context(), w, state.Credential.Integration)
 	if !ok {
 		auditErr = errors.New("integration not found")
 		return

@@ -101,7 +101,7 @@ func registryAppStaticHandler(app, mount string, entry *config.ProviderEntry, pr
 		}
 		served := false
 		err := runtimeState.WithRunningVersion(app, func(version string) error {
-			if _, err := providers.Get(app); err != nil {
+			if _, err := providers.GetWithContext(r.Context(), app); err != nil {
 				return err
 			}
 			marker := filepath.Join(artifactsDir, appregistry.RegistryInstallSubdir, app, "active-version")

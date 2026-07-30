@@ -15,7 +15,7 @@ import (
 func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding MountedHTTPBinding, r *http.Request, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*principal.Principal, error) {
 	bindingPrincipal := s.httpBindingPrincipal(binding, verified)
 
-	prov, err := s.providers.Get(binding.AppName)
+	prov, err := s.providers.GetWithContext(ctx, binding.AppName)
 	if err != nil {
 		return nil, err
 	}

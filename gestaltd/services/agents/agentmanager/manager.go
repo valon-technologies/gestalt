@@ -2238,7 +2238,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if appName == "" {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent tool app is required", invocation.ErrProviderNotFound)
 	}
-	prov, err := m.providers.Get(appName)
+	prov, err := m.providers.GetWithContext(ctx, appName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return coreagent.Tool{}, fmt.Errorf("%w: %q", invocation.ErrProviderNotFound, appName)
@@ -2462,7 +2462,7 @@ func (m *Manager) visitToolSearchCandidates(
 		if appName == "" {
 			continue
 		}
-		prov, err := m.providers.Get(appName)
+		prov, err := m.providers.GetWithContext(ctx, appName)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				continue
@@ -2915,7 +2915,7 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			continue
 		}
-		if _, err := m.providers.Get(appName); err != nil {
+		if _, err := m.providers.GetWithContext(ctx, appName); err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				return fmt.Errorf("%w: %q", invocation.ErrProviderNotFound, appName)
 			}

@@ -72,7 +72,7 @@ func (s *TunnelAppProviderServer) resolveServer(ctx context.Context) (proto.AppP
 	}
 	s.mu.Unlock()
 
-	prov, err := s.providers.Get(appName)
+	prov, err := s.providers.GetWithContext(ctx, appName)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "app %q not found", appName)
 	}

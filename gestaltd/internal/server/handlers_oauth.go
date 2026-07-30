@@ -44,7 +44,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	providerName = req.Integration
 
-	prov, connection, err := s.resolveConnectionProvider(w, req.Integration, req.Connection)
+	prov, connection, err := s.resolveConnectionProvider(r.Context(), w, req.Integration, req.Connection)
 	if err != nil {
 		auditErr = err
 		return
@@ -211,7 +211,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	prov, _ := s.providers.Get(providerName)
+	prov, _ := s.providers.GetWithContext(r.Context(), providerName)
 	if prov != nil {
 		connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	}

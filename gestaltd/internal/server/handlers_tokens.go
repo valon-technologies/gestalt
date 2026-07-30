@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-func (s *Server) validateCreateGrantRequest(req createTokenRequest) (string, error) {
+func (s *Server) validateCreateGrantRequest(ctx context.Context, req createTokenRequest) (string, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return "", errors.New("name is required")
 	}
@@ -25,7 +26,7 @@ func (s *Server) validateCreateGrantRequest(req createTokenRequest) (string, err
 	scope := strings.TrimSpace(req.Scopes)
 	for _, part := range strings.Fields(scope) {
 		appName, _, _ := strings.Cut(part, ":")
-		if _, err := s.providers.Get(appName); err != nil {
+		if _, err := s.providers.GetWithContext(ctx, appName); err != nil {
 			return "", fmt.Errorf("unknown scope %q", part)
 		}
 	}
@@ -75,7 +76,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 	auditTarget = apiTokenAuditTarget("", req.Name)
 
-	scope, err := s.validateCreateGrantRequest(req)
+	scope, err := s.validateCreateGrantRequest(r.Context(), req)
 	if err != nil {
 		auditErr = err
 		writeError(w, http.StatusBadRequest, err.Error())

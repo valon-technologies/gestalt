@@ -56,7 +56,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prov, manualConnection, err := s.resolveConnectionProvider(w, req.Integration, req.Connection)
+	prov, manualConnection, err := s.resolveConnectionProvider(r.Context(), w, req.Integration, req.Connection)
 	if err != nil {
 		auditErr = err
 		return
@@ -206,8 +206,8 @@ func (s *Server) exchangeManualCredential(ctx context.Context, req connectManual
 	}, nil
 }
 
-func (s *Server) resolveConnectionProvider(w http.ResponseWriter, integration, requestedConnection string) (core.Provider, string, error) {
-	prov, ok := s.getProvider(w, integration)
+func (s *Server) resolveConnectionProvider(ctx context.Context, w http.ResponseWriter, integration, requestedConnection string) (core.Provider, string, error) {
+	prov, ok := s.getProvider(ctx, w, integration)
 	if !ok {
 		return nil, "", errors.New("integration not found")
 	}
