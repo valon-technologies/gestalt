@@ -49,7 +49,7 @@ func TestPrepareProviderLocalSessionAutoMountsAppStatic(t *testing.T) {
 	baseCfg := filepath.Join(dir, "base.yaml")
 	baseYAML := `apiVersion: gestaltd.config/v8
 apps:
-  vm_style_guide:
+  vm-style-guide:
     static:
       mount: /vm-style-guide
     source: https://example.invalid/apps/vm-style-guide
@@ -71,7 +71,7 @@ apps:
 	if got, want := session.Kind, providermanifestv1.KindApp; got != want {
 		t.Fatalf("session.Kind = %q, want %q", got, want)
 	}
-	if got, want := session.TargetKey, "vm_style_guide"; got != want {
+	if got, want := session.TargetKey, "vm-style-guide"; got != want {
 		t.Fatalf("session.TargetKey = %q, want %q", got, want)
 	}
 	if got, want := session.AutoMountedUIPath, "/vm-style-guide"; got != want {
