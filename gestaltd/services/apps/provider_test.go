@@ -84,6 +84,14 @@ func (p *roundTripProvider) Catalog() *catalog.Catalog {
 	}
 }
 
+type iconOnlyCatalogProvider struct {
+	roundTripProvider
+}
+
+func (p *iconOnlyCatalogProvider) Catalog() *catalog.Catalog {
+	return &catalog.Catalog{IconSVG: "<svg/>"}
+}
+
 func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	subjectID := ""
 	subjectKind := ""
@@ -303,6 +311,53 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("static catalog source", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tc := range []struct {
+			name   string
+			specOp string
+			wantOp string
+		}{
+			{name: "adopted from metadata", wantOp: "echo"},
+			{name: "spec takes precedence", specOp: "spec-only", wantOp: "spec-only"},
+		} {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				spec := roundTripStaticSpec()
+				if tc.specOp == "" {
+					spec.Catalog = nil
+				} else {
+					spec.Catalog.Operations[0].ID = tc.specOp
+				}
+				cataloged, err := NewRemote(context.Background(), client, spec, nil)
+				if err != nil {
+					t.Fatalf("NewRemote: %v", err)
+				}
+				cat := cataloged.Catalog()
+				if cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != tc.wantOp {
+					t.Fatalf("unexpected catalog: %+v", cat)
+				}
+			})
+		}
+	})
+
+	t.Run("invalid metadata catalog ignored", func(t *testing.T) {
+		t.Parallel()
+
+		spec := roundTripStaticSpec()
+		spec.Catalog = nil
+		prov, err := NewRemote(context.Background(), newAppProviderClient(t, NewProviderServer(&iconOnlyCatalogProvider{})), spec, nil)
+		if err != nil {
+			t.Fatalf("NewRemote: %v", err)
+		}
+		if cat := prov.Catalog(); cat != nil {
+			t.Fatalf("expected invalid metadata catalog to be ignored, got %+v", cat)
+		}
+	})
 
 	t.Run("malformed principal", func(t *testing.T) {
 		t.Parallel()
