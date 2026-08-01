@@ -32,6 +32,7 @@ func NewServer(provider core.Provider) proto.AppProviderServer {
 
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
 	return &proto.ProviderMetadata{
+		StaticCatalog:          catalogToProto(s.provider.Catalog()),
 		SupportsSessionCatalog: core.SupportsSessionCatalog(s.provider),
 	}, nil
 }

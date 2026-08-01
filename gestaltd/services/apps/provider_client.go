@@ -65,6 +65,7 @@ var (
 
 type integrationProviderSupport struct {
 	sessionCatalog      bool
+	staticCatalog       *catalog.Catalog
 	workflowDefinitions []*proto.WorkflowDefinitionSpec
 }
 
@@ -127,6 +128,9 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 		discovery:           spec.DiscoveryConfig,
 		workflowDefinitions: append([]*proto.WorkflowDefinitionSpec(nil), support.workflowDefinitions...),
 	}
+	if base.catalog == nil && support.staticCatalog != nil {
+		base.catalog = support.staticCatalog
+	}
 	for _, opt := range opts {
 		opt(base)
 	}
@@ -141,12 +145,17 @@ func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProvide
 	for {
 		meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 		if err == nil {
+			// Providers may legitimately advertise catalogs that fail
+			// Validate (e.g. icon-only with zero operations); treat those
+			// as absent rather than failing provider construction.
+			staticCat, _ := catalogFromProto(meta.GetStaticCatalog())
 			specs, decodeErr := decodeWorkflowDefinitionSpecs(meta.GetWorkflowDefinitionSpecs())
 			if decodeErr != nil {
 				return nil, decodeErr
 			}
 			return &integrationProviderSupport{
 				sessionCatalog:      meta.GetSupportsSessionCatalog(),
+				staticCatalog:       staticCat,
 				workflowDefinitions: specs,
 			}, nil
 		}
