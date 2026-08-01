@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@shikijs/langs": "^3.23.0",
-    "@shikijs/themes": "^3.23.0",
+    "@shikijs/themes": "^4.3.1",
     "@types/react-dom": "^19.2.3",
     "next": "^16.2.6",
     "nextra": "^4.6.1",
