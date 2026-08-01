@@ -19,7 +19,7 @@
     "test:registry-docs": "node scripts/check-registry-docs-render.mjs"
   },
   "dependencies": {
-    "@shikijs/langs": "^3.23.0",
+    "@shikijs/langs": "^4.3.1",
     "@shikijs/themes": "^3.23.0",
     "@types/react-dom": "^19.2.3",
     "next": "^16.2.6",
