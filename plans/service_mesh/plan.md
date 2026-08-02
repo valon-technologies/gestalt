@@ -3,6 +3,7 @@
 ## Contents
 
 - [Overview](#overview)
+- [Registries](#registries)
 - [Foundations](#foundations)
 - [Publishing and Distribution](#publishing-and-distribution)
 - [Package Revisions](#package-revisions)
@@ -11,6 +12,7 @@
 - [Representative Request Lifecycles](#representative-request-lifecycles)
 - [Assurance](#assurance)
 - [Glossary](#glossary)
+- [Appendix: Design Invariants](#appendix-design-invariants)
 
 ## Overview
 
@@ -20,149 +22,196 @@ The platform builds, distributes, installs, and runs packages in a shared servic
 - One or more single-page user interfaces
 - Durable workflow definitions
 - Dependency and migration metadata
-- Runtime and operation-authorization requirements
+- Per-operation authorization relationship or role requirements
 
-Each package runtime Pod includes a platform-owned supervisor sidecar that gates readiness and shutdown, exposes the mesh listener, and reports observed runtime state. Kubernetes starts and terminates the sibling runtime container. UI-only and workflow-only packages do not create runtime Pods.
+The platform should enable the following user experiences.
 
-Each organization operates one deployment backed by a private registry and optional trusted registries. The deployment exposes catalogs of installed packages, callable operations, user interfaces, workflows, and dependencies.
+### Organization Administrator
 
-Publishing makes a release discoverable. Installation admits an immutable release into an organization. Canarying permits controlled, undiscoverable traffic. Routing and external registrations converge before promotion atomically makes an installed revision primary and exposes its catalog generations. These milestones are separate and must not be inferred from one another.
+An organization administrator can:
 
-This design is a full replacement for the existing Gestalt implementation. It does not preserve the existing provider runtime, package archive, registry, deployment, authorization, or workflow protocols, and it does not define an in-place migration. Feature names shared with the existing system do not imply wire-format or state compatibility.
+- Operate one deployment, private registry, and administration surface, such as `https://vt.valon.tools`, `/registry`, and `/admin`.
+- Configure source automation to build and publish packages from GitHub branches, pull requests, or label-based rules.
+- Configure read-only upstream registry sources and pull trusted releases into the private registry.
+- Browse installed apps as a graph, including operations, UIs, workflows, dependencies, versions, identities, and authorization.
+- Open an app administration page, change its version, or install and remove it.
 
-## Foundations
+### Package Publisher
 
-### Design Invariants
+A publisher can:
 
-The following invariants apply to every implementation:
+- Define package metadata, operations, dependencies, workflows, UIs, and migration jobs in a source manifest.
+- Run `vt build <dir>` and optionally push the result directly to the deployment registry.
+- Use repository automation instead of pushing manually.
+- Run `vt dev --deployment <url> <dir>` to test a package in an isolated, user-scoped mesh sandbox before publishing it.
 
-1. A published release is immutable and identified by its `releaseDigest`.
-2. A deployment records every accepted install, upgrade, rollback, and removal request in an append-only revision history.
-3. For each canonical package identity in an organization, only one revision operation — install, upgrade, rollback, or removal — may be in progress at a time.
-4. Durable revision requests record intent; revision controllers perform runtime work and resume safely after process failure.
-5. Registry publication, revision-operation phase, live workload health, routing promotion, and catalog convergence are tracked separately.
-6. A pre-promotion failure does not replace the last successfully promoted revision.
-7. Routing propagation is eventually consistent, so every revision that may receive traffic remains contract-compatible with operations referenced by installed reverse dependencies until propagation and draining finish. New contracts become visible only after routing convergence. A candidate may omit an operation when no installed package or workflow definition or execution retained by policy references it; stale or undeclared calls to that operation may fail after promotion.
-8. Packages run only under organization-provisioned identities; release metadata may define access requirements but cannot grant authority.
-9. Ordinary packages cannot replace components needed to administer the platform. Identity, authorization, workflow execution, secret management, registry verification, and audit may be implemented only by protected system packages; certificates, state storage, revision control, and recovery remain part of the bootstrap substrate.
-10. Every externally supplied manifest, image, schema, and migration is untrusted until its digest, signature, and policy are verified.
-11. Every authorization decision uses canonical identities and one immutable policy generation. Grants change only through explicit authorized actions; policy-model changes cannot silently delete or orphan them.
-12. Raw user credentials and caller-supplied identity fields never cross into package runtimes. Internal caller context is short-lived, signed, and bound to its intended audience and target.
+Migration jobs should be retry-safe and reversible where practical. Explicitly approved one-time jobs are supported when idempotency is impossible; their durable outcome prevents accidental re-execution.
 
-### Identity Model
+### Package Administrator
 
-The system keeps these identities separate:
+A package administrator can:
 
-- **Registry identity**: an immutable self-certifying `registryId` derived from the registry's offline root public key. The identifier is globally stable for that registry but does not imply endorsement by, or membership in, a central registry namespace. Signed registry descriptors authorize the current origin set and origin changes.
-- **Package identity**: permanent `(registryId, packageId)` assigned when the package is reserved. A slug is a mutable display and discovery alias, never a security identifier.
-- **Release identity**: `(registryId, packageId, releaseVersion, releaseDigest)`.
-- **Installation identity**: an organization-scoped UUID representing one installed package.
-- **Workload identity**: the installation principal used in authorization checks for one installation's runtime or migration job, bound at installation to an organization-managed Kubernetes service account.
-- **Workflow identity**: the principal assigned to a workflow definition or execution.
-- **Actor identity**: the user, API grant, platform service account, or workflow that initiated an action.
-- **Effective subject**: the principal whose delegated authority an invocation exercises.
+- Inspect an app and its deployment details.
+- Manage its desired version within their package-scoped authority.
+- Invoke any app operation they are authorized to use.
+- Promote releases from the private registry manually or through deployment rules.
+- Perform the first installation that admits a package into the mesh.
+- Select organization-managed identities for runtimes, migrations, and workflows.
+- Decide whether an operation runs only as its workload identity or may exercise explicitly delegated caller authority.
+- Bind each permission as either a durable grant or delegated authority.
 
-Authentication resolves a credential to one canonical principal before authorization. Gateways remove caller-supplied internal identity fields, and downstream services accept identity only from verified workload identity or signed internal context. Delegation keeps the actor and effective subject distinct throughout authorization and audit.
+A durable grant cannot exceed the human issuer's authority when created and remains until explicitly revoked, expired, or invalidated by a policy migration. Delegated authority is bounded by the subject's current authority and narrows immediately when that authority is lost.
 
-Package IDs are never reused. Slug renames retain aliases and tombstones. Content published under a different registry receives a distinct package identity, even when the release bytes are identical.
+Package administration and publishing are independent roles, although the same person may hold both. Publishing, installation, and promotion remain separate actions.
 
-Release metadata cannot name workload identities or Kubernetes service accounts. Runtime identities and authorization bindings are selected from organization-managed resources during installation.
+### Package User
 
-## Publishing and Distribution
+A package user can:
 
-### Package Releases
+- Open a deployment and browse only the apps, operations, UIs, and workflows they are authorized to see.
+- Launch an app UI or invoke an operation through MCP Streamable HTTP or `vt invoke`.
+- Manage their API grants and use a development sandbox when authorized.
+- Use these capabilities without access to organization or app administration surfaces.
 
-Each `(registryId, packageId, releaseVersion)` has one release manifest with detached signatures. A release with a runtime declares one or more OS, architecture, and optional variant tuples and references an OCI runtime image index covering them.
+## Registries
 
-Runtime and migration images may contain platform-specific binaries, but contracts, dependencies, workflow definitions, user interfaces, and operation access requirements are shared across all supported platforms.
+The registry protocol is open. Anyone may operate a compatible registry; there is no central creation or approval authority.
 
-The release manifest contains:
+### Deployment Registry
 
-- Canonical registry and package IDs, slug, and `releaseVersion`
-- Optional OCI runtime image-index digest, supported platforms, startup instructions, and probe contract
-- Zero or more digest-addressed migration image indexes with their supported platforms
-- Zero or more MCP operations with input and output schema digests
-- Zero or more digest-addressed workflow definitions and UI bundles
-- Required and optional package and operation dependencies
-- Ordered prepare, finalize, and compensating migration jobs
-- Required authorization relationships or roles for each operation
-- Supported MCP protocol versions and private runtime control API versions
-- Minimum and maximum compatible package-supervisor versions
-- Optional source repository URL and source revision
+Each deployment has exactly one registry and uses it as the sole package catalog and artifact source. Installation, upgrade, rollback, and recovery never fetch directly from an external registry.
 
-The registry stores signatures separately from the manifest. Each signature identifies the exact release or image digest it covers.
+Releases enter through:
 
-Source repository and revision are optional display metadata. Publication must support releases without either field; when present, catalogs and administration views may use them for links and context.
+- **Push**: an authorized publisher uploads a release created for the deployment registry. Publication credentials grant only the permitted package and release actions.
+- **Pull-through import**: an administrator imports an external release using read-only upstream authorization. The registry verifies and stores the complete release locally before exposing it.
 
-The `releaseDigest` is the hash of the canonical manifest bytes. Catalog entries, signatures, and installation records carry it; the manifest does not.
+### Build
 
-`releaseVersion` follows a documented registry grammar and comparison order. `(registryId, packageId, releaseVersion)` binds permanently to one `releaseDigest`: conflicting republications fail, while identical retries are idempotent and preserve publication time and metadata. Mutable tags may aid discovery but are never installation inputs.
+Publishers create releases from a source directory with `vt build <dir>`. For example:
 
-### Package Runtime Contract
+```text
+g-issues/
+├── package.yaml
+├── runtime/
+│   ├── Dockerfile
+│   └── src/
+├── migrations/
+│   ├── v2.3.0/
+│   └── v2.3.1/
+└── ui/
+    └── admin-console/
+```
 
-A release may contain an MCP runtime, static user interfaces, workflow definitions, or any combination of them. A release with no MCP runtime does not create a runtime Deployment. Protected system packages may additionally expose platform-owned typed APIs; those APIs are versioned platform protocols and are not part of the ordinary package operation catalog.
+`package.yaml` defines the package name, version, operations, dependencies, workflows, UIs, migration jobs, and authorization requirements. Workflow definitions and operation schemas live in the migration jobs rather than separate source directories. `vt build g-issues/` validates the package, builds digest-addressed artifacts locally, and writes a logical release bundle.
 
-Every MCP runtime image follows one platform runtime contract:
+### Example Release Bundle
 
-- Kubernetes starts the runtime container through the manifest-declared executable and arguments. The image contains no embedded platform credential.
-- The supervisor and runtime mount one private in-memory volume. The runtime exposes MCP Streamable HTTP on `/run/gestalt/mcp.sock` and the typed runtime control API on `/run/gestalt/control.sock`; it never binds a mesh-reachable application port directly.
-- The supervisor owns the mesh-facing listener and relays MCP to the private MCP socket without changing JSON-RPC semantics. Configuration, readiness, cancellation, and graceful shutdown use the separate control socket.
-- Startup, liveness, and readiness probes are distinct. Readiness reports the loaded `releaseDigest`, operation-contract digest set, MCP version, and private runtime control API version.
-- The supervisor supplies configuration and secret references through the platform runtime API. Secret values are fetched under the installation workload identity and are never embedded in release metadata.
-- Graceful shutdown first rejects new sessions, then allows pinned requests and streams to drain until the revision deadline. The supervisor requests shutdown over the control API and fails its readiness gate; Kubernetes remains responsible for container termination.
-- The runtime accepts caller identity only through a verified supervisor context. Caller-supplied identity headers, credentials, and routing fields are discarded before dispatch.
+A typical bundle is not one container or folder. For example:
 
-The private runtime control API is a versioned typed protocol covering configuration, readiness, stream cancellation, graceful shutdown, and observed runtime state. It does not carry MCP invocation payloads. Its compatibility range is recorded independently from the MCP protocol and package-supervisor version range. Ordinary packages cannot replace or extend this protocol.
+```text
+g-issues@2.3.1
+├── release_manifest.json
+├── runtime
+│   └── image-index
+│       ├── linux-amd64 image
+│       └── linux-arm64 image
+├── migrations
+│   ├── v2.3.0 image
+│   └── v2.3.1 image
+└── ui
+    └── admin-console.tar.gz
+```
 
-The OCI artifact specification defines canonical media types and paths for the release manifest, image indexes, UI bundles, workflow definitions, schemas, and migration images. Canonical manifest serialization, digest calculation, detached-signature envelopes, package reservation, and publication idempotency are normative parts of the registry protocol rather than implementation details.
-
-### Registries
-
-The registry protocol is open and has no central creation or approval authority. Anyone may operate a registry using the reference creation tooling or an independent implementation that serves the required registry descriptor, APIs, and signature bundles. Each organization independently decides whether to connect to and trust that registry.
-
-Registries control who can publish, discover, or download releases. Each configured registry has:
-
-- The registry's immutable `registryId`, root public key, descriptor generation, and verified origin set
-- Discovery, metadata, blob, and publication endpoints
-- Optional read credentials for discovery and download from a private registry
-- A registry trust policy binding each trusted public-key fingerprint to a publisher identity and the package IDs that key may sign
-- Whether local clients may publish directly
-- A policy revision incremented when trust or local publication rules change
-
-The registry root key signs descriptors containing the `registryId`, protocol version, authorized origin set, operational signing keys, and descriptor generation. Deployments verify that the identifier matches the root key and accept origin additions, removals, mirrors, and disaster-recovery endpoints only through a newer valid descriptor. The offline root key does not sign package releases; publisher and operational keys rotate independently.
-
-The registry's publisher policy controls which releases it accepts. Each connected organization's registry trust policy independently controls which of those releases the organization will admit and may be more restrictive. Registry connection credentials, when present, are read-only and are stored by the secret-management service. Publishers authenticate to the registry with their own user or CI credentials, which the platform does not retain. Artifact verification uses the registry trust policy and public trust material, not registry credentials.
-
-Connecting a registry does not trust its publishers. Catalogs and manifests remain untrusted until admission verifies digests, signatures, schema versions, and the registry trust policy.
-
-The registry provides distinct APIs for paginated discovery, reading immutable metadata and blobs, and authenticated publication.
-
-A registry catalog contains paginated package and release summaries that reference authoritative manifest digests, without duplicating release contracts. Per-package indexes use monotonic revisions and compare-and-swap updates.
-
-Disconnecting a registry blocks discovery and installation but preserves its identity and history. Hard removal fails while any desired, running, dependent, or in-progress revision references it, or while its artifacts remain eligible for rollback or disaster recovery under retention policy. A replacement is a new registry; package identities do not carry over.
-
-### Build and Publish
-
-`vt build <dir>` validates package metadata and builds the applicable digest-addressed runtime, migration, UI, workflow, and schema artifacts, zero or more OCI image indexes, and one release manifest locally. Adding `--push` publishes the result to the selected registry:
+A UI-only or workflow-only package omits the runtime image.
 
 ```sh
 vt build <dir> --push
 ```
 
-Without `--push`, the command does not modify a registry.
+#### CLI authentication
 
-Publication is a recoverable transaction:
+`vt build <dir>` without `--push` needs no deployment credentials.
 
-1. Reserve `(packageId, releaseVersion)` and create a publish-attempt ID.
-2. Record a pending release with any optional source metadata.
-3. Upload all applicable content-addressed blobs, image indexes, and manifests.
-4. Validate all referenced artifacts and release contracts server-side.
-5. Store the immutable release manifest.
-6. Attach signatures.
-7. After all artifacts are stored, atomically add the release to the package catalog. Retry if another publisher changed the catalog first.
-8. Mark the attempt succeeded or failed.
+`vt build <dir> --push` authenticates to the deployment registry before upload. The CLI resolves credentials in this order:
 
-Pending and failed attempts are visible but never installable. Concurrent publishers cannot lose catalog updates. Stale attempts become failed, and orphaned content-addressed blobs are garbage-collected after a grace period.
+1. `VT_API_KEY` environment variable
+2. A session stored in the OS keychain from a prior `vt auth login`
+3. Interactive `vt auth login` if no credential is available
+
+`--push` is safe to run idempotently: retrying the same release after interruption resumes or completes the existing attempt instead of creating a duplicate catalog entry. Pending and failed attempts are visible but never installable. Concurrent publishers cannot lose catalog updates. Stale attempts become failed, and orphaned content-addressed blobs are garbage-collected after a grace period.
+
+### Stored Content and Backing Services
+
+Google Artifact Registry stores the immutable release bundle: runtime and migration OCI images, UI bundles, workflow definitions, schemas, the canonical release manifest, and detached signatures. Each artifact is content-addressed by SHA-256 digest.
+
+The registry service also tracks metadata that Artifact Registry does not provide on its own:
+
+- Package IDs, slugs, version indexes, and tombstones
+- Publication and import attempts, including pending and failed state
+- Catalog indexes that map `(package, version)` to `releaseDigest`
+- Trusted upstream registries and which publishers we accept from them
+- Import history, including where a release came from and whether the copy completed
+
+Upstream read credentials live in the secret-management service, and signing keys live in KMS; neither is stored with package artifacts.
+
+### Identity and Trust
+
+Every registry is responsible for permissioning who can pull from it and who can publish to it.
+
+The deployment registry controls read access for discovery and download, and write access for authorized publishers. Upstream registries do the same on their side; pull-through import uses read-only credentials supplied for that one-time operation.
+
+Each registry has a stable `registryId` derived from its root public key.
+
+### Pull-through Imports
+
+Upstream access is a one-time import that grants read access only; installation still requires organization trust in the release signature. An administrator import verifies the complete release, then atomically adds it to the local catalog; failed imports remain invisible. Imported releases keep their source identity, signatures, and digest.
+
+## Publishing and Distribution
+
+### Package Releases
+
+Each `(registryId, packageId, releaseVersion)` has one canonical release manifest with detached signatures. Runtime and migration binaries may vary by platform; manifest contracts do not.
+
+`release_manifest.json` must declare:
+
+- Canonical registry and package IDs, slug, and `releaseVersion`
+- Digest references for every artifact produced by `vt build`
+- MCP operations with input and output schema digests
+- Required and optional package and operation dependencies
+- Ordered prepare, finalize, and compensating migration jobs
+- Required authorization relationships or roles for each operation
+- Supported MCP protocol versions
+- Runtime startup instructions and probe contract for releases that include a runtime
+- Optional source metadata (e.g. PR number)
+
+#### Publication
+
+1. `vt build` produces the release artifacts; each artifact gets a SHA-256 digest.
+2. `vt build` writes `release_manifest.json` listing those digests and the release metadata above.
+3. `vt build` computes `releaseDigest` as the SHA-256 hash of the canonical manifest bytes. It is not embedded in the manifest.
+4. The publisher signs `registryId`, `packageId`, `releaseVersion`, `releaseDigest`, and every referenced artifact digest. The signature is stored separately from the manifest.
+5. `--push` uploads the artifacts, manifest, and signature to the deployment registry.
+
+#### Verification
+
+When the registry receives a push request, it authenticates the publisher, verifies signatures, digests, and contracts, and rejects conflicting republications of the same `releaseVersion`. A `releaseVersion` follows a documented grammar and binds permanently to one `releaseDigest`. Only after those checks succeed does the registry expose the release in the catalog.
+
+Pull-through import has its own validation before copying an external release locally; installation is a separate check that re-verifies the selected `releaseDigest` before admitting a package into the mesh.
+
+### First Installation
+
+A release in the registry catalog is not yet running in the mesh. The first installation admits it. For example, installing `g-issues@2.3.1`:
+
+1. **Select a release.** A package administrator chooses the app and an immutable `releaseDigest` from the registry catalog.
+2. **Review the contract.** The platform shows declared operations, dependencies, workflows, UIs, migrations, and required authorization relationships.
+3. **Bind identities.** The administrator selects organization-managed service accounts for the runtime, migration jobs, and workflows when the release includes them.
+4. **Configure operation authority.** For each operation, the administrator decides whether it runs only as the workload identity or may exercise delegated caller authority, and binds permissions as durable grants or delegated authority.
+5. **Approve admission.** The administrator confirms the bindings. This requires `service_account.assign` for each identity and `authorization.grant` for each relationship or role being granted.
+6. **Verify and prepare.** The control plane re-verifies the `releaseDigest`, resolves dependencies, reserves the package slot, runs prepare migrations, and provisions identities, mesh routes, and policies.
+7. **Roll out.** The revision controller creates runtime workloads when needed, stages UI and workflow artifacts, and promotes the revision once readiness checks converge. The app then appears in user-facing catalogs and becomes invocable.
+
+Releases without a runtime skip workload creation but still register workflows, UIs, and catalog entries through the same path. See [Installation](#installation) and [Revision Rollouts](#revision-rollouts) for the durable state machine and promotion rules.
 
 ## Package Revisions
 
@@ -171,7 +220,7 @@ Pending and failed attempts are visible but never installable. Concurrent publis
 The control plane persists:
 
 - **Package slots**: one organization-scoped slot keyed by canonical package identity, reserved before allocating an installation ID and used to fence concurrent first installs
-- **Revision requests**: append-only install, upgrade, rollback, and removal intent with actor, previous promoted revision, target `releaseDigest`, registry trust policy revision, approved authorization bindings, resolved dependencies, and timestamps
+- **Revision requests**: append-only install, upgrade, rollback, and removal intent with actor, previous promoted revision, target release or tombstone, deployment-registry catalog generation and applicable trust-policy revision, approved authorization bindings, resolved dependencies, and timestamps
 - **Installation head**: last successfully promoted revision and current admitted candidate
 - **Revision operation**: one generation-fenced state machine per installation, including phase, candidate Kubernetes resources, deadlines, stability timestamp, and routing generation
 - **Migration outcomes**: immutable status keyed by installation, `releaseDigest`, and migration ID
@@ -194,7 +243,7 @@ Before admission, the platform shows package-declared operation access requireme
 
 Installation is a reconciled saga:
 
-1. Verify the registry identity and trust policy, release and image signatures, platform support, runtime compatibility, and schema versions.
+1. Verify that the release is complete in the deployment registry, then verify its source registry identity and applicable trust policy, release signature and referenced artifact digests, platform support, runtime compatibility, and schema versions.
 2. Resolve exact dependency revisions and operation-contract digests.
 3. Reserve the organization package slot and persist the revision request, approved authorization snapshot, and fenced revision operation.
 4. Provision the installation and any required runtime, migration, and workflow identities, authorization relationships, ambient data-plane enrollment, and `AuthorizationPolicy` attachments.
@@ -227,40 +276,40 @@ An atomic rollout group is one durable request containing candidates for multipl
 
 Releases with an MCP runtime use a Kubernetes-native blue/green rollout with optional Istio canary traffic. Each runtime upgrade creates a candidate revision in a distinct immutable Kubernetes Deployment behind a revision-specific Service. The promoted and candidate Deployments may run together, so the serving Deployment is never restarted or mutated in place. Runtime-less releases use the same durable revision state machine without creating runtime Deployments or Services.
 
-Revision records use optimistic concurrency and fencing tokens, preventing a controller that loses its lease from mutating a newer generation. Retries are idempotent; every external mutation has a stable idempotency key. For example, controller A may start an upgrade at generation 4, create the candidate Deployment, and then lose its lease. Controller B takes over at generation 5. Any later update from controller A is rejected, while controller B can safely retry the Deployment request without creating a duplicate.
+Revision operations use optimistic concurrency and fencing tokens, so a controller that loses its lease cannot mutate a newer generation. Retries are idempotent, and every external mutation has a stable idempotency key.
 
-For runtime releases, Kubernetes and the package supervisor are the source of truth for live workload health. A runtime candidate is ready only when Kubernetes has observed the Deployment generation, its required replicas are available, and package-supervisor readiness confirms the target `releaseDigest` for a stability window. Replacement pods and autoscaled replicas count by current readiness, not persistent identity.
+For runtime releases, Kubernetes is the source of truth for live workload health and configured image identity. A runtime candidate is ready only when Kubernetes has observed the Deployment generation, its required replicas are available, each Pod specification is pinned to the expected platform-manifest digest resolved from the admitted image index, ambient enrollment and policy readiness gates are true, and runtime probes and synthetic MCP contract checks remain successful for a stability window. Replacement pods and autoscaled replicas count by current readiness, not persistent identity.
 
-Before any candidate becomes promotable, the interface service must verify and stage every UI bundle, and the workflow service must register every workflow definition as candidate-only and acknowledge its digest. These records remain unreachable from user catalogs. A release with no runtime reaches Ready from artifact verification and the required UI and workflow acknowledgements; Starting, Canarying, runtime routing, Draining, and runtime observation are skipped when they do not apply.
+Before promotion, the interface service verifies and stages every UI bundle, while the workflow service registers each definition as candidate-only and acknowledges its digest. These records remain absent from user catalogs. A release without a runtime reaches Ready after artifact verification and applicable UI and workflow acknowledgements; it skips runtime resource creation, Canarying, runtime routing, Draining, and runtime observation.
 
-Each installation with an MCP runtime has one stable frontend Service and revision-specific backend Services. Gateway API `HTTPRoute` resources select weighted revision backends; callers never address a revision Service directly. Packages may call other packages only through declared dependencies and these mesh-managed routes. Direct or undeclared package-to-package calls are blocked.
+Each installation with an MCP runtime has one stable frontend Service and revision-specific backend Services. Gateway API `HTTPRoute` resources establish the package route, while a protected waypoint cluster-selector extension applies the admitted operation-specific revision weights after MCP decoding and authorization. Callers never address a revision Service directly. Packages may call other packages only through declared dependencies and these mesh-managed routes. Direct or undeclared package-to-package calls are blocked.
 
-The controller assigns each routing change a durable `routingGeneration` and records the exact Kubernetes resource UIDs, generations, and desired route hashes that implement it. Infrastructure installs a protected routing-status extension in every ingress gateway and waypoint; the extension exposes, over an mTLS-protected administration endpoint, the routing generations and route hashes currently loaded by that proxy. This extension and endpoint are versioned with the pinned Istio/Envoy build and covered by infrastructure conformance tests.
+The controller assigns each routing change a durable `routingGeneration` and records the exact Kubernetes resource UIDs, generations, waypoint cluster-selection configuration, and desired route and policy hashes that implement it. Infrastructure installs a protected routing-status extension in every ingress gateway and waypoint; the extension exposes, over an mTLS-protected administration endpoint, the routing generations and configuration hashes currently loaded by that proxy. This extension and endpoint are versioned with the pinned Istio/Envoy build and covered by infrastructure conformance tests.
 
-The relevant proxy set is a persisted membership snapshot of available ingress-gateway and destination-waypoint replicas selected for those resources. Convergence requires accepted and resolved Gateway API status, ready route backends, every member's routing-status report matching the desired hashes, and authenticated synthetic probes observing the target generation through each proxy class. The controller does not infer application convergence from one global Istio xDS version. Proxy replacement, loss of availability, or membership change resets the stability window. A bounded timeout fails the phase and leaves enough recorded evidence for deterministic retry or restoration.
+The relevant data-plane set is a persisted membership snapshot of available ingress gateways, destination waypoints, and destination-node `ztunnel` instances selected for those resources. Convergence requires accepted and resolved Gateway API status, ready route backends, every gateway and waypoint report matching the desired hashes, ambient status confirming workload enrollment and policy generation on every relevant `ztunnel`, and authenticated allow-path and direct-bypass probes. The controller does not infer application convergence from one global Istio xDS version. Data-plane replacement, loss of availability, or membership change resets the stability window. A bounded timeout fails the phase and leaves enough recorded evidence for deterministic retry or restoration.
 
-Gateway and waypoint readiness is gated on the routing-status extension reporting either the current committed generation or an active generation-fenced rollout generation authorized for that proxy and route. During promotion, the proxy may remain ready on the fenced candidate generation while convergence is observed. Immediately after the promotion commit, only the newly committed generation satisfies readiness. A new or restarted proxy cannot enter Service endpoints or load-balancer membership until it has loaded and reported the then-current committed generation, so proxy churn after promotion cannot reintroduce stale routing.
+Gateway and waypoint readiness is gated on the routing-status extension reporting either the current committed generation or an active generation-fenced rollout generation authorized for that proxy and route. Destination workload readiness is separately gated on ambient enrollment and the current or fenced `ztunnel` policy generation. During promotion, the data plane may remain ready on the fenced candidate generation while convergence is observed. Immediately after the promotion commit, only the newly committed generation satisfies readiness. New or restarted gateways, waypoints, and `ztunnel` instances cannot enter traffic-serving membership until they report the then-current committed generation, so data-plane churn after promotion cannot reintroduce stale routing or bypass policy.
 
 Promotion has one commit point. For runtime releases, the controller first writes primary routing intent while the previous revision remains the persisted promoted head. After routing converges and all UI-serving and workflow-registration acknowledgements remain valid for the stability window, one state-store transaction updates the promoted revision and the relevant routing, package, operation, UI, and workflow generations. Only that transaction constitutes successful promotion. If a prerequisite fails before the transaction, the controller restores previous routing and external registrations and confirms their convergence; it does not advance the promoted head or any catalog generation.
 
-The control plane persists rollout intent and decisions, then reconstructs progress from Kubernetes, the package supervisor, and Istio after restart. Historical rollout outcomes remain immutable; current workload health is a separate live view.
+The control plane persists rollout intent and decisions, then reconstructs progress from Kubernetes, Istio, and protected platform services after restart. Historical rollout outcomes remain immutable; current workload health is a separate live view.
 
 The canonical revision-operation phases are:
 
-1. **Admitted**: verify the release, policy, runtime compatibility, dependencies, and reverse dependents.
-2. **Preparing**: run backward-compatible prepare migrations as fenced one-shot jobs.
-3. **Starting**: create any revision-specific runtime resources and stage candidate-only UI bundles and workflow definitions.
-4. **Ready**: require all applicable runtime, UI-serving, and workflow-registration checks for the configured stability window.
-5. **Canarying**: route a configurable small traffic percentage for operations whose contracts exactly match the promoted revision; the candidate remains absent from user-facing catalogs.
-6. **Promoting**: converge applicable routing and external registrations, then atomically commit the promoted head and relevant package, operation, UI, workflow, and routing generations.
-7. **Draining**: keep the prior revision available for in-flight requests and streams until their drain deadline.
-8. **Observing**: monitor the promoted revision under production traffic for a configured period.
-9. **Finalizing**: run explicitly approved irreversible finalize migrations when required.
-10. **Complete**: record convergence and terminal timing.
+1. **Admitted**: validate release, policy, compatibility, and dependencies.
+2. **Preparing**: run fenced, backward-compatible prepare migrations.
+3. **Starting**: create runtime resources and stage candidate UI and workflow artifacts.
+4. **Ready**: hold every applicable check for the stability window.
+5. **Canarying**: send limited traffic only for contracts identical to the promoted revision, without catalog exposure.
+6. **Promoting**: execute the convergence and atomic commit protocol above.
+7. **Draining**: enforce the pinned-session and hard-deadline protocol below.
+8. **Observing**: monitor production traffic for the configured period.
+9. **Finalizing**: run separately approved irreversible migrations.
+10. **Complete**: record convergence and timing.
 
-Starting runtime resources, Canarying, runtime routing, Draining, runtime observation, and Finalizing are skipped when they do not apply. A failure or cancellation records a terminal outcome against the phase where the operation stopped rather than introducing another progression phase.
+Inapplicable runtime, canary, drain, observation, and finalization work is skipped. Failure or cancellation is a terminal outcome attached to the stopping phase, not another progression phase.
 
-Each phase has a timeout, retry policy, and terminal error taxonomy. Readiness requires the configured replica capacity, not a single ready pod. During routing propagation and draining, revisions follow the compatibility and operation-removal rules in [Dependencies and Contracts](#dependencies-and-contracts). Existing MCP SSE streams remain pinned to their original revision while the old revision drains, including streams for an operation omitted by the candidate.
+Each phase has a timeout, retry policy, and terminal error taxonomy. Readiness requires the configured replica capacity, not a single ready pod. During routing propagation and draining, revisions follow the compatibility and operation-removal rules in [Dependencies and Contracts](#dependencies-and-contracts). The prior revision Service remains available for pinned sessions while new session routing targets only the promoted revision. One termination-grace interval before the hard drain deadline, the controller starts Pod deletion and publishes a protected draining cluster containing the terminating Pod endpoints. The waypoint cluster selector admits only valid pinned-session tokens to that cluster and does not depend on normal Service endpoint discovery retaining terminating endpoints. Kubernetes force-terminates any remaining process at the deadline, after which the controller removes the drain cluster and prior revision resources. Existing MCP SSE streams remain pinned to their original revision while the old revision drains, including streams for an operation omitted by the candidate.
 
 Pre-promotion failures mark the candidate failed and leave the prior revision primary. Failures during post-promotion observation mark the new revision degraded. Neither case triggers automatic rollback. Degraded or finalization-error states block the next revision operation until an administrator retries, initiates an approved rollback, or approves a forward fix. Finalization failure records `promoted_with_finalization_error`; it neither marks the promoted revision failed nor changes routing.
 
@@ -282,18 +331,11 @@ The first version does not classify rollback safety in release metadata or initi
 
 ### Removal
 
-Removal is a durable tombstoned revision, not deletion of a catalog row:
+Removal is a durable tombstoned revision, not catalog-row deletion. Admission rejects it while required reverse dependents exist unless the same atomic rollout group removes them. Preparing records workflow-retirement and data-retention decisions. Starting stages tombstone generations and candidate interface and workflow retirement changes; Ready confirms their acknowledgements. Promoting atomically commits package, operation, UI, and workflow tombstones, disables interface launches, unregisters workflows, stops new executions, and prevents new invocation resolution.
 
-1. Reject removal while required reverse dependents exist, unless they are removed in the same atomic rollout group.
-2. In one fenced transition, promote tombstones for the package, operation, UI, and workflow generations, disable interface launch routes, unregister promoted workflow definitions, stop new workflow executions, and prevent new invocation resolution.
-3. Drain resolved requests and streams and handle queued or running workflow executions according to their recorded retirement policy.
-4. Stop the removed package's runtime workloads, scale them to zero, and block any stale ingress or package-initiated egress.
-5. Revoke workload authorization bindings, installation-owned assignments, and delegated tokens.
-6. Apply package data retention or destruction policy.
-7. Preserve the package tombstone and audit history.
-8. Garbage-collect runtime resources after the recovery window.
+Draining applies the normal hard deadline to resolved runtime requests and streams; workflow executions follow their recorded finish, retire, or migrate policy. Finalizing removes runtime workloads, blocks stale ingress and package egress, revokes installation-owned bindings, assignments, and delegated tokens, and performs approved data retention or destruction. Complete preserves the tombstone and audit history; runtime-resource garbage collection follows the recovery window. Canarying and Observing are skipped.
 
-Removal preserves organization-owned grants and distinguishes them from installation-owned grants. Reinstallation creates a new installation identity unless an approved restore reactivates the tombstone.
+Organization-owned grants survive removal. Reinstallation gets a new installation identity unless an approved restore reactivates the tombstone.
 
 ## Runtime and Access
 
@@ -310,9 +352,9 @@ The authorization service is the system of record for organization policy. It st
 - Every invocation is centrally authorized before dispatch; package-specific resource checks may further restrict it.
 - Production does not start in a fail-open mode when identity or authorization is unavailable.
 
-Each authorization grant wraps one relationship tuple and records an immutable ID, organization, human issuer, creation and optional expiration, source authority, and policy revision. Grant mutation creates a new record; revocation appends a revocation record rather than rewriting or deleting history. Revoking or narrowing the source authority invalidates dependent grants. Platform controllers may apply a recorded human-authorized grant but cannot originate one.
+Each authorization grant wraps one relationship tuple and records an immutable ID, organization, human issuer, creation and optional expiration, issuance-authority snapshot, and policy revision. Grant mutation creates a new record; revocation appends a revocation record rather than rewriting or deleting history. A later loss of the issuer's authority does not revoke an existing durable grant; revocation, expiration, or an explicit policy migration does. Delegated authority is evaluated against the delegating subject's current authority and narrows immediately with it. Platform controllers may apply a recorded human-authorized grant but cannot originate one.
 
-The first implementation does not cache authorization decisions. Internal invocation tokens are short-lived, and every workflow step is authorized independently. Existing streams may continue until their configured lifetime expires. Security events go to an immutable audit sink outside package-controlled storage.
+The first implementation does not cache authorization decisions. Caller tokens and internal caller contexts are short-lived, and every workflow step is authorized independently. Existing streams may continue until their configured lifetime expires. Security events go to an immutable audit sink outside package-controlled storage.
 
 ### Authorization Model and Evaluation
 
@@ -330,7 +372,7 @@ The authorization model defines resource types, relations, actions, and which re
 
 The authorization service stores the policy model and organization-managed grants in one authoritative runtime system. Platform bootstrap registers reserved resource types, while package admission registers namespaced resource types and operation requirements. Each model change produces an immutable, content-hashed generation. Grants may be revoked at any time. A policy-model change cannot remove or rename a resource type or relation referenced by active grants unless those grants are revoked or migrated in the same transaction. Grants are indexed by subject, relation, and resource so evaluation does not scan the complete relationship set.
 
-Credential scopes are an upper bound on authority: a relationship grant cannot restore access excluded by the authenticated credential. Missing subjects, actions, resources, policy models, or provider availability produce a denial.
+Credential scopes are an upper bound on authority: a relationship grant cannot restore access excluded by the authenticated credential. Missing subjects, actions, resources, or policy models—and authorization-provider outages—produce a denial.
 
 ### Package Access Policy
 
@@ -360,28 +402,19 @@ UI bundles are immutable content-addressed artifacts referenced by the release m
 
 The platform assigns each installation interface a stable non-executable launch origin and a distinct executable origin for every promoted UI generation beneath a deployment-controlled wildcard application domain. The launch origin only redirects to the currently promoted generation and serves no package-controlled document or script. Package generations never share an executable origin, cookies, service workers, browser storage, or CSP authority with deployment administration, protected services, another interface, or an older generation.
 
-Private interfaces use an origin-scoped session established through the normal external identity flow. The interface service issues a short-lived browser capability only when the request originates from the currently promoted generation's verified entry document. The capability names the installation, interface ID, UI generation, allowed operations, and exact generation-specific origin. Ingress validates that capability and the `Origin` header in addition to normal subject authorization; it rejects stale generations and browser calls outside the declared allowlist. A public interface must be explicitly allowed by organization policy, and public asset access does not make its operations public. Browser code never receives workload credentials or raw internal invocation tokens.
+Private interfaces use an origin-scoped session established through the normal external identity flow. The interface service issues a short-lived browser capability only when the request originates from the currently promoted generation's verified entry document. The capability names the installation, interface ID, UI generation, allowed operations, and exact generation-specific origin. Ingress validates that capability and the `Origin` header, rejects stale generations, and carries its signed allowlist claims into the caller token. After decoding the MCP request, the destination waypoint rejects browser operations outside that allowlist in addition to performing normal subject authorization. A public interface must be explicitly allowed by organization policy, and public asset access does not make its operations public. Browser code never receives workload credentials, caller tokens, or internal caller contexts.
 
 The platform applies the declared CSP profile, strict CORS, MIME validation, integrity metadata, response-size limits, immutable caching for revision-qualified assets, and service-worker scope restrictions. Interfaces requiring embedding use opaque sandboxed frames and explicit `postMessage` schemas; embedding does not grant same-origin access.
 
 ### Catalogs and Administration
 
-An organization deployment provides:
-
-- A package catalog
-- An operation catalog
-- A user-interface catalog
-- A workflow catalog
-- A dependency graph
-- Package revisions, rollout and migration status, identities, and authorization settings
-- API grant management
-- A development sandbox
+An organization deployment exposes package, operation, UI, and workflow catalogs; a dependency graph; revision, rollout, migration, identity, and authorization administration; API-grant management; and a development sandbox.
 
 Administrative catalogs may expose candidate metadata. User-facing package, operation, UI, and workflow catalogs expose only their atomically promoted generations. New operation contracts appear only after applicable routing, UI-serving, and workflow-registration prerequisites in [Revision Rollouts](#revision-rollouts) have converged.
 
 Clients treat catalogs as snapshots. Invocation remains authoritative and may reject stale or undeclared operations under the rules in [Dependencies and Contracts](#dependencies-and-contracts).
 
-Organization administrators can connect registries and install, upgrade, roll back, or remove packages. Package administrators can perform revision and administration actions within their delegated package and authorization scope. Package developers can build, publish, test, and invoke packages. Package users see only catalogs and operations authorized for them.
+Organization administrators can configure upstream pull sources, authorize imports, and install, upgrade, roll back, or remove packages. Package administrators can perform revision and administration actions within their delegated package and authorization scope. Package developers with registry write access can build, publish, test, and invoke packages. Package users see only catalogs and operations authorized for them.
 
 Representative endpoints:
 
@@ -404,41 +437,29 @@ Authentication comes from an interactive session, keychain, environment, or stan
 
 Invocation uses MCP Streamable HTTP: JSON-RPC over POST with JSON or SSE responses. The gateway enforces request size, timeout, rate, and stream lifetime.
 
-Ingress strips externally supplied internal-identity headers and exchanges user credentials for a short-lived, signed internal invocation token. The token is bound to its issuer, audience, target installation, request class, operation when applicable, and request-envelope hash and carries a unique ID, issuance, not-before, and expiry times, the original actor, effective subject, immediate caller workload identity, delegation chain, and trace ID. Signing keys rotate with an overlap window for in-flight requests. Packages never receive or forward raw user bearer tokens or API keys.
+Ingress strips external identity and routing fields, authenticates the credential, and exchanges it for a short-lived signed caller token; it neither parses MCP nor authorizes operations. The token is bound to its issuer, waypoint audience, target installation, and raw envelope hash. It carries a unique ID; issuance, not-before, and expiry times; actor and effective subject; credential and delegation upper bounds; optional browser-capability claims; delegation chain; and trace ID.
 
-The deployment exposes package-scoped MCP endpoints rather than one endpoint that multiplexes package names from JSON-RPC bodies. A trusted MCP request decoder at ingress validates the JSON-RPC envelope, resolves the canonical operation ID from the MCP method and parameters, rejects ambiguous or batch requests that target more than one authorization scope, and writes immutable dynamic metadata for authorization and routing. External clients cannot supply that metadata. The decoder binds a hash of the authorized request envelope into the internal invocation token so a downstream component cannot change the target operation after authorization.
+The deployment exposes package-scoped MCP endpoints rather than one endpoint that multiplexes package names from JSON-RPC bodies. A protected MCP extension shared by destination waypoints validates the caller token and request-envelope hash, parses the JSON-RPC envelope, resolves the request class and canonical operation ID, and writes trusted dynamic metadata for `ext_authz`, routing, canary selection, and telemetry. Callers cannot supply that metadata. Malformed JSON-RPC, unsupported methods, unknown operations, mismatched hashes, and expired tokens fail at the waypoint before reaching a package.
 
 MCP methods map to authorization and routing as follows:
 
 - `initialize`, `ping`, and session negotiation require the installation-level `package.connect` action and do not select an operation.
-- Catalog and discovery methods require their catalog-read action and return only entries authorized for the effective subject.
+- Catalog and discovery methods terminate at a protected catalog service behind the waypoint. They require their catalog-read action, use a batch authorization check against one policy snapshot, and return only entries authorized for the effective subject; untrusted package runtimes do not filter their own discoverability.
 - Operation calls such as `tools/call` resolve the package-stable operation ID from validated parameters and require that operation's action and resource checks.
 - Cancellation, progress, and other session notifications must reference an existing authorized session and inherit its installation, revision, actor, and effective subject. They cannot change authorization scope.
 - Unsupported methods fail closed. A JSON-RPC batch is accepted only when every item has the same target installation, request class, operation, authorization scope, session, and routing target and each item is authorized independently; otherwise the complete batch is rejected.
 
-The destination waypoint uses the package endpoint and verified token claims for routing and `ext_authz`; it does not trust a caller-supplied operation header. The supervisor verifies the token, request-envelope hash, target installation, request class, operation when applicable, and selected revision before dispatch. Malformed JSON-RPC, unsupported MCP methods, unknown operations, mismatched hashes, and expired tokens fail before reaching the runtime.
+The waypoint sends verified caller context and decoded request metadata to authorization. On allow, the adapter returns short-lived signed internal context carrying the actor, effective subject, applicable immediate workload, and delegation chain. It is bound to the target installation, request class, applicable operation, envelope hash, applied credential and delegation bounds, applicable browser claims, policy generation, and trace ID. The waypoint removes the external token and reserved fields. Catalog requests terminate at the protected catalog service; runtime requests select a revision Service and forward only the internal context.
 
-After weighted routing selects a revision Service, a protected waypoint extension creates a short-lived signed dispatch receipt bound to the invocation-token ID, installation ID, revision ID, `releaseDigest`, routing generation, and request-envelope hash. Waypoint receipt-signing certificates are issued and rotated by the identity service for the waypoint workload identity. The supervisor verifies this receipt and confirms that its loaded digest matches it; packages never receive the receipt. Session continuation receipts must name the revision already pinned by the session.
+After `ext_authz`, a protected metadata-aware cluster-selector extension uses only decoder-generated metadata and the signed routing table for the committed or active fenced generation to select operation-specific canary backends for runtime request classes. Catalog and discovery classes bypass revision selection and terminate at the catalog service. No route trusts a caller-supplied operation header, and standard `HTTPRoute` header matching is not used for decoded operations.
 
-MCP session IDs are client-opaque signed routing tokens issued by the supervisor under an identity-service-certified workload signing key. They contain the installation, revision, `releaseDigest`, routing generation, issued and expiry times, and random nonce. Before backend selection, the waypoint verifies the token and routes subsequent requests to its named revision Service. Cancellation is forwarded to that revision, and reconnect succeeds only while the token is valid and the revision remains inside its drain deadline. SSE streams send platform heartbeats, have a configured maximum lifetime, and remain pinned until completion, cancellation, or that deadline.
+For a new session, the waypoint wraps the runtime-issued opaque session ID in a client-opaque signed routing token containing the installation, revision, `releaseDigest`, routing generation, issued and expiry times, and random nonce. On each successful continuation or response, the waypoint may rotate the wrapper without extending it beyond the configured maximum session lifetime or revision drain deadline. The waypoint verifies and unwraps continuations before routing to their named revision Service. Cancellation is forwarded to that revision, and reconnect succeeds only while the wrapper is valid and the revision remains inside its drain deadline. SSE streams have a configured maximum lifetime and remain pinned until completion, cancellation, or that deadline.
 
-Authorization is enforced at two surfaces:
+Ingress authenticates external credentials, creates package caller tokens, and authorizes catalogs and management APIs; it does not authorize MCP operations. The destination waypoint decodes and authorizes every MCP request before revision routing. Both use one authorization service and relationship graph.
 
-- **Ingress gateway**: user invocation, catalogs, package administration, and package revision APIs. The gateway's `ext_authz` filter calls the authorization service before forwarding to control-plane or package services.
-- **Destination waypoint**: every MCP call is checked before revision routing. For external calls, the waypoint revalidates the ingress-issued token and authorized request metadata; for package calls, it performs the corresponding workload and effective-subject authorization check. Waypoint enforcement is described in [Runtime Architecture](#runtime-architecture).
+Checks use the effective subject, target installation, and request-class action. Package-originated calls also require the immediate workload's authority; operation calls additionally require the canonical operation ID, approved package access policy, and any package-specific resource authorization. Credential scope and every applicable relationship check must allow the request. Decisions record the policy model and revision; missing or unknown identities, installations, request classes, operations, or policies—and provider outages—deny access.
 
-Both surfaces use one authorization service and relationship graph. MCP checks always use the effective subject, target installation, and request-class action. Package-originated calls additionally use the immediate caller workload identity. Operation calls additionally use the canonical operation ID; connection, catalog, session, and notification classes use the actions defined in the MCP method mapping and do not invent an operation. Management checks use the actor and requested revision or administration action.
-
-For an MCP operation call, the authorization decision intersects:
-
-- The caller workload identity's permission to invoke the target when the call originated from a package
-- The effective subject's permission
-- The installed package's approved operation access policy
-- Any operation-specific resource authorization
-
-Credential scope and every relationship check applicable to the request class must allow the request. The decision records the policy model ID and revision. Missing or unknown identities, installations, request classes, required operations, policies, or authorization-provider outages deny access.
-
-For package-to-package calls, the caller asks the identity service to mint an internal invocation token over its authenticated workload channel. The request names one declared dependency, operation, effective subject, and request-envelope hash. The identity service verifies the caller's workload identity and delegation chain, while the authorization service evaluates the call before a token is issued. Tokens are single-target, short-lived, non-refreshable by the package, and cannot broaden the caller's credential or delegated authority. Package SDKs perform this exchange and send the resulting token to the destination Service.
+For package-to-package calls, the caller asks the identity service to mint a caller token over its authenticated workload channel and presents the signed parent internal caller context or a platform-issued workload-execution context. The request names one declared dependency and request-envelope hash; it cannot supply a replacement actor, effective subject, or delegation chain. The identity service verifies the parent context, preserves its actor and effective subject, appends the authenticated caller workload to the delegation chain, and cryptographically attenuates scope and expiry. The destination waypoint remains authoritative for target operation authorization. Tokens are single-target, short-lived, non-refreshable by the package, and cannot broaden delegated authority. Package SDKs perform this exchange and send the resulting token to the destination Service.
 
 ### Development Sandbox
 
@@ -490,13 +511,13 @@ The bootstrap substrate and protected system packages are both inside the platfo
 
 The bootstrap substrate and protected system packages provide these trusted services:
 
-- **Identity service**: authenticates sessions and API grants, resolves canonical principals, manages organization service accounts, and issues short-lived internal invocation tokens.
+- **Identity service**: authenticates sessions and API grants, resolves canonical principals, manages organization service accounts, issues caller tokens, and manages signing keys for internal caller contexts and session wrappers.
 - **Authorization service**: stores immutable policy models, grants, assignments, and revocations and evaluates provider-independent and Envoy `ext_authz` checks.
 - **Secret-management service**: stores and rotates platform and connection credentials and releases secret material only to explicitly authorized workload identities.
-- **Registry-verification service**: retrieves registry metadata and verifies origins, manifests, digests, signatures, platform compatibility, and the registry trust policy before admission.
+- **Registry-verification service**: verifies the deployment registry and upstream source identities, controls pull-through imports, verifies manifests, digests, signatures, platform compatibility, trust policy, and local artifact completeness before catalog exposure and admission.
 - **Audit sink**: accepts append-only security, authorization, administration, and runtime events in storage that packages cannot control.
 - **Workflow service**: registers promoted package-defined workflows and runs pinned executions outside package runtimes.
-- **Control-plane state store**: a bootstrap-substrate service that durably stores registries, package slots, revision requests and operations, routing and catalog generations, migration outcomes, and recovery metadata.
+- **Control-plane state store**: a bootstrap-substrate service that durably stores deployment-registry state, upstream source configurations, import attempts, package slots, revision requests and operations, routing and catalog generations, migration outcomes, and recovery metadata.
 
 The Istio control plane provides the certificate authority and workload-certificate lifecycle. Backup and recovery tooling protects control-plane state and trusted-service configuration but does not sit on the request path.
 
@@ -504,32 +525,25 @@ Each trusted service exposes a versioned typed API. Control-plane clients use sh
 
 ### Runtime Architecture
 
-Production uses Istio ambient mode. `ztunnel` provides L4 transport security and workload identity, while waypoint proxies provide L7 routing and authorization. Istio data-plane sidecars are not planned for the first implementation; the package supervisor remains an application sidecar.
+Production uses Istio ambient mode. `ztunnel` provides L4 transport security and workload identity, while waypoint proxies provide L7 routing, authorization, and telemetry. Package Pods have no mesh or application proxy sidecar.
 
-The runtime consists of:
+The runtime combines `istiod`, mandatory node-level `ztunnel`, shared destination waypoints, ingress and egress gateways, unprivileged package containers, the protected services above, the state store, and revision controllers. Package containers expose MCP and health endpoints directly; the interface service serves static UIs.
 
-- **Istio control plane (`istiod`)**: distributes routing, policy, endpoint, and certificate configuration.
-- **`ztunnel`**: mandatory node proxies providing L4 transport security and workload identity.
-- **Waypoint proxies**: shared Envoy proxies providing L7 routing, telemetry, and authorization for destination Kubernetes Services.
-- **Ingress gateways**: terminate external transport, remove untrusted identity headers, authenticate credentials, enforce `ext_authz`, and route public and organization traffic.
-- **Egress gateways**: enforce and audit organization-declared external access that cannot safely use direct egress.
-- **Package supervisor (`gestaltd`)**: one platform-owned sidecar container in each runtime Pod that gates runtime readiness and shutdown through the control API, exposes the mesh-facing MCP listener, verifies invocation context, and reports observed state. It is not an Istio proxy.
-- **Package runtime**: an unprivileged container that implements the private side of the package runtime contract. Static interfaces are served by a protected platform service, not by this container.
-- **Protected system packages**: provide identity, authorization, secrets, registry verification, audit, and workflow execution as defined above.
-- **Control-plane state store**: provides durable state for trusted services and revision controllers as part of the bootstrap substrate.
-- **Revision controllers**: reconcile durable revision requests and rollout state into workloads, routing, catalogs, identities, and policy.
+Revision controllers reconcile durable state through trusted-service and Kubernetes APIs into Deployments, stable and revision Services, waypoint enrollment, Gateway API routes, signed cluster-selection configuration, and `AuthorizationPolicy`. `istiod` distributes the resulting xDS configuration. Controllers advance catalog generations only after protected status reports and allow-path and bypass probes confirm route, selector, enrollment, and policy convergence.
 
-Revision controllers use trusted-service APIs and the Kubernetes API to create or update Deployments, stable frontend and revision Services, waypoint enrollment, Gateway API routes, traffic weights, and `AuthorizationPolicy` resources. `istiod` watches the Kubernetes and Istio resources, translates the desired state into xDS configuration, and distributes it to ingress gateways, waypoints, and `ztunnel`. The protected routing-status extension reports loaded route hashes and routing generations; revision controllers require those reports and active probes before advancing promoted catalog generations.
+Istio owns endpoint, routing, certificate, and mesh-policy distribution—not revision state, grants, workflows, or catalogs. Ingress authenticates external callers; destination waypoints authorize MCP requests.
 
-Istio keeps workload endpoints, routing, certificates, and mesh-policy configuration synchronized. It does not own or synchronize package revision state, authorization grants, workflow executions, or catalogs. Those remain the responsibility of revision controllers and trusted platform services. Package operation invocations remain on the mesh data plane and use ingress or destination-waypoint authorization.
+Because `ztunnel` cannot enforce L7 policy, ingress handles management checks while the destination waypoint decodes and authorizes every MCP request before revision selection. Every stable package Service is waypoint-enrolled, and ingress traffic traverses that waypoint. `AuthorizationPolicy` permits application-port traffic only from its authenticated identity, including requests addressed directly to a Pod IP or revision Service. Health probes use a separate protected port with the minimum exception.
 
-`ztunnel` cannot enforce L7 authorization. MCP, revision, and administration checks therefore run at ingress gateways or destination waypoints. Every stable package Service is explicitly enrolled in a destination waypoint. Ingress-to-Service traffic is configured to traverse that waypoint, and `AuthorizationPolicy` `CUSTOM` rules use `targetRefs` for the enrolled Service or Gateway. Admission fails if the required waypoint, enrollment, extension provider, route, or policy attachment is absent or not accepted.
+A readiness controller keeps new `ztunnel` instances and affected workloads out of service until the current policy generation is loaded. Admission requires accepted waypoint enrollment, ingress waypoint use, bypass prevention, MCP decoding and authorization extensions, routes, and policy attachments.
 
-The ingress request decoder, external authenticator, internal-token exchange, and authorization adapter are protected extensions pinned by infrastructure configuration. The decoder executes before `ext_authz`. Ingress removes all external copies of their reserved headers and dynamic metadata before decoding. Only decoded metadata and signed token claims may select an operation or revision.
+The external authenticator, caller-token exchange, waypoint MCP decoder, authorization adapter, metadata-aware cluster selector, session wrapper, response observer, audit adapter, and routing-status reporter are protected extensions pinned by infrastructure configuration. The waypoint decoder executes before `ext_authz`, removes all external copies of reserved fields, and produces trusted dynamic metadata. After authorization, the cluster selector uses that metadata and signed generation-fenced configuration to choose a revision backend; standard `HTTPRoute` header matching is not used for decoded operations.
 
-After token verification, the waypoint derives a trusted operation routing key from the signed claim. Gateway API header matches may use only that platform-generated key to select operation-specific canary weights; no route matches a client-supplied operation header. Route configuration remains declarative and digest-correlated with the operation contracts admitted for both revisions.
+Production uses `ztunnel` for transport security and L4 authorization, `NetworkPolicy` for reachability, ingress `ext_authz` for management authorization, and destination-waypoint `ext_authz` for MCP authorization. Authorization fails closed; health ports have no public ingress.
 
-Production uses `ztunnel` for transport security and L4 workload authorization, Kubernetes `NetworkPolicy` for reachability, and ingress or waypoint `ext_authz` for application authorization. Authorization checks fail closed on denial or outage. Only the mesh data plane can reach package application ports; health and supervisor administration ports have minimal explicit exceptions and no public ingress.
+Waypoints emit L7 request rate, transport and MCP outcome, duration, response-size, route, operation, source and destination identity, selected backend, access-log, and trace telemetry. The protected response observer distinguishes HTTP transport results from JSON-RPC errors and terminal SSE outcomes without exposing response bodies. `ztunnel` emits L4 connection, byte, policy-denial, and bypass telemetry. Kubernetes reports Pod health, restarts, resources, and rollout state, while package instrumentation reports application-internal metrics and trace spans. Application metrics are scraped separately rather than merged through a per-Pod proxy.
+
+The waypoint audit adapter durably records malformed requests, token and envelope-hash failures, authorization denials, routing-generation mismatches, and session-token failures before returning an error. `ztunnel` policy denials flow through the protected audit pipeline. If a required security event cannot be delivered or durably buffered, the affected request fails closed.
 
 If `istiod` is unavailable, established traffic uses its last configuration. New revision operations requiring routing or policy changes fail closed until dependencies recover.
 
@@ -558,151 +572,107 @@ The mesh is redeployed only for changes to Istio or its trust and extension conf
 - Istio certificate-authority and trust-domain configuration
 - Mesh-wide extension-provider and ambient-enrollment configuration
 
-Protected system packages roll independently through the revision controller and do not require a mesh redeployment. Ordinary package revisions, registry connection changes, identity assignments, and authorization-binding updates likewise change runtime or control-plane state without redeploying the mesh. `gestaltd` supervisor updates roll with the workloads that use them.
+Protected system packages roll independently through the revision controller and do not require a mesh redeployment. Ordinary package revisions, upstream source and registry-policy changes, identity assignments, and authorization-binding updates likewise change runtime or control-plane state without redeploying the mesh.
 
-Bootstrap-substrate changes, including control-plane state migrations and backup or recovery tooling, use infrastructure rollouts but do not redeploy the mesh unless they also change an Istio item listed above. Package releases independently declare supported MCP versions, private runtime control API versions, and compatible `gestaltd` supervisor versions. Infrastructure pins Kubernetes, Istio, Envoy, routing-status extension, and dispatch-receipt protocol versions and accounts for overlapping old and new versions before admitting releases that require new features. Registry trust-root changes remain separately authorized and audited.
+Bootstrap-substrate changes, including control-plane state migrations and backup or recovery tooling, use infrastructure rollouts but do not redeploy the mesh unless they also change an Istio item listed above. Package releases declare supported MCP versions. Infrastructure pins Kubernetes, Istio, Envoy, the shared MCP extension, session-token format, authorization adapter, and routing-status extension versions and accounts for overlapping old and new versions before admitting releases that require new features. Registry trust-root changes remain separately authorized and audited.
 
 ## Representative Request Lifecycles
 
-The following lifecycles show how representative registry, management, and data-plane requests move through the system.
+These summaries add sequencing and externally observable behavior; preceding sections define the authoritative mechanics.
 
-### Create a Registry
+### Provision the Deployment Registry
 
-Registry creation is a registry-side operation and is distinct from connecting that registry to an organization. The reference registry-creation service and CLI are convenience tools, not gatekeepers; operators may instead use the underlying libraries or build any compatible implementation.
+Deployment provisioning creates one private registry with OCI 1.1 storage, a self-certifying `registryId`, publisher controls, and pull-through import. It publishes the signed descriptor and verifies storage, digest, authentication, authorization, and signature enforcement before serving traffic. Publisher private keys remain publisher-controlled.
 
-1. A registry operator uses the reference tooling or an independent implementation to provision a protocol-compatible registry and durable metadata store. The registry uses OCI 1.1 storage—Google Artifact Registry by default—for content-addressed images, manifests, and signature bundles.
-2. The registry generates an offline root key and derives its immutable `registryId` from that public key. The identifier remains stable wherever the registry is connected.
-3. The operator configures discovery and download visibility, publisher authentication, who may create packages, and who may publish versions to each package. The reference tooling may also configure optional GitHub listeners or other publication triggers.
-4. The operator configures the registry's publisher policy by registering publisher identities, their public keys, and the package IDs each key may sign. The reference tooling may provision KMS-backed signing keys, but private keys remain publisher-controlled and are never stored by the registry.
-5. The registry publishes a descriptor matching the required schema, including its protocol version, `registryId`, API endpoints, and supported signature formats, through its well-known metadata endpoint.
-6. Readiness checks verify metadata and blob durability, digest validation, authentication, authorization, and signature enforcement before the registry accepts publication or discovery traffic.
+### Pull a Package Release
 
-### Connect a Registry
-
-1. An organization administrator submits the registry's HTTPS origin, optional read credentials for a private registry, and a registry trust policy binding trusted publisher identities and public keys to package IDs.
-2. The ingress gateway authenticates the actor, removes untrusted identity headers, and calls the authorization service through `ext_authz`. The request proceeds only when the actor has the required registry-management permission.
-3. The registry-verification service connects through the permitted egress path and reads the registry's protocol version, immutable `registryId`, API endpoints, catalog, and signature bundles. Remote content remains untrusted.
-4. The control plane verifies the self-certifying `registryId`, descriptor signature and generation, and that the submitted origin is in the signed origin set. It rejects an origin already associated with a different registry identity. It stores any read credentials through the secret-management service and persists the verified registry identity, descriptor generation, and initial registry trust policy revision.
-5. After verification succeeds, the control plane marks the registry connected and advances the registry catalog generation. Packages become discoverable, but each release must still pass admission checks before installation.
-6. The API returns the registry record and verification status. Failures preserve diagnostics without making the registry available for discovery or installation.
+An administrator selects an external release, read-only authorization, and trust policy. The deployment registry verifies the source identity and complete release, copies its content into local storage, and atomically exposes it. The API returns the import status and `releaseDigest`; failures retain diagnostics but expose no installable release.
 
 ### Publish a Package Release
 
-1. A developer or CI job authenticates directly to the registry with its own publishing credential and runs `vt build <dir> --push`.
-2. `vt` validates the package metadata, builds every applicable digest-addressed artifact and OCI image index, creates the canonical release manifest, and calculates its `releaseDigest`.
-3. The registry authorizes the publisher to reserve `(packageId, releaseVersion)` and creates a recoverable publish-attempt ID. A version already bound to a different digest is rejected.
-4. `vt` uploads the content-addressed blobs, image indexes, and release manifest. The registry recalculates every digest and validates all referenced artifacts and release contracts before making anything discoverable.
-5. The publisher signs a statement containing the `registryId`, `packageId`, `releaseVersion`, `releaseDigest`, and every referenced runtime, migration, UI, workflow, and schema artifact digest with an authorized KMS-backed key, then uploads the signature bundle.
-6. The registry verifies the signature and confirms under its publisher policy that the signing key may publish the package. It then atomically binds the version to the digest and adds the release to the package catalog.
-7. The registry returns the immutable `releaseDigest`. Failed or interrupted attempts remain non-installable and may be retried; publishing does not install or deploy the release.
+A developer or CI job authenticates to the deployment registry and runs `vt build <dir> --push`. The registry validates and atomically publishes the signed release, then returns its immutable `releaseDigest`. Interrupted attempts remain non-installable, and publishing never installs the release.
 
 ### Upgrade a Package
 
-1. An organization or package administrator selects a target `releaseDigest` for an installed package and submits a durable upgrade revision request with any approved identity or authorization changes.
-2. The ingress gateway authenticates and authorizes the actor. The control plane verifies any required `service_account.assign` and `authorization.grant` permissions.
-3. The control plane appends the revision request, verifies that no revision operation is active for the installation, and creates a generation-fenced revision operation. The API returns the operation ID so the client can observe progress asynchronously.
-4. The revision controller verifies the recorded registry trust policy revision, release and image signatures, platform and runtime compatibility, schemas, dependencies, reverse dependents, workflows, and migrations against the recorded desired-state snapshot.
-5. The controller runs declared prepare migrations, creates any immutable candidate runtime resources, stages UI bundles and workflow definitions, and applies required ambient enrollment and `AuthorizationPolicy` attachments. Candidate artifacts remain absent from user-facing catalogs and receive no default production traffic.
-6. After applicable readiness remains stable, the controller may canary runtime operations whose contracts exactly match the promoted revision. Promotion writes any primary routing intent and waits for routing status, UI-serving, and workflow-registration prerequisites associated with the candidate generations.
-7. After applicable routing, UI-serving, and workflow-registration prerequisites remain converged for the stability window, one transaction advances the promoted head and relevant routing, package, operation, UI, and workflow generations. The previous runtime revision drains pinned requests and streams while the controller observes the promoted revision and runs any separately approved finalization.
-8. The controller records the terminal outcome. A pre-promotion failure leaves the previously promoted revision primary.
+An authorized administrator submits a durable request naming the target `releaseDigest` and approved identity or authorization changes. The control plane verifies permissions, appends the request, fences the operation, and returns its ID. Candidates remain absent from user catalogs and receive no primary traffic before promotion; operations with identical contracts may receive controlled canary traffic. Promotion uses the convergence-gated transaction above, and pre-promotion failure leaves the prior revision primary.
 
 ### Invoke a Package Operation
 
-1. An external caller sends an MCP Streamable HTTP request to the package-scoped deployment endpoint with a session credential or API grant and a JSON-RPC envelope.
-2. The ingress gateway authenticates the credential, removes untrusted internal metadata, applies request limits, and decodes the MCP request class and canonical operation when applicable before calling the authorization service through `ext_authz`.
-3. The authorization service evaluates the credential scope, effective subject, target installation, request class, canonical operation ID when applicable, approved package access policy, and any operation-specific resource against one policy generation. An unknown target or denied check fails before dispatch.
-4. The gateway exchanges the external credential for a short-lived internal invocation token bound to the target installation, request class, applicable operation, and request-envelope hash.
-5. The destination waypoint revalidates the token, applies the trusted operation-specific route when applicable, selects a revision Service, and attaches a signed dispatch receipt. A new session becomes pinned to that revision.
-6. The package supervisor verifies the token and dispatch receipt and relays the MCP request to the private runtime socket. The runtime returns one JSON-RPC response or opens an SSE stream; an open stream remains on the selected revision while that revision drains.
-7. The response returns through the mesh and ingress gateway. The platform records the authorization decision, policy model ID and revision, actor, effective subject, immediate caller workload identity, target, `releaseDigest`, internal token and dispatch-receipt IDs, trace ID, duration, and outcome.
+An external caller sends MCP Streamable HTTP to a package-scoped endpoint. Ingress authenticates, strips untrusted metadata, applies transport limits, and issues a caller token bound to the installation and envelope hash; it neither parses MCP nor authorizes an operation. The waypoint validates the token, decodes and authorizes the request, removes the caller token, adds signed internal context, selects the revision, and pins sessions through its signed wrapper. The runtime receives the request directly. Audit records include the decision and policy generation, actor, effective subject, immediate caller workload when applicable, target, `releaseDigest`, caller-token ID, trace ID, duration, and outcome.
 
-Package-to-package invocation does not pass through ingress. The calling package presents a platform-issued internal invocation token to the destination waypoint, which performs the corresponding workload and effective-subject authorization checks before revision routing and dispatch. Raw caller credentials are never forwarded.
+Package-to-package calls bypass ingress but still terminate at the destination waypoint. The identity service derives an attenuated, single-target token from authenticated workload context; raw caller credentials are never forwarded.
 
 ## Assurance
 
 ### Retention and Audit
 
-Release metadata, accepted revision history, and audit events are retained according to applicable policy. Registries and platform-owned artifact storage retain blobs required by active revisions or the configured rollback window. Unreferenced blobs may be garbage-collected after a grace period; shared OCI layers are deleted only after references are rechecked.
-
-Authentication, authorization, registry, package-lifecycle, migration, secret-access, and network-policy events are written to the immutable audit sink with the actor, target, decision, relevant identifiers, trace ID, and outcome.
+Retention follows active-revision, rollback, recovery, and garbage-collection rules above; shared OCI layers are deleted only after references are rechecked. Authentication, authorization, registry, lifecycle, migration, secret-access, and network-policy events go to the immutable audit sink with actor, target, decision, identifiers, trace ID, and outcome.
 
 ### Required Verification
 
 Before production use, automated tests cover:
 
-- **Registry and release integrity**: atomic publication under retries and concurrency, signature and compatibility rejection, and safe disconnection and garbage collection
-- **Runtime contract**: supervisor protocol negotiation, digest-aware readiness, request-envelope decoding, token binding, cancellation, session pinning, SSE draining, and malformed or ambiguous MCP requests
+- **Registry and release integrity**: one-registry-per-deployment enforcement, least-privilege push and upstream read authorization, atomic publication and pull-through import under retries and concurrency, preservation of source identity, complete local artifact closure, signature and compatibility rejection, upstream-source disablement, and safe garbage collection
+- **Runtime contract**: direct MCP and health endpoints, platform-manifest-pinned Pods, synthetic contract readiness, Kubernetes shutdown, waypoint request and response decoding, token upper bounds, protected catalog filtering, cancellation, session rotation and pinning, SSE draining, and malformed or ambiguous MCP requests
 - **Revision state machines**: validation failures, administrator, controller, and dependency races, restart at every phase, and migration idempotency and lease loss
 - **Rollout and recovery**: canary and promotion failures before and after routing intent, proxy-membership churn, route restoration, atomic rollout groups, catalog convergence, draining and SSE behavior, rollback approval, removal, tombstones, retained workflows, autoscaling, and mixed versions
 - **Platform lifecycle**: bootstrap ordering and outages, protected identities and signers, ordinary-package replacement prevention, and independent infrastructure and system-package rollouts
 - **Authorization models**: deterministic policy publication, active-grant preservation, subject-set cycles, and parity between batch and individual checks
 - **Identity and delegation**: spoofing, claim validation, token expiration and rotation, `runAs`, confused-deputy prevention, attenuation, and revocation
-- **Fail-closed enforcement**: authorization outages, data-plane bypass attempts, and ingress or waypoint `ext_authz` failures
+- **Fail-closed enforcement**: authorization and audit outages, direct Pod-IP and revision-Service bypass attempts, `ztunnel` and waypoint churn, stale policy generations, and ingress or waypoint `ext_authz` failures
 - **Interfaces and workflows**: route collisions, CSP and asset validation, revision-qualified caching, pinned workflow executions, signals and timers during upgrades, retirement, migration, and forced termination
 - **Disaster recovery**: regional state restore, route reconstruction, signing-key and certificate recovery, protected-service recovery, audit continuity, and break-glass controls
 
 ## Glossary
 
-**package identity**<br>
-Permanent `(registryId, packageId)` for a registry package. Assigned when the package is reserved; never reused.
+| Term | Meaning |
+| --- | --- |
+| Package identity | Permanent `(registryId, packageId)`; never reused |
+| Pull-through import | Verified, atomic copy of an external release and its complete artifact closure into the deployment registry using read-only upstream authorization |
+| `releaseDigest` | Hash of canonical manifest bytes and authoritative install input |
+| Revision | Installed release or removal tombstone |
+| Revision operation | Fenced execution of durable revision intent |
+| Promotion | Atomic commit advancing the promoted head and catalog generations |
+| Routing generation | Durable correlation of one routing decision, its resources, proxy set, and observations |
+| Atomic rollout group | One fenced promotion across mutually dependent packages |
+| Caller token | Signed pre-authorization context presented only to a destination waypoint |
+| Internal caller context | Signed post-authorization context forwarded to a runtime |
+| Protected system package | Signer-pinned platform package unavailable to ordinary package APIs |
+| Waypoint | Shared Envoy proxy for MCP authorization, revision routing, sessions, and telemetry |
+| `ztunnel` | Node-level ambient proxy for L4 security and workload identity |
 
-**release**<br>
-Immutable artifact with detached signatures for one `releaseVersion` of a package, identified by `releaseDigest`.
+## Appendix: Design Invariants
 
-**releaseVersion**<br>
-Registry-scoped version label for one published release of a package. `(registryId, packageId, releaseVersion)` binds permanently to one `releaseDigest`.
+The following invariants apply to every implementation:
 
-**releaseDigest**<br>
-Content hash of the canonical release manifest bytes. The authoritative install input; signatures bind to it.
+1. Published releases are immutable and digest-addressed.
+2. Revision intent and outcomes are append-only.
+3. Each package slot permits one active fenced revision operation.
+4. Controllers reconcile durable intent idempotently and resume after failure.
+5. Lifecycle state, workload observations, routing convergence, and catalog convergence remain distinct.
+6. Only successful promotion changes the promoted head.
+7. Every traffic-eligible revision satisfies the compatibility and removal rules in [Dependencies and Contracts](#dependencies-and-contracts).
+8. Organization-managed identities are the sole source of runtime authority.
+9. Ordinary package APIs cannot replace the bootstrap substrate or protected platform capabilities.
+10. External artifacts remain untrusted until admission verifies their digests, signatures, schemas, and policy.
+11. Authorization uses canonical identities and one immutable policy generation; policy changes cannot silently delete or orphan grants.
+12. Package runtimes receive no raw credentials or caller-supplied identity, only short-lived, signed, audience-bound caller context.
 
-**revision**<br>
-One installed state of a package in an organization, backed by a specific `releaseDigest`.
+## Appendix: Foundations
 
-**revision request**<br>
-Durable intent to install, upgrade, rollback, or remove a package.
+### Identity Model
 
-**revision operation**<br>
-Generation-fenced state machine that executes one revision request.
+The system keeps these identities separate:
 
-**revision controller**<br>
-Background worker that drives a revision operation to completion and resumes after failure.
+- **Registry identity**: an immutable self-certifying `registryId` derived from the registry's offline root public key. The identifier is globally stable for that registry but does not imply endorsement by, or membership in, a central registry namespace. Signed registry descriptors authorize the current origin set and origin changes.
+- **Package identity**: permanent `(registryId, packageId)` assigned when the package is reserved. A slug is a mutable display and discovery alias, never a security identifier.
+- **Release identity**: `(registryId, packageId, releaseVersion, releaseDigest)`.
+- **Installation identity**: an organization-scoped UUID representing one installed package.
+- **Workload identity**: the installation principal used in authorization checks for one installation's runtime or migration job, bound at installation to an organization-managed Kubernetes service account.
+- **Workflow identity**: the principal assigned to a workflow definition or execution.
+- **Actor identity**: the user, API grant, platform service account, or workflow that initiated an action.
+- **Effective subject**: the principal whose delegated authority an invocation exercises.
 
-**rollout**<br>
-Path from admission through readiness, optional canarying, and promotion for an install or upgrade candidate.
+Authentication resolves credentials to canonical principals before authorization. Downstream services accept identity only from verified workload identity or signed context; delegation preserves actor and effective subject through authorization and audit.
 
-**promotion**<br>
-Atomic state-store commit that advances the promoted revision and relevant routing, package, operation, UI, and workflow generations after all applicable prerequisites have converged.
-
-**routing generation**<br>
-Durable identifier that correlates one routing decision with its exact Kubernetes resources, desired route hashes, relevant proxy-membership snapshot, and convergence observations.
-
-**atomic rollout group**<br>
-One generation-fenced revision request that validates and promotes mutually dependent package revisions as a single desired-state and catalog change.
-
-**authorization model**<br>
-Immutable, content-hashed definition of resource types, relations, actions, and allowed relationship targets used for one generation of authorization decisions.
-
-**relationship tuple**<br>
-An assignment of a subject, resource, or subject set to one relation on a resource.
-
-**internal invocation token**<br>
-Short-lived signed context carrying verified caller and delegation information, bound to its issuer, audience, target installation, request class, optional operation, and request-envelope hash.
-
-**package supervisor**<br>
-Platform-owned `gestaltd` sidecar in each runtime Pod that implements the mesh-facing runtime contract, verifies invocation context, gates runtime readiness and shutdown, and reports observed state.
-
-**bootstrap substrate**<br>
-Infrastructure that must exist before package APIs are available, including Kubernetes, Istio, control-plane state, revision controllers, certificate authority, and recovery tooling.
-
-**protected system package**<br>
-A trusted, signer-pinned package that uses normal revision rollouts but has a fixed platform identity and cannot be replaced or removed through ordinary package APIs.
-
-**waypoint**<br>
-Shared Envoy proxy that enforces L7 routing and authorization for Kubernetes Services exposing packages in ambient mode.
-
-**workflow service**<br>
-MCP service in the mesh that registers package-defined workflows and executes them outside package processes.
-
-**ztunnel**<br>
-Node-level ambient proxy that provides L4 transport security and workload identity for enrolled pods.
+Package IDs are never reused; slug renames retain aliases and tombstones. A different registry yields a different package identity even for identical bytes. Release metadata cannot name workload identities or Kubernetes service accounts; installation selects them from organization-managed resources.
