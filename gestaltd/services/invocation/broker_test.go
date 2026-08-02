@@ -372,6 +372,45 @@ func TestBrokerInvokeSkipsLocalAuthorizationForRemoteDelegatedApps(t *testing.T)
 	}
 }
 
+func TestBrokerInvokePassthroughForRemoteDelegatedProviderWithoutCatalog(t *testing.T) {
+	t.Parallel()
+
+	executed := false
+	provider := &remoteDelegatedAppStub{
+		StubIntegration: &coretesting.StubIntegration{
+			N:        "data-schema-explorer",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				executed = true
+				if op != "get_schema" {
+					return nil, fmt.Errorf("unexpected operation %q", op)
+				}
+				return &core.OperationResult{Status: 200, Body: []byte(`{"tables":[]}`)}, nil
+			},
+		},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+	)
+
+	_, err := broker.Invoke(
+		context.Background(),
+		&principal.Principal{SubjectID: "user:u-123", Kind: principal.KindUser},
+		"data-schema-explorer",
+		"",
+		"get_schema",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if !executed {
+		t.Fatal("Execute was not called")
+	}
+}
+
 type remoteDelegatedAppStub struct {
 	*coretesting.StubIntegration
 }
