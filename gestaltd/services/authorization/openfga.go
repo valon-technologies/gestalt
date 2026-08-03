@@ -335,7 +335,7 @@ func (p *openFGA) ListActiveModelResourceTypes(_ context.Context, req *proto.Lis
 	if pageToken > len(items) {
 		pageToken = len(items)
 	}
-	end := min(pageToken+pageSize, len(items))
+	end := minInt(pageToken+pageSize, len(items))
 	response := &proto.ListActiveModelResourceTypesResponse{ModelId: p.model.Id}
 	for _, item := range items[pageToken:end] {
 		response.ResourceTypes = append(response.ResourceTypes, cloneResourceType(item))
@@ -396,11 +396,8 @@ func (p *openFGA) ListRelationships(ctx context.Context, req *proto.ListRelation
 	if pageToken > len(items) {
 		pageToken = len(items)
 	}
-	end := min(pageToken+pageSize, len(items))
-	out := &proto.ListRelationshipsResponse{}
-	for _, item := range items[pageToken:end] {
-		out.Relationships = append(out.Relationships, item)
-	}
+	end := minInt(pageToken+pageSize, len(items))
+	out := &proto.ListRelationshipsResponse{Relationships: append([]*proto.Relationship(nil), items[pageToken:end]...)}
 	if end < len(items) {
 		out.NextPageToken = strconv.Itoa(end)
 	}
@@ -516,8 +513,8 @@ func (p *openFGA) replaceTuples(ctx context.Context, codec *fgaCodec, relationsh
 		keys = append(keys, key)
 	}
 	for start := 0; start < len(keys) || start < len(deletes); start += 100 {
-		endWrites := min(start+100, len(keys))
-		endDeletes := min(start+100, len(deletes))
+		endWrites := minInt(start+100, len(keys))
+		endDeletes := minInt(start+100, len(deletes))
 		body := openfga.WriteRequest{AuthorizationModelId: stringPtr(codec.model.Id)}
 		if start < len(keys) {
 			duplicate := "ignore"
@@ -839,7 +836,7 @@ func loadLegacyRelationships(ctx context.Context, db indexeddb.Database) ([]*pro
 	}
 	records, err := db.ObjectStore("authz_relationships").GetAll(ctx, nil)
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("read legacy relationships: %w", err)
 	}
 	relationships := make([]*proto.Relationship, 0, len(records))
 	for _, record := range records {
@@ -1094,7 +1091,7 @@ func cloneResourceType(in *proto.AuthorizationModelResourceType) *proto.Authoriz
 
 func stringPtr(value string) *string { return &value }
 func int32Ptr(value int32) *int32    { return &value }
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

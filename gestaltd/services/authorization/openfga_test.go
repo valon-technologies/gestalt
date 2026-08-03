@@ -8,6 +8,8 @@ import (
 )
 
 func TestNewFGACodecPreservesGraphTargetsAndStableNames(t *testing.T) {
+	t.Parallel()
+
 	model := &proto.AuthorizationModel{ResourceTypes: []*proto.AuthorizationModelResourceType{
 		{
 			Name:        "workspace.document",
@@ -52,6 +54,8 @@ func TestNewFGACodecPreservesGraphTargetsAndStableNames(t *testing.T) {
 }
 
 func TestSplitFGAObjectRejectsMalformedValues(t *testing.T) {
+	t.Parallel()
+
 	for _, value := range []string{"", "missing-separator", ":id", "type:"} {
 		if _, _, ok := splitFGAObject(value); ok {
 			t.Fatalf("splitFGAObject(%q) accepted malformed value", value)

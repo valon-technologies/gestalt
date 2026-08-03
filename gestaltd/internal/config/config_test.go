@@ -5796,6 +5796,8 @@ providers:
 }
 
 func TestAuthorizationOpenFGAScalarSourceIsBuiltin(t *testing.T) {
+	t.Parallel()
+
 	var source ProviderSource
 	if err := yaml.Unmarshal([]byte("openfga\n"), &source); err != nil {
 		t.Fatalf("unmarshal source: %v", err)
