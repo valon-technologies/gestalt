@@ -125,7 +125,7 @@ func (p *openFGA) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest
 	if model == nil || codec == nil {
 		return nil, status.Error(codes.FailedPrecondition, "openfga authorization model is not configured")
 	}
-	if scope := subjectScope(req.Subject); scope != "" && !scopeAllows(scope, req.Resource.Type, req.Action.Name) {
+	if scope := subjectScope(req.Subject); scope != "" && !scopeAllows(scope, req.Resource.Id, req.Action.Name) {
 		return &proto.CheckAccessResponse{Allowed: false, ModelId: modelID}, nil
 	}
 	resourceType := findResourceType(model, req.Resource.Type)
@@ -312,22 +312,15 @@ func (p *openFGA) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefRe
 	return &proto.GetActiveModelRefResponse{Model: cloneModelRef(p.modelRef)}, nil
 }
 
-func (p *openFGA) SetActiveModel(_ context.Context, req *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+func (p *openFGA) SetActiveModel(ctx context.Context, req *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
 	if req == nil || req.Model == nil {
 		return nil, status.Error(codes.InvalidArgument, "model is required")
 	}
-	codec, err := newFGACodec(req.Model)
+	state, err := p.setAuthorizationState(ctx, &proto.SetAuthorizationStateRequest{Model: req.Model}, false)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "model: %v", err)
+		return nil, err
 	}
-	model := cloneModel(req.Model)
-	ref := &proto.AuthorizationModelRef{Id: model.Id, Version: model.Version, CreatedAt: timestamppb.New(time.Now().UTC())}
-	p.mu.Lock()
-	p.model = model
-	p.modelRef = ref
-	p.codec = codec
-	p.mu.Unlock()
-	return &proto.SetActiveModelResponse{Model: cloneModelRef(ref)}, nil
+	return &proto.SetActiveModelResponse{Model: cloneModelRef(state.ActiveModel)}, nil
 }
 
 func (p *openFGA) ListActiveModelResourceTypes(_ context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {

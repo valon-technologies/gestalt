@@ -227,6 +227,24 @@ func TestOpenFGADefaultRoleCompatibility(t *testing.T) {
 	if checkRequests != 1 {
 		t.Fatalf("scope-denied action made %d OpenFGA checks, want 1", checkRequests)
 	}
+
+	nameScopedSubject := &proto.Subject{Type: "subject", Id: "user:alice", Properties: func() *structpb.Struct {
+		value, err := structpb.NewStruct(map[string]any{"scope": "doc-1:read"})
+		if err != nil {
+			t.Fatalf("NewStruct: %v", err)
+		}
+		return value
+	}()}
+	nameScoped, err := provider.CheckAccess(t.Context(), request("read", nameScopedSubject))
+	if err != nil {
+		t.Fatalf("resource-name scoped CheckAccess: %v", err)
+	}
+	if !nameScoped.GetAllowed() {
+		t.Fatal("resource-name scoped default-role action denied, want allowed")
+	}
+	if checkRequests != 1 {
+		t.Fatalf("resource-name scoped action made %d OpenFGA checks, want 1", checkRequests)
+	}
 }
 
 func TestOpenFGAListActiveModelResourceTypesFiltersSourceLayerBeforePagination(t *testing.T) {
@@ -308,12 +326,27 @@ func TestOpenFGAListActiveModelResourceTypesFiltersSourceLayerBeforePagination(t
 func TestOpenFGASetActiveModelUpdatesModelAndCodec(t *testing.T) {
 	t.Parallel()
 
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/stores/test-store/authorization-models" {
+			http.Error(w, "unexpected request", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"authorization_model_id":"remote-model-id"}`))
+	}))
+	t.Cleanup(server.Close)
+	clientConfig, err := openfga.NewConfiguration(openfga.Configuration{ApiUrl: server.URL})
+	if err != nil {
+		t.Fatalf("NewConfiguration: %v", err)
+	}
 	oldModel := &proto.AuthorizationModel{Id: "old-model", ResourceTypes: []*proto.AuthorizationModelResourceType{{Name: "old-resource"}}}
 	oldCodec, err := newFGACodec(oldModel)
 	if err != nil {
 		t.Fatalf("newFGACodec(oldModel): %v", err)
 	}
 	provider := &openFGA{
+		client:   openfga.NewAPIClient(clientConfig),
+		storeID:  "test-store",
 		model:    oldModel,
 		modelRef: &proto.AuthorizationModelRef{Id: oldModel.Id},
 		codec:    oldCodec,
@@ -339,6 +372,9 @@ func TestOpenFGASetActiveModelUpdatesModelAndCodec(t *testing.T) {
 	}
 	if _, ok := provider.codec.types["old-resource"]; ok {
 		t.Fatalf("active codec retained old model resource type: %#v", provider.codec.types)
+	}
+	if provider.codec.model.Id != "remote-model-id" {
+		t.Fatalf("active codec model id = %q, want remote OpenFGA model id", provider.codec.model.Id)
 	}
 }
 
