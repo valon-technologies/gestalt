@@ -1078,11 +1078,11 @@ func cloneModelRef(in *proto.AuthorizationModelRef) *proto.AuthorizationModelRef
 	if in == nil {
 		return nil
 	}
-	out := *in
+	out := &proto.AuthorizationModelRef{Id: in.Id, Version: in.Version}
 	if in.CreatedAt != nil {
 		out.CreatedAt = timestamppb.New(in.CreatedAt.AsTime())
 	}
-	return &out
+	return out
 }
 
 func cloneResourceType(in *proto.AuthorizationModelResourceType) *proto.AuthorizationModelResourceType {
