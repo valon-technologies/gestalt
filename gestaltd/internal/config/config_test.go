@@ -5795,6 +5795,17 @@ providers:
 	}
 }
 
+func TestAuthorizationOpenFGAScalarSourceIsBuiltin(t *testing.T) {
+	var source ProviderSource
+	if err := yaml.Unmarshal([]byte("openfga\n"), &source); err != nil {
+		t.Fatalf("unmarshal source: %v", err)
+	}
+	normalizeProviderSource(string(HostProviderKindAuthorization), &source)
+	if !source.IsBuiltin() || source.Builtin != "openfga" {
+		t.Fatalf("source = %#v, want openfga builtin", source)
+	}
+}
+
 func TestLoadConfigProviderPackageSourceValidation(t *testing.T) {
 	t.Parallel()
 

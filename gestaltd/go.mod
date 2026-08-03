@@ -16,6 +16,7 @@ require (
 	github.com/hashicorp/yamux v0.1.1
 	github.com/landlock-lsm/go-landlock v0.8.1
 	github.com/mark3labs/mcp-go v0.54.0
+	github.com/openfga/go-sdk v0.8.2
 	github.com/pb33f/libopenapi v0.36.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/robfig/cron/v3 v3.0.1

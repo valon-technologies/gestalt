@@ -3448,6 +3448,8 @@ func isLocalReleaseMetadataPath(value string) bool {
 
 func isBuiltinScalarSource(kind, source string) bool {
 	switch kind {
+	case string(HostProviderKindAuthorization):
+		return strings.EqualFold(strings.TrimSpace(source), "openfga")
 	case providermanifestv1.KindSecrets:
 		switch source {
 		case "env", "file":

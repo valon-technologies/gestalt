@@ -524,11 +524,16 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 				return err
 			}
 		case HostProviderKindAuthorization:
-			if entry.Source.IsBuiltin() {
+			if entry.Source.IsBuiltin() && !strings.EqualFold(strings.TrimSpace(entry.Source.Builtin), "openfga") {
 				return fmt.Errorf("config validation: authorization provider %q does not support builtin providers; use a provider source reference or omit authorization", name)
 			}
-			if err := validateProviderEntrySource("authorization", name, entry); err != nil {
-				return err
+			if !entry.Source.IsBuiltin() {
+				if err := validateProviderEntrySource("authorization", name, entry); err != nil {
+					return err
+				}
+			}
+			if strings.EqualFold(strings.TrimSpace(entry.Source.Builtin), "openfga") && strings.TrimSpace(entry.Remote) != "" {
+				return fmt.Errorf("config validation: authorization provider %q openfga backend cannot use remote placement", name)
 			}
 		case HostProviderKindExternalCredentials:
 			if entry.Source.IsBuiltin() {

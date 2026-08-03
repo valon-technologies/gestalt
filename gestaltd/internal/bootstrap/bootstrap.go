@@ -2178,6 +2178,20 @@ func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, na
 	if entry == nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
 	}
+	if strings.EqualFold(strings.TrimSpace(entry.Source.Builtin), "openfga") {
+		if !config.EntryBuildsLocal(entry) {
+			return nil, fmt.Errorf("bootstrap: built-in openfga authorization provider %q must build locally", logicalName)
+		}
+		var legacyDB indexeddb.IndexedDB
+		if deps.SelectedIndexedDBName != "" {
+			legacyDB = deps.IndexedDBs[deps.SelectedIndexedDBName]
+		}
+		provider, err := authorizationservice.NewOpenFGA(entry.Config, legacyDB)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+		}
+		return provider, nil
+	}
 	if !config.EntryBuildsLocal(entry) {
 		clients, err := remoteClientsForEntry(cfg, entry, deps)
 		if err != nil {
