@@ -316,10 +316,18 @@ func (p *openFGA) SetActiveModel(_ context.Context, req *proto.SetActiveModelReq
 	if req == nil || req.Model == nil {
 		return nil, status.Error(codes.InvalidArgument, "model is required")
 	}
+	codec, err := newFGACodec(req.Model)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "model: %v", err)
+	}
+	model := cloneModel(req.Model)
+	ref := &proto.AuthorizationModelRef{Id: model.Id, Version: model.Version, CreatedAt: timestamppb.New(time.Now().UTC())}
 	p.mu.Lock()
-	p.modelRef = &proto.AuthorizationModelRef{Id: req.Model.Id, Version: req.Model.Version, CreatedAt: timestamppb.New(time.Now().UTC())}
+	p.model = model
+	p.modelRef = ref
+	p.codec = codec
 	p.mu.Unlock()
-	return &proto.SetActiveModelResponse{Model: cloneModelRef(p.modelRef)}, nil
+	return &proto.SetActiveModelResponse{Model: cloneModelRef(ref)}, nil
 }
 
 func (p *openFGA) ListActiveModelResourceTypes(_ context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
@@ -406,7 +414,11 @@ func (p *openFGA) ListRelationships(ctx context.Context, req *proto.ListRelation
 			pageToken = parsed
 		}
 	}
-	tuples, err := p.readAllTuples(ctx, codec.readFilter(filter))
+	readFilter, err := codec.readFilter(filter)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "relationship filter: %v", err)
+	}
+	tuples, err := p.readAllTuples(ctx, readFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -682,12 +694,16 @@ func (c *fgaCodec) checkTuple(subject *proto.Subject, permission string, resourc
 	if objectType == "" {
 		return openfga.TupleKey{}, fmt.Errorf("unknown resource type %q", resource.Type)
 	}
-	return openfga.TupleKey{User: c.subjectUser(subject), Relation: permission, Object: objectType + ":" + resource.Id}, nil
+	user, err := c.subjectUser(subject)
+	if err != nil {
+		return openfga.TupleKey{}, err
+	}
+	return openfga.TupleKey{User: user, Relation: permission, Object: objectType + ":" + resource.Id}, nil
 }
 
 func (c *fgaCodec) targetUser(target *proto.RelationshipTarget) (string, error) {
 	if subject := target.GetSubject(); subject != nil {
-		return c.subjectUser(subject), nil
+		return c.subjectUser(subject)
 	}
 	if resource := target.GetResource(); resource != nil {
 		typeName := c.types[resource.Type]
@@ -707,13 +723,20 @@ func (c *fgaCodec) targetUser(target *proto.RelationshipTarget) (string, error) 
 	return "", fmt.Errorf("relationship target is required")
 }
 
-func (c *fgaCodec) subjectUser(subject *proto.Subject) string {
-	return c.types[subject.Type] + ":" + subject.Id
+func (c *fgaCodec) subjectUser(subject *proto.Subject) (string, error) {
+	if subject == nil {
+		return "", fmt.Errorf("subject is required")
+	}
+	typeName := c.types[subject.Type]
+	if typeName == "" {
+		return "", fmt.Errorf("unknown subject type %q", subject.Type)
+	}
+	return typeName + ":" + subject.Id, nil
 }
 
-func (c *fgaCodec) readFilter(filter *proto.RelationshipFilter) *openfga.ReadRequestTupleKey {
+func (c *fgaCodec) readFilter(filter *proto.RelationshipFilter) (*openfga.ReadRequestTupleKey, error) {
 	if filter == nil {
-		return nil
+		return nil, nil
 	}
 	key := &openfga.ReadRequestTupleKey{}
 	if filter.Resource != nil {
@@ -721,6 +744,13 @@ func (c *fgaCodec) readFilter(filter *proto.RelationshipFilter) *openfga.ReadReq
 			value := objectType + ":" + filter.Resource.Id
 			key.Object = &value
 		}
+	}
+	if filter.Target != nil {
+		value, err := c.targetUser(filter.Target)
+		if err != nil {
+			return nil, err
+		}
+		key.User = &value
 	}
 	// OpenFGA's Read API only accepts exact object IDs, not a type prefix.
 	// Leave resource-type-only filtering unbounded and apply it locally after
@@ -730,7 +760,10 @@ func (c *fgaCodec) readFilter(filter *proto.RelationshipFilter) *openfga.ReadReq
 			key.Relation = &relation
 		}
 	}
-	return key
+	if !key.HasObject() && !key.HasRelation() && !key.HasUser() {
+		return nil, nil
+	}
+	return key, nil
 }
 
 func (c *fgaCodec) relationsForFilter(filter *proto.RelationshipFilter) string {

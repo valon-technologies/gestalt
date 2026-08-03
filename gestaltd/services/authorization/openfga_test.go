@@ -305,6 +305,110 @@ func TestOpenFGAListActiveModelResourceTypesFiltersSourceLayerBeforePagination(t
 	}
 }
 
+func TestOpenFGASetActiveModelUpdatesModelAndCodec(t *testing.T) {
+	t.Parallel()
+
+	oldModel := &proto.AuthorizationModel{Id: "old-model", ResourceTypes: []*proto.AuthorizationModelResourceType{{Name: "old-resource"}}}
+	oldCodec, err := newFGACodec(oldModel)
+	if err != nil {
+		t.Fatalf("newFGACodec(oldModel): %v", err)
+	}
+	provider := &openFGA{
+		model:    oldModel,
+		modelRef: &proto.AuthorizationModelRef{Id: oldModel.Id},
+		codec:    oldCodec,
+	}
+	newModel := &proto.AuthorizationModel{Id: "new-model", Version: "v2", ResourceTypes: []*proto.AuthorizationModelResourceType{{Name: "new-resource"}}}
+
+	response, err := provider.SetActiveModel(t.Context(), &proto.SetActiveModelRequest{Model: newModel})
+	if err != nil {
+		t.Fatalf("SetActiveModel: %v", err)
+	}
+	if response.GetModel().GetId() != newModel.Id || response.GetModel().GetVersion() != newModel.Version {
+		t.Fatalf("active model ref = %#v, want id/version %q/%q", response.GetModel(), newModel.Id, newModel.Version)
+	}
+	listed, err := provider.ListActiveModelResourceTypes(t.Context(), &proto.ListActiveModelResourceTypesRequest{})
+	if err != nil {
+		t.Fatalf("ListActiveModelResourceTypes: %v", err)
+	}
+	if len(listed.ResourceTypes) != 1 || listed.ResourceTypes[0].GetName() != "new-resource" || listed.GetModelId() != newModel.Id {
+		t.Fatalf("active resource types = %#v (model %q), want new-resource (model %q)", listed.ResourceTypes, listed.GetModelId(), newModel.Id)
+	}
+	if _, ok := provider.codec.types["new-resource"]; !ok {
+		t.Fatalf("active codec does not contain new model resource type: %#v", provider.codec.types)
+	}
+	if _, ok := provider.codec.types["old-resource"]; ok {
+		t.Fatalf("active codec retained old model resource type: %#v", provider.codec.types)
+	}
+}
+
+func TestFGACodecReadFilterUsesValidOpenFGAFields(t *testing.T) {
+	t.Parallel()
+
+	model := &proto.AuthorizationModel{ResourceTypes: []*proto.AuthorizationModelResourceType{{
+		Name:      "document",
+		Relations: []*proto.ModelRelation{{Name: "viewer", AllowedTargets: []*proto.ModelAllowedTarget{{Kind: &proto.ModelAllowedTarget_SubjectType{SubjectType: "subject"}}}}},
+	}}}
+	codec, err := newFGACodec(model)
+	if err != nil {
+		t.Fatalf("newFGACodec: %v", err)
+	}
+
+	metadataOnly, err := codec.readFilter(&proto.RelationshipFilter{SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME})
+	if err != nil {
+		t.Fatalf("metadata-only readFilter: %v", err)
+	}
+	if metadataOnly != nil {
+		t.Fatalf("metadata-only readFilter = %#v, want nil unbounded filter", metadataOnly)
+	}
+
+	resourceAndRelation, err := codec.readFilter(&proto.RelationshipFilter{
+		Resource: &proto.Resource{Type: "document", Id: "doc-1"},
+		Relation: "viewer",
+	})
+	if err != nil {
+		t.Fatalf("resource/relation readFilter: %v", err)
+	}
+	if resourceAndRelation.GetObject() != codec.types["document"]+":doc-1" || resourceAndRelation.GetRelation() != codec.relations["document\x00viewer"] || resourceAndRelation.HasUser() {
+		t.Fatalf("resource/relation readFilter = %#v, want exact object/relation only", resourceAndRelation)
+	}
+
+	target, err := codec.readFilter(&proto.RelationshipFilter{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:alice"}}}})
+	if err != nil {
+		t.Fatalf("target readFilter: %v", err)
+	}
+	if target.GetUser() != codec.types["subject"]+":user:alice" || target.HasObject() || target.HasRelation() {
+		t.Fatalf("target readFilter = %#v, want exact user only", target)
+	}
+
+	_, err = codec.readFilter(&proto.RelationshipFilter{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "unknown", Id: "user:alice"}}}})
+	if err == nil || !strings.Contains(err.Error(), "unknown subject type") {
+		t.Fatalf("unknown subject target error = %v, want unknown subject type", err)
+	}
+}
+
+func TestFGACodecRejectsUnknownSubjectType(t *testing.T) {
+	t.Parallel()
+
+	model := &proto.AuthorizationModel{ResourceTypes: []*proto.AuthorizationModelResourceType{{
+		Name:      "document",
+		Relations: []*proto.ModelRelation{{Name: "viewer", AllowedTargets: []*proto.ModelAllowedTarget{{Kind: &proto.ModelAllowedTarget_SubjectType{SubjectType: "subject"}}}}},
+	}}}
+	codec, err := newFGACodec(model)
+	if err != nil {
+		t.Fatalf("newFGACodec: %v", err)
+	}
+	tuple := &proto.RelationshipTuple{
+		Resource: &proto.Resource{Type: "document", Id: "doc-1"},
+		Relation: "viewer",
+		Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "unknown", Id: "user:alice"}}},
+	}
+	_, err = codec.relationshipTuple(tuple)
+	if err == nil || !strings.Contains(err.Error(), "unknown subject type") {
+		t.Fatalf("relationshipTuple error = %v, want unknown subject type", err)
+	}
+}
+
 func TestFGAWriteBatchesRespectCombinedLimit(t *testing.T) {
 	t.Parallel()
 
