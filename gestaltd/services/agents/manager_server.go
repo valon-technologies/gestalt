@@ -9,6 +9,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentroute"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -375,8 +376,10 @@ func agentManagerStatusError(err error) error {
 		return existing.Err()
 	}
 	switch {
-	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported), errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported), errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
+	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported), errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported), errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported), errors.Is(err, agentmanager.ErrAgentRoutesNotConfigured), errors.Is(err, agentmanager.ErrAgentContractVersionMismatch), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentContractFeatureNotReady), errors.Is(err, coreagent.ErrContractUnsupported):
+		return status.Error(codes.Unimplemented, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool), errors.Is(err, agentmanager.ErrAgentInteractionRequired), errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid), errors.Is(err, agentmanager.ErrAgentWorkspaceInvalid):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInvalidListRequest), errors.Is(err, invocation.ErrInvalidInvocation):
@@ -387,7 +390,9 @@ func agentManagerStatusError(err error) error {
 		return status.Error(codes.Internal, err.Error())
 	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
 		return status.Error(codes.PermissionDenied, err.Error())
-	case errors.Is(err, agentmanager.ErrAgentInteractionNotFound), errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound), errors.Is(err, core.ErrNotFound):
+	case errors.Is(err, agentroute.ErrConflict):
+		return status.Error(codes.Aborted, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentInteractionNotFound), errors.Is(err, agentroute.ErrNotFound), errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound), errors.Is(err, core.ErrNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	default:
 		return status.Error(codes.Unknown, err.Error())

@@ -40,18 +40,20 @@ type ExecConfig struct {
 var startAgentProviderProcess = runtimehost.StartAppProcess
 
 type remoteAgent struct {
-	client  proto.AgentClient
-	runtime proto.ProviderLifecycleClient
-	closer  io.Closer
-	name    string
+	client   proto.AgentClient
+	contract proto.AgentProviderClient
+	runtime  proto.ProviderLifecycleClient
+	closer   io.Closer
+	name     string
 }
 
 type RemoteConfig struct {
-	Client  proto.AgentClient
-	Runtime proto.ProviderLifecycleClient
-	Closer  io.Closer
-	Config  map[string]any
-	Name    string
+	Client   proto.AgentClient
+	Contract proto.AgentProviderClient
+	Runtime  proto.ProviderLifecycleClient
+	Closer   io.Closer
+	Config   map[string]any
+	Name     string
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (coreagent.Provider, error) {
@@ -81,11 +83,12 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (coreagent.Provider, err
 		conn = cfg.Gateway.Conn(target)
 	}
 	return NewRemote(ctx, RemoteConfig{
-		Client:  proto.NewAgentClient(conn),
-		Runtime: proc.Lifecycle(),
-		Closer:  proc,
-		Config:  cfg.Config,
-		Name:    cfg.Name,
+		Client:   proto.NewAgentClient(conn),
+		Contract: proto.NewAgentProviderClient(conn),
+		Runtime:  proc.Lifecycle(),
+		Closer:   proc,
+		Config:   cfg.Config,
+		Name:     cfg.Name,
 	})
 }
 
@@ -102,7 +105,13 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreagent.Provider, error
 			return nil, err
 		}
 	}
-	return &remoteAgent{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer, name: name}, nil
+	return &remoteAgent{
+		client:   cfg.Client,
+		contract: cfg.Contract,
+		runtime:  cfg.Runtime,
+		closer:   cfg.Closer,
+		name:     name,
+	}, nil
 }
 
 func (r *remoteAgent) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {

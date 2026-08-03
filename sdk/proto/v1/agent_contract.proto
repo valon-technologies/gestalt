@@ -1,0 +1,540 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "v1/agent.proto";
+import "v1/app.proto";
+
+// This file contains the target agent contracts while the original alpha
+// Agent service remains available. AgentService is the authenticated Gestalt
+// surface consumed by clients. AgentProvider is the remote runtime contract
+// implemented by providers. The old service is removed only at the coordinated
+// alpha cutover.
+
+message AgentToolSelection {
+  // When true, the configuration explicitly grants no tools. It cannot be
+  // combined with refs.
+  bool disabled = 1;
+  repeated AgentToolRef refs = 2;
+}
+
+message AgentSkillRef {
+  string marketplace = 1;
+  string package = 2;
+  string skill = 3;
+  string version = 4;
+}
+
+message AgentSkillSelection {
+  repeated AgentSkillRef refs = 1;
+}
+
+message AgentConfigInput {
+  // Creation-time provider routing key. It cannot be updated later.
+  string provider_name = 1;
+  string model = 2;
+  string instructions = 3;
+  AgentToolSelection tools = 4;
+  AgentSkillSelection skills = 5;
+  // Optional, capability-gated, creation-only coding workspace.
+  AgentWorkspace workspace = 6;
+}
+
+enum AgentConfigCollectionUpdateMode {
+  AGENT_CONFIG_COLLECTION_UPDATE_MODE_UNSPECIFIED = 0;
+  AGENT_CONFIG_COLLECTION_UPDATE_MODE_REPLACE = 1;
+  AGENT_CONFIG_COLLECTION_UPDATE_MODE_PATCH = 2;
+}
+
+message AgentToolSelectionUpdate {
+  AgentConfigCollectionUpdateMode mode = 1;
+  AgentToolSelection replace = 2;
+  repeated AgentToolRef add = 3;
+  repeated AgentToolRef remove = 4;
+}
+
+message AgentSkillSelectionUpdate {
+  AgentConfigCollectionUpdateMode mode = 1;
+  AgentSkillSelection replace = 2;
+  repeated AgentSkillRef add = 3;
+  repeated AgentSkillRef remove = 4;
+}
+
+message AgentConfigUpdateInput {
+  optional string model = 1;
+  optional string instructions = 2;
+  AgentToolSelectionUpdate tools = 3;
+  AgentSkillSelectionUpdate skills = 4;
+}
+
+message AgentConfigRevision {
+  string id = 1;
+  string parent_revision = 2;
+  string model = 3;
+  string instructions = 4;
+  repeated AgentToolRef tool_refs = 5;
+  repeated AgentSkillRef skill_refs = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message AgentResource {
+  string id = 1;
+  string provider_name = 2;
+  AgentSessionState state = 3;
+  string config_revision = 4;
+  string created_by_subject_id = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  google.protobuf.Timestamp last_run_at = 8;
+}
+
+message CreateAgentRequest {
+  AgentConfigInput config = 1;
+  string idempotency_key = 2;
+  RequestContext context = 3;
+}
+
+message GetAgentRequest {
+  string agent_id = 1;
+  RequestContext context = 2;
+}
+
+message ListAgentsRequest {
+  repeated string agent_ids = 1;
+  AgentSessionState state = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+  RequestContext context = 5;
+}
+
+message ListAgentsResponse {
+  repeated AgentResource agents = 1;
+  string next_page_token = 2;
+}
+
+message ArchiveAgentRequest {
+  string agent_id = 1;
+  string idempotency_key = 2;
+  RequestContext context = 3;
+}
+
+message CreateAgentConfigRevisionRequest {
+  string agent_id = 1;
+  string expected_revision = 2;
+  string idempotency_key = 3;
+  AgentConfigUpdateInput update = 4;
+  RequestContext context = 5;
+}
+
+message AgentRunOutput {
+  string text = 1;
+  google.protobuf.Value structured = 2;
+}
+
+message AgentRunResource {
+  string id = 1;
+  string agent_id = 2;
+  string provider_name = 3;
+  string config_revision = 4;
+  AgentExecutionStatus status = 5;
+  string status_message = 6;
+  AgentRunOutput output = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp started_at = 9;
+  google.protobuf.Timestamp completed_at = 10;
+}
+
+message CreateAgentRunRequest {
+  string agent_id = 1;
+  string message = 2;
+  string idempotency_key = 3;
+  RequestContext context = 4;
+}
+
+message GetAgentRunRequest {
+  string agent_id = 1;
+  string run_id = 2;
+  RequestContext context = 3;
+}
+
+message ListAgentRunsRequest {
+  string agent_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  RequestContext context = 4;
+}
+
+message ListAgentRunsResponse {
+  repeated AgentRunResource runs = 1;
+  string next_page_token = 2;
+}
+
+message CancelAgentRunRequest {
+  string agent_id = 1;
+  string run_id = 2;
+  string reason = 3;
+  string idempotency_key = 4;
+  RequestContext context = 5;
+}
+
+enum AgentRunEventType {
+  AGENT_RUN_EVENT_TYPE_UNSPECIFIED = 0;
+  AGENT_RUN_EVENT_TYPE_TURN_CREATED = 1;
+  AGENT_RUN_EVENT_TYPE_TURN_STARTED = 2;
+  AGENT_RUN_EVENT_TYPE_TEXT_DELTA = 3;
+  AGENT_RUN_EVENT_TYPE_TOOL_CALL_REQUESTED = 4;
+  AGENT_RUN_EVENT_TYPE_TOOL_CALL_COMPLETED = 5;
+  AGENT_RUN_EVENT_TYPE_INTERACTION_REQUESTED = 6;
+  AGENT_RUN_EVENT_TYPE_INTERACTION_RESOLVED = 7;
+  AGENT_RUN_EVENT_TYPE_HISTORY_COMPACTED = 8;
+  AGENT_RUN_EVENT_TYPE_TURN_COMPLETED = 9;
+  AGENT_RUN_EVENT_TYPE_TURN_FAILED = 10;
+  AGENT_RUN_EVENT_TYPE_TURN_CANCELED = 11;
+}
+
+message AgentRunEventDisplay {
+  string text = 1;
+  string label = 2;
+  string phase = 3;
+}
+
+message AgentRunEvent {
+  string id = 1;
+  string cursor = 2;
+  uint64 sequence = 3;
+  string agent_id = 4;
+  string run_id = 5;
+  AgentRunEventType type = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+  AgentRunEventDisplay display = 8;
+  // Opaque reference to separately authorized, retention-bound payload data.
+  string payload_ref = 9;
+}
+
+message ListAgentRunEventsRequest {
+  string agent_id = 1;
+  string run_id = 2;
+  string after_cursor = 3;
+  int32 page_size = 4;
+  RequestContext context = 5;
+}
+
+message ListAgentRunEventsResponse {
+  repeated AgentRunEvent events = 1;
+  string next_cursor = 2;
+}
+
+enum AgentInteractionKind {
+  AGENT_INTERACTION_KIND_UNSPECIFIED = 0;
+  AGENT_INTERACTION_KIND_APPROVAL = 1;
+  AGENT_INTERACTION_KIND_INPUT = 2;
+}
+
+message AgentApprovalInteraction {
+  string action = 1;
+  string description = 2;
+  google.protobuf.Value arguments_summary = 3;
+}
+
+enum AgentInputType {
+  AGENT_INPUT_TYPE_UNSPECIFIED = 0;
+  AGENT_INPUT_TYPE_TEXT = 1;
+  AGENT_INPUT_TYPE_CHOICE = 2;
+  AGENT_INPUT_TYPE_JSON = 3;
+}
+
+message AgentInputChoice {
+  string value = 1;
+  string label = 2;
+}
+
+message AgentInputDefinition {
+  AgentInputType type = 1;
+  bool multiline = 2;
+  repeated AgentInputChoice choices = 3;
+  google.protobuf.Struct schema = 4;
+}
+
+message AgentInputInteraction {
+  string prompt = 1;
+  AgentInputDefinition input = 2;
+}
+
+message AgentRunInteraction {
+  string id = 1;
+  string agent_id = 2;
+  string run_id = 3;
+  AgentInteractionKind kind = 4;
+  AgentInteractionState state = 5;
+  string title = 6;
+  oneof request {
+    AgentApprovalInteraction approval = 7;
+    AgentInputInteraction input = 8;
+  }
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp resolved_at = 10;
+}
+
+enum AgentApprovalDecision {
+  AGENT_APPROVAL_DECISION_UNSPECIFIED = 0;
+  AGENT_APPROVAL_DECISION_APPROVE = 1;
+  AGENT_APPROVAL_DECISION_DENY = 2;
+}
+
+message AgentApprovalResolution {
+  AgentApprovalDecision decision = 1;
+  string reason = 2;
+}
+
+message AgentInputResolution {
+  google.protobuf.Value value = 1;
+}
+
+message AgentInteractionResolution {
+  oneof resolution {
+    AgentApprovalResolution approval = 1;
+    AgentInputResolution input = 2;
+  }
+}
+
+message GetAgentRunInteractionRequest {
+  string agent_id = 1;
+  string run_id = 2;
+  string interaction_id = 3;
+  RequestContext context = 4;
+}
+
+message ListAgentRunInteractionsRequest {
+  string agent_id = 1;
+  string run_id = 2;
+  AgentInteractionState state = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+  RequestContext context = 6;
+}
+
+message ListAgentRunInteractionsResponse {
+  repeated AgentRunInteraction interactions = 1;
+  string next_page_token = 2;
+}
+
+message ResolveAgentRunInteractionRequest {
+  string agent_id = 1;
+  string run_id = 2;
+  string interaction_id = 3;
+  string idempotency_key = 4;
+  AgentInteractionResolution resolution = 5;
+  RequestContext context = 6;
+}
+
+message AgentResolvedSkill {
+  AgentSkillRef ref = 1;
+  string version = 2;
+  string digest = 3;
+  string materialization_ref = 4;
+}
+
+message AgentResolvedWorkspace {
+  string id = 1;
+  string materialization_ref = 2;
+  string cwd = 3;
+}
+
+message AgentHistoryPolicy {
+  string strategy = 1;
+  int32 max_context_tokens = 2;
+}
+
+message AgentResolvedConfigRevision {
+  string id = 1;
+  string parent_revision = 2;
+  string model = 3;
+  string instructions = 4;
+  repeated ListedAgentTool resolved_tools = 5;
+  repeated AgentResolvedSkill resolved_skills = 6;
+  AgentResolvedWorkspace resolved_workspace = 7;
+  AgentHistoryPolicy history_policy = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message AgentProviderCreateSessionRequest {
+  string session_id = 1;
+  string idempotency_key = 2;
+  AgentResolvedConfigRevision initial_config = 3;
+  string created_by_subject_id = 4;
+  RequestContext context = 5;
+}
+
+message AgentProviderGetSessionRequest {
+  string session_id = 1;
+  RequestContext context = 2;
+}
+
+message AgentProviderListSessionsRequest {
+  repeated string session_ids = 1;
+  AgentSessionState state = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+  RequestContext context = 5;
+}
+
+message AgentProviderListSessionsResponse {
+  repeated AgentResource sessions = 1;
+  string next_page_token = 2;
+}
+
+message AgentProviderArchiveSessionRequest {
+  string session_id = 1;
+  string idempotency_key = 2;
+  RequestContext context = 3;
+}
+
+message AgentProviderCreateConfigRevisionRequest {
+  string session_id = 1;
+  string expected_revision = 2;
+  string idempotency_key = 3;
+  AgentResolvedConfigRevision next_config = 4;
+  RequestContext context = 5;
+}
+
+message AgentProviderCreateRunRequest {
+  string session_id = 1;
+  string run_id = 2;
+  string idempotency_key = 3;
+  string message = 4;
+  string config_revision = 5;
+  string execution_ref = 6;
+  string authority_ref = 7;
+  string created_by_subject_id = 8;
+  RequestContext context = 9;
+}
+
+message AgentProviderGetRunRequest {
+  string session_id = 1;
+  string run_id = 2;
+  RequestContext context = 3;
+}
+
+message AgentProviderListRunsRequest {
+  string session_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  RequestContext context = 4;
+}
+
+message AgentProviderCancelRunRequest {
+  string session_id = 1;
+  string run_id = 2;
+  string reason = 3;
+  string idempotency_key = 4;
+  RequestContext context = 5;
+}
+
+message AgentProviderListRunEventsRequest {
+  string session_id = 1;
+  string run_id = 2;
+  string after_cursor = 3;
+  int32 page_size = 4;
+  RequestContext context = 5;
+}
+
+message AgentProviderGetInteractionRequest {
+  string session_id = 1;
+  string run_id = 2;
+  string interaction_id = 3;
+  RequestContext context = 4;
+}
+
+message AgentProviderListInteractionsRequest {
+  string session_id = 1;
+  string run_id = 2;
+  AgentInteractionState state = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+  RequestContext context = 6;
+}
+
+message AgentProviderResolveInteractionRequest {
+  string session_id = 1;
+  string run_id = 2;
+  string interaction_id = 3;
+  string idempotency_key = 4;
+  AgentInteractionResolution resolution = 5;
+  RequestContext context = 6;
+}
+
+message AgentProviderContractCapabilities {
+  int32 protocol_version = 1;
+  bool tools = 2;
+  bool skills = 3;
+  bool interactions = 4;
+  bool structured_output = 5;
+  bool workspaces = 6;
+  bool parallel_tool_calls = 7;
+  bool reasoning_summaries = 8;
+}
+
+message GetAgentProviderContractCapabilitiesRequest {}
+
+enum AgentErrorCategory {
+  AGENT_ERROR_CATEGORY_UNSPECIFIED = 0;
+  AGENT_ERROR_CATEGORY_INVALID_ARGUMENT = 1;
+  AGENT_ERROR_CATEGORY_UNAUTHENTICATED = 2;
+  AGENT_ERROR_CATEGORY_PERMISSION_DENIED = 3;
+  AGENT_ERROR_CATEGORY_NOT_FOUND = 4;
+  AGENT_ERROR_CATEGORY_CONFLICT = 5;
+  AGENT_ERROR_CATEGORY_FAILED_PRECONDITION = 6;
+  AGENT_ERROR_CATEGORY_UNAVAILABLE = 7;
+  AGENT_ERROR_CATEGORY_DEADLINE_EXCEEDED = 8;
+}
+
+message AgentErrorDetail {
+  AgentErrorCategory category = 1;
+  string agent_id = 2;
+  string run_id = 3;
+  string interaction_id = 4;
+  string current_revision = 5;
+  string required_capability = 6;
+}
+
+// AgentService is the authenticated Gestalt control-plane API used by clients.
+service AgentService {
+  rpc CreateAgent(CreateAgentRequest) returns (AgentResource);
+  rpc GetAgent(GetAgentRequest) returns (AgentResource);
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  rpc ArchiveAgent(ArchiveAgentRequest) returns (AgentResource);
+  rpc CreateConfigRevision(CreateAgentConfigRevisionRequest) returns (AgentConfigRevision);
+
+  rpc CreateRun(CreateAgentRunRequest) returns (AgentRunResource);
+  rpc GetRun(GetAgentRunRequest) returns (AgentRunResource);
+  rpc ListRuns(ListAgentRunsRequest) returns (ListAgentRunsResponse);
+  rpc CancelRun(CancelAgentRunRequest) returns (AgentRunResource);
+  rpc ListRunEvents(ListAgentRunEventsRequest) returns (ListAgentRunEventsResponse);
+
+  rpc GetInteraction(GetAgentRunInteractionRequest) returns (AgentRunInteraction);
+  rpc ListInteractions(ListAgentRunInteractionsRequest) returns (ListAgentRunInteractionsResponse);
+  rpc ResolveInteraction(ResolveAgentRunInteractionRequest) returns (AgentRunInteraction);
+}
+
+// AgentProvider is the remote runtime contract implemented by providers.
+service AgentProvider {
+  rpc CreateSession(AgentProviderCreateSessionRequest) returns (AgentResource);
+  rpc GetSession(AgentProviderGetSessionRequest) returns (AgentResource);
+  rpc ListSessions(AgentProviderListSessionsRequest) returns (AgentProviderListSessionsResponse);
+  rpc ArchiveSession(AgentProviderArchiveSessionRequest) returns (AgentResource);
+  rpc CreateConfigRevision(AgentProviderCreateConfigRevisionRequest) returns (AgentResolvedConfigRevision);
+
+  rpc CreateRun(AgentProviderCreateRunRequest) returns (AgentRunResource);
+  rpc GetRun(AgentProviderGetRunRequest) returns (AgentRunResource);
+  rpc ListRuns(AgentProviderListRunsRequest) returns (ListAgentRunsResponse);
+  rpc CancelRun(AgentProviderCancelRunRequest) returns (AgentRunResource);
+  rpc ListRunEvents(AgentProviderListRunEventsRequest) returns (ListAgentRunEventsResponse);
+
+  rpc GetInteraction(AgentProviderGetInteractionRequest) returns (AgentRunInteraction);
+  rpc ListInteractions(AgentProviderListInteractionsRequest) returns (ListAgentRunInteractionsResponse);
+  rpc ResolveInteraction(AgentProviderResolveInteractionRequest) returns (AgentRunInteraction);
+
+  rpc GetCapabilities(GetAgentProviderContractCapabilitiesRequest) returns (AgentProviderContractCapabilities);
+}

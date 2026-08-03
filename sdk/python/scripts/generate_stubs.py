@@ -6,6 +6,7 @@ from pathlib import Path
 
 PROTO_MODULES = (
     "agent",
+    "agent_contract",
     "annotations",
     "identity",
     "authorization",

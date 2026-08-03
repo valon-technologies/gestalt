@@ -147,6 +147,110 @@ func (l *lazyAgentManager) ResolveInteraction(ctx context.Context, p *principal.
 	return target.ResolveInteraction(ctx, p, req)
 }
 
+func (l *lazyAgentManager) CreateAgent(ctx context.Context, p *principal.Principal, req *proto.CreateAgentRequest) (*proto.AgentResource, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.CreateAgent(ctx, p, req)
+}
+
+func (l *lazyAgentManager) GetAgent(ctx context.Context, p *principal.Principal, req *proto.GetAgentRequest) (*proto.AgentResource, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetAgent(ctx, p, req)
+}
+
+func (l *lazyAgentManager) ListAgents(ctx context.Context, p *principal.Principal, req *proto.ListAgentsRequest) (*proto.ListAgentsResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListAgents(ctx, p, req)
+}
+
+func (l *lazyAgentManager) ArchiveAgent(ctx context.Context, p *principal.Principal, req *proto.ArchiveAgentRequest) (*proto.AgentResource, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ArchiveAgent(ctx, p, req)
+}
+
+func (l *lazyAgentManager) CreateConfigRevision(ctx context.Context, p *principal.Principal, req *proto.CreateAgentConfigRevisionRequest) (*proto.AgentConfigRevision, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.CreateConfigRevision(ctx, p, req)
+}
+
+func (l *lazyAgentManager) CreateRun(ctx context.Context, p *principal.Principal, req *proto.CreateAgentRunRequest) (*proto.AgentRunResource, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.CreateRun(ctx, p, req)
+}
+
+func (l *lazyAgentManager) GetRun(ctx context.Context, p *principal.Principal, req *proto.GetAgentRunRequest) (*proto.AgentRunResource, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetRun(ctx, p, req)
+}
+
+func (l *lazyAgentManager) ListRuns(ctx context.Context, p *principal.Principal, req *proto.ListAgentRunsRequest) (*proto.ListAgentRunsResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListRuns(ctx, p, req)
+}
+
+func (l *lazyAgentManager) CancelRun(ctx context.Context, p *principal.Principal, req *proto.CancelAgentRunRequest) (*proto.AgentRunResource, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.CancelRun(ctx, p, req)
+}
+
+func (l *lazyAgentManager) ListRunEvents(ctx context.Context, p *principal.Principal, req *proto.ListAgentRunEventsRequest) (*proto.ListAgentRunEventsResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListRunEvents(ctx, p, req)
+}
+
+func (l *lazyAgentManager) GetRunInteraction(ctx context.Context, p *principal.Principal, req *proto.GetAgentRunInteractionRequest) (*proto.AgentRunInteraction, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetRunInteraction(ctx, p, req)
+}
+
+func (l *lazyAgentManager) ListRunInteractions(ctx context.Context, p *principal.Principal, req *proto.ListAgentRunInteractionsRequest) (*proto.ListAgentRunInteractionsResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListRunInteractions(ctx, p, req)
+}
+
+func (l *lazyAgentManager) ResolveRunInteraction(ctx context.Context, p *principal.Principal, req *proto.ResolveAgentRunInteractionRequest) (*proto.AgentRunInteraction, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ResolveRunInteraction(ctx, p, req)
+}
+
 func (l *lazyAgentManager) AuthorizeAppInvocation(ctx context.Context, req invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error) {
 	target, err := l.current()
 	if err != nil {
@@ -174,3 +278,4 @@ func (l *lazyAgentManager) current() (*agentmanager.Manager, error) {
 }
 
 var _ agentmanager.Service = (*lazyAgentManager)(nil)
+var _ agentmanager.ContractService = (*lazyAgentManager)(nil)
