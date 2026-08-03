@@ -105,6 +105,7 @@ type Server struct {
 	auditSink              core.AuditSink
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
+	connectionInstancePreferences *coredata.ConnectionInstancePreferenceService
 	managedSubjects        *coredata.ManagedSubjectService
 	agent                  bootstrap.AgentControl
 	workflowSchedules      *workflowmanager.Manager
@@ -336,6 +337,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	users := cfg.Services.Users
 	externalCredentials := cfg.Services.ExternalCredentials
+	connectionInstancePreferences := cfg.Services.ConnectionInstancePreferences
 	if core.ExternalCredentialProviderMissing(externalCredentials) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
@@ -416,8 +418,9 @@ func New(cfg Config) (*Server, error) {
 		providerKinds:          cfg.ProviderKinds,
 		auditSink:              cfg.AuditSink,
 		users:                  users,
-		externalCredentials:    externalCredentials,
-		managedSubjects:        managedSubjects,
+		externalCredentials:           externalCredentials,
+		connectionInstancePreferences: connectionInstancePreferences,
+		managedSubjects:               managedSubjects,
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		providers:              cfg.Providers,

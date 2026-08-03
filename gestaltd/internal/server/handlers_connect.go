@@ -527,6 +527,7 @@ func (s *Server) completeConnection(ctx context.Context, _ core.Provider, tm cre
 	if _, err := s.storeCredentialFromMaterial(ctx, tm); err != nil {
 		return nil, err
 	}
+	s.maybeSetDefaultInstancePreference(ctx, tm.SubjectID, tm.Integration, tm.Connection, tm.Instance)
 	return &connectionSetupResult{Status: "connected", Integration: tm.Integration}, nil
 }
 

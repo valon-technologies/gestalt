@@ -20,6 +20,7 @@ const (
 	StoreAppVersionRecoveryObservations = "app_version_recovery_observations"
 	StoreRemoteRegistrations            = "remote_registrations"
 	StoreRemoteProviders                = "remote_providers"
+	StoreConnectionInstancePreferences  = "connection_instance_preferences"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -215,6 +216,19 @@ var RemoteRegistrationsSchema = idb.ObjectStoreOptions{
 var RemoteProvidersSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_registration", KeyPath: []string{"registration_id"}},
+	},
+}
+
+var ConnectionInstancePreferencesSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_subject_connection", KeyPath: []string{"subject_id", "connection_id"}, Unique: true},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "subject_id", Type: idb.TypeString, NotNull: true},
+		{Name: "connection_id", Type: idb.TypeString, NotNull: true},
+		{Name: "instance", Type: idb.TypeString, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},
 }
 

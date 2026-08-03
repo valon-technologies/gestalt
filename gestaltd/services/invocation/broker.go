@@ -126,10 +126,11 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 }
 
 type Broker struct {
-	providers         *registry.ProviderMap[core.Provider]
-	users             UserStore
-	externalCreds     core.ExternalCredentialProvider
-	connMapper        ConnectionMapper
+	providers                     *registry.ProviderMap[core.Provider]
+	users                         UserStore
+	externalCreds                 core.ExternalCredentialProvider
+	connectionInstancePreferences ConnectionInstancePreferenceStore
+	connMapper                    ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
 	authorization     core.AuthorizationProvider
@@ -139,6 +140,15 @@ type Broker struct {
 }
 
 type BrokerOption func(*Broker)
+
+// ConnectionInstancePreferenceStore resolves a subject's preferred credential instance.
+type ConnectionInstancePreferenceStore interface {
+	PreferredInstance(ctx context.Context, subjectID, connectionID string) (string, error)
+}
+
+func WithConnectionInstancePreferences(store ConnectionInstancePreferenceStore) BrokerOption {
+	return func(b *Broker) { b.connectionInstancePreferences = store }
+}
 
 func WithConnectionMapper(m ConnectionMapper) BrokerOption {
 	return func(b *Broker) { b.connMapper = m }
@@ -1090,6 +1100,24 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 		}
 
 		connectionID := b.connectionID(providerName, target.Connection)
+		if b.connectionInstancePreferences != nil {
+			preferred, prefErr := b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
+			if prefErr != nil {
+				return nil, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
+			}
+			if preferred != "" {
+				resolved := CatalogResolutionTarget{
+					Connection: target.Connection,
+					Instance:   preferred,
+				}
+				if _, ok := seen[resolved]; !ok {
+					seen[resolved] = struct{}{}
+					expanded = append(expanded, resolved)
+				}
+				continue
+			}
+		}
+
 		credentials, listErr := b.externalCreds.ListCredentials(ctx, subjectID, connectionID)
 		if listErr != nil {
 			return nil, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
@@ -1205,6 +1233,16 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	}
 
 	connectionID := b.connectionID(providerName, connection)
+	if instance == "" && b.connectionInstancePreferences != nil {
+		preferred, prefErr := b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
+		if prefErr != nil {
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
+		}
+		if preferred != "" {
+			instance = preferred
+		}
+	}
+
 	runtimeInfo := ConnectionRuntimeInfo{}
 	if b.connectionRuntime != nil {
 		runtimeInfo, _ = b.connectionRuntime(providerName, connection)

@@ -53,6 +53,7 @@ var (
 type instanceInfo struct {
 	Name       string `json:"name"`
 	Connection string `json:"connection,omitempty"`
+	Preferred  bool   `json:"preferred,omitempty"`
 
 	credentialInvalid bool
 }
@@ -75,9 +76,10 @@ type connectionDefInfo struct {
 	HealthState      string                         `json:"healthState"`
 	Actions          []string                       `json:"actions"`
 	CredentialMode   string                         `json:"credentialMode"`
-	OwnerKind        string                         `json:"ownerKind"`
-	Instances        []instanceInfo                 `json:"instances"`
-	StatusCode       string                         `json:"statusCode,omitempty"`
+	OwnerKind         string                         `json:"ownerKind"`
+	Instances         []instanceInfo                 `json:"instances"`
+	PreferredInstance string                         `json:"preferredInstance,omitempty"`
+	StatusCode        string                         `json:"statusCode,omitempty"`
 	StatusReason     string                         `json:"statusReason,omitempty"`
 
 	connected      bool
@@ -247,7 +249,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		}
 		info.Prompts = s.appPrompts[name]
 		instances := connected[name]
-		authTypes := s.populateIntegrationSettings(&info, instances, p)
+		authTypes := s.populateIntegrationSettings(r.Context(), &info, instances, p)
 		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
 		info.ManagementPath = s.integrationManagementPath(r.Context(), p, name)
@@ -542,6 +544,16 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditErr = errors.New("failed to disconnect integration")
 		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
 		return
+	}
+
+	disconnected := matched[0]
+	if s.connectionInstancePreferences != nil {
+		connectionID := serverCredentialConnectionID(name, disconnected.connection, s.effectiveConnectionDefOrEmpty(name, disconnected.connection))
+		if pref, err := s.connectionInstancePreferences.Get(r.Context(), subjectID, connectionID); err == nil && pref != nil && pref.Instance == disconnected.credential.Qualifier {
+			if err := s.connectionInstancePreferences.Delete(r.Context(), subjectID, connectionID); err != nil {
+				slog.WarnContext(r.Context(), "failed to clear preferred instance after disconnect", "integration", name, "connection", disconnected.connection, "error", err)
+			}
+		}
 	}
 
 	auditAllowed = true

@@ -124,7 +124,7 @@ func (s *Server) implicitIntegrationStatus(integration string, prov core.Provide
 			Connected:       true,
 		}
 	default:
-		return subjectConnectionStatus(groupInstancesForConnection(instances, ""), len(authTypes) > 0, ownerKindForPrincipal(p))
+		return subjectConnectionStatus(groupInstancesForConnection(instances, ""), len(authTypes) > 0, ownerKindForPrincipal(p), "")
 	}
 }
 
@@ -270,7 +270,7 @@ func noAuthConnectionStatus() connectionStatusInfo {
 	}
 }
 
-func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKind string) connectionStatusInfo {
+func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKind string, preferredInstance string) connectionStatusInfo {
 	status := connectionStatusInfo{
 		CredentialMode: credentialModeSubject,
 		OwnerKind:      ownerKind,
@@ -280,6 +280,7 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 	}
 	invalidCount := invalidInstanceCount(instances)
 	validCount := len(instances) - invalidCount
+	preferredValid := preferredInstanceValid(instances, preferredInstance)
 	switch len(instances) {
 	case 0:
 		status.Status = connectionStatusNeedsUserConnection
@@ -289,7 +290,7 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 		}
 	default:
 		switch {
-		case invalidCount == 0 && len(instances) == 1:
+		case invalidCount == 0 && (len(instances) == 1 || preferredValid):
 			status.Status = connectionStatusReady
 			status.CredentialState = credentialStateConnected
 			status.HealthState = healthStateNotChecked
@@ -326,6 +327,33 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 		}
 	}
 	return status
+}
+
+func preferredInstanceValid(instances []instanceInfo, preferredInstance string) bool {
+	preferredInstance = strings.TrimSpace(preferredInstance)
+	if preferredInstance == "" {
+		return false
+	}
+	for _, instance := range instances {
+		if instance.Name == preferredInstance && !instance.credentialInvalid {
+			return true
+		}
+	}
+	return false
+}
+
+func markPreferredInstances(instances []instanceInfo, preferredInstance string) []instanceInfo {
+	if preferredInstance == "" || len(instances) == 0 {
+		return instances
+	}
+	out := make([]instanceInfo, len(instances))
+	for i, instance := range instances {
+		out[i] = instance
+		if instance.Name == preferredInstance {
+			out[i].Preferred = true
+		}
+	}
+	return out
 }
 
 func invalidInstanceCount(instances []instanceInfo) int {
