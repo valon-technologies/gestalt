@@ -144,7 +144,14 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 	}
 	for name, entry := range cfg.Apps {
 		name = strings.TrimSpace(name)
-		if name == "" || entry == nil || entry.Source.IsRegistry() || config.EntryBuildsLocal(entry) {
+		if name == "" || entry == nil || config.EntryBuildsLocal(entry) {
+			continue
+		}
+		// In dev mode, registry-sourced apps that are not dev-active are
+		// proxied to the remote rather than downloaded and started locally.
+		// Outside dev mode, registry apps are managed by the app runtime
+		// lifecycle and do not need remote placement.
+		if entry.Source.IsRegistry() && !cfg.Server.Dev {
 			continue
 		}
 		clients, err := remoteClientsForEntry(cfg, entry, deps)
@@ -154,9 +161,17 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		if clients.App == nil {
 			return fmt.Errorf("remote app %q: provider client is required", name)
 		}
-		spec, _, err := buildStartupProviderSpec(name, entry)
-		if err != nil {
-			return fmt.Errorf("remote app %q: %w", name, err)
+		var spec appservice.StaticProviderSpec
+		if entry.Source.IsRegistry() {
+			// Registry apps in dev mode do not have a locally resolved
+			// manifest; the remote holds the full catalog and metadata.
+			spec = appservice.StaticProviderSpec{Name: name}
+		} else {
+			var err error
+			spec, _, err = buildStartupProviderSpec(name, entry)
+			if err != nil {
+				return fmt.Errorf("remote app %q: %w", name, err)
+			}
 		}
 		client := clients.App
 		if rawConn := clients.Conn(); rawConn != nil {

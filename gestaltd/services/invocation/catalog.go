@@ -136,6 +136,10 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 			catalogSource = "static"
 			return staticOp, OperationTransport(staticOp), "", nil
 		}
+		if delegated, ok := prov.(RemoteCredentialDelegated); ok && delegated.RemoteCredentialDelegated() {
+			catalogSource = "passthrough"
+			return catalog.CatalogOperation{ID: operation}, catalog.TransportApp, "", nil
+		}
 		return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
 	}
 
