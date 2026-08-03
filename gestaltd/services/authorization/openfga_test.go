@@ -350,7 +350,21 @@ func TestOpenFGASetActiveModelUpdatesModelAndCodec(t *testing.T) {
 		model:    oldModel,
 		modelRef: &proto.AuthorizationModelRef{Id: oldModel.Id},
 		codec:    oldCodec,
+		meta:     make(map[string]*proto.Relationship),
 	}
+	metadataRelationship := &proto.Relationship{
+		SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
+		Properties: func() *structpb.Struct {
+			value, _ := structpb.NewStruct(map[string]any{"source": "existing"})
+			return value
+		}(),
+		Tuple: &proto.RelationshipTuple{
+			Resource: &proto.Resource{Type: "old-resource", Id: "old-1"},
+			Relation: "viewer",
+			Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:alice"}}},
+		},
+	}
+	provider.meta[tupleKey(metadataRelationship.Tuple)] = metadataRelationship
 	newModel := &proto.AuthorizationModel{Id: "new-model", Version: "v2", ResourceTypes: []*proto.AuthorizationModelResourceType{{Name: "new-resource"}}}
 
 	response, err := provider.SetActiveModel(t.Context(), &proto.SetActiveModelRequest{Model: newModel})
@@ -375,6 +389,9 @@ func TestOpenFGASetActiveModelUpdatesModelAndCodec(t *testing.T) {
 	}
 	if provider.codec.model.Id != "remote-model-id" {
 		t.Fatalf("active codec model id = %q, want remote OpenFGA model id", provider.codec.model.Id)
+	}
+	if got := provider.meta[tupleKey(metadataRelationship.Tuple)]; got == nil || got.GetSourceLayer() != metadataRelationship.GetSourceLayer() || got.GetProperties().GetFields()["source"].GetStringValue() != "existing" {
+		t.Fatalf("relationship metadata after SetActiveModel = %#v, want existing metadata preserved", got)
 	}
 }
 

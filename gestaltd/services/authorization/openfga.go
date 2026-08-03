@@ -289,7 +289,11 @@ func (p *openFGA) setAuthorizationState(ctx context.Context, req *proto.SetAutho
 	p.model = cloneModel(req.Model)
 	p.modelRef = ref
 	p.codec = codec
-	p.meta = make(map[string]*proto.Relationship, len(req.Relationships))
+	if replace {
+		p.meta = make(map[string]*proto.Relationship, len(req.Relationships))
+	} else if p.meta == nil {
+		p.meta = make(map[string]*proto.Relationship)
+	}
 	for _, relationship := range req.Relationships {
 		if relationship != nil && relationship.Tuple != nil {
 			copy := cloneRelationship(relationship)
