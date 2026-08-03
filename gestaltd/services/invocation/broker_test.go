@@ -953,3 +953,108 @@ func TestBrokerInvokeHeaderOverridesResolveDefaultCredential(t *testing.T) {
 		t.Fatalf("tenant header override = %q, want TENSelected", capturedTenant)
 	}
 }
+
+func TestBrokerResolveToken_UsesPreferredInstance(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("user-preferred")
+	for _, tok := range []*core.ExternalCredential{
+		{
+			ID:        "tok-a",
+			Subject:   subjectID,
+			Audience:  "slack:default",
+			Qualifier: "team-a",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-a-token"},
+		},
+		{
+			ID:        "tok-b",
+			Subject:   subjectID,
+			Audience:  "slack:default",
+			Qualifier: "team-b",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-b-token"},
+		},
+	} {
+		if err := svc.ExternalCredentials.UpsertCredential(context.Background(), tok); err != nil {
+			t.Fatalf("UpsertCredential: %v", err)
+		}
+	}
+	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, "slack:default", "team-b"); err != nil {
+		t.Fatalf("Set preference: %v", err)
+	}
+
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeSubject,
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithConnectionInstancePreferences(svc.ConnectionInstancePreferences),
+	)
+
+	_, token, err := broker.ResolveToken(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+		UserID:    "user-preferred",
+		Kind:      principal.KindUser,
+	}, "slack", "", "")
+	if err != nil {
+		t.Fatalf("ResolveToken: %v", err)
+	}
+	if token != "team-b-token" {
+		t.Fatalf("token = %q, want team-b-token", token)
+	}
+}
+
+func TestBrokerExpandCatalogTargets_UsesPreferredInstance(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("user-expand")
+	for _, tok := range []*core.ExternalCredential{
+		{
+			ID:        "tok-a",
+			Subject:   subjectID,
+			Audience:  "slack:default",
+			Qualifier: "team-a",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-a-token"},
+		},
+		{
+			ID:        "tok-b",
+			Subject:   subjectID,
+			Audience:  "slack:default",
+			Qualifier: "team-b",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-b-token"},
+		},
+	} {
+		if err := svc.ExternalCredentials.UpsertCredential(context.Background(), tok); err != nil {
+			t.Fatalf("UpsertCredential: %v", err)
+		}
+	}
+	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, "slack:default", "team-b"); err != nil {
+		t.Fatalf("Set preference: %v", err)
+	}
+
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeSubject,
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithConnectionInstancePreferences(svc.ConnectionInstancePreferences),
+	)
+
+	targets, err := broker.ExpandCatalogTargets(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+		UserID:    "user-expand",
+		Kind:      principal.KindUser,
+		Scopes:    []string{"slack"},
+	}, "slack", []CatalogResolutionTarget{{}})
+	if err != nil {
+		t.Fatalf("ExpandCatalogTargets: %v", err)
+	}
+	if len(targets) != 1 || targets[0].Instance != "team-b" {
+		t.Fatalf("targets = %+v, want single team-b target", targets)
+	}
+}
