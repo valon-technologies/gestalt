@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	openfga "github.com/openfga/go-sdk"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
@@ -50,6 +51,42 @@ func TestNewFGACodecPreservesGraphTargetsAndStableNames(t *testing.T) {
 	}
 	if got := directTypes[2].GetType(); got != codec.types["subject"] {
 		t.Fatalf("default wildcard type = %q, want encoded subject type %q", got, codec.types["subject"])
+	}
+	permission := request.TypeDefinitions[0].GetRelations()[codec.permissions["workspace.document\x00read"]]
+	computed, ok := permission.GetComputedUsersetOk()
+	if !ok {
+		t.Fatalf("read permission = %#v, want computed userset", permission)
+	}
+	if got := computed.GetObject(); got != "" {
+		t.Fatalf("computed userset object = %q, want empty same-object reference", got)
+	}
+	if got := computed.GetRelation(); got != codec.relations["workspace.document\x00viewer"] {
+		t.Fatalf("computed userset relation = %q, want encoded viewer relation %q", got, codec.relations["workspace.document\x00viewer"])
+	}
+}
+
+func TestFGAWriteBatchesRespectCombinedLimit(t *testing.T) {
+	t.Parallel()
+
+	writes := make([]openfga.TupleKey, 75)
+	deletes := make([]openfga.TupleKeyWithoutCondition, 80)
+	batches := fgaWriteBatches(writes, deletes, 100)
+	if len(batches) != 2 {
+		t.Fatalf("batches = %d, want 2", len(batches))
+	}
+	for i, batch := range batches {
+		if got := len(batch.writes) + len(batch.deletes); got > 100 {
+			t.Fatalf("batch %d contains %d operations, want at most 100", i, got)
+		}
+	}
+	if got := len(batches[0].writes); got != 75 {
+		t.Fatalf("first batch writes = %d, want 75", got)
+	}
+	if got := len(batches[0].deletes); got != 25 {
+		t.Fatalf("first batch deletes = %d, want 25", got)
+	}
+	if got := len(batches[1].deletes); got != 55 {
+		t.Fatalf("second batch deletes = %d, want 55", got)
 	}
 }
 

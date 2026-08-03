@@ -47,7 +47,6 @@ type openFGA struct {
 	modelRef *proto.AuthorizationModelRef
 	codec    *fgaCodec
 	meta     map[string]*proto.Relationship
-	legacyDB indexeddb.Database
 	legacy   []*proto.Relationship
 }
 
@@ -98,7 +97,6 @@ func NewOpenFGA(node yaml.Node, databases ...indexeddb.Database) (core.Authoriza
 		meta:    make(map[string]*proto.Relationship),
 	}
 	if len(databases) > 0 && databases[0] != nil {
-		provider.legacyDB = databases[0]
 		provider.legacy, _ = loadLegacyRelationships(context.Background(), databases[0])
 	}
 	return provider, nil
@@ -111,9 +109,6 @@ func (p *openFGA) Ping(ctx context.Context) error {
 	_, _, err := p.client.OpenFgaApi.GetStore(ctx, p.storeID).Execute()
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "openfga store health: %v", err)
-	}
-	if err := p.syncLegacyRelationships(ctx); err != nil {
-		return err
 	}
 	return nil
 }
@@ -269,6 +264,10 @@ func (p *openFGA) SetAuthorizationState(ctx context.Context, req *proto.SetAutho
 	p.model = cloneModel(req.Model)
 	p.modelRef = ref
 	p.codec = codec
+	// The legacy store is only a bootstrap input. Once the OpenFGA state is
+	// active, retaining it would allow a later fallback to resurrect deleted
+	// relationships.
+	p.legacy = nil
 	p.meta = make(map[string]*proto.Relationship, len(req.Relationships))
 	for _, relationship := range req.Relationships {
 		if relationship != nil && relationship.Tuple != nil {
@@ -421,47 +420,6 @@ func (p *openFGA) legacyRelationships(req *proto.ListRelationshipsRequest) ([]*p
 	return legacy, true
 }
 
-func (p *openFGA) syncLegacyRelationships(ctx context.Context) error {
-	p.mu.RLock()
-	db := p.legacyDB
-	codec := p.codec
-	model := p.model
-	legacy := append([]*proto.Relationship(nil), p.legacy...)
-	p.mu.RUnlock()
-	if db == nil || codec == nil || model == nil {
-		return nil
-	}
-	latest, err := loadLegacyRelationships(ctx, db)
-	if err != nil {
-		return err
-	}
-	if len(latest) == 0 {
-		latest = legacy
-	}
-	for _, relationship := range latest {
-		if relationship == nil || relationship.Tuple == nil {
-			continue
-		}
-		key, err := codec.relationshipTuple(relationship.Tuple)
-		if err != nil {
-			continue
-		}
-		duplicate := "ignore"
-		body := openfga.WriteRequest{Writes: openfga.NewWriteRequestWrites([]openfga.TupleKey{key}), AuthorizationModelId: stringPtr(codec.model.Id)}
-		body.Writes.OnDuplicate = &duplicate
-		if _, _, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(body).Execute(); err != nil {
-			return status.Errorf(codes.Unavailable, "openfga legacy relationship sync: %v", err)
-		}
-		p.mu.Lock()
-		p.meta[tupleKey(relationship.Tuple)] = cloneRelationship(relationship)
-		p.mu.Unlock()
-	}
-	p.mu.Lock()
-	p.legacy = latest
-	p.mu.Unlock()
-	return nil
-}
-
 func (p *openFGA) readAllTuples(ctx context.Context, filter *openfga.ReadRequestTupleKey) ([]openfga.Tuple, error) {
 	var tuples []openfga.Tuple
 	continuation := ""
@@ -512,18 +470,16 @@ func (p *openFGA) replaceTuples(ctx context.Context, codec *fgaCodec, relationsh
 	for _, key := range desired {
 		keys = append(keys, key)
 	}
-	for start := 0; start < len(keys) || start < len(deletes); start += 100 {
-		endWrites := minInt(start+100, len(keys))
-		endDeletes := minInt(start+100, len(deletes))
+	for _, batch := range fgaWriteBatches(keys, deletes, 100) {
 		body := openfga.WriteRequest{AuthorizationModelId: stringPtr(codec.model.Id)}
-		if start < len(keys) {
+		if len(batch.writes) > 0 {
 			duplicate := "ignore"
-			body.Writes = openfga.NewWriteRequestWrites(keys[start:endWrites])
+			body.Writes = openfga.NewWriteRequestWrites(batch.writes)
 			body.Writes.OnDuplicate = &duplicate
 		}
-		if start < len(deletes) {
+		if len(batch.deletes) > 0 {
 			missing := "ignore"
-			body.Deletes = openfga.NewWriteRequestDeletes(deletes[start:endDeletes])
+			body.Deletes = openfga.NewWriteRequestDeletes(batch.deletes)
 			body.Deletes.OnMissing = &missing
 		}
 		if _, _, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(body).Execute(); err != nil {
@@ -531,6 +487,31 @@ func (p *openFGA) replaceTuples(ctx context.Context, codec *fgaCodec, relationsh
 		}
 	}
 	return nil
+}
+
+type fgaWriteBatch struct {
+	writes  []openfga.TupleKey
+	deletes []openfga.TupleKeyWithoutCondition
+}
+
+func fgaWriteBatches(writes []openfga.TupleKey, deletes []openfga.TupleKeyWithoutCondition, limit int) []fgaWriteBatch {
+	if limit <= 0 {
+		return nil
+	}
+	batches := make([]fgaWriteBatch, 0, (len(writes)+len(deletes)+limit-1)/limit)
+	writeIndex, deleteIndex := 0, 0
+	for writeIndex < len(writes) || deleteIndex < len(deletes) {
+		remaining := limit
+		writeEnd := minInt(writeIndex+remaining, len(writes))
+		remaining -= writeEnd - writeIndex
+		deleteEnd := minInt(deleteIndex+remaining, len(deletes))
+		batches = append(batches, fgaWriteBatch{
+			writes:  writes[writeIndex:writeEnd],
+			deletes: deletes[deleteIndex:deleteEnd],
+		})
+		writeIndex, deleteIndex = writeEnd, deleteEnd
+	}
+	return batches
 }
 
 func newFGACodec(model *proto.AuthorizationModel) (*fgaCodec, error) {
@@ -633,8 +614,9 @@ func (c *fgaCodec) modelRequest() (openfga.WriteAuthorizationModelRequest, error
 				if role == "" {
 					continue
 				}
-				object := c.types[resourceType.Name]
-				children = append(children, openfga.Userset{ComputedUserset: &openfga.ObjectRelation{Object: &object, Relation: &role}})
+				// A computed userset is evaluated on the current object. OpenFGA's
+				// model language requires the object field to be omitted here.
+				children = append(children, openfga.Userset{ComputedUserset: &openfga.ObjectRelation{Relation: &role}})
 			}
 			if len(children) == 1 {
 				relations[c.permissions[resourceType.Name+"\x00"+action.Name]] = children[0]
