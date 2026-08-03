@@ -98,7 +98,10 @@ func (p *openFGA) Ping(ctx context.Context) error {
 	if p == nil || p.client == nil {
 		return status.Error(codes.FailedPrecondition, "openfga authorization is not configured")
 	}
-	_, _, err := p.client.OpenFgaApi.GetStore(ctx, p.storeID).Execute()
+	_, httpResponse, err := p.client.OpenFgaApi.GetStore(ctx, p.storeID).Execute()
+	if httpResponse != nil && httpResponse.Body != nil {
+		_ = httpResponse.Body.Close()
+	}
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "openfga store health: %v", err)
 	}
@@ -153,7 +156,10 @@ func (p *openFGA) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest
 			check.SetContextualTuples(openfga.ContextualTupleKeys{TupleKeys: []openfga.TupleKey{*wildcard}})
 		}
 	}
-	response, _, err := p.client.OpenFgaApi.Check(ctx, p.storeID).Body(*check).Execute()
+	response, httpResponse, err := p.client.OpenFgaApi.Check(ctx, p.storeID).Body(*check).Execute()
+	if httpResponse != nil && httpResponse.Body != nil {
+		_ = httpResponse.Body.Close()
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "openfga check: %v", err)
 	}
@@ -192,7 +198,11 @@ func (p *openFGA) AddRelationship(ctx context.Context, req *proto.AddRelationshi
 	duplicate := "ignore"
 	writes := openfga.WriteRequest{Writes: openfga.NewWriteRequestWrites([]openfga.TupleKey{key}), AuthorizationModelId: stringPtr(codec.model.Id)}
 	writes.Writes.OnDuplicate = &duplicate
-	if _, _, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(writes).Execute(); err != nil {
+	_, httpResponse, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(writes).Execute()
+	if httpResponse != nil && httpResponse.Body != nil {
+		_ = httpResponse.Body.Close()
+	}
+	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "openfga relationship write: %v", err)
 	}
 	copy := cloneRelationship(req.Relationship)
@@ -222,7 +232,11 @@ func (p *openFGA) DeleteRelationship(ctx context.Context, req *proto.DeleteRelat
 	missing := "ignore"
 	deletes := openfga.WriteRequest{Deletes: openfga.NewWriteRequestDeletes([]openfga.TupleKeyWithoutCondition{{User: key.User, Relation: key.Relation, Object: key.Object}}), AuthorizationModelId: stringPtr(codec.model.Id)}
 	deletes.Deletes.OnMissing = &missing
-	if _, _, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(deletes).Execute(); err != nil {
+	_, httpResponse, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(deletes).Execute()
+	if httpResponse != nil && httpResponse.Body != nil {
+		_ = httpResponse.Body.Close()
+	}
+	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "openfga relationship delete: %v", err)
 	}
 	p.mu.Lock()
@@ -259,7 +273,10 @@ func (p *openFGA) setAuthorizationState(ctx context.Context, req *proto.SetAutho
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "compile openfga model: %v", err)
 	}
-	modelResponse, _, err := p.client.OpenFgaApi.WriteAuthorizationModel(ctx, p.storeID).Body(modelRequest).Execute()
+	modelResponse, httpResponse, err := p.client.OpenFgaApi.WriteAuthorizationModel(ctx, p.storeID).Body(modelRequest).Execute()
+	if httpResponse != nil && httpResponse.Body != nil {
+		_ = httpResponse.Body.Close()
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "openfga write authorization model: %v", err)
 	}
@@ -415,7 +432,10 @@ func (p *openFGA) readAllTuples(ctx context.Context, filter *openfga.ReadRequest
 		if continuation != "" {
 			request.ContinuationToken = stringPtr(continuation)
 		}
-		response, _, err := p.client.OpenFgaApi.Read(ctx, p.storeID).Body(request).Execute()
+		response, httpResponse, err := p.client.OpenFgaApi.Read(ctx, p.storeID).Body(request).Execute()
+		if httpResponse != nil && httpResponse.Body != nil {
+			_ = httpResponse.Body.Close()
+		}
 		if err != nil {
 			return nil, status.Errorf(codes.Unavailable, "openfga read relationships: %v", err)
 		}
@@ -468,7 +488,11 @@ func (p *openFGA) writeAuthorizationRelationships(ctx context.Context, codec *fg
 			body.Deletes = openfga.NewWriteRequestDeletes(batch.deletes)
 			body.Deletes.OnMissing = &missing
 		}
-		if _, _, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(body).Execute(); err != nil {
+		_, httpResponse, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(body).Execute()
+		if httpResponse != nil && httpResponse.Body != nil {
+			_ = httpResponse.Body.Close()
+		}
+		if err != nil {
 			return status.Errorf(codes.Unavailable, "openfga write relationships: %v", err)
 		}
 	}
