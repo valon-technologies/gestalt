@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	openfga "github.com/openfga/go-sdk"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestBootstrapAuthorizationStateOnlyWritesConfiguredRelationships(t *testing.T) {
@@ -112,11 +114,14 @@ func TestNewFGACodecPreservesGraphTargetsAndStableNames(t *testing.T) {
 	metadata := request.TypeDefinitions[0].GetMetadata()
 	viewer := metadata.GetRelations()[codec.relations["workspace.document\x00viewer"]]
 	directTypes := viewer.GetDirectlyRelatedUserTypes()
+	if len(directTypes) != 2 {
+		t.Fatalf("viewer direct types = %#v, want configured subject and group types only", directTypes)
+	}
+	if got := directTypes[0].GetType(); got != codec.types["subject"] {
+		t.Fatalf("subject relation type = %q, want encoded subject type %q", got, codec.types["subject"])
+	}
 	if got := directTypes[1].GetType(); got != codec.types["group"] {
 		t.Fatalf("subject-set relation type = %q, want encoded group type %q", got, codec.types["group"])
-	}
-	if got := directTypes[2].GetType(); got != codec.types["subject"] {
-		t.Fatalf("default wildcard type = %q, want encoded subject type %q", got, codec.types["subject"])
 	}
 	permission := request.TypeDefinitions[0].GetRelations()[codec.permissions["workspace.document\x00read"]]
 	computed, ok := permission.GetComputedUsersetOk()
@@ -128,6 +133,168 @@ func TestNewFGACodecPreservesGraphTargetsAndStableNames(t *testing.T) {
 	}
 	if got := computed.GetRelation(); got != codec.relations["workspace.document\x00viewer"] {
 		t.Fatalf("computed userset relation = %q, want encoded viewer relation %q", got, codec.relations["workspace.document\x00viewer"])
+	}
+}
+
+func TestOpenFGADefaultRoleCompatibility(t *testing.T) {
+	var checkRequests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		checkRequests++
+		if r.URL.Path != "/stores/test-store/check" {
+			http.Error(w, "unexpected request", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"allowed":false}`))
+	}))
+	t.Cleanup(server.Close)
+
+	clientConfig, err := openfga.NewConfiguration(openfga.Configuration{ApiUrl: server.URL})
+	if err != nil {
+		t.Fatalf("NewConfiguration: %v", err)
+	}
+	model := &proto.AuthorizationModel{Id: "model-id", ResourceTypes: []*proto.AuthorizationModelResourceType{{
+		Name:        "document",
+		DefaultRole: "viewer",
+		Relations: []*proto.ModelRelation{
+			{Name: "viewer", AllowedTargets: []*proto.ModelAllowedTarget{{Kind: &proto.ModelAllowedTarget_SubjectType{SubjectType: "subject"}}}},
+			{Name: "editor", AllowedTargets: []*proto.ModelAllowedTarget{{Kind: &proto.ModelAllowedTarget_SubjectType{SubjectType: "subject"}}}},
+		},
+		Actions: []*proto.ModelAction{
+			{Name: "read", Relations: []string{"viewer"}},
+			{Name: "edit", Relations: []string{"editor"}},
+		},
+	}}}
+	codec, err := newFGACodec(model)
+	if err != nil {
+		t.Fatalf("newFGACodec: %v", err)
+	}
+	provider := &openFGA{
+		client:   openfga.NewAPIClient(clientConfig),
+		storeID:  "test-store",
+		model:    model,
+		modelRef: &proto.AuthorizationModelRef{Id: "model-id"},
+		codec:    codec,
+		meta:     make(map[string]*proto.Relationship),
+	}
+	request := func(action string, subject *proto.Subject) *proto.CheckAccessRequest {
+		return &proto.CheckAccessRequest{
+			Subject:  subject,
+			Resource: &proto.Resource{Type: "document", Id: "doc-1"},
+			Action:   &proto.Action{Name: action},
+		}
+	}
+	subject := &proto.Subject{Type: "subject", Id: "user:alice"}
+
+	allowed, err := provider.CheckAccess(t.Context(), request("read", subject))
+	if err != nil {
+		t.Fatalf("default-role CheckAccess: %v", err)
+	}
+	if !allowed.GetAllowed() {
+		t.Fatal("default-role action denied, want allowed")
+	}
+	if checkRequests != 0 {
+		t.Fatalf("default-role action made %d OpenFGA checks, want 0", checkRequests)
+	}
+
+	denied, err := provider.CheckAccess(t.Context(), request("edit", subject))
+	if err != nil {
+		t.Fatalf("non-default-role CheckAccess: %v", err)
+	}
+	if denied.GetAllowed() {
+		t.Fatal("action excluding defaultRole allowed, want denied")
+	}
+	if checkRequests != 1 {
+		t.Fatalf("non-default-role action made %d OpenFGA checks, want 1", checkRequests)
+	}
+
+	scopedSubject := &proto.Subject{Type: "subject", Id: "user:alice", Properties: func() *structpb.Struct {
+		value, err := structpb.NewStruct(map[string]any{"scope": "other:operation"})
+		if err != nil {
+			t.Fatalf("NewStruct: %v", err)
+		}
+		return value
+	}()}
+	scopeDenied, err := provider.CheckAccess(t.Context(), request("read", scopedSubject))
+	if err != nil {
+		t.Fatalf("scoped default-role CheckAccess: %v", err)
+	}
+	if scopeDenied.GetAllowed() {
+		t.Fatal("scope-denied default-role action allowed, want denied")
+	}
+	if checkRequests != 1 {
+		t.Fatalf("scope-denied action made %d OpenFGA checks, want 1", checkRequests)
+	}
+}
+
+func TestOpenFGAListActiveModelResourceTypesFiltersSourceLayerBeforePagination(t *testing.T) {
+	model := &proto.AuthorizationModel{Id: "model-id", ResourceTypes: []*proto.AuthorizationModelResourceType{
+		{Name: "static-alpha", SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG},
+		{Name: "runtime-alpha", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME},
+		{Name: "static-beta", SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG},
+		{Name: "runtime-beta", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME},
+	}}
+	provider := &openFGA{model: model}
+
+	tests := []struct {
+		name      string
+		filter    *proto.AuthorizationModelResourceTypeFilter
+		pageSize  int32
+		pageToken string
+		wantNames []string
+		wantNext  string
+	}{
+		{
+			name:      "static-only",
+			filter:    &proto.AuthorizationModelResourceTypeFilter{SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG},
+			wantNames: []string{"static-alpha", "static-beta"},
+		},
+		{
+			name:      "runtime-only",
+			filter:    &proto.AuthorizationModelResourceTypeFilter{SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME},
+			wantNames: []string{"runtime-alpha", "runtime-beta"},
+		},
+		{
+			name:      "combined-name-and-layer",
+			filter:    &proto.AuthorizationModelResourceTypeFilter{Name: "runtime-beta", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME},
+			wantNames: []string{"runtime-beta"},
+		},
+		{
+			name:      "pagination-after-filtering",
+			filter:    &proto.AuthorizationModelResourceTypeFilter{SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG},
+			pageSize:  1,
+			wantNames: []string{"static-alpha"},
+			wantNext:  "1",
+		},
+		{
+			name:      "pagination-second-page",
+			filter:    &proto.AuthorizationModelResourceTypeFilter{SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG},
+			pageSize:  1,
+			pageToken: "1",
+			wantNames: []string{"static-beta"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response, err := provider.ListActiveModelResourceTypes(t.Context(), &proto.ListActiveModelResourceTypesRequest{
+				Filter:    test.filter,
+				PageSize:  test.pageSize,
+				PageToken: test.pageToken,
+			})
+			if err != nil {
+				t.Fatalf("ListActiveModelResourceTypes: %v", err)
+			}
+			gotNames := make([]string, 0, len(response.ResourceTypes))
+			for _, resourceType := range response.ResourceTypes {
+				gotNames = append(gotNames, resourceType.GetName())
+			}
+			if !reflect.DeepEqual(gotNames, test.wantNames) {
+				t.Fatalf("resource types = %#v, want %#v", gotNames, test.wantNames)
+			}
+			if response.NextPageToken != test.wantNext {
+				t.Fatalf("next page token = %q, want %q", response.NextPageToken, test.wantNext)
+			}
+		})
 	}
 }
 

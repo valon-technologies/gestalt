@@ -143,19 +143,19 @@ func (p *openFGA) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest
 	if permission == "" {
 		return &proto.CheckAccessResponse{Allowed: false, ModelId: modelID}, nil
 	}
+	// Match the IndexedDB provider's compatibility contract: DefaultRole is
+	// an implicit grant for actions that include it. Scope and action checks
+	// above still apply, so a scoped subject can deny the request before this
+	// compatibility grant is considered.
+	if defaultRole := strings.TrimSpace(resourceType.DefaultRole); defaultRole != "" && contains(action.Relations, defaultRole) {
+		return &proto.CheckAccessResponse{Allowed: true, ModelId: modelID}, nil
+	}
 	key, err := codec.checkTuple(req.Subject, permission, req.Resource)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "authorization check: %v", err)
 	}
 	check := openfga.NewCheckRequest(*openfga.NewCheckRequestTupleKey(key.User, key.Relation, key.Object))
 	check.SetAuthorizationModelId(codec.model.Id)
-	if defaultRole := strings.TrimSpace(resourceType.DefaultRole); defaultRole != "" && contains(action.Relations, defaultRole) {
-		role := codec.relations[resourceType.Name+"\x00"+defaultRole]
-		if role != "" {
-			wildcard := openfga.NewTupleKey(codec.subjectWildcard(req.Subject.Type), role, key.Object)
-			check.SetContextualTuples(openfga.ContextualTupleKeys{TupleKeys: []openfga.TupleKey{*wildcard}})
-		}
-	}
 	response, httpResponse, err := p.client.OpenFgaApi.Check(ctx, p.storeID).Body(*check).Execute()
 	if httpResponse != nil && httpResponse.Body != nil {
 		_ = httpResponse.Body.Close()
@@ -329,11 +329,13 @@ func (p *openFGA) ListActiveModelResourceTypes(_ context.Context, req *proto.Lis
 		return nil, status.Error(codes.NotFound, "active authorization model is not set")
 	}
 	name := ""
+	sourceLayer := proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED
 	pageSize := 100
 	pageToken := 0
 	if req != nil {
 		if req.Filter != nil {
 			name = strings.TrimSpace(req.Filter.Name)
+			sourceLayer = req.Filter.SourceLayer
 		}
 		if req.PageSize > 0 {
 			pageSize = int(req.PageSize)
@@ -348,9 +350,16 @@ func (p *openFGA) ListActiveModelResourceTypes(_ context.Context, req *proto.Lis
 	}
 	items := make([]*proto.AuthorizationModelResourceType, 0, len(p.model.ResourceTypes))
 	for _, item := range p.model.ResourceTypes {
-		if name == "" || item.GetName() == name {
-			items = append(items, item)
+		if item == nil {
+			continue
 		}
+		if name != "" && item.GetName() != name {
+			continue
+		}
+		if sourceLayer != proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED && item.GetSourceLayer() != sourceLayer {
+			continue
+		}
+		items = append(items, item)
 	}
 	if pageToken > len(items) {
 		pageToken = len(items)
@@ -607,9 +616,6 @@ func (c *fgaCodec) modelRequest() (openfga.WriteAuthorizationModelRequest, error
 					refs = append(refs, openfga.RelationReference{Type: c.types[set.ResourceType], Relation: stringPtr(relationName)})
 				}
 			}
-			if strings.TrimSpace(resourceType.DefaultRole) == strings.TrimSpace(relation.Name) {
-				refs = append(refs, openfga.RelationReference{Type: c.types["subject"], Wildcard: &map[string]interface{}{}})
-			}
 			direct := map[string]interface{}{}
 			relations[c.relations[resourceType.Name+"\x00"+relation.Name]] = openfga.Userset{This: &direct}
 			metadata[c.relations[resourceType.Name+"\x00"+relation.Name]] = openfga.RelationMetadata{DirectlyRelatedUserTypes: &refs}
@@ -703,10 +709,6 @@ func (c *fgaCodec) targetUser(target *proto.RelationshipTarget) (string, error) 
 
 func (c *fgaCodec) subjectUser(subject *proto.Subject) string {
 	return c.types[subject.Type] + ":" + subject.Id
-}
-
-func (c *fgaCodec) subjectWildcard(subjectType string) string {
-	return c.types[subjectType] + ":*"
 }
 
 func (c *fgaCodec) readFilter(filter *proto.RelationshipFilter) *openfga.ReadRequestTupleKey {
