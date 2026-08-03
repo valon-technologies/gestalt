@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -751,24 +752,26 @@ func TestInvokeFrameToProtoDataOnlyYieldsOneFrame(t *testing.T) {
 func TestAppStreamErrorMapsAllInvocationErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		err      error
-		wantCode codes.Code
+		name        string
+		err         error
+		wantCode    codes.Code
+		wantMessage string
 	}{
-		{"provider not found", invocation.ErrProviderNotFound, codes.NotFound},
-		{"operation not found", invocation.ErrOperationNotFound, codes.NotFound},
-		{"not authenticated", invocation.ErrNotAuthenticated, codes.Unauthenticated},
-		{"authorization denied", invocation.ErrAuthorizationDenied, codes.PermissionDenied},
-		{"scope denied", invocation.ErrScopeDenied, codes.PermissionDenied},
-		{"no credential", invocation.ErrNoCredential, codes.FailedPrecondition},
-		{"reconnect required", invocation.ErrReconnectRequired, codes.FailedPrecondition},
-		{"invalid invocation", invocation.ErrInvalidInvocation, codes.InvalidArgument},
-		{"streaming unsupported", invocation.ErrStreamingUnsupported, codes.FailedPrecondition},
-		{"ambiguous instance", invocation.ErrAmbiguousInstance, codes.Aborted},
-		{"max depth", &invocation.MaxDepthError{Depth: 5, Max: 4}, codes.ResourceExhausted},
-		{"rate limit", &invocation.RateLimitError{Provider: "foo"}, codes.ResourceExhausted},
-		{"recursion", &invocation.RecursionError{Provider: "foo", Operation: "bar"}, codes.FailedPrecondition},
-		{"unknown", assertErr("unknown"), codes.Internal},
+		{"provider not found", invocation.ErrProviderNotFound, codes.NotFound, ""},
+		{"operation not found", invocation.ErrOperationNotFound, codes.NotFound, ""},
+		{"not authenticated", invocation.ErrNotAuthenticated, codes.Unauthenticated, ""},
+		{"authorization denied", invocation.ErrAuthorizationDenied, codes.PermissionDenied, ""},
+		{"scope denied", invocation.ErrScopeDenied, codes.PermissionDenied, ""},
+		{"no credential", invocation.ErrNoCredential, codes.FailedPrecondition, ""},
+		{"reconnect required", invocation.ErrReconnectRequired, codes.FailedPrecondition, ""},
+		{"invalid invocation", invocation.ErrInvalidInvocation, codes.InvalidArgument, ""},
+		{"streaming unsupported", invocation.ErrStreamingUnsupported, codes.FailedPrecondition, ""},
+		{"ambiguous instance", invocation.ErrAmbiguousInstance, codes.Aborted, ""},
+		{"max depth", &invocation.MaxDepthError{Depth: 5, Max: 4}, codes.ResourceExhausted, ""},
+		{"rate limit", &invocation.RateLimitError{Provider: "foo"}, codes.ResourceExhausted, ""},
+		{"recursion", &invocation.RecursionError{Provider: "foo", Operation: "bar"}, codes.FailedPrecondition, ""},
+		{"unknown", assertErr("unknown"), codes.Unknown, "app invocation failed: unknown"},
+		{"grpc status", status.Error(codes.Unavailable, "upstream unavailable"), codes.Unavailable, "upstream unavailable"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -780,7 +783,47 @@ func TestAppStreamErrorMapsAllInvocationErrors(t *testing.T) {
 			if st.Code() != tc.wantCode {
 				t.Fatalf("got code %s, want %s", st.Code(), tc.wantCode)
 			}
+			if tc.wantMessage != "" && st.Message() != tc.wantMessage {
+				t.Fatalf("got message %q, want %q", st.Message(), tc.wantMessage)
+			}
 		})
+	}
+}
+
+func TestAppOperationResultPreservesGRPCStatusAndUsesAppWording(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		code    codes.Code
+		message string
+	}{
+		{name: "invalid argument", code: codes.InvalidArgument, message: "context is server-filled"},
+		{name: "internal", code: codes.Internal, message: "upstream exploded"},
+		{name: "unavailable", code: codes.Unavailable, message: "upstream unavailable"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := appOperationResult(nil, status.Error(tc.code, tc.message))
+			if status.Code(err) != tc.code || status.Convert(err).Message() != tc.message {
+				t.Fatalf("error = %v, want %s %q", err, tc.code, tc.message)
+			}
+		})
+	}
+
+	_, err := appOperationResult(nil, assertErr("ordinary failure"))
+	if status.Code(err) != codes.Unknown || !strings.Contains(err.Error(), "app invocation failed: ordinary failure") {
+		t.Fatalf("ordinary error = %v, want Unknown app-invocation wording", err)
+	}
+
+	_, err = appOperationResult(nil, invocation.ErrOperationNotFound)
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("typed invocation error code = %s, want NotFound", status.Code(err))
+	}
+	_, err = appOperationResult(nil, nil)
+	if status.Code(err) != codes.Internal || status.Convert(err).Message() != "app invocation returned no result" {
+		t.Fatalf("nil result error = %v, want app wording", err)
 	}
 }
 

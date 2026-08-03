@@ -285,7 +285,7 @@ func registryAppStartup(cfg *config.Config, result *bootstrap.Result, reader *ap
 		slices.Sort(names)
 		for _, appName := range names {
 			entry := cfg.Apps[appName]
-			if entry == nil || !entry.Source.IsRegistry() {
+			if entry == nil || !entry.Source.IsRegistry() || !config.EntryBuildsLocal(entry) {
 				continue
 			}
 			known, err := result.Services.AppVersionChangeRequests.ListKnownVersionsByApp(ctx, appName)

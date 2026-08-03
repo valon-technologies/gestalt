@@ -567,6 +567,10 @@ func NewGestaltRemote(client proto.AppClient, spec StaticProviderSpec) core.Prov
 
 func (p *gestaltRemoteProvider) RemoteCredentialDelegated() bool { return true }
 
+func (p *gestaltRemoteProvider) ResolveStaticOperationForRequest(_ context.Context, operation string) (catalog.CatalogOperation, bool) {
+	return catalog.OperationByID(p.spec.Catalog, strings.TrimSpace(operation))
+}
+
 func (p *gestaltRemoteProvider) Execute(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
 	paramsStruct, err := protoutil.StructFromMap(params)
 	if err != nil {
@@ -588,6 +592,9 @@ func (p *gestaltRemoteProvider) Execute(ctx context.Context, operation string, p
 }
 
 func (p *gestaltRemoteProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, _ string) (*core.OperationResult, error) {
+	if !p.graphQLAllowed() {
+		return nil, fmt.Errorf("%w: %s.graphql", invocation.ErrOperationNotFound, p.spec.Name)
+	}
 	variables, err := protoutil.StructFromMap(request.Variables)
 	if err != nil {
 		return nil, err
@@ -605,6 +612,14 @@ func (p *gestaltRemoteProvider) InvokeGraphQL(ctx context.Context, request core.
 		return nil, remoteProviderExecuteError(err)
 	}
 	return remoteOperationResult(resp), nil
+}
+
+func (p *gestaltRemoteProvider) graphQLAllowed() bool {
+	if _, ok := catalog.OperationByID(p.spec.Catalog, "graphql"); ok {
+		return true
+	}
+	_, ok := catalog.OperationByID(p.spec.Catalog, "graphql.execute")
+	return ok
 }
 
 func remoteAppInvokeSelectors(ctx context.Context) (connection, instance string) {

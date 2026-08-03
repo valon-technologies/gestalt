@@ -147,10 +147,6 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		if name == "" || entry == nil || config.EntryBuildsLocal(entry) {
 			continue
 		}
-		// In dev mode, registry-sourced apps that are not dev-active are
-		// proxied to the remote rather than downloaded and started locally.
-		// Outside dev mode, registry apps are managed by the app runtime
-		// lifecycle and do not need remote placement.
 		if entry.Source.IsRegistry() && !cfg.Server.Dev {
 			continue
 		}
@@ -163,9 +159,11 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		}
 		var spec appservice.StaticProviderSpec
 		if entry.Source.IsRegistry() {
-			// Registry apps in dev mode do not have a locally resolved
-			// manifest; the remote holds the full catalog and metadata.
-			spec = appservice.StaticProviderSpec{Name: name}
+			catalog, err := buildRemoteRegistryCatalog(name, entry.AllowedOperations)
+			if err != nil {
+				return err
+			}
+			spec = appservice.StaticProviderSpec{Name: name, Catalog: catalog}
 		} else {
 			var err error
 			spec, _, err = buildStartupProviderSpec(name, entry)
@@ -192,6 +190,38 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		slog.Debug("registered remote app provider", "provider", name, "remote", config.EntryPlacementRemote(entry))
 	}
 	return nil
+}
+
+func buildRemoteRegistryCatalog(appName string, allowedOperations map[string]*config.OperationOverride) (*catalog.Catalog, error) {
+	appName = strings.TrimSpace(appName)
+	keys := slices.Sorted(maps.Keys(allowedOperations))
+	normalizedKeys := make(map[string]string, len(keys))
+	for _, rawKey := range keys {
+		operationID := strings.TrimSpace(rawKey)
+		if operationID == "" {
+			return nil, fmt.Errorf("remote app %q allowedOperations key %q is blank", appName, rawKey)
+		}
+		operation := &catalog.Catalog{
+			Name: appName,
+			Operations: []catalog.CatalogOperation{{
+				ID:        operationID,
+				Transport: catalog.TransportApp,
+			}},
+		}
+		if err := operation.Validate(); err != nil {
+			return nil, fmt.Errorf("remote app %q allowedOperations key %q: %w", appName, rawKey, err)
+		}
+		if previous, exists := normalizedKeys[operationID]; exists {
+			return nil, fmt.Errorf("remote app %q allowedOperations key %q normalizes to duplicate operation %q from key %q", appName, rawKey, operationID, previous)
+		}
+		normalizedKeys[operationID] = rawKey
+	}
+	operationIDs := slices.Sorted(maps.Keys(normalizedKeys))
+	operations := make([]catalog.CatalogOperation, 0, len(operationIDs))
+	for _, operationID := range operationIDs {
+		operations = append(operations, catalog.CatalogOperation{ID: operationID, Transport: catalog.TransportApp})
+	}
+	return &catalog.Catalog{Name: appName, Operations: operations}, nil
 }
 
 func (b *preparedProviderBuilds) partition(categorize func(string, *config.ProviderEntry) AppStartupCategory) (noop, update *preparedProviderBuilds) {
