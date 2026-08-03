@@ -137,6 +137,8 @@ func TestNewFGACodecPreservesGraphTargetsAndStableNames(t *testing.T) {
 }
 
 func TestOpenFGADefaultRoleCompatibility(t *testing.T) {
+	t.Parallel()
+
 	var checkRequests int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checkRequests++
@@ -228,6 +230,8 @@ func TestOpenFGADefaultRoleCompatibility(t *testing.T) {
 }
 
 func TestOpenFGAListActiveModelResourceTypesFiltersSourceLayerBeforePagination(t *testing.T) {
+	t.Parallel()
+
 	model := &proto.AuthorizationModel{Id: "model-id", ResourceTypes: []*proto.AuthorizationModelResourceType{
 		{Name: "static-alpha", SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG},
 		{Name: "runtime-alpha", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME},
@@ -275,7 +279,10 @@ func TestOpenFGAListActiveModelResourceTypesFiltersSourceLayerBeforePagination(t
 		},
 	}
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			response, err := provider.ListActiveModelResourceTypes(t.Context(), &proto.ListActiveModelResourceTypesRequest{
 				Filter:    test.filter,
 				PageSize:  test.pageSize,
