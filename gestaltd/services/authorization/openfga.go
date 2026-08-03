@@ -1064,21 +1064,14 @@ func cloneRelationship(in *proto.Relationship) *proto.Relationship {
 	if in == nil {
 		return nil
 	}
-	out := *in
-	if in.Tuple != nil {
-		tuple := *in.Tuple
-		out.Tuple = &tuple
-	}
-	return &out
+	return gproto.Clone(in).(*proto.Relationship)
 }
 
 func cloneModel(in *proto.AuthorizationModel) *proto.AuthorizationModel {
 	if in == nil {
 		return nil
 	}
-	model := *in
-	model.ResourceTypes = append([]*proto.AuthorizationModelResourceType(nil), in.ResourceTypes...)
-	return &model
+	return gproto.Clone(in).(*proto.AuthorizationModel)
 }
 
 func cloneModelRef(in *proto.AuthorizationModelRef) *proto.AuthorizationModelRef {
@@ -1096,8 +1089,7 @@ func cloneResourceType(in *proto.AuthorizationModelResourceType) *proto.Authoriz
 	if in == nil {
 		return nil
 	}
-	out := *in
-	return &out
+	return gproto.Clone(in).(*proto.AuthorizationModelResourceType)
 }
 
 func stringPtr(value string) *string { return &value }
