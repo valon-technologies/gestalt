@@ -87,16 +87,28 @@ type appAdminRollout struct {
 }
 
 type appAdminFleetState struct {
-	State                   string `json:"state"`
-	SourceVersion           string `json:"sourceVersion,omitempty"`
-	DesiredVersion          string `json:"desiredVersion,omitempty"`
-	MinimumHealthyInstances int    `json:"minimumHealthyInstances"`
-	LiveInstances           int    `json:"liveInstances"`
-	RunningDesiredVersion   int    `json:"runningDesiredVersion"`
-	Mismatched              int    `json:"mismatched"`
-	Errors                  int    `json:"errors"`
-	HeartbeatTTLSeconds     int64  `json:"heartbeatTtlSeconds"`
-	EvaluatedAt             string `json:"evaluatedAt"`
+	State                   string                 `json:"state"`
+	SourceVersion           string                 `json:"sourceVersion,omitempty"`
+	DesiredVersion          string                 `json:"desiredVersion,omitempty"`
+	MinimumHealthyInstances int                    `json:"minimumHealthyInstances"`
+	LiveInstances           int                    `json:"liveInstances"`
+	RunningDesiredVersion   int                    `json:"runningDesiredVersion"`
+	Mismatched              int                    `json:"mismatched"`
+	Errors                  int                    `json:"errors"`
+	HeartbeatTTLSeconds     int64                  `json:"heartbeatTtlSeconds"`
+	EvaluatedAt             string                 `json:"evaluatedAt"`
+	Replicas                []appAdminFleetReplica `json:"replicas,omitempty"`
+}
+
+type appAdminFleetReplica struct {
+	InstanceID             string `json:"instanceId"`
+	StartedAt              string `json:"startedAt,omitempty"`
+	HeartbeatAt            string `json:"heartbeatAt"`
+	AppState               string `json:"appState"`
+	RunningVersion         string `json:"runningVersion,omitempty"`
+	ObservedDesiredVersion string `json:"observedDesiredVersion,omitempty"`
+	LastError              string `json:"lastError,omitempty"`
+	Class                  string `json:"class"`
 }
 
 type appAdminRecovery struct {
@@ -431,7 +443,27 @@ func (s *Server) projectAppAdminFleetState(ctx context.Context, app string) (*ap
 	if projection == nil {
 		return nil, nil
 	}
-	return &appAdminFleetState{
+	return appAdminFleetStateFromProjection(projection), nil
+}
+
+func appAdminFleetStateFromProjection(projection *core.AppFleetProjection) *appAdminFleetState {
+	if projection == nil {
+		return nil
+	}
+	replicas := make([]appAdminFleetReplica, 0, len(projection.Replicas))
+	for _, replica := range projection.Replicas {
+		replicas = append(replicas, appAdminFleetReplica{
+			InstanceID:             replica.InstanceID,
+			StartedAt:              formatAdminTime(replica.StartedAt),
+			HeartbeatAt:            formatAdminTime(replica.HeartbeatAt),
+			AppState:               string(replica.AppState),
+			RunningVersion:         replica.RunningVersion,
+			ObservedDesiredVersion: replica.ObservedDesiredVersion,
+			LastError:              replica.LastError,
+			Class:                  string(replica.Class),
+		})
+	}
+	out := &appAdminFleetState{
 		State:                   string(projection.State),
 		SourceVersion:           projection.SourceVersion,
 		DesiredVersion:          projection.DesiredVersion,
@@ -442,7 +474,11 @@ func (s *Server) projectAppAdminFleetState(ctx context.Context, app string) (*ap
 		Errors:                  projection.Errors,
 		HeartbeatTTLSeconds:     int64(projection.HeartbeatTTL / time.Second),
 		EvaluatedAt:             formatAdminTime(projection.EvaluatedAt),
-	}, nil
+	}
+	if len(replicas) > 0 {
+		out.Replicas = replicas
+	}
+	return out
 }
 
 func appAdminRecoveryFromCore(observation *core.AppVersionRecoveryObservation) *appAdminRecovery {

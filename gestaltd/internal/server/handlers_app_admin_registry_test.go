@@ -946,6 +946,12 @@ func TestAppAdminRegistryFleetStateAndRecoveryResponseShapes(t *testing.T) {
 			LiveInstances           int    `json:"liveInstances"`
 			RunningDesiredVersion   int    `json:"runningDesiredVersion"`
 			EvaluatedAt             string `json:"evaluatedAt"`
+			Replicas                []struct {
+				InstanceID     string `json:"instanceId"`
+				AppState       string `json:"appState"`
+				RunningVersion string `json:"runningVersion"`
+				Class          string `json:"class"`
+			} `json:"replicas"`
 		} `json:"fleetState"`
 		Recovery struct {
 			RecoveredAt   string `json:"recoveredAt"`
@@ -961,6 +967,13 @@ func TestAppAdminRegistryFleetStateAndRecoveryResponseShapes(t *testing.T) {
 		current.FleetState.RunningDesiredVersion != 1 ||
 		current.FleetState.EvaluatedAt == "" {
 		t.Fatalf("current registry state = %#v", current)
+	}
+	if len(current.FleetState.Replicas) != 1 ||
+		current.FleetState.Replicas[0].InstanceID != "instance-a" ||
+		current.FleetState.Replicas[0].AppState != "running" ||
+		current.FleetState.Replicas[0].RunningVersion != fixture.Version ||
+		current.FleetState.Replicas[0].Class != "on_desired" {
+		t.Fatalf("current fleet replicas = %#v", current.FleetState.Replicas)
 	}
 	if current.Recovery.RecoveredAt != recoveredAt.Format(time.RFC3339) ||
 		current.Recovery.SourceVersion != "source-a" {

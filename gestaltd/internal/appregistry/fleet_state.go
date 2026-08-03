@@ -140,23 +140,40 @@ func EvaluateFleetState(input FleetEvaluation) core.AppFleetProjection {
 			continue
 		}
 		projection.LiveInstances++
+		replica := core.AppFleetReplicaObservation{
+			InstanceID:  strings.TrimSpace(heartbeat.InstanceID),
+			StartedAt:   heartbeat.StartedAt.UTC(),
+			HeartbeatAt: heartbeat.HeartbeatAt.UTC(),
+			AppState:    core.GestaltdInstanceAppStateUnknown,
+			Class:       core.AppFleetReplicaClassError,
+		}
 		observation, ok := heartbeat.Apps[app]
 		if !ok {
 			projection.Errors++
+			projection.Replicas = append(projection.Replicas, replica)
 			continue
 		}
+		replica.AppState = observation.State
+		replica.RunningVersion = strings.TrimSpace(observation.RunningVersion)
+		replica.ObservedDesiredVersion = strings.TrimSpace(observation.DesiredVersion)
+		replica.LastError = strings.TrimSpace(observation.LastError)
 		if observation.State == core.GestaltdInstanceAppStateRunning &&
-			strings.TrimSpace(observation.RunningVersion) == desiredVersion &&
+			replica.RunningVersion == desiredVersion &&
 			desiredVersion != "" {
+			replica.Class = core.AppFleetReplicaClassOnDesired
 			projection.RunningDesiredVersion++
+			projection.Replicas = append(projection.Replicas, replica)
 			continue
 		}
 		switch observation.State {
 		case core.GestaltdInstanceAppStateError, core.GestaltdInstanceAppStateUnknown:
+			replica.Class = core.AppFleetReplicaClassError
 			projection.Errors++
 		default:
+			replica.Class = core.AppFleetReplicaClassMismatched
 			projection.Mismatched++
 		}
+		projection.Replicas = append(projection.Replicas, replica)
 	}
 
 	validBasis := desiredVersion != "" && sourceVersion != "" && input.MinimumHealthyInstances > 0

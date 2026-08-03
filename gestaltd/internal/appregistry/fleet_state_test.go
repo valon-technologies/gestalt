@@ -144,6 +144,26 @@ func TestEvaluateFleetState(t *testing.T) {
 				got.Errors != tc.wantErrors {
 				t.Fatalf("projection = %#v", got)
 			}
+			if len(got.Replicas) != got.LiveInstances {
+				t.Fatalf("replicas len = %d, liveInstances = %d", len(got.Replicas), got.LiveInstances)
+			}
+			var onDesired, mismatched, errors int
+			for _, replica := range got.Replicas {
+				switch replica.Class {
+				case core.AppFleetReplicaClassOnDesired:
+					onDesired++
+				case core.AppFleetReplicaClassMismatched:
+					mismatched++
+				case core.AppFleetReplicaClassError:
+					errors++
+				default:
+					t.Fatalf("unexpected replica class %q in %#v", replica.Class, replica)
+				}
+			}
+			if onDesired != got.RunningDesiredVersion || mismatched != got.Mismatched || errors != got.Errors {
+				t.Fatalf("replica class counts on=%d mis=%d err=%d; aggregates run=%d mis=%d err=%d",
+					onDesired, mismatched, errors, got.RunningDesiredVersion, got.Mismatched, got.Errors)
+			}
 		})
 	}
 }
