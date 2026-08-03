@@ -150,6 +150,65 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 	}
 }
 
+func TestBootstrapAuthorizationProviderStateHardCutoverSkipsRuntimeReconciliation(t *testing.T) {
+	t.Parallel()
+
+	provider := &cutoverAuthorizationProvider{recordingAuthorizationProvider: &recordingAuthorizationProvider{
+		listResourceTypePages: []*proto.ListActiveModelResourceTypesResponse{{
+			ResourceTypes: []*proto.AuthorizationModelResourceType{testAuthorizationResourceType("legacy", proto.SourceLayer_SOURCE_LAYER_RUNTIME)},
+		}},
+		listRelationshipsPages: []*proto.ListRelationshipsResponse{{
+			Relationships: []*proto.Relationship{testAuthorizationRelationship("user:legacy", "viewer", "github", "repo-1", proto.SourceLayer_SOURCE_LAYER_RUNTIME)},
+		}},
+	}}
+	cfg := &config.Config{
+		Server: config.ServerConfig{Providers: config.ServerProvidersConfig{Authorization: "authz"}},
+		Providers: config.ProvidersConfig{
+			Authorization: map[string]*config.ProviderEntry{"authz": {Default: true}},
+		},
+		Authorization: config.AuthorizationConfig{
+			Models: map[string]config.AuthorizationModelDef{
+				"default": {
+					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
+						"github": {
+							Relations: map[string]config.AuthorizationRelationDef{
+								"viewer": {SubjectTypes: []string{"subject"}},
+							},
+						},
+					},
+				},
+			},
+			Relationships: []config.AuthorizationRelationshipDef{{
+				Subject:  config.AuthorizationSubjectDef{Type: "subject", ID: "user:static"},
+				Relation: "viewer",
+				Resource: config.AuthorizationResourceDef{Type: "github", ID: "repo-1"},
+			}},
+		},
+	}
+
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
+	}
+	if provider.bootstrapModel == nil {
+		t.Fatal("BootstrapAuthorizationState was not called")
+	}
+	if got, want := len(provider.bootstrapModel.GetResourceTypes()), 1; got != want {
+		t.Fatalf("bootstrapped resource types = %d, want %d static resource type", got, want)
+	}
+	if got, want := len(provider.bootstrapRelationships), 1; got != want {
+		t.Fatalf("bootstrapped relationships = %d, want %d static relationship", got, want)
+	}
+	if got := provider.bootstrapRelationships[0].GetTuple().GetTarget().GetSubject().GetId(); got != "user:static" {
+		t.Fatalf("bootstrapped subject = %q, want static subject", got)
+	}
+	if provider.setAuthorizationState != nil {
+		t.Fatal("SetAuthorizationState should not be called for a hard-cutover provider")
+	}
+	if len(provider.resourceTypeRequests) != 0 || len(provider.listRequests) != 0 {
+		t.Fatalf("runtime state was read during hard cutover: resource type requests=%d relationship requests=%d", len(provider.resourceTypeRequests), len(provider.listRequests))
+	}
+}
+
 func TestStaticAuthorizationModelCarriesResourceTypeDefaultRole(t *testing.T) {
 	t.Parallel()
 
@@ -351,6 +410,21 @@ type recordingAuthorizationProvider struct {
 	listRequests           []*proto.ListRelationshipsRequest
 	resourceTypeRequests   []*proto.ListActiveModelResourceTypesRequest
 	setAuthorizationState  *proto.SetAuthorizationStateRequest
+}
+
+type cutoverAuthorizationProvider struct {
+	*recordingAuthorizationProvider
+	bootstrapModel         *proto.AuthorizationModel
+	bootstrapRelationships []*proto.Relationship
+}
+
+func (p *cutoverAuthorizationProvider) BootstrapAuthorizationState(_ context.Context, model *proto.AuthorizationModel, relationships []*proto.Relationship) error {
+	p.bootstrapModel = gproto.Clone(model).(*proto.AuthorizationModel)
+	p.bootstrapRelationships = make([]*proto.Relationship, 0, len(relationships))
+	for _, relationship := range relationships {
+		p.bootstrapRelationships = append(p.bootstrapRelationships, gproto.Clone(relationship).(*proto.Relationship))
+	}
+	return nil
 }
 
 func (p *recordingAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {

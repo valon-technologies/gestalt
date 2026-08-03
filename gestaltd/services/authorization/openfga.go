@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -14,13 +13,11 @@ import (
 
 	openfga "github.com/openfga/go-sdk"
 	"github.com/openfga/go-sdk/credentials"
-	indexeddb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 )
@@ -47,7 +44,6 @@ type openFGA struct {
 	modelRef *proto.AuthorizationModelRef
 	codec    *fgaCodec
 	meta     map[string]*proto.Relationship
-	legacy   []*proto.Relationship
 }
 
 type fgaCodec struct {
@@ -58,7 +54,7 @@ type fgaCodec struct {
 	reverse     map[string]string
 }
 
-func NewOpenFGA(node yaml.Node, databases ...indexeddb.Database) (core.AuthorizationProvider, error) {
+func NewOpenFGA(node yaml.Node) (core.AuthorizationProvider, error) {
 	var cfg OpenFGAConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("openfga authorization: decode config: %w", err)
@@ -91,15 +87,11 @@ func NewOpenFGA(node yaml.Node, databases ...indexeddb.Database) (core.Authoriza
 	if err != nil {
 		return nil, fmt.Errorf("openfga authorization: client config: %w", err)
 	}
-	provider := &openFGA{
+	return &openFGA{
 		client:  openfga.NewAPIClient(apiCfg),
 		storeID: strings.TrimSpace(cfg.StoreID),
 		meta:    make(map[string]*proto.Relationship),
-	}
-	if len(databases) > 0 && databases[0] != nil {
-		provider.legacy, _ = loadLegacyRelationships(context.Background(), databases[0])
-	}
-	return provider, nil
+	}, nil
 }
 
 func (p *openFGA) Ping(ctx context.Context) error {
@@ -240,6 +232,22 @@ func (p *openFGA) DeleteRelationship(ctx context.Context, req *proto.DeleteRelat
 }
 
 func (p *openFGA) SetAuthorizationState(ctx context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
+	return p.setAuthorizationState(ctx, req, true)
+}
+
+// BootstrapAuthorizationState publishes the configured authorization model and
+// ensures its static relationships exist without reconciling the OpenFGA tuple
+// store. OpenFGA is authoritative for runtime relationships after cutover, so
+// startup must never delete or recreate them from another backend.
+func (p *openFGA) BootstrapAuthorizationState(ctx context.Context, model *proto.AuthorizationModel, relationships []*proto.Relationship) error {
+	_, err := p.setAuthorizationState(ctx, &proto.SetAuthorizationStateRequest{
+		Model:         model,
+		Relationships: relationships,
+	}, false)
+	return err
+}
+
+func (p *openFGA) setAuthorizationState(ctx context.Context, req *proto.SetAuthorizationStateRequest, replace bool) (*proto.SetAuthorizationStateResponse, error) {
 	if req == nil || req.Model == nil {
 		return nil, status.Error(codes.InvalidArgument, "model is required")
 	}
@@ -256,7 +264,7 @@ func (p *openFGA) SetAuthorizationState(ctx context.Context, req *proto.SetAutho
 		return nil, status.Errorf(codes.Unavailable, "openfga write authorization model: %v", err)
 	}
 	codec.model.Id = modelResponse.GetAuthorizationModelId()
-	if err := p.replaceTuples(ctx, codec, req.Relationships); err != nil {
+	if err := p.writeAuthorizationRelationships(ctx, codec, req.Relationships, replace); err != nil {
 		return nil, err
 	}
 	ref := &proto.AuthorizationModelRef{Id: req.Model.Id, Version: req.Model.Version, CreatedAt: timestamppb.New(time.Now().UTC())}
@@ -264,10 +272,6 @@ func (p *openFGA) SetAuthorizationState(ctx context.Context, req *proto.SetAutho
 	p.model = cloneModel(req.Model)
 	p.modelRef = ref
 	p.codec = codec
-	// The legacy store is only a bootstrap input. Once the OpenFGA state is
-	// active, retaining it would allow a later fallback to resurrect deleted
-	// relationships.
-	p.legacy = nil
 	p.meta = make(map[string]*proto.Relationship, len(req.Relationships))
 	for _, relationship := range req.Relationships {
 		if relationship != nil && relationship.Tuple != nil {
@@ -355,9 +359,6 @@ func (p *openFGA) ListRelationships(ctx context.Context, req *proto.ListRelation
 	}
 	p.mu.RUnlock()
 	if codec == nil || model == nil {
-		if legacy, ok := p.legacyRelationships(req); ok {
-			return &proto.ListRelationshipsResponse{Relationships: legacy}, nil
-		}
 		return nil, status.Error(codes.FailedPrecondition, "openfga authorization model is not configured")
 	}
 	filter := (*proto.RelationshipFilter)(nil)
@@ -403,23 +404,6 @@ func (p *openFGA) ListRelationships(ctx context.Context, req *proto.ListRelation
 	return out, nil
 }
 
-func (p *openFGA) legacyRelationships(req *proto.ListRelationshipsRequest) ([]*proto.Relationship, bool) {
-	p.mu.RLock()
-	loaded := p.legacy != nil
-	legacy := make([]*proto.Relationship, 0, len(p.legacy))
-	for _, relationship := range p.legacy {
-		if relationshipMatches(req.GetFilter(), relationship) {
-			legacy = append(legacy, cloneRelationship(relationship))
-		}
-	}
-	p.mu.RUnlock()
-	if !loaded {
-		return nil, false
-	}
-	sort.Slice(legacy, func(i, j int) bool { return tupleKey(legacy[i].Tuple) < tupleKey(legacy[j].Tuple) })
-	return legacy, true
-}
-
 func (p *openFGA) readAllTuples(ctx context.Context, filter *openfga.ReadRequestTupleKey) ([]openfga.Tuple, error) {
 	var tuples []openfga.Tuple
 	continuation := ""
@@ -443,7 +427,7 @@ func (p *openFGA) readAllTuples(ctx context.Context, filter *openfga.ReadRequest
 	}
 }
 
-func (p *openFGA) replaceTuples(ctx context.Context, codec *fgaCodec, relationships []*proto.Relationship) error {
+func (p *openFGA) writeAuthorizationRelationships(ctx context.Context, codec *fgaCodec, relationships []*proto.Relationship, replace bool) error {
 	desired := make(map[string]openfga.TupleKey, len(relationships))
 	for _, relationship := range relationships {
 		if relationship == nil || relationship.Tuple == nil {
@@ -455,15 +439,17 @@ func (p *openFGA) replaceTuples(ctx context.Context, codec *fgaCodec, relationsh
 		}
 		desired[key.User+"\x00"+key.Relation+"\x00"+key.Object] = key
 	}
-	readTuples, err := p.readAllTuples(ctx, nil)
-	if err != nil {
-		return err
-	}
 	var deletes []openfga.TupleKeyWithoutCondition
-	for _, tuple := range readTuples {
-		key := tuple.Key.User + "\x00" + tuple.Key.Relation + "\x00" + tuple.Key.Object
-		if _, ok := desired[key]; !ok {
-			deletes = append(deletes, openfga.TupleKeyWithoutCondition{User: tuple.Key.User, Relation: tuple.Key.Relation, Object: tuple.Key.Object})
+	if replace {
+		readTuples, err := p.readAllTuples(ctx, nil)
+		if err != nil {
+			return err
+		}
+		for _, tuple := range readTuples {
+			key := tuple.Key.User + "\x00" + tuple.Key.Relation + "\x00" + tuple.Key.Object
+			if _, ok := desired[key]; !ok {
+				deletes = append(deletes, openfga.TupleKeyWithoutCondition{User: tuple.Key.User, Relation: tuple.Key.Relation, Object: tuple.Key.Object})
+			}
 		}
 	}
 	keys := make([]openfga.TupleKey, 0, len(desired))
@@ -483,7 +469,7 @@ func (p *openFGA) replaceTuples(ctx context.Context, codec *fgaCodec, relationsh
 			body.Deletes.OnMissing = &missing
 		}
 		if _, _, err := p.client.OpenFgaApi.Write(ctx, p.storeID).Body(body).Execute(); err != nil {
-			return status.Errorf(codes.Unavailable, "openfga replace relationships: %v", err)
+			return status.Errorf(codes.Unavailable, "openfga write relationships: %v", err)
 		}
 	}
 	return nil
@@ -781,116 +767,6 @@ func (c *fgaCodec) targetFromUser(user, resourceType, relation string, model *pr
 func stableFGAName(prefix, value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return prefix + hex.EncodeToString(sum[:])[:26]
-}
-
-type legacyRelationship struct {
-	Tuple       *legacyRelationshipTuple `json:"tuple"`
-	Properties  map[string]any           `json:"properties,omitempty"`
-	SourceLayer json.RawMessage          `json:"source_layer"`
-}
-
-type legacyRelationshipTuple struct {
-	Target   *legacyRelationshipTarget `json:"target"`
-	Relation string                    `json:"relation"`
-	Resource *legacyEntity             `json:"resource"`
-}
-
-type legacyRelationshipTarget struct {
-	Subject    *legacyEntity     `json:"subject,omitempty"`
-	Resource   *legacyEntity     `json:"resource,omitempty"`
-	SubjectSet *legacySubjectSet `json:"subject_set,omitempty"`
-}
-
-type legacySubjectSet struct {
-	Resource *legacyEntity `json:"resource"`
-	Relation string        `json:"relation"`
-}
-
-type legacyEntity struct {
-	Type       string         `json:"type"`
-	ID         string         `json:"id"`
-	Properties map[string]any `json:"properties,omitempty"`
-}
-
-func loadLegacyRelationships(ctx context.Context, db indexeddb.Database) ([]*proto.Relationship, error) {
-	if db == nil {
-		return nil, nil
-	}
-	records, err := db.ObjectStore("authz_relationships").GetAll(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("read legacy relationships: %w", err)
-	}
-	relationships := make([]*proto.Relationship, 0, len(records))
-	for _, record := range records {
-		data, err := json.Marshal(record["value"])
-		if err != nil {
-			return nil, fmt.Errorf("decode legacy relationship: %w", err)
-		}
-		var stored legacyRelationship
-		if err := json.Unmarshal(data, &stored); err != nil {
-			return nil, fmt.Errorf("decode legacy relationship: %w", err)
-		}
-		relationship, err := legacyRelationshipToProto(&stored)
-		if err != nil {
-			return nil, err
-		}
-		relationships = append(relationships, relationship)
-	}
-	return relationships, nil
-}
-
-func legacyRelationshipToProto(stored *legacyRelationship) (*proto.Relationship, error) {
-	if stored == nil || stored.Tuple == nil || stored.Tuple.Resource == nil || stored.Tuple.Target == nil {
-		return nil, fmt.Errorf("legacy relationship is incomplete")
-	}
-	target := &proto.RelationshipTarget{}
-	switch {
-	case stored.Tuple.Target.Subject != nil:
-		entity := stored.Tuple.Target.Subject
-		target.Kind = &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: entity.Type, Id: entity.ID, Properties: legacyProperties(entity.Properties)}}
-	case stored.Tuple.Target.Resource != nil:
-		entity := stored.Tuple.Target.Resource
-		target.Kind = &proto.RelationshipTarget_Resource{Resource: &proto.Resource{Type: entity.Type, Id: entity.ID, Properties: legacyProperties(entity.Properties)}}
-	case stored.Tuple.Target.SubjectSet != nil && stored.Tuple.Target.SubjectSet.Resource != nil:
-		entity := stored.Tuple.Target.SubjectSet.Resource
-		target.Kind = &proto.RelationshipTarget_SubjectSet{SubjectSet: &proto.SubjectSet{Resource: &proto.Resource{Type: entity.Type, Id: entity.ID, Properties: legacyProperties(entity.Properties)}, Relation: stored.Tuple.Target.SubjectSet.Relation}}
-	default:
-		return nil, fmt.Errorf("legacy relationship target is incomplete")
-	}
-	resource := stored.Tuple.Resource
-	return &proto.Relationship{
-		Tuple:       &proto.RelationshipTuple{Target: target, Relation: stored.Tuple.Relation, Resource: &proto.Resource{Type: resource.Type, Id: resource.ID, Properties: legacyProperties(resource.Properties)}},
-		Properties:  legacyProperties(stored.Properties),
-		SourceLayer: legacySourceLayer(stored.SourceLayer),
-	}, nil
-}
-
-func legacyProperties(properties map[string]any) *structpb.Struct {
-	if len(properties) == 0 {
-		return nil
-	}
-	value, err := structpb.NewStruct(properties)
-	if err != nil {
-		return nil
-	}
-	return value
-}
-
-func legacySourceLayer(raw json.RawMessage) proto.SourceLayer {
-	var value string
-	if json.Unmarshal(raw, &value) == nil {
-		switch strings.TrimSpace(value) {
-		case "static_config", "staticconfig":
-			return proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG
-		case "runtime":
-			return proto.SourceLayer_SOURCE_LAYER_RUNTIME
-		}
-	}
-	var number int32
-	if json.Unmarshal(raw, &number) == nil {
-		return proto.SourceLayer(number)
-	}
-	return proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED
 }
 
 func splitFGAObject(value string) (string, string, bool) {

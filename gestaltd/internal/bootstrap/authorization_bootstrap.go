@@ -21,6 +21,10 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+type authorizationStateBootstrapper interface {
+	BootstrapAuthorizationState(context.Context, *proto.AuthorizationModel, []*proto.Relationship) error
+}
+
 func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config, providers map[string]core.AuthorizationProvider) error {
 	if len(providers) == 0 {
 		return nil
@@ -43,16 +47,25 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
+	staticRelationships, err := staticAuthorizationRelationships(cfg.Authorization)
+	if err != nil {
+		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
+	}
+	if bootstrapper, ok := provider.(authorizationStateBootstrapper); ok {
+		if err := stampAuthorizationModel(model, time.Now()); err != nil {
+			return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
+		}
+		if err := bootstrapper.BootstrapAuthorizationState(ctx, model, staticRelationships); err != nil {
+			return fmt.Errorf("bootstrap: authorization provider %q: bootstrap authorization state: %w", name, err)
+		}
+		return nil
+	}
 	runtimeResourceTypes, err := listRuntimeAuthorizationModelResourceTypes(ctx, provider)
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
 	model.ResourceTypes = mergedAuthorizationModelResourceTypes(model.GetResourceTypes(), runtimeResourceTypes)
 	if err := stampAuthorizationModel(model, time.Now()); err != nil {
-		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
-	}
-	staticRelationships, err := staticAuthorizationRelationships(cfg.Authorization)
-	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
 	runtimeRelationships, err := listRuntimeAuthorizationRelationships(ctx, provider)

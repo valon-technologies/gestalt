@@ -1,12 +1,78 @@
 package authorization
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	openfga "github.com/openfga/go-sdk"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
+
+func TestBootstrapAuthorizationStateOnlyWritesConfiguredRelationships(t *testing.T) {
+	t.Parallel()
+
+	var paths []string
+	var writeBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/stores/test-store/authorization-models":
+			_, _ = w.Write([]byte(`{"authorization_model_id":"model-id"}`))
+		case "/stores/test-store/write":
+			if err := json.NewDecoder(r.Body).Decode(&writeBody); err != nil {
+				t.Errorf("decode write request: %v", err)
+			}
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	cfg, err := openfga.NewConfiguration(openfga.Configuration{ApiUrl: server.URL})
+	if err != nil {
+		t.Fatalf("NewConfiguration: %v", err)
+	}
+	provider := &openFGA{
+		client:  openfga.NewAPIClient(cfg),
+		storeID: "test-store",
+		meta:    make(map[string]*proto.Relationship),
+	}
+	model := &proto.AuthorizationModel{Id: "logical-id", Version: "1", ResourceTypes: []*proto.AuthorizationModelResourceType{{
+		Name: "repository",
+		Relations: []*proto.ModelRelation{{
+			Name: "viewer",
+			AllowedTargets: []*proto.ModelAllowedTarget{{
+				Kind: &proto.ModelAllowedTarget_SubjectType{SubjectType: "subject"},
+			}},
+		}},
+	}}}
+	relationship := &proto.Relationship{Tuple: &proto.RelationshipTuple{
+		Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
+			Type: "subject",
+			Id:   "user:alice",
+		}}},
+		Relation: "viewer",
+		Resource: &proto.Resource{Type: "repository", Id: "repo-1"},
+	}}
+
+	if err := provider.BootstrapAuthorizationState(t.Context(), model, []*proto.Relationship{relationship}); err != nil {
+		t.Fatalf("BootstrapAuthorizationState: %v", err)
+	}
+	if got, want := strings.Join(paths, ","), "/stores/test-store/authorization-models,/stores/test-store/write"; got != want {
+		t.Fatalf("request paths = %q, want %q", got, want)
+	}
+	if _, ok := writeBody["deletes"]; ok {
+		t.Fatalf("bootstrap write unexpectedly contains deletes: %#v", writeBody)
+	}
+	if _, ok := writeBody["writes"]; !ok {
+		t.Fatalf("bootstrap write does not contain configured relationships: %#v", writeBody)
+	}
+}
 
 func TestNewFGACodecPreservesGraphTargetsAndStableNames(t *testing.T) {
 	t.Parallel()

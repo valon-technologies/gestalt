@@ -2182,11 +2182,7 @@ func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, na
 		if !config.EntryBuildsLocal(entry) {
 			return nil, fmt.Errorf("bootstrap: built-in openfga authorization provider %q must build locally", logicalName)
 		}
-		var legacyDB indexeddb.IndexedDB
-		if deps.SelectedIndexedDBName != "" {
-			legacyDB = deps.IndexedDBs[deps.SelectedIndexedDBName]
-		}
-		provider, err := authorizationservice.NewOpenFGA(entry.Config, legacyDB)
+		provider, err := authorizationservice.NewOpenFGA(entry.Config)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
