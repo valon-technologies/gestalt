@@ -270,7 +270,10 @@ func appStreamError(err error) error {
 		if errors.As(err, &recursionErr) {
 			return status.Error(codes.FailedPrecondition, recursionErr.Error())
 		}
-		return status.Error(codes.Internal, err.Error())
+		if st, ok := status.FromError(err); ok {
+			return st.Err()
+		}
+		return status.Error(codes.Unknown, fmt.Sprintf("app invocation failed: %v", err))
 	}
 }
 
@@ -295,7 +298,7 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 		InvokeGraphQL(context.Context, *principal.Principal, string, string, invocation.GraphQLRequest) (*core.OperationResult, error)
 	})
 	if !ok {
-		return nil, status.Error(codes.Unimplemented, "plugin graphql invocation is not available")
+		return nil, status.Error(codes.Unimplemented, "app graphql invocation is not available")
 	}
 
 	invokeCtx, instance, err := prepareInvocationSelectors(ctx, callCtx, req.GetConnection(), req.GetInstance())
@@ -673,7 +676,7 @@ func appOperationResult(result *core.OperationResult, err error) (*proto.Operati
 		return nil, invocationStatusError(err)
 	}
 	if result == nil {
-		return nil, status.Error(codes.Internal, "plugin invocation returned no result")
+		return nil, status.Error(codes.Internal, "app invocation returned no result")
 	}
 	return coreOperationResultToProto(result), nil
 }
@@ -717,6 +720,9 @@ func invocationStatusError(err error) error {
 		if errors.As(err, &recursionErr) {
 			return status.Error(codes.FailedPrecondition, recursionErr.Error())
 		}
-		return status.Error(codes.Unknown, fmt.Sprintf("plugin invocation failed: %v", err))
+		if st, ok := status.FromError(err); ok {
+			return st.Err()
+		}
+		return status.Error(codes.Unknown, fmt.Sprintf("app invocation failed: %v", err))
 	}
 }

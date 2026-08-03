@@ -123,18 +123,20 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 	}
 
 	staticOp, staticOK := CatalogOperation(providerCatalog(prov), operation)
-	if staticOK {
-		if resolver, ok := prov.(requestStaticOperationResolver); ok {
-			if op, ok := resolver.ResolveStaticOperationForRequest(ctx, operation); ok {
-				catalogSource = "static"
-				return op, OperationTransport(op), "", nil
-			}
+	staticResolver, hasStaticResolver := prov.(requestStaticOperationResolver)
+	if staticOK && hasStaticResolver {
+		if op, ok := staticResolver.ResolveStaticOperationForRequest(ctx, operation); ok {
+			catalogSource = "static"
+			return op, OperationTransport(op), "", nil
 		}
 	}
 	if !core.SupportsSessionCatalog(prov) {
 		if staticOK {
 			catalogSource = "static"
 			return staticOp, OperationTransport(staticOp), "", nil
+		}
+		if hasStaticResolver {
+			return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
 		}
 		if delegated, ok := prov.(RemoteCredentialDelegated); ok && delegated.RemoteCredentialDelegated() {
 			catalogSource = "passthrough"

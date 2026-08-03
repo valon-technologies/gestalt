@@ -189,6 +189,51 @@ func TestRegistryAppStartupStopsEmptyProjection(t *testing.T) {
 	}
 }
 
+func TestRegistryAppStartupSkipsRemotePlacement(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	installedAt := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	if _, err := services.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "registry:first-install",
+		ToVersion:   fixture.Version,
+		Timestamp:   installedAt,
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName:     "g-issues",
+			Version:     fixture.Version,
+			Registry:    "toolshed",
+			InstalledAt: installedAt,
+			UpdatedAt:   installedAt,
+		}),
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	artifactsDir := t.TempDir()
+	restarter := &startupRecordingRestarter{}
+	cfg := &config.Config{
+		AppRegistries: map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		Apps: map[string]*config.ProviderEntry{
+			"g-issues": {
+				Source: config.ProviderSource{Registry: "toolshed"},
+				Remote: config.DefaultRemoteName,
+			},
+		},
+		Server: config.ServerConfig{ArtifactsDir: artifactsDir},
+	}
+	result := &bootstrap.Result{Services: services, AppRestarter: restarter}
+
+	registryAppStartup(cfg, result, fixture.Reader)(ctx)
+
+	if restarter.startedApp != "" || restarter.stoppedApp != "" {
+		t.Fatalf("remote registry lifecycle called restarter: started=%q stopped=%q", restarter.startedApp, restarter.stoppedApp)
+	}
+	if _, err := os.Stat(appregistry.MaterializedPath(artifactsDir, "g-issues", fixture.Version)); !os.IsNotExist(err) {
+		t.Fatalf("remote registry materialized package stat error = %v, want not exist", err)
+	}
+}
+
 func TestStartAppRegistryHeartbeatWriterUsesBootstrapReadiness(t *testing.T) {
 	t.Setenv("SOURCE_VERSION", "source-v3")
 	ctx, cancel := context.WithCancel(context.Background())

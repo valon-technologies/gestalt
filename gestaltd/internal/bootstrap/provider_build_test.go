@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -958,6 +959,171 @@ func TestMultiRemoteAppRouting(t *testing.T) {
 	}
 	if len(devCalls) != 1 || devCalls[0].app != "valon-profile" {
 		t.Fatalf("dev calls = %#v, want valon-profile only", devCalls)
+	}
+}
+
+func TestBuildRemoteRegistryCatalog(t *testing.T) {
+	t.Parallel()
+
+	cat, err := buildRemoteRegistryCatalog("data-schema-explorer", map[string]*config.OperationOverride{
+		" get_schema ":        nil,
+		"vds.schema_versions": nil,
+	})
+	if err != nil {
+		t.Fatalf("buildRemoteRegistryCatalog: %v", err)
+	}
+	if cat == nil || len(cat.Operations) != 2 {
+		t.Fatalf("catalog = %#v, want two operations", cat)
+	}
+	if got := []string{cat.Operations[0].ID, cat.Operations[1].ID}; !slices.Equal(got, []string{"get_schema", "vds.schema_versions"}) {
+		t.Fatalf("operation IDs = %v, want sorted trimmed IDs", got)
+	}
+	for _, operation := range cat.Operations {
+		if operation.Transport != catalog.TransportApp {
+			t.Fatalf("operation %q transport = %q, want %q", operation.ID, operation.Transport, catalog.TransportApp)
+		}
+	}
+
+	empty, err := buildRemoteRegistryCatalog("empty", nil)
+	if err != nil {
+		t.Fatalf("buildRemoteRegistryCatalog(empty): %v", err)
+	}
+	if empty == nil || len(empty.Operations) != 0 {
+		t.Fatalf("empty catalog = %#v, want non-nil empty catalog", empty)
+	}
+
+	for _, rawKey := range []string{"", "   ", "invalid operation"} {
+		rawKey := rawKey
+		t.Run(fmt.Sprintf("invalid %q", rawKey), func(t *testing.T) {
+			t.Parallel()
+			_, err := buildRemoteRegistryCatalog("data-schema-explorer", map[string]*config.OperationOverride{rawKey: nil})
+			if err == nil || !strings.Contains(err.Error(), "data-schema-explorer") || !strings.Contains(err.Error(), rawKey) {
+				t.Fatalf("error = %v, want app and offending key", err)
+			}
+		})
+	}
+}
+
+func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) {
+	t.Parallel()
+
+	prodClient := &recordingRemoteAppClient{}
+	devClient := &recordingRemoteAppClient{}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Dev: true,
+			Remotes: map[string]*config.RemoteConfig{
+				"prod": {URL: "https://prod.test", Token: "prod-token", Default: true},
+				"dev":  {URL: "https://dev.test", Token: "dev-token"},
+			},
+		},
+		Apps: map[string]*config.ProviderEntry{
+			"data-schema-explorer": {
+				Source: config.ProviderSource{Registry: "toolshed"},
+				Remote: "prod",
+				AllowedOperations: map[string]*config.OperationOverride{
+					" get_schema ": nil,
+				},
+			},
+			"other-registry-app": {
+				Source: config.ProviderSource{Registry: "toolshed"},
+				Remote: "dev",
+				AllowedOperations: map[string]*config.OperationOverride{
+					"ping": nil,
+				},
+			},
+		},
+	}
+	reg := registry.New()
+	clientSets := remote.ClientSets{
+		"prod": {App: prodClient},
+		"dev":  {App: devClient},
+	}
+	if err := registerRemoteApps(&reg.Providers, cfg, Deps{RemoteClientSets: clientSets}); err != nil {
+		t.Fatalf("registerRemoteApps: %v", err)
+	}
+
+	for name, wantIDs := range map[string][]string{
+		"data-schema-explorer": {"get_schema"},
+		"other-registry-app":   {"ping"},
+	} {
+		provider, err := reg.Providers.Get(name)
+		if err != nil {
+			t.Fatalf("provider %q: %v", name, err)
+		}
+		cat := provider.Catalog()
+		if cat == nil || len(cat.Operations) != len(wantIDs) {
+			t.Fatalf("provider %q catalog = %#v, want %v", name, cat, wantIDs)
+		}
+		for i, wantID := range wantIDs {
+			if cat.Operations[i].ID != wantID || cat.Operations[i].Transport != catalog.TransportApp {
+				t.Fatalf("provider %q operation[%d] = %#v, want %q app transport", name, i, cat.Operations[i], wantID)
+			}
+		}
+	}
+
+	services := testutil.NewStubServices(t)
+	broker := invocation.NewBroker(&reg.Providers, services.Users, services.ExternalCredentials)
+	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "data-schema-explorer", "", "get_schema", nil); err != nil {
+		t.Fatalf("allowlisted Invoke: %v", err)
+	}
+	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "other-registry-app", "", "ping", nil); err != nil {
+		t.Fatalf("second configured remote Invoke: %v", err)
+	}
+	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "data-schema-explorer", "", "not-allowlisted", nil); !errors.Is(err, invocation.ErrOperationNotFound) {
+		t.Fatalf("non-allowlisted error = %v, want ErrOperationNotFound", err)
+	}
+	if got := len(prodClient.snapshot()); got != 1 {
+		t.Fatalf("prod remote calls = %d, want one allowlisted call", got)
+	}
+	if got := len(devClient.snapshot()); got != 1 {
+		t.Fatalf("dev remote calls = %d, want one configured call", got)
+	}
+}
+
+func TestRemoteRegistryAppRoutingPreservesNonDevelopmentAndLocalPlacement(t *testing.T) {
+	t.Parallel()
+
+	remoteClient := &recordingRemoteAppClient{}
+	for _, tc := range []struct {
+		name       string
+		dev        bool
+		devActive  bool
+		wantRemote bool
+	}{
+		{name: "non-development", dev: false, wantRemote: false},
+		{name: "active local", dev: true, devActive: true, wantRemote: false},
+		{name: "development remote", dev: true, wantRemote: true},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &config.Config{
+				Server: config.ServerConfig{Dev: tc.dev},
+				Apps: map[string]*config.ProviderEntry{
+					"registry-app": {
+						Source:    config.ProviderSource{Registry: "toolshed"},
+						Remote:    config.DefaultRemoteName,
+						DevActive: tc.devActive,
+						AllowedOperations: map[string]*config.OperationOverride{
+							"ping": nil,
+						},
+					},
+				},
+			}
+			reg := registry.New()
+			clients := remote.ClientSets{config.DefaultRemoteName: {App: remoteClient}}
+			if err := registerRemoteApps(&reg.Providers, cfg, Deps{RemoteClientSets: clients}); err != nil {
+				t.Fatalf("registerRemoteApps: %v", err)
+			}
+			_, err := reg.Providers.Get("registry-app")
+			if tc.wantRemote && err != nil {
+				t.Fatalf("remote registry provider lookup: %v", err)
+			}
+			if !tc.wantRemote && !errors.Is(err, core.ErrNotFound) {
+				t.Fatalf("provider lookup error = %v, want not found", err)
+			}
+		})
 	}
 }
 

@@ -317,20 +317,36 @@ func (a *appManaged) probeFrontendReadiness(ctx context.Context, logger *slog.Lo
 	if strings.TrimSpace(a.target.BasePath) == "" {
 		return
 	}
-	deadline := time.Now().Add(maxReadyTimeout(a.target.Commands))
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(a.port))
+	a.probeFrontendReadinessWith(ctx, logger, func() (net.Conn, error) {
+		return net.DialTimeout("tcp", addr, time.Second)
+	})
+}
+
+func (a *appManaged) probeFrontendReadinessWith(ctx context.Context, logger *slog.Logger, probe func() (net.Conn, error)) {
+	a.probeFrontendReadinessUntil(ctx, logger, time.Now().Add(maxReadyTimeout(a.target.Commands)), probe)
+}
+
+func (a *appManaged) probeFrontendReadinessUntil(ctx context.Context, logger *slog.Logger, deadline time.Time, probe func() (net.Conn, error)) {
 	warned := false
 	loggedReady := false
+	readyBeforeDeadline := false
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
-		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		conn, err := probe()
 		if err == nil {
-			_ = conn.Close()
+			if conn != nil {
+				_ = conn.Close()
+			}
+			now := time.Now()
 			a.ready.Store(true)
+			if now.Before(deadline) {
+				readyBeforeDeadline = true
+			}
 			a.frontendReadyOnce.Do(func() { close(a.frontendReady) })
 			if logger != nil && !loggedReady {
 				logger.Debug("dev app frontend ready", "app", a.target.Name, "port", a.port)
@@ -342,7 +358,7 @@ func (a *appManaged) probeFrontendReadiness(ctx context.Context, logger *slog.Lo
 		}
 		if !warned && time.Now().After(deadline) {
 			warned = true
-			if logger != nil {
+			if !readyBeforeDeadline && logger != nil {
 				args := []any{"app", a.target.Name}
 				for i, proc := range a.commandProcs() {
 					if output := proc.currentOutput(); output != nil {
