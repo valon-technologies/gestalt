@@ -2,6 +2,9 @@
 
 ## Contents
 
+- [Implementation phases](implementation.md)
+- [Component responsibilities](responsibilities.md)
+- [Prototype findings](prototypes.md)
 - [Overview](#overview)
 - [Registries](#registries)
 - [Publishing and Distribution](#publishing-and-distribution)
