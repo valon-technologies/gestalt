@@ -599,8 +599,10 @@ fn test_cli_apps_list_table_output() {
     assert!(stdout.contains("legacy"), "stdout: {stdout}");
     assert!(stdout.contains("team-a"), "stdout: {stdout}");
     assert!(stdout.contains("team-b"), "stdout: {stdout}");
+    // Table layout may wrap the status across lines; ignore whitespace.
+    let compact: String = stdout.chars().filter(|c| !c.is_whitespace()).collect();
     assert!(
-        stdout.contains("needs_instance_selection"),
+        compact.contains("needs_instance_selection"),
         "stdout: {stdout}"
     );
     assert_eq!(stdout.matches("Multi-instance service").count(), 1);

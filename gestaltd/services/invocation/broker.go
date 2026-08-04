@@ -1060,23 +1060,24 @@ func (b *Broker) connectionID(providerName, connection string) string {
 }
 
 // chosenCredentialInstance returns the account the subject has chosen for this
-// connection: a preferred qualifier that still exists among credentials, or the
-// sole credential when preference is missing/stale. Empty means not connected
-// (zero or ambiguous accounts).
-func chosenCredentialInstance(credentials []*core.ExternalCredential, preferred string) string {
+// connection and whether a choice exists. Preferred wins only when that
+// qualifier still exists among credentials; otherwise a sole credential is
+// implicitly chosen (including empty qualifier). ok=false means zero or
+// ambiguous accounts — the connection is not connected.
+func chosenCredentialInstance(credentials []*core.ExternalCredential, preferred string) (instance string, ok bool) {
 	creds := nonNilCredentials(credentials)
 	preferred = strings.TrimSpace(preferred)
 	if preferred != "" {
 		for _, credential := range creds {
 			if strings.TrimSpace(credential.Qualifier) == preferred {
-				return preferred
+				return preferred, true
 			}
 		}
 	}
 	if len(creds) == 1 {
-		return strings.TrimSpace(creds[0].Qualifier)
+		return strings.TrimSpace(creds[0].Qualifier), true
 	}
-	return ""
+	return "", false
 }
 
 func nonNilCredentials(credentials []*core.ExternalCredential) []*core.ExternalCredential {
@@ -1141,20 +1142,20 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 				return nil, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
 			}
 		}
-		chosen := chosenCredentialInstance(credentials, preferred)
-		if chosen != "" {
+		chosen, ok := chosenCredentialInstance(credentials, preferred)
+		if ok {
 			resolved := CatalogResolutionTarget{
 				Connection: target.Connection,
 				Instance:   chosen,
 			}
-			if _, ok := seen[resolved]; !ok {
+			if _, seenAlready := seen[resolved]; !seenAlready {
 				seen[resolved] = struct{}{}
 				expanded = append(expanded, resolved)
 			}
 			continue
 		}
 		if len(nonNilCredentials(credentials)) == 0 {
-			if _, ok := seen[target]; !ok {
+			if _, seenAlready := seen[target]; !seenAlready {
 				seen[target] = struct{}{}
 				expanded = append(expanded, target)
 			}
@@ -1258,7 +1259,9 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 				return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
 			}
 		}
-		instance = chosenCredentialInstance(credentials, preferred)
+		if chosen, ok := chosenCredentialInstance(credentials, preferred); ok {
+			instance = chosen
+		}
 	}
 
 	runtimeInfo := ConnectionRuntimeInfo{}
