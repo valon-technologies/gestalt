@@ -279,11 +279,16 @@ func (s *Server) connectionInfoFromAuth(ctx context.Context, integration, name, 
 	}
 	connectionID := serverCredentialConnectionID(integration, instanceConnection, conn)
 	subjectID, _ := principal.ResolveCredentialSubjectID(ctx, s.users, p)
-	preferredInstance := s.preferredInstanceForConnection(ctx, subjectID, connectionID)
+	storedPreferred := s.preferredInstanceForConnection(ctx, subjectID, connectionID)
 	status := noAuthConnectionStatus()
+	preferredInstance := ""
 	if displayMode != core.ConnectionModeNone {
-		status = subjectConnectionStatus(connectionInstances, len(authTypes) > 0, ownerKindForPrincipal(p), preferredInstance)
-		connectionInstances = markPreferredInstances(connectionInstances, preferredInstance)
+		status = subjectConnectionStatus(connectionInstances, len(authTypes) > 0, ownerKindForPrincipal(p), storedPreferred)
+		connectionInstances = markPreferredInstances(connectionInstances, storedPreferred)
+		// preferredInstance is the chosen account — omit stale/invalid store rows.
+		if preferredInstanceValid(connectionInstances, storedPreferred) {
+			preferredInstance = strings.TrimSpace(storedPreferred)
+		}
 	}
 
 	info := connectionDefInfo{

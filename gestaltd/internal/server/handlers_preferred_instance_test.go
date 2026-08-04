@@ -222,6 +222,62 @@ func TestListIntegrations_NeedsInstanceSelectionIsNotConnected(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_OmitsStalePreferredInstance(t *testing.T) {
+	t.Parallel()
+
+	svc, subjectID, ts := preferredInstanceTestSetup(t)
+	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, "manual-multi:"+testDefaultConnection, "team-gone"); err != nil {
+		t.Fatalf("Set preference: %v", err)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	type statusConnection struct {
+		PreferredInstance string           `json:"preferredInstance"`
+		Connected         bool             `json:"connected"`
+		Status            string           `json:"status"`
+		Instances         []map[string]any `json:"instances"`
+	}
+	type statusIntegration struct {
+		Name        string             `json:"name"`
+		Connections []statusConnection `json:"connections"`
+	}
+	var integrations []statusIntegration
+	if err := json.Unmarshal(body, &integrations); err != nil {
+		t.Fatalf("decode integrations: %v (body: %s)", err, body)
+	}
+	var conn statusConnection
+	for _, item := range integrations {
+		if item.Name == "manual-multi" && len(item.Connections) == 1 {
+			conn = item.Connections[0]
+			break
+		}
+	}
+	if conn.Status != "needs_instance_selection" {
+		t.Fatalf("status = %q, want needs_instance_selection", conn.Status)
+	}
+	if conn.Connected {
+		t.Fatalf("connected = true, want false for stale preferred among multiple accounts")
+	}
+	if conn.PreferredInstance != "" {
+		t.Fatalf("preferredInstance = %q, want omitted/empty when store preference is stale", conn.PreferredInstance)
+	}
+	for _, instance := range conn.Instances {
+		if preferred, _ := instance["preferred"].(bool); preferred {
+			t.Fatalf("instances entry marked preferred with stale store preference: %+v", instance)
+		}
+	}
+}
+
 func TestExecuteOperation_UsesPreferredInstanceWithoutParam(t *testing.T) {
 	t.Parallel()
 
