@@ -13,7 +13,7 @@
 
 ## Overview
 
-The platform builds, distributes, installs, and runs packages in a shared service mesh. A package release may include:
+The platform builds, distributes, installs, and runs packages in a shared mesh. A release may include:
 
 - An MCP server and its operations
 - One or more single-page user interfaces
@@ -21,66 +21,64 @@ The platform builds, distributes, installs, and runs packages in a shared servic
 - Dependency and migration metadata
 - Per-operation authorization relationship or role requirements
 
-The platform supports the following roles and workflows.
-
 ### Organization Administrator
 
-An organization administrator can:
+An organization administrator:
 
-- Operate one deployment with a private registry and administration surfaces, such as `https://vt.valon.tools`, `/registry`, and `/admin`.
-- Pull trusted releases into the private registry by canonical package ID and release version, supplying upstream read credentials at import time.
-- Browse installed apps as a graph, including operations, UIs, workflows, dependencies, versions, identities, and authorization.
-- Open an app administration page, change its version, or install and remove it.
+- Operates a deployment with one private registry and administration surfaces such as `https://vt.valon.tools`, `/registry`, and `/admin`.
+- Imports trusted releases by canonical package ID and version, supplying upstream read credentials per import.
+- Browses installed apps as a graph of operations, UIs, workflows, dependencies, versions, identities, and authorization.
+- Installs, updates, and removes apps.
 
 ### Package Publisher
 
-A publisher can:
+A publisher:
 
-- Define package metadata, operations, dependencies, workflows, UIs, and migration jobs in `package.yaml`.
-- Run `vt build <dir>` to validate the package and build a release bundle locally, or pass `--push` to publish it to the deployment registry.
-- Run `vt dev --deployment <url> <dir>` to test a package in an isolated, user-scoped mesh sandbox before publishing it.
+- Defines package metadata, operations, dependencies, workflows, UIs, and migrations in `package.yaml`.
+- Runs `vt build <dir>` to validate and build locally, with `--push` to publish.
+- Runs `vt dev --deployment <url> <dir>` in an isolated user sandbox.
 
 ### Package Administrator
 
-A package administrator can:
+A package administrator:
 
-- Inspect an app and its deployment details.
-- Manage an app's desired release version within the administrator's package-scoped authority.
-- Promote releases from the private registry manually or through deployment rules.
-- Perform the first installation that admits a package into the mesh.
-- Select organization-managed identities for runtimes, migrations, and workflows.
-- Decide whether an operation runs only as its workload identity or may exercise explicitly delegated caller authority.
-- Bind each permission as either a durable grant or delegated authority.
+- Inspects app deployment details.
+- Manages desired release versions within package-scoped authority.
+- Promotes releases manually or through deployment rules.
+- Performs the first installation.
+- Selects organization-managed identities for runtimes, migrations, and workflows.
+- Chooses workload-only or delegated caller authority per operation.
+- Binds permissions as durable grants or delegated authority.
 
-A durable grant cannot exceed the human issuer's authority when created and remains until it is explicitly revoked, expires, or is invalidated by a policy migration. Delegated authority is bounded by the subject's current authority and narrows immediately when that authority is lost.
+A durable grant cannot exceed its human issuer's authority and lasts until revocation, expiration, or invalidation by policy migration. Delegated authority tracks the subject's current authority.
 
-Package administration and publishing are independent roles, although the same person may hold both. Publishing, installation, and promotion remain separate actions.
+Publishing and package administration are independent roles. Publishing, installation, and promotion are separate actions.
 
 ### Package User
 
-A package user can:
+A package user:
 
-- Open a deployment and browse only the apps, operations, UIs, and workflows they are authorized to see.
-- Launch an app UI or invoke an operation through MCP Streamable HTTP or `vt invoke`.
-- Manage their API grants and use a development sandbox when authorized.
-- Use these capabilities without access to organization or app administration surfaces.
+- Browses authorized apps, operations, UIs, and workflows.
+- Launches app UIs and invokes operations through MCP Streamable HTTP or `vt invoke`.
+- Manages API grants and authorized development sandboxes.
+- Has no organization or app administration access.
 
 ## Registries
 
-The registry protocol is open. Anyone may operate a compatible registry; there is no central creation or approval authority.
+The registry protocol is open and has no central authority.
 
 ### Deployment Registry
 
-Each deployment has exactly one deployment registry, also called its private registry, and uses it as the sole package catalog and artifact source. Installation, upgrade, rollback, and recovery never fetch directly from an external registry.
+Each deployment has one private registry as its sole catalog and artifact source. Installation, upgrade, rollback, and recovery never fetch externally.
 
 Releases enter through:
 
-- **Push**: an authorized publisher uploads a release created for the deployment registry. Publication credentials authorize only the permitted package and release actions.
-- **Pull-through import**: an administrator specifies a canonical package ID, release version, and upstream read credentials at import time. The registry resolves the source registry from the package ID, verifies the release, and stores the complete release locally before exposing it.
+- **Push**: an authorized publisher uploads a release. Credentials are scoped to permitted package and release actions.
+- **Pull-through import**: an administrator supplies a canonical package ID, version, and upstream read credentials. The registry resolves, verifies, and stores the complete release before exposure.
 
 ### Build
 
-Publishers create releases from a source directory with `vt build <dir>`. For example:
+`vt build <dir>` creates a release from a source directory:
 
 ```text
 g-issues/
@@ -96,7 +94,7 @@ g-issues/
     └── admin-console/
 ```
 
-`package.yaml` defines the package name, version, operations, dependencies, workflows, UIs, migration jobs, and authorization requirements. Runtime and migration code must be Bun applications; packages do not supply Dockerfiles or custom container images. Workflow definitions and operation schemas are referenced by `package.yaml` rather than requiring separate source directories. `vt build g-issues/` validates the package, installs dependencies from the frozen Bun lockfile, builds digest-addressed Bun application artifacts locally, and writes a logical release bundle.
+`package.yaml` defines package metadata, operations, dependencies, workflows, UIs, migrations, and authorization. It references workflow definitions and operation schemas; no fixed directories are required. Runtime and migration code must be Bun applications; packages cannot supply images or Dockerfiles. `vt build` validates the package, installs from the frozen lockfile, builds digest-addressed artifacts, and writes the release bundle.
 
 ### Example Release Bundle
 
@@ -116,28 +114,28 @@ g-issues@2.3.1
     └── admin-console.tar.gz
 ```
 
-A UI-only or workflow-only package omits the runtime Bun app.
+UI-only or workflow-only packages omit the runtime.
 
 ```sh
 vt build <dir>
 vt build <dir> --push
 ```
 
-Without `--push`, `vt build` writes the release bundle locally and needs no deployment credentials. With `--push`, it uploads the release bundle to the deployment registry after building.
+Without `--push`, the build is local and needs no deployment credentials. `--push` uploads the completed bundle.
 
 ### CLI Authentication
 
-`vt build <dir> --push` authenticates to the deployment registry before upload. The CLI resolves credentials in this order:
+For `--push`, the CLI resolves credentials in this order:
 
 1. `VT_API_KEY` environment variable
 2. A session stored in the OS keychain from a prior `vt auth login`
 3. Interactive `vt auth login` if no credential is available
 
-`--push` is idempotent: retrying the same release after interruption resumes or completes the existing attempt instead of creating a duplicate catalog entry.
+`--push` is idempotent and resumes interrupted uploads.
 
 ### Stored Content and Backing Services
 
-Google Cloud Storage stores the immutable release bundle: runtime and migration Bun app artifacts, UI bundles, workflow definitions, schemas, the canonical release manifest, and detached signatures. Each artifact is stored under its SHA-256 digest. Uploads use generation-match preconditions so an existing digest cannot be overwritten; bucket retention and versioning provide additional recovery and immutability safeguards.
+Cloud Storage holds immutable release bundles and detached signatures by SHA-256 digest. Generation-match preconditions prevent overwrite; retention and versioning support recovery.
 
 The registry service tracks catalog and control-plane metadata separately from Cloud Storage:
 
@@ -148,13 +146,13 @@ The registry service tracks catalog and control-plane metadata separately from C
 
 ### Identity and Trust
 
-Each registry controls discovery, download, and publication access. The deployment registry authorizes its readers and publishers; upstream registries enforce their own policies. Pull-through import uses read-only credentials supplied for that import operation.
+Each registry controls discovery, download, and publication. Pull-through imports use per-operation read-only credentials.
 
 Each registry has a stable `registryId` derived from its root public key.
 
 ### Pull-through Imports
 
-An administrator specifies a canonical package ID, release version, and upstream read credentials at import time. The canonical package ID encodes the source registry; no standing upstream source configuration is required. The import grants read access only for that operation; installation still requires the organization's trust policy to accept the release signature. The registry verifies the complete release, then atomically adds it to the local catalog; failed imports remain invisible. Imported releases keep their source identity, signatures, and digest.
+The canonical package ID identifies the source registry, so no standing upstream configuration is required. The registry uses per-import credentials, verifies the complete release, then atomically exposes it. Failed imports remain hidden. Installation separately enforces organization trust policy. Imported releases retain source identity, signatures, and digest.
 
 ## Publishing and Distribution
 
@@ -183,21 +181,21 @@ An administrator specifies a canonical package ID, release version, and upstream
 
 #### Verification
 
-When the registry receives a push request, it authenticates the publisher, verifies signatures, digests, and contracts, and rejects conflicting republications of the same `releaseVersion`. A `releaseVersion` follows a documented grammar and binds permanently to one `releaseDigest`. Only after those checks succeed does the registry expose the release in the catalog.
+On push, the registry authenticates the publisher, verifies signatures, digests, and contracts, and rejects conflicting `releaseVersion` republications. `releaseVersion` follows a documented grammar and permanently binds to one `releaseDigest`. Exposure follows successful verification.
 
-Pull-through import has its own validation before copying an external release locally; installation is a separate check that re-verifies the selected `releaseDigest` before admitting a package into the mesh.
+Import validates before copying. Installation re-verifies the selected `releaseDigest`.
 
 ### First Installation
 
-First installation admits a cataloged release into the mesh. Installation of `g-issues@2.3.1` proceeds as follows:
+First installation admits a cataloged release:
 
 1. **Select a release.** A package administrator chooses the app and an immutable `releaseDigest` from the registry catalog.
 2. **Review the contract.** The platform shows declared operations, dependencies, workflows, UIs, migrations, and required authorization relationships.
 3. **Bind identities.** The administrator selects organization-managed service accounts for the runtime, migration jobs, and workflows when the release includes them.
 4. **Configure operation authority.** For each operation, the administrator decides whether it runs only as the workload identity or may exercise delegated caller authority, and binds permissions as durable grants or delegated authority.
 5. **Approve admission.** The administrator confirms the bindings. This requires `service_account.assign` for each identity and `authorization.grant` for each relationship or role being granted.
-6. **Verify and prepare.** The control plane re-verifies the `releaseDigest`, resolves dependencies, reserves the package slot, binds identities, provisions mesh routes and policies, and then runs prepare migrations.
-7. **Roll out.** For releases with a runtime, the revision controller creates runtime workloads. It stages UI and workflow artifacts and promotes the revision once readiness checks converge. The app then appears in user-facing catalogs and becomes invocable.
+6. **Verify and prepare.** The control plane re-verifies the `releaseDigest`, resolves dependencies, reserves the package slot, binds identities, provisions waypoint routes and mesh policies, and then runs prepare migrations.
+7. **Roll out.** The revision controller creates runtime workloads when present, stages UI and workflow artifacts, and promotes after readiness converges.
 
 ## Package Revisions
 
@@ -205,17 +203,17 @@ First installation admits a cataloged release into the mesh. Installation of `g-
 
 The control plane persists:
 
-- **Package slots**: one organization-scoped slot keyed by canonical package identity, reserved before allocating an installation ID and used to fence concurrent first installs
+- **Package slots**: organization-scoped slots keyed by canonical package identity, reserved before installation ID allocation to fence concurrent first installs
 - **Revision requests**: append-only records of install, upgrade, rollback, and removal intent, including the actor, previous promoted revision, target release or tombstone, deployment-registry catalog generation and applicable trust-policy revision, approved authorization bindings, resolved dependencies, and timestamps
 - **Installation head**: last successfully promoted revision and current admitted candidate
-- **Revision operation**: one generation-fenced state machine per installation, including phase, candidate Kubernetes resources, deadlines, stability timestamp, and routing generation
+- **Revision operation**: one generation-fenced state machine per installation with phase, candidate resources, deadlines, stability timestamp, and routing generation
 - **Migration outcomes**: immutable status keyed by installation, `releaseDigest`, and migration ID
 - **Routing and catalog generations**: independent operation-routing, package, operation, UI, and workflow generations committed for the promoted revision
 - **Terminal outcomes**: completion or failure phase, duration, and reason
 
 ### Installation Reconciliation
 
-Publishing does not install a package. An authorized installer selects an immutable `releaseDigest` and supplies the following bindings and settings:
+An installer selects an immutable `releaseDigest` and supplies:
 
 - An organization-managed Kubernetes service account when the release has a runtime or migration
 - Organization-managed workflow identities
@@ -223,21 +221,21 @@ Publishing does not install a package. An authorized installer selects an immuta
 - Caller-delegation policy per operation
 - Initial replica, resource, and availability settings when the release has a runtime
 
-Installation is a reconciled saga:
+Installation uses a reconciled saga:
 
-1. Verify that the release is complete in the deployment registry, then verify its source registry identity, applicable trust policy, release signature, referenced artifact digests, platform support, runtime compatibility, and schema versions.
+1. Verify registry completeness, source identity, trust policy, signatures, digests, platform support, runtime compatibility, and schema versions.
 2. Resolve exact dependency revisions and operation-contract digests.
 3. Reserve the organization package slot and persist the revision request, approved authorization snapshot, and fenced revision operation.
-4. Bind the installation to any required runtime, migration, and workflow identities, authorization relationships, ambient data-plane enrollment, and `AuthorizationPolicy` attachments.
+4. Bind identities, authorization, ambient and waypoint enrollment, L4 bypass policy, and waypoint `AuthorizationPolicy` attachments.
 5. Hand the fenced operation to the revision controller, which follows the canonical phases in [Revision Rollouts](#revision-rollouts).
 
-Failures preserve phase and diagnostics. The revision controller retries within policy and cleans up resources created for an unpromoted revision when an administrator cancels the operation. Promotion, catalog exposure, and canary behavior follow the rules in Revision Rollouts.
+Failures preserve phase and diagnostics. The controller retries within policy and cleans up unpromoted resources after cancellation.
 
 ### Dependencies and Contracts
 
-Dependencies specify canonical package identities, `releaseVersion` ranges, whether they are required or optional, and operation-contract digests. Admission records the selected revisions and digests.
+Dependencies specify package identity, version range, requirement level, and operation-contract digests. Admission records resolved revisions and digests.
 
-The platform validates:
+Admission validates:
 
 - Every required dependency has a promoted compatible revision
 - Required operations exist
@@ -246,18 +244,18 @@ The platform validates:
 - No conflicting revision operation is active in the affected dependency subgraph
 - Workflow calls reference compatible operation contracts
 
-All schemas use the same JSON Schema version and are normalized before hashing. Initially, schemas are compatible only when their hashes match.
+Schemas share one JSON Schema version and are normalized before hashing. Initially, compatibility requires equal hashes.
 
 ### Revision Rollouts
 
-Runtime upgrades use Kubernetes blue/green rollouts. Each candidate revision runs in a distinct immutable Deployment behind a revision-specific Service, and the serving Deployment is never restarted or mutated in place. Promotion advances the promoted head and all catalog generations in one state-store transaction only after routing, UI, and workflow prerequisites converge for a stability window. Failure before that commit restores prior routing without advancing any generation. Convergence is verified from Kubernetes workload health, per-proxy routing-status reports, and ambient enrollment gates.
+Runtime upgrades use blue/green rollouts. Each revision has an immutable Deployment and Service; serving Deployments are never mutated. Promotion atomically advances the promoted head and catalog generations after routing, UI, and workflow checks pass for a stability window. Pre-commit failure restores routing without advancing generations. Checks cover workload health, Gateway API route status, waypoint configuration distribution, and ambient enrollment.
 
-The canonical revision-operation phases are:
+Phases:
 
 1. **Admitted**: validate release, policy, compatibility, and dependencies.
 2. **Preparing**: run fenced, backward-compatible prepare migrations.
 3. **Starting**: create runtime resources and stage candidate UI and workflow artifacts.
-4. **Ready**: hold every applicable check for the stability window.
+4. **Ready**: require every applicable check to pass for the stability window.
 5. **Canarying**: send limited traffic only for contracts identical to the promoted revision, without catalog exposure.
 6. **Promoting**: execute the convergence and atomic commit protocol above.
 7. **Draining**: enforce the pinned-session and hard-deadline protocol below.
@@ -265,55 +263,55 @@ The canonical revision-operation phases are:
 9. **Finalizing**: run separately approved irreversible migrations.
 10. **Complete**: record convergence and timing.
 
-The prior revision drains pinned sessions and MCP SSE streams until a hard deadline while new sessions route only to the promoted revision. Pre-promotion failure leaves the prior revision primary; post-promotion failure marks the new revision degraded without automatic rollback—the next revision operation waits for an administrator retry, an approved rollback, or a forward fix.
+Existing MCP SSE connections remain pinned until closure or deadline. Stateful follow-ups carry a signed session token and revision header; `ext_authz` validates the token before the waypoint routes by header. New sessions follow controller-owned weights. Pre-promotion failure retains the prior revision. Post-promotion failure marks the new revision degraded and requires retry, approved rollback, or forward fix.
 
 ### Migrations and Rollback
 
-Migrations are separately identified, digest-pinned jobs. Each declares:
+Each digest-pinned migration declares:
 
 - Migration ID and `releaseDigest`
 - Phase—the revision lifecycle stage in which the job runs
-  - **Prepare** — runs before promotion while the prior revision may still serve traffic. Changes must be backward-compatible with the serving revision (the expand phase of an expand/contract migration).
-  - **Finalize** — runs after promotion once the candidate is primary. These migrations may be irreversible; destructive jobs require separate administrator approval (the contract phase of an expand/contract migration).
-  - **Compensating** — runs on approved rollback to reverse or repair data changes from prior migrations when returning to an earlier revision.
+  - **Prepare** — backward-compatible changes before promotion.
+  - **Finalize** — potentially irreversible changes after promotion; destructive jobs require separate approval.
+  - **Compensating** — data reversal or repair during approved rollback.
 - Dedicated workload identity
 - Timeout, resource limits, retry policy, and idempotency key
 - Compatibility with the prior and candidate package revisions
 
-In the expand phase of an expand/contract migration, the schema changes remain compatible with the serving revision. The contract phase removes the obsolete schema only after the new revision is primary.
+Expand changes remain compatible with the serving revision. Contract changes remove obsolete schema only after promotion.
 
 ## Runtime and Access
 
 ### Authentication and Authorization
 
-The authorization service is the system of record for organization policy. It stores Zanzibar-style tuples used by management, user-invocation, workflow, and package-to-package authorization checks. Enforcement topology and mesh policy attachment are defined in [Runtime Architecture](#runtime-architecture).
+The authorization service is the system of record for organization policy, stored as Zanzibar-style tuples for management, user, workflow, and package calls.
 
 - Users authenticate through an external identity provider with organization-level SSO, issuer and tenant allowlists, and session revocation.
-- API keys are credentials for named, expiring, scoped API grants that act on behalf of an owner. Only hashes are stored; plaintext is returned only once, and an empty scope does not mean unrestricted access.
+- API keys are credentials for named, expiring, scoped grants that act for an owner. Only hashes are stored; plaintext is returned once. Empty scope grants nothing.
 - `service_account.create` permits creating an organization-managed service account but grants it no authority.
 - `service_account.assign` permits binding a service account to a package runtime, workflow definition, or workflow execution but grants it no new authority.
-- `authorization.grant` permits granting a relationship or role and may be held only by a human subject. The grant cannot exceed the issuer's current authority, resource scope, conditions, or expiration.
+- `authorization.grant` is human-only and cannot exceed the issuer's authority, resource scope, conditions, or expiration.
 - Every installed package runtime uses an organization-owned workload identity. Workflow definitions are bound to organization-owned workflow identities that the workflow service uses for execution.
 - Every invocation is centrally authorized before dispatch; package-specific resource checks may further restrict it.
-- Production does not start in a fail-open mode when identity or authorization is unavailable.
+- Production fails closed when identity or authorization is unavailable.
 
 ### Authorization Model and Evaluation
 
-Authorization uses a provider-independent check protocol built around:
+Authorization checks include:
 
 - A canonical **subject** being evaluated, such as the effective subject, immediate caller workload, or management actor
 - An **action**, such as a package operation or administrative permission
 - A canonical **resource**, identified by a reserved platform type or a package-namespaced type
 
-The platform reserves resource types for registries, packages, releases, installations, revisions, workflows, identities, and authorization grants. Packages register namespaced resource types at admission and cannot use reserved names.
+The platform reserves registry, package, release, installation, revision, workflow, identity, and authorization-grant types. Packages register namespaced types at admission.
 
 ### Package Access Policy
 
-Release manifests define only the authorization relationships or roles required to invoke each operation. MCP endpoints are mesh-internal by default. External invocation uses the deployment ingress and the same authorization service. Direct package egress defaults to deny and is managed by deployment policy rather than release metadata.
+Release manifests declare required relationships or roles per operation. MCP endpoints are mesh-internal. Every invocation passes through the destination waypoint. Ambient L4 policy and `NetworkPolicy` block waypoint bypass; the Bun wrapper rejects requests without signed internal caller context. External calls use deployment ingress and the same authorization service. Deployment policy controls default-deny egress.
 
 ### Workflows
 
-Packages publish immutable workflow definitions that the revision controller registers with a mesh workflow service. Each execution is pinned to its definition and operation-contract digests until completion, migration, or retirement, while new executions use the promoted catalog generation.
+The controller registers immutable workflow definitions. Executions remain pinned to definition and contract digests until completion, migration, or retirement; new executions use the promoted catalog generation.
 
 ### User Interfaces
 
@@ -338,7 +336,7 @@ Users connect a package to an external service through the CLI:
 vt connect <package>
 ```
 
-The CLI opens a browser-based login flow. After the user authenticates and grants access, the platform syncs the resulting external credentials into its secret-management service for the package connection.
+The CLI opens browser login, then stores granted credentials in the secret-management service.
 
 TODO: Define provider discovery, requested scopes and consent, callback handling, credential storage and rotation, revocation, and package access to connected credentials.
 
@@ -350,93 +348,99 @@ Authorized operations are available over the deployment endpoint and through the
 vt invoke --deployment <url> <package> <operation> --args <json>
 ```
 
-Authentication comes from an interactive session, keychain, environment, or standard input. Positional arguments never carry secrets or tokens.
+Authentication comes from a session, keychain, environment, or standard input. Positional arguments never carry secrets.
 
-Invocation uses MCP Streamable HTTP: JSON-RPC over POST with JSON or SSE responses. The gateway enforces request size, timeout, rate, and stream lifetime.
+MCP Streamable HTTP requests carry reserved installation and operation headers; stateful requests also carry a revision header and signed session token. Ingress authenticates external callers, strips caller-supplied internal-context headers, validates routing headers, and issues a short-lived caller token bound to that metadata. Workloads obtain equivalent tokens internally.
 
-Ingress strips external identity and routing fields, authenticates the credential, and exchanges it for a short-lived signed caller token; it neither parses MCP nor authorizes operations. The token is bound to its issuer, waypoint audience, target installation, and raw envelope hash. It carries a unique ID; issuance, not-before, and expiry times; actor and effective subject; credential and delegation upper bounds; optional browser-capability claims; a delegation chain; and a trace ID. After authorization, the destination waypoint replaces the caller token with a signed internal caller context containing only the claims the runtime needs.
+The waypoint calls `ext_authz`, then routes by header to a revision Service. Authorization validates tokens, operation access, and quota, then returns signed internal caller context. Invalid requests never reach the runtime.
+
+The Bun wrapper verifies context, operation/body agreement, and schema before dispatch. Ingress enforces external limits; waypoint policy controls transport; the wrapper enforces payload and argument-dependent authorization.
 
 ### Development Sandbox
 
-`vt dev` builds a local package and connects it only to an explicitly enabled per-user sandbox:
+`vt dev` connects a local build to an enabled per-user sandbox:
 
 ```sh
 vt dev --deployment <url> <dir>
 ```
 
-Authentication uses the normal interactive or keychain flow. The platform assigns a short-lived development workload identity distinct from the user. Routes are scoped to the developer or named test session and cannot claim a production package slug.
+The platform assigns a short-lived development workload identity. Routes are scoped to the developer or test session and cannot claim production slugs.
 
 Development packages:
 
-- Receive traffic only from their developer or explicitly named test sessions and never become the default production route
+- Receive traffic only from their developer or named test sessions and never become the production default
 - Cannot run migrations
 - Cannot receive or forward raw caller credentials
 - Do not inherit the production workload's permissions
 - Use sandbox-scoped authorization
 - Expire automatically and are audited upon connection and disconnection
 
-The first implementation has one production deployment profile: Kubernetes with Istio ambient mode and the protected platform services described below. `vt build` may run locally, but there is no production runtime for standalone laptops or VMs, unauthenticated operation, or operation outside the mesh. The development sandbox is a capability of a connected deployment rather than a second local control plane.
+Production runs only on Kubernetes with self-managed Istio ambient. Pinned Helm releases install base CRDs, `istiod`, ambient CNI, and `ztunnel`; managed Google Cloud Service Mesh lacks the required data plane. There is no laptop or VM production profile. Development sandboxes use the connected deployment.
 
 ## Platform Architecture
 
 ### Deployment Tiers
 
-The platform separates deployment into three trust and lifecycle tiers:
+Deployment has three trust tiers:
 
-1. **Bootstrap substrate**: Kubernetes and Istio, the Google Cloud Storage artifact bucket, the control-plane state store, revision controllers, certificate authority, and backup and recovery tooling. Terraform provisions or deploys these components before package APIs are available.
-2. **Protected system packages**: identity, authorization, secret management, registry verification, audit, and workflow execution. After the bootstrap substrate is healthy, revision controllers install and upgrade these services using signed releases and the normal immutable revision and rollout machinery.
-3. **Ordinary organization packages**: packages installed by authorized organization or package administrators and constrained by organization policy.
+1. **Bootstrap substrate**: Kubernetes, Istio ambient, artifact storage, state store, revision controllers, certificate authority, and recovery tooling. Terraform provisions these before package APIs.
+2. **Protected system packages**: ingress authentication, identity, authorization, secrets, registry verification, audit, and workflows. After bootstrap, controllers deploy signed releases through normal revision machinery.
+3. **Organization packages**: administrator-installed packages constrained by organization policy.
 
-The bootstrap substrate and protected system packages are both inside the platform availability boundary. If a required component in either tier is unavailable, the affected capability is counted as platform downtime even when some existing package traffic continues. An ordinary package failure counts as downtime for that package, not for the platform, unless a platform defect caused or propagated the failure.
+Bootstrap and protected services are inside the platform availability boundary. Their failure is platform downtime for affected capabilities. Organization package failure affects only that package unless caused or spread by the platform.
 
 ### Trusted Platform Services
 
-The bootstrap substrate and protected system packages provide these trusted services:
-
-- **Identity service**: authenticates sessions and API grants, resolves canonical principals, manages organization service accounts, issues caller tokens, and manages signing keys for internal caller contexts and session wrappers.
-- **Authorization service**: stores immutable policy models, grants, assignments, and revocations and evaluates provider-independent and Envoy `ext_authz` checks.
-- **Secret-management service**: stores and rotates platform and connection credentials and releases secret material only to explicitly authorized workload identities.
-- **Registry-verification service**: validates the deployment registry and pull-through imports identified by canonical package ID. Before catalog exposure and admission, it verifies manifests, digests, signatures, platform compatibility, trust policy, and local artifact completeness.
+- **Identity service**: authenticates sessions and API keys, resolves principals, manages service accounts, and issues signed caller and session tokens.
+- **Authorization service**: stores immutable policy models, grants, assignments, and revocations; evaluates provider-independent and Envoy `ext_authz` checks; and signs the internal caller contexts forwarded to package runtimes.
+- **Secret-management service**: stores and rotates credentials and releases them only to authorized workload identities.
+- **Registry-verification service**: verifies manifests, digests, signatures, compatibility, trust policy, and artifact completeness before exposure and admission.
 - **Audit sink**: writes append-only security, authorization, administration, and runtime events to storage that packages cannot control.
-- **Workflow service**: registers promoted package-defined workflows and runs pinned executions outside package runtimes.
-- **Control-plane state store**: a bootstrap-substrate service that durably stores deployment-registry state, import attempts and provenance, package slots, revision requests and operations, routing and catalog generations, migration outcomes, and recovery metadata.
+- **Workflow service**: registers promoted workflows and runs pinned executions outside package runtimes.
+- **Control-plane state store**: stores registry state, import provenance, package slots, revision state, generations, migrations, and recovery metadata.
 
 ### Runtime Architecture
 
-Production uses Istio ambient mode. Package Pods have no mesh or application proxy sidecar; they expose MCP and health endpoints directly. Every package runtime and migration executes as a Bun application in a platform-owned, unprivileged Bun container image; publishers cannot provide arbitrary images or Dockerfiles. The runtime combines `istiod`, mandatory node-level `ztunnel`, shared destination and ingress waypoints, gateways, these standardized Bun application containers, protected services, the state store, and revision controllers. Revision controllers reconcile durable state into Deployments, Services, waypoint enrollment, Gateway API routes, signed cluster-selection configuration, and `AuthorizationPolicy`; `istiod` distributes the resulting xDS configuration. `istiod` owns endpoint, routing, certificate, and mesh-policy distribution—not revision state, grants, workflows, or catalogs.
+Production uses self-managed Istio ambient with shared destination waypoints and no Pod sidecars. Runtimes and migrations use a platform-owned, unprivileged Bun image. The runtime wrapper owns MCP and health listeners, verifies caller context and operation/body agreement, validates schemas, dispatches package code, reports health, emits telemetry, and drains. Migrations use a non-serving entry point.
+
+The platform runtime includes `istiod`, node-level `ztunnel`, ingress, destination waypoints, Bun containers, protected services, state store, and revision controllers. Controllers reconcile durable state into workloads, Services, enrollment, routes, and policies. `istiod` distributes endpoints, routes, identities, certificates, and policies but does not own revisions, grants, workflows, or catalogs.
 
 **`ztunnel` configures (L4):**
 
-- mTLS and identity-based L4 `AuthorizationPolicy` on workload ports, including bypass prevention for direct Pod IP or revision Service access
-- Ambient workload enrollment, policy-generation binding, and readiness gating until the current generation is loaded
+- mTLS and identity-based L4 policy, including direct Pod and revision Service bypass prevention
+- Workload enrollment and readiness gating on policy generation
 - L4 telemetry and audit for connection, byte, policy-denial, and bypass events
 
-`ztunnel` cannot enforce L7 policy, decode MCP, select revision backends, or run `ext_authz` authorization checks.
+`ztunnel` cannot enforce L7 policy, select revision backends, or run `ext_authz` authorization checks.
 
-**Waypoints configure (L7):**
+**Destination waypoints configure and enforce L7 behavior:**
 
-- Gateway API `HTTPRoute` resources, waypoint enrollment, and protected extensions (MCP decoder, `ext_authz`, cluster selector, session wrapper, routing-status reporter, and audit adapter)
-- MCP decoding, authorization, and operation-specific revision routing via decoder metadata and signed generation-fenced routing tables—not caller headers or `HTTPRoute` matching
-- Signed session routing wrappers for SSE pinning, plus L7 request, MCP outcome, and trace telemetry
+- Gateway API routing by installation, operation, and optional session revision to revision-specific Services
+- Provider-independent operation authorization through `CUSTOM` `AuthorizationPolicy` and `ext_authz`
+- Weighted routing and signed session-route validation
+- L7 telemetry and transport policy
+- Rate or quota enforcement through `ext_authz`
 
-Ingress authenticates external credentials and mints caller tokens; the destination waypoint decodes and authorizes MCP requests. Health probes use a separate protected port with only the minimum necessary policy exception. `NetworkPolicy` provides reachability enforcement alongside ambient policy. Authorization fails closed; health ports have no public ingress. If a required security event cannot be delivered or durably buffered, the affected request fails closed. If `istiod` is unavailable, established traffic uses its last configuration; new revision operations requiring routing or policy changes fail closed until dependencies recover.
+Waypoints do not decode MCP or use custom Envoy, Wasm, or `TrafficExtension` filters. They trust metadata approved by `ext_authz`; the Bun wrapper enforces metadata/body agreement.
+
+Ingress authenticates and mints caller tokens; waypoints authorize and route; the wrapper verifies internal context and body agreement. Health probes use a protected, non-public port. `NetworkPolicy` supplements ambient policy. Authorization and required security-event delivery or buffering fail closed. Without `istiod`, existing traffic uses cached configuration while configuration-dependent revision operations stop.
 
 ### Infrastructure and Service Rollouts
 
-The mesh is redeployed only for changes to Istio or its trust and extension configuration, including:
+Mesh redeployment is limited to:
 
-- `istiod`, `ztunnel`, and waypoint proxy versions
-- Ingress and egress gateway versions or deployment-pinned configuration
+- `istiod`, ambient CNI, and `ztunnel` versions
+- Destination waypoint and optional Istio ingress or egress gateway versions
 - Istio certificate-authority and trust-domain configuration
-- Mesh-wide extension-provider and ambient-enrollment configuration
+- Mesh-wide ambient-enrollment and L4 policy configuration
 
-Protected system packages roll independently through the revision controller and do not require a mesh redeployment. Ordinary package revisions, registry trust-policy changes, identity assignments, and authorization-binding updates likewise change runtime or control-plane state without redeploying the mesh.
+Protected and organization packages roll independently. Package revisions, registry trust, identity, and authorization changes do not redeploy the mesh.
 
-Bootstrap-substrate changes, including control-plane state migrations and backup or recovery tooling, use infrastructure rollouts but do not redeploy the mesh unless they also change an Istio item listed above. Package releases declare supported MCP and Bun versions. Infrastructure pins Kubernetes, Istio, Envoy, the platform Bun container image, the shared MCP extension, session-token format, authorization adapter, and routing-status extension versions and accounts for overlapping old and new versions before admitting releases that require new features. Registry trust-root changes remain separately authorized and audited.
+Bootstrap changes use infrastructure rollouts and redeploy the mesh only when changing an item above. Releases declare supported MCP and Bun versions. Infrastructure pins Kubernetes, Istio, Envoy, the Bun image, routing contract, token formats, and routing schema, with version overlap before admitting dependent releases. Registry trust-root changes require separate authorization and audit.
 
 ## Representative Request Lifecycles
 
-The following representative lifecycles remain to be specified:
+To specify:
 
 - Provision the deployment registry
 - Import a package release through pull-through
@@ -462,12 +466,13 @@ The following representative lifecycles remain to be specified:
 | Revision | Installed release or removal tombstone |
 | Revision operation | Fenced execution of durable revision intent |
 | Promotion | Atomic commit advancing the promoted head and catalog generations |
-| Routing generation | Durable correlation of one routing decision, its resources, proxy set, and observations |
+| Routing generation | Durable correlation of waypoint routing state, selected revision Services, route and proxy convergence, and observations |
 | Service account | Organization-managed non-human principal that may be assigned to runtimes, migrations, or workflows |
 | Workload identity | Runtime identity materialized from an assigned service account and enforced by Kubernetes and the mesh |
 | Workflow identity | Identity bound to a workflow definition and used by the workflow service for executions |
-| Caller token | Signed pre-authorization context presented only to a destination waypoint |
+| Caller token | Signed pre-authorization context presented only to an authorized destination waypoint |
 | Internal caller context | Signed post-authorization context forwarded to a runtime |
+| Bun runtime wrapper | Platform-owned runtime layer that verifies internal caller context, validates schemas, and dispatches publisher package code |
 | Protected system package | Signer-pinned platform package unavailable to ordinary package APIs |
-| Waypoint | Shared Envoy proxy for MCP authorization, revision routing, sessions, and telemetry |
+| Waypoint | Shared ambient Envoy proxy that authorizes declared invocation metadata and routes requests to revision-specific Services using standard Gateway API configuration |
 | `ztunnel` | Node-level ambient proxy for L4 security and workload identity |
