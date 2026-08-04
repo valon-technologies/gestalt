@@ -21,8 +21,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-const adminResourceType = "gestaltAdmin"
-const adminResourceID = "gestaltAdmin"
+const reversePublicationResourceType = "reversePublication"
+const reversePublicationResourceID = "reversePublication"
+const legacyAdminResourceType = "gestaltAdmin"
+const legacyAdminResourceID = "gestaltAdmin"
 
 // EndpointValidator dials a candidate tunnel and runs the tunnel-only
 // RegistrationLifecycle.Check. RR-6/RR-7 supply the real one; tests inject a fake.
@@ -73,7 +75,7 @@ func (s *Service) CreateRemote(ctx context.Context, req *proto.CreateRemoteReque
 	}
 
 	p := principal.FromContext(ctx)
-	if err := s.authorizeAdmin(ctx, p, "create"); err != nil {
+	if err := s.authorizePublication(ctx, p, "create"); err != nil {
 		return nil, err
 	}
 	owner, err := principal.ResolveCredentialSubjectID(ctx, s.users, p)
@@ -119,7 +121,7 @@ func (s *Service) ListRemotes(ctx context.Context, _ *proto.ListRemotesRequest) 
 		return nil, status.Error(codes.FailedPrecondition, "remote management is not configured")
 	}
 	p := principal.FromContext(ctx)
-	if err := s.authorizeAdmin(ctx, p, "read"); err != nil {
+	if err := s.authorizePublication(ctx, p, "read"); err != nil {
 		return nil, err
 	}
 	owner, err := principal.ResolveCredentialSubjectID(ctx, s.users, p)
@@ -163,7 +165,7 @@ func (s *Service) DeleteRemote(ctx context.Context, req *proto.DeleteRemoteReque
 	if p == nil {
 		return nil, status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
-	if err := s.authorizeAdmin(ctx, p, "delete"); err != nil {
+	if err := s.authorizePublication(ctx, p, "delete"); err != nil {
 		return nil, err
 	}
 	if err := s.store.Delete(ctx, id, req.GetExpectedGeneration()); err != nil {
@@ -172,7 +174,7 @@ func (s *Service) DeleteRemote(ctx context.Context, req *proto.DeleteRemoteReque
 	return &emptypb.Empty{}, nil
 }
 
-func (s *Service) authorizeAdmin(ctx context.Context, p *principal.Principal, action string) error {
+func (s *Service) authorizePublication(ctx context.Context, p *principal.Principal, action string) error {
 	if s == nil || s.authz == nil {
 		return nil
 	}
@@ -180,18 +182,29 @@ func (s *Service) authorizeAdmin(ctx context.Context, p *principal.Principal, ac
 	if err != nil {
 		return resolveSubjectError(err)
 	}
-	req := invocation.SubjectAccessRequest(subjectID, action, &proto.Resource{
-		Type: adminResourceType,
-		Id:   adminResourceID,
-	})
-	allowed, err := invocation.CheckSubjectAccess(ctx, s.authz, req)
-	if err != nil {
+
+	resources := []*proto.Resource{
+		{Type: reversePublicationResourceType, Id: reversePublicationResourceID},
+		// Preserve existing access while deployments migrate administrators to the
+		// narrower reverse-publication permission.
+		{Type: legacyAdminResourceType, Id: legacyAdminResourceID},
+	}
+	var authorizationFailed bool
+	for _, resource := range resources {
+		req := invocation.SubjectAccessRequest(subjectID, action, resource)
+		allowed, checkErr := invocation.CheckSubjectAccess(ctx, s.authz, req)
+		if checkErr != nil {
+			authorizationFailed = true
+			continue
+		}
+		if allowed {
+			return nil
+		}
+	}
+	if authorizationFailed {
 		return status.Error(codes.Unavailable, "authorization provider unavailable")
 	}
-	if !allowed {
-		return status.Error(codes.PermissionDenied, "access denied")
-	}
-	return nil
+	return status.Error(codes.PermissionDenied, "access denied")
 }
 
 func (s *Service) storeNow() time.Time {
