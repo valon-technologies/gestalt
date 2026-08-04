@@ -118,6 +118,8 @@ const (
 
 // AppFleetReplicaObservation is one live process observation for a single app
 // on the current source version (within the heartbeat freshness lease).
+// Class is assigned in the same EvaluateFleetState pass as the aggregate
+// counters so replica rows and counts cannot disagree.
 type AppFleetReplicaObservation struct {
 	InstanceID             string
 	StartedAt              time.Time
@@ -125,6 +127,7 @@ type AppFleetReplicaObservation struct {
 	AppState               GestaltdInstanceAppState
 	RunningVersion         string
 	ObservedDesiredVersion string
+	ObservedAt             time.Time
 	LastError              string
 	Class                  AppFleetReplicaClass
 }

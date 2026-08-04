@@ -168,6 +168,57 @@ func TestEvaluateFleetState(t *testing.T) {
 	}
 }
 
+func TestEvaluateFleetStateReplicaIdentityAndOrder(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	cutoff := now.Add(-45 * time.Second)
+	older := now.Add(-10 * time.Second)
+	newer := now.Add(-2 * time.Second)
+
+	got := EvaluateFleetState(FleetEvaluation{
+		App:                     "app",
+		DesiredVersion:          "v2",
+		SourceVersion:           "source",
+		MinimumHealthyInstances: 2,
+		Cutoff:                  cutoff,
+		EvaluatedAt:             now,
+		Heartbeats: []*core.GestaltdInstanceHeartbeat{
+			heartbeatForFleet("error", "source", older, map[string]core.GestaltdInstanceAppHeartbeat{
+				"app": {
+					State:      core.GestaltdInstanceAppStateError,
+					LastError:  "failed",
+					ObservedAt: older,
+				},
+			}),
+			heartbeatForFleet("mismatch", "source", newer, map[string]core.GestaltdInstanceAppHeartbeat{
+				"app": {
+					State:          core.GestaltdInstanceAppStateRunning,
+					DesiredVersion: "v2",
+					RunningVersion: "v1",
+					ObservedAt:     newer,
+				},
+			}),
+		},
+	})
+	if len(got.Replicas) != 2 {
+		t.Fatalf("replicas = %#v", got.Replicas)
+	}
+	// Newest heartbeat first, then instance id.
+	if got.Replicas[0].InstanceID != "mismatch" ||
+		got.Replicas[0].Class != core.AppFleetReplicaClassMismatched ||
+		got.Replicas[0].RunningVersion != "v1" ||
+		got.Replicas[0].ObservedDesiredVersion != "v2" ||
+		!got.Replicas[0].ObservedAt.Equal(newer) {
+		t.Fatalf("replicas[0] = %#v", got.Replicas[0])
+	}
+	if got.Replicas[1].InstanceID != "error" ||
+		got.Replicas[1].Class != core.AppFleetReplicaClassError ||
+		got.Replicas[1].LastError != "failed" ||
+		!got.Replicas[1].ObservedAt.Equal(older) {
+		t.Fatalf("replicas[1] = %#v", got.Replicas[1])
+	}
+}
+
 func TestEvaluateFleetStateRequiresDesiredSourceAndMinimum(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC()

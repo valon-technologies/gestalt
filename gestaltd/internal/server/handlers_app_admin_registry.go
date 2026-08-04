@@ -107,6 +107,7 @@ type appAdminFleetReplica struct {
 	AppState               string `json:"appState"`
 	RunningVersion         string `json:"runningVersion,omitempty"`
 	ObservedDesiredVersion string `json:"observedDesiredVersion,omitempty"`
+	ObservedAt             string `json:"observedAt,omitempty"`
 	LastError              string `json:"lastError,omitempty"`
 	Class                  string `json:"class"`
 }
@@ -460,6 +461,7 @@ func appAdminFleetStateFromProjection(projection *core.AppFleetProjection) *appA
 			AppState:               string(replica.AppState),
 			RunningVersion:         replica.RunningVersion,
 			ObservedDesiredVersion: replica.ObservedDesiredVersion,
+			ObservedAt:             formatAdminTime(replica.ObservedAt),
 			LastError:              replica.LastError,
 			Class:                  string(replica.Class),
 		})

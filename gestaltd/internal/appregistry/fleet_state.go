@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -156,6 +157,7 @@ func EvaluateFleetState(input FleetEvaluation) core.AppFleetProjection {
 		replica.AppState = observation.State
 		replica.RunningVersion = strings.TrimSpace(observation.RunningVersion)
 		replica.ObservedDesiredVersion = strings.TrimSpace(observation.DesiredVersion)
+		replica.ObservedAt = observation.ObservedAt.UTC()
 		replica.LastError = strings.TrimSpace(observation.LastError)
 		if observation.State == core.GestaltdInstanceAppStateRunning &&
 			replica.RunningVersion == desiredVersion &&
@@ -175,6 +177,7 @@ func EvaluateFleetState(input FleetEvaluation) core.AppFleetProjection {
 		}
 		projection.Replicas = append(projection.Replicas, replica)
 	}
+	sortFleetReplicas(projection.Replicas)
 
 	validBasis := desiredVersion != "" && sourceVersion != "" && input.MinimumHealthyInstances > 0
 	switch {
@@ -189,6 +192,17 @@ func EvaluateFleetState(input FleetEvaluation) core.AppFleetProjection {
 		projection.State = core.AppFleetStateConverging
 	}
 	return projection
+}
+
+// sortFleetReplicas makes live replica order stable for API consumers:
+// newest heartbeat first, then instance id.
+func sortFleetReplicas(replicas []core.AppFleetReplicaObservation) {
+	slices.SortFunc(replicas, func(a, b core.AppFleetReplicaObservation) int {
+		if byHeartbeat := b.HeartbeatAt.Compare(a.HeartbeatAt); byHeartbeat != 0 {
+			return byHeartbeat
+		}
+		return strings.Compare(a.InstanceID, b.InstanceID)
+	})
 }
 
 func rolloutMatches(rollout *core.AppRollout, app, version, sourceVersion string, now time.Time) bool {
