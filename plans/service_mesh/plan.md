@@ -21,7 +21,7 @@ The platform builds, distributes, installs, and runs packages in a shared servic
 - Dependency and migration metadata
 - Per-operation authorization relationship or role requirements
 
-The platform should enable the following user experiences.
+The platform supports the following roles and workflows.
 
 ### Organization Administrator
 
@@ -100,8 +100,6 @@ g-issues/
 
 ### Example Release Bundle
 
-A typical release bundle contains multiple artifacts rather than a single archive. For example:
-
 ```text
 g-issues@2.3.1
 ├── release_manifest.json
@@ -150,9 +148,7 @@ The registry service tracks catalog and control-plane metadata separately from C
 
 ### Identity and Trust
 
-Every registry controls who can pull from it and who can publish to it.
-
-The deployment registry controls read access for discovery and download, and write access for authorized publishers. Upstream registries do the same on their side; pull-through import uses read-only credentials supplied for that import operation.
+Each registry controls discovery, download, and publication access. The deployment registry authorizes its readers and publishers; upstream registries enforce their own policies. Pull-through import uses read-only credentials supplied for that import operation.
 
 Each registry has a stable `registryId` derived from its root public key.
 
@@ -193,7 +189,7 @@ Pull-through import has its own validation before copying an external release lo
 
 ### First Installation
 
-A release in the registry catalog is not yet running in the mesh. The first installation admits it. For example, installation of `g-issues@2.3.1` proceeds as follows:
+First installation admits a cataloged release into the mesh. Installation of `g-issues@2.3.1` proceeds as follows:
 
 1. **Select a release.** A package administrator chooses the app and an immutable `releaseDigest` from the registry catalog.
 2. **Review the contract.** The platform shows declared operations, dependencies, workflows, UIs, migrations, and required authorization relationships.
@@ -201,7 +197,7 @@ A release in the registry catalog is not yet running in the mesh. The first inst
 4. **Configure operation authority.** For each operation, the administrator decides whether it runs only as the workload identity or may exercise delegated caller authority, and binds permissions as durable grants or delegated authority.
 5. **Approve admission.** The administrator confirms the bindings. This requires `service_account.assign` for each identity and `authorization.grant` for each relationship or role being granted.
 6. **Verify and prepare.** The control plane re-verifies the `releaseDigest`, resolves dependencies, reserves the package slot, binds identities, provisions mesh routes and policies, and then runs prepare migrations.
-7. **Roll out.** The revision controller creates runtime workloads when needed, stages UI and workflow artifacts, and promotes the revision once readiness checks converge. The app then appears in user-facing catalogs and becomes invocable.
+7. **Roll out.** For releases with a runtime, the revision controller creates runtime workloads. It stages UI and workflow artifacts and promotes the revision once readiness checks converge. The app then appears in user-facing catalogs and becomes invocable.
 
 ## Package Revisions
 
@@ -217,7 +213,7 @@ The control plane persists:
 - **Routing and catalog generations**: independent operation-routing, package, operation, UI, and workflow generations committed for the promoted revision
 - **Terminal outcomes**: completion or failure phase, duration, and reason
 
-### Installation
+### Installation Reconciliation
 
 Publishing does not install a package. An authorized installer selects an immutable `releaseDigest` and supplies the following bindings and settings:
 
@@ -332,7 +328,7 @@ Representative endpoints:
 - Administration: `https://vt.valon.tools/admin`
 - Package administration: `https://vt.valon.tools/packages/<package>/admin`
 
-Management APIs require dedicated administrative permissions and should use a private listener or equivalent network controls where practical.
+Management APIs require dedicated administrative permissions and a private listener or equivalent network controls.
 
 ### External Connections
 
