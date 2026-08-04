@@ -138,9 +138,9 @@ Without `--push`, `vt build` writes the release bundle locally and needs no depl
 
 ### Stored Content and Backing Services
 
-Google Artifact Registry stores the immutable release bundle: runtime and migration Bun app artifacts, UI bundles, workflow definitions, schemas, the canonical release manifest, and detached signatures. Bun app artifacts may use OCI artifact storage, but they are not publisher-supplied container images. Each artifact is content-addressed by SHA-256 digest.
+Google Cloud Storage stores the immutable release bundle: runtime and migration Bun app artifacts, UI bundles, workflow definitions, schemas, the canonical release manifest, and detached signatures. Each artifact is stored under its SHA-256 digest. Uploads use generation-match preconditions so an existing digest cannot be overwritten; bucket retention and versioning provide an additional recovery and immutability boundary.
 
-The registry service also tracks metadata that Artifact Registry does not provide on its own:
+The registry service tracks catalog and control-plane metadata separately from Cloud Storage:
 
 - Canonical package IDs, slugs, version indexes, and tombstones
 - Publication and import attempts, including pending and failed state
