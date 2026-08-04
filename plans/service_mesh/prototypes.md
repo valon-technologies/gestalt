@@ -21,6 +21,25 @@ What we learned:
 - The production architecture should therefore use self-managed upstream
   Istio rather than managed Google Cloud Service Mesh.
 
+Reproduce from the `valon-tools` repository:
+
+```sh
+scripts/setup-mesh-prototype-cluster.sh dev
+scripts/deploy-mesh-prototype-demo.sh dev
+AUTO_APPROVE=true scripts/deploy-mesh-prototype-waypoint-demo.sh dev
+```
+
+The second deployment command exercises managed Cloud Service Mesh. The third
+irreversibly converts this disposable cluster to self-managed upstream Istio
+ambient mode and exercises its waypoint.
+
+Remove only the prototype workloads while retaining the cluster:
+
+```sh
+scripts/deploy-mesh-prototype-demo.sh dev --destroy
+scripts/deploy-mesh-prototype-waypoint-demo.sh dev --destroy
+```
+
 ## Prototype 2: Authorized Revision Promotion
 
 Implementation: [valon-tools#367](https://github.com/valon-technologies/valon-tools/pull/367)
@@ -49,3 +68,25 @@ What we learned:
 The prototype uses a mock bearer token, a small HTTP authorization service, and
 a SQLite state store. Signed caller and session tokens, the production
 authorization model, MCP streaming, and database fencing remain to be tested.
+
+On a cluster already converted to upstream Istio ambient mode by Prototype 1,
+reproduce from the `valon-tools` repository:
+
+```sh
+scripts/deploy-mesh-vertical-slice-prototype.sh dev
+```
+
+The script deploys the workloads, runs the assertions described above, and
+exits nonzero if an assertion fails. Remove its workloads and persistent volume
+claim while retaining the cluster:
+
+```sh
+scripts/deploy-mesh-vertical-slice-prototype.sh dev --destroy
+```
+
+After both prototypes are no longer needed, remove the shared disposable
+cluster and its network:
+
+```sh
+AUTO_APPROVE=true scripts/setup-mesh-prototype-cluster.sh dev --destroy
+```
