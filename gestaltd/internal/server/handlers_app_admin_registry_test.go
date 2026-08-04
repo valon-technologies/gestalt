@@ -946,6 +946,16 @@ func TestAppAdminRegistryFleetStateAndRecoveryResponseShapes(t *testing.T) {
 			LiveInstances           int    `json:"liveInstances"`
 			RunningDesiredVersion   int    `json:"runningDesiredVersion"`
 			EvaluatedAt             string `json:"evaluatedAt"`
+			Replicas                []struct {
+				InstanceID             string `json:"instanceId"`
+				StartedAt              string `json:"startedAt"`
+				HeartbeatAt            string `json:"heartbeatAt"`
+				AppState               string `json:"appState"`
+				RunningVersion         string `json:"runningVersion"`
+				ObservedDesiredVersion string `json:"observedDesiredVersion"`
+				ObservedAt             string `json:"observedAt"`
+				Class                  string `json:"class"`
+			} `json:"replicas"`
 		} `json:"fleetState"`
 		Recovery struct {
 			RecoveredAt   string `json:"recoveredAt"`
@@ -961,6 +971,18 @@ func TestAppAdminRegistryFleetStateAndRecoveryResponseShapes(t *testing.T) {
 		current.FleetState.RunningDesiredVersion != 1 ||
 		current.FleetState.EvaluatedAt == "" {
 		t.Fatalf("current registry state = %#v", current)
+	}
+	replica := current.FleetState.Replicas
+	if len(replica) != 1 ||
+		replica[0].InstanceID != "instance-a" ||
+		replica[0].StartedAt != deployedAt.UTC().Format(time.RFC3339) ||
+		replica[0].HeartbeatAt != now.Add(-5*time.Second).UTC().Format(time.RFC3339) ||
+		replica[0].AppState != "running" ||
+		replica[0].RunningVersion != fixture.Version ||
+		replica[0].ObservedDesiredVersion != fixture.Version ||
+		replica[0].ObservedAt != now.Add(-5*time.Second).UTC().Format(time.RFC3339) ||
+		replica[0].Class != "on_desired" {
+		t.Fatalf("current fleet replicas = %#v", current.FleetState.Replicas)
 	}
 	if current.Recovery.RecoveredAt != recoveredAt.Format(time.RFC3339) ||
 		current.Recovery.SourceVersion != "source-a" {

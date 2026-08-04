@@ -144,7 +144,78 @@ func TestEvaluateFleetState(t *testing.T) {
 				got.Errors != tc.wantErrors {
 				t.Fatalf("projection = %#v", got)
 			}
+			if len(got.Replicas) != got.LiveInstances {
+				t.Fatalf("replicas len = %d, liveInstances = %d", len(got.Replicas), got.LiveInstances)
+			}
+			var onDesired, mismatched, errors int
+			for _, replica := range got.Replicas {
+				switch replica.Class {
+				case core.AppFleetReplicaClassOnDesired:
+					onDesired++
+				case core.AppFleetReplicaClassMismatched:
+					mismatched++
+				case core.AppFleetReplicaClassError:
+					errors++
+				default:
+					t.Fatalf("unexpected replica class %q in %#v", replica.Class, replica)
+				}
+			}
+			if onDesired != got.RunningDesiredVersion || mismatched != got.Mismatched || errors != got.Errors {
+				t.Fatalf("replica class counts on=%d mis=%d err=%d; aggregates run=%d mis=%d err=%d",
+					onDesired, mismatched, errors, got.RunningDesiredVersion, got.Mismatched, got.Errors)
+			}
 		})
+	}
+}
+
+func TestEvaluateFleetStateReplicaIdentityAndOrder(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	cutoff := now.Add(-45 * time.Second)
+	older := now.Add(-10 * time.Second)
+	newer := now.Add(-2 * time.Second)
+
+	got := EvaluateFleetState(FleetEvaluation{
+		App:                     "app",
+		DesiredVersion:          "v2",
+		SourceVersion:           "source",
+		MinimumHealthyInstances: 2,
+		Cutoff:                  cutoff,
+		EvaluatedAt:             now,
+		Heartbeats: []*core.GestaltdInstanceHeartbeat{
+			heartbeatForFleet("error", "source", older, map[string]core.GestaltdInstanceAppHeartbeat{
+				"app": {
+					State:      core.GestaltdInstanceAppStateError,
+					LastError:  "failed",
+					ObservedAt: older,
+				},
+			}),
+			heartbeatForFleet("mismatch", "source", newer, map[string]core.GestaltdInstanceAppHeartbeat{
+				"app": {
+					State:          core.GestaltdInstanceAppStateRunning,
+					DesiredVersion: "v2",
+					RunningVersion: "v1",
+					ObservedAt:     newer,
+				},
+			}),
+		},
+	})
+	if len(got.Replicas) != 2 {
+		t.Fatalf("replicas = %#v", got.Replicas)
+	}
+	// Newest heartbeat first, then instance id.
+	if got.Replicas[0].InstanceID != "mismatch" ||
+		got.Replicas[0].Class != core.AppFleetReplicaClassMismatched ||
+		got.Replicas[0].RunningVersion != "v1" ||
+		got.Replicas[0].ObservedDesiredVersion != "v2" ||
+		!got.Replicas[0].ObservedAt.Equal(newer) {
+		t.Fatalf("replicas[0] = %#v", got.Replicas[0])
+	}
+	if got.Replicas[1].InstanceID != "error" ||
+		got.Replicas[1].Class != core.AppFleetReplicaClassError ||
+		got.Replicas[1].LastError != "failed" ||
+		!got.Replicas[1].ObservedAt.Equal(older) {
+		t.Fatalf("replicas[1] = %#v", got.Replicas[1])
 	}
 }
 

@@ -105,6 +105,33 @@ const (
 	AppFleetStateUnknown    AppFleetState = "unknown"
 )
 
+// AppFleetReplicaClass is the counter bucket a live replica contributes to in
+// AppFleetProjection. It is assigned in the same pass as the aggregates so
+// replica rows and counts cannot disagree.
+type AppFleetReplicaClass string
+
+const (
+	AppFleetReplicaClassOnDesired  AppFleetReplicaClass = "on_desired"
+	AppFleetReplicaClassMismatched AppFleetReplicaClass = "mismatched"
+	AppFleetReplicaClassError      AppFleetReplicaClass = "error"
+)
+
+// AppFleetReplicaObservation is one live process observation for a single app
+// on the current source version (within the heartbeat freshness lease).
+// Class is assigned in the same EvaluateFleetState pass as the aggregate
+// counters so replica rows and counts cannot disagree.
+type AppFleetReplicaObservation struct {
+	InstanceID             string
+	StartedAt              time.Time
+	HeartbeatAt            time.Time
+	AppState               GestaltdInstanceAppState
+	RunningVersion         string
+	ObservedDesiredVersion string
+	ObservedAt             time.Time
+	LastError              string
+	Class                  AppFleetReplicaClass
+}
+
 type AppFleetProjection struct {
 	App                     string
 	State                   AppFleetState
@@ -117,6 +144,7 @@ type AppFleetProjection struct {
 	Errors                  int
 	HeartbeatTTL            time.Duration
 	EvaluatedAt             time.Time
+	Replicas                []AppFleetReplicaObservation
 }
 
 type AppRolloutState string
