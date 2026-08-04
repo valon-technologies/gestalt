@@ -334,6 +334,18 @@ Representative endpoints:
 
 Management APIs require dedicated administrative permissions and should use a private listener or equivalent network controls where practical.
 
+### External Connections
+
+Users connect a package to an external service through the CLI:
+
+```sh
+vt connect <package>
+```
+
+The CLI opens a browser-based login flow. After the user authenticates and grants access, the platform syncs the resulting external credentials into its secret-management service for the package connection.
+
+TODO: Define provider discovery, requested scopes and consent, callback handling, credential storage and rotation, revocation, and package access to connected credentials.
+
 ### Invocation
 
 Authorized operations are available over the deployment endpoint and through the CLI:
