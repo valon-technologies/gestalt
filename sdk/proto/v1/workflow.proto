@@ -344,6 +344,10 @@ message ListWorkflowProviderRunsRequest {
   int32 page_size = 1;
   string page_token = 2;
   WorkflowRunStatus status = 3;
+  // Optional ownership / participation filter. Matches runs that invoke this
+  // app in their target steps, or (when list summaries omit steps) app-owned
+  // definitions (`app_<target_app>_…`) and provider run handles whose
+  // owner_key equals target_app.
   string target_app = 5;
   RequestContext context = 6;
   string provider = 7;

@@ -824,7 +824,9 @@ func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsReque
 		return false
 	}
 	if app := strings.TrimSpace(req.TargetApp); app != "" {
-		if !workflowTargetHasApp(run.Target, app) {
+		// List summaries often omit Target.steps. Match hydrated steps, then
+		// fall back to app-owned definition IDs and provider run-handle owner_key.
+		if !coreworkflow.RunMatchesTargetApp(run, app) {
 			return false
 		}
 	}
@@ -832,19 +834,6 @@ func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsReque
 		return false
 	}
 	return true
-}
-
-func workflowTargetHasApp(target coreworkflow.Target, appName string) bool {
-	appName = strings.TrimSpace(appName)
-	if appName == "" {
-		return false
-	}
-	for i := range target.Steps {
-		if target.Steps[i].App != nil && strings.TrimSpace(target.Steps[i].App.Name) == appName {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req EventDeliver) (out coreworkflow.Event, err error) {
