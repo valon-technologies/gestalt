@@ -89,7 +89,8 @@ Publishers create releases from a source directory with `vt build <dir>`. For ex
 g-issues/
 ├── package.yaml
 ├── runtime/
-│   ├── Dockerfile
+│   ├── package.json
+│   ├── bun.lock
 │   └── src/
 ├── migrations/
 │   ├── v2.3.0/
@@ -98,7 +99,7 @@ g-issues/
     └── admin-console/
 ```
 
-`package.yaml` defines the package name, version, operations, dependencies, workflows, UIs, migration jobs, and authorization requirements. Workflow definitions and operation schemas live in the migration jobs rather than separate source directories. `vt build g-issues/` validates the package, builds digest-addressed artifacts locally, and writes a logical release bundle.
+`package.yaml` defines the package name, version, operations, dependencies, workflows, UIs, migration jobs, and authorization requirements. Runtime and migration code must be Bun applications; packages do not supply Dockerfiles or custom container images. Workflow definitions and operation schemas live in the migration jobs rather than separate source directories. `vt build g-issues/` validates the package, installs dependencies from the frozen Bun lockfile, builds digest-addressed Bun application artifacts locally, and writes a logical release bundle.
 
 ### Example Release Bundle
 
@@ -108,17 +109,15 @@ A typical bundle is not one container or folder. For example:
 g-issues@2.3.1
 ├── release_manifest.json
 ├── runtime
-│   └── image-index
-│       ├── linux-amd64 image
-│       └── linux-arm64 image
+│   └── bun-app.tar.gz
 ├── migrations
-│   ├── v2.3.0 image
-│   └── v2.3.1 image
+│   ├── v2.3.0-bun-app.tar.gz
+│   └── v2.3.1-bun-app.tar.gz
 └── ui
     └── admin-console.tar.gz
 ```
 
-A UI-only or workflow-only package omits the runtime image.
+A UI-only or workflow-only package omits the runtime Bun app.
 
 ```sh
 vt build <dir>
@@ -139,7 +138,7 @@ Without `--push`, `vt build` writes the release bundle locally and needs no depl
 
 ### Stored Content and Backing Services
 
-Google Artifact Registry stores the immutable release bundle: runtime and migration OCI images, UI bundles, workflow definitions, schemas, the canonical release manifest, and detached signatures. Each artifact is content-addressed by SHA-256 digest.
+Google Artifact Registry stores the immutable release bundle: runtime and migration Bun app artifacts, UI bundles, workflow definitions, schemas, the canonical release manifest, and detached signatures. Bun app artifacts may use OCI artifact storage, but they are not publisher-supplied container images. Each artifact is content-addressed by SHA-256 digest.
 
 The registry service also tracks metadata that Artifact Registry does not provide on its own:
 
@@ -173,7 +172,7 @@ An administrator specifies a canonical package ID, release version, and upstream
 - Ordered migration jobs
 - Required authorization relationships or roles for each operation
 - Supported MCP protocol versions
-- Runtime startup instructions and probe contract for releases that include a runtime
+- Bun version, entry point, startup instructions, and probe contract for releases that include a runtime
 - Optional source metadata (e.g. PR number)
 
 #### Publication
@@ -393,7 +392,7 @@ The bootstrap substrate and protected system packages provide these trusted serv
 
 ### Runtime Architecture
 
-Production uses Istio ambient mode. Package Pods have no mesh or application proxy sidecar; they expose MCP and health endpoints directly. The runtime combines `istiod`, mandatory node-level `ztunnel`, shared destination and ingress waypoints, gateways, unprivileged package containers, protected services, the state store, and revision controllers. Revision controllers reconcile durable state into Deployments, Services, waypoint enrollment, Gateway API routes, signed cluster-selection configuration, and `AuthorizationPolicy`; `istiod` distributes the resulting xDS configuration. `Istiod` owns endpoint, routing, certificate, and mesh-policy distribution—not revision state, grants, workflows, or catalogs.
+Production uses Istio ambient mode. Package Pods have no mesh or application proxy sidecar; they expose MCP and health endpoints directly. Every package runtime and migration executes as a Bun application in a platform-owned, unprivileged Bun container image; publishers cannot provide arbitrary images or Dockerfiles. The runtime combines `istiod`, mandatory node-level `ztunnel`, shared destination and ingress waypoints, gateways, these standardized Bun application containers, protected services, the state store, and revision controllers. Revision controllers reconcile durable state into Deployments, Services, waypoint enrollment, Gateway API routes, signed cluster-selection configuration, and `AuthorizationPolicy`; `istiod` distributes the resulting xDS configuration. `Istiod` owns endpoint, routing, certificate, and mesh-policy distribution—not revision state, grants, workflows, or catalogs.
 
 **`ztunnel` configures (L4):**
 
@@ -422,7 +421,7 @@ The mesh is redeployed only for changes to Istio or its trust and extension conf
 
 Protected system packages roll independently through the revision controller and do not require a mesh redeployment. Ordinary package revisions, registry trust-policy changes, identity assignments, and authorization-binding updates likewise change runtime or control-plane state without redeploying the mesh.
 
-Bootstrap-substrate changes, including control-plane state migrations and backup or recovery tooling, use infrastructure rollouts but do not redeploy the mesh unless they also change an Istio item listed above. Package releases declare supported MCP versions. Infrastructure pins Kubernetes, Istio, Envoy, the shared MCP extension, session-token format, authorization adapter, and routing-status extension versions and accounts for overlapping old and new versions before admitting releases that require new features. Registry trust-root changes remain separately authorized and audited.
+Bootstrap-substrate changes, including control-plane state migrations and backup or recovery tooling, use infrastructure rollouts but do not redeploy the mesh unless they also change an Istio item listed above. Package releases declare supported MCP and Bun versions. Infrastructure pins Kubernetes, Istio, Envoy, the platform Bun container image, the shared MCP extension, session-token format, authorization adapter, and routing-status extension versions and accounts for overlapping old and new versions before admitting releases that require new features. Registry trust-root changes remain separately authorized and audited.
 
 ## Representative Request Lifecycles
 
