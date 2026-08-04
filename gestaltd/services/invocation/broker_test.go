@@ -1007,6 +1007,65 @@ func TestBrokerResolveToken_UsesPreferredInstance(t *testing.T) {
 	}
 }
 
+func TestBrokerResolveToken_RemoteDelegatedUsesPreferredInstance(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("user-remote-preferred")
+	connectionID := "linear:" + core.AppConnectionName
+	for _, tok := range []*core.ExternalCredential{
+		{
+			ID:        "tok-a",
+			Subject:   subjectID,
+			Audience:  connectionID,
+			Qualifier: "workspace-a",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "workspace-a-token"},
+		},
+		{
+			ID:        "tok-b",
+			Subject:   subjectID,
+			Audience:  connectionID,
+			Qualifier: "workspace-b",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "workspace-b-token"},
+		},
+	} {
+		if err := svc.ExternalCredentials.UpsertCredential(context.Background(), tok); err != nil {
+			t.Fatalf("UpsertCredential: %v", err)
+		}
+	}
+	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, connectionID, "workspace-b"); err != nil {
+		t.Fatalf("Set preference: %v", err)
+	}
+
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &remoteDelegatedAppStub{
+			StubIntegration: &coretesting.StubIntegration{
+				N:        "linear",
+				ConnMode: core.ConnectionModeSubject,
+			},
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithConnectionInstancePreferences(svc.ConnectionInstancePreferences),
+	)
+
+	ctx, token, err := broker.ResolveToken(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+		UserID:    "user-remote-preferred",
+		Kind:      principal.KindUser,
+	}, "linear", "", "")
+	if err != nil {
+		t.Fatalf("ResolveToken: %v", err)
+	}
+	if token != "" {
+		t.Fatalf("token = %q, want empty for remote-delegated resolve", token)
+	}
+	cred := CredentialContextFromContext(ctx)
+	if cred.Instance != "workspace-b" {
+		t.Fatalf("credential context instance = %q, want workspace-b", cred.Instance)
+	}
+}
+
 func TestBrokerExpandCatalogTargets_UsesPreferredInstance(t *testing.T) {
 	t.Parallel()
 

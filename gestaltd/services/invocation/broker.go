@@ -1090,6 +1090,37 @@ func nonNilCredentials(credentials []*core.ExternalCredential) []*core.ExternalC
 	return out
 }
 
+// resolveChosenInstance fills an empty instance from the subject's chosen
+// account for connectionID (validated preferred, else sole credential). A
+// non-empty instance is returned unchanged. ok=false from
+// chosenCredentialInstance leaves instance empty so callers surface
+// ambiguity the same way as local resolve.
+func (b *Broker) resolveChosenInstance(ctx context.Context, subjectID, connectionID, instance string) (string, error) {
+	instance = strings.TrimSpace(instance)
+	if instance != "" {
+		return instance, nil
+	}
+	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
+		return "", fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
+	}
+	credentials, listErr := b.externalCreds.ListCredentials(ctx, subjectID, connectionID)
+	if listErr != nil {
+		return "", fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
+	}
+	preferred := ""
+	if b.connectionInstancePreferences != nil {
+		var prefErr error
+		preferred, prefErr = b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
+		if prefErr != nil {
+			return "", fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
+		}
+	}
+	if chosen, ok := chosenCredentialInstance(credentials, preferred); ok {
+		return chosen, nil
+	}
+	return "", nil
+}
+
 func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principal, providerName string, targets []CatalogResolutionTarget) ([]CatalogResolutionTarget, error) {
 	if len(targets) == 0 {
 		targets = []CatalogResolutionTarget{{}}
@@ -1184,12 +1215,19 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 			if connection == "" {
 				connection = core.AppConnectionName
 			}
+			// Same chosen-account gate as local resolve / catalog expand: empty
+			// _instance must resolve to preferred-or-sole before forwarding
+			// credential context to the remote app.
+			instance, err = b.resolveChosenInstance(ctx, subjectID, b.connectionID(providerName, connection), instance)
+			if err != nil {
+				return ctx, "", err
+			}
 			SetCredentialAudit(ctx, core.ConnectionModeSubject, subjectID, connection, instance)
 			ctx = WithCredentialContext(ctx, CredentialContext{
 				Mode:       core.ConnectionModeSubject,
 				SubjectID:  subjectID,
 				Connection: connection,
-				Instance:   strings.TrimSpace(instance),
+				Instance:   instance,
 			})
 			return ctx, "", nil
 		}
@@ -1246,22 +1284,9 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	}
 
 	connectionID := b.connectionID(providerName, connection)
-	if instance == "" {
-		credentials, listErr := b.externalCreds.ListCredentials(ctx, subjectID, connectionID)
-		if listErr != nil {
-			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
-		}
-		preferred := ""
-		if b.connectionInstancePreferences != nil {
-			var prefErr error
-			preferred, prefErr = b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
-			if prefErr != nil {
-				return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
-			}
-		}
-		if chosen, ok := chosenCredentialInstance(credentials, preferred); ok {
-			instance = chosen
-		}
+	instance, err := b.resolveChosenInstance(ctx, subjectID, connectionID, instance)
+	if err != nil {
+		return ctx, ConnectionRuntimeCredential{}, err
 	}
 
 	runtimeInfo := ConnectionRuntimeInfo{}
