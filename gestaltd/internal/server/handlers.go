@@ -81,8 +81,11 @@ type connectionDefInfo struct {
 	PreferredInstance string                         `json:"preferredInstance,omitempty"`
 	StatusCode        string                         `json:"statusCode,omitempty"`
 	StatusReason     string                         `json:"statusReason,omitempty"`
+	// Connected is true only when a chosen account exists for this connection
+	// (valid preferred instance, or a single valid instance). Stored credentials
+	// without a chosen account leave Connected false.
+	Connected bool `json:"connected"`
 
-	connected      bool
 	connectable    bool
 	disconnectable bool
 }

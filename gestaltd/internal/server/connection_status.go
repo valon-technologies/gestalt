@@ -150,7 +150,7 @@ func statusFromConnectionInfo(conn *connectionDefInfo) connectionStatusInfo {
 		CredentialMode:  conn.CredentialMode,
 		OwnerKind:       conn.OwnerKind,
 		Disconnectable:  conn.disconnectable,
-		Connected:       conn.connected,
+		Connected:       conn.Connected,
 		StatusCode:      conn.StatusCode,
 		StatusReason:    conn.StatusReason,
 	}
@@ -224,7 +224,7 @@ func summarizeReconnectRequiredConnectionStatuses(connections []connectionDefInf
 			}
 			continue
 		}
-		if conn.connected || conn.Status == connectionStatusReady || conn.CredentialState == credentialStateConnected || conn.CredentialState == credentialStateConfigured {
+		if conn.Connected || conn.Status == connectionStatusReady || conn.CredentialState == credentialStateConfigured {
 			hasConnected = true
 		}
 	}
@@ -280,7 +280,9 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 	}
 	invalidCount := invalidInstanceCount(instances)
 	validCount := len(instances) - invalidCount
-	preferredValid := preferredInstanceValid(instances, preferredInstance)
+	// Product invariant: connected iff a chosen account exists.
+	// Chosen = valid preferred, or exactly one valid instance (implicitly chosen).
+	chosen := preferredInstanceValid(instances, preferredInstance) || validCount == 1
 	switch len(instances) {
 	case 0:
 		status.Status = connectionStatusNeedsUserConnection
@@ -290,22 +292,6 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 		}
 	default:
 		switch {
-		case invalidCount == 0 && (len(instances) == 1 || preferredValid):
-			status.Status = connectionStatusReady
-			status.CredentialState = credentialStateConnected
-			status.HealthState = healthStateNotChecked
-			status.Disconnectable = true
-			status.Connected = true
-			status.Actions = subjectConnectionActions(true, connectable, false)
-		case invalidCount == 0:
-			status.Status = connectionStatusNeedsInstanceSelection
-			status.CredentialState = credentialStateConnected
-			status.HealthState = healthStateNotChecked
-			status.Disconnectable = true
-			status.Connected = true
-			status.Actions = subjectConnectionActions(true, connectable, true)
-			status.StatusCode = "instance_selection_required"
-			status.StatusReason = "multiple connected instances require explicit instance selection"
 		case validCount == 0:
 			status.Status = connectionStatusNeedsUserConnection
 			status.CredentialState = credentialStateInvalid
@@ -315,6 +301,23 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 			status.Actions = reconnectStatusActions(instances, connectable, true, false)
 			status.StatusCode = "reconnect_required"
 			status.StatusReason = "stored credential is expired and refresh has failed; reconnect it"
+		case !chosen:
+			// Accounts exist as credential material, but none is chosen — not connected.
+			status.Status = connectionStatusNeedsInstanceSelection
+			status.CredentialState = credentialStateConnected
+			status.HealthState = healthStateNotChecked
+			status.Disconnectable = true
+			status.Connected = false
+			status.Actions = subjectConnectionActions(true, connectable, true)
+			status.StatusCode = "instance_selection_required"
+			status.StatusReason = "multiple accounts are available; choose which account this workspace should use"
+		case invalidCount == 0:
+			status.Status = connectionStatusReady
+			status.CredentialState = credentialStateConnected
+			status.HealthState = healthStateNotChecked
+			status.Disconnectable = true
+			status.Connected = true
+			status.Actions = subjectConnectionActions(true, connectable, false)
 		default:
 			status.Status = connectionStatusDegraded
 			status.CredentialState = credentialStateInvalid

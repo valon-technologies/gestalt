@@ -114,6 +114,7 @@ func TestListIntegrations_PreferredInstanceShowsReady(t *testing.T) {
 		HealthState       string           `json:"healthState"`
 		Actions           []string         `json:"actions"`
 		PreferredInstance string           `json:"preferredInstance"`
+		Connected         bool             `json:"connected"`
 		Instances         []map[string]any `json:"instances"`
 	}
 	type statusIntegration struct {
@@ -150,6 +151,74 @@ func TestListIntegrations_PreferredInstanceShowsReady(t *testing.T) {
 	conn := integration.Connections[0]
 	if conn.PreferredInstance != "team-a" {
 		t.Fatalf("preferredInstance = %q, want team-a", conn.PreferredInstance)
+	}
+	if !conn.Connected {
+		t.Fatalf("connection.connected = false, want true when preferred account is chosen")
+	}
+}
+
+func TestListIntegrations_NeedsInstanceSelectionIsNotConnected(t *testing.T) {
+	t.Parallel()
+
+	_, _, ts := preferredInstanceTestSetup(t)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	type statusConnection struct {
+		Name            string `json:"name"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
+		Connected       bool   `json:"connected"`
+		Actions         []string `json:"actions"`
+	}
+	type statusIntegration struct {
+		Name            string             `json:"name"`
+		Connections     []statusConnection `json:"connections"`
+		Status          string             `json:"status"`
+		CredentialState string             `json:"credentialState"`
+		Actions         []string           `json:"actions"`
+	}
+	var integrations []statusIntegration
+	if err := json.Unmarshal(body, &integrations); err != nil {
+		t.Fatalf("decode integrations: %v (body: %s)", err, body)
+	}
+	var integration statusIntegration
+	for _, item := range integrations {
+		if item.Name == "manual-multi" {
+			integration = item
+			break
+		}
+	}
+	if integration.Name == "" {
+		t.Fatalf("manual-multi missing from response: %s", body)
+	}
+	if integration.Status != "needs_instance_selection" {
+		t.Fatalf("integration status = %q, want needs_instance_selection", integration.Status)
+	}
+	if !reflect.DeepEqual(integration.Actions, []string{"select_instance", "disconnect", "add_instance"}) {
+		t.Fatalf("integration actions = %v, want [select_instance disconnect add_instance]", integration.Actions)
+	}
+	if len(integration.Connections) != 1 {
+		t.Fatalf("connections = %+v", integration.Connections)
+	}
+	conn := integration.Connections[0]
+	if conn.Status != "needs_instance_selection" {
+		t.Fatalf("connection status = %q, want needs_instance_selection", conn.Status)
+	}
+	if conn.Connected {
+		t.Fatalf("connection.connected = true, want false when no account is chosen")
+	}
+	if conn.CredentialState != "connected" {
+		t.Fatalf("credentialState = %q, want connected (accounts exist as material)", conn.CredentialState)
 	}
 }
 

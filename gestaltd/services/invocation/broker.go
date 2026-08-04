@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -1135,20 +1134,21 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 				nonNil = append(nonNil, credential)
 			}
 		}
-		sort.Slice(nonNil, func(i, j int) bool {
-			return nonNil[i].Qualifier < nonNil[j].Qualifier
-		})
-		for _, credential := range nonNil {
-			resolved := CatalogResolutionTarget{
-				Connection: target.Connection,
-				Instance:   strings.TrimSpace(credential.Qualifier),
-			}
-			if _, ok := seen[resolved]; ok {
-				continue
-			}
-			seen[resolved] = struct{}{}
-			expanded = append(expanded, resolved)
+		// Chosen-account invariant: expand only a chosen instance.
+		// Sole credential is implicitly chosen; multiple without preferred → skip
+		// (app is not connected until the subject selects an account).
+		if len(nonNil) != 1 {
+			continue
 		}
+		resolved := CatalogResolutionTarget{
+			Connection: target.Connection,
+			Instance:   strings.TrimSpace(nonNil[0].Qualifier),
+		}
+		if _, ok := seen[resolved]; ok {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		expanded = append(expanded, resolved)
 	}
 	return expanded, nil
 }

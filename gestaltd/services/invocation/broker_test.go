@@ -959,18 +959,19 @@ func TestBrokerResolveToken_UsesPreferredInstance(t *testing.T) {
 
 	svc := testutil.NewStubServices(t)
 	subjectID := principal.UserSubjectID("user-preferred")
+	connectionID := "slack:" + core.AppConnectionName
 	for _, tok := range []*core.ExternalCredential{
 		{
 			ID:        "tok-a",
 			Subject:   subjectID,
-			Audience:  "slack:default",
+			Audience:  connectionID,
 			Qualifier: "team-a",
 			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-a-token"},
 		},
 		{
 			ID:        "tok-b",
 			Subject:   subjectID,
-			Audience:  "slack:default",
+			Audience:  connectionID,
 			Qualifier: "team-b",
 			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-b-token"},
 		},
@@ -979,7 +980,7 @@ func TestBrokerResolveToken_UsesPreferredInstance(t *testing.T) {
 			t.Fatalf("UpsertCredential: %v", err)
 		}
 	}
-	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, "slack:default", "team-b"); err != nil {
+	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, connectionID, "team-b"); err != nil {
 		t.Fatalf("Set preference: %v", err)
 	}
 
@@ -1011,18 +1012,19 @@ func TestBrokerExpandCatalogTargets_UsesPreferredInstance(t *testing.T) {
 
 	svc := testutil.NewStubServices(t)
 	subjectID := principal.UserSubjectID("user-expand")
+	connectionID := "slack:" + core.AppConnectionName
 	for _, tok := range []*core.ExternalCredential{
 		{
 			ID:        "tok-a",
 			Subject:   subjectID,
-			Audience:  "slack:default",
+			Audience:  connectionID,
 			Qualifier: "team-a",
 			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-a-token"},
 		},
 		{
 			ID:        "tok-b",
 			Subject:   subjectID,
-			Audience:  "slack:default",
+			Audience:  connectionID,
 			Qualifier: "team-b",
 			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-b-token"},
 		},
@@ -1031,7 +1033,7 @@ func TestBrokerExpandCatalogTargets_UsesPreferredInstance(t *testing.T) {
 			t.Fatalf("UpsertCredential: %v", err)
 		}
 	}
-	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, "slack:default", "team-b"); err != nil {
+	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, connectionID, "team-b"); err != nil {
 		t.Fatalf("Set preference: %v", err)
 	}
 
@@ -1056,5 +1058,56 @@ func TestBrokerExpandCatalogTargets_UsesPreferredInstance(t *testing.T) {
 	}
 	if len(targets) != 1 || targets[0].Instance != "team-b" {
 		t.Fatalf("targets = %+v, want single team-b target", targets)
+	}
+}
+
+func TestBrokerExpandCatalogTargets_SkipsWhenNoPreferredAmongMultiple(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("user-expand-none")
+	connectionID := "slack:" + core.AppConnectionName
+	for _, tok := range []*core.ExternalCredential{
+		{
+			ID:        "tok-a",
+			Subject:   subjectID,
+			Audience:  connectionID,
+			Qualifier: "team-a",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-a-token"},
+		},
+		{
+			ID:        "tok-b",
+			Subject:   subjectID,
+			Audience:  connectionID,
+			Qualifier: "team-b",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "team-b-token"},
+		},
+	} {
+		if err := svc.ExternalCredentials.UpsertCredential(context.Background(), tok); err != nil {
+			t.Fatalf("UpsertCredential: %v", err)
+		}
+	}
+
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeSubject,
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithConnectionInstancePreferences(svc.ConnectionInstancePreferences),
+	)
+
+	targets, err := broker.ExpandCatalogTargets(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+		UserID:    "user-expand-none",
+		Kind:      principal.KindUser,
+		Scopes:    []string{"slack"},
+	}, "slack", []CatalogResolutionTarget{{}})
+	if err != nil {
+		t.Fatalf("ExpandCatalogTargets: %v", err)
+	}
+	if len(targets) != 0 {
+		t.Fatalf("targets = %+v, want none when multiple accounts exist without a chosen preferred", targets)
 	}
 }

@@ -573,7 +573,7 @@ fn test_cli_apps_list_table_output() {
 			r#"[
                 {"name":"acme_crm","description":"Acme CRM app with a longer description","status":"ready","connections":[{"name":"workspace","status":"ready"}]},
                 {"name":"legacy_svc","description":"Legacy service","status":"ready","connections":[{"name":"legacy","status":"ready","instances":[{"displayName":"Legacy"}]}]},
-                {"name":"multi_svc","description":"Multi-instance service","status":"needs_instance_selection","connections":[{"name":"workspace","status":"needs_instance_selection","credentialState":"connected","instances":[{"name":"team-a"},{"name":"team-b"}]}]}
+                {"name":"multi_svc","description":"Multi-instance service","status":"needs_instance_selection","connections":[{"name":"workspace","status":"needs_instance_selection","credentialState":"connected","connected":false,"instances":[{"name":"team-a"},{"name":"team-b"}]}]}
             ]"#,
 		)
         .create();
@@ -599,7 +599,7 @@ fn test_cli_apps_list_table_output() {
     assert!(stdout.contains("legacy"), "stdout: {stdout}");
     assert!(stdout.contains("team-a"), "stdout: {stdout}");
     assert!(stdout.contains("team-b"), "stdout: {stdout}");
-    assert!(stdout.contains("connected"), "stdout: {stdout}");
+    assert!(stdout.contains("needs_instance_selection"), "stdout: {stdout}");
     assert_eq!(stdout.matches("Multi-instance service").count(), 1);
 
     mock.assert();

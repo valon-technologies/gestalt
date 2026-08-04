@@ -303,7 +303,7 @@ func (s *Server) connectionInfoFromAuth(ctx context.Context, integration, name, 
 		PreferredInstance: preferredInstance,
 		StatusCode:        status.StatusCode,
 		StatusReason:      status.StatusReason,
-		connected:         status.Connected,
+		Connected:         status.Connected,
 		connectable:       len(authTypes) > 0,
 		disconnectable:    status.Disconnectable,
 	}
