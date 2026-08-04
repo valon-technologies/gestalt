@@ -23,6 +23,23 @@ func TestDefinitionBelongsToApp(t *testing.T) {
 	}
 }
 
+func TestDefinitionOwnerAppLongestMatch(t *testing.T) {
+	t.Parallel()
+	id := "app_foo_bar_sync"
+	if got := DefinitionOwnerApp(id, []string{"foo", "foo_bar"}); got != "foo_bar" {
+		t.Fatalf("DefinitionOwnerApp = %q, want foo_bar", got)
+	}
+	if !DefinitionBelongsToApp(id, "foo") {
+		t.Fatal("single-candidate DefinitionBelongsToApp still uses prefix match")
+	}
+	if RunMatchesTargetApp(&Run{DefinitionID: id}, "foo", "foo", "foo_bar") {
+		t.Fatal("foo must not own foo_bar's definition when both apps are known")
+	}
+	if !RunMatchesTargetApp(&Run{DefinitionID: id}, "foo_bar", "foo", "foo_bar") {
+		t.Fatal("foo_bar should own its definition with longest-match candidates")
+	}
+}
+
 func TestAppDefinitionID(t *testing.T) {
 	t.Parallel()
 	got := AppDefinitionID("ai-spend-tracker", "ai_spend_tracker_sync")
