@@ -599,16 +599,9 @@ fn test_cli_apps_list_table_output() {
     assert!(stdout.contains("legacy"), "stdout: {stdout}");
     assert!(stdout.contains("team-a"), "stdout: {stdout}");
     assert!(stdout.contains("team-b"), "stdout: {stdout}");
-    // Table layout wraps long statuses and inserts box-drawing between pieces.
-    let compact: String = stdout
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
-        .collect();
-    assert!(
-        compact.contains("needs_instance_selection"),
-        "stdout: {stdout}"
-    );
-    assert_eq!(stdout.matches("Multi-instance service").count(), 1);
+    assert!(stdout.contains("choose account"), "stdout: {stdout}");
+    assert!(stdout.contains("Multi-instance"), "stdout: {stdout}");
+    assert_eq!(stdout.matches("multi_svc").count(), 1);
 
     mock.assert();
 

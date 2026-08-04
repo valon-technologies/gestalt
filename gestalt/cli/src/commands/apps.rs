@@ -198,7 +198,8 @@ fn connection_status(
     // Multiple accounts without a chosen preferred stay needs_instance_selection
     // even when credentialState is still "connected".
     if connection["status"].as_str() == Some("needs_instance_selection") {
-        return "needs_instance_selection".to_string();
+        // Short table label — machine status is too wide for the Status column.
+        return "choose account".to_string();
     }
     if connection["connected"] == serde_json::Value::Bool(false) {
         return connection["status"]
