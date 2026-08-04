@@ -89,7 +89,7 @@ func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	event, err := s.workflowSchedules.DeliverEvent(r.Context(), p, workflowmanager.EventDeliver{
-		ProviderName: s.workflowProviderName,
+		ProviderName: s.defaultWorkflowProviderName(),
 		AppName:      appName,
 		Event:        workflowEventFromPublishRequest(req),
 	})

@@ -45,11 +45,7 @@ func (c *stubWorkflowControl) ResolveProvider(_ context.Context, name string) (s
 }
 
 func (c *stubWorkflowControl) DefaultProviderName() string {
-	name := strings.TrimSpace(c.defaultProviderName)
-	if name == "" {
-		name = "default"
-	}
-	return name
+	return strings.TrimSpace(c.defaultProviderName)
 }
 
 func (c *stubWorkflowControl) ProviderNames() []string {

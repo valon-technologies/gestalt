@@ -34,7 +34,8 @@ type authInfoResponse struct {
 type authInfoFeaturesResponse struct {
 	Agent bool `json:"agent"`
 	// WorkflowDefaultProvider is the configured workflow platform provider name
-	// (Workflow API `provider` query). Omitted when workflows are not configured.
+	// (Workflow API `provider` query). Omitted when no default workflow provider
+	// is selected (empty DefaultProviderName), even if WorkflowControl is present.
 	WorkflowDefaultProvider string `json:"workflowDefaultProvider,omitempty"`
 }
 
@@ -97,11 +98,14 @@ func (s *Server) agentFeatureAvailable() bool {
 	return s != nil && s.agentRuns != nil && s.agentRuns.Available()
 }
 
-func (s *Server) workflowDefaultProviderFeature() string {
-	if s == nil {
+// defaultWorkflowProviderName returns the deployment's configured workflow
+// platform provider name from WorkflowControl. Empty means no default is
+// selected (auth/info omits workflowDefaultProvider).
+func (s *Server) defaultWorkflowProviderName() string {
+	if s == nil || s.workflow == nil {
 		return ""
 	}
-	return strings.TrimSpace(s.workflowProviderName)
+	return strings.TrimSpace(s.workflow.DefaultProviderName())
 }
 
 func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
@@ -118,7 +122,7 @@ func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 		LoginSupported: s.authEnabled(),
 		Features: authInfoFeaturesResponse{
 			Agent:                   s.agentFeatureAvailable(),
-			WorkflowDefaultProvider: s.workflowDefaultProviderFeature(),
+			WorkflowDefaultProvider: s.defaultWorkflowProviderName(),
 		},
 	})
 }

@@ -10395,6 +10395,36 @@ func TestAuthInfoWorkflowDefaultProviderFeature(t *testing.T) {
 	requireAuthInfoWorkflowDefaultProvider(t, body, "local")
 }
 
+func TestAuthInfoWorkflowDefaultProviderEmptyWhenControlPresent(t *testing.T) {
+	t.Parallel()
+
+	// Production always wires WorkflowControl; absence of a selected default is
+	// an empty DefaultProviderName, not a nil control.
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "",
+			provider:            newMemoryWorkflowProvider(),
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/info: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	requireAuthInfoWorkflowDefaultProvider(t, body, "")
+}
+
 func requireAuthInfoAgentFeature(t *testing.T, body map[string]any, want bool) {
 	t.Helper()
 
@@ -10414,15 +10444,19 @@ func requireAuthInfoWorkflowDefaultProvider(t *testing.T, body map[string]any, w
 	if !ok {
 		t.Fatalf("expected features object, got %#v", body["features"])
 	}
-	got, _ := features["workflowDefaultProvider"].(string)
+	got, present := features["workflowDefaultProvider"]
 	if want == "" {
-		if _, present := features["workflowDefaultProvider"]; present && got != "" {
-			t.Fatalf("expected features.workflowDefaultProvider omitted/empty, got %#v", features["workflowDefaultProvider"])
+		if present {
+			t.Fatalf("expected features.workflowDefaultProvider omitted, got %#v", got)
 		}
 		return
 	}
-	if got != want {
-		t.Fatalf("expected features.workflowDefaultProvider %q, got %#v", want, features["workflowDefaultProvider"])
+	if !present {
+		t.Fatalf("expected features.workflowDefaultProvider %q, got omitted", want)
+	}
+	gotStr, _ := got.(string)
+	if gotStr != want {
+		t.Fatalf("expected features.workflowDefaultProvider %q, got %#v", want, got)
 	}
 }
 
