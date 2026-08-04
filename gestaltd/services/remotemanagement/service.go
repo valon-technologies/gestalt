@@ -168,6 +168,13 @@ func (s *Service) DeleteRemote(ctx context.Context, req *proto.DeleteRemoteReque
 	if err := s.authorizePublication(ctx, p, "delete"); err != nil {
 		return nil, err
 	}
+	owner, err := principal.ResolveCredentialSubjectID(ctx, s.users, p)
+	if err != nil {
+		return nil, resolveSubjectError(err)
+	}
+	if id != owner {
+		return nil, status.Error(codes.NotFound, "unknown registration")
+	}
 	if err := s.store.Delete(ctx, id, req.GetExpectedGeneration()); err != nil {
 		return nil, mapStoreError(err)
 	}
