@@ -451,7 +451,8 @@ func appAdminFleetStateFromProjection(projection *core.AppFleetProjection) *appA
 		return nil
 	}
 	replicas := make([]appAdminFleetReplica, 0, len(projection.Replicas))
-	for _, replica := range projection.Replicas {
+	for i := range projection.Replicas {
+		replica := &projection.Replicas[i]
 		replicas = append(replicas, appAdminFleetReplica{
 			InstanceID:             replica.InstanceID,
 			StartedAt:              formatAdminTime(replica.StartedAt),
