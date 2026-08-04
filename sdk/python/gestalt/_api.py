@@ -5,12 +5,14 @@ from __future__ import annotations
 import builtins
 import dataclasses
 import json
+import os
 import threading
 from dataclasses import MISSING
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar, cast
 
 from ._protocol import JsonObject, JsonValue
+from ._grpc_transport import ENV_HOST_SERVICE_TOKEN
 
 if TYPE_CHECKING:
     from typing_extensions import dataclass_transform
@@ -136,11 +138,19 @@ class Request:
 
         from .app import App
 
-        return App.connect(
-            context=self._native_context(),
-            timeout=timeout,
-            relay_token=self.relay_token,
-        )
+        previous = os.environ.get(ENV_HOST_SERVICE_TOKEN)
+        if self.relay_token.strip():
+            os.environ[ENV_HOST_SERVICE_TOKEN] = self.relay_token.strip()
+        try:
+            return App.connect(
+                context=self._native_context(),
+                timeout=timeout,
+            )
+        finally:
+            if previous is None:
+                os.environ.pop(ENV_HOST_SERVICE_TOKEN, None)
+            else:
+                os.environ[ENV_HOST_SERVICE_TOKEN] = previous
 
     def gestalt(self) -> "BoundGestaltClient":
         """Return the public Gestalt client bound to this request's relay context."""
@@ -155,11 +165,20 @@ class Request:
 
         from .agent import Agent
 
-        return Agent.connect(
-            context=self._native_context(),
-            timeout=timeout,
-            relay_token=self.relay_token,
-        )
+        previous = os.environ.get(ENV_HOST_SERVICE_TOKEN)
+        if self.relay_token.strip():
+            os.environ[ENV_HOST_SERVICE_TOKEN] = self.relay_token.strip()
+        try:
+            return Agent.connect(
+                context=self._native_context(),
+                timeout=timeout,
+            )
+        finally:
+            if previous is None:
+                os.environ.pop(ENV_HOST_SERVICE_TOKEN, None)
+            else:
+                os.environ[ENV_HOST_SERVICE_TOKEN] = previous
+
 
     def workflows(self, *, timeout: float | None = None) -> "Workflow":
         from ._workflow import Workflow
