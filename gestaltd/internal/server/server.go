@@ -109,7 +109,6 @@ type Server struct {
 	managedSubjects               *coredata.ManagedSubjectService
 	agent                         bootstrap.AgentControl
 	workflowSchedules             *workflowmanager.Manager
-	workflowProviderName          string
 	agentRuns                     agentmanager.Service
 	providers                     *registry.ProviderMap[core.Provider]
 	workflow                      bootstrap.WorkflowControl
@@ -492,9 +491,6 @@ func New(cfg Config) (*Server, error) {
 		MCPConnection:     cfg.MCPConnection,
 		Now:               now,
 	})
-	if cfg.Workflow != nil {
-		s.workflowProviderName = strings.TrimSpace(cfg.Workflow.DefaultProviderName())
-	}
 	if cfg.RouteProfile != RouteProfileManagement {
 		conn, restHandler, err := buildPublicGateway(publicGRPCConfig{
 			Transport:           cfg.PublicGatewayTransport,
