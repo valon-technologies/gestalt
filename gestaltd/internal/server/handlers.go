@@ -65,22 +65,22 @@ type credentialFieldInfo struct {
 }
 
 type connectionDefInfo struct {
-	DisplayName      string                         `json:"displayName,omitempty"`
-	Name             string                         `json:"name"`
-	Mode             string                         `json:"mode,omitempty"`
-	AuthTypes        []string                       `json:"authTypes"`
-	ConnectionParams map[string]connectionParamInfo `json:"connectionParams,omitempty"`
-	CredentialFields []credentialFieldInfo          `json:"credentialFields"`
-	Status           string                         `json:"status"`
-	CredentialState  string                         `json:"credentialState"`
-	HealthState      string                         `json:"healthState"`
-	Actions          []string                       `json:"actions"`
-	CredentialMode   string                         `json:"credentialMode"`
+	DisplayName       string                         `json:"displayName,omitempty"`
+	Name              string                         `json:"name"`
+	Mode              string                         `json:"mode,omitempty"`
+	AuthTypes         []string                       `json:"authTypes"`
+	ConnectionParams  map[string]connectionParamInfo `json:"connectionParams,omitempty"`
+	CredentialFields  []credentialFieldInfo          `json:"credentialFields"`
+	Status            string                         `json:"status"`
+	CredentialState   string                         `json:"credentialState"`
+	HealthState       string                         `json:"healthState"`
+	Actions           []string                       `json:"actions"`
+	CredentialMode    string                         `json:"credentialMode"`
 	OwnerKind         string                         `json:"ownerKind"`
 	Instances         []instanceInfo                 `json:"instances"`
 	PreferredInstance string                         `json:"preferredInstance,omitempty"`
 	StatusCode        string                         `json:"statusCode,omitempty"`
-	StatusReason     string                         `json:"statusReason,omitempty"`
+	StatusReason      string                         `json:"statusReason,omitempty"`
 	// Connected is true only when a chosen account exists for this connection
 	// (valid preferred instance, or a single valid instance). Stored credentials
 	// without a chosen account leave Connected false.

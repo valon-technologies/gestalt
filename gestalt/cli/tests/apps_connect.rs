@@ -599,7 +599,10 @@ fn test_cli_apps_list_table_output() {
     assert!(stdout.contains("legacy"), "stdout: {stdout}");
     assert!(stdout.contains("team-a"), "stdout: {stdout}");
     assert!(stdout.contains("team-b"), "stdout: {stdout}");
-    assert!(stdout.contains("needs_instance_selection"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("needs_instance_selection"),
+        "stdout: {stdout}"
+    );
     assert_eq!(stdout.matches("Multi-instance service").count(), 1);
 
     mock.assert();

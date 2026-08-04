@@ -130,12 +130,12 @@ type Broker struct {
 	externalCreds                 core.ExternalCredentialProvider
 	connectionInstancePreferences ConnectionInstancePreferenceStore
 	connMapper                    ConnectionMapper
-	mcpMapper         ConnectionMapper
-	connectionRuntime ConnectionRuntimeResolver
-	authorization     core.AuthorizationProvider
-	providerKinds     map[string]ProviderKind
-	logger            *slog.Logger
-	tracerProvider    trace.TracerProvider
+	mcpMapper                     ConnectionMapper
+	connectionRuntime             ConnectionRuntimeResolver
+	authorization                 core.AuthorizationProvider
+	providerKinds                 map[string]ProviderKind
+	logger                        *slog.Logger
+	tracerProvider                trace.TracerProvider
 }
 
 type BrokerOption func(*Broker)
@@ -1059,6 +1059,36 @@ func (b *Broker) connectionID(providerName, connection string) string {
 	return providerName + ":" + connection
 }
 
+// chosenCredentialInstance returns the account the subject has chosen for this
+// connection: a preferred qualifier that still exists among credentials, or the
+// sole credential when preference is missing/stale. Empty means not connected
+// (zero or ambiguous accounts).
+func chosenCredentialInstance(credentials []*core.ExternalCredential, preferred string) string {
+	creds := nonNilCredentials(credentials)
+	preferred = strings.TrimSpace(preferred)
+	if preferred != "" {
+		for _, credential := range creds {
+			if strings.TrimSpace(credential.Qualifier) == preferred {
+				return preferred
+			}
+		}
+	}
+	if len(creds) == 1 {
+		return strings.TrimSpace(creds[0].Qualifier)
+	}
+	return ""
+}
+
+func nonNilCredentials(credentials []*core.ExternalCredential) []*core.ExternalCredential {
+	out := make([]*core.ExternalCredential, 0, len(credentials))
+	for _, credential := range credentials {
+		if credential != nil {
+			out = append(out, credential)
+		}
+	}
+	return out
+}
+
 func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principal, providerName string, targets []CatalogResolutionTarget) ([]CatalogResolutionTarget, error) {
 	if len(targets) == 0 {
 		targets = []CatalogResolutionTarget{{}}
@@ -1099,56 +1129,38 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 		}
 
 		connectionID := b.connectionID(providerName, target.Connection)
-		if b.connectionInstancePreferences != nil {
-			preferred, prefErr := b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
-			if prefErr != nil {
-				return nil, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
-			}
-			if preferred != "" {
-				resolved := CatalogResolutionTarget{
-					Connection: target.Connection,
-					Instance:   preferred,
-				}
-				if _, ok := seen[resolved]; !ok {
-					seen[resolved] = struct{}{}
-					expanded = append(expanded, resolved)
-				}
-				continue
-			}
-		}
-
 		credentials, listErr := b.externalCreds.ListCredentials(ctx, subjectID, connectionID)
 		if listErr != nil {
 			return nil, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
 		}
-		if len(credentials) == 0 {
+		preferred := ""
+		if b.connectionInstancePreferences != nil {
+			var prefErr error
+			preferred, prefErr = b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
+			if prefErr != nil {
+				return nil, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
+			}
+		}
+		chosen := chosenCredentialInstance(credentials, preferred)
+		if chosen != "" {
+			resolved := CatalogResolutionTarget{
+				Connection: target.Connection,
+				Instance:   chosen,
+			}
+			if _, ok := seen[resolved]; !ok {
+				seen[resolved] = struct{}{}
+				expanded = append(expanded, resolved)
+			}
+			continue
+		}
+		if len(nonNilCredentials(credentials)) == 0 {
 			if _, ok := seen[target]; !ok {
 				seen[target] = struct{}{}
 				expanded = append(expanded, target)
 			}
 			continue
 		}
-		nonNil := credentials[:0]
-		for _, credential := range credentials {
-			if credential != nil {
-				nonNil = append(nonNil, credential)
-			}
-		}
-		// Chosen-account invariant: expand only a chosen instance.
-		// Sole credential is implicitly chosen; multiple without preferred → skip
-		// (app is not connected until the subject selects an account).
-		if len(nonNil) != 1 {
-			continue
-		}
-		resolved := CatalogResolutionTarget{
-			Connection: target.Connection,
-			Instance:   strings.TrimSpace(nonNil[0].Qualifier),
-		}
-		if _, ok := seen[resolved]; ok {
-			continue
-		}
-		seen[resolved] = struct{}{}
-		expanded = append(expanded, resolved)
+		// Multiple accounts without a valid chosen preferred → not connected.
 	}
 	return expanded, nil
 }
@@ -1233,14 +1245,20 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	}
 
 	connectionID := b.connectionID(providerName, connection)
-	if instance == "" && b.connectionInstancePreferences != nil {
-		preferred, prefErr := b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
-		if prefErr != nil {
-			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
+	if instance == "" {
+		credentials, listErr := b.externalCreds.ListCredentials(ctx, subjectID, connectionID)
+		if listErr != nil {
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
 		}
-		if preferred != "" {
-			instance = preferred
+		preferred := ""
+		if b.connectionInstancePreferences != nil {
+			var prefErr error
+			preferred, prefErr = b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
+			if prefErr != nil {
+				return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
+			}
 		}
+		instance = chosenCredentialInstance(credentials, preferred)
 	}
 
 	runtimeInfo := ConnectionRuntimeInfo{}

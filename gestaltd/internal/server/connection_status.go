@@ -346,7 +346,7 @@ func preferredInstanceValid(instances []instanceInfo, preferredInstance string) 
 }
 
 func markPreferredInstances(instances []instanceInfo, preferredInstance string) []instanceInfo {
-	if preferredInstance == "" || len(instances) == 0 {
+	if !preferredInstanceValid(instances, preferredInstance) || len(instances) == 0 {
 		return instances
 	}
 	out := make([]instanceInfo, len(instances))

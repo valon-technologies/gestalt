@@ -120,9 +120,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		AppVersionRolloutOutcomes:      appVersionRolloutOutcomes,
 		GestaltdInstanceHeartbeats:     gestaltdInstanceHeartbeats,
 		AppVersionRecoveryObservations: appVersionRecoveryObservations,
-		RemoteRegistrations:           remoteRegistrations,
-		ConnectionInstancePreferences: connectionInstancePreferences,
-		DB:                            ds,
+		RemoteRegistrations:            remoteRegistrations,
+		ConnectionInstancePreferences:  connectionInstancePreferences,
+		DB:                             ds,
 	}, nil
 }
 

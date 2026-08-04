@@ -174,10 +174,10 @@ func TestListIntegrations_NeedsInstanceSelectionIsNotConnected(t *testing.T) {
 	}
 
 	type statusConnection struct {
-		Name            string `json:"name"`
-		Status          string `json:"status"`
-		CredentialState string `json:"credentialState"`
-		Connected       bool   `json:"connected"`
+		Name            string   `json:"name"`
+		Status          string   `json:"status"`
+		CredentialState string   `json:"credentialState"`
+		Connected       bool     `json:"connected"`
 		Actions         []string `json:"actions"`
 	}
 	type statusIntegration struct {
