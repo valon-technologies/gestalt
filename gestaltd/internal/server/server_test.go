@@ -155,6 +155,9 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	if cfg.TracerProvider != nil {
 		brokerOpts = append(brokerOpts, invocation.WithTracerProvider(cfg.TracerProvider))
 	}
+	if cfg.Services != nil && cfg.Services.ConnectionInstancePreferences != nil {
+		brokerOpts = append(brokerOpts, invocation.WithConnectionInstancePreferences(cfg.Services.ConnectionInstancePreferences))
+	}
 	if cfg.Invoker == nil {
 		externalCredentials := cfg.Services.ExternalCredentials
 		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Services.Users, externalCredentials, brokerOpts...)

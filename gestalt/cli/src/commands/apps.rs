@@ -194,14 +194,27 @@ fn connection_status(
     connection: &serde_json::Value,
     instance: Option<&serde_json::Value>,
 ) -> String {
+    // Product connectedness is status / connected, not credential material alone.
+    // Multiple accounts without a chosen preferred stay needs_instance_selection
+    // even when credentialState is still "connected".
+    if connection["status"].as_str() == Some("needs_instance_selection") {
+        // Short table label — machine status is too wide for the Status column.
+        return "choose account".to_string();
+    }
+    if connection["connected"] == serde_json::Value::Bool(false) {
+        return connection["status"]
+            .as_str()
+            .unwrap_or("not_connected")
+            .to_string();
+    }
     instance
         .and_then(|instance| {
             instance["credentialState"]
                 .as_str()
                 .or_else(|| instance["status"].as_str())
         })
-        .or_else(|| connection["credentialState"].as_str())
         .or_else(|| connection["status"].as_str())
+        .or_else(|| connection["credentialState"].as_str())
         .unwrap_or("unknown")
         .to_string()
 }

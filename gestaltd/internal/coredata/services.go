@@ -22,6 +22,7 @@ type Services struct {
 	GestaltdInstanceHeartbeats     *GestaltdInstanceHeartbeatService
 	AppVersionRecoveryObservations *AppVersionRecoveryObservationService
 	RemoteRegistrations            *RemoteRegistrationService
+	ConnectionInstancePreferences  *ConnectionInstancePreferenceService
 	DB                             indexeddb.IndexedDB
 }
 
@@ -87,6 +88,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreRemoteProviders, RemoteProvidersSchema); err != nil {
 			return nil, fmt.Errorf("create remote_providers store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreConnectionInstancePreferences, ConnectionInstancePreferencesSchema); err != nil {
+			return nil, fmt.Errorf("create connection_instance_preferences store: %w", err)
+		}
 	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
 		return nil, err
 	}
@@ -102,6 +106,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	gestaltdInstanceHeartbeats := NewGestaltdInstanceHeartbeatService(ds)
 	appVersionRecoveryObservations := NewAppVersionRecoveryObservationService(ds)
 	remoteRegistrations := NewRemoteRegistrationService(ds)
+	connectionInstancePreferences := NewConnectionInstancePreferenceService(ds)
 	return &Services{
 		ExternalCredentials:            nil,
 		Users:                          users,
@@ -116,6 +121,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		GestaltdInstanceHeartbeats:     gestaltdInstanceHeartbeats,
 		AppVersionRecoveryObservations: appVersionRecoveryObservations,
 		RemoteRegistrations:            remoteRegistrations,
+		ConnectionInstancePreferences:  connectionInstancePreferences,
 		DB:                             ds,
 	}, nil
 }

@@ -168,7 +168,7 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
-func (s *Server) connectionInfosForPlugin(integration string, app *config.ProviderEntry, instances []instanceInfo, integrationAuthTypes []string, p *principal.Principal) []connectionDefInfo {
+func (s *Server) connectionInfosForPlugin(ctx context.Context, integration string, app *config.ProviderEntry, instances []instanceInfo, integrationAuthTypes []string, p *principal.Principal) []connectionDefInfo {
 	if app == nil {
 		return []connectionDefInfo{}
 	}
@@ -187,7 +187,7 @@ func (s *Server) connectionInfosForPlugin(integration string, app *config.Provid
 		if name == config.AppConnectionName {
 			conn = displayAppConnectionDef(app, manifestSpec, conn)
 		}
-		if info, ok := s.connectionInfoFromAuth(integration, userFacingConnectionName(name), name, conn, instances, integrationAuthTypes, name != config.AppConnectionName, p); ok {
+		if info, ok := s.connectionInfoFromAuth(ctx, integration, userFacingConnectionName(name), name, conn, instances, integrationAuthTypes, name != config.AppConnectionName, p); ok {
 			infos = append(infos, info)
 		}
 	}
@@ -225,12 +225,12 @@ func userFacingConnectionName(name string) string {
 	return name
 }
 
-func (s *Server) populateIntegrationSettings(info *integrationInfo, instances []instanceInfo, p *principal.Principal) []string {
+func (s *Server) populateIntegrationSettings(ctx context.Context, info *integrationInfo, instances []instanceInfo, p *principal.Principal) []string {
 	authTypes := []string{}
-	info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], instances, authTypes, p)
+	info.Connections = s.connectionInfosForPlugin(ctx, info.Name, s.pluginDefs[info.Name], instances, authTypes, p)
 	resolvedAuthTypes := resolvedIntegrationAuthTypes(info.Connections)
 	if len(authTypes) == 0 && len(resolvedAuthTypes) > 0 {
-		info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], instances, resolvedAuthTypes, p)
+		info.Connections = s.connectionInfosForPlugin(ctx, info.Name, s.pluginDefs[info.Name], instances, resolvedAuthTypes, p)
 	}
 	return resolvedIntegrationAuthTypes(info.Connections)
 }
@@ -264,7 +264,7 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 	return infos
 }
 
-func (s *Server) connectionInfoFromAuth(integration, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, integrationAuthTypes []string, includeWithoutAuth bool, p *principal.Principal) (connectionDefInfo, bool) {
+func (s *Server) connectionInfoFromAuth(ctx context.Context, integration, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, integrationAuthTypes []string, includeWithoutAuth bool, p *principal.Principal) (connectionDefInfo, bool) {
 	mode := config.ConnectionModeForConnection(conn)
 	connectionInstances := groupInstancesForConnection(instances, instanceConnection)
 	connectionParams := connectionParamInfosFromConnection(conn)
@@ -277,30 +277,40 @@ func (s *Server) connectionInfoFromAuth(integration, name, instanceConnection st
 	if displayMode == core.ConnectionModeNone && len(authTypes) > 0 {
 		displayMode = core.ConnectionModeSubject
 	}
+	connectionID := serverCredentialConnectionID(integration, instanceConnection, conn)
+	subjectID, _ := principal.ResolveCredentialSubjectID(ctx, s.users, p)
+	storedPreferred := s.preferredInstanceForConnection(ctx, subjectID, connectionID)
 	status := noAuthConnectionStatus()
+	preferredInstance := ""
 	if displayMode != core.ConnectionModeNone {
-		status = subjectConnectionStatus(connectionInstances, len(authTypes) > 0, ownerKindForPrincipal(p))
+		status = subjectConnectionStatus(connectionInstances, len(authTypes) > 0, ownerKindForPrincipal(p), storedPreferred)
+		connectionInstances = markPreferredInstances(connectionInstances, storedPreferred)
+		// preferredInstance is the chosen account — omit stale/invalid store rows.
+		if preferredInstanceValid(connectionInstances, storedPreferred) {
+			preferredInstance = strings.TrimSpace(storedPreferred)
+		}
 	}
 
 	info := connectionDefInfo{
-		DisplayName:      connectionDisplayName(name, conn.DisplayName),
-		Name:             name,
-		Mode:             string(displayMode),
-		AuthTypes:        []string{},
-		ConnectionParams: connectionParams,
-		CredentialFields: []credentialFieldInfo{},
-		Status:           status.Status,
-		CredentialState:  status.CredentialState,
-		HealthState:      status.HealthState,
-		Actions:          status.Actions,
-		CredentialMode:   status.CredentialMode,
-		OwnerKind:        status.OwnerKind,
-		Instances:        connectionInstances,
-		StatusCode:       status.StatusCode,
-		StatusReason:     status.StatusReason,
-		connected:        status.Connected,
-		connectable:      len(authTypes) > 0,
-		disconnectable:   status.Disconnectable,
+		DisplayName:       connectionDisplayName(name, conn.DisplayName),
+		Name:              name,
+		Mode:              string(displayMode),
+		AuthTypes:         []string{},
+		ConnectionParams:  connectionParams,
+		CredentialFields:  []credentialFieldInfo{},
+		Status:            status.Status,
+		CredentialState:   status.CredentialState,
+		HealthState:       status.HealthState,
+		Actions:           status.Actions,
+		CredentialMode:    status.CredentialMode,
+		OwnerKind:         status.OwnerKind,
+		Instances:         connectionInstances,
+		PreferredInstance: preferredInstance,
+		StatusCode:        status.StatusCode,
+		StatusReason:      status.StatusReason,
+		Connected:         status.Connected,
+		connectable:       len(authTypes) > 0,
+		disconnectable:    status.Disconnectable,
 	}
 	if len(authTypes) > 0 {
 		info.AuthTypes = authTypes
@@ -341,6 +351,14 @@ func (s *Server) effectiveConnectionDef(integration, connection string) (config.
 		return config.ConnectionDef{}, false
 	}
 	return plan.LookupConnection(connection)
+}
+
+func (s *Server) effectiveConnectionDefOrEmpty(integration, connection string) config.ConnectionDef {
+	conn, ok := s.effectiveConnectionDef(integration, connection)
+	if !ok {
+		return config.ConnectionDef{}
+	}
+	return conn
 }
 
 func shouldHidePassiveNamedConnection(plan config.StaticConnectionPlan, name string, conn config.ConnectionDef, integrationAuthTypes []string) bool {

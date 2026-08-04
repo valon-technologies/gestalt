@@ -64,7 +64,13 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 
 `GET /api/v1/apps` returns one object per app. Use top-level `status`,
 `credentialState`, `healthState`, and `actions` for aggregate display state. Use
-`connections[]` for connection-specific auth and credential metadata:
+`connections[]` for connection-specific auth and credential metadata.
+
+Each connection includes `connected` (boolean): true only when a **chosen
+account** exists for that connection — a valid preferred instance, or a single
+valid instance. Multiple stored accounts with no preferred leave
+`status: needs_instance_selection` and `connected: false` (credentials may still
+appear under `instances`).
 
 ```json
 {
@@ -75,6 +81,7 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
     {
       "name": "default",
       "status": "ready",
+      "connected": true,
       "authTypes": ["oauth"],
       "instances": [{"id": "acme", "name": "Acme"}],
       "connectionParams": {},
