@@ -143,6 +143,8 @@ class ListWorkflowProviderRunsRequest:
     page_size: int = 0
     page_token: str = ""
     status: WorkflowRunStatus = 0
+    #: Optional filter for runs owned by or invoking this app. Matching uses
+    #: hydrated target steps when present, otherwise app-owned definition IDs.
     target_app: str = ""
     context: RequestContext | None = None
     provider: str = ""

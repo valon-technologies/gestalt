@@ -825,7 +825,7 @@ func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsReque
 	}
 	if app := strings.TrimSpace(req.TargetApp); app != "" {
 		// List summaries often omit Target.steps. Match hydrated steps, then
-		// fall back to app-owned definition IDs and provider run-handle owner_key.
+		// fall back to app-owned definition IDs (app_<app>_…).
 		if !coreworkflow.RunMatchesTargetApp(run, app) {
 			return false
 		}

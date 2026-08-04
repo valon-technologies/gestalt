@@ -1,8 +1,6 @@
 package workflow
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"strings"
 )
 
@@ -14,6 +12,12 @@ func AppDefinitionIDPrefix(appName string) string {
 		return ""
 	}
 	return "app_" + appName + "_"
+}
+
+// AppDefinitionID builds the canonical app-owned definition id
+// app_<appName>_<localId>.
+func AppDefinitionID(appName, localID string) string {
+	return AppDefinitionIDPrefix(appName) + strings.TrimSpace(localID)
 }
 
 // DefinitionBelongsToApp reports whether definitionID is owned by appName
@@ -40,26 +44,9 @@ func TargetReferencesApp(target Target, appName string) bool {
 	return false
 }
 
-// OwnerKeyFromRunID extracts a provider-encoded owner_key from a run ID when
-// the ID is a base64url JSON handle (temporal list summaries). Returns "" when
-// the ID is not that shape.
-func OwnerKeyFromRunID(runID string) string {
-	raw := decodeRunIDPayload(runID)
-	if len(raw) == 0 || raw[0] != '{' {
-		return ""
-	}
-	var handle struct {
-		OwnerKey string `json:"owner_key"`
-	}
-	if err := json.Unmarshal(raw, &handle); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(handle.OwnerKey)
-}
-
 // RunMatchesTargetApp reports whether a run belongs to targetApp for list
-// filtering. Prefer hydrated step targets; fall back to definition-id ownership
-// and provider run-handle owner_key when list summaries omit Target.steps.
+// filtering. Prefer hydrated step targets; when list summaries omit
+// Target.steps, fall back to app-owned definition IDs (app_<app>_…).
 func RunMatchesTargetApp(run *Run, targetApp string) bool {
 	if run == nil {
 		return false
@@ -71,29 +58,5 @@ func RunMatchesTargetApp(run *Run, targetApp string) bool {
 	if TargetReferencesApp(run.Target, app) {
 		return true
 	}
-	if DefinitionBelongsToApp(run.DefinitionID, app) {
-		return true
-	}
-	if OwnerKeyFromRunID(run.ID) == app {
-		return true
-	}
-	return false
-}
-
-func decodeRunIDPayload(runID string) []byte {
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
-		return nil
-	}
-	if raw, err := base64.RawURLEncoding.DecodeString(runID); err == nil {
-		return raw
-	}
-	padded := runID
-	if m := len(padded) % 4; m != 0 {
-		padded += strings.Repeat("=", 4-m)
-	}
-	if raw, err := base64.URLEncoding.DecodeString(padded); err == nil {
-		return raw
-	}
-	return nil
+	return DefinitionBelongsToApp(run.DefinitionID, app)
 }

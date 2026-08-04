@@ -3995,6 +3995,8 @@ pub struct ListWorkflowProviderRunsRequest {
     pub page_token: ::prost::alloc::string::String,
     #[prost(enumeration = "WorkflowRunStatus", tag = "3")]
     pub status: i32,
+    /// Optional filter for runs owned by or invoking this app. Matching uses
+    /// hydrated target steps when present, otherwise app-owned definition IDs.
     #[prost(string, tag = "5")]
     pub target_app: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]

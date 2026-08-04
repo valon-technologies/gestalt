@@ -71,7 +71,7 @@ func (r *appWorkflowDeclarations) Snapshot() map[string][]*proto.WorkflowDefinit
 }
 
 func appWorkflowDefinitionID(appName, localID string) string {
-	return "app_" + strings.TrimSpace(appName) + "_" + strings.TrimSpace(localID)
+	return coreworkflow.AppDefinitionID(appName, localID)
 }
 
 func validateAppWorkflowLocalID(localID string) error {

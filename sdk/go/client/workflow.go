@@ -140,6 +140,8 @@ type ListWorkflowProviderRunsRequest struct {
 	PageSize  int32
 	PageToken string
 	Status    WorkflowRunStatus
+	// Optional filter for runs owned by or invoking this app. Matching uses
+	// hydrated target steps when present, otherwise app-owned definition IDs.
 	TargetApp string
 	Context   *RequestContext
 	Provider  string

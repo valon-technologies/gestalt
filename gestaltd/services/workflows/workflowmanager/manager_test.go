@@ -716,3 +716,19 @@ func (p *testWorkflowProvider) DeliverEvent(_ context.Context, req *proto.Delive
 func (p *testWorkflowProvider) Ping(context.Context) error { return nil }
 
 func (p *testWorkflowProvider) Close() error { return nil }
+
+func TestRunMatchesListFiltersEmptyTargetUsesDefinitionOwnership(t *testing.T) {
+	t.Parallel()
+	run := &coreworkflow.Run{
+		ID:           "list-summary",
+		DefinitionID: "app_ai-spend-tracker_ai_spend_tracker_sync_every_four_hours",
+		Target:       coreworkflow.Target{},
+		Status:       coreworkflow.RunStatusSucceeded,
+	}
+	if !runMatchesListFilters(run, coreworkflow.ListRunsRequest{TargetApp: "ai-spend-tracker"}) {
+		t.Fatal("empty-target list summary should match via app-owned definition id")
+	}
+	if runMatchesListFilters(run, coreworkflow.ListRunsRequest{TargetApp: "ci-cd"}) {
+		t.Fatal("empty-target list summary should not match a different app")
+	}
+}

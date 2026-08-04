@@ -1,10 +1,6 @@
 package workflow
 
-import (
-	"encoding/base64"
-	"encoding/json"
-	"testing"
-)
+import "testing"
 
 func TestDefinitionBelongsToApp(t *testing.T) {
 	t.Parallel()
@@ -27,21 +23,12 @@ func TestDefinitionBelongsToApp(t *testing.T) {
 	}
 }
 
-func TestOwnerKeyFromRunID(t *testing.T) {
+func TestAppDefinitionID(t *testing.T) {
 	t.Parallel()
-	payload, err := json.Marshal(map[string]any{
-		"kind":      "temporal-run",
-		"owner_key": "ai-spend-tracker",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded := base64.RawURLEncoding.EncodeToString(payload)
-	if got := OwnerKeyFromRunID(encoded); got != "ai-spend-tracker" {
-		t.Fatalf("OwnerKeyFromRunID = %q, want ai-spend-tracker", got)
-	}
-	if got := OwnerKeyFromRunID("not-a-handle"); got != "" {
-		t.Fatalf("OwnerKeyFromRunID(opaque) = %q, want empty", got)
+	got := AppDefinitionID("ai-spend-tracker", "ai_spend_tracker_sync")
+	want := "app_ai-spend-tracker_ai_spend_tracker_sync"
+	if got != want {
+		t.Fatalf("AppDefinitionID = %q, want %q", got, want)
 	}
 }
 
@@ -64,35 +51,23 @@ func TestRunMatchesTargetApp(t *testing.T) {
 	}
 
 	listSummary := &Run{
-		ID: encodeOwnerHandle(t, "ai-spend-tracker"),
+		ID:           "opaque-list-id",
 		DefinitionID: "app_ai-spend-tracker_ai_spend_tracker_sync_every_four_hours",
 		Target:       Target{}, // list summaries omit steps
 	}
 	if !RunMatchesTargetApp(listSummary, "ai-spend-tracker") {
-		t.Fatal("expected empty-target list summary to match via definition/owner")
+		t.Fatal("expected empty-target list summary to match via definition ownership")
 	}
 	if RunMatchesTargetApp(listSummary, "ci-cd") {
 		t.Fatal("expected empty-target list summary not to match other apps")
 	}
 
-	ownerOnly := &Run{
-		ID:           encodeOwnerHandle(t, "ci-cd"),
-		DefinitionID: "cfg_not_app_owned",
+	cfgOwned := &Run{
+		ID:           "opaque",
+		DefinitionID: "cfg_slack_agent_default",
 		Target:       Target{},
 	}
-	if !RunMatchesTargetApp(ownerOnly, "ci-cd") {
-		t.Fatal("expected owner_key handle to match when definition is not app-owned")
+	if RunMatchesTargetApp(cfgOwned, "slack") {
+		t.Fatal("cfg_* definitions are not app-owned; empty targets must not match by name alone")
 	}
-}
-
-func encodeOwnerHandle(t *testing.T, owner string) string {
-	t.Helper()
-	payload, err := json.Marshal(map[string]any{
-		"kind":      "temporal-run",
-		"owner_key": owner,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return base64.RawURLEncoding.EncodeToString(payload)
 }

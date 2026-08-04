@@ -220,6 +220,9 @@ pub struct ListWorkflowProviderRunsRequest {
     pub page_token: String,
     /// The `status` field.
     pub status: WorkflowRunStatus,
+    /// Optional filter for runs owned by or invoking this app. Matching uses
+    /// hydrated target steps when present, otherwise app-owned definition IDs.
+    ///
     /// The `target_app` field.
     pub target_app: String,
     /// The `context` field; None when unset.
