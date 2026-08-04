@@ -66,6 +66,39 @@ The script deploys and verifies the prototype. Remove its workloads and PVC:
 scripts/deploy-mesh-vertical-slice-prototype.sh dev --destroy
 ```
 
+## Prototype 3: Revision Reconciliation
+
+Implementation: [valon-tools#368](https://github.com/valon-technologies/valon-tools/pull/368)
+
+Tested a `controller-runtime` revision controller with two replicas.
+
+Findings:
+
+- Kubernetes lease election kept one active reconciler.
+- Child-resource watches repaired a deleted Service. Reconciliation also
+  converged after both controller Pods restarted with partial state.
+- An uncached authoritative-intent read fenced a stale `RevisionOperation`
+  generation without deleting the promoted or candidate revision.
+- Cancellation deleted the candidate Deployment and Service while retaining
+  the promoted revision.
+- `controller-runtime` fits the revision controllers. Keep SQL authoritative
+  and use a minimal `RevisionOperation` as a rebuildable work projection.
+- The prototype used a ConfigMap in place of SQL. SQL transactions and Temporal
+  integration remain untested.
+
+Run from `valon-tools` against the shared prototype cluster:
+
+```sh
+scripts/deploy-mesh-controller-runtime-prototype.sh dev
+```
+
+The script builds the controller image, deploys the resources, and verifies the
+failure cases. Remove the namespace, RBAC, and CRD:
+
+```sh
+scripts/deploy-mesh-controller-runtime-prototype.sh dev --destroy
+```
+
 Remove the shared cluster and network:
 
 ```sh
