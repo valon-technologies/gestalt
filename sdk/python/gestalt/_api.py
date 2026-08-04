@@ -11,8 +11,8 @@ from dataclasses import MISSING
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar, cast
 
-from ._protocol import JsonObject, JsonValue
 from ._grpc_transport import ENV_HOST_SERVICE_TOKEN
+from ._protocol import JsonObject, JsonValue
 
 if TYPE_CHECKING:
     from typing_extensions import dataclass_transform
