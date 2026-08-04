@@ -10262,6 +10262,7 @@ func TestAuthInfo(t *testing.T) {
 		t.Fatalf("expected loginSupported true, got %#v", body["loginSupported"])
 	}
 	requireAuthInfoAgentFeature(t, body, false)
+	requireAuthInfoWorkflowDefaultProvider(t, body, "")
 }
 
 func TestAuthInfoFallback(t *testing.T) {
@@ -10297,6 +10298,7 @@ func TestAuthInfoFallback(t *testing.T) {
 		t.Fatalf("expected loginSupported true, got %#v", body["loginSupported"])
 	}
 	requireAuthInfoAgentFeature(t, body, false)
+	requireAuthInfoWorkflowDefaultProvider(t, body, "")
 }
 
 func TestAuthInfoNoAuth(t *testing.T) {
@@ -10331,6 +10333,7 @@ func TestAuthInfoNoAuth(t *testing.T) {
 		t.Fatalf("expected loginSupported false, got %#v", body["loginSupported"])
 	}
 	requireAuthInfoAgentFeature(t, body, false)
+	requireAuthInfoWorkflowDefaultProvider(t, body, "")
 }
 
 func TestAuthInfoAgentFeature(t *testing.T) {
@@ -10361,6 +10364,35 @@ func TestAuthInfoAgentFeature(t *testing.T) {
 		t.Fatalf("decoding: %v", err)
 	}
 	requireAuthInfoAgentFeature(t, body, true)
+	requireAuthInfoWorkflowDefaultProvider(t, body, "")
+}
+
+func TestAuthInfoWorkflowDefaultProviderFeature(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "local",
+			provider:            newMemoryWorkflowProvider(),
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/info: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	requireAuthInfoWorkflowDefaultProvider(t, body, "local")
 }
 
 func requireAuthInfoAgentFeature(t *testing.T, body map[string]any, want bool) {
@@ -10372,6 +10404,25 @@ func requireAuthInfoAgentFeature(t *testing.T, body map[string]any, want bool) {
 	}
 	if features["agent"] != want {
 		t.Fatalf("expected features.agent %v, got %#v", want, features["agent"])
+	}
+}
+
+func requireAuthInfoWorkflowDefaultProvider(t *testing.T, body map[string]any, want string) {
+	t.Helper()
+
+	features, ok := body["features"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected features object, got %#v", body["features"])
+	}
+	got, _ := features["workflowDefaultProvider"].(string)
+	if want == "" {
+		if _, present := features["workflowDefaultProvider"]; present && got != "" {
+			t.Fatalf("expected features.workflowDefaultProvider omitted/empty, got %#v", features["workflowDefaultProvider"])
+		}
+		return
+	}
+	if got != want {
+		t.Fatalf("expected features.workflowDefaultProvider %q, got %#v", want, features["workflowDefaultProvider"])
 	}
 }
 

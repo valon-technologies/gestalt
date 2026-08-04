@@ -33,6 +33,9 @@ type authInfoResponse struct {
 
 type authInfoFeaturesResponse struct {
 	Agent bool `json:"agent"`
+	// WorkflowDefaultProvider is the configured workflow platform provider name
+	// (Workflow API `provider` query). Omitted when workflows are not configured.
+	WorkflowDefaultProvider string `json:"workflowDefaultProvider,omitempty"`
 }
 
 type authSessionResponse struct {
@@ -94,6 +97,13 @@ func (s *Server) agentFeatureAvailable() bool {
 	return s != nil && s.agentRuns != nil && s.agentRuns.Available()
 }
 
+func (s *Server) workflowDefaultProviderFeature() string {
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.workflowProviderName)
+}
+
 func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 	provider := s.authProviderName()
 	displayName := provider
@@ -107,7 +117,8 @@ func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 		DisplayName:    displayName,
 		LoginSupported: s.authEnabled(),
 		Features: authInfoFeaturesResponse{
-			Agent: s.agentFeatureAvailable(),
+			Agent:                   s.agentFeatureAvailable(),
+			WorkflowDefaultProvider: s.workflowDefaultProviderFeature(),
 		},
 	})
 }
