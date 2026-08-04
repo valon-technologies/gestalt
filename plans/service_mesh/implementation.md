@@ -20,7 +20,7 @@ This roadmap turns the validated prototypes into production infrastructure and c
 
 ## Fixed Ownership
 
-- SQL is authoritative for registry state, revisions, generations, grants, migrations, and recovery state.
+- PlanetScale is the authoritative SQL store for registry state, revisions, generations, grants, migrations, and recovery state.
 - Temporal sequences long-running phases and cross-system retries.
 - `RevisionOperation` is a disposable, generation-fenced projection of work.
 - Revision controllers built with `controller-runtime` converge Kubernetes and Istio resources and report status.
@@ -38,7 +38,7 @@ Create a reproducible, empty deployment platform before moving any Gestalt packa
 
 1. Use the existing `valon-tools` GKE Standard module to provision private, regional, VPC-native clusters with separate Pod and Service ranges, private nodes, Cloud NAT, Workload Identity, Secret Manager CSI, release channels, and restricted control-plane access.
 2. Create Artifact Registry repositories for the revision-controller image, platform Bun image, and Helm charts. Publish only digest-addressed artifacts through GitHub OIDC identities.
-3. Provision Cloud SQL networking, instance, database, migration identity, application identity, backups, point-in-time recovery, maintenance policy, monitoring, and restore tooling. Use private connectivity from GKE.
+3. Provision the PlanetScale database and production branch, migration and application roles, TLS connectivity from GKE, connection management, backup retention, monitoring, and restore tooling through the PlanetScale Terraform provider.
 4. Create Secret Manager containers and workload-specific IAM for database credentials, Temporal credentials, token-signing keys, registry trust roots, and telemetry credentials.
 5. Install pinned Gateway API CRDs and self-managed Istio ambient components through Helm: base CRDs, `istiod`, CNI, and `ztunnel`. Define the trust domain, certificate authority, ambient enrollment policy, default-deny L4 policy, and supplemental `NetworkPolicy`.
 6. Deploy cluster-local OpenTelemetry collection and connect it to the existing Datadog and audit pipelines. Add basic cluster, `istiod`, `ztunnel`, and waypoint dashboards.
@@ -53,7 +53,7 @@ None. This is the bootstrap layer.
 - A clean environment can be created and destroyed without manual cloud changes.
 - Terraform plans contain no unexpected replacement or destroy operations.
 - Nodes pull private images through Workload Identity and private networking.
-- Cloud SQL migrations, backup creation, and restore into a clean database succeed.
+- PlanetScale migrations, backup creation, and restore into a clean branch succeed.
 - Sidecarless workloads receive ambient mTLS, reach a shared waypoint, and cannot bypass required L4 policy.
 - Existing traffic continues with cached configuration during an `istiod` restart, while configuration-dependent changes stop.
 - Prototype 1 conformance checks pass against the Helm-managed installation.
@@ -70,17 +70,17 @@ Establish authoritative state and release admission before creating package work
 
 ### Build
 
-1. Define Cloud SQL schemas for registry catalogs, immutable release metadata, import and publication attempts, package slots, append-only revision requests, installation heads, fenced revision operations, migration outcomes, routing generations, terminal outcomes, and a transactional outbox.
+1. Define PlanetScale schemas for registry catalogs, immutable release metadata, import and publication attempts, package slots, append-only revision requests, installation heads, fenced revision operations, migration outcomes, routing generations, terminal outcomes, and a transactional outbox.
 2. Store immutable release bundles, manifests, detached signatures, schemas, workflow definitions, migrations, and UI artifacts in Cloud Storage with generation-match preconditions, retention, and versioning.
 3. Build registry verification for canonical manifests, artifact digests, signatures, trust policy, package-version immutability, operation contracts, dependency compatibility, and complete local artifact availability.
 4. Implement authenticated, resumable publication into the deployment registry. Start with direct push; defer pull-through import until the release and trust contracts are stable.
-5. Connect the control plane to Temporal Cloud with deterministic workflow IDs. Use the SQL outbox to start or signal workflows idempotently after the authoritative transaction commits.
+5. Connect the control plane to Temporal Cloud with deterministic workflow IDs. Use the PlanetScale outbox to start or signal workflows idempotently after the authoritative transaction commits.
 6. Add database migration jobs, schema-version checks, transaction-fencing tests, workflow replay tests, and recovery tooling.
 7. Deploy control-plane APIs with separate public and management listeners, workload identities, minimal permissions, health checks, audit emission, and OTLP telemetry. The API process does not receive Kubernetes mutation permissions.
 
 ### Dependencies
 
-Piece 1 provides GKE, Cloud SQL, storage, secrets, artifact publication, networking, and telemetry.
+Piece 1 provides GKE, PlanetScale, storage, secrets, artifact publication, networking, and telemetry.
 
 ### Completion Gate
 
@@ -88,9 +88,9 @@ Piece 1 provides GKE, Cloud SQL, storage, secrets, artifact publication, network
 - Interrupted uploads resume, and incomplete publications remain invisible.
 - Admission uses only artifacts present in the deployment registry and rejects digest, signature, trust, schema, or dependency mismatches.
 - Concurrent first installations reserve one package slot.
-- A crash after committing SQL but before starting Temporal is recovered through the outbox without duplicating the workflow.
+- A crash after committing PlanetScale state but before starting Temporal is recovered through the outbox without duplicating the workflow.
 - Stale generations cannot overwrite newer revision intent.
-- Cloud SQL restore recovers authoritative state, and Temporal replay resumes workflows without changing that state.
+- PlanetScale restore recovers authoritative state, and Temporal replay resumes workflows without changing that state.
 
 ### Defer
 
@@ -141,11 +141,11 @@ Turn durable revision intent into repeatable installation, upgrade, rollback, ca
 
 1. Define the minimal `RevisionOperation` CRD and status contract. Treat it as a rebuildable work projection, not the source of truth.
 2. Build separately deployed revision controllers with `controller-runtime`, leader election, health endpoints, narrow service accounts, and least-privilege RBAC.
-3. Have Temporal own phase sequencing. After committing fenced SQL intent, project the current phase into Kubernetes and wait for controller convergence before advancing.
+3. Have Temporal own phase sequencing. After committing fenced PlanetScale intent, project the current phase into Kubernetes and wait for controller convergence before advancing.
 4. Run the Temporal projection activity under a dedicated identity with narrow permission to create and update `RevisionOperation` resources. Do not give the public control-plane API Kubernetes mutation permissions.
 5. Have controllers perform an authoritative generation check before mutation and reconcile deterministic, immutable Deployments, revision Services, front Services, ambient enrollment, routes, waypoint attachment, authorization policy, migration Jobs, and cleanup.
 6. Implement the initial lifecycle: Admitted, Preparing, Starting, Ready, Promoting, Draining, and Complete. Add Observing after the base lifecycle is reliable.
-7. Promote by first converging routing and staged artifacts, then atomically advancing the SQL installation head and catalog generations. Preserve the prior revision until drain and rollback deadlines expire.
+7. Promote by first converging routing and staged artifacts, then atomically advancing the PlanetScale installation head and catalog generations. Preserve the prior revision until drain and rollback deadlines expire.
 8. Implement cancellation, pre-promotion rollback, post-promotion degradation, forward recovery, idempotent prepare migrations, and explicit compensating migrations. Never automate destructive down migrations.
 9. Convert Prototype 3 drift, restart, stale-generation, leader-election, and candidate-cancellation scenarios into failure-injection tests.
 
@@ -157,9 +157,9 @@ Piece 2 owns authoritative state and workflow sequencing. Piece 3 supplies the r
 
 - Deleting a managed child resource causes deterministic repair.
 - Duplicate Temporal delivery and controller retries do not duplicate resources or phase effects.
-- Controller or Temporal restarts converge from SQL and the projected operation.
+- Controller or Temporal restarts converge from PlanetScale and the projected operation.
 - A stale or cancelled operation cannot mutate or delete the promoted revision.
-- Pre-promotion failure restores prior routing without advancing SQL generations.
+- Pre-promotion failure restores prior routing without advancing PlanetScale generations.
 - Promotion advances routing and catalog generations exactly once.
 - Existing pinned sessions remain on their revision until closure or deadline; new sessions use the promoted revision.
 - Install, upgrade, rollback, cancellation, removal, and recovery pass end-to-end failure-injection tests.
@@ -177,9 +177,9 @@ Prove the platform can operate safely under production load and failure before m
 ### Build
 
 1. Add multiple replicas, PodDisruptionBudgets, topology spread, anti-affinity, priority classes, resource guarantees, autoscaling, and capacity limits for every bootstrap and protected component.
-2. Define SLOs and alerts for control-plane admission, SQL and Temporal latency, controller queues, reconciliation age, route convergence, `istiod`, `ztunnel`, waypoints, authorization, ingress, runtime health, and audit delivery.
+2. Define SLOs and alerts for control-plane admission, PlanetScale and Temporal latency, controller queues, reconciliation age, route convergence, `istiod`, `ztunnel`, waypoints, authorization, ingress, runtime health, and audit delivery.
 3. Route Kubernetes logs and OTLP telemetry into Datadog and the immutable audit archive. Ensure authorization and required security-event delivery fail closed or buffer durably.
-4. Exercise Cloud SQL restore, Temporal replay, expired-certificate recovery, lost-controller recovery, cluster recreation, and restoration from authoritative state.
+4. Exercise PlanetScale restore, Temporal replay, expired-certificate recovery, lost-controller recovery, cluster recreation, and restoration from authoritative state.
 5. Establish pinned Kubernetes, Istio, Envoy, Bun, routing-contract, token-format, and CRD compatibility windows. Rehearse mesh, database, controller, and runtime upgrades and rollback.
 6. Add policy regression, penetration, load, soak, connection-drain, pinned-session, noisy-neighbor, and waypoint-failure tests.
 7. Migrate representative packages in cohorts: internal test package, non-critical package, package with dependencies, package with workflows, and finally critical packages.
