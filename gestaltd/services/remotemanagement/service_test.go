@@ -210,6 +210,34 @@ func TestDeleteRemoteGenerationRequiredAndNotFound(t *testing.T) {
 	}
 }
 
+func TestDeleteRemoteRejectsCrossOwnerDeletion(t *testing.T) {
+	t.Parallel()
+	svc := newRemoteService(t, &stubAuthz{
+		allowedResourceTypes: map[string]bool{"reversePublication": true},
+	})
+	alice := withPrincipal(context.Background(), "user:alice-uuid")
+	bob := withPrincipal(context.Background(), "user:bob-uuid")
+
+	remote, err := svc.CreateRemote(alice, &proto.CreateRemoteRequest{
+		Tunnel: validTunnel(), Providers: []*proto.RemoteProviderDefinition{appProvider("app", "test-app")}, ExpectedGeneration: 0,
+	})
+	if err != nil {
+		t.Fatalf("alice CreateRemote: %v", err)
+	}
+	if _, err := svc.DeleteRemote(bob, &proto.DeleteRemoteRequest{
+		Id: remote.GetId(), ExpectedGeneration: remote.GetGeneration(),
+	}); codeOf(t, err) != codes.NotFound {
+		t.Fatalf("bob cross-owner delete code = %v, want NotFound", codeOf(t, err))
+	}
+	resp, err := svc.ListRemotes(alice, &proto.ListRemotesRequest{})
+	if err != nil {
+		t.Fatalf("alice ListRemotes after bob delete: %v", err)
+	}
+	if len(resp.GetRemotes()) != 1 {
+		t.Fatalf("alice remotes after bob delete = %d, want 1", len(resp.GetRemotes()))
+	}
+}
+
 func TestListRemotesEmptyAndAfterCreate(t *testing.T) {
 	t.Parallel()
 	ctx := withPrincipal(context.Background(), "user:alice-uuid")
@@ -242,7 +270,7 @@ func TestListRemotesEmptyAndAfterCreate(t *testing.T) {
 	}
 }
 
-func TestAdminAuthorizationStates(t *testing.T) {
+func TestPublicationAuthorizationStates(t *testing.T) {
 	t.Parallel()
 	ctx := withPrincipal(context.Background(), "user:alice-uuid")
 
@@ -264,6 +292,30 @@ func TestAdminAuthorizationStates(t *testing.T) {
 		})
 		if got := codeOf(t, err); got != codes.PermissionDenied {
 			t.Fatalf("denied code = %v, want %v", got, codes.PermissionDenied)
+		}
+	})
+
+	t.Run("dedicated_permission_allows", func(t *testing.T) {
+		t.Parallel()
+		svc := newRemoteService(t, &stubAuthz{
+			allowedResourceTypes: map[string]bool{"reversePublication": true},
+		})
+		if _, err := svc.CreateRemote(ctx, &proto.CreateRemoteRequest{
+			Tunnel: validTunnel(), Providers: []*proto.RemoteProviderDefinition{appProvider("app", "test-app")}, ExpectedGeneration: 0,
+		}); err != nil {
+			t.Fatalf("dedicated permission CreateRemote: %v", err)
+		}
+	})
+
+	t.Run("legacy_admin_permission_allows", func(t *testing.T) {
+		t.Parallel()
+		svc := newRemoteService(t, &stubAuthz{
+			allowedResourceTypes: map[string]bool{"gestaltAdmin": true},
+		})
+		if _, err := svc.CreateRemote(ctx, &proto.CreateRemoteRequest{
+			Tunnel: validTunnel(), Providers: []*proto.RemoteProviderDefinition{appProvider("app", "test-app")}, ExpectedGeneration: 0,
+		}); err != nil {
+			t.Fatalf("legacy admin CreateRemote: %v", err)
 		}
 	})
 
@@ -352,13 +404,17 @@ func TestCreateRemoteRejectsDuplicateProviders(t *testing.T) {
 }
 
 type stubAuthz struct {
-	allowed bool
-	err     error
+	allowed              bool
+	allowedResourceTypes map[string]bool
+	err                  error
 }
 
 func (s *stubAuthz) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	if s.err != nil {
 		return nil, s.err
+	}
+	if s.allowedResourceTypes != nil {
+		return &proto.CheckAccessResponse{Allowed: s.allowedResourceTypes[req.GetResource().GetType()]}, nil
 	}
 	return &proto.CheckAccessResponse{Allowed: s.allowed}, nil
 }
