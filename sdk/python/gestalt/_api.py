@@ -5,7 +5,6 @@ from __future__ import annotations
 import builtins
 import dataclasses
 import json
-import os
 import threading
 from dataclasses import MISSING
 from http import HTTPStatus
