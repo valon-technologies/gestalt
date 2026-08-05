@@ -2,7 +2,8 @@
 
 Allowlisted domains (e.g. `valon.com`, `example.com`) can log in. `@valon.com` via
 Auth0 Google connection; externals via Auth0 database. No app/MCP/admin access without
-`authorization.relationships`. Checklist: [implementation.md](./implementation.md).
+`authorization.relationships`. Implementation PRs and process:
+[implementation.md](./implementation.md).
 
 ## Current state
 
