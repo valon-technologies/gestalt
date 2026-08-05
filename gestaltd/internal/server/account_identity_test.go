@@ -10,6 +10,7 @@ import (
 )
 
 func TestNormalizeIdentityFacts_AssignsSinglePrimary(t *testing.T) {
+	t.Parallel()
 	facts := normalizeIdentityFacts([]identityFact{
 		{Kind: "display_name", Value: "Ada"},
 		{Kind: "email", Value: "ada@example.com"},
@@ -33,6 +34,7 @@ func TestNormalizeIdentityFacts_AssignsSinglePrimary(t *testing.T) {
 }
 
 func TestNormalizeIdentityFacts_KeepsExplicitPrimary(t *testing.T) {
+	t.Parallel()
 	facts := normalizeIdentityFacts([]identityFact{
 		{Kind: "email", Value: "a@example.com"},
 		{Kind: "workspace", Value: "Acme", Primary: true},
@@ -46,6 +48,7 @@ func TestNormalizeIdentityFacts_KeepsExplicitPrimary(t *testing.T) {
 }
 
 func TestSetAndParseAccountIdentityRoundTrip(t *testing.T) {
+	t.Parallel()
 	meta, err := setAccountIdentity(`{"subdomain":"acme"}`, &accountIdentity{
 		Facts: []identityFact{
 			{Kind: "subdomain", Value: "acme", Primary: true},
@@ -72,6 +75,7 @@ func TestSetAndParseAccountIdentityRoundTrip(t *testing.T) {
 }
 
 func TestIdentityFactsFromConnectionParams(t *testing.T) {
+	t.Parallel()
 	facts := identityFactsFromConnectionParams(`{"host":"looker.example","cloud_id":"abc","api_host":"api-na1.niceincontact.com"}`)
 	if len(facts) != 1 {
 		t.Fatalf("facts = %+v, want single host (host preferred over api_host)", facts)
@@ -82,6 +86,7 @@ func TestIdentityFactsFromConnectionParams(t *testing.T) {
 }
 
 func TestMergeDiscoveryCandidateIdentity(t *testing.T) {
+	t.Parallel()
 	meta, err := mergeDiscoveryCandidateIdentity(`{"cloud_id":"123"}`, "Acme Jira")
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +101,7 @@ func TestMergeDiscoveryCandidateIdentity(t *testing.T) {
 }
 
 func TestMergeDiscoveryCandidateIdentity_CorruptBlobDoesNotFail(t *testing.T) {
+	t.Parallel()
 	raw, err := json.Marshal(map[string]string{
 		"cloud_id":                 "123",
 		accountIdentityMetadataKey: "{not-json",
@@ -114,6 +120,7 @@ func TestMergeDiscoveryCandidateIdentity_CorruptBlobDoesNotFail(t *testing.T) {
 }
 
 func TestValidateProviderMetadataRejectsAccountIdentity(t *testing.T) {
+	t.Parallel()
 	err := validateProviderMetadata("discovery", map[string]string{
 		"cloud_id":                 "abc-123",
 		accountIdentityMetadataKey: `{"facts":[{"kind":"site","value":"Acme","primary":true}]}`,
@@ -124,6 +131,7 @@ func TestValidateProviderMetadataRejectsAccountIdentity(t *testing.T) {
 }
 
 func TestMergeMetadataJSONStripsAccountIdentity(t *testing.T) {
+	t.Parallel()
 	merged, err := mergeMetadataJSON(`{"cloud_id":"1"}`, map[string]string{
 		"cloud_id":                 "2",
 		accountIdentityMetadataKey: `{"facts":[]}`,
@@ -144,15 +152,16 @@ func TestMergeMetadataJSONStripsAccountIdentity(t *testing.T) {
 }
 
 func TestOAuthIdentitySource(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
-		"gmail":            "gmail",
-		"google_calendar":  "google",
-		"bigquery":         "google",
-		"github":           "github",
-		"slack":            "slack",
-		"jira":             "",
-		"zendesk":          "",
-		"launchdarkly":     "",
+		"gmail":           "gmail",
+		"google_calendar": "google",
+		"bigquery":        "google",
+		"github":          "github",
+		"slack":           "slack",
+		"jira":            "",
+		"zendesk":         "",
+		"launchdarkly":    "",
 	}
 	for integration, want := range cases {
 		if got := oauthIdentitySource(integration); got != want {
@@ -162,6 +171,7 @@ func TestOAuthIdentitySource(t *testing.T) {
 }
 
 func TestFetchOAuthAccountIdentityFacts_NoProbeForUnknownIntegration(t *testing.T) {
+	t.Parallel()
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -181,6 +191,7 @@ func TestFetchOAuthAccountIdentityFacts_NoProbeForUnknownIntegration(t *testing.
 }
 
 func TestEnrichAccountIdentity_EmailOutranksEarlierSubdomain(t *testing.T) {
+	t.Parallel()
 	var s Server
 	tm := credentialMaterial{
 		Integration: "zendesk",
@@ -207,6 +218,7 @@ func TestEnrichAccountIdentity_EmailOutranksEarlierSubdomain(t *testing.T) {
 }
 
 func TestEnrichAccountIdentity_ManualFieldsSkipOAuthProbe(t *testing.T) {
+	t.Parallel()
 	var s Server
 	tm := credentialMaterial{
 		Integration:  "gmail",
@@ -229,6 +241,7 @@ func TestEnrichAccountIdentity_ManualFieldsSkipOAuthProbe(t *testing.T) {
 }
 
 func TestMergeIdentityFacts_DoesNotAutoAssignPrimary(t *testing.T) {
+	t.Parallel()
 	facts := mergeIdentityFacts(nil, identityFact{Kind: "subdomain", Value: "acme"})
 	for _, f := range facts {
 		if f.Primary {
@@ -252,6 +265,7 @@ func TestMergeIdentityFacts_DoesNotAutoAssignPrimary(t *testing.T) {
 }
 
 func TestEnrichAccountIdentity_GmailProbeScoped(t *testing.T) {
+	t.Parallel()
 	userinfoHits, profileHits := 0, 0
 	mux := http.NewServeMux()
 	// We can't remint hardcoded Google URLs; instead verify oauthIdentitySource

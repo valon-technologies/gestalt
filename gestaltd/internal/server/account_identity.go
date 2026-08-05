@@ -9,12 +9,15 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/valon-technologies/gestalt/server/core"
 )
 
 // accountIdentityMetadataKey is the reserved MetadataJSON key for Connection
 // account recognition facts (SCIM-style). Only host code may write this key;
-// provider/discovery metadata must not set it.
-const accountIdentityMetadataKey = "account_identity"
+// provider/discovery metadata must not set it. Runtime connection-param
+// surfaces must strip it via core.ConnectionParamsFromMetadataJSON.
+const accountIdentityMetadataKey = core.AccountIdentityMetadataKey
 
 const oauthIdentityProbeTimeout = 3 * time.Second
 

@@ -2,7 +2,6 @@ package invocation
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -1356,8 +1355,8 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		metadataJSON = resp.MetadataJSON
 	}
 	if metadataJSON != "" {
-		var connParams map[string]string
-		if err := json.Unmarshal([]byte(metadataJSON), &connParams); err != nil {
+		connParams, err := core.ConnectionParamsFromMetadataJSON(metadataJSON)
+		if err != nil {
 			b.log().WarnContext(ctx, "malformed metadata JSON", "provider", providerName, "error", err)
 		} else if len(connParams) > 0 {
 			ctx = core.WithConnectionParams(ctx, connParams)
