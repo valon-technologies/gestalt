@@ -49,24 +49,6 @@ func (s *Server) lookupUserByEmail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) requireGestaltAdmin(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
-	p, ok := s.requireAuthenticatedUserCaller(w, r)
-	if !ok {
-		return nil, false
-	}
-
-	_, allowed, err := s.authorizeMountedAppAccess(r.Context(), p, s.adminMountedUI())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to authorize request")
-		return nil, false
-	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "gestalt admin access required")
-		return nil, false
-	}
-	return p, true
-}
-
 func (s *Server) requireUserLookupAccess(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
 	p, ok := s.requireAuthenticatedUserCaller(w, r)
 	if !ok {
