@@ -1,20 +1,12 @@
 # External Users on valon.tools
 
-Allowlisted domains (e.g. `valon.com`, `example.com`) can log in. `@valon.com` via
-Auth0 Google connection; externals via Auth0 database. No app/MCP/admin access without
-`authorization.relationships`. Implementation PRs and process:
-[implementation.md](./implementation.md).
+Allowlisted domains (e.g. `valon.com`, `example.com`) can log in. `@valon.com` via Auth0 Google connection; externals via Auth0 database. No app/MCP/admin access without `authorization.relationships`. Implementation PRs and process: [implementation.md](./implementation.md).
 
 ## Current state
 
-- Identity: `gestalt-providers/auth/oidc` with `issuerUrl: https://accounts.google.com`
-  (`toolshed/valon-tools/deploy`; config key `google`).
+- Identity: `gestalt-providers/auth/oidc` with `issuerUrl: https://accounts.google.com` (`toolshed/valon-tools/deploy`; config key `google`).
 - No `allowedDomains` — Gestalt accepts any verified email after OAuth.
-- **Blocker:** `app` has `defaultRole: viewer` and `"*"` includes `viewer`. A
-  non-empty `defaultRole` is an **allow fallback** in gestaltd: mounted UIs with
-  empty `allowedRoles` still serve static assets, and `CheckAccess` can allow
-  actions when `defaultRole` matches the action’s relation list — even for
-  ungranted subjects. Fix before widening login.
+- **Blocker:** `app` has `defaultRole: viewer` and `"*"` includes `viewer`. A non-empty `defaultRole` is an **allow fallback** in gestaltd: mounted UIs with empty `allowedRoles` still serve static assets, and `CheckAccess` can allow actions when `defaultRole` matches the action’s relation list — even for ungranted subjects. Fix before widening login.
 - Users: `FindOrCreateUser(email)` → stable `user:<uuid>`; grants use UUIDs in prod.
 
 ## Flow
@@ -36,8 +28,7 @@ allowedDomains:
   - example.com
 ```
 
-Empty list = allow all. Non-empty = reject at callback if domain not listed
-(`gestalt-providers/auth/internal/userinfo`). Not a substitute for authz.
+Empty list = allow all. Non-empty = reject at callback if domain not listed (`gestalt-providers/auth/internal/userinfo`). Not a substitute for authz.
 
 Optional Auth0 Action: force `@valon.com` to Google; duplicate domain check.
 
@@ -50,22 +41,14 @@ Optional Auth0 Action: force `@valon.com` to Google; duplicate domain check.
 
 Before external login, patch `app` in `toolshed/valon-tools/deploy/config.yaml`:
 
-- **Clear `defaultRole`** on `app` (omit the field). Do not set `defaultRole:
-  noaccess` — any non-empty `defaultRole` still authorizes mounted UIs when
-  `allowedRoles` is empty (`gestaltd/internal/server/mounted_ui.go`).
-- `"*": relations: [nobody]` — closes the `CheckAccess` wildcard; ungranted
-  subjects have no `nobody` relationship, so RPC/MCP/actions deny. Does **not** gate
-  static UI by itself.
-- Explicit `relations` on every `app` action Valon uses (`get_me`, `stores.health`,
-  deal-hub, ci-cd sync, …).
-- Spot-check apps with a custom `authorizationPolicy` — clear `defaultRole` on
-  those resource types too when they use an empty `allowedRoles` UI mount.
+- **Clear `defaultRole`** on `app` (omit the field). Do not set `defaultRole: noaccess` — any non-empty `defaultRole` still authorizes mounted UIs when `allowedRoles` is empty (`gestaltd/internal/server/mounted_ui.go`).
+- `"*": relations: [nobody]` — closes the `CheckAccess` wildcard; ungranted subjects have no `nobody` relationship, so RPC/MCP/actions deny. Does **not** gate static UI by itself.
+- Explicit `relations` on every `app` action Valon uses (`get_me`, `stores.health`, deal-hub, ci-cd sync, …).
+- Spot-check apps with a custom `authorizationPolicy` — clear `defaultRole` on those resource types too when they use an empty `allowedRoles` UI mount.
 
-`itAccountOnboarding` is a useful reference for `"*"` → `nobody` and per-action
-relations, not for `defaultRole: noaccess` as a UI deny lever.
+`itAccountOnboarding` is a useful reference for `"*"` → `nobody` and per-action relations, not for `defaultRole: noaccess` as a UI deny lever.
 
-Grant externals: login → `GET /api/v1/auth/session` for `user:<uuid>` → add
-relationship → deploy.
+Grant externals: login → `GET /api/v1/auth/session` for `user:<uuid>` → add relationship → deploy.
 
 ## Gestalt / toolshed config
 
@@ -84,11 +67,9 @@ providers:
         allowedDomains: [valon.com, example.com]
 ```
 
-GSM + `toolshed/valon-tools/terraform/main.tf`: `auth0-client-id`,
-`auth0-client-secret`. Keep `google-oauth-*` for Calendar/Drive/IAP connections.
+GSM + `toolshed/valon-tools/terraform/main.tf`: `auth0-client-id`, `auth0-client-secret`. Keep `google-oauth-*` for Calendar/Drive/IAP connections.
 
-Files: `deploy/config.yaml` (authz + dev identity), `deploy/prod/config.yaml`,
-`gestalt.lock.json` if ref changes.
+Files: `deploy/config.yaml` (authz + dev identity), `deploy/prod/config.yaml`, `gestalt.lock.json` if ref changes.
 
 ## Auth0
 
@@ -111,5 +92,4 @@ Rollback: revert issuer to Google + `google-oauth-*` secrets.
 - Database signup: open vs invite-only?
 - MFA on database connection?
 - Custom Auth0 domain?
-- Per-app `authorizationPolicy` resource types: clear `defaultRole` where mounts
-  rely on relationship grants only?
+- Per-app `authorizationPolicy` resource types: clear `defaultRole` where mounts rely on relationship grants only?
