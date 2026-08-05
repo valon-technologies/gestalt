@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -176,6 +177,11 @@ func newAuthorizedUserLookupTestServer(t *testing.T, grants userLookupTestGrants
 	}
 
 	return newTestServer(t, func(cfg *server.Config) {
+		if grants.appAdmin != "" {
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				grants.appAdmin: {},
+			}
+		}
 		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
 			if token != "session-token" {
 				return nil, core.ErrNotFound
