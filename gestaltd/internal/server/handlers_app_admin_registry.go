@@ -245,6 +245,25 @@ func (s *Server) hasExplicitAppAdmin(ctx context.Context, subjectID, appName str
 	}
 }
 
+// hasAnyExplicitAppAdmin reports whether subjectID has an explicit admin grant on
+// any app resource. This is a coarse gate for operator workflows like user
+// lookup until finer-grained authorization is wired in.
+func (s *Server) hasAnyExplicitAppAdmin(ctx context.Context, subjectID string) (bool, error) {
+	if s == nil || s.authorization == nil {
+		return false, errors.New("authorization is unavailable")
+	}
+	for appName := range s.pluginDefs {
+		allowed, err := s.hasExplicitAppAdmin(ctx, subjectID, appName)
+		if err != nil {
+			return false, err
+		}
+		if allowed {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	app, registry, ok := s.appAdminRegistryConfig(w, r)
 	if !ok {

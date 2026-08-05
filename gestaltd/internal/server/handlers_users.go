@@ -17,7 +17,7 @@ type userLookupResponse struct {
 }
 
 func (s *Server) lookupUserByEmail(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.requireGestaltAdmin(w, r); !ok {
+	if _, ok := s.requireUserLookupAccess(w, r); !ok {
 		return
 	}
 	if s.users == nil {
@@ -49,7 +49,35 @@ func (s *Server) lookupUserByEmail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) requireGestaltAdmin(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
+func (s *Server) requireUserLookupAccess(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
+	p, ok := s.requireAuthenticatedUserCaller(w, r)
+	if !ok {
+		return nil, false
+	}
+
+	_, gestaltAdmin, err := s.authorizeMountedAppAccess(r.Context(), p, s.adminMountedUI())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to authorize request")
+		return nil, false
+	}
+	if gestaltAdmin {
+		return p, true
+	}
+
+	subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
+	appAdmin, err := s.hasAnyExplicitAppAdmin(r.Context(), subjectID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to authorize request")
+		return nil, false
+	}
+	if !appAdmin {
+		writeError(w, http.StatusForbidden, "gestalt admin or app admin access required")
+		return nil, false
+	}
+	return p, true
+}
+
+func (s *Server) requireAuthenticatedUserCaller(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
 	p, err := s.resolveRequestPrincipalWithUserID(r)
 	switch {
 	case errors.Is(err, errInvalidAuthorizationHeader):
@@ -66,16 +94,6 @@ func (s *Server) requireGestaltAdmin(w http.ResponseWriter, r *http.Request) (*p
 		return nil, false
 	}
 	if err := requireUserCaller(w, p); err != nil {
-		return nil, false
-	}
-
-	_, allowed, err := s.authorizeMountedAppAccess(r.Context(), p, s.adminMountedUI())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to authorize request")
-		return nil, false
-	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "gestalt admin access required")
 		return nil, false
 	}
 	return p, true

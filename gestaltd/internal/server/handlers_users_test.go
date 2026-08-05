@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -20,7 +21,7 @@ import (
 func TestLookupUserByEmailRequiresAuthentication(t *testing.T) {
 	t.Parallel()
 
-	ts := newAuthorizedUserLookupTestServer(t, true)
+	ts := newAuthorizedUserLookupTestServer(t, userLookupTestGrants{gestaltAdmin: true})
 	testutil.CloseOnCleanup(t, ts)
 
 	resp, err := http.Get(ts.URL + "/api/v1/users/lookup?email=admin-api-user%40example.test")
@@ -34,10 +35,10 @@ func TestLookupUserByEmailRequiresAuthentication(t *testing.T) {
 	}
 }
 
-func TestLookupUserByEmailRequiresGestaltAdmin(t *testing.T) {
+func TestLookupUserByEmailRequiresAdminAccess(t *testing.T) {
 	t.Parallel()
 
-	ts := newAuthorizedUserLookupTestServer(t, false)
+	ts := newAuthorizedUserLookupTestServer(t, userLookupTestGrants{})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/users/lookup?email=admin-api-user%40example.test", nil)
@@ -57,10 +58,33 @@ func TestLookupUserByEmailRequiresGestaltAdmin(t *testing.T) {
 	}
 }
 
+func TestLookupUserByEmailAllowsAppAdmin(t *testing.T) {
+	t.Parallel()
+
+	ts := newAuthorizedUserLookupTestServer(t, userLookupTestGrants{appAdmin: "traffic-cop"})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/users/lookup?email=admin-api-user%40example.test", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET user lookup: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+}
+
 func TestLookupUserByEmailReturnsSubjectID(t *testing.T) {
 	t.Parallel()
 
-	ts := newAuthorizedUserLookupTestServer(t, true)
+	ts := newAuthorizedUserLookupTestServer(t, userLookupTestGrants{gestaltAdmin: true})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/users/lookup?email=admin-api-user%40example.test", nil)
@@ -101,7 +125,7 @@ func TestLookupUserByEmailReturnsSubjectID(t *testing.T) {
 func TestLookupUserByEmailNotFound(t *testing.T) {
 	t.Parallel()
 
-	ts := newAuthorizedUserLookupTestServer(t, true)
+	ts := newAuthorizedUserLookupTestServer(t, userLookupTestGrants{gestaltAdmin: true})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/users/lookup?email=missing%40example.test", nil)
@@ -121,19 +145,27 @@ func TestLookupUserByEmailNotFound(t *testing.T) {
 	}
 }
 
-func newAuthorizedUserLookupTestServer(t *testing.T, grantAdmin bool) *httptest.Server {
+func newAuthorizedUserLookupTestServer(t *testing.T, grants userLookupTestGrants) *httptest.Server {
 	t.Helper()
 
 	svc := testutil.NewStubServices(t)
 	user := seedUserRecord(t, svc, "admin-api-user", "admin-api-user@example.test", time.Now())
 
 	relationships := []*proto.Relationship(nil)
-	if grantAdmin {
+	if grants.gestaltAdmin {
 		relationships = append(relationships, testAuthorizationRelationship(
 			principal.UserSubjectID(user.ID),
 			"admin",
 			"gestaltAdmin",
 			"gestaltAdmin",
+		))
+	}
+	if grants.appAdmin != "" {
+		relationships = append(relationships, testAuthorizationRelationship(
+			principal.UserSubjectID(user.ID),
+			"admin",
+			"app",
+			grants.appAdmin,
 		))
 	}
 
@@ -145,6 +177,11 @@ func newAuthorizedUserLookupTestServer(t *testing.T, grantAdmin bool) *httptest.
 	}
 
 	return newTestServer(t, func(cfg *server.Config) {
+		if grants.appAdmin != "" {
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				grants.appAdmin: {},
+			}
+		}
 		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
 			if token != "session-token" {
 				return nil, core.ErrNotFound
@@ -157,4 +194,9 @@ func newAuthorizedUserLookupTestServer(t *testing.T, grantAdmin bool) *httptest.
 			_, _ = w.Write([]byte("admin-shell"))
 		})
 	})
+}
+
+type userLookupTestGrants struct {
+	gestaltAdmin bool
+	appAdmin     string
 }
