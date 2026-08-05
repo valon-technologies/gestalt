@@ -454,6 +454,10 @@ func validateProviderMetadata(source string, metadata map[string]string) error {
 		source = "provider"
 	}
 	for k, v := range metadata {
+		if k == accountIdentityMetadataKey {
+			// Reserved host-owned JSON blob; not a provider param value.
+			continue
+		}
 		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
 			return fmt.Errorf("%s returned invalid key or value for %q", source, k)
 		}
@@ -503,6 +507,10 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 			if err != nil {
 				return nil, err
 			}
+			merged, err = mergeDiscoveryCandidateIdentity(merged, candidates[0].Name)
+			if err != nil {
+				return nil, err
+			}
 			tm.MetadataJSON = merged
 			return s.completeConnection(ctx, prov, tm)
 		}
@@ -524,11 +532,15 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 }
 
 func (s *Server) completeConnection(ctx context.Context, _ core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
-	if _, err := s.storeCredentialFromMaterial(ctx, tm); err != nil {
+	enriched, err := s.enrichAccountIdentity(ctx, tm)
+	if err != nil {
+		return nil, fmt.Errorf("enriching account identity: %w", err)
+	}
+	if _, err := s.storeCredentialFromMaterial(ctx, enriched); err != nil {
 		return nil, err
 	}
-	s.maybeSetDefaultInstancePreference(ctx, tm.SubjectID, tm.Integration, tm.Connection, tm.Instance)
-	return &connectionSetupResult{Status: "connected", Integration: tm.Integration}, nil
+	s.maybeSetDefaultInstancePreference(ctx, enriched.SubjectID, enriched.Integration, enriched.Connection, enriched.Instance)
+	return &connectionSetupResult{Status: "connected", Integration: enriched.Integration}, nil
 }
 
 func manualConnectionAllowed(conn config.ConnectionDef) bool {

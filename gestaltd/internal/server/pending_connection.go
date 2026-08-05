@@ -445,6 +445,12 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to merge metadata")
 		return
 	}
+	merged, err = mergeDiscoveryCandidateIdentity(merged, selected.Name)
+	if err != nil {
+		auditErr = errors.New("failed to merge discovery identity")
+		writeError(w, http.StatusInternalServerError, "failed to merge metadata")
+		return
+	}
 
 	tm := state.Credential
 	tm.MetadataJSON = merged
