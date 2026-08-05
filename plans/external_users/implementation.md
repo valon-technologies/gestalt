@@ -14,10 +14,15 @@ Land [plan.md](./plan.md) and this file. No runtime changes.
 
 **PR 2 — `app` authorization hardening**
 
-- Patch `app` in `valon-tools/deploy/config.yaml`: `defaultRole: noaccess`, `"*"` →
+- Patch `app` in `valon-tools/deploy/config.yaml`: **omit `defaultRole`**, `"*"` →
   `nobody`, explicit `relations` on every prod `app` action (`get_me`,
   `stores.health`, deal-hub, ci-cd sync, …).
-- Spot-check apps with `authorizationPolicy` and `allowedRoles`.
+- **Do not** set `defaultRole: noaccess` — gestaltd treats any non-empty
+  `defaultRole` as an allow fallback for mounted UIs when `allowedRoles` is empty,
+  and `CheckAccess` can allow when `defaultRole` appears in the action relation
+  list (`mounted_ui.go`, `authorization/indexeddb/access.go`).
+- Spot-check apps with `authorizationPolicy` and `allowedRoles`; clear
+  `defaultRole` on custom policy resource types where needed.
 - Regression as a granted Valon user (CI/CD, 2–3 apps).
 - Deploy to prod. **No identity provider change.**
 
@@ -112,7 +117,9 @@ Auth0 application setup (dashboard) is not a git PR; complete before PR 3 deploy
 ### Authorization (PR 2)
 
 - Subject with zero `authorization.relationships`: 403 on mounted app UIs and MCP
-  invokes after patch (except explicitly public ops).
+  invokes after patch (except explicitly public ops). Requires **cleared
+  `defaultRole`** on the relevant resource type — `"*": relations: [nobody]` alone
+  does not block static UI serving.
 - Granted Valon user: no regression on CI/CD and 2–3 high-traffic apps.
 
 ### Login and domain allowlist (PR 3)
