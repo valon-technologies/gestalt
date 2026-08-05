@@ -245,6 +245,43 @@ func (s *Server) hasExplicitAppAdmin(ctx context.Context, subjectID, appName str
 	}
 }
 
+// hasAnyExplicitAppAdmin reports whether subjectID has an explicit admin grant on
+// any app resource. This is a coarse gate for operator workflows like user
+// lookup until finer-grained authorization is wired in.
+func (s *Server) hasAnyExplicitAppAdmin(ctx context.Context, subjectID string) (bool, error) {
+	if s == nil || s.authorization == nil {
+		return false, errors.New("authorization is unavailable")
+	}
+	pageToken := ""
+	for {
+		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
+			Filter: &proto.RelationshipFilter{
+				Target: &proto.RelationshipTarget{
+					Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
+						Type: "subject",
+						Id:   strings.TrimSpace(subjectID),
+					}},
+				},
+				Relation: "admin",
+			},
+			PageSize:  500,
+			PageToken: pageToken,
+		})
+		if err != nil {
+			return false, err
+		}
+		for _, relationship := range resp.GetRelationships() {
+			if relationship.GetTuple().GetResource().GetType() == "app" {
+				return true, nil
+			}
+		}
+		pageToken = strings.TrimSpace(resp.GetNextPageToken())
+		if pageToken == "" {
+			return false, nil
+		}
+	}
+}
+
 func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	app, registry, ok := s.appAdminRegistryConfig(w, r)
 	if !ok {
