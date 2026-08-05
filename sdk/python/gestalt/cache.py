@@ -141,13 +141,19 @@ class Cache:
         self._owns_channel = False
 
     @classmethod
-    def connect(cls, name: str | None = None, *, timeout: float | None = None) -> Cache:
+    def connect(
+        cls,
+        name: str | None = None,
+        *,
+        timeout: float | None = None,
+        relay_token: str = "",
+    ) -> Cache:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
+        token = (relay_token or os.environ.get(ENV_HOST_SERVICE_TOKEN, "")).strip()
         channel = host_service_channel(
-            "cache", target, token=token.strip(), binding=(name or "").strip()
+            "cache", target, token=token, binding=(name or "").strip()
         )
         client = cls(channel, timeout=timeout)
         client._owns_channel = True

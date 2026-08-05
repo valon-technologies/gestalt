@@ -557,13 +557,14 @@ class Agent:
         *,
         context: RequestContext | None = None,
         timeout: float | None = None,
+        relay_token: str = "",
     ) -> Agent:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
+        token = (relay_token or os.environ.get(ENV_HOST_SERVICE_TOKEN, "")).strip()
         channel = host_service_channel(
-            "agent", target, token=token.strip(), binding=(name or "").strip()
+            "agent", target, token=token, binding=(name or "").strip()
         )
         client = cls(channel, context=context, timeout=timeout)
         client._owns_channel = True

@@ -24,7 +24,6 @@ from gestalt import (
     AGENT_SESSION_STATE_ACTIVE,
     AGENT_SESSION_STATE_ARCHIVED,
     ENV_HOST_SERVICE_SOCKET,
-    ENV_HOST_SERVICE_TOKEN,
     AgentInteraction,
     AgentMessage,
     AgentMessagePart,
@@ -872,15 +871,7 @@ class AgentTransportTests(unittest.TestCase):
         )
 
     def test_agent_accepts_native_message_metadata(self) -> None:
-        previous_token = os.environ.get(ENV_HOST_SERVICE_TOKEN)
-        os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-py"
-        try:
-            manager = genagent.Agent.connect()
-        finally:
-            if previous_token is None:
-                os.environ.pop(ENV_HOST_SERVICE_TOKEN, None)
-            else:
-                os.environ[ENV_HOST_SERVICE_TOKEN] = previous_token
+        manager = genagent.Agent.connect(relay_token="relay-token-py")
         created_turn = manager.create_turn(
             session_id="session-managed-1",
             model="gpt-5.1",

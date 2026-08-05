@@ -302,6 +302,9 @@ type ListRunsRequest struct {
 	PageSize  int
 	PageToken string
 	TargetApp string
+	// KnownApps is the installed app name set used to disambiguate
+	// app_<app>_… definition ownership when Target.steps is empty.
+	KnownApps []string
 	Status    RunStatus
 }
 

@@ -11,7 +11,6 @@ from dataclasses import MISSING
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar, cast
 
-from ._grpc_transport import ENV_HOST_SERVICE_TOKEN
 from ._protocol import JsonObject, JsonValue
 
 if TYPE_CHECKING:
@@ -138,19 +137,11 @@ class Request:
 
         from .app import App
 
-        previous = os.environ.get(ENV_HOST_SERVICE_TOKEN)
-        if self.relay_token.strip():
-            os.environ[ENV_HOST_SERVICE_TOKEN] = self.relay_token.strip()
-        try:
-            return App.connect(
-                context=self._native_context(),
-                timeout=timeout,
-            )
-        finally:
-            if previous is None:
-                os.environ.pop(ENV_HOST_SERVICE_TOKEN, None)
-            else:
-                os.environ[ENV_HOST_SERVICE_TOKEN] = previous
+        return App.connect(
+            context=self._native_context(),
+            timeout=timeout,
+            relay_token=self.relay_token,
+        )
 
     def gestalt(self) -> "BoundGestaltClient":
         """Return the public Gestalt client bound to this request's relay context."""
@@ -165,20 +156,11 @@ class Request:
 
         from .agent import Agent
 
-        previous = os.environ.get(ENV_HOST_SERVICE_TOKEN)
-        if self.relay_token.strip():
-            os.environ[ENV_HOST_SERVICE_TOKEN] = self.relay_token.strip()
-        try:
-            return Agent.connect(
-                context=self._native_context(),
-                timeout=timeout,
-            )
-        finally:
-            if previous is None:
-                os.environ.pop(ENV_HOST_SERVICE_TOKEN, None)
-            else:
-                os.environ[ENV_HOST_SERVICE_TOKEN] = previous
-
+        return Agent.connect(
+            context=self._native_context(),
+            timeout=timeout,
+            relay_token=self.relay_token,
+        )
 
     def workflows(self, *, timeout: float | None = None) -> "Workflow":
         from ._workflow import Workflow

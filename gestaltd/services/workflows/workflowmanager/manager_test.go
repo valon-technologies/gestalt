@@ -732,3 +732,20 @@ func TestRunMatchesListFiltersEmptyTargetUsesDefinitionOwnership(t *testing.T) {
 		t.Fatal("empty-target list summary should not match a different app")
 	}
 }
+
+func TestRunMatchesListFiltersKnownAppsDisambiguatesPrefixCollision(t *testing.T) {
+	t.Parallel()
+	run := &coreworkflow.Run{
+		ID:           "list-summary",
+		DefinitionID: "app_foo_bar_daily_sync",
+		Target:       coreworkflow.Target{},
+		Status:       coreworkflow.RunStatusSucceeded,
+	}
+	known := []string{"foo", "foo_bar"}
+	if runMatchesListFilters(run, coreworkflow.ListRunsRequest{TargetApp: "foo", KnownApps: known}) {
+		t.Fatal("prefix collision should not match shorter app when longer owner is known")
+	}
+	if !runMatchesListFilters(run, coreworkflow.ListRunsRequest{TargetApp: "foo_bar", KnownApps: known}) {
+		t.Fatal("prefix collision should match longest known app owner")
+	}
+}
