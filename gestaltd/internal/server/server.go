@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -489,6 +491,7 @@ func New(cfg Config) (*Server, error) {
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,
 		MCPConnection:     cfg.MCPConnection,
+		AppNames:          slices.Collect(maps.Keys(cfg.AppDefs)),
 		Now:               now,
 	})
 	if cfg.RouteProfile != RouteProfileManagement {

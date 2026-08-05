@@ -655,16 +655,16 @@ func (r *renderer) renderClient(svc *model.Service) {
 			params += ", context: " + r.fieldType(ctxField) + " | None = None"
 			forward = "channel, context=context"
 		}
-		params += ", timeout: float | None = None"
+		params += ", timeout: float | None = None, relay_token: str = \"\""
 		forward += ", timeout=timeout"
 		r.body.WriteString("    @classmethod\n")
 		fmt.Fprintf(&r.body, "    def connect(%s) -> %s:\n", params, name)
 		r.body.WriteString("        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, \"\")\n")
 		r.body.WriteString("        if not target:\n")
 		r.body.WriteString("            raise RuntimeError(f\"{ENV_HOST_SERVICE_SOCKET} is not set\")\n")
-		r.body.WriteString("        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, \"\")\n")
+		r.body.WriteString("        token = (relay_token or os.environ.get(ENV_HOST_SERVICE_TOKEN, \"\")).strip()\n")
 		r.body.WriteString("        channel = host_service_channel(\n")
-		fmt.Fprintf(&r.body, "            %q, target, token=token.strip(), binding=(name or \"\").strip()\n", svc.HostBinding)
+		fmt.Fprintf(&r.body, "            %q, target, token=token, binding=(name or \"\").strip()\n", svc.HostBinding)
 		r.body.WriteString("        )\n")
 		fmt.Fprintf(&r.body, "        client = cls(%s)\n", forward)
 		r.body.WriteString("        client._owns_channel = True\n")

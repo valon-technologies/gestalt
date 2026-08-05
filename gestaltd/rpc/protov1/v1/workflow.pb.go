@@ -2910,13 +2910,15 @@ func (x *GetWorkflowProviderRunRequest) GetProvider() string {
 }
 
 type ListWorkflowProviderRunsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	Status        WorkflowRunStatus      `protobuf:"varint,3,opt,name=status,proto3,enum=gestalt.provider.v1.WorkflowRunStatus" json:"status,omitempty"`
-	TargetApp     string                 `protobuf:"bytes,5,opt,name=target_app,json=targetApp,proto3" json:"target_app,omitempty"`
-	Context       *RequestContext        `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
-	Provider      string                 `protobuf:"bytes,7,opt,name=provider,proto3" json:"provider,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PageSize  int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Status    WorkflowRunStatus      `protobuf:"varint,3,opt,name=status,proto3,enum=gestalt.provider.v1.WorkflowRunStatus" json:"status,omitempty"`
+	// Optional filter for runs owned by or invoking this app. Matching uses
+	// hydrated target steps when present, otherwise app-owned definition IDs.
+	TargetApp     string          `protobuf:"bytes,5,opt,name=target_app,json=targetApp,proto3" json:"target_app,omitempty"`
+	Context       *RequestContext `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
+	Provider      string          `protobuf:"bytes,7,opt,name=provider,proto3" json:"provider,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

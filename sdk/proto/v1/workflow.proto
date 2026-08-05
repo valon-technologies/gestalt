@@ -344,6 +344,8 @@ message ListWorkflowProviderRunsRequest {
   int32 page_size = 1;
   string page_token = 2;
   WorkflowRunStatus status = 3;
+  // Optional filter for runs owned by or invoking this app. Matching uses
+  // hydrated target steps when present, otherwise app-owned definition IDs.
   string target_app = 5;
   RequestContext context = 6;
   string provider = 7;

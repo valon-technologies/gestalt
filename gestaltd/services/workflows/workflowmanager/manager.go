@@ -121,8 +121,11 @@ type Config struct {
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	MCPConnection     map[string]string
-	Now               func() time.Time
-	Logger            *slog.Logger
+	// AppNames is the installed app catalog used to disambiguate
+	// app_<app>_… ownership when ListRuns target summaries omit steps.
+	AppNames []string
+	Now      func() time.Time
+	Logger   *slog.Logger
 }
 
 type Manager struct {
@@ -135,6 +138,7 @@ type Manager struct {
 	defaultConnection map[string]string
 	catalogConnection map[string]string
 	mcpConnection     map[string]string
+	appNames          []string
 	now               func() time.Time
 	logger            *slog.Logger
 }
@@ -240,6 +244,7 @@ func New(cfg Config) *Manager {
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		mcpConnection:     maps.Clone(cfg.MCPConnection),
+		appNames:          append([]string(nil), cfg.AppNames...),
 		now:               now,
 		logger:            cfg.Logger,
 	}
@@ -366,6 +371,9 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 	}
 	if m == nil || m.workflow == nil {
 		return nil, ErrWorkflowNotConfigured
+	}
+	if len(req.KnownApps) == 0 && m != nil {
+		req.KnownApps = append([]string(nil), m.appNames...)
 	}
 	p = principal.Canonicalized(p)
 	subjectID := strings.TrimSpace(principalSubjectID(p))
@@ -824,7 +832,10 @@ func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsReque
 		return false
 	}
 	if app := strings.TrimSpace(req.TargetApp); app != "" {
-		if !workflowTargetHasApp(run.Target, app) {
+		// List summaries often omit Target.steps. Match hydrated steps, then
+		// fall back to app-owned definition IDs (app_<app>_…), disambiguated
+		// with the installed app set when provided.
+		if !coreworkflow.RunMatchesTargetApp(run, app, req.KnownApps...) {
 			return false
 		}
 	}
@@ -832,19 +843,6 @@ func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsReque
 		return false
 	}
 	return true
-}
-
-func workflowTargetHasApp(target coreworkflow.Target, appName string) bool {
-	appName = strings.TrimSpace(appName)
-	if appName == "" {
-		return false
-	}
-	for i := range target.Steps {
-		if target.Steps[i].App != nil && strings.TrimSpace(target.Steps[i].App.Name) == appName {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req EventDeliver) (out coreworkflow.Event, err error) {

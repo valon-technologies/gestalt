@@ -1306,6 +1306,9 @@ export type ListWorkflowProviderRunsRequest = Message<"gestalt.provider.v1.ListW
   status: WorkflowRunStatus;
 
   /**
+   * Optional filter for runs owned by or invoking this app. Matching uses
+   * hydrated target steps when present, otherwise app-owned definition IDs.
+   *
    * @generated from field: string target_app = 5;
    */
   targetApp: string;

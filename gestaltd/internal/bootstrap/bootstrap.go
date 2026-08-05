@@ -1337,6 +1337,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
 		MCPConnection:     connMaps.MCPConnection,
+		AppNames:          slices.Collect(maps.Keys(cfg.Apps)),
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,

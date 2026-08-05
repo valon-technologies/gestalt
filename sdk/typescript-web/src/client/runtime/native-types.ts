@@ -1013,6 +1013,10 @@ export interface ListWorkflowProviderRunsRequest {
   pageSize: number;
   pageToken: string;
   status: WorkflowRunStatus;
+  /**
+   * Optional filter for runs owned by or invoking this app. Matching uses
+   * hydrated target steps when present, otherwise app-owned definition IDs.
+   */
   targetApp: string;
   provider: string;
 }

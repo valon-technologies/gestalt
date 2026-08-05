@@ -143,6 +143,8 @@ class ListWorkflowProviderRunsRequest:
     page_size: int = 0
     page_token: str = ""
     status: WorkflowRunStatus = 0
+    #: Optional filter for runs owned by or invoking this app. Matching uses
+    #: hydrated target steps when present, otherwise app-owned definition IDs.
     target_app: str = ""
     context: RequestContext | None = None
     provider: str = ""
@@ -567,13 +569,14 @@ class Workflow:
         *,
         context: RequestContext | None = None,
         timeout: float | None = None,
+        relay_token: str = "",
     ) -> Workflow:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
+        token = (relay_token or os.environ.get(ENV_HOST_SERVICE_TOKEN, "")).strip()
         channel = host_service_channel(
-            "workflow", target, token=token.strip(), binding=(name or "").strip()
+            "workflow", target, token=token, binding=(name or "").strip()
         )
         client = cls(channel, context=context, timeout=timeout)
         client._owns_channel = True
