@@ -455,8 +455,7 @@ func validateProviderMetadata(source string, metadata map[string]string) error {
 	}
 	for k, v := range metadata {
 		if k == accountIdentityMetadataKey {
-			// Reserved host-owned JSON blob; not a provider param value.
-			continue
+			return fmt.Errorf("%s must not set reserved metadata key %q", source, k)
 		}
 		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
 			return fmt.Errorf("%s returned invalid key or value for %q", source, k)
@@ -477,6 +476,10 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 		}
 	}
 	for k, v := range extra {
+		if k == accountIdentityMetadataKey {
+			// Host-owned; never accept from provider/discovery overlays.
+			continue
+		}
 		m[k] = v
 	}
 	b, err := json.Marshal(m)
@@ -532,10 +535,7 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 }
 
 func (s *Server) completeConnection(ctx context.Context, _ core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
-	enriched, err := s.enrichAccountIdentity(ctx, tm)
-	if err != nil {
-		return nil, fmt.Errorf("enriching account identity: %w", err)
-	}
+	enriched := s.enrichAccountIdentity(ctx, tm)
 	if _, err := s.storeCredentialFromMaterial(ctx, enriched); err != nil {
 		return nil, err
 	}

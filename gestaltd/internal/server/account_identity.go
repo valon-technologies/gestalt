@@ -5,15 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 )
 
 // accountIdentityMetadataKey is the reserved MetadataJSON key for Connection
-// account recognition facts (SCIM-style). Values are JSON, not provider params,
-// and are skipped by validateProviderMetadata.
+// account recognition facts (SCIM-style). Only host code may write this key;
+// provider/discovery metadata must not set it.
 const accountIdentityMetadataKey = "account_identity"
+
+const oauthIdentityProbeTimeout = 3 * time.Second
 
 // identityFact is one recognition attribute for a linked account (SCIM multi-valued style).
 type identityFact struct {
@@ -27,12 +30,20 @@ type accountIdentity struct {
 	Facts []identityFact `json:"facts"`
 }
 
-// Connection-param metadata keys that are safe, human-meaningful signifiers.
-var connectionParamIdentityKinds = map[string]string{
-	"subdomain":       "subdomain",
-	"host":            "host",
-	"api_host":        "host",
-	"organization_id": "organization",
+// connectionParamIdentityBinding maps stored connection-param metadata keys to
+// identity fact kinds. Order is significant for determinism when multiple
+// params are present. Opaque ids (e.g. cloud_id) are intentionally omitted.
+//
+// Longer-term these bindings should be declared on ConnectionParamDef /
+// provider manifests (identityKind); this table is the host fallback until then.
+var connectionParamIdentityBindings = []struct {
+	Param string
+	Kind  string
+}{
+	{Param: "subdomain", Kind: "subdomain"},
+	{Param: "host", Kind: "host"},
+	{Param: "api_host", Kind: "host"},
+	{Param: "organization_id", Kind: "organization"},
 }
 
 // Prefer these kinds when assigning primary if none is flagged.
@@ -170,7 +181,8 @@ func mergeDiscoveryCandidateIdentity(metadataJSON, candidateName string) (string
 	}
 	id, err := parseAccountIdentity(metadataJSON)
 	if err != nil {
-		return "", err
+		// Corrupt host blob must not block discovery completion.
+		id = nil
 	}
 	if id == nil {
 		id = &accountIdentity{}
@@ -185,9 +197,15 @@ func identityFactsFromConnectionParams(metadataJSON string) []identityFact {
 		return nil
 	}
 	var facts []identityFact
-	for key, kind := range connectionParamIdentityKinds {
-		if v := strings.TrimSpace(m[key]); v != "" {
-			facts = append(facts, identityFact{Kind: kind, Value: v})
+	seenKinds := make(map[string]struct{})
+	for _, binding := range connectionParamIdentityBindings {
+		if v := strings.TrimSpace(m[binding.Param]); v != "" {
+			if _, ok := seenKinds[binding.Kind]; ok {
+				// Prefer earlier bindings (e.g. host over api_host).
+				continue
+			}
+			seenKinds[binding.Kind] = struct{}{}
+			facts = append(facts, identityFact{Kind: binding.Kind, Value: v})
 		}
 	}
 	return facts
@@ -197,7 +215,7 @@ func mergeIdentityFacts(base []identityFact, extra ...identityFact) []identityFa
 	return normalizeIdentityFacts(append(append([]identityFact{}, base...), extra...))
 }
 
-func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMaterial) (credentialMaterial, error) {
+func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMaterial) credentialMaterial {
 	existing, err := parseAccountIdentity(tm.MetadataJSON)
 	if err != nil {
 		// Corrupt identity blob: drop it and rebuild from known sources.
@@ -209,42 +227,73 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 	}
 	facts = mergeIdentityFacts(facts, identityFactsFromConnectionParams(tm.MetadataJSON)...)
 
-	if token := strings.TrimSpace(tm.AccessToken); token != "" {
-		facts = mergeIdentityFacts(facts, fetchOAuthAccountIdentityFacts(ctx, token)...)
-	}
-
 	if len(tm.Fields) > 0 {
 		if email := strings.TrimSpace(tm.Fields["email"]); email != "" {
 			facts = mergeIdentityFacts(facts, identityFact{Kind: "email", Value: email})
 		}
 	}
 
+	// OAuth probes are integration-scoped and never run for opaque/manual
+	// field credentials (AccessToken may hold a raw secret there).
+	if len(tm.Fields) == 0 {
+		if token := strings.TrimSpace(tm.AccessToken); token != "" {
+			facts = mergeIdentityFacts(facts, fetchOAuthAccountIdentityFacts(ctx, tm.Integration, token)...)
+		}
+	}
+
 	if len(facts) == 0 {
-		return tm, nil
+		return tm
 	}
 	merged, err := setAccountIdentity(tm.MetadataJSON, &accountIdentity{Facts: facts})
 	if err != nil {
-		return tm, err
+		slog.WarnContext(ctx, "account identity enrichment skipped", "integration", tm.Integration, "error", err)
+		return tm
 	}
 	tm.MetadataJSON = merged
-	return tm, nil
+	return tm
 }
 
-func fetchOAuthAccountIdentityFacts(ctx context.Context, accessToken string) []identityFact {
-	client := &http.Client{Timeout: 10 * time.Second}
-	if facts := fetchGoogleUserInfoFacts(ctx, client, accessToken); len(facts) > 0 {
-		return facts
+// oauthIdentitySource selects the single identity probe family for an
+// integration. Empty means no outbound OAuth identity probe.
+func oauthIdentitySource(integration string) string {
+	switch strings.TrimSpace(integration) {
+	case "gmail":
+		return "gmail"
+	case "github":
+		return "github"
+	case "slack", "slack_v2":
+		return "slack"
+	case "bigquery", "gcs", "gcp_batch":
+		return "google"
+	default:
+		if strings.HasPrefix(integration, "google_") {
+			return "google"
+		}
+		return ""
 	}
-	if facts := fetchGmailProfileFacts(ctx, client, accessToken); len(facts) > 0 {
-		return facts
+}
+
+func fetchOAuthAccountIdentityFacts(ctx context.Context, integration, accessToken string) []identityFact {
+	source := oauthIdentitySource(integration)
+	if source == "" || strings.TrimSpace(accessToken) == "" {
+		return nil
 	}
-	if facts := fetchSlackAuthTestFacts(ctx, client, accessToken); len(facts) > 0 {
-		return facts
+	client := &http.Client{Timeout: oauthIdentityProbeTimeout}
+	switch source {
+	case "gmail":
+		if facts := fetchGoogleUserInfoFacts(ctx, client, accessToken); len(facts) > 0 {
+			return facts
+		}
+		return fetchGmailProfileFacts(ctx, client, accessToken)
+	case "google":
+		return fetchGoogleUserInfoFacts(ctx, client, accessToken)
+	case "slack":
+		return fetchSlackAuthTestFacts(ctx, client, accessToken)
+	case "github":
+		return fetchGitHubUserFacts(ctx, client, accessToken)
+	default:
+		return nil
 	}
-	if facts := fetchGitHubUserFacts(ctx, client, accessToken); len(facts) > 0 {
-		return facts
-	}
-	return nil
 }
 
 func fetchJSONObject(ctx context.Context, client *http.Client, method, url, accessToken string) (map[string]any, error) {
