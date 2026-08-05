@@ -91,8 +91,8 @@ Rollback: revert issuer to Google + `google-oauth-*` secrets.
 ## Rollout
 
 1. Ship authz patch (phase 0).
-2. Auth0 dev + staging config.
-3. Prod cutover.
+2. Auth0 `valon-tools-toolshed` application + GSM secrets.
+3. `valon.tools` cutover.
 4. Swap `example.com` for real partner domains in `allowedDomains`.
 
 ## Open questions
