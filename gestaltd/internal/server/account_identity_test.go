@@ -180,6 +180,32 @@ func TestFetchOAuthAccountIdentityFacts_NoProbeForUnknownIntegration(t *testing.
 	}
 }
 
+func TestEnrichAccountIdentity_EmailOutranksEarlierSubdomain(t *testing.T) {
+	var s Server
+	tm := credentialMaterial{
+		Integration: "zendesk",
+		Fields: map[string]string{
+			"email":     "ops@acme.com",
+			"api_token": "secret",
+		},
+		MetadataJSON: `{"subdomain":"acme"}`,
+	}
+	got := s.enrichAccountIdentity(context.Background(), tm)
+	id := identityFromMetadataJSON(got.MetadataJSON)
+	if id == nil {
+		t.Fatal("expected identity")
+	}
+	var primary *identityFact
+	for i := range id.Facts {
+		if id.Facts[i].Primary {
+			primary = &id.Facts[i]
+		}
+	}
+	if primary == nil || primary.Kind != "email" || primary.Value != "ops@acme.com" {
+		t.Fatalf("primary = %+v, facts = %+v", primary, id.Facts)
+	}
+}
+
 func TestEnrichAccountIdentity_ManualFieldsSkipOAuthProbe(t *testing.T) {
 	var s Server
 	tm := credentialMaterial{
@@ -199,6 +225,29 @@ func TestEnrichAccountIdentity_ManualFieldsSkipOAuthProbe(t *testing.T) {
 	}
 	if !kinds["email"] || !kinds["subdomain"] {
 		t.Fatalf("facts = %+v", id.Facts)
+	}
+}
+
+func TestMergeIdentityFacts_DoesNotAutoAssignPrimary(t *testing.T) {
+	facts := mergeIdentityFacts(nil, identityFact{Kind: "subdomain", Value: "acme"})
+	for _, f := range facts {
+		if f.Primary {
+			t.Fatalf("partial merge must not auto-assign primary: %+v", facts)
+		}
+	}
+	facts = mergeIdentityFacts(facts, identityFact{Kind: "email", Value: "ops@acme.com"})
+	normalized := normalizeIdentityFacts(facts)
+	primaryCount := 0
+	for _, f := range normalized {
+		if f.Primary {
+			primaryCount++
+			if f.Kind != "email" {
+				t.Fatalf("want email primary after final normalize, got %+v", normalized)
+			}
+		}
+	}
+	if primaryCount != 1 {
+		t.Fatalf("primary count = %d in %+v", primaryCount, normalized)
 	}
 }
 

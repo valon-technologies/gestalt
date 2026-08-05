@@ -123,6 +123,17 @@ func setAccountIdentity(metadataJSON string, id *accountIdentity) (string, error
 }
 
 func normalizeIdentityFacts(facts []identityFact) []identityFact {
+	out := dedupeIdentityFacts(facts)
+	if len(out) == 0 {
+		return nil
+	}
+	return ensurePrimaryIdentityFact(out)
+}
+
+// dedupeIdentityFacts trims/dedupes and keeps at most one Primary from the
+// input (last wins). It does not auto-assign primary — callers that merge
+// partial batches must leave that to a final ensurePrimaryIdentityFact.
+func dedupeIdentityFacts(facts []identityFact) []identityFact {
 	out := make([]identityFact, 0, len(facts))
 	seen := make(map[string]struct{}, len(facts))
 	primaryIdx := -1
@@ -149,10 +160,36 @@ func normalizeIdentityFacts(facts []identityFact) []identityFact {
 	if len(out) == 0 {
 		return nil
 	}
-	if primaryIdx < 0 {
-		out[selectPrimaryFactIndex(out)].Primary = true
+	return out
+}
+
+func clearPrimaryIdentityFlags(facts []identityFact) []identityFact {
+	if len(facts) == 0 {
+		return nil
+	}
+	out := make([]identityFact, len(facts))
+	for i, f := range facts {
+		out[i] = identityFact{Kind: f.Kind, Value: f.Value}
 	}
 	return out
+}
+
+func ensurePrimaryIdentityFact(facts []identityFact) []identityFact {
+	if len(facts) == 0 {
+		return nil
+	}
+	hasPrimary := false
+	for _, f := range facts {
+		if f.Primary {
+			hasPrimary = true
+			break
+		}
+	}
+	if hasPrimary {
+		return facts
+	}
+	facts[selectPrimaryFactIndex(facts)].Primary = true
+	return facts
 }
 
 func selectPrimaryFactIndex(facts []identityFact) int {
@@ -212,7 +249,10 @@ func identityFactsFromConnectionParams(metadataJSON string) []identityFact {
 }
 
 func mergeIdentityFacts(base []identityFact, extra ...identityFact) []identityFact {
-	return normalizeIdentityFacts(append(append([]identityFact{}, base...), extra...))
+	// Dedupe only — never auto-assign primary on partial merges, or an early
+	// batch (e.g. subdomain) permanently wins over a later higher-rank fact
+	// (e.g. email).
+	return dedupeIdentityFacts(append(append([]identityFact{}, base...), extra...))
 }
 
 func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMaterial) credentialMaterial {
@@ -223,7 +263,9 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 	}
 	var facts []identityFact
 	if existing != nil {
-		facts = append(facts, existing.Facts...)
+		// Drop stored primary flags so this enrich pass can re-rank by kind
+		// order (and honor new explicit primaries from OAuth probes).
+		facts = append(facts, clearPrimaryIdentityFlags(existing.Facts)...)
 	}
 	facts = mergeIdentityFacts(facts, identityFactsFromConnectionParams(tm.MetadataJSON)...)
 
