@@ -318,7 +318,7 @@ The controller registers immutable workflow definitions. Executions remain pinne
 
 ### User Interfaces
 
-UI staging, serving, authorization, version pinning, and rollback behavior remain to be specified.
+Production UI staging, serving, authorization, version pinning, and rollback behavior remain to be specified. During development, the UI runs on the publisher's machine with its normal hot-reload server while backend code runs in a remote development sandbox as described below.
 
 ### Catalogs and Administration
 
@@ -361,13 +361,38 @@ The Bun wrapper verifies context, operation/body agreement, and schema before di
 
 ### Development Sandbox
 
-`vt dev` connects a local build to an enabled per-user sandbox:
+`vt dev` combines a local UI development server with an isolated backend in the connected deployment:
 
 ```sh
 vt dev --deployment <url> <dir>
 ```
 
-The platform assigns a short-lived development workload identity. Routes are scoped to the developer or test session and cannot claim production slugs.
+The frontend does not join the mesh. `vt dev` starts the package's UI development command locally and places a loopback-only development proxy in front of the deployment API. The browser loads the UI and hot-reload connection from localhost. Relative API, MCP Streamable HTTP, SSE, and WebSocket requests pass through the local proxy to the deployment ingress:
+
+```text
+Browser
+    |
+    v
+Local UI development server and loopback proxy
+    |
+    | HTTPS with the developer session and sandbox route
+    v
+Deployment ingress
+    |
+    v
+Sandbox destination waypoint
+    |
+    v
+Remote sandbox backend
+```
+
+The proxy binds only to loopback, validates the browser origin and a per-process nonce, and reads deployment credentials from the OS keychain. It does not expose credentials to frontend JavaScript or add mesh-internal caller headers. Ingress authenticates the developer, removes caller-supplied internal headers, validates the signed sandbox route, and mints the normal destination-bound caller token. This avoids broad localhost CORS rules and keeps hot-module replacement local.
+
+When a package includes a backend, `vt dev` builds it with the same frozen-lockfile and platform Bun constraints as a release, uploads the development artifact, and asks the deployment to create a sandbox revision. Runtime source changes produce a new digest and remote sandbox revision; the sandbox route advances only after the new backend is ready. UI source changes remain local and use the frontend tool's normal hot reload. A UI-only package does not create a backend sandbox.
+
+The remote backend is a normal Kubernetes Pod in an ambient-enrolled development namespace. It therefore joins the deployment's ambient mesh through node `ztunnel`, receives a short-lived sandbox-only workload identity, and uses the destination waypoint for inbound and package-to-package traffic. The local process never receives an Istio certificate or Kubernetes workload identity.
+
+Each sandbox has a random, non-production route identifier. The route is reachable only through deployment ingress by its developer or an explicitly named test session; it is not added to production package discovery and cannot become a production default. The sandbox service account, authorization tuples, secrets, quotas, and egress policy are distinct from the installed package.
 
 Development packages:
 
@@ -376,7 +401,11 @@ Development packages:
 - Cannot receive or forward raw caller credentials
 - Do not inherit the production workload's permissions
 - Use sandbox-scoped authorization
-- Expire automatically and are audited upon connection and disconnection
+- Cannot claim production slugs, Services, routes, service accounts, or authorization grants
+- May invoke installed packages only when the sandbox identity has an explicit development grant
+- Expire automatically and are audited upon creation, revision change, connection, disconnection, and cleanup
+
+`vt dev` deletes the sandbox when the session ends and the deployment also enforces an idle timeout and hard lifetime so abandoned sessions converge to removal. Reconnection may reuse an unexpired sandbox only after re-authentication and ownership checks.
 
 Production runs only on Kubernetes with self-managed Istio ambient. Pinned Helm releases install base CRDs, `istiod`, ambient CNI, and `ztunnel`; managed Google Cloud Service Mesh lacks the required data plane. There is no laptop or VM production profile. Development sandboxes use the connected deployment.
 
