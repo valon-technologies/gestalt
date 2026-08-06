@@ -59,10 +59,6 @@ fn run() -> anyhow::Result<()> {
             commands::workflows::dispatch(&api, &workflow, command, format)
         }
         Commands::Agent(args) => dispatch_agent(args, url, url_was_explicit, format),
-        Commands::Users { command } => {
-            let api = ApiClient::from_env(url)?;
-            commands::users::dispatch(&api, command, format)
-        }
     }
 }
 

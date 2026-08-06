@@ -8,6 +8,5 @@ pub mod describe;
 pub mod init;
 pub mod invoke;
 pub mod tokens;
-pub mod users;
 mod workflow_target;
 pub mod workflows;
