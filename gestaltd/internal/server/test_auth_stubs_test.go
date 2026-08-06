@@ -1,9 +1,12 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"sync"
@@ -430,4 +433,88 @@ func testAuthStubForScopedBearer() *coretesting.StubAuthProvider {
 		}
 		return testIntrospectActive(principal.UserSubjectID(userID), scope), nil
 	})
+}
+
+type federatedLogoutAuthStub struct {
+	coretesting.StubAuthProvider
+	logoutPrefix string
+}
+
+func (s *federatedLogoutAuthStub) FederatedLogoutURL(returnTo string) (string, error) {
+	prefix := strings.TrimSpace(s.logoutPrefix)
+	if prefix == "" {
+		prefix = "https://idp.example.test/v2/logout"
+	}
+	return prefix + "?returnTo=" + url.QueryEscape(returnTo), nil
+}
+
+func TestLoginCallbackRejectedDomainRedirectsThroughLogout(t *testing.T) {
+	t.Parallel()
+
+	stub := &federatedLogoutAuthStub{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "auth0"},
+	}
+	stub.TokenFn = func(_ context.Context, _ *core.TokenRequest) (*core.TokenResponse, error) {
+		return nil, fmt.Errorf(`oidc auth: email domain "gmail.com" is not allowed`)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", bytes.NewBufferString(`{"state":"test-state"}`))
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	callbackResp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
+	if err != nil {
+		t.Fatalf("callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+
+	if callbackResp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302", callbackResp.StatusCode)
+	}
+	location := callbackResp.Header.Get("Location")
+	if !strings.HasPrefix(location, "https://idp.example.test/v2/logout") {
+		t.Fatalf("Location = %q, want federated logout redirect", location)
+	}
+	parsed, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("parse Location: %v", err)
+	}
+	returnTo := parsed.Query().Get("returnTo")
+	if !strings.Contains(returnTo, "/api/v1/auth/login/denied") {
+		t.Fatalf("returnTo = %q, want login denied page", returnTo)
+	}
+	if !strings.Contains(returnTo, "domain_not_allowed") {
+		t.Fatalf("returnTo = %q, want domain_not_allowed reason", returnTo)
+	}
+
+	deniedResp, err := client.Get(ts.URL + "/api/v1/auth/login/denied?reason=domain_not_allowed")
+	if err != nil {
+		t.Fatalf("denied page: %v", err)
+	}
+	defer func() { _ = deniedResp.Body.Close() }()
+	if deniedResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("denied status = %d, want 401", deniedResp.StatusCode)
+	}
+	body, err := io.ReadAll(deniedResp.Body)
+	if err != nil {
+		t.Fatalf("read denied body: %v", err)
+	}
+	if !strings.Contains(string(body), "Try again") || !strings.Contains(string(body), "not allowed") {
+		t.Fatalf("denied body = %q, want user-facing denial copy", string(body))
+	}
 }
