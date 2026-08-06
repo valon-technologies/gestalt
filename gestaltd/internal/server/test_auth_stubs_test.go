@@ -498,8 +498,8 @@ func TestLoginCallbackRejectedDomainRedirectsThroughLogout(t *testing.T) {
 	if !strings.Contains(returnTo, "/api/v1/auth/login/denied") {
 		t.Fatalf("returnTo = %q, want login denied page", returnTo)
 	}
-	if strings.Contains(returnTo, "reason=") {
-		t.Fatalf("returnTo = %q, want path without query (reason is in cookie)", returnTo)
+	if !strings.Contains(returnTo, "domain_not_allowed") {
+		t.Fatalf("returnTo = %q, want domain_not_allowed reason", returnTo)
 	}
 
 	deniedResp, err := client.Get(ts.URL + "/api/v1/auth/login/denied?reason=domain_not_allowed")
