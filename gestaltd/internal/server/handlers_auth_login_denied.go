@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -44,15 +43,6 @@ func loginFailureFromOAuthError(oauthErr, description string) error {
 		return errors.New(oauthErr)
 	}
 	return errors.New("oauth authorization failed")
-}
-
-func (s *Server) loginDeniedURL(r *http.Request, reason string) (string, error) {
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		reason = loginFailureReasonGeneric
-	}
-	deniedPath := loginDeniedPath + "?reason=" + url.QueryEscape(reason)
-	return s.resolvePublicURL(r, deniedPath)
 }
 
 // loginDeniedReturnURL is the federated-logout return target. Auth0 Allowed Logout
