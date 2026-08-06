@@ -389,8 +389,8 @@ func mapIdentityProviderRPCError(err error) error {
 }
 
 var (
-	_ core.IdentityProvider     = (*remoteIdentityProvider)(nil)
-	_ FederatedLogoutProvider   = (*remoteIdentityProvider)(nil)
+	_ core.IdentityProvider   = (*remoteIdentityProvider)(nil)
+	_ FederatedLogoutProvider = (*remoteIdentityProvider)(nil)
 	_ interface {
 		DisplayName() string
 		Description() string
