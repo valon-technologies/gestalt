@@ -302,8 +302,7 @@ func refreshTestCredential(ctx context.Context, cfg *server.Config, req *core.Re
 			if refresher := connMap[req.Connection]; refresher != nil {
 				tokenURL := refresher.TokenURL()
 				if credential.MetadataJSON != "" {
-					var params map[string]string
-					if err := json.Unmarshal([]byte(credential.MetadataJSON), &params); err == nil && len(params) > 0 {
+					if params, err := core.ConnectionParamsFromMetadataJSON(credential.MetadataJSON); err == nil && len(params) > 0 {
 						tokenURL = paraminterp.Interpolate(tokenURL, params)
 					}
 				}
@@ -9399,12 +9398,17 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if err := json.Unmarshal([]byte(stored.MetadataJSON), &metadata); err != nil {
 			t.Fatalf("unmarshal metadata: %v", err)
 		}
+		identityRaw := metadata["account_identity"]
+		delete(metadata, "account_identity")
 		if !reflect.DeepEqual(metadata, map[string]string{
 			"tenant_id":  "tenant-123",
 			"account_id": "account-456",
 			"workspace":  "beta",
 		}) {
-			t.Fatalf("stored metadata = %+v", metadata)
+			t.Fatalf("stored connection metadata = %+v", metadata)
+		}
+		if !strings.Contains(identityRaw, `"kind":"site"`) || !strings.Contains(identityRaw, "Site B") {
+			t.Fatalf("stored account_identity = %q, want site fact for Site B", identityRaw)
 		}
 	})
 }

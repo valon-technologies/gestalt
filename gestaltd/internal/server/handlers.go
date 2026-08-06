@@ -51,9 +51,10 @@ var (
 )
 
 type instanceInfo struct {
-	Name       string `json:"name"`
-	Connection string `json:"connection,omitempty"`
-	Preferred  bool   `json:"preferred,omitempty"`
+	Name       string           `json:"name"`
+	Connection string           `json:"connection,omitempty"`
+	Preferred  bool             `json:"preferred,omitempty"`
+	Identity   *accountIdentity `json:"identity,omitempty"`
 
 	credentialInvalid bool
 }
@@ -350,6 +351,7 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 			m[binding.App] = append(m[binding.App], instanceInfo{
 				Name:              tok.Qualifier,
 				Connection:        userFacingConnectionName(binding.Connection),
+				Identity:          identityFromMetadataJSON(tok.MetadataJSON),
 				credentialInvalid: credentialInvalid,
 			})
 		}
