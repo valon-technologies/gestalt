@@ -14,6 +14,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
@@ -672,22 +673,27 @@ func (s *Server) clearLoginStateCookie(w http.ResponseWriter) {
 	})
 }
 
-type federatedLogoutProvider interface {
-	FederatedLogoutURL(returnTo string) (string, error)
+func (s *Server) logoutAuthRuntime(returnPath string) authRuntime {
+	auth := s.serverAuthRuntime()
+	returnPath = strings.TrimSpace(returnPath)
+	if returnPath == "" {
+		return auth
+	}
+	runtime, err := s.loginAuthRuntimeForNextPath(returnPath)
+	if err != nil {
+		return auth
+	}
+	return runtime
 }
 
-func (s *Server) federatedLogoutURL(returnTo string) (string, error) {
-	if s == nil || s.auth == nil {
+func (s *Server) federatedLogoutURL(auth authRuntime, returnTo string) (string, error) {
+	if auth.noAuth || auth.provider == nil {
 		return "", errors.New("auth is not configured")
 	}
-	provider, ok := s.auth.(federatedLogoutProvider)
-	if !ok {
-		return "", errors.New("federated logout is not supported")
-	}
-	return provider.FederatedLogoutURL(returnTo)
+	return identityservice.FederatedLogoutURL(auth.provider, returnTo)
 }
 
-func (s *Server) logoutReturnURL(r *http.Request) (string, error) {
+func (s *Server) logoutReturnPath(r *http.Request) (string, error) {
 	returnPath, err := resolveLoginRedirectPath(r.URL.Query().Get("returnTo"), s.allowedLoginRedirectBaseURLs())
 	if err != nil {
 		return "", err
@@ -695,6 +701,10 @@ func (s *Server) logoutReturnURL(r *http.Request) (string, error) {
 	if returnPath == "" {
 		returnPath = "/"
 	}
+	return returnPath, nil
+}
+
+func (s *Server) logoutReturnURL(r *http.Request, returnPath string) (string, error) {
 	return s.resolvePublicURL(r, returnPath)
 }
 
@@ -721,22 +731,24 @@ func (s *Server) logoutBrowser(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 
-	returnTo, err := s.logoutReturnURL(r)
+	returnPath, err := s.logoutReturnPath(r)
 	if err != nil {
 		slog.WarnContext(r.Context(), "logout return url resolution failed", "error", err)
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-	if logoutURL, err := s.federatedLogoutURL(returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
-		http.Redirect(w, r, logoutURL, http.StatusFound)
-		return
-	}
-	parsed, err := url.Parse(returnTo)
-	if err != nil || parsed.Path == "" {
+	auth := s.logoutAuthRuntime(returnPath)
+	returnTo, err := s.logoutReturnURL(r, returnPath)
+	if err != nil {
+		slog.WarnContext(r.Context(), "logout return url resolution failed", "error", err)
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, parsed.RequestURI(), http.StatusFound)
+	if logoutURL, err := s.federatedLogoutURL(auth, returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
+		http.Redirect(w, r, logoutURL, http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, returnTo, http.StatusFound)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
@@ -766,9 +778,12 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	resp := map[string]string{"status": "ok"}
-	if returnTo, err := s.logoutReturnURL(r); err == nil {
-		if logoutURL, err := s.federatedLogoutURL(returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
-			resp["redirect"] = logoutURL
+	if returnPath, err := s.logoutReturnPath(r); err == nil {
+		auth := s.logoutAuthRuntime(returnPath)
+		if returnTo, err := s.logoutReturnURL(r, returnPath); err == nil {
+			if logoutURL, err := s.federatedLogoutURL(auth, returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
+				resp["redirect"] = logoutURL
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)

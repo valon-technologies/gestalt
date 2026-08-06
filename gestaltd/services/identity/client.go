@@ -42,13 +42,15 @@ type ExecConfig struct {
 }
 
 type remoteIdentityProvider struct {
-	runtime     proto.ProviderLifecycleClient
-	client      identityRPCClient
-	name        string
-	displayName string
-	description string
-	callbackURL string
-	closer      io.Closer
+	runtime       proto.ProviderLifecycleClient
+	client        identityRPCClient
+	name          string
+	displayName   string
+	description   string
+	callbackURL   string
+	oidcIssuerURL string
+	oidcClientID  string
+	closer        io.Closer
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.IdentityProvider, error) {
@@ -129,7 +131,12 @@ func (p *remoteIdentityProvider) configure(ctx context.Context, name string, con
 		p.displayName = meta.DisplayName
 		p.description = meta.Description
 	}
+	p.oidcIssuerURL, p.oidcClientID = oidcLogoutConfigFromMap(config)
 	return nil
+}
+
+func (p *remoteIdentityProvider) FederatedLogoutURL(returnTo string) (string, error) {
+	return BuildOIDCFederatedLogoutURL(p.oidcIssuerURL, p.oidcClientID, returnTo)
 }
 
 func (p *remoteIdentityProvider) DisplayName() string {
@@ -382,7 +389,8 @@ func mapIdentityProviderRPCError(err error) error {
 }
 
 var (
-	_ core.IdentityProvider = (*remoteIdentityProvider)(nil)
+	_ core.IdentityProvider     = (*remoteIdentityProvider)(nil)
+	_ FederatedLogoutProvider   = (*remoteIdentityProvider)(nil)
 	_ interface {
 		DisplayName() string
 		Description() string
