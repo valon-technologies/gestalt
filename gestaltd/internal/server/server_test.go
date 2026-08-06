@@ -2640,7 +2640,15 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(
 				principal.UserSubjectID(user.ID),
-				"admin",
+				"member",
+				"group",
+				"valon-employees",
+			),
+			testAuthorizationSubjectSetRelationship(
+				"group",
+				"valon-employees",
+				"member",
+				"viewer",
 				"app",
 				"sampleApp",
 			),
@@ -2697,10 +2705,10 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("relationship-gated mounted UI status = %d, want 200: %s", resp.StatusCode, body)
+		t.Fatalf("employee-group-gated mounted UI status = %d, want 200: %s", resp.StatusCode, body)
 	}
 	if !bytes.Contains(body, []byte("sample-shell")) {
-		t.Fatalf("relationship-gated mounted UI body = %q, want sample-shell", body)
+		t.Fatalf("employee-group-gated mounted UI body = %q, want sample-shell", body)
 	}
 	if len(authz.listRelationshipRequests) == 0 {
 		t.Fatal("authorization ListRelationships was not called")
@@ -2838,6 +2846,35 @@ func testAuthorizationRelationship(subjectID, relation, resourceType, resourceID
 				Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
 					Type: "subject",
 					Id:   subjectID,
+				}},
+			},
+			Relation: relation,
+			Resource: &proto.Resource{
+				Type: resourceType,
+				Id:   resourceID,
+			},
+		},
+		SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
+	}
+}
+
+func testAuthorizationSubjectSetRelationship(
+	subjectSetResourceType,
+	subjectSetResourceID,
+	subjectSetRelation,
+	relation,
+	resourceType,
+	resourceID string,
+) *proto.Relationship {
+	return &proto.Relationship{
+		Tuple: &proto.RelationshipTuple{
+			Target: &proto.RelationshipTarget{
+				Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &proto.SubjectSet{
+					Resource: &proto.Resource{
+						Type: subjectSetResourceType,
+						Id:   subjectSetResourceID,
+					},
+					Relation: subjectSetRelation,
 				}},
 			},
 			Relation: relation,
