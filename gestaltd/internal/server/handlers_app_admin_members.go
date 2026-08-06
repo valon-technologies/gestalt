@@ -20,6 +20,7 @@ type appAdminMemberRow struct {
 	Source        string `json:"source"`
 	Mutable       bool   `json:"mutable"`
 	Effective     bool   `json:"effective"`
+	ShadowedBy    string `json:"shadowedBy,omitempty"`
 	SelectorKind  string `json:"selectorKind,omitempty"`
 	SelectorValue string `json:"selectorValue,omitempty"`
 	SubjectID     string `json:"subjectId,omitempty"`
@@ -71,9 +72,36 @@ func (s *Server) listAppAuthorizationMemberRows(ctx context.Context, appName str
 		}
 		pageToken = strings.TrimSpace(resp.GetNextPageToken())
 		if pageToken == "" {
-			return rows, nil
+			return projectAppAdminMemberRoster(rows), nil
 		}
 	}
+}
+
+// memberGrantKey identifies one logical grant for static-over-runtime shadowing.
+func memberGrantKey(row appAdminMemberRow) string {
+	return row.SelectorKind + "\x00" + row.SelectorValue + "\x00" + row.Role
+}
+
+// projectAppAdminMemberRoster owns roster layering: when the same selector+role
+// exists as both static and runtime, the runtime row is marked shadowed.
+func projectAppAdminMemberRoster(rows []appAdminMemberRow) []appAdminMemberRow {
+	staticKeys := make(map[string]struct{})
+	for _, row := range rows {
+		if row.Source == "static" {
+			staticKeys[memberGrantKey(row)] = struct{}{}
+		}
+	}
+	out := make([]appAdminMemberRow, 0, len(rows))
+	for _, row := range rows {
+		if row.Source == "dynamic" {
+			if _, ok := staticKeys[memberGrantKey(row)]; ok {
+				row.Effective = false
+				row.ShadowedBy = "static " + row.Role + " grant"
+			}
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 func (s *Server) appAdminMemberRowFromRelationship(ctx context.Context, relationship *proto.Relationship) (appAdminMemberRow, bool) {
