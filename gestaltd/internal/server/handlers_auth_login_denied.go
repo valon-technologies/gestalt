@@ -125,7 +125,7 @@ func loginDeniedCopy(reason string) (title, message string) {
 	case loginFailureReasonEmail:
 		return "Email not verified", "Your email address must be verified before you can sign in."
 	case loginFailureReasonOAuth:
-		return "Sign-in cancelled", "Sign-in did not complete. You can try again with a different account."
+		return "Sign-in canceled", "Sign-in did not complete. You can try again with a different account."
 	default:
 		return "Sign-in failed", "We could not complete sign-in. You can try again with a different account."
 	}
