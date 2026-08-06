@@ -23,8 +23,6 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Post("/tokens", s.createAPIToken)
 		r.Delete("/tokens/{id}", s.revokeAPIToken)
 
-		r.Get("/users/lookup", s.lookupUserByEmail)
-
 	})
 
 	r.With(s.pluginRouteAuthMiddleware("name")).Get("/apps/{name}/operations", s.listOperations)

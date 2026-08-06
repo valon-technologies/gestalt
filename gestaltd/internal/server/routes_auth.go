@@ -7,8 +7,6 @@ func (s *Server) mountAuthRoutes(r chi.Router) {
 	r.Get("/auth/login", s.startBrowserLogin)
 	r.Post("/auth/login", s.startLogin)
 	r.Get("/auth/login/callback", s.loginCallback)
-	r.Get("/auth/login/denied", s.loginDenied)
-	r.Get("/auth/logout", s.logoutBrowser)
 	r.Post("/auth/logout", s.logout)
 	r.Get("/auth/callback", s.integrationOAuthCallback)
 	r.Post("/auth/pending-connection", s.selectPendingConnection)

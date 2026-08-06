@@ -67,12 +67,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: WorkflowCommands,
     },
-
-    /// Look up Gestalt users and subject identifiers
-    Users {
-        #[command(subcommand)]
-        command: UsersCommands,
-    },
 }
 
 #[derive(Subcommand)]
@@ -217,15 +211,6 @@ pub enum TokenCommands {
     Revoke {
         /// Token ID to revoke
         id: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum UsersCommands {
-    /// Look up a user's persisted UUID and subject ID by email
-    Lookup {
-        /// Email address to look up
-        email: String,
     },
 }
 

@@ -351,108 +351,33 @@ func mountedUIRequiresAuthorization(mounted MountedUI) bool {
 
 func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, resourceName string) (map[string]struct{}, error) {
 	roles := map[string]struct{}{}
-	subject := &proto.Subject{
-		Type: "subject",
-		Id:   strings.TrimSpace(subjectID),
-	}
-	relationships, err := s.listAuthorizationRelationships(ctx, &proto.RelationshipFilter{
-		Resource: invocation.AuthorizationResource(resourceName, s.providerKinds),
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, relationship := range relationships {
-		matches, err := s.mountedUIRelationshipTargetMatchesSubject(
-			ctx,
-			subject,
-			relationship.GetTuple().GetTarget(),
-			map[string]struct{}{},
-		)
-		if err != nil {
-			return nil, err
-		}
-		if !matches {
-			continue
-		}
-		relation := strings.TrimSpace(relationship.GetTuple().GetRelation())
-		if relation != "" {
-			roles[relation] = struct{}{}
-		}
-	}
-	return roles, nil
-}
-
-func (s *Server) mountedUIRelationshipTargetMatchesSubject(
-	ctx context.Context,
-	subject *proto.Subject,
-	target *proto.RelationshipTarget,
-	visited map[string]struct{},
-) (bool, error) {
-	if target == nil {
-		return false, nil
-	}
-	if targetSubject := target.GetSubject(); targetSubject != nil {
-		return strings.TrimSpace(targetSubject.GetType()) == strings.TrimSpace(subject.GetType()) &&
-			strings.TrimSpace(targetSubject.GetId()) == strings.TrimSpace(subject.GetId()), nil
-	}
-	subjectSet := target.GetSubjectSet()
-	if subjectSet == nil || subjectSet.GetResource() == nil {
-		return false, nil
-	}
-	resource := subjectSet.GetResource()
-	relation := strings.TrimSpace(subjectSet.GetRelation())
-	key := strings.Join([]string{
-		strings.TrimSpace(subject.GetType()),
-		strings.TrimSpace(subject.GetId()),
-		strings.TrimSpace(resource.GetType()),
-		strings.TrimSpace(resource.GetId()),
-		relation,
-	}, "\x00")
-	if _, ok := visited[key]; ok {
-		return false, nil
-	}
-	visited[key] = struct{}{}
-
-	relationships, err := s.listAuthorizationRelationships(ctx, &proto.RelationshipFilter{
-		Relation: relation,
-		Resource: resource,
-	})
-	if err != nil {
-		return false, err
-	}
-	for _, relationship := range relationships {
-		matches, err := s.mountedUIRelationshipTargetMatchesSubject(
-			ctx,
-			subject,
-			relationship.GetTuple().GetTarget(),
-			visited,
-		)
-		if err != nil {
-			return false, err
-		}
-		if matches {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (s *Server) listAuthorizationRelationships(ctx context.Context, filter *proto.RelationshipFilter) ([]*proto.Relationship, error) {
-	var relationships []*proto.Relationship
 	pageToken := ""
 	for {
 		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
-			Filter:    filter,
+			Filter: &proto.RelationshipFilter{
+				Target: &proto.RelationshipTarget{
+					Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
+						Type: "subject",
+						Id:   strings.TrimSpace(subjectID),
+					}},
+				},
+				Resource: invocation.AuthorizationResource(resourceName, s.providerKinds),
+			},
 			PageSize:  500,
 			PageToken: pageToken,
 		})
 		if err != nil {
 			return nil, err
 		}
-		relationships = append(relationships, resp.GetRelationships()...)
+		for _, relationship := range resp.GetRelationships() {
+			relation := strings.TrimSpace(relationship.GetTuple().GetRelation())
+			if relation != "" {
+				roles[relation] = struct{}{}
+			}
+		}
 		pageToken = strings.TrimSpace(resp.GetNextPageToken())
 		if pageToken == "" {
-			return relationships, nil
+			return roles, nil
 		}
 	}
 }

@@ -14,7 +14,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
@@ -468,11 +467,6 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		if oauthErr := strings.TrimSpace(r.URL.Query().Get("error")); oauthErr != "" {
-			auditErr = loginFailureFromOAuthError(oauthErr, r.URL.Query().Get("error_description"))
-			s.failBrowserLogin(w, r, auth, auditErr)
-			return
-		}
 		auditErr = errors.New("missing code parameter")
 		writeError(w, http.StatusBadRequest, "missing code parameter")
 		return
@@ -535,11 +529,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil || tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
 		auditErr = errors.New("login failed")
 		slog.ErrorContext(r.Context(), "login callback failed", "error", err)
-		if mode == loginCallbackCLIGrant {
-			writeError(w, http.StatusUnauthorized, "login failed")
-			return
-		}
-		s.failBrowserLogin(w, r, auth, err)
+		writeError(w, http.StatusUnauthorized, "login failed")
 		return
 	}
 
@@ -682,84 +672,6 @@ func (s *Server) clearLoginStateCookie(w http.ResponseWriter) {
 	})
 }
 
-func (s *Server) logoutAuthRuntime(returnPath string) authRuntime {
-	auth := s.serverAuthRuntime()
-	returnPath = strings.TrimSpace(returnPath)
-	if returnPath == "" {
-		return auth
-	}
-	runtime, err := s.loginAuthRuntimeForNextPath(returnPath)
-	if err != nil {
-		return auth
-	}
-	return runtime
-}
-
-func (s *Server) federatedLogoutURL(auth authRuntime, returnTo string) (string, error) {
-	if auth.noAuth || auth.provider == nil {
-		return "", errors.New("auth is not configured")
-	}
-	return identityservice.FederatedLogoutURL(auth.provider, returnTo)
-}
-
-func (s *Server) logoutReturnPath(r *http.Request) (string, error) {
-	returnPath, err := resolveLoginRedirectPath(r.URL.Query().Get("returnTo"), s.allowedLoginRedirectBaseURLs())
-	if err != nil {
-		return "", err
-	}
-	if returnPath == "" {
-		returnPath = "/"
-	}
-	return returnPath, nil
-}
-
-func (s *Server) logoutReturnURL(r *http.Request, returnPath string) (string, error) {
-	return s.resolvePublicURL(r, returnPath)
-}
-
-func (s *Server) logoutBrowser(w http.ResponseWriter, r *http.Request) {
-	auditAllowed := false
-	auditErr := errors.New("logout failed")
-	var auditPrincipal *principal.Principal
-	if !s.noAuth {
-		p, err := s.resolveRequestPrincipalWithUserID(r)
-		switch {
-		case err == nil:
-			auditPrincipal = p
-		case errors.Is(err, errInvalidAuthorizationHeader), errors.Is(err, principal.ErrInvalidToken):
-			slog.InfoContext(r.Context(), "logout: unable to resolve caller for audit", "error", err)
-		default:
-			slog.WarnContext(r.Context(), "logout: unable to resolve caller for audit", "error", err)
-		}
-	}
-	defer func() {
-		s.auditHTTPEvent(r.Context(), auditPrincipal, s.authProviderName(), "auth.logout", auditAllowed, auditErr)
-	}()
-
-	s.clearSessionCookie(w)
-	auditAllowed = true
-	auditErr = nil
-
-	returnPath, err := s.logoutReturnPath(r)
-	if err != nil {
-		slog.WarnContext(r.Context(), "logout return url resolution failed", "error", err)
-		http.Redirect(w, r, "/", http.StatusFound)
-		return
-	}
-	auth := s.logoutAuthRuntime(returnPath)
-	returnTo, err := s.logoutReturnURL(r, returnPath)
-	if err != nil {
-		slog.WarnContext(r.Context(), "logout return url resolution failed", "error", err)
-		http.Redirect(w, r, "/", http.StatusFound)
-		return
-	}
-	if logoutURL, err := s.federatedLogoutURL(auth, returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
-		http.Redirect(w, r, logoutURL, http.StatusFound)
-		return
-	}
-	http.Redirect(w, r, returnTo, http.StatusFound)
-}
-
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("logout failed")
@@ -786,14 +698,5 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	s.clearSessionCookie(w)
 	auditAllowed = true
 	auditErr = nil
-	resp := map[string]string{"status": "ok"}
-	if returnPath, err := s.logoutReturnPath(r); err == nil {
-		auth := s.logoutAuthRuntime(returnPath)
-		if returnTo, err := s.logoutReturnURL(r, returnPath); err == nil {
-			if logoutURL, err := s.federatedLogoutURL(auth, returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
-				resp["redirect"] = logoutURL
-			}
-		}
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -9,40 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-var integrationCatalogVisibleRoles = []string{"viewer", "editor", "admin"}
-
-func (s *Server) integrationAuthorizationResourceName(provider string) string {
-	if entry, ok := s.pluginDefs[provider]; ok && entry != nil {
-		if policy := strings.TrimSpace(entry.AuthorizationPolicy); policy != "" {
-			return policy
-		}
-	}
-	return strings.TrimSpace(provider)
-}
-
-// integrationCatalogVisibleContext reports whether an integration should appear in
-// GET /api/v1/apps. Callers need viewer/editor/admin on the app resource, unless
-// the resource type's defaultRole grants one of those catalog roles.
-func (s *Server) integrationCatalogVisibleContext(ctx context.Context, p *principal.Principal, provider string) bool {
-	if principal.IsNonUserPrincipal(p) {
-		return false
-	}
-	if s.authorization == nil {
-		return true
-	}
-	subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
-	if subjectID == "" {
-		return false
-	}
-	resourceName := s.integrationAuthorizationResourceName(provider)
-	_, allowed, err := s.authorizeMountedResourceRoles(ctx, resourceName, subjectID, integrationCatalogVisibleRoles)
-	return err == nil && allowed
-}
-
 func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider, info integrationInfo) bool {
-	if !s.integrationCatalogVisibleContext(ctx, p, provider) {
-		return false
-	}
 	if info.MountedPath != "" {
 		return true
 	}
