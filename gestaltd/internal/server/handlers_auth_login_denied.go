@@ -55,6 +55,12 @@ func (s *Server) loginDeniedURL(r *http.Request, reason string) (string, error) 
 	return s.resolvePublicURL(r, deniedPath)
 }
 
+// loginDeniedReturnURL is the federated-logout return target. Auth0 Allowed Logout
+// URLs must include this path exactly; the failure reason is carried in a cookie.
+func (s *Server) loginDeniedReturnURL(r *http.Request) (string, error) {
+	return s.resolvePublicURL(r, loginDeniedPath)
+}
+
 func (s *Server) setLoginDeniedReasonCookie(w http.ResponseWriter, reason string) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
@@ -106,16 +112,16 @@ func (s *Server) failBrowserLogin(w http.ResponseWriter, r *http.Request, auth a
 	}
 	s.setLoginDeniedReasonCookie(w, reason)
 
-	deniedURL, err := s.loginDeniedURL(r, reason)
+	deniedReturnURL, err := s.loginDeniedReturnURL(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "login failed")
 		return
 	}
-	if logoutURL, err := s.federatedLogoutURL(auth, deniedURL); err == nil && strings.TrimSpace(logoutURL) != "" {
+	if logoutURL, err := s.federatedLogoutURL(auth, deniedReturnURL); err == nil && strings.TrimSpace(logoutURL) != "" {
 		http.Redirect(w, r, logoutURL, http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, deniedURL, http.StatusFound)
+	http.Redirect(w, r, deniedReturnURL, http.StatusFound)
 }
 
 func loginDeniedCopy(reason string) (title, message string) {
