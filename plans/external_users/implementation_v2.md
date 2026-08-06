@@ -6,21 +6,20 @@ Allow verified users from approved external domains to log in without changing e
 
 ## What failed
 
-1. **Incomplete employee roster.** `valon-employees` contained 67 UUIDs and 6 emails found in existing authorization rows, not an authoritative employee list. Employees who relied only on `app.defaultRole` could be missing.
-2. **Inconsistent authorization.** Operation `CheckAccess` supported subject sets, but mounted UI, catalog, and admin paths used separate relationship scans. [#3061](https://github.com/valon-technologies/gestalt/pull/3061) broke group-only catalog access. [#3062](https://github.com/valon-technologies/gestalt/pull/3062) fixed only UI/catalog traversal.
-3. **Bad policy migration.** Setting the shared app wildcard to `[nobody]` denied hundreds of valid operations. The relationship-gated wildcard must remain `[viewer, user, editor, admin]`.
-4. **Untested Auth0 configuration.** The cutover exposed, in sequence, an issuer mismatch, HS256 tokens, and missing connection/HRD setup.
-5. **Unsafe deployment state.** No-traffic Cloud Run candidates could overwrite shared authorization state during startup. Traffic rollback did not restore that state.
-6. **Non-reproducible binaries.** `GESTALTD_PINNED_SHA` was mutable and outside the Toolshed commit.
-7. **Oversized hotfix.** [#4071](https://github.com/valon-technologies/toolshed/pull/4071) generated 5,762 direct grants and failed startup probes. [#4073](https://github.com/valon-technologies/toolshed/pull/4073) restored service.
+1. **Inconsistent authorization.** Operation `CheckAccess` supported subject sets, but mounted UI, catalog, and admin paths used separate relationship scans. [#3061](https://github.com/valon-technologies/gestalt/pull/3061) broke group-only catalog access. [#3062](https://github.com/valon-technologies/gestalt/pull/3062) fixed only UI/catalog traversal.
+2. **Bad policy migration.** Setting the shared app wildcard to `[nobody]` denied hundreds of valid operations. The relationship-gated wildcard must remain `[viewer, user, editor, admin]`.
+3. **Untested Auth0 configuration.** The cutover exposed, in sequence, an issuer mismatch, HS256 tokens, and missing connection/HRD setup.
+4. **Unsafe deployment state.** No-traffic Cloud Run candidates could overwrite shared authorization state during startup. Traffic rollback did not restore that state.
+5. **Non-reproducible binaries.** `GESTALTD_PINNED_SHA` was mutable and outside the Toolshed commit.
+6. **Oversized hotfix.** [#4071](https://github.com/valon-technologies/toolshed/pull/4071) generated 5,762 direct grants and failed startup probes. [#4073](https://github.com/valon-technologies/toolshed/pull/4073) restored service.
 
-The #3062 binary was deployed by #4072 at 12:04 UTC. Dave still reproduced UI, catalog, and CLI failures at 12:09 UTC. For Linear, Workplace Hub, and AI Spend, grants and wildcard policy existed; an absent or incorrect employee UUID is the leading remaining explanation. Confirm it from retained production data before assigning person-specific causality.
+The 67-user roster intentionally covered previously logged-in users and included Dave and Kevon. Roster completeness was not the cause. The #3062 binary was deployed by #4072 at 12:04 UTC, but Dave still reproduced UI, catalog, and CLI failures at 12:09 UTC. This confirms that authorization policy and evaluation remained incorrect across request surfaces.
 
 ## Non-negotiables
 
 - Keep Google login until explicit employee authorization passes and soaks.
-- Build employee membership from the approved active-employee authority, joined to persisted Gestalt UUIDs by normalized email.
-- Never use existing authorization rows as the employee roster.
+- Keep the reviewed roster of previously logged-in users as canonical Gestalt UUIDs.
+- Add future users through an explicit, validated manual process.
 - Never use `[nobody]` as the shared app wildcard.
 - Never generate per-user/per-app grants.
 - A no-traffic candidate must not mutate active authorization state.
@@ -88,13 +87,13 @@ Use the real authorization evaluator for at least one integration suite. Cover:
 
 ## Stack B — Employee authorization under Google
 
-### T1 — Inventory and roster
+### T1 — Inventory and roster validation
 
 - Resolve every app’s key, resource type/ID, policy alias, valid relations, mounted roles, management path, and registered operations.
 - Explicitly cover Talent Team, Rippling, Traffic Cop, agent-trace-viewer, and other dedicated policies.
-- Load active employees from the approved People/Identity authority.
-- Join normalized Valon emails to persisted Gestalt UUIDs.
-- Block on missing users, duplicates, inactive employees, external identities, or noncanonical subjects.
+- Verify every reviewed roster entry is a unique, canonical Gestalt UUID.
+- Document the manual lookup, validation, addition, and removal workflow.
+- Block on missing users, duplicates, or noncanonical subjects.
 
 ### T2 — Versioned authorization state
 
