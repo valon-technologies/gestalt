@@ -6,14 +6,16 @@ Allow verified users from approved external domains to log in without changing e
 
 ## What failed
 
-1. **Inconsistent authorization.** Operation `CheckAccess` supported subject sets, but mounted UI, catalog, and admin paths used separate relationship scans. [#3061](https://github.com/valon-technologies/gestalt/pull/3061) broke group-only catalog access. [#3062](https://github.com/valon-technologies/gestalt/pull/3062) fixed only UI/catalog traversal.
-2. **Bad policy migration.** Setting the shared app wildcard to `[nobody]` denied hundreds of valid operations. The relationship-gated wildcard must remain `[viewer, user, editor, admin]`.
+1. **Inconsistent authorization.** Operation `CheckAccess` supported subject sets, but mounted UI, catalog, and app-admin paths did not share that evaluator. [#3061](https://github.com/valon-technologies/gestalt/pull/3061) broke group-only catalog access. [#3062](https://github.com/valon-technologies/gestalt/pull/3062) added subject-set traversal for mounted UI and catalog, but app-admin checks remained direct-only.
+2. **Bad policy migration.** Setting the shared app wildcard to `[nobody]` denied 713 operations that previously relied on wildcard viewer access. [Toolshed #4062](https://github.com/valon-technologies/toolshed/pull/4062) restored `[viewer, user, editor, admin]`.
 3. **Untested Auth0 configuration.** The cutover exposed, in sequence, an issuer mismatch, HS256 tokens, and missing connection/HRD setup.
 4. **Unsafe deployment state.** No-traffic Cloud Run candidates could overwrite shared authorization state during startup. Traffic rollback did not restore that state.
 5. **Non-reproducible binaries.** `GESTALTD_PINNED_SHA` was mutable and outside the Toolshed commit.
 6. **Oversized hotfix.** [#4071](https://github.com/valon-technologies/toolshed/pull/4071) generated 5,762 direct grants and failed startup probes. [#4073](https://github.com/valon-technologies/toolshed/pull/4073) restored service.
 
-The 67-user roster intentionally covered previously logged-in users and included Dave and Kevon. Roster completeness was not the cause. The #3062 binary was deployed by #4072 at 12:04 UTC, but Dave still reproduced UI, catalog, and CLI failures at 12:09 UTC. This confirms that authorization policy and evaluation remained incorrect across request surfaces.
+The 67-user roster intentionally covered previously logged-in users and included Dave and Kevon. Roster completeness was not the cause.
+
+The `[nobody]` policy explains earlier operation denials, and a focused regression test confirms that #3062 resolves a canonical UUID’s group-derived mounted-UI access. Neither explains Dave’s UI, catalog, and CLI failures after [Toolshed #4072](https://github.com/valon-technologies/toolshed/pull/4072) deployed #3062 with the restored wildcard. The exact post-#4072 failure remains unproven; stale or unexpected authorization state, artifact mismatch, and an uncovered production path remain hypotheses.
 
 ## Non-negotiables
 
@@ -21,9 +23,9 @@ The 67-user roster intentionally covered previously logged-in users and included
 - Keep the reviewed roster of previously logged-in users as canonical Gestalt UUIDs.
 - Add future users through an explicit, validated manual process.
 - Never use `[nobody]` as the shared app wildcard.
-- Never generate per-user/per-app grants.
+- Do not replace group access with generated per-user/per-app grants.
 - A no-traffic candidate must not mutate active authorization state.
-- Pin runtime, providers, config, and authorization state immutably.
+- Pin runtime, providers, config, and the static authorization baseline immutably; audit runtime grant changes.
 - Roll back on the first failed gate; do not stack hotfixes.
 - Keep federated logout out of this rollout.
 
@@ -121,8 +123,8 @@ Use the real authorization evaluator for at least one integration suite. Cover:
 
 1. Verify the previous authorization snapshot and rollback command.
 2. Apply T3.
-3. Run all employee and negative checks immediately.
-4. Restore Michael’s original direct grants.
+3. Temporarily remove Michael’s direct grants and run all verifier and negative checks.
+4. Restore Michael’s original direct grants and verify restoration.
 5. Repeat checks after 30 minutes and the next business morning.
 6. Soak for one business day.
 7. On failure, reactivate the previous authorization snapshot and runtime bundle.
@@ -175,10 +177,11 @@ This proves artifact compatibility, not production routing, cookies, or shared-s
 
 ### T7 — Probe
 
-- Enable one temporary domain and one pre-created verified user.
+- Enable the database connection for one pre-created verified user with public signup disabled.
+- Add one temporary domain to `allowedDomains`.
 - Run no-grant, grant, revoke, and employee-regression checks.
 - Use runtime relationships for grant/revoke; do not redeploy production config per user.
-- Remove the temporary domain after the test.
+- Disable the probe user and remove the temporary domain after the test.
 
 ### T8 — First partner
 
