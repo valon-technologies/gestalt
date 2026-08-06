@@ -6,22 +6,24 @@ Allow verified users from approved external domains to log in without changing e
 
 ## What failed
 
-1. **Inconsistent authorization.** Operation `CheckAccess` supported subject sets, but mounted UI, catalog, and app-admin paths did not share that evaluator. [#3061](https://github.com/valon-technologies/gestalt/pull/3061) broke group-only catalog access. [#3062](https://github.com/valon-technologies/gestalt/pull/3062) added subject-set traversal for mounted UI and catalog, but app-admin checks remained direct-only.
-2. **Bad policy migration.** Setting the shared app wildcard to `[nobody]` denied 713 operations that previously relied on wildcard viewer access. [Toolshed #4062](https://github.com/valon-technologies/toolshed/pull/4062) restored `[viewer, user, editor, admin]`.
-3. **Untested Auth0 configuration.** The cutover exposed, in sequence, an issuer mismatch, HS256 tokens, and missing connection/HRD setup.
-4. **Unsafe deployment state.** No-traffic Cloud Run candidates could overwrite shared authorization state during startup. Traffic rollback did not restore that state.
-5. **Non-reproducible binaries.** `GESTALTD_PINNED_SHA` was mutable and outside the Toolshed commit.
-6. **Oversized hotfix.** [#4071](https://github.com/valon-technologies/toolshed/pull/4071) generated 5,762 direct grants and failed startup probes. [#4073](https://github.com/valon-technologies/toolshed/pull/4073) restored service.
+1. **Incomplete employee migration.** The roster generator harvested UUIDs from existing authorization relationships instead of the Gestalt `users` table. The deployed roster contained 67 UUIDs; only 64 match current user records, while 294 of 358 users are absent. Dave and Kevon are in the users table but their canonical UUIDs are absent from the roster.
+2. **Inconsistent authorization.** Operation `CheckAccess` supported subject sets, but mounted UI, catalog, and app-admin paths did not share that evaluator. [#3061](https://github.com/valon-technologies/gestalt/pull/3061) broke group-only catalog access. [#3062](https://github.com/valon-technologies/gestalt/pull/3062) added subject-set traversal for mounted UI and catalog, but app-admin checks remained direct-only.
+3. **Bad policy migration.** Setting the shared app wildcard to `[nobody]` denied 713 operations that previously relied on wildcard viewer access. [Toolshed #4062](https://github.com/valon-technologies/toolshed/pull/4062) restored `[viewer, user, editor, admin]`.
+4. **Untested Auth0 configuration.** The cutover exposed, in sequence, an issuer mismatch, HS256 tokens, and missing connection/HRD setup.
+5. **Unsafe deployment state.** No-traffic Cloud Run candidates could overwrite shared authorization state during startup. Traffic rollback did not restore that state.
+6. **Non-reproducible binaries.** `GESTALTD_PINNED_SHA` was mutable and outside the Toolshed commit.
+7. **Oversized hotfix.** [#4071](https://github.com/valon-technologies/toolshed/pull/4071) generated 5,762 direct grants and failed startup probes. [#4073](https://github.com/valon-technologies/toolshed/pull/4073) restored service.
 
-The 67-user roster intentionally covered previously logged-in users and included Dave and Kevon. Roster completeness was not the cause.
+The missing canonical memberships explain why Dave and Kevon still failed after [Toolshed #4072](https://github.com/valon-technologies/toolshed/pull/4072) deployed #3062 with the restored wildcard: subject-set traversal cannot grant access to a UUID that is not a member of the subject set. A focused regression test confirms both sides of this behavior—a roster UUID receives group-derived access and an absent UUID is denied.
 
-The `[nobody]` policy explains earlier operation denials, and a focused regression test confirms that #3062 resolves a canonical UUID’s group-derived mounted-UI access. Neither explains Dave’s UI, catalog, and CLI failures after [Toolshed #4072](https://github.com/valon-technologies/toolshed/pull/4072) deployed #3062 with the restored wildcard. The exact post-#4072 failure remains unproven; stale or unexpected authorization state, artifact mismatch, and an uncovered production path remain hypotheses.
+The users-table comparison uses current production state, so its aggregate counts are evidence of a broken inventory process rather than a historical snapshot of the incident minute. The historical deployed roster independently confirms that Dave and Kevon were absent.
 
 ## Non-negotiables
 
 - Keep Google login until explicit employee authorization passes and soaks.
-- Keep the reviewed roster of previously logged-in users as canonical Gestalt UUIDs.
-- Add future users through an explicit, validated manual process.
+- Build the employee inventory from a versioned users-table snapshot, not existing authorization relationships.
+- Reconcile every users-table record to either a canonical employee UUID or an explicitly reviewed exclusion; do not grant employee access solely from email domain.
+- Add future users through an explicit, validated process that updates the reconciliation.
 - Never use `[nobody]` as the shared app wildcard.
 - Do not replace group access with generated per-user/per-app grants.
 - A no-traffic candidate must not mutate active authorization state.
@@ -93,9 +95,12 @@ Use the real authorization evaluator for at least one integration suite. Cover:
 
 - Resolve every app’s key, resource type/ID, policy alias, valid relations, mounted roles, management path, and registered operations.
 - Explicitly cover Talent Team, Rippling, Traffic Cop, agent-trace-viewer, and other dedicated policies.
-- Verify every reviewed roster entry is a unique, canonical Gestalt UUID.
-- Document the manual lookup, validation, addition, and removal workflow.
-- Block on missing users, duplicates, or noncanonical subjects.
+- Export and version a point-in-time production users-table inventory containing canonical UUID and normalized email.
+- Classify every record as employee or reviewed exclusion. Require an owner and reason for non-Valon, test, duplicate, stale, and service accounts.
+- Verify every employee entry is a unique, canonical Gestalt UUID and every roster UUID resolves to exactly one users-table record.
+- Generate the employee membership file from the reviewed inventory, never from existing authorization relationships.
+- Produce a set-difference report and require zero unclassified users, zero missing employees, zero duplicate UUIDs, and zero orphaned roster UUIDs.
+- Document the lookup, classification, validation, addition, and removal workflow.
 
 ### T2 — Versioned authorization state
 
@@ -121,13 +126,14 @@ Use the real authorization evaluator for at least one integration suite. Cover:
 
 ### Gate B
 
-1. Verify the previous authorization snapshot and rollback command.
-2. Apply T3.
-3. Temporarily remove Michael’s direct grants and run all verifier and negative checks.
-4. Restore Michael’s original direct grants and verify restoration.
-5. Repeat checks after 30 minutes and the next business morning.
-6. Soak for one business day.
-7. On failure, reactivate the previous authorization snapshot and runtime bundle.
+1. Verify the users-table reconciliation, previous authorization snapshot, and rollback command.
+2. Require every approved employee UUID to pass the shadow evaluation before removing `defaultRole`.
+3. Apply T3.
+4. Temporarily remove Michael’s direct grants and run all verifier and negative checks.
+5. Restore Michael’s original direct grants and verify restoration.
+6. Repeat checks after 30 minutes and the next business morning.
+7. Soak for one business day.
+8. On failure, reactivate the previous authorization snapshot and runtime bundle.
 
 ## Stack C — Employee-only Auth0
 
@@ -191,7 +197,8 @@ This proves artifact compatibility, not production routing, cookies, or shared-s
 
 ## Evidence required at every gate
 
-- Immutable runtime image digest, provider refs, Toolshed commit, config digest, and authorization digests.
+- Immutable runtime image digest, provider refs, Toolshed commit, config digest, authorization digests, and users-table inventory digest.
+- Users-table-to-roster reconciliation counts and reviewed exclusions.
 - Verifier UUIDs and pass/fail results.
 - Denials segmented by login, catalog, UI, HTTP, CLI, MCP discovery/call, and admin.
 - Authorization apply/rollback duration and relationship count.
