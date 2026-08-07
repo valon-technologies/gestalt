@@ -242,3 +242,54 @@ This proves artifact compatibility, not production routing, cookies, or shared-s
 Every output is produced by a literal manifest command and checked against that stack's numeric thresholds. Gate A does not require later-stack inventory or Auth0 evidence.
 
 Rollback immediately for any verifier failure, UUID change, employee access loss, unexpected external access, candidate readiness failure, inventory/Auth0/authorization drift, or exceeded deployment budget.
+
+## Stacking
+
+Each stack's items land as its own PR, git-stacked within the stack. A stack does not merge into the next stack's branch — it gates it: the next stack's PRs may be authored in parallel, but the candidate they build does not deploy or take traffic until the prior stack's Gate passes. Gate C, D, and E cutovers are traffic-routing actions driven by that stack's rollout manifest, not separate PRs.
+
+```text
+main
+ ├── gestalt PR A1 — G1 deployment-safe authorization state
+ │    └── gestalt PR A2 — G2 canonical identity
+ │         └── gestalt PR A3 — G3 one authorization decision engine
+ │              └── gestalt PR A4 — G4 conformance suite
+ │                                                       ⇣ Gate A
+ ├── toolshed PR B1 — T1 inventory and roster validation
+ │    └── toolshed PR B2 — T2 preseed, shadow, activate
+ │                                                       ⇣ Gate B
+ ├── toolshed PR C1 — T3 versioned Auth0 state + live preflight
+ │    └── toolshed PR C2 — T4 isolated candidate
+ │         └── toolshed PR C3 — T5 production candidate (no-traffic)
+ │                                                       ⇣ Gate C (traffic cutover, no PR)
+ └── toolshed PR D1 — T6 immutable probe candidate
+                                                         ⇣ Gate D (probe traffic, no PR)
+      └── toolshed PR D2 — T7 first partner
+                                                         ⇣ Gate E (partner cutover, no PR)
+```
+
+| PR | Repo | Base branch | Depends on | Gates activation |
+| --- | --- | --- | --- | --- |
+| A1 | gestalt | `main` | — | — |
+| A2 | gestalt | A1 | A1 merged | — |
+| A3 | gestalt | A2 | A2 merged | — |
+| A4 | gestalt | A3 | A3 merged | Gate A |
+| B1 | toolshed | `main` | Gate A passed | — |
+| B2 | toolshed | B1 | B1 merged | Gate B |
+| C1 | toolshed | `main` | Gate B passed | — |
+| C2 | toolshed | C1 | C1 merged | — |
+| C3 | toolshed | C2 | C2 merged | Gate C |
+| D1 | toolshed | `main` | Gate C passed | Gate D |
+| D2 | toolshed | D1 | D1 merged; Gate D clean | Gate E |
+
+`gestalt-providers` has no PR in this plan unless T3's live preflight surfaces a concrete provider gap (issuer/algorithm/subject handling) — land that as an unstacked, independently reviewed provider PR before C1 resumes, per "Do not weaken issuer or algorithm validation."
+
+Each stack's rollout manifest (see "Rollout manifest") is committed as part of that stack's first PR (A1, B1, C1, D1) and amended by later PRs in the same stack, not filed as a separate change.
+
+## Process
+
+1. **Stack A (gestalt correctness)** — Land A1–A4. G1 must be complete and merged before any candidate connects to production authorization storage. Validate the manifest, pin the G4 image digest, deploy under Google with `defaultRole` unchanged, run the current-access regression matrix, then run the dedicated group-only canary with `defaultRole` removed in an isolated environment. Execute the manifest rollback on any failure; do not proceed to Stack B until Gate A passes.
+2. **Stack B (employee authorization under Google)** — Land B1–B2. B1 builds and validates the employee-to-user join with zero unmapped/ambiguous/duplicate entries. B2 preseeds compact memberships under `defaultRole`, shadow-evaluates the no-default model against the captured baseline, recomputes the join immediately before apply, then activates the no-default snapshot while keeping the wildcard at `[viewer, user, editor, admin]`. Run Gate B: apply, run all verifier and negative checks including the permanent group-only canary, repeat at 30 minutes and next business morning, soak one business day. On failure, execute the manifest rollback to reactivate the previous snapshot and runtime bundle atomically.
+3. **Stack C (employee-only Auth0)** — Land C1–C3. C1 provisions the Auth0 client and connections additively, freezes them, and runs live preflight against the frozen client — no deploy. C2 deploys the frozen bundle to an isolated hostname with a controlled copy of production UUIDs and the production authorization snapshot. C3 deploys the same immutable bundle as a tagged no-traffic production revision with external/database login still disabled. Run Gate C: reverify frozen-state digests, record verifier UUIDs, cut over with one traffic-routing update (never split traffic across issuers), run all employee checks within 15 minutes, reverse only that routing update on failure, then soak one business day before Stack D.
+4. **Stack D (external pilot)** — Land D1: provision a separate pilot Auth0 client additively, freeze it, deploy a tagged no-traffic revision. Run Gate D: route traffic to the probe revision, run grant/isolation/revoke/employee-regression checks via runtime relationships only, route back and disable the unused pilot client. Land D2 once Gate D is clean: build a new frozen client/revision for one approved partner domain and named cohort, public signup still disabled. Run Gate E: route traffic to the partner revision, run the full verifier set plus renewal and account-switching checks, roll back only on failure, retain the revision after soak succeeds.
+
+Every PR requires the manifest for its stack to validate in CI (no missing values, no unresolved high/medium findings) before merge. Every Gate requires that stack's rollback command to be rehearsed and confirmed valid before the cutover it gates.
