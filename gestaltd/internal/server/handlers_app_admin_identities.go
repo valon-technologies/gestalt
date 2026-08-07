@@ -1,12 +1,11 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
-	"github.com/valon-technologies/gestalt/server/core"
 )
 
 // appAdminIdentityRow is the read model for GET /apps/{app}/admin/identities.
@@ -43,19 +42,21 @@ func (s *Server) listAppAdminIdentities(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, projectAppAdminIdentityRows(memberRows))
+	writeJSON(w, http.StatusOK, s.projectAppAdminIdentityRows(r.Context(), memberRows))
 }
 
-func projectAppAdminIdentityRows(rows []appAdminMemberRow) []appAdminIdentityRow {
+// projectAppAdminIdentityRows is the service-account projection of the shared
+// app authorization grant roster. Display labels use the same subject resolver
+// as registry revision actors (ManagedSubject when present).
+func (s *Server) projectAppAdminIdentityRows(ctx context.Context, rows []appAdminMemberRow) []appAdminIdentityRow {
 	out := make([]appAdminIdentityRow, 0)
 	for _, row := range rows {
 		if !isAppAdminServiceAccountRow(row) {
 			continue
 		}
-		kind, localID, ok := core.ParseSubjectID(row.SubjectID)
-		displayName := row.SubjectID
-		if ok && kind == "service_account" && localID != "" {
-			displayName = localID
+		displayName := strings.TrimSpace(s.resolveRevisionActorLabel(ctx, row.SubjectID))
+		if displayName == "" {
+			displayName = row.SubjectID
 		}
 		out = append(out, appAdminIdentityRow{
 			SubjectID:   row.SubjectID,
@@ -68,12 +69,4 @@ func projectAppAdminIdentityRows(rows []appAdminMemberRow) []appAdminIdentityRow
 		})
 	}
 	return out
-}
-
-func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
-	if row.SelectorKind != "subject_id" || row.SubjectID == "" {
-		return false
-	}
-	kind, _, ok := core.ParseSubjectID(row.SubjectID)
-	return ok && kind == "service_account"
 }

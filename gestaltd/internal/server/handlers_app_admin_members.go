@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -50,6 +51,17 @@ func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
 	// Members is the human/group access roster. Service-account grants are
 	// owned by GET /apps/{app}/admin/identities.
 	writeJSON(w, http.StatusOK, projectAppAdminHumanMemberRows(rows))
+}
+
+// isAppAdminServiceAccountRow partitions the shared app authorization grant
+// roster: direct service_account subject_id grants belong on identities;
+// humans, other subjects, and subject_set selectors belong on members.
+func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
+	if row.SelectorKind != "subject_id" || row.SubjectID == "" {
+		return false
+	}
+	kind, _, ok := core.ParseSubjectID(row.SubjectID)
+	return ok && kind == coredata.ManagedSubjectKindServiceAccount
 }
 
 func projectAppAdminHumanMemberRows(rows []appAdminMemberRow) []appAdminMemberRow {
