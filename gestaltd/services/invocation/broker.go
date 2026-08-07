@@ -1050,22 +1050,21 @@ func (b *Broker) authorizationDecision(
 	)
 }
 
-func (b *Broker) authorizationPolicy(providerName string) string {
-	if b != nil {
-		if policy := strings.TrimSpace(b.authorizationPolicies[providerName]); policy != "" {
-			return policy
-		}
+// authorizationMapper exposes the shared app key -> policy alias -> resource
+// mapping so invocation and the HTTP surfaces resolve identically.
+func (b *Broker) authorizationMapper() AuthorizationResourceMapper {
+	if b == nil {
+		return AuthorizationResourceMapper{}
 	}
-	return strings.TrimSpace(providerName)
+	return NewAuthorizationResourceMapper(b.providerKinds, b.authorizationPolicies)
+}
+
+func (b *Broker) authorizationPolicy(providerName string) string {
+	return b.authorizationMapper().Policy(providerName)
 }
 
 func (b *Broker) authorizationResource(providerName string) *proto.Resource {
-	if b != nil {
-		if policy := strings.TrimSpace(b.authorizationPolicies[providerName]); policy != "" {
-			return &proto.Resource{Type: policy, Id: policy}
-		}
-	}
-	return AuthorizationResource(providerName, b.providerKinds)
+	return b.authorizationMapper().Resource(providerName)
 }
 
 func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {

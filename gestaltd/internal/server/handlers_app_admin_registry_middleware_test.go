@@ -17,8 +17,8 @@ type appAdminAuthzStub struct {
 	core.AuthorizationProvider
 }
 
-func (appAdminAuthzStub) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	return &proto.ListRelationshipsResponse{}, nil
+func (appAdminAuthzStub) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	return &proto.CheckAccessResponse{}, nil
 }
 
 func TestAppAdminAuthorizationMiddlewareRejectsNilPrincipal(t *testing.T) {

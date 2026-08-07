@@ -68,6 +68,7 @@ func TestAppAdminIdentitiesList(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -167,6 +168,7 @@ func TestAppAdminIdentitiesListShadowsRuntimeDuplicate(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -262,6 +264,7 @@ func TestAppAdminIdentitiesListExcludesSubjectSet(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -303,6 +306,7 @@ func TestAppAdminIdentitiesListEmpty(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -378,6 +382,7 @@ func TestAppAdminIdentitiesListUsesManagedSubjectDisplayName(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 		if _, err := cfg.Services.ManagedSubjects.CreateManagedSubject(context.Background(), &core.ManagedSubject{
 			SubjectID:   saID,
 			DisplayName: "Slack Bot",
@@ -423,6 +428,7 @@ func TestAppAdminIdentitiesListForbiddenWithoutAdmin(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("bob-token", viewerID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 

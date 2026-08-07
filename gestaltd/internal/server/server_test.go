@@ -2701,11 +2701,11 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	if !bytes.Contains(body, []byte("sample-shell")) {
 		t.Fatalf("relationship-gated mounted UI body = %q, want sample-shell", body)
 	}
-	if len(authz.listRelationshipRequests) == 0 {
-		t.Fatal("authorization ListRelationships was not called")
+	if len(authz.checkAccessRequests) == 0 {
+		t.Fatal("authorization CheckAccess was not called")
 	}
-	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != "app" {
-		t.Fatalf("relationship resource type = %q, want app", got)
+	if got := authz.checkAccessRequests[0].GetResource().GetType(); got != "app" {
+		t.Fatalf("decision resource type = %q, want app", got)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/viewer/", nil)
@@ -2722,8 +2722,8 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	if !bytes.Contains(body, []byte("viewer-shell")) {
 		t.Fatalf("default-role mounted UI body = %q, want viewer-shell", body)
 	}
-	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "viewerPolicy" {
-		t.Fatalf("relationship resource type = %q, want viewerPolicy", got)
+	if got := authz.checkAccessRequests[len(authz.checkAccessRequests)-1].GetResource().GetType(); got != "viewerPolicy" {
+		t.Fatalf("decision resource type = %q, want viewerPolicy", got)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/default-role/", nil)
@@ -2755,11 +2755,11 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	if !bytes.Contains(body, []byte("admin-shell")) {
 		t.Fatalf("admin UI body = %q, want admin-shell", body)
 	}
-	if len(authz.listRelationshipRequests) < 2 {
-		t.Fatalf("authorization ListRelationships calls = %d, want at least 2", len(authz.listRelationshipRequests))
+	if len(authz.checkAccessRequests) < 2 {
+		t.Fatalf("authorization CheckAccess calls = %d, want at least 2", len(authz.checkAccessRequests))
 	}
-	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "adminPolicy" {
-		t.Fatalf("relationship resource type = %q, want adminPolicy", got)
+	if got := authz.checkAccessRequests[len(authz.checkAccessRequests)-1].GetResource().GetType(); got != "adminPolicy" {
+		t.Fatalf("decision resource type = %q, want adminPolicy", got)
 	}
 }
 
@@ -2769,6 +2769,103 @@ type serverTestAuthorizationProvider struct {
 	resourceTypes            []*proto.AuthorizationModelResourceType
 	relationships            []*proto.Relationship
 	listRelationshipRequests []*proto.ListRelationshipsRequest
+	checkAccessRequests      []*proto.CheckAccessRequest
+	checkAccessErr           error
+}
+
+// CheckAccess models the provider-owned evaluator: it expands subject sets so a
+// subject that only holds a grant through a group is allowed, exactly as the
+// real relationship-graph provider does.
+func (p *serverTestAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	p.checkAccessRequests = append(p.checkAccessRequests, req)
+	if p.checkAccessErr != nil {
+		return nil, p.checkAccessErr
+	}
+	if !p.modelAnswersAction(req.GetResource().GetType(), req.GetAction().GetName()) {
+		// A real evaluator can only answer about actions the model declares.
+		return &proto.CheckAccessResponse{}, nil
+	}
+	relations := p.effectiveRelations(req.GetSubject().GetId(), req.GetResource())
+	return &proto.CheckAccessResponse{Allowed: len(relations) > 0, MatchedRelations: relations}, nil
+}
+
+func (p *serverTestAuthorizationProvider) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	decisions := make([]*proto.CheckAccessResponse, 0, len(req.GetRequests()))
+	for _, entry := range req.GetRequests() {
+		decision, err := p.CheckAccess(ctx, entry)
+		if err != nil {
+			return nil, err
+		}
+		decisions = append(decisions, decision)
+	}
+	return &proto.CheckAccessManyResponse{Decisions: decisions}, nil
+}
+
+// modelAnswersAction mirrors a real evaluator: a resource type present in the
+// model answers only about actions it declares (or "*"). Tests that leave
+// resourceTypes unset opt out of action awareness entirely.
+func (p *serverTestAuthorizationProvider) modelAnswersAction(resourceTypeName, action string) bool {
+	if len(p.resourceTypes) == 0 {
+		return true
+	}
+	for _, resourceType := range p.resourceTypes {
+		if strings.TrimSpace(resourceType.GetName()) != strings.TrimSpace(resourceTypeName) {
+			continue
+		}
+		for _, declared := range resourceType.GetActions() {
+			name := strings.TrimSpace(declared.GetName())
+			if name == "*" || (name != "" && name == strings.TrimSpace(action)) {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
+
+func (p *serverTestAuthorizationProvider) effectiveRelations(subjectID string, resource *proto.Resource) []string {
+	out := []string{}
+	for _, relationship := range p.relationships {
+		tuple := relationship.GetTuple()
+		if tuple.GetResource().GetType() != resource.GetType() || tuple.GetResource().GetId() != resource.GetId() {
+			continue
+		}
+		if !p.targetIncludesSubject(tuple.GetTarget(), subjectID, 0) {
+			continue
+		}
+		relation := strings.TrimSpace(tuple.GetRelation())
+		if relation != "" && !slices.Contains(out, relation) {
+			out = append(out, relation)
+		}
+	}
+	return out
+}
+
+func (p *serverTestAuthorizationProvider) targetIncludesSubject(target *proto.RelationshipTarget, subjectID string, depth int) bool {
+	if depth > 8 {
+		return false
+	}
+	if subject := target.GetSubject(); subject != nil {
+		return subject.GetId() == subjectID
+	}
+	set := target.GetSubjectSet()
+	if set == nil {
+		return false
+	}
+	for _, relationship := range p.relationships {
+		tuple := relationship.GetTuple()
+		if tuple.GetResource().GetType() != set.GetResource().GetType() ||
+			tuple.GetResource().GetId() != set.GetResource().GetId() {
+			continue
+		}
+		if strings.TrimSpace(tuple.GetRelation()) != strings.TrimSpace(set.GetRelation()) {
+			continue
+		}
+		if p.targetIncludesSubject(tuple.GetTarget(), subjectID, depth+1) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
@@ -2828,6 +2925,15 @@ func relationshipMatchesFilter(relationship *proto.Relationship, filter *proto.R
 		}
 	}
 	return true
+}
+
+// appAdminTestAppDefs registers the apps used by app-admin tests so the shared
+// app key -> resource mapping resolves them to the "app" resource type.
+func appAdminTestAppDefs() map[string]*config.ProviderEntry {
+	return map[string]*config.ProviderEntry{
+		"g-issues":  {},
+		"other-app": {},
+	}
 }
 
 func testAuthorizationRelationship(subjectID, relation, resourceType, resourceID string) *proto.Relationship {

@@ -27,27 +27,14 @@ type subjectScopedAuthzStub struct {
 	relation         string
 }
 
-func (s subjectScopedAuthzStub) ListRelationships(
+func (s subjectScopedAuthzStub) CheckAccess(
 	_ context.Context,
-	req *proto.ListRelationshipsRequest,
-) (*proto.ListRelationshipsResponse, error) {
-	subjectID := req.GetFilter().GetTarget().GetSubject().GetId()
-	if subjectID != s.grantedSubjectID {
-		return &proto.ListRelationshipsResponse{}, nil
+	req *proto.CheckAccessRequest,
+) (*proto.CheckAccessResponse, error) {
+	if req.GetSubject().GetId() != s.grantedSubjectID {
+		return &proto.CheckAccessResponse{}, nil
 	}
-	return &proto.ListRelationshipsResponse{
-		Relationships: []*proto.Relationship{
-			{Tuple: &proto.RelationshipTuple{
-				Resource: req.GetFilter().GetResource(),
-				Relation: s.relation,
-				Target: &proto.RelationshipTarget{
-					Kind: &proto.RelationshipTarget_Subject{
-						Subject: &proto.Subject{Type: "subject", Id: subjectID},
-					},
-				},
-			}},
-		},
-	}, nil
+	return &proto.CheckAccessResponse{Allowed: true, MatchedRelations: []string{s.relation}}, nil
 }
 
 func (subjectScopedAuthzStub) ListActiveModelResourceTypes(

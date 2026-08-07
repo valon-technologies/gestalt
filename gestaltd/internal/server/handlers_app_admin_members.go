@@ -88,7 +88,7 @@ func (s *Server) listAppAuthorizationMemberRows(ctx context.Context, appName str
 	for {
 		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
 			Filter: &proto.RelationshipFilter{
-				Resource: &proto.Resource{Type: "app", Id: appName},
+				Resource: s.authorizationResource(appName),
 			},
 			PageSize:  500,
 			PageToken: pageToken,

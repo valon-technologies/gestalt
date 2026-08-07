@@ -18,8 +18,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type appAdminRegistryResponse struct {
@@ -223,38 +223,28 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 	})
 }
 
+// appAdminRole is the relation that grants administration of an app.
+const appAdminRole = "admin"
+
+// hasExplicitAppAdmin reports whether the subject administers the app. The
+// decision comes from the shared authorization evaluator, so admin granted
+// through a group or subject set counts exactly like a direct grant. Any
+// evaluator error denies.
 func (s *Server) hasExplicitAppAdmin(ctx context.Context, subjectID, appName string) (bool, error) {
 	if s == nil || s.authorization == nil {
 		return false, errors.New("authorization is unavailable")
 	}
-	pageToken := ""
-	for {
-		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
-			Filter: &proto.RelationshipFilter{
-				Target: &proto.RelationshipTarget{
-					Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
-						Type: "subject",
-						Id:   strings.TrimSpace(subjectID),
-					}},
-				},
-				Resource: &proto.Resource{Type: "app", Id: strings.TrimSpace(appName)},
-			},
-			PageSize:  500,
-			PageToken: pageToken,
-		})
-		if err != nil {
-			return false, err
-		}
-		for _, relationship := range resp.GetRelationships() {
-			if strings.TrimSpace(relationship.GetTuple().GetRelation()) == "admin" {
-				return true, nil
-			}
-		}
-		pageToken = strings.TrimSpace(resp.GetNextPageToken())
-		if pageToken == "" {
-			return false, nil
-		}
+	appName = strings.TrimSpace(appName)
+	decision, err := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
+		SubjectID:    subjectID,
+		Action:       appName,
+		Resource:     s.authorizationResource(appName),
+		AllowedRoles: []string{appAdminRole},
+	})
+	if err != nil {
+		return false, err
 	}
+	return decision.Allowed && decision.Role == appAdminRole, nil
 }
 
 func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {

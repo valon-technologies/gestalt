@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -284,7 +285,33 @@ func (s *Server) authorizeMountedAppAccess(ctx context.Context, p *principal.Pri
 	if err != nil || !ok {
 		return invocation.AccessContext{}, false, err
 	}
-	return s.authorizeMountedResourceRoles(ctx, resourceName, subjectID, mounted.AllowedRoles)
+	return s.authorizeMountedResourceRoles(ctx, mountedResourceAccess{
+		appKey:       strings.TrimSpace(mounted.AppName),
+		resourceName: resourceName,
+		subjectID:    subjectID,
+		allowedRoles: mounted.AllowedRoles,
+	})
+}
+
+// mountedResourceAccess carries the identifiers a mounted-UI decision needs:
+// the app key that names the action, the policy/resource name, the canonical
+// subject, and the roles the mount restricts access to.
+type mountedResourceAccess struct {
+	appKey       string
+	resourceName string
+	subjectID    string
+	allowedRoles []string
+}
+
+// action names the authorization action for a mounted UI. It is the app key so
+// that a mounted UI and an operation invocation for the same app ask the
+// evaluator the same question; policy-only mounts (the built-in admin UI) fall
+// back to the policy name.
+func (m mountedResourceAccess) action() string {
+	if m.appKey != "" {
+		return m.appKey
+	}
+	return m.resourceName
 }
 
 // mountedUIAuthorizationSubject resolves the canonical subject the mounted UI
@@ -314,29 +341,50 @@ func (s *Server) mountedUIAuthorizationSubject(
 	return resourceName, subjectID, true, nil
 }
 
-func (s *Server) authorizeMountedResourceRoles(ctx context.Context, resourceName, subjectID string, allowedRoles []string) (invocation.AccessContext, bool, error) {
-	roles, err := s.mountedUIAuthorizationRoles(ctx, subjectID, resourceName)
+// authorizeMountedResourceRoles decides mounted-UI access through the shared
+// authorization evaluator. The mount's AllowedRoles still gate access: when the
+// mount declares roles, the evaluator must report one of them as the relation
+// that authorized the action. The resource type's defaultRole keeps its current
+// meaning as the fallback role when the evaluator reports no relation of its
+// own.
+func (s *Server) authorizeMountedResourceRoles(ctx context.Context, access mountedResourceAccess) (invocation.AccessContext, bool, error) {
+	decision, err := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
+		SubjectID:    access.subjectID,
+		Action:       access.action(),
+		Resource:     s.authorizationResource(access.resourceName),
+		AllowedRoles: access.allowedRoles,
+	})
 	if err != nil {
 		return invocation.AccessContext{}, false, err
 	}
-	if len(allowedRoles) == 0 {
-		for role := range roles {
-			return invocation.AccessContext{Policy: resourceName, Role: strings.TrimSpace(role)}, true, nil
-		}
-	} else {
-		for _, allowedRole := range allowedRoles {
-			allowedRole = strings.TrimSpace(allowedRole)
-			if _, ok := roles[allowedRole]; ok {
-				return invocation.AccessContext{Policy: resourceName, Role: allowedRole}, true, nil
-			}
-		}
+	if decision.Allowed && decision.Role != "" {
+		return invocation.AccessContext{Policy: access.resourceName, Role: decision.Role}, true, nil
 	}
-	defaultRole, err := s.mountedUIResourceDefaultRole(ctx, resourceName)
+
+	// The evaluator did not name an authorizing relation. Read the active model
+	// once: it supplies both the declared actions (which say whether the
+	// evaluator could answer this question at all) and the defaultRole.
+	model, err := s.mountedUIResourceModel(ctx, access.resourceName)
 	if err != nil {
 		return invocation.AccessContext{}, false, err
 	}
-	if defaultRole != "" && (len(allowedRoles) == 0 || mountedUIRoleAllowed(defaultRole, allowedRoles)) {
-		return invocation.AccessContext{Policy: resourceName, Role: defaultRole}, true, nil
+	if !model.answersAction(access.action()) {
+		legacy, allowed, legacyErr := s.legacyDirectGrantMountedAccess(ctx, access, model)
+		if legacyErr != nil {
+			return invocation.AccessContext{}, false, legacyErr
+		}
+		if allowed {
+			return legacy, true, nil
+		}
+	}
+
+	if model.defaultRole != "" && (len(access.allowedRoles) == 0 || mountedUIRoleAllowed(model.defaultRole, access.allowedRoles)) {
+		return invocation.AccessContext{Policy: access.resourceName, Role: model.defaultRole}, true, nil
+	}
+	if decision.Allowed && len(access.allowedRoles) == 0 {
+		// The evaluator allowed the action without naming a relation and the
+		// mount restricts no roles, so there is nothing left to gate on.
+		return invocation.AccessContext{Policy: access.resourceName}, true, nil
 	}
 	return invocation.AccessContext{}, false, nil
 }
@@ -364,10 +412,128 @@ func mountedUIRequiresAuthorization(mounted MountedUI) bool {
 	return strings.TrimSpace(mounted.AppName) != ""
 }
 
-func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, resourceName string) (map[string]struct{}, error) {
-	roles := map[string]struct{}{}
+// mountedUIWildcardAction is the model action name that matches every action.
+const mountedUIWildcardAction = "*"
+
+// mountedUILegacyDecisionLogMessage names the transition-shim warning so it can
+// be alerted on and so its disappearance proves the shim is unused.
+const mountedUILegacyDecisionLogMessage = "auth: mounted UI resource type declares no matching action; using legacy direct-grant path"
+
+// mountedUIModelSnapshot is the active-model view of one mounted resource type.
+// It is a model read, not a relationship traversal: it decides nothing, it only
+// reports what the model can express.
+type mountedUIModelSnapshot struct {
+	typeName    string
+	found       bool
+	defaultRole string
+	actions     []string
+}
+
+// answersAction reports whether the evaluator can express a decision about this
+// action for this resource type. A resource type that is absent from the active
+// model, or that declares neither the action nor a wildcard action, cannot
+// answer, so its denial carries no information.
+func (m mountedUIModelSnapshot) answersAction(action string) bool {
+	if !m.found {
+		return false
+	}
+	action = strings.TrimSpace(action)
+	for _, name := range m.actions {
+		name = strings.TrimSpace(name)
+		if name == mountedUIWildcardAction {
+			return true
+		}
+		if action != "" && name == action {
+			return true
+		}
+	}
+	return false
+}
+
+// mountedUIResourceModel reads the mount's resource type from the active model.
+func (s *Server) mountedUIResourceModel(ctx context.Context, resourceName string) (mountedUIModelSnapshot, error) {
+	if s == nil || s.authorization == nil {
+		return mountedUIModelSnapshot{}, invocation.ErrAuthorizationUnavailable
+	}
+	typeName := strings.TrimSpace(s.authorizationResource(resourceName).GetType())
+	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
+		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: typeName},
+		PageSize: 1,
+	})
+	if err != nil {
+		return mountedUIModelSnapshot{}, err
+	}
+	snapshot := mountedUIModelSnapshot{typeName: typeName}
+	for _, resourceType := range resp.GetResourceTypes() {
+		if strings.TrimSpace(resourceType.GetName()) != typeName {
+			continue
+		}
+		snapshot.found = true
+		snapshot.defaultRole = strings.TrimSpace(resourceType.GetDefaultRole())
+		for _, action := range resourceType.GetActions() {
+			if name := strings.TrimSpace(action.GetName()); name != "" {
+				snapshot.actions = append(snapshot.actions, name)
+			}
+		}
+		break
+	}
+	return snapshot, nil
+}
+
+// maxLegacyDirectGrantPages bounds the transition shim's relationship scan so a
+// paginating provider cannot make a mounted-UI request loop without limit.
+const maxLegacyDirectGrantPages = 20
+
+// legacyDirectGrantMountedAccess is a TRANSITION SHIM. Delete it once T1's
+// inventory confirms every mounted resource type declares either an action
+// matching its app key/policy name or a "*" wildcard action.
+//
+// CheckAccessRequest is strictly action-shaped and there is no effective-roles
+// RPC, so a resource type that declares no matching action makes the evaluator
+// answer "denied" to a question it cannot represent. Treating that as a real
+// denial would lock existing direct grant holders out of their mounted UI -
+// including the built-in admin UI, whose policy typically declares no actions.
+// This shim runs ONLY when a successfully read model proves the evaluator
+// cannot answer; a provider or transport error never reaches it and always
+// denies.
+func (s *Server) legacyDirectGrantMountedAccess(
+	ctx context.Context,
+	access mountedResourceAccess,
+	model mountedUIModelSnapshot,
+) (invocation.AccessContext, bool, error) {
+	slog.WarnContext(ctx, mountedUILegacyDecisionLogMessage,
+		"resourceType", model.typeName,
+		"resource", access.resourceName,
+		"action", access.action(),
+		"modelKnowsResourceType", model.found,
+	)
+
+	roles, err := s.legacyDirectGrantRoles(ctx, access.subjectID, access.resourceName)
+	if err != nil {
+		return invocation.AccessContext{}, false, err
+	}
+	if len(access.allowedRoles) == 0 {
+		if len(roles) > 0 {
+			return invocation.AccessContext{Policy: access.resourceName, Role: roles[0]}, true, nil
+		}
+		return invocation.AccessContext{}, false, nil
+	}
+	for _, allowedRole := range access.allowedRoles {
+		allowedRole = strings.TrimSpace(allowedRole)
+		if allowedRole != "" && slices.Contains(roles, allowedRole) {
+			return invocation.AccessContext{Policy: access.resourceName, Role: allowedRole}, true, nil
+		}
+	}
+	return invocation.AccessContext{}, false, nil
+}
+
+// legacyDirectGrantRoles lists the subject's direct relations on the resource.
+// It is part of the transition shim above and must not be called from the main
+// decision path.
+func (s *Server) legacyDirectGrantRoles(ctx context.Context, subjectID, resourceName string) ([]string, error) {
+	roles := make([]string, 0, 4)
 	pageToken := ""
-	for {
+	for page := 0; page < maxLegacyDirectGrantPages; page++ {
 		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
 			Filter: &proto.RelationshipFilter{
 				Target: &proto.RelationshipTarget{
@@ -376,7 +542,7 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, res
 						Id:   strings.TrimSpace(subjectID),
 					}},
 				},
-				Resource: invocation.AuthorizationResource(resourceName, s.providerKinds),
+				Resource: s.authorizationResource(resourceName),
 			},
 			PageSize:  500,
 			PageToken: pageToken,
@@ -386,32 +552,16 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, res
 		}
 		for _, relationship := range resp.GetRelationships() {
 			relation := strings.TrimSpace(relationship.GetTuple().GetRelation())
-			if relation != "" {
-				roles[relation] = struct{}{}
+			if relation != "" && !slices.Contains(roles, relation) {
+				roles = append(roles, relation)
 			}
 		}
 		pageToken = strings.TrimSpace(resp.GetNextPageToken())
 		if pageToken == "" {
-			return roles, nil
+			break
 		}
 	}
-}
-
-func (s *Server) mountedUIResourceDefaultRole(ctx context.Context, resourceName string) (string, error) {
-	typeName := invocation.AuthorizationResource(resourceName, s.providerKinds).GetType()
-	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
-		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(typeName)},
-		PageSize: 1,
-	})
-	if err != nil {
-		return "", err
-	}
-	for _, resourceType := range resp.GetResourceTypes() {
-		if strings.TrimSpace(resourceType.GetName()) == strings.TrimSpace(typeName) {
-			return strings.TrimSpace(resourceType.GetDefaultRole()), nil
-		}
-	}
-	return "", nil
+	return roles, nil
 }
 
 func (s *Server) redirectMountedUILogin(w http.ResponseWriter, r *http.Request) error {
