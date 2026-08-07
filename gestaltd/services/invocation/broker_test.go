@@ -357,7 +357,10 @@ func TestBrokerInvokePropagatesAllowedRoleToProvider(t *testing.T) {
 		nil,
 		nil,
 		WithAuthorizationProvider(authz),
-		WithProviderKinds(map[string]ProviderKind{"traffic-cop": ProviderKindApp}),
+		WithProviderKinds(map[string]ProviderKind{
+			"traffic-cop":    ProviderKindApp,
+			"traffic-policy": ProviderKindApp,
+		}),
 		WithAuthorizationPolicies(map[string]string{"traffic-cop": "traffic-policy"}),
 	)
 

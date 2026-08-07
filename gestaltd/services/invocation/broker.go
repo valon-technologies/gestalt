@@ -1044,7 +1044,7 @@ func (b *Broker) authorizationDecision(
 	if err != nil {
 		return nil, err
 	}
-	resource := AuthorizationResource(b.authorizationPolicy(providerName), b.providerKinds)
+	resource := b.authorizationResource(providerName)
 	return b.authorization.CheckAccess(
 		ctx,
 		accessRequest(p, subjectID, resource, operationID),
@@ -1058,6 +1058,15 @@ func (b *Broker) authorizationPolicy(providerName string) string {
 		}
 	}
 	return strings.TrimSpace(providerName)
+}
+
+func (b *Broker) authorizationResource(providerName string) *proto.Resource {
+	if b != nil {
+		if policy := strings.TrimSpace(b.authorizationPolicies[providerName]); policy != "" {
+			return &proto.Resource{Type: policy, Id: policy}
+		}
+	}
+	return AuthorizationResource(providerName, b.providerKinds)
 }
 
 func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
