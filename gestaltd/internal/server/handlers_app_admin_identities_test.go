@@ -18,7 +18,7 @@ import (
 func TestAppAdminIdentitiesList(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
@@ -129,7 +129,7 @@ func TestAppAdminIdentitiesList(t *testing.T) {
 func TestAppAdminIdentitiesListShadowsRuntimeDuplicate(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
 	const saID = "service_account:slack-bot"
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
@@ -223,7 +223,7 @@ func TestAppAdminIdentitiesListShadowsRuntimeDuplicate(t *testing.T) {
 func TestAppAdminIdentitiesListExcludesSubjectSet(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
@@ -292,7 +292,7 @@ func TestAppAdminIdentitiesListExcludesSubjectSet(t *testing.T) {
 func TestAppAdminIdentitiesListEmpty(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
@@ -329,7 +329,7 @@ func TestAppAdminIdentitiesListEmpty(t *testing.T) {
 func TestAppAdminIdentitiesFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = nil
@@ -353,7 +353,7 @@ func TestAppAdminIdentitiesFailsClosed(t *testing.T) {
 func TestAppAdminIdentitiesListUsesManagedSubjectDisplayName(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
 	const saID = "service_account:slack-bot"
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
@@ -414,7 +414,7 @@ func TestAppAdminIdentitiesListUsesManagedSubjectDisplayName(t *testing.T) {
 func TestAppAdminIdentitiesListForbiddenWithoutAdmin(t *testing.T) {
 	t.Parallel()
 
-	viewerID := principal.UserSubjectID("bob")
+	viewerID := principal.UserSubjectID(testCanonicalViewerUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(viewerID, "viewer", "app", "g-issues"),
