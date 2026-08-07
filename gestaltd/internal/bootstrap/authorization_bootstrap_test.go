@@ -562,6 +562,25 @@ func TestProviderAuthorizationKindsSkipsDedicatedAppResourceTypes(t *testing.T) 
 	}
 }
 
+func TestProviderAuthorizationPolicies(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Apps: map[string]*config.ProviderEntry{
+			"shared": {AuthorizationPolicy: " workspace "},
+			"own":    {},
+		},
+	}
+
+	got := ProviderAuthorizationPolicies(cfg)
+	if got["shared"] != "workspace" {
+		t.Fatalf("shared policy = %q, want workspace", got["shared"])
+	}
+	if _, ok := got["own"]; ok {
+		t.Fatal("own app should use its app name instead of an explicit policy")
+	}
+}
+
 func TestBootstrapAuthorizationProviderReceivesSharedGatewayTransport(t *testing.T) {
 	t.Parallel()
 

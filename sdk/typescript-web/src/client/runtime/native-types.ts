@@ -571,6 +571,7 @@ export interface CheckAccessRequest {
 export interface CheckAccessResponse {
   allowed: boolean;
   modelId: string;
+  matchedRelations: string[];
 }
 
 export interface DeleteRelationshipRequest {

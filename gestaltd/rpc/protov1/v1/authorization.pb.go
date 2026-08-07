@@ -360,11 +360,12 @@ func (x *CheckAccessRequest) GetResource() *Resource {
 }
 
 type CheckAccessResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Allowed       bool                   `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
-	ModelId       string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Allowed          bool                   `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	ModelId          string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	MatchedRelations []string               `protobuf:"bytes,3,rep,name=matched_relations,json=matchedRelations,proto3" json:"matched_relations,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CheckAccessResponse) Reset() {
@@ -409,6 +410,13 @@ func (x *CheckAccessResponse) GetModelId() string {
 		return x.ModelId
 	}
 	return ""
+}
+
+func (x *CheckAccessResponse) GetMatchedRelations() []string {
+	if x != nil {
+		return x.MatchedRelations
+	}
+	return nil
 }
 
 type CheckAccessManyRequest struct {
@@ -2016,10 +2024,11 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\x12CheckAccessRequest\x126\n" +
 	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectR\asubject\x123\n" +
 	"\x06action\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.ActionR\x06action\x129\n" +
-	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\"J\n" +
+	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\"w\n" +
 	"\x13CheckAccessResponse\x12\x18\n" +
 	"\aallowed\x18\x01 \x01(\bR\aallowed\x12\x19\n" +
-	"\bmodel_id\x18\x02 \x01(\tR\amodelId\"]\n" +
+	"\bmodel_id\x18\x02 \x01(\tR\amodelId\x12+\n" +
+	"\x11matched_relations\x18\x03 \x03(\tR\x10matchedRelations\"]\n" +
 	"\x16CheckAccessManyRequest\x12C\n" +
 	"\brequests\x18\x01 \x03(\v2'.gestalt.provider.v1.CheckAccessRequestR\brequests\"a\n" +
 	"\x17CheckAccessManyResponse\x12F\n" +

@@ -77,7 +77,11 @@ func protoCheckAccessResponse(in *CheckAccessResponse) *proto.CheckAccessRespons
 	if in == nil {
 		return nil
 	}
-	return &proto.CheckAccessResponse{Allowed: in.Allowed, ModelId: in.ModelId}
+	return &proto.CheckAccessResponse{
+		Allowed:          in.Allowed,
+		ModelId:          in.ModelId,
+		MatchedRelations: append([]string(nil), in.MatchedRelations...),
+	}
 }
 
 func checkAccessManyRequestFromProto(in *proto.CheckAccessManyRequest) *CheckAccessManyRequest {

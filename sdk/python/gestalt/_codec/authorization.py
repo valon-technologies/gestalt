@@ -197,6 +197,7 @@ def to_wire_check_access_response(value: native.CheckAccessResponse) -> Any:
     return _authorization_pb2.CheckAccessResponse(
         allowed=value.allowed,
         model_id=value.model_id,
+        matched_relations=value.matched_relations,
     )
 
 
@@ -204,6 +205,7 @@ def from_wire_check_access_response(value: Any) -> native.CheckAccessResponse:
     return native.CheckAccessResponse(
         allowed=value.allowed,
         model_id=value.model_id,
+        matched_relations=list(value.matched_relations),
     )
 
 

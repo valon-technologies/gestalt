@@ -35,6 +35,7 @@ message CheckAccessRequest {
 message CheckAccessResponse {
   bool allowed = 1;
   string model_id = 2;
+  repeated string matched_relations = 3;
 }
 
 message CheckAccessManyRequest {

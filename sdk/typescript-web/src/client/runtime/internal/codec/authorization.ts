@@ -263,6 +263,7 @@ export function toWireCheckAccessResponse(
   return create(wire.CheckAccessResponseSchema, {
     allowed: value.allowed ?? false,
     modelId: value.modelId ?? "",
+    matchedRelations: value.matchedRelations ?? [],
   });
 }
 
@@ -272,6 +273,7 @@ export function fromWireCheckAccessResponse(
   return {
     allowed: value.allowed,
     modelId: value.modelId,
+    matchedRelations: value.matchedRelations,
   };
 }
 

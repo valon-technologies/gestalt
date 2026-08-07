@@ -1421,6 +1421,8 @@ pub struct CheckAccessResponse {
     pub allowed: bool,
     #[prost(string, tag = "2")]
     pub model_id: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "3")]
+    pub matched_relations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CheckAccessManyRequest {

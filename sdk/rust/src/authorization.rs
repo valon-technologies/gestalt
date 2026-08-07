@@ -158,6 +158,8 @@ pub struct CheckAccessResponse {
     pub allowed: bool,
     /// The `model_id` field.
     pub model_id: String,
+    /// The `matched_relations` field.
+    pub matched_relations: Vec<String>,
 }
 
 /// Native message type for `gestalt.provider.v1.DeleteRelationshipRequest`.

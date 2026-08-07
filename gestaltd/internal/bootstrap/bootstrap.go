@@ -1308,6 +1308,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		return nil, err
 	}
 	kinds := ProviderAuthorizationKinds(cfg)
+	authorizationPolicies := ProviderAuthorizationPolicies(cfg)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
@@ -1315,6 +1316,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		invocation.WithConnectionInstancePreferences(prepared.Services.ConnectionInstancePreferences),
 		invocation.WithAuthorizationProvider(authorizationProvider),
 		invocation.WithProviderKinds(kinds),
+		invocation.WithAuthorizationPolicies(authorizationPolicies),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
@@ -2480,4 +2482,17 @@ func ProviderAuthorizationKinds(cfg *config.Config) map[string]invocation.Provid
 		kinds[name] = invocation.ProviderKindAgent
 	}
 	return kinds
+}
+
+func ProviderAuthorizationPolicies(cfg *config.Config) map[string]string {
+	policies := map[string]string{}
+	if cfg == nil {
+		return policies
+	}
+	for name, app := range cfg.Apps {
+		if policy := strings.TrimSpace(app.AuthorizationPolicy); policy != "" {
+			policies[name] = policy
+		}
+	}
+	return policies
 }

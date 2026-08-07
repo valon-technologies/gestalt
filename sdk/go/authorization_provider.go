@@ -34,8 +34,9 @@ type CheckAccessRequest struct {
 
 // CheckAccessResponse is the native message type for gestalt.provider.v1.CheckAccessResponse.
 type CheckAccessResponse struct {
-	Allowed bool
-	ModelId string
+	Allowed          bool
+	ModelId          string
+	MatchedRelations []string
 }
 
 // CheckAccessManyRequest is the native message type for gestalt.provider.v1.CheckAccessManyRequest.

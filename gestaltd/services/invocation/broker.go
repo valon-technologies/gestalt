@@ -134,6 +134,7 @@ type Broker struct {
 	connectionRuntime             ConnectionRuntimeResolver
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]ProviderKind
+	authorizationPolicies         map[string]string
 	logger                        *slog.Logger
 	tracerProvider                trace.TracerProvider
 }
@@ -167,6 +168,10 @@ func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption
 
 func WithProviderKinds(kinds map[string]ProviderKind) BrokerOption {
 	return func(b *Broker) { b.providerKinds = kinds }
+}
+
+func WithAuthorizationPolicies(policies map[string]string) BrokerOption {
+	return func(b *Broker) { b.authorizationPolicies = policies }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -298,10 +303,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
-		if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
-			return fail(err)
-		}
-		ctx, err = b.withAuthorizationRole(ctx, p, providerName, opMeta)
+		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
 		if err != nil {
 			return fail(err)
 		}
@@ -458,10 +460,7 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
-		if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
-			return fail(err)
-		}
-		ctx, err = b.withAuthorizationRole(ctx, p, providerName, opMeta)
+		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
 		if err != nil {
 			return fail(err)
 		}
@@ -644,10 +643,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
-		if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
-			return fail(err)
-		}
-		ctx, err = b.withAuthorizationRole(ctx, p, providerName, opMeta)
+		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
 		if err != nil {
 			return fail(err)
 		}
@@ -999,42 +995,70 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	if b == nil || b.authorization == nil {
 		return nil
 	}
-	subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+	decision, err := b.authorizationDecision(ctx, p, providerName, operationID)
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
 	}
-	allowed, err := CheckSubjectAccess(ctx, b.authorization, accessRequest(b.providerKinds, p, subjectID, providerName, operationID))
-	if err != nil {
-		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
-	}
-	if !allowed {
+	if decision == nil || !decision.GetAllowed() {
 		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
 	return nil
 }
 
-func (b *Broker) withAuthorizationRole(
+func (b *Broker) authorizeOperation(
 	ctx context.Context,
 	p *principal.Principal,
 	providerName string,
 	operation catalog.CatalogOperation,
 ) (context.Context, error) {
-	if b == nil || b.authorization == nil || len(operation.AllowedRoles) == 0 {
+	if b == nil || b.authorization == nil {
 		return ctx, nil
 	}
-	subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+	decision, err := b.authorizationDecision(ctx, p, providerName, operation.ID)
 	if err != nil {
 		return ctx, fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operation.ID, err)
 	}
-	resource := AuthorizationResource(providerName, b.providerKinds)
-	role, err := ResolveSubjectRole(ctx, b.authorization, subjectID, resource, operation.AllowedRoles)
-	if err != nil {
-		return ctx, fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operation.ID, err)
+	if decision == nil || !decision.GetAllowed() {
+		return ctx, fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
 	}
+	if len(operation.AllowedRoles) == 0 {
+		return ctx, nil
+	}
+	role := matchedAllowedRole(decision.GetMatchedRelations(), operation.AllowedRoles)
 	if role == "" {
 		return ctx, fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
 	}
-	return WithAccessContext(ctx, AccessContext{Policy: resource.GetId(), Role: role}), nil
+	return WithAccessContext(ctx, AccessContext{
+		Policy: b.authorizationPolicy(providerName),
+		Role:   role,
+	}), nil
+}
+
+func (b *Broker) authorizationDecision(
+	ctx context.Context,
+	p *principal.Principal,
+	providerName string,
+	operationID string,
+) (*proto.CheckAccessResponse, error) {
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+	if err != nil {
+		return nil, err
+	}
+	resource := AuthorizationResource(providerName, b.providerKinds)
+	resource.Id = b.authorizationPolicy(providerName)
+	return b.authorization.CheckAccess(
+		ctx,
+		accessRequest(p, subjectID, resource, operationID),
+	)
+}
+
+func (b *Broker) authorizationPolicy(providerName string) string {
+	if b != nil {
+		if policy := strings.TrimSpace(b.authorizationPolicies[providerName]); policy != "" {
+			return policy
+		}
+	}
+	return strings.TrimSpace(providerName)
 }
 
 func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
@@ -1057,14 +1081,14 @@ func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal
 	return b.checkAuthorizationAccess(ctx, p, providerName, providerName)
 }
 
-func accessRequest(kinds map[string]ProviderKind, p *principal.Principal, subjectID, providerName, action string) *proto.CheckAccessRequest {
+func accessRequest(p *principal.Principal, subjectID string, resource *proto.Resource, action string) *proto.CheckAccessRequest {
 	p = principal.Canonicalized(p)
 	properties, _ := structpb.NewStruct(map[string]any{
 		"scope":     strings.Join(p.Scopes, " "),
 		"client_id": strings.TrimSpace(p.ClientID),
 		"audience":  append([]string(nil), p.Audience...),
 	})
-	req := SubjectAccessRequest(subjectID, action, AuthorizationResource(providerName, kinds))
+	req := SubjectAccessRequest(subjectID, action, resource)
 	req.Subject.Properties = properties
 	return req
 }

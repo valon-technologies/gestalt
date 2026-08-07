@@ -1077,6 +1077,18 @@ pub(crate) fn encode_wire_check_access_response_json(
             serde_json::Value::String(value.model_id.to_string()),
         );
     }
+    if !value.matched_relations.is_empty() {
+        object.insert(
+            "matchedRelations".into(),
+            serde_json::Value::Array(
+                value
+                    .matched_relations
+                    .iter()
+                    .map(|item| serde_json::Value::String(item.to_string()))
+                    .collect(),
+            ),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -1098,6 +1110,23 @@ pub(crate) fn decode_wire_check_access_response_json(
         model_id: match object.get("modelId") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
+        },
+        matched_relations: match object.get("matchedRelations") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json(
+                        "expected array for matchedRelations",
+                    )
+                })?
+                .iter()
+                .map(|item| {
+                    Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                        crate::public::proto_json::decode_string(item)?,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
         },
         ..Default::default()
     })
