@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
@@ -48,6 +50,10 @@ type ResourceAccessRequest struct {
 	// AllowedRoles, when non-empty, requires the evaluator to report one of
 	// these relations as the relation that authorized the action.
 	AllowedRoles []string
+	// SubjectProperties, when set, is the subject metadata the evaluator sees
+	// (token scope, client ID, audience). Surfaces that carry it on the
+	// single-decision path must carry the same value into a batched decision.
+	SubjectProperties *structpb.Struct
 }
 
 // ResourceAccessDecision is the evaluator's answer. Role is the relation that
@@ -79,30 +85,48 @@ func CheckResourceAccess(
 		return ResourceAccessDecision{}, nil
 	}
 
-	resp, err := authorization.CheckAccess(ctx, SubjectAccessRequest(subjectID, action, req.Resource))
+	resp, err := authorization.CheckAccess(ctx, req.protoRequest())
 	if err != nil {
 		return ResourceAccessDecision{}, err
 	}
 	if resp == nil {
 		return ResourceAccessDecision{}, ErrMalformedAuthorizationDecision
 	}
-	if !resp.GetAllowed() {
-		return ResourceAccessDecision{}, nil
-	}
+	return resourceAccessDecision(resp, req.AllowedRoles), nil
+}
 
+// protoRequest builds the evaluator question for one resource access request.
+// The batched and single-decision paths both go through it, so they can never
+// ask the evaluator two different questions about the same access request.
+func (req ResourceAccessRequest) protoRequest() *proto.CheckAccessRequest {
+	out := SubjectAccessRequest(req.SubjectID, req.Action, req.Resource)
+	if req.SubjectProperties != nil {
+		out.Subject.Properties = req.SubjectProperties
+	}
+	return out
+}
+
+// resourceAccessDecision projects one evaluator response onto the caller's
+// allowed-role restriction. It is the only place a CheckAccessResponse becomes
+// an allow/deny answer, so a decision read out of a batched response and a
+// decision read out of a single response are identical by construction.
+func resourceAccessDecision(resp *proto.CheckAccessResponse, allowedRoles []string) ResourceAccessDecision {
+	if !resp.GetAllowed() {
+		return ResourceAccessDecision{}
+	}
 	roles := boundedRelations(resp.GetMatchedRelations())
-	if len(req.AllowedRoles) == 0 {
+	if len(allowedRoles) == 0 {
 		role := ""
 		if len(roles) > 0 {
 			role = roles[0]
 		}
-		return ResourceAccessDecision{Allowed: true, Role: role}, nil
+		return ResourceAccessDecision{Allowed: true, Role: role}
 	}
-	role := matchedAllowedRole(roles, req.AllowedRoles)
+	role := matchedAllowedRole(roles, allowedRoles)
 	if role == "" {
-		return ResourceAccessDecision{}, nil
+		return ResourceAccessDecision{}
 	}
-	return ResourceAccessDecision{Allowed: true, Role: role}, nil
+	return ResourceAccessDecision{Allowed: true, Role: role}
 }
 
 // boundedRelations normalizes and caps the relations reported by a decision.

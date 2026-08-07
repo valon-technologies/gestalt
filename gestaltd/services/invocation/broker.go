@@ -1088,15 +1088,22 @@ func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal
 }
 
 func accessRequest(p *principal.Principal, subjectID string, resource *proto.Resource, action string) *proto.CheckAccessRequest {
+	req := SubjectAccessRequest(subjectID, action, resource)
+	req.Subject.Properties = subjectAccessProperties(p)
+	return req
+}
+
+// subjectAccessProperties is the subject metadata the evaluator sees for an
+// invocation decision. Batched listing decisions reuse it so a listed operation
+// is judged with the same subject the invocation decision judges.
+func subjectAccessProperties(p *principal.Principal) *structpb.Struct {
 	p = principal.Canonicalized(p)
 	properties, _ := structpb.NewStruct(map[string]any{
 		"scope":     strings.Join(p.Scopes, " "),
 		"client_id": strings.TrimSpace(p.ClientID),
 		"audience":  append([]string(nil), p.Audience...),
 	})
-	req := SubjectAccessRequest(subjectID, action, resource)
-	req.Subject.Properties = properties
-	return req
+	return properties
 }
 
 func (b *Broker) resolveConnectionMode(ctx context.Context, prov core.Provider, providerName, connection string) core.ConnectionMode {

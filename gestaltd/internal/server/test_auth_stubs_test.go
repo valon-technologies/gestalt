@@ -28,6 +28,12 @@ const (
 	// test subjects use realistic user-table UUIDs.
 	testCanonicalAdminUserID  = "9f2c1c2e-1a2b-4c3d-8e4f-5a6b7c8d9e01"
 	testCanonicalViewerUserID = "3b7d5e6f-2c3d-4e5f-9a0b-1c2d3e4f5a02"
+
+	// User lookup is gated on a dedicated employee operator resource and
+	// relation, not on any app's admin grant. These mirror the server's
+	// built-in defaults.
+	testUserLookupResource = "gestaltUserLookup"
+	testUserLookupRole     = "operator"
 )
 
 func grantTestProviders(t *testing.T) *registry.ProviderMap[core.Provider] {

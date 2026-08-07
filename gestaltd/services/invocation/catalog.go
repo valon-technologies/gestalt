@@ -320,6 +320,52 @@ func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*ca
 	return merged, nil
 }
 
-func FilterCatalogForPrincipal(ctx context.Context, cat *catalog.Catalog, provName string, p *principal.Principal, _ any) *catalog.Catalog {
-	return cat
+// FilterCatalogForPrincipal removes the operations the principal may not
+// invoke. It reaches those answers with ONE batched evaluator call for the
+// whole catalog, through the same decision path invocation uses, so a listed
+// operation is an invocable operation and an operation hidden here would have
+// been denied at invoke time anyway.
+//
+// It never silently empties a catalog. When the evaluator cannot be reached the
+// error is returned to the caller so the surface can fail the request: an empty
+// operation list is indistinguishable from "you have no apps", and a listing
+// that quietly drops everything is the exact access-loss failure this filtering
+// exists to avoid. A nil checker means no filtering is configured and the
+// catalog is returned unchanged; invoke-time enforcement is unaffected.
+func FilterCatalogForPrincipal(
+	ctx context.Context,
+	cat *catalog.Catalog,
+	provName string,
+	p *principal.Principal,
+	checker OperationAccessChecker,
+) (*catalog.Catalog, error) {
+	if cat == nil || checker == nil || len(cat.Operations) == 0 {
+		return cat, nil
+	}
+
+	queries := make([]OperationAccessQuery, len(cat.Operations))
+	for i := range cat.Operations {
+		queries[i] = OperationAccessQuery{
+			Provider:     provName,
+			Operation:    cat.Operations[i].ID,
+			AllowedRoles: cat.Operations[i].AllowedRoles,
+		}
+	}
+	results, err := checker.CheckOperationAccessMany(ctx, p, queries)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) != len(queries) {
+		return nil, ErrMalformedAuthorizationDecision
+	}
+
+	filtered := cat.Clone()
+	operations := make([]catalog.CatalogOperation, 0, len(filtered.Operations))
+	for i := range filtered.Operations {
+		if results[i] == nil {
+			operations = append(operations, filtered.Operations[i])
+		}
+	}
+	filtered.Operations = operations
+	return filtered, nil
 }

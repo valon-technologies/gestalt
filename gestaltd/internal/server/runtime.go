@@ -153,6 +153,11 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
 		},
+		UserLookup: UserLookupRouteConfig{
+			AuthorizationPolicy: cfg.Server.UserLookup.AuthorizationPolicy,
+			AllowedRoles:        append([]string(nil), cfg.Server.UserLookup.AllowedRoles...),
+		},
+		OperationAccessChecker:  operationAccessChecker(result.Invoker),
 		AppRegistries:           cfg.AppRegistries,
 		AppRegistryHeartbeatTTL: heartbeatTTL,
 		AppRegistryRolloutMode:  cfg.Server.AppRegistry.RolloutMode,
@@ -497,6 +502,7 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 	return gestaltmcp.NewStatelessHTTPHandler(gestaltmcp.Config{
 		Invoker:           invoker,
 		TokenResolver:     broker,
+		OperationAccess:   broker,
 		AuditSink:         result.AuditSink,
 		Providers:         result.Providers,
 		AllowedProviders:  allowedProviders,

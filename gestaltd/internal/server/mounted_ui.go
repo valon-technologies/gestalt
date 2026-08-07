@@ -451,11 +451,17 @@ func (m mountedUIModelSnapshot) answersAction(action string) bool {
 }
 
 // mountedUIResourceModel reads the mount's resource type from the active model.
+// Within a listing request the read is memoized per resource type, so filtering
+// many apps does not re-read the same model entry once per app.
 func (s *Server) mountedUIResourceModel(ctx context.Context, resourceName string) (mountedUIModelSnapshot, error) {
 	if s == nil || s.authorization == nil {
 		return mountedUIModelSnapshot{}, invocation.ErrAuthorizationUnavailable
 	}
 	typeName := strings.TrimSpace(s.authorizationResource(resourceName).GetType())
+	cache := listingDecisionCacheFromContext(ctx)
+	if cached, ok := cache.model(typeName); ok {
+		return cached, nil
+	}
 	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
 		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: typeName},
 		PageSize: 1,
@@ -477,6 +483,7 @@ func (s *Server) mountedUIResourceModel(ctx context.Context, resourceName string
 		}
 		break
 	}
+	cache.putModel(typeName, snapshot)
 	return snapshot, nil
 }
 

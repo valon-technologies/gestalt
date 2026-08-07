@@ -122,6 +122,8 @@ type Server struct {
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]invocation.ProviderKind
 	authorizationPolicies         map[string]string
+	operationAccess               invocation.OperationAccessChecker
+	userLookupRoute               UserLookupRouteConfig
 	auditSink                     core.AuditSink
 	users                         userStore
 	externalCredentials           core.ExternalCredentialProvider
@@ -206,12 +208,19 @@ func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 }
 
 type Config struct {
-	Auth                    core.IdentityProvider
-	SelectedAuthProvider    string
-	AuthProviders           map[string]core.IdentityProvider
-	Authorization           core.AuthorizationProvider
-	ProviderKinds           map[string]invocation.ProviderKind
-	AuthorizationPolicies   map[string]string
+	Auth                  core.IdentityProvider
+	SelectedAuthProvider  string
+	AuthProviders         map[string]core.IdentityProvider
+	Authorization         core.AuthorizationProvider
+	ProviderKinds         map[string]invocation.ProviderKind
+	AuthorizationPolicies map[string]string
+	// OperationAccessChecker answers batched operation-access questions for
+	// catalog listing. Nil disables catalog filtering; invoke-time
+	// enforcement is unaffected either way.
+	OperationAccessChecker invocation.OperationAccessChecker
+	// UserLookup gates resolving other people's identities on an explicit
+	// employee operator role.
+	UserLookup              UserLookupRouteConfig
 	AuditSink               core.AuditSink
 	Services                *coredata.Services
 	Providers               *registry.ProviderMap[core.Provider]
@@ -327,6 +336,15 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("normalize admin route: %w", err)
 	}
+	defaultUserLookupResource := ""
+	if !noAuth && cfg.Authorization != nil {
+		defaultUserLookupResource = defaultUserLookupAuthorizationResource
+	}
+	userLookupRoute, err := normalizeUserLookupRouteConfig(cfg.UserLookup, defaultUserLookupResource)
+	if err != nil {
+		return nil, fmt.Errorf("normalize user lookup route: %w", err)
+	}
+	operationAccess := cfg.OperationAccessChecker
 	if err := validateAdminRouteRuntime(adminRoute, noAuth, cfg.PublicBaseURL, cfg.ManagementBaseURL, cfg.RouteProfile); err != nil {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
@@ -440,6 +458,8 @@ func New(cfg Config) (*Server, error) {
 		authorization:                 cfg.Authorization,
 		providerKinds:                 cfg.ProviderKinds,
 		authorizationPolicies:         cfg.AuthorizationPolicies,
+		operationAccess:               operationAccess,
+		userLookupRoute:               userLookupRoute,
 		auditSink:                     cfg.AuditSink,
 		users:                         users,
 		externalCredentials:           externalCredentials,

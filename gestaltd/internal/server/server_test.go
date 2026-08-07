@@ -2770,7 +2770,9 @@ type serverTestAuthorizationProvider struct {
 	relationships            []*proto.Relationship
 	listRelationshipRequests []*proto.ListRelationshipsRequest
 	checkAccessRequests      []*proto.CheckAccessRequest
+	checkAccessManyRequests  []*proto.CheckAccessManyRequest
 	checkAccessErr           error
+	checkAccessManyErr       error
 }
 
 // CheckAccess models the provider-owned evaluator: it expands subject sets so a
@@ -2778,6 +2780,13 @@ type serverTestAuthorizationProvider struct {
 // real relationship-graph provider does.
 func (p *serverTestAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.checkAccessRequests = append(p.checkAccessRequests, req)
+	return p.decide(req)
+}
+
+// decide is the evaluator itself, shared by the single and batched RPCs so the
+// stub cannot answer one question two ways. Only the public entry points record
+// calls, which lets tests count batched versus per-item round trips.
+func (p *serverTestAuthorizationProvider) decide(req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	if p.checkAccessErr != nil {
 		return nil, p.checkAccessErr
 	}
@@ -2789,10 +2798,14 @@ func (p *serverTestAuthorizationProvider) CheckAccess(_ context.Context, req *pr
 	return &proto.CheckAccessResponse{Allowed: len(relations) > 0, MatchedRelations: relations}, nil
 }
 
-func (p *serverTestAuthorizationProvider) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+func (p *serverTestAuthorizationProvider) CheckAccessMany(_ context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	p.checkAccessManyRequests = append(p.checkAccessManyRequests, req)
+	if p.checkAccessManyErr != nil {
+		return nil, p.checkAccessManyErr
+	}
 	decisions := make([]*proto.CheckAccessResponse, 0, len(req.GetRequests()))
 	for _, entry := range req.GetRequests() {
-		decision, err := p.CheckAccess(ctx, entry)
+		decision, err := p.decide(entry)
 		if err != nil {
 			return nil, err
 		}

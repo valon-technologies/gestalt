@@ -961,6 +961,9 @@ func (s *Server) resolveRevisionActorLabels(ctx context.Context, requests []*cor
 	if s == nil {
 		return labels
 	}
+	// Resolve the user-lookup gate once for the whole page rather than per
+	// actor: labeling a user actor with their email is user lookup.
+	allowLookup := s.userLookupAllowed(ctx)
 	seen := make(map[string]struct{})
 	for _, request := range requests {
 		if request == nil {
@@ -974,7 +977,7 @@ func (s *Server) resolveRevisionActorLabels(ctx context.Context, requests []*cor
 			continue
 		}
 		seen[actor] = struct{}{}
-		labels[actor] = s.resolveSubjectDisplayLabel(ctx, actor)
+		labels[actor] = s.resolveSubjectDisplayLabelForLookup(ctx, actor, allowLookup)
 	}
 	return labels
 }
@@ -984,8 +987,18 @@ func (s *Server) resolveRevisionActorLabel(ctx context.Context, actor string) st
 }
 
 // resolveSubjectDisplayLabel owns subject presentation labels for admin
-// surfaces (registry revision actors, agent identities, etc.).
+// surfaces (registry revision actors, agent identities, etc.). It resolves the
+// user-lookup gate itself; callers labeling many subjects should resolve the
+// gate once and call resolveSubjectDisplayLabelForLookup instead.
 func (s *Server) resolveSubjectDisplayLabel(ctx context.Context, subjectID string) string {
+	return s.resolveSubjectDisplayLabelForLookup(ctx, subjectID, s.userLookupAllowed(ctx))
+}
+
+// resolveSubjectDisplayLabelForLookup labels a subject, resolving a user
+// subject to their email only when the caller holds the employee operator role
+// that permits user lookup. Without it the subject ID is shown as-is, so an
+// app-scoped administrator cannot turn an admin surface into a directory.
+func (s *Server) resolveSubjectDisplayLabelForLookup(ctx context.Context, subjectID string, allowLookup bool) string {
 	subjectID = strings.TrimSpace(subjectID)
 	if subjectID == "" {
 		return ""
@@ -1002,7 +1015,7 @@ func (s *Server) resolveSubjectDisplayLabel(ctx context.Context, subjectID strin
 		if strings.Contains(id, "@") {
 			return id
 		}
-		if s.users != nil {
+		if allowLookup && s.users != nil {
 			user, err := s.users.GetUser(ctx, id)
 			if err == nil && user != nil {
 				if email := strings.TrimSpace(user.Email); email != "" {

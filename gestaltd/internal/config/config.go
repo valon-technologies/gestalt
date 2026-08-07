@@ -1938,6 +1938,17 @@ type AdminConfig struct {
 	AllowedRoles        []string `yaml:"allowedRoles,omitempty"`
 }
 
+// UserLookupConfig gates resolving other people's identities (turning a subject
+// ID into an email on an admin surface) on an explicit employee operator role.
+// It is deliberately separate from any app's admin policy: app-scoped
+// administration alone must not permit user enumeration. Leaving it unset uses
+// the built-in operator resource and relation whenever authorization is
+// configured.
+type UserLookupConfig struct {
+	AuthorizationPolicy string   `yaml:"authorizationPolicy,omitempty"`
+	AllowedRoles        []string `yaml:"allowedRoles,omitempty"`
+}
+
 type ServerConfig struct {
 	Public        ListenerConfig           `yaml:"public"`
 	Management    ManagementListenerConfig `yaml:"management"`
@@ -1952,6 +1963,7 @@ type ServerConfig struct {
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
+	UserLookup    UserLookupConfig         `yaml:"userLookup,omitempty"`
 	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
 	// AuthorizationStateApply gates whether server startup is allowed to
@@ -2481,6 +2493,9 @@ func normalizeConfigShapeForPartialLoad(cfg *Config) error {
 		return err
 	}
 	if err := normalizeAdminConfig(cfg); err != nil {
+		return err
+	}
+	if err := normalizeUserLookupConfig(cfg); err != nil {
 		return err
 	}
 	return nil
@@ -3752,6 +3767,26 @@ func normalizeAdminConfig(cfg *Config) error {
 	}
 	admin.AllowedRoles = roles
 	cfg.Server.Admin = admin
+	return nil
+}
+
+func normalizeUserLookupConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	lookup := cfg.Server.UserLookup
+	lookup.AuthorizationPolicy = strings.TrimSpace(lookup.AuthorizationPolicy)
+	if len(lookup.AllowedRoles) == 0 {
+		lookup.AllowedRoles = nil
+		cfg.Server.UserLookup = lookup
+		return nil
+	}
+	roles, err := packageio.NormalizeUIAllowedRoles("server.userLookup.allowedRoles", lookup.AllowedRoles)
+	if err != nil {
+		return fmt.Errorf("normalize user lookup config: %w", err)
+	}
+	lookup.AllowedRoles = roles
+	cfg.Server.UserLookup = lookup
 	return nil
 }
 

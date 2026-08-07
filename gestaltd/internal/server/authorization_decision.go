@@ -26,6 +26,11 @@ func (s *Server) authorizationResource(appKey string) *proto.Resource {
 // checkResourceAccess routes an HTTP-surface authorization question through the
 // provider-owned evaluator. Server code never traverses relationships to reach
 // a decision, so group and subject-set derived access is honored everywhere.
+//
+// When the request carries a listing decision cache, an answer a batched call
+// already produced for this exact question is reused. The cached answer comes
+// from the same projection this function applies to a single response, so a
+// batched listing and a single decision cannot disagree.
 func (s *Server) checkResourceAccess(
 	ctx context.Context,
 	req invocation.ResourceAccessRequest,
@@ -33,5 +38,15 @@ func (s *Server) checkResourceAccess(
 	if s == nil || s.authorization == nil {
 		return invocation.ResourceAccessDecision{}, invocation.ErrAuthorizationUnavailable
 	}
-	return invocation.CheckResourceAccess(ctx, s.authorization, req)
+	cache := listingDecisionCacheFromContext(ctx)
+	key := newListingDecisionKey(req)
+	if decision, ok := cache.decision(key); ok {
+		return decision, nil
+	}
+	decision, err := invocation.CheckResourceAccess(ctx, s.authorization, req)
+	if err != nil {
+		return invocation.ResourceAccessDecision{}, err
+	}
+	cache.putDecision(key, decision)
+	return decision, nil
 }
