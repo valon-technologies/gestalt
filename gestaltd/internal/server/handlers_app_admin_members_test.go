@@ -82,8 +82,8 @@ func TestAppAdminMembersList(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(rows) != 3 {
-		t.Fatalf("members = %#v, want 3 rows for g-issues only", rows)
+	if len(rows) != 2 {
+		t.Fatalf("members = %#v, want 2 human rows for g-issues (service accounts excluded)", rows)
 	}
 
 	bySubject := map[string]struct {
@@ -107,8 +107,8 @@ func TestAppAdminMembersList(t *testing.T) {
 	if got := bySubject[viewerID]; got.Role != "viewer" || got.Source != "static" || got.Mutable {
 		t.Fatalf("viewer row = %#v", got)
 	}
-	if got := bySubject["service_account:slack-bot"]; got.Role != "viewer" || got.Source != "dynamic" || !got.Mutable {
-		t.Fatalf("service account row = %#v", got)
+	if _, ok := bySubject["service_account:slack-bot"]; ok {
+		t.Fatalf("service account must not appear in members: %#v", rows)
 	}
 }
 

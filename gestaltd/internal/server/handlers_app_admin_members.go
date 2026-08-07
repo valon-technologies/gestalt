@@ -47,7 +47,20 @@ func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, rows)
+	// Members is the human/group access roster. Service-account grants are
+	// owned by GET /apps/{app}/admin/identities.
+	writeJSON(w, http.StatusOK, projectAppAdminHumanMemberRows(rows))
+}
+
+func projectAppAdminHumanMemberRows(rows []appAdminMemberRow) []appAdminMemberRow {
+	out := make([]appAdminMemberRow, 0, len(rows))
+	for _, row := range rows {
+		if isAppAdminServiceAccountRow(row) {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 func (s *Server) listAppAuthorizationMemberRows(ctx context.Context, appName string) ([]appAdminMemberRow, error) {
