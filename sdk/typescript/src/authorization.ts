@@ -111,6 +111,10 @@ export interface CheckAccessRequest {
 export interface CheckAccessResponse {
   allowed: boolean;
   modelId: string;
+  /**
+   * Relations on the requested resource that authorized the requested action.
+   * Providers populate this from the same model snapshot as allowed.
+   */
   matchedRelations: string[];
 }
 

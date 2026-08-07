@@ -158,6 +158,9 @@ pub struct CheckAccessResponse {
     pub allowed: bool,
     /// The `model_id` field.
     pub model_id: String,
+    /// Relations on the requested resource that authorized the requested action.
+    /// Providers populate this from the same model snapshot as allowed.
+    ///
     /// The `matched_relations` field.
     pub matched_relations: Vec<String>,
 }

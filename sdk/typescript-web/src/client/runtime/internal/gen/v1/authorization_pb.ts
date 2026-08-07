@@ -135,6 +135,9 @@ export type CheckAccessResponse = Message<"gestalt.provider.v1.CheckAccessRespon
   modelId: string;
 
   /**
+   * Relations on the requested resource that authorized the requested action.
+   * Providers populate this from the same model snapshot as allowed.
+   *
    * @generated from field: repeated string matched_relations = 3;
    */
   matchedRelations: string[];

@@ -1044,8 +1044,7 @@ func (b *Broker) authorizationDecision(
 	if err != nil {
 		return nil, err
 	}
-	resource := AuthorizationResource(providerName, b.providerKinds)
-	resource.Id = b.authorizationPolicy(providerName)
+	resource := AuthorizationResource(b.authorizationPolicy(providerName), b.providerKinds)
 	return b.authorization.CheckAccess(
 		ctx,
 		accessRequest(p, subjectID, resource, operationID),

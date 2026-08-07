@@ -1421,6 +1421,8 @@ pub struct CheckAccessResponse {
     pub allowed: bool,
     #[prost(string, tag = "2")]
     pub model_id: ::prost::alloc::string::String,
+    /// Relations on the requested resource that authorized the requested action.
+    /// Providers populate this from the same model snapshot as allowed.
     #[prost(string, repeated, tag = "3")]
     pub matched_relations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }

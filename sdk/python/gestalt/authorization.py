@@ -116,6 +116,8 @@ class CheckAccessRequest:
 class CheckAccessResponse:
     allowed: bool = False
     model_id: str = ""
+    #: Relations on the requested resource that authorized the requested action.
+    #: Providers populate this from the same model snapshot as allowed.
     matched_relations: list[str] = field(default_factory=list)
 
 

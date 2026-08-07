@@ -360,10 +360,12 @@ func (x *CheckAccessRequest) GetResource() *Resource {
 }
 
 type CheckAccessResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Allowed          bool                   `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
-	ModelId          string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	MatchedRelations []string               `protobuf:"bytes,3,rep,name=matched_relations,json=matchedRelations,proto3" json:"matched_relations,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Allowed bool                   `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	ModelId string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	// Relations on the requested resource that authorized the requested action.
+	// Providers populate this from the same model snapshot as allowed.
+	MatchedRelations []string `protobuf:"bytes,3,rep,name=matched_relations,json=matchedRelations,proto3" json:"matched_relations,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }

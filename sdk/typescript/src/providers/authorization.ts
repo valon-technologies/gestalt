@@ -99,6 +99,7 @@ export interface CheckAccessRequest {
 export interface CheckAccessResponse {
   allowed?: boolean | undefined;
   modelId?: string | undefined;
+  matchedRelations?: readonly string[] | undefined;
 }
 
 export interface CheckAccessManyRequest {
@@ -474,6 +475,7 @@ function checkAccessResponseToProto(value: CheckAccessResponse | undefined) {
   return create(CheckAccessResponseSchema, {
     allowed: value.allowed ?? false,
     modelId: value.modelId ?? "",
+    matchedRelations: [...(value.matchedRelations ?? [])],
   });
 }
 

@@ -35,6 +35,8 @@ message CheckAccessRequest {
 message CheckAccessResponse {
   bool allowed = 1;
   string model_id = 2;
+  // Relations on the requested resource that authorized the requested action.
+  // Providers populate this from the same model snapshot as allowed.
   repeated string matched_relations = 3;
 }
 

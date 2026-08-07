@@ -104,8 +104,10 @@ type CheckAccessRequest struct {
 
 // CheckAccessResponse is the native message type for gestalt.provider.v1.CheckAccessResponse.
 type CheckAccessResponse struct {
-	Allowed          bool
-	ModelId          string
+	Allowed bool
+	ModelId string
+	// Relations on the requested resource that authorized the requested action.
+	// Providers populate this from the same model snapshot as allowed.
 	MatchedRelations []string
 }
 

@@ -381,6 +381,9 @@ func TestBrokerInvokePropagatesAllowedRoleToProvider(t *testing.T) {
 	if got := authz.lastCheckAccess.GetResource().GetId(); got != "traffic-policy" {
 		t.Fatalf("authorization resource id = %q, want traffic-policy", got)
 	}
+	if got := authz.lastCheckAccess.GetResource().GetType(); got != "traffic-policy" {
+		t.Fatalf("authorization resource type = %q, want traffic-policy", got)
+	}
 }
 
 func TestBrokerAuthorizeOperationDeniesWithoutMatchedAllowedRole(t *testing.T) {
