@@ -192,7 +192,19 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 		if err := requireUserCaller(w, p); err != nil {
 			return
 		}
-		subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
+		subjectID, err := principal.ResolveAuthorizationSubjectID(r.Context(), s.credentialUserResolver(), p)
+		switch {
+		case errors.Is(err, principal.ErrCredentialSubjectRequired):
+			writeError(w, http.StatusUnauthorized, "missing authorization")
+			return
+		case errors.Is(err, principal.ErrOpaqueCredentialSubject):
+			writeError(w, http.StatusForbidden, "app access denied")
+			return
+		case err != nil:
+			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+			return
+		}
+		subjectID = strings.TrimSpace(subjectID)
 		if subjectID == "" {
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return

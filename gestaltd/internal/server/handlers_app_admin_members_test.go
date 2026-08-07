@@ -15,8 +15,8 @@ import (
 func TestAppAdminMembersList(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
-	viewerID := principal.UserSubjectID("bob")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	viewerID := principal.UserSubjectID(testCanonicalViewerUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
@@ -115,8 +115,8 @@ func TestAppAdminMembersList(t *testing.T) {
 func TestAppAdminMembersListShadowsRuntimeDuplicate(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
-	viewerID := principal.UserSubjectID("bob")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	viewerID := principal.UserSubjectID(testCanonicalViewerUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
@@ -209,7 +209,7 @@ func TestAppAdminMembersListShadowsRuntimeDuplicate(t *testing.T) {
 func TestAppAdminMembersListSubjectSet(t *testing.T) {
 	t.Parallel()
 
-	adminID := principal.UserSubjectID("alice")
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
@@ -274,7 +274,7 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 func TestAppAdminMembersListForbiddenWithoutAdmin(t *testing.T) {
 	t.Parallel()
 
-	viewerID := principal.UserSubjectID("bob")
+	viewerID := principal.UserSubjectID(testCanonicalViewerUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(viewerID, "viewer", "app", "g-issues"),

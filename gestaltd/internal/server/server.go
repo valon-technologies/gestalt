@@ -96,6 +96,23 @@ type AppRuntimeState interface {
 	WithRunningVersion(app string, fn func(version string) error) error
 }
 
+// userStore is the persisted user lookup the server needs to canonicalize
+// human identities before authorization.
+type userStore interface {
+	principal.CredentialUserResolver
+	GetUser(ctx context.Context, id string) (*core.User, error)
+}
+
+// credentialUserResolver returns the user store used to canonicalize human
+// subjects, or nil when no user store is configured so that resolution fails
+// closed instead of panicking on a nil store.
+func (s *Server) credentialUserResolver() principal.CredentialUserResolver {
+	if s == nil || s.users == nil {
+		return nil
+	}
+	return s.users
+}
+
 type Server struct {
 	router                        chi.Router
 	handler                       http.Handler
@@ -105,7 +122,7 @@ type Server struct {
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]invocation.ProviderKind
 	auditSink                     core.AuditSink
-	users                         *coredata.UserService
+	users                         userStore
 	externalCredentials           core.ExternalCredentialProvider
 	connectionInstancePreferences *coredata.ConnectionInstancePreferenceService
 	managedSubjects               *coredata.ManagedSubjectService
@@ -336,7 +353,10 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Services == nil {
 		return nil, fmt.Errorf("services are required")
 	}
-	users := cfg.Services.Users
+	var users userStore
+	if cfg.Services.Users != nil {
+		users = cfg.Services.Users
+	}
 	externalCredentials := cfg.Services.ExternalCredentials
 	connectionInstancePreferences := cfg.Services.ConnectionInstancePreferences
 	if core.ExternalCredentialProviderMissing(externalCredentials) {
