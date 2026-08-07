@@ -13,8 +13,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-// appAdminMemberRow is the read model for GET /apps/{app}/admin/members.
-// Field names match the app-default Members UI contract.
+// appAdminMemberRow is the shared authorization grant roster row used before
+// Members / Identities projections. Field names match the Members UI contract.
 type appAdminMemberRow struct {
 	Email         string `json:"email,omitempty"`
 	Role          string `json:"role"`
@@ -50,7 +50,7 @@ func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	// Members is the human/group access roster. Service-account grants are
 	// owned by GET /apps/{app}/admin/identities.
-	writeJSON(w, http.StatusOK, projectAppAdminHumanMemberRows(rows))
+	writeJSON(w, http.StatusOK, s.projectAppAdminHumanMemberRows(r.Context(), rows))
 }
 
 // isAppAdminServiceAccountRow partitions the shared app authorization grant
@@ -64,11 +64,17 @@ func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
 	return ok && kind == coredata.ManagedSubjectKindServiceAccount
 }
 
-func projectAppAdminHumanMemberRows(rows []appAdminMemberRow) []appAdminMemberRow {
+// projectAppAdminHumanMemberRows is the human/group projection of the shared
+// grant roster. Email enrichment belongs here — not in the shared mapper —
+// so identities listing does not resolve user emails it will discard.
+func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow) []appAdminMemberRow {
 	out := make([]appAdminMemberRow, 0, len(rows))
 	for _, row := range rows {
 		if isAppAdminServiceAccountRow(row) {
 			continue
+		}
+		if row.SelectorKind == "subject_id" && row.SubjectID != "" {
+			row.Email = s.resolveAppAdminMemberEmail(ctx, row.SubjectID)
 		}
 		out = append(out, row)
 	}
@@ -129,7 +135,7 @@ func projectAppAdminMemberRoster(rows []appAdminMemberRow) []appAdminMemberRow {
 	return out
 }
 
-func (s *Server) appAdminMemberRowFromRelationship(ctx context.Context, relationship *proto.Relationship) (appAdminMemberRow, bool) {
+func (s *Server) appAdminMemberRowFromRelationship(_ context.Context, relationship *proto.Relationship) (appAdminMemberRow, bool) {
 	if relationship == nil || relationship.GetTuple() == nil {
 		return appAdminMemberRow{}, false
 	}
@@ -156,7 +162,6 @@ func (s *Server) appAdminMemberRowFromRelationship(ctx context.Context, relation
 		row.SubjectID = subjectID
 		row.SelectorKind = "subject_id"
 		row.SelectorValue = subjectID
-		row.Email = s.resolveAppAdminMemberEmail(ctx, subjectID)
 		return row, true
 	case *proto.RelationshipTarget_SubjectSet:
 		resourceType := strings.TrimSpace(target.SubjectSet.GetResource().GetType())

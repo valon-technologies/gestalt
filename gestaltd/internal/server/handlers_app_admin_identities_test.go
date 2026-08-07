@@ -1,12 +1,14 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -345,6 +347,67 @@ func TestAppAdminIdentitiesFailsClosed(t *testing.T) {
 	if response.StatusCode != http.StatusServiceUnavailable && response.StatusCode != http.StatusForbidden {
 		body, _ := io.ReadAll(response.Body)
 		t.Fatalf("GET status = %d, want 503 or 403: %s", response.StatusCode, body)
+	}
+}
+
+func TestAppAdminIdentitiesListUsesManagedSubjectDisplayName(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID("alice")
+	const saID = "service_account:slack-bot"
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
+			{
+				Tuple: &proto.RelationshipTuple{
+					Target: &proto.RelationshipTarget{
+						Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
+							Type: "subject",
+							Id:   saID,
+						}},
+					},
+					Relation: "viewer",
+					Resource: &proto.Resource{Type: "app", Id: "g-issues"},
+				},
+				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
+			},
+		},
+	}
+	authz.relationships[0].SourceLayer = proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		if _, err := cfg.Services.ManagedSubjects.CreateManagedSubject(context.Background(), &core.ManagedSubject{
+			SubjectID:   saID,
+			DisplayName: "Slack Bot",
+		}); err != nil {
+			t.Fatalf("CreateManagedSubject: %v", err)
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/identities", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET identities: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET status = %d: %s", response.StatusCode, body)
+	}
+
+	var rows []struct {
+		SubjectID   string `json:"subjectId"`
+		DisplayName string `json:"displayName"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(rows) != 1 || rows[0].SubjectID != saID || rows[0].DisplayName != "Slack Bot" {
+		t.Fatalf("identities = %#v, want displayName Slack Bot", rows)
 	}
 }
 

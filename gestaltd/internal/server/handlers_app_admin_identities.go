@@ -46,17 +46,22 @@ func (s *Server) listAppAdminIdentities(w http.ResponseWriter, r *http.Request) 
 }
 
 // projectAppAdminIdentityRows is the service-account projection of the shared
-// app authorization grant roster. Display labels use the same subject resolver
-// as registry revision actors (ManagedSubject when present).
+// app authorization grant roster. Display labels use the shared subject
+// presentation helper (ManagedSubject when present).
 func (s *Server) projectAppAdminIdentityRows(ctx context.Context, rows []appAdminMemberRow) []appAdminIdentityRow {
+	labels := make(map[string]string)
 	out := make([]appAdminIdentityRow, 0)
 	for _, row := range rows {
 		if !isAppAdminServiceAccountRow(row) {
 			continue
 		}
-		displayName := strings.TrimSpace(s.resolveRevisionActorLabel(ctx, row.SubjectID))
-		if displayName == "" {
-			displayName = row.SubjectID
+		displayName, ok := labels[row.SubjectID]
+		if !ok {
+			displayName = strings.TrimSpace(s.resolveSubjectDisplayLabel(ctx, row.SubjectID))
+			if displayName == "" {
+				displayName = row.SubjectID
+			}
+			labels[row.SubjectID] = displayName
 		}
 		out = append(out, appAdminIdentityRow{
 			SubjectID:   row.SubjectID,
