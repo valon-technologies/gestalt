@@ -5,9 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"maps"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,32 +20,6 @@ import (
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
-
-// authorizationStateApplyEnv gates whether server startup is allowed to
-// overwrite active authorization provider state. Set to a truthy value
-// (see strconv.ParseBool) for the one deployment revision meant to own
-// authorization state; every other revision, including no-traffic
-// candidates, must start with this unset so it only plans/logs.
-const authorizationStateApplyEnv = "GESTALTD_AUTHORIZATION_STATE_APPLY"
-
-// resolveAuthorizationStateApply reports whether bootstrapAuthorizationProviderState
-// is allowed to call SetAuthorizationState. cfg.Server.AuthorizationStateApply
-// takes precedence over the environment variable; both default to false
-// (plan-only) when unset.
-func resolveAuthorizationStateApply(cfg *config.Config) bool {
-	if cfg != nil && cfg.Server.AuthorizationStateApply != nil {
-		return *cfg.Server.AuthorizationStateApply
-	}
-	raw := strings.TrimSpace(os.Getenv(authorizationStateApplyEnv))
-	if raw == "" {
-		return false
-	}
-	parsed, err := strconv.ParseBool(raw)
-	if err != nil {
-		return false
-	}
-	return parsed
-}
 
 func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config, providers map[string]core.AuthorizationProvider) error {
 	if len(providers) == 0 {
@@ -88,30 +60,12 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
 	staticRelationships = append(staticRelationships, runtimeRelationships...)
-	digest := model.GetId()
-	apply := resolveAuthorizationStateApply(cfg)
-	if !apply {
-		slog.InfoContext(ctx, "authorization state plan (no-op): startup will not mutate authorization provider state",
-			"provider", name,
-			"model_digest", digest,
-			"resource_type_count", len(model.GetResourceTypes()),
-			"relationship_count", len(staticRelationships),
-			"enable_env", authorizationStateApplyEnv,
-		)
-		return nil
-	}
 	if _, err := provider.SetAuthorizationState(ctx, &proto.SetAuthorizationStateRequest{
 		Model:         model,
 		Relationships: staticRelationships,
 	}); err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: set authorization state: %w", name, err)
 	}
-	slog.InfoContext(ctx, "authorization state applied: startup wrote authorization provider state",
-		"provider", name,
-		"model_digest", digest,
-		"resource_type_count", len(model.GetResourceTypes()),
-		"relationship_count", len(staticRelationships),
-	)
 	return nil
 }
 

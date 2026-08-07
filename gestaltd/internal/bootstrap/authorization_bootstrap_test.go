@@ -60,10 +60,7 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 	}
 	before := time.Now().Unix()
 	cfg := &config.Config{
-		Server: config.ServerConfig{
-			Providers:               config.ServerProvidersConfig{Authorization: "authz"},
-			AuthorizationStateApply: boolPtr(true),
-		},
+		Server: config.ServerConfig{Providers: config.ServerProvidersConfig{Authorization: "authz"}},
 		Providers: config.ProvidersConfig{
 			Authorization: map[string]*config.ProviderEntry{"authz": {Default: true}},
 		},
@@ -300,10 +297,7 @@ func TestBootstrapAuthorizationProviderStateAuthorizesProviderGatewayRequests(t 
 	t.Parallel()
 
 	cfg := &config.Config{
-		Server: config.ServerConfig{
-			Providers:               config.ServerProvidersConfig{Authorization: "authz"},
-			AuthorizationStateApply: boolPtr(true),
-		},
+		Server: config.ServerConfig{Providers: config.ServerProvidersConfig{Authorization: "authz"}},
 		Providers: config.ProvidersConfig{
 			Authorization: map[string]*config.ProviderEntry{"authz": {Default: true}},
 		},
@@ -665,169 +659,3 @@ func (telemetrynoopProvider) PrometheusHandler() http.Handler      { return nil 
 func (telemetrynoopProvider) MeterProvider() metric.MeterProvider  { return nil }
 func (telemetrynoopProvider) TracerProvider() trace.TracerProvider { return nil }
 func (telemetrynoopProvider) Shutdown(context.Context) error       { return nil }
-
-func boolPtr(v bool) *bool { return &v }
-
-func authorizationBootstrapTestConfig(applyEnabled *bool) *config.Config {
-	return &config.Config{
-		Server: config.ServerConfig{
-			Providers:               config.ServerProvidersConfig{Authorization: "authz"},
-			AuthorizationStateApply: applyEnabled,
-		},
-		Providers: config.ProvidersConfig{
-			Authorization: map[string]*config.ProviderEntry{"authz": {Default: true}},
-		},
-		Authorization: config.AuthorizationConfig{
-			Models: map[string]config.AuthorizationModelDef{
-				"default": {
-					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
-						"github": {
-							Relations: map[string]config.AuthorizationRelationDef{
-								"viewer": {SubjectTypes: []string{"subject"}},
-							},
-							Actions: map[string]config.AuthorizationActionDef{
-								"repos/list-for-authenticated-user": {Relations: []string{"viewer"}},
-							},
-						},
-					},
-				},
-			},
-			Relationships: []config.AuthorizationRelationshipDef{{
-				Subject:  config.AuthorizationSubjectDef{Type: "subject", ID: "user:alice"},
-				Relation: "viewer",
-				Resource: config.AuthorizationResourceDef{Type: "github", ID: "repo-1"},
-			}},
-		},
-	}
-}
-
-func TestBootstrapAuthorizationProviderStateDefaultsToPlanOnly(t *testing.T) {
-	t.Parallel()
-
-	provider := &recordingAuthorizationProvider{}
-	cfg := authorizationBootstrapTestConfig(nil)
-
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
-	}
-	if provider.setAuthorizationState != nil {
-		t.Fatal("SetAuthorizationState should not be called when authorization state apply is not enabled")
-	}
-}
-
-func TestBootstrapAuthorizationProviderStateExplicitFalseSkipsApply(t *testing.T) {
-	t.Parallel()
-
-	provider := &recordingAuthorizationProvider{}
-	cfg := authorizationBootstrapTestConfig(boolPtr(false))
-
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
-	}
-	if provider.setAuthorizationState != nil {
-		t.Fatal("SetAuthorizationState should not be called when authorization state apply is explicitly disabled")
-	}
-}
-
-func TestBootstrapAuthorizationProviderStateEnvEnablesApply(t *testing.T) {
-	t.Setenv(authorizationStateApplyEnv, "true")
-
-	provider := &recordingAuthorizationProvider{}
-	cfg := authorizationBootstrapTestConfig(nil)
-
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
-	}
-	if provider.setAuthorizationState == nil {
-		t.Fatal("SetAuthorizationState should be called when GESTALTD_AUTHORIZATION_STATE_APPLY=true")
-	}
-}
-
-func TestBootstrapAuthorizationProviderStateConfigOverridesEnv(t *testing.T) {
-	t.Setenv(authorizationStateApplyEnv, "true")
-
-	provider := &recordingAuthorizationProvider{}
-	cfg := authorizationBootstrapTestConfig(boolPtr(false))
-
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
-	}
-	if provider.setAuthorizationState != nil {
-		t.Fatal("explicit config false should override a truthy env var")
-	}
-}
-
-func TestBootstrapAuthorizationProviderStatePlanAndApplyProduceSameDigest(t *testing.T) {
-	t.Parallel()
-
-	planProvider := &recordingAuthorizationProvider{}
-	planCfg := authorizationBootstrapTestConfig(boolPtr(false))
-	if err := bootstrapAuthorizationProviderState(context.Background(), planCfg, map[string]core.AuthorizationProvider{"authz": planProvider}); err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState (plan): %v", err)
-	}
-	planModel, err := staticAuthorizationModel(planCfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	if err := stampAuthorizationModel(planModel, time.Now()); err != nil {
-		t.Fatalf("stampAuthorizationModel: %v", err)
-	}
-	planDigest := planModel.GetId()
-
-	applyProvider := &recordingAuthorizationProvider{}
-	applyCfg := authorizationBootstrapTestConfig(boolPtr(true))
-	if err := bootstrapAuthorizationProviderState(context.Background(), applyCfg, map[string]core.AuthorizationProvider{"authz": applyProvider}); err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState (apply): %v", err)
-	}
-	if applyProvider.setAuthorizationState == nil {
-		t.Fatal("SetAuthorizationState should be called when apply is enabled")
-	}
-	applyDigest := applyProvider.setAuthorizationState.GetModel().GetId()
-
-	if planDigest == "" || applyDigest == "" {
-		t.Fatalf("digests should be non-empty: plan=%q apply=%q", planDigest, applyDigest)
-	}
-	if planDigest != applyDigest {
-		t.Fatalf("plan digest %q should match apply digest %q for identical static models", planDigest, applyDigest)
-	}
-}
-
-func TestAuthorizationModelContentHashDeterministicAndSensitiveToChanges(t *testing.T) {
-	t.Parallel()
-
-	cfg := authorizationBootstrapTestConfig(nil)
-	modelA, err := staticAuthorizationModel(cfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	modelB, err := staticAuthorizationModel(cfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	digestA, err := authorizationModelContentHash(modelA)
-	if err != nil {
-		t.Fatalf("authorizationModelContentHash: %v", err)
-	}
-	digestB, err := authorizationModelContentHash(modelB)
-	if err != nil {
-		t.Fatalf("authorizationModelContentHash: %v", err)
-	}
-	if digestA != digestB {
-		t.Fatalf("digest should be deterministic for identical models: %q != %q", digestA, digestB)
-	}
-
-	cfg.Authorization.Models["default"].ResourceTypes["docs"] = config.AuthorizationResourceTypeDef{
-		Relations: map[string]config.AuthorizationRelationDef{"reader": {SubjectTypes: []string{"subject"}}},
-	}
-	modelC, err := staticAuthorizationModel(cfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	digestC, err := authorizationModelContentHash(modelC)
-	if err != nil {
-		t.Fatalf("authorizationModelContentHash: %v", err)
-	}
-	if digestC == digestA {
-		t.Fatal("digest should change when the static model gains a resource type")
-	}
-}

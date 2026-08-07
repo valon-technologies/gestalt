@@ -1954,13 +1954,6 @@ type ServerConfig struct {
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
-	// AuthorizationStateApply gates whether server startup is allowed to
-	// overwrite active authorization provider state. When unset, the
-	// GESTALTD_AUTHORIZATION_STATE_APPLY environment variable is consulted;
-	// when neither is set/true, startup only computes and logs the
-	// authorization state it would have applied. This keeps no-traffic
-	// candidates from mutating shared authorization state by default.
-	AuthorizationStateApply *bool `yaml:"authorizationStateApply,omitempty"`
 	// Dev is set programmatically when gestaltd is launched via the dev
 	// subcommand. It gates CLI config resolution and reverse-tunnel startup.
 	Dev bool `yaml:"-"`

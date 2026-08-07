@@ -327,8 +327,6 @@ func agentProviderTurnIdempotencyScope(req *proto.CreateAgentProviderTurnRequest
 	return strings.Join([]string{"turn", subjectID, strings.TrimSpace(req.GetSessionId()), idempotencyKey}, "\x00")
 }
 
-func authorizationStateApplyPtr(v bool) *bool { return &v }
-
 func turnStatusIsTerminalForTest(status coreagent.ExecutionStatus) bool {
 	switch status {
 	case coreagent.ExecutionStatusSucceeded, coreagent.ExecutionStatusFailed, coreagent.ExecutionStatusCanceled:
@@ -1890,7 +1888,6 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 
 	cfg := validConfig()
 	cfg.Server.Providers.Authorization = "authz"
-	cfg.Server.AuthorizationStateApply = authorizationStateApplyPtr(true)
 	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
 		"authz": {Config: yaml.Node{Kind: yaml.MappingNode}},
 	}
