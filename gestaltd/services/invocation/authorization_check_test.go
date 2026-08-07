@@ -93,6 +93,23 @@ func TestCheckSubjectAccessErrorPassesThrough(t *testing.T) {
 	}
 }
 
+func TestMatchedAllowedRoleUsesAllowedRoleOrder(t *testing.T) {
+	t.Parallel()
+
+	role := matchedAllowedRole([]string{"viewer", "admin"}, []string{"admin", "viewer"})
+	if role != "admin" {
+		t.Fatalf("matchedAllowedRole = %q, want admin", role)
+	}
+}
+
+func TestMatchedAllowedRoleRejectsNonMatchingRole(t *testing.T) {
+	t.Parallel()
+
+	if role := matchedAllowedRole([]string{"viewer"}, []string{"admin"}); role != "" {
+		t.Fatalf("matchedAllowedRole = %q, want empty", role)
+	}
+}
+
 type authorizationCheckTestProvider struct {
 	allowed  bool
 	response *proto.CheckAccessResponse

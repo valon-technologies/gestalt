@@ -106,6 +106,9 @@ type CheckAccessRequest struct {
 type CheckAccessResponse struct {
 	Allowed bool
 	ModelId string
+	// Relations on the requested resource that authorized the requested action.
+	// Providers populate this from the same model snapshot as allowed.
+	MatchedRelations []string
 }
 
 // DeleteRelationshipRequest is the native message type for gestalt.provider.v1.DeleteRelationshipRequest.

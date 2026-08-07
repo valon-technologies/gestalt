@@ -328,6 +328,96 @@ func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
 	}
 }
 
+func TestBrokerInvokePropagatesAllowedRoleToProvider(t *testing.T) {
+	t.Parallel()
+
+	var gotAccess AccessContext
+	provider := &coretesting.StubIntegration{
+		N:        "traffic-cop",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "traffic-cop",
+			Operations: []catalog.CatalogOperation{{
+				ID:           "graphql.execute",
+				Method:       "POST",
+				AllowedRoles: []string{"admin"},
+			}},
+		},
+		ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+			gotAccess = AccessContextFromContext(ctx)
+			return &core.OperationResult{Status: 200}, nil
+		},
+	}
+	authz := &recordingAuthorizationProvider{
+		allowed:          true,
+		matchedRelations: []string{"admin"},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+		WithProviderKinds(map[string]ProviderKind{
+			"traffic-cop":    ProviderKindApp,
+			"traffic-policy": ProviderKindApp,
+		}),
+		WithAuthorizationPolicies(map[string]string{"traffic-cop": "traffic-policy"}),
+	)
+
+	_, err := broker.Invoke(
+		context.Background(),
+		&principal.Principal{SubjectID: "user:u-123", UserID: "u-123", Kind: principal.KindUser},
+		"traffic-cop",
+		"",
+		"graphql.execute",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotAccess.Policy != "traffic-policy" {
+		t.Fatalf("access policy = %q, want traffic-policy", gotAccess.Policy)
+	}
+	if gotAccess.Role != "admin" {
+		t.Fatalf("access role = %q, want admin", gotAccess.Role)
+	}
+	if got := authz.lastCheckAccess.GetResource().GetId(); got != "traffic-policy" {
+		t.Fatalf("authorization resource id = %q, want traffic-policy", got)
+	}
+	if got := authz.lastCheckAccess.GetResource().GetType(); got != "traffic-policy" {
+		t.Fatalf("authorization resource type = %q, want traffic-policy", got)
+	}
+}
+
+func TestBrokerAuthorizeOperationDeniesWithoutMatchedAllowedRole(t *testing.T) {
+	t.Parallel()
+
+	authz := &recordingAuthorizationProvider{
+		allowed:          true,
+		matchedRelations: []string{"viewer"},
+	}
+	broker := NewBroker(
+		nil,
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+		WithProviderKinds(map[string]ProviderKind{"traffic-cop": ProviderKindApp}),
+	)
+
+	_, err := broker.authorizeOperation(
+		context.Background(),
+		&principal.Principal{SubjectID: "user:u-123", UserID: "u-123", Kind: principal.KindUser},
+		"traffic-cop",
+		catalog.CatalogOperation{ID: "graphql.execute", AllowedRoles: []string{"admin"}},
+	)
+	if !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("authorizeOperation error = %v, want ErrAuthorizationDenied", err)
+	}
+	if authz.checkAccessCalls != 1 {
+		t.Fatalf("CheckAccess calls = %d, want 1", authz.checkAccessCalls)
+	}
+}
+
 func TestBrokerInvokeSkipsLocalAuthorizationForRemoteDelegatedApps(t *testing.T) {
 	t.Parallel()
 
@@ -510,13 +600,19 @@ func (p *brokerGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.
 }
 
 type recordingAuthorizationProvider struct {
-	allowed         bool
-	lastCheckAccess *proto.CheckAccessRequest
+	allowed          bool
+	matchedRelations []string
+	lastCheckAccess  *proto.CheckAccessRequest
+	checkAccessCalls int
 }
 
 func (p *recordingAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.lastCheckAccess = req
-	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
+	p.checkAccessCalls++
+	return &proto.CheckAccessResponse{
+		Allowed:          p.allowed,
+		MatchedRelations: p.matchedRelations,
+	}, nil
 }
 
 func (p *recordingAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
@@ -587,21 +683,24 @@ func TestBrokerInvokeStreamDispatchesToStreamingExecutor(t *testing.T) {
 	cat := &catalog.Catalog{
 		Name: "events",
 		Operations: []catalog.CatalogOperation{{
-			ID:        "events.watch",
-			Method:    "GET",
-			Transport: catalog.TransportApp,
+			ID:           "events.watch",
+			Method:       "GET",
+			Transport:    catalog.TransportApp,
+			AllowedRoles: []string{"admin"},
 			Response: &catalog.OperationResponseSpec{
 				Stream: &catalog.StreamResponseSpec{MediaType: "application/x-ndjson"},
 			},
 		}},
 	}
+	var gotAccess AccessContext
 	provider := &streamingStub{
 		StubIntegration: &coretesting.StubIntegration{
 			N:          "events",
 			ConnMode:   core.ConnectionModeNone,
 			CatalogVal: cat,
 		},
-		executeStream: func(_ context.Context, op string, _ map[string]any, _ string) (core.StreamReader, error) {
+		executeStream: func(ctx context.Context, op string, _ map[string]any, _ string) (core.StreamReader, error) {
+			gotAccess = AccessContextFromContext(ctx)
 			if op != "events.watch" {
 				return nil, fmt.Errorf("unexpected operation %q", op)
 			}
@@ -618,6 +717,11 @@ func TestBrokerInvokeStreamDispatchesToStreamingExecutor(t *testing.T) {
 		testutil.NewProviderRegistry(t, provider),
 		svc.Users,
 		svc.ExternalCredentials,
+		WithAuthorizationProvider(&recordingAuthorizationProvider{
+			allowed:          true,
+			matchedRelations: []string{"admin"},
+		}),
+		WithProviderKinds(map[string]ProviderKind{"events": ProviderKindApp}),
 	)
 
 	reader, err := broker.InvokeStream(
@@ -630,6 +734,9 @@ func TestBrokerInvokeStreamDispatchesToStreamingExecutor(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("InvokeStream: %v", err)
+	}
+	if gotAccess.Role != "admin" {
+		t.Fatalf("access role = %q, want admin", gotAccess.Role)
 	}
 	meta, err := reader.Recv()
 	if err != nil {
@@ -731,21 +838,24 @@ func TestBrokerInvokeMaybeStreamDispatchesStreaming(t *testing.T) {
 	cat := &catalog.Catalog{
 		Name: "events",
 		Operations: []catalog.CatalogOperation{{
-			ID:        "events.watch",
-			Method:    "GET",
-			Transport: catalog.TransportApp,
+			ID:           "events.watch",
+			Method:       "GET",
+			Transport:    catalog.TransportApp,
+			AllowedRoles: []string{"admin"},
 			Response: &catalog.OperationResponseSpec{
 				Stream: &catalog.StreamResponseSpec{MediaType: "application/x-ndjson"},
 			},
 		}},
 	}
+	var gotAccess AccessContext
 	provider := &streamingStub{
 		StubIntegration: &coretesting.StubIntegration{
 			N:          "events",
 			ConnMode:   core.ConnectionModeNone,
 			CatalogVal: cat,
 		},
-		executeStream: func(_ context.Context, op string, _ map[string]any, _ string) (core.StreamReader, error) {
+		executeStream: func(ctx context.Context, op string, _ map[string]any, _ string) (core.StreamReader, error) {
+			gotAccess = AccessContextFromContext(ctx)
 			return &sliceCoreStreamReader{
 				frames: []*core.InvokeFrame{
 					{Metadata: &core.InvokeMetadata{Status: 200, MediaType: "application/x-ndjson"}},
@@ -758,6 +868,11 @@ func TestBrokerInvokeMaybeStreamDispatchesStreaming(t *testing.T) {
 		testutil.NewProviderRegistry(t, provider),
 		svc.Users,
 		svc.ExternalCredentials,
+		WithAuthorizationProvider(&recordingAuthorizationProvider{
+			allowed:          true,
+			matchedRelations: []string{"admin"},
+		}),
+		WithProviderKinds(map[string]ProviderKind{"events": ProviderKindApp}),
 	)
 
 	outcome, err := broker.InvokeMaybeStream(
@@ -770,6 +885,9 @@ func TestBrokerInvokeMaybeStreamDispatchesStreaming(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("InvokeMaybeStream: %v", err)
+	}
+	if gotAccess.Role != "admin" {
+		t.Fatalf("access role = %q, want admin", gotAccess.Role)
 	}
 	if !outcome.IsStream() {
 		t.Fatalf("outcome should be stream, got unary %+v", outcome.Unary)

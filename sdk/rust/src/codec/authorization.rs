@@ -161,6 +161,7 @@ pub(crate) fn from_wire_check_access_response(
     CheckAccessResponse {
         allowed: value.allowed,
         model_id: value.model_id,
+        matched_relations: value.matched_relations,
     }
 }
 

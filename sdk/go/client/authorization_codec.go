@@ -251,8 +251,9 @@ func ToWireCheckAccessResponse(value *CheckAccessResponse) *proto.CheckAccessRes
 		return nil
 	}
 	out := &proto.CheckAccessResponse{
-		Allowed: value.Allowed,
-		ModelId: value.ModelId,
+		Allowed:          value.Allowed,
+		ModelId:          value.ModelId,
+		MatchedRelations: value.MatchedRelations,
 	}
 	return out
 }
@@ -262,8 +263,9 @@ func FromWireCheckAccessResponse(value *proto.CheckAccessResponse) *CheckAccessR
 		return nil
 	}
 	out := &CheckAccessResponse{
-		Allowed: value.Allowed,
-		ModelId: value.ModelId,
+		Allowed:          value.Allowed,
+		ModelId:          value.ModelId,
+		MatchedRelations: value.MatchedRelations,
 	}
 	return out
 }

@@ -77,9 +77,11 @@ class CheckAccessResponse(_message.Message):
     __slots__ = ()
     ALLOWED_FIELD_NUMBER: _ClassVar[int]
     MODEL_ID_FIELD_NUMBER: _ClassVar[int]
+    MATCHED_RELATIONS_FIELD_NUMBER: _ClassVar[int]
     allowed: bool
     model_id: str
-    def __init__(self, allowed: _Optional[bool] = ..., model_id: _Optional[str] = ...) -> None: ...
+    matched_relations: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, allowed: _Optional[bool] = ..., model_id: _Optional[str] = ..., matched_relations: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class CheckAccessManyRequest(_message.Message):
     __slots__ = ()

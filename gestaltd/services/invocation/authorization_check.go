@@ -23,3 +23,19 @@ func CheckSubjectAccess(ctx context.Context, authorization core.AuthorizationPro
 	}
 	return resp.GetAllowed(), nil
 }
+
+func matchedAllowedRole(matchedRelations, allowedRoles []string) string {
+	matched := make(map[string]struct{}, len(matchedRelations))
+	for _, relation := range matchedRelations {
+		if relation = strings.TrimSpace(relation); relation != "" {
+			matched[relation] = struct{}{}
+		}
+	}
+	for _, role := range allowedRoles {
+		role = strings.TrimSpace(role)
+		if _, ok := matched[role]; ok {
+			return role
+		}
+	}
+	return ""
+}
