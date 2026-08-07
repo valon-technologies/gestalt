@@ -972,22 +972,28 @@ func (s *Server) resolveRevisionActorLabels(ctx context.Context, requests []*cor
 			continue
 		}
 		seen[actor] = struct{}{}
-		labels[actor] = s.resolveRevisionActorLabel(ctx, actor)
+		labels[actor] = s.resolveSubjectDisplayLabel(ctx, actor)
 	}
 	return labels
 }
 
 func (s *Server) resolveRevisionActorLabel(ctx context.Context, actor string) string {
-	actor = strings.TrimSpace(actor)
-	if actor == "" {
+	return s.resolveSubjectDisplayLabel(ctx, actor)
+}
+
+// resolveSubjectDisplayLabel owns subject presentation labels for admin
+// surfaces (registry revision actors, agent identities, etc.).
+func (s *Server) resolveSubjectDisplayLabel(ctx context.Context, subjectID string) string {
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" {
 		return ""
 	}
-	if strings.HasPrefix(actor, "system:") {
-		return actor
+	if strings.HasPrefix(subjectID, "system:") {
+		return subjectID
 	}
-	kind, id, ok := core.ParseSubjectID(actor)
+	kind, id, ok := core.ParseSubjectID(subjectID)
 	if !ok {
-		return actor
+		return subjectID
 	}
 	switch kind {
 	case string(principal.KindUser):
@@ -1005,7 +1011,7 @@ func (s *Server) resolveRevisionActorLabel(ctx context.Context, actor string) st
 		return id
 	case coredata.ManagedSubjectKindServiceAccount:
 		if s.managedSubjects != nil {
-			subject, err := s.managedSubjects.GetManagedSubject(ctx, actor)
+			subject, err := s.managedSubjects.GetManagedSubject(ctx, subjectID)
 			if err == nil && subject != nil {
 				if displayName := strings.TrimSpace(subject.DisplayName); displayName != "" {
 					return displayName
