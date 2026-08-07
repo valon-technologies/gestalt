@@ -301,6 +301,10 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
 			return fail(err)
 		}
+		ctx, err = b.withAuthorizationRole(ctx, p, providerName, opMeta)
+		if err != nil {
+			return fail(err)
+		}
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -455,6 +459,10 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
 		if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+			return fail(err)
+		}
+		ctx, err = b.withAuthorizationRole(ctx, p, providerName, opMeta)
+		if err != nil {
 			return fail(err)
 		}
 	}
@@ -637,6 +645,10 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
 		if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+			return fail(err)
+		}
+		ctx, err = b.withAuthorizationRole(ctx, p, providerName, opMeta)
+		if err != nil {
 			return fail(err)
 		}
 	}
@@ -999,6 +1011,30 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
 	return nil
+}
+
+func (b *Broker) withAuthorizationRole(
+	ctx context.Context,
+	p *principal.Principal,
+	providerName string,
+	operation catalog.CatalogOperation,
+) (context.Context, error) {
+	if b == nil || b.authorization == nil || len(operation.AllowedRoles) == 0 {
+		return ctx, nil
+	}
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+	if err != nil {
+		return ctx, fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operation.ID, err)
+	}
+	resource := AuthorizationResource(providerName, b.providerKinds)
+	role, err := ResolveSubjectRole(ctx, b.authorization, subjectID, resource, operation.AllowedRoles)
+	if err != nil {
+		return ctx, fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operation.ID, err)
+	}
+	if role == "" {
+		return ctx, fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
+	}
+	return WithAccessContext(ctx, AccessContext{Policy: resource.GetId(), Role: role}), nil
 }
 
 func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {

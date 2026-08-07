@@ -93,11 +93,73 @@ func TestCheckSubjectAccessErrorPassesThrough(t *testing.T) {
 	}
 }
 
+func TestResolveSubjectRolePrefersAllowedExplicitRole(t *testing.T) {
+	t.Parallel()
+
+	provider := &authorizationCheckTestProvider{
+		relationships: []*proto.Relationship{
+			authorizationCheckRelationship("user:alice", "viewer", "app", "traffic-cop"),
+			authorizationCheckRelationship("user:alice", "admin", "app", "traffic-cop"),
+		},
+	}
+	role, err := ResolveSubjectRole(
+		context.Background(),
+		provider,
+		"user:alice",
+		&proto.Resource{Type: "app", Id: "traffic-cop"},
+		[]string{"admin"},
+	)
+	if err != nil {
+		t.Fatalf("ResolveSubjectRole error = %v, want nil", err)
+	}
+	if role != "admin" {
+		t.Fatalf("ResolveSubjectRole = %q, want admin", role)
+	}
+}
+
+func TestResolveSubjectRoleUsesAllowedDefaultRole(t *testing.T) {
+	t.Parallel()
+
+	provider := &authorizationCheckTestProvider{
+		resourceTypes: []*proto.AuthorizationModelResourceType{
+			{Name: "app", DefaultRole: "viewer"},
+		},
+	}
+	role, err := ResolveSubjectRole(
+		context.Background(),
+		provider,
+		"user:alice",
+		&proto.Resource{Type: "app", Id: "traffic-cop"},
+		[]string{"viewer", "admin"},
+	)
+	if err != nil {
+		t.Fatalf("ResolveSubjectRole error = %v, want nil", err)
+	}
+	if role != "viewer" {
+		t.Fatalf("ResolveSubjectRole = %q, want viewer", role)
+	}
+}
+
+func authorizationCheckRelationship(subjectID, role, resourceType, resourceID string) *proto.Relationship {
+	return &proto.Relationship{Tuple: &proto.RelationshipTuple{
+		Target: &proto.RelationshipTarget{
+			Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
+				Type: "subject",
+				Id:   subjectID,
+			}},
+		},
+		Relation: role,
+		Resource: &proto.Resource{Type: resourceType, Id: resourceID},
+	}}
+}
+
 type authorizationCheckTestProvider struct {
-	allowed  bool
-	response *proto.CheckAccessResponse
-	err      error
-	lastReq  *proto.CheckAccessRequest
+	allowed       bool
+	response      *proto.CheckAccessResponse
+	err           error
+	lastReq       *proto.CheckAccessRequest
+	relationships []*proto.Relationship
+	resourceTypes []*proto.AuthorizationModelResourceType
 }
 
 func (p *authorizationCheckTestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -116,7 +178,7 @@ func (p *authorizationCheckTestProvider) CheckAccessMany(context.Context, *proto
 }
 
 func (p *authorizationCheckTestProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	return &proto.ListRelationshipsResponse{}, nil
+	return &proto.ListRelationshipsResponse{Relationships: p.relationships}, nil
 }
 
 func (p *authorizationCheckTestProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
@@ -140,7 +202,7 @@ func (p *authorizationCheckTestProvider) SetActiveModel(context.Context, *proto.
 }
 
 func (p *authorizationCheckTestProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
-	return &proto.ListActiveModelResourceTypesResponse{}, nil
+	return &proto.ListActiveModelResourceTypesResponse{ResourceTypes: p.resourceTypes}, nil
 }
 
 func (p *authorizationCheckTestProvider) Ping(context.Context) error { return nil }

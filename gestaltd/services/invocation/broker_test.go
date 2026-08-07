@@ -328,6 +328,59 @@ func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
 	}
 }
 
+func TestBrokerInvokePropagatesAllowedRoleToProvider(t *testing.T) {
+	t.Parallel()
+
+	var gotAccess AccessContext
+	provider := &coretesting.StubIntegration{
+		N:        "traffic-cop",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "traffic-cop",
+			Operations: []catalog.CatalogOperation{{
+				ID:           "graphql.execute",
+				Method:       "POST",
+				AllowedRoles: []string{"admin"},
+			}},
+		},
+		ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+			gotAccess = AccessContextFromContext(ctx)
+			return &core.OperationResult{Status: 200}, nil
+		},
+	}
+	authz := &recordingAuthorizationProvider{
+		allowed: true,
+		relationships: []*proto.Relationship{
+			authorizationCheckRelationship("user:u-123", "admin", "app", "traffic-cop"),
+		},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+		WithProviderKinds(map[string]ProviderKind{"traffic-cop": ProviderKindApp}),
+	)
+
+	_, err := broker.Invoke(
+		context.Background(),
+		&principal.Principal{SubjectID: "user:u-123", UserID: "u-123", Kind: principal.KindUser},
+		"traffic-cop",
+		"",
+		"graphql.execute",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotAccess.Policy != "traffic-cop" {
+		t.Fatalf("access policy = %q, want traffic-cop", gotAccess.Policy)
+	}
+	if gotAccess.Role != "admin" {
+		t.Fatalf("access role = %q, want admin", gotAccess.Role)
+	}
+}
+
 func TestBrokerInvokeSkipsLocalAuthorizationForRemoteDelegatedApps(t *testing.T) {
 	t.Parallel()
 
@@ -512,6 +565,8 @@ func (p *brokerGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.
 type recordingAuthorizationProvider struct {
 	allowed         bool
 	lastCheckAccess *proto.CheckAccessRequest
+	relationships   []*proto.Relationship
+	resourceTypes   []*proto.AuthorizationModelResourceType
 }
 
 func (p *recordingAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -524,7 +579,7 @@ func (p *recordingAuthorizationProvider) CheckAccessMany(context.Context, *proto
 }
 
 func (p *recordingAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	return &proto.ListRelationshipsResponse{}, nil
+	return &proto.ListRelationshipsResponse{Relationships: p.relationships}, nil
 }
 
 func (p *recordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
@@ -548,7 +603,7 @@ func (p *recordingAuthorizationProvider) SetActiveModel(context.Context, *proto.
 }
 
 func (p *recordingAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
-	return &proto.ListActiveModelResourceTypesResponse{}, nil
+	return &proto.ListActiveModelResourceTypesResponse{ResourceTypes: p.resourceTypes}, nil
 }
 
 func (p *recordingAuthorizationProvider) Ping(context.Context) error { return nil }
