@@ -55,6 +55,7 @@ func TestAppAdminMembersList(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -153,6 +154,7 @@ func TestAppAdminMembersListShadowsRuntimeDuplicate(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -235,6 +237,7 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -283,6 +286,7 @@ func TestAppAdminMembersListForbiddenWithoutAdmin(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("bob-token", viewerID, "")
 		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
 	})
 	testutil.CloseOnCleanup(t, ts)
 

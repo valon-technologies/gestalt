@@ -47,3 +47,44 @@ func TestAuthorizationResource(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthorizationResourceMapperResolvesPolicyAliasFirst(t *testing.T) {
+	t.Parallel()
+
+	mapper := NewAuthorizationResourceMapper(
+		map[string]ProviderKind{"traffic-cop": ProviderKindApp},
+		map[string]string{"traffic-cop": "trafficCop"},
+	)
+
+	if got := mapper.Policy("traffic-cop"); got != "trafficCop" {
+		t.Fatalf("Policy = %q, want trafficCop", got)
+	}
+	resource := mapper.Resource("traffic-cop")
+	if resource.GetType() != "trafficCop" || resource.GetId() != "trafficCop" {
+		t.Fatalf("Resource = %v, want trafficCop/trafficCop", resource)
+	}
+}
+
+func TestAuthorizationResourceMapperFallsBackToProviderKind(t *testing.T) {
+	t.Parallel()
+
+	mapper := NewAuthorizationResourceMapper(map[string]ProviderKind{"slack": ProviderKindApp}, nil)
+
+	if got := mapper.Policy("slack"); got != "slack" {
+		t.Fatalf("Policy = %q, want slack", got)
+	}
+	resource := mapper.Resource(" slack ")
+	if resource.GetType() != "app" || resource.GetId() != "slack" {
+		t.Fatalf("Resource = %v, want app/slack", resource)
+	}
+}
+
+func TestAuthorizationResourceMapperZeroValueIsUsable(t *testing.T) {
+	t.Parallel()
+
+	var mapper AuthorizationResourceMapper
+	resource := mapper.Resource("unknown")
+	if resource.GetType() != "unknown" || resource.GetId() != "unknown" {
+		t.Fatalf("Resource = %v, want unknown/unknown", resource)
+	}
+}

@@ -3,6 +3,7 @@ package invocation
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -111,16 +112,20 @@ func TestMatchedAllowedRoleRejectsNonMatchingRole(t *testing.T) {
 }
 
 type authorizationCheckTestProvider struct {
-	allowed  bool
-	response *proto.CheckAccessResponse
-	err      error
-	lastReq  *proto.CheckAccessRequest
+	allowed     bool
+	response    *proto.CheckAccessResponse
+	nilResponse bool
+	err         error
+	lastReq     *proto.CheckAccessRequest
 }
 
 func (p *authorizationCheckTestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.lastReq = req
 	if p.err != nil {
 		return nil, p.err
+	}
+	if p.nilResponse {
+		return nil, nil
 	}
 	if p.response != nil {
 		return p.response, nil
@@ -163,3 +168,141 @@ func (p *authorizationCheckTestProvider) ListActiveModelResourceTypes(context.Co
 func (p *authorizationCheckTestProvider) Ping(context.Context) error { return nil }
 
 func (p *authorizationCheckTestProvider) Close() error { return nil }
+
+func testResourceAccessRequest(allowedRoles []string) ResourceAccessRequest {
+	return ResourceAccessRequest{
+		SubjectID:    "user:alice",
+		Action:       "slack",
+		Resource:     &proto.Resource{Type: "app", Id: "slack"},
+		AllowedRoles: allowedRoles,
+	}
+}
+
+func TestCheckResourceAccessReportsMatchedRole(t *testing.T) {
+	t.Parallel()
+
+	provider := &authorizationCheckTestProvider{response: &proto.CheckAccessResponse{
+		Allowed:          true,
+		MatchedRelations: []string{"viewer", "admin"},
+	}}
+
+	decision, err := CheckResourceAccess(context.Background(), provider, testResourceAccessRequest([]string{"admin"}))
+	if err != nil {
+		t.Fatalf("CheckResourceAccess error = %v, want nil", err)
+	}
+	if !decision.Allowed || decision.Role != "admin" {
+		t.Fatalf("decision = %+v, want allowed admin", decision)
+	}
+	if got := provider.lastReq.GetAction().GetName(); got != "slack" {
+		t.Fatalf("action = %q, want slack", got)
+	}
+}
+
+func TestCheckResourceAccessDeniesRoleOutsideAllowedRoles(t *testing.T) {
+	t.Parallel()
+
+	provider := &authorizationCheckTestProvider{response: &proto.CheckAccessResponse{
+		Allowed:          true,
+		MatchedRelations: []string{"viewer"},
+	}}
+
+	decision, err := CheckResourceAccess(context.Background(), provider, testResourceAccessRequest([]string{"admin"}))
+	if err != nil {
+		t.Fatalf("CheckResourceAccess error = %v, want nil", err)
+	}
+	if decision.Allowed {
+		t.Fatalf("decision = %+v, want denied", decision)
+	}
+}
+
+func TestCheckResourceAccessDeniesWhenEvaluatorDenies(t *testing.T) {
+	t.Parallel()
+
+	provider := &authorizationCheckTestProvider{response: &proto.CheckAccessResponse{
+		Allowed:          false,
+		MatchedRelations: []string{"admin"},
+	}}
+
+	decision, err := CheckResourceAccess(context.Background(), provider, testResourceAccessRequest(nil))
+	if err != nil {
+		t.Fatalf("CheckResourceAccess error = %v, want nil", err)
+	}
+	if decision.Allowed {
+		t.Fatalf("decision = %+v, want denied when the evaluator denies", decision)
+	}
+}
+
+func TestCheckResourceAccessFailsClosedOnProviderError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("evaluator unavailable")
+	provider := &authorizationCheckTestProvider{err: wantErr}
+
+	decision, err := CheckResourceAccess(context.Background(), provider, testResourceAccessRequest(nil))
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want %v", err, wantErr)
+	}
+	if decision.Allowed {
+		t.Fatal("provider error was allowed")
+	}
+}
+
+func TestCheckResourceAccessFailsClosedOnMalformedResponse(t *testing.T) {
+	t.Parallel()
+
+	provider := &authorizationCheckTestProvider{nilResponse: true}
+	decision, err := CheckResourceAccess(context.Background(), provider, testResourceAccessRequest(nil))
+	if !errors.Is(err, ErrMalformedAuthorizationDecision) {
+		t.Fatalf("error = %v, want ErrMalformedAuthorizationDecision", err)
+	}
+	if decision.Allowed {
+		t.Fatal("malformed response was allowed")
+	}
+
+	nilProvider, err := CheckResourceAccess(context.Background(), nil, testResourceAccessRequest(nil))
+	if !errors.Is(err, ErrAuthorizationUnavailable) {
+		t.Fatalf("error = %v, want ErrAuthorizationUnavailable", err)
+	}
+	if nilProvider.Allowed {
+		t.Fatal("missing evaluator was allowed")
+	}
+}
+
+func TestCheckResourceAccessBoundsMatchedRelations(t *testing.T) {
+	t.Parallel()
+
+	relations := make([]string, 0, maxEvaluatedRelations*4)
+	for i := range cap(relations) {
+		relations = append(relations, "relation-"+strconv.Itoa(i))
+	}
+	provider := &authorizationCheckTestProvider{response: &proto.CheckAccessResponse{
+		Allowed:          true,
+		MatchedRelations: relations,
+	}}
+
+	// A role past the bound is not honored, so an oversized response cannot
+	// make the server do unbounded work to find a match.
+	decision, err := CheckResourceAccess(
+		context.Background(),
+		provider,
+		testResourceAccessRequest([]string{relations[len(relations)-1]}),
+	)
+	if err != nil {
+		t.Fatalf("CheckResourceAccess error = %v, want nil", err)
+	}
+	if decision.Allowed {
+		t.Fatalf("decision = %+v, want denied beyond the relation bound", decision)
+	}
+	if got := len(boundedRelations(relations)); got != maxEvaluatedRelations {
+		t.Fatalf("boundedRelations length = %d, want %d", got, maxEvaluatedRelations)
+	}
+}
+
+func TestBoundedRelationsNormalizes(t *testing.T) {
+	t.Parallel()
+
+	got := boundedRelations([]string{" admin ", "", "admin", "viewer"})
+	if len(got) != 2 || got[0] != "admin" || got[1] != "viewer" {
+		t.Fatalf("boundedRelations = %#v, want [admin viewer]", got)
+	}
+}
