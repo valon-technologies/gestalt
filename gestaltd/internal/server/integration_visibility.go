@@ -46,7 +46,10 @@ func (s *Server) integrationSettingsAccessibleContext(ctx context.Context, p *pr
 		return false, nil
 	}
 	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), p)
-	if err != nil || strings.TrimSpace(subjectID) == "" {
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(subjectID) == "" {
 		return false, nil
 	}
 	decision, err := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
