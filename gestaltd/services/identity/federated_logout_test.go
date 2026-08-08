@@ -19,6 +19,20 @@ func TestBuildOIDCFederatedLogoutURL(t *testing.T) {
 	}
 }
 
+func TestBuildOIDCFederatedLogoutURLRejectsNonAuth0Issuer(t *testing.T) {
+	t.Parallel()
+
+	for _, issuer := range []string{
+		"https://login.example.com/",
+		"https://tenant.auth0.com.example.com/",
+		"not-a-url",
+	} {
+		if _, err := BuildOIDCFederatedLogoutURL(issuer, "client-id", "https://valon.tools/"); err == nil {
+			t.Errorf("BuildOIDCFederatedLogoutURL(%q) error = nil, want unsupported issuer error", issuer)
+		}
+	}
+}
+
 func TestRemoteIdentityProviderFederatedLogoutURL(t *testing.T) {
 	t.Parallel()
 
