@@ -470,7 +470,16 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	if code == "" {
 		if oauthErr := strings.TrimSpace(r.URL.Query().Get("error")); oauthErr != "" {
 			auditErr = loginFailureFromOAuthError(oauthErr, r.URL.Query().Get("error_description"))
-			s.failBrowserLogin(w, r, auth, auditErr)
+			failureAuth := authRuntime{}
+			originalState := r.URL.Query().Get("state")
+			if loginState, stateErr := s.loginStateForCallback(r); stateErr == nil &&
+				loginStatesMatch(loginState.State, originalState) {
+				if resolvedAuth, resolveErr := s.authRuntimeForProvider(loginState.Provider); resolveErr == nil {
+					auth = resolvedAuth
+					failureAuth = resolvedAuth
+				}
+			}
+			s.failBrowserLogin(w, r, failureAuth, auditErr)
 			return
 		}
 		auditErr = errors.New("missing code parameter")

@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -527,5 +528,70 @@ func TestLoginCallbackRejectedDomainRedirectsThroughLogout(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "Try again") || !strings.Contains(string(body), "not allowed") {
 		t.Fatalf("denied body = %q, want user-facing denial copy", string(body))
+	}
+}
+
+func TestLoginCallbackOAuthErrorLogsOutStateProvider(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	serverAuth := &federatedLogoutAuthStub{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "server"},
+		logoutPrefix:     "https://server-idp.example.test/v2/logout",
+	}
+	routeAuth := &federatedLogoutAuthStub{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "alt"},
+		logoutPrefix:     "https://route-idp.example.test/v2/logout",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = serverAuth
+		cfg.SelectedAuthProvider = "server"
+		cfg.StateSecret = secret
+		cfg.AuthProviders = map[string]core.IdentityProvider{"alt": routeAuth}
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:    "sample_portal",
+			Path:    "/sample-portal",
+			AppName: "sample_portal",
+			Handler: http.NotFoundHandler(),
+		}}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"sample_portal": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	loginResp, err := client.Get(ts.URL + "/api/v1/auth/login?next=" + url.QueryEscape("/sample-portal"))
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+	loginURL, err := url.Parse(loginResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse login Location: %v", err)
+	}
+
+	callbackURL := ts.URL + "/api/v1/auth/login/callback?error=access_denied&state=" +
+		url.QueryEscape(loginURL.Query().Get("state"))
+	callbackResp, err := client.Get(callbackURL)
+	if err != nil {
+		t.Fatalf("callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+
+	location := callbackResp.Header.Get("Location")
+	if !strings.HasPrefix(location, routeAuth.logoutPrefix) {
+		t.Fatalf("Location = %q, want route provider logout prefix %q", location, routeAuth.logoutPrefix)
+	}
+	if strings.HasPrefix(location, serverAuth.logoutPrefix) {
+		t.Fatalf("Location = %q, unexpectedly used server provider logout", location)
 	}
 }
