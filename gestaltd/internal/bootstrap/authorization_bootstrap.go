@@ -310,10 +310,13 @@ func resolveStaticAuthorizationRelationshipSubject(
 	users authorizationUserResolver,
 ) (config.AuthorizationRelationshipDef, bool, error) {
 	subject := &def.Subject
-	if def.Target.Subject != nil {
+	switch {
+	case def.Target.Subject != nil:
 		targetSubject := *def.Target.Subject
 		def.Target.Subject = &targetSubject
 		subject = def.Target.Subject
+	case def.Target.Resource != nil || def.Target.SubjectSet != nil:
+		return def, true, nil
 	}
 	email := strings.TrimSpace(subject.Email)
 	if email == "" {

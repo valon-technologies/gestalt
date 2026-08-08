@@ -748,6 +748,14 @@ func TestStaticAuthorizationRelationshipsResolveSubjectEmails(t *testing.T) {
 				Relation: "viewer",
 				Resource: config.AuthorizationResourceDef{Type: "app", ID: "three"},
 			},
+			{
+				Subject: config.AuthorizationSubjectDef{Type: "subject", Email: "ignored@example.com"},
+				Target: config.AuthorizationRelationshipTargetDef{
+					Resource: &config.AuthorizationResourceDef{Type: "app", ID: "parent"},
+				},
+				Relation: "viewer",
+				Resource: config.AuthorizationResourceDef{Type: "app", ID: "child"},
+			},
 		},
 	}
 	users := &stubAuthorizationUserResolver{users: map[string]*core.User{
@@ -759,7 +767,7 @@ func TestStaticAuthorizationRelationshipsResolveSubjectEmails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("staticAuthorizationRelationships: %v", err)
 	}
-	if got, want := len(relationships), 3; got != want {
+	if got, want := len(relationships), 4; got != want {
 		t.Fatalf("relationships count = %d, want %d", got, want)
 	}
 	gotSubjects := []string{
@@ -774,6 +782,9 @@ func TestStaticAuthorizationRelationshipsResolveSubjectEmails(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotSubjects, wantSubjects) {
 		t.Fatalf("relationship subjects = %#v, want %#v", gotSubjects, wantSubjects)
+	}
+	if got, want := relationships[3].GetTuple().GetTarget().GetResource().GetId(), "parent"; got != want {
+		t.Fatalf("resource target id = %q, want %q", got, want)
 	}
 	if wantCalls := []string{"alice@example.com", "bob@example.com", "missing@example.com"}; !reflect.DeepEqual(users.calls, wantCalls) {
 		t.Fatalf("user lookup calls = %#v, want %#v", users.calls, wantCalls)
