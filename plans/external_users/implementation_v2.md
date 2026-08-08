@@ -145,12 +145,20 @@ Externals hold no grants, so grant/revoke workflows and per-app external access 
 | 3 | gestalt | 1 | Startup authorization-state write gated behind explicit apply |
 | 4 | gestalt | 1 | Conformance suite |
 | 5 | toolshed | 1 | Wire the state-apply flag to the one owning revision; deploy Phase 1 |
-| 6 | toolshed | 2 | `valon-employees` roster, memberships, per-app group grants, reconciliation gate |
-| 7 | toolshed | 3 | Remove `defaultRole` |
-| 8 | gestalt | 4 | Catalog + MCP listing authorization (**prerequisite for externals**) |
-| 9+ | toolshed | 4 | Auth0 cutover, probe, first partner |
+| 6 | toolshed | 2 | `valon-employees` roster, memberships, per-resource-type group grants, reconciliation gate |
+| 7 | toolshed | 3 | Clear `defaultRole` on the custom-policy types (`pmiPayoffCancellations`, `itAccountOnboarding`) |
+| 8 | toolshed | 3 | Clear `defaultRole` on `app` and the anchor trio (`agent-trace-viewer`/`workflow`/`agent`) |
+| 9 | gestalt | 4 | Catalog + MCP listing authorization (**prerequisite for externals**) |
+| 10 | toolshed | 4 | Auth0 secrets — GSM + `terraform/main.tf` |
+| 11 | toolshed | 4 | Auth0 employee-only identity cutover |
+| 12 | toolshed | 4 | Enable temporary probe domain |
+| 13 | toolshed | 4 | Remove probe domain; enable first partner domain |
 
-PRs 1–4 were implemented and passed CI on branches `g2-canonical-identity`, `g3a-unify-authorization-evaluator`, `g1-authorization-state-safety`, and `g4-authorization-conformance-suite`. PR 8 was implemented on `g3b-batched-listing-decisions`. Those branches are pushed; the PRs were closed pending this replan and can be reopened.
+Phase 3 is split so the two narrow custom-policy types go first as a live rehearsal of the procedure *including the rollback*, before touching `app` and the anchor trio.
+
+PRs 1–4 were implemented and passed CI on branches `g2-canonical-identity`, `g3a-unify-authorization-evaluator`, `g1-authorization-state-safety`, and `g4-authorization-conformance-suite`. PR 9 was implemented on `g3b-batched-listing-decisions`. Those branches are pushed; the PRs were closed pending this replan and can be reopened.
+
+Implementation handoff: [implementation_prompt.md](./implementation_prompt.md).
 
 ## Decisions
 
