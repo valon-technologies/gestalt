@@ -122,7 +122,7 @@ func TestAppsListingBatchesGroupDerivedDecisions(t *testing.T) {
 }
 
 // TestAppsListingHidesUngrantedApp proves the filtering is real: a subject with
-// no grant does not get the mounted path.
+// no grant does not see the app through an otherwise usable settings surface.
 func TestAppsListingHidesUngrantedApp(t *testing.T) {
 	t.Parallel()
 
@@ -135,8 +135,8 @@ func TestAppsListingHidesUngrantedApp(t *testing.T) {
 	if mountedPath, _ := mountedPathFor(integrations, "sampleApp"); mountedPath == "" {
 		t.Fatalf("granted app lost its mounted path: %#v", integrations)
 	}
-	if mountedPath, _ := mountedPathFor(integrations, "otherApp"); mountedPath != "" {
-		t.Fatalf("ungranted app exposed mounted path %q", mountedPath)
+	if _, ok := mountedPathFor(integrations, "otherApp"); ok {
+		t.Fatalf("ungranted app exposed in listing: %#v", integrations)
 	}
 }
 
