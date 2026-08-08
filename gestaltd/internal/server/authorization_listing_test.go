@@ -193,6 +193,41 @@ func TestAppsListingFallsBackWhenBatchFails(t *testing.T) {
 	}
 }
 
+func TestAppsListingFallsThroughDeniedSettingsToAuthorizedOperations(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID(testCanonicalViewerUserID)
+	checker := &allowOneOperationAccess{allowed: "items.list"}
+	stub := &coretesting.StubIntegration{
+		N:        "sampleApp",
+		DN:       "Sample",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "sampleApp",
+			Operations: []catalog.CatalogOperation{
+				{ID: "items.list", Method: http.MethodGet, Path: "/items"},
+			},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("listing-token", subjectID, "")
+		cfg.Authorization = &serverTestAuthorizationProvider{}
+		cfg.Services = testutil.NewStubServices(t)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.AppDefs = map[string]*config.ProviderEntry{"sampleApp": {}}
+		cfg.OperationAccessChecker = checker
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	integrations := listIntegrationsForTest(t, ts)
+	if _, ok := mountedPathFor(integrations, "sampleApp"); !ok {
+		t.Fatalf("operation-authorized app missing from listing: %#v", integrations)
+	}
+	if checker.calls != 1 || checker.queries != 1 {
+		t.Fatalf("operation checks = {%d calls, %d queries}, want {1, 1}", checker.calls, checker.queries)
+	}
+}
+
 // erroringOperationAccess is an evaluator that cannot answer, used to prove a
 // listing surfaces the failure rather than returning an empty list.
 type erroringOperationAccess struct{}

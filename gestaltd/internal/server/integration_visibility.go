@@ -17,7 +17,13 @@ func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *prin
 		return true, nil
 	}
 	if s.integrationHasSettingsSurface(p, info) {
-		return s.integrationSettingsAccessibleContext(ctx, p, provider)
+		settingsAccessible, err := s.integrationSettingsAccessibleContext(ctx, p, provider)
+		if err != nil {
+			return false, err
+		}
+		if settingsAccessible {
+			return true, nil
+		}
 	}
 	return s.integrationHasVisibleHTTPOperationsContext(ctx, p, provider, prov)
 }
