@@ -156,3 +156,64 @@ func TestUserLookupHonorsGroupDerivedOperatorRole(t *testing.T) {
 		t.Fatalf("group-derived operator role did not resolve email: %#v", rows)
 	}
 }
+
+// TestUserLookupWorksWhenModelDeclaresNoMatchingAction guards the transition
+// shim. The user-lookup resource is policy-shaped like gestaltAdmin: it carries
+// the operator relation but declares no actions. CheckAccessRequest is
+// action-shaped, so an evaluator asked about an undeclared action answers
+// "denied" to a question it cannot represent. Without the shim an operator
+// grant would never restore lookup and the gate would stay shut for everyone.
+func TestUserLookupWorksWhenModelDeclaresNoMatchingAction(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	member := seedUser(t, services, "bob@valon.com")
+	memberSubject := principal.UserSubjectID(member.ID)
+	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
+
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminSubject, "admin", "app", "g-issues"),
+			testAuthorizationRelationship(memberSubject, "viewer", "app", "g-issues"),
+			testAuthorizationRelationship(adminSubject, testUserLookupRole, testUserLookupResource, testUserLookupResource),
+		},
+		// The app type answers actions; the user-lookup type declares the
+		// operator relation but no actions at all, as a real policy type does.
+		resourceTypes: []*proto.AuthorizationModelResourceType{
+			{Name: "app", Actions: []*proto.ModelAction{{Name: "*"}}},
+			{Name: testUserLookupResource},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("admin-token", adminSubject, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppDefs = appAdminTestAppDefs()
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/members", nil)
+	request.Header.Set("Authorization", "Bearer admin-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET members: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET members status = %d: %s", response.StatusCode, body)
+	}
+	var rows []memberEmailRow
+	if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
+		t.Fatalf("decode members: %v", err)
+	}
+
+	email, ok := memberEmailFor(rows, memberSubject)
+	if !ok {
+		t.Fatalf("member row missing: %#v", rows)
+	}
+	if email != "bob@valon.com" {
+		t.Fatalf("operator grant did not resolve email when the model declares no matching action: %#v", rows)
+	}
+}

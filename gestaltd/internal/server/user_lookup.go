@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -15,6 +17,12 @@ import (
 // administering an app must not, on its own, let the administrator enumerate
 // the people in the directory.
 const defaultUserLookupAuthorizationResource = "gestaltUserLookup"
+
+// userLookupLegacyDecisionLogMessage marks a user-lookup decision that fell
+// back to the direct-grant path because the active model declares no matching
+// or wildcard action. Its absence in production is the evidence the shim can
+// be deleted.
+const userLookupLegacyDecisionLogMessage = "auth: user lookup resource type declares no matching action; using legacy direct-grant path"
 
 // defaultUserLookupOperatorRole is the explicit employee operator relation that
 // permits user lookup. It is a distinct relation from "admin" so an app-scoped
@@ -92,5 +100,51 @@ func (s *Server) userLookupAllowed(ctx context.Context) bool {
 		Resource:     s.authorizationResource(policy),
 		AllowedRoles: s.userLookupRoute.AllowedRoles,
 	})
-	return err == nil && decision.Allowed
+	if err != nil {
+		return false
+	}
+	if decision.Allowed {
+		return true
+	}
+	return s.userLookupAllowedByDirectGrant(ctx, subjectID, policy)
+}
+
+// userLookupAllowedByDirectGrant is the user-lookup half of the TRANSITION
+// SHIM documented on legacyDirectGrantMountedAccess. The user-lookup resource
+// type is policy-shaped like gestaltAdmin: it declares the operator relation
+// but typically no actions. CheckAccessRequest is action-shaped, so an
+// evaluator asked about an undeclared action answers "denied" to a question it
+// cannot represent, and an operator grant would never restore lookup. Delete
+// this with the mounted-UI shim once T1 confirms the user-lookup resource type
+// declares a matching or wildcard action.
+//
+// Only a successfully read model that proves the evaluator cannot answer
+// reaches the direct-grant scan; a model or provider error denies.
+func (s *Server) userLookupAllowedByDirectGrant(ctx context.Context, subjectID, policy string) bool {
+	model, err := s.mountedUIResourceModel(ctx, policy)
+	if err != nil || model.answersAction(policy) {
+		return false
+	}
+
+	slog.WarnContext(ctx, userLookupLegacyDecisionLogMessage,
+		"resourceType", model.typeName,
+		"resource", policy,
+		"action", policy,
+		"modelKnowsResourceType", model.found,
+	)
+
+	roles, err := s.legacyDirectGrantRoles(ctx, subjectID, policy)
+	if err != nil {
+		return false
+	}
+	allowed := s.userLookupRoute.AllowedRoles
+	if len(allowed) == 0 {
+		return len(roles) > 0
+	}
+	for _, allowedRole := range allowed {
+		if allowedRole = strings.TrimSpace(allowedRole); allowedRole != "" && slices.Contains(roles, allowedRole) {
+			return true
+		}
+	}
+	return false
 }
