@@ -244,6 +244,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	seen := make(map[string]struct{}, len(names))
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
+		if s.integrationHiddenFromCatalog(name) {
+			continue
+		}
 		prov, err := s.providers.GetWithContext(r.Context(), name)
 		if err != nil {
 			continue
@@ -286,6 +289,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		out = append(out, info)
 	}
 	for _, app := range registryApps {
+		if s.integrationHiddenFromCatalog(app.name) {
+			continue
+		}
 		if _, ok := seen[app.name]; ok {
 			continue
 		}

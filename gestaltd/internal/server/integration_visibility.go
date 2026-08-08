@@ -9,6 +9,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
+func (s *Server) integrationHiddenFromCatalog(provider string) bool {
+	entry, ok := s.pluginDefs[strings.TrimSpace(provider)]
+	return ok && entry != nil && entry.Static != nil && entry.Static.CatalogHidden
+}
+
 func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider, info integrationInfo) (bool, error) {
 	if info.MountedPath != "" {
 		return true, nil

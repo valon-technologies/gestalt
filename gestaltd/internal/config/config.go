@@ -563,9 +563,10 @@ type ProviderEntry struct {
 // AppStaticConfig configures a packaged app's static bundle mount.
 // TODO(hughhan1): static.theme is a deployer workaround and should not be supported long-term.
 type AppStaticConfig struct {
-	Mount  string         `yaml:"mount,omitempty"`
-	Theme  *UIThemeConfig `yaml:"theme,omitempty"`
-	Public bool           `yaml:"public,omitempty"`
+	Mount         string         `yaml:"mount,omitempty"`
+	Theme         *UIThemeConfig `yaml:"theme,omitempty"`
+	Public        bool           `yaml:"public,omitempty"`
+	CatalogHidden bool           `yaml:"catalogHidden,omitempty"`
 }
 
 type providerEntryFields ProviderEntry
