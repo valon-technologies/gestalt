@@ -39,8 +39,8 @@ func listingTestServer(t *testing.T, authz *serverTestAuthorizationProvider, sub
 		cfg.Authorization = authz
 		cfg.Services = testutil.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t,
-			&coretesting.StubIntegration{N: "sampleApp", DN: "Sample"},
-			&coretesting.StubIntegration{N: "otherApp", DN: "Other"},
+			&coretesting.StubIntegration{N: "sampleApp", DN: "Sample", ConnMode: core.ConnectionModeNone},
+			&coretesting.StubIntegration{N: "otherApp", DN: "Other", ConnMode: core.ConnectionModeNone},
 		)
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sampleApp": {
