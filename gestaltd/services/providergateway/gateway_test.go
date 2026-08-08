@@ -186,6 +186,29 @@ func TestPreparePublicRequest(t *testing.T) {
 			wantCode:   codes.InvalidArgument,
 		},
 		{
+			name:       "authorization check uses stable provider resource type",
+			fullMethod: proto.Authorization_CheckAccess_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req: &proto.CheckAccessRequest{
+				Subject:  &proto.Subject{Type: "subject", Id: "service_account:test"},
+				Action:   &proto.Action{Name: "read"},
+				Resource: &proto.Resource{Type: "app", Id: "roadmap"},
+			},
+			checkAuth: func(t *testing.T, auth *stubAuthorizationProvider) {
+				t.Helper()
+				if got := auth.request.GetResource().GetType(); got != string(ProviderKindAuthorization) {
+					t.Fatalf("authorization resource type = %q, want %q", got, ProviderKindAuthorization)
+				}
+				if got := auth.request.GetResource().GetId(); got != "authorization" {
+					t.Fatalf("authorization resource id = %q, want authorization", got)
+				}
+				if got := auth.request.GetAction().GetName(); got != "authorization" {
+					t.Fatalf("authorization action = %q, want authorization", got)
+				}
+			},
+		},
+		{
 			name:       "requires authorization provider",
 			fullMethod: proto.Workflow_DeliverEvent_FullMethodName,
 			withOrigin: true,

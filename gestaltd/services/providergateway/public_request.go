@@ -190,6 +190,8 @@ func publicIdentityLoginMethod(fullMethod string) bool {
 func providerKindFromFullMethod(fullMethod string) ProviderKind {
 	service, _ := splitFullMethod(fullMethod)
 	switch service {
+	case proto.Authorization_ServiceDesc.ServiceName:
+		return ProviderKindAuthorization
 	case proto.App_ServiceDesc.ServiceName:
 		return ProviderKindApp
 	case proto.Workflow_ServiceDesc.ServiceName:
