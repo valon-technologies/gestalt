@@ -531,6 +531,10 @@ func TestAppAdminRegistryHistory(t *testing.T) {
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+			// Resolving another person's subject ID to their email is user
+			// lookup, which requires the employee operator role in addition to
+			// app-scoped admin.
+			testAuthorizationRelationship(subjectID, testUserLookupRole, testUserLookupResource, testUserLookupResource),
 		},
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {

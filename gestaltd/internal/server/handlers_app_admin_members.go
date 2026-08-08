@@ -67,13 +67,20 @@ func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
 // projectAppAdminHumanMemberRows is the human/group projection of the shared
 // grant roster. Email enrichment belongs here — not in the shared mapper —
 // so identities listing does not resolve user emails it will discard.
+//
+// Turning a subject ID into an email is user lookup, so it is gated on the
+// explicit employee operator role rather than on the app-scoped admin grant
+// that reached this handler. An app administrator without that role still sees
+// the full grant roster - which subjects and groups hold which roles on their
+// own app - but cannot use it to enumerate the directory.
 func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow) []appAdminMemberRow {
+	allowLookup := s.userLookupAllowed(ctx)
 	out := make([]appAdminMemberRow, 0, len(rows))
 	for _, row := range rows {
 		if isAppAdminServiceAccountRow(row) {
 			continue
 		}
-		if row.SelectorKind == "subject_id" && row.SubjectID != "" {
+		if allowLookup && row.SelectorKind == "subject_id" && row.SubjectID != "" {
 			row.Email = s.resolveAppAdminMemberEmail(ctx, row.SubjectID)
 		}
 		out = append(out, row)

@@ -16,14 +16,19 @@ const (
 )
 
 type Config struct {
-	Invoker             invocation.Invoker
-	TokenResolver       invocation.TokenResolver
-	AuditSink           core.AuditSink
-	Providers           *registry.ProviderMap[core.Provider]
-	AllowedProviders    []string
-	ToolPrefixes        map[string]string
-	IncludeREST         map[string]bool
-	MCPConnection       map[string]string
-	CatalogProjection   func(provName string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog
+	Invoker           invocation.Invoker
+	TokenResolver     invocation.TokenResolver
+	AuditSink         core.AuditSink
+	Providers         *registry.ProviderMap[core.Provider]
+	AllowedProviders  []string
+	ToolPrefixes      map[string]string
+	IncludeREST       map[string]bool
+	MCPConnection     map[string]string
+	CatalogProjection func(provName string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog
+	// OperationAccess answers tools/list authorization questions in one
+	// batched evaluator call, using the same decision path tools/call uses.
+	// Nil means tools/list is not authorization-filtered; tools/call
+	// enforcement is unaffected either way.
+	OperationAccess     invocation.OperationAccessChecker
 	InvocationValidator func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error
 }

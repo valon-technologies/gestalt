@@ -49,6 +49,9 @@ func (s *Server) listAppAdminIdentities(w http.ResponseWriter, r *http.Request) 
 // app authorization grant roster. Display labels use the shared subject
 // presentation helper (ManagedSubject when present).
 func (s *Server) projectAppAdminIdentityRows(ctx context.Context, rows []appAdminMemberRow) []appAdminIdentityRow {
+	// Rows here are service accounts, so no user lookup is expected; resolve
+	// the gate once anyway so the shared labeler stays on one code path.
+	allowLookup := s.userLookupAllowed(ctx)
 	labels := make(map[string]string)
 	out := make([]appAdminIdentityRow, 0)
 	for _, row := range rows {
@@ -57,7 +60,7 @@ func (s *Server) projectAppAdminIdentityRows(ctx context.Context, rows []appAdmi
 		}
 		displayName, ok := labels[row.SubjectID]
 		if !ok {
-			displayName = strings.TrimSpace(s.resolveSubjectDisplayLabel(ctx, row.SubjectID))
+			displayName = strings.TrimSpace(s.resolveSubjectDisplayLabelForLookup(ctx, row.SubjectID, allowLookup))
 			if displayName == "" {
 				displayName = row.SubjectID
 			}
