@@ -41,6 +41,7 @@ func listingTestServer(t *testing.T, authz *serverTestAuthorizationProvider, sub
 		cfg.Providers = testutil.NewProviderRegistry(t,
 			&coretesting.StubIntegration{N: "sampleApp", DN: "Sample", ConnMode: core.ConnectionModeNone},
 			&coretesting.StubIntegration{N: "otherApp", DN: "Other", ConnMode: core.ConnectionModeNone},
+			&coretesting.StubIntegration{N: "publicHidden", DN: "Hidden", ConnMode: core.ConnectionModeNone},
 		)
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sampleApp": {
@@ -49,6 +50,10 @@ func listingTestServer(t *testing.T, authz *serverTestAuthorizationProvider, sub
 			},
 			"otherApp": {
 				Static:             &config.AppStaticConfig{Mount: "/other"},
+				ResolvedStaticRoot: rootDir,
+			},
+			"publicHidden": {
+				Static:             &config.AppStaticConfig{Mount: "/hidden", Public: true, CatalogHidden: true},
 				ResolvedStaticRoot: rootDir,
 			},
 		}
@@ -137,6 +142,20 @@ func TestAppsListingHidesUngrantedApp(t *testing.T) {
 	}
 	if _, ok := mountedPathFor(integrations, "otherApp"); ok {
 		t.Fatalf("ungranted app exposed in listing: %#v", integrations)
+	}
+}
+
+func TestAppsListingOmitsCatalogHiddenPublicApp(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID(testCanonicalViewerUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: subjectSetGrant(subjectID, "viewer", "app", "publicHidden"),
+	}
+
+	integrations := listIntegrationsForTest(t, listingTestServer(t, authz, subjectID))
+	if _, ok := mountedPathFor(integrations, "publicHidden"); ok {
+		t.Fatalf("catalog-hidden public app exposed in listing: %#v", integrations)
 	}
 }
 
