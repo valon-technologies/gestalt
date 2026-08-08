@@ -1,9 +1,12 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"sync"
@@ -13,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -441,4 +445,153 @@ func testAuthStubForScopedBearer() *coretesting.StubAuthProvider {
 		}
 		return testIntrospectActive(principal.UserSubjectID(userID), scope), nil
 	})
+}
+
+type federatedLogoutAuthStub struct {
+	coretesting.StubAuthProvider
+	logoutPrefix string
+}
+
+func (s *federatedLogoutAuthStub) FederatedLogoutURL(returnTo string) (string, error) {
+	prefix := strings.TrimSpace(s.logoutPrefix)
+	if prefix == "" {
+		prefix = "https://idp.example.test/v2/logout"
+	}
+	return prefix + "?returnTo=" + url.QueryEscape(returnTo), nil
+}
+
+func TestLoginCallbackRejectedDomainRedirectsThroughLogout(t *testing.T) {
+	t.Parallel()
+
+	stub := &federatedLogoutAuthStub{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "auth0"},
+	}
+	stub.TokenFn = func(_ context.Context, _ *core.TokenRequest) (*core.TokenResponse, error) {
+		return nil, fmt.Errorf(`oidc auth: email domain "gmail.com" is not allowed`)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", bytes.NewBufferString(`{"state":"test-state"}`))
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	callbackResp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
+	if err != nil {
+		t.Fatalf("callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+
+	if callbackResp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302", callbackResp.StatusCode)
+	}
+	location := callbackResp.Header.Get("Location")
+	if !strings.HasPrefix(location, "https://idp.example.test/v2/logout") {
+		t.Fatalf("Location = %q, want federated logout redirect", location)
+	}
+	parsed, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("parse Location: %v", err)
+	}
+	returnTo := parsed.Query().Get("returnTo")
+	if !strings.Contains(returnTo, "/api/v1/auth/login/denied") {
+		t.Fatalf("returnTo = %q, want login denied page", returnTo)
+	}
+	if !strings.Contains(returnTo, "domain_not_allowed") {
+		t.Fatalf("returnTo = %q, want domain_not_allowed reason", returnTo)
+	}
+
+	deniedResp, err := client.Get(ts.URL + "/api/v1/auth/login/denied?reason=domain_not_allowed")
+	if err != nil {
+		t.Fatalf("denied page: %v", err)
+	}
+	defer func() { _ = deniedResp.Body.Close() }()
+	if deniedResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("denied status = %d, want 401", deniedResp.StatusCode)
+	}
+	body, err := io.ReadAll(deniedResp.Body)
+	if err != nil {
+		t.Fatalf("read denied body: %v", err)
+	}
+	if !strings.Contains(string(body), "Try again") || !strings.Contains(string(body), "not allowed") {
+		t.Fatalf("denied body = %q, want user-facing denial copy", string(body))
+	}
+}
+
+func TestLoginCallbackOAuthErrorLogsOutStateProvider(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	serverAuth := &federatedLogoutAuthStub{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "server"},
+		logoutPrefix:     "https://server-idp.example.test/v2/logout",
+	}
+	routeAuth := &federatedLogoutAuthStub{
+		StubAuthProvider: coretesting.StubAuthProvider{N: "alt"},
+		logoutPrefix:     "https://route-idp.example.test/v2/logout",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = serverAuth
+		cfg.SelectedAuthProvider = "server"
+		cfg.StateSecret = secret
+		cfg.AuthProviders = map[string]core.IdentityProvider{"alt": routeAuth}
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:    "sample_portal",
+			Path:    "/sample-portal",
+			AppName: "sample_portal",
+			Handler: http.NotFoundHandler(),
+		}}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"sample_portal": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	loginResp, err := client.Get(ts.URL + "/api/v1/auth/login?next=" + url.QueryEscape("/sample-portal"))
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+	loginURL, err := url.Parse(loginResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse login Location: %v", err)
+	}
+
+	callbackURL := ts.URL + "/api/v1/auth/login/callback?error=access_denied&state=" +
+		url.QueryEscape(loginURL.Query().Get("state"))
+	callbackResp, err := client.Get(callbackURL)
+	if err != nil {
+		t.Fatalf("callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+
+	location := callbackResp.Header.Get("Location")
+	if !strings.HasPrefix(location, routeAuth.logoutPrefix) {
+		t.Fatalf("Location = %q, want route provider logout prefix %q", location, routeAuth.logoutPrefix)
+	}
+	if strings.HasPrefix(location, serverAuth.logoutPrefix) {
+		t.Fatalf("Location = %q, unexpectedly used server provider logout", location)
+	}
 }

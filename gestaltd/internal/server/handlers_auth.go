@@ -468,6 +468,20 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
+		if oauthErr := strings.TrimSpace(r.URL.Query().Get("error")); oauthErr != "" {
+			auditErr = loginFailureFromOAuthError(oauthErr, r.URL.Query().Get("error_description"))
+			failureAuth := authRuntime{}
+			originalState := r.URL.Query().Get("state")
+			if loginState, stateErr := s.loginStateForCallback(r); stateErr == nil &&
+				loginStatesMatch(loginState.State, originalState) {
+				if resolvedAuth, resolveErr := s.authRuntimeForProvider(loginState.Provider); resolveErr == nil {
+					auth = resolvedAuth
+					failureAuth = resolvedAuth
+				}
+			}
+			s.failBrowserLogin(w, r, failureAuth, auditErr)
+			return
+		}
 		auditErr = errors.New("missing code parameter")
 		writeError(w, http.StatusBadRequest, "missing code parameter")
 		return
@@ -530,7 +544,11 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil || tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
 		auditErr = errors.New("login failed")
 		slog.ErrorContext(r.Context(), "login callback failed", "error", err)
-		writeError(w, http.StatusUnauthorized, "login failed")
+		if mode == loginCallbackCLIGrant {
+			writeError(w, http.StatusUnauthorized, "login failed")
+			return
+		}
+		s.failBrowserLogin(w, r, auth, err)
 		return
 	}
 
