@@ -31,7 +31,11 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	if principal.IsNonUserPrincipal(p) {
 		return p, nil
 	}
-	if p.UserID != "" && !strings.Contains(p.UserID, "@") {
+	// Only a persisted user UUID is already canonical. A provider-opaque
+	// subject such as "auth0|abc" or "google-oauth2|123" contains no "@" but
+	// is not canonical, so it must still be resolved through the user store
+	// rather than passed through to an authorization boundary.
+	if principal.ClassifyUserSubjectValue(p.UserID) == principal.UserSubjectFormCanonical {
 		return p, nil
 	}
 	if p.Identity == nil || p.Identity.Email == "" {

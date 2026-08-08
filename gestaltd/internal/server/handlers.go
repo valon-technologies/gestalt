@@ -296,11 +296,11 @@ func (s *Server) integrationManagementPath(ctx context.Context, p *principal.Pri
 	if _, ok := s.registryApp(appName); !ok {
 		return ""
 	}
-	subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
-	if subjectID == "" {
+	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), p)
+	if err != nil || strings.TrimSpace(subjectID) == "" {
 		return ""
 	}
-	allowed, err := s.hasExplicitAppAdmin(ctx, subjectID, appName)
+	allowed, err := s.hasExplicitAppAdmin(ctx, strings.TrimSpace(subjectID), appName)
 	if err != nil || !allowed {
 		return ""
 	}

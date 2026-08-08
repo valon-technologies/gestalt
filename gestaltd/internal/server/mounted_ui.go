@@ -280,23 +280,38 @@ func (s *Server) authorizeMountedAppAccess(ctx context.Context, p *principal.Pri
 	if s.authorization == nil {
 		return invocation.AccessContext{}, true, nil
 	}
-	resourceName, subjectID, ok := mountedUIAuthorizationSubject(p, mounted)
-	if !ok {
-		return invocation.AccessContext{}, false, nil
+	resourceName, subjectID, ok, err := s.mountedUIAuthorizationSubject(ctx, p, mounted)
+	if err != nil || !ok {
+		return invocation.AccessContext{}, false, err
 	}
 	return s.authorizeMountedResourceRoles(ctx, resourceName, subjectID, mounted.AllowedRoles)
 }
 
-func mountedUIAuthorizationSubject(p *principal.Principal, mounted MountedUI) (resourceName, subjectID string, ok bool) {
+// mountedUIAuthorizationSubject resolves the canonical subject the mounted UI
+// boundary authorizes as. Unresolvable or provider-opaque subjects are denied;
+// the raw token subject is never used.
+func (s *Server) mountedUIAuthorizationSubject(
+	ctx context.Context,
+	p *principal.Principal,
+	mounted MountedUI,
+) (resourceName, subjectID string, ok bool, err error) {
 	resourceName = mountedUIAuthorizationResourceName(mounted)
 	if resourceName == "" {
-		return "", "", false
+		return "", "", false, nil
 	}
-	subjectID = strings.TrimSpace(principal.Canonicalized(p).SubjectID)
+	subjectID, err = principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), p)
+	switch {
+	case errors.Is(err, principal.ErrCredentialSubjectRequired),
+		errors.Is(err, principal.ErrOpaqueCredentialSubject):
+		return "", "", false, nil
+	case err != nil:
+		return "", "", false, err
+	}
+	subjectID = strings.TrimSpace(subjectID)
 	if subjectID == "" {
-		return "", "", false
+		return "", "", false, nil
 	}
-	return resourceName, subjectID, true
+	return resourceName, subjectID, true, nil
 }
 
 func (s *Server) authorizeMountedResourceRoles(ctx context.Context, resourceName, subjectID string, allowedRoles []string) (invocation.AccessContext, bool, error) {

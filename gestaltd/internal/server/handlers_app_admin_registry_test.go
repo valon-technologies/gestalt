@@ -25,7 +25,7 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 	t.Parallel()
 
 	fixture := registrytest.NewInstallFixture(t)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -122,7 +122,7 @@ func TestAppAdminRegistryAutoDeploy(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed auto-deploy settings: %v", err)
 	}
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -213,7 +213,7 @@ func TestAppAdminRegistryAutoDeployNotifies(t *testing.T) {
 
 	fixture := registrytest.NewInstallFixture(t)
 	services := testutil.NewStubServices(t)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -278,7 +278,7 @@ func TestAppAdminRegistryAutoDeployRequiresAppAdmin(t *testing.T) {
 	t.Parallel()
 
 	fixture := registrytest.NewInstallFixture(t)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
 		cfg.Authorization = &serverTestAuthorizationProvider{}
@@ -310,7 +310,7 @@ func TestAppAdminRegistryFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	fixture := registrytest.NewInstallFixture(t)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
 		cfg.AppDefs = map[string]*config.ProviderEntry{
@@ -337,7 +337,7 @@ func TestAppAdminRegistryFailsClosed(t *testing.T) {
 func TestListAppsIncludesManagementPathForUninstalledRegistryApp(t *testing.T) {
 	t.Parallel()
 
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -378,7 +378,7 @@ func TestListAppsIncludesManagementPathForUninstalledRegistryApp(t *testing.T) {
 func TestListAppsIncludesManagementPathForAppAdmin(t *testing.T) {
 	t.Parallel()
 
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -421,7 +421,7 @@ func TestAppAdminRegistryIncludesPendingAndFailedVersions(t *testing.T) {
 	t.Parallel()
 
 	fixture := registrytest.NewInstallFixture(t)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -527,7 +527,7 @@ func TestAppAdminRegistryHistory(t *testing.T) {
 	services := testutil.NewStubServices(t)
 	alice := seedUser(t, services, "alice@valon.com")
 	aliceActor := principal.UserSubjectID(alice.ID)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -673,7 +673,7 @@ func TestAppAdminRegistryHistoryActiveRolloutFields(t *testing.T) {
 	services := testutil.NewStubServices(t)
 	alice := seedUser(t, services, "alice@valon.com")
 	aliceActor := principal.UserSubjectID(alice.ID)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -762,7 +762,7 @@ func TestAppAdminRegistryHistoryStoredRolloutOutcomeFields(t *testing.T) {
 	services := testutil.NewStubServices(t)
 	alice := seedUser(t, services, "alice@valon.com")
 	aliceActor := principal.UserSubjectID(alice.ID)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -844,7 +844,7 @@ func TestAppAdminRegistryFleetStateAndRecoveryResponseShapes(t *testing.T) {
 
 	fixture := registrytest.NewInstallFixture(t)
 	services := testutil.NewStubServices(t)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -1039,7 +1039,7 @@ func TestAppAdminRegistryHistoryIgnoresLiveRolloutForOlderSameVersion(t *testing
 	services := testutil.NewStubServices(t)
 	alice := seedUser(t, services, "alice@valon.com")
 	aliceActor := principal.UserSubjectID(alice.ID)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	otherVersion := "0.0.0-snapshot.gother"
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
@@ -1146,7 +1146,7 @@ func TestAppAdminRegistryHistoryPrefersStoredOutcomeOverLiveRollout(t *testing.T
 	services := testutil.NewStubServices(t)
 	alice := seedUser(t, services, "alice@valon.com")
 	aliceActor := principal.UserSubjectID(alice.ID)
-	subjectID := principal.UserSubjectID("alice")
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
