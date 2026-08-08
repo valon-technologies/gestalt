@@ -73,8 +73,12 @@ and resource-type repairs.
 
 ## Non-negotiables
 
-- **Never** build the roster from authorization rows. Use Rippling (the People authority),
-  joined to canonical Gestalt user UUIDs by normalized email.
+- **Never** build the roster from authorization rows. Build it from the Gestalt `users`
+  table — every `@valon.com` row, by canonical UUID. Every employee is on the Valon domain,
+  so an excluded row with a non-Valon domain is a non-employee. **The exception is a row
+  with no usable email at all** — blank, or a provider-opaque subject like `auth0|abc`. Those
+  carry no domain to judge, they are the original root-cause shape, and each one must be
+  resolved to a person before the flip. See "Roster source" in the spec.
 - **Never** set the shared app wildcard to `[nobody]`. Keep
   `actions: "*": relations: [viewer, user, editor, admin]`.
 - **Never** generate per-user/per-app grants. One grant per resource type, to the group.
@@ -107,16 +111,35 @@ and resource-type repairs.
 
 ## Work already done
 
-Five gestalt PRs were implemented and passed CI, then closed pending a replan. The branches
-are pushed; reopen or re-file them rather than rewriting:
+**Phase 1 is merged and deployed** (2026-08-08). All five gestalt PRs are on `main`:
 
-| Branch | Content | Closed PR |
+| Content | PR | Merge commit |
 | --- | --- | --- |
-| `g2-canonical-identity` | Canonical identity at every authorization boundary | [#3070](https://github.com/valon-technologies/gestalt/pull/3070) |
-| `g3a-unify-authorization-evaluator` | Mounted UI + app admin decide through the evaluator | [#3071](https://github.com/valon-technologies/gestalt/pull/3071) |
-| `g1-authorization-state-safety` | Startup authorization-state write gated behind explicit apply | [#3069](https://github.com/valon-technologies/gestalt/pull/3069) |
-| `g4-authorization-conformance-suite` | Conformance suite across every server surface | [#3073](https://github.com/valon-technologies/gestalt/pull/3073) |
-| `g3b-batched-listing-decisions` | Catalog + MCP listing authorization | [#3072](https://github.com/valon-technologies/gestalt/pull/3072) |
+| Startup authorization-state write gated behind explicit apply | [#3069](https://github.com/valon-technologies/gestalt/pull/3069) | `3b5157258` |
+| Canonical identity at every authorization boundary | [#3075](https://github.com/valon-technologies/gestalt/pull/3075) | `48a6624c4` |
+| Mounted UI + app admin decide through the evaluator | [#3071](https://github.com/valon-technologies/gestalt/pull/3071) | `1c53b04aa` |
+| Catalog + MCP listing authorization (PR 9, landed early) | [#3072](https://github.com/valon-technologies/gestalt/pull/3072) | `77cd8ef6f` |
+| Conformance suite across every server surface | [#3073](https://github.com/valon-technologies/gestalt/pull/3073) | `a3ff3a33d` |
+
+Toolshed [#4144](https://github.com/valon-technologies/toolshed/pull/4144) then set
+`server.authorizationStateApply: true` in `valon-tools/deploy/prod/config.yaml` and deployed,
+with `GESTALTD_PINNED_SHA` bumped to `a3ff3a33dd6c1fc3263ebb02ab2a47315fd75443`. Prod logs
+confirm `authorization state applied` on the serving revision, so exactly one deployment
+owns that write and every other gestaltd invocation is plan-only.
+
+Two deviations from the plan as written, both deliberate:
+
+- **PR 9 (catalog + MCP listing authorization) landed in Phase 1, not Phase 4.** The
+  conformance suite asserts listing behavior that only exists once it is in, and does not
+  compile without it. Landing it early is inert while `defaultRole` is active — every
+  employee resolves viewer, so the filter removes nothing — and it means the Phase 4
+  prerequisite is already deployed. It still needs verifying against an ungranted identity
+  before any external domain is enabled.
+- **#3070 was re-filed as #3075.** Merging #3069 deleted its base branch, and GitHub
+  auto-closed the dependent PR rather than retargeting it, then refused to reopen it. When
+  landing the remaining stacks, retarget each PR to `main` *before* merging the one below it.
+
+Phase 1's check — the current-access regression with real people — is outstanding.
 
 Caveat on the conformance suite: it runs against an in-repo reference evaluator, not the
 real provider (that provider is a separate module in another repository and needs a live
@@ -128,17 +151,22 @@ not prove the shipped provider implements those semantics.
 Phases 1 and 2 are additive with `defaultRole` still active, so **nobody's access changes**
 and mistakes are free. Only Phase 3 carries risk.
 
-**Phase 1 — make group membership work** (PRs 1–5). Land the five gestalt branches above,
-wire the state-apply flag to exactly one owning revision in Toolshed, deploy under Google.
-*Check:* current-access regression for real employees. Nothing should change for anyone.
+**Phase 1 — make group membership work** (PRs 1–5). **Merged and deployed**; see "Work
+already done". *Check, still outstanding:* current-access regression for real employees.
+Nothing should change for anyone.
 
 **Phase 2 — build the roster, additively** (PR 6). Enumerate every resource type declaring a
-`defaultRole`. Build `valon-employees` from Rippling. Add memberships and one grant per
-resource type to the group.
-*Gate:* every active employee resolves to exactly one Gestalt UUID and is in the group;
-every user who authenticated in the last 30 days is either in the group or an identified
-non-employee, **with the count reconciled explicitly** — this is the check that would have
-caught the original 67-vs-358 failure; every cleared resource type has a matching grant.
+`defaultRole`. Build `valon-employees` from the Gestalt `users` table — **every `@valon.com`
+row**, by canonical UUID. Last time only 67 UUIDs went in against 358 real users; there are
+many hundreds, so export them from the database rather than transcribing a list. The DSN is
+the Cloud SQL instance valon.tools mounts, `gitlab-peach-street:us-east4:terra-east4`, with
+credentials in that project's Secret Manager. Everything the domain filter excludes —
+other domains, blank emails, subjects with no email — goes on an exclusion list that gets
+read row by row and dispositioned. Add memberships and one grant per resource type.
+*Gate:* roster count plus exclusion count equals the `users` row count, **all three numbers
+recorded** — this is the check that would have caught the original 67-vs-358 failure; every
+exclusion carries a disposition; every user who authenticated in the last 30 days is in the
+group or dispositioned; every cleared resource type has a matching grant.
 
 **Phase 3 — the flip** (PRs 7–8). Clear `defaultRole` on the two narrow custom-policy types
 first as a live rehearsal including the rollback, then on `app` and the anchor trio.
@@ -158,6 +186,10 @@ subjects match, callbacks allowlisted, HRD enabled, public signup disabled,
 temporary probe domain, then the first partner domain.
 *External acceptance test:* an authenticated external sees an empty `/apps`, `tools/list`
 returns nothing, and invocation is denied.
+*Hard ordering:* the first external login puts an external into the `users` table the roster
+was built from. The `@valon.com` filter is what stops a later rebuild granting them employee
+access, so from here it is load-bearing: complete Phases 2 and 3 first, and treat any
+rebuild afterwards as a change needing its own pass over the exclusion list.
 
 ## How to work
 
