@@ -39,8 +39,8 @@ func listingTestServer(t *testing.T, authz *serverTestAuthorizationProvider, sub
 		cfg.Authorization = authz
 		cfg.Services = testutil.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t,
-			&coretesting.StubIntegration{N: "sampleApp", DN: "Sample"},
-			&coretesting.StubIntegration{N: "otherApp", DN: "Other"},
+			&coretesting.StubIntegration{N: "sampleApp", DN: "Sample", ConnMode: core.ConnectionModeNone},
+			&coretesting.StubIntegration{N: "otherApp", DN: "Other", ConnMode: core.ConnectionModeNone},
 		)
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sampleApp": {
@@ -122,7 +122,7 @@ func TestAppsListingBatchesGroupDerivedDecisions(t *testing.T) {
 }
 
 // TestAppsListingHidesUngrantedApp proves the filtering is real: a subject with
-// no grant does not get the mounted path.
+// no grant does not see the app through an otherwise usable settings surface.
 func TestAppsListingHidesUngrantedApp(t *testing.T) {
 	t.Parallel()
 
@@ -135,8 +135,8 @@ func TestAppsListingHidesUngrantedApp(t *testing.T) {
 	if mountedPath, _ := mountedPathFor(integrations, "sampleApp"); mountedPath == "" {
 		t.Fatalf("granted app lost its mounted path: %#v", integrations)
 	}
-	if mountedPath, _ := mountedPathFor(integrations, "otherApp"); mountedPath != "" {
-		t.Fatalf("ungranted app exposed mounted path %q", mountedPath)
+	if _, ok := mountedPathFor(integrations, "otherApp"); ok {
+		t.Fatalf("ungranted app exposed in listing: %#v", integrations)
 	}
 }
 
@@ -190,6 +190,41 @@ func TestAppsListingFallsBackWhenBatchFails(t *testing.T) {
 	}
 	if len(authz.checkAccessRequests) == 0 {
 		t.Fatal("batch failure did not fall back to per-item decisions")
+	}
+}
+
+func TestAppsListingFallsThroughDeniedSettingsToAuthorizedOperations(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID(testCanonicalViewerUserID)
+	checker := &allowOneOperationAccess{allowed: "items.list"}
+	stub := &coretesting.StubIntegration{
+		N:        "sampleApp",
+		DN:       "Sample",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "sampleApp",
+			Operations: []catalog.CatalogOperation{
+				{ID: "items.list", Method: http.MethodGet, Path: "/items"},
+			},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("listing-token", subjectID, "")
+		cfg.Authorization = &serverTestAuthorizationProvider{}
+		cfg.Services = testutil.NewStubServices(t)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.AppDefs = map[string]*config.ProviderEntry{"sampleApp": {}}
+		cfg.OperationAccessChecker = checker
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	integrations := listIntegrationsForTest(t, ts)
+	if _, ok := mountedPathFor(integrations, "sampleApp"); !ok {
+		t.Fatalf("operation-authorized app missing from listing: %#v", integrations)
+	}
+	if checker.calls != 1 || checker.queries != 1 {
+		t.Fatalf("operation checks = {%d calls, %d queries}, want {1, 1}", checker.calls, checker.queries)
 	}
 }
 

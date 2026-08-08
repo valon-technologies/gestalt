@@ -17,7 +17,13 @@ func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *prin
 		return true, nil
 	}
 	if s.integrationHasSettingsSurface(p, info) {
-		return true, nil
+		settingsAccessible, err := s.integrationSettingsAccessibleContext(ctx, p, provider)
+		if err != nil {
+			return false, err
+		}
+		if settingsAccessible {
+			return true, nil
+		}
 	}
 	return s.integrationHasVisibleHTTPOperationsContext(ctx, p, provider, prov)
 }
@@ -30,6 +36,31 @@ func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info inte
 		info.CredentialState == credentialStateConfigured ||
 		info.CredentialState == credentialStateNotRequired ||
 		len(info.Connections) > 0
+}
+
+func (s *Server) integrationSettingsAccessibleContext(ctx context.Context, p *principal.Principal, provider string) (bool, error) {
+	if s == nil || s.authorization == nil {
+		return true, nil
+	}
+	if p == nil || principal.IsNonUserPrincipal(p) {
+		return false, nil
+	}
+	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), p)
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(subjectID) == "" {
+		return false, nil
+	}
+	decision, err := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
+		SubjectID: subjectID,
+		Action:    provider,
+		Resource:  s.authorizationResource(provider),
+	})
+	if err != nil {
+		return false, err
+	}
+	return decision.Allowed, nil
 }
 
 // integrationHasVisibleHTTPOperationsContext reports whether the principal can
@@ -67,8 +98,13 @@ func (s *Server) prefetchIntegrationListingDecisions(ctx context.Context, p *pri
 		return
 	}
 
-	reqs := make([]invocation.ResourceAccessRequest, 0, 2*len(appNames))
+	reqs := make([]invocation.ResourceAccessRequest, 0, 3*len(appNames))
 	for _, name := range appNames {
+		reqs = append(reqs, invocation.ResourceAccessRequest{
+			SubjectID: subjectID,
+			Action:    name,
+			Resource:  s.authorizationResource(name),
+		})
 		if req, ok := s.mountedUIListingAccessRequest(name, subjectID); ok {
 			reqs = append(reqs, req)
 		}
