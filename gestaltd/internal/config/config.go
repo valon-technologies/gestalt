@@ -1889,6 +1889,7 @@ type AuthorizationRelationshipDef struct {
 type AuthorizationSubjectDef struct {
 	Type       string            `yaml:"type,omitempty"`
 	ID         string            `yaml:"id,omitempty"`
+	Email      string            `yaml:"email,omitempty"`
 	Properties map[string]string `yaml:"properties,omitempty"`
 }
 
@@ -3682,6 +3683,7 @@ func normalizedAuthorizationRelationshipDef(def AuthorizationRelationshipDef) Au
 func normalizedAuthorizationSubjectDef(def AuthorizationSubjectDef) AuthorizationSubjectDef {
 	def.Type = strings.TrimSpace(def.Type)
 	def.ID = strings.TrimSpace(def.ID)
+	def.Email = strings.ToLower(strings.TrimSpace(def.Email))
 	if len(def.Properties) == 0 {
 		def.Properties = nil
 	} else {

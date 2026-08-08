@@ -263,6 +263,28 @@ authorization:
         id: authorization.relationships[0]
 ```
 
+Static user relationships can use an existing Gestalt user's email instead of
+copying the persisted UUID:
+
+```yaml
+authorization:
+  relationships:
+    - subject:
+        type: subject
+        email: alice@example.com
+      relation: admin
+      resource:
+        type: app
+        id: workspace-review
+```
+
+`subject.id` and `subject.email` are mutually exclusive. Email references are
+case-insensitive and resolve at startup to the canonical `user:<uuid>` subject
+stored in the system users database. An email that is not in that database is
+skipped with a warning so other relationships can still load. Ambiguous users
+and database failures abort authorization state application rather than
+silently removing grants. The same rules apply to `target.subject`.
+
 Dynamic grants are app-scoped. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
 
 Non-human callers are modeled as [service account subjects](/service-accounts), typically `service_account:<id>`. Grant access with static authorization relationships or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.

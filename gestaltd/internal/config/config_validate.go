@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"net/mail"
 	"net/url"
 	"os"
 	"path"
@@ -1887,8 +1888,20 @@ func validateAuthorizationSubjectDef(path string, subject AuthorizationSubjectDe
 	if strings.TrimSpace(subject.Type) == "" {
 		return fmt.Errorf("config validation: %s.type is required", path)
 	}
-	if strings.TrimSpace(subject.ID) == "" {
-		return fmt.Errorf("config validation: %s.id is required", path)
+	id := strings.TrimSpace(subject.ID)
+	email := strings.TrimSpace(subject.Email)
+	if (id == "") == (email == "") {
+		return fmt.Errorf("config validation: %s must set exactly one of id or email", path)
+	}
+	if email == "" {
+		return nil
+	}
+	if strings.TrimSpace(subject.Type) != "subject" {
+		return fmt.Errorf("config validation: %s.email requires type %q", path, "subject")
+	}
+	address, err := mail.ParseAddress(email)
+	if err != nil || address.Address != email {
+		return fmt.Errorf("config validation: %s.email must be a valid bare email address", path)
 	}
 	return nil
 }
