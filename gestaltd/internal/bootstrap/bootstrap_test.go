@@ -29,6 +29,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
@@ -1894,9 +1895,39 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
 		"authz": {Config: yaml.Node{Kind: yaml.MappingNode}},
 	}
+	cfg.Authorization = config.AuthorizationConfig{
+		Models: map[string]config.AuthorizationModelDef{
+			"default": {
+				ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
+					"app": {
+						Relations: map[string]config.AuthorizationRelationDef{
+							"admin": {SubjectTypes: []string{"subject"}},
+						},
+					},
+				},
+			},
+		},
+		Relationships: []config.AuthorizationRelationshipDef{{
+			Subject:  config.AuthorizationSubjectDef{Type: "subject", Email: "alice@example.com"},
+			Relation: "admin",
+			Resource: config.AuthorizationResourceDef{Type: "app", ID: "example"},
+		}},
+	}
 
 	var built []*bootstrapTransportRecordingAuthorizationProvider
+	db := &coretesting.StubIndexedDB{}
+	seedServices, err := coredata.New(db)
+	if err != nil {
+		t.Fatalf("create seed services: %v", err)
+	}
+	alice, err := seedServices.Users.FindOrCreateUser(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
 	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
+		return db, nil
+	}
 	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 		return &coretesting.StubSecretManager{Secrets: map[string]string{}}, nil
 	}
@@ -1921,6 +1952,13 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	}
 	if result.Authorization["authz"] != provider {
 		t.Fatal("bootstrapped authorization provider is not the runtime authorization provider")
+	}
+	relationships := provider.setAuthorizationState.GetRelationships()
+	if got, want := len(relationships), 1; got != want {
+		t.Fatalf("authorization relationships = %d, want %d", got, want)
+	}
+	if got, want := relationships[0].GetTuple().GetTarget().GetSubject().GetId(), principal.UserSubjectID(alice.ID); got != want {
+		t.Fatalf("authorization subject = %q, want %q", got, want)
 	}
 }
 

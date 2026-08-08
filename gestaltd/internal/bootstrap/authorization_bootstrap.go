@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -17,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
@@ -49,7 +51,16 @@ func resolveAuthorizationStateApply(cfg *config.Config) bool {
 	return parsed
 }
 
-func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config, providers map[string]core.AuthorizationProvider) error {
+type authorizationUserResolver interface {
+	FindUserByEmail(context.Context, string) (*core.User, error)
+}
+
+func bootstrapAuthorizationProviderState(
+	ctx context.Context,
+	cfg *config.Config,
+	providers map[string]core.AuthorizationProvider,
+	users authorizationUserResolver,
+) error {
 	if len(providers) == 0 {
 		return nil
 	}
@@ -79,7 +90,7 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 	if err := stampAuthorizationModel(model, time.Now()); err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
-	staticRelationships, err := staticAuthorizationRelationships(cfg.Authorization)
+	staticRelationships, err := staticAuthorizationRelationships(ctx, cfg.Authorization, users)
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
@@ -247,22 +258,39 @@ func staticAuthorizationAllowedTargets(subjectTypes []string, targets []config.A
 	return out, nil
 }
 
-func staticAuthorizationRelationships(cfg config.AuthorizationConfig) ([]*proto.Relationship, error) {
+func staticAuthorizationRelationships(
+	ctx context.Context,
+	cfg config.AuthorizationConfig,
+	users authorizationUserResolver,
+) ([]*proto.Relationship, error) {
 	out := make([]*proto.Relationship, 0, len(cfg.Relationships))
 	for i := range cfg.Relationships {
-		relationship, err := staticAuthorizationRelationship(cfg.Relationships[i])
+		relationship, include, err := staticAuthorizationRelationship(ctx, i, cfg.Relationships[i], users)
 		if err != nil {
 			return nil, fmt.Errorf("relationships[%d]: %w", i, err)
+		}
+		if !include {
+			continue
 		}
 		out = append(out, relationship)
 	}
 	return out, nil
 }
 
-func staticAuthorizationRelationship(def config.AuthorizationRelationshipDef) (*proto.Relationship, error) {
+func staticAuthorizationRelationship(
+	ctx context.Context,
+	index int,
+	def config.AuthorizationRelationshipDef,
+	users authorizationUserResolver,
+) (*proto.Relationship, bool, error) {
+	resolved, include, err := resolveStaticAuthorizationRelationshipSubject(ctx, index, def, users)
+	if err != nil || !include {
+		return nil, include, err
+	}
+	def = resolved
 	properties, err := stringPropertiesStruct(def.Properties)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	return &proto.Relationship{
 		Tuple: &proto.RelationshipTuple{
@@ -272,7 +300,55 @@ func staticAuthorizationRelationship(def config.AuthorizationRelationshipDef) (*
 		},
 		Properties:  properties,
 		SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
-	}, nil
+	}, true, nil
+}
+
+func resolveStaticAuthorizationRelationshipSubject(
+	ctx context.Context,
+	index int,
+	def config.AuthorizationRelationshipDef,
+	users authorizationUserResolver,
+) (config.AuthorizationRelationshipDef, bool, error) {
+	subject := &def.Subject
+	switch {
+	case def.Target.Subject != nil:
+		targetSubject := *def.Target.Subject
+		def.Target.Subject = &targetSubject
+		subject = def.Target.Subject
+	case def.Target.Resource != nil || def.Target.SubjectSet != nil:
+		return def, true, nil
+	}
+	email := strings.TrimSpace(subject.Email)
+	if email == "" {
+		return def, true, nil
+	}
+	if users == nil {
+		return def, false, fmt.Errorf("resolve subject email %q: user resolver is unavailable", email)
+	}
+	user, err := users.FindUserByEmail(ctx, email)
+	if errors.Is(err, core.ErrNotFound) {
+		slog.WarnContext(ctx, "skipping static authorization relationship for unknown user email",
+			"relationship_index", index,
+			"email", email,
+			"relation", strings.TrimSpace(def.Relation),
+			"resource_type", strings.TrimSpace(def.Resource.Type),
+			"resource_id", strings.TrimSpace(def.Resource.ID),
+		)
+		return def, false, nil
+	}
+	if err != nil {
+		return def, false, fmt.Errorf("resolve subject email %q: %w", email, err)
+	}
+	if user == nil || strings.TrimSpace(user.ID) == "" {
+		return def, false, fmt.Errorf("resolve subject email %q: user has no canonical id", email)
+	}
+	userID := strings.TrimSpace(user.ID)
+	if principal.ClassifyUserSubjectValue(userID) != principal.UserSubjectFormCanonical {
+		return def, false, fmt.Errorf("resolve subject email %q: user id %q is not canonical", email, userID)
+	}
+	subject.ID = principal.UserSubjectID(userID)
+	subject.Email = ""
+	return def, true, nil
 }
 
 func staticAuthorizationRelationshipTarget(def config.AuthorizationRelationshipDef) *proto.RelationshipTarget {

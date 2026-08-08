@@ -1131,7 +1131,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			_ = closeAuthorizationProviders(authorizationProviders)
 		}
 	}()
-	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders); err != nil {
+	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders, svc.Users); err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}

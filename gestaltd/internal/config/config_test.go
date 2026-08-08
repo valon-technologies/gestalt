@@ -1087,6 +1087,111 @@ func TestValidateAuthorizationRelationshipAllowsExplicitSubjectSetTarget(t *test
 	}
 }
 
+func TestLoadAuthorizationRelationshipSubjectEmails(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+authorization:
+  models:
+    default:
+      resourceTypes:
+        app:
+          relations:
+            admin:
+              subjectTypes: [subject]
+  relationships:
+    - subject:
+        type: subject
+        email: " Alice@Example.COM "
+      relation: admin
+      resource:
+        type: app
+        id: one
+    - target:
+        subject:
+          type: subject
+          email: " BOB@example.com "
+      relation: admin
+      resource:
+        type: app
+        id: two
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Authorization.Relationships[0].Subject.Email; got != "alice@example.com" {
+		t.Fatalf("subject email = %q, want alice@example.com", got)
+	}
+	if got := cfg.Authorization.Relationships[1].Target.Subject.Email; got != "bob@example.com" {
+		t.Fatalf("target subject email = %q, want bob@example.com", got)
+	}
+}
+
+func TestValidateAuthorizationRelationshipSubjectEmail(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		subject AuthorizationSubjectDef
+		wantErr string
+	}{
+		{
+			name:    "id and email",
+			subject: AuthorizationSubjectDef{Type: "subject", ID: "user:alice", Email: "alice@example.com"},
+			wantErr: "must set exactly one of id or email",
+		},
+		{
+			name:    "neither id nor email",
+			subject: AuthorizationSubjectDef{Type: "subject"},
+			wantErr: "must set exactly one of id or email",
+		},
+		{
+			name:    "email on non-user subject type",
+			subject: AuthorizationSubjectDef{Type: "service_account", Email: "alice@example.com"},
+			wantErr: `email requires type "subject"`,
+		},
+		{
+			name:    "malformed email",
+			subject: AuthorizationSubjectDef{Type: "subject", Email: "Alice <alice@example.com>"},
+			wantErr: "email must be a valid bare email address",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &Config{
+				APIVersion: ConfigAPIVersion,
+				Authorization: AuthorizationConfig{
+					Models: map[string]AuthorizationModelDef{
+						"default": {
+							ResourceTypes: map[string]AuthorizationResourceTypeDef{
+								"app": {
+									Relations: map[string]AuthorizationRelationDef{
+										"admin": {SubjectTypes: []string{"subject"}},
+									},
+								},
+							},
+						},
+					},
+					Relationships: []AuthorizationRelationshipDef{{
+						Subject:  tc.subject,
+						Relation: "admin",
+						Resource: AuthorizationResourceDef{Type: "app", ID: "example"},
+					}},
+				},
+			}
+			err := ValidateStructure(cfg)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("ValidateStructure error = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestNormalizedAuthorizationRelationshipTargetDefCopiesSubjectSet(t *testing.T) {
 	t.Parallel()
 

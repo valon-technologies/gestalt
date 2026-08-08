@@ -2,10 +2,12 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,7 +92,7 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 		},
 	}
 
-	err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider})
+	err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}, nil)
 	if err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
@@ -233,7 +235,7 @@ func TestBootstrapAuthorizationProviderStateSkipsRemoteProvider(t *testing.T) {
 		},
 	}
 
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}, nil); err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 	if provider.setAuthorizationState != nil {
@@ -330,7 +332,7 @@ func TestBootstrapAuthorizationProviderStateAuthorizesProviderGatewayRequests(t 
 		},
 	}
 	provider := &statefulAuthorizationProvider{}
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}, nil); err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 
@@ -701,13 +703,178 @@ func authorizationBootstrapTestConfig(applyEnabled *bool) *config.Config {
 	}
 }
 
+type stubAuthorizationUserResolver struct {
+	users map[string]*core.User
+	err   error
+	calls []string
+}
+
+func (s *stubAuthorizationUserResolver) FindUserByEmail(_ context.Context, email string) (*core.User, error) {
+	s.calls = append(s.calls, email)
+	if s.err != nil {
+		return nil, s.err
+	}
+	user, ok := s.users[email]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	return user, nil
+}
+
+func TestStaticAuthorizationRelationshipsResolveSubjectEmails(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.AuthorizationConfig{
+		Relationships: []config.AuthorizationRelationshipDef{
+			{
+				Subject:  config.AuthorizationSubjectDef{Type: "subject", Email: "alice@example.com"},
+				Relation: "viewer",
+				Resource: config.AuthorizationResourceDef{Type: "app", ID: "one"},
+			},
+			{
+				Target: config.AuthorizationRelationshipTargetDef{
+					Subject: &config.AuthorizationSubjectDef{Type: "subject", Email: "bob@example.com"},
+				},
+				Relation: "admin",
+				Resource: config.AuthorizationResourceDef{Type: "app", ID: "two"},
+			},
+			{
+				Subject:  config.AuthorizationSubjectDef{Type: "subject", Email: "missing@example.com"},
+				Relation: "viewer",
+				Resource: config.AuthorizationResourceDef{Type: "app", ID: "skipped"},
+			},
+			{
+				Subject:  config.AuthorizationSubjectDef{Type: "subject", ID: "service_account:unchanged"},
+				Relation: "viewer",
+				Resource: config.AuthorizationResourceDef{Type: "app", ID: "three"},
+			},
+			{
+				Subject: config.AuthorizationSubjectDef{Type: "subject", Email: "ignored@example.com"},
+				Target: config.AuthorizationRelationshipTargetDef{
+					Resource: &config.AuthorizationResourceDef{Type: "app", ID: "parent"},
+				},
+				Relation: "viewer",
+				Resource: config.AuthorizationResourceDef{Type: "app", ID: "child"},
+			},
+		},
+	}
+	users := &stubAuthorizationUserResolver{users: map[string]*core.User{
+		"alice@example.com": {ID: "11111111-1111-4111-8111-111111111111"},
+		"bob@example.com":   {ID: "22222222-2222-4222-8222-222222222222"},
+	}}
+
+	relationships, err := staticAuthorizationRelationships(context.Background(), cfg, users)
+	if err != nil {
+		t.Fatalf("staticAuthorizationRelationships: %v", err)
+	}
+	if got, want := len(relationships), 4; got != want {
+		t.Fatalf("relationships count = %d, want %d", got, want)
+	}
+	gotSubjects := []string{
+		relationships[0].GetTuple().GetTarget().GetSubject().GetId(),
+		relationships[1].GetTuple().GetTarget().GetSubject().GetId(),
+		relationships[2].GetTuple().GetTarget().GetSubject().GetId(),
+	}
+	wantSubjects := []string{
+		"user:11111111-1111-4111-8111-111111111111",
+		"user:22222222-2222-4222-8222-222222222222",
+		"service_account:unchanged",
+	}
+	if !reflect.DeepEqual(gotSubjects, wantSubjects) {
+		t.Fatalf("relationship subjects = %#v, want %#v", gotSubjects, wantSubjects)
+	}
+	if got, want := relationships[3].GetTuple().GetTarget().GetResource().GetId(), "parent"; got != want {
+		t.Fatalf("resource target id = %q, want %q", got, want)
+	}
+	if wantCalls := []string{"alice@example.com", "bob@example.com", "missing@example.com"}; !reflect.DeepEqual(users.calls, wantCalls) {
+		t.Fatalf("user lookup calls = %#v, want %#v", users.calls, wantCalls)
+	}
+}
+
+func TestStaticAuthorizationRelationshipsAbortOnUserLookupFailure(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.AuthorizationConfig{
+		Relationships: []config.AuthorizationRelationshipDef{{
+			Subject:  config.AuthorizationSubjectDef{Type: "subject", Email: "alice@example.com"},
+			Relation: "viewer",
+			Resource: config.AuthorizationResourceDef{Type: "app", ID: "one"},
+		}},
+	}
+	users := &stubAuthorizationUserResolver{err: errors.New("database unavailable")}
+
+	_, err := staticAuthorizationRelationships(context.Background(), cfg, users)
+	if err == nil || !strings.Contains(err.Error(), `resolve subject email "alice@example.com": database unavailable`) {
+		t.Fatalf("staticAuthorizationRelationships error = %v, want lookup failure", err)
+	}
+}
+
+func TestBootstrapAuthorizationProviderStateResolvesEmailsInPlanOnlyMode(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingAuthorizationProvider{}
+	cfg := authorizationBootstrapTestConfig(boolPtr(false))
+	cfg.Authorization.Relationships[0].Subject = config.AuthorizationSubjectDef{
+		Type:  "subject",
+		Email: "alice@example.com",
+	}
+	users := &stubAuthorizationUserResolver{users: map[string]*core.User{
+		"alice@example.com": {ID: "11111111-1111-4111-8111-111111111111"},
+	}}
+
+	if err := bootstrapAuthorizationProviderState(
+		context.Background(),
+		cfg,
+		map[string]core.AuthorizationProvider{"authz": provider},
+		users,
+	); err != nil {
+		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
+	}
+	if provider.setAuthorizationState != nil {
+		t.Fatal("SetAuthorizationState should not be called in plan-only mode")
+	}
+	if want := []string{"alice@example.com"}; !reflect.DeepEqual(users.calls, want) {
+		t.Fatalf("user lookup calls = %#v, want %#v", users.calls, want)
+	}
+}
+
+func TestBootstrapAuthorizationProviderStateAppliesCanonicalEmailSubject(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingAuthorizationProvider{}
+	cfg := authorizationBootstrapTestConfig(boolPtr(true))
+	cfg.Authorization.Relationships[0].Subject = config.AuthorizationSubjectDef{
+		Type:  "subject",
+		Email: "alice@example.com",
+	}
+	users := &stubAuthorizationUserResolver{users: map[string]*core.User{
+		"alice@example.com": {ID: "11111111-1111-4111-8111-111111111111"},
+	}}
+
+	if err := bootstrapAuthorizationProviderState(
+		context.Background(),
+		cfg,
+		map[string]core.AuthorizationProvider{"authz": provider},
+		users,
+	); err != nil {
+		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
+	}
+	relationships := provider.setAuthorizationState.GetRelationships()
+	if got, want := len(relationships), 1; got != want {
+		t.Fatalf("applied relationships count = %d, want %d", got, want)
+	}
+	if got, want := relationships[0].GetTuple().GetTarget().GetSubject().GetId(), "user:11111111-1111-4111-8111-111111111111"; got != want {
+		t.Fatalf("applied subject id = %q, want %q", got, want)
+	}
+}
+
 func TestBootstrapAuthorizationProviderStateDefaultsToPlanOnly(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingAuthorizationProvider{}
 	cfg := authorizationBootstrapTestConfig(nil)
 
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}, nil); err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 	if provider.setAuthorizationState != nil {
@@ -721,7 +888,7 @@ func TestBootstrapAuthorizationProviderStateExplicitFalseSkipsApply(t *testing.T
 	provider := &recordingAuthorizationProvider{}
 	cfg := authorizationBootstrapTestConfig(boolPtr(false))
 
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}, nil); err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 	if provider.setAuthorizationState != nil {
@@ -735,7 +902,7 @@ func TestBootstrapAuthorizationProviderStateEnvEnablesApply(t *testing.T) {
 	provider := &recordingAuthorizationProvider{}
 	cfg := authorizationBootstrapTestConfig(nil)
 
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}, nil); err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 	if provider.setAuthorizationState == nil {
@@ -749,7 +916,7 @@ func TestBootstrapAuthorizationProviderStateConfigOverridesEnv(t *testing.T) {
 	provider := &recordingAuthorizationProvider{}
 	cfg := authorizationBootstrapTestConfig(boolPtr(false))
 
-	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}, nil); err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 	if provider.setAuthorizationState != nil {
@@ -762,7 +929,7 @@ func TestBootstrapAuthorizationProviderStatePlanAndApplyProduceSameDigest(t *tes
 
 	planProvider := &recordingAuthorizationProvider{}
 	planCfg := authorizationBootstrapTestConfig(boolPtr(false))
-	if err := bootstrapAuthorizationProviderState(context.Background(), planCfg, map[string]core.AuthorizationProvider{"authz": planProvider}); err != nil {
+	if err := bootstrapAuthorizationProviderState(context.Background(), planCfg, map[string]core.AuthorizationProvider{"authz": planProvider}, nil); err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState (plan): %v", err)
 	}
 	planModel, err := staticAuthorizationModel(planCfg)
@@ -776,7 +943,7 @@ func TestBootstrapAuthorizationProviderStatePlanAndApplyProduceSameDigest(t *tes
 
 	applyProvider := &recordingAuthorizationProvider{}
 	applyCfg := authorizationBootstrapTestConfig(boolPtr(true))
-	if err := bootstrapAuthorizationProviderState(context.Background(), applyCfg, map[string]core.AuthorizationProvider{"authz": applyProvider}); err != nil {
+	if err := bootstrapAuthorizationProviderState(context.Background(), applyCfg, map[string]core.AuthorizationProvider{"authz": applyProvider}, nil); err != nil {
 		t.Fatalf("bootstrapAuthorizationProviderState (apply): %v", err)
 	}
 	if applyProvider.setAuthorizationState == nil {
