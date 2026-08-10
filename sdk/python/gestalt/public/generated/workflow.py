@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from gestalt.rpc_support import JsonValue
 from gestalt.workflow import WorkflowDefinitionSpec, WorkflowRunStatus, WorkflowSignal
@@ -69,10 +69,6 @@ class ListWorkflowProviderRunsRequest:
     #: disambiguated with known_apps when provided.
     target_app: str = ""
     provider: str = ""
-    #: Installed app names used to disambiguate app-owned definition ID prefixes
-    #: when target steps are empty. When set, providers must apply the same
-    #: ownership rules to returned runs and to total_count / status_counts.
-    known_apps: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

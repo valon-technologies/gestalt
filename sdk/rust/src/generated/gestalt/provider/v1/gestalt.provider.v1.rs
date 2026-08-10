@@ -4009,8 +4009,9 @@ pub struct ListWorkflowProviderRunsRequest {
     #[prost(string, tag = "7")]
     pub provider: ::prost::alloc::string::String,
     /// Installed app names used to disambiguate app-owned definition ID prefixes
-    /// when target steps are empty. When set, providers must apply the same
-    /// ownership rules to returned runs and to total_count / status_counts.
+    /// when target steps are empty. gestaltd fills this when calling providers;
+    /// public callers must omit it (rejected). When set, providers must apply the
+    /// same ownership rules to returned runs and to total_count / status_counts.
     #[prost(string, repeated, tag = "8")]
     pub known_apps: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }

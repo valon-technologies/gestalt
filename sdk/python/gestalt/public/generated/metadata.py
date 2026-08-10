@@ -824,10 +824,9 @@ METHOD_WORKFLOW_LIST_RUNS = Method(
         PublicField(name="status", json_name="status"),
         PublicField(name="target_app", json_name="targetApp"),
         PublicField(name="provider", json_name="provider"),
-        PublicField(name="known_apps", json_name="knownApps"),
     ),
     fill=("context",),
-    reject=(),
+    reject=("known_apps",),
 )
 
 METHOD_WORKFLOW_GET_RUN = Method(

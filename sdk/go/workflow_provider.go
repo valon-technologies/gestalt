@@ -72,7 +72,7 @@ type ListWorkflowProviderRunsRequest struct {
 	PageToken string
 	Status    WorkflowRunStatus
 	TargetApp string
-	// KnownApps disambiguates app-owned definition ID prefixes for target_app
+	// KnownApps is filled by gestaltd for provider calls; public callers must omit it
 	// filters when target steps are empty. Providers must apply the same rules
 	// to returned runs and to TotalCount / StatusCounts.
 	KnownApps []string

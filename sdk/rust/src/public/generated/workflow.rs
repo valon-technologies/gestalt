@@ -104,12 +104,6 @@ pub struct ListWorkflowProviderRunsRequest {
     pub target_app: String,
     /// The `provider` field.
     pub provider: String,
-    /// Installed app names used to disambiguate app-owned definition ID prefixes
-    /// when target steps are empty. When set, providers must apply the same
-    /// ownership rules to returned runs and to total_count / status_counts.
-    ///
-    /// The `known_apps` field.
-    pub known_apps: Vec<String>,
 }
 
 /// Native message type for `gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest`.

@@ -1971,7 +1971,6 @@ pub(crate) fn to_wire_list_workflow_provider_runs_request(
         target_app: value.target_app,
         context: None,
         provider: value.provider,
-        known_apps: value.known_apps,
         ..Default::default()
     }
 }

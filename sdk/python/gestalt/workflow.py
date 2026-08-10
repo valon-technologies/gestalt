@@ -150,8 +150,9 @@ class ListWorkflowProviderRunsRequest:
     context: RequestContext | None = None
     provider: str = ""
     #: Installed app names used to disambiguate app-owned definition ID prefixes
-    #: when target steps are empty. When set, providers must apply the same
-    #: ownership rules to returned runs and to total_count / status_counts.
+    #: when target steps are empty. gestaltd fills this when calling providers;
+    #: public callers must omit it (rejected). When set, providers must apply the
+    #: same ownership rules to returned runs and to total_count / status_counts.
     known_apps: list[str] = field(default_factory=list)
 
 

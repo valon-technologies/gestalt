@@ -2921,8 +2921,9 @@ type ListWorkflowProviderRunsRequest struct {
 	Context   *RequestContext `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
 	Provider  string          `protobuf:"bytes,7,opt,name=provider,proto3" json:"provider,omitempty"`
 	// Installed app names used to disambiguate app-owned definition ID prefixes
-	// when target steps are empty. When set, providers must apply the same
-	// ownership rules to returned runs and to total_count / status_counts.
+	// when target steps are empty. gestaltd fills this when calling providers;
+	// public callers must omit it (rejected). When set, providers must apply the
+	// same ownership rules to returned runs and to total_count / status_counts.
 	KnownApps     []string `protobuf:"bytes,8,rep,name=known_apps,json=knownApps,proto3" json:"known_apps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

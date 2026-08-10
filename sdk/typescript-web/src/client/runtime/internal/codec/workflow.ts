@@ -296,7 +296,6 @@ export function toWireListWorkflowProviderRunsRequest(
     status: (value.status ?? 0) as wire.WorkflowRunStatus,
     targetApp: value.targetApp ?? "",
     provider: value.provider ?? "",
-    knownApps: value.knownApps ?? [],
   });
 }
 
@@ -309,7 +308,6 @@ export function fromWireListWorkflowProviderRunsRequest(
     status: value.status,
     targetApp: value.targetApp,
     provider: value.provider,
-    knownApps: value.knownApps,
   };
 }
 
