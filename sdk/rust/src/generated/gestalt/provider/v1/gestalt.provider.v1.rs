@@ -4008,9 +4008,9 @@ pub struct ListWorkflowProviderRunsRequest {
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "7")]
     pub provider: ::prost::alloc::string::String,
-    /// Installed app names used to disambiguate app-prefixed definition IDs
-    /// (app_NAME_…) when target steps are empty. When set, providers must apply
-    /// the same ownership rules to returned runs and to total_count / status_counts.
+    /// Installed app names used to disambiguate app-owned definition ID prefixes
+    /// when target steps are empty. When set, providers must apply the same
+    /// ownership rules to returned runs and to total_count / status_counts.
     #[prost(string, repeated, tag = "8")]
     pub known_apps: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }

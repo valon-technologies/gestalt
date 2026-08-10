@@ -65,7 +65,7 @@ type ListWorkflowProviderRunsRequest struct {
 	// disambiguated with known_apps when provided.
 	TargetApp string
 	Provider  string
-	// Installed app names used to disambiguate app-prefixed definition IDs (app_NAME_…)
+	// Installed app names used to disambiguate app-owned definition ID prefixes
 	// when target steps are empty. When set, providers must apply the same
 	// ownership rules to returned runs and to total_count / status_counts.
 	KnownApps []string

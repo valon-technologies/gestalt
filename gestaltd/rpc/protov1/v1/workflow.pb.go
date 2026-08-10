@@ -2920,9 +2920,9 @@ type ListWorkflowProviderRunsRequest struct {
 	TargetApp string          `protobuf:"bytes,5,opt,name=target_app,json=targetApp,proto3" json:"target_app,omitempty"`
 	Context   *RequestContext `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
 	Provider  string          `protobuf:"bytes,7,opt,name=provider,proto3" json:"provider,omitempty"`
-	// Installed app names used to disambiguate app-prefixed definition IDs
-	// (app_NAME_…) when target steps are empty. When set, providers must apply
-	// the same ownership rules to returned runs and to total_count / status_counts.
+	// Installed app names used to disambiguate app-owned definition ID prefixes
+	// when target steps are empty. When set, providers must apply the same
+	// ownership rules to returned runs and to total_count / status_counts.
 	KnownApps     []string `protobuf:"bytes,8,rep,name=known_apps,json=knownApps,proto3" json:"known_apps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

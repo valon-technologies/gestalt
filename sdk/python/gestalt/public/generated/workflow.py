@@ -69,7 +69,7 @@ class ListWorkflowProviderRunsRequest:
     #: disambiguated with known_apps when provided.
     target_app: str = ""
     provider: str = ""
-    #: Installed app names used to disambiguate app-prefixed definition IDs (app_NAME_…)
+    #: Installed app names used to disambiguate app-owned definition ID prefixes
     #: when target steps are empty. When set, providers must apply the same
     #: ownership rules to returned runs and to total_count / status_counts.
     known_apps: list[str] = field(default_factory=list)
