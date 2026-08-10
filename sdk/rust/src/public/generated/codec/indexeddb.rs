@@ -778,9 +778,7 @@ pub(crate) fn encode_wire_index_query_request_json(
         object.insert("query".into(), encode_wire_indexed_db_query_json(inner));
     }
     if let Some(inner) = &value.count {
-        if *inner != 0 {
-            object.insert("count".into(), serde_json::json!(*inner));
-        }
+        object.insert("count".into(), serde_json::json!(*inner));
     }
     serde_json::Value::Object(object)
 }
@@ -943,9 +941,7 @@ pub(crate) fn encode_wire_object_store_range_request_json(
         object.insert("query".into(), encode_wire_indexed_db_query_json(inner));
     }
     if let Some(inner) = &value.count {
-        if *inner != 0 {
-            object.insert("count".into(), serde_json::json!(*inner));
-        }
+        object.insert("count".into(), serde_json::json!(*inner));
     }
     serde_json::Value::Object(object)
 }

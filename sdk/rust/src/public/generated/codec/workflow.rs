@@ -3093,12 +3093,10 @@ pub(crate) fn encode_wire_list_workflow_provider_runs_response_json(
         );
     }
     if let Some(inner) = &value.total_count {
-        if *inner != 0 {
-            object.insert(
-                "totalCount".into(),
-                crate::public::proto_json::encode_i64(*inner),
-            );
-        }
+        object.insert(
+            "totalCount".into(),
+            crate::public::proto_json::encode_i64(*inner),
+        );
     }
     if let Some(inner) = &value.status_counts {
         object.insert(
