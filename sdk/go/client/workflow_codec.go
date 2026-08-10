@@ -322,6 +322,7 @@ func ToWireListWorkflowProviderRunsRequest(value *ListWorkflowProviderRunsReques
 		TargetApp: value.TargetApp,
 		Context:   ToWireRequestContext(value.Context),
 		Provider:  value.Provider,
+		KnownApps: value.KnownApps,
 	}
 	return out
 }
@@ -337,6 +338,7 @@ func FromWireListWorkflowProviderRunsRequest(value *proto.ListWorkflowProviderRu
 		TargetApp: value.TargetApp,
 		Context:   FromWireRequestContext(value.Context),
 		Provider:  value.Provider,
+		KnownApps: value.KnownApps,
 	}
 	return out
 }
@@ -348,12 +350,10 @@ func ToWireListWorkflowProviderRunsResponse(value *ListWorkflowProviderRunsRespo
 	out := &proto.ListWorkflowProviderRunsResponse{
 		NextPageToken: value.NextPageToken,
 		TotalCount:    value.TotalCount,
+		StatusCounts:  ToWireWorkflowRunStatusCounts(value.StatusCounts),
 	}
 	for _, item := range value.Runs {
 		out.Runs = append(out.Runs, ToWireWorkflowRun(item))
-	}
-	if value.StatusCounts != nil {
-		out.StatusCounts = ToWireWorkflowRunStatusCounts(value.StatusCounts)
 	}
 	return out
 }
@@ -365,38 +365,12 @@ func FromWireListWorkflowProviderRunsResponse(value *proto.ListWorkflowProviderR
 	out := &ListWorkflowProviderRunsResponse{
 		NextPageToken: value.NextPageToken,
 		TotalCount:    value.TotalCount,
-		StatusCounts:  FromWireWorkflowRunStatusCounts(value.GetStatusCounts()),
+		StatusCounts:  FromWireWorkflowRunStatusCounts(value.StatusCounts),
 	}
 	for _, item := range value.Runs {
 		out.Runs = append(out.Runs, FromWireWorkflowRun(item))
 	}
 	return out
-}
-
-func ToWireWorkflowRunStatusCounts(value *WorkflowRunStatusCounts) *proto.WorkflowRunStatusCounts {
-	if value == nil {
-		return nil
-	}
-	return &proto.WorkflowRunStatusCounts{
-		Pending:   value.Pending,
-		Running:   value.Running,
-		Succeeded: value.Succeeded,
-		Failed:    value.Failed,
-		Canceled:  value.Canceled,
-	}
-}
-
-func FromWireWorkflowRunStatusCounts(value *proto.WorkflowRunStatusCounts) *WorkflowRunStatusCounts {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowRunStatusCounts{
-		Pending:   value.GetPending(),
-		Running:   value.GetRunning(),
-		Succeeded: value.GetSucceeded(),
-		Failed:    value.GetFailed(),
-		Canceled:  value.GetCanceled(),
-	}
 }
 
 func ToWireSetWorkflowProviderActivationPausedRequest(value *SetWorkflowProviderActivationPausedRequest) *proto.SetWorkflowProviderActivationPausedRequest {
@@ -983,6 +957,34 @@ func FromWireWorkflowRunEvent(value *proto.WorkflowRunEvent) *WorkflowRunEvent {
 		Type:      value.Type,
 		Data:      FromWireStruct(value.Data),
 		CreatedAt: FromWireTimestamp(value.CreatedAt),
+	}
+	return out
+}
+
+func ToWireWorkflowRunStatusCounts(value *WorkflowRunStatusCounts) *proto.WorkflowRunStatusCounts {
+	if value == nil {
+		return nil
+	}
+	out := &proto.WorkflowRunStatusCounts{
+		Pending:   value.Pending,
+		Running:   value.Running,
+		Succeeded: value.Succeeded,
+		Failed:    value.Failed,
+		Canceled:  value.Canceled,
+	}
+	return out
+}
+
+func FromWireWorkflowRunStatusCounts(value *proto.WorkflowRunStatusCounts) *WorkflowRunStatusCounts {
+	if value == nil {
+		return nil
+	}
+	out := &WorkflowRunStatusCounts{
+		Pending:   value.Pending,
+		Running:   value.Running,
+		Succeeded: value.Succeeded,
+		Failed:    value.Failed,
+		Canceled:  value.Canceled,
 	}
 	return out
 }

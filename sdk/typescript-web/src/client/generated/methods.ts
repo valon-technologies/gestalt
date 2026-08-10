@@ -705,6 +705,7 @@ export const PUBLIC_METHODS = {
           { name: "status", jsonName: "status" },
           { name: "target_app", jsonName: "targetApp" },
           { name: "provider", jsonName: "provider" },
+          { name: "known_apps", jsonName: "knownApps" },
         ],
       },
     },

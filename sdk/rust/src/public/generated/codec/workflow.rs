@@ -1971,6 +1971,7 @@ pub(crate) fn to_wire_list_workflow_provider_runs_request(
         target_app: value.target_app,
         context: None,
         provider: value.provider,
+        known_apps: value.known_apps,
         ..Default::default()
     }
 }
@@ -2020,6 +2021,18 @@ pub(crate) fn encode_wire_list_workflow_provider_runs_request_json(
         object.insert(
             "provider".into(),
             serde_json::Value::String(value.provider.to_string()),
+        );
+    }
+    if !value.known_apps.is_empty() {
+        object.insert(
+            "knownApps".into(),
+            serde_json::Value::Array(
+                value
+                    .known_apps
+                    .iter()
+                    .map(|item| serde_json::Value::String(item.to_string()))
+                    .collect(),
+            ),
         );
     }
     serde_json::Value::Object(object)
@@ -2094,6 +2107,21 @@ pub(crate) fn decode_wire_list_workflow_provider_runs_request_json(
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
+        },
+        known_apps: match object.get("knownApps") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for knownApps")
+                })?
+                .iter()
+                .map(|item| {
+                    Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                        crate::public::proto_json::decode_string(item)?,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
         },
         ..Default::default()
     })
@@ -2968,6 +2996,79 @@ pub(crate) fn decode_wire_workflow_run_json(
     })
 }
 
+/// Encodes a wire `WorkflowRunStatusCounts` as protobuf JSON.
+pub(crate) fn encode_wire_workflow_run_status_counts_json(
+    value: &v1::WorkflowRunStatusCounts,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if value.pending != 0 {
+        object.insert(
+            "pending".into(),
+            crate::public::proto_json::encode_i64(value.pending),
+        );
+    }
+    if value.running != 0 {
+        object.insert(
+            "running".into(),
+            crate::public::proto_json::encode_i64(value.running),
+        );
+    }
+    if value.succeeded != 0 {
+        object.insert(
+            "succeeded".into(),
+            crate::public::proto_json::encode_i64(value.succeeded),
+        );
+    }
+    if value.failed != 0 {
+        object.insert(
+            "failed".into(),
+            crate::public::proto_json::encode_i64(value.failed),
+        );
+    }
+    if value.canceled != 0 {
+        object.insert(
+            "canceled".into(),
+            crate::public::proto_json::encode_i64(value.canceled),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `WorkflowRunStatusCounts`.
+pub(crate) fn decode_wire_workflow_run_status_counts_json(
+    value: &serde_json::Value,
+) -> Result<v1::WorkflowRunStatusCounts, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::WorkflowRunStatusCounts {
+        pending: match object.get("pending") {
+            Some(value) => crate::public::proto_json::decode_i64(value)?,
+            None => 0,
+        },
+        running: match object.get("running") {
+            Some(value) => crate::public::proto_json::decode_i64(value)?,
+            None => 0,
+        },
+        succeeded: match object.get("succeeded") {
+            Some(value) => crate::public::proto_json::decode_i64(value)?,
+            None => 0,
+        },
+        failed: match object.get("failed") {
+            Some(value) => crate::public::proto_json::decode_i64(value)?,
+            None => 0,
+        },
+        canceled: match object.get("canceled") {
+            Some(value) => crate::public::proto_json::decode_i64(value)?,
+            None => 0,
+        },
+        ..Default::default()
+    })
+}
+
 /// Encodes a wire `ListWorkflowProviderRunsResponse` as protobuf JSON.
 pub(crate) fn encode_wire_list_workflow_provider_runs_response_json(
     value: &v1::ListWorkflowProviderRunsResponse,
@@ -2989,6 +3090,20 @@ pub(crate) fn encode_wire_list_workflow_provider_runs_response_json(
         object.insert(
             "nextPageToken".into(),
             serde_json::Value::String(value.next_page_token.to_string()),
+        );
+    }
+    if let Some(inner) = &value.total_count {
+        if *inner != 0 {
+            object.insert(
+                "totalCount".into(),
+                crate::public::proto_json::encode_i64(*inner),
+            );
+        }
+    }
+    if let Some(inner) = &value.status_counts {
+        object.insert(
+            "statusCounts".into(),
+            encode_wire_workflow_run_status_counts_json(inner),
         );
     }
     serde_json::Value::Object(object)
@@ -3021,6 +3136,14 @@ pub(crate) fn decode_wire_list_workflow_provider_runs_response_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        total_count: object
+            .get("totalCount")
+            .map(|value| crate::public::proto_json::decode_i64(value))
+            .transpose()?,
+        status_counts: object
+            .get("statusCounts")
+            .map(|value| decode_wire_workflow_run_status_counts_json(value))
+            .transpose()?,
         ..Default::default()
     })
 }

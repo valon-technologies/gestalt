@@ -2218,6 +2218,10 @@ pub const METHOD_WORKFLOW_LIST_RUNS: Method = Method {
             name: "provider",
             json_name: "provider",
         },
+        PublicField {
+            name: "known_apps",
+            json_name: "knownApps",
+        },
     ],
     fill: &["context"],
     reject: &[],

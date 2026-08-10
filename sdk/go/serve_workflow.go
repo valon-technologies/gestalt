@@ -118,6 +118,7 @@ func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWor
 		PageToken: req.GetPageToken(),
 		Status:    WorkflowRunStatus(req.GetStatus()),
 		TargetApp: req.GetTargetApp(),
+		KnownApps: append([]string(nil), req.GetKnownApps()...),
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)

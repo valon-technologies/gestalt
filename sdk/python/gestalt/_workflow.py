@@ -1762,6 +1762,7 @@ class ListWorkflowProviderRunsRequest:
     page_token: str = ""
     status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
     target_app: str = ""
+    known_apps: Sequence[str] = _dataclasses.field(default_factory=list)
     context: Any | None = None
 
 
@@ -1773,6 +1774,21 @@ class ListWorkflowProviderRunsResponse:
 
     runs: Sequence[WorkflowRun] = _dataclasses.field(default_factory=list)
     next_page_token: str = ""
+    total_count: int | None = None
+    status_counts: WorkflowRunStatusCounts | None = None
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class WorkflowRunStatusCounts:
+    """Visibility status histogram for list aggregates."""
+
+    __hash__ = None
+
+    pending: int = 0
+    running: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    canceled: int = 0
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -2005,6 +2021,7 @@ def list_workflow_provider_runs_request_from_proto(
         page_token=value.page_token,
         status=value.status,
         target_app=value.target_app,
+        known_apps=list(value.known_apps),
         context=getattr(value, "context", None),
     )
 
@@ -2017,10 +2034,24 @@ def list_workflow_provider_runs_response_to_proto(value: Any) -> Any:
         ListWorkflowProviderRunsResponse,
         "ListWorkflowProviderRunsResponse",
     )
-    return pb.ListWorkflowProviderRunsResponse(
-        runs=[workflow_run(item) for item in response.runs],
-        next_page_token=response.next_page_token,
-    )
+    status_counts = None
+    if response.status_counts is not None:
+        counts = response.status_counts
+        status_counts = pb.WorkflowRunStatusCounts(
+            pending=int(counts.pending),
+            running=int(counts.running),
+            succeeded=int(counts.succeeded),
+            failed=int(counts.failed),
+            canceled=int(counts.canceled),
+        )
+    kwargs: dict[str, Any] = {
+        "runs": [workflow_run(item) for item in response.runs],
+        "next_page_token": response.next_page_token,
+        "status_counts": status_counts,
+    }
+    if response.total_count is not None:
+        kwargs["total_count"] = int(response.total_count)
+    return pb.ListWorkflowProviderRunsResponse(**kwargs)
 
 
 def cancel_workflow_provider_run_request_from_proto(

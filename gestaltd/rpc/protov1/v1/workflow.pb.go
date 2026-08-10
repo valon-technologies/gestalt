@@ -2915,10 +2915,15 @@ type ListWorkflowProviderRunsRequest struct {
 	PageToken string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	Status    WorkflowRunStatus      `protobuf:"varint,3,opt,name=status,proto3,enum=gestalt.provider.v1.WorkflowRunStatus" json:"status,omitempty"`
 	// Optional filter for runs owned by or invoking this app. Matching uses
-	// hydrated target steps when present, otherwise app-owned definition IDs.
-	TargetApp     string          `protobuf:"bytes,5,opt,name=target_app,json=targetApp,proto3" json:"target_app,omitempty"`
-	Context       *RequestContext `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
-	Provider      string          `protobuf:"bytes,7,opt,name=provider,proto3" json:"provider,omitempty"`
+	// hydrated target steps when present, otherwise app-owned definition IDs
+	// disambiguated with known_apps when provided.
+	TargetApp string          `protobuf:"bytes,5,opt,name=target_app,json=targetApp,proto3" json:"target_app,omitempty"`
+	Context   *RequestContext `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
+	Provider  string          `protobuf:"bytes,7,opt,name=provider,proto3" json:"provider,omitempty"`
+	// Installed app names used to disambiguate app_<app>_… definition ownership
+	// when target steps are empty. When set, providers must apply the same
+	// ownership rules to returned runs and to total_count / status_counts.
+	KnownApps     []string `protobuf:"bytes,8,rep,name=known_apps,json=knownApps,proto3" json:"known_apps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2995,9 +3000,16 @@ func (x *ListWorkflowProviderRunsRequest) GetProvider() string {
 	return ""
 }
 
+func (x *ListWorkflowProviderRunsRequest) GetKnownApps() []string {
+	if x != nil {
+		return x.KnownApps
+	}
+	return nil
+}
+
 // WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-// scope with status cleared (provider + target_app). It is not derived from the
-// current page of runs.
+// scope with status cleared (provider + target_app + known_apps). It is not
+// derived from the current page of runs.
 type WorkflowRunStatusCounts struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pending       int64                  `protobuf:"varint,1,opt,name=pending,proto3" json:"pending,omitempty"`
@@ -3079,12 +3091,14 @@ type ListWorkflowProviderRunsResponse struct {
 	Runs          []*WorkflowRun         `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
 	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	// Total runs matching this request's filters in provider visibility (same
-	// query as the page). Distinct from len(runs). Omitted when unknown.
+	// query as the page, including known_apps ownership). Distinct from
+	// len(runs). Omitted when unknown.
 	TotalCount *int64 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3,oneof" json:"total_count,omitempty"`
-	// Status histogram for the same provider/target_app scope with status
-	// filter cleared. Omitted when unknown. Lets UIs render Running/Succeeded/
-	// Failed without scanning every page.
-	StatusCounts  *WorkflowRunStatusCounts `protobuf:"bytes,4,opt,name=status_counts,json=statusCounts,proto3" json:"status_counts,omitempty"`
+	// Status histogram for the same provider/target_app/known_apps scope with
+	// status filter cleared. Omitted when unknown (optional presence — an
+	// all-zero message means a known empty histogram). Lets UIs render
+	// Running/Succeeded/Failed without scanning every page.
+	StatusCounts  *WorkflowRunStatusCounts `protobuf:"bytes,4,opt,name=status_counts,json=statusCounts,proto3,oneof" json:"status_counts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4037,7 +4051,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x1dGetWorkflowProviderRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12=\n" +
 	"\acontext\x18\x04 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12\x1a\n" +
-	"\bprovider\x18\x05 \x01(\tR\bproviderJ\x04\b\x03\x10\x04\"\x9d\x02\n" +
+	"\bprovider\x18\x05 \x01(\tR\bproviderJ\x04\b\x03\x10\x04\"\xbc\x02\n" +
 	"\x1fListWorkflowProviderRunsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -4046,20 +4060,23 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"target_app\x18\x05 \x01(\tR\ttargetApp\x12=\n" +
 	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12\x1a\n" +
-	"\bprovider\x18\a \x01(\tR\bproviderJ\x04\b\x04\x10\x05\"\x9f\x01\n" +
+	"\bprovider\x18\a \x01(\tR\bprovider\x12\x1d\n" +
+	"\n" +
+	"known_apps\x18\b \x03(\tR\tknownAppsJ\x04\b\x04\x10\x05\"\x9f\x01\n" +
 	"\x17WorkflowRunStatusCounts\x12\x18\n" +
 	"\apending\x18\x01 \x01(\x03R\apending\x12\x18\n" +
 	"\arunning\x18\x02 \x01(\x03R\arunning\x12\x1c\n" +
 	"\tsucceeded\x18\x03 \x01(\x03R\tsucceeded\x12\x16\n" +
 	"\x06failed\x18\x04 \x01(\x03R\x06failed\x12\x1a\n" +
-	"\bcanceled\x18\x05 \x01(\x03R\bcanceled\"\x89\x02\n" +
+	"\bcanceled\x18\x05 \x01(\x03R\bcanceled\"\xa0\x02\n" +
 	" ListWorkflowProviderRunsResponse\x124\n" +
 	"\x04runs\x18\x01 \x03(\v2 .gestalt.provider.v1.WorkflowRunR\x04runs\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12$\n" +
 	"\vtotal_count\x18\x03 \x01(\x03H\x00R\n" +
-	"totalCount\x88\x01\x01\x12Q\n" +
-	"\rstatus_counts\x18\x04 \x01(\v2,.gestalt.provider.v1.WorkflowRunStatusCountsR\fstatusCountsB\x0e\n" +
-	"\f_total_count\"\xb2\x01\n" +
+	"totalCount\x88\x01\x01\x12V\n" +
+	"\rstatus_counts\x18\x04 \x01(\v2,.gestalt.provider.v1.WorkflowRunStatusCountsH\x01R\fstatusCounts\x88\x01\x01B\x0e\n" +
+	"\f_total_countB\x10\n" +
+	"\x0e_status_counts\"\xb2\x01\n" +
 	" CancelWorkflowProviderRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12=\n" +

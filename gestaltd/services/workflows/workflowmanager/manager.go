@@ -110,8 +110,10 @@ type ListRunsResponse struct {
 	Runs          []*ManagedRun
 	NextPageToken string
 	// TotalCount is the visibility total for this list filter when known.
+	// Distinct from len(Runs). Nil means unknown, not zero.
 	TotalCount *int64
-	// StatusCounts is the provider/target_app status histogram when known.
+	// StatusCounts is the provider/target_app/known_apps status histogram
+	// (status filter cleared) when known. Nil means unknown.
 	StatusCounts *proto.WorkflowRunStatusCounts
 }
 
@@ -393,7 +395,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 		return nil, err
 	}
 	providerNames := []string{providerName}
-	states, err := decodeWorkflowRunListPageToken(req.PageToken, providerNames, req, pageSize)
+	states, aggregatesSnap, err := decodeWorkflowRunListPageToken(req.PageToken, providerNames, req, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -401,9 +403,17 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 	candidates := make([]workflowRunListCandidate, 0, pageSize)
 	providerCandidateTotals := map[int]int{}
 	providerSourcesExhausted := map[int]bool{}
+	// Aggregates are manager-owned response metadata for this list scope.
+	// Capture once on the provider's first page (empty provider token), then
+	// echo via the manager page token so every continuation page is stable.
+	// Single-provider only: multi-provider merge has no aggregate model yet.
 	var totalCount *int64
 	var statusCounts *proto.WorkflowRunStatusCounts
 	aggregatesCaptured := false
+	if aggregatesSnap != nil && aggregatesSnap.Captured {
+		aggregatesCaptured = true
+		totalCount, statusCounts = aggregatesSnap.toResponseFields()
+	}
 	for providerIndex, providerName := range providerNames {
 		state := states[providerIndex]
 		if state.Exhausted {
@@ -434,13 +444,14 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 				break
 			}
 			seenProviderTokens[providerPageToken] = struct{}{}
-			captureAggregates := !aggregatesCaptured && providerPageToken == ""
+			captureAggregates := !aggregatesCaptured && providerPageToken == "" && len(providerNames) == 1
 			resp, err := provider.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
 				Provider:  providerName,
 				PageSize:  int32(pageSize),
 				PageToken: providerPageToken,
 				Status:    workflowwire.RunStatusToProto(req.Status),
 				TargetApp: strings.TrimSpace(req.TargetApp),
+				KnownApps: append([]string(nil), req.KnownApps...),
 				Context:   reqContext,
 			})
 			if err != nil {
@@ -462,10 +473,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 					total := *resp.TotalCount
 					totalCount = &total
 				}
-				if counts := resp.GetStatusCounts(); counts != nil {
-					copied := *counts
-					statusCounts = &copied
-				}
+				statusCounts = cloneWorkflowRunStatusCounts(resp.GetStatusCounts())
 			}
 
 			nextProviderToken := strings.TrimSpace(resp.GetNextPageToken())
@@ -573,6 +581,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 	for providerIndex, selected := range selectedByProvider {
 		nextStates[providerIndex] = workflowRunProviderResumeState(nextStates[providerIndex], selected, providerCandidateTotals[providerIndex], providerSourcesExhausted[providerIndex])
 	}
+	aggregatesOut := workflowRunListAggregatesSnapshotFromFields(aggregatesCaptured, totalCount, statusCounts)
 	if len(out) == 0 || workflowRunProviderPageStatesExhausted(nextStates) {
 		return &ListRunsResponse{
 			Runs:         out,
@@ -582,7 +591,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 	}
 	return &ListRunsResponse{
 		Runs:          out,
-		NextPageToken: workflowRunListNextPageToken(providerNames, req, pageSize, nextStates),
+		NextPageToken: workflowRunListNextPageToken(providerNames, req, pageSize, nextStates, aggregatesOut),
 		TotalCount:    totalCount,
 		StatusCounts:  statusCounts,
 	}, nil
@@ -657,12 +666,29 @@ func effectiveWorkflowRunListPageSize(pageSize int) (int, error) {
 const workflowRunListPageTokenVersion = 1
 
 type workflowRunListPageToken struct {
-	Version             int                            `json:"v"`
-	ProviderFingerprint string                         `json:"providerFingerprint"`
-	Providers           []workflowRunProviderPageState `json:"providers"`
-	PageSize            int                            `json:"pageSize"`
-	TargetApp           string                         `json:"targetApp,omitempty"`
-	Status              coreworkflow.RunStatus         `json:"status,omitempty"`
+	Version             int                              `json:"v"`
+	ProviderFingerprint string                           `json:"providerFingerprint"`
+	Providers           []workflowRunProviderPageState   `json:"providers"`
+	PageSize            int                              `json:"pageSize"`
+	TargetApp           string                           `json:"targetApp,omitempty"`
+	Status              coreworkflow.RunStatus           `json:"status,omitempty"`
+	Aggregates          *workflowRunListAggregatesSnapshot `json:"aggregates,omitempty"`
+}
+
+// workflowRunListAggregatesSnapshot persists ListRuns aggregates in the manager
+// page token so continuation pages echo the same totals as page 1.
+type workflowRunListAggregatesSnapshot struct {
+	Captured     bool                              `json:"captured"`
+	TotalCount   *int64                            `json:"totalCount,omitempty"`
+	StatusCounts *workflowRunStatusCountsSnapshot  `json:"statusCounts,omitempty"`
+}
+
+type workflowRunStatusCountsSnapshot struct {
+	Pending   int64 `json:"pending"`
+	Running   int64 `json:"running"`
+	Succeeded int64 `json:"succeeded"`
+	Failed    int64 `json:"failed"`
+	Canceled  int64 `json:"canceled"`
 }
 
 type workflowRunProviderPageState struct {
@@ -673,38 +699,38 @@ type workflowRunProviderPageState struct {
 	SkipRunIDs     []string `json:"skipRunIds,omitempty"`
 }
 
-func decodeWorkflowRunListPageToken(raw string, providerNames []string, req coreworkflow.ListRunsRequest, pageSize int) ([]workflowRunProviderPageState, error) {
+func decodeWorkflowRunListPageToken(raw string, providerNames []string, req coreworkflow.ListRunsRequest, pageSize int) ([]workflowRunProviderPageState, *workflowRunListAggregatesSnapshot, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return initialWorkflowRunProviderPageStates(providerNames), nil
+		return initialWorkflowRunProviderPageStates(providerNames), nil, nil
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(raw)
 	if err != nil {
-		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	var token workflowRunListPageToken
 	if err := json.Unmarshal(decoded, &token); err != nil {
-		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	if token.Version != workflowRunListPageTokenVersion {
-		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	if token.ProviderFingerprint != workflowRunProviderListFingerprint(providerNames) {
-		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	if len(token.Providers) != len(providerNames) {
-		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	if token.PageSize != pageSize {
-		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	if token.TargetApp != strings.TrimSpace(req.TargetApp) || token.Status != req.Status {
-		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	for i := range token.Providers {
 		state := &token.Providers[i]
 		if strings.TrimSpace(state.ProviderName) != providerNames[i] || state.ProviderOffset < 0 {
-			return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+			return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 		}
 		state.ProviderName = providerNames[i]
 		state.ProviderToken = strings.TrimSpace(state.ProviderToken)
@@ -716,10 +742,10 @@ func decodeWorkflowRunListPageToken(raw string, providerNames []string, req core
 		}
 		state.SkipRunIDs = normalizeWorkflowRunSkipIDs(state.SkipRunIDs)
 	}
-	return token.Providers, nil
+	return token.Providers, token.Aggregates, nil
 }
 
-func workflowRunListNextPageToken(providerNames []string, req coreworkflow.ListRunsRequest, pageSize int, states []workflowRunProviderPageState) string {
+func workflowRunListNextPageToken(providerNames []string, req coreworkflow.ListRunsRequest, pageSize int, states []workflowRunProviderPageState, aggregates *workflowRunListAggregatesSnapshot) string {
 	token := workflowRunListPageToken{
 		Version:             workflowRunListPageTokenVersion,
 		ProviderFingerprint: workflowRunProviderListFingerprint(providerNames),
@@ -727,8 +753,65 @@ func workflowRunListNextPageToken(providerNames []string, req coreworkflow.ListR
 		PageSize:            pageSize,
 		TargetApp:           strings.TrimSpace(req.TargetApp),
 		Status:              req.Status,
+		Aggregates:          aggregates,
 	}
 	return encodeWorkflowRunListPageToken(token)
+}
+
+func cloneWorkflowRunStatusCounts(counts *proto.WorkflowRunStatusCounts) *proto.WorkflowRunStatusCounts {
+	if counts == nil {
+		return nil
+	}
+	return &proto.WorkflowRunStatusCounts{
+		Pending:   counts.GetPending(),
+		Running:   counts.GetRunning(),
+		Succeeded: counts.GetSucceeded(),
+		Failed:    counts.GetFailed(),
+		Canceled:  counts.GetCanceled(),
+	}
+}
+
+func workflowRunListAggregatesSnapshotFromFields(captured bool, totalCount *int64, statusCounts *proto.WorkflowRunStatusCounts) *workflowRunListAggregatesSnapshot {
+	if !captured {
+		return nil
+	}
+	snap := &workflowRunListAggregatesSnapshot{Captured: true}
+	if totalCount != nil {
+		total := *totalCount
+		snap.TotalCount = &total
+	}
+	if statusCounts != nil {
+		snap.StatusCounts = &workflowRunStatusCountsSnapshot{
+			Pending:   statusCounts.GetPending(),
+			Running:   statusCounts.GetRunning(),
+			Succeeded: statusCounts.GetSucceeded(),
+			Failed:    statusCounts.GetFailed(),
+			Canceled:  statusCounts.GetCanceled(),
+		}
+	}
+	return snap
+}
+
+func (s *workflowRunListAggregatesSnapshot) toResponseFields() (*int64, *proto.WorkflowRunStatusCounts) {
+	if s == nil || !s.Captured {
+		return nil, nil
+	}
+	var totalCount *int64
+	if s.TotalCount != nil {
+		total := *s.TotalCount
+		totalCount = &total
+	}
+	var statusCounts *proto.WorkflowRunStatusCounts
+	if s.StatusCounts != nil {
+		statusCounts = &proto.WorkflowRunStatusCounts{
+			Pending:   s.StatusCounts.Pending,
+			Running:   s.StatusCounts.Running,
+			Succeeded: s.StatusCounts.Succeeded,
+			Failed:    s.StatusCounts.Failed,
+			Canceled:  s.StatusCounts.Canceled,
+		}
+	}
+	return totalCount, statusCounts
 }
 
 func initialWorkflowRunProviderPageStates(providerNames []string) []workflowRunProviderPageState {

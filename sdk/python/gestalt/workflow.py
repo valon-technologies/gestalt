@@ -144,16 +144,30 @@ class ListWorkflowProviderRunsRequest:
     page_token: str = ""
     status: WorkflowRunStatus = 0
     #: Optional filter for runs owned by or invoking this app. Matching uses
-    #: hydrated target steps when present, otherwise app-owned definition IDs.
+    #: hydrated target steps when present, otherwise app-owned definition IDs
+    #: disambiguated with known_apps when provided.
     target_app: str = ""
     context: RequestContext | None = None
     provider: str = ""
+    #: Installed app names used to disambiguate app_<app>_… definition ownership
+    #: when target steps are empty. When set, providers must apply the same
+    #: ownership rules to returned runs and to total_count / status_counts.
+    known_apps: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
 class ListWorkflowProviderRunsResponse:
     runs: list[WorkflowRun] = field(default_factory=list)
     next_page_token: str = ""
+    #: Total runs matching this request's filters in provider visibility (same
+    #: query as the page, including known_apps ownership). Distinct from
+    #: len(runs). Omitted when unknown.
+    total_count: int | None = None
+    #: Status histogram for the same provider/target_app/known_apps scope with
+    #: status filter cleared. Omitted when unknown (optional presence — an
+    #: all-zero message means a known empty histogram). Lets UIs render
+    #: Running/Succeeded/Failed without scanning every page.
+    status_counts: WorkflowRunStatusCounts | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,6 +356,20 @@ class WorkflowRunEvent:
     type: str = ""
     data: dict[str, JsonValue] | None = None
     created_at: datetime.datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowRunStatusCounts:
+    """WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
+    scope with status cleared (provider + target_app + known_apps). It is not
+    derived from the current page of runs.
+    """
+
+    pending: int = 0
+    running: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    canceled: int = 0
 
 
 @dataclass(frozen=True, slots=True)

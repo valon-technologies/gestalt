@@ -1020,15 +1020,35 @@ export interface ListWorkflowProviderRunsRequest {
   status: WorkflowRunStatus;
   /**
    * Optional filter for runs owned by or invoking this app. Matching uses
-   * hydrated target steps when present, otherwise app-owned definition IDs.
+   * hydrated target steps when present, otherwise app-owned definition IDs
+   * disambiguated with known_apps when provided.
    */
   targetApp: string;
   provider: string;
+  /**
+   * Installed app names used to disambiguate app_<app>_… definition ownership
+   * when target steps are empty. When set, providers must apply the same
+   * ownership rules to returned runs and to total_count / status_counts.
+   */
+  knownApps: string[];
 }
 
 export interface ListWorkflowProviderRunsResponse {
   runs: WorkflowRun[];
   nextPageToken: string;
+  /**
+   * Total runs matching this request's filters in provider visibility (same
+   * query as the page, including known_apps ownership). Distinct from
+   * len(runs). Omitted when unknown.
+   */
+  totalCount?: bigint;
+  /**
+   * Status histogram for the same provider/target_app/known_apps scope with
+   * status filter cleared. Omitted when unknown (optional presence — an
+   * all-zero message means a known empty histogram). Lets UIs render
+   * Running/Succeeded/Failed without scanning every page.
+   */
+  statusCounts?: WorkflowRunStatusCounts;
 }
 
 export interface SetWorkflowProviderActivationPausedRequest {
@@ -1182,6 +1202,19 @@ export interface WorkflowRunEvent {
   type: string;
   data?: JsonObjectInput;
   createdAt?: Date;
+}
+
+/**
+ * WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
+ * scope with status cleared (provider + target_app + known_apps). It is not
+ * derived from the current page of runs.
+ */
+export interface WorkflowRunStatusCounts {
+  pending: bigint;
+  running: bigint;
+  succeeded: bigint;
+  failed: bigint;
+  canceled: bigint;
 }
 
 export type WorkflowRunTriggerKind =

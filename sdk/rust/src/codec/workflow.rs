@@ -25,11 +25,11 @@ use crate::workflow::{
     WorkflowActivationTrigger, WorkflowAgentMessage, WorkflowArray, WorkflowDefinition,
     WorkflowDefinitionSpec, WorkflowEvent, WorkflowEventActivation, WorkflowEventMatch,
     WorkflowEventTriggerInvocation, WorkflowManualTrigger, WorkflowObject, WorkflowPathSource,
-    WorkflowRun, WorkflowRunEvent, WorkflowRunTrigger, WorkflowRunTriggerKind,
-    WorkflowScheduleActivation, WorkflowScheduleTrigger, WorkflowSignal, WorkflowStep,
-    WorkflowStepAction, WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowStepAttempt,
-    WorkflowStepExecution, WorkflowStepInputSource, WorkflowStepOutputSource, WorkflowStepWhen,
-    WorkflowText, WorkflowValue, WorkflowValueKind,
+    WorkflowRun, WorkflowRunEvent, WorkflowRunStatusCounts, WorkflowRunTrigger,
+    WorkflowRunTriggerKind, WorkflowScheduleActivation, WorkflowScheduleTrigger, WorkflowSignal,
+    WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn, WorkflowStepAppCall,
+    WorkflowStepAttempt, WorkflowStepExecution, WorkflowStepInputSource, WorkflowStepOutputSource,
+    WorkflowStepWhen, WorkflowText, WorkflowValue, WorkflowValueKind,
 };
 
 /// Converts a native `ApplyWorkflowProviderDefinitionRequest` to its wire message.
@@ -198,6 +198,7 @@ pub(crate) fn to_wire_list_workflow_provider_runs_request(
         target_app: value.target_app,
         context: value.context.map(to_wire_request_context),
         provider: value.provider,
+        known_apps: value.known_apps,
     }
 }
 
@@ -208,6 +209,10 @@ pub(crate) fn from_wire_list_workflow_provider_runs_response(
     ListWorkflowProviderRunsResponse {
         runs: value.runs.into_iter().map(from_wire_workflow_run).collect(),
         next_page_token: value.next_page_token,
+        total_count: value.total_count,
+        status_counts: value
+            .status_counts
+            .map(from_wire_workflow_run_status_counts),
     }
 }
 
@@ -576,6 +581,19 @@ pub(crate) fn from_wire_workflow_run_event(value: v1::WorkflowRunEvent) -> Workf
         r#type: value.r#type,
         data: value.data.map(from_wire_struct),
         created_at: value.created_at.map(from_wire_timestamp),
+    }
+}
+
+/// Converts a wire `WorkflowRunStatusCounts` to its native message.
+pub(crate) fn from_wire_workflow_run_status_counts(
+    value: v1::WorkflowRunStatusCounts,
+) -> WorkflowRunStatusCounts {
+    WorkflowRunStatusCounts {
+        pending: value.pending,
+        running: value.running,
+        succeeded: value.succeeded,
+        failed: value.failed,
+        canceled: value.canceled,
     }
 }
 

@@ -106,6 +106,7 @@ func ToWireListWorkflowProviderRunsRequest(value *ListWorkflowProviderRunsReques
 		Status:    proto.WorkflowRunStatus(value.Status),
 		TargetApp: value.TargetApp,
 		Provider:  value.Provider,
+		KnownApps: value.KnownApps,
 	}
 	return out
 }

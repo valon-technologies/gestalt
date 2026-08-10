@@ -396,6 +396,16 @@ export interface ListWorkflowProviderDefinitionsResponse {
 export interface ListWorkflowProviderRunsResponse {
   runs: readonly WorkflowRun[];
   nextPageToken?: string | undefined;
+  totalCount?: bigint | undefined;
+  statusCounts?: WorkflowRunStatusCounts | undefined;
+}
+
+export interface WorkflowRunStatusCounts {
+  pending: bigint;
+  running: bigint;
+  succeeded: bigint;
+  failed: bigint;
+  canceled: bigint;
 }
 
 export interface GetWorkflowProviderRunEventsResponse {
@@ -467,6 +477,7 @@ export interface ListWorkflowProviderRunsRequest {
   pageToken?: string | undefined;
   status?: WorkflowRunStatus | undefined;
   targetApp?: string | undefined;
+  knownApps?: readonly string[] | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -974,6 +985,8 @@ export function createWorkflowProviderService(provider: WorkflowProvider): Workf
       return create(ListWorkflowProviderRunsResponseSchema, {
         runs: result.runs.map(workflowRunToProto),
         nextPageToken: result.nextPageToken ?? "",
+        totalCount: result.totalCount,
+        statusCounts: result.statusCounts,
       });
     },
     async getRunEvents(request) {
@@ -1640,6 +1653,7 @@ function listWorkflowProviderRunsRequestFromProto(input: ProtoListWorkflowProvid
     pageToken: input.pageToken,
     status: input.status as WorkflowRunStatus,
     targetApp: input.targetApp,
+    knownApps: input.knownApps,
     context: input.context,
   };
 }

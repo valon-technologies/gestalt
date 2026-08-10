@@ -72,17 +72,22 @@ type ListWorkflowProviderRunsRequest struct {
 	PageToken string
 	Status    WorkflowRunStatus
 	TargetApp string
+	// KnownApps disambiguates app_<app>_… definition ownership for target_app
+	// filters when target steps are empty. Providers must apply the same rules
+	// to returned runs and to TotalCount / StatusCounts.
+	KnownApps []string
 }
 
 // ListWorkflowProviderRunsResponse contains workflow runs.
 type ListWorkflowProviderRunsResponse struct {
 	Runs          []WorkflowRun
 	NextPageToken string
-	// TotalCount is the visibility total for this request's filters. Nil when
-	// the provider cannot compute it. Distinct from len(Runs).
+	// TotalCount is the visibility total for this request's filters (including
+	// KnownApps ownership). Nil when the provider cannot compute it. Distinct
+	// from len(Runs).
 	TotalCount *int64
-	// StatusCounts is the provider/target_app status histogram with status
-	// filter cleared. Nil when unknown.
+	// StatusCounts is the provider/target_app/known_apps status histogram with
+	// status filter cleared. Nil when unknown.
 	StatusCounts *WorkflowRunStatusCounts
 }
 
