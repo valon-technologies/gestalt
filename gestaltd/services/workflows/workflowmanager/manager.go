@@ -666,21 +666,21 @@ func effectiveWorkflowRunListPageSize(pageSize int) (int, error) {
 const workflowRunListPageTokenVersion = 1
 
 type workflowRunListPageToken struct {
-	Version             int                              `json:"v"`
-	ProviderFingerprint string                           `json:"providerFingerprint"`
-	Providers           []workflowRunProviderPageState   `json:"providers"`
-	PageSize            int                              `json:"pageSize"`
-	TargetApp           string                           `json:"targetApp,omitempty"`
-	Status              coreworkflow.RunStatus           `json:"status,omitempty"`
+	Version             int                                `json:"v"`
+	ProviderFingerprint string                             `json:"providerFingerprint"`
+	Providers           []workflowRunProviderPageState     `json:"providers"`
+	PageSize            int                                `json:"pageSize"`
+	TargetApp           string                             `json:"targetApp,omitempty"`
+	Status              coreworkflow.RunStatus             `json:"status,omitempty"`
 	Aggregates          *workflowRunListAggregatesSnapshot `json:"aggregates,omitempty"`
 }
 
 // workflowRunListAggregatesSnapshot persists ListRuns aggregates in the manager
 // page token so continuation pages echo the same totals as page 1.
 type workflowRunListAggregatesSnapshot struct {
-	Captured     bool                              `json:"captured"`
-	TotalCount   *int64                            `json:"totalCount,omitempty"`
-	StatusCounts *workflowRunStatusCountsSnapshot  `json:"statusCounts,omitempty"`
+	Captured     bool                             `json:"captured"`
+	TotalCount   *int64                           `json:"totalCount,omitempty"`
+	StatusCounts *workflowRunStatusCountsSnapshot `json:"statusCounts,omitempty"`
 }
 
 type workflowRunStatusCountsSnapshot struct {

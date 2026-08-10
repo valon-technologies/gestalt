@@ -262,6 +262,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
                 ..Default::default()
             }],
             next_page_token: "next".to_string(),
+            ..Default::default()
         }))
     }
 
