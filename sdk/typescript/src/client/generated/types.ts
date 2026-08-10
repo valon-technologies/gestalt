@@ -293,7 +293,7 @@ export type PublicWorkflowStartRunRequest = Omit<
 
 export type PublicWorkflowListRunsRequest = Omit<
   ListWorkflowProviderRunsRequest,
-  "context"
+  "context" | "knownApps"
 >;
 
 export type PublicWorkflowGetRunRequest = Omit<

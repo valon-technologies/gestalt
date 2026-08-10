@@ -195,7 +195,7 @@ export type PublicWorkflowStartRunRequest = Init<
 >;
 
 export type PublicWorkflowListRunsRequest = Init<
-  Omit<ListWorkflowProviderRunsRequest, "context">
+  Omit<ListWorkflowProviderRunsRequest, "context" | "knownApps">
 >;
 
 export type PublicWorkflowGetRunRequest = Init<
