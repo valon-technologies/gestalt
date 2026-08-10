@@ -351,9 +351,27 @@ message ListWorkflowProviderRunsRequest {
   string provider = 7;
 }
 
+// WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
+// scope with status cleared (provider + target_app). It is not derived from the
+// current page of runs.
+message WorkflowRunStatusCounts {
+  int64 pending = 1;
+  int64 running = 2;
+  int64 succeeded = 3;
+  int64 failed = 4;
+  int64 canceled = 5;
+}
+
 message ListWorkflowProviderRunsResponse {
   repeated WorkflowRun runs = 1;
   string next_page_token = 2;
+  // Total runs matching this request's filters in provider visibility (same
+  // query as the page). Distinct from len(runs). Omitted when unknown.
+  optional int64 total_count = 3;
+  // Status histogram for the same provider/target_app scope with status
+  // filter cleared. Omitted when unknown. Lets UIs render Running/Succeeded/
+  // Failed without scanning every page.
+  WorkflowRunStatusCounts status_counts = 4;
 }
 
 message CancelWorkflowProviderRunRequest {

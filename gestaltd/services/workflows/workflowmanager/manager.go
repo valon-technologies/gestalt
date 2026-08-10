@@ -109,6 +109,10 @@ type ListDefinitionsResponse struct {
 type ListRunsResponse struct {
 	Runs          []*ManagedRun
 	NextPageToken string
+	// TotalCount is the visibility total for this list filter when known.
+	TotalCount *int64
+	// StatusCounts is the provider/target_app status histogram when known.
+	StatusCounts *proto.WorkflowRunStatusCounts
 }
 
 type Config struct {
@@ -397,6 +401,9 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 	candidates := make([]workflowRunListCandidate, 0, pageSize)
 	providerCandidateTotals := map[int]int{}
 	providerSourcesExhausted := map[int]bool{}
+	var totalCount *int64
+	var statusCounts *proto.WorkflowRunStatusCounts
+	aggregatesCaptured := false
 	for providerIndex, providerName := range providerNames {
 		state := states[providerIndex]
 		if state.Exhausted {
@@ -427,6 +434,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 				break
 			}
 			seenProviderTokens[providerPageToken] = struct{}{}
+			captureAggregates := !aggregatesCaptured && providerPageToken == ""
 			resp, err := provider.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
 				Provider:  providerName,
 				PageSize:  int32(pageSize),
@@ -447,6 +455,17 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 				}
 				providerSourceExhausted = true
 				break
+			}
+			if captureAggregates {
+				aggregatesCaptured = true
+				if resp.TotalCount != nil {
+					total := *resp.TotalCount
+					totalCount = &total
+				}
+				if counts := resp.GetStatusCounts(); counts != nil {
+					copied := *counts
+					statusCounts = &copied
+				}
 			}
 
 			nextProviderToken := strings.TrimSpace(resp.GetNextPageToken())
@@ -555,11 +574,17 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 		nextStates[providerIndex] = workflowRunProviderResumeState(nextStates[providerIndex], selected, providerCandidateTotals[providerIndex], providerSourcesExhausted[providerIndex])
 	}
 	if len(out) == 0 || workflowRunProviderPageStatesExhausted(nextStates) {
-		return &ListRunsResponse{Runs: out}, nil
+		return &ListRunsResponse{
+			Runs:         out,
+			TotalCount:   totalCount,
+			StatusCounts: statusCounts,
+		}, nil
 	}
 	return &ListRunsResponse{
 		Runs:          out,
 		NextPageToken: workflowRunListNextPageToken(providerNames, req, pageSize, nextStates),
+		TotalCount:    totalCount,
+		StatusCounts:  statusCounts,
 	}, nil
 }
 

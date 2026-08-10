@@ -126,10 +126,23 @@ func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWor
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
 	}
-	return &proto.ListWorkflowProviderRunsResponse{
+	out := &proto.ListWorkflowProviderRunsResponse{
 		Runs:          runs,
 		NextPageToken: resp.GetNextPageToken(),
-	}, nil
+	}
+	if total, ok := resp.GetTotalCount(); ok {
+		out.TotalCount = &total
+	}
+	if counts := resp.GetStatusCounts(); counts != nil {
+		out.StatusCounts = &proto.WorkflowRunStatusCounts{
+			Pending:   counts.Pending,
+			Running:   counts.Running,
+			Succeeded: counts.Succeeded,
+			Failed:    counts.Failed,
+			Canceled:  counts.Canceled,
+		}
+	}
+	return out, nil
 }
 
 func (s workflowProviderServer) GetRunEvents(ctx context.Context, req *proto.GetWorkflowProviderRunEventsRequest) (*proto.GetWorkflowProviderRunEventsResponse, error) {

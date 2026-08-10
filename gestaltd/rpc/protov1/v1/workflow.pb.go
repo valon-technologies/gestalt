@@ -2995,17 +2995,103 @@ func (x *ListWorkflowProviderRunsRequest) GetProvider() string {
 	return ""
 }
 
+// WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
+// scope with status cleared (provider + target_app). It is not derived from the
+// current page of runs.
+type WorkflowRunStatusCounts struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pending       int64                  `protobuf:"varint,1,opt,name=pending,proto3" json:"pending,omitempty"`
+	Running       int64                  `protobuf:"varint,2,opt,name=running,proto3" json:"running,omitempty"`
+	Succeeded     int64                  `protobuf:"varint,3,opt,name=succeeded,proto3" json:"succeeded,omitempty"`
+	Failed        int64                  `protobuf:"varint,4,opt,name=failed,proto3" json:"failed,omitempty"`
+	Canceled      int64                  `protobuf:"varint,5,opt,name=canceled,proto3" json:"canceled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowRunStatusCounts) Reset() {
+	*x = WorkflowRunStatusCounts{}
+	mi := &file_v1_workflow_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowRunStatusCounts) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowRunStatusCounts) ProtoMessage() {}
+
+func (x *WorkflowRunStatusCounts) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowRunStatusCounts.ProtoReflect.Descriptor instead.
+func (*WorkflowRunStatusCounts) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *WorkflowRunStatusCounts) GetPending() int64 {
+	if x != nil {
+		return x.Pending
+	}
+	return 0
+}
+
+func (x *WorkflowRunStatusCounts) GetRunning() int64 {
+	if x != nil {
+		return x.Running
+	}
+	return 0
+}
+
+func (x *WorkflowRunStatusCounts) GetSucceeded() int64 {
+	if x != nil {
+		return x.Succeeded
+	}
+	return 0
+}
+
+func (x *WorkflowRunStatusCounts) GetFailed() int64 {
+	if x != nil {
+		return x.Failed
+	}
+	return 0
+}
+
+func (x *WorkflowRunStatusCounts) GetCanceled() int64 {
+	if x != nil {
+		return x.Canceled
+	}
+	return 0
+}
+
 type ListWorkflowProviderRunsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Runs          []*WorkflowRun         `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
 	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// Total runs matching this request's filters in provider visibility (same
+	// query as the page). Distinct from len(runs). Omitted when unknown.
+	TotalCount *int64 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3,oneof" json:"total_count,omitempty"`
+	// Status histogram for the same provider/target_app scope with status
+	// filter cleared. Omitted when unknown. Lets UIs render Running/Succeeded/
+	// Failed without scanning every page.
+	StatusCounts  *WorkflowRunStatusCounts `protobuf:"bytes,4,opt,name=status_counts,json=statusCounts,proto3" json:"status_counts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListWorkflowProviderRunsResponse) Reset() {
 	*x = ListWorkflowProviderRunsResponse{}
-	mi := &file_v1_workflow_proto_msgTypes[38]
+	mi := &file_v1_workflow_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3017,7 +3103,7 @@ func (x *ListWorkflowProviderRunsResponse) String() string {
 func (*ListWorkflowProviderRunsResponse) ProtoMessage() {}
 
 func (x *ListWorkflowProviderRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[38]
+	mi := &file_v1_workflow_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3030,7 +3116,7 @@ func (x *ListWorkflowProviderRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorkflowProviderRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderRunsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{38}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ListWorkflowProviderRunsResponse) GetRuns() []*WorkflowRun {
@@ -3047,6 +3133,20 @@ func (x *ListWorkflowProviderRunsResponse) GetNextPageToken() string {
 	return ""
 }
 
+func (x *ListWorkflowProviderRunsResponse) GetTotalCount() int64 {
+	if x != nil && x.TotalCount != nil {
+		return *x.TotalCount
+	}
+	return 0
+}
+
+func (x *ListWorkflowProviderRunsResponse) GetStatusCounts() *WorkflowRunStatusCounts {
+	if x != nil {
+		return x.StatusCounts
+	}
+	return nil
+}
+
 type CancelWorkflowProviderRunRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -3059,7 +3159,7 @@ type CancelWorkflowProviderRunRequest struct {
 
 func (x *CancelWorkflowProviderRunRequest) Reset() {
 	*x = CancelWorkflowProviderRunRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[39]
+	mi := &file_v1_workflow_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3071,7 +3171,7 @@ func (x *CancelWorkflowProviderRunRequest) String() string {
 func (*CancelWorkflowProviderRunRequest) ProtoMessage() {}
 
 func (x *CancelWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[39]
+	mi := &file_v1_workflow_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3084,7 +3184,7 @@ func (x *CancelWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelWorkflowProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*CancelWorkflowProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{39}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CancelWorkflowProviderRunRequest) GetRunId() string {
@@ -3127,7 +3227,7 @@ type SignalWorkflowProviderRunRequest struct {
 
 func (x *SignalWorkflowProviderRunRequest) Reset() {
 	*x = SignalWorkflowProviderRunRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[40]
+	mi := &file_v1_workflow_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3139,7 +3239,7 @@ func (x *SignalWorkflowProviderRunRequest) String() string {
 func (*SignalWorkflowProviderRunRequest) ProtoMessage() {}
 
 func (x *SignalWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[40]
+	mi := &file_v1_workflow_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3152,7 +3252,7 @@ func (x *SignalWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignalWorkflowProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*SignalWorkflowProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{40}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SignalWorkflowProviderRunRequest) GetRunId() string {
@@ -3199,7 +3299,7 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 
 func (x *SignalOrStartWorkflowProviderRunRequest) Reset() {
 	*x = SignalOrStartWorkflowProviderRunRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[41]
+	mi := &file_v1_workflow_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3211,7 +3311,7 @@ func (x *SignalOrStartWorkflowProviderRunRequest) String() string {
 func (*SignalOrStartWorkflowProviderRunRequest) ProtoMessage() {}
 
 func (x *SignalOrStartWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[41]
+	mi := &file_v1_workflow_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3224,7 +3324,7 @@ func (x *SignalOrStartWorkflowProviderRunRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use SignalOrStartWorkflowProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*SignalOrStartWorkflowProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{41}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SignalOrStartWorkflowProviderRunRequest) GetWorkflowKey() string {
@@ -3295,7 +3395,7 @@ type SignalWorkflowRunResponse struct {
 
 func (x *SignalWorkflowRunResponse) Reset() {
 	*x = SignalWorkflowRunResponse{}
-	mi := &file_v1_workflow_proto_msgTypes[42]
+	mi := &file_v1_workflow_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3307,7 +3407,7 @@ func (x *SignalWorkflowRunResponse) String() string {
 func (*SignalWorkflowRunResponse) ProtoMessage() {}
 
 func (x *SignalWorkflowRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[42]
+	mi := &file_v1_workflow_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3320,7 +3420,7 @@ func (x *SignalWorkflowRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignalWorkflowRunResponse.ProtoReflect.Descriptor instead.
 func (*SignalWorkflowRunResponse) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{42}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SignalWorkflowRunResponse) GetRun() *WorkflowRun {
@@ -3362,7 +3462,7 @@ type DeliverWorkflowProviderEventRequest struct {
 
 func (x *DeliverWorkflowProviderEventRequest) Reset() {
 	*x = DeliverWorkflowProviderEventRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[43]
+	mi := &file_v1_workflow_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3374,7 +3474,7 @@ func (x *DeliverWorkflowProviderEventRequest) String() string {
 func (*DeliverWorkflowProviderEventRequest) ProtoMessage() {}
 
 func (x *DeliverWorkflowProviderEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[43]
+	mi := &file_v1_workflow_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3387,7 +3487,7 @@ func (x *DeliverWorkflowProviderEventRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use DeliverWorkflowProviderEventRequest.ProtoReflect.Descriptor instead.
 func (*DeliverWorkflowProviderEventRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{43}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *DeliverWorkflowProviderEventRequest) GetProvider() string {
@@ -3425,7 +3525,7 @@ type WorkflowRunEvent struct {
 
 func (x *WorkflowRunEvent) Reset() {
 	*x = WorkflowRunEvent{}
-	mi := &file_v1_workflow_proto_msgTypes[44]
+	mi := &file_v1_workflow_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3437,7 +3537,7 @@ func (x *WorkflowRunEvent) String() string {
 func (*WorkflowRunEvent) ProtoMessage() {}
 
 func (x *WorkflowRunEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[44]
+	mi := &file_v1_workflow_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3450,7 +3550,7 @@ func (x *WorkflowRunEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowRunEvent.ProtoReflect.Descriptor instead.
 func (*WorkflowRunEvent) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{44}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *WorkflowRunEvent) GetId() string {
@@ -3506,7 +3606,7 @@ type GetWorkflowProviderRunEventsRequest struct {
 
 func (x *GetWorkflowProviderRunEventsRequest) Reset() {
 	*x = GetWorkflowProviderRunEventsRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[45]
+	mi := &file_v1_workflow_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3518,7 +3618,7 @@ func (x *GetWorkflowProviderRunEventsRequest) String() string {
 func (*GetWorkflowProviderRunEventsRequest) ProtoMessage() {}
 
 func (x *GetWorkflowProviderRunEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[45]
+	mi := &file_v1_workflow_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3531,7 +3631,7 @@ func (x *GetWorkflowProviderRunEventsRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use GetWorkflowProviderRunEventsRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowProviderRunEventsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{45}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GetWorkflowProviderRunEventsRequest) GetRunId() string {
@@ -3564,7 +3664,7 @@ type GetWorkflowProviderRunEventsResponse struct {
 
 func (x *GetWorkflowProviderRunEventsResponse) Reset() {
 	*x = GetWorkflowProviderRunEventsResponse{}
-	mi := &file_v1_workflow_proto_msgTypes[46]
+	mi := &file_v1_workflow_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3576,7 +3676,7 @@ func (x *GetWorkflowProviderRunEventsResponse) String() string {
 func (*GetWorkflowProviderRunEventsResponse) ProtoMessage() {}
 
 func (x *GetWorkflowProviderRunEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[46]
+	mi := &file_v1_workflow_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3589,7 +3689,7 @@ func (x *GetWorkflowProviderRunEventsResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use GetWorkflowProviderRunEventsResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkflowProviderRunEventsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{46}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetWorkflowProviderRunEventsResponse) GetEvents() []*WorkflowRunEvent {
@@ -3610,7 +3710,7 @@ type GetWorkflowProviderRunOutputRequest struct {
 
 func (x *GetWorkflowProviderRunOutputRequest) Reset() {
 	*x = GetWorkflowProviderRunOutputRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[47]
+	mi := &file_v1_workflow_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3622,7 +3722,7 @@ func (x *GetWorkflowProviderRunOutputRequest) String() string {
 func (*GetWorkflowProviderRunOutputRequest) ProtoMessage() {}
 
 func (x *GetWorkflowProviderRunOutputRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[47]
+	mi := &file_v1_workflow_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3635,7 +3735,7 @@ func (x *GetWorkflowProviderRunOutputRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use GetWorkflowProviderRunOutputRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowProviderRunOutputRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{47}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GetWorkflowProviderRunOutputRequest) GetRunId() string {
@@ -3668,7 +3768,7 @@ type GetWorkflowProviderRunOutputResponse struct {
 
 func (x *GetWorkflowProviderRunOutputResponse) Reset() {
 	*x = GetWorkflowProviderRunOutputResponse{}
-	mi := &file_v1_workflow_proto_msgTypes[48]
+	mi := &file_v1_workflow_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3680,7 +3780,7 @@ func (x *GetWorkflowProviderRunOutputResponse) String() string {
 func (*GetWorkflowProviderRunOutputResponse) ProtoMessage() {}
 
 func (x *GetWorkflowProviderRunOutputResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[48]
+	mi := &file_v1_workflow_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3693,7 +3793,7 @@ func (x *GetWorkflowProviderRunOutputResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use GetWorkflowProviderRunOutputResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkflowProviderRunOutputResponse) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{48}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GetWorkflowProviderRunOutputResponse) GetOutput() *structpb.Value {
@@ -3946,10 +4046,20 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"target_app\x18\x05 \x01(\tR\ttargetApp\x12=\n" +
 	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12\x1a\n" +
-	"\bprovider\x18\a \x01(\tR\bproviderJ\x04\b\x04\x10\x05\"\x80\x01\n" +
+	"\bprovider\x18\a \x01(\tR\bproviderJ\x04\b\x04\x10\x05\"\x9f\x01\n" +
+	"\x17WorkflowRunStatusCounts\x12\x18\n" +
+	"\apending\x18\x01 \x01(\x03R\apending\x12\x18\n" +
+	"\arunning\x18\x02 \x01(\x03R\arunning\x12\x1c\n" +
+	"\tsucceeded\x18\x03 \x01(\x03R\tsucceeded\x12\x16\n" +
+	"\x06failed\x18\x04 \x01(\x03R\x06failed\x12\x1a\n" +
+	"\bcanceled\x18\x05 \x01(\x03R\bcanceled\"\x89\x02\n" +
 	" ListWorkflowProviderRunsResponse\x124\n" +
 	"\x04runs\x18\x01 \x03(\v2 .gestalt.provider.v1.WorkflowRunR\x04runs\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xb2\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12$\n" +
+	"\vtotal_count\x18\x03 \x01(\x03H\x00R\n" +
+	"totalCount\x88\x01\x01\x12Q\n" +
+	"\rstatus_counts\x18\x04 \x01(\v2,.gestalt.provider.v1.WorkflowRunStatusCountsR\fstatusCountsB\x0e\n" +
+	"\f_total_count\"\xb2\x01\n" +
 	" CancelWorkflowProviderRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12=\n" +
@@ -4064,7 +4174,7 @@ func file_v1_workflow_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_workflow_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_v1_workflow_proto_goTypes = []any{
 	(WorkflowRunStatus)(0),                             // 0: gestalt.provider.v1.WorkflowRunStatus
 	(WorkflowStepStatus)(0),                            // 1: gestalt.provider.v1.WorkflowStepStatus
@@ -4106,46 +4216,47 @@ var file_v1_workflow_proto_goTypes = []any{
 	(*StartWorkflowProviderRunRequest)(nil),            // 37: gestalt.provider.v1.StartWorkflowProviderRunRequest
 	(*GetWorkflowProviderRunRequest)(nil),              // 38: gestalt.provider.v1.GetWorkflowProviderRunRequest
 	(*ListWorkflowProviderRunsRequest)(nil),            // 39: gestalt.provider.v1.ListWorkflowProviderRunsRequest
-	(*ListWorkflowProviderRunsResponse)(nil),           // 40: gestalt.provider.v1.ListWorkflowProviderRunsResponse
-	(*CancelWorkflowProviderRunRequest)(nil),           // 41: gestalt.provider.v1.CancelWorkflowProviderRunRequest
-	(*SignalWorkflowProviderRunRequest)(nil),           // 42: gestalt.provider.v1.SignalWorkflowProviderRunRequest
-	(*SignalOrStartWorkflowProviderRunRequest)(nil),    // 43: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest
-	(*SignalWorkflowRunResponse)(nil),                  // 44: gestalt.provider.v1.SignalWorkflowRunResponse
-	(*DeliverWorkflowProviderEventRequest)(nil),        // 45: gestalt.provider.v1.DeliverWorkflowProviderEventRequest
-	(*WorkflowRunEvent)(nil),                           // 46: gestalt.provider.v1.WorkflowRunEvent
-	(*GetWorkflowProviderRunEventsRequest)(nil),        // 47: gestalt.provider.v1.GetWorkflowProviderRunEventsRequest
-	(*GetWorkflowProviderRunEventsResponse)(nil),       // 48: gestalt.provider.v1.GetWorkflowProviderRunEventsResponse
-	(*GetWorkflowProviderRunOutputRequest)(nil),        // 49: gestalt.provider.v1.GetWorkflowProviderRunOutputRequest
-	(*GetWorkflowProviderRunOutputResponse)(nil),       // 50: gestalt.provider.v1.GetWorkflowProviderRunOutputResponse
-	nil,                           // 51: gestalt.provider.v1.WorkflowStep.InputsEntry
-	nil,                           // 52: gestalt.provider.v1.WorkflowObject.FieldsEntry
-	nil,                           // 53: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
-	(*structpb.Struct)(nil),       // 54: google.protobuf.Struct
-	(*AgentToolRef)(nil),          // 55: gestalt.provider.v1.AgentToolRef
-	(*AgentOutput)(nil),           // 56: gestalt.provider.v1.AgentOutput
-	(*structpb.Value)(nil),        // 57: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil), // 58: google.protobuf.Timestamp
-	(*RequestContext)(nil),        // 59: gestalt.provider.v1.RequestContext
-	(*emptypb.Empty)(nil),         // 60: google.protobuf.Empty
+	(*WorkflowRunStatusCounts)(nil),                    // 40: gestalt.provider.v1.WorkflowRunStatusCounts
+	(*ListWorkflowProviderRunsResponse)(nil),           // 41: gestalt.provider.v1.ListWorkflowProviderRunsResponse
+	(*CancelWorkflowProviderRunRequest)(nil),           // 42: gestalt.provider.v1.CancelWorkflowProviderRunRequest
+	(*SignalWorkflowProviderRunRequest)(nil),           // 43: gestalt.provider.v1.SignalWorkflowProviderRunRequest
+	(*SignalOrStartWorkflowProviderRunRequest)(nil),    // 44: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest
+	(*SignalWorkflowRunResponse)(nil),                  // 45: gestalt.provider.v1.SignalWorkflowRunResponse
+	(*DeliverWorkflowProviderEventRequest)(nil),        // 46: gestalt.provider.v1.DeliverWorkflowProviderEventRequest
+	(*WorkflowRunEvent)(nil),                           // 47: gestalt.provider.v1.WorkflowRunEvent
+	(*GetWorkflowProviderRunEventsRequest)(nil),        // 48: gestalt.provider.v1.GetWorkflowProviderRunEventsRequest
+	(*GetWorkflowProviderRunEventsResponse)(nil),       // 49: gestalt.provider.v1.GetWorkflowProviderRunEventsResponse
+	(*GetWorkflowProviderRunOutputRequest)(nil),        // 50: gestalt.provider.v1.GetWorkflowProviderRunOutputRequest
+	(*GetWorkflowProviderRunOutputResponse)(nil),       // 51: gestalt.provider.v1.GetWorkflowProviderRunOutputResponse
+	nil,                           // 52: gestalt.provider.v1.WorkflowStep.InputsEntry
+	nil,                           // 53: gestalt.provider.v1.WorkflowObject.FieldsEntry
+	nil,                           // 54: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
+	(*structpb.Struct)(nil),       // 55: google.protobuf.Struct
+	(*AgentToolRef)(nil),          // 56: gestalt.provider.v1.AgentToolRef
+	(*AgentOutput)(nil),           // 57: gestalt.provider.v1.AgentOutput
+	(*structpb.Value)(nil),        // 58: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil), // 59: google.protobuf.Timestamp
+	(*RequestContext)(nil),        // 60: gestalt.provider.v1.RequestContext
+	(*emptypb.Empty)(nil),         // 61: google.protobuf.Empty
 }
 var file_v1_workflow_proto_depIdxs = []int32{
 	3,   // 0: gestalt.provider.v1.BoundWorkflowTarget.steps:type_name -> gestalt.provider.v1.WorkflowStep
-	51,  // 1: gestalt.provider.v1.WorkflowStep.inputs:type_name -> gestalt.provider.v1.WorkflowStep.InputsEntry
+	52,  // 1: gestalt.provider.v1.WorkflowStep.inputs:type_name -> gestalt.provider.v1.WorkflowStep.InputsEntry
 	8,   // 2: gestalt.provider.v1.WorkflowStep.when:type_name -> gestalt.provider.v1.WorkflowStepWhen
-	54,  // 3: gestalt.provider.v1.WorkflowStep.metadata:type_name -> google.protobuf.Struct
+	55,  // 3: gestalt.provider.v1.WorkflowStep.metadata:type_name -> google.protobuf.Struct
 	4,   // 4: gestalt.provider.v1.WorkflowStep.app:type_name -> gestalt.provider.v1.WorkflowStepAppCall
 	5,   // 5: gestalt.provider.v1.WorkflowStep.agent:type_name -> gestalt.provider.v1.WorkflowStepAgentTurn
 	9,   // 6: gestalt.provider.v1.WorkflowStepAppCall.input:type_name -> gestalt.provider.v1.WorkflowValue
 	7,   // 7: gestalt.provider.v1.WorkflowStepAgentTurn.prompt:type_name -> gestalt.provider.v1.WorkflowText
 	6,   // 8: gestalt.provider.v1.WorkflowStepAgentTurn.messages:type_name -> gestalt.provider.v1.WorkflowAgentMessage
-	55,  // 9: gestalt.provider.v1.WorkflowStepAgentTurn.tools:type_name -> gestalt.provider.v1.AgentToolRef
-	56,  // 10: gestalt.provider.v1.WorkflowStepAgentTurn.output:type_name -> gestalt.provider.v1.AgentOutput
-	54,  // 11: gestalt.provider.v1.WorkflowStepAgentTurn.model_options:type_name -> google.protobuf.Struct
+	56,  // 9: gestalt.provider.v1.WorkflowStepAgentTurn.tools:type_name -> gestalt.provider.v1.AgentToolRef
+	57,  // 10: gestalt.provider.v1.WorkflowStepAgentTurn.output:type_name -> gestalt.provider.v1.AgentOutput
+	55,  // 11: gestalt.provider.v1.WorkflowStepAgentTurn.model_options:type_name -> google.protobuf.Struct
 	7,   // 12: gestalt.provider.v1.WorkflowAgentMessage.text:type_name -> gestalt.provider.v1.WorkflowText
-	54,  // 13: gestalt.provider.v1.WorkflowAgentMessage.metadata:type_name -> google.protobuf.Struct
+	55,  // 13: gestalt.provider.v1.WorkflowAgentMessage.metadata:type_name -> google.protobuf.Struct
 	9,   // 14: gestalt.provider.v1.WorkflowStepWhen.value:type_name -> gestalt.provider.v1.WorkflowValue
-	57,  // 15: gestalt.provider.v1.WorkflowStepWhen.equals:type_name -> google.protobuf.Value
-	57,  // 16: gestalt.provider.v1.WorkflowValue.literal:type_name -> google.protobuf.Value
+	58,  // 15: gestalt.provider.v1.WorkflowStepWhen.equals:type_name -> google.protobuf.Value
+	58,  // 16: gestalt.provider.v1.WorkflowValue.literal:type_name -> google.protobuf.Value
 	10,  // 17: gestalt.provider.v1.WorkflowValue.object:type_name -> gestalt.provider.v1.WorkflowObject
 	11,  // 18: gestalt.provider.v1.WorkflowValue.array:type_name -> gestalt.provider.v1.WorkflowArray
 	7,   // 19: gestalt.provider.v1.WorkflowValue.template:type_name -> gestalt.provider.v1.WorkflowText
@@ -4153,11 +4264,11 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	12,  // 21: gestalt.provider.v1.WorkflowValue.signal:type_name -> gestalt.provider.v1.WorkflowPathSource
 	13,  // 22: gestalt.provider.v1.WorkflowValue.step_output:type_name -> gestalt.provider.v1.WorkflowStepOutputSource
 	14,  // 23: gestalt.provider.v1.WorkflowValue.step_input:type_name -> gestalt.provider.v1.WorkflowStepInputSource
-	52,  // 24: gestalt.provider.v1.WorkflowObject.fields:type_name -> gestalt.provider.v1.WorkflowObject.FieldsEntry
+	53,  // 24: gestalt.provider.v1.WorkflowObject.fields:type_name -> gestalt.provider.v1.WorkflowObject.FieldsEntry
 	9,   // 25: gestalt.provider.v1.WorkflowArray.values:type_name -> gestalt.provider.v1.WorkflowValue
-	58,  // 26: gestalt.provider.v1.WorkflowEvent.time:type_name -> google.protobuf.Timestamp
-	54,  // 27: gestalt.provider.v1.WorkflowEvent.data:type_name -> google.protobuf.Struct
-	53,  // 28: gestalt.provider.v1.WorkflowEvent.extensions:type_name -> gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
+	59,  // 26: gestalt.provider.v1.WorkflowEvent.time:type_name -> google.protobuf.Timestamp
+	55,  // 27: gestalt.provider.v1.WorkflowEvent.data:type_name -> google.protobuf.Struct
+	54,  // 28: gestalt.provider.v1.WorkflowEvent.extensions:type_name -> gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
 	16,  // 29: gestalt.provider.v1.WorkflowEventActivation.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
 	9,   // 30: gestalt.provider.v1.WorkflowActivation.input:type_name -> gestalt.provider.v1.WorkflowValue
 	17,  // 31: gestalt.provider.v1.WorkflowActivation.schedule:type_name -> gestalt.provider.v1.WorkflowScheduleActivation
@@ -4166,104 +4277,105 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	19,  // 34: gestalt.provider.v1.WorkflowDefinitionSpec.activations:type_name -> gestalt.provider.v1.WorkflowActivation
 	2,   // 35: gestalt.provider.v1.WorkflowDefinition.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
 	19,  // 36: gestalt.provider.v1.WorkflowDefinition.activations:type_name -> gestalt.provider.v1.WorkflowActivation
-	58,  // 37: gestalt.provider.v1.WorkflowDefinition.created_at:type_name -> google.protobuf.Timestamp
-	58,  // 38: gestalt.provider.v1.WorkflowDefinition.updated_at:type_name -> google.protobuf.Timestamp
-	58,  // 39: gestalt.provider.v1.WorkflowScheduleTrigger.scheduled_for:type_name -> google.protobuf.Timestamp
+	59,  // 37: gestalt.provider.v1.WorkflowDefinition.created_at:type_name -> google.protobuf.Timestamp
+	59,  // 38: gestalt.provider.v1.WorkflowDefinition.updated_at:type_name -> google.protobuf.Timestamp
+	59,  // 39: gestalt.provider.v1.WorkflowScheduleTrigger.scheduled_for:type_name -> google.protobuf.Timestamp
 	15,  // 40: gestalt.provider.v1.WorkflowEventTriggerInvocation.event:type_name -> gestalt.provider.v1.WorkflowEvent
 	22,  // 41: gestalt.provider.v1.WorkflowRunTrigger.manual:type_name -> gestalt.provider.v1.WorkflowManualTrigger
 	23,  // 42: gestalt.provider.v1.WorkflowRunTrigger.schedule:type_name -> gestalt.provider.v1.WorkflowScheduleTrigger
 	24,  // 43: gestalt.provider.v1.WorkflowRunTrigger.event:type_name -> gestalt.provider.v1.WorkflowEventTriggerInvocation
 	1,   // 44: gestalt.provider.v1.WorkflowStepAttempt.status:type_name -> gestalt.provider.v1.WorkflowStepStatus
-	57,  // 45: gestalt.provider.v1.WorkflowStepAttempt.input:type_name -> google.protobuf.Value
-	57,  // 46: gestalt.provider.v1.WorkflowStepAttempt.output:type_name -> google.protobuf.Value
-	58,  // 47: gestalt.provider.v1.WorkflowStepAttempt.started_at:type_name -> google.protobuf.Timestamp
-	58,  // 48: gestalt.provider.v1.WorkflowStepAttempt.completed_at:type_name -> google.protobuf.Timestamp
+	58,  // 45: gestalt.provider.v1.WorkflowStepAttempt.input:type_name -> google.protobuf.Value
+	58,  // 46: gestalt.provider.v1.WorkflowStepAttempt.output:type_name -> google.protobuf.Value
+	59,  // 47: gestalt.provider.v1.WorkflowStepAttempt.started_at:type_name -> google.protobuf.Timestamp
+	59,  // 48: gestalt.provider.v1.WorkflowStepAttempt.completed_at:type_name -> google.protobuf.Timestamp
 	1,   // 49: gestalt.provider.v1.WorkflowStepExecution.status:type_name -> gestalt.provider.v1.WorkflowStepStatus
 	26,  // 50: gestalt.provider.v1.WorkflowStepExecution.attempts:type_name -> gestalt.provider.v1.WorkflowStepAttempt
-	57,  // 51: gestalt.provider.v1.WorkflowStepExecution.input:type_name -> google.protobuf.Value
-	57,  // 52: gestalt.provider.v1.WorkflowStepExecution.output:type_name -> google.protobuf.Value
-	58,  // 53: gestalt.provider.v1.WorkflowStepExecution.started_at:type_name -> google.protobuf.Timestamp
-	58,  // 54: gestalt.provider.v1.WorkflowStepExecution.completed_at:type_name -> google.protobuf.Timestamp
+	58,  // 51: gestalt.provider.v1.WorkflowStepExecution.input:type_name -> google.protobuf.Value
+	58,  // 52: gestalt.provider.v1.WorkflowStepExecution.output:type_name -> google.protobuf.Value
+	59,  // 53: gestalt.provider.v1.WorkflowStepExecution.started_at:type_name -> google.protobuf.Timestamp
+	59,  // 54: gestalt.provider.v1.WorkflowStepExecution.completed_at:type_name -> google.protobuf.Timestamp
 	0,   // 55: gestalt.provider.v1.WorkflowRun.status:type_name -> gestalt.provider.v1.WorkflowRunStatus
 	2,   // 56: gestalt.provider.v1.WorkflowRun.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
 	25,  // 57: gestalt.provider.v1.WorkflowRun.trigger:type_name -> gestalt.provider.v1.WorkflowRunTrigger
-	58,  // 58: gestalt.provider.v1.WorkflowRun.created_at:type_name -> google.protobuf.Timestamp
-	58,  // 59: gestalt.provider.v1.WorkflowRun.started_at:type_name -> google.protobuf.Timestamp
-	58,  // 60: gestalt.provider.v1.WorkflowRun.completed_at:type_name -> google.protobuf.Timestamp
-	57,  // 61: gestalt.provider.v1.WorkflowRun.output:type_name -> google.protobuf.Value
-	54,  // 62: gestalt.provider.v1.WorkflowRun.input:type_name -> google.protobuf.Struct
+	59,  // 58: gestalt.provider.v1.WorkflowRun.created_at:type_name -> google.protobuf.Timestamp
+	59,  // 59: gestalt.provider.v1.WorkflowRun.started_at:type_name -> google.protobuf.Timestamp
+	59,  // 60: gestalt.provider.v1.WorkflowRun.completed_at:type_name -> google.protobuf.Timestamp
+	58,  // 61: gestalt.provider.v1.WorkflowRun.output:type_name -> google.protobuf.Value
+	55,  // 62: gestalt.provider.v1.WorkflowRun.input:type_name -> google.protobuf.Struct
 	27,  // 63: gestalt.provider.v1.WorkflowRun.steps:type_name -> gestalt.provider.v1.WorkflowStepExecution
-	54,  // 64: gestalt.provider.v1.WorkflowSignal.payload:type_name -> google.protobuf.Struct
-	54,  // 65: gestalt.provider.v1.WorkflowSignal.metadata:type_name -> google.protobuf.Struct
-	58,  // 66: gestalt.provider.v1.WorkflowSignal.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 64: gestalt.provider.v1.WorkflowSignal.payload:type_name -> google.protobuf.Struct
+	55,  // 65: gestalt.provider.v1.WorkflowSignal.metadata:type_name -> google.protobuf.Struct
+	59,  // 66: gestalt.provider.v1.WorkflowSignal.created_at:type_name -> google.protobuf.Timestamp
 	20,  // 67: gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.spec:type_name -> gestalt.provider.v1.WorkflowDefinitionSpec
-	59,  // 68: gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	59,  // 69: gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	59,  // 70: gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 68: gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 69: gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 70: gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest.context:type_name -> gestalt.provider.v1.RequestContext
 	21,  // 71: gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse.definitions:type_name -> gestalt.provider.v1.WorkflowDefinition
-	59,  // 72: gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	59,  // 73: gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	59,  // 74: gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	54,  // 75: gestalt.provider.v1.StartWorkflowProviderRunRequest.input:type_name -> google.protobuf.Struct
-	59,  // 76: gestalt.provider.v1.StartWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	59,  // 77: gestalt.provider.v1.GetWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 72: gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 73: gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 74: gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	55,  // 75: gestalt.provider.v1.StartWorkflowProviderRunRequest.input:type_name -> google.protobuf.Struct
+	60,  // 76: gestalt.provider.v1.StartWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 77: gestalt.provider.v1.GetWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
 	0,   // 78: gestalt.provider.v1.ListWorkflowProviderRunsRequest.status:type_name -> gestalt.provider.v1.WorkflowRunStatus
-	59,  // 79: gestalt.provider.v1.ListWorkflowProviderRunsRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 79: gestalt.provider.v1.ListWorkflowProviderRunsRequest.context:type_name -> gestalt.provider.v1.RequestContext
 	28,  // 80: gestalt.provider.v1.ListWorkflowProviderRunsResponse.runs:type_name -> gestalt.provider.v1.WorkflowRun
-	59,  // 81: gestalt.provider.v1.CancelWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	29,  // 82: gestalt.provider.v1.SignalWorkflowProviderRunRequest.signal:type_name -> gestalt.provider.v1.WorkflowSignal
-	59,  // 83: gestalt.provider.v1.SignalWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	29,  // 84: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.signal:type_name -> gestalt.provider.v1.WorkflowSignal
-	54,  // 85: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.input:type_name -> google.protobuf.Struct
-	59,  // 86: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	28,  // 87: gestalt.provider.v1.SignalWorkflowRunResponse.run:type_name -> gestalt.provider.v1.WorkflowRun
-	29,  // 88: gestalt.provider.v1.SignalWorkflowRunResponse.signal:type_name -> gestalt.provider.v1.WorkflowSignal
-	15,  // 89: gestalt.provider.v1.DeliverWorkflowProviderEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
-	59,  // 90: gestalt.provider.v1.DeliverWorkflowProviderEventRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	54,  // 91: gestalt.provider.v1.WorkflowRunEvent.data:type_name -> google.protobuf.Struct
-	58,  // 92: gestalt.provider.v1.WorkflowRunEvent.created_at:type_name -> google.protobuf.Timestamp
-	59,  // 93: gestalt.provider.v1.GetWorkflowProviderRunEventsRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	46,  // 94: gestalt.provider.v1.GetWorkflowProviderRunEventsResponse.events:type_name -> gestalt.provider.v1.WorkflowRunEvent
-	59,  // 95: gestalt.provider.v1.GetWorkflowProviderRunOutputRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	57,  // 96: gestalt.provider.v1.GetWorkflowProviderRunOutputResponse.output:type_name -> google.protobuf.Value
-	9,   // 97: gestalt.provider.v1.WorkflowStep.InputsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
-	9,   // 98: gestalt.provider.v1.WorkflowObject.FieldsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
-	57,  // 99: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
-	30,  // 100: gestalt.provider.v1.Workflow.ApplyDefinition:input_type -> gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest
-	31,  // 101: gestalt.provider.v1.Workflow.GetDefinition:input_type -> gestalt.provider.v1.GetWorkflowProviderDefinitionRequest
-	32,  // 102: gestalt.provider.v1.Workflow.ListDefinitions:input_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest
-	34,  // 103: gestalt.provider.v1.Workflow.SetDefinitionPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest
-	35,  // 104: gestalt.provider.v1.Workflow.SetActivationPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest
-	36,  // 105: gestalt.provider.v1.Workflow.DeleteDefinition:input_type -> gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest
-	37,  // 106: gestalt.provider.v1.Workflow.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
-	39,  // 107: gestalt.provider.v1.Workflow.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
-	38,  // 108: gestalt.provider.v1.Workflow.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
-	47,  // 109: gestalt.provider.v1.Workflow.GetRunEvents:input_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsRequest
-	49,  // 110: gestalt.provider.v1.Workflow.GetRunOutput:input_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputRequest
-	41,  // 111: gestalt.provider.v1.Workflow.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
-	42,  // 112: gestalt.provider.v1.Workflow.SignalRun:input_type -> gestalt.provider.v1.SignalWorkflowProviderRunRequest
-	43,  // 113: gestalt.provider.v1.Workflow.SignalOrStartRun:input_type -> gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest
-	45,  // 114: gestalt.provider.v1.Workflow.DeliverEvent:input_type -> gestalt.provider.v1.DeliverWorkflowProviderEventRequest
-	21,  // 115: gestalt.provider.v1.Workflow.ApplyDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
-	21,  // 116: gestalt.provider.v1.Workflow.GetDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
-	33,  // 117: gestalt.provider.v1.Workflow.ListDefinitions:output_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse
-	21,  // 118: gestalt.provider.v1.Workflow.SetDefinitionPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
-	21,  // 119: gestalt.provider.v1.Workflow.SetActivationPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
-	60,  // 120: gestalt.provider.v1.Workflow.DeleteDefinition:output_type -> google.protobuf.Empty
-	28,  // 121: gestalt.provider.v1.Workflow.StartRun:output_type -> gestalt.provider.v1.WorkflowRun
-	40,  // 122: gestalt.provider.v1.Workflow.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
-	28,  // 123: gestalt.provider.v1.Workflow.GetRun:output_type -> gestalt.provider.v1.WorkflowRun
-	48,  // 124: gestalt.provider.v1.Workflow.GetRunEvents:output_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsResponse
-	50,  // 125: gestalt.provider.v1.Workflow.GetRunOutput:output_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputResponse
-	28,  // 126: gestalt.provider.v1.Workflow.CancelRun:output_type -> gestalt.provider.v1.WorkflowRun
-	44,  // 127: gestalt.provider.v1.Workflow.SignalRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
-	44,  // 128: gestalt.provider.v1.Workflow.SignalOrStartRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
-	15,  // 129: gestalt.provider.v1.Workflow.DeliverEvent:output_type -> gestalt.provider.v1.WorkflowEvent
-	115, // [115:130] is the sub-list for method output_type
-	100, // [100:115] is the sub-list for method input_type
-	100, // [100:100] is the sub-list for extension type_name
-	100, // [100:100] is the sub-list for extension extendee
-	0,   // [0:100] is the sub-list for field type_name
+	40,  // 81: gestalt.provider.v1.ListWorkflowProviderRunsResponse.status_counts:type_name -> gestalt.provider.v1.WorkflowRunStatusCounts
+	60,  // 82: gestalt.provider.v1.CancelWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	29,  // 83: gestalt.provider.v1.SignalWorkflowProviderRunRequest.signal:type_name -> gestalt.provider.v1.WorkflowSignal
+	60,  // 84: gestalt.provider.v1.SignalWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	29,  // 85: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.signal:type_name -> gestalt.provider.v1.WorkflowSignal
+	55,  // 86: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.input:type_name -> google.protobuf.Struct
+	60,  // 87: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	28,  // 88: gestalt.provider.v1.SignalWorkflowRunResponse.run:type_name -> gestalt.provider.v1.WorkflowRun
+	29,  // 89: gestalt.provider.v1.SignalWorkflowRunResponse.signal:type_name -> gestalt.provider.v1.WorkflowSignal
+	15,  // 90: gestalt.provider.v1.DeliverWorkflowProviderEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
+	60,  // 91: gestalt.provider.v1.DeliverWorkflowProviderEventRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	55,  // 92: gestalt.provider.v1.WorkflowRunEvent.data:type_name -> google.protobuf.Struct
+	59,  // 93: gestalt.provider.v1.WorkflowRunEvent.created_at:type_name -> google.protobuf.Timestamp
+	60,  // 94: gestalt.provider.v1.GetWorkflowProviderRunEventsRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	47,  // 95: gestalt.provider.v1.GetWorkflowProviderRunEventsResponse.events:type_name -> gestalt.provider.v1.WorkflowRunEvent
+	60,  // 96: gestalt.provider.v1.GetWorkflowProviderRunOutputRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	58,  // 97: gestalt.provider.v1.GetWorkflowProviderRunOutputResponse.output:type_name -> google.protobuf.Value
+	9,   // 98: gestalt.provider.v1.WorkflowStep.InputsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
+	9,   // 99: gestalt.provider.v1.WorkflowObject.FieldsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
+	58,  // 100: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
+	30,  // 101: gestalt.provider.v1.Workflow.ApplyDefinition:input_type -> gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest
+	31,  // 102: gestalt.provider.v1.Workflow.GetDefinition:input_type -> gestalt.provider.v1.GetWorkflowProviderDefinitionRequest
+	32,  // 103: gestalt.provider.v1.Workflow.ListDefinitions:input_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest
+	34,  // 104: gestalt.provider.v1.Workflow.SetDefinitionPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest
+	35,  // 105: gestalt.provider.v1.Workflow.SetActivationPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest
+	36,  // 106: gestalt.provider.v1.Workflow.DeleteDefinition:input_type -> gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest
+	37,  // 107: gestalt.provider.v1.Workflow.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
+	39,  // 108: gestalt.provider.v1.Workflow.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
+	38,  // 109: gestalt.provider.v1.Workflow.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
+	48,  // 110: gestalt.provider.v1.Workflow.GetRunEvents:input_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsRequest
+	50,  // 111: gestalt.provider.v1.Workflow.GetRunOutput:input_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputRequest
+	42,  // 112: gestalt.provider.v1.Workflow.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
+	43,  // 113: gestalt.provider.v1.Workflow.SignalRun:input_type -> gestalt.provider.v1.SignalWorkflowProviderRunRequest
+	44,  // 114: gestalt.provider.v1.Workflow.SignalOrStartRun:input_type -> gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest
+	46,  // 115: gestalt.provider.v1.Workflow.DeliverEvent:input_type -> gestalt.provider.v1.DeliverWorkflowProviderEventRequest
+	21,  // 116: gestalt.provider.v1.Workflow.ApplyDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
+	21,  // 117: gestalt.provider.v1.Workflow.GetDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
+	33,  // 118: gestalt.provider.v1.Workflow.ListDefinitions:output_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse
+	21,  // 119: gestalt.provider.v1.Workflow.SetDefinitionPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
+	21,  // 120: gestalt.provider.v1.Workflow.SetActivationPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
+	61,  // 121: gestalt.provider.v1.Workflow.DeleteDefinition:output_type -> google.protobuf.Empty
+	28,  // 122: gestalt.provider.v1.Workflow.StartRun:output_type -> gestalt.provider.v1.WorkflowRun
+	41,  // 123: gestalt.provider.v1.Workflow.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
+	28,  // 124: gestalt.provider.v1.Workflow.GetRun:output_type -> gestalt.provider.v1.WorkflowRun
+	49,  // 125: gestalt.provider.v1.Workflow.GetRunEvents:output_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsResponse
+	51,  // 126: gestalt.provider.v1.Workflow.GetRunOutput:output_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputResponse
+	28,  // 127: gestalt.provider.v1.Workflow.CancelRun:output_type -> gestalt.provider.v1.WorkflowRun
+	45,  // 128: gestalt.provider.v1.Workflow.SignalRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
+	45,  // 129: gestalt.provider.v1.Workflow.SignalOrStartRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
+	15,  // 130: gestalt.provider.v1.Workflow.DeliverEvent:output_type -> gestalt.provider.v1.WorkflowEvent
+	116, // [116:131] is the sub-list for method output_type
+	101, // [101:116] is the sub-list for method input_type
+	101, // [101:101] is the sub-list for extension type_name
+	101, // [101:101] is the sub-list for extension extendee
+	0,   // [0:101] is the sub-list for field type_name
 }
 
 func init() { file_v1_workflow_proto_init() }
@@ -4297,13 +4409,14 @@ func file_v1_workflow_proto_init() {
 		(*WorkflowRunTrigger_Schedule)(nil),
 		(*WorkflowRunTrigger_Event)(nil),
 	}
+	file_v1_workflow_proto_msgTypes[39].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_workflow_proto_rawDesc), len(file_v1_workflow_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   52,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -350,6 +350,8 @@ func (s *ProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowPr
 	}
 	out := &proto.ListWorkflowProviderRunsResponse{
 		NextPageToken: managed.NextPageToken,
+		TotalCount:    managed.TotalCount,
+		StatusCounts:  managed.StatusCounts,
 	}
 	for _, run := range managed.Runs {
 		runProto, err := managedWorkflowRunToProto(run)

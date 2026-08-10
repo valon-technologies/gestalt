@@ -151,6 +151,17 @@ type ListWorkflowProviderRunsRequest struct {
 type ListWorkflowProviderRunsResponse struct {
 	Runs          []*WorkflowRun
 	NextPageToken string
+	TotalCount    *int64
+	StatusCounts  *WorkflowRunStatusCounts
+}
+
+// WorkflowRunStatusCounts is the native message type for gestalt.provider.v1.WorkflowRunStatusCounts.
+type WorkflowRunStatusCounts struct {
+	Pending   int64
+	Running   int64
+	Succeeded int64
+	Failed    int64
+	Canceled  int64
 }
 
 // SetWorkflowProviderActivationPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.
