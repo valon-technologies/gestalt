@@ -72,7 +72,7 @@ type ListWorkflowProviderRunsRequest struct {
 	PageToken string
 	Status    WorkflowRunStatus
 	TargetApp string
-	// KnownApps disambiguates app_<app>_… definition ownership for target_app
+	// KnownApps disambiguates app-prefixed definition IDs (app_NAME_…) for target_app
 	// filters when target steps are empty. Providers must apply the same rules
 	// to returned runs and to TotalCount / StatusCounts.
 	KnownApps []string

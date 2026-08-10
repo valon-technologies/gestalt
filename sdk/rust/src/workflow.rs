@@ -230,7 +230,7 @@ pub struct ListWorkflowProviderRunsRequest {
     pub context: Option<RequestContext>,
     /// The `provider` field.
     pub provider: String,
-    /// Installed app names used to disambiguate app_<app>_… definition ownership
+    /// Installed app names used to disambiguate app-prefixed definition IDs (app_NAME_…)
     /// when target steps are empty. When set, providers must apply the same
     /// ownership rules to returned runs and to total_count / status_counts.
     ///
