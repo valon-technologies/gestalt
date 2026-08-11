@@ -79,6 +79,23 @@ func TestWaitProviderLocalFrontend(t *testing.T) {
 			t.Fatalf("waitProviderLocalFrontendWithin() = %q, %v; want empty, false", got, ok)
 		}
 	})
+
+	t.Run("starts timeout after providers initialize", func(t *testing.T) {
+		t.Parallel()
+		initialized := make(chan struct{})
+		frontend := fakeProviderLocalFrontend{ready: make(chan struct{}), exited: make(chan struct{}), url: "http://127.0.0.1:5173/"}
+		close(frontend.ready)
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			close(initialized)
+		}()
+		got, ok := waitProviderLocalFrontendWithin(context.Background(), initialized, func(string) (providerLocalFrontend, bool) {
+			return frontend, true
+		}, "dashboard", time.Millisecond)
+		if !ok || got != frontend.url {
+			t.Fatalf("waitProviderLocalFrontendWithin() = %q, %v; want %q, true", got, ok, frontend.url)
+		}
+	})
 }
 
 func TestProviderLocalReadyURL(t *testing.T) {

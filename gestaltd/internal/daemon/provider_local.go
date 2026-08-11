@@ -582,12 +582,8 @@ func waitProviderLocalFrontendWithin(ctx context.Context, providersInitialized <
 	if lookup == nil || providersInitialized == nil {
 		return "", false
 	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 	select {
 	case <-providersInitialized:
-	case <-timer.C:
-		return "", false
 	case <-ctx.Done():
 		return "", false
 	}
@@ -595,6 +591,8 @@ func waitProviderLocalFrontendWithin(ctx context.Context, providersInitialized <
 	if !ok {
 		return "", false
 	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-handle.FrontendReady():
 		return handle.FrontendURL(), true
