@@ -175,6 +175,23 @@ func TestRemoteProviderForwardsStaticHeaders(t *testing.T) {
 	}
 }
 
+func TestStaticSpecProviderForwardsStaticHeaders(t *testing.T) {
+	t.Parallel()
+
+	prov := newStaticSpecProvider(StaticProviderSpec{
+		Name:          "remote",
+		StaticHeaders: map[string]string{"X-Tenant-Sid": ""},
+	})
+	headers := prov.StaticHeaders()
+	if _, ok := headers["X-Tenant-Sid"]; !ok {
+		t.Fatalf("StaticHeaders() = %#v, want X-Tenant-Sid", headers)
+	}
+	headers["X-Tenant-Sid"] = "mutated"
+	if next := prov.StaticHeaders()["X-Tenant-Sid"]; next != "" {
+		t.Fatalf("StaticHeaders() returned mutable provider state: %q", next)
+	}
+}
+
 func manualOnlyStaticSpec() StaticProviderSpec {
 	return StaticProviderSpec{
 		Name:           "manual-only",

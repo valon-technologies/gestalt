@@ -556,6 +556,10 @@ func (p staticSpecProvider) Catalog() *catalog.Catalog {
 	return p.spec.Catalog
 }
 
+func (p staticSpecProvider) StaticHeaders() map[string]string {
+	return maps.Clone(p.spec.StaticHeaders)
+}
+
 type gestaltRemoteProvider struct {
 	staticSpecProvider
 	client proto.AppClient

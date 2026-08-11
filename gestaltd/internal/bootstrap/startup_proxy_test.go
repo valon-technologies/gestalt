@@ -50,6 +50,24 @@ func TestStartupProviderProxyLazilyActivatesAndFailsFast(t *testing.T) {
 	}
 }
 
+func TestStartupProviderProxyExposesStaticHeadersBeforeActivation(t *testing.T) {
+	t.Parallel()
+
+	proxy := newStartupProviderProxy(appservice.StaticProviderSpec{
+		Name:          "deferred",
+		StaticHeaders: map[string]string{"X-Tenant-Sid": "TENDefault"},
+	}, startupOperationRouting{}, nil)
+
+	headers := proxy.StaticHeaders()
+	if headers["X-Tenant-Sid"] != "TENDefault" {
+		t.Fatalf("StaticHeaders() = %#v, want X-Tenant-Sid", headers)
+	}
+	headers["X-Tenant-Sid"] = "mutated"
+	if got := proxy.StaticHeaders()["X-Tenant-Sid"]; got != "TENDefault" {
+		t.Fatalf("StaticHeaders() returned mutable proxy state: %q", got)
+	}
+}
+
 func TestStartupProviderProxySurfacesActivationFailure(t *testing.T) {
 	t.Parallel()
 
