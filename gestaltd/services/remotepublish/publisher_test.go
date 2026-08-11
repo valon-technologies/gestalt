@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/tunnel"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/remotemanagement"
@@ -292,8 +293,16 @@ func TestBuildPublicationGroupsPlacementMatrix(t *testing.T) {
 			},
 		},
 		Apps: map[string]*config.ProviderEntry{
-			"local-app":     {Remote: ""},
-			"published-app": {Remote: "upstream", DevActive: true},
+			"local-app": {Remote: ""},
+			"published-app": {
+				Remote:    "upstream",
+				DevActive: true,
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Headers: map[string]string{"X-Tenant-Sid": "TENDefault"},
+					},
+				},
+			},
 			"delegated-app": {Remote: "upstream"},
 		},
 	}
@@ -313,6 +322,10 @@ func TestBuildPublicationGroupsPlacementMatrix(t *testing.T) {
 	}
 	if groups[0].Providers[0].Name != "published-app" {
 		t.Fatalf("expected published-app, got %s", groups[0].Providers[0].Name)
+	}
+	headers := remotepublish.StaticHeadersFromDefinition(groups[0].Providers[0].Definition)
+	if _, ok := headers["X-Tenant-Sid"]; !ok {
+		t.Fatalf("published static headers = %#v, want X-Tenant-Sid", headers)
 	}
 }
 

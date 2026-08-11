@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ type StaticProviderSpec struct {
 	ConnectionParams map[string]core.ConnectionParamDef
 	CredentialFields []core.CredentialFieldDef
 	DiscoveryConfig  *core.DiscoveryConfig
+	StaticHeaders    map[string]string
 }
 
 type remoteProviderBase struct {
@@ -50,6 +52,7 @@ type remoteProviderBase struct {
 	connParams          map[string]core.ConnectionParamDef
 	credFields          []core.CredentialFieldDef
 	discovery           *core.DiscoveryConfig
+	staticHeaders       map[string]string
 	closer              io.Closer
 	publicBaseURL       string
 	callerKind          invocation.ProviderKind
@@ -126,6 +129,7 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 		connParams:          spec.ConnectionParams,
 		credFields:          spec.CredentialFields,
 		discovery:           spec.DiscoveryConfig,
+		staticHeaders:       maps.Clone(spec.StaticHeaders),
 		workflowDefinitions: append([]*proto.WorkflowDefinitionSpec(nil), support.workflowDefinitions...),
 	}
 	if base.catalog == nil && support.staticCatalog != nil {
@@ -179,6 +183,13 @@ func (p *remoteProviderBase) DeclaredWorkflowDefinitions() []*proto.WorkflowDefi
 		return nil
 	}
 	return append([]*proto.WorkflowDefinitionSpec(nil), p.workflowDefinitions...)
+}
+
+func (p *remoteProviderBase) StaticHeaders() map[string]string {
+	if p == nil || len(p.staticHeaders) == 0 {
+		return nil
+	}
+	return maps.Clone(p.staticHeaders)
 }
 
 // DeclaredWorkflowDefinitions returns workflow specs declared by a remote app

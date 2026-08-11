@@ -150,6 +150,31 @@ func roundTripStaticSpec() StaticProviderSpec {
 	}
 }
 
+func TestRemoteProviderForwardsStaticHeaders(t *testing.T) {
+	t.Parallel()
+
+	client := newAppProviderClient(t, NewProviderServer(&roundTripProvider{}))
+	prov, err := NewRemote(context.Background(), client, StaticProviderSpec{
+		Name:          "roundtrip",
+		StaticHeaders: map[string]string{"X-Tenant-Sid": ""},
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewRemote: %v", err)
+	}
+	headers, ok := prov.(interface{ StaticHeaders() map[string]string })
+	if !ok {
+		t.Fatal("expected remote provider to expose static headers")
+	}
+	got := headers.StaticHeaders()
+	if _, ok := got["X-Tenant-Sid"]; !ok {
+		t.Fatalf("StaticHeaders() = %#v, want X-Tenant-Sid", got)
+	}
+	got["X-Tenant-Sid"] = "mutated"
+	if next := headers.StaticHeaders()["X-Tenant-Sid"]; next != "" {
+		t.Fatalf("StaticHeaders() returned mutable provider state: %q", next)
+	}
+}
+
 func manualOnlyStaticSpec() StaticProviderSpec {
 	return StaticProviderSpec{
 		Name:           "manual-only",

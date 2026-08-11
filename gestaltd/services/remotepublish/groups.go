@@ -70,6 +70,14 @@ func appProviderDefinition(name string, entry *config.ProviderEntry) map[string]
 			if entry.ResolvedManifest.Source != "" {
 				def["source"] = entry.ResolvedManifest.Source
 			}
+			if spec := entry.ResolvedManifest.Spec; spec != nil && len(spec.Headers) > 0 {
+				headerNames := make([]string, 0, len(spec.Headers))
+				for name := range spec.Headers {
+					headerNames = append(headerNames, name)
+				}
+				slices.Sort(headerNames)
+				def["staticHeaders"] = headerNames
+			}
 		}
 	}
 	return def

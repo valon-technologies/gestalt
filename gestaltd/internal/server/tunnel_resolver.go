@@ -51,6 +51,7 @@ func (r *tunnelProviderResolver) ResolveProvider(ctx context.Context, name strin
 
 	provider, err := remotepublish.NewTunnelProxyProvider(buildCtx, remotepublish.TunnelProxyConfig{
 		AppName:        name,
+		StaticHeaders:  remotepublish.StaticHeadersFromDefinition(remoteProvider.Definition),
 		TunnelHost:     reg.TunnelHost,
 		PinnedSPKI:     reg.ServerSPKISHA256,
 		ConnectAddr:    r.cfg.ConnectAddr,
