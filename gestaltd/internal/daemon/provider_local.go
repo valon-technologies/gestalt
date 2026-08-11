@@ -577,13 +577,14 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 }
 
 func providerLocalReadyURL(session *providerLocalSession) string {
-	if session == nil || strings.TrimSpace(session.AutoMountedUIPath) == "" {
-		if session == nil {
-			return ""
-		}
+	if session == nil {
+		return ""
+	}
+	mountPath := strings.Trim(strings.TrimSpace(session.AutoMountedUIPath), "/")
+	if mountPath == "" {
 		return session.PublicURL
 	}
-	return strings.TrimRight(session.PublicURL, "/") + "/" + strings.Trim(session.AutoMountedUIPath, "/") + "/"
+	return strings.TrimRight(session.PublicURL, "/") + "/" + mountPath + "/"
 }
 
 func reserveLocalPort() (int, error) {

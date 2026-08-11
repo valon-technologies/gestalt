@@ -28,6 +28,14 @@ func TestProviderLocalReadyURL(t *testing.T) {
 			want: "http://localhost:8080/",
 		},
 		{
+			name: "provider with root-mounted UI",
+			session: &providerLocalSession{
+				PublicURL:         "http://localhost:8080/",
+				AutoMountedUIPath: "/",
+			},
+			want: "http://localhost:8080/",
+		},
+		{
 			name: "provider with mounted UI",
 			session: &providerLocalSession{
 				PublicURL:         "http://localhost:8080/",
