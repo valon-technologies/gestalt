@@ -540,6 +540,7 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 	if session == nil {
 		return
 	}
+	readyURL := providerLocalReadyURL(session)
 	publicUIPaths := session.PublicUIPaths
 	if len(publicUIPaths) == 0 {
 		publicUIPaths = nil
@@ -547,6 +548,7 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 	detailArgs := []any{
 		"config_files", session.ConfigPaths,
 		"public_url", session.PublicURL,
+		"ready_url", readyURL,
 		"admin_url", session.AdminURL,
 		"mounted_ui_paths", publicUIPaths,
 	}
@@ -567,11 +569,21 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 		)
 	}
 	if strings.Contains(message, "ready") {
-		currentCLIReporter().Status(message + ": " + session.PublicURL)
+		currentCLIReporter().Status(message + ": " + readyURL)
 	} else {
 		currentCLIReporter().Status(message)
 	}
 	currentCLIReporter().Verbose(formatCLIFields(message+" details", detailArgs...))
+}
+
+func providerLocalReadyURL(session *providerLocalSession) string {
+	if session == nil || strings.TrimSpace(session.AutoMountedUIPath) == "" {
+		if session == nil {
+			return ""
+		}
+		return session.PublicURL
+	}
+	return strings.TrimRight(session.PublicURL, "/") + "/" + strings.Trim(session.AutoMountedUIPath, "/") + "/"
 }
 
 func reserveLocalPort() (int, error) {
