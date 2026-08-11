@@ -517,6 +517,8 @@ type testWorkflowProvider struct {
 	startRunRequests      []*proto.StartWorkflowProviderRunRequest
 	signalOrStartRequests []*proto.SignalOrStartWorkflowProviderRunRequest
 	deliveredEvents       []*proto.DeliverWorkflowProviderEventRequest
+	listRunsRequests      []*proto.ListWorkflowProviderRunsRequest
+	listRunsHandler       func(*proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error)
 }
 
 func newTestWorkflowProvider() *testWorkflowProvider {
@@ -666,7 +668,11 @@ func (p *testWorkflowProvider) GetRun(_ context.Context, req *proto.GetWorkflowP
 	return workflowwire.RunToProto(&copied)
 }
 
-func (p *testWorkflowProvider) ListRuns(context.Context, *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+func (p *testWorkflowProvider) ListRuns(_ context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+	p.listRunsRequests = append(p.listRunsRequests, gproto.Clone(req).(*proto.ListWorkflowProviderRunsRequest))
+	if p.listRunsHandler != nil {
+		return p.listRunsHandler(req)
+	}
 	out := &proto.ListWorkflowProviderRunsResponse{}
 	for _, run := range p.runs {
 		pb, err := workflowwire.RunToProto(run)
@@ -747,5 +753,111 @@ func TestRunMatchesListFiltersKnownAppsDisambiguatesPrefixCollision(t *testing.T
 	}
 	if !runMatchesListFilters(run, coreworkflow.ListRunsRequest{TargetApp: "foo_bar", KnownApps: known}) {
 		t.Fatal("prefix collision should match longest known app owner")
+	}
+}
+
+func TestManagerListRunsForwardsAggregatesAndKnownApps(t *testing.T) {
+	t.Parallel()
+	provider := newTestWorkflowProvider()
+	total := int64(42)
+	provider.listRunsHandler = func(req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+		run := &coreworkflow.Run{
+			ID:           "run-1",
+			DefinitionID: "app_foo_daily",
+			Status:       coreworkflow.RunStatusRunning,
+		}
+		pb, err := workflowwire.RunToProto(run)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListWorkflowProviderRunsResponse{
+			Runs:          []*proto.WorkflowRun{pb},
+			NextPageToken: "provider-page-2",
+			TotalCount:    &total,
+			StatusCounts: &proto.WorkflowRunStatusCounts{
+				Running:   2,
+				Succeeded: 40,
+			},
+		}, nil
+	}
+	manager := New(Config{
+		Providers: testWorkflowGithubProviders(t),
+		Workflow:  testWorkflowControl{provider: provider},
+		Invoker:   testWorkflowManagerBroker(t, testWorkflowGithubProviders(t), allowAllAuthz{}),
+		AppNames:  []string{"foo", "foo_bar"},
+	})
+	resp, err := manager.ListRuns(context.Background(), testWorkflowManagerPrincipal(), "local", coreworkflow.ListRunsRequest{
+		PageSize:  1,
+		TargetApp: "foo",
+	})
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if resp.TotalCount == nil || *resp.TotalCount != 42 {
+		t.Fatalf("TotalCount = %v, want 42", resp.TotalCount)
+	}
+	if resp.StatusCounts == nil || resp.StatusCounts.GetRunning() != 2 || resp.StatusCounts.GetSucceeded() != 40 {
+		t.Fatalf("StatusCounts = %#v, want running=2 succeeded=40", resp.StatusCounts)
+	}
+	if resp.NextPageToken == "" {
+		t.Fatal("expected manager next page token")
+	}
+	if len(provider.listRunsRequests) != 1 {
+		t.Fatalf("provider ListRuns calls = %d, want 1", len(provider.listRunsRequests))
+	}
+	gotKnown := provider.listRunsRequests[0].GetKnownApps()
+	if len(gotKnown) != 2 || gotKnown[0] != "foo" || gotKnown[1] != "foo_bar" {
+		t.Fatalf("KnownApps = %#v, want [foo foo_bar]", gotKnown)
+	}
+	if got := provider.listRunsRequests[0].GetTargetApp(); got != "foo" {
+		t.Fatalf("TargetApp = %q, want foo", got)
+	}
+
+	// Continuation page must echo aggregates from the manager page token without
+	// requiring the provider to resend them on a non-empty provider token.
+	provider.listRunsHandler = func(req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+		if strings.TrimSpace(req.GetPageToken()) == "" {
+			t.Fatal("page 2 should resume with a non-empty provider page token")
+		}
+		run := &coreworkflow.Run{
+			ID:           "run-2",
+			DefinitionID: "app_foo_daily",
+			Status:       coreworkflow.RunStatusSucceeded,
+		}
+		pb, err := workflowwire.RunToProto(run)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListWorkflowProviderRunsResponse{Runs: []*proto.WorkflowRun{pb}}, nil
+	}
+	page2, err := manager.ListRuns(context.Background(), testWorkflowManagerPrincipal(), "local", coreworkflow.ListRunsRequest{
+		PageSize:  1,
+		PageToken: resp.NextPageToken,
+		TargetApp: "foo",
+	})
+	if err != nil {
+		t.Fatalf("ListRuns page 2: %v", err)
+	}
+	if page2.TotalCount == nil || *page2.TotalCount != 42 {
+		t.Fatalf("page 2 TotalCount = %v, want 42", page2.TotalCount)
+	}
+	if page2.StatusCounts == nil || page2.StatusCounts.GetRunning() != 2 || page2.StatusCounts.GetSucceeded() != 40 {
+		t.Fatalf("page 2 StatusCounts = %#v, want running=2 succeeded=40", page2.StatusCounts)
+	}
+}
+
+func TestCloneWorkflowRunStatusCountsDoesNotCopyLocks(t *testing.T) {
+	t.Parallel()
+	src := &proto.WorkflowRunStatusCounts{Pending: 1, Failed: 3}
+	got := cloneWorkflowRunStatusCounts(src)
+	if got == nil || got.GetPending() != 1 || got.GetFailed() != 3 {
+		t.Fatalf("clone = %#v", got)
+	}
+	got.Pending = 9
+	if src.GetPending() != 1 {
+		t.Fatal("clone must not alias source fields")
+	}
+	if cloneWorkflowRunStatusCounts(nil) != nil {
+		t.Fatal("nil clone should stay nil")
 	}
 }

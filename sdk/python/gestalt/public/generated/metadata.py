@@ -826,7 +826,7 @@ METHOD_WORKFLOW_LIST_RUNS = Method(
         PublicField(name="provider", json_name="provider"),
     ),
     fill=("context",),
-    reject=(),
+    reject=("known_apps",),
 )
 
 METHOD_WORKFLOW_GET_RUN = Method(

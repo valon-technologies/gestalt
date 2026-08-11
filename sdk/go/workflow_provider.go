@@ -72,12 +72,32 @@ type ListWorkflowProviderRunsRequest struct {
 	PageToken string
 	Status    WorkflowRunStatus
 	TargetApp string
+	// KnownApps is filled by gestaltd for provider calls; public callers must omit it
+	// filters when target steps are empty. Providers must apply the same rules
+	// to returned runs and to TotalCount / StatusCounts.
+	KnownApps []string
 }
 
 // ListWorkflowProviderRunsResponse contains workflow runs.
 type ListWorkflowProviderRunsResponse struct {
 	Runs          []WorkflowRun
 	NextPageToken string
+	// TotalCount is the visibility total for this request's filters (including
+	// KnownApps ownership). Nil when the provider cannot compute it. Distinct
+	// from len(Runs).
+	TotalCount *int64
+	// StatusCounts is the provider/target_app/known_apps status histogram with
+	// status filter cleared. Nil when unknown.
+	StatusCounts *WorkflowRunStatusCounts
+}
+
+// WorkflowRunStatusCounts is a visibility status histogram for list aggregates.
+type WorkflowRunStatusCounts struct {
+	Pending   int64
+	Running   int64
+	Succeeded int64
+	Failed    int64
+	Canceled  int64
 }
 
 // GetRuns returns the runs field; it is safe to call on a nil receiver.
@@ -94,6 +114,22 @@ func (r *ListWorkflowProviderRunsResponse) GetNextPageToken() string {
 		return ""
 	}
 	return r.NextPageToken
+}
+
+// GetTotalCount returns the visibility total when present.
+func (r *ListWorkflowProviderRunsResponse) GetTotalCount() (int64, bool) {
+	if r == nil || r.TotalCount == nil {
+		return 0, false
+	}
+	return *r.TotalCount, true
+}
+
+// GetStatusCounts returns the status histogram; it is safe to call on a nil receiver.
+func (r *ListWorkflowProviderRunsResponse) GetStatusCounts() *WorkflowRunStatusCounts {
+	if r == nil {
+		return nil
+	}
+	return r.StatusCounts
 }
 
 // GetWorkflowProviderRunEventsRequest identifies one run event stream.

@@ -2220,7 +2220,7 @@ pub const METHOD_WORKFLOW_LIST_RUNS: Method = Method {
         },
     ],
     fill: &["context"],
-    reject: &[],
+    reject: &["known_apps"],
     encode_request_json: Some(encode_list_runs_request_json),
     decode_response_json: Some(decode_list_runs_response_json),
 };

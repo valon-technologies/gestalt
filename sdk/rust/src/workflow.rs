@@ -221,7 +221,8 @@ pub struct ListWorkflowProviderRunsRequest {
     /// The `status` field.
     pub status: WorkflowRunStatus,
     /// Optional filter for runs owned by or invoking this app. Matching uses
-    /// hydrated target steps when present, otherwise app-owned definition IDs.
+    /// hydrated target steps when present, otherwise app-owned definition IDs
+    /// disambiguated with known_apps when provided.
     ///
     /// The `target_app` field.
     pub target_app: String,
@@ -229,6 +230,13 @@ pub struct ListWorkflowProviderRunsRequest {
     pub context: Option<RequestContext>,
     /// The `provider` field.
     pub provider: String,
+    /// Installed app names used to disambiguate app-owned definition ID prefixes
+    /// when target steps are empty. gestaltd fills this when calling providers;
+    /// public callers must omit it (rejected). When set, providers must apply the
+    /// same ownership rules to returned runs and to total_count / status_counts.
+    ///
+    /// The `known_apps` field.
+    pub known_apps: Vec<String>,
 }
 
 /// Native message type for `gestalt.provider.v1.ListWorkflowProviderRunsResponse`.
@@ -239,6 +247,19 @@ pub struct ListWorkflowProviderRunsResponse {
     pub runs: Vec<WorkflowRun>,
     /// The `next_page_token` field.
     pub next_page_token: String,
+    /// Total runs matching this request's filters in provider visibility (same
+    /// query as the page, including known_apps ownership). Distinct from
+    /// len(runs). Omitted when unknown.
+    ///
+    /// The `total_count` field; None when unset.
+    pub total_count: Option<i64>,
+    /// Status histogram for the same provider/target_app/known_apps scope with
+    /// status filter cleared. Omitted when unknown (optional presence — an
+    /// all-zero message means a known empty histogram). Lets UIs render
+    /// Running/Succeeded/Failed without scanning every page.
+    ///
+    /// The `status_counts` field; None when unset.
+    pub status_counts: Option<WorkflowRunStatusCounts>,
 }
 
 /// Native message type for `gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest`.
@@ -563,6 +584,26 @@ pub struct WorkflowRunEvent {
     #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
+}
+
+/// WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
+/// scope with status cleared (provider + target_app + known_apps). It is not
+/// derived from the current page of runs.
+///
+/// Native message type for `gestalt.provider.v1.WorkflowRunStatusCounts`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRunStatusCounts {
+    /// The `pending` field.
+    pub pending: i64,
+    /// The `running` field.
+    pub running: i64,
+    /// The `succeeded` field.
+    pub succeeded: i64,
+    /// The `failed` field.
+    pub failed: i64,
+    /// The `canceled` field.
+    pub canceled: i64,
 }
 
 /// Values of the `kind` oneof in `WorkflowRunTrigger`; the message field is None when unset.
@@ -1167,6 +1208,7 @@ impl Workflow {
             status,
             target_app,
             context: self.context.clone(),
+            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_list_workflow_provider_runs_request(request));

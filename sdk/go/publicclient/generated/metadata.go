@@ -843,7 +843,7 @@ var MethodWorkflowListRuns = Method{
 	HTTPQueryFields: []PublicField{PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}, PublicField{Name: "status", JSONName: "status"}, PublicField{Name: "target_app", JSONName: "targetApp"}, PublicField{Name: "provider", JSONName: "provider"}},
 	Stream:          false,
 	Fill:            []string{"context"},
-	Reject:          nil,
+	Reject:          []string{"known_apps"},
 }
 
 var MethodWorkflowGetRun = Method{

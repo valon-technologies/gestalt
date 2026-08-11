@@ -1261,24 +1261,16 @@ pub(crate) fn encode_wire_operation_annotations_json(
 ) -> serde_json::Value {
     let mut object = serde_json::Map::new();
     if let Some(inner) = &value.read_only_hint {
-        if *inner {
-            object.insert("readOnlyHint".into(), serde_json::Value::Bool(*inner));
-        }
+        object.insert("readOnlyHint".into(), serde_json::Value::Bool(*inner));
     }
     if let Some(inner) = &value.idempotent_hint {
-        if *inner {
-            object.insert("idempotentHint".into(), serde_json::Value::Bool(*inner));
-        }
+        object.insert("idempotentHint".into(), serde_json::Value::Bool(*inner));
     }
     if let Some(inner) = &value.destructive_hint {
-        if *inner {
-            object.insert("destructiveHint".into(), serde_json::Value::Bool(*inner));
-        }
+        object.insert("destructiveHint".into(), serde_json::Value::Bool(*inner));
     }
     if let Some(inner) = &value.open_world_hint {
-        if *inner {
-            object.insert("openWorldHint".into(), serde_json::Value::Bool(*inner));
-        }
+        object.insert("openWorldHint".into(), serde_json::Value::Bool(*inner));
     }
     serde_json::Value::Object(object)
 }

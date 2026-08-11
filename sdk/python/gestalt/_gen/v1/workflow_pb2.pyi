@@ -540,21 +540,41 @@ class ListWorkflowProviderRunsRequest(_message.Message):
     TARGET_APP_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    KNOWN_APPS_FIELD_NUMBER: _ClassVar[int]
     page_size: int
     page_token: str
     status: WorkflowRunStatus
     target_app: str
     context: _app_pb2.RequestContext
     provider: str
-    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., target_app: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider: _Optional[str] = ...) -> None: ...
+    known_apps: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., target_app: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider: _Optional[str] = ..., known_apps: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class WorkflowRunStatusCounts(_message.Message):
+    __slots__ = ()
+    PENDING_FIELD_NUMBER: _ClassVar[int]
+    RUNNING_FIELD_NUMBER: _ClassVar[int]
+    SUCCEEDED_FIELD_NUMBER: _ClassVar[int]
+    FAILED_FIELD_NUMBER: _ClassVar[int]
+    CANCELED_FIELD_NUMBER: _ClassVar[int]
+    pending: int
+    running: int
+    succeeded: int
+    failed: int
+    canceled: int
+    def __init__(self, pending: _Optional[int] = ..., running: _Optional[int] = ..., succeeded: _Optional[int] = ..., failed: _Optional[int] = ..., canceled: _Optional[int] = ...) -> None: ...
 
 class ListWorkflowProviderRunsResponse(_message.Message):
     __slots__ = ()
     RUNS_FIELD_NUMBER: _ClassVar[int]
     NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_COUNT_FIELD_NUMBER: _ClassVar[int]
+    STATUS_COUNTS_FIELD_NUMBER: _ClassVar[int]
     runs: _containers.RepeatedCompositeFieldContainer[WorkflowRun]
     next_page_token: str
-    def __init__(self, runs: _Optional[_Iterable[_Union[WorkflowRun, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
+    total_count: int
+    status_counts: WorkflowRunStatusCounts
+    def __init__(self, runs: _Optional[_Iterable[_Union[WorkflowRun, _Mapping]]] = ..., next_page_token: _Optional[str] = ..., total_count: _Optional[int] = ..., status_counts: _Optional[_Union[WorkflowRunStatusCounts, _Mapping]] = ...) -> None: ...
 
 class CancelWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()

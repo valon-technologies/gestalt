@@ -4000,13 +4000,36 @@ pub struct ListWorkflowProviderRunsRequest {
     #[prost(enumeration = "WorkflowRunStatus", tag = "3")]
     pub status: i32,
     /// Optional filter for runs owned by or invoking this app. Matching uses
-    /// hydrated target steps when present, otherwise app-owned definition IDs.
+    /// hydrated target steps when present, otherwise app-owned definition IDs
+    /// disambiguated with known_apps when provided.
     #[prost(string, tag = "5")]
     pub target_app: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "7")]
     pub provider: ::prost::alloc::string::String,
+    /// Installed app names used to disambiguate app-owned definition ID prefixes
+    /// when target steps are empty. gestaltd fills this when calling providers;
+    /// public callers must omit it (rejected). When set, providers must apply the
+    /// same ownership rules to returned runs and to total_count / status_counts.
+    #[prost(string, repeated, tag = "8")]
+    pub known_apps: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
+/// scope with status cleared (provider + target_app + known_apps). It is not
+/// derived from the current page of runs.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowRunStatusCounts {
+    #[prost(int64, tag = "1")]
+    pub pending: i64,
+    #[prost(int64, tag = "2")]
+    pub running: i64,
+    #[prost(int64, tag = "3")]
+    pub succeeded: i64,
+    #[prost(int64, tag = "4")]
+    pub failed: i64,
+    #[prost(int64, tag = "5")]
+    pub canceled: i64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderRunsResponse {
@@ -4014,6 +4037,17 @@ pub struct ListWorkflowProviderRunsResponse {
     pub runs: ::prost::alloc::vec::Vec<WorkflowRun>,
     #[prost(string, tag = "2")]
     pub next_page_token: ::prost::alloc::string::String,
+    /// Total runs matching this request's filters in provider visibility (same
+    /// query as the page, including known_apps ownership). Distinct from
+    /// len(runs). Omitted when unknown.
+    #[prost(int64, optional, tag = "3")]
+    pub total_count: ::core::option::Option<i64>,
+    /// Status histogram for the same provider/target_app/known_apps scope with
+    /// status filter cleared. Omitted when unknown (optional presence — an
+    /// all-zero message means a known empty histogram). Lets UIs render
+    /// Running/Succeeded/Failed without scanning every page.
+    #[prost(message, optional, tag = "4")]
+    pub status_counts: ::core::option::Option<WorkflowRunStatusCounts>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CancelWorkflowProviderRunRequest {

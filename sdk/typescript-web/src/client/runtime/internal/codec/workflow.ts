@@ -39,6 +39,7 @@ import type {
   WorkflowPathSource,
   WorkflowRun,
   WorkflowRunEvent,
+  WorkflowRunStatusCounts,
   WorkflowRunTrigger,
   WorkflowRunTriggerKind,
   WorkflowScheduleActivation,
@@ -316,6 +317,10 @@ export function toWireListWorkflowProviderRunsResponse(
   return create(wire.ListWorkflowProviderRunsResponseSchema, {
     runs: (value.runs ?? []).map(toWireWorkflowRun),
     nextPageToken: value.nextPageToken ?? "",
+    ...(value.totalCount !== undefined ? { totalCount: value.totalCount } : {}),
+    ...(value.statusCounts !== undefined
+      ? { statusCounts: toWireWorkflowRunStatusCounts(value.statusCounts) }
+      : {}),
   });
 }
 
@@ -325,6 +330,10 @@ export function fromWireListWorkflowProviderRunsResponse(
   return {
     runs: value.runs.map(fromWireWorkflowRun),
     nextPageToken: value.nextPageToken,
+    ...(value.totalCount !== undefined ? { totalCount: value.totalCount } : {}),
+    ...(value.statusCounts !== undefined
+      ? { statusCounts: fromWireWorkflowRunStatusCounts(value.statusCounts) }
+      : {}),
   };
 }
 
@@ -923,6 +932,30 @@ export function fromWireWorkflowRunEvent(
     ...(value.createdAt !== undefined
       ? { createdAt: fromWireTimestamp(value.createdAt) }
       : {}),
+  };
+}
+
+export function toWireWorkflowRunStatusCounts(
+  value: Init<WorkflowRunStatusCounts>,
+): wire.WorkflowRunStatusCounts {
+  return create(wire.WorkflowRunStatusCountsSchema, {
+    pending: value.pending ?? 0n,
+    running: value.running ?? 0n,
+    succeeded: value.succeeded ?? 0n,
+    failed: value.failed ?? 0n,
+    canceled: value.canceled ?? 0n,
+  });
+}
+
+export function fromWireWorkflowRunStatusCounts(
+  value: wire.WorkflowRunStatusCounts,
+): WorkflowRunStatusCounts {
+  return {
+    pending: value.pending,
+    running: value.running,
+    succeeded: value.succeeded,
+    failed: value.failed,
+    canceled: value.canceled,
   };
 }
 

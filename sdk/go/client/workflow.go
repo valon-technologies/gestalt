@@ -141,16 +141,31 @@ type ListWorkflowProviderRunsRequest struct {
 	PageToken string
 	Status    WorkflowRunStatus
 	// Optional filter for runs owned by or invoking this app. Matching uses
-	// hydrated target steps when present, otherwise app-owned definition IDs.
+	// hydrated target steps when present, otherwise app-owned definition IDs
+	// disambiguated with known_apps when provided.
 	TargetApp string
 	Context   *RequestContext
 	Provider  string
+	// Installed app names used to disambiguate app-owned definition ID prefixes
+	// when target steps are empty. gestaltd fills this when calling providers;
+	// public callers must omit it (rejected). When set, providers must apply the
+	// same ownership rules to returned runs and to total_count / status_counts.
+	KnownApps []string
 }
 
 // ListWorkflowProviderRunsResponse is the native message type for gestalt.provider.v1.ListWorkflowProviderRunsResponse.
 type ListWorkflowProviderRunsResponse struct {
 	Runs          []*WorkflowRun
 	NextPageToken string
+	// Total runs matching this request's filters in provider visibility (same
+	// query as the page, including known_apps ownership). Distinct from
+	// len(runs). Omitted when unknown.
+	TotalCount *int64
+	// Status histogram for the same provider/target_app/known_apps scope with
+	// status filter cleared. Omitted when unknown (optional presence — an
+	// all-zero message means a known empty histogram). Lets UIs render
+	// Running/Succeeded/Failed without scanning every page.
+	StatusCounts *WorkflowRunStatusCounts
 }
 
 // SetWorkflowProviderActivationPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.
@@ -344,6 +359,19 @@ type WorkflowRunEvent struct {
 	Type      string
 	Data      map[string]any
 	CreatedAt *time.Time
+}
+
+// WorkflowRunStatusCounts is the native message type for gestalt.provider.v1.WorkflowRunStatusCounts.
+//
+// WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
+// scope with status cleared (provider + target_app + known_apps). It is not
+// derived from the current page of runs.
+type WorkflowRunStatusCounts struct {
+	Pending   int64
+	Running   int64
+	Succeeded int64
+	Failed    int64
+	Canceled  int64
 }
 
 // WorkflowRunTriggerKind selects one variant of the kind oneof of WorkflowRunTrigger.

@@ -61,7 +61,8 @@ type ListWorkflowProviderRunsRequest struct {
 	PageToken string
 	Status    gestaltclient.WorkflowRunStatus
 	// Optional filter for runs owned by or invoking this app. Matching uses
-	// hydrated target steps when present, otherwise app-owned definition IDs.
+	// hydrated target steps when present, otherwise app-owned definition IDs
+	// disambiguated with known_apps when provided.
 	TargetApp string
 	Provider  string
 }

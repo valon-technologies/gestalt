@@ -174,11 +174,44 @@ func (r *renderer) renderWireJSONEncodeField(f *model.Field, root string) {
 	expr := root + "." + escapeIdent(f.Name)
 	if f.Presence == model.ExplicitPresence {
 		fmt.Fprintf(&r.body, "    if let Some(inner) = &%s {\n", expr)
-		r.renderWireJSONEncodeFieldInner(f, key, "inner")
+		// Explicit presence means "set", including zero/default scalar values.
+		// Do not apply proto3 zero-default elision inside the Some branch.
+		r.renderWireJSONEncodeFieldPresent(f, key, "inner")
 		r.body.WriteString("    }\n")
 		return
 	}
 	r.renderWireJSONEncodeFieldInner(f, key, expr)
+}
+
+// renderWireJSONEncodeFieldPresent emits a field that is already known to be
+// present (Option::Some). Scalars must be written even when zero so callers can
+// distinguish known-empty from unknown/omitted.
+func (r *renderer) renderWireJSONEncodeFieldPresent(f *model.Field, key, expr string) {
+	form := wireJSONScalarDirect
+	if expr == "inner" {
+		form = wireJSONScalarBorrowed
+	}
+	ref := fieldToTypeRef(f)
+	switch f.Kind {
+	case model.KindScalar, model.KindBytes, model.KindEnum,
+		model.KindMessage, model.KindTimestamp, model.KindDuration,
+		model.KindJSONStruct, model.KindJSONValue:
+		fmt.Fprintf(&r.body, "        object.insert(%q.into(), %s);\n", key, r.wireJSONEncodeValue(ref, expr, form))
+	case model.KindRepeated:
+		fmt.Fprintf(&r.body, "        object.insert(%q.into(), serde_json::Value::Array(%s.iter().map(|item| %s).collect()));\n",
+			key, expr, r.wireJSONEncodeValue(f.Elem, "item", wireJSONScalarBorrowed))
+	case model.KindMap:
+		if !wireJSONMapKeySupported(f.MapKey) {
+			panic(fmt.Sprintf("rust proto_json: unsupported map key scalar %v for field %s", f.MapKey, f.Name))
+		}
+		r.body.WriteString("        let mut map = serde_json::Map::new();\n")
+		fmt.Fprintf(&r.body, "        for (key, value) in &%s {\n", expr)
+		fmt.Fprintf(&r.body, "            map.insert(%s, %s);\n", r.wireJSONEncodeMapKey(f.MapKey, "key"), r.wireJSONEncodeValue(f.MapValue, "value", wireJSONScalarBorrowed))
+		r.body.WriteString("        }\n")
+		fmt.Fprintf(&r.body, "        object.insert(%q.into(), serde_json::Value::Object(map));\n", key)
+	default:
+		r.renderWireJSONEncodeFieldInner(f, key, expr)
+	}
 }
 
 func (r *renderer) renderWireJSONEncodeFieldInner(f *model.Field, key, expr string) {

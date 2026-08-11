@@ -316,6 +316,7 @@ def to_wire_list_workflow_provider_runs_request(
         if value.context is None
         else app.to_wire_request_context(value.context),
         provider=value.provider,
+        known_apps=value.known_apps,
     )
 
 
@@ -331,6 +332,7 @@ def from_wire_list_workflow_provider_runs_request(
         if value.HasField("context")
         else None,
         provider=value.provider,
+        known_apps=list(value.known_apps),
     )
 
 
@@ -340,6 +342,10 @@ def to_wire_list_workflow_provider_runs_response(
     return _workflow_pb2.ListWorkflowProviderRunsResponse(
         runs=[to_wire_workflow_run(item) for item in value.runs],
         next_page_token=value.next_page_token,
+        total_count=value.total_count,
+        status_counts=None
+        if value.status_counts is None
+        else to_wire_workflow_run_status_counts(value.status_counts),
     )
 
 
@@ -349,6 +355,10 @@ def from_wire_list_workflow_provider_runs_response(
     return native.ListWorkflowProviderRunsResponse(
         runs=[from_wire_workflow_run(item) for item in value.runs],
         next_page_token=value.next_page_token,
+        total_count=value.total_count if value.HasField("total_count") else None,
+        status_counts=from_wire_workflow_run_status_counts(value.status_counts)
+        if value.HasField("status_counts")
+        else None,
     )
 
 
@@ -870,6 +880,26 @@ def from_wire_workflow_run_event(value: Any) -> native.WorkflowRunEvent:
         created_at=from_wire_timestamp(value.created_at)
         if value.HasField("created_at")
         else None,
+    )
+
+
+def to_wire_workflow_run_status_counts(value: native.WorkflowRunStatusCounts) -> Any:
+    return _workflow_pb2.WorkflowRunStatusCounts(
+        pending=value.pending,
+        running=value.running,
+        succeeded=value.succeeded,
+        failed=value.failed,
+        canceled=value.canceled,
+    )
+
+
+def from_wire_workflow_run_status_counts(value: Any) -> native.WorkflowRunStatusCounts:
+    return native.WorkflowRunStatusCounts(
+        pending=value.pending,
+        running=value.running,
+        succeeded=value.succeeded,
+        failed=value.failed,
+        canceled=value.canceled,
     )
 
 

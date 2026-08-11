@@ -692,7 +692,7 @@ export const PUBLIC_METHODS = {
       method: "ListRuns",
       grpcPath: "/gestalt.provider.v1.Workflow/ListRuns",
       fill: ["context"],
-      reject: [],
+      reject: ["known_apps"],
       stream: false,
       http: {
         verb: "GET",

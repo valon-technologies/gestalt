@@ -48,24 +48,26 @@ func TestWireJSONContainerUsesWKTHelpers(t *testing.T) {
 	}
 }
 
-func TestWireJSONEncodeEnumUsesNumericFallback(t *testing.T) {
+func TestWireJSONEncodeExplicitPresenceScalarKeepsZero(t *testing.T) {
 	t.Parallel()
 
-	r := newRenderer(&index{
-		enums: map[string]*model.Enum{
-			"test.v1.Status": {
-				FullName: "test.v1.Status",
-				Values:   []model.EnumValue{{Name: "OK", Number: 1}},
-			},
-		},
-	}, "codec/app", "codec/app", modulePublic, true, nil, nil)
-	ref := &model.TypeRef{Kind: model.KindEnum, Enum: "test.v1.Status"}
-
-	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarBorrowed)
-	if strings.Contains(encode, "Value::Null") {
-		t.Fatalf("unknown enum must encode as number, not null: %q", encode)
+	r := newRenderer(&index{}, "codec/app", "codec/app", modulePublic, true, nil, nil)
+	r.body.Reset()
+	r.renderWireJSONEncodeField(&model.Field{
+		Name:     "total_count",
+		JSONName: "totalCount",
+		Kind:     model.KindScalar,
+		Scalar:   model.ScalarInt64,
+		Presence: model.ExplicitPresence,
+	}, "value")
+	out := r.body.String()
+	if !strings.Contains(out, "if let Some(inner) = &value.total_count") {
+		t.Fatalf("expected Option unwrap, got:\n%s", out)
 	}
-	if !strings.Contains(encode, "serde_json::json!(v)") {
-		t.Fatalf("enum encode missing numeric fallback: %q", encode)
+	if strings.Contains(out, "!= 0") {
+		t.Fatalf("explicit presence scalar must not skip zero values:\n%s", out)
+	}
+	if !strings.Contains(out, `object.insert("totalCount".into()`) {
+		t.Fatalf("expected unconditional insert for present scalar:\n%s", out)
 	}
 }
