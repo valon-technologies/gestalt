@@ -2274,6 +2274,7 @@ func buildAppStaticSpec(name string, entry *config.ProviderEntry, manifest *prov
 		ConnectionParams: appservice.ConnectionParamDefsFromManifest(conn.ConnectionParams),
 		CredentialFields: appservice.CredentialFieldsFromManifest(conn.Auth.Credentials),
 		DiscoveryConfig:  appservice.DiscoveryConfigFromManifest(conn.Discovery),
+		StaticHeaders:    maps.Clone(manifest.Spec.Headers),
 	}, plan, nil
 }
 
