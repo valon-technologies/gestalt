@@ -1,11 +1,72 @@
 package daemon
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type fakeProviderLocalFrontend struct {
+	ready  chan struct{}
+	exited chan struct{}
+	url    string
+}
+
+func (f fakeProviderLocalFrontend) FrontendReady() <-chan struct{} { return f.ready }
+func (f fakeProviderLocalFrontend) AllExited() <-chan struct{}     { return f.exited }
+func (f fakeProviderLocalFrontend) FrontendURL() string            { return f.url }
+
+func TestWaitProviderLocalFrontend(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns direct URL after provider and frontend readiness", func(t *testing.T) {
+		t.Parallel()
+		initialized := make(chan struct{})
+		frontend := fakeProviderLocalFrontend{
+			ready:  make(chan struct{}),
+			exited: make(chan struct{}),
+			url:    "http://127.0.0.1:5173/data-platform-dashboard/",
+		}
+		close(initialized)
+		close(frontend.ready)
+		got, ok := waitProviderLocalFrontend(context.Background(), initialized, func(app string) (providerLocalFrontend, bool) {
+			if app != "data-platform-dashboard" {
+				t.Fatalf("lookup app = %q", app)
+			}
+			return frontend, true
+		}, "data-platform-dashboard")
+		if !ok || got != frontend.url {
+			t.Fatalf("waitProviderLocalFrontend() = %q, %v; want %q, true", got, ok, frontend.url)
+		}
+	})
+
+	t.Run("stops when frontend exits", func(t *testing.T) {
+		t.Parallel()
+		initialized := make(chan struct{})
+		frontend := fakeProviderLocalFrontend{ready: make(chan struct{}), exited: make(chan struct{})}
+		close(initialized)
+		close(frontend.exited)
+		if got, ok := waitProviderLocalFrontend(context.Background(), initialized, func(string) (providerLocalFrontend, bool) {
+			return frontend, true
+		}, "dashboard"); ok || got != "" {
+			t.Fatalf("waitProviderLocalFrontend() = %q, %v; want empty, false", got, ok)
+		}
+	})
+
+	t.Run("stops when startup is canceled", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if got, ok := waitProviderLocalFrontend(ctx, make(chan struct{}), func(string) (providerLocalFrontend, bool) {
+			t.Fatal("lookup should not run")
+			return nil, false
+		}, "dashboard"); ok || got != "" {
+			t.Fatalf("waitProviderLocalFrontend() = %q, %v; want empty, false", got, ok)
+		}
+	})
+}
 
 func TestProviderLocalReadyURL(t *testing.T) {
 	t.Parallel()
