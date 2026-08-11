@@ -3,6 +3,7 @@ package remotepublish
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -16,12 +17,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/tunnel"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 // TunnelProxyConfig holds the parameters needed to build a tunnel proxy
 // provider that forwards app invocations through a reverse tunnel.
 type TunnelProxyConfig struct {
 	AppName        string
+	StaticHeaders  map[string]string
 	TunnelHost     string
 	PinnedSPKI     string
 	ConnectAddr    string
@@ -67,7 +70,8 @@ func NewTunnelProxyProvider(ctx context.Context, cfg TunnelProxyConfig) (core.Pr
 	}
 
 	provider, err := appservice.NewRemote(ctx, client, appservice.StaticProviderSpec{
-		Name: name,
+		Name:          name,
+		StaticHeaders: cfg.StaticHeaders,
 	}, nil, appservice.WithCloser(conn))
 	if err != nil {
 		_ = conn.Close()
@@ -75,6 +79,38 @@ func NewTunnelProxyProvider(ctx context.Context, cfg TunnelProxyConfig) (core.Pr
 	}
 
 	return provider, nil
+}
+
+// StaticHeadersFromDefinition returns the header names a published provider
+// declared as overridable. Values are intentionally omitted from publication
+// metadata because only the names are needed for invocation validation.
+func StaticHeadersFromDefinition(definition map[string]any) map[string]string {
+	raw, ok := definition["staticHeaders"]
+	if !ok {
+		return nil
+	}
+	var names []string
+	switch values := raw.(type) {
+	case []string:
+		names = values
+	case []any:
+		names = make([]string, 0, len(values))
+		for _, value := range values {
+			if name, ok := value.(string); ok {
+				names = append(names, name)
+			}
+		}
+	}
+	headers := make(map[string]string, len(names))
+	for _, name := range names {
+		if name = strings.TrimSpace(name); name != "" {
+			headers[name] = ""
+		}
+	}
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
 }
 
 // metadataAppProviderClient wraps an AppProviderClient to inject the
@@ -88,7 +124,13 @@ type metadataAppProviderClient struct {
 }
 
 func (c *metadataAppProviderClient) withApp(ctx context.Context) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, tunnelAppMetadataKey, c.appName)
+	pairs := []string{tunnelAppMetadataKey, c.appName}
+	if overrides := egress.OutboundHeaderOverridesFromContext(ctx); len(overrides) > 0 {
+		if encoded, err := json.Marshal(overrides); err == nil {
+			pairs = append(pairs, tunnelHeaderOverridesMetadataKey, string(encoded))
+		}
+	}
+	return metadata.AppendToOutgoingContext(ctx, pairs...)
 }
 
 func (c *metadataAppProviderClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*proto.ProviderMetadata, error) {

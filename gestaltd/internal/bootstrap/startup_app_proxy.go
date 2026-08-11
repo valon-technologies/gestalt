@@ -105,6 +105,15 @@ func (p *startupProviderProxy) Catalog() *catalog.Catalog {
 	return p.spec.Catalog.Clone()
 }
 
+func (p *startupProviderProxy) StaticHeaders() map[string]string {
+	if provider := p.resolved(); provider != nil {
+		if headers, ok := provider.(interface{ StaticHeaders() map[string]string }); ok {
+			return maps.Clone(headers.StaticHeaders())
+		}
+	}
+	return maps.Clone(p.spec.StaticHeaders)
+}
+
 func (p *startupProviderProxy) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	done, err := p.beginCallerWait(ctx)
 	if err != nil {

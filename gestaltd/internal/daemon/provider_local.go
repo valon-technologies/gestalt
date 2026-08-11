@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -141,7 +142,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	session.PublicURL = providerLocalPublicURL(env.Config)
 	session.AdminURL = strings.TrimRight(session.PublicURL, "/") + "/admin/"
 	return runServerWithReady(env, opts.GestaltdVersion, func() {
-		logProviderLocalSummary("local provider ready", session)
+		logProviderLocalReady(env, session)
 	})
 }
 
@@ -536,11 +537,82 @@ func mountedPublicUIPaths(cfg *config.Config) []string {
 	return slices.Compact(paths)
 }
 
-func logProviderLocalSummary(message string, session *providerLocalSession) {
+func logProviderLocalReady(env *bootstrapEnv, session *providerLocalSession) {
 	if session == nil {
 		return
 	}
-	readyURL := providerLocalReadyURL(session)
+	if strings.TrimSpace(session.AutoMountedUIPath) == "" {
+		logProviderLocalSummary("local provider ready", session)
+		return
+	}
+	go func() {
+		var lookup providerLocalFrontendLookup
+		if env.Result.DevSupervisor != nil {
+			lookup = func(app string) (providerLocalFrontend, bool) {
+				return env.Result.DevSupervisor.AppHandle(app)
+			}
+		}
+		readyURL, ok := waitProviderLocalFrontend(env.Ctx, env.Result.AppProvidersInitialized, lookup, session.TargetKey)
+		if !ok {
+			if env.Ctx.Err() == nil {
+				currentCLIReporter().Warning("local frontend did not become ready")
+				logProviderLocalSummary("local provider ready", session)
+			}
+			return
+		}
+		logProviderLocalSummaryAt("local frontend ready", session, readyURL)
+	}()
+}
+
+type providerLocalFrontend interface {
+	FrontendReady() <-chan struct{}
+	AllExited() <-chan struct{}
+	FrontendURL() string
+}
+
+type providerLocalFrontendLookup func(string) (providerLocalFrontend, bool)
+
+const providerLocalFrontendReadyTimeout = 30 * time.Second
+
+func waitProviderLocalFrontend(ctx context.Context, providersInitialized <-chan struct{}, lookup providerLocalFrontendLookup, app string) (string, bool) {
+	return waitProviderLocalFrontendWithin(ctx, providersInitialized, lookup, app, providerLocalFrontendReadyTimeout)
+}
+
+func waitProviderLocalFrontendWithin(ctx context.Context, providersInitialized <-chan struct{}, lookup providerLocalFrontendLookup, app string, timeout time.Duration) (string, bool) {
+	if lookup == nil || providersInitialized == nil {
+		return "", false
+	}
+	select {
+	case <-providersInitialized:
+	case <-ctx.Done():
+		return "", false
+	}
+	handle, ok := lookup(app)
+	if !ok {
+		return "", false
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-handle.FrontendReady():
+		return handle.FrontendURL(), true
+	case <-handle.AllExited():
+		return "", false
+	case <-timer.C:
+		return "", false
+	case <-ctx.Done():
+		return "", false
+	}
+}
+
+func logProviderLocalSummary(message string, session *providerLocalSession) {
+	logProviderLocalSummaryAt(message, session, providerLocalReadyURL(session))
+}
+
+func logProviderLocalSummaryAt(message string, session *providerLocalSession, readyURL string) {
+	if session == nil {
+		return
+	}
 	publicUIPaths := session.PublicUIPaths
 	if len(publicUIPaths) == 0 {
 		publicUIPaths = nil

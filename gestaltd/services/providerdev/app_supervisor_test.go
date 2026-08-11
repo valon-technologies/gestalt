@@ -12,6 +12,49 @@ import (
 	"time"
 )
 
+func TestAppHandleFrontendURL(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		basePath string
+		want     string
+	}{
+		{name: "mounted app", basePath: "/data-platform-dashboard", want: "http://127.0.0.1:5173/data-platform-dashboard/"},
+		{name: "root mount", basePath: "/", want: "http://127.0.0.1:5173/"},
+		{name: "empty mount", want: "http://127.0.0.1:5173/"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			handle := &AppHandle{app: &appManaged{
+				target: AppTarget{BasePath: tc.basePath},
+				port:   5173,
+			}}
+			if got := handle.FrontendURL(); got != tc.want {
+				t.Fatalf("FrontendURL() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSupervisorAppHandle(t *testing.T) {
+	t.Parallel()
+
+	app := &appManaged{target: AppTarget{Name: "dashboard"}, port: 5173}
+	supervisor := &Supervisor{apps: map[string]*appManaged{"dashboard": app}}
+	handle, ok := supervisor.AppHandle("dashboard")
+	if !ok {
+		t.Fatal("AppHandle(dashboard) not found")
+	}
+	if handle.app != app {
+		t.Fatal("AppHandle(dashboard) returned a different managed app")
+	}
+	if _, ok := supervisor.AppHandle("missing"); ok {
+		t.Fatal("AppHandle(missing) unexpectedly found")
+	}
+}
+
 func TestProbeFrontendReadinessTimeoutBehavior(t *testing.T) {
 	t.Parallel()
 

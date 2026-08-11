@@ -63,6 +63,21 @@ func (h *AppHandle) SocketPath() string {
 	return h.app.target.SocketPath
 }
 
+func (h *AppHandle) FrontendURL() string {
+	if h == nil || h.app == nil {
+		return ""
+	}
+	basePath := "/" + strings.Trim(h.app.target.BasePath, "/")
+	if basePath != "/" {
+		basePath += "/"
+	}
+	return (&url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort("127.0.0.1", strconv.Itoa(h.app.port)),
+		Path:   basePath,
+	}).String()
+}
+
 type appManaged struct {
 	target AppTarget
 	port   int
@@ -185,6 +200,19 @@ func (s *Supervisor) StartApp(ctx context.Context, target AppTarget) (*AppHandle
 	}()
 	go app.probeFrontendReadiness(appCtx, s.logger)
 	return &AppHandle{name: target.Name, app: app}, nil
+}
+
+func (s *Supervisor) AppHandle(name string) (*AppHandle, bool) {
+	if s == nil {
+		return nil, false
+	}
+	s.appsMu.RLock()
+	app, ok := s.apps[name]
+	s.appsMu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	return &AppHandle{name: name, app: app}, true
 }
 
 func (s *Supervisor) StopApp(name string) {
