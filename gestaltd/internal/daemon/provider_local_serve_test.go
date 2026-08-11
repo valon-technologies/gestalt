@@ -7,6 +7,52 @@ import (
 	"testing"
 )
 
+func TestProviderLocalReadyURL(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		session *providerLocalSession
+		want    string
+	}{
+		{
+			name:    "nil session",
+			session: nil,
+			want:    "",
+		},
+		{
+			name: "provider without mounted UI",
+			session: &providerLocalSession{
+				PublicURL: "http://localhost:8080/",
+			},
+			want: "http://localhost:8080/",
+		},
+		{
+			name: "provider with root-mounted UI",
+			session: &providerLocalSession{
+				PublicURL:         "http://localhost:8080/",
+				AutoMountedUIPath: "/",
+			},
+			want: "http://localhost:8080/",
+		},
+		{
+			name: "provider with mounted UI",
+			session: &providerLocalSession{
+				PublicURL:         "http://localhost:8080/",
+				AutoMountedUIPath: "/data-platform-dashboard",
+			},
+			want: "http://localhost:8080/data-platform-dashboard/",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := providerLocalReadyURL(test.session); got != test.want {
+				t.Fatalf("providerLocalReadyURL() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestMaybeRunServeProviderLocalRejectsLockedWithoutConfig(t *testing.T) {
 	t.Parallel()
 
