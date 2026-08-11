@@ -2,6 +2,8 @@ package remotepublish
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -14,6 +16,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 // TunnelAppProviderServer implements proto.AppProviderServer over the reverse
@@ -44,6 +47,7 @@ func NewTunnelAppProviderServer(providers *registry.ProviderMap[core.Provider]) 
 
 // tunnelAppMetadataKey is the gRPC metadata key carrying the target app name.
 const tunnelAppMetadataKey = "x-gestalt-app"
+const tunnelHeaderOverridesMetadataKey = "x-gestalt-header-overrides-bin"
 
 func appFromContext(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -110,6 +114,10 @@ func (s *TunnelAppProviderServer) Execute(ctx context.Context, req *proto.Execut
 	if err != nil {
 		return nil, err
 	}
+	ctx, err = s.applyHeaderOverrides(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return srv.Execute(ctx, req)
 }
 
@@ -118,7 +126,71 @@ func (s *TunnelAppProviderServer) ExecuteStream(req *proto.ExecuteRequest, strea
 	if err != nil {
 		return err
 	}
-	return srv.ExecuteStream(req, stream)
+	ctx, err := s.applyHeaderOverrides(stream.Context())
+	if err != nil {
+		return err
+	}
+	return srv.ExecuteStream(req, &tunnelExecuteStreamServer{
+		AppProvider_ExecuteStreamServer: stream,
+		ctx:                             ctx,
+	})
+}
+
+type tunnelExecuteStreamServer struct {
+	proto.AppProvider_ExecuteStreamServer
+	ctx context.Context
+}
+
+func (s *tunnelExecuteStreamServer) Context() context.Context { return s.ctx }
+
+func (s *TunnelAppProviderServer) applyHeaderOverrides(ctx context.Context) (context.Context, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ctx, nil
+	}
+	values := md.Get(tunnelHeaderOverridesMetadataKey)
+	if len(values) == 0 {
+		return ctx, nil
+	}
+	if len(values) != 1 {
+		return nil, status.Error(codes.InvalidArgument, "header override metadata must have one value")
+	}
+	requested := map[string]string{}
+	if err := json.Unmarshal([]byte(values[0]), &requested); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "header override metadata is invalid")
+	}
+	appName, err := appFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := s.providers.GetWithContext(ctx, appName)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "app %q not found", appName)
+	}
+	allowedProvider, ok := provider.(interface{ StaticHeaders() map[string]string })
+	if !ok {
+		return nil, status.Error(codes.InvalidArgument, "provider does not allow header overrides")
+	}
+	allowed := allowedProvider.StaticHeaders()
+	validated := make(map[string]string, len(requested))
+	for name, value := range requested {
+		canonical := http.CanonicalHeaderKey(strings.TrimSpace(name))
+		if canonical == "" || strings.TrimSpace(value) == "" {
+			return nil, status.Error(codes.InvalidArgument, "header override metadata contains an empty name or value")
+		}
+		matched := false
+		for allowedName := range allowed {
+			if http.CanonicalHeaderKey(allowedName) == canonical {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil, status.Errorf(codes.InvalidArgument, "header %q is not overridable for provider", canonical)
+		}
+		validated[canonical] = value
+	}
+	return egress.WithOutboundHeaderOverrides(ctx, validated), nil
 }
 
 func (s *TunnelAppProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.ResolveHTTPSubjectRequest) (*proto.ResolveHTTPSubjectResponse, error) {

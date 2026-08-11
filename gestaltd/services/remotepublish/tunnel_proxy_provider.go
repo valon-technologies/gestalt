@@ -3,6 +3,7 @@ package remotepublish
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/tunnel"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 // TunnelProxyConfig holds the parameters needed to build a tunnel proxy
@@ -122,7 +124,13 @@ type metadataAppProviderClient struct {
 }
 
 func (c *metadataAppProviderClient) withApp(ctx context.Context) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, tunnelAppMetadataKey, c.appName)
+	pairs := []string{tunnelAppMetadataKey, c.appName}
+	if overrides := egress.OutboundHeaderOverridesFromContext(ctx); len(overrides) > 0 {
+		if encoded, err := json.Marshal(overrides); err == nil {
+			pairs = append(pairs, tunnelHeaderOverridesMetadataKey, string(encoded))
+		}
+	}
+	return metadata.AppendToOutgoingContext(ctx, pairs...)
 }
 
 func (c *metadataAppProviderClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*proto.ProviderMetadata, error) {
