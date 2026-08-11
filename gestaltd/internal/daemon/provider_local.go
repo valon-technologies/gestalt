@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -555,6 +556,7 @@ func logProviderLocalReady(env *bootstrapEnv, session *providerLocalSession) {
 		if !ok {
 			if env.Ctx.Err() == nil {
 				currentCLIReporter().Warning("local frontend did not become ready")
+				logProviderLocalSummary("local provider ready", session)
 			}
 			return
 		}
@@ -570,12 +572,22 @@ type providerLocalFrontend interface {
 
 type providerLocalFrontendLookup func(string) (providerLocalFrontend, bool)
 
+const providerLocalFrontendReadyTimeout = 30 * time.Second
+
 func waitProviderLocalFrontend(ctx context.Context, providersInitialized <-chan struct{}, lookup providerLocalFrontendLookup, app string) (string, bool) {
+	return waitProviderLocalFrontendWithin(ctx, providersInitialized, lookup, app, providerLocalFrontendReadyTimeout)
+}
+
+func waitProviderLocalFrontendWithin(ctx context.Context, providersInitialized <-chan struct{}, lookup providerLocalFrontendLookup, app string, timeout time.Duration) (string, bool) {
 	if lookup == nil || providersInitialized == nil {
 		return "", false
 	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-providersInitialized:
+	case <-timer.C:
+		return "", false
 	case <-ctx.Done():
 		return "", false
 	}
@@ -587,6 +599,8 @@ func waitProviderLocalFrontend(ctx context.Context, providersInitialized <-chan 
 	case <-handle.FrontendReady():
 		return handle.FrontendURL(), true
 	case <-handle.AllExited():
+		return "", false
+	case <-timer.C:
 		return "", false
 	case <-ctx.Done():
 		return "", false

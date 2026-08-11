@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeProviderLocalFrontend struct {
@@ -64,6 +65,18 @@ func TestWaitProviderLocalFrontend(t *testing.T) {
 			return nil, false
 		}, "dashboard"); ok || got != "" {
 			t.Fatalf("waitProviderLocalFrontend() = %q, %v; want empty, false", got, ok)
+		}
+	})
+
+	t.Run("stops when frontend readiness times out", func(t *testing.T) {
+		t.Parallel()
+		initialized := make(chan struct{})
+		close(initialized)
+		frontend := fakeProviderLocalFrontend{ready: make(chan struct{}), exited: make(chan struct{})}
+		if got, ok := waitProviderLocalFrontendWithin(context.Background(), initialized, func(string) (providerLocalFrontend, bool) {
+			return frontend, true
+		}, "dashboard", time.Millisecond); ok || got != "" {
+			t.Fatalf("waitProviderLocalFrontendWithin() = %q, %v; want empty, false", got, ok)
 		}
 	})
 }
