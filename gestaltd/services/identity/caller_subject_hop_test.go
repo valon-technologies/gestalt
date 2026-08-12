@@ -23,7 +23,7 @@ import (
 )
 
 type recordingIdentityProvider struct {
-	mu            sync.Mutex
+	mu              sync.Mutex
 	callerSubjectID string
 }
 
