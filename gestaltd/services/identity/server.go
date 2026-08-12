@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
@@ -77,7 +78,7 @@ func (s *providerServer) UserInfo(ctx context.Context, req *proto.UserInfoReques
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	resp, err := s.provider.UserInfo(providerHandlerContext(ctx), userInfoRequestFromProto(req))
+	resp, err := s.provider.UserInfo(gestalt.AuthCallContextFromIncoming(ctx), userInfoRequestFromProto(req))
 	if err != nil {
 		return nil, identityToGRPCError("userinfo", err)
 	}
@@ -91,7 +92,7 @@ func (s *providerServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequ
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	resp, err := s.provider.ListGrants(providerHandlerContext(ctx), &core.ListGrantsRequest{})
+	resp, err := s.provider.ListGrants(gestalt.AuthCallContextFromIncoming(ctx), &core.ListGrantsRequest{})
 	if err != nil {
 		return nil, identityToGRPCError("list grants", err)
 	}
@@ -108,7 +109,7 @@ func (s *providerServer) GetGrant(ctx context.Context, req *proto.GetGrantReques
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	resp, err := s.provider.GetGrant(providerHandlerContext(ctx), getGrantRequestFromProto(req))
+	resp, err := s.provider.GetGrant(gestalt.AuthCallContextFromIncoming(ctx), getGrantRequestFromProto(req))
 	if err != nil {
 		return nil, identityToGRPCError("get grant", err)
 	}
@@ -125,7 +126,7 @@ func (s *providerServer) RevokeGrant(ctx context.Context, req *proto.RevokeGrant
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	if _, err := s.provider.RevokeGrant(providerHandlerContext(ctx), revokeGrantRequestFromProto(req)); err != nil {
+	if _, err := s.provider.RevokeGrant(gestalt.AuthCallContextFromIncoming(ctx), revokeGrantRequestFromProto(req)); err != nil {
 		return nil, identityToGRPCError("revoke grant", err)
 	}
 	return &proto.RevokeGrantResponse{}, nil

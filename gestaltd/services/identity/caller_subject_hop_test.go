@@ -23,8 +23,8 @@ import (
 )
 
 type recordingIdentityProvider struct {
-	mu                    sync.Mutex
-	userInfoCallerSubject string
+	mu              sync.Mutex
+	callerSubjectID string
 }
 
 func (p *recordingIdentityProvider) Configure(context.Context, string, map[string]any) error {
@@ -60,16 +60,16 @@ func (p *recordingIdentityProvider) Introspect(context.Context, *gestalt.Introsp
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (p *recordingIdentityProvider) UserInfo(ctx context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
-	call := gestalt.IdentityCallContextFromContext(gestalt.AuthCallContextFromIncoming(ctx))
-	p.mu.Lock()
-	p.userInfoCallerSubject = call.CallerSubjectID
-	p.mu.Unlock()
-	return &gestalt.UserInfoResponse{SubjectID: call.CallerSubjectID}, nil
+func (p *recordingIdentityProvider) UserInfo(context.Context, *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (p *recordingIdentityProvider) ListGrants(context.Context, *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+func (p *recordingIdentityProvider) ListGrants(ctx context.Context, _ *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
+	call := gestalt.IdentityCallContextFromContext(gestalt.AuthCallContextFromIncoming(ctx))
+	p.mu.Lock()
+	p.callerSubjectID = call.CallerSubjectID
+	p.mu.Unlock()
+	return &gestalt.ListGrantsResponse{}, nil
 }
 
 func (p *recordingIdentityProvider) GetGrant(context.Context, *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
@@ -83,7 +83,7 @@ func (p *recordingIdentityProvider) RevokeGrant(context.Context, *gestalt.Revoke
 func (p *recordingIdentityProvider) callerSubject() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.userInfoCallerSubject
+	return p.callerSubjectID
 }
 
 func TestHostServiceIdentityHopPropagatesCallerSubject(t *testing.T) {
@@ -169,9 +169,9 @@ func TestHostServiceIdentityHopPropagatesCallerSubject(t *testing.T) {
 		capability,
 	)
 
-	_, err = proto.NewIdentityClient(hostConn).UserInfo(rpcCtx, &proto.UserInfoRequest{})
+	_, err = proto.NewIdentityClient(hostConn).ListGrants(rpcCtx, &proto.ListGrantsRequest{})
 	if err != nil {
-		t.Fatalf("UserInfo via host service: %v", err)
+		t.Fatalf("ListGrants via host service: %v", err)
 	}
 	if got := recording.callerSubject(); got != "user:hop-caller" {
 		t.Fatalf("executable provider CallerSubjectID = %q, want user:hop-caller", got)
