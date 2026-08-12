@@ -28,6 +28,8 @@ func mountedUIThemeHandlerFullPath(mounted MountedUI, next http.Handler) http.Ha
 			return
 		}
 		switch {
+		case r.URL.Path == mountedUIBrandPaths(mounted.Path):
+			serveMountedUIBrandJSON(w, r, mounted)
 		case r.URL.Path == stylesheetPath:
 			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
 		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, assetsPrefix):
@@ -53,6 +55,8 @@ func mountedUIThemeHandler(mounted MountedUI, next http.Handler) http.Handler {
 			return
 		}
 		switch {
+		case r.URL.Path == mountedUIBrandJSONPath:
+			serveMountedUIBrandJSON(w, r, mounted)
 		case r.URL.Path == mountedUIThemeStylesheetPath:
 			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
 		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, mountedUIThemeAssetsPrefix):
@@ -108,6 +112,8 @@ func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir 
 // table lacks .woff2, and OS mime databases are absent in minimal containers
 // — while delivering licensed fonts is the main reason assetsDir exists.
 var mountedUIThemeContentTypes = map[string]string{
+	".svg":   "image/svg+xml",
+	".png":   "image/png",
 	".woff2": "font/woff2",
 	".woff":  "font/woff",
 }

@@ -4627,32 +4627,73 @@ func resolveAppStaticTheme(paths lifecyclePaths, name string, entry *config.Prov
 	}
 	entry.ResolvedThemeStylesheet = ""
 	entry.ResolvedThemeAssetsDir = ""
-	if entry.Static == nil || entry.Static.Theme == nil {
+	entry.ResolvedBrandName = ""
+	entry.ResolvedBrandMarkSrc = ""
+	if entry.Static == nil {
 		return nil
 	}
-	theme := entry.Static.Theme
-	if stylesheet := strings.TrimSpace(theme.Stylesheet); stylesheet != "" {
-		resolved := resolveUIThemePath(paths.configDir, stylesheet)
-		info, err := os.Stat(resolved)
-		if err != nil {
-			return fmt.Errorf("app %q static theme stylesheet not found at %s: %w", name, resolved, err)
+	if theme := entry.Static.Theme; theme != nil {
+		if stylesheet := strings.TrimSpace(theme.Stylesheet); stylesheet != "" {
+			resolved := resolveUIThemePath(paths.configDir, stylesheet)
+			info, err := os.Stat(resolved)
+			if err != nil {
+				return fmt.Errorf("app %q static theme stylesheet not found at %s: %w", name, resolved, err)
+			}
+			if info.IsDir() {
+				return fmt.Errorf("app %q static theme stylesheet at %s is a directory", name, resolved)
+			}
+			entry.ResolvedThemeStylesheet = resolved
 		}
-		if info.IsDir() {
-			return fmt.Errorf("app %q static theme stylesheet at %s is a directory", name, resolved)
+		if assetsDir := strings.TrimSpace(theme.AssetsDir); assetsDir != "" {
+			resolved := resolveUIThemePath(paths.configDir, assetsDir)
+			info, err := os.Stat(resolved)
+			if err != nil {
+				return fmt.Errorf("app %q static theme assetsDir not found at %s: %w", name, resolved, err)
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("app %q static theme assetsDir at %s is not a directory", name, resolved)
+			}
+			entry.ResolvedThemeAssetsDir = resolved
 		}
-		entry.ResolvedThemeStylesheet = resolved
 	}
-	if assetsDir := strings.TrimSpace(theme.AssetsDir); assetsDir != "" {
-		resolved := resolveUIThemePath(paths.configDir, assetsDir)
-		info, err := os.Stat(resolved)
-		if err != nil {
-			return fmt.Errorf("app %q static theme assetsDir not found at %s: %w", name, resolved, err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("app %q static theme assetsDir at %s is not a directory", name, resolved)
-		}
-		entry.ResolvedThemeAssetsDir = resolved
+	if err := resolveAppStaticBrand(paths, name, entry); err != nil {
+		return err
 	}
+	return nil
+}
+
+// resolveAppStaticBrand resolves static.brand against the deployment config directory.
+// Mark files must live under theme.assetsDir so they are served at /theme/<rel>.
+func resolveAppStaticBrand(paths lifecyclePaths, name string, entry *config.ProviderEntry) error {
+	if entry == nil || entry.Static == nil || entry.Static.Brand == nil {
+		return nil
+	}
+	brand := entry.Static.Brand
+	entry.ResolvedBrandName = strings.TrimSpace(brand.Name)
+	mark := strings.TrimSpace(brand.Mark)
+	if mark == "" {
+		return nil
+	}
+	if entry.ResolvedThemeAssetsDir == "" {
+		return fmt.Errorf("app %q static.brand.mark requires static.theme.assetsDir", name)
+	}
+	resolvedMark := resolveUIThemePath(paths.configDir, mark)
+	info, err := os.Stat(resolvedMark)
+	if err != nil {
+		return fmt.Errorf("app %q static brand mark not found at %s: %w", name, resolvedMark, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("app %q static brand mark at %s is a directory", name, resolvedMark)
+	}
+	rel, err := filepath.Rel(entry.ResolvedThemeAssetsDir, resolvedMark)
+	if err != nil {
+		return fmt.Errorf("app %q static brand mark path: %w", name, err)
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(rel, "../") {
+		return fmt.Errorf("app %q static.brand.mark must be inside static.theme.assetsDir", name)
+	}
+	entry.ResolvedBrandMarkSrc = "theme/" + rel
 	return nil
 }
 

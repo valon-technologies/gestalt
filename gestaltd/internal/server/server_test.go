@@ -2408,6 +2408,88 @@ func TestMountedUIThemeRoutes(t *testing.T) {
 	}
 }
 
+func TestMountedUIBrandJSON(t *testing.T) {
+	t.Parallel()
+
+	uiDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(uiDir, "index.html"), "<html>portal-shell</html>")
+
+	handler, err := testutilUIHandler(uiDir)
+	if err != nil {
+		t.Fatalf("ui handler: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:         "portal",
+			Path:         "/portal",
+			Handler:      handler,
+			BrandName:    "Valon Tools",
+			BrandMarkSrc: "theme/mark.svg",
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/portal/brand.json")
+	if err != nil {
+		t.Fatalf("GET brand.json: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll brand.json: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("brand.json status = %d, want 200", resp.StatusCode)
+	}
+	want := `{"name":"Valon Tools","markSrc":"theme/mark.svg"}`
+	if got := string(body); got != want {
+		t.Fatalf("brand.json body = %q, want %q", got, want)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("brand.json Content-Type = %q, want application/json; charset=utf-8", got)
+	}
+}
+
+func TestMountedUIBrandJSONUnconfigured(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>root-shell</html>")
+	handler, err := testutilUIHandler(rootDir)
+	if err != nil {
+		t.Fatalf("ui handler: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:    "root",
+			Path:    "/",
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/brand.json")
+	if err != nil {
+		t.Fatalf("GET brand.json: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll brand.json: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("brand.json status = %d, want 200", resp.StatusCode)
+	}
+	if got := string(body); got != "{}" {
+		t.Fatalf("brand.json body = %q, want {}", got)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("brand.json Content-Type = %q, want application/json; charset=utf-8", got)
+	}
+}
+
 func TestMountedUIThemeStylesheetUnconfigured(t *testing.T) {
 	t.Parallel()
 

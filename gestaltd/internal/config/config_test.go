@@ -2296,6 +2296,46 @@ server:
 		}
 	})
 
+	t.Run("static brand config is preserved", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+    static:
+      mount: /roadmap
+      brand:
+        name: Valon Tools
+        mark: ./ui/mark.svg
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		brand := cfg.Apps["roadmap"].Static.Brand
+		if brand == nil {
+			t.Fatal(`Apps["roadmap"].Static.Brand = nil`)
+		}
+		if got := brand.Name; got != "Valon Tools" {
+			t.Fatalf(`brand.name = %q, want %q`, got, "Valon Tools")
+		}
+		if got := brand.Mark; got != "./ui/mark.svg" {
+			t.Fatalf(`brand.mark = %q, want %q`, got, "./ui/mark.svg")
+		}
+	})
+
 	t.Run("reserved static mount path is rejected", func(t *testing.T) {
 		t.Parallel()
 

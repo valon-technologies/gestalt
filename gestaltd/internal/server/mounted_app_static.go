@@ -47,6 +47,8 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				Handler:             handler,
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+				BrandName:           entry.ResolvedBrandName,
+				BrandMarkSrc:        entry.ResolvedBrandMarkSrc,
 				IsDev:               true,
 			})
 			continue
@@ -61,6 +63,8 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				Handler:             registryAppStaticHandler(name, mount, entry, providers, artifactsDir, runtimeState),
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+				BrandName:           entry.ResolvedBrandName,
+				BrandMarkSrc:        entry.ResolvedBrandMarkSrc,
 			})
 			continue
 		}
@@ -69,25 +73,31 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 			return nil, fmt.Errorf("app %q static configured but asset root not resolved", name)
 		}
 
-		handler, err := ui.StaticHandler(ui.StaticConfig{
-			FS:           os.DirFS(entry.ResolvedStaticRoot),
-			DynamicIndex: true,
-			RenderIndex:  injectBaseHref(mount),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("app %q static: %w", name, err)
-		}
-
-		mounted = append(mounted, MountedUI{
+		mountedUI := MountedUI{
 			Name:                mountedName,
 			Path:                mount,
 			AppName:             name,
 			AuthorizationPolicy: entry.AuthorizationPolicy,
 			AppLevelAuth:        !entry.Static.Public,
-			Handler:             handler,
 			ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 			ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+			BrandName:           entry.ResolvedBrandName,
+			BrandMarkSrc:        entry.ResolvedBrandMarkSrc,
+		}
+		handler, err := ui.StaticHandler(ui.StaticConfig{
+			FS:           os.DirFS(entry.ResolvedStaticRoot),
+			DynamicIndex: true,
+			RenderIndex: composeIndexRenderers(
+				injectBaseHref(mount),
+				injectPlatformBrand(mountedUI),
+			),
 		})
+		if err != nil {
+			return nil, fmt.Errorf("app %q static: %w", name, err)
+		}
+		mountedUI.Handler = handler
+
+		mounted = append(mounted, mountedUI)
 	}
 
 	return mounted, nil
@@ -120,7 +130,13 @@ func registryAppStaticHandler(app, mount string, entry *config.ProviderEntry, pr
 			handler, err := ui.StaticHandler(ui.StaticConfig{
 				FS:           os.DirFS(resolved.ResolvedStaticRoot),
 				DynamicIndex: true,
-				RenderIndex:  injectBaseHref(mount),
+				RenderIndex: composeIndexRenderers(
+					injectBaseHref(mount),
+					injectPlatformBrand(MountedUI{
+						BrandName:    entry.ResolvedBrandName,
+						BrandMarkSrc: entry.ResolvedBrandMarkSrc,
+					}),
+				),
 			})
 			if err != nil {
 				return err

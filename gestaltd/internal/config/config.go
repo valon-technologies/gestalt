@@ -557,7 +557,10 @@ type ProviderEntry struct {
 	// ui config.theme, not from YAML).
 	ResolvedThemeStylesheet string `yaml:"-"`
 	ResolvedThemeAssetsDir  string `yaml:"-"`
-	MCPToolPrefix           string `yaml:"-"`
+	// Runtime-resolved platform brand (populated during sync from static.brand).
+	ResolvedBrandName    string `yaml:"-"`
+	ResolvedBrandMarkSrc string `yaml:"-"` // mount-relative, e.g. "theme/mark.svg"
+	MCPToolPrefix        string `yaml:"-"`
 }
 
 // AppStaticConfig configures a packaged app's static bundle mount.
@@ -565,8 +568,16 @@ type ProviderEntry struct {
 type AppStaticConfig struct {
 	Mount         string         `yaml:"mount,omitempty"`
 	Theme         *UIThemeConfig `yaml:"theme,omitempty"`
+	Brand         *UIBrandConfig `yaml:"brand,omitempty"`
 	Public        bool           `yaml:"public,omitempty"`
 	CatalogHidden bool           `yaml:"catalogHidden,omitempty"`
+}
+
+// UIBrandConfig is the typed `brand` block for a mounted UI's platform identity
+// (product name + optional logo mark). Distinct from UIThemeConfig (colors/fonts).
+type UIBrandConfig struct {
+	Name string `yaml:"name,omitempty"`
+	Mark string `yaml:"mark,omitempty"`
 }
 
 type providerEntryFields ProviderEntry

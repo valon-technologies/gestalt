@@ -64,9 +64,14 @@ type MountedUI struct {
 	// <mount>/theme/ respectively. Both are optional.
 	ThemeStylesheet string
 	ThemeAssetsDir  string
-	IsDev           bool
-	AppLevelAuth    bool
-	builtInAdmin    bool
+	// BrandName and BrandMarkSrc are the serve-time platform identity for this
+	// mount (product name + optional mark URL). BrandMarkSrc is mount-relative
+	// (e.g. "theme/mark.svg"). Both are optional; empty means the UI default.
+	BrandName    string
+	BrandMarkSrc string
+	IsDev        bool
+	AppLevelAuth bool
+	builtInAdmin bool
 }
 
 type MountedHTTPBinding struct {
