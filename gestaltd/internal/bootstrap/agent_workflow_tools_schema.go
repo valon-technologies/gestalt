@@ -16,9 +16,10 @@ func workflowSystemToolStartRunSchema() map[string]any {
 
 func workflowSystemToolListRunsSchema() map[string]any {
 	return workflowSystemToolObjectSchema(nil, map[string]any{
-		"pageSize":  map[string]any{"type": "integer", "minimum": 0, "description": "Maximum runs to return."},
-		"pageToken": workflowSystemToolStringSchema("Pagination token from a previous workflow_runs_list response."),
-		"app":       workflowSystemToolStringSchema("Target app name to filter by."),
+		"pageSize":     map[string]any{"type": "integer", "minimum": 0, "description": "Maximum runs to return."},
+		"pageToken":    workflowSystemToolStringSchema("Pagination token from a previous workflow_runs_list response."),
+		"app":          workflowSystemToolStringSchema("Target app name to filter by."),
+		"definitionId": workflowSystemToolStringSchema("Workflow definition ID to filter by."),
 		"status": map[string]any{
 			"type":        "string",
 			"description": "Workflow run status to filter by.",

@@ -43,13 +43,14 @@ func TestListWorkflowProviderRunsResponseCodecRoundTrip(t *testing.T) {
 func TestListWorkflowProviderRunsRequestCodecKnownApps(t *testing.T) {
 	t.Parallel()
 	in := &ListWorkflowProviderRunsRequest{
-		PageSize:  10,
-		TargetApp: "foo",
-		KnownApps: []string{"foo", "foo_bar"},
-		Provider:  "local",
+		PageSize:     10,
+		TargetApp:    "foo",
+		KnownApps:    []string{"foo", "foo_bar"},
+		DefinitionId: "app_foo_daily",
+		Provider:     "local",
 	}
 	out := FromWireListWorkflowProviderRunsRequest(ToWireListWorkflowProviderRunsRequest(in))
-	if out.TargetApp != "foo" || out.Provider != "local" || out.PageSize != 10 {
+	if out.TargetApp != "foo" || out.Provider != "local" || out.PageSize != 10 || out.DefinitionId != "app_foo_daily" {
 		t.Fatalf("scalar fields = %#v", out)
 	}
 	if !reflect.DeepEqual(out.KnownApps, []string{"foo", "foo_bar"}) {

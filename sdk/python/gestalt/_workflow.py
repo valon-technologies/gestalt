@@ -1763,6 +1763,7 @@ class ListWorkflowProviderRunsRequest:
     status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
     target_app: str = ""
     known_apps: Sequence[str] = _dataclasses.field(default_factory=list)
+    definition_id: str = ""
     context: Any | None = None
 
 
@@ -2022,6 +2023,7 @@ def list_workflow_provider_runs_request_from_proto(
         status=value.status,
         target_app=value.target_app,
         known_apps=list(value.known_apps),
+        definition_id=value.definition_id,
         context=getattr(value, "context", None),
     )
 

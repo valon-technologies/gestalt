@@ -775,6 +775,48 @@ func TestRunMatchesListFiltersDefinitionID(t *testing.T) {
 	}
 }
 
+func TestManagerListRunsFiltersProviderRunsByDefinitionID(t *testing.T) {
+	t.Parallel()
+	provider := newTestWorkflowProvider()
+	provider.listRunsHandler = func(req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+		keep, err := workflowwire.RunToProto(&coreworkflow.Run{
+			ID:           "keep",
+			DefinitionID: "app_foo_daily",
+			Status:       coreworkflow.RunStatusSucceeded,
+		})
+		if err != nil {
+			return nil, err
+		}
+		drop, err := workflowwire.RunToProto(&coreworkflow.Run{
+			ID:           "drop",
+			DefinitionID: "app_foo_other",
+			Status:       coreworkflow.RunStatusSucceeded,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListWorkflowProviderRunsResponse{Runs: []*proto.WorkflowRun{keep, drop}}, nil
+	}
+	manager := New(Config{
+		Providers: testWorkflowGithubProviders(t),
+		Workflow:  testWorkflowControl{provider: provider},
+		Invoker:   testWorkflowManagerBroker(t, testWorkflowGithubProviders(t), allowAllAuthz{}),
+		AppNames:  []string{"foo"},
+	})
+	resp, err := manager.ListRuns(context.Background(), testWorkflowManagerPrincipal(), "local", coreworkflow.ListRunsRequest{
+		DefinitionID: "app_foo_daily",
+	})
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if len(resp.Runs) != 1 || resp.Runs[0].Run == nil || resp.Runs[0].Run.ID != "keep" {
+		t.Fatalf("runs = %#v, want only keep", resp.Runs)
+	}
+	if got := provider.listRunsRequests[0].GetDefinitionId(); got != "app_foo_daily" {
+		t.Fatalf("DefinitionId = %q, want app_foo_daily", got)
+	}
+}
+
 func TestManagerListRunsForwardsAggregatesAndKnownApps(t *testing.T) {
 	t.Parallel()
 	provider := newTestWorkflowProvider()
@@ -875,8 +917,8 @@ func TestManagerListRunsForwardsAggregatesAndKnownApps(t *testing.T) {
 		TargetApp:    "foo",
 		DefinitionID: "app_foo_other",
 	})
-	if err == nil {
-		t.Fatal("expected page token to reject a changed definition_id")
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("changed definition_id error = %v, want invalid invocation", err)
 	}
 }
 

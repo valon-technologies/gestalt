@@ -1572,6 +1572,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
                 page_size=25,
                 page_token="page-0",
                 status=workflow_pb2.WORKFLOW_RUN_STATUS_RUNNING,
+                definition_id="app_foo_daily",
             ),
             object(),
         )
@@ -1582,6 +1583,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertEqual(
             provider.request.status, workflow_pb2.WORKFLOW_RUN_STATUS_RUNNING
         )
+        self.assertEqual(provider.request.definition_id, "app_foo_daily")
         self.assertEqual([run.id for run in response.runs], ["run-page"])
         self.assertEqual(response.next_page_token, "next-page")
 
