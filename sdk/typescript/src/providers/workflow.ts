@@ -478,6 +478,7 @@ export interface ListWorkflowProviderRunsRequest {
   status?: WorkflowRunStatus | undefined;
   targetApp?: string | undefined;
   knownApps?: readonly string[] | undefined;
+  definitionId?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -1654,6 +1655,7 @@ function listWorkflowProviderRunsRequestFromProto(input: ProtoListWorkflowProvid
     status: input.status as WorkflowRunStatus,
     targetApp: input.targetApp,
     knownApps: input.knownApps,
+    definitionId: input.definitionId,
     context: input.context,
   };
 }

@@ -154,6 +154,8 @@ class ListWorkflowProviderRunsRequest:
     #: public callers must omit it (rejected). When set, providers must apply the
     #: same ownership rules to returned runs and to total_count / status_counts.
     known_apps: list[str] = field(default_factory=list)
+    #: Optional filter for runs of one workflow definition.
+    definition_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,9 +166,9 @@ class ListWorkflowProviderRunsResponse:
     #: query as the page, including known_apps ownership). Distinct from
     #: len(runs). Omitted when unknown.
     total_count: int | None = None
-    #: Status histogram for the same provider/target_app/known_apps scope with
-    #: status filter cleared. Omitted when unknown (optional presence — an
-    #: all-zero message means a known empty histogram). Lets UIs render
+    #: Status histogram for the same provider/target_app/known_apps/definition_id
+    #: scope with status filter cleared. Omitted when unknown (optional presence —
+    #: an all-zero message means a known empty histogram). Lets UIs render
     #: Running/Succeeded/Failed without scanning every page.
     status_counts: WorkflowRunStatusCounts | None = None
 
@@ -362,8 +364,8 @@ class WorkflowRunEvent:
 @dataclass(frozen=True, slots=True)
 class WorkflowRunStatusCounts:
     """WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-    scope with status cleared (provider + target_app + known_apps). It is not
-    derived from the current page of runs.
+    scope with status cleared (provider + target_app + known_apps +
+    definition_id). It is not derived from the current page of runs.
     """
 
     pending: int = 0
@@ -927,6 +929,7 @@ class Workflow:
         page_token: str = ...,
         status: WorkflowRunStatus = ...,
         target_app: str = ...,
+        definition_id: str = ...,
     ) -> ListWorkflowProviderRunsResponse: ...
 
     def list_runs(
@@ -938,6 +941,7 @@ class Workflow:
         page_token: str | None = None,
         status: WorkflowRunStatus | None = None,
         target_app: str | None = None,
+        definition_id: str | None = None,
     ) -> ListWorkflowProviderRunsResponse:
         if request is None:
             request = ListWorkflowProviderRunsRequest(
@@ -946,6 +950,7 @@ class Workflow:
                 page_token=page_token or "",
                 status=status or 0,
                 target_app=target_app or "",
+                definition_id=definition_id or "",
             )
         elif (
             provider is not None
@@ -953,6 +958,7 @@ class Workflow:
             or page_token is not None
             or status is not None
             or target_app is not None
+            or definition_id is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:

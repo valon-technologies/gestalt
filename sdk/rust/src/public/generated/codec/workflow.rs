@@ -1972,6 +1972,7 @@ pub(crate) fn to_wire_list_workflow_provider_runs_request(
         context: None,
         provider: value.provider,
         known_apps: Vec::new(),
+        definition_id: value.definition_id,
         ..Default::default()
     }
 }
@@ -2033,6 +2034,12 @@ pub(crate) fn encode_wire_list_workflow_provider_runs_request_json(
                     .map(|item| serde_json::Value::String(item.to_string()))
                     .collect(),
             ),
+        );
+    }
+    if !value.definition_id.is_empty() {
+        object.insert(
+            "definitionId".into(),
+            serde_json::Value::String(value.definition_id.to_string()),
         );
     }
     serde_json::Value::Object(object)
@@ -2122,6 +2129,10 @@ pub(crate) fn decode_wire_list_workflow_provider_runs_request_json(
                 })
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
+        },
+        definition_id: match object.get("definitionId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
         },
         ..Default::default()
     })

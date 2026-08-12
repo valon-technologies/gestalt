@@ -112,8 +112,8 @@ type ListRunsResponse struct {
 	// TotalCount is the visibility total for this list filter when known.
 	// Distinct from len(Runs). Nil means unknown, not zero.
 	TotalCount *int64
-	// StatusCounts is the provider/target_app/known_apps status histogram
-	// (status filter cleared) when known. Nil means unknown.
+	// StatusCounts is the provider/target_app/known_apps/definition_id status
+	// histogram (status filter cleared) when known. Nil means unknown.
 	StatusCounts *proto.WorkflowRunStatusCounts
 }
 
@@ -446,13 +446,14 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 			seenProviderTokens[providerPageToken] = struct{}{}
 			captureAggregates := !aggregatesCaptured && providerPageToken == "" && len(providerNames) == 1
 			resp, err := provider.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
-				Provider:  providerName,
-				PageSize:  int32(pageSize),
-				PageToken: providerPageToken,
-				Status:    workflowwire.RunStatusToProto(req.Status),
-				TargetApp: strings.TrimSpace(req.TargetApp),
-				KnownApps: append([]string(nil), req.KnownApps...),
-				Context:   reqContext,
+				Provider:     providerName,
+				PageSize:     int32(pageSize),
+				PageToken:    providerPageToken,
+				Status:       workflowwire.RunStatusToProto(req.Status),
+				TargetApp:    strings.TrimSpace(req.TargetApp),
+				KnownApps:    append([]string(nil), req.KnownApps...),
+				DefinitionId: strings.TrimSpace(req.DefinitionID),
+				Context:      reqContext,
 			})
 			if err != nil {
 				return nil, err
@@ -671,6 +672,7 @@ type workflowRunListPageToken struct {
 	Providers           []workflowRunProviderPageState     `json:"providers"`
 	PageSize            int                                `json:"pageSize"`
 	TargetApp           string                             `json:"targetApp,omitempty"`
+	DefinitionID        string                             `json:"definitionId,omitempty"`
 	Status              coreworkflow.RunStatus             `json:"status,omitempty"`
 	Aggregates          *workflowRunListAggregatesSnapshot `json:"aggregates,omitempty"`
 }
@@ -724,7 +726,9 @@ func decodeWorkflowRunListPageToken(raw string, providerNames []string, req core
 	if token.PageSize != pageSize {
 		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
-	if token.TargetApp != strings.TrimSpace(req.TargetApp) || token.Status != req.Status {
+	if token.TargetApp != strings.TrimSpace(req.TargetApp) ||
+		token.DefinitionID != strings.TrimSpace(req.DefinitionID) ||
+		token.Status != req.Status {
 		return nil, nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	for i := range token.Providers {
@@ -752,6 +756,7 @@ func workflowRunListNextPageToken(providerNames []string, req coreworkflow.ListR
 		Providers:           cloneWorkflowRunProviderPageStates(states),
 		PageSize:            pageSize,
 		TargetApp:           strings.TrimSpace(req.TargetApp),
+		DefinitionID:        strings.TrimSpace(req.DefinitionID),
 		Status:              req.Status,
 		Aggregates:          aggregates,
 	}
@@ -938,6 +943,11 @@ func workflowRunProviderListFingerprint(providerNames []string) string {
 func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsRequest) bool {
 	if run == nil {
 		return false
+	}
+	if definitionID := strings.TrimSpace(req.DefinitionID); definitionID != "" {
+		if strings.TrimSpace(run.DefinitionID) != definitionID {
+			return false
+		}
 	}
 	if app := strings.TrimSpace(req.TargetApp); app != "" {
 		// List summaries often omit Target.steps. Match hydrated steps, then

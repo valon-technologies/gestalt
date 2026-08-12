@@ -17,3 +17,16 @@ func TestWorkflowSystemToolsExposeApplyDefinition(t *testing.T) {
 		t.Fatalf("tool target = %#v, want workflow definitions.apply", tool.Target)
 	}
 }
+
+func TestWorkflowSystemToolsListRunsExposesDefinitionID(t *testing.T) {
+	t.Parallel()
+
+	tool, err := workflowSystemToolFromRef(coreagent.ToolRef{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsList})
+	if err != nil {
+		t.Fatalf("runs.list tool: %v", err)
+	}
+	properties, _ := tool.ParametersSchema["properties"].(map[string]any)
+	if _, ok := properties["definitionId"]; !ok {
+		t.Fatalf("runs.list schema missing definitionId: %#v", tool.ParametersSchema)
+	}
+}

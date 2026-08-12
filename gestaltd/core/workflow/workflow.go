@@ -305,7 +305,9 @@ type ListRunsRequest struct {
 	// KnownApps is the installed app name set used to disambiguate
 	// app_<app>_… definition ownership when Target.steps is empty.
 	KnownApps []string
-	Status    RunStatus
+	// DefinitionID optionally restricts the list to one workflow definition.
+	DefinitionID string
+	Status       RunStatus
 }
 
 type ListRunsResponse struct {

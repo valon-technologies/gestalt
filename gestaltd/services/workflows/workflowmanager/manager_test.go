@@ -756,6 +756,67 @@ func TestRunMatchesListFiltersKnownAppsDisambiguatesPrefixCollision(t *testing.T
 	}
 }
 
+func TestRunMatchesListFiltersDefinitionID(t *testing.T) {
+	t.Parallel()
+	run := &coreworkflow.Run{
+		ID:           "list-summary",
+		DefinitionID: "app_foo_daily",
+		Target:       coreworkflow.Target{},
+		Status:       coreworkflow.RunStatusSucceeded,
+	}
+	if !runMatchesListFilters(run, coreworkflow.ListRunsRequest{}) {
+		t.Fatal("empty definition id should not filter")
+	}
+	if !runMatchesListFilters(run, coreworkflow.ListRunsRequest{DefinitionID: "app_foo_daily"}) {
+		t.Fatal("exact definition id should match")
+	}
+	if runMatchesListFilters(run, coreworkflow.ListRunsRequest{DefinitionID: "app_foo_other"}) {
+		t.Fatal("different definition id should not match")
+	}
+}
+
+func TestManagerListRunsFiltersProviderRunsByDefinitionID(t *testing.T) {
+	t.Parallel()
+	provider := newTestWorkflowProvider()
+	provider.listRunsHandler = func(req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+		keep, err := workflowwire.RunToProto(&coreworkflow.Run{
+			ID:           "keep",
+			DefinitionID: "app_foo_daily",
+			Status:       coreworkflow.RunStatusSucceeded,
+		})
+		if err != nil {
+			return nil, err
+		}
+		drop, err := workflowwire.RunToProto(&coreworkflow.Run{
+			ID:           "drop",
+			DefinitionID: "app_foo_other",
+			Status:       coreworkflow.RunStatusSucceeded,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListWorkflowProviderRunsResponse{Runs: []*proto.WorkflowRun{keep, drop}}, nil
+	}
+	manager := New(Config{
+		Providers: testWorkflowGithubProviders(t),
+		Workflow:  testWorkflowControl{provider: provider},
+		Invoker:   testWorkflowManagerBroker(t, testWorkflowGithubProviders(t), allowAllAuthz{}),
+		AppNames:  []string{"foo"},
+	})
+	resp, err := manager.ListRuns(context.Background(), testWorkflowManagerPrincipal(), "local", coreworkflow.ListRunsRequest{
+		DefinitionID: "app_foo_daily",
+	})
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if len(resp.Runs) != 1 || resp.Runs[0].Run == nil || resp.Runs[0].Run.ID != "keep" {
+		t.Fatalf("runs = %#v, want only keep", resp.Runs)
+	}
+	if got := provider.listRunsRequests[0].GetDefinitionId(); got != "app_foo_daily" {
+		t.Fatalf("DefinitionId = %q, want app_foo_daily", got)
+	}
+}
+
 func TestManagerListRunsForwardsAggregatesAndKnownApps(t *testing.T) {
 	t.Parallel()
 	provider := newTestWorkflowProvider()
@@ -787,8 +848,9 @@ func TestManagerListRunsForwardsAggregatesAndKnownApps(t *testing.T) {
 		AppNames:  []string{"foo", "foo_bar"},
 	})
 	resp, err := manager.ListRuns(context.Background(), testWorkflowManagerPrincipal(), "local", coreworkflow.ListRunsRequest{
-		PageSize:  1,
-		TargetApp: "foo",
+		PageSize:     1,
+		TargetApp:    "foo",
+		DefinitionID: "app_foo_daily",
 	})
 	if err != nil {
 		t.Fatalf("ListRuns: %v", err)
@@ -812,6 +874,9 @@ func TestManagerListRunsForwardsAggregatesAndKnownApps(t *testing.T) {
 	if got := provider.listRunsRequests[0].GetTargetApp(); got != "foo" {
 		t.Fatalf("TargetApp = %q, want foo", got)
 	}
+	if got := provider.listRunsRequests[0].GetDefinitionId(); got != "app_foo_daily" {
+		t.Fatalf("DefinitionId = %q, want app_foo_daily", got)
+	}
 
 	// Continuation page must echo aggregates from the manager page token without
 	// requiring the provider to resend them on a non-empty provider token.
@@ -831,9 +896,10 @@ func TestManagerListRunsForwardsAggregatesAndKnownApps(t *testing.T) {
 		return &proto.ListWorkflowProviderRunsResponse{Runs: []*proto.WorkflowRun{pb}}, nil
 	}
 	page2, err := manager.ListRuns(context.Background(), testWorkflowManagerPrincipal(), "local", coreworkflow.ListRunsRequest{
-		PageSize:  1,
-		PageToken: resp.NextPageToken,
-		TargetApp: "foo",
+		PageSize:     1,
+		PageToken:    resp.NextPageToken,
+		TargetApp:    "foo",
+		DefinitionID: "app_foo_daily",
 	})
 	if err != nil {
 		t.Fatalf("ListRuns page 2: %v", err)
@@ -843,6 +909,16 @@ func TestManagerListRunsForwardsAggregatesAndKnownApps(t *testing.T) {
 	}
 	if page2.StatusCounts == nil || page2.StatusCounts.GetRunning() != 2 || page2.StatusCounts.GetSucceeded() != 40 {
 		t.Fatalf("page 2 StatusCounts = %#v, want running=2 succeeded=40", page2.StatusCounts)
+	}
+
+	_, err = manager.ListRuns(context.Background(), testWorkflowManagerPrincipal(), "local", coreworkflow.ListRunsRequest{
+		PageSize:     1,
+		PageToken:    resp.NextPageToken,
+		TargetApp:    "foo",
+		DefinitionID: "app_foo_other",
+	})
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("changed definition_id error = %v, want invalid invocation", err)
 	}
 }
 

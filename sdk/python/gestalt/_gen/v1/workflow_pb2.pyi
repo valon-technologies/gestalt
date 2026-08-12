@@ -541,6 +541,7 @@ class ListWorkflowProviderRunsRequest(_message.Message):
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
     KNOWN_APPS_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     page_size: int
     page_token: str
     status: WorkflowRunStatus
@@ -548,7 +549,8 @@ class ListWorkflowProviderRunsRequest(_message.Message):
     context: _app_pb2.RequestContext
     provider: str
     known_apps: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., target_app: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider: _Optional[str] = ..., known_apps: _Optional[_Iterable[str]] = ...) -> None: ...
+    definition_id: str
+    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., target_app: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider: _Optional[str] = ..., known_apps: _Optional[_Iterable[str]] = ..., definition_id: _Optional[str] = ...) -> None: ...
 
 class WorkflowRunStatusCounts(_message.Message):
     __slots__ = ()

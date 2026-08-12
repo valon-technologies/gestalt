@@ -316,13 +316,14 @@ func ToWireListWorkflowProviderRunsRequest(value *ListWorkflowProviderRunsReques
 		return nil
 	}
 	out := &proto.ListWorkflowProviderRunsRequest{
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-		Status:    proto.WorkflowRunStatus(value.Status),
-		TargetApp: value.TargetApp,
-		Context:   ToWireRequestContext(value.Context),
-		Provider:  value.Provider,
-		KnownApps: value.KnownApps,
+		PageSize:     value.PageSize,
+		PageToken:    value.PageToken,
+		Status:       proto.WorkflowRunStatus(value.Status),
+		TargetApp:    value.TargetApp,
+		Context:      ToWireRequestContext(value.Context),
+		Provider:     value.Provider,
+		KnownApps:    value.KnownApps,
+		DefinitionId: value.DefinitionId,
 	}
 	return out
 }
@@ -332,13 +333,14 @@ func FromWireListWorkflowProviderRunsRequest(value *proto.ListWorkflowProviderRu
 		return nil
 	}
 	out := &ListWorkflowProviderRunsRequest{
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-		Status:    WorkflowRunStatus(value.Status),
-		TargetApp: value.TargetApp,
-		Context:   FromWireRequestContext(value.Context),
-		Provider:  value.Provider,
-		KnownApps: value.KnownApps,
+		PageSize:     value.PageSize,
+		PageToken:    value.PageToken,
+		Status:       WorkflowRunStatus(value.Status),
+		TargetApp:    value.TargetApp,
+		Context:      FromWireRequestContext(value.Context),
+		Provider:     value.Provider,
+		KnownApps:    value.KnownApps,
+		DefinitionId: value.DefinitionId,
 	}
 	return out
 }

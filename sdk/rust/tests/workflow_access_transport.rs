@@ -546,6 +546,7 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
             String::new(),
             workflow_run_status::WORKFLOW_RUN_STATUS_UNSPECIFIED,
             "github".to_string(),
+            String::new(),
         )
         .await
         .expect("list runs");

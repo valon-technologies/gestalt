@@ -199,6 +199,7 @@ pub(crate) fn to_wire_list_workflow_provider_runs_request(
         context: value.context.map(to_wire_request_context),
         provider: value.provider,
         known_apps: value.known_apps,
+        definition_id: value.definition_id,
     }
 }
 

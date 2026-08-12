@@ -340,10 +340,11 @@ func (s *ProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowPr
 		return nil, status.Errorf(codes.InvalidArgument, "status: %v", err)
 	}
 	managed, err := s.manager.ListRuns(s.managerContext(ctx, authCtx), p, providerName, coreworkflow.ListRunsRequest{
-		PageSize:  int(req.GetPageSize()),
-		PageToken: strings.TrimSpace(req.GetPageToken()),
-		TargetApp: strings.TrimSpace(req.GetTargetApp()),
-		Status:    statusFilter,
+		PageSize:     int(req.GetPageSize()),
+		PageToken:    strings.TrimSpace(req.GetPageToken()),
+		TargetApp:    strings.TrimSpace(req.GetTargetApp()),
+		DefinitionID: strings.TrimSpace(req.GetDefinitionId()),
+		Status:       statusFilter,
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)

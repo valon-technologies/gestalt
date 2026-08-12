@@ -151,6 +151,8 @@ type ListWorkflowProviderRunsRequest struct {
 	// public callers must omit it (rejected). When set, providers must apply the
 	// same ownership rules to returned runs and to total_count / status_counts.
 	KnownApps []string
+	// Optional filter for runs of one workflow definition.
+	DefinitionId string
 }
 
 // ListWorkflowProviderRunsResponse is the native message type for gestalt.provider.v1.ListWorkflowProviderRunsResponse.
@@ -161,9 +163,9 @@ type ListWorkflowProviderRunsResponse struct {
 	// query as the page, including known_apps ownership). Distinct from
 	// len(runs). Omitted when unknown.
 	TotalCount *int64
-	// Status histogram for the same provider/target_app/known_apps scope with
-	// status filter cleared. Omitted when unknown (optional presence — an
-	// all-zero message means a known empty histogram). Lets UIs render
+	// Status histogram for the same provider/target_app/known_apps/definition_id
+	// scope with status filter cleared. Omitted when unknown (optional presence —
+	// an all-zero message means a known empty histogram). Lets UIs render
 	// Running/Succeeded/Failed without scanning every page.
 	StatusCounts *WorkflowRunStatusCounts
 }
@@ -364,8 +366,8 @@ type WorkflowRunEvent struct {
 // WorkflowRunStatusCounts is the native message type for gestalt.provider.v1.WorkflowRunStatusCounts.
 //
 // WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-// scope with status cleared (provider + target_app + known_apps). It is not
-// derived from the current page of runs.
+// scope with status cleared (provider + target_app + known_apps +
+// definition_id). It is not derived from the current page of runs.
 type WorkflowRunStatusCounts struct {
 	Pending   int64
 	Running   int64
@@ -799,8 +801,8 @@ func (c *Workflow) StartRunRaw(ctx context.Context, request *StartWorkflowProvid
 }
 
 // ListRuns is the ergonomic form of [Workflow.ListRunsRaw].
-func (c *Workflow) ListRuns(ctx context.Context, provider string, pageSize int32, pageToken string, status WorkflowRunStatus, targetApp string) (*ListWorkflowProviderRunsResponse, error) {
-	request := &ListWorkflowProviderRunsRequest{Provider: provider, PageSize: pageSize, PageToken: pageToken, Status: status, TargetApp: targetApp, Context: c.context}
+func (c *Workflow) ListRuns(ctx context.Context, provider string, pageSize int32, pageToken string, status WorkflowRunStatus, targetApp string, definitionId string) (*ListWorkflowProviderRunsResponse, error) {
+	request := &ListWorkflowProviderRunsRequest{Provider: provider, PageSize: pageSize, PageToken: pageToken, Status: status, TargetApp: targetApp, DefinitionId: definitionId, Context: c.context}
 	response, err := c.client.ListRuns(ctx, ToWireListWorkflowProviderRunsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
