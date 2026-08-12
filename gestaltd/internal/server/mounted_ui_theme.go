@@ -33,7 +33,7 @@ func mountedUIThemeHandlerFullPath(mounted MountedUI, next http.Handler) http.Ha
 		case r.URL.Path == stylesheetPath:
 			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
 		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, assetsPrefix):
-			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir)
+			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir, assetsPrefix)
 		default:
 			next.ServeHTTP(w, r)
 		}
@@ -60,7 +60,7 @@ func mountedUIThemeHandler(mounted MountedUI, next http.Handler) http.Handler {
 		case r.URL.Path == mountedUIThemeStylesheetPath:
 			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
 		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, mountedUIThemeAssetsPrefix):
-			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir)
+			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir, mountedUIThemeAssetsPrefix)
 		default:
 			next.ServeHTTP(w, r)
 		}
@@ -80,8 +80,8 @@ func serveMountedUIThemeStylesheet(w http.ResponseWriter, r *http.Request, style
 	serveMountedUIThemeContent(w, r, "text/css; charset=utf-8", body)
 }
 
-func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir string) {
-	assetPath, ok := cleanMountedUIThemeAssetPath(strings.TrimPrefix(r.URL.Path, mountedUIThemeAssetsPrefix))
+func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir, assetsPrefix string) {
+	assetPath, ok := cleanMountedUIThemeAssetPath(strings.TrimPrefix(r.URL.Path, assetsPrefix))
 	if !ok {
 		http.NotFound(w, r)
 		return

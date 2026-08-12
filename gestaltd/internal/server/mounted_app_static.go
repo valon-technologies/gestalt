@@ -133,6 +133,7 @@ func registryAppStaticHandler(app, mount string, entry *config.ProviderEntry, pr
 				RenderIndex: composeIndexRenderers(
 					injectBaseHref(mount),
 					injectPlatformBrand(MountedUI{
+						Path:         mount,
 						BrandName:    entry.ResolvedBrandName,
 						BrandMarkSrc: entry.ResolvedBrandMarkSrc,
 					}),

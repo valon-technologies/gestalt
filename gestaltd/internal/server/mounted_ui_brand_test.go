@@ -48,3 +48,16 @@ func TestMountedUIBrandJSONEmpty(t *testing.T) {
 		t.Fatalf("got %q, want {}", got)
 	}
 }
+
+func TestAbsoluteBrandMarkSrc(t *testing.T) {
+	t.Parallel()
+	if got := absoluteBrandMarkSrc("/portal", "theme/mark.svg"); got != "/portal/theme/mark.svg" {
+		t.Fatalf("got %q", got)
+	}
+	if got := absoluteBrandMarkSrc("/", "theme/mark.svg"); got != "/theme/mark.svg" {
+		t.Fatalf("got %q", got)
+	}
+	if got := absoluteBrandMarkSrc("/portal", "/theme/mark.svg"); got != "/theme/mark.svg" {
+		t.Fatalf("already absolute got %q", got)
+	}
+}
