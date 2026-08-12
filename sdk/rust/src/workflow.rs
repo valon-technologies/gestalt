@@ -237,6 +237,10 @@ pub struct ListWorkflowProviderRunsRequest {
     ///
     /// The `known_apps` field.
     pub known_apps: Vec<String>,
+    /// Optional filter for runs of one workflow definition.
+    ///
+    /// The `definition_id` field.
+    pub definition_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.ListWorkflowProviderRunsResponse`.
@@ -253,7 +257,7 @@ pub struct ListWorkflowProviderRunsResponse {
     ///
     /// The `total_count` field; None when unset.
     pub total_count: Option<i64>,
-    /// Status histogram for the same provider/target_app/known_apps scope with
+    /// Status histogram for the same provider/target_app/known_apps/definition_id scope with
     /// status filter cleared. Omitted when unknown (optional presence — an
     /// all-zero message means a known empty histogram). Lets UIs render
     /// Running/Succeeded/Failed without scanning every page.
@@ -587,7 +591,7 @@ pub struct WorkflowRunEvent {
 }
 
 /// WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-/// scope with status cleared (provider + target_app + known_apps). It is not
+/// scope with status cleared (provider + target_app + known_apps + definition_id). It is not
 /// derived from the current page of runs.
 ///
 /// Native message type for `gestalt.provider.v1.WorkflowRunStatusCounts`.
@@ -1200,6 +1204,7 @@ impl Workflow {
         page_token: String,
         status: WorkflowRunStatus,
         target_app: String,
+        definition_id: String,
     ) -> Result<ListWorkflowProviderRunsResponse, GestaltError> {
         let request = ListWorkflowProviderRunsRequest {
             provider,
@@ -1207,6 +1212,7 @@ impl Workflow {
             page_token,
             status,
             target_app,
+            definition_id,
             context: self.context.clone(),
             ..Default::default()
         };

@@ -382,6 +382,7 @@ export function toWireListWorkflowProviderRunsRequest(
       : {}),
     provider: value.provider ?? "",
     knownApps: value.knownApps ?? [],
+    definitionId: value.definitionId ?? "",
   });
 }
 
@@ -398,6 +399,7 @@ export function fromWireListWorkflowProviderRunsRequest(
       : {}),
     provider: value.provider,
     knownApps: value.knownApps,
+    definitionId: value.definitionId,
   };
 }
 

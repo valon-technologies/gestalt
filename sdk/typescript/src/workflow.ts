@@ -160,6 +160,10 @@ export interface ListWorkflowProviderRunsRequest {
    * same ownership rules to returned runs and to total_count / status_counts.
    */
   knownApps: string[];
+  /**
+   * Optional filter for runs of one workflow definition.
+   */
+  definitionId: string;
 }
 
 export interface ListWorkflowProviderRunsResponse {
@@ -172,7 +176,7 @@ export interface ListWorkflowProviderRunsResponse {
    */
   totalCount?: bigint;
   /**
-   * Status histogram for the same provider/target_app/known_apps scope with
+   * Status histogram for the same provider/target_app/known_apps/definition_id scope with
    * status filter cleared. Omitted when unknown (optional presence — an
    * all-zero message means a known empty histogram). Lets UIs render
    * Running/Succeeded/Failed without scanning every page.
@@ -352,7 +356,7 @@ export interface WorkflowRunEvent {
 
 /**
  * WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
- * scope with status cleared (provider + target_app + known_apps). It is not
+ * scope with status cleared (provider + target_app + known_apps + definition_id). It is not
  * derived from the current page of runs.
  */
 export interface WorkflowRunStatusCounts {
@@ -888,6 +892,7 @@ export class Workflow {
     pageToken: string,
     status: WorkflowRunStatus,
     targetApp: string,
+    definitionId: string,
   ): Promise<ListWorkflowProviderRunsResponse> {
     const request = {
       provider,
@@ -895,6 +900,7 @@ export class Workflow {
       pageToken,
       status,
       targetApp,
+      definitionId,
       knownApps: [],
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<ListWorkflowProviderRunsRequest>;

@@ -2924,7 +2924,9 @@ type ListWorkflowProviderRunsRequest struct {
 	// when target steps are empty. gestaltd fills this when calling providers;
 	// public callers must omit it (rejected). When set, providers must apply the
 	// same ownership rules to returned runs and to total_count / status_counts.
-	KnownApps     []string `protobuf:"bytes,8,rep,name=known_apps,json=knownApps,proto3" json:"known_apps,omitempty"`
+	KnownApps []string `protobuf:"bytes,8,rep,name=known_apps,json=knownApps,proto3" json:"known_apps,omitempty"`
+	// Optional filter for runs of one workflow definition.
+	DefinitionId  string `protobuf:"bytes,9,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3008,8 +3010,15 @@ func (x *ListWorkflowProviderRunsRequest) GetKnownApps() []string {
 	return nil
 }
 
+func (x *ListWorkflowProviderRunsRequest) GetDefinitionId() string {
+	if x != nil {
+		return x.DefinitionId
+	}
+	return ""
+}
+
 // WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-// scope with status cleared (provider + target_app + known_apps). It is not
+// scope with status cleared (provider + target_app + known_apps + definition_id). It is not
 // derived from the current page of runs.
 type WorkflowRunStatusCounts struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3095,7 +3104,7 @@ type ListWorkflowProviderRunsResponse struct {
 	// query as the page, including known_apps ownership). Distinct from
 	// len(runs). Omitted when unknown.
 	TotalCount *int64 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3,oneof" json:"total_count,omitempty"`
-	// Status histogram for the same provider/target_app/known_apps scope with
+	// Status histogram for the same provider/target_app/known_apps/definition_id scope with
 	// status filter cleared. Omitted when unknown (optional presence — an
 	// all-zero message means a known empty histogram). Lets UIs render
 	// Running/Succeeded/Failed without scanning every page.
@@ -4052,7 +4061,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x1dGetWorkflowProviderRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12=\n" +
 	"\acontext\x18\x04 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12\x1a\n" +
-	"\bprovider\x18\x05 \x01(\tR\bproviderJ\x04\b\x03\x10\x04\"\xbc\x02\n" +
+	"\bprovider\x18\x05 \x01(\tR\bproviderJ\x04\b\x03\x10\x04\"\xe1\x02\n" +
 	"\x1fListWorkflowProviderRunsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -4063,7 +4072,8 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12\x1a\n" +
 	"\bprovider\x18\a \x01(\tR\bprovider\x12\x1d\n" +
 	"\n" +
-	"known_apps\x18\b \x03(\tR\tknownAppsJ\x04\b\x04\x10\x05\"\x9f\x01\n" +
+	"known_apps\x18\b \x03(\tR\tknownApps\x12#\n" +
+	"\rdefinition_id\x18\t \x01(\tR\fdefinitionIdJ\x04\b\x04\x10\x05\"\x9f\x01\n" +
 	"\x17WorkflowRunStatusCounts\x12\x18\n" +
 	"\apending\x18\x01 \x01(\x03R\apending\x12\x18\n" +
 	"\arunning\x18\x02 \x01(\x03R\arunning\x12\x1c\n" +
@@ -4144,7 +4154,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x1cWORKFLOW_STEP_STATUS_SKIPPED\x10\x03\x12\"\n" +
 	"\x1eWORKFLOW_STEP_STATUS_SUCCEEDED\x10\x04\x12\x1f\n" +
 	"\x1bWORKFLOW_STEP_STATUS_FAILED\x10\x05\x12 \n" +
-	"\x1cWORKFLOW_STEP_STATUS_UNKNOWN\x10\x062\xa0\x1c\n" +
+	"\x1cWORKFLOW_STEP_STATUS_UNKNOWN\x10\x062\xb1\x1c\n" +
 	"\bWorkflow\x12\xe8\x01\n" +
 	"\x0fApplyDefinition\x12;.gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest\x1a'.gestalt.provider.v1.WorkflowDefinition\"o\x8a\xb5\x18\bprovider\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x04spec\xca\xf3\x18\t\n" +
 	"\acontext\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02':\x01*\"\"/api/v2/workflow/definitions:apply\x12\xe1\x01\n" +
@@ -4159,10 +4169,10 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x10DeleteDefinition\x12<.gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest\x1a\x16.google.protobuf.Empty\"l\x8a\xb5\x18\bprovider\x8a\xb5\x18\rdefinition_id\xca\xf3\x18\t\n" +
 	"\acontext\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02.*,/api/v2/workflow/definitions/{definition_id}\x12\xa7\x02\n" +
 	"\bStartRun\x124.gestalt.provider.v1.StartWorkflowProviderRunRequest\x1a .gestalt.provider.v1.WorkflowRun\"\xc2\x01\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\fworkflow_key\x8a\xb5\x18\bprovider\x8a\xb5\x18\rdefinition_id\x8a\xb5\x18\x1eexpected_definition_generation\x8a\xb5\x18\x05input\xca\xf3\x18\t\n" +
-	"\acontext\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x026:\x01*\"1/api/v2/workflow/definitions/{definition_id}/runs\x12\xfd\x01\n" +
-	"\bListRuns\x124.gestalt.provider.v1.ListWorkflowProviderRunsRequest\x1a5.gestalt.provider.v1.ListWorkflowProviderRunsResponse\"\x83\x01\x8a\xb5\x18\bprovider\x8a\xb5\x18\tpage_size\x8a\xb5\x18\n" +
+	"\acontext\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x026:\x01*\"1/api/v2/workflow/definitions/{definition_id}/runs\x12\x8e\x02\n" +
+	"\bListRuns\x124.gestalt.provider.v1.ListWorkflowProviderRunsRequest\x1a5.gestalt.provider.v1.ListWorkflowProviderRunsResponse\"\x94\x01\x8a\xb5\x18\bprovider\x8a\xb5\x18\tpage_size\x8a\xb5\x18\n" +
 	"page_token\x8a\xb5\x18\x06status\x8a\xb5\x18\n" +
-	"target_app\xca\xf3\x18\x15\n" +
+	"target_app\x8a\xb5\x18\rdefinition_id\xca\xf3\x18\x15\n" +
 	"\acontext\x12\n" +
 	"known_apps\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x17\x12\x15/api/v2/workflow/runs\x12\xb7\x01\n" +
 	"\x06GetRun\x122.gestalt.provider.v1.GetWorkflowProviderRunRequest\x1a .gestalt.provider.v1.WorkflowRun\"W\x8a\xb5\x18\bprovider\x8a\xb5\x18\x06run_id\xca\xf3\x18\t\n" +

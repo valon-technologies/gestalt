@@ -76,6 +76,8 @@ type ListWorkflowProviderRunsRequest struct {
 	// filters when target steps are empty. Providers must apply the same rules
 	// to returned runs and to TotalCount / StatusCounts.
 	KnownApps []string
+	// DefinitionID optionally restricts the list to one workflow definition.
+	DefinitionID string
 }
 
 // ListWorkflowProviderRunsResponse contains workflow runs.
@@ -86,7 +88,7 @@ type ListWorkflowProviderRunsResponse struct {
 	// KnownApps ownership). Nil when the provider cannot compute it. Distinct
 	// from len(Runs).
 	TotalCount *int64
-	// StatusCounts is the provider/target_app/known_apps status histogram with
+	// StatusCounts is the provider/target_app/known_apps/definition_id status histogram with
 	// status filter cleared. Nil when unknown.
 	StatusCounts *WorkflowRunStatusCounts
 }

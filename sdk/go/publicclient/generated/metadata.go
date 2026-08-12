@@ -840,7 +840,7 @@ var MethodWorkflowListRuns = Method{
 	HTTPPath:        "/api/v2/workflow/runs",
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
-	HTTPQueryFields: []PublicField{PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}, PublicField{Name: "status", JSONName: "status"}, PublicField{Name: "target_app", JSONName: "targetApp"}, PublicField{Name: "provider", JSONName: "provider"}},
+	HTTPQueryFields: []PublicField{PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}, PublicField{Name: "status", JSONName: "status"}, PublicField{Name: "target_app", JSONName: "targetApp"}, PublicField{Name: "provider", JSONName: "provider"}, PublicField{Name: "definition_id", JSONName: "definitionId"}},
 	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          []string{"known_apps"},

@@ -104,6 +104,10 @@ pub struct ListWorkflowProviderRunsRequest {
     pub target_app: String,
     /// The `provider` field.
     pub provider: String,
+    /// Optional filter for runs of one workflow definition.
+    ///
+    /// The `definition_id` field.
+    pub definition_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest`.

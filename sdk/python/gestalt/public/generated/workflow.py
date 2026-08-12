@@ -69,6 +69,8 @@ class ListWorkflowProviderRunsRequest:
     #: disambiguated with known_apps when provided.
     target_app: str = ""
     provider: str = ""
+    #: Optional filter for runs of one workflow definition.
+    definition_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)

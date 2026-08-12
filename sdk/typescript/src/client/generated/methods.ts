@@ -934,6 +934,7 @@ export const PUBLIC_METHODS = {
           { name: "status", jsonName: "status" },
           { name: "target_app", jsonName: "targetApp" },
           { name: "provider", jsonName: "provider" },
+          { name: "definition_id", jsonName: "definitionId" },
         ],
       },
     },

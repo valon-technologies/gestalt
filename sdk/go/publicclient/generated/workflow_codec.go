@@ -101,11 +101,12 @@ func ToWireListWorkflowProviderRunsRequest(value *ListWorkflowProviderRunsReques
 		return nil
 	}
 	out := &proto.ListWorkflowProviderRunsRequest{
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-		Status:    proto.WorkflowRunStatus(value.Status),
-		TargetApp: value.TargetApp,
-		Provider:  value.Provider,
+		PageSize:     value.PageSize,
+		PageToken:    value.PageToken,
+		Status:       proto.WorkflowRunStatus(value.Status),
+		TargetApp:    value.TargetApp,
+		Provider:     value.Provider,
+		DefinitionId: value.DefinitionId,
 	}
 	return out
 }

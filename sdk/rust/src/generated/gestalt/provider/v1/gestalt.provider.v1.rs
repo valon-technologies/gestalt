@@ -4014,9 +4014,12 @@ pub struct ListWorkflowProviderRunsRequest {
     /// same ownership rules to returned runs and to total_count / status_counts.
     #[prost(string, repeated, tag = "8")]
     pub known_apps: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Optional filter for runs of one workflow definition.
+    #[prost(string, tag = "9")]
+    pub definition_id: ::prost::alloc::string::String,
 }
 /// WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-/// scope with status cleared (provider + target_app + known_apps). It is not
+/// scope with status cleared (provider + target_app + known_apps + definition_id). It is not
 /// derived from the current page of runs.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowRunStatusCounts {
@@ -4042,7 +4045,7 @@ pub struct ListWorkflowProviderRunsResponse {
     /// len(runs). Omitted when unknown.
     #[prost(int64, optional, tag = "3")]
     pub total_count: ::core::option::Option<i64>,
-    /// Status histogram for the same provider/target_app/known_apps scope with
+    /// Status histogram for the same provider/target_app/known_apps/definition_id scope with
     /// status filter cleared. Omitted when unknown (optional presence — an
     /// all-zero message means a known empty histogram). Lets UIs render
     /// Running/Succeeded/Failed without scanning every page.

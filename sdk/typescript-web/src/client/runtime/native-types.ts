@@ -1025,6 +1025,10 @@ export interface ListWorkflowProviderRunsRequest {
    */
   targetApp: string;
   provider: string;
+  /**
+   * Optional filter for runs of one workflow definition.
+   */
+  definitionId: string;
 }
 
 export interface ListWorkflowProviderRunsResponse {
@@ -1037,7 +1041,7 @@ export interface ListWorkflowProviderRunsResponse {
    */
   totalCount?: bigint;
   /**
-   * Status histogram for the same provider/target_app/known_apps scope with
+   * Status histogram for the same provider/target_app/known_apps/definition_id scope with
    * status filter cleared. Omitted when unknown (optional presence — an
    * all-zero message means a known empty histogram). Lets UIs render
    * Running/Succeeded/Failed without scanning every page.
@@ -1200,7 +1204,7 @@ export interface WorkflowRunEvent {
 
 /**
  * WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
- * scope with status cleared (provider + target_app + known_apps). It is not
+ * scope with status cleared (provider + target_app + known_apps + definition_id). It is not
  * derived from the current page of runs.
  */
 export interface WorkflowRunStatusCounts {

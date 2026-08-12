@@ -65,6 +65,8 @@ type ListWorkflowProviderRunsRequest struct {
 	// disambiguated with known_apps when provided.
 	TargetApp string
 	Provider  string
+	// Optional filter for runs of one workflow definition.
+	DefinitionId string
 }
 
 // SetWorkflowProviderActivationPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.

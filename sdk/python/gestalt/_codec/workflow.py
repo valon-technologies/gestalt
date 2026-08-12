@@ -317,6 +317,7 @@ def to_wire_list_workflow_provider_runs_request(
         else app.to_wire_request_context(value.context),
         provider=value.provider,
         known_apps=value.known_apps,
+        definition_id=value.definition_id,
     )
 
 
@@ -333,6 +334,7 @@ def from_wire_list_workflow_provider_runs_request(
         else None,
         provider=value.provider,
         known_apps=list(value.known_apps),
+        definition_id=value.definition_id,
     )
 
 

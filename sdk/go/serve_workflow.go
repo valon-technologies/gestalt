@@ -114,11 +114,12 @@ func (s workflowProviderServer) GetRun(ctx context.Context, req *proto.GetWorkfl
 func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
 	ctx = withRequestContext(ctx, req.GetContext())
 	resp, err := s.provider.ListRuns(ctx, &ListWorkflowProviderRunsRequest{
-		PageSize:  int(req.GetPageSize()),
-		PageToken: req.GetPageToken(),
-		Status:    WorkflowRunStatus(req.GetStatus()),
-		TargetApp: req.GetTargetApp(),
-		KnownApps: append([]string(nil), req.GetKnownApps()...),
+		PageSize:     int(req.GetPageSize()),
+		PageToken:    req.GetPageToken(),
+		Status:       WorkflowRunStatus(req.GetStatus()),
+		TargetApp:    req.GetTargetApp(),
+		KnownApps:    append([]string(nil), req.GetKnownApps()...),
+		DefinitionID: req.GetDefinitionId(),
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
