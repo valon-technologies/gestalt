@@ -22,7 +22,7 @@ func TestInjectPlatformBrand(t *testing.T) {
 	if !strings.Contains(html, `<title>Valon Tools</title>`) {
 		t.Fatalf("title not rewritten: %s", html)
 	}
-	want := `{"name":"Valon Tools","markSrc":"theme/mark.svg"}`
+	want := `{"name":"Valon Tools","markSrc":"/theme/mark.svg"}`
 	if !strings.Contains(html, want) {
 		t.Fatalf("brand JSON not injected: %s", html)
 	}

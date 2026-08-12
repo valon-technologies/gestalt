@@ -18,10 +18,25 @@ type platformBrandPayload struct {
 	MarkSrc string `json:"markSrc,omitempty"`
 }
 
+func absoluteBrandMarkSrc(mountPath, markSrc string) string {
+	markSrc = strings.TrimSpace(markSrc)
+	if markSrc == "" {
+		return ""
+	}
+	if strings.HasPrefix(markSrc, "/") || strings.HasPrefix(markSrc, "http://") || strings.HasPrefix(markSrc, "https://") {
+		return markSrc
+	}
+	mountPath = strings.TrimRight(strings.TrimSpace(mountPath), "/")
+	if mountPath == "" {
+		return "/" + markSrc
+	}
+	return mountPath + "/" + markSrc
+}
+
 func mountedUIBrandJSON(mounted MountedUI) []byte {
 	payload := platformBrandPayload{
 		Name:    strings.TrimSpace(mounted.BrandName),
-		MarkSrc: strings.TrimSpace(mounted.BrandMarkSrc),
+		MarkSrc: absoluteBrandMarkSrc(mounted.Path, mounted.BrandMarkSrc),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

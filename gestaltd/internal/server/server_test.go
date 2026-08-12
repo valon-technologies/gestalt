@@ -2442,7 +2442,7 @@ func TestMountedUIBrandJSON(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("brand.json status = %d, want 200", resp.StatusCode)
 	}
-	want := `{"name":"Valon Tools","markSrc":"theme/mark.svg"}`
+	want := `{"name":"Valon Tools","markSrc":"/portal/theme/mark.svg"}`
 	if got := string(body); got != want {
 		t.Fatalf("brand.json body = %q, want %q", got, want)
 	}
