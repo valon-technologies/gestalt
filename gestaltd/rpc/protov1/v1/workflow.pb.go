@@ -3018,8 +3018,8 @@ func (x *ListWorkflowProviderRunsRequest) GetDefinitionId() string {
 }
 
 // WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-// scope with status cleared (provider + target_app + known_apps + definition_id). It is not
-// derived from the current page of runs.
+// scope with status cleared (provider + target_app + known_apps +
+// definition_id). It is not derived from the current page of runs.
 type WorkflowRunStatusCounts struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pending       int64                  `protobuf:"varint,1,opt,name=pending,proto3" json:"pending,omitempty"`
@@ -3104,9 +3104,9 @@ type ListWorkflowProviderRunsResponse struct {
 	// query as the page, including known_apps ownership). Distinct from
 	// len(runs). Omitted when unknown.
 	TotalCount *int64 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3,oneof" json:"total_count,omitempty"`
-	// Status histogram for the same provider/target_app/known_apps/definition_id scope with
-	// status filter cleared. Omitted when unknown (optional presence — an
-	// all-zero message means a known empty histogram). Lets UIs render
+	// Status histogram for the same provider/target_app/known_apps/definition_id
+	// scope with status filter cleared. Omitted when unknown (optional presence —
+	// an all-zero message means a known empty histogram). Lets UIs render
 	// Running/Succeeded/Failed without scanning every page.
 	StatusCounts  *WorkflowRunStatusCounts `protobuf:"bytes,4,opt,name=status_counts,json=statusCounts,proto3,oneof" json:"status_counts,omitempty"`
 	unknownFields protoimpl.UnknownFields

@@ -257,9 +257,9 @@ pub struct ListWorkflowProviderRunsResponse {
     ///
     /// The `total_count` field; None when unset.
     pub total_count: Option<i64>,
-    /// Status histogram for the same provider/target_app/known_apps/definition_id scope with
-    /// status filter cleared. Omitted when unknown (optional presence — an
-    /// all-zero message means a known empty histogram). Lets UIs render
+    /// Status histogram for the same provider/target_app/known_apps/definition_id
+    /// scope with status filter cleared. Omitted when unknown (optional presence —
+    /// an all-zero message means a known empty histogram). Lets UIs render
     /// Running/Succeeded/Failed without scanning every page.
     ///
     /// The `status_counts` field; None when unset.
@@ -591,8 +591,8 @@ pub struct WorkflowRunEvent {
 }
 
 /// WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-/// scope with status cleared (provider + target_app + known_apps + definition_id). It is not
-/// derived from the current page of runs.
+/// scope with status cleared (provider + target_app + known_apps +
+/// definition_id). It is not derived from the current page of runs.
 ///
 /// Native message type for `gestalt.provider.v1.WorkflowRunStatusCounts`.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]

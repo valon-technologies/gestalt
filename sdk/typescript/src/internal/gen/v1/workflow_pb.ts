@@ -1351,8 +1351,8 @@ export const ListWorkflowProviderRunsRequestSchema: GenMessage<ListWorkflowProvi
 
 /**
  * WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
- * scope with status cleared (provider + target_app + known_apps + definition_id). It is not
- * derived from the current page of runs.
+ * scope with status cleared (provider + target_app + known_apps +
+ * definition_id). It is not derived from the current page of runs.
  *
  * @generated from message gestalt.provider.v1.WorkflowRunStatusCounts
  */
@@ -1414,9 +1414,9 @@ export type ListWorkflowProviderRunsResponse = Message<"gestalt.provider.v1.List
   totalCount?: bigint | undefined;
 
   /**
-   * Status histogram for the same provider/target_app/known_apps/definition_id scope with
-   * status filter cleared. Omitted when unknown (optional presence — an
-   * all-zero message means a known empty histogram). Lets UIs render
+   * Status histogram for the same provider/target_app/known_apps/definition_id
+   * scope with status filter cleared. Omitted when unknown (optional presence —
+   * an all-zero message means a known empty histogram). Lets UIs render
    * Running/Succeeded/Failed without scanning every page.
    *
    * @generated from field: optional gestalt.provider.v1.WorkflowRunStatusCounts status_counts = 4;

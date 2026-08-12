@@ -166,9 +166,9 @@ class ListWorkflowProviderRunsResponse:
     #: query as the page, including known_apps ownership). Distinct from
     #: len(runs). Omitted when unknown.
     total_count: int | None = None
-    #: Status histogram for the same provider/target_app/known_apps/definition_id scope with
-    #: status filter cleared. Omitted when unknown (optional presence — an
-    #: all-zero message means a known empty histogram). Lets UIs render
+    #: Status histogram for the same provider/target_app/known_apps/definition_id
+    #: scope with status filter cleared. Omitted when unknown (optional presence —
+    #: an all-zero message means a known empty histogram). Lets UIs render
     #: Running/Succeeded/Failed without scanning every page.
     status_counts: WorkflowRunStatusCounts | None = None
 
@@ -364,8 +364,8 @@ class WorkflowRunEvent:
 @dataclass(frozen=True, slots=True)
 class WorkflowRunStatusCounts:
     """WorkflowRunStatusCounts is the visibility histogram for a ListRuns filter
-    scope with status cleared (provider + target_app + known_apps + definition_id). It is not
-    derived from the current page of runs.
+    scope with status cleared (provider + target_app + known_apps +
+    definition_id). It is not derived from the current page of runs.
     """
 
     pending: int = 0
