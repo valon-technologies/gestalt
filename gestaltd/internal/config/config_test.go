@@ -7412,11 +7412,11 @@ func TestGitSourceDefTreeURL(t *testing.T) {
 		{
 			name: "github app directory",
 			git: GitSourceDef{
-				Repo: "https://github.com/example/toolshed.git",
+				Repo: "https://github.com/example/apps.git",
 				Ref:  "main",
 				Path: "apps/roadmap/manifest.yaml",
 			},
-			want: "https://github.com/example/toolshed/tree/main/apps/roadmap",
+			want: "https://github.com/example/apps/tree/main/apps/roadmap",
 		},
 		{
 			name: "github root manifest",

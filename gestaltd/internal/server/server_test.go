@@ -4296,17 +4296,27 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 func TestListIntegrations_IncludesSourceURL(t *testing.T) {
 	t.Parallel()
 
-	stub := &coretesting.StubIntegration{N: "roadmap", DN: "Roadmap"}
+	githubApp := &coretesting.StubIntegration{N: "roadmap", DN: "Roadmap"}
+	gitlabApp := &coretesting.StubIntegration{N: "notes", DN: "Notes"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, githubApp, gitlabApp)
 		defs := testPluginDefsForConnections("roadmap", "default")
 		defs["roadmap"].Source = config.ProviderSource{
 			Git: &config.GitSourceDef{
-				Repo: "https://github.com/example/toolshed.git",
+				Repo: "https://github.com/example/apps.git",
 				Ref:  "main",
 				Path: "apps/roadmap/manifest.yaml",
 			},
 		}
+		notes := testPluginDefsForConnections("notes", "default")["notes"]
+		notes.Source = config.ProviderSource{
+			Git: &config.GitSourceDef{
+				Repo: "https://gitlab.example.com/group/app.git",
+				Ref:  "main",
+				Path: "apps/notes/manifest.yaml",
+			},
+		}
+		defs["notes"] = notes
 		cfg.AppDefs = defs
 		cfg.Services = testutil.NewStubServices(t)
 	})
@@ -4330,12 +4340,19 @@ func TestListIntegrations_IncludesSourceURL(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if len(integrations) != 1 {
-		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	got := map[string]string{}
+	for _, integration := range integrations {
+		got[integration.Name] = integration.SourceURL
 	}
-	want := "https://github.com/example/toolshed/tree/main/apps/roadmap"
-	if integrations[0].Name != "roadmap" || integrations[0].SourceURL != want {
-		t.Fatalf("integration = %+v, want sourceUrl %q", integrations[0], want)
+	wantGitHub := "https://github.com/example/apps/tree/main/apps/roadmap"
+	if got["roadmap"] != wantGitHub {
+		t.Fatalf("roadmap sourceUrl = %q, want %q (apps=%+v)", got["roadmap"], wantGitHub, integrations)
+	}
+	if _, ok := got["notes"]; !ok {
+		t.Fatalf("expected notes in apps list, got %+v", integrations)
+	}
+	if got["notes"] != "" {
+		t.Fatalf("notes sourceUrl = %q, want omitted empty for non-GitHub git", got["notes"])
 	}
 }
 

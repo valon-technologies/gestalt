@@ -266,12 +266,10 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
 		}
-		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
-			if entry.Static != nil {
-				info.MountedPath = strings.TrimSpace(entry.Static.Mount)
-			}
-			info.SourceURL = entry.SourceTreeURL()
+		if entry, ok := s.pluginDefs[name]; ok && entry != nil && entry.Static != nil {
+			info.MountedPath = strings.TrimSpace(entry.Static.Mount)
 		}
+		info.SourceURL = s.appSourceTreeURL(name)
 		info.Prompts = s.appPrompts[name]
 		instances := connected[name]
 		authTypes := s.populateIntegrationSettings(r.Context(), &info, instances, p)
@@ -314,15 +312,26 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			ManagementPath:  managementPath,
 			Prompts:         s.appPrompts[app.name],
 		}
-		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil {
-			if entry.Static != nil {
-				info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))
-			}
-			info.SourceURL = entry.SourceTreeURL()
+		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil && entry.Static != nil {
+			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))
 		}
+		info.SourceURL = s.appSourceTreeURL(app.name)
 		out = append(out, info)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// appSourceTreeURL is the catalog source URL for an app: the GitHub tree of
+// the deploy git directory, or empty when the app has no GitHub git source.
+func (s *Server) appSourceTreeURL(name string) string {
+	if s == nil {
+		return ""
+	}
+	entry := s.pluginDefs[name]
+	if entry == nil {
+		return ""
+	}
+	return entry.SourceTreeURL()
 }
 
 func (s *Server) integrationManagementPath(ctx context.Context, p *principal.Principal, appName string) string {
