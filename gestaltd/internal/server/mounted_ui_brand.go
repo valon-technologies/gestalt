@@ -61,14 +61,18 @@ func serveMountedUIBrandJSON(w http.ResponseWriter, r *http.Request, mounted Mou
 }
 
 // injectPlatformBrand rewrites the frozen index.html placeholder so first paint
-// sees the deployment product name (no Gestalt→tenant flash).
+// sees the deployment product name and mark (no Gestalt→tenant flash).
 func injectPlatformBrand(mounted MountedUI) func([]byte) []byte {
 	body := mountedUIBrandJSON(mounted)
 	name := strings.TrimSpace(mounted.BrandName)
+	markSrc := absoluteBrandMarkSrc(mounted.Path, mounted.BrandMarkSrc)
 	return func(data []byte) []byte {
 		data = replacePlatformBrandScriptJSON(data, body)
 		if name != "" {
 			data = replaceHTMLTitle(data, name)
+		}
+		if markSrc != "" {
+			data = replaceBrandIconHrefs(data, markSrc)
 		}
 		return data
 	}
@@ -78,8 +82,35 @@ var (
 	platformBrandScriptPattern = regexp.MustCompile(
 		`(?is)(<script\b[^>]*\bid\s*=\s*["']` + platformBrandScriptID + `["'][^>]*>)(.*?)(</script>)`,
 	)
-	htmlTitlePattern = regexp.MustCompile(`(?is)(<title\b[^>]*>)(.*?)(</title>)`)
+	htmlTitlePattern     = regexp.MustCompile(`(?is)(<title\b[^>]*>)(.*?)(</title>)`)
+	brandIconLinkPattern = regexp.MustCompile(
+		`(?is)<link\b[^>]*\brel\s*=\s*["'](?:apple-touch-icon|shortcut icon|icon)["'][^>]*>`,
+	)
+	hrefAttrPattern  = regexp.MustCompile(`(?i)\bhref\s*=\s*["'][^"']*["']`)
+	typeAttrPattern  = regexp.MustCompile(`(?i)\btype\s*=\s*["'][^"']*["']`)
+	sizesAttrPattern = regexp.MustCompile(`(?i)\s*\bsizes\s*=\s*["'][^"']*["']`)
+	relIconPattern   = regexp.MustCompile(`(?i)\brel\s*=\s*["'](?:shortcut icon|icon)["']`)
 )
+
+func replaceBrandIconHrefs(data []byte, markSrc string) []byte {
+	markSrc = strings.TrimSpace(markSrc)
+	if markSrc == "" {
+		return data
+	}
+	href := []byte(`href="` + html.EscapeString(markSrc) + `"`)
+	return brandIconLinkPattern.ReplaceAllFunc(data, func(tag []byte) []byte {
+		if hrefAttrPattern.Match(tag) {
+			tag = hrefAttrPattern.ReplaceAll(tag, href)
+		}
+		if relIconPattern.Match(tag) {
+			if typeAttrPattern.Match(tag) {
+				tag = typeAttrPattern.ReplaceAll(tag, []byte(`type="image/svg+xml"`))
+			}
+			tag = sizesAttrPattern.ReplaceAll(tag, nil)
+		}
+		return tag
+	})
+}
 
 func replacePlatformBrandScriptJSON(data, body []byte) []byte {
 	if platformBrandScriptPattern.Match(data) {
