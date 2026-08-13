@@ -133,8 +133,8 @@ func (dir *appDirectory) catalogJSON() []appCatalogEntry {
 		return []appCatalogEntry{}
 	}
 	out := make([]appCatalogEntry, 0, len(dir.entries))
-	for _, entry := range dir.entries {
-		out = append(out, entry.catalogJSON())
+	for i := range dir.entries {
+		out = append(out, dir.entries[i].catalogJSON())
 	}
 	return out
 }
@@ -234,13 +234,18 @@ func (s *Server) assembleAppDirectory(r *http.Request) (*appDirectory, error) {
 		if managementPath == "" {
 			continue
 		}
+		plugin := s.pluginDefs[app.name]
 		entry := appDirectoryEntry{
-			Name:           app.name,
-			DisplayName:    app.name,
-			ManagementPath: managementPath,
-			Prompts:        s.appPrompts[app.name],
+			Name:             app.name,
+			DisplayName:      app.name,
+			ManagementPath:   managementPath,
+			Prompts:          s.appPrompts[app.name],
+			ConnectionSchema: s.connectionSchemasForPlugin(app.name, plugin),
 		}
-		if plugin, ok := s.pluginDefs[app.name]; ok && plugin != nil && plugin.Static != nil {
+		if plugin != nil && strings.TrimSpace(plugin.DisplayName) != "" {
+			entry.DisplayName = strings.TrimSpace(plugin.DisplayName)
+		}
+		if plugin != nil && plugin.Static != nil {
 			entry.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(plugin.Static.Mount))
 		}
 		dir.entries = append(dir.entries, entry)
@@ -347,7 +352,8 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 		}
 	}
 	out := make([]integrationInfo, 0, len(dir.entries))
-	for _, entry := range dir.entries {
+	for i := range dir.entries {
+		entry := &dir.entries[i]
 		info := integrationInfo{
 			Name:            entry.Name,
 			DisplayName:     entry.DisplayName,

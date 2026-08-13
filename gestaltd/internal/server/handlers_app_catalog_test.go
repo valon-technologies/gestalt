@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -272,6 +273,84 @@ func TestAppCatalogOmitsCatalogHiddenApps(t *testing.T) {
 	}
 
 	_ = getJSONPath(t, ts, "/api/v1/catalog/apps/publicHidden/icon", http.StatusNotFound, "Bearer listing-token")
+}
+
+func TestAppCatalogIncludesSchemaForRegistryOnlyApps(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "registry-only"),
+		},
+	}
+	svc := testutil.NewStubServices(t)
+	recording := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
+	svc.ExternalCredentials = recording
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Providers = testutil.NewProviderRegistry(t)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"registry-only": {
+				Source:      config.ProviderSource{Registry: "toolshed"},
+				DisplayName: "Registry Only",
+				Connections: map[string]*config.ConnectionDef{
+					"workspace": {
+						ConnectionID: "registry-only:workspace",
+						DisplayName:  "Workspace",
+						Mode:         providermanifestv1.ConnectionModeSubject,
+						Auth: config.ConnectionAuthDef{
+							Type: providermanifestv1.AuthTypeManual,
+						},
+					},
+				},
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	catalog := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "Bearer alice-token")
+	if recording.listCredentialsCalls.Load() != 0 {
+		t.Fatalf("catalog listing consulted subject credentials %d times", recording.listCredentialsCalls.Load())
+	}
+	var catalogApps []map[string]any
+	if err := json.Unmarshal(catalog, &catalogApps); err != nil {
+		t.Fatalf("decode catalog: %v", err)
+	}
+	if len(catalogApps) != 1 || catalogApps[0]["name"] != "registry-only" {
+		t.Fatalf("catalog = %s", catalog)
+	}
+	connections, _ := catalogApps[0]["connections"].([]any)
+	if len(connections) != 1 {
+		t.Fatalf("registry-only catalog missing connection schema: %s", catalog)
+	}
+	catalogConn, _ := connections[0].(map[string]any)
+	if catalogConn["name"] != "workspace" {
+		t.Fatalf("catalog connection = %#v, want workspace", catalogConn)
+	}
+
+	overlay := getJSONPath(t, ts, "/api/v1/me/app-connections", http.StatusOK, "Bearer alice-token")
+	if recording.listCredentialsCalls.Load() == 0 {
+		t.Fatal("connection overlay did not list subject credentials")
+	}
+	var statuses []struct {
+		Name        string `json:"name"`
+		Connections []struct {
+			Name string `json:"name"`
+		} `json:"connections"`
+	}
+	if err := json.Unmarshal(overlay, &statuses); err != nil {
+		t.Fatalf("decode overlay: %v", err)
+	}
+	if len(statuses) != 1 || statuses[0].Name != "registry-only" {
+		t.Fatalf("overlay = %s", overlay)
+	}
+	if len(statuses[0].Connections) != 1 || statuses[0].Connections[0].Name != "workspace" {
+		t.Fatalf("overlay connections = %+v, want workspace so catalog and overlay zip", statuses[0].Connections)
+	}
 }
 
 func TestAppOverlayNoAuthIsNotProductConnected(t *testing.T) {
