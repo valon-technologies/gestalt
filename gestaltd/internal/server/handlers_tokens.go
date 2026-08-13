@@ -195,6 +195,89 @@ func (s *Server) connectionInfosForPlugin(ctx context.Context, integration strin
 	return infos
 }
 
+func (s *Server) connectionSchemasForPlugin(integration string, app *config.ProviderEntry) []connectionSchemaInfo {
+	authTypes := []string{}
+	schemas := s.connectionSchemasForPluginWithAuthTypes(integration, app, authTypes)
+	resolvedAuthTypes := resolvedSchemaAuthTypes(schemas)
+	if len(authTypes) == 0 && len(resolvedAuthTypes) > 0 {
+		return s.connectionSchemasForPluginWithAuthTypes(integration, app, resolvedAuthTypes)
+	}
+	return schemas
+}
+
+func (s *Server) connectionSchemasForPluginWithAuthTypes(integration string, app *config.ProviderEntry, integrationAuthTypes []string) []connectionSchemaInfo {
+	if app == nil {
+		return []connectionSchemaInfo{}
+	}
+	manifestSpec := app.ManifestSpec()
+	plan, err := config.BuildStaticConnectionPlan(app, manifestSpec)
+	if err != nil {
+		return []connectionSchemaInfo{}
+	}
+	names := plan.AdvertisedConnectionNames()
+	schemas := make([]connectionSchemaInfo, 0, len(names))
+	for _, name := range names {
+		conn, ok := plan.LookupConnection(name)
+		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
+			continue
+		}
+		if name == config.AppConnectionName {
+			conn = displayAppConnectionDef(app, manifestSpec, conn)
+		}
+		if schema, ok := s.connectionSchemaFromDef(integration, userFacingConnectionName(name), conn, name != config.AppConnectionName); ok {
+			schemas = append(schemas, schema)
+		}
+	}
+	return schemas
+}
+
+func (s *Server) connectionSchemaFromDef(integration, name string, conn config.ConnectionDef, includeWithoutAuth bool) (connectionSchemaInfo, bool) {
+	mode := config.ConnectionModeForConnection(conn)
+	authTypes := connectionAuthTypes(conn.Auth, nil)
+	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
+	if len(authTypes) == 0 && !includeWithoutAuth {
+		return connectionSchemaInfo{}, false
+	}
+	displayMode := mode
+	if displayMode == core.ConnectionModeNone && len(authTypes) > 0 {
+		displayMode = core.ConnectionModeSubject
+	}
+	schema := connectionSchemaInfo{
+		DisplayName:      connectionDisplayName(name, conn.DisplayName),
+		Name:             name,
+		Mode:             string(displayMode),
+		AuthTypes:        []string{},
+		ConnectionParams: connectionParamInfosFromConnection(conn),
+		CredentialFields: []credentialFieldInfo{},
+	}
+	if len(authTypes) > 0 {
+		schema.AuthTypes = authTypes
+	}
+	if fields := credentialFieldInfos(conn.Auth.Credentials, func(field config.CredentialFieldDef) credentialFieldInfo {
+		return credentialFieldInfo{
+			Name:        field.Name,
+			Label:       field.Label,
+			Description: field.Description,
+		}
+	}); len(fields) > 0 {
+		schema.CredentialFields = fields
+	} else if authTypesContain(authTypes, "manual") {
+		schema.CredentialFields = defaultManualCredentialFieldInfos()
+	}
+	return schema, true
+}
+
+func resolvedSchemaAuthTypes(connections []connectionSchemaInfo) []string {
+	combined := make([]string, 0, 2)
+	for i := range connections {
+		combined = append(combined, connections[i].AuthTypes...)
+	}
+	if authTypes := userFacingAuthTypes(combined); len(authTypes) > 0 {
+		return authTypes
+	}
+	return []string{}
+}
+
 func displayAppConnectionDef(app *config.ProviderEntry, manifestSpec *providermanifestv1.Spec, conn config.ConnectionDef) config.ConnectionDef {
 	if app == nil || manifestSpec == nil || manifestSpec.IsManifestBacked() {
 		return conn

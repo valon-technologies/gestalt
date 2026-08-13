@@ -12,6 +12,10 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
 
+		r.Get("/catalog/apps", s.listAppCatalog)
+		r.Get("/catalog/apps/{name}/icon", s.serveAppCatalogIcon)
+		r.Get("/me/app-connections", s.listAppConnections)
+
 		r.Get("/apps", s.listIntegrations)
 		r.Delete("/apps/{name}", s.disconnectIntegration)
 		r.Put("/apps/{name}/preferred-instance", s.selectPreferredInstance)

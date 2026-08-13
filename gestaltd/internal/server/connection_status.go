@@ -121,7 +121,7 @@ func (s *Server) implicitIntegrationStatus(integration string, prov core.Provide
 			CredentialState: credentialStateNotRequired,
 			HealthState:     healthStateNotApplicable,
 			Actions:         []string{},
-			Connected:       true,
+			Connected:       false,
 		}
 	default:
 		return subjectConnectionStatus(groupInstancesForConnection(instances, ""), len(authTypes) > 0, ownerKindForPrincipal(p), "")
@@ -187,7 +187,7 @@ func summarizeConnectionStatuses(connections []connectionDefInfo) connectionStat
 	if allReady {
 		status := statusFromConnectionInfo(&connections[0])
 		status.Actions = []string{}
-		status.Connected = true
+		status.Connected = subjectProductConnected(connections)
 		return status
 	}
 	for i := range connections {
@@ -224,7 +224,7 @@ func summarizeReconnectRequiredConnectionStatuses(connections []connectionDefInf
 			}
 			continue
 		}
-		if conn.Connected || conn.Status == connectionStatusReady || conn.CredentialState == credentialStateConfigured {
+		if connectionHasSubjectIdentity(conn) && conn.Connected {
 			hasConnected = true
 		}
 	}
@@ -266,8 +266,26 @@ func noAuthConnectionStatus() connectionStatusInfo {
 		Actions:         []string{},
 		CredentialMode:  credentialModeNone,
 		OwnerKind:       ownerKindNone,
-		Connected:       true,
+		Connected:       false,
 	}
+}
+
+// subjectProductConnected is true when this subject has a chosen identity on
+// any credential-bearing connection. No-auth / mode-none rows are never that.
+func subjectProductConnected(connections []connectionDefInfo) bool {
+	for i := range connections {
+		if connectionHasSubjectIdentity(&connections[i]) && connections[i].Connected {
+			return true
+		}
+	}
+	return false
+}
+
+func connectionHasSubjectIdentity(conn *connectionDefInfo) bool {
+	if conn == nil {
+		return false
+	}
+	return conn.CredentialMode != credentialModeNone
 }
 
 func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKind string, preferredInstance string) connectionStatusInfo {

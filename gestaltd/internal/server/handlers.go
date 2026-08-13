@@ -219,106 +219,15 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
-	p := PrincipalFromContext(r.Context())
-	connected, err := s.subjectConnectedIntegrations(r)
+	dir, err := s.assembleAppDirectory(r)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "listing integrations", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to check integration status")
+		writeAppListingError(w, r, err)
 		return
 	}
-
-	names := s.providers.List()
-	registryApps := s.configuredRegistryApps()
-
-	// Answer every app-visibility question this listing asks in one batched
-	// evaluator call. Each app below still reaches its decision through the
-	// same single-decision helper; the batch only pre-populates the answers.
-	ctx, _ := withListingDecisionCache(r.Context())
-	r = r.WithContext(ctx)
-	prefetchNames := make([]string, 0, len(names)+len(registryApps))
-	prefetchNames = append(prefetchNames, names...)
-	for _, app := range registryApps {
-		prefetchNames = append(prefetchNames, app.name)
-	}
-	s.prefetchIntegrationListingDecisions(ctx, p, prefetchNames)
-
-	seen := make(map[string]struct{}, len(names))
-	out := make([]integrationInfo, 0, len(names))
-	for _, name := range names {
-		if s.integrationHiddenFromCatalog(name) {
-			continue
-		}
-		prov, err := s.providers.GetWithContext(r.Context(), name)
-		if err != nil {
-			continue
-		}
-		seen[name] = struct{}{}
-		info := integrationInfo{
-			Name:            name,
-			DisplayName:     prov.DisplayName(),
-			Description:     prov.Description(),
-			Connections:     []connectionDefInfo{},
-			Status:          connectionStatusUnknown,
-			CredentialState: credentialStateUnknown,
-			HealthState:     healthStateUnknown,
-			Actions:         []string{},
-		}
-		if cat := prov.Catalog(); cat != nil {
-			info.IconSVG = cat.IconSVG
-		}
-		entry := s.pluginDefs[name]
-		if entry != nil && entry.Static != nil {
-			info.MountedPath = strings.TrimSpace(entry.Static.Mount)
-		}
-		info.SourceTreeURL = entry.SourceTreeURL()
-		info.Prompts = s.appPrompts[name]
-		instances := connected[name]
-		authTypes := s.populateIntegrationSettings(r.Context(), &info, instances, p)
-		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
-		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
-		info.ManagementPath = s.integrationManagementPath(r.Context(), p, name)
-		usable, err := s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info)
-		if err != nil {
-			// An unreachable evaluator must not be reported as "you have no
-			// apps": fail the request instead of returning a silently empty or
-			// silently truncated list.
-			slog.ErrorContext(r.Context(), "listing integrations", "app", name, "error", err)
-			writeError(w, http.StatusServiceUnavailable, "failed to authorize app access")
-			return
-		}
-		if !usable {
-			continue
-		}
-		out = append(out, info)
-	}
-	for _, app := range registryApps {
-		if s.integrationHiddenFromCatalog(app.name) {
-			continue
-		}
-		if _, ok := seen[app.name]; ok {
-			continue
-		}
-		managementPath := s.integrationManagementPath(r.Context(), p, app.name)
-		if managementPath == "" {
-			continue
-		}
-		info := integrationInfo{
-			Name:            app.name,
-			DisplayName:     app.name,
-			Connections:     []connectionDefInfo{},
-			Status:          connectionStatusUnknown,
-			CredentialState: credentialStateUnknown,
-			HealthState:     healthStateUnknown,
-			Actions:         []string{},
-			ManagementPath:  managementPath,
-			Prompts:         s.appPrompts[app.name],
-		}
-		entry := s.pluginDefs[app.name]
-		if entry != nil && entry.Static != nil {
-			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))
-		}
-		info.SourceTreeURL = entry.SourceTreeURL()
-		out = append(out, info)
+	out, err := s.projectComposedAppListing(r, dir)
+	if err != nil {
+		writeAppListingError(w, r, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }
