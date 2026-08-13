@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -38,13 +40,15 @@ func (s *Server) routes() {
 		s.mountHTTPBindingRoutes(r)
 		s.mountS3ObjectAccessRoutes(r)
 		s.mountAPIRoutes(r)
+		s.mountAdminAPIRoutes(r)
+		s.mountAdminPageRedirects(r)
 		s.mountMountedUIRoutes(r)
 		s.mountManagementHiddenRoutes(r)
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
 		s.mountManagementRootRedirect(r)
 		s.mountAdminAPIRoutes(r)
-		s.mountAdminUIRoutes(r)
+		s.mountAdminPageRedirects(r)
 		s.mountActivateRoute(r)
 	default:
 		s.mountCoreRoutes(r, metricsAuthenticated)
@@ -52,9 +56,9 @@ func (s *Server) routes() {
 		s.mountHTTPBindingRoutes(r)
 		s.mountS3ObjectAccessRoutes(r)
 		s.mountAPIRoutes(r)
-		s.mountMountedUIRoutes(r)
 		s.mountAdminAPIRoutes(r)
-		s.mountAdminUIRoutes(r)
+		s.mountAdminPageRedirects(r)
+		s.mountMountedUIRoutes(r)
 		s.mountActivateRoute(r)
 	}
 }
@@ -86,24 +90,50 @@ func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 }
 
 func (s *Server) mountManagementRootRedirect(r chi.Router) {
-	if s.adminUI == nil {
-		return
-	}
-
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		redirectPreservingQuery(w, r, "/admin/", http.StatusMovedPermanently)
+		redirectPreservingQuery(w, r, s.adminProductURL("/admin"), http.StatusMovedPermanently)
 	})
 }
 
-func (s *Server) mountAdminUIRoutes(r chi.Router) {
-	if s.adminUI == nil {
-		return
-	}
-
-	r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
-		redirectPreservingQuery(w, r, "/admin/", http.StatusMovedPermanently)
+func (s *Server) mountAdminPageRedirects(r chi.Router) {
+	r.Get("/admin/registry", func(w http.ResponseWriter, r *http.Request) {
+		redirectPreservingQuery(w, r, s.adminProductURL("/admin/versions"), http.StatusMovedPermanently)
 	})
-	r.Handle("/admin/*", s.adminUIHandler())
+	r.Get("/admin/registry/{app}", func(w http.ResponseWriter, r *http.Request) {
+		app := strings.TrimSpace(chi.URLParam(r, "app"))
+		redirectPreservingQuery(w, r, s.adminProductURL("/admin/versions/"+url.PathEscape(app)), http.StatusMovedPermanently)
+	})
+	if s.routeProfile == RouteProfileManagement {
+		r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
+			redirectPreservingQuery(w, r, s.adminProductURL("/admin"), http.StatusMovedPermanently)
+		})
+		r.Get("/admin/", func(w http.ResponseWriter, r *http.Request) {
+			redirectPreservingQuery(w, r, s.adminProductURL("/admin"), http.StatusMovedPermanently)
+		})
+		r.Get("/admin/metrics", func(w http.ResponseWriter, r *http.Request) {
+			redirectPreservingQuery(w, r, s.adminProductURL("/admin/metrics"), http.StatusMovedPermanently)
+		})
+		r.Get("/admin/versions", func(w http.ResponseWriter, r *http.Request) {
+			redirectPreservingQuery(w, r, s.adminProductURL("/admin/versions"), http.StatusMovedPermanently)
+		})
+		r.Get("/admin/versions/{app}", func(w http.ResponseWriter, r *http.Request) {
+			app := strings.TrimSpace(chi.URLParam(r, "app"))
+			redirectPreservingQuery(w, r, s.adminProductURL("/admin/versions/"+url.PathEscape(app)), http.StatusMovedPermanently)
+		})
+	}
+}
+
+func (s *Server) adminProductURL(path string) string {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	if s.routeProfile == RouteProfileManagement {
+		base := strings.TrimRight(strings.TrimSpace(s.publicBaseURL), "/")
+		if base != "" {
+			return base + path
+		}
+	}
+	return path
 }
 
 func (s *Server) mountAdminAPIRoutes(r chi.Router) {
@@ -115,6 +145,8 @@ func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 			s.mountAdminAppRegistryRoutes(r)
 			s.mountAdminAppInstallReadRoutes(r)
 			s.mountAdminAppRolloutRoutes(r)
+			s.mountAdminMetricsRoutes(r)
+			s.mountAdminPlatformAdminsRoutes(r)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(10 * time.Minute))
@@ -169,10 +201,6 @@ func routePatternTelemetryMiddleware(next http.Handler) http.Handler {
 func (s *Server) mountManagementHiddenRoutes(r chi.Router) {
 	notFound := http.NotFoundHandler()
 	r.Handle("/metrics", notFound)
-	r.Handle("/admin/api/v1", notFound)
-	r.Handle("/admin/api/v1/*", notFound)
-	r.Handle("/admin", notFound)
-	r.Handle("/admin/*", notFound)
 	r.Handle("/activate", notFound)
 }
 

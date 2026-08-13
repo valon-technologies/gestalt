@@ -370,14 +370,6 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	adminUI := cfg.AdminUI
-	if adminUI == nil && cfg.BuiltinAdminUI != nil {
-		adminUI, err = resolveBuiltinAdminUI(*cfg.BuiltinAdminUI)
-		if err != nil {
-			return nil, fmt.Errorf("resolve admin ui: %w", err)
-		}
-	}
-
 	if cfg.Services == nil {
 		return nil, fmt.Errorf("services are required")
 	}
@@ -511,7 +503,7 @@ func New(cfg Config) (*Server, error) {
 		mountedHTTPBindings:           mountedHTTPBindings,
 		mountedUIs:                    mountedUIs,
 		adminRoute:                    adminRoute,
-		adminUI:                       adminUI,
+		adminUI:                       cfg.AdminUI,
 		appRegistries:                 cloneAppRegistryConfig(cfg.AppRegistries),
 		appRegistryReader:             cfg.AppRegistryReader,
 		appRegistryInstaller:          newAppRegistryInstaller(cfg),

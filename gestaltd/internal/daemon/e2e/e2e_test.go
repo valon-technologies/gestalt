@@ -1804,11 +1804,18 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	})
 
 	client := &http.Client{Timeout: 2 * time.Second}
+	noFollow := &http.Client{
+		Timeout: 2 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	for _, tc := range []struct {
 		name         string
 		url          string
 		wantStatus   int
 		wantContains string
+		noFollow     bool
 	}{
 		{
 			name:       "public serves apps API",
@@ -1821,9 +1828,14 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 			wantStatus: http.StatusNotFound,
 		},
 		{
-			name:       "public hides admin ui",
+			name:       "public has no builtin admin html",
 			url:        publicURL + "/admin/",
 			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "public serves admin API",
+			url:        publicURL + "/admin/api/v1/app-registries",
+			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "management becomes ready",
@@ -1842,17 +1854,21 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 			wantContains: "# TYPE",
 		},
 		{
-			name:         "management serves admin ui",
-			url:          managementURL + "/admin/",
-			wantStatus:   http.StatusOK,
-			wantContains: `id="root"`,
+			name:       "management redirects admin pages to public",
+			url:        managementURL + "/admin",
+			wantStatus: http.StatusMovedPermanently,
+			noFollow:   true,
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp, err := client.Get(tc.url)
+			httpClient := client
+			if tc.noFollow {
+				httpClient = noFollow
+			}
+			resp, err := httpClient.Get(tc.url)
 			if err != nil {
 				t.Fatalf("GET %s: %v", tc.url, err)
 			}
