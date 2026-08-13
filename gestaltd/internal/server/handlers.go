@@ -105,6 +105,8 @@ type integrationInfo struct {
 	CredentialState string              `json:"credentialState"`
 	HealthState     string              `json:"healthState"`
 	Actions         []string            `json:"actions"`
+	// Connected is true only when this subject has a chosen account.
+	Connected bool `json:"connected"`
 }
 
 type appPromptInfo struct {

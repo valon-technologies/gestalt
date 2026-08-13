@@ -59,6 +59,7 @@ type appConnectionStatus struct {
 	CredentialState string                 `json:"credentialState"`
 	HealthState     string                 `json:"healthState"`
 	Actions         []string               `json:"actions"`
+	Connected       bool                   `json:"connected"`
 	Connections     []connectionStatusView `json:"connections"`
 }
 
@@ -186,6 +187,7 @@ func appConnectionStatusesFrom(infos []integrationInfo) []appConnectionStatus {
 			CredentialState: info.CredentialState,
 			HealthState:     info.HealthState,
 			Actions:         actions,
+			Connected:       info.Connected,
 			Connections:     connectionStatusViews(info.Connections),
 		})
 	}

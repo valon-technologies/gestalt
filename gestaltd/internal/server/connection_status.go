@@ -50,6 +50,7 @@ func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov co
 	info.CredentialState = status.CredentialState
 	info.HealthState = status.HealthState
 	info.Actions = status.Actions
+	info.Connected = status.Connected
 }
 
 func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {

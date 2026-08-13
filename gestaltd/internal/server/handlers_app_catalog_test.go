@@ -90,6 +90,7 @@ func TestAppCatalogOmitsSubjectConnectionState(t *testing.T) {
 		Name            string `json:"name"`
 		Status          string `json:"status"`
 		CredentialState string `json:"credentialState"`
+		Connected       bool   `json:"connected"`
 		Connections     []struct {
 			Name      string `json:"name"`
 			Connected bool   `json:"connected"`
@@ -104,6 +105,9 @@ func TestAppCatalogOmitsSubjectConnectionState(t *testing.T) {
 	if statuses[0].Status != "ready" || statuses[0].CredentialState != "connected" {
 		t.Fatalf("overlay status = {%q, %q}, want ready/connected", statuses[0].Status, statuses[0].CredentialState)
 	}
+	if !statuses[0].Connected {
+		t.Fatalf("overlay app connected = false, want true: %s", overlay)
+	}
 	if len(statuses[0].Connections) != 1 || !statuses[0].Connections[0].Connected {
 		t.Fatalf("overlay connections = %+v", statuses[0].Connections)
 	}
@@ -117,6 +121,7 @@ func TestAppCatalogOmitsSubjectConnectionState(t *testing.T) {
 		Name            string `json:"name"`
 		Status          string `json:"status"`
 		CredentialState string `json:"credentialState"`
+		Connected       bool   `json:"connected"`
 	}
 	if err := json.Unmarshal(composed, &integrations); err != nil {
 		t.Fatalf("decode composed listing: %v", err)
@@ -126,6 +131,9 @@ func TestAppCatalogOmitsSubjectConnectionState(t *testing.T) {
 	}
 	if integrations[0].Status != "ready" || integrations[0].CredentialState != "connected" {
 		t.Fatalf("composed status = {%q, %q}, want ready/connected", integrations[0].Status, integrations[0].CredentialState)
+	}
+	if !integrations[0].Connected {
+		t.Fatalf("composed listing app connected = false, want true: %s", composed)
 	}
 }
 
@@ -410,6 +418,9 @@ func TestAppOverlayNoAuthIsNotProductConnected(t *testing.T) {
 	if statuses[0].CredentialState != "not_required" {
 		t.Fatalf("overlay credential state = %q, want not_required: %s", statuses[0].CredentialState, overlay)
 	}
+	if statuses[0].Connected {
+		t.Fatalf("no-auth overlay app must not be product-connected: %s", overlay)
+	}
 	for _, connection := range statuses[0].Connections {
 		if connection.Connected {
 			t.Fatalf("no-auth overlay connection %q must not be product-connected: %s", connection.Name, overlay)
@@ -419,6 +430,7 @@ func TestAppOverlayNoAuthIsNotProductConnected(t *testing.T) {
 	composed := getJSONPath(t, ts, "/api/v1/apps", http.StatusOK, "")
 	var integrations []struct {
 		Name        string `json:"name"`
+		Connected   bool   `json:"connected"`
 		Connections []struct {
 			Connected bool `json:"connected"`
 		} `json:"connections"`
@@ -428,6 +440,9 @@ func TestAppOverlayNoAuthIsNotProductConnected(t *testing.T) {
 	}
 	if len(integrations) != 1 || integrations[0].Name != "no-auth" {
 		t.Fatalf("composed listing = %s", composed)
+	}
+	if integrations[0].Connected {
+		t.Fatalf("composed no-auth app must not be product-connected: %s", composed)
 	}
 	for i, connection := range integrations[0].Connections {
 		if connection.Connected {
