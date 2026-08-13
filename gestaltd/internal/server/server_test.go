@@ -4293,6 +4293,52 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_IncludesSourceURL(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "roadmap", DN: "Roadmap"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		defs := testPluginDefsForConnections("roadmap", "default")
+		defs["roadmap"].Source = config.ProviderSource{
+			Git: &config.GitSourceDef{
+				Repo: "https://github.com/example/toolshed.git",
+				Ref:  "main",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+		}
+		cfg.AppDefs = defs
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name      string `json:"name"`
+		SourceURL string `json:"sourceUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	want := "https://github.com/example/toolshed/tree/main/apps/roadmap"
+	if integrations[0].Name != "roadmap" || integrations[0].SourceURL != want {
+		t.Fatalf("integration = %+v, want sourceUrl %q", integrations[0], want)
+	}
+}
+
 func TestListIntegrations_IncludesPrompts(t *testing.T) {
 	t.Parallel()
 

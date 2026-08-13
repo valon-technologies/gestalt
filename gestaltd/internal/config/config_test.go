@@ -2072,6 +2072,10 @@ apps:
 			manifestPath != "apps/custom_tool/manifest.yaml" {
 			t.Fatalf("NormalizedLocationParts = (%q, %q, %q)", repo, ref, manifestPath)
 		}
+		wantTree := "https://github.com/Valon-Technologies/Gestalt-Providers/tree/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/apps/custom_tool"
+		if got := entry.SourceTreeURL(); got != wantTree {
+			t.Fatalf("SourceTreeURL = %q, want %q", got, wantTree)
+		}
 	})
 
 	t.Run("apiVersion preserves nested source auth on local release metadata sources", func(t *testing.T) {
@@ -7394,5 +7398,56 @@ func TestEffectiveHTTPBindingsOverridesStreaming(t *testing.T) {
 	bindings := entry.EffectiveHTTPBindings()
 	if bindings["echo"] == nil || !bindings["echo"].Streaming {
 		t.Fatalf("EffectiveHTTPBindings did not apply override streaming: got %+v", bindings["echo"])
+	}
+}
+
+func TestGitSourceDefTreeURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		git  GitSourceDef
+		want string
+	}{
+		{
+			name: "github app directory",
+			git: GitSourceDef{
+				Repo: "https://github.com/example/toolshed.git",
+				Ref:  "main",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+			want: "https://github.com/example/toolshed/tree/main/apps/roadmap",
+		},
+		{
+			name: "github root manifest",
+			git: GitSourceDef{
+				Repo: "https://github.com/example/app.git",
+				Ref:  "abc123",
+				Path: "manifest.yaml",
+			},
+			want: "https://github.com/example/app/tree/abc123",
+		},
+		{
+			name: "non-github omitted",
+			git: GitSourceDef{
+				Repo: "https://gitlab.example.com/group/app.git",
+				Ref:  "main",
+				Path: "apps/foo/manifest.yaml",
+			},
+			want: "",
+		},
+		{
+			name: "missing repo omitted",
+			git:  GitSourceDef{Ref: "main", Path: "apps/foo/manifest.yaml"},
+			want: "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.git.TreeURL(); got != tc.want {
+				t.Fatalf("TreeURL = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

@@ -99,6 +99,7 @@ type integrationInfo struct {
 	MountedPath     string              `json:"mountedPath,omitempty"`
 	ManagementPath  string              `json:"managementPath,omitempty"`
 	Prompts         []appPromptInfo     `json:"prompts,omitempty"`
+	SourceURL       string              `json:"sourceUrl,omitempty"`
 	Connections     []connectionDefInfo `json:"connections"`
 	Status          string              `json:"status"`
 	CredentialState string              `json:"credentialState"`
@@ -265,8 +266,11 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
 		}
-		if entry, ok := s.pluginDefs[name]; ok && entry != nil && entry.Static != nil {
-			info.MountedPath = strings.TrimSpace(entry.Static.Mount)
+		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
+			if entry.Static != nil {
+				info.MountedPath = strings.TrimSpace(entry.Static.Mount)
+			}
+			info.SourceURL = entry.SourceTreeURL()
 		}
 		info.Prompts = s.appPrompts[name]
 		instances := connected[name]
@@ -310,8 +314,11 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			ManagementPath:  managementPath,
 			Prompts:         s.appPrompts[app.name],
 		}
-		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil && entry.Static != nil {
-			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))
+		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil {
+			if entry.Static != nil {
+				info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))
+			}
+			info.SourceURL = entry.SourceTreeURL()
 		}
 		out = append(out, info)
 	}
