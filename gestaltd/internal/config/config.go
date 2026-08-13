@@ -470,41 +470,6 @@ func (g GitSourceDef) Location() string {
 	return "git+" + repo + "@" + ref + "#" + manifestPath
 }
 
-// TreeURL is the browseable GitHub tree for this git source: the app
-// directory (parent of the manifest), not the install locator from Location.
-func (g GitSourceDef) TreeURL() string {
-	repo, ref, manifestPath := g.NormalizedLocationParts()
-	if repo == "" || ref == "" {
-		return ""
-	}
-	parsed, err := url.Parse(repo)
-	if err != nil {
-		return ""
-	}
-	if parsed.Scheme != "https" && parsed.Scheme != "http" {
-		return ""
-	}
-	if !strings.EqualFold(parsed.Host, "github.com") {
-		return ""
-	}
-	clean := strings.Trim(path.Clean(parsed.Path), "/")
-	parts := strings.Split(clean, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return ""
-	}
-	owner := parts[0]
-	name := strings.TrimSuffix(parts[1], ".git")
-	if name == "" {
-		return ""
-	}
-	treePath := "/" + owner + "/" + name + "/tree/" + ref
-	dir := path.Dir(manifestPath)
-	if dir != "" && dir != "." {
-		treePath += "/" + dir
-	}
-	return (&url.URL{Scheme: "https", Host: "github.com", Path: treePath}).String()
-}
-
 // NormalizedLocationParts returns the canonical repo, ref, and manifest path used by Location.
 func (g GitSourceDef) NormalizedLocationParts() (repo, ref, manifestPath string) {
 	return normalizeGitLocationRepoURL(g.Repo),
@@ -1700,8 +1665,8 @@ func (e *ProviderEntry) HasGitSource() bool {
 	return e != nil && e.Source.IsGit()
 }
 
-// SourceTreeURL is the browseable source tree for Overview and other
-// catalog surfaces. Empty when the app has no GitHub git source.
+// SourceTreeURL is the GitHub website tree for this app's checkout identity.
+// Empty when the app has no GitHub git source.
 func (e *ProviderEntry) SourceTreeURL() string {
 	if e == nil || !e.HasGitSource() {
 		return ""

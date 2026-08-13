@@ -99,7 +99,7 @@ type integrationInfo struct {
 	MountedPath     string              `json:"mountedPath,omitempty"`
 	ManagementPath  string              `json:"managementPath,omitempty"`
 	Prompts         []appPromptInfo     `json:"prompts,omitempty"`
-	SourceURL       string              `json:"sourceUrl,omitempty"`
+	SourceTreeURL   string              `json:"sourceTreeUrl,omitempty"`
 	Connections     []connectionDefInfo `json:"connections"`
 	Status          string              `json:"status"`
 	CredentialState string              `json:"credentialState"`
@@ -266,10 +266,11 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
 		}
-		if entry, ok := s.pluginDefs[name]; ok && entry != nil && entry.Static != nil {
+		entry := s.pluginDefs[name]
+		if entry != nil && entry.Static != nil {
 			info.MountedPath = strings.TrimSpace(entry.Static.Mount)
 		}
-		info.SourceURL = s.appSourceTreeURL(name)
+		info.SourceTreeURL = entry.SourceTreeURL()
 		info.Prompts = s.appPrompts[name]
 		instances := connected[name]
 		authTypes := s.populateIntegrationSettings(r.Context(), &info, instances, p)
@@ -312,26 +313,14 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			ManagementPath:  managementPath,
 			Prompts:         s.appPrompts[app.name],
 		}
-		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil && entry.Static != nil {
+		entry := s.pluginDefs[app.name]
+		if entry != nil && entry.Static != nil {
 			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, app.name, strings.TrimSpace(entry.Static.Mount))
 		}
-		info.SourceURL = s.appSourceTreeURL(app.name)
+		info.SourceTreeURL = entry.SourceTreeURL()
 		out = append(out, info)
 	}
 	writeJSON(w, http.StatusOK, out)
-}
-
-// appSourceTreeURL is the catalog source URL for an app: the GitHub tree of
-// the deploy git directory, or empty when the app has no GitHub git source.
-func (s *Server) appSourceTreeURL(name string) string {
-	if s == nil {
-		return ""
-	}
-	entry := s.pluginDefs[name]
-	if entry == nil {
-		return ""
-	}
-	return entry.SourceTreeURL()
 }
 
 func (s *Server) integrationManagementPath(ctx context.Context, p *principal.Principal, appName string) string {

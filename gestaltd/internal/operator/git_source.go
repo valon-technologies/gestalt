@@ -179,28 +179,22 @@ func snapshotSourceFileURL(base string, snapshotPath SnapshotSourceRefPath, file
 	return parsed.String(), nil
 }
 
+// githubRepoPath uses the shared GitHub owner/name parser, then keeps the
+// snapshot rule: https://github.com/<owner>/<repo> or git@github.com:.
 func githubRepoPath(raw string) (string, string, string, error) {
 	raw = strings.TrimSpace(raw)
-	const sshPrefix = "git@github.com:"
-	if strings.HasPrefix(raw, sshPrefix) {
-		owner, repo, ok := strings.Cut(strings.TrimPrefix(raw, sshPrefix), "/")
-		if ok && owner != "" && repo != "" {
-			return "github.com", owner, strings.TrimSuffix(repo, ".git"), nil
-		}
-	}
-	parsed, err := url.Parse(strings.TrimSpace(raw))
+	repo, err := config.ParseGitHubRepo(raw)
 	if err != nil {
-		return "", "", "", fmt.Errorf("parse source.git.repo: %w", err)
-	}
-	if parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "github.com") {
 		return "", "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
 	}
-	clean := strings.Trim(path.Clean(parsed.Path), "/")
-	parts := strings.Split(clean, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+	if strings.HasPrefix(raw, "git@github.com:") {
+		return "github.com", repo.Owner, repo.Name, nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "github.com") {
 		return "", "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
 	}
-	return "github.com", parts[0], strings.TrimSuffix(parts[1], ".git"), nil
+	return "github.com", repo.Owner, repo.Name, nil
 }
 
 func (l *Lifecycle) gitSourceManifestPath(ctx context.Context, paths lifecyclePaths, entry *config.ProviderEntry) (string, error) {

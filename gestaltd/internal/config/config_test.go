@@ -2072,7 +2072,7 @@ apps:
 			manifestPath != "apps/custom_tool/manifest.yaml" {
 			t.Fatalf("NormalizedLocationParts = (%q, %q, %q)", repo, ref, manifestPath)
 		}
-		wantTree := "https://github.com/Valon-Technologies/Gestalt-Providers/tree/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/apps/custom_tool"
+		wantTree := "https://github.com/Valon-Technologies/Gestalt-Providers/tree/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/apps/custom_tool"
 		if got := entry.SourceTreeURL(); got != wantTree {
 			t.Fatalf("SourceTreeURL = %q, want %q", got, wantTree)
 		}
@@ -7401,6 +7401,28 @@ func TestEffectiveHTTPBindingsOverridesStreaming(t *testing.T) {
 	}
 }
 
+func TestGitSourceDefIdentity(t *testing.T) {
+	t.Parallel()
+
+	git := GitSourceDef{
+		Repo: "HTTPS://GitHub.com/Ex/App.git",
+		Ref:  "feat/ui",
+		Path: "apps/foo/manifest.yaml",
+	}
+	got, ok := git.Identity()
+	if !ok {
+		t.Fatal("Identity() = false, want GitHub checkout identity")
+	}
+	want := GitSourceIdentity{
+		Repo:   GitHubRepo{Owner: "Ex", Name: "App"},
+		Ref:    "feat/ui",
+		AppDir: "apps/foo",
+	}
+	if got != want {
+		t.Fatalf("Identity() = %+v, want %+v", got, want)
+	}
+}
+
 func TestGitSourceDefTreeURL(t *testing.T) {
 	t.Parallel()
 
@@ -7426,6 +7448,42 @@ func TestGitSourceDefTreeURL(t *testing.T) {
 				Path: "manifest.yaml",
 			},
 			want: "https://github.com/example/app/tree/abc123",
+		},
+		{
+			name: "ssh scp",
+			git: GitSourceDef{
+				Repo: "git@github.com:example/apps.git",
+				Ref:  "main",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/main/apps/roadmap",
+		},
+		{
+			name: "http github",
+			git: GitSourceDef{
+				Repo: "http://github.com/example/apps.git",
+				Ref:  "main",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/main/apps/roadmap",
+		},
+		{
+			name: "preserves configured ref case",
+			git: GitSourceDef{
+				Repo: "https://github.com/example/apps.git",
+				Ref:  "Release-1",
+				Path: "apps/foo/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/Release-1/apps/foo",
+		},
+		{
+			name: "slash in ref is one path segment",
+			git: GitSourceDef{
+				Repo: "https://github.com/example/apps.git",
+				Ref:  "feat/ui",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/feat%2Fui/apps/roadmap",
 		},
 		{
 			name: "non-github omitted",

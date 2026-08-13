@@ -4293,7 +4293,7 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	}
 }
 
-func TestListIntegrations_IncludesSourceURL(t *testing.T) {
+func TestListIntegrations_IncludesSourceTreeURL(t *testing.T) {
 	t.Parallel()
 
 	githubApp := &coretesting.StubIntegration{N: "roadmap", DN: "Roadmap"}
@@ -4333,26 +4333,35 @@ func TestListIntegrations_IncludesSourceURL(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var integrations []struct {
-		Name      string `json:"name"`
-		SourceURL string `json:"sourceUrl"`
-	}
+	var integrations []map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	got := map[string]string{}
+	got := map[string]map[string]any{}
 	for _, integration := range integrations {
-		got[integration.Name] = integration.SourceURL
+		name, _ := integration["name"].(string)
+		got[name] = integration
+	}
+	roadmap, ok := got["roadmap"]
+	if !ok {
+		t.Fatalf("expected roadmap in apps list, got %+v", integrations)
+	}
+	if _, exists := roadmap["sourceUrl"]; exists {
+		t.Fatalf("catalog must not emit version-commit sourceUrl: %+v", roadmap)
 	}
 	wantGitHub := "https://github.com/example/apps/tree/main/apps/roadmap"
-	if got["roadmap"] != wantGitHub {
-		t.Fatalf("roadmap sourceUrl = %q, want %q (apps=%+v)", got["roadmap"], wantGitHub, integrations)
+	if gotTree, _ := roadmap["sourceTreeUrl"].(string); gotTree != wantGitHub {
+		t.Fatalf("roadmap sourceTreeUrl = %q, want %q (apps=%+v)", gotTree, wantGitHub, integrations)
 	}
-	if _, ok := got["notes"]; !ok {
+	notes, ok := got["notes"]
+	if !ok {
 		t.Fatalf("expected notes in apps list, got %+v", integrations)
 	}
-	if got["notes"] != "" {
-		t.Fatalf("notes sourceUrl = %q, want omitted empty for non-GitHub git", got["notes"])
+	if _, exists := notes["sourceTreeUrl"]; exists {
+		t.Fatalf("notes sourceTreeUrl = %+v, want omitted for non-GitHub git", notes["sourceTreeUrl"])
+	}
+	if _, exists := notes["sourceUrl"]; exists {
+		t.Fatalf("catalog must not emit version-commit sourceUrl: %+v", notes)
 	}
 }
 
