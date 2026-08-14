@@ -22,9 +22,10 @@ type configCall struct {
 
 type fullIdentityProvider struct {
 	closeTracker
-	configured []configCall
-	started    int
-	revoked    []string
+	configured         []configCall
+	started            int
+	revoked            []string
+	tokenCallerSubject string
 }
 
 func (p *fullIdentityProvider) Configure(_ context.Context, name string, config map[string]any) error {
@@ -63,7 +64,8 @@ func (p *fullIdentityProvider) Authorize(_ context.Context, req *gestalt.Authori
 	}, nil
 }
 
-func (p *fullIdentityProvider) Token(_ context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+func (p *fullIdentityProvider) Token(ctx context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+	p.tokenCallerSubject = gestalt.IdentityCallContextFromContext(ctx).CallerSubjectID
 	if req == nil || req.Code != "auth-code" {
 		return nil, status.Error(codes.InvalidArgument, "invalid authorization code")
 	}
@@ -335,6 +337,19 @@ func TestIdentityProviderRoundTrip(t *testing.T) {
 	}
 	if proofSubjectUserInfo.SubjectID != "user:user@example.test" {
 		t.Fatalf("userinfo(validated caller proof) subject_id = %q, want %q", proofSubjectUserInfo.SubjectID, "user:user@example.test")
+	}
+
+	tokenWithSubjectCtx := metadata.AppendToOutgoingContext(rpcCtx, gestalt.TrustedCallerSubjectMetadataKey, "user:user@example.test")
+	if _, err := authClient.Token(tokenWithSubjectCtx, &proto.TokenRequest{
+		GrantType:   "authorization_code",
+		Code:        "auth-code",
+		RedirectUri: "https://app.example.test/callback",
+		ClientId:    "gestaltd",
+	}); err != nil {
+		t.Fatalf("Token(trusted caller subject metadata): %v", err)
+	}
+	if provider.tokenCallerSubject != "user:user@example.test" {
+		t.Fatalf("Token CallerSubjectID = %q, want user:user@example.test", provider.tokenCallerSubject)
 	}
 
 	_, err = authClient.RevokeGrant(grantCtx, &proto.RevokeGrantRequest{GrantId: "grant-1"})

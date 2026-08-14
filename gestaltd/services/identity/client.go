@@ -373,9 +373,12 @@ func userInfoResponseFromProto(resp *proto.UserInfoResponse) *core.UserInfoRespo
 	}
 }
 
-// WithCallerBearerToken attaches the caller bearer token for caller-relative RPCs.
+// WithCallerBearerToken attaches the caller bearer token for caller-relative RPCs
+// without dropping an existing CallerSubjectID or Introspection.
 func WithCallerBearerToken(ctx context.Context, token string) context.Context {
-	ctx = gestalt.WithIdentityCallContext(ctx, gestalt.IdentityCallContext{CallerBearerToken: token})
+	call := gestalt.IdentityCallContextFromContext(ctx)
+	call.CallerBearerToken = token
+	ctx = gestalt.WithIdentityCallContext(ctx, call)
 	return metadata.AppendToOutgoingContext(ctx, gestalt.CallerBearerTokenMetadataKey, token)
 }
 

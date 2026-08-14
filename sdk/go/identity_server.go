@@ -35,7 +35,7 @@ func (s *authServer) Token(ctx context.Context, req *proto.TokenRequest) (*proto
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	resp, err := s.auth.Token(ctx, tokenRequestFromProto(req))
+	resp, err := s.auth.Token(AuthCallContextFromIncoming(ctx), tokenRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("token", err)
 	}

@@ -53,7 +53,7 @@ func (p *recordingIdentityProvider) Authorize(context.Context, *gestalt.Authoriz
 }
 
 func (p *recordingIdentityProvider) Token(ctx context.Context, _ *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
-	call := gestalt.IdentityCallContextFromContext(gestalt.AuthCallContextFromIncoming(ctx))
+	call := gestalt.IdentityCallContextFromContext(ctx)
 	p.mu.Lock()
 	p.callerSubjectID = call.CallerSubjectID
 	p.mu.Unlock()
