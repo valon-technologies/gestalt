@@ -1,10 +1,39 @@
 package server
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
+
+func TestCallerAuthContextAttachesCanonicalSubject(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tokens", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	canonical := "user:11111111-1111-1111-1111-111111111111"
+	ctx := principal.WithPrincipal(req.Context(), &principal.Principal{
+		SubjectID: canonical,
+		Kind:      principal.KindUser,
+	})
+
+	got := s.callerAuthContext(ctx, req)
+	call := gestalt.IdentityCallContextFromContext(got)
+	if call.CallerBearerToken != "session-token" {
+		t.Fatalf("CallerBearerToken = %q, want session-token", call.CallerBearerToken)
+	}
+	if call.CallerSubjectID != canonical {
+		t.Fatalf("CallerSubjectID = %q, want %q", call.CallerSubjectID, canonical)
+	}
+	if gestalt.TrustedCallerSubjectFromContext(got) != canonical {
+		t.Fatalf("TrustedCallerSubject = %q, want %q", gestalt.TrustedCallerSubjectFromContext(got), canonical)
+	}
+}
 
 func TestTokenExpiresIn(t *testing.T) {
 	t.Parallel()

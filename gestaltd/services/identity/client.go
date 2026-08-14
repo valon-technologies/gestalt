@@ -164,6 +164,7 @@ func (p *remoteIdentityProvider) Authorize(ctx context.Context, req *core.Author
 func (p *remoteIdentityProvider) Token(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
+	ctx = p.outgoingIdentityCallContext(ctx)
 
 	resp, err := p.client.Token(ctx, tokenRequestToProto(req))
 	if err != nil {
