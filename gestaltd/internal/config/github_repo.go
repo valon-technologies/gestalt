@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -60,4 +61,29 @@ func gitHubRepoFromPath(p string) (GitHubRepo, error) {
 		return GitHubRepo{}, fmt.Errorf("github repo path must be <owner>/<repo>")
 	}
 	return GitHubRepo{Owner: parts[0], Name: name}, nil
+}
+
+const gitHubSnapshotRemoteErr = "source.git snapshots require https://github.com/<owner>/<repo>[.git]"
+
+// ParseGitHubSnapshotRemote extracts owner and name from a GitHub remote that
+// snapshots accept: https://github.com/<owner>/<repo> or git@github.com:<owner>/<repo>.
+// Other forms that ParseGitHubRepo accepts (http, ssh://, www.github.com) fail here.
+func ParseGitHubSnapshotRemote(raw string) (GitHubRepo, error) {
+	raw = strings.TrimSpace(raw)
+	if !gitHubSnapshotRemoteForm(raw) {
+		return GitHubRepo{}, errors.New(gitHubSnapshotRemoteErr)
+	}
+	repo, err := ParseGitHubRepo(raw)
+	if err != nil {
+		return GitHubRepo{}, errors.New(gitHubSnapshotRemoteErr)
+	}
+	return repo, nil
+}
+
+func gitHubSnapshotRemoteForm(raw string) bool {
+	if strings.HasPrefix(raw, "git@github.com:") {
+		return true
+	}
+	parsed, err := url.Parse(raw)
+	return err == nil && parsed.Scheme == "https" && strings.EqualFold(parsed.Host, "github.com")
 }

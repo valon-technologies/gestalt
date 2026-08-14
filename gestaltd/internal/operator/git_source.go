@@ -38,7 +38,7 @@ type SnapshotSourceRefPath struct {
 }
 
 func NewSnapshotSourceRefPath(repoURL, ref, manifestPath string) (SnapshotSourceRefPath, error) {
-	host, owner, name, err := githubRepoPath(repoURL)
+	repo, err := config.ParseGitHubSnapshotRemote(repoURL)
 	if err != nil {
 		return SnapshotSourceRefPath{}, err
 	}
@@ -47,11 +47,8 @@ func NewSnapshotSourceRefPath(repoURL, ref, manifestPath string) (SnapshotSource
 	if manifestPath == "" || manifestPath == "." || strings.HasPrefix(manifestPath, "../") || path.IsAbs(manifestPath) {
 		return SnapshotSourceRefPath{}, fmt.Errorf("source.git.path must be a clean relative path")
 	}
-	providerDir := path.Dir(manifestPath)
-	if providerDir == "." {
-		providerDir = ""
-	}
-	sourceRepository := path.Join(host, owner, name)
+	providerDir := config.AppDirFromManifestPath(manifestPath)
+	sourceRepository := path.Join("github.com", repo.Owner, repo.Name)
 	parts := []string{sourceRepository, sourceRef}
 	if providerDir != "" {
 		parts = append(parts, strings.Split(providerDir, "/")...)
@@ -177,24 +174,6 @@ func snapshotSourceFileURL(base string, snapshotPath SnapshotSourceRefPath, file
 	query.Set("sourceRef", snapshotPath.SourceRef)
 	parsed.RawQuery = query.Encode()
 	return parsed.String(), nil
-}
-
-// githubRepoPath uses the shared GitHub owner/name parser, then keeps the
-// snapshot rule: https://github.com/<owner>/<repo> or git@github.com:.
-func githubRepoPath(raw string) (string, string, string, error) {
-	raw = strings.TrimSpace(raw)
-	repo, err := config.ParseGitHubRepo(raw)
-	if err != nil {
-		return "", "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
-	}
-	if strings.HasPrefix(raw, "git@github.com:") {
-		return "github.com", repo.Owner, repo.Name, nil
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "github.com") {
-		return "", "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
-	}
-	return "github.com", repo.Owner, repo.Name, nil
 }
 
 func (l *Lifecycle) gitSourceManifestPath(ctx context.Context, paths lifecyclePaths, entry *config.ProviderEntry) (string, error) {

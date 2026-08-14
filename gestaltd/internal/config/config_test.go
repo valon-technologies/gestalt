@@ -7423,6 +7423,32 @@ func TestGitSourceDefIdentity(t *testing.T) {
 	}
 }
 
+func TestAppDirFromManifestPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "nested", path: "apps/foo/manifest.yaml", want: "apps/foo"},
+		{name: "root", path: "manifest.yaml", want: ""},
+		{name: "messy", path: "apps//foo/../foo/manifest.yaml", want: "apps/foo"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := AppDirFromManifestPath(tc.path); got != tc.want {
+				t.Fatalf("AppDirFromManifestPath(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+			git := GitSourceDef{Path: tc.path}
+			if got := git.AppDir(); got != tc.want {
+				t.Fatalf("GitSourceDef.AppDir(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestGitSourceDefTreeURL(t *testing.T) {
 	t.Parallel()
 

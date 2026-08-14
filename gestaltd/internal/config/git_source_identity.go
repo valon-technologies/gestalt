@@ -27,11 +27,23 @@ func (g GitSourceDef) Identity() (GitSourceIdentity, bool) {
 	if ref == "" {
 		return GitSourceIdentity{}, false
 	}
-	appDir := path.Dir(normalizeGitLocationManifestPath(g.Path))
-	if appDir == "." {
-		appDir = ""
+	return GitSourceIdentity{Repo: repo, Ref: ref, AppDir: g.AppDir()}, true
+}
+
+// AppDir is the app directory (parent of the manifest). Empty when the
+// manifest is at the repository root.
+func (g GitSourceDef) AppDir() string {
+	return AppDirFromManifestPath(g.Path)
+}
+
+// AppDirFromManifestPath is the app directory for a git source manifest path.
+// Empty when the manifest is at the repository root.
+func AppDirFromManifestPath(manifestPath string) string {
+	dir := path.Dir(normalizeGitLocationManifestPath(manifestPath))
+	if dir == "." {
+		return ""
 	}
-	return GitSourceIdentity{Repo: repo, Ref: ref, AppDir: appDir}, true
+	return dir
 }
 
 // TreeURL is the GitHub website projection of Identity. Empty when this
