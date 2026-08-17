@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -250,6 +251,8 @@ func TestBootstrapAppRegistryPublishFailsWhenSigningUnavailable(t *testing.T) {
 
 	restoreProbe := stubProbeGCSRegistryBucket(t, nil)
 	defer restoreProbe()
+	restorePermissions := stubCheckGCSRegistryPermissions(t, nil)
+	defer restorePermissions()
 	restoreSigning := stubCheckUploadSigning(t, fmt.Errorf("signBlob unavailable"))
 	defer restoreSigning()
 
@@ -274,6 +277,8 @@ func TestBootstrapAppRegistryPublishFailsWhenBucketUnavailable(t *testing.T) {
 
 	restoreProbe := stubProbeGCSRegistryBucket(t, errors.New("bucket unavailable"))
 	defer restoreProbe()
+	restorePermissions := stubCheckGCSRegistryPermissions(t, nil)
+	defer restorePermissions()
 
 	_, err = server.BootstrapAppRegistryPublishForTest(cfg)
 	if err == nil || !strings.Contains(err.Error(), "bucket unavailable") {
@@ -301,7 +306,9 @@ func newRegistryPublishHarness(t *testing.T) registryPublishHarness {
 	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
 	limits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}}
 	service := &appregistry.StatelessPublishService{
-		Store: store, Signer: signer, Writer: &appregistry.Writer{Store: store}, Limits: limits,
+		Registry: "toolshed", StorageRoot: "gs://gitlab-peach-street-gestalt-app-registry",
+		PublicRoot: "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry",
+		Store:      store, Signer: signer, Writer: &appregistry.Writer{Store: store}, Limits: limits,
 	}
 	declaration, artifactBytes := testServerPublishDeclaration(t, "g-issues", "0.3.0-dev.server")
 	return registryPublishHarness{
@@ -429,6 +436,13 @@ func stubProbeGCSRegistryBucket(t *testing.T, err error) func() {
 func stubCheckUploadSigning(t *testing.T, err error) func() {
 	t.Helper()
 	prev := server.CheckUploadSigningForTest()
-	server.SetCheckUploadSigningForTest(func(*appregistry.GCSUploadSigner, string) error { return err })
+	server.SetCheckUploadSigningForTest(func(*appregistry.GCSUploadSigner) error { return err })
 	return func() { server.SetCheckUploadSigningForTest(prev) }
+}
+
+func stubCheckGCSRegistryPermissions(t *testing.T, err error) func() {
+	t.Helper()
+	prev := server.CheckGCSRegistryPermissionsForTest()
+	server.SetCheckGCSRegistryPermissionsForTest(func(context.Context, string) error { return err })
+	return func() { server.SetCheckGCSRegistryPermissionsForTest(prev) }
 }
