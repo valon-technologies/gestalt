@@ -154,11 +154,11 @@ func (w *Writer) preflightImmutableObject(object PublishObject) error {
 		return nil
 	}
 	if object.Kind == PublishObjectKindEntry {
-		matches, err := w.entryObjectMatchesExistingBytes(object)
+		skipped, err := w.reconcileExistingEntryObject(object)
 		if err != nil {
 			return err
 		}
-		if matches {
+		if skipped {
 			return nil
 		}
 		return fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
@@ -221,15 +221,13 @@ func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef s
 		return ImmutableObjectOutcome{}, "", err
 	}
 	if described.Generation != 0 && object.Kind == PublishObjectKindEntry {
-		matches, err := w.entryObjectMatchesExistingBytes(object)
+		skipped, err := w.reconcileExistingEntryObject(object)
 		if err != nil {
 			return ImmutableObjectOutcome{}, "", err
 		}
-		if matches {
-			return ImmutableObjectOutcome{
-				StorageURL: object.StorageURL,
-				Outcome:    ObjectWriteOutcomeSkipped,
-			}, fmt.Sprintf("skipped existing %s", object.StorageURL), nil
+		if skipped {
+			outcome, line := entryObjectSkippedOutcome(object)
+			return outcome, line, nil
 		}
 		return ImmutableObjectOutcome{}, "", fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
 	}
@@ -239,6 +237,17 @@ func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef s
 		SourceRef:  sourceRef,
 		SHA256:     object.SHA256,
 	}); err != nil {
+		if object.Kind == PublishObjectKindEntry && errors.Is(err, ErrObjectPreconditionFailed) {
+			skipped, reconcileErr := w.reconcileExistingEntryObject(object)
+			if reconcileErr != nil {
+				return ImmutableObjectOutcome{}, "", reconcileErr
+			}
+			if skipped {
+				outcome, line := entryObjectSkippedOutcome(object)
+				return outcome, line, nil
+			}
+			return ImmutableObjectOutcome{}, "", fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
+		}
 		return ImmutableObjectOutcome{}, "", err
 	}
 	return ImmutableObjectOutcome{
@@ -276,6 +285,21 @@ func (w *Writer) entryObjectMatchesExistingBytes(object PublishObject) (bool, er
 		return false, nil
 	}
 	return EntryFileEquivalentIgnoringPublishedAt(object.LocalPath, existing)
+}
+
+func entryObjectSkippedOutcome(object PublishObject) (ImmutableObjectOutcome, string) {
+	return ImmutableObjectOutcome{
+		StorageURL: object.StorageURL,
+		Outcome:    ObjectWriteOutcomeSkipped,
+	}, fmt.Sprintf("skipped existing %s", object.StorageURL)
+}
+
+func (w *Writer) reconcileExistingEntryObject(object PublishObject) (bool, error) {
+	matches, err := w.entryObjectMatchesExistingBytes(object)
+	if err != nil {
+		return false, err
+	}
+	return matches, nil
 }
 
 func (w *Writer) uploadIndex(req PublishRequest, entry Entry, progress PublishProgress) (CatalogWriteOutcome, error) {

@@ -526,3 +526,123 @@ func TestWriter_uploadImmutableObjectIfNeeded_RejectsConcurrentConflictingEntry(
 		t.Fatalf("uploadImmutableObjectIfNeeded() = %v, want ErrRegistryEntryConflict", err)
 	}
 }
+
+type entryWriteCollisionStore struct {
+	RegistryObjectStore
+	entryURL        string
+	injectLocalPath string
+	mu              sync.Mutex
+}
+
+func (s *entryWriteCollisionStore) WriteImmutableObject(input WriteImmutableObjectInput) error {
+	if input.StorageURL != s.entryURL {
+		return s.RegistryObjectStore.WriteImmutableObject(input)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.RegistryObjectStore.WriteImmutableObject(WriteImmutableObjectInput{
+		LocalPath:  s.injectLocalPath,
+		StorageURL: s.entryURL,
+		SourceRef:  input.SourceRef,
+	}); err != nil {
+		return err
+	}
+	return fmt.Errorf("%w: %s", ErrObjectPreconditionFailed, input.StorageURL)
+}
+
+func TestWriter_uploadImmutableObjectIfNeeded_ReconcilesWriteCollisionEquivalentEntry(t *testing.T) {
+	t.Parallel()
+
+	store := NewMemoryObjectStore()
+	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.13")
+	winningPublishedAt := time.Date(2026, 8, 17, 10, 0, 0, 0, time.UTC)
+	laterPublishedAt := time.Date(2026, 8, 17, 11, 0, 0, 0, time.UTC)
+
+	winningEntry := manifest.Entry
+	winningEntry.PublishedAt = winningPublishedAt
+	winningData, err := json.MarshalIndent(winningEntry, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal winning entry: %v", err)
+	}
+	winningPath, err := WriteTempJSON("gestalt-app-entry-winning-*", append(winningData, '\n'))
+	if err != nil {
+		t.Fatalf("WriteTempJSON(): %v", err)
+	}
+
+	localEntry := manifest.Entry
+	localEntry.PublishedAt = laterPublishedAt
+	localData, err := json.MarshalIndent(localEntry, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal local entry: %v", err)
+	}
+	if err := os.WriteFile(manifest.EntryObject.LocalPath, append(localData, '\n'), 0o644); err != nil {
+		t.Fatalf("rewrite local entry: %v", err)
+	}
+
+	collisionStore := &entryWriteCollisionStore{
+		RegistryObjectStore: store,
+		entryURL:            manifest.EntryObject.StorageURL,
+		injectLocalPath:     winningPath,
+	}
+	writer := &Writer{Store: collisionStore}
+	outcome, _, err := writer.uploadImmutableObjectIfNeeded(manifest.EntryObject, "651a5c30feb995c9364c38f63d0d5c3880bc2055")
+	if err != nil {
+		t.Fatalf("uploadImmutableObjectIfNeeded() = %v", err)
+	}
+	if outcome.Outcome != ObjectWriteOutcomeSkipped {
+		t.Fatalf("outcome = %q, want skipped", outcome.Outcome)
+	}
+}
+
+func TestWriter_uploadImmutableObjectIfNeeded_RejectsWriteCollisionConflictingEntry(t *testing.T) {
+	t.Parallel()
+
+	store := NewMemoryObjectStore()
+	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.14")
+	conflicting := manifest.Entry
+	conflicting.SourceRef = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	conflictingData, err := json.MarshalIndent(conflicting, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal conflicting entry: %v", err)
+	}
+	conflictingPath, err := WriteTempJSON("gestalt-app-entry-conflicting-*", append(conflictingData, '\n'))
+	if err != nil {
+		t.Fatalf("WriteTempJSON(): %v", err)
+	}
+
+	collisionStore := &entryWriteCollisionStore{
+		RegistryObjectStore: store,
+		entryURL:            manifest.EntryObject.StorageURL,
+		injectLocalPath:     conflictingPath,
+	}
+	writer := &Writer{Store: collisionStore}
+	_, _, err = writer.uploadImmutableObjectIfNeeded(manifest.EntryObject, "651a5c30feb995c9364c38f63d0d5c3880bc2055")
+	if !errors.Is(err, ErrRegistryEntryConflict) {
+		t.Fatalf("uploadImmutableObjectIfNeeded() = %v, want ErrRegistryEntryConflict", err)
+	}
+}
+
+func TestWriter_uploadImmutableObjectIfNeeded_FailsClosedOnWriteCollisionMalformedEntry(t *testing.T) {
+	t.Parallel()
+
+	store := NewMemoryObjectStore()
+	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.15")
+	malformedPath, err := WriteTempJSON("gestalt-app-entry-malformed-*", []byte("{not-json\n"))
+	if err != nil {
+		t.Fatalf("WriteTempJSON(): %v", err)
+	}
+
+	collisionStore := &entryWriteCollisionStore{
+		RegistryObjectStore: store,
+		entryURL:            manifest.EntryObject.StorageURL,
+		injectLocalPath:     malformedPath,
+	}
+	writer := &Writer{Store: collisionStore}
+	_, _, err = writer.uploadImmutableObjectIfNeeded(manifest.EntryObject, "651a5c30feb995c9364c38f63d0d5c3880bc2055")
+	if err == nil {
+		t.Fatal("expected malformed winning entry to fail closed")
+	}
+	if errors.Is(err, ErrRegistryEntryConflict) || errors.Is(err, ErrObjectPreconditionFailed) {
+		t.Fatalf("uploadImmutableObjectIfNeeded() = %v, want decode/read failure", err)
+	}
+}
