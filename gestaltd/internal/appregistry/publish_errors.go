@@ -29,7 +29,9 @@ func PublishHTTPStatus(err error) int {
 		return 400
 	case errors.Is(err, ErrPublishVersionConflict),
 		errors.Is(err, ErrPublishUploadMismatch),
-		errors.Is(err, ErrPublishReconcileMismatch):
+		errors.Is(err, ErrPublishReconcileMismatch),
+		errors.Is(err, ErrRegistryEntryConflict),
+		errors.Is(err, ErrObjectPreconditionFailed):
 		return 409
 	case errors.Is(err, ErrPublishRegistryNotEnrolled):
 		return 404
