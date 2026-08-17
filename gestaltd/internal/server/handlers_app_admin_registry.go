@@ -23,20 +23,20 @@ import (
 )
 
 type appAdminRegistryResponse struct {
-	App               string                     `json:"app"`
-	Registry          string                     `json:"registry"`
-	DesiredVersion    string                     `json:"desiredVersion,omitempty"`
-	KnownVersions     []adminAppInstallationInfo `json:"knownVersions"`
-	PublishedVersions []appAdminPublishedVersion `json:"publishedVersions"`
-	PendingVersions   []appAdminPendingVersion   `json:"pendingVersions,omitempty"`
-	FailedVersions    []appAdminFailedVersion    `json:"failedVersions,omitempty"`
-	Rollout           *appAdminRollout           `json:"rollout,omitempty"`
-	FleetState        *appAdminFleetState        `json:"fleetState,omitempty"`
-	Recovery          *appAdminRecovery          `json:"recovery,omitempty"`
-	AutoDeploy        appAdminAutoDeploy         `json:"autoDeploy"`
+	App               string                                  `json:"app"`
+	Registry          string                                  `json:"registry"`
+	DesiredVersion    string                                  `json:"desiredVersion,omitempty"`
+	KnownVersions     []adminAppInstallationInfo              `json:"knownVersions"`
+	PublishedVersions []appAdminPublishedVersion              `json:"publishedVersions"`
+	PendingVersions   []appAdminPendingVersion                `json:"pendingVersions,omitempty"`
+	FailedVersions    []appAdminFailedVersion                 `json:"failedVersions,omitempty"`
+	Rollout           *appAdminRollout                        `json:"rollout,omitempty"`
+	FleetState        *appAdminFleetState                     `json:"fleetState,omitempty"`
+	Recovery          *appAdminRecovery                       `json:"recovery,omitempty"`
+	AutoDeploy        appAdminAutoDeploy                      `json:"autoDeploy"`
 	PublishSessions   []appAdminRegistryPublishSessionSummary `json:"publishSessions,omitempty"`
-	SelectionDisabled bool                       `json:"selectionDisabled"`
-	DisabledReason    string                     `json:"disabledReason,omitempty"`
+	SelectionDisabled bool                                    `json:"selectionDisabled"`
+	DisabledReason    string                                  `json:"disabledReason,omitempty"`
 }
 
 type appAdminAutoDeploy struct {
