@@ -52,6 +52,22 @@ func gcsBucketObjectFromURL(storageURL string) (bucket, object string, err error
 	return bucket, object, nil
 }
 
+func gcsBucketFromStorageRoot(storageRoot string) (string, error) {
+	storageRoot = strings.TrimSpace(storageRoot)
+	if storageRoot == "" {
+		return "", fmt.Errorf("storage root is required")
+	}
+	if !strings.HasPrefix(storageRoot, "gs://") {
+		return "", fmt.Errorf("storage root must be a gs:// URL")
+	}
+	bucket := strings.TrimPrefix(storageRoot, "gs://")
+	bucket = strings.Trim(bucket, "/")
+	if bucket == "" || strings.Contains(bucket, "/") {
+		return "", fmt.Errorf("storage root must name exactly one bucket")
+	}
+	return bucket, nil
+}
+
 // RegistryUploadSigner mints short-lived create-only upload URLs.
 type RegistryUploadSigner interface {
 	SignCreateUpload(input SignCreateUploadInput) (SignCreateUploadResult, error)
@@ -61,7 +77,6 @@ type SignCreateUploadInput struct {
 	StorageURL    string
 	SHA256        string
 	ContentLength int64
-	SourceRef     string
 	ExpiresAt     time.Time
 }
 
@@ -75,7 +90,10 @@ func BuildSignedUploadHeaders(contentLength int64, sha256Hex string) (map[string
 	if contentLength <= 0 {
 		return nil, fmt.Errorf("content length is required")
 	}
-	digestHex := strings.ToLower(strings.TrimSpace(sha256Hex))
+	digestHex, err := normalizePublishArtifactSHA256(sha256Hex)
+	if err != nil {
+		return nil, err
+	}
 	sum, err := hex.DecodeString(digestHex)
 	if err != nil || len(sum) != sha256.Size {
 		return nil, fmt.Errorf("sha256 must be %d hex bytes", sha256.Size)
@@ -101,21 +119,52 @@ func signedUploadHeaderLines(headers map[string]string) []string {
 	return lines
 }
 
-// GCSRegistryStore implements RegistryObjectStore against one GCS bucket.
-type GCSRegistryStore struct {
-	SourceRef string
+func cloneSignedUploadHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(headers))
+	for _, name := range signedUploadHeaderOrder {
+		if value, ok := headers[name]; ok {
+			out[name] = value
+		}
+	}
+	return out
+}
 
+// GCSRegistryStore implements RegistryObjectStore against one bound GCS bucket.
+type GCSRegistryStore struct {
+	SourceRef  string
+	Bucket     string
 	clientOnce sync.Once
 	client     *storage.Client
 	clientErr  error
 }
 
-func NewGCSRegistryStore(sourceRef string) *GCSRegistryStore {
+func NewGCSRegistryStore(sourceRef, storageRoot string) (*GCSRegistryStore, error) {
 	sourceRef = strings.TrimSpace(sourceRef)
 	if sourceRef == "" {
 		sourceRef = "gestaltd-publish"
 	}
-	return &GCSRegistryStore{SourceRef: sourceRef}
+	bucket, err := gcsBucketFromStorageRoot(storageRoot)
+	if err != nil {
+		return nil, err
+	}
+	return &GCSRegistryStore{SourceRef: sourceRef, Bucket: bucket}, nil
+}
+
+func (s *GCSRegistryStore) validateStorageURL(storageURL string) (bucket, object string, err error) {
+	bucket, object, err = gcsBucketObjectFromURL(storageURL)
+	if err != nil {
+		return "", "", err
+	}
+	if s == nil || strings.TrimSpace(s.Bucket) == "" {
+		return "", "", fmt.Errorf("registry store bucket is not configured")
+	}
+	if bucket != s.Bucket {
+		return "", "", fmt.Errorf("storage URL bucket %q is outside bound registry bucket %q", bucket, s.Bucket)
+	}
+	return bucket, object, nil
 }
 
 func (s *GCSRegistryStore) storageClient() (*storage.Client, error) {
@@ -130,7 +179,7 @@ func (s *GCSRegistryStore) DescribeObject(storageURL string) (ObjectDescription,
 	if err != nil {
 		return ObjectDescription{}, fmt.Errorf("create storage client: %w", err)
 	}
-	bucket, object, err := gcsBucketObjectFromURL(storageURL)
+	bucket, object, err := s.validateStorageURL(storageURL)
 	if err != nil {
 		return ObjectDescription{}, err
 	}
@@ -153,7 +202,7 @@ func (s *GCSRegistryStore) ReadObject(storageURL string) (int64, []byte, error) 
 	if err != nil {
 		return 0, nil, fmt.Errorf("create storage client: %w", err)
 	}
-	bucket, object, err := gcsBucketObjectFromURL(storageURL)
+	bucket, object, err := s.validateStorageURL(storageURL)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -181,7 +230,7 @@ func (s *GCSRegistryStore) WriteImmutableObject(input WriteImmutableObjectInput)
 	if err != nil {
 		return fmt.Errorf("create storage client: %w", err)
 	}
-	bucket, object, err := gcsBucketObjectFromURL(input.StorageURL)
+	bucket, object, err := s.validateStorageURL(input.StorageURL)
 	if err != nil {
 		return err
 	}
@@ -214,7 +263,7 @@ func (s *GCSRegistryStore) WriteCatalogObject(input WriteCatalogObjectInput) err
 	if err != nil {
 		return fmt.Errorf("create storage client: %w", err)
 	}
-	bucket, object, err := gcsBucketObjectFromURL(input.StorageURL)
+	bucket, object, err := s.validateStorageURL(input.StorageURL)
 	if err != nil {
 		return err
 	}
@@ -246,11 +295,11 @@ func (s *GCSRegistryStore) PromoteObject(input PromoteObjectInput) error {
 	if err != nil {
 		return fmt.Errorf("create storage client: %w", err)
 	}
-	srcBucket, srcObject, err := gcsBucketObjectFromURL(input.SourceURL)
+	srcBucket, srcObject, err := s.validateStorageURL(input.SourceURL)
 	if err != nil {
 		return err
 	}
-	destBucket, destObject, err := gcsBucketObjectFromURL(input.DestURL)
+	destBucket, destObject, err := s.validateStorageURL(input.DestURL)
 	if err != nil {
 		return err
 	}
@@ -385,20 +434,20 @@ func (s *GCSUploadSigner) SignCreateUpload(input SignCreateUploadInput) (SignCre
 	if err != nil {
 		return SignCreateUploadResult{}, err
 	}
-	signedHeaders := signedUploadHeaderLines(headers)
-	if sourceRef := strings.TrimSpace(input.SourceRef); sourceRef != "" {
-		signedHeaders = append(signedHeaders, "x-goog-meta-source-ref:"+sourceRef)
-	}
 	uploadURL, err := s.signedURL(client, bucket, object, &storage.SignedURLOptions{
 		Scheme:  storage.SigningSchemeV4,
 		Method:  "PUT",
-		Headers: signedHeaders,
+		Headers: signedUploadHeaderLines(headers),
 		Expires: expiresAt.UTC(),
 	})
 	if err != nil {
 		return SignCreateUploadResult{}, fmt.Errorf("sign upload URL for %s: %w", storageURL, err)
 	}
-	return SignCreateUploadResult{UploadURL: uploadURL, ExpiresAt: expiresAt.UTC(), Headers: headers}, nil
+	return SignCreateUploadResult{
+		UploadURL: uploadURL,
+		ExpiresAt: expiresAt.UTC(),
+		Headers:   cloneSignedUploadHeaders(headers),
+	}, nil
 }
 
 func NewMemoryRegistryUploadSigner(store *MemoryObjectStore, baseURL string) RegistryUploadSigner {
@@ -443,7 +492,11 @@ func (s *memoryUploadSigner) SignCreateUpload(input SignCreateUploadInput) (Sign
 	if err != nil {
 		return SignCreateUploadResult{}, err
 	}
-	return SignCreateUploadResult{UploadURL: u.String(), ExpiresAt: expiresAt.UTC(), Headers: headers}, nil
+	return SignCreateUploadResult{
+		UploadURL: u.String(),
+		ExpiresAt: expiresAt.UTC(),
+		Headers:   cloneSignedUploadHeaders(headers),
+	}, nil
 }
 
 // ApplyMemoryUpload applies a signed memory upload URL to the backing store.
@@ -483,4 +536,46 @@ func ApplyMemoryUpload(store *MemoryObjectStore, uploadURL string, data []byte, 
 		StorageURL: objectURL,
 		SHA256:     strings.ToLower(strings.TrimSpace(sha256)),
 	})
+}
+
+// CheckGCSRegistryStorePermissions verifies non-destructive IAM permissions for publish CAS flows.
+func CheckGCSRegistryStorePermissions(ctx context.Context, storageRoot string) error {
+	bucket, err := gcsBucketFromStorageRoot(storageRoot)
+	if err != nil {
+		return err
+	}
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	permissions, err := client.Bucket(bucket).IAM().TestPermissions(ctx, []string{
+		"storage.objects.get",
+		"storage.objects.create",
+		"storage.objects.delete",
+		"storage.objects.update",
+	})
+	if err != nil {
+		return fmt.Errorf("test gcs registry permissions: %w", err)
+	}
+	required := map[string]struct{}{
+		"storage.objects.get":    {},
+		"storage.objects.create": {},
+		"storage.objects.delete": {},
+		"storage.objects.update": {},
+	}
+	granted := make(map[string]struct{}, len(permissions))
+	for _, permission := range permissions {
+		granted[permission] = struct{}{}
+	}
+	var missing []string
+	for permission := range required {
+		if _, ok := granted[permission]; !ok {
+			missing = append(missing, permission)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("gcs registry permissions missing: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }

@@ -14,7 +14,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -27,11 +26,11 @@ func (s *Server) mountAppAdminRegistryPublishRoutes(r chi.Router) {
 }
 
 func (s *Server) beginAppAdminRegistryPublish(w http.ResponseWriter, r *http.Request) {
-	app, registryConfig, ok := s.appAdminRegistryConfig(w, r)
+	app, _, ok := s.appAdminRegistryConfig(w, r)
 	if !ok {
 		return
 	}
-	service, storageRoot, publicRoot, ok := s.appAdminPublishService(w, registryConfig)
+	service, ok := s.appAdminPublishService(w)
 	if !ok {
 		return
 	}
@@ -43,10 +42,11 @@ func (s *Server) beginAppAdminRegistryPublish(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	result, err := service.Begin(r.Context(), appregistry.AdminPublishInput{
-		App: app.name, Registry: app.registry, StorageRoot: storageRoot, PublicRoot: publicRoot, Declaration: declaration,
+	result, err := service.Begin(r.Context(), app.registry, appregistry.AdminPublishInput{
+		App: app.name, Declaration: declaration,
 	})
 	if err != nil {
+		s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, "", "app.registry.publish.begin", false, err.Error())
 		writeError(w, appregistry.PublishHTTPStatus(err), err.Error())
 		return
 	}
@@ -55,11 +55,11 @@ func (s *Server) beginAppAdminRegistryPublish(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.Request) {
-	app, registryConfig, ok := s.appAdminRegistryConfig(w, r)
+	app, _, ok := s.appAdminRegistryConfig(w, r)
 	if !ok {
 		return
 	}
-	service, storageRoot, publicRoot, ok := s.appAdminPublishService(w, registryConfig)
+	service, ok := s.appAdminPublishService(w)
 	if !ok {
 		return
 	}
@@ -95,9 +95,8 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 			}
 		}
 	}
-	result, err := service.Finalize(r.Context(), appregistry.AdminPublishInput{
-		App: app.name, PublishID: publishID, Registry: app.registry,
-		StorageRoot: storageRoot, PublicRoot: publicRoot,
+	result, err := service.Finalize(r.Context(), app.registry, appregistry.AdminPublishInput{
+		App: app.name, PublishID: publishID,
 		DisplayName: displayName, Description: description,
 		GestaltdVersion: strings.TrimSpace(s.sourceVersion), Declaration: declaration,
 	})
@@ -132,22 +131,12 @@ func (s *Server) decodePublishDeclaration(w http.ResponseWriter, r *http.Request
 	return body.Declaration, true
 }
 
-func (s *Server) appAdminPublishService(w http.ResponseWriter, registry config.AppRegistryConfig) (*appregistry.StatelessPublishService, string, string, bool) {
+func (s *Server) appAdminPublishService(w http.ResponseWriter) (*appregistry.StatelessPublishService, bool) {
 	if s.appRegistryPublish == nil {
 		writeError(w, http.StatusServiceUnavailable, "app registry publish is unavailable")
-		return nil, "", "", false
+		return nil, false
 	}
-	storageRoot, err := registry.StorageURL()
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "app registry is unavailable")
-		return nil, "", "", false
-	}
-	publicRoot, err := registry.PublicURL()
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "app registry is unavailable")
-		return nil, "", "", false
-	}
-	return s.appRegistryPublish, storageRoot, publicRoot, true
+	return s.appRegistryPublish, true
 }
 
 func (s *Server) appAdminPublisherSubjectID(w http.ResponseWriter, r *http.Request) (string, bool) {

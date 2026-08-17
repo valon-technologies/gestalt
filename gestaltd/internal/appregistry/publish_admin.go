@@ -2,82 +2,18 @@ package appregistry
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
-
-	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 const (
-	PublishDeclarationSchemaVersion = "gestaltd.app.publish.declaration.v1"
-	PublishStateUploading           = "uploading"
-	PublishStatePublished           = "published"
+	PublishStateUploading = "uploading"
+	PublishStatePublished = "published"
 )
-
-var (
-	ErrPublishDeclarationInvalid  = errors.New("publish declaration is invalid")
-	ErrPublishVersionConflict     = errors.New("publish version conflict")
-	ErrPublishUnavailable         = errors.New("app registry publish is unavailable")
-	ErrPublishUploadMissing       = errors.New("publish upload is missing")
-	ErrPublishUploadMismatch      = errors.New("publish upload mismatch")
-	ErrPublishArtifactLimit       = errors.New("publish artifact limit exceeded")
-	ErrPublishRequiredPlatform    = errors.New("required publish platform missing")
-	ErrPublishAppIdentityMismatch = errors.New("publish app identity mismatch")
-	ErrPublishRegistryNotEnrolled = errors.New("app is not enrolled in the registry")
-	ErrPublishIDMismatch          = errors.New("publish id mismatch")
-	ErrPublishReconcileMismatch   = errors.New("published registry entry does not match publish declaration")
-)
-
-func PublishHTTPStatus(err error) int {
-	switch {
-	case errors.Is(err, ErrPublishUnavailable):
-		return 503
-	case errors.Is(err, ErrPublishDeclarationInvalid),
-		errors.Is(err, ErrPublishRequiredPlatform),
-		errors.Is(err, ErrPublishArtifactLimit),
-		errors.Is(err, ErrPublishAppIdentityMismatch),
-		errors.Is(err, ErrPublishUploadMissing),
-		errors.Is(err, ErrPublishIDMismatch):
-		return 400
-	case errors.Is(err, ErrPublishVersionConflict),
-		errors.Is(err, ErrPublishUploadMismatch),
-		errors.Is(err, ErrPublishReconcileMismatch):
-		return 409
-	case errors.Is(err, ErrPublishRegistryNotEnrolled):
-		return 404
-	default:
-		return 502
-	}
-}
-
-type PublishDeclaration struct {
-	Schema          string                       `json:"schema"`
-	Manifest        *providermanifestv1.Manifest `json:"manifest"`
-	ManifestPath    string                       `json:"manifestPath,omitempty"`
-	ReleaseMetadata *providerrelease.Metadata    `json:"releaseMetadata"`
-	Artifacts       []PublishDeclarationArtifact `json:"artifacts"`
-	PublicationKind PublicationKind              `json:"publicationKind,omitempty"`
-	SourceRef       string                       `json:"sourceRef,omitempty"`
-	LocalSource     *LocalSourceState            `json:"localSource,omitempty"`
-	BuilderVersion  string                       `json:"builderVersion,omitempty"`
-}
-
-type PublishDeclarationArtifact struct {
-	Platform string `json:"platform"`
-	Filename string `json:"filename"`
-	SHA256   string `json:"sha256"`
-	Size     int64  `json:"size,omitempty"`
-}
 
 type PublishLimits struct {
 	UploadURLTTL      time.Duration
@@ -121,9 +57,6 @@ type AdminPublishUpload struct {
 
 type AdminPublishInput struct {
 	App             string
-	Registry        string
-	StorageRoot     string
-	PublicRoot      string
 	PublishID       string
 	DisplayName     string
 	Description     string
@@ -132,188 +65,32 @@ type AdminPublishInput struct {
 }
 
 type StatelessPublishService struct {
-	Store  RegistryObjectStore
-	Signer RegistryUploadSigner
-	Writer *Writer
-	Limits PublishLimits
-	Now    func() time.Time
+	Registry    string
+	StorageRoot string
+	PublicRoot  string
+	Store       RegistryObjectStore
+	Signer      RegistryUploadSigner
+	Writer      *Writer
+	Limits      PublishLimits
+	Now         func() time.Time
 }
 
-func ValidatePublishDeclaration(appName string, declaration *PublishDeclaration, limits PublishLimits) error {
-	if declaration == nil {
-		return fmt.Errorf("%w: declaration is required", ErrPublishDeclarationInvalid)
+func (s *StatelessPublishService) ensureWritableRegistry(appRegistry string) error {
+	if s == nil {
+		return ErrPublishUnavailable
 	}
-	if strings.TrimSpace(declaration.Schema) != PublishDeclarationSchemaVersion {
-		return fmt.Errorf("%w: unsupported schema %q", ErrPublishDeclarationInvalid, declaration.Schema)
-	}
-	manifest := declaration.Manifest
-	if manifest == nil {
-		return fmt.Errorf("%w: manifest is required", ErrPublishDeclarationInvalid)
-	}
-	manifestApp, err := AppNameFromManifestSource(manifest.Source)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
-	}
-	if manifestApp != strings.TrimSpace(appName) {
-		return fmt.Errorf("%w: manifest app %q does not match route app %q", ErrPublishAppIdentityMismatch, manifestApp, appName)
-	}
-	if declaration.ReleaseMetadata == nil {
-		return fmt.Errorf("%w: releaseMetadata is required", ErrPublishDeclarationInvalid)
-	}
-	if err := providerrelease.ValidateMetadata(declaration.ReleaseMetadata); err != nil {
-		return fmt.Errorf("%w: releaseMetadata: %v", ErrPublishDeclarationInvalid, err)
-	}
-	if len(declaration.Artifacts) == 0 {
-		return fmt.Errorf("%w: at least one artifact is required", ErrPublishDeclarationInvalid)
-	}
-	limits = limits.withDefaults()
-	if limits.MaxArtifacts > 0 && len(declaration.Artifacts) > limits.MaxArtifacts {
-		return fmt.Errorf("%w: got %d, limit %d", ErrPublishArtifactLimit, len(declaration.Artifacts), limits.MaxArtifacts)
-	}
-	platforms := make(map[string]struct{}, len(declaration.Artifacts))
-	for _, artifact := range declaration.Artifacts {
-		platform := strings.TrimSpace(artifact.Platform)
-		filename := strings.TrimSpace(artifact.Filename)
-		digest := strings.ToLower(strings.TrimSpace(artifact.SHA256))
-		if platform == "" || filename == "" || digest == "" {
-			return fmt.Errorf("%w: artifact platform, filename, and sha256 are required", ErrPublishDeclarationInvalid)
-		}
-		if len(digest) != 64 {
-			return fmt.Errorf("%w: artifact %q sha256 must be 64 hex characters", ErrPublishDeclarationInvalid, platform)
-		}
-		if limits.MaxArtifactBytes > 0 && artifact.Size > limits.MaxArtifactBytes {
-			return fmt.Errorf("%w: artifact %q exceeds size limit", ErrPublishArtifactLimit, platform)
-		}
-		if _, ok := platforms[platform]; ok {
-			return fmt.Errorf("%w: duplicate platform %q", ErrPublishDeclarationInvalid, platform)
-		}
-		platforms[platform] = struct{}{}
-	}
-	for _, required := range limits.RequiredPlatforms {
-		required = strings.TrimSpace(required)
-		if required == "" {
-			continue
-		}
-		if _, ok := platforms[required]; !ok {
-			return fmt.Errorf("%w: %q", ErrPublishRequiredPlatform, required)
-		}
-	}
-	publicationKind := declaration.PublicationKind
-	if publicationKind == "" {
-		publicationKind = PublicationKindLocal
-	}
-	sourceRef := strings.ToLower(strings.TrimSpace(declaration.SourceRef))
-	if err := ValidatePublishInputWithOptions(manifest, manifest.Version, sourceRef, PublishValidationOptions{
-		PublicationKind: publicationKind,
-	}); err != nil {
-		return fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
-	}
-	if err := validateLocalSourceState(declaration.LocalSource); err != nil {
-		return fmt.Errorf("%w: localSource: %v", ErrPublishDeclarationInvalid, err)
+	if strings.TrimSpace(appRegistry) != strings.TrimSpace(s.Registry) {
+		return ErrPublishRegistryNotEnrolled
 	}
 	return nil
 }
 
-func DeclarationDigest(declaration *PublishDeclaration) (string, error) {
-	if declaration == nil {
-		return "", fmt.Errorf("declaration is required")
-	}
-	artifacts := append([]PublishDeclarationArtifact(nil), declaration.Artifacts...)
-	sort.Slice(artifacts, func(i, j int) bool {
-		if artifacts[i].Platform != artifacts[j].Platform {
-			return artifacts[i].Platform < artifacts[j].Platform
-		}
-		return artifacts[i].Filename < artifacts[j].Filename
-	})
-	for i := range artifacts {
-		artifacts[i].Platform = strings.TrimSpace(artifacts[i].Platform)
-		artifacts[i].Filename = strings.TrimSpace(artifacts[i].Filename)
-		artifacts[i].SHA256 = strings.ToLower(strings.TrimSpace(artifacts[i].SHA256))
-	}
-	kind := declaration.PublicationKind
-	if kind == "" {
-		kind = PublicationKindLocal
-	}
-	payload, err := json.Marshal(struct {
-		Schema          string                       `json:"schema"`
-		Manifest        *providermanifestv1.Manifest `json:"manifest"`
-		ManifestPath    string                       `json:"manifestPath,omitempty"`
-		ReleaseMetadata *providerrelease.Metadata    `json:"releaseMetadata"`
-		Artifacts       []PublishDeclarationArtifact `json:"artifacts"`
-		PublicationKind PublicationKind              `json:"publicationKind,omitempty"`
-		SourceRef       string                       `json:"sourceRef,omitempty"`
-		LocalSource     *LocalSourceState            `json:"localSource,omitempty"`
-		BuilderVersion  string                       `json:"builderVersion,omitempty"`
-	}{
-		Schema:          PublishDeclarationSchemaVersion,
-		Manifest:        declaration.Manifest,
-		ManifestPath:    strings.TrimSpace(declaration.ManifestPath),
-		ReleaseMetadata: declaration.ReleaseMetadata,
-		Artifacts:       artifacts,
-		PublicationKind: kind,
-		SourceRef:       strings.ToLower(strings.TrimSpace(declaration.SourceRef)),
-		LocalSource:     declaration.LocalSource,
-		BuilderVersion:  strings.TrimSpace(declaration.BuilderVersion),
-	})
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(payload)
-	return hex.EncodeToString(sum[:]), nil
-}
-
-func DerivePublishID(app, version, declarationDigest string) string {
-	payload := strings.TrimSpace(app) + "\x00" + strings.TrimSpace(version) + "\x00" + strings.TrimSpace(declarationDigest)
-	sum := sha256.Sum256([]byte(payload))
-	return "pub_" + hex.EncodeToString(sum[:16])
-}
-
-func PublishStagingPrefix(appName, version, declarationDigest string) string {
-	return path.Join("apps", strings.TrimSpace(appName), "publish-staging", strings.TrimSpace(version), strings.TrimSpace(declarationDigest))
-}
-
-func PublishStagingArtifactPath(stagingPrefix, platform, filename string) string {
-	return path.Join(stagingPrefix, "artifacts", strings.TrimSpace(platform), strings.TrimSpace(filename))
-}
-
-func LoadPublishedEntry(store RegistryObjectStore, storageRoot, appName, version string) (*Entry, error) {
-	if store == nil {
-		return nil, fmt.Errorf("registry store is required")
-	}
-	indexURL := StorageURL(storageRoot, AppIndexPath(appName))
-	_, indexData, err := store.ReadObject(indexURL)
-	if err != nil {
-		return nil, err
-	}
-	index, err := decodeIndexOrEmpty(indexData)
-	if err != nil {
-		return nil, fmt.Errorf("decode index: %w", err)
-	}
-	if index == nil || index.Apps == nil {
-		return nil, nil
-	}
-	appVersions, ok := index.Apps[appName]
-	if !ok {
-		return nil, nil
-	}
-	indexVersion, ok := appVersions.Versions[strings.TrimSpace(version)]
-	if !ok {
-		return nil, nil
-	}
-	entryURL := StorageURL(storageRoot, strings.TrimSpace(indexVersion.Metadata))
-	_, entryData, err := store.ReadObject(entryURL)
-	if err != nil {
-		return nil, err
-	}
-	if len(entryData) == 0 {
-		return nil, nil
-	}
-	return DecodeEntry(entryData)
-}
-
-func (s *StatelessPublishService) Begin(ctx context.Context, input AdminPublishInput) (*AdminPublishResponse, error) {
+func (s *StatelessPublishService) Begin(ctx context.Context, appRegistry string, input AdminPublishInput) (*AdminPublishResponse, error) {
 	if s == nil || s.Store == nil || s.Signer == nil {
 		return nil, ErrPublishUnavailable
+	}
+	if err := s.ensureWritableRegistry(appRegistry); err != nil {
+		return nil, err
 	}
 	limits := s.limits()
 	declaration := input.Declaration
@@ -324,25 +101,26 @@ func (s *StatelessPublishService) Begin(ctx context.Context, input AdminPublishI
 	if err != nil {
 		return nil, err
 	}
-	if entry, err := s.matchPublishedIdentity(input.StorageRoot, input.App, declaration, publishID, digest); err != nil {
-		if entry != nil && errors.Is(err, ErrPublishVersionConflict) {
-			return nil, fmt.Errorf("%w: version %q is already published with different identity", ErrPublishVersionConflict, version)
-		}
-		return nil, err
+	sourceRef := declarationSourceRef(declaration)
+	if entry, err := s.loadMatchingPublished(input.App, version, publishID, digest, sourceRef); err != nil {
+		return nil, versionConflictError(version, err)
 	} else if entry != nil {
-		return adminPublishResponse(publishID, input.App, input.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
+		return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
 	}
-	uploads, err := s.signMissingUploads(input.StorageRoot, stagingPrefix, declaration, limits)
+	uploads, err := s.signMissingUploads(stagingPrefix, declaration, limits)
 	if err != nil {
 		return nil, err
 	}
 	_ = ctx
-	return adminPublishResponse(publishID, input.App, input.Registry, version, PublishStateUploading, uploads, time.Time{}), nil
+	return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStateUploading, uploads, time.Time{}), nil
 }
 
-func (s *StatelessPublishService) Finalize(ctx context.Context, input AdminPublishInput) (*AdminPublishResponse, error) {
+func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry string, input AdminPublishInput) (*AdminPublishResponse, error) {
 	if s == nil || s.Store == nil || s.Writer == nil {
 		return nil, ErrPublishUnavailable
+	}
+	if err := s.ensureWritableRegistry(appRegistry); err != nil {
+		return nil, err
 	}
 	limits := s.limits()
 	declaration := input.Declaration
@@ -356,18 +134,15 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, input AdminPubli
 	if strings.TrimSpace(input.PublishID) != publishID {
 		return nil, fmt.Errorf("%w: got %q, want %q", ErrPublishIDMismatch, input.PublishID, publishID)
 	}
-	sourceRef := strings.ToLower(strings.TrimSpace(declaration.SourceRef))
+	sourceRef := declarationSourceRef(declaration)
 
-	if entry, matchErr := s.matchPublishedIdentity(input.StorageRoot, input.App, declaration, publishID, digest); matchErr != nil {
-		if entry != nil && errors.Is(matchErr, ErrPublishVersionConflict) {
-			return nil, fmt.Errorf("%w: version %q is already published with different identity", ErrPublishVersionConflict, version)
-		}
-		return nil, matchErr
+	if entry, matchErr := s.loadMatchingPublished(input.App, version, publishID, digest, sourceRef); matchErr != nil {
+		return nil, versionConflictError(version, matchErr)
 	} else if entry != nil {
-		return adminPublishResponse(publishID, input.App, input.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
+		return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
 	}
 
-	if err := s.promoteStagingArtifacts(stagingPrefix, declaration, input.StorageRoot, sourceRef); err != nil {
+	if err := s.promoteStagingArtifacts(stagingPrefix, declaration, sourceRef); err != nil {
 		return nil, err
 	}
 
@@ -382,30 +157,29 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, input AdminPubli
 	if err := s.Writer.Preflight(req, PublishProgress{}); err != nil {
 		return nil, err
 	}
-	result, err := s.publishWithConcurrentRetry(input, declaration, publishID, digest, req)
+	result, err := s.publishWithCatalogRetry(req)
 	if err != nil {
 		return nil, err
 	}
 	if !publishIndexCommitted(result) {
-		if entry, matchErr := s.matchPublishedIdentity(input.StorageRoot, input.App, declaration, publishID, digest); matchErr != nil || entry == nil {
-			return nil, fmt.Errorf("registry index was not updated")
-		}
+		return nil, fmt.Errorf("registry index was not updated")
 	}
 
-	entry, loadErr := LoadPublishedEntry(s.Store, input.StorageRoot, input.App, version)
+	loaded, loadErr := LoadPublishedState(s.Store, s.StorageRoot, input.App, version)
 	if loadErr != nil {
 		return nil, loadErr
 	}
-	if err := verifyPublishedEntry(entry, input.App, version, publishID, digest, sourceRef); err != nil {
-		if entry != nil {
-			if retryEntry, retryErr := s.matchPublishedIdentity(input.StorageRoot, input.App, declaration, publishID, digest); retryErr == nil && retryEntry != nil {
-				return adminPublishResponse(publishID, input.App, input.Registry, version, PublishStatePublished, nil, retryEntry.PublishedAt), nil
-			}
+	if loaded.State != PublishedLoadVerified {
+		if loaded.Err != nil {
+			return nil, loaded.Err
 		}
+		return nil, fmt.Errorf("%w: published version is not indexed", ErrPublishReconcileMismatch)
+	}
+	if err := verifyPublishedEntry(loaded.Entry, publishedExpectation(input.App, version, publishID, digest, sourceRef)); err != nil {
 		return nil, err
 	}
 	_ = ctx
-	return adminPublishResponse(publishID, input.App, input.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
+	return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, loaded.Entry.PublishedAt), nil
 }
 
 func (s *StatelessPublishService) now() time.Time {
@@ -433,63 +207,15 @@ func (s *StatelessPublishService) resolveIdentity(app string, declaration *Publi
 	return publishID, digest, version, stagingPrefix, nil
 }
 
-func (s *StatelessPublishService) matchPublishedIdentity(
-	storageRoot, appName string,
-	declaration *PublishDeclaration,
-	publishID, declarationDigest string,
-) (*Entry, error) {
-	if declaration == nil || declaration.Manifest == nil {
-		return nil, fmt.Errorf("declaration is required")
-	}
-	version := strings.TrimSpace(declaration.Manifest.Version)
-	entry, err := LoadPublishedEntry(s.Store, storageRoot, strings.TrimSpace(appName), version)
-	if err != nil {
-		return nil, err
-	}
-	if entry == nil {
-		return nil, nil
-	}
-	sourceRef := strings.ToLower(strings.TrimSpace(declaration.SourceRef))
-	if err := verifyPublishedEntry(entry, appName, version, publishID, declarationDigest, sourceRef); err != nil {
-		if strings.Contains(err.Error(), "publishId") || strings.Contains(err.Error(), "declarationDigest") || strings.Contains(err.Error(), "sourceRef") {
-			return entry, ErrPublishVersionConflict
-		}
-		return entry, err
-	}
-	return entry, nil
-}
-
-func verifyPublishedEntry(entry *Entry, app, version, publishID, declarationDigest, sourceRef string) error {
-	if entry == nil {
-		return fmt.Errorf("%w: entry is missing", ErrPublishReconcileMismatch)
-	}
-	if strings.TrimSpace(entry.App) != strings.TrimSpace(app) {
-		return fmt.Errorf("%w: app %q != %q", ErrPublishReconcileMismatch, entry.App, app)
-	}
-	if strings.TrimSpace(entry.Version) != strings.TrimSpace(version) {
-		return fmt.Errorf("%w: version %q != %q", ErrPublishReconcileMismatch, entry.Version, version)
-	}
-	if strings.TrimSpace(entry.PublishID) != strings.TrimSpace(publishID) {
-		return fmt.Errorf("%w: publishId %q != %q", ErrPublishReconcileMismatch, entry.PublishID, publishID)
-	}
-	if strings.TrimSpace(entry.DeclarationDigest) != strings.TrimSpace(declarationDigest) {
-		return fmt.Errorf("%w: declarationDigest mismatch", ErrPublishReconcileMismatch)
-	}
-	if !strings.EqualFold(strings.TrimSpace(entry.SourceRef), strings.TrimSpace(sourceRef)) {
-		return fmt.Errorf("%w: sourceRef %q != %q", ErrPublishReconcileMismatch, entry.SourceRef, sourceRef)
-	}
-	return nil
-}
-
-func publishIndexCommitted(result PublishResult) bool {
-	return result.Index == CatalogWriteOutcomeUpdated || result.Index == CatalogWriteOutcomeUnchanged
-}
-
 func verifyArtifactDescribed(described ObjectDescription, artifact PublishDeclarationArtifact) error {
 	if described.Generation == 0 {
 		return fmt.Errorf("%w: %s", ErrPublishUploadMissing, artifact.Platform)
 	}
-	if !strings.EqualFold(strings.TrimSpace(described.SHA256), strings.TrimSpace(artifact.SHA256)) {
+	expected, err := normalizePublishArtifactSHA256(artifact.SHA256)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrPublishUploadMismatch, artifact.Platform)
+	}
+	if !strings.EqualFold(strings.TrimSpace(described.SHA256), expected) {
 		return fmt.Errorf("%w: %s", ErrPublishUploadMismatch, artifact.Platform)
 	}
 	if artifact.Size > 0 && described.Size > 0 && described.Size != artifact.Size {
@@ -498,12 +224,15 @@ func verifyArtifactDescribed(described ObjectDescription, artifact PublishDeclar
 	return nil
 }
 
-func (s *StatelessPublishService) signMissingUploads(storageRoot, stagingPrefix string, declaration *PublishDeclaration, limits PublishLimits) ([]AdminPublishUpload, error) {
+func (s *StatelessPublishService) signMissingUploads(stagingPrefix string, declaration *PublishDeclaration, limits PublishLimits) ([]AdminPublishUpload, error) {
 	uploads := make([]AdminPublishUpload, 0, len(declaration.Artifacts))
 	expiresAt := s.now().Add(limits.UploadURLTTL)
-	sourceRef := strings.ToLower(strings.TrimSpace(declaration.SourceRef))
 	for _, artifact := range declaration.Artifacts {
-		stagingURL := StorageURL(storageRoot, PublishStagingArtifactPath(stagingPrefix, artifact.Platform, artifact.Filename))
+		stagingPath, err := PublishStagingArtifactPath(stagingPrefix, artifact.Platform, artifact.Filename)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
+		}
+		stagingURL := StorageURL(s.StorageRoot, stagingPath)
 		described, err := s.Store.DescribeObject(stagingURL)
 		if err != nil {
 			return nil, err
@@ -516,7 +245,7 @@ func (s *StatelessPublishService) signMissingUploads(storageRoot, stagingPrefix 
 		}
 		signed, err := s.Signer.SignCreateUpload(SignCreateUploadInput{
 			StorageURL: stagingURL, SHA256: artifact.SHA256, ContentLength: artifact.Size,
-			SourceRef: sourceRef, ExpiresAt: expiresAt,
+			ExpiresAt: expiresAt,
 		})
 		if err != nil {
 			return nil, err
@@ -531,13 +260,17 @@ func (s *StatelessPublishService) signMissingUploads(storageRoot, stagingPrefix 
 	return uploads, nil
 }
 
-func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, declaration *PublishDeclaration, storageRoot, sourceRef string) error {
+func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, declaration *PublishDeclaration, sourceRef string) error {
 	layout, err := ResolvePublishLayout(declaration.Manifest.Source, declaration.Manifest.Version)
 	if err != nil {
 		return err
 	}
 	for _, artifact := range declaration.Artifacts {
-		stagingURL := StorageURL(storageRoot, PublishStagingArtifactPath(stagingPrefix, artifact.Platform, artifact.Filename))
+		stagingPath, err := PublishStagingArtifactPath(stagingPrefix, artifact.Platform, artifact.Filename)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
+		}
+		stagingURL := StorageURL(s.StorageRoot, stagingPath)
 		described, err := s.Store.DescribeObject(stagingURL)
 		if err != nil {
 			return err
@@ -545,11 +278,13 @@ func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, 
 		if err := verifyArtifactDescribed(described, artifact); err != nil {
 			return err
 		}
-		filename := strings.TrimSpace(artifact.Filename)
-		finalRel := filepath.ToSlash(filepath.Join(layout.ArtifactPrefix, filename))
+		finalRel, err := PublishArtifactFinalRel(layout.ArtifactPrefix, artifact.Filename)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
+		}
 		if err := s.Store.PromoteObject(PromoteObjectInput{
 			SourceURL: stagingURL, SourceGeneration: described.Generation,
-			DestURL: StorageURL(storageRoot, finalRel), ExpectedSHA256: artifact.SHA256, SourceRef: sourceRef,
+			DestURL: StorageURL(s.StorageRoot, finalRel), ExpectedSHA256: artifact.SHA256, SourceRef: sourceRef,
 		}); err != nil {
 			return err
 		}
@@ -557,20 +292,16 @@ func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, 
 	return nil
 }
 
-func (s *StatelessPublishService) publishWithConcurrentRetry(
-	input AdminPublishInput,
-	declaration *PublishDeclaration,
-	publishID, digest string,
-	req PublishRequest,
-) (PublishResult, error) {
+func (s *StatelessPublishService) publishWithCatalogRetry(req PublishRequest) (PublishResult, error) {
+	attempts := defaultCatalogUpdateAttempts
+	if s != nil && s.Writer != nil && s.Writer.CatalogAttempts > 0 {
+		attempts = s.Writer.CatalogAttempts
+	}
 	var lastResult PublishResult
 	var lastErr error
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < attempts; attempt++ {
 		lastResult, lastErr = s.Writer.Publish(req, PublishProgress{})
 		if lastErr == nil && publishIndexCommitted(lastResult) {
-			return lastResult, nil
-		}
-		if entry, matchErr := s.matchPublishedIdentity(input.StorageRoot, input.App, declaration, publishID, digest); matchErr == nil && entry != nil {
 			return lastResult, nil
 		}
 		if lastErr != nil && !errors.Is(lastErr, ErrObjectPreconditionFailed) && !CatalogPreconditionFailed(lastErr) {
@@ -590,7 +321,7 @@ func (s *StatelessPublishService) buildFinalManifest(
 	if publicationKind == "" {
 		publicationKind = PublicationKindLocal
 	}
-	sourceRef := strings.ToLower(strings.TrimSpace(declaration.SourceRef))
+	sourceRef := declarationSourceRef(declaration)
 	builderVersion := strings.TrimSpace(declaration.BuilderVersion)
 	if builderVersion == "" {
 		builderVersion = strings.TrimSpace(input.GestaltdVersion)
@@ -601,12 +332,18 @@ func (s *StatelessPublishService) buildFinalManifest(
 	}
 	artifacts := make([]PublishArtifact, 0, len(declaration.Artifacts))
 	for _, artifact := range declaration.Artifacts {
-		filename := strings.TrimSpace(artifact.Filename)
-		rel := filepath.ToSlash(filepath.Join(layout.ArtifactPrefix, filename))
+		finalRel, err := PublishArtifactFinalRel(layout.ArtifactPrefix, artifact.Filename)
+		if err != nil {
+			return PublishManifest{}, err
+		}
+		digestHex, err := normalizePublishArtifactSHA256(artifact.SHA256)
+		if err != nil {
+			return PublishManifest{}, err
+		}
 		artifacts = append(artifacts, PublishArtifact{
-			Target: strings.TrimSpace(artifact.Platform), Filename: filename,
-			StorageURL: StorageURL(input.StorageRoot, rel), PublicURL: PublicURL(input.PublicRoot, rel),
-			SHA256: strings.ToLower(strings.TrimSpace(artifact.SHA256)),
+			Target: strings.TrimSpace(artifact.Platform), Filename: strings.TrimSpace(artifact.Filename),
+			StorageURL: StorageURL(s.StorageRoot, finalRel), PublicURL: PublicURL(s.PublicRoot, finalRel),
+			SHA256: digestHex,
 		})
 	}
 	entry, err := BuildEntry(BuildEntryInput{
@@ -645,13 +382,13 @@ func (s *StatelessPublishService) buildFinalManifest(
 		Entry: entry,
 		EntryObject: PublishObject{
 			Kind: PublishObjectKindEntry, LocalPath: entryPath,
-			StorageURL: StorageURL(input.StorageRoot, layout.EntryPath),
-			PublicURL:  PublicURL(input.PublicRoot, layout.EntryPath), SHA256: entryDigest,
+			StorageURL: StorageURL(s.StorageRoot, layout.EntryPath),
+			PublicURL:  PublicURL(s.PublicRoot, layout.EntryPath), SHA256: entryDigest,
 		},
 		IndexObject: PublishObject{
 			Kind:       PublishObjectKindIndex,
-			StorageURL: StorageURL(input.StorageRoot, layout.IndexPath),
-			PublicURL:  PublicURL(input.PublicRoot, layout.IndexPath),
+			StorageURL: StorageURL(s.StorageRoot, layout.IndexPath),
+			PublicURL:  PublicURL(s.PublicRoot, layout.IndexPath),
 		},
 		ArtifactObjects: artifactObjects,
 	}, nil

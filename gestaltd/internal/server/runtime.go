@@ -819,6 +819,9 @@ var (
 	checkUploadSigningFn     = func(signer *appregistry.GCSUploadSigner, storageRoot string) error {
 		return signer.CheckSigningReadiness(context.Background(), storageRoot)
 	}
+	checkGCSRegistryPermissionsFn = func(ctx context.Context, storageRoot string) error {
+		return appregistry.CheckGCSRegistryStorePermissions(ctx, storageRoot)
+	}
 )
 
 func bootstrapAppRegistryPublish(cfg *config.Config) (*appregistry.StatelessPublishService, error) {
@@ -838,11 +841,21 @@ func bootstrapAppRegistryPublish(cfg *config.Config) (*appregistry.StatelessPubl
 	if err := probeGCSRegistryBucketFn(storageRoot); err != nil {
 		return nil, fmt.Errorf("app registry publish storage credentials or bucket access unavailable: %w", err)
 	}
+	if err := checkGCSRegistryPermissionsFn(context.Background(), storageRoot); err != nil {
+		return nil, fmt.Errorf("app registry publish storage IAM permissions unavailable: %w", err)
+	}
 	signer := appregistry.NewGCSUploadSigner()
 	if err := checkUploadSigningFn(signer, storageRoot); err != nil {
 		return nil, err
 	}
-	store := appregistry.NewGCSRegistryStore("gestaltd-publish")
+	store, err := appregistry.NewGCSRegistryStore("gestaltd-publish", storageRoot)
+	if err != nil {
+		return nil, fmt.Errorf("app registry publish store: %w", err)
+	}
+	publicRoot, err := registry.PublicURL()
+	if err != nil {
+		return nil, fmt.Errorf("app registry publish writable registry %q public root: %w", registryName, err)
+	}
 	unusedRetention, deployedRetention, err := registry.RetentionPolicy()
 	if err != nil {
 		return nil, fmt.Errorf("app registry publish retention policy: %w", err)
@@ -858,6 +871,7 @@ func bootstrapAppRegistryPublish(cfg *config.Config) (*appregistry.StatelessPubl
 		return nil, err
 	}
 	return &appregistry.StatelessPublishService{
+		Registry: registryName, StorageRoot: storageRoot, PublicRoot: publicRoot,
 		Store: store, Signer: signer, Writer: writer,
 		Limits: appregistry.PublishLimits{
 			UploadURLTTL: limitsCfg.UploadURLTTL, MaxArtifacts: limitsCfg.MaxArtifacts,
@@ -899,4 +913,12 @@ func CheckUploadSigningForTest() func(*appregistry.GCSUploadSigner, string) erro
 
 func SetCheckUploadSigningForTest(fn func(*appregistry.GCSUploadSigner, string) error) {
 	checkUploadSigningFn = fn
+}
+
+func CheckGCSRegistryPermissionsForTest() func(context.Context, string) error {
+	return checkGCSRegistryPermissionsFn
+}
+
+func SetCheckGCSRegistryPermissionsForTest(fn func(context.Context, string) error) {
+	checkGCSRegistryPermissionsFn = fn
 }

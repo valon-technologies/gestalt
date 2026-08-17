@@ -15,6 +15,9 @@ func TestBuildSignedUploadHeaders(t *testing.T) {
 	if headers[UploadHeaderContentLength] != "42" {
 		t.Fatalf("content length = %q", headers[UploadHeaderContentLength])
 	}
+	if headers[UploadHeaderXGoogMetaSHA256] != stringsRepeat("a", 64) {
+		t.Fatalf("sha256 header = %q", headers[UploadHeaderXGoogMetaSHA256])
+	}
 }
 
 func TestGCSBucketObjectFromURL(t *testing.T) {
@@ -26,6 +29,19 @@ func TestGCSBucketObjectFromURL(t *testing.T) {
 	}
 	if bucket != "gestalt-app-registry" || object != "apps/g-issues/index.json" {
 		t.Fatalf("bucket/object = %q/%q", bucket, object)
+	}
+}
+
+func TestGCSRegistryStoreRejectsForeignBucket(t *testing.T) {
+	t.Parallel()
+
+	store, err := NewGCSRegistryStore("gestaltd-publish", "gs://gestalt-app-registry")
+	if err != nil {
+		t.Fatalf("NewGCSRegistryStore: %v", err)
+	}
+	_, _, err = store.validateStorageURL("gs://other-bucket/apps/g-issues/index.json")
+	if err == nil {
+		t.Fatal("expected foreign bucket rejection")
 	}
 }
 
