@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 type createGrantResponse struct {
@@ -24,7 +26,20 @@ func (s *Server) callerAuthContext(ctx context.Context, r *http.Request) context
 	if err != nil || strings.TrimSpace(token) == "" {
 		return ctx
 	}
-	return identity.WithCallerBearerToken(ctx, token)
+	token = strings.TrimSpace(token)
+	ctx = identity.WithCallerBearerToken(ctx, token)
+	p := PrincipalFromContext(ctx)
+	if p == nil {
+		return ctx
+	}
+	subject := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
+	if subject == "" {
+		return ctx
+	}
+	call := gestalt.IdentityCallContextFromContext(ctx)
+	call.CallerSubjectID = subject
+	ctx = gestalt.WithIdentityCallContext(ctx, call)
+	return gestalt.WithTrustedCallerSubject(ctx, subject)
 }
 
 func (s *Server) callerBearerToken(r *http.Request) (string, error) {

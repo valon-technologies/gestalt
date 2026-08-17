@@ -44,7 +44,7 @@ func (s *providerServer) Token(ctx context.Context, req *proto.TokenRequest) (*p
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	resp, err := s.provider.Token(ctx, tokenRequestFromProto(req))
+	resp, err := s.provider.Token(gestalt.AuthCallContextFromIncoming(ctx), tokenRequestFromProto(req))
 	if err != nil {
 		return nil, identityToGRPCError("token", err)
 	}

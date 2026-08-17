@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -71,12 +72,13 @@ func testIntrospectActive(subjectID, scope string) *core.IntrospectResponse {
 
 type grantTrackingAuthStub struct {
 	coretesting.StubAuthProvider
-	mu                   sync.Mutex
-	grants               map[string]*core.GetGrantResponse
-	revoked              map[string]struct{}
-	pendingScope         string
-	pendingState         string
-	lastTokenExchangeReq *core.TokenRequest
+	mu                      sync.Mutex
+	grants                  map[string]*core.GetGrantResponse
+	revoked                 map[string]struct{}
+	pendingScope            string
+	pendingState            string
+	lastTokenExchangeReq    *core.TokenRequest
+	lastTokenExchangeCaller string
 }
 
 func newGrantTrackingAuthStub() *grantTrackingAuthStub {
@@ -117,7 +119,7 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 			return &core.IntrospectResponse{Active: false}, nil
 		}
 	}
-	stub.TokenFn = func(_ context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+	stub.TokenFn = func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
 		if req == nil {
 			return nil, fmt.Errorf("token request is required")
 		}
@@ -131,6 +133,7 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 				copied := *req
 				stub.lastTokenExchangeReq = &copied
 			}
+			stub.lastTokenExchangeCaller = gestalt.IdentityCallContextFromContext(ctx).CallerSubjectID
 			intro, introErr := stub.IntrospectFn(context.Background(), &core.IntrospectRequest{Token: req.SubjectToken})
 			if introErr != nil || intro == nil || !intro.Active {
 				return nil, fmt.Errorf("inactive subject token")

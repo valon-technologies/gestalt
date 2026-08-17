@@ -52,8 +52,12 @@ func (p *recordingIdentityProvider) Authorize(context.Context, *gestalt.Authoriz
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (p *recordingIdentityProvider) Token(context.Context, *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+func (p *recordingIdentityProvider) Token(ctx context.Context, _ *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+	call := gestalt.IdentityCallContextFromContext(ctx)
+	p.mu.Lock()
+	p.callerSubjectID = call.CallerSubjectID
+	p.mu.Unlock()
+	return &gestalt.TokenResponse{AccessToken: "hop-token", TokenType: "Bearer", GrantID: "grant-hop"}, nil
 }
 
 func (p *recordingIdentityProvider) Introspect(context.Context, *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
@@ -175,6 +179,16 @@ func TestHostServiceIdentityHopPropagatesCallerSubject(t *testing.T) {
 	}
 	if got := recording.callerSubject(); got != "user:hop-caller" {
 		t.Fatalf("executable provider CallerSubjectID = %q, want user:hop-caller", got)
+	}
+
+	_, err = proto.NewIdentityClient(hostConn).Token(rpcCtx, &proto.TokenRequest{
+		GrantType: "urn:ietf:params:oauth:grant-type:token-exchange",
+	})
+	if err != nil {
+		t.Fatalf("Token via host service: %v", err)
+	}
+	if got := recording.callerSubject(); got != "user:hop-caller" {
+		t.Fatalf("Token() executable provider CallerSubjectID = %q, want user:hop-caller", got)
 	}
 }
 

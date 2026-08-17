@@ -87,6 +87,9 @@ func TestCreateAPITokenForwardsExpiresIn(t *testing.T) {
 	if stub.lastTokenExchangeReq == nil {
 		t.Fatal("token exchange request was not captured")
 	}
+	if stub.lastTokenExchangeCaller != "user:test-user" {
+		t.Fatalf("token exchange CallerSubjectID = %q, want user:test-user", stub.lastTokenExchangeCaller)
+	}
 	if stub.lastTokenExchangeReq.ExpiresIn != 7776000 {
 		t.Fatalf("ExpiresIn = %d, want 7776000", stub.lastTokenExchangeReq.ExpiresIn)
 	}
