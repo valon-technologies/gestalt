@@ -306,7 +306,7 @@ func (s *StatelessPublishService) publishWithCatalogRetry(req PublishRequest) (P
 		if lastErr == nil && publishIndexCommitted(lastResult) {
 			return lastResult, nil
 		}
-		if lastErr != nil && !errors.Is(lastErr, ErrObjectPreconditionFailed) && !isCatalogPreconditionFailed(lastErr) {
+		if lastErr != nil && !isObjectGenerationPreconditionFailed(lastErr) {
 			return lastResult, lastErr
 		}
 	}
