@@ -15,7 +15,7 @@ func TestAppRegistryPublishSettingsLimits(t *testing.T) {
 		MaxArtifactBytes:  1024,
 		RequiredPlatforms: []string{"linux/amd64"},
 	}
-	limits, err := settings.Limits()
+	limits, err := settings.PublishLimits()
 	if err != nil {
 		t.Fatalf("Limits: %v", err)
 	}

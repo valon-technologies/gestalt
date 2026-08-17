@@ -2011,6 +2011,39 @@ type ServerAppRegistryConfig struct {
 	maxReconcileAttemptsSet bool                       `yaml:"-"`
 }
 
+// AppRegistryPublishSettings configures authenticated app-admin stateless publishing.
+type AppRegistryPublishSettings struct {
+	Enabled           bool     `yaml:"enabled,omitempty"`
+	WritableRegistry  string   `yaml:"writableRegistry,omitempty"`
+	UploadURLTTL      string   `yaml:"uploadURLTTL,omitempty"`
+	MaxArtifacts      int      `yaml:"maxArtifacts,omitempty"`
+	MaxArtifactBytes  int64    `yaml:"maxArtifactBytes,omitempty"`
+	RequiredPlatforms []string `yaml:"requiredPlatforms,omitempty"`
+}
+
+func (c AppRegistryPublishSettings) PublishLimits() (AppRegistryPublishLimits, error) {
+	limits := AppRegistryPublishLimits{
+		MaxArtifacts:      c.MaxArtifacts,
+		MaxArtifactBytes:  c.MaxArtifactBytes,
+		RequiredPlatforms: append([]string(nil), c.RequiredPlatforms...),
+	}
+	if ttl := c.UploadURLTTL; ttl != "" {
+		duration, err := ParseDuration(ttl)
+		if err != nil {
+			return AppRegistryPublishLimits{}, err
+		}
+		limits.UploadURLTTL = duration
+	}
+	return limits, nil
+}
+
+type AppRegistryPublishLimits struct {
+	UploadURLTTL      time.Duration
+	MaxArtifacts      int
+	MaxArtifactBytes  int64
+	RequiredPlatforms []string
+}
+
 const DefaultAppRegistryMaxReconcileAttempts = 3
 const DefaultAppRegistryAutoDeployPollInterval = time.Minute
 const DefaultAppRegistryHeartbeatInterval = 15 * time.Second

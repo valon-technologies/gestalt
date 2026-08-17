@@ -22,7 +22,7 @@ func TestStatelessPublishBeginResumeAndFinalize(t *testing.T) {
 	service, mem := newStatelessPublishHarness(t)
 	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.1")
 
-	first, err := service.Begin(ctx, appregistry.BeginPublishInput{
+	first, err := service.Begin(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -38,7 +38,7 @@ func TestStatelessPublishBeginResumeAndFinalize(t *testing.T) {
 		t.Fatalf("upload: %v", err)
 	}
 
-	second, err := service.Begin(ctx, appregistry.BeginPublishInput{
+	second, err := service.Begin(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -51,7 +51,7 @@ func TestStatelessPublishBeginResumeAndFinalize(t *testing.T) {
 		t.Fatalf("resume begin = %#v", second)
 	}
 
-	final, err := service.Finalize(ctx, appregistry.FinalizePublishInput{
+	final, err := service.Finalize(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", PublishID: first.PublishID, Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -64,7 +64,7 @@ func TestStatelessPublishBeginResumeAndFinalize(t *testing.T) {
 		t.Fatalf("finalize = %#v", final)
 	}
 
-	idempotent, err := service.Finalize(ctx, appregistry.FinalizePublishInput{
+	idempotent, err := service.Finalize(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", PublishID: first.PublishID, Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -84,7 +84,7 @@ func TestStatelessPublishVersionConflict(t *testing.T) {
 	declB, _ := testPublishDeclaration(t, "g-issues", "0.3.0-dev.2")
 	declB.Artifacts[0].SHA256 = strings.Repeat("b", 64)
 
-	beginA, err := service.Begin(ctx, appregistry.BeginPublishInput{
+	beginA, err := service.Begin(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -96,7 +96,7 @@ func TestStatelessPublishVersionConflict(t *testing.T) {
 	if err := appregistry.ApplyMemoryUpload(mem, beginA.Uploads[0].UploadURL, bytesA, declA.Artifacts[0].SHA256); err != nil {
 		t.Fatalf("upload A: %v", err)
 	}
-	if _, err := service.Finalize(ctx, appregistry.FinalizePublishInput{
+	if _, err := service.Finalize(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", PublishID: beginA.PublishID, Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -105,7 +105,7 @@ func TestStatelessPublishVersionConflict(t *testing.T) {
 		t.Fatalf("Finalize A: %v", err)
 	}
 
-	_, err = service.Begin(ctx, appregistry.BeginPublishInput{
+	_, err = service.Begin(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -123,7 +123,7 @@ func TestStatelessPublishConcurrentFinalizeMatching(t *testing.T) {
 	service, mem := newStatelessPublishHarness(t)
 	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.3")
 
-	begin, err := service.Begin(ctx, appregistry.BeginPublishInput{
+	begin, err := service.Begin(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -143,7 +143,7 @@ func TestStatelessPublishConcurrentFinalizeMatching(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := service.Finalize(ctx, appregistry.FinalizePublishInput{
+			_, err := service.Finalize(ctx, appregistry.AdminPublishInput{
 				App: "g-issues", PublishID: begin.PublishID, Registry: "toolshed",
 				StorageRoot: "gs://gestalt-app-registry",
 				PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -167,7 +167,7 @@ func TestStatelessPublishMissingFinalize(t *testing.T) {
 	ctx := context.Background()
 	service, _ := newStatelessPublishHarness(t)
 	declaration, _ := testPublishDeclaration(t, "g-issues", "0.3.0-dev.4")
-	begin, err := service.Begin(ctx, appregistry.BeginPublishInput{
+	begin, err := service.Begin(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -176,7 +176,7 @@ func TestStatelessPublishMissingFinalize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
-	if _, err := service.Finalize(ctx, appregistry.FinalizePublishInput{
+	if _, err := service.Finalize(ctx, appregistry.AdminPublishInput{
 		App: "g-issues", PublishID: begin.PublishID, Registry: "toolshed",
 		StorageRoot: "gs://gestalt-app-registry",
 		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
@@ -188,16 +188,11 @@ func TestStatelessPublishMissingFinalize(t *testing.T) {
 
 func newStatelessPublishHarness(t *testing.T) (*appregistry.StatelessPublishService, *appregistry.MemoryObjectStore) {
 	t.Helper()
-	store, mem := appregistry.NewMemoryPublishStores()
+	mem := appregistry.NewMemoryObjectStore()
 	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
-	limits := appregistry.DefaultPublishLimits()
-	limits.RequiredPlatforms = []string{"linux/amd64"}
+	limits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}}
 	return &appregistry.StatelessPublishService{
-		Store:  store,
-		Signer: signer,
-		Writer: &appregistry.Writer{Store: store},
-		Index:  appregistry.StoreIndexChecker{Store: store, StorageRoot: "gs://gestalt-app-registry"},
-		Limits: limits,
+		Store: mem, Signer: signer, Writer: &appregistry.Writer{Store: mem}, Limits: limits,
 	}, mem
 }
 

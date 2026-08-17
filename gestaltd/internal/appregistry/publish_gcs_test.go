@@ -9,20 +9,20 @@ func TestBuildSignedUploadHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSignedUploadHeaders: %v", err)
 	}
-	if err := validateSignedUploadHeaders(headers, 42, stringsRepeat("a", 64)); err != nil {
-		t.Fatalf("validateSignedUploadHeaders: %v", err)
-	}
 	if headers[UploadHeaderXGoogIfGenerationMatch] != "0" {
 		t.Fatalf("generation header = %q", headers[UploadHeaderXGoogIfGenerationMatch])
 	}
+	if headers[UploadHeaderContentLength] != "42" {
+		t.Fatalf("content length = %q", headers[UploadHeaderContentLength])
+	}
 }
 
-func TestParseGCSStorageURL(t *testing.T) {
+func TestGCSBucketObjectFromURL(t *testing.T) {
 	t.Parallel()
 
-	bucket, object, err := parseGCSStorageURL("gs://gestalt-app-registry/apps/g-issues/index.json")
+	bucket, object, err := gcsBucketObjectFromURL("gs://gestalt-app-registry/apps/g-issues/index.json")
 	if err != nil {
-		t.Fatalf("parseGCSStorageURL: %v", err)
+		t.Fatalf("gcsBucketObjectFromURL: %v", err)
 	}
 	if bucket != "gestalt-app-registry" || object != "apps/g-issues/index.json" {
 		t.Fatalf("bucket/object = %q/%q", bucket, object)

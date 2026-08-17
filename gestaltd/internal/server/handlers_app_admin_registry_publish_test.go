@@ -296,16 +296,12 @@ func newRegistryPublishHarness(t *testing.T) registryPublishHarness {
 	if err != nil {
 		t.Fatalf("NewGCSAppRegistry: %v", err)
 	}
-	store, mem := appregistry.NewMemoryPublishStores()
+	store := appregistry.NewMemoryObjectStore()
+	mem := store
 	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
-	limits := appregistry.DefaultPublishLimits()
-	limits.RequiredPlatforms = []string{"linux/amd64"}
+	limits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}}
 	service := &appregistry.StatelessPublishService{
-		Store:  store,
-		Signer: signer,
-		Writer: &appregistry.Writer{Store: store},
-		Index:  appregistry.StoreIndexChecker{Store: store, StorageRoot: "gs://gitlab-peach-street-gestalt-app-registry"},
-		Limits: limits,
+		Store: store, Signer: signer, Writer: &appregistry.Writer{Store: store}, Limits: limits,
 	}
 	declaration, artifactBytes := testServerPublishDeclaration(t, "g-issues", "0.3.0-dev.server")
 	return registryPublishHarness{

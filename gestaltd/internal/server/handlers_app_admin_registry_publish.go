@@ -19,27 +19,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-type appAdminRegistryPublishRequest struct {
-	Declaration *appregistry.PublishDeclaration `json:"declaration"`
-}
-
-type appAdminRegistryPublishResponse struct {
-	PublishID   string                          `json:"publishId"`
-	App         string                          `json:"app"`
-	Registry    string                          `json:"registry"`
-	Version     string                          `json:"version"`
-	State       string                          `json:"state"`
-	Uploads     []appAdminRegistryPublishUpload `json:"uploads,omitempty"`
-	PublishedAt string                          `json:"publishedAt,omitempty"`
-}
-
-type appAdminRegistryPublishUpload struct {
-	Platform  string            `json:"platform"`
-	UploadURL string            `json:"uploadUrl"`
-	ExpiresAt string            `json:"expiresAt"`
-	Headers   map[string]string `json:"headers,omitempty"`
-}
-
 func (s *Server) mountAppAdminRegistryPublishRoutes(r chi.Router) {
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
 		Post("/apps/{app}/admin/registry/publishes", s.beginAppAdminRegistryPublish)
@@ -56,7 +35,7 @@ func (s *Server) beginAppAdminRegistryPublish(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	request, ok := s.decodeAppAdminRegistryPublishRequest(w, r)
+	declaration, ok := s.decodePublishDeclaration(w, r)
 	if !ok {
 		return
 	}
@@ -64,19 +43,15 @@ func (s *Server) beginAppAdminRegistryPublish(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	result, err := service.Begin(r.Context(), appregistry.BeginPublishInput{
-		App:         app.name,
-		Registry:    app.registry,
-		StorageRoot: storageRoot,
-		PublicRoot:  publicRoot,
-		Declaration: request.Declaration,
+	result, err := service.Begin(r.Context(), appregistry.AdminPublishInput{
+		App: app.name, Registry: app.registry, StorageRoot: storageRoot, PublicRoot: publicRoot, Declaration: declaration,
 	})
 	if err != nil {
-		writeAppAdminRegistryPublishError(w, err)
+		writeError(w, appregistry.PublishHTTPStatus(err), err.Error())
 		return
 	}
 	s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, result.PublishID, "app.registry.publish.begin", true, "")
-	writeJSON(w, http.StatusOK, appAdminRegistryPublishResponseFromResult(result))
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +68,7 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "publishID is required")
 		return
 	}
-	request, ok := s.decodeAppAdminRegistryPublishRequest(w, r)
+	declaration, ok := s.decodePublishDeclaration(w, r)
 	if !ok {
 		return
 	}
@@ -101,44 +76,60 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	result, err := service.Finalize(r.Context(), appregistry.FinalizePublishInput{
-		App:             app.name,
-		PublishID:       publishID,
-		Registry:        app.registry,
-		StorageRoot:     storageRoot,
-		PublicRoot:      publicRoot,
-		DisplayName:     appDisplayName(s, app.name, request.Declaration),
-		Description:     appDescription(s, app.name, request.Declaration),
-		GestaltdVersion: strings.TrimSpace(s.sourceVersion),
-		Declaration:     request.Declaration,
+	displayName, description := app.name, ""
+	if declaration.Manifest != nil {
+		if v := strings.TrimSpace(declaration.Manifest.DisplayName); v != "" {
+			displayName = v
+		}
+		if v := strings.TrimSpace(declaration.Manifest.Description); v != "" {
+			description = v
+		}
+	}
+	if s.pluginDefs != nil {
+		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil {
+			if displayName == app.name && strings.TrimSpace(entry.DisplayName) != "" {
+				displayName = strings.TrimSpace(entry.DisplayName)
+			}
+			if description == "" {
+				description = strings.TrimSpace(entry.Description)
+			}
+		}
+	}
+	result, err := service.Finalize(r.Context(), appregistry.AdminPublishInput{
+		App: app.name, PublishID: publishID, Registry: app.registry,
+		StorageRoot: storageRoot, PublicRoot: publicRoot,
+		DisplayName: displayName, Description: description,
+		GestaltdVersion: strings.TrimSpace(s.sourceVersion), Declaration: declaration,
 	})
 	if err != nil {
 		s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, publishID, "app.registry.publish.finalize", false, err.Error())
-		writeAppAdminRegistryPublishError(w, err)
+		writeError(w, appregistry.PublishHTTPStatus(err), err.Error())
 		return
 	}
 	s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, publishID, "app.registry.publish.finalize", true, "")
 	s.notifyAppAutoDeploy(app.name)
-	writeJSON(w, http.StatusOK, appAdminRegistryPublishResponseFromResult(result))
+	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) decodeAppAdminRegistryPublishRequest(w http.ResponseWriter, r *http.Request) (appAdminRegistryPublishRequest, bool) {
-	var request appAdminRegistryPublishRequest
+func (s *Server) decodePublishDeclaration(w http.ResponseWriter, r *http.Request) (*appregistry.PublishDeclaration, bool) {
+	var body struct {
+		Declaration *appregistry.PublishDeclaration `json:"declaration"`
+	}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
+	if err := decoder.Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return appAdminRegistryPublishRequest{}, false
+		return nil, false
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return appAdminRegistryPublishRequest{}, false
+		return nil, false
 	}
-	if request.Declaration == nil {
+	if body.Declaration == nil {
 		writeError(w, http.StatusBadRequest, "declaration is required")
-		return appAdminRegistryPublishRequest{}, false
+		return nil, false
 	}
-	return request, true
+	return body.Declaration, true
 }
 
 func (s *Server) appAdminPublishService(w http.ResponseWriter, registry config.AppRegistryConfig) (*appregistry.StatelessPublishService, string, string, bool) {
@@ -173,78 +164,14 @@ func (s *Server) appAdminPublisherSubjectID(w http.ResponseWriter, r *http.Reque
 	return strings.TrimSpace(subjectID), true
 }
 
-func appAdminRegistryPublishResponseFromResult(result any) appAdminRegistryPublishResponse {
-	switch typed := result.(type) {
-	case *appregistry.BeginPublishResult:
-		if typed == nil {
-			return appAdminRegistryPublishResponse{}
-		}
-		return appAdminRegistryPublishResponseFromBegin(typed)
-	case *appregistry.FinalizePublishResult:
-		if typed == nil {
-			return appAdminRegistryPublishResponse{}
-		}
-		return appAdminRegistryPublishResponseFromFinalize(typed)
-	default:
-		return appAdminRegistryPublishResponse{}
-	}
-}
-
-func appAdminRegistryPublishResponseFromBegin(result *appregistry.BeginPublishResult) appAdminRegistryPublishResponse {
-	response := appAdminRegistryPublishResponse{
-		PublishID: result.PublishID,
-		App:       result.App,
-		Registry:  result.Registry,
-		Version:   result.Version,
-		State:     result.State,
-	}
-	for _, upload := range result.Uploads {
-		response.Uploads = append(response.Uploads, appAdminRegistryPublishUpload{
-			Platform:  upload.Platform,
-			UploadURL: upload.UploadURL,
-			ExpiresAt: formatAdminTime(upload.ExpiresAt),
-			Headers:   appregistry.SignedUploadHeadersForResponse(upload.Headers),
-		})
-	}
-	if !result.PublishedAt.IsZero() {
-		response.PublishedAt = formatAdminTime(result.PublishedAt)
-	}
-	return response
-}
-
-func appAdminRegistryPublishResponseFromFinalize(result *appregistry.FinalizePublishResult) appAdminRegistryPublishResponse {
-	response := appAdminRegistryPublishResponse{
-		PublishID: result.PublishID,
-		App:       result.App,
-		Registry:  result.Registry,
-		Version:   result.Version,
-		State:     result.State,
-	}
-	if !result.PublishedAt.IsZero() {
-		response.PublishedAt = formatAdminTime(result.PublishedAt)
-	}
-	return response
-}
-
-func writeAppAdminRegistryPublishError(w http.ResponseWriter, err error) {
-	writeError(w, appregistry.PublishHTTPStatus(err), err.Error())
-}
-
 func (s *Server) auditAppRegistryPublish(ctx context.Context, r *http.Request, subjectID, app, publishID, operation string, allowed bool, errMsg string) {
 	if s == nil || s.auditSink == nil {
 		return
 	}
 	entry := core.AuditEntry{
-		Timestamp:  time.Now().UTC(),
-		Source:     "gestaltd",
-		SubjectID:  subjectID,
-		CallerApp:  app,
-		TargetID:   publishID,
-		TargetKind: "app_registry_publish",
-		TargetName: app,
-		Operation:  operation,
-		Allowed:    allowed,
-		Error:      errMsg,
+		Timestamp: time.Now().UTC(), Source: "gestaltd", SubjectID: subjectID,
+		CallerApp: app, TargetID: publishID, TargetKind: "app_registry_publish",
+		TargetName: app, Operation: operation, Allowed: allowed, Error: errMsg,
 	}
 	if r != nil {
 		entry.RequestID = strings.TrimSpace(r.Header.Get("X-Request-ID"))
@@ -253,36 +180,5 @@ func (s *Server) auditAppRegistryPublish(ctx context.Context, r *http.Request, s
 		entry.UserAgent = r.UserAgent()
 	}
 	s.auditSink.Log(ctx, entry)
-	slog.Info("app registry publish",
-		"operation", operation,
-		"app", app,
-		"publish_id", publishID,
-		"subject_id", subjectID,
-		"allowed", allowed,
-		"error", errMsg,
-	)
-}
-
-func appDisplayName(s *Server, appName string, declaration *appregistry.PublishDeclaration) string {
-	if declaration != nil && declaration.Manifest != nil && strings.TrimSpace(declaration.Manifest.DisplayName) != "" {
-		return strings.TrimSpace(declaration.Manifest.DisplayName)
-	}
-	if s != nil && s.pluginDefs != nil {
-		if entry, ok := s.pluginDefs[appName]; ok && entry != nil {
-			return strings.TrimSpace(entry.DisplayName)
-		}
-	}
-	return appName
-}
-
-func appDescription(s *Server, appName string, declaration *appregistry.PublishDeclaration) string {
-	if declaration != nil && declaration.Manifest != nil && strings.TrimSpace(declaration.Manifest.Description) != "" {
-		return strings.TrimSpace(declaration.Manifest.Description)
-	}
-	if s != nil && s.pluginDefs != nil {
-		if entry, ok := s.pluginDefs[appName]; ok && entry != nil {
-			return strings.TrimSpace(entry.Description)
-		}
-	}
-	return ""
+	slog.Info("app registry publish", "operation", operation, "app", app, "publish_id", publishID, "subject_id", subjectID, "allowed", allowed, "error", errMsg)
 }
