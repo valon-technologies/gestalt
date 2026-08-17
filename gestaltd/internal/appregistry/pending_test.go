@@ -2,6 +2,7 @@ package appregistry
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -511,6 +512,43 @@ func TestUpsertAppIndex_CopiesPublishStartedAt(t *testing.T) {
 	got := index.Apps["traffic-cop"].Versions["0.0.1"]
 	if got.PublishStartedAt == nil || !got.PublishStartedAt.Equal(startedAt) {
 		t.Fatalf("index publishStartedAt = %v, want %v", got.PublishStartedAt, startedAt)
+	}
+}
+
+func TestUpsertAppIndex_RejectsStaleIdentityWithSameMetadataPath(t *testing.T) {
+	t.Parallel()
+
+	entry := testPublishEntryForUpsert(t)
+	metadataPath := AppVersionEntryPath(entry.App, entry.Version)
+	index, changed, err := UpsertAppIndex(NewEmptyIndex(), entry, metadataPath, "", "")
+	if err != nil || !changed {
+		t.Fatalf("UpsertAppIndex() = changed %v, err %v", changed, err)
+	}
+	staleEntry := entry
+	staleEntry.SourceRef = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	_, _, err = UpsertAppIndex(index, staleEntry, metadataPath, "", "")
+	if !errors.Is(err, ErrIndexVersionConflict) {
+		t.Fatalf("UpsertAppIndex(stale) = %v, want ErrIndexVersionConflict", err)
+	}
+}
+
+func testPublishEntryForUpsert(t *testing.T) Entry {
+	t.Helper()
+	return Entry{
+		SchemaVersion: EntrySchemaVersion,
+		App:           "traffic-cop",
+		Version:       "0.0.1",
+		SourceRef:     "651a5c30feb995c9364c38f63d0d5c3880bc2055",
+		ManifestPath:  "apps/traffic-cop/manifest.yaml",
+		Repository:    "github.com/valon-technologies/valon-tools",
+		PublishedAt:   time.Date(2026, 7, 24, 19, 4, 32, 0, time.UTC),
+		Artifacts: map[string]Artifact{
+			"linux/amd64": {
+				URL:       "https://example.com/artifact.tar.gz",
+				PublicURL: "https://example.com/artifact.tar.gz",
+				SHA256:    "deadbeef",
+			},
+		},
 	}
 }
 

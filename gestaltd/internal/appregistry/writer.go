@@ -55,13 +55,17 @@ func (w *Writer) Preflight(req PublishRequest, progress PublishProgress) error {
 	if progress.Start != nil {
 		progress.Start("Checking %d remote app objects before upload", objectCount)
 	}
-	if err := w.preflightIndex(plan); err != nil {
-		return err
-	}
 	for _, object := range append([]PublishObject{plan.EntryObject}, plan.ArtifactObjects...) {
 		if err := w.preflightImmutableObject(object); err != nil {
 			return err
 		}
+	}
+	winningEntry, err := w.resolveWinningEntry(plan)
+	if err != nil {
+		return err
+	}
+	if err := w.preflightIndex(plan, winningEntry); err != nil {
+		return err
 	}
 	if progress.Done != nil {
 		progress.Done("Checked %d remote app objects", objectCount)
@@ -83,13 +87,18 @@ func (w *Writer) Publish(req PublishRequest, progress PublishProgress) (PublishR
 	result.Artifacts = immutable.Artifacts
 	result.Entry = immutable.Entry
 
-	retentionOutcome, err := w.uploadRetention(req, progress)
+	winningEntry, err := w.resolveWinningEntry(req.Manifest)
+	if err != nil {
+		return result, err
+	}
+
+	retentionOutcome, err := w.uploadRetention(req, winningEntry, progress)
 	result.Retention = retentionOutcome
 	if err != nil {
 		return result, err
 	}
 
-	indexOutcome, err := w.uploadIndex(req, progress)
+	indexOutcome, err := w.uploadIndex(req, winningEntry, progress)
 	result.Index = indexOutcome
 	if err != nil {
 		return result, err
@@ -97,7 +106,7 @@ func (w *Writer) Publish(req PublishRequest, progress PublishProgress) (PublishR
 	return result, nil
 }
 
-func (w *Writer) preflightIndex(plan PublishManifest) error {
+func (w *Writer) preflightIndex(plan PublishManifest, entry Entry) error {
 	_, existing, err := w.Store.ReadObject(plan.IndexObject.StorageURL)
 	if err != nil {
 		return err
@@ -107,8 +116,26 @@ func (w *Writer) preflightIndex(plan PublishManifest) error {
 		return fmt.Errorf("decode existing app index: %w", err)
 	}
 	metadataPath := AppVersionEntryPath(plan.AppName, plan.Version)
-	_, _, err = UpsertAppIndex(index, plan.Entry, metadataPath, plan.DisplayName, plan.Description)
+	_, _, err = UpsertAppIndex(index, entry, metadataPath, plan.DisplayName, plan.Description)
 	return err
+}
+
+func (w *Writer) resolveWinningEntry(plan PublishManifest) (Entry, error) {
+	_, existing, err := w.Store.ReadObject(plan.EntryObject.StorageURL)
+	if err != nil {
+		return Entry{}, err
+	}
+	if len(existing) == 0 {
+		return plan.Entry, nil
+	}
+	winning, err := DecodeEntry(existing)
+	if err != nil {
+		return Entry{}, fmt.Errorf("decode winning entry: %w", err)
+	}
+	if !EntriesEqualIgnoringPublishedAt(plan.Entry, *winning) {
+		return Entry{}, fmt.Errorf("%s: %w; %s", plan.EntryObject.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
+	}
+	return *winning, nil
 }
 
 func (w *Writer) preflightImmutableObject(object PublishObject) error {
@@ -125,6 +152,9 @@ func (w *Writer) preflightImmutableObject(object PublishObject) error {
 	}
 	if described.Generation == 0 {
 		return nil
+	}
+	if object.Kind == PublishObjectKindEntry {
+		return fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
 	}
 	return fmt.Errorf("%s already exists; %s", object.StorageURL, RepublishCorruptObjectGuidance)
 }
@@ -179,6 +209,13 @@ func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef s
 			Outcome:    ObjectWriteOutcomeSkipped,
 		}, fmt.Sprintf("skipped existing %s", object.StorageURL), nil
 	}
+	described, err := w.Store.DescribeObject(object.StorageURL)
+	if err != nil {
+		return ImmutableObjectOutcome{}, "", err
+	}
+	if described.Generation != 0 && object.Kind == PublishObjectKindEntry {
+		return ImmutableObjectOutcome{}, "", fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
+	}
 	if err := w.Store.WriteImmutableObject(WriteImmutableObjectInput{
 		LocalPath:  object.LocalPath,
 		StorageURL: object.StorageURL,
@@ -214,7 +251,7 @@ func (w *Writer) immutableObjectMatchesExisting(object PublishObject) (bool, err
 	return false, nil
 }
 
-func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) (CatalogWriteOutcome, error) {
+func (w *Writer) uploadIndex(req PublishRequest, entry Entry, progress PublishProgress) (CatalogWriteOutcome, error) {
 	plan := req.Manifest
 	indexPath := plan.IndexObject.StorageURL
 	if progress.Start != nil {
@@ -233,7 +270,7 @@ func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) (Cata
 			return CatalogWriteOutcomeNotAttempted, fmt.Errorf("decode existing app index: %w", err)
 		}
 		metadataPath := AppVersionEntryPath(plan.AppName, plan.Version)
-		updated, changed, err := UpsertAppIndex(index, plan.Entry, metadataPath, plan.DisplayName, plan.Description)
+		updated, changed, err := UpsertAppIndex(index, entry, metadataPath, plan.DisplayName, plan.Description)
 		if err != nil {
 			return CatalogWriteOutcomeNotAttempted, err
 		}
@@ -281,10 +318,10 @@ func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) (Cata
 	return CatalogWriteOutcomeNotAttempted, fmt.Errorf("update %s: exceeded retry limit after concurrent index updates", indexPath)
 }
 
-func (w *Writer) uploadRetention(req PublishRequest, progress PublishProgress) (CatalogWriteOutcome, error) {
+func (w *Writer) uploadRetention(req PublishRequest, entry Entry, progress PublishProgress) (CatalogWriteOutcome, error) {
 	plan := req.Manifest
 	retentionPath := RetentionStorageURL(plan.IndexObject.StorageURL, plan.AppName)
-	publishedAt := plan.Entry.PublishedAt
+	publishedAt := entry.PublishedAt
 	if progress.Start != nil {
 		progress.Start("Updating app registry retention catalog")
 	}
