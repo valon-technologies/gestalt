@@ -2,10 +2,8 @@ package appregistry
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 )
@@ -84,8 +82,18 @@ func (s *StatelessPublishService) ensureWritableRegistry(appRegistry string) err
 	return nil
 }
 
-func (s *StatelessPublishService) Begin(ctx context.Context, appRegistry string, input AdminPublishInput) (*AdminPublishResponse, error) {
-	if s == nil || s.Store == nil || s.Signer == nil {
+type preparedPublishAttempt struct {
+	canonical     *PublishDeclaration
+	publishID     string
+	digest        string
+	version       string
+	stagingPrefix string
+	sourceRef     string
+	published     *Entry
+}
+
+func (s *StatelessPublishService) preparePublishAttempt(appRegistry string, input AdminPublishInput) (*preparedPublishAttempt, error) {
+	if s == nil || s.Store == nil {
 		return nil, ErrPublishUnavailable
 	}
 	if err := s.ensureWritableRegistry(appRegistry); err != nil {
@@ -101,61 +109,77 @@ func (s *StatelessPublishService) Begin(ctx context.Context, appRegistry string,
 		return nil, err
 	}
 	sourceRef := declarationSourceRef(canonical)
-	if entry, err := s.loadMatchingPublished(input.App, version, publishID, digest, sourceRef); err != nil {
+	entry, err := s.loadMatchingPublished(input.App, version, publishID, digest, sourceRef)
+	if err != nil {
 		return nil, versionConflictError(version, err)
-	} else if entry != nil {
-		return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
 	}
-	uploads, err := s.signMissingUploads(stagingPrefix, canonical, limits)
+	return &preparedPublishAttempt{
+		canonical: canonical, publishID: publishID, digest: digest, version: version,
+		stagingPrefix: stagingPrefix, sourceRef: sourceRef, published: entry,
+	}, nil
+}
+
+func (s *StatelessPublishService) Begin(ctx context.Context, appRegistry string, input AdminPublishInput) (*AdminPublishResponse, error) {
+	if s == nil || s.Signer == nil {
+		return nil, ErrPublishUnavailable
+	}
+	prepared, err := s.preparePublishAttempt(appRegistry, input)
 	if err != nil {
 		return nil, err
 	}
-	_ = ctx
-	return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStateUploading, uploads, time.Time{}), nil
+	if prepared.published != nil {
+		return adminPublishResponse(prepared.publishID, input.App, s.Registry, prepared.version, PublishStatePublished, nil, prepared.published.PublishedAt), nil
+	}
+	uploads, err := s.signMissingUploads(prepared.stagingPrefix, prepared.canonical, s.limits())
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return adminPublishResponse(prepared.publishID, input.App, s.Registry, prepared.version, PublishStateUploading, uploads, time.Time{}), nil
 }
 
 func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry string, input AdminPublishInput) (*AdminPublishResponse, error) {
-	if s == nil || s.Store == nil || s.Writer == nil {
+	if s == nil || s.Writer == nil {
 		return nil, ErrPublishUnavailable
 	}
-	if err := s.ensureWritableRegistry(appRegistry); err != nil {
-		return nil, err
-	}
-	limits := s.limits()
-	canonical, err := NormalizeAndValidatePublishDeclaration(input.App, input.Declaration, limits)
+	prepared, err := s.preparePublishAttempt(appRegistry, input)
 	if err != nil {
 		return nil, err
 	}
-	publishID, digest, version, stagingPrefix, err := s.resolveIdentity(input.App, canonical)
-	if err != nil {
-		return nil, err
+	if strings.TrimSpace(input.PublishID) != prepared.publishID {
+		return nil, fmt.Errorf("%w: got %q, want %q", ErrPublishIDMismatch, input.PublishID, prepared.publishID)
 	}
-	if strings.TrimSpace(input.PublishID) != publishID {
-		return nil, fmt.Errorf("%w: got %q, want %q", ErrPublishIDMismatch, input.PublishID, publishID)
-	}
-	sourceRef := declarationSourceRef(canonical)
-
-	if entry, matchErr := s.loadMatchingPublished(input.App, version, publishID, digest, sourceRef); matchErr != nil {
-		return nil, versionConflictError(version, matchErr)
-	} else if entry != nil {
-		return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
+	if prepared.published != nil {
+		return adminPublishResponse(prepared.publishID, input.App, s.Registry, prepared.version, PublishStatePublished, nil, prepared.published.PublishedAt), nil
 	}
 
 	publishedAt := s.now()
-	manifest, err := s.buildFinalManifest(input, canonical, publishID, digest, version, publishedAt)
+	manifest, err := BuildPublishManifestFromDeclaration(BuildPublishManifestFromDeclarationInput{
+		StorageRoot: s.StorageRoot, PublicRoot: s.PublicRoot,
+		DisplayName: input.DisplayName, Description: input.Description,
+		Declaration: prepared.canonical, PublishID: prepared.publishID,
+		DeclarationDigest: prepared.digest, Version: prepared.version, PublishedAt: publishedAt,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = os.Remove(manifest.EntryObject.LocalPath) }()
+	defer manifest.Cleanup()
 
-	req := PublishRequest{Manifest: manifest, SourceRef: sourceRef}
+	req := PublishRequest{Manifest: manifest, SourceRef: prepared.sourceRef}
 	if err := s.Writer.Preflight(req, PublishProgress{}); err != nil {
 		return nil, err
 	}
-	if err := s.promoteStagingArtifacts(stagingPrefix, canonical, sourceRef); err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	result, err := s.publishWithCatalogRetry(req)
+	// Promote staged uploads before committing immutable entry/index metadata. Partial
+	// finals without an index entry are recoverable via identical finalize retries.
+	if err := s.promoteStagingArtifacts(prepared.stagingPrefix, prepared.canonical, prepared.sourceRef); err != nil {
+		return nil, err
+	}
+	result, err := s.Writer.Publish(req, PublishProgress{})
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +187,7 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry stri
 		return nil, fmt.Errorf("registry index was not updated")
 	}
 
-	loaded, loadErr := LoadPublishedState(s.Store, s.StorageRoot, input.App, version)
+	loaded, loadErr := LoadPublishedState(s.Store, s.StorageRoot, input.App, prepared.version)
 	if loadErr != nil {
 		return nil, loadErr
 	}
@@ -173,11 +197,13 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry stri
 		}
 		return nil, fmt.Errorf("%w: published version is not indexed", ErrPublishReconcileMismatch)
 	}
-	if err := verifyPublishedEntry(loaded.Entry, publishedExpectation(input.App, version, publishID, digest, sourceRef)); err != nil {
+	if err := verifyPublishedEntry(loaded.Entry, publishedExpectation(input.App, prepared.version, prepared.publishID, prepared.digest, prepared.sourceRef)); err != nil {
 		return nil, err
 	}
-	_ = ctx
-	return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, loaded.Entry.PublishedAt), nil
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return adminPublishResponse(prepared.publishID, input.App, s.Registry, prepared.version, PublishStatePublished, nil, loaded.Entry.PublishedAt), nil
 }
 
 func (s *StatelessPublishService) now() time.Time {
@@ -313,105 +339,6 @@ func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, 
 		}
 	}
 	return nil
-}
-
-func (s *StatelessPublishService) publishWithCatalogRetry(req PublishRequest) (PublishResult, error) {
-	attempts := defaultCatalogUpdateAttempts
-	if s != nil && s.Writer != nil && s.Writer.CatalogAttempts > 0 {
-		attempts = s.Writer.CatalogAttempts
-	}
-	var lastResult PublishResult
-	var lastErr error
-	for attempt := 0; attempt < attempts; attempt++ {
-		lastResult, lastErr = s.Writer.Publish(req, PublishProgress{})
-		if lastErr == nil && publishIndexCommitted(lastResult) {
-			return lastResult, nil
-		}
-		if lastErr != nil && !isObjectGenerationPreconditionFailed(lastErr) {
-			return lastResult, lastErr
-		}
-	}
-	return lastResult, lastErr
-}
-
-func (s *StatelessPublishService) buildFinalManifest(
-	input AdminPublishInput,
-	declaration *PublishDeclaration,
-	publishID, digest, version string,
-	publishedAt time.Time,
-) (PublishManifest, error) {
-	publicationKind := declaration.PublicationKind
-	if publicationKind == "" {
-		publicationKind = PublicationKindLocal
-	}
-	sourceRef := declarationSourceRef(declaration)
-	builderVersion := strings.TrimSpace(declaration.BuilderVersion)
-	layout, err := ResolvePublishLayout(declaration.Manifest.Source, version)
-	if err != nil {
-		return PublishManifest{}, err
-	}
-	artifacts := make([]PublishArtifact, 0, len(declaration.Artifacts))
-	for _, artifact := range declaration.Artifacts {
-		finalRel, err := PublishArtifactFinalRel(layout.ArtifactPrefix, artifact.Filename)
-		if err != nil {
-			return PublishManifest{}, err
-		}
-		digestHex, err := normalizePublishArtifactSHA256(artifact.SHA256)
-		if err != nil {
-			return PublishManifest{}, err
-		}
-		artifacts = append(artifacts, PublishArtifact{
-			Target: strings.TrimSpace(artifact.Platform), Filename: strings.TrimSpace(artifact.Filename),
-			StorageURL: StorageURL(s.StorageRoot, finalRel), PublicURL: PublicURL(s.PublicRoot, finalRel),
-			SHA256: digestHex,
-		})
-	}
-	entry, err := BuildEntry(BuildEntryInput{
-		Manifest: declaration.Manifest, Version: version, SourceRef: sourceRef,
-		ManifestPath: strings.TrimSpace(declaration.ManifestPath), PublicationKind: publicationKind,
-		PublishID: publishID, BuilderVersion: builderVersion, DeclarationDigest: digest,
-		LocalSource: normalizeLocalSourceState(declaration.LocalSource), Release: declaration.ReleaseMetadata,
-		Artifacts: artifacts, PublishedAt: publishedAt.UTC(),
-	})
-	if err != nil {
-		return PublishManifest{}, err
-	}
-	entryData, err := json.MarshalIndent(entry, "", "  ")
-	if err != nil {
-		return PublishManifest{}, err
-	}
-	entryPath, err := WriteTempJSON("gestalt-publish-entry-*", entryData)
-	if err != nil {
-		return PublishManifest{}, err
-	}
-	entryDigest, err := SHA256File(entryPath)
-	if err != nil {
-		_ = os.Remove(entryPath)
-		return PublishManifest{}, err
-	}
-	artifactObjects := make([]PublishObject, 0, len(artifacts))
-	for _, artifact := range artifacts {
-		artifactObjects = append(artifactObjects, PublishObject{
-			Kind: PublishObjectKindArchive, Target: artifact.Target,
-			StorageURL: artifact.StorageURL, PublicURL: artifact.PublicURL, SHA256: artifact.SHA256,
-		})
-	}
-	return PublishManifest{
-		Schema: PublishPlanSchemaVersion, AppName: entry.App,
-		DisplayName: input.DisplayName, Description: input.Description, Version: version,
-		Entry: entry,
-		EntryObject: PublishObject{
-			Kind: PublishObjectKindEntry, LocalPath: entryPath,
-			StorageURL: StorageURL(s.StorageRoot, layout.EntryPath),
-			PublicURL:  PublicURL(s.PublicRoot, layout.EntryPath), SHA256: entryDigest,
-		},
-		IndexObject: PublishObject{
-			Kind:       PublishObjectKindIndex,
-			StorageURL: StorageURL(s.StorageRoot, layout.IndexPath),
-			PublicURL:  PublicURL(s.PublicRoot, layout.IndexPath),
-		},
-		ArtifactObjects: artifactObjects,
-	}, nil
 }
 
 func adminPublishResponse(publishID, app, registry, version, state string, uploads []AdminPublishUpload, publishedAt time.Time) *AdminPublishResponse {

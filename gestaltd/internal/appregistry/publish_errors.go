@@ -14,6 +14,7 @@ var (
 	ErrPublishRegistryNotEnrolled = errors.New("app is not enrolled in the registry")
 	ErrPublishIDMismatch          = errors.New("publish id mismatch")
 	ErrPublishReconcileMismatch   = errors.New("published registry entry does not match publish declaration")
+	ErrPublishIdentityMismatch    = errors.New("published entry identity mismatch")
 )
 
 func PublishHTTPStatus(err error) int {

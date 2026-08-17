@@ -101,13 +101,13 @@ func verifyPublishedEntry(entry *Entry, expect PublishedCommitExpectation) error
 		return fmt.Errorf("%w: version %q != %q", ErrPublishReconcileMismatch, entry.Version, expect.Version)
 	}
 	if strings.TrimSpace(entry.PublishID) != strings.TrimSpace(expect.PublishID) {
-		return fmt.Errorf("%w: publishId %q != %q", ErrPublishReconcileMismatch, entry.PublishID, expect.PublishID)
+		return fmt.Errorf("%w: publishId %q != %q", ErrPublishIdentityMismatch, entry.PublishID, expect.PublishID)
 	}
 	if strings.TrimSpace(entry.DeclarationDigest) != strings.TrimSpace(expect.DeclarationDigest) {
-		return fmt.Errorf("%w: declarationDigest mismatch", ErrPublishReconcileMismatch)
+		return fmt.Errorf("%w: declarationDigest mismatch", ErrPublishIdentityMismatch)
 	}
 	if !strings.EqualFold(strings.TrimSpace(entry.SourceRef), strings.TrimSpace(expect.SourceRef)) {
-		return fmt.Errorf("%w: sourceRef %q != %q", ErrPublishReconcileMismatch, entry.SourceRef, expect.SourceRef)
+		return fmt.Errorf("%w: sourceRef %q != %q", ErrPublishIdentityMismatch, entry.SourceRef, expect.SourceRef)
 	}
 	return nil
 }
@@ -128,10 +128,7 @@ func (s *StatelessPublishService) loadMatchingPublished(app, version, publishID,
 			DeclarationDigest: digest, SourceRef: sourceRef,
 		}
 		if err := verifyPublishedEntry(loaded.Entry, expect); err != nil {
-			if errors.Is(err, ErrPublishReconcileMismatch) &&
-				(strings.Contains(err.Error(), "publishId") ||
-					strings.Contains(err.Error(), "declarationDigest") ||
-					strings.Contains(err.Error(), "sourceRef")) {
+			if errors.Is(err, ErrPublishIdentityMismatch) {
 				return loaded.Entry, ErrPublishVersionConflict
 			}
 			return loaded.Entry, err
