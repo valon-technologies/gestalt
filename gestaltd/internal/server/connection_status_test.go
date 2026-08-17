@@ -14,6 +14,13 @@ func TestNoAuthConnectionIsNotProductConnected(t *testing.T) {
 	}
 }
 
+func TestOwnerKindForNilPrincipalIsUnknown(t *testing.T) {
+	t.Parallel()
+	if got := ownerKindForPrincipal(nil); got != ownerKindUnknown {
+		t.Fatalf("owner kind = %q, want %s", got, ownerKindUnknown)
+	}
+}
+
 func TestSummarizeReadyNoAuthDoesNotConnectTheApp(t *testing.T) {
 	t.Parallel()
 
@@ -77,5 +84,64 @@ func TestSummarizeAllReadySubjectStaysConnected(t *testing.T) {
 	})
 	if !got.Connected {
 		t.Fatal("a chosen subject identity must keep the app connected")
+	}
+}
+
+func TestSummarizeReconnectKeepsAppConnectedWhenSiblingIsValid(t *testing.T) {
+	t.Parallel()
+
+	got, ok := summarizeReconnectRequiredConnectionStatuses([]connectionDefInfo{
+		{
+			Name:            "workspace",
+			Status:          connectionStatusReady,
+			CredentialState: credentialStateConnected,
+			CredentialMode:  credentialModeSubject,
+			Connected:       true,
+		},
+		{
+			Name:            "archive",
+			Status:          connectionStatusNeedsUserConnection,
+			CredentialState: credentialStateInvalid,
+			CredentialMode:  credentialModeSubject,
+			StatusCode:      "reconnect_required",
+			Connected:       false,
+		},
+	})
+	if !ok {
+		t.Fatal("expected reconnect rollup for mixed valid and stale connections")
+	}
+	if !got.Connected {
+		t.Fatal("a chosen account must keep the app connected when a sibling needs reconnect")
+	}
+	if got.Status != connectionStatusDegraded {
+		t.Fatalf("status = %q, want %s", got.Status, connectionStatusDegraded)
+	}
+}
+
+func TestSummarizeReconnectNoAuthDoesNotConnectTheApp(t *testing.T) {
+	t.Parallel()
+
+	got, ok := summarizeReconnectRequiredConnectionStatuses([]connectionDefInfo{
+		{
+			Name:            "webhook",
+			Status:          connectionStatusReady,
+			CredentialState: credentialStateNotRequired,
+			CredentialMode:  credentialModeNone,
+			Connected:       false,
+		},
+		{
+			Name:            "workspace",
+			Status:          connectionStatusNeedsUserConnection,
+			CredentialState: credentialStateInvalid,
+			CredentialMode:  credentialModeSubject,
+			StatusCode:      "reconnect_required",
+			Connected:       false,
+		},
+	})
+	if !ok {
+		t.Fatal("expected reconnect rollup when a subject connection is invalid")
+	}
+	if got.Connected {
+		t.Fatal("mode-none ready must not mark the app connected during reconnect rollup")
 	}
 }

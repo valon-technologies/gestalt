@@ -36,7 +36,7 @@ func (s *Server) serveAppCatalogIcon(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	entry, ok, err := s.visibleProviderDirectoryEntry(r, name)
 	if err != nil {
-		writeAppListingError(w, r, err)
+		writeAppDirectoryError(w, r, err, "failed to load app icon")
 		return
 	}
 	if !ok || strings.TrimSpace(entry.IconSVG) == "" {
@@ -50,6 +50,10 @@ func (s *Server) serveAppCatalogIcon(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeAppListingError(w http.ResponseWriter, r *http.Request, err error) {
+	writeAppDirectoryError(w, r, err, "failed to list apps")
+}
+
+func writeAppDirectoryError(w http.ResponseWriter, r *http.Request, err error, unexpectedPublic string) {
 	var listingErr *appListingError
 	if errors.As(err, &listingErr) && listingErr != nil {
 		slog.ErrorContext(r.Context(), "listing integrations", "error", listingErr.Unwrap())
@@ -57,5 +61,8 @@ func writeAppListingError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	slog.ErrorContext(r.Context(), "listing integrations", "error", err)
-	writeError(w, http.StatusInternalServerError, "failed to list apps")
+	if strings.TrimSpace(unexpectedPublic) == "" {
+		unexpectedPublic = "failed to list apps"
+	}
+	writeError(w, http.StatusInternalServerError, unexpectedPublic)
 }

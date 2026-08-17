@@ -256,8 +256,10 @@ func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]ins
 	p := PrincipalFromContext(r.Context())
 	// Ingress already canonicalized p; read the subject directly to avoid
 	// re-querying the user store and surfacing duplicate-email errors.
-	if subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID); subjectID != "" {
-		return s.connectedIntegrationsForSubject(r.Context(), subjectID)
+	if canon := principal.Canonicalized(p); canon != nil {
+		if subjectID := strings.TrimSpace(canon.SubjectID); subjectID != "" {
+			return s.connectedIntegrationsForSubject(r.Context(), subjectID)
+		}
 	}
 	if principal.IsNonUserPrincipal(p) {
 		return nil, nil

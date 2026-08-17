@@ -168,17 +168,41 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
-func (s *Server) connectionInfosForPlugin(ctx context.Context, integration string, app *config.ProviderEntry, instances []instanceInfo, integrationAuthTypes []string, p *principal.Principal) []connectionDefInfo {
+func (s *Server) attachDirectoryConnections(entry *appDirectoryEntry, plugin *config.ProviderEntry) {
+	if entry == nil {
+		return
+	}
+	entry.Advertised = s.advertisedConnectionsForPlugin(entry.Name, plugin)
+	entry.ConnectionSchema = s.connectionSchemasFromAdvertised(entry.Name, entry.Advertised)
+}
+
+type advertisedConnection struct {
+	Name               string
+	InstanceConnection string
+	Def                config.ConnectionDef
+	IncludeWithoutAuth bool
+}
+
+func (s *Server) advertisedConnectionsForPlugin(integration string, app *config.ProviderEntry) []advertisedConnection {
+	first := s.advertisedConnectionsForPluginWithAuthTypes(integration, app, nil)
+	resolved := s.authTypesForAdvertised(integration, first)
+	if len(resolved) == 0 {
+		return first
+	}
+	return s.advertisedConnectionsForPluginWithAuthTypes(integration, app, resolved)
+}
+
+func (s *Server) advertisedConnectionsForPluginWithAuthTypes(integration string, app *config.ProviderEntry, integrationAuthTypes []string) []advertisedConnection {
 	if app == nil {
-		return []connectionDefInfo{}
+		return []advertisedConnection{}
 	}
 	manifestSpec := app.ManifestSpec()
 	plan, err := config.BuildStaticConnectionPlan(app, manifestSpec)
 	if err != nil {
-		return []connectionDefInfo{}
+		return []advertisedConnection{}
 	}
 	names := plan.AdvertisedConnectionNames()
-	infos := make([]connectionDefInfo, 0, len(names))
+	out := make([]advertisedConnection, 0, len(names))
 	for _, name := range names {
 		conn, ok := plan.LookupConnection(name)
 		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
@@ -187,58 +211,61 @@ func (s *Server) connectionInfosForPlugin(ctx context.Context, integration strin
 		if name == config.AppConnectionName {
 			conn = displayAppConnectionDef(app, manifestSpec, conn)
 		}
-		if info, ok := s.connectionInfoFromAuth(ctx, integration, userFacingConnectionName(name), name, conn, instances, integrationAuthTypes, name != config.AppConnectionName, p); ok {
-			infos = append(infos, info)
-		}
+		out = append(out, advertisedConnection{
+			Name:               userFacingConnectionName(name),
+			InstanceConnection: name,
+			Def:                conn,
+			IncludeWithoutAuth: name != config.AppConnectionName,
+		})
 	}
-
-	return infos
+	return out
 }
 
-func (s *Server) connectionSchemasForPlugin(integration string, app *config.ProviderEntry) []connectionSchemaInfo {
-	authTypes := []string{}
-	schemas := s.connectionSchemasForPluginWithAuthTypes(integration, app, authTypes)
-	resolvedAuthTypes := resolvedSchemaAuthTypes(schemas)
-	if len(authTypes) == 0 && len(resolvedAuthTypes) > 0 {
-		return s.connectionSchemasForPluginWithAuthTypes(integration, app, resolvedAuthTypes)
-	}
-	return schemas
-}
-
-func (s *Server) connectionSchemasForPluginWithAuthTypes(integration string, app *config.ProviderEntry, integrationAuthTypes []string) []connectionSchemaInfo {
-	if app == nil {
-		return []connectionSchemaInfo{}
-	}
-	manifestSpec := app.ManifestSpec()
-	plan, err := config.BuildStaticConnectionPlan(app, manifestSpec)
-	if err != nil {
-		return []connectionSchemaInfo{}
-	}
-	names := plan.AdvertisedConnectionNames()
-	schemas := make([]connectionSchemaInfo, 0, len(names))
-	for _, name := range names {
-		conn, ok := plan.LookupConnection(name)
-		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
-			continue
-		}
-		if name == config.AppConnectionName {
-			conn = displayAppConnectionDef(app, manifestSpec, conn)
-		}
-		if schema, ok := s.connectionSchemaFromDef(integration, userFacingConnectionName(name), conn, name != config.AppConnectionName); ok {
+func (s *Server) connectionSchemasFromAdvertised(integration string, connections []advertisedConnection) []connectionSchemaInfo {
+	schemas := make([]connectionSchemaInfo, 0, len(connections))
+	for i := range connections {
+		conn := connections[i]
+		if schema, ok := s.connectionSchemaFromDef(integration, conn.Name, conn.Def, conn.IncludeWithoutAuth); ok {
 			schemas = append(schemas, schema)
 		}
 	}
 	return schemas
 }
 
+func (s *Server) connectionInfosFromAdvertised(ctx context.Context, integration string, connections []advertisedConnection, instances []instanceInfo, p *principal.Principal) []connectionDefInfo {
+	infos := make([]connectionDefInfo, 0, len(connections))
+	for i := range connections {
+		conn := connections[i]
+		if info, ok := s.connectionInfoFromAuth(ctx, integration, conn.Name, conn.InstanceConnection, conn.Def, instances, conn.IncludeWithoutAuth, p); ok {
+			infos = append(infos, info)
+		}
+	}
+	return infos
+}
+
+func (s *Server) authTypesForAdvertised(integration string, connections []advertisedConnection) []string {
+	combined := make([]string, 0, 2)
+	for i := range connections {
+		conn := connections[i]
+		authTypes := s.connectionAuthTypesForDef(integration, conn.Name, conn.Def)
+		if len(authTypes) == 0 && !conn.IncludeWithoutAuth {
+			continue
+		}
+		combined = append(combined, authTypes...)
+	}
+	return resolvedAuthTypes(combined)
+}
+
+func (s *Server) connectionAuthTypesForDef(integration, name string, conn config.ConnectionDef) []string {
+	return s.supportedConnectionAuthTypes(integration, name, connectionAuthTypes(conn.Auth, nil))
+}
+
 func (s *Server) connectionSchemaFromDef(integration, name string, conn config.ConnectionDef, includeWithoutAuth bool) (connectionSchemaInfo, bool) {
-	mode := config.ConnectionModeForConnection(conn)
-	authTypes := connectionAuthTypes(conn.Auth, nil)
-	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
+	authTypes := s.connectionAuthTypesForDef(integration, name, conn)
 	if len(authTypes) == 0 && !includeWithoutAuth {
 		return connectionSchemaInfo{}, false
 	}
-	displayMode := mode
+	displayMode := config.ConnectionModeForConnection(conn)
 	if displayMode == core.ConnectionModeNone && len(authTypes) > 0 {
 		displayMode = core.ConnectionModeSubject
 	}
@@ -265,17 +292,6 @@ func (s *Server) connectionSchemaFromDef(integration, name string, conn config.C
 		schema.CredentialFields = defaultManualCredentialFieldInfos()
 	}
 	return schema, true
-}
-
-func resolvedSchemaAuthTypes(connections []connectionSchemaInfo) []string {
-	combined := make([]string, 0, 2)
-	for i := range connections {
-		combined = append(combined, connections[i].AuthTypes...)
-	}
-	if authTypes := userFacingAuthTypes(combined); len(authTypes) > 0 {
-		return authTypes
-	}
-	return []string{}
 }
 
 func displayAppConnectionDef(app *config.ProviderEntry, manifestSpec *providermanifestv1.Spec, conn config.ConnectionDef) config.ConnectionDef {
@@ -308,14 +324,47 @@ func userFacingConnectionName(name string) string {
 	return name
 }
 
-func (s *Server) populateIntegrationSettings(ctx context.Context, info *integrationInfo, instances []instanceInfo, p *principal.Principal) []string {
-	authTypes := []string{}
-	info.Connections = s.connectionInfosForPlugin(ctx, info.Name, s.pluginDefs[info.Name], instances, authTypes, p)
-	resolvedAuthTypes := resolvedIntegrationAuthTypes(info.Connections)
-	if len(authTypes) == 0 && len(resolvedAuthTypes) > 0 {
-		info.Connections = s.connectionInfosForPlugin(ctx, info.Name, s.pluginDefs[info.Name], instances, resolvedAuthTypes, p)
+func (s *Server) connectionInfoFromAuth(ctx context.Context, integration, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, includeWithoutAuth bool, p *principal.Principal) (connectionDefInfo, bool) {
+	schema, ok := s.connectionSchemaFromDef(integration, name, conn, includeWithoutAuth)
+	if !ok {
+		return connectionDefInfo{}, false
 	}
-	return resolvedIntegrationAuthTypes(info.Connections)
+	connectionInstances := groupInstancesForConnection(instances, instanceConnection)
+	connectionID := serverCredentialConnectionID(integration, instanceConnection, conn)
+	subjectID, _ := principal.ResolveCredentialSubjectID(ctx, s.users, p)
+	storedPreferred := s.preferredInstanceForConnection(ctx, subjectID, connectionID)
+	status := noAuthConnectionStatus()
+	preferredInstance := ""
+	if schema.Mode != string(core.ConnectionModeNone) {
+		status = subjectConnectionStatus(connectionInstances, len(schema.AuthTypes) > 0, ownerKindForPrincipal(p), storedPreferred)
+		connectionInstances = markPreferredInstances(connectionInstances, storedPreferred)
+		// preferredInstance is the chosen account — omit stale/invalid store rows.
+		if preferredInstanceValid(connectionInstances, storedPreferred) {
+			preferredInstance = strings.TrimSpace(storedPreferred)
+		}
+	}
+
+	return connectionDefInfo{
+		DisplayName:       schema.DisplayName,
+		Name:              schema.Name,
+		Mode:              schema.Mode,
+		AuthTypes:         schema.AuthTypes,
+		ConnectionParams:  schema.ConnectionParams,
+		CredentialFields:  schema.CredentialFields,
+		Status:            status.Status,
+		CredentialState:   status.CredentialState,
+		HealthState:       status.HealthState,
+		Actions:           status.Actions,
+		CredentialMode:    status.CredentialMode,
+		OwnerKind:         status.OwnerKind,
+		Instances:         connectionInstances,
+		PreferredInstance: preferredInstance,
+		StatusCode:        status.StatusCode,
+		StatusReason:      status.StatusReason,
+		Connected:         status.Connected,
+		connectable:       len(schema.AuthTypes) > 0,
+		disconnectable:    status.Disconnectable,
+	}, true
 }
 
 func connectionParamInfosFromConnection(conn config.ConnectionDef) map[string]connectionParamInfo {
@@ -345,71 +394,6 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 		infos[i] = mapField(field)
 	}
 	return infos
-}
-
-func (s *Server) connectionInfoFromAuth(ctx context.Context, integration, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, integrationAuthTypes []string, includeWithoutAuth bool, p *principal.Principal) (connectionDefInfo, bool) {
-	mode := config.ConnectionModeForConnection(conn)
-	connectionInstances := groupInstancesForConnection(instances, instanceConnection)
-	connectionParams := connectionParamInfosFromConnection(conn)
-	authTypes := connectionAuthTypes(conn.Auth, nil)
-	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
-	if len(authTypes) == 0 && !includeWithoutAuth {
-		return connectionDefInfo{}, false
-	}
-	displayMode := mode
-	if displayMode == core.ConnectionModeNone && len(authTypes) > 0 {
-		displayMode = core.ConnectionModeSubject
-	}
-	connectionID := serverCredentialConnectionID(integration, instanceConnection, conn)
-	subjectID, _ := principal.ResolveCredentialSubjectID(ctx, s.users, p)
-	storedPreferred := s.preferredInstanceForConnection(ctx, subjectID, connectionID)
-	status := noAuthConnectionStatus()
-	preferredInstance := ""
-	if displayMode != core.ConnectionModeNone {
-		status = subjectConnectionStatus(connectionInstances, len(authTypes) > 0, ownerKindForPrincipal(p), storedPreferred)
-		connectionInstances = markPreferredInstances(connectionInstances, storedPreferred)
-		// preferredInstance is the chosen account — omit stale/invalid store rows.
-		if preferredInstanceValid(connectionInstances, storedPreferred) {
-			preferredInstance = strings.TrimSpace(storedPreferred)
-		}
-	}
-
-	info := connectionDefInfo{
-		DisplayName:       connectionDisplayName(name, conn.DisplayName),
-		Name:              name,
-		Mode:              string(displayMode),
-		AuthTypes:         []string{},
-		ConnectionParams:  connectionParams,
-		CredentialFields:  []credentialFieldInfo{},
-		Status:            status.Status,
-		CredentialState:   status.CredentialState,
-		HealthState:       status.HealthState,
-		Actions:           status.Actions,
-		CredentialMode:    status.CredentialMode,
-		OwnerKind:         status.OwnerKind,
-		Instances:         connectionInstances,
-		PreferredInstance: preferredInstance,
-		StatusCode:        status.StatusCode,
-		StatusReason:      status.StatusReason,
-		Connected:         status.Connected,
-		connectable:       len(authTypes) > 0,
-		disconnectable:    status.Disconnectable,
-	}
-	if len(authTypes) > 0 {
-		info.AuthTypes = authTypes
-	}
-	if fields := credentialFieldInfos(conn.Auth.Credentials, func(field config.CredentialFieldDef) credentialFieldInfo {
-		return credentialFieldInfo{
-			Name:        field.Name,
-			Label:       field.Label,
-			Description: field.Description,
-		}
-	}); len(fields) > 0 {
-		info.CredentialFields = fields
-	} else if authTypesContain(authTypes, "manual") {
-		info.CredentialFields = defaultManualCredentialFieldInfos()
-	}
-	return info, true
 }
 
 func (s *Server) invocationConnectionMode(prov core.Provider, integration, connection string) core.ConnectionMode {
@@ -511,12 +495,15 @@ func connectionDisplayName(name, configured string) string {
 	return userFacingConnectionName(name)
 }
 
-func resolvedIntegrationAuthTypes(connections []connectionDefInfo) []string {
+func resolvedAuthTypesFromConnections(connections []connectionDefInfo) []string {
 	combined := make([]string, 0, 2)
 	for i := range connections {
-		connection := &connections[i]
-		combined = append(combined, connection.AuthTypes...)
+		combined = append(combined, connections[i].AuthTypes...)
 	}
+	return resolvedAuthTypes(combined)
+}
+
+func resolvedAuthTypes(combined []string) []string {
 	if authTypes := userFacingAuthTypes(combined); len(authTypes) > 0 {
 		return authTypes
 	}

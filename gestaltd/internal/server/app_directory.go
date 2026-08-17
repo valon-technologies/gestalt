@@ -29,6 +29,7 @@ type appDirectoryEntry struct {
 	ManagementPath   string
 	Prompts          []appPromptInfo
 	SourceTreeURL    string
+	Advertised       []advertisedConnection
 	ConnectionSchema []connectionSchemaInfo
 	Provider         core.Provider
 }
@@ -40,7 +41,6 @@ type connectionSchemaInfo struct {
 	AuthTypes        []string                       `json:"authTypes"`
 	ConnectionParams map[string]connectionParamInfo `json:"connectionParams,omitempty"`
 	CredentialFields []credentialFieldInfo          `json:"credentialFields,omitempty"`
-	McpPassthrough   bool                           `json:"mcpPassthrough,omitempty"`
 }
 
 type appCatalogEntry struct {
@@ -241,13 +241,13 @@ func (s *Server) assembleAppDirectory(r *http.Request) (*appDirectory, error) {
 		}
 		plugin := s.pluginDefs[app.name]
 		entry := appDirectoryEntry{
-			Name:             app.name,
-			DisplayName:      app.name,
-			ManagementPath:   managementPath,
-			Prompts:          s.appPrompts[app.name],
-			SourceTreeURL:    plugin.SourceTreeURL(),
-			ConnectionSchema: s.connectionSchemasForPlugin(app.name, plugin),
+			Name:           app.name,
+			DisplayName:    app.name,
+			ManagementPath: managementPath,
+			Prompts:        s.appPrompts[app.name],
+			SourceTreeURL:  plugin.SourceTreeURL(),
 		}
+		s.attachDirectoryConnections(&entry, plugin)
 		if plugin != nil && strings.TrimSpace(plugin.DisplayName) != "" {
 			entry.DisplayName = strings.TrimSpace(plugin.DisplayName)
 		}
@@ -273,14 +273,14 @@ func (s *Server) lookupProviderDirectory(r *http.Request, name string) (core.Pro
 func (s *Server) completeProviderDirectoryEntry(r *http.Request, p *principal.Principal, name string, prov core.Provider) (appDirectoryEntry, bool, error) {
 	plugin := s.pluginDefs[name]
 	entry := appDirectoryEntry{
-		Name:             name,
-		DisplayName:      prov.DisplayName(),
-		Description:      prov.Description(),
-		Prompts:          s.appPrompts[name],
-		SourceTreeURL:    plugin.SourceTreeURL(),
-		ConnectionSchema: s.connectionSchemasForPlugin(name, plugin),
-		Provider:         prov,
+		Name:          name,
+		DisplayName:   prov.DisplayName(),
+		Description:   prov.Description(),
+		Prompts:       s.appPrompts[name],
+		SourceTreeURL: plugin.SourceTreeURL(),
+		Provider:      prov,
 	}
+	s.attachDirectoryConnections(&entry, plugin)
 	if cat := prov.Catalog(); cat != nil {
 		entry.IconSVG = cat.IconSVG
 	}
@@ -378,7 +378,8 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 			Actions:         []string{},
 		}
 		instances := connected[entry.Name]
-		authTypes := s.populateIntegrationSettings(r.Context(), &info, instances, p)
+		info.Connections = s.connectionInfosFromAdvertised(r.Context(), entry.Name, entry.Advertised, instances, p)
+		authTypes := resolvedAuthTypesFromConnections(info.Connections)
 		s.applyIntegrationConnectionStatus(&info, entry.Provider, instances, authTypes, p)
 		out = append(out, info)
 	}
