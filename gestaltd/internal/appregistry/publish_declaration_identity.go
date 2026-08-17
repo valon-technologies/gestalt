@@ -103,6 +103,7 @@ func validatePublishDeclaration(appName string, declaration *PublishDeclaration,
 		return fmt.Errorf("%w: got %d, limit %d", ErrPublishArtifactLimit, len(declaration.Artifacts), limits.MaxArtifacts)
 	}
 	platforms := make(map[string]struct{}, len(declaration.Artifacts))
+	filenames := make(map[string]struct{}, len(declaration.Artifacts))
 	for _, artifact := range declaration.Artifacts {
 		platform, err := normalizePublishPlatform(artifact.Platform)
 		if err != nil {
@@ -111,6 +112,7 @@ func validatePublishDeclaration(appName string, declaration *PublishDeclaration,
 		if err := validatePublishArtifactFilename(artifact.Filename); err != nil {
 			return fmt.Errorf("%w: artifact %q filename: %v", ErrPublishDeclarationInvalid, platform, err)
 		}
+		filename := canonicalPublishArtifactFilename(artifact.Filename)
 		if _, err := normalizePublishArtifactSHA256(artifact.SHA256); err != nil {
 			return fmt.Errorf("%w: artifact %q sha256: %v", ErrPublishDeclarationInvalid, platform, err)
 		}
@@ -124,6 +126,10 @@ func validatePublishDeclaration(appName string, declaration *PublishDeclaration,
 			return fmt.Errorf("%w: duplicate platform %q", ErrPublishDeclarationInvalid, platform)
 		}
 		platforms[platform] = struct{}{}
+		if _, ok := filenames[filename]; ok {
+			return fmt.Errorf("%w: duplicate filename %q", ErrPublishDeclarationInvalid, filename)
+		}
+		filenames[filename] = struct{}{}
 	}
 	for _, required := range limits.RequiredPlatforms {
 		required = strings.TrimSpace(required)
@@ -270,7 +276,7 @@ func canonicalPublishDeclaration(declaration *PublishDeclaration) (*PublishDecla
 		}
 		canonical.Artifacts[i] = PublishDeclarationArtifact{
 			Platform: platform,
-			Filename: strings.TrimSpace(artifact.Filename),
+			Filename: canonicalPublishArtifactFilename(artifact.Filename),
 			SHA256:   digest,
 			Size:     artifact.Size,
 		}
