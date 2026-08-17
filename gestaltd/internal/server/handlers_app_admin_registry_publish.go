@@ -40,9 +40,10 @@ type appAdminRegistryPublishResponse struct {
 }
 
 type appAdminRegistryPublishUpload struct {
-	Platform  string `json:"platform"`
-	UploadURL string `json:"uploadUrl"`
-	ExpiresAt string `json:"expiresAt"`
+	Platform  string            `json:"platform"`
+	UploadURL string            `json:"uploadUrl"`
+	ExpiresAt string            `json:"expiresAt"`
+	Headers   map[string]string `json:"headers,omitempty"`
 }
 
 type appAdminRegistryPublishSessionSummary struct {
@@ -218,6 +219,7 @@ func appAdminRegistryPublishResponseFromSession(ctx context.Context, s *Server, 
 			Platform:  lease.Platform,
 			UploadURL: lease.UploadURL,
 			ExpiresAt: formatAdminTime(lease.ExpiresAt),
+			Headers:   appregistry.SignedUploadHeadersForResponse(lease.UploadHeaders),
 		})
 	}
 	if session.State == core.AppRegistryPublishSessionFailed {

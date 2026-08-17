@@ -9,18 +9,20 @@ import (
 
 // PublishSessionLimits bounds remote publish sessions.
 type PublishSessionLimits struct {
-	UploadLeaseTTL    time.Duration
-	MaxArtifacts      int
-	MaxArtifactBytes  int64
-	RequiredPlatforms []string
+	UploadLeaseTTL        time.Duration
+	FinalizeClaimLeaseTTL time.Duration
+	MaxArtifacts          int
+	MaxArtifactBytes      int64
+	RequiredPlatforms     []string
 }
 
 func DefaultPublishSessionLimits() PublishSessionLimits {
 	return PublishSessionLimits{
-		UploadLeaseTTL:    time.Hour,
-		MaxArtifacts:      16,
-		MaxArtifactBytes:  512 << 20,
-		RequiredPlatforms: []string{"linux/amd64", "darwin/arm64"},
+		UploadLeaseTTL:        time.Hour,
+		FinalizeClaimLeaseTTL: 15 * time.Minute,
+		MaxArtifacts:          16,
+		MaxArtifactBytes:      512 << 20,
+		RequiredPlatforms:     []string{"linux/amd64", "darwin/arm64"},
 	}
 }
 
@@ -28,6 +30,9 @@ func (l PublishSessionLimits) normalized() PublishSessionLimits {
 	defaults := DefaultPublishSessionLimits()
 	if l.UploadLeaseTTL <= 0 {
 		l.UploadLeaseTTL = defaults.UploadLeaseTTL
+	}
+	if l.FinalizeClaimLeaseTTL <= 0 {
+		l.FinalizeClaimLeaseTTL = defaults.FinalizeClaimLeaseTTL
 	}
 	if l.MaxArtifacts <= 0 {
 		l.MaxArtifacts = defaults.MaxArtifacts
@@ -72,6 +77,7 @@ type SignCreateUploadInput struct {
 type SignCreateUploadResult struct {
 	UploadURL string
 	ExpiresAt time.Time
+	Headers   map[string]string
 }
 
 type memoryPromoteStore struct {

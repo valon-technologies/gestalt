@@ -87,6 +87,19 @@ func (s *MemoryObjectStore) ReadObject(storageURL string) (int64, []byte, error)
 	return object.generation, data, nil
 }
 
+// SetMemoryObjectSHA256ForTest overrides stored digest metadata for unit tests.
+func (s *MemoryObjectStore) SetMemoryObjectSHA256ForTest(storageURL, sha256 string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	object, ok := s.objects[storageURL]
+	if !ok || object.generation == 0 {
+		return fmt.Errorf("%w: %s", ErrObjectNotFound, storageURL)
+	}
+	object.sha256 = strings.ToLower(strings.TrimSpace(sha256))
+	s.objects[storageURL] = object
+	return nil
+}
+
 func (s *MemoryObjectStore) WriteImmutableObject(input WriteImmutableObjectInput) error {
 	data, err := os.ReadFile(input.LocalPath)
 	if err != nil {

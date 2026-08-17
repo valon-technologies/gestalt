@@ -201,6 +201,15 @@ func appRegistryPublishSessionRecord(session *core.AppRegistryPublishSession) id
 	if !session.StagingMarkedStale.IsZero() {
 		rec["staging_marked_stale_at"] = session.StagingMarkedStale
 	}
+	if token := strings.TrimSpace(session.FinalizeClaimToken); token != "" {
+		rec["finalize_claim_token"] = token
+	}
+	if !session.FinalizeClaimExpiresAt.IsZero() {
+		rec["finalize_claim_expires_at"] = session.FinalizeClaimExpiresAt
+	}
+	if !session.FinalizePublishedAt.IsZero() {
+		rec["finalize_published_at"] = session.FinalizePublishedAt
+	}
 	return rec
 }
 
@@ -208,24 +217,27 @@ func recordToAppRegistryPublishSession(rec idb.Record) *core.AppRegistryPublishS
 	artifacts := decodePublishArtifacts(recJSON(rec, "artifacts_json"))
 	leases := decodeUploadLeases(recJSON(rec, "upload_leases_json"))
 	return &core.AppRegistryPublishSession{
-		ID:                 recString(rec, "id"),
-		App:                recString(rec, "app"),
-		Registry:           recString(rec, "registry"),
-		Version:            recString(rec, "version"),
-		DedupeKey:          recString(rec, "dedupe_key"),
-		DeclarationDigest:  recString(rec, "declaration_digest"),
-		DeclarationJSON:    append([]byte(nil), recJSON(rec, "declaration_json")...),
-		State:              core.AppRegistryPublishSessionState(recString(rec, "state")),
-		PublisherSubjectID: recString(rec, "publisher_subject_id"),
-		Artifacts:          artifacts,
-		UploadLeases:       leases,
-		StagingPrefix:      recString(rec, "staging_prefix"),
-		FailureReason:      recString(rec, "failure_reason"),
-		PublishStartedAt:   recTime(rec, "publish_started_at"),
-		CreatedAt:          recTime(rec, "created_at"),
-		UpdatedAt:          recTime(rec, "updated_at"),
-		PublishedAt:        recTime(rec, "published_at"),
-		StagingMarkedStale: recTime(rec, "staging_marked_stale_at"),
+		ID:                     recString(rec, "id"),
+		App:                    recString(rec, "app"),
+		Registry:               recString(rec, "registry"),
+		Version:                recString(rec, "version"),
+		DedupeKey:              recString(rec, "dedupe_key"),
+		DeclarationDigest:      recString(rec, "declaration_digest"),
+		DeclarationJSON:        append([]byte(nil), recJSON(rec, "declaration_json")...),
+		State:                  core.AppRegistryPublishSessionState(recString(rec, "state")),
+		PublisherSubjectID:     recString(rec, "publisher_subject_id"),
+		Artifacts:              artifacts,
+		UploadLeases:           leases,
+		StagingPrefix:          recString(rec, "staging_prefix"),
+		FailureReason:          recString(rec, "failure_reason"),
+		PublishStartedAt:       recTime(rec, "publish_started_at"),
+		CreatedAt:              recTime(rec, "created_at"),
+		UpdatedAt:              recTime(rec, "updated_at"),
+		PublishedAt:            recTime(rec, "published_at"),
+		StagingMarkedStale:     recTime(rec, "staging_marked_stale_at"),
+		FinalizeClaimToken:     recString(rec, "finalize_claim_token"),
+		FinalizeClaimExpiresAt: recTime(rec, "finalize_claim_expires_at"),
+		FinalizePublishedAt:    recTime(rec, "finalize_published_at"),
 	}
 }
 

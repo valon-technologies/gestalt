@@ -43,15 +43,15 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 	}
 	declaration, err := DecodePublishDeclaration(session.DeclarationJSON)
 	if err != nil {
+		_, _ = s.failSession(ctx, session, err)
 		return nil, err
 	}
 	sourceRef := strings.ToLower(strings.TrimSpace(declaration.SourceRef))
-	publishedAt := s.now()
 
-	if reconciled, reconcileErr := s.reconcilePublishedSession(ctx, session, input.StorageRoot, sourceRef, publishedAt); reconcileErr != nil {
+	if reconciled, reconcileErr := s.reconcilePublishedSession(ctx, session, input.StorageRoot, sourceRef, time.Time{}); reconcileErr != nil {
 		return nil, reconcileErr
 	} else if reconciled != nil && reconciled.State == core.AppRegistryPublishSessionPublished {
-		manifest, manifestErr := s.buildFinalManifest(input, reconciled, declaration, publishedAt)
+		manifest, manifestErr := s.buildFinalManifest(input, reconciled, declaration, reconciled.PublishedAt)
 		if manifestErr != nil {
 			return nil, manifestErr
 		}
@@ -61,8 +61,8 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 	session, err = s.claimFinalize(ctx, session)
 	if err != nil {
 		if errors.Is(err, ErrPublishFinalizeInProgress) {
-			if reconciled, reconcileErr := s.reconcilePublishedSession(ctx, session, input.StorageRoot, sourceRef, publishedAt); reconcileErr == nil && reconciled != nil && reconciled.State == core.AppRegistryPublishSessionPublished {
-				manifest, manifestErr := s.buildFinalManifest(input, reconciled, declaration, publishedAt)
+			if reconciled, reconcileErr := s.reconcilePublishedSession(ctx, session, input.StorageRoot, sourceRef, time.Time{}); reconcileErr == nil && reconciled != nil && reconciled.State == core.AppRegistryPublishSessionPublished {
+				manifest, manifestErr := s.buildFinalManifest(input, reconciled, declaration, reconciled.PublishedAt)
 				if manifestErr != nil {
 					return nil, manifestErr
 				}
@@ -71,21 +71,29 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 		}
 		return nil, err
 	}
+	publishedAt := session.FinalizePublishedAt
+	if publishedAt.IsZero() {
+		publishedAt = s.now()
+	}
 
 	if err := s.verifyAndPromoteUploads(session, declaration, input.StorageRoot, sourceRef); err != nil {
-		_, _ = s.failSession(ctx, session, err)
+		if isTerminalFinalizeError(err) {
+			_, _ = s.failSession(ctx, session, err)
+		}
 		return nil, err
 	}
 	manifest, err := s.buildFinalManifest(input, session, declaration, publishedAt)
 	if err != nil {
-		_, _ = s.failSession(ctx, session, err)
+		if isTerminalFinalizeError(err) {
+			_, _ = s.failSession(ctx, session, err)
+		}
 		return nil, err
 	}
 	defer func() { _ = os.Remove(manifest.EntryObject.LocalPath) }()
 
 	req := PublishRequest{Manifest: manifest, SourceRef: sourceRef}
 	if err := s.Writer.Preflight(req, PublishProgress{}); err != nil {
-		if isTerminalPublishConflict(err) {
+		if isTerminalFinalizeError(err) {
 			_, _ = s.failSession(ctx, session, err)
 		}
 		return nil, err
@@ -114,7 +122,7 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 
 	finalSession, err := s.markPublished(ctx, session, publishedAt)
 	if err != nil {
-		if reconciled, reconcileErr := s.reconcilePublishedSession(ctx, session, input.StorageRoot, sourceRef, publishedAt); reconcileErr != nil {
+		if reconciled, reconcileErr := s.reconcilePublishedSession(ctx, session, input.StorageRoot, sourceRef, time.Time{}); reconcileErr != nil {
 			return nil, reconcileErr
 		} else if reconciled != nil {
 			finalSession = reconciled
@@ -126,7 +134,13 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 }
 
 func (s *PublishSessionService) claimFinalize(ctx context.Context, session *core.AppRegistryPublishSession) (*core.AppRegistryPublishSession, error) {
-	claimed, err := s.Sessions.ClaimFinalize(ctx, session.ID)
+	if session.State == core.AppRegistryPublishSessionFinalizing {
+		now := s.now()
+		if !session.FinalizeClaimExpiresAt.IsZero() && session.FinalizeClaimExpiresAt.After(now) {
+			return session, nil
+		}
+	}
+	claimed, err := s.Sessions.ClaimFinalize(ctx, session.ID, s.limits().FinalizeClaimLeaseTTL)
 	if err != nil {
 		if errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
 			return session, ErrPublishFinalizeInProgress
@@ -279,7 +293,7 @@ func (s *PublishSessionService) failSession(ctx context.Context, session *core.A
 	if cause != nil {
 		reason = strings.TrimSpace(cause.Error())
 	}
-	return s.Sessions.MarkFailed(ctx, session.ID, session.UpdatedAt, reason)
+	return s.Sessions.MarkFailed(ctx, session.ID, session.FinalizeClaimToken, session.UpdatedAt, reason)
 }
 
 func isTerminalPublishConflict(err error) bool {

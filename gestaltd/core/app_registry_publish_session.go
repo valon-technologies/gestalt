@@ -24,31 +24,35 @@ type AppRegistryPublishArtifact struct {
 }
 
 type AppRegistryUploadLease struct {
-	Kind       string
-	Platform   string
-	StorageURL string
-	UploadURL  string
-	ExpiresAt  time.Time
-	Generation int64
+	Kind          string
+	Platform      string
+	StorageURL    string
+	UploadURL     string
+	UploadHeaders map[string]string
+	ExpiresAt     time.Time
+	Generation    int64
 }
 
 type AppRegistryPublishSession struct {
-	ID                 string
-	App                string
-	Registry           string
-	Version            string
-	DedupeKey          string
-	DeclarationDigest  string
-	DeclarationJSON    []byte
-	State              AppRegistryPublishSessionState
-	PublisherSubjectID string
-	Artifacts          []AppRegistryPublishArtifact
-	UploadLeases       []AppRegistryUploadLease
-	StagingPrefix      string
-	FailureReason      string
-	PublishStartedAt   time.Time
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	PublishedAt        time.Time
-	StagingMarkedStale time.Time
+	ID                     string
+	App                    string
+	Registry               string
+	Version                string
+	DedupeKey              string
+	DeclarationDigest      string
+	DeclarationJSON        []byte
+	State                  AppRegistryPublishSessionState
+	PublisherSubjectID     string
+	Artifacts              []AppRegistryPublishArtifact
+	UploadLeases           []AppRegistryUploadLease
+	StagingPrefix          string
+	FailureReason          string
+	PublishStartedAt       time.Time
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	PublishedAt            time.Time
+	StagingMarkedStale     time.Time
+	FinalizeClaimToken     string
+	FinalizeClaimExpiresAt time.Time
+	FinalizePublishedAt    time.Time
 }

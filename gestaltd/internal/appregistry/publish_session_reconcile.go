@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 var (
@@ -113,12 +114,19 @@ func (s *PublishSessionService) reconcilePublishedSession(
 		PublishID:         session.ID,
 		DeclarationDigest: session.DeclarationDigest,
 		SourceRef:         sourceRef,
-		PublishedAt:       publishedAt,
 	}
-	if publishedAt.IsZero() {
+	if !session.FinalizePublishedAt.IsZero() {
+		expect.PublishedAt = session.FinalizePublishedAt.UTC()
+	} else if !publishedAt.IsZero() {
+		expect.PublishedAt = publishedAt.UTC()
+	} else {
 		expect.PublishedAt = entry.PublishedAt.UTC()
 	}
 	if err := VerifyPublishedEntry(entry, expect); err != nil {
+		return nil, err
+	}
+	session, err = s.ensureFinalizeClaimForReconcile(ctx, session)
+	if err != nil {
 		return nil, err
 	}
 	markAt := expect.PublishedAt
@@ -128,8 +136,25 @@ func (s *PublishSessionService) reconcilePublishedSession(
 	return s.markPublished(ctx, session, markAt)
 }
 
+func (s *PublishSessionService) ensureFinalizeClaimForReconcile(ctx context.Context, session *core.AppRegistryPublishSession) (*core.AppRegistryPublishSession, error) {
+	if session.State == core.AppRegistryPublishSessionFinalizing {
+		now := s.now()
+		if !session.FinalizeClaimExpiresAt.IsZero() && session.FinalizeClaimExpiresAt.After(now) {
+			return session, nil
+		}
+	}
+	claimed, err := s.Sessions.ClaimFinalize(ctx, session.ID, s.limits().FinalizeClaimLeaseTTL)
+	if err != nil {
+		if errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
+			return nil, ErrPublishFinalizeInProgress
+		}
+		return nil, err
+	}
+	return claimed, nil
+}
+
 func (s *PublishSessionService) markPublished(ctx context.Context, session *core.AppRegistryPublishSession, publishedAt time.Time) (*core.AppRegistryPublishSession, error) {
-	return s.Sessions.MarkPublished(ctx, session.ID, session.UpdatedAt, publishedAt)
+	return s.Sessions.MarkPublished(ctx, session.ID, session.FinalizeClaimToken, session.UpdatedAt, publishedAt)
 }
 
 func publishIndexCommitted(result PublishResult) bool {

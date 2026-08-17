@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -69,10 +70,10 @@ func TestAppRegistryPublishSessionClaimFinalizeIsExclusive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if _, err := svc.ClaimFinalize(ctx, session.ID); err != nil {
+	if _, err := svc.ClaimFinalize(ctx, session.ID, 15*time.Minute); err != nil {
 		t.Fatalf("first ClaimFinalize: %v", err)
 	}
-	if _, err := svc.ClaimFinalize(ctx, session.ID); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
+	if _, err := svc.ClaimFinalize(ctx, session.ID, 15*time.Minute); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
 		t.Fatalf("second ClaimFinalize error = %v", err)
 	}
 }
@@ -91,14 +92,14 @@ func TestAppRegistryPublishSessionNeverMarksFailedPublished(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	failed, err := svc.MarkFailed(ctx, session.ID, session.UpdatedAt, "boom")
+	failed, err := svc.MarkFailed(ctx, session.ID, "", session.UpdatedAt, "boom")
 	if err != nil {
 		t.Fatalf("MarkFailed: %v", err)
 	}
 	if failed.State != core.AppRegistryPublishSessionFailed {
 		t.Fatalf("state = %q", failed.State)
 	}
-	if _, err := svc.MarkPublished(ctx, session.ID, failed.UpdatedAt, failed.UpdatedAt); !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
+	if _, err := svc.MarkPublished(ctx, session.ID, failed.FinalizeClaimToken, failed.UpdatedAt, failed.UpdatedAt); !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
 		t.Fatalf("MarkPublished after failed error = %v", err)
 	}
 }
