@@ -261,31 +261,53 @@ func (s *StatelessPublishService) signMissingUploads(stagingPrefix string, decla
 	return uploads, nil
 }
 
-func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, declaration *PublishDeclaration, sourceRef string) error {
+type stagedArtifactPromotion struct {
+	stagingURL     string
+	destURL        string
+	generation     int64
+	expectedSHA256 string
+}
+
+func (s *StatelessPublishService) planStagedArtifactPromotions(stagingPrefix string, declaration *PublishDeclaration) ([]stagedArtifactPromotion, error) {
 	layout, err := ResolvePublishLayout(declaration.Manifest.Source, declaration.Manifest.Version)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	planned := make([]stagedArtifactPromotion, 0, len(declaration.Artifacts))
 	for _, artifact := range declaration.Artifacts {
 		stagingPath, err := PublishStagingArtifactPath(stagingPrefix, artifact.Platform, artifact.Filename)
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
+			return nil, fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
 		}
 		stagingURL := StorageURL(s.StorageRoot, stagingPath)
 		described, err := s.Store.DescribeObject(stagingURL)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if err := verifyArtifactDescribed(described, artifact); err != nil {
-			return err
+			return nil, err
 		}
 		finalRel, err := PublishArtifactFinalRel(layout.ArtifactPrefix, artifact.Filename)
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
+			return nil, fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
 		}
+		planned = append(planned, stagedArtifactPromotion{
+			stagingURL: stagingURL, destURL: StorageURL(s.StorageRoot, finalRel),
+			generation: described.Generation, expectedSHA256: artifact.SHA256,
+		})
+	}
+	return planned, nil
+}
+
+func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, declaration *PublishDeclaration, sourceRef string) error {
+	planned, err := s.planStagedArtifactPromotions(stagingPrefix, declaration)
+	if err != nil {
+		return err
+	}
+	for _, plan := range planned {
 		if err := s.Store.PromoteObject(PromoteObjectInput{
-			SourceURL: stagingURL, SourceGeneration: described.Generation,
-			DestURL: StorageURL(s.StorageRoot, finalRel), ExpectedSHA256: artifact.SHA256, SourceRef: sourceRef,
+			SourceURL: plan.stagingURL, SourceGeneration: plan.generation,
+			DestURL: plan.destURL, ExpectedSHA256: plan.expectedSHA256, SourceRef: sourceRef,
 		}); err != nil {
 			return err
 		}

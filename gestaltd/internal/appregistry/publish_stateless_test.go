@@ -252,6 +252,131 @@ func TestStatelessPublishFinalizePromotionOrder(t *testing.T) {
 	})
 }
 
+func TestStatelessPublishMultiArtifactPromotion(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	multiLimits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64", "darwin/arm64"}}
+
+	t.Run("second missing validates all before promoting", func(t *testing.T) {
+		t.Parallel()
+		service, mem, recorder := newStatelessPublishHarnessWithLimitsAndRecorder(t, multiLimits)
+		begin, declaration := beginMultiUploadedPublish(t, ctx, service, mem, "0.3.0-dev.20", 1)
+		urls := testPublishMultiArtifactURLs(t, declaration)
+
+		_, err := service.Finalize(ctx, "toolshed", appregistry.AdminPublishInput{
+			App: "g-issues", PublishID: begin.PublishID, Declaration: declaration,
+		})
+		if !errors.Is(err, appregistry.ErrPublishUploadMissing) {
+			t.Fatalf("Finalize error = %v, want ErrPublishUploadMissing", err)
+		}
+		if len(recorder.promotions) != 0 {
+			t.Fatalf("PromoteObject calls = %d, want none before any promotion", len(recorder.promotions))
+		}
+		assertNoFinalArtifacts(t, mem, urls)
+	})
+
+	t.Run("second mismatched validates all before promoting", func(t *testing.T) {
+		t.Parallel()
+		service, mem, recorder := newStatelessPublishHarnessWithLimitsAndRecorder(t, multiLimits)
+		begin, declaration := beginMultiUploadedPublish(t, ctx, service, mem, "0.3.0-dev.21", 0, 1)
+		urls := testPublishMultiArtifactURLs(t, declaration)
+		mem.MutateMemoryObjectForTest(stagingURLForPlatform(urls, "linux/amd64"), []byte("tampered"), strings.Repeat("c", 64))
+
+		_, err := service.Finalize(ctx, "toolshed", appregistry.AdminPublishInput{
+			App: "g-issues", PublishID: begin.PublishID, Declaration: declaration,
+		})
+		if !errors.Is(err, appregistry.ErrPublishUploadMismatch) {
+			t.Fatalf("Finalize error = %v, want ErrPublishUploadMismatch", err)
+		}
+		if len(recorder.promotions) != 0 {
+			t.Fatalf("PromoteObject calls = %d, want none", len(recorder.promotions))
+		}
+		assertNoFinalArtifacts(t, mem, urls)
+	})
+
+	t.Run("all valid promotes every artifact in declaration order", func(t *testing.T) {
+		t.Parallel()
+		service, mem, recorder := newStatelessPublishHarnessWithLimitsAndRecorder(t, multiLimits)
+		begin, declaration := beginMultiUploadedPublish(t, ctx, service, mem, "0.3.0-dev.22", 0, 1)
+		urls := testPublishMultiArtifactURLs(t, declaration)
+
+		final, err := service.Finalize(ctx, "toolshed", appregistry.AdminPublishInput{
+			App: "g-issues", PublishID: begin.PublishID, Declaration: declaration,
+		})
+		if err != nil {
+			t.Fatalf("Finalize: %v", err)
+		}
+		if final.State != appregistry.PublishStatePublished {
+			t.Fatalf("finalize = %#v", final)
+		}
+		if len(recorder.promotions) != 2 {
+			t.Fatalf("PromoteObject calls = %d, want 2", len(recorder.promotions))
+		}
+		wantDarwin := stagingURLForPlatform(urls, "darwin/arm64")
+		wantLinux := stagingURLForPlatform(urls, "linux/amd64")
+		if recorder.promotions[0].SourceURL != wantDarwin || recorder.promotions[1].SourceURL != wantLinux {
+			t.Fatalf("promotion order = %#v, want darwin/arm64 then linux/amd64", recorder.promotions)
+		}
+		for _, platform := range []string{"darwin/arm64", "linux/amd64"} {
+			finalURL := finalURLForPlatform(urls, platform)
+			artifact := artifactForPlatform(declaration, platform)
+			described, err := mem.DescribeObject(finalURL)
+			if err != nil {
+				t.Fatalf("DescribeObject(%s final): %v", platform, err)
+			}
+			if described.Generation == 0 {
+				t.Fatalf("%s final missing: %#v", platform, described)
+			}
+			if !strings.EqualFold(described.SHA256, artifact.SHA256) {
+				t.Fatalf("%s final digest = %q, want %q", platform, described.SHA256, artifact.SHA256)
+			}
+		}
+	})
+
+	t.Run("generation change after snapshot fails changed artifact without wrong final", func(t *testing.T) {
+		t.Parallel()
+		mem := appregistry.NewMemoryObjectStore()
+		recorder := &promoteMutatorRecorder{MemoryObjectStore: mem}
+		signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
+		service := &appregistry.StatelessPublishService{
+			Registry: "toolshed", StorageRoot: testPublishStorageRoot, PublicRoot: testPublishPublicRoot,
+			Store: recorder, Signer: signer, Writer: &appregistry.Writer{Store: recorder}, Limits: multiLimits,
+		}
+		begin, declaration := beginMultiUploadedPublish(t, ctx, service, mem, "0.3.0-dev.23", 0, 1)
+		urls := testPublishMultiArtifactURLs(t, declaration)
+		recorder.mutateURL = stagingURLForPlatform(urls, "linux/amd64")
+		recorder.mutateData = []byte("replaced-after-validation")
+		recorder.mutateSHA = strings.Repeat("d", 64)
+
+		_, err := service.Finalize(ctx, "toolshed", appregistry.AdminPublishInput{
+			App: "g-issues", PublishID: begin.PublishID, Declaration: declaration,
+		})
+		if !errors.Is(err, appregistry.ErrPublishUploadMismatch) {
+			t.Fatalf("Finalize error = %v, want ErrPublishUploadMismatch", err)
+		}
+		if len(recorder.promotions) != 2 {
+			t.Fatalf("PromoteObject calls = %d, want 2 (darwin succeeds, linux fails generation precondition)", len(recorder.promotions))
+		}
+		darwinFinal, err := mem.DescribeObject(finalURLForPlatform(urls, "darwin/arm64"))
+		if err != nil {
+			t.Fatalf("DescribeObject(darwin final): %v", err)
+		}
+		if darwinFinal.Generation == 0 {
+			t.Fatalf("darwin final missing after partial promotion: %#v", darwinFinal)
+		}
+		if !strings.EqualFold(darwinFinal.SHA256, artifactForPlatform(declaration, "darwin/arm64").SHA256) {
+			t.Fatalf("darwin final digest = %q, want %q", darwinFinal.SHA256, artifactForPlatform(declaration, "darwin/arm64").SHA256)
+		}
+		linuxFinal, err := mem.DescribeObject(finalURLForPlatform(urls, "linux/amd64"))
+		if err != nil {
+			t.Fatalf("DescribeObject(linux final): %v", err)
+		}
+		if linuxFinal.Generation != 0 {
+			t.Fatalf("linux final created with wrong content: %#v", linuxFinal)
+		}
+	})
+}
+
 func TestStatelessPublishRejectsMissingBuilderVersionBeforeSigning(t *testing.T) {
 	t.Parallel()
 
@@ -327,6 +452,24 @@ func TestStatelessPublishEntryStableAcrossServiceInstances(t *testing.T) {
 	}
 }
 
+type promoteMutatorRecorder struct {
+	*appregistry.MemoryObjectStore
+	promotions []appregistry.PromoteObjectInput
+	mutateURL  string
+	mutateData []byte
+	mutateSHA  string
+	mutated    bool
+}
+
+func (r *promoteMutatorRecorder) PromoteObject(input appregistry.PromoteObjectInput) error {
+	if !r.mutated && r.mutateURL != "" {
+		r.MutateMemoryObjectForTest(r.mutateURL, r.mutateData, r.mutateSHA)
+		r.mutated = true
+	}
+	r.promotions = append(r.promotions, input)
+	return r.MemoryObjectStore.PromoteObject(input)
+}
+
 type promoteRecorder struct {
 	*appregistry.MemoryObjectStore
 	promotions []appregistry.PromoteObjectInput
@@ -335,6 +478,118 @@ type promoteRecorder struct {
 func (r *promoteRecorder) PromoteObject(input appregistry.PromoteObjectInput) error {
 	r.promotions = append(r.promotions, input)
 	return r.MemoryObjectStore.PromoteObject(input)
+}
+
+type multiPublishArtifactURLs struct {
+	platform, stagingURL, finalURL string
+}
+
+func testPublishMultiArtifactURLs(t *testing.T, declaration *appregistry.PublishDeclaration) []multiPublishArtifactURLs {
+	t.Helper()
+	layout, err := appregistry.ResolvePublishLayout(declaration.Manifest.Source, declaration.Manifest.Version)
+	if err != nil {
+		t.Fatalf("ResolvePublishLayout: %v", err)
+	}
+	digest, err := appregistry.DeclarationDigest(declaration)
+	if err != nil {
+		t.Fatalf("DeclarationDigest: %v", err)
+	}
+	stagingPrefix, err := appregistry.PublishStagingPrefix("g-issues", declaration.Manifest.Version, digest)
+	if err != nil {
+		t.Fatalf("PublishStagingPrefix: %v", err)
+	}
+	urls := make([]multiPublishArtifactURLs, 0, len(declaration.Artifacts))
+	for _, artifact := range declaration.Artifacts {
+		stagingPath, err := appregistry.PublishStagingArtifactPath(stagingPrefix, artifact.Platform, artifact.Filename)
+		if err != nil {
+			t.Fatalf("PublishStagingArtifactPath: %v", err)
+		}
+		finalRel, err := appregistry.PublishArtifactFinalRel(layout.ArtifactPrefix, artifact.Filename)
+		if err != nil {
+			t.Fatalf("PublishArtifactFinalRel: %v", err)
+		}
+		urls = append(urls, multiPublishArtifactURLs{
+			platform:   artifact.Platform,
+			stagingURL: appregistry.StorageURL(testPublishStorageRoot, stagingPath),
+			finalURL:   appregistry.StorageURL(testPublishStorageRoot, finalRel),
+		})
+	}
+	return urls
+}
+
+func beginMultiUploadedPublish(t *testing.T, ctx context.Context, service *appregistry.StatelessPublishService, mem *appregistry.MemoryObjectStore, version string, uploadIndices ...int) (*appregistry.AdminPublishResponse, *appregistry.PublishDeclaration) {
+	t.Helper()
+	declaration, artifactBytes := testPublishDeclarationMultiPlatform(t, "g-issues", version)
+	begin, err := service.Begin(ctx, "toolshed", appregistry.AdminPublishInput{App: "g-issues", Declaration: declaration})
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	uploadByPlatform := map[string]appregistry.AdminPublishUpload{}
+	for _, upload := range begin.Uploads {
+		uploadByPlatform[upload.Platform] = upload
+	}
+	for _, index := range uploadIndices {
+		artifact := declaration.Artifacts[index]
+		upload, ok := uploadByPlatform[artifact.Platform]
+		if !ok {
+			t.Fatalf("missing upload URL for platform %q", artifact.Platform)
+		}
+		if err := appregistry.ApplyMemoryUpload(mem, upload.UploadURL, artifactBytes[index], artifact.SHA256); err != nil {
+			t.Fatalf("upload %s: %v", artifact.Platform, err)
+		}
+	}
+	return begin, declaration
+}
+
+func assertNoFinalArtifacts(t *testing.T, mem *appregistry.MemoryObjectStore, urls []multiPublishArtifactURLs) {
+	t.Helper()
+	for i, url := range urls {
+		described, err := mem.DescribeObject(url.finalURL)
+		if err != nil {
+			t.Fatalf("DescribeObject(final[%d]): %v", i, err)
+		}
+		if described.Generation != 0 {
+			t.Fatalf("final artifact[%d] created: %#v", i, described)
+		}
+	}
+}
+
+func stagingURLForPlatform(urls []multiPublishArtifactURLs, platform string) string {
+	for _, url := range urls {
+		if url.platform == platform {
+			return url.stagingURL
+		}
+	}
+	panic("missing platform " + platform)
+}
+
+func finalURLForPlatform(urls []multiPublishArtifactURLs, platform string) string {
+	for _, url := range urls {
+		if url.platform == platform {
+			return url.finalURL
+		}
+	}
+	panic("missing platform " + platform)
+}
+
+func artifactForPlatform(declaration *appregistry.PublishDeclaration, platform string) appregistry.PublishDeclarationArtifact {
+	for _, artifact := range declaration.Artifacts {
+		if artifact.Platform == platform {
+			return artifact
+		}
+	}
+	panic("missing platform " + platform)
+}
+
+func newStatelessPublishHarnessWithLimitsAndRecorder(t *testing.T, limits appregistry.PublishLimits) (*appregistry.StatelessPublishService, *appregistry.MemoryObjectStore, *promoteRecorder) {
+	t.Helper()
+	mem := appregistry.NewMemoryObjectStore()
+	recorder := &promoteRecorder{MemoryObjectStore: mem}
+	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
+	return &appregistry.StatelessPublishService{
+		Registry: "toolshed", StorageRoot: testPublishStorageRoot, PublicRoot: testPublishPublicRoot,
+		Store: recorder, Signer: signer, Writer: &appregistry.Writer{Store: recorder}, Limits: limits,
+	}, mem, recorder
 }
 
 type publishArtifactURLs struct {
