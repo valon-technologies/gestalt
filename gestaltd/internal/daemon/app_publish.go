@@ -220,7 +220,8 @@ func runAppPublishCommand(opts appPublishCommandOptions) error {
 	if err := writer.Preflight(req, progress.progress()); err != nil {
 		return err
 	}
-	return writer.Publish(req, progress.progress())
+	_, err = writer.Publish(req, progress.progress())
+	return err
 }
 
 type buildAppPublishManifestInput struct {

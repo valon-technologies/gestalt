@@ -17,6 +17,7 @@ var (
 type ObjectDescription struct {
 	Generation int64
 	SHA256     string
+	Size       int64
 }
 
 // RegistryObjectStore reads and writes registry bucket objects. Implementations must
@@ -72,7 +73,7 @@ func (s *MemoryObjectStore) DescribeObject(storageURL string) (ObjectDescription
 	if !ok {
 		return ObjectDescription{}, nil
 	}
-	return ObjectDescription{Generation: object.generation, SHA256: object.sha256}, nil
+	return ObjectDescription{Generation: object.generation, SHA256: object.sha256, Size: int64(len(object.data))}, nil
 }
 
 func (s *MemoryObjectStore) ReadObject(storageURL string) (int64, []byte, error) {

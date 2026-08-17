@@ -17,34 +17,14 @@ type PublishSessionStore interface {
 	GetByDedupeKey(ctx context.Context, dedupeKey string) (*core.AppRegistryPublishSession, error)
 	Create(ctx context.Context, input coredata.CreateAppRegistryPublishSessionInput) (*core.AppRegistryPublishSession, error)
 	Update(ctx context.Context, id string, update func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
+	ClaimFinalize(ctx context.Context, id string) (*core.AppRegistryPublishSession, error)
+	MarkPublished(ctx context.Context, id string, expectUpdated, publishedAt time.Time) (*core.AppRegistryPublishSession, error)
+	MarkFailed(ctx context.Context, id string, expectUpdated time.Time, reason string) (*core.AppRegistryPublishSession, error)
+	RenewLeases(ctx context.Context, id string, expectUpdated time.Time, mutate func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
 }
 
 type PublishSessionIndexChecker interface {
-	VersionPublished(ctx context.Context, publicRoot, appName, version string) (bool, error)
-}
-
-type RegistryReaderIndexChecker struct {
-	Reader *RegistryReader
-}
-
-func (c RegistryReaderIndexChecker) VersionPublished(ctx context.Context, publicRoot, appName, version string) (bool, error) {
-	reader := c.Reader
-	if reader == nil {
-		reader = &RegistryReader{}
-	}
-	index, err := reader.FetchAppIndex(ctx, publicRoot, appName)
-	if err != nil {
-		return false, err
-	}
-	if index == nil || index.Apps == nil {
-		return false, nil
-	}
-	appVersions, ok := index.Apps[appName]
-	if !ok {
-		return false, nil
-	}
-	_, ok = appVersions.Versions[strings.TrimSpace(version)]
-	return ok, nil
+	VersionPublished(ctx context.Context, storageRoot, appName, version string) (bool, error)
 }
 
 type PublishSessionService struct {
@@ -115,7 +95,7 @@ func (s *PublishSessionService) Create(ctx context.Context, input CreatePublishS
 		return nil, err
 	}
 	if s.Index != nil {
-		published, err := s.Index.VersionPublished(ctx, input.PublicRoot, input.App, version)
+		published, err := s.Index.VersionPublished(ctx, input.StorageRoot, input.App, version)
 		if err != nil {
 			return nil, err
 		}
@@ -189,11 +169,7 @@ func (s *PublishSessionService) renewExistingSession(
 	if err != nil {
 		return false, nil, err
 	}
-	updated, err := s.Sessions.Update(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
-		if current.State.Terminal() {
-			return nil
-		}
-		current.State = core.AppRegistryPublishSessionUploading
+	updated, err := s.Sessions.RenewLeases(ctx, session.ID, session.UpdatedAt, func(current *core.AppRegistryPublishSession) error {
 		current.Artifacts = artifacts
 		current.UploadLeases = leases
 		return nil
@@ -219,9 +195,10 @@ func (s *PublishSessionService) buildUploadLeases(
 		stagingPath := PublishStagingArtifactPath(stagingPrefix, platform, filename)
 		storageURL := StorageURL(storageRoot, stagingPath)
 		signed, err := s.Signer.SignCreateUpload(SignCreateUploadInput{
-			StorageURL: storageURL,
-			SHA256:     digest,
-			ExpiresAt:  expiresAt,
+			StorageURL:    storageURL,
+			SHA256:        digest,
+			ContentLength: artifact.Size,
+			ExpiresAt:     expiresAt,
 		})
 		if err != nil {
 			return nil, nil, err
@@ -249,7 +226,7 @@ type PublishSessionStatus struct {
 	MismatchedUploads []string
 }
 
-func (s *PublishSessionService) Status(ctx context.Context, app, publishID, storageRoot, publicRoot string) (*PublishSessionStatus, error) {
+func (s *PublishSessionService) Status(ctx context.Context, app, publishID, storageRoot, _ string) (*PublishSessionStatus, error) {
 	if s == nil || s.Sessions == nil || s.Store == nil {
 		return nil, ErrPublishSessionUnavailable
 	}
@@ -257,7 +234,12 @@ func (s *PublishSessionService) Status(ctx context.Context, app, publishID, stor
 	if err != nil {
 		return nil, err
 	}
-	if reconciled, reconcileErr := s.reconcilePublishedSession(ctx, session, publicRoot); reconcileErr != nil {
+	declaration, err := DecodePublishDeclaration(session.DeclarationJSON)
+	if err != nil {
+		return nil, err
+	}
+	sourceRef := strings.ToLower(strings.TrimSpace(declaration.SourceRef))
+	if reconciled, reconcileErr := s.reconcilePublishedSession(ctx, session, storageRoot, sourceRef, time.Time{}); reconcileErr != nil {
 		return nil, reconcileErr
 	} else if reconciled != nil {
 		session = reconciled
