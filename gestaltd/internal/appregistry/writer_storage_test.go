@@ -25,17 +25,16 @@ func TestWriterNeedsOnlyRegistryObjectStore(t *testing.T) {
 	}
 }
 
-func TestStatelessFinalizeNeedsRegistryObjectPromoter(t *testing.T) {
+func TestStatelessFinalizeNeedsRegistryObjectStoreWithPromoter(t *testing.T) {
 	t.Parallel()
 
-	store := NewMemoryObjectStore()
 	service := &StatelessPublishService{
 		Registry: "toolshed", StorageRoot: "gs://example", PublicRoot: "https://example",
-		Store: store, Writer: &Writer{Store: store},
+		Writer: &Writer{Store: NewMemoryObjectStore()},
 	}
 	_, err := service.Finalize(context.Background(), "toolshed", AdminPublishInput{App: "g-issues"})
 	if err != ErrPublishUnavailable {
-		t.Fatalf("Finalize without promoter = %v, want %v", err, ErrPublishUnavailable)
+		t.Fatalf("Finalize without store = %v, want %v", err, ErrPublishUnavailable)
 	}
 }
 

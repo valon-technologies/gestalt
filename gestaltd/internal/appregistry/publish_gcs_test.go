@@ -89,20 +89,30 @@ func TestGCSRegistryStoreIAMPermissions(t *testing.T) {
 		"storage.objects.create",
 		"storage.objects.delete",
 	}
-	if len(GCSRegistryStoreIAMPermissions) != len(want) {
-		t.Fatalf("permissions = %#v, want %#v", GCSRegistryStoreIAMPermissions, want)
+	got := gcsRegistryStoreIAMPermissionsCopy()
+	if len(got) != len(want) {
+		t.Fatalf("permissions = %#v, want %#v", got, want)
 	}
-	seen := make(map[string]struct{}, len(GCSRegistryStoreIAMPermissions))
-	for _, permission := range GCSRegistryStoreIAMPermissions {
+	seen := make(map[string]struct{}, len(got))
+	for _, permission := range got {
 		seen[permission] = struct{}{}
 	}
 	for _, permission := range want {
 		if _, ok := seen[permission]; !ok {
-			t.Fatalf("missing permission %q in %#v", permission, GCSRegistryStoreIAMPermissions)
+			t.Fatalf("missing permission %q in %#v", permission, got)
 		}
 	}
 	if _, ok := seen["storage.objects.update"]; ok {
 		t.Fatal("storage.objects.update is not required for NewWriter catalog rewrites")
+	}
+	if len(gcsRegistryStoreIAMPermissions) != len(want) {
+		t.Fatalf("internal permission list = %#v", gcsRegistryStoreIAMPermissions)
+	}
+	copyA := gcsRegistryStoreIAMPermissionsCopy()
+	copyB := gcsRegistryStoreIAMPermissionsCopy()
+	copyA[0] = "mutated"
+	if copyB[0] == "mutated" || gcsRegistryStoreIAMPermissions[0] == "mutated" {
+		t.Fatal("gcsRegistryStoreIAMPermissionsCopy must return an independent slice")
 	}
 }
 

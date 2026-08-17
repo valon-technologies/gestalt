@@ -2,6 +2,7 @@ package appregistry_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -349,6 +350,17 @@ func TestValidatePublishDeclarationRequiresPositiveSize(t *testing.T) {
 	err := appregistry.ValidatePublishDeclaration("g-issues", decl, appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}})
 	if err == nil {
 		t.Fatal("expected zero size rejection")
+	}
+}
+
+func TestValidatePublishDeclarationRequiresBuilderVersion(t *testing.T) {
+	t.Parallel()
+
+	decl, _ := testPublishDeclaration(t, "g-issues", "0.3.0-dev.10")
+	decl.BuilderVersion = ""
+	err := appregistry.ValidatePublishDeclaration("g-issues", decl, appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}})
+	if !errors.Is(err, appregistry.ErrPublishDeclarationInvalid) {
+		t.Fatalf("ValidatePublishDeclaration error = %v, want declaration invalid", err)
 	}
 }
 

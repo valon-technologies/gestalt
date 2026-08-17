@@ -56,20 +56,18 @@ type AdminPublishUpload struct {
 }
 
 type AdminPublishInput struct {
-	App             string
-	PublishID       string
-	DisplayName     string
-	Description     string
-	GestaltdVersion string
-	Declaration     *PublishDeclaration
+	App         string
+	PublishID   string
+	DisplayName string
+	Description string
+	Declaration *PublishDeclaration
 }
 
 type StatelessPublishService struct {
 	Registry    string
 	StorageRoot string
 	PublicRoot  string
-	Store       RegistryObjectStore
-	Promoter    RegistryObjectPromoter
+	Store       RegistryObjectStoreWithPromoter
 	Signer      RegistryUploadSigner
 	Writer      *Writer
 	Limits      PublishLimits
@@ -117,7 +115,7 @@ func (s *StatelessPublishService) Begin(ctx context.Context, appRegistry string,
 }
 
 func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry string, input AdminPublishInput) (*AdminPublishResponse, error) {
-	if s == nil || s.Store == nil || s.Promoter == nil || s.Writer == nil {
+	if s == nil || s.Store == nil || s.Writer == nil {
 		return nil, ErrPublishUnavailable
 	}
 	if err := s.ensureWritableRegistry(appRegistry); err != nil {
@@ -286,7 +284,7 @@ func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, 
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
 		}
-		if err := s.Promoter.PromoteObject(PromoteObjectInput{
+		if err := s.Store.PromoteObject(PromoteObjectInput{
 			SourceURL: stagingURL, SourceGeneration: described.Generation,
 			DestURL: StorageURL(s.StorageRoot, finalRel), ExpectedSHA256: artifact.SHA256, SourceRef: sourceRef,
 		}); err != nil {
@@ -327,9 +325,6 @@ func (s *StatelessPublishService) buildFinalManifest(
 	}
 	sourceRef := declarationSourceRef(declaration)
 	builderVersion := strings.TrimSpace(declaration.BuilderVersion)
-	if builderVersion == "" {
-		builderVersion = strings.TrimSpace(input.GestaltdVersion)
-	}
 	layout, err := ResolvePublishLayout(declaration.Manifest.Source, version)
 	if err != nil {
 		return PublishManifest{}, err
