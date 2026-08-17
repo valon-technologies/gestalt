@@ -237,7 +237,7 @@ func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef s
 		SourceRef:  sourceRef,
 		SHA256:     object.SHA256,
 	}); err != nil {
-		if object.Kind == PublishObjectKindEntry && errors.Is(err, ErrObjectPreconditionFailed) {
+		if object.Kind == PublishObjectKindEntry && isObjectGenerationPreconditionFailed(err) {
 			skipped, reconcileErr := w.reconcileExistingEntryObject(object)
 			if reconcileErr != nil {
 				return ImmutableObjectOutcome{}, "", reconcileErr
@@ -350,7 +350,7 @@ func (w *Writer) uploadIndex(req PublishRequest, entry Entry, progress PublishPr
 		})
 		_ = os.Remove(tmpPath)
 		if err != nil {
-			if isCatalogPreconditionFailed(err) && attempt < w.catalogAttempts() {
+			if isObjectGenerationPreconditionFailed(err) && attempt < w.catalogAttempts() {
 				if progress.Status != nil {
 					progress.Status("App registry index update conflict; retrying")
 				}
@@ -410,7 +410,7 @@ func (w *Writer) uploadRetention(req PublishRequest, entry Entry, progress Publi
 		})
 		_ = os.Remove(tmpPath)
 		if err != nil {
-			if isCatalogPreconditionFailed(err) && attempt < w.catalogAttempts() {
+			if isObjectGenerationPreconditionFailed(err) && attempt < w.catalogAttempts() {
 				continue
 			}
 			return CatalogWriteOutcomeNotAttempted, err
@@ -461,7 +461,7 @@ func decodeRetentionIndexOrEmpty(existing []byte) (*RetentionIndex, error) {
 	return DecodeRetentionIndex(existing)
 }
 
-func isCatalogPreconditionFailed(err error) bool {
+func isObjectGenerationPreconditionFailed(err error) bool {
 	if errors.Is(err, ErrObjectPreconditionFailed) {
 		return true
 	}
@@ -470,5 +470,5 @@ func isCatalogPreconditionFailed(err error) bool {
 
 // CatalogPreconditionFailed reports whether err is a generation/precondition conflict.
 func CatalogPreconditionFailed(err error) bool {
-	return isCatalogPreconditionFailed(err)
+	return isObjectGenerationPreconditionFailed(err)
 }
