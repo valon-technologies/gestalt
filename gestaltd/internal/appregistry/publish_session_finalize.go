@@ -58,6 +58,13 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 		return &FinalizePublishSessionResult{Session: reconciled, Manifest: manifest}, nil
 	}
 
+	if err := s.verifyStagingUploads(session, input.StorageRoot); err != nil {
+		if isTerminalFinalizeError(err) {
+			_, _ = s.failSession(ctx, session, err)
+		}
+		return nil, err
+	}
+
 	session, err = s.claimFinalize(ctx, session)
 	if err != nil {
 		if errors.Is(err, ErrPublishFinalizeInProgress) {
@@ -76,10 +83,17 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 		publishedAt = s.now()
 	}
 
-	if err := s.verifyAndPromoteUploads(session, declaration, input.StorageRoot, sourceRef); err != nil {
+	if session, err = s.renewFinalizeClaim(ctx, session); err != nil {
+		return nil, err
+	}
+	session, err = s.verifyAndPromoteUploads(ctx, session, declaration, input.StorageRoot, sourceRef)
+	if err != nil {
 		if isTerminalFinalizeError(err) {
 			_, _ = s.failSession(ctx, session, err)
 		}
+		return nil, err
+	}
+	if session, err = s.renewFinalizeClaim(ctx, session); err != nil {
 		return nil, err
 	}
 	manifest, err := s.buildFinalManifest(input, session, declaration, publishedAt)
@@ -91,11 +105,17 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 	}
 	defer func() { _ = os.Remove(manifest.EntryObject.LocalPath) }()
 
+	if session, err = s.renewFinalizeClaim(ctx, session); err != nil {
+		return nil, err
+	}
 	req := PublishRequest{Manifest: manifest, SourceRef: sourceRef}
 	if err := s.Writer.Preflight(req, PublishProgress{}); err != nil {
 		if isTerminalFinalizeError(err) {
 			_, _ = s.failSession(ctx, session, err)
 		}
+		return nil, err
+	}
+	if session, err = s.renewFinalizeClaim(ctx, session); err != nil {
 		return nil, err
 	}
 	result, err := s.Writer.Publish(req, PublishProgress{})
@@ -104,6 +124,9 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 	}
 	if !publishIndexCommitted(result) {
 		return nil, fmt.Errorf("registry index was not updated")
+	}
+	if session, err = s.renewFinalizeClaim(ctx, session); err != nil {
+		return nil, err
 	}
 	entry, loadErr := LoadPublishedEntry(s.Store, input.StorageRoot, session.App, session.Version)
 	if loadErr != nil {
@@ -134,31 +157,24 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 }
 
 func (s *PublishSessionService) claimFinalize(ctx context.Context, session *core.AppRegistryPublishSession) (*core.AppRegistryPublishSession, error) {
-	if session.State == core.AppRegistryPublishSessionFinalizing {
-		now := s.now()
-		if !session.FinalizeClaimExpiresAt.IsZero() && session.FinalizeClaimExpiresAt.After(now) {
-			return session, nil
-		}
-	}
 	claimed, err := s.Sessions.ClaimFinalize(ctx, session.ID, s.limits().FinalizeClaimLeaseTTL)
 	if err != nil {
 		if errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
-			return session, ErrPublishFinalizeInProgress
+			return nil, ErrPublishFinalizeInProgress
 		}
 		return nil, err
 	}
 	return claimed, nil
 }
 
-func (s *PublishSessionService) verifyAndPromoteUploads(
-	session *core.AppRegistryPublishSession,
-	declaration *PublishDeclaration,
-	storageRoot, sourceRef string,
-) error {
-	layout, err := ResolvePublishLayout(declaration.Manifest.Source, session.Version)
-	if err != nil {
-		return err
+func (s *PublishSessionService) renewFinalizeClaim(ctx context.Context, session *core.AppRegistryPublishSession) (*core.AppRegistryPublishSession, error) {
+	if session == nil || strings.TrimSpace(session.FinalizeClaimToken) == "" {
+		return session, nil
 	}
+	return s.Sessions.RenewFinalizeClaim(ctx, session.ID, session.FinalizeClaimToken, session.UpdatedAt, s.limits().FinalizeClaimLeaseTTL)
+}
+
+func (s *PublishSessionService) verifyStagingUploads(session *core.AppRegistryPublishSession, storageRoot string) error {
 	for _, artifact := range session.Artifacts {
 		stagingPath := PublishStagingArtifactPath(session.StagingPrefix, artifact.Platform, artifact.Filename)
 		stagingURL := StorageURL(storageRoot, stagingPath)
@@ -175,6 +191,41 @@ func (s *PublishSessionService) verifyAndPromoteUploads(
 		if artifact.Size > 0 && described.Size > 0 && described.Size != artifact.Size {
 			return fmt.Errorf("%w: %s size mismatch", ErrPublishUploadMismatch, artifact.Platform)
 		}
+	}
+	return nil
+}
+
+func (s *PublishSessionService) verifyAndPromoteUploads(
+	ctx context.Context,
+	session *core.AppRegistryPublishSession,
+	declaration *PublishDeclaration,
+	storageRoot, sourceRef string,
+) (*core.AppRegistryPublishSession, error) {
+	layout, err := ResolvePublishLayout(declaration.Manifest.Source, session.Version)
+	if err != nil {
+		return nil, err
+	}
+	for _, artifact := range session.Artifacts {
+		var renewErr error
+		session, renewErr = s.renewFinalizeClaim(ctx, session)
+		if renewErr != nil {
+			return nil, renewErr
+		}
+		stagingPath := PublishStagingArtifactPath(session.StagingPrefix, artifact.Platform, artifact.Filename)
+		stagingURL := StorageURL(storageRoot, stagingPath)
+		described, err := s.Store.DescribeObject(stagingURL)
+		if err != nil {
+			return nil, err
+		}
+		if described.Generation == 0 {
+			return nil, fmt.Errorf("%w: %s", ErrPublishUploadMissing, artifact.Platform)
+		}
+		if strings.ToLower(strings.TrimSpace(described.SHA256)) != strings.ToLower(strings.TrimSpace(artifact.SHA256)) {
+			return nil, fmt.Errorf("%w: %s", ErrPublishUploadMismatch, artifact.Platform)
+		}
+		if artifact.Size > 0 && described.Size > 0 && described.Size != artifact.Size {
+			return nil, fmt.Errorf("%w: %s size mismatch", ErrPublishUploadMismatch, artifact.Platform)
+		}
 		filename := strings.TrimSpace(artifact.Filename)
 		finalRel := filepath.ToSlash(filepath.Join(layout.ArtifactPrefix, filename))
 		finalURL := StorageURL(storageRoot, finalRel)
@@ -185,10 +236,10 @@ func (s *PublishSessionService) verifyAndPromoteUploads(
 			ExpectedSHA256:   artifact.SHA256,
 			SourceRef:        sourceRef,
 		}); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return session, nil
 }
 
 func (s *PublishSessionService) buildFinalManifest(

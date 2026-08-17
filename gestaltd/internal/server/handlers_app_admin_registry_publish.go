@@ -269,6 +269,7 @@ func writeAppAdminRegistryPublishError(w http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 	case errors.Is(err, appregistry.ErrPublishVersionConflict),
 		errors.Is(err, appregistry.ErrPublishUploadMismatch),
+		errors.Is(err, appregistry.ErrPublishFinalizeInProgress),
 		errors.Is(err, coredata.ErrPublishSessionVersionLocked):
 		status = http.StatusConflict
 	case errors.Is(err, appregistry.ErrPublishSessionFailed):

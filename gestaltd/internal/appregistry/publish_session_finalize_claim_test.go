@@ -74,14 +74,35 @@ func (h *finalizeCrashHarness) claimSession() (*core.AppRegistryPublishSession, 
 	return claimed, claimed.FinalizePublishedAt
 }
 
+func (h *finalizeCrashHarness) expireClaim(sessionID string) {
+	h.t.Helper()
+	if _, err := h.sessions.Update(h.ctx, sessionID, func(session *core.AppRegistryPublishSession) error {
+		session.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
+		return nil
+	}); err != nil {
+		h.t.Fatalf("expire claim: %v", err)
+	}
+}
+
 func TestPublishSessionFinalizeCrashBeforePromotion(t *testing.T) {
 	t.Parallel()
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.crash1")
-	_, wantPublishedAt := h.claimSession()
+	store := h.service.Store.(appregistry.WritableRegistryStore)
+	h.service.Store = &promoteTransientFailStore{WritableRegistryStore: store}
+	if _, err := h.service.Finalize(h.ctx, h.finalizeInput()); err == nil {
+		t.Fatal("expected transient promotion failure")
+	}
+	claimed, err := h.sessions.Get(h.ctx, h.created.Session.ID)
+	if err != nil {
+		t.Fatalf("Get session: %v", err)
+	}
+	wantPublishedAt := claimed.FinalizePublishedAt
+	h.expireClaim(claimed.ID)
 
+	h.service.Store = store
 	result, err := h.service.Finalize(h.ctx, h.finalizeInput())
 	if err != nil {
-		t.Fatalf("Finalize after claimed crash: %v", err)
+		t.Fatalf("Finalize after expired claim takeover: %v", err)
 	}
 	if !result.Session.PublishedAt.Equal(wantPublishedAt) {
 		t.Fatalf("PublishedAt = %v, want %v", result.Session.PublishedAt, wantPublishedAt)
@@ -103,6 +124,7 @@ func TestPublishSessionFinalizeCrashBeforeRetention(t *testing.T) {
 		t.Fatal("expected retention failure")
 	}
 
+	h.expireClaim(h.created.Session.ID)
 	h.service.Writer = &appregistry.Writer{Store: store}
 	result, err := h.service.Finalize(h.ctx, h.finalizeInput())
 	if err != nil {
@@ -133,6 +155,7 @@ func TestPublishSessionFinalizeCrashBeforeIndex(t *testing.T) {
 		t.Fatal("expected index failure")
 	}
 
+	h.expireClaim(h.created.Session.ID)
 	h.service.Writer = &appregistry.Writer{Store: store}
 	result, err := h.service.Finalize(h.ctx, h.finalizeInput())
 	if err != nil {

@@ -80,6 +80,28 @@ func (s *AppRegistryPublishSessionService) Transition(ctx context.Context, id st
 	return session, nil
 }
 
+func (s *AppRegistryPublishSessionService) RenewFinalizeClaim(ctx context.Context, id, claimToken string, expectUpdated time.Time, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error) {
+	claimToken = strings.TrimSpace(claimToken)
+	if claimToken == "" {
+		return nil, fmt.Errorf("%w: session %q claim token is required", ErrPublishSessionClaimMismatch, id)
+	}
+	return s.Transition(ctx, id, PublishSessionTransition{
+		ExpectedStates: []core.AppRegistryPublishSessionState{core.AppRegistryPublishSessionFinalizing},
+		ExpectUpdated:  expectUpdated,
+		Mutate: func(current *core.AppRegistryPublishSession) error {
+			if err := requireFinalizeClaimToken(current, claimToken); err != nil {
+				return err
+			}
+			now := time.Now().UTC().Truncate(time.Millisecond)
+			if current.FinalizeClaimExpiresAt.IsZero() || !current.FinalizeClaimExpiresAt.After(now) {
+				return fmt.Errorf("%w: session %q finalize claim expired", ErrPublishSessionFinalizeConflict, id)
+			}
+			current.FinalizeClaimExpiresAt = now.Add(normalizeFinalizeClaimLeaseTTL(leaseTTL))
+			return nil
+		},
+	})
+}
+
 func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id string, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error) {
 	session, err := s.Get(ctx, id)
 	if err != nil {
