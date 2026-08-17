@@ -157,6 +157,9 @@ func Publish(ctx context.Context, input PublishInput) (PublishResult, error) {
 		return zero, sessionFailureError(finalized)
 	}
 	result := publishResultFromSession(baseURL, finalized)
+	if created.Renewed {
+		result.Renewed = true
+	}
 	printPublishResult(os.Stdout, result)
 	return result, nil
 }
@@ -195,6 +198,7 @@ func uploadMissingArtifacts(ctx context.Context, uploader *Uploader, archives []
 			LocalPath: archive.Path,
 			SHA256:    archive.SHA256,
 			UploadURL: upload.UploadURL,
+			Headers:   upload.Headers,
 		}); err != nil {
 			return err
 		}

@@ -9,9 +9,10 @@ const sessionStateFailed = "failed"
 
 // SessionUpload describes a scoped artifact upload lease returned by the API.
 type SessionUpload struct {
-	Platform  string `json:"platform"`
-	UploadURL string `json:"uploadUrl"`
-	ExpiresAt string `json:"expiresAt"`
+	Platform  string            `json:"platform"`
+	UploadURL string            `json:"uploadUrl"`
+	ExpiresAt string            `json:"expiresAt"`
+	Headers   map[string]string `json:"headers,omitempty"`
 }
 
 // SessionResponse is the typed API contract for publish session endpoints.

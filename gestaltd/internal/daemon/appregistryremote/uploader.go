@@ -2,19 +2,25 @@ package appregistryremote
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 )
 
 const defaultUploadTimeout = 30 * time.Minute
+
+var signedUploadHeaderOrder = []string{
+	appregistry.UploadHeaderContentLength,
+	appregistry.UploadHeaderXGoogIfGenerationMatch,
+	appregistry.UploadHeaderXGoogMetaSHA256,
+	appregistry.UploadHeaderXGoogContentSHA256,
+}
 
 // ArtifactUploadInput describes a local archive upload to a scoped signed URL.
 type ArtifactUploadInput struct {
@@ -22,6 +28,7 @@ type ArtifactUploadInput struct {
 	LocalPath string
 	SHA256    string
 	UploadURL string
+	Headers   map[string]string
 }
 
 // Uploader streams local artifacts to signed upload URLs.
@@ -33,13 +40,14 @@ func (u *Uploader) Upload(ctx context.Context, input ArtifactUploadInput) error 
 	if u == nil {
 		return fmt.Errorf("upload client is not configured")
 	}
+	platform := strings.TrimSpace(input.Platform)
 	localPath := strings.TrimSpace(input.LocalPath)
 	if localPath == "" {
 		return fmt.Errorf("upload local path is required")
 	}
 	uploadURL := strings.TrimSpace(input.UploadURL)
 	if uploadURL == "" {
-		return fmt.Errorf("upload URL is required for platform %q", strings.TrimSpace(input.Platform))
+		return fmt.Errorf("upload URL is required for platform %q", platform)
 	}
 	file, err := os.Open(localPath)
 	if err != nil {
@@ -50,26 +58,25 @@ func (u *Uploader) Upload(ctx context.Context, input ArtifactUploadInput) error 
 	if err != nil {
 		return fmt.Errorf("stat %s: %w", localPath, err)
 	}
+	if err := validateSignedUploadLeaseHeaders(platform, input.Headers, info.Size(), input.SHA256); err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, uploadURL, file)
 	if err != nil {
 		return err
 	}
 	req.ContentLength = info.Size()
-	headers, err := signedUploadHeaders(uploadURL, input.SHA256)
-	if err != nil {
-		return err
-	}
-	for key, value := range headers {
+	for key, value := range input.Headers {
 		req.Header.Set(key, value)
 	}
 	resp, err := u.httpClient().Do(req)
 	if err != nil {
-		return fmt.Errorf("upload platform %q: %w", strings.TrimSpace(input.Platform), err)
+		return fmt.Errorf("upload platform %q: %w", platform, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("upload platform %q returned %d: %s", strings.TrimSpace(input.Platform), resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("upload platform %q returned %d: %s", platform, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return nil
 }
@@ -81,28 +88,39 @@ func (u *Uploader) httpClient() *http.Client {
 	return &http.Client{Timeout: defaultUploadTimeout}
 }
 
-func signedUploadHeaders(uploadURL, digestHex string) (map[string]string, error) {
-	headers := map[string]string{
-		"Content-Type": "application/octet-stream",
+func validateSignedUploadLeaseHeaders(platform string, headers map[string]string, fileSize int64, sha256Hex string) error {
+	if len(headers) == 0 {
+		return fmt.Errorf("upload platform %q: signed upload headers are required", platform)
 	}
-	digestHex = strings.ToLower(strings.TrimSpace(digestHex))
-	if digestHex == "" {
-		return headers, nil
-	}
-	sum, err := hex.DecodeString(digestHex)
+	expected, err := appregistry.BuildSignedUploadHeaders(fileSize, sha256Hex)
 	if err != nil {
-		return nil, fmt.Errorf("decode artifact sha256: %w", err)
+		return fmt.Errorf("upload platform %q: %w", platform, err)
 	}
-	if len(sum) != sha256.Size {
-		return nil, fmt.Errorf("artifact sha256 must be %d bytes", sha256.Size)
+	for _, name := range signedUploadHeaderOrder {
+		got, ok := headers[name]
+		if !ok {
+			return fmt.Errorf("upload platform %q: missing signed upload header %q", platform, name)
+		}
+		if got != expected[name] {
+			return fmt.Errorf("upload platform %q: signed upload header %q mismatch", platform, name)
+		}
 	}
-	headers["x-goog-content-sha256"] = base64.StdEncoding.EncodeToString(sum)
-	parsed, err := url.Parse(uploadURL)
-	if err != nil {
-		return headers, nil
+	extra := make([]string, 0)
+	for name := range headers {
+		found := false
+		for _, expectedName := range signedUploadHeaderOrder {
+			if name == expectedName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			extra = append(extra, name)
+		}
 	}
-	if strings.EqualFold(parsed.Scheme, "memory-upload") {
-		headers["X-Goog-Content-SHA256"] = headers["x-goog-content-sha256"]
+	if len(extra) > 0 {
+		sort.Strings(extra)
+		return fmt.Errorf("upload platform %q: unexpected signed upload headers: %s", platform, strings.Join(extra, ", "))
 	}
-	return headers, nil
+	return nil
 }

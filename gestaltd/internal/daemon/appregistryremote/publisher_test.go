@@ -46,9 +46,11 @@ func TestPublishUploadFinalizeAndResume(t *testing.T) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if got := r.Header.Get("x-goog-content-sha256"); got == "" {
-			http.Error(w, "missing digest header", http.StatusBadRequest)
-			return
+		for _, name := range signedUploadHeaderOrder {
+			if r.Header.Get(name) == "" {
+				http.Error(w, "missing signed header", http.StatusBadRequest)
+				return
+			}
 		}
 		body, _ := io.ReadAll(r.Body)
 		sum := sha256.Sum256(body)
@@ -62,6 +64,9 @@ func TestPublishUploadFinalizeAndResume(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(uploadServer.Close)
+
+	linuxHeaders := mustTestUploadHeaders(t, int64(len(data)), digest)
+	darwinHeaders := mustTestUploadHeaders(t, int64(len(darwinData)), digest2)
 
 	state := "created"
 	publishID := "pub_test123"
@@ -83,8 +88,8 @@ func TestPublishUploadFinalizeAndResume(t *testing.T) {
 				Version:   "0.3.0-dev.1",
 				State:     state,
 				Uploads: []SessionUpload{
-					{Platform: "linux/amd64", UploadURL: uploadServer.URL + "/upload/linux/amd64?sha256=" + digest},
-					{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64?sha256=" + digest2},
+					{Platform: "linux/amd64", UploadURL: uploadServer.URL + "/upload/linux/amd64?sha256=" + digest, Headers: linuxHeaders},
+					{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64?sha256=" + digest2, Headers: darwinHeaders},
 				},
 			})
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, publishID):
@@ -99,8 +104,8 @@ func TestPublishUploadFinalizeAndResume(t *testing.T) {
 				PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state,
 				MissingUploads: missing,
 				Uploads: []SessionUpload{
-					{Platform: "linux/amd64", UploadURL: uploadServer.URL + "/upload/linux/amd64?sha256=" + digest},
-					{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64?sha256=" + digest2},
+					{Platform: "linux/amd64", UploadURL: uploadServer.URL + "/upload/linux/amd64?sha256=" + digest, Headers: linuxHeaders},
+					{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64?sha256=" + digest2, Headers: darwinHeaders},
 				},
 			})
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/finalize"):
@@ -197,6 +202,133 @@ func TestPublishAuthPrecedenceUsesExplicitToken(t *testing.T) {
 	if authHeader != "Bearer explicit-token" {
 		t.Fatalf("Authorization = %q", authHeader)
 	}
+}
+
+func TestPublishUsesRenewedUploadLease(t *testing.T) {
+	registerTestPublishHelpers(t)
+
+	_, distDir, runner := setupTestPublishRepo(t)
+	artifactPath := filepath.Join(distDir, "linux-amd64.tar.gz")
+	data, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	digest := hex.EncodeToString(sum[:])
+	darwinData, err := os.ReadFile(filepath.Join(distDir, "darwin-arm64.tar.gz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	darwinSum := sha256.Sum256(darwinData)
+	digest2 := hex.EncodeToString(darwinSum[:])
+
+	var gotLinuxURL, gotDarwinURL string
+	uploaded := map[string]int{}
+	var uploadMu sync.Mutex
+	uploadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		platform := strings.TrimPrefix(r.URL.Path, "/upload/")
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		for _, name := range signedUploadHeaderOrder {
+			if r.Header.Get(name) == "" {
+				http.Error(w, "missing signed header", http.StatusBadRequest)
+				return
+			}
+		}
+		if !strings.Contains(r.URL.RawQuery, "renewed=1") {
+			http.Error(w, "stale upload URL", http.StatusBadRequest)
+			return
+		}
+		uploadMu.Lock()
+		switch platform {
+		case "linux/amd64":
+			gotLinuxURL = r.URL.String()
+		case "darwin/arm64":
+			gotDarwinURL = r.URL.String()
+		}
+		uploaded[platform]++
+		uploadMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(uploadServer.Close)
+
+	renewedLinuxHeaders := mustTestUploadHeaders(t, int64(len(data)), digest)
+	renewedDarwinHeaders := mustTestUploadHeaders(t, int64(len(darwinData)), digest2)
+	renewedLinuxURL := uploadServer.URL + "/upload/linux/amd64?sha256=" + digest + "&renewed=1"
+	renewedDarwinURL := uploadServer.URL + "/upload/darwin/arm64?sha256=" + digest2 + "&renewed=1"
+	staleLinuxURL := uploadServer.URL + "/upload/linux/amd64?sha256=" + digest
+	staleDarwinURL := uploadServer.URL + "/upload/darwin/arm64?sha256=" + digest2
+
+	state := "created"
+	publishID := "pub_renew"
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/publishes"):
+			writeJSON(w, SessionResponse{
+				PublishID: publishID,
+				App:       "demo",
+				Version:   "0.3.0-dev.1",
+				State:     state,
+				Renewed:   true,
+				Uploads: []SessionUpload{
+					{Platform: "linux/amd64", UploadURL: staleLinuxURL, Headers: renewedLinuxHeaders},
+					{Platform: "darwin/arm64", UploadURL: staleDarwinURL, Headers: renewedDarwinHeaders},
+				},
+			})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, publishID):
+			missing := []string{"linux/amd64", "darwin/arm64"}
+			writeJSON(w, SessionResponse{
+				PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state,
+				MissingUploads: missing,
+				Uploads: []SessionUpload{
+					{Platform: "linux/amd64", UploadURL: renewedLinuxURL, Headers: renewedLinuxHeaders},
+					{Platform: "darwin/arm64", UploadURL: renewedDarwinURL, Headers: renewedDarwinHeaders},
+				},
+			})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/finalize"):
+			state = sessionStatePublished
+			writeJSON(w, SessionResponse{
+				PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state,
+				PublishedAt: "2026-08-17T12:00:00Z",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(apiServer.Close)
+
+	client := &Client{BaseURL: apiServer.URL, Token: "test-token"}
+	result, err := Publish(t.Context(), PublishInput{
+		Version:       "0.3.0-dev.1",
+		DistDirs:      []string{distDir},
+		GestaltURL:    apiServer.URL,
+		GestaltToken:  "test-token",
+		Client:        client,
+		CommandRunner: runner,
+	})
+	if err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	if !result.Renewed {
+		t.Fatalf("Publish() renewed = false, want true")
+	}
+	if uploaded["linux/amd64"] != 1 || uploaded["darwin/arm64"] != 1 {
+		t.Fatalf("upload counts = %#v", uploaded)
+	}
+	if !strings.Contains(gotLinuxURL, "renewed=1") || !strings.Contains(gotDarwinURL, "renewed=1") {
+		t.Fatalf("upload URLs = linux %q darwin %q, want renewed leases", gotLinuxURL, gotDarwinURL)
+	}
+}
+
+func mustTestUploadHeaders(t *testing.T, size int64, digest string) map[string]string {
+	t.Helper()
+	headers, err := appregistry.BuildSignedUploadHeaders(size, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return headers
 }
 
 func writeJSON(w http.ResponseWriter, payload any) {
