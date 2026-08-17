@@ -15,7 +15,8 @@ import type { App, Tool } from "./sdk.ts";
 interface InstalledRelease {
   key: string;
   release: PublishedRelease;
-  app: App<Record<string, Tool<any, any>>>;
+  replicas: Array<App<Record<string, Tool<any, any>>>>;
+  nextReplica: number;
 }
 
 interface InstalledGraph {
@@ -23,11 +24,31 @@ interface InstalledGraph {
   releases: Map<string, InstalledRelease>;
 }
 
+export interface InvocationRoute {
+  app: string;
+  version: string;
+  tool: string;
+  replica: number;
+}
+
+export interface InstallationOptions {
+  replicasPerRelease?: number;
+  onRoute?: (route: InvocationRoute) => void;
+}
+
 export class InstallationManager {
   private active: InstalledGraph | undefined;
   private readonly caller = new AsyncLocalStorage<string>();
+  private readonly replicasPerRelease: number;
 
-  constructor(private readonly registry: FilesystemRegistry) {
+  constructor(
+    private readonly registry: FilesystemRegistry,
+    private readonly options: InstallationOptions = {},
+  ) {
+    this.replicasPerRelease = options.replicasPerRelease ?? 1;
+    if (!Number.isSafeInteger(this.replicasPerRelease) || this.replicasPerRelease < 1) {
+      throw new ExperimentError("INVALID_REPLICA_COUNT", "replicasPerRelease must be a positive integer");
+    }
     globalThis.__gestaltExperimentInvoke = async (alias, tool, input, contractDigest) => {
       const sourceKey = this.caller.getStore();
       if (!sourceKey || !this.active) {
@@ -94,15 +115,20 @@ export class InstallationManager {
       }
       await this.loadCandidate(dependency.app, dependency.version, [...stack, key], releases);
     }
-    const moduleUrl = pathToFileURL(this.registry.artifactPath(app, version));
-    moduleUrl.searchParams.set("digest", release.artifactDigest);
-    const module = (await import(moduleUrl.href)) as {
-      default?: App<Record<string, Tool<any, any>>>;
-    };
-    if (!module.default || typeof module.default !== "object" || !module.default.tools) {
-      throw new ExperimentError("INVALID_ARTIFACT", `${key} has no default app export`);
+    const replicas: Array<App<Record<string, Tool<any, any>>>> = [];
+    for (let replica = 0; replica < this.replicasPerRelease; replica += 1) {
+      const moduleUrl = pathToFileURL(this.registry.artifactPath(app, version));
+      moduleUrl.searchParams.set("digest", release.artifactDigest);
+      moduleUrl.searchParams.set("replica", String(replica));
+      const module = (await import(moduleUrl.href)) as {
+        default?: App<Record<string, Tool<any, any>>>;
+      };
+      if (!module.default || typeof module.default !== "object" || !module.default.tools) {
+        throw new ExperimentError("INVALID_ARTIFACT", `${key} has no default app export`);
+      }
+      replicas.push(module.default);
     }
-    releases.set(key, { key, release, app: module.default });
+    releases.set(key, { key, release, replicas, nextReplica: 0 });
   }
 
   private async verifyRelease(key: string, release: PublishedRelease): Promise<void> {
@@ -134,10 +160,18 @@ export class InstallationManager {
     rawInput: unknown,
   ): Promise<unknown> {
     const contract = installed.release.contract.tools[toolName];
-    const tool = installed.app.tools[toolName];
+    const replica = installed.nextReplica % installed.replicas.length;
+    installed.nextReplica += 1;
+    const tool = installed.replicas[replica]!.tools[toolName];
     if (!contract || !tool) {
       throw new ExperimentError("INVALID_TOOL_REFERENCE", `${installed.key}.${toolName} does not exist`);
     }
+    this.options.onRoute?.({
+      app: installed.release.manifest.name,
+      version: installed.release.manifest.version,
+      tool: toolName,
+      replica,
+    });
     const parsedInput = await tool.input.safeParseAsync(rawInput);
     if (!parsedInput.success) {
       throw validationError("$.input", parsedInput.error.issues);
