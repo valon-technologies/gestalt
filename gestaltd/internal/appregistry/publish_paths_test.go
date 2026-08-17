@@ -33,7 +33,10 @@ func TestPublishStagingArtifactPathStaysUnderVersionPrefix(t *testing.T) {
 	t.Parallel()
 
 	versionPrefix := appregistry.PublishVersionStagingPrefix("g-issues", "0.3.0-dev.1")
-	stagingPrefix := appregistry.PublishStagingPrefix("g-issues", "0.3.0-dev.1", "digest")
+	stagingPrefix, err := appregistry.PublishStagingPrefix("g-issues", "0.3.0-dev.1", "digest")
+	if err != nil {
+		t.Fatalf("PublishStagingPrefix: %v", err)
+	}
 	joined, err := appregistry.PublishStagingArtifactPath(stagingPrefix, "linux/amd64", "linux-amd64.tar.gz")
 	if err != nil {
 		t.Fatalf("PublishStagingArtifactPath: %v", err)

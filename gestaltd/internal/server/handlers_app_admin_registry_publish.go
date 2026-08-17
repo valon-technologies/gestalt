@@ -30,16 +30,17 @@ func (s *Server) beginAppAdminRegistryPublish(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	subjectID, ok := s.appAdminPublisherSubjectID(w, r)
+	if !ok {
+		return
+	}
 	service, ok := s.appAdminPublishService(w)
 	if !ok {
 		return
 	}
-	declaration, ok := s.decodePublishDeclaration(w, r)
-	if !ok {
-		return
-	}
-	subjectID, ok := s.appAdminPublisherSubjectID(w, r)
-	if !ok {
+	declaration, decodeErr := s.decodePublishDeclaration(w, r)
+	if decodeErr != "" {
+		s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, "", "app.registry.publish.begin", false, decodeErr)
 		return
 	}
 	result, err := service.Begin(r.Context(), app.registry, appregistry.AdminPublishInput{
@@ -59,6 +60,10 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
+	subjectID, ok := s.appAdminPublisherSubjectID(w, r)
+	if !ok {
+		return
+	}
 	service, ok := s.appAdminPublishService(w)
 	if !ok {
 		return
@@ -68,12 +73,9 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "publishID is required")
 		return
 	}
-	declaration, ok := s.decodePublishDeclaration(w, r)
-	if !ok {
-		return
-	}
-	subjectID, ok := s.appAdminPublisherSubjectID(w, r)
-	if !ok {
+	declaration, decodeErr := s.decodePublishDeclaration(w, r)
+	if decodeErr != "" {
+		s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, publishID, "app.registry.publish.finalize", false, decodeErr)
 		return
 	}
 	displayName, description := app.name, ""
@@ -110,7 +112,7 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) decodePublishDeclaration(w http.ResponseWriter, r *http.Request) (*appregistry.PublishDeclaration, bool) {
+func (s *Server) decodePublishDeclaration(w http.ResponseWriter, r *http.Request) (*appregistry.PublishDeclaration, string) {
 	var body struct {
 		Declaration *appregistry.PublishDeclaration `json:"declaration"`
 	}
@@ -118,17 +120,17 @@ func (s *Server) decodePublishDeclaration(w http.ResponseWriter, r *http.Request
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return nil, false
+		return nil, "invalid JSON body"
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return nil, false
+		return nil, "invalid JSON body"
 	}
 	if body.Declaration == nil {
 		writeError(w, http.StatusBadRequest, "declaration is required")
-		return nil, false
+		return nil, "declaration is required"
 	}
-	return body.Declaration, true
+	return body.Declaration, ""
 }
 
 func (s *Server) appAdminPublishService(w http.ResponseWriter) (*appregistry.StatelessPublishService, bool) {

@@ -242,6 +242,49 @@ func newStatelessPublishHarnessWithNow(t *testing.T, now func() time.Time) (*app
 	}, mem
 }
 
+func testPublishDeclarationMultiPlatform(t *testing.T, appName, version string) (*appregistry.PublishDeclaration, [][]byte) {
+	t.Helper()
+	artifactBytesA := []byte("artifact-a-" + version)
+	sumA := sha256.Sum256(artifactBytesA)
+	digestA := hex.EncodeToString(sumA[:])
+	artifactBytesB := []byte("artifact-b-" + version)
+	sumB := sha256.Sum256(artifactBytesB)
+	digestB := hex.EncodeToString(sumB[:])
+	release := &providerrelease.Metadata{
+		Schema:        providerrelease.SchemaName,
+		SchemaVersion: providerrelease.SchemaVersion,
+		Package:       "github.com/valon-technologies/valon-tools/apps/" + appName,
+		Kind:          providermanifestv1.KindApp,
+		Version:       version,
+		Runtime:       providerrelease.RuntimeExecutable,
+		Artifacts: providerrelease.Artifacts{
+			"linux/amd64":  {Path: "linux-amd64.tar.gz", SHA256: digestA},
+			"darwin/arm64": {Path: "darwin-arm64.tar.gz", SHA256: digestB},
+		},
+		StaticValidation: &providerrelease.StaticValidation{
+			Manifest: &providermanifestv1.Manifest{
+				Kind: providermanifestv1.KindApp, Source: "github.com/valon-technologies/valon-tools/apps/" + appName,
+				Version: version, Spec: &providermanifestv1.Spec{},
+			},
+			Catalog: &catalog.Catalog{Name: appName, Operations: []catalog.CatalogOperation{{ID: "echo", Method: "POST"}}},
+		},
+	}
+	return &appregistry.PublishDeclaration{
+		Schema: appregistry.PublishDeclarationSchemaVersion,
+		Manifest: &providermanifestv1.Manifest{
+			Kind: providermanifestv1.KindApp, Source: "github.com/valon-technologies/valon-tools/apps/" + appName,
+			Version: version, Spec: &providermanifestv1.Spec{},
+		},
+		ManifestPath: "apps/" + appName + "/manifest.yaml", ReleaseMetadata: release,
+		PublicationKind: appregistry.PublicationKindLocal,
+		LocalSource:     &appregistry.LocalSourceState{CommitSHA: "651a5c30feb995c9364c38f63d0d5c3880bc2055"},
+		Artifacts: []appregistry.PublishDeclarationArtifact{
+			{Platform: "linux/amd64", Filename: "linux-amd64.tar.gz", SHA256: digestA, Size: int64(len(artifactBytesA))},
+			{Platform: "darwin/arm64", Filename: "darwin-arm64.tar.gz", SHA256: digestB, Size: int64(len(artifactBytesB))},
+		},
+	}, [][]byte{artifactBytesA, artifactBytesB}
+}
+
 func testPublishDeclaration(t *testing.T, appName, version string) (*appregistry.PublishDeclaration, []byte) {
 	t.Helper()
 	artifactBytes := []byte("artifact-" + version)

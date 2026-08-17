@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+
+	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
 
 func validatePublishArtifactFilename(filename string) error {
@@ -65,7 +67,7 @@ func normalizePublishPlatform(platform string) (string, error) {
 }
 
 func parsePlatformString(platform string) (string, string, error) {
-	return packageioParsePlatform(platform)
+	return packageio.ParsePlatformString(platform)
 }
 
 // JoinRegistryObjectPath joins path segments under prefix and rejects traversal escapes.
@@ -108,13 +110,9 @@ func PublishVersionStagingPrefix(appName, version string) string {
 	return path.Join("apps", strings.TrimSpace(appName), "publish-staging", strings.TrimSpace(version))
 }
 
-func PublishStagingPrefix(appName, version, declarationDigest string) string {
+func PublishStagingPrefix(appName, version, declarationDigest string) (string, error) {
 	base := PublishVersionStagingPrefix(appName, version)
-	joined, err := JoinRegistryObjectPath(base, strings.TrimSpace(declarationDigest))
-	if err != nil {
-		return path.Join(base, strings.TrimSpace(declarationDigest))
-	}
-	return joined
+	return JoinRegistryObjectPath(base, strings.TrimSpace(declarationDigest))
 }
 
 func PublishStagingArtifactPath(stagingPrefix, platform, filename string) (string, error) {
