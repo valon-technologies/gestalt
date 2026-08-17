@@ -34,7 +34,41 @@ type PublishDeclarationArtifact struct {
 	Size     int64  `json:"size,omitempty"`
 }
 
+// NormalizeAndValidatePublishDeclaration deep-clones declaration, validates the clone
+// (including mutation-prone providerrelease validation), and returns the canonical form.
+// Caller input is never modified.
+func NormalizeAndValidatePublishDeclaration(appName string, declaration *PublishDeclaration, limits PublishLimits) (*PublishDeclaration, error) {
+	if declaration == nil {
+		return nil, fmt.Errorf("%w: declaration is required", ErrPublishDeclarationInvalid)
+	}
+	clone, err := deepClonePublishDeclaration(declaration)
+	if err != nil {
+		return nil, fmt.Errorf("%w: clone declaration: %v", ErrPublishDeclarationInvalid, err)
+	}
+	if err := validatePublishDeclaration(appName, clone, limits); err != nil {
+		return nil, err
+	}
+	return canonicalPublishDeclaration(clone)
+}
+
 func ValidatePublishDeclaration(appName string, declaration *PublishDeclaration, limits PublishLimits) error {
+	_, err := NormalizeAndValidatePublishDeclaration(appName, declaration, limits)
+	return err
+}
+
+func deepClonePublishDeclaration(declaration *PublishDeclaration) (*PublishDeclaration, error) {
+	data, err := json.Marshal(declaration)
+	if err != nil {
+		return nil, err
+	}
+	var clone PublishDeclaration
+	if err := json.Unmarshal(data, &clone); err != nil {
+		return nil, err
+	}
+	return &clone, nil
+}
+
+func validatePublishDeclaration(appName string, declaration *PublishDeclaration, limits PublishLimits) error {
 	if declaration == nil {
 		return fmt.Errorf("%w: declaration is required", ErrPublishDeclarationInvalid)
 	}
@@ -124,16 +158,26 @@ func validatePublishReleaseMetadata(release *providerrelease.Metadata, manifest 
 	if release == nil || manifest == nil {
 		return fmt.Errorf("release metadata and manifest are required")
 	}
-	if strings.TrimSpace(release.Version) != strings.TrimSpace(manifest.Version) {
+	releaseVersion := strings.TrimSpace(release.Version)
+	manifestVersion := strings.TrimSpace(manifest.Version)
+	if releaseVersion != manifestVersion {
 		return fmt.Errorf("releaseMetadata version %q does not match manifest version %q", release.Version, manifest.Version)
 	}
-	if strings.TrimSpace(release.Package) != strings.TrimSpace(manifest.Source) {
+	releasePackage := strings.TrimSpace(release.Package)
+	manifestSource := strings.TrimSpace(manifest.Source)
+	if releasePackage != manifestSource {
 		return fmt.Errorf("releaseMetadata package %q does not match manifest source %q", release.Package, manifest.Source)
+	}
+	releaseKind := providermanifestv1.NormalizeKind(release.Kind)
+	manifestKind := providermanifestv1.NormalizeKind(manifest.Kind)
+	if releaseKind != manifestKind {
+		return fmt.Errorf("releaseMetadata kind %q does not match manifest kind %q", release.Kind, manifest.Kind)
 	}
 	releaseArtifacts, err := providerrelease.ArtifactsByTarget(release.Artifacts)
 	if err != nil {
 		return err
 	}
+	declPlatforms := make(map[string]struct{}, len(artifacts))
 	for _, artifact := range artifacts {
 		platform, err := normalizePublishPlatform(artifact.Platform)
 		if err != nil {
@@ -157,6 +201,12 @@ func validatePublishReleaseMetadata(release *providerrelease.Metadata, manifest 
 		if releaseDigest != declDigest {
 			return fmt.Errorf("releaseMetadata artifact sha256 for platform %q does not match declaration", platform)
 		}
+		declPlatforms[platform] = struct{}{}
+	}
+	for platform := range releaseArtifacts {
+		if _, ok := declPlatforms[platform]; !ok {
+			return fmt.Errorf("declaration has no artifact for releaseMetadata platform %q", platform)
+		}
 	}
 	return nil
 }
@@ -166,12 +216,28 @@ func canonicalPublishDeclaration(declaration *PublishDeclaration) (*PublishDecla
 		return nil, fmt.Errorf("declaration is required")
 	}
 	canonical := *declaration
+	canonical.Schema = PublishDeclarationSchemaVersion
 	if declaration.Manifest != nil {
 		manifestCopy := *declaration.Manifest
+		manifestCopy.Kind = providermanifestv1.NormalizeKind(manifestCopy.Kind)
+		manifestCopy.Source = strings.TrimSpace(manifestCopy.Source)
+		manifestCopy.Version = strings.TrimSpace(manifestCopy.Version)
 		canonical.Manifest = &manifestCopy
 	}
 	if declaration.ReleaseMetadata != nil {
 		releaseCopy := *declaration.ReleaseMetadata
+		releaseCopy.Kind = providermanifestv1.NormalizeKind(releaseCopy.Kind)
+		releaseCopy.Package = strings.TrimSpace(releaseCopy.Package)
+		releaseCopy.Version = strings.TrimSpace(releaseCopy.Version)
+		if releaseCopy.StaticValidation != nil && releaseCopy.StaticValidation.Manifest != nil {
+			staticCopy := *releaseCopy.StaticValidation
+			manifestCopy := *staticCopy.Manifest
+			manifestCopy.Kind = providermanifestv1.NormalizeKind(manifestCopy.Kind)
+			manifestCopy.Source = strings.TrimSpace(manifestCopy.Source)
+			manifestCopy.Version = strings.TrimSpace(manifestCopy.Version)
+			staticCopy.Manifest = &manifestCopy
+			releaseCopy.StaticValidation = &staticCopy
+		}
 		canonical.ReleaseMetadata = &releaseCopy
 	}
 	canonical.ManifestPath = strings.TrimSpace(canonical.ManifestPath)
@@ -180,7 +246,7 @@ func canonicalPublishDeclaration(declaration *PublishDeclaration) (*PublishDecla
 	if canonical.PublicationKind == "" {
 		canonical.PublicationKind = PublicationKindLocal
 	}
-	canonical.LocalSource = cloneLocalSourceState(canonical.LocalSource)
+	canonical.LocalSource = normalizeLocalSourceState(canonical.LocalSource)
 	canonical.Artifacts = make([]PublishDeclarationArtifact, len(declaration.Artifacts))
 	for i, artifact := range declaration.Artifacts {
 		platform, err := normalizePublishPlatform(artifact.Platform)

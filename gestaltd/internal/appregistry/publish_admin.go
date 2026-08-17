@@ -93,21 +93,21 @@ func (s *StatelessPublishService) Begin(ctx context.Context, appRegistry string,
 		return nil, err
 	}
 	limits := s.limits()
-	declaration := input.Declaration
-	if err := ValidatePublishDeclaration(input.App, declaration, limits); err != nil {
-		return nil, err
-	}
-	publishID, digest, version, stagingPrefix, err := s.resolveIdentity(input.App, declaration)
+	canonical, err := NormalizeAndValidatePublishDeclaration(input.App, input.Declaration, limits)
 	if err != nil {
 		return nil, err
 	}
-	sourceRef := declarationSourceRef(declaration)
+	publishID, digest, version, stagingPrefix, err := s.resolveIdentity(input.App, canonical)
+	if err != nil {
+		return nil, err
+	}
+	sourceRef := declarationSourceRef(canonical)
 	if entry, err := s.loadMatchingPublished(input.App, version, publishID, digest, sourceRef); err != nil {
 		return nil, versionConflictError(version, err)
 	} else if entry != nil {
 		return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
 	}
-	uploads, err := s.signMissingUploads(stagingPrefix, declaration, limits)
+	uploads, err := s.signMissingUploads(stagingPrefix, canonical, limits)
 	if err != nil {
 		return nil, err
 	}
@@ -123,18 +123,18 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry stri
 		return nil, err
 	}
 	limits := s.limits()
-	declaration := input.Declaration
-	if err := ValidatePublishDeclaration(input.App, declaration, limits); err != nil {
+	canonical, err := NormalizeAndValidatePublishDeclaration(input.App, input.Declaration, limits)
+	if err != nil {
 		return nil, err
 	}
-	publishID, digest, version, stagingPrefix, err := s.resolveIdentity(input.App, declaration)
+	publishID, digest, version, stagingPrefix, err := s.resolveIdentity(input.App, canonical)
 	if err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(input.PublishID) != publishID {
 		return nil, fmt.Errorf("%w: got %q, want %q", ErrPublishIDMismatch, input.PublishID, publishID)
 	}
-	sourceRef := declarationSourceRef(declaration)
+	sourceRef := declarationSourceRef(canonical)
 
 	if entry, matchErr := s.loadMatchingPublished(input.App, version, publishID, digest, sourceRef); matchErr != nil {
 		return nil, versionConflictError(version, matchErr)
@@ -142,12 +142,12 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry stri
 		return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
 	}
 
-	if err := s.promoteStagingArtifacts(stagingPrefix, declaration, sourceRef); err != nil {
+	if err := s.promoteStagingArtifacts(stagingPrefix, canonical, sourceRef); err != nil {
 		return nil, err
 	}
 
 	publishedAt := s.now()
-	manifest, err := s.buildFinalManifest(input, declaration, publishID, digest, version, publishedAt)
+	manifest, err := s.buildFinalManifest(input, canonical, publishID, digest, version, publishedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,10 @@ func (s *StatelessPublishService) resolveIdentity(app string, declaration *Publi
 	}
 	version = strings.TrimSpace(declaration.Manifest.Version)
 	publishID = DerivePublishID(app, version, digest)
-	stagingPrefix = PublishStagingPrefix(app, version, digest)
+	stagingPrefix, err = PublishStagingPrefix(app, version, digest)
+	if err != nil {
+		return "", "", "", "", err
+	}
 	return publishID, digest, version, stagingPrefix, nil
 }
 
@@ -304,7 +307,7 @@ func (s *StatelessPublishService) publishWithCatalogRetry(req PublishRequest) (P
 		if lastErr == nil && publishIndexCommitted(lastResult) {
 			return lastResult, nil
 		}
-		if lastErr != nil && !errors.Is(lastErr, ErrObjectPreconditionFailed) && !CatalogPreconditionFailed(lastErr) {
+		if lastErr != nil && !errors.Is(lastErr, ErrObjectPreconditionFailed) && !isCatalogPreconditionFailed(lastErr) {
 			return lastResult, lastErr
 		}
 	}
@@ -350,7 +353,7 @@ func (s *StatelessPublishService) buildFinalManifest(
 		Manifest: declaration.Manifest, Version: version, SourceRef: sourceRef,
 		ManifestPath: strings.TrimSpace(declaration.ManifestPath), PublicationKind: publicationKind,
 		PublishID: publishID, BuilderVersion: builderVersion, DeclarationDigest: digest,
-		LocalSource: cloneLocalSourceState(declaration.LocalSource), Release: declaration.ReleaseMetadata,
+		LocalSource: normalizeLocalSourceState(declaration.LocalSource), Release: declaration.ReleaseMetadata,
 		Artifacts: artifacts, PublishedAt: publishedAt.UTC(),
 	})
 	if err != nil {
