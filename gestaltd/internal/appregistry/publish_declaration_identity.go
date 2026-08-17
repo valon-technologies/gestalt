@@ -173,7 +173,7 @@ func validatePublishReleaseMetadata(release *providerrelease.Metadata, manifest 
 	if releaseKind != manifestKind {
 		return fmt.Errorf("releaseMetadata kind %q does not match manifest kind %q", release.Kind, manifest.Kind)
 	}
-	releaseArtifacts, err := providerrelease.ArtifactsByTarget(release.Artifacts)
+	releaseArtifacts, err := canonicalReleaseArtifacts(release.Artifacts)
 	if err != nil {
 		return err
 	}
@@ -238,6 +238,11 @@ func canonicalPublishDeclaration(declaration *PublishDeclaration) (*PublishDecla
 			staticCopy.Manifest = &manifestCopy
 			releaseCopy.StaticValidation = &staticCopy
 		}
+		canonicalArtifacts, err := canonicalReleaseArtifacts(releaseCopy.Artifacts)
+		if err != nil {
+			return nil, err
+		}
+		releaseCopy.Artifacts = canonicalArtifacts
 		canonical.ReleaseMetadata = &releaseCopy
 	}
 	canonical.ManifestPath = strings.TrimSpace(canonical.ManifestPath)
@@ -274,6 +279,44 @@ func canonicalPublishDeclaration(declaration *PublishDeclaration) (*PublishDecla
 		return canonical.Artifacts[i].Filename < canonical.Artifacts[j].Filename
 	})
 	return &canonical, nil
+}
+
+func canonicalReleaseArtifacts(artifacts providerrelease.Artifacts) (providerrelease.Artifacts, error) {
+	if len(artifacts) == 0 {
+		return nil, nil
+	}
+	canonical := make(providerrelease.Artifacts, len(artifacts))
+	for target, artifact := range artifacts {
+		canonicalTarget, err := canonicalReleaseArtifactTarget(target)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := canonical[canonicalTarget]; ok {
+			return nil, fmt.Errorf("duplicate release artifact target %q", canonicalTarget)
+		}
+		path := strings.TrimSpace(artifact.Path)
+		digest, err := normalizePublishArtifactSHA256(artifact.SHA256)
+		if err != nil {
+			return nil, fmt.Errorf("release artifact %q sha256: %w", canonicalTarget, err)
+		}
+		canonical[canonicalTarget] = providerrelease.Artifact{
+			Path:   path,
+			SHA256: digest,
+		}
+	}
+	return canonical, nil
+}
+
+func canonicalReleaseArtifactTarget(target string) (string, error) {
+	target = strings.TrimSpace(target)
+	switch target {
+	case "":
+		return "", fmt.Errorf("release artifact target is required")
+	case providerrelease.GenericTarget:
+		return providerrelease.GenericTarget, nil
+	default:
+		return normalizePublishPlatform(target)
+	}
 }
 
 func DeclarationDigest(declaration *PublishDeclaration) (string, error) {
