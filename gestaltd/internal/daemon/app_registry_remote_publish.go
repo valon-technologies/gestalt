@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -49,9 +48,6 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 	if err != nil {
 		return zero, err
 	}
-	if err := validateRemoteRequiredPlatforms(archives); err != nil {
-		return zero, err
-	}
 	appName, err := appregistry.AppNameFromManifestSource(releaseManifest.Source)
 	if err != nil {
 		return zero, fmt.Errorf("manifest source: %w", err)
@@ -71,11 +67,15 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 	if err := validateProviderPublishManifest(sourceManifest, releaseManifest, releaseVersion, version); err != nil {
 		return zero, err
 	}
+	manifestBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return zero, fmt.Errorf("read %s: %w", manifestPath, err)
+	}
 	buildMeta := p.buildReleaseMetadata
 	if buildMeta == nil {
 		buildMeta = buildProviderReleaseMetadata
 	}
-	releaseMetadata, err := buildMeta(releaseManifest, releaseVersion, archives, nil)
+	releaseMetadata, err := buildMeta(releaseManifest, releaseVersion, archives, manifestBytes)
 	if err != nil {
 		return zero, fmt.Errorf("build release metadata: %w", err)
 	}
@@ -87,24 +87,13 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 	if err != nil {
 		return zero, err
 	}
+	warnRemotePublishProvenance(p.Output, localSource)
 	declaration, err := buildRemotePublishDeclaration(appName, version, relManifestPath, sourceManifest, releaseMetadata, archives, localSource, p.BuilderVersion)
 	if err != nil {
 		return zero, err
 	}
 	baseURL := strings.TrimSpace(p.GestaltURL)
 	token := strings.TrimSpace(p.GestaltToken)
-	if baseURL == "" {
-		baseURL, err = config.ResolveGestaltCLIURL()
-		if err != nil {
-			return zero, err
-		}
-	}
-	if token == "" {
-		token, err = config.ResolveGestaltCLIToken()
-		if err != nil {
-			return zero, err
-		}
-	}
 	if baseURL == "" {
 		return zero, fmt.Errorf("gestalt URL is required; set GESTALT_URL or run `gestalt init`")
 	}
@@ -222,7 +211,7 @@ func buildRemotePublishDeclaration(appName, version, manifestPath string, source
 		ReleaseMetadata: release, Artifacts: artifacts, PublicationKind: appregistry.PublicationKindLocal,
 		LocalSource: localSource, BuilderVersion: strings.TrimSpace(builderVersion),
 	}
-	if err := appregistry.ValidatePublishDeclaration(appName, declaration, remoteRegistryPublishLimits); err != nil {
+	if err := appregistry.ValidatePublishDeclaration(appName, declaration, appregistry.DefaultPublishLimits()); err != nil {
 		return nil, err
 	}
 	return declaration, nil
@@ -269,21 +258,16 @@ func collectRemoteLocalSourceState(manifestPath string, runner remoteGitRunner) 
 	return state, nil
 }
 
-func validateRemoteRequiredPlatforms(archives []releaseArchive) error {
-	platforms := make(map[string]struct{}, len(archives))
-	for _, archive := range archives {
-		platforms[strings.TrimSpace(archive.Target)] = struct{}{}
+func warnRemotePublishProvenance(w io.Writer, localSource *appregistry.LocalSourceState) {
+	if w == nil {
+		return
 	}
-	var missing []string
-	for _, platform := range remoteRegistryPublishLimits.RequiredPlatforms {
-		if _, ok := platforms[strings.TrimSpace(platform)]; !ok {
-			missing = append(missing, platform)
-		}
+	switch {
+	case localSource == nil:
+		fmt.Fprintln(w, "warning: remote publish has no git provenance; version metadata will omit commitSha")
+	case localSource.Dirty:
+		fmt.Fprintf(w, "warning: remote publish is from a dirty checkout at %s\n", localSource.CommitSHA)
+	case localSource.Untracked:
+		fmt.Fprintf(w, "warning: remote publish has untracked files at commit %s\n", localSource.CommitSHA)
 	}
-	if len(missing) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%w: missing %s", appregistry.ErrPublishRequiredPlatform, strings.Join(missing, ", "))
 }
-
-var remoteRegistryPublishLimits = appregistry.PublishLimits{MaxArtifacts: 16, MaxArtifactBytes: 512 << 20, RequiredPlatforms: []string{"linux/amd64", "darwin/arm64"}}

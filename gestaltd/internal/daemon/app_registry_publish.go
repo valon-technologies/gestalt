@@ -38,9 +38,6 @@ func runAppRegistryPublish(args []string, gestaltdVersion string) error {
 		}
 		return runAppRegistryRemotePublish(opts.Version, []string(opts.DistDirs), gestaltdVersion)
 	}
-	if err := rejectRemoteOnlyPublishFlags(); err != nil {
-		return err
-	}
 	return runAppPublishWithOptions(appPublishCommandOptions{
 		Bucket:           opts.Bucket,
 		AppName:          opts.AppName,
@@ -115,9 +112,6 @@ func rejectDirectOnlyPublishFlags(bucket, app, ref string, dryRun bool, workflow
 	}
 }
 
-func rejectRemoteOnlyPublishFlags() error {
-	return nil
-}
 
 func runAppRegistryRemotePublish(version string, distDirs []string, gestaltdVersion string) error {
 	baseURL, err := config.ResolveGestaltCLIURL()
