@@ -171,7 +171,7 @@ func (s *PublishSessionService) renewFinalizeClaim(ctx context.Context, session 
 	if session == nil || strings.TrimSpace(session.FinalizeClaimToken) == "" {
 		return session, nil
 	}
-	return s.Sessions.RenewFinalizeClaim(ctx, session.ID, session.FinalizeClaimToken, session.UpdatedAt, s.limits().FinalizeClaimLeaseTTL)
+	return s.Sessions.RenewFinalizeClaim(ctx, session.ID, session.FinalizeClaimToken, session.Revision, s.limits().FinalizeClaimLeaseTTL)
 }
 
 func (s *PublishSessionService) verifyStagingUploads(session *core.AppRegistryPublishSession, storageRoot string) error {
@@ -344,7 +344,7 @@ func (s *PublishSessionService) failSession(ctx context.Context, session *core.A
 	if cause != nil {
 		reason = strings.TrimSpace(cause.Error())
 	}
-	return s.Sessions.MarkFailed(ctx, session.ID, session.FinalizeClaimToken, session.UpdatedAt, reason)
+	return s.Sessions.MarkFailed(ctx, session.ID, session.FinalizeClaimToken, session.Revision, reason)
 }
 
 func isTerminalPublishConflict(err error) bool {

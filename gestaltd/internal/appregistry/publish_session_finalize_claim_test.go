@@ -225,7 +225,7 @@ func TestPublishSessionFinalizeRejectsStaleClaimToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimFinalize: %v", err)
 	}
-	_, err = h.sessions.MarkPublished(h.ctx, claimed.ID, "stale-token", claimed.UpdatedAt, claimed.FinalizePublishedAt)
+	_, err = h.sessions.MarkPublished(h.ctx, claimed.ID, "stale-token", claimed.Revision, claimed.FinalizePublishedAt)
 	if !errors.Is(err, coredata.ErrPublishSessionClaimMismatch) {
 		t.Fatalf("MarkPublished stale token = %v", err)
 	}
@@ -270,11 +270,11 @@ func TestPublishSessionFinalizeTimestampStabilityAcrossRetries(t *testing.T) {
 func TestPublishSessionFailedSessionsNeverRevive(t *testing.T) {
 	t.Parallel()
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.crash8")
-	failed, err := h.sessions.MarkFailed(h.ctx, h.created.Session.ID, "", h.created.Session.UpdatedAt, "terminal")
+	failed, err := h.sessions.MarkFailed(h.ctx, h.created.Session.ID, "", h.created.Session.Revision, "terminal")
 	if err != nil {
 		t.Fatalf("MarkFailed: %v", err)
 	}
-	_, err = h.sessions.MarkPublished(h.ctx, failed.ID, failed.FinalizeClaimToken, failed.UpdatedAt, h.fixedNow)
+	_, err = h.sessions.MarkPublished(h.ctx, failed.ID, failed.FinalizeClaimToken, failed.Revision, h.fixedNow)
 	if !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
 		t.Fatalf("MarkPublished after failed = %v", err)
 	}

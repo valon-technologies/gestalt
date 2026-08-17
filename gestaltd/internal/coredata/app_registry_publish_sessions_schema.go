@@ -28,6 +28,7 @@ var AppRegistryPublishSessionsSchema = idb.ObjectStoreOptions{
 		{Name: "publish_started_at", Type: idb.TypeTime},
 		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "revision", Type: idb.TypeInt},
 		{Name: "published_at", Type: idb.TypeTime},
 		{Name: "staging_marked_stale_at", Type: idb.TypeTime},
 		{Name: "finalize_claim_token", Type: idb.TypeString},

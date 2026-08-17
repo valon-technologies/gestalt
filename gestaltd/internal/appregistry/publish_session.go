@@ -18,10 +18,10 @@ type PublishSessionStore interface {
 	Create(ctx context.Context, input coredata.CreateAppRegistryPublishSessionInput) (*core.AppRegistryPublishSession, error)
 	Update(ctx context.Context, id string, update func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
 	ClaimFinalize(ctx context.Context, id string, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error)
-	RenewFinalizeClaim(ctx context.Context, id, claimToken string, expectUpdated time.Time, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error)
-	MarkPublished(ctx context.Context, id, claimToken string, expectUpdated, publishedAt time.Time) (*core.AppRegistryPublishSession, error)
-	MarkFailed(ctx context.Context, id, claimToken string, expectUpdated time.Time, reason string) (*core.AppRegistryPublishSession, error)
-	RenewLeases(ctx context.Context, id string, expectUpdated time.Time, mutate func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
+	RenewFinalizeClaim(ctx context.Context, id, claimToken string, expectRevision int64, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error)
+	MarkPublished(ctx context.Context, id, claimToken string, expectRevision int64, publishedAt time.Time) (*core.AppRegistryPublishSession, error)
+	MarkFailed(ctx context.Context, id, claimToken string, expectRevision int64, reason string) (*core.AppRegistryPublishSession, error)
+	RenewLeases(ctx context.Context, id string, expectRevision int64, mutate func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
 }
 
 type PublishSessionIndexChecker interface {
@@ -170,7 +170,7 @@ func (s *PublishSessionService) renewExistingSession(
 	if err != nil {
 		return false, nil, err
 	}
-	updated, err := s.Sessions.RenewLeases(ctx, session.ID, session.UpdatedAt, func(current *core.AppRegistryPublishSession) error {
+	updated, err := s.Sessions.RenewLeases(ctx, session.ID, session.Revision, func(current *core.AppRegistryPublishSession) error {
 		current.Artifacts = artifacts
 		current.UploadLeases = leases
 		return nil

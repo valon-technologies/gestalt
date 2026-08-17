@@ -113,6 +113,27 @@ func jsonValue(v any) any {
 	}
 }
 
+func recInt64(rec idb.Record, key string) int64 {
+	v, ok := rec[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case uint64:
+		return int64(n)
+	case float64:
+		return int64(n)
+	default:
+		return 0
+	}
+}
+
 func recUint64(rec idb.Record, key string) uint64 {
 	v, ok := rec[key]
 	if !ok || v == nil {

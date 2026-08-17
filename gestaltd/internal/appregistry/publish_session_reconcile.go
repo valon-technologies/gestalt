@@ -154,7 +154,7 @@ func (s *PublishSessionService) ensureFinalizeClaimForReconcile(ctx context.Cont
 }
 
 func (s *PublishSessionService) markPublished(ctx context.Context, session *core.AppRegistryPublishSession, publishedAt time.Time) (*core.AppRegistryPublishSession, error) {
-	return s.Sessions.MarkPublished(ctx, session.ID, session.FinalizeClaimToken, session.UpdatedAt, publishedAt)
+	return s.Sessions.MarkPublished(ctx, session.ID, session.FinalizeClaimToken, session.Revision, publishedAt)
 }
 
 func publishIndexCommitted(result PublishResult) bool {

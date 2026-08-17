@@ -92,14 +92,14 @@ func TestAppRegistryPublishSessionNeverMarksFailedPublished(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	failed, err := svc.MarkFailed(ctx, session.ID, "", session.UpdatedAt, "boom")
+	failed, err := svc.MarkFailed(ctx, session.ID, "", session.Revision, "boom")
 	if err != nil {
 		t.Fatalf("MarkFailed: %v", err)
 	}
 	if failed.State != core.AppRegistryPublishSessionFailed {
 		t.Fatalf("state = %q", failed.State)
 	}
-	if _, err := svc.MarkPublished(ctx, session.ID, failed.FinalizeClaimToken, failed.UpdatedAt, failed.UpdatedAt); !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
+	if _, err := svc.MarkPublished(ctx, session.ID, failed.FinalizeClaimToken, failed.Revision, failed.UpdatedAt); !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
 		t.Fatalf("MarkPublished after failed error = %v", err)
 	}
 }

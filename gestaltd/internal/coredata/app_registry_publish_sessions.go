@@ -194,6 +194,7 @@ func appRegistryPublishSessionRecord(session *core.AppRegistryPublishSession) id
 		"publish_started_at":   session.PublishStartedAt,
 		"created_at":           session.CreatedAt,
 		"updated_at":           session.UpdatedAt,
+		"revision":             session.Revision,
 	}
 	if !session.PublishedAt.IsZero() {
 		rec["published_at"] = session.PublishedAt
@@ -233,6 +234,7 @@ func recordToAppRegistryPublishSession(rec idb.Record) *core.AppRegistryPublishS
 		PublishStartedAt:       recTime(rec, "publish_started_at"),
 		CreatedAt:              recTime(rec, "created_at"),
 		UpdatedAt:              recTime(rec, "updated_at"),
+		Revision:               recInt64(rec, "revision"),
 		PublishedAt:            recTime(rec, "published_at"),
 		StagingMarkedStale:     recTime(rec, "staging_marked_stale_at"),
 		FinalizeClaimToken:     recString(rec, "finalize_claim_token"),
