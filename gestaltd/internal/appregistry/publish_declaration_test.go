@@ -2,6 +2,7 @@ package appregistry_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -165,6 +166,117 @@ func TestDeclarationDigestStableAcrossArtifactOrder(t *testing.T) {
 	}
 	if got != baseDigest {
 		t.Fatalf("digests differ: %q vs %q", got, baseDigest)
+	}
+}
+
+func TestDeclarationDigestStableAcrossReleaseArtifactVariants(t *testing.T) {
+	t.Parallel()
+
+	base, _ := testPublishDeclaration(t, "g-issues", "0.3.0-dev.7d")
+	baseDigest, err := appregistry.DeclarationDigest(base)
+	if err != nil {
+		t.Fatalf("DeclarationDigest base: %v", err)
+	}
+	basePublishID := appregistry.DerivePublishID("g-issues", base.Manifest.Version, baseDigest)
+
+	cases := []struct {
+		name string
+		mut  func(*appregistry.PublishDeclaration)
+	}{
+		{
+			name: "release artifact target whitespace",
+			mut: func(d *appregistry.PublishDeclaration) {
+				artifact := d.ReleaseMetadata.Artifacts["linux/amd64"]
+				delete(d.ReleaseMetadata.Artifacts, "linux/amd64")
+				d.ReleaseMetadata.Artifacts["  linux/amd64  "] = artifact
+			},
+		},
+		{
+			name: "release artifact path whitespace",
+			mut: func(d *appregistry.PublishDeclaration) {
+				artifact := d.ReleaseMetadata.Artifacts["linux/amd64"]
+				artifact.Path = "  " + artifact.Path + "  "
+				d.ReleaseMetadata.Artifacts["linux/amd64"] = artifact
+				d.Artifacts[0].Filename = "  " + strings.TrimSpace(d.Artifacts[0].Filename) + "  "
+			},
+		},
+		{
+			name: "release artifact sha whitespace and casing",
+			mut: func(d *appregistry.PublishDeclaration) {
+				artifact := d.ReleaseMetadata.Artifacts["linux/amd64"]
+				artifact.SHA256 = "  " + strings.ToUpper(artifact.SHA256) + "  "
+				d.ReleaseMetadata.Artifacts["linux/amd64"] = artifact
+				d.Artifacts[0].SHA256 = "  " + strings.ToUpper(d.Artifacts[0].SHA256) + "  "
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			clone := clonePublishDeclaration(t, base)
+			tc.mut(clone)
+			gotDigest, err := appregistry.DeclarationDigest(clone)
+			if err != nil {
+				t.Fatalf("DeclarationDigest: %v", err)
+			}
+			if gotDigest != baseDigest {
+				t.Fatalf("digests differ: %q vs %q", gotDigest, baseDigest)
+			}
+			gotPublishID := appregistry.DerivePublishID("g-issues", clone.Manifest.Version, gotDigest)
+			if gotPublishID != basePublishID {
+				t.Fatalf("publish ids differ: %q vs %q", gotPublishID, basePublishID)
+			}
+		})
+	}
+}
+
+func TestNormalizeAndValidatePublishDeclarationPreservesCallerWithReleaseArtifactVariants(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		mut  func(*appregistry.PublishDeclaration)
+	}{
+		{
+			name: "release artifact target whitespace",
+			mut: func(d *appregistry.PublishDeclaration) {
+				artifact := d.ReleaseMetadata.Artifacts["linux/amd64"]
+				delete(d.ReleaseMetadata.Artifacts, "linux/amd64")
+				d.ReleaseMetadata.Artifacts["  linux/amd64  "] = artifact
+			},
+		},
+		{
+			name: "release artifact path and sha whitespace",
+			mut: func(d *appregistry.PublishDeclaration) {
+				artifact := d.ReleaseMetadata.Artifacts["linux/amd64"]
+				artifact.Path = "  " + artifact.Path + "  "
+				artifact.SHA256 = "  " + strings.ToUpper(artifact.SHA256) + "  "
+				d.ReleaseMetadata.Artifacts["linux/amd64"] = artifact
+				d.Artifacts[0].Filename = "  " + strings.TrimSpace(d.Artifacts[0].Filename) + "  "
+				d.Artifacts[0].SHA256 = "  " + strings.ToUpper(d.Artifacts[0].SHA256) + "  "
+			},
+		},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			original, _ := testPublishDeclaration(t, "g-issues", fmt.Sprintf("0.3.0-dev.10%c", 'a'+i))
+			tc.mut(original)
+			before, err := json.Marshal(original)
+			if err != nil {
+				t.Fatalf("marshal before: %v", err)
+			}
+			if _, err := appregistry.NormalizeAndValidatePublishDeclaration("g-issues", original, appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}}); err != nil {
+				t.Fatalf("NormalizeAndValidatePublishDeclaration: %v", err)
+			}
+			after, err := json.Marshal(original)
+			if err != nil {
+				t.Fatalf("marshal after: %v", err)
+			}
+			if string(before) != string(after) {
+				t.Fatalf("caller declaration mutated")
+			}
+		})
 	}
 }
 
