@@ -257,6 +257,90 @@ func TestAppCatalogServesIconsByURL(t *testing.T) {
 	}
 }
 
+func TestAppCatalogIncludesSourceTreeURL(t *testing.T) {
+	t.Parallel()
+
+	githubApp := &coretesting.StubIntegration{N: "roadmap", DN: "Roadmap"}
+	gitlabApp := &coretesting.StubIntegration{N: "notes", DN: "Notes"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, githubApp, gitlabApp)
+		defs := testPluginDefsForConnections("roadmap", "default")
+		defs["roadmap"].Source = config.ProviderSource{
+			Git: &config.GitSourceDef{
+				Repo: "https://github.com/example/apps.git",
+				Ref:  "main",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+		}
+		notes := testPluginDefsForConnections("notes", "default")["notes"]
+		notes.Source = config.ProviderSource{
+			Git: &config.GitSourceDef{
+				Repo: "https://gitlab.example.com/group/app.git",
+				Ref:  "main",
+				Path: "apps/notes/manifest.yaml",
+			},
+		}
+		defs["notes"] = notes
+		cfg.AppDefs = defs
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	catalog := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	var catalogApps []map[string]any
+	if err := json.Unmarshal(catalog, &catalogApps); err != nil {
+		t.Fatalf("decode catalog: %v", err)
+	}
+	got := map[string]map[string]any{}
+	for _, app := range catalogApps {
+		name, _ := app["name"].(string)
+		got[name] = app
+	}
+	roadmap, ok := got["roadmap"]
+	if !ok {
+		t.Fatalf("expected roadmap in catalog, got %s", catalog)
+	}
+	wantGitHub := "https://github.com/example/apps/tree/main/apps/roadmap"
+	if gotTree, _ := roadmap["sourceTreeUrl"].(string); gotTree != wantGitHub {
+		t.Fatalf("catalog roadmap sourceTreeUrl = %q, want %q: %s", gotTree, wantGitHub, catalog)
+	}
+	notes, ok := got["notes"]
+	if !ok {
+		t.Fatalf("expected notes in catalog, got %s", catalog)
+	}
+	if _, exists := notes["sourceTreeUrl"]; exists {
+		t.Fatalf("catalog notes sourceTreeUrl = %+v, want omitted for non-GitHub git", notes["sourceTreeUrl"])
+	}
+
+	overlay := getJSONPath(t, ts, "/api/v1/me/app-connections", http.StatusOK, "")
+	var statuses []map[string]any
+	if err := json.Unmarshal(overlay, &statuses); err != nil {
+		t.Fatalf("decode overlay: %v", err)
+	}
+	for _, status := range statuses {
+		if _, exists := status["sourceTreeUrl"]; exists {
+			t.Fatalf("connection overlay must not include catalog identity field sourceTreeUrl: %#v", status)
+		}
+	}
+
+	composed := getJSONPath(t, ts, "/api/v1/apps", http.StatusOK, "")
+	var integrations []map[string]any
+	if err := json.Unmarshal(composed, &integrations); err != nil {
+		t.Fatalf("decode composed listing: %v", err)
+	}
+	composedByName := map[string]map[string]any{}
+	for _, integration := range integrations {
+		name, _ := integration["name"].(string)
+		composedByName[name] = integration
+	}
+	if gotTree, _ := composedByName["roadmap"]["sourceTreeUrl"].(string); gotTree != wantGitHub {
+		t.Fatalf("composed roadmap sourceTreeUrl = %q, want %q: %s", gotTree, wantGitHub, composed)
+	}
+	if _, exists := composedByName["notes"]["sourceTreeUrl"]; exists {
+		t.Fatalf("composed notes sourceTreeUrl = %+v, want omitted", composedByName["notes"]["sourceTreeUrl"])
+	}
+}
+
 func TestAppCatalogOmitsCatalogHiddenApps(t *testing.T) {
 	t.Parallel()
 

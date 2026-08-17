@@ -28,6 +28,7 @@ type appDirectoryEntry struct {
 	MountedPath      string
 	ManagementPath   string
 	Prompts          []appPromptInfo
+	SourceTreeURL    string
 	ConnectionSchema []connectionSchemaInfo
 	Provider         core.Provider
 }
@@ -50,6 +51,7 @@ type appCatalogEntry struct {
 	MountedPath    string                 `json:"mountedPath,omitempty"`
 	ManagementPath string                 `json:"managementPath,omitempty"`
 	Prompts        []appPromptInfo        `json:"prompts,omitempty"`
+	SourceTreeURL  string                 `json:"sourceTreeUrl,omitempty"`
 	Connections    []connectionSchemaInfo `json:"connections"`
 }
 
@@ -121,6 +123,7 @@ func (entry appDirectoryEntry) catalogJSON() appCatalogEntry {
 		MountedPath:    entry.MountedPath,
 		ManagementPath: entry.ManagementPath,
 		Prompts:        entry.Prompts,
+		SourceTreeURL:  entry.SourceTreeURL,
 		Connections:    connections,
 	}
 	if strings.TrimSpace(entry.IconSVG) != "" {
@@ -242,6 +245,7 @@ func (s *Server) assembleAppDirectory(r *http.Request) (*appDirectory, error) {
 			DisplayName:      app.name,
 			ManagementPath:   managementPath,
 			Prompts:          s.appPrompts[app.name],
+			SourceTreeURL:    plugin.SourceTreeURL(),
 			ConnectionSchema: s.connectionSchemasForPlugin(app.name, plugin),
 		}
 		if plugin != nil && strings.TrimSpace(plugin.DisplayName) != "" {
@@ -267,19 +271,21 @@ func (s *Server) lookupProviderDirectory(r *http.Request, name string) (core.Pro
 }
 
 func (s *Server) completeProviderDirectoryEntry(r *http.Request, p *principal.Principal, name string, prov core.Provider) (appDirectoryEntry, bool, error) {
+	plugin := s.pluginDefs[name]
 	entry := appDirectoryEntry{
 		Name:             name,
 		DisplayName:      prov.DisplayName(),
 		Description:      prov.Description(),
 		Prompts:          s.appPrompts[name],
-		ConnectionSchema: s.connectionSchemasForPlugin(name, s.pluginDefs[name]),
+		SourceTreeURL:    plugin.SourceTreeURL(),
+		ConnectionSchema: s.connectionSchemasForPlugin(name, plugin),
 		Provider:         prov,
 	}
 	if cat := prov.Catalog(); cat != nil {
 		entry.IconSVG = cat.IconSVG
 	}
 	mountedPath := ""
-	if plugin, ok := s.pluginDefs[name]; ok && plugin != nil && plugin.Static != nil {
+	if plugin != nil && plugin.Static != nil {
 		mountedPath = strings.TrimSpace(plugin.Static.Mount)
 	}
 	entry.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, mountedPath)
@@ -364,6 +370,7 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 			MountedPath:     entry.MountedPath,
 			ManagementPath:  entry.ManagementPath,
 			Prompts:         entry.Prompts,
+			SourceTreeURL:   entry.SourceTreeURL,
 			Connections:     []connectionDefInfo{},
 			Status:          connectionStatusUnknown,
 			CredentialState: credentialStateUnknown,
