@@ -152,19 +152,6 @@ func (s *MemoryObjectStore) WriteCatalogObject(input WriteCatalogObjectInput) er
 	return nil
 }
 
-// MutateMemoryObjectForTest replaces staged content and bumps generation. Tests only.
-func (s *MemoryObjectStore) MutateMemoryObjectForTest(storageURL string, data []byte, sha256 string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.nextGen++
-	s.objects[storageURL] = memoryStoredObject{
-		generation: s.nextGen,
-		data:       append([]byte(nil), data...),
-		sha256:     strings.ToLower(strings.TrimSpace(sha256)),
-		size:       int64(len(data)),
-	}
-}
-
 func (s *MemoryObjectStore) PromoteObject(input PromoteObjectInput) error {
 	if s == nil {
 		return fmt.Errorf("registry store is required")
