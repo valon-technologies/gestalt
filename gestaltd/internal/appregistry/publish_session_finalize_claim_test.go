@@ -87,7 +87,7 @@ func (h *finalizeCrashHarness) expireClaim(sessionID string) {
 func TestPublishSessionFinalizeCrashBeforePromotion(t *testing.T) {
 	t.Parallel()
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.crash1")
-	store := h.service.Store.(appregistry.WritableRegistryStore)
+	store := h.service.Store
 	h.service.Store = &promoteTransientFailStore{WritableRegistryStore: store}
 	if _, err := h.service.Finalize(h.ctx, h.finalizeInput()); err == nil {
 		t.Fatal("expected transient promotion failure")
@@ -114,7 +114,7 @@ func TestPublishSessionFinalizeCrashBeforeRetention(t *testing.T) {
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.crash2")
 	_, wantPublishedAt := h.claimSession()
 
-	store := h.service.Store.(appregistry.WritableRegistryStore)
+	store := h.service.Store
 	h.service.Writer = &appregistry.Writer{Store: &retentionFailStore{
 		RegistryObjectStore: store,
 		retentionURL:        appregistry.RetentionStorageURL(appregistry.StorageURL("gs://gestalt-app-registry", appregistry.AppIndexPath("g-issues")), "g-issues"),
@@ -140,7 +140,7 @@ func TestPublishSessionFinalizeCrashBeforeIndex(t *testing.T) {
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.crash3")
 	_, wantPublishedAt := h.claimSession()
 
-	store := h.service.Store.(appregistry.WritableRegistryStore)
+	store := h.service.Store
 	indexURL := appregistry.StorageURL("gs://gestalt-app-registry", appregistry.AppIndexPath("g-issues"))
 	h.service.Writer = &appregistry.Writer{
 		Store: &catalogConflictStore{
@@ -236,7 +236,7 @@ func TestPublishSessionFinalizeTimestampStabilityAcrossRetries(t *testing.T) {
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.crash7")
 	claimed, wantPublishedAt := h.claimSession()
 
-	store := h.service.Store.(appregistry.WritableRegistryStore)
+	store := h.service.Store
 	h.service.Writer = &appregistry.Writer{Store: &retentionFailStore{
 		RegistryObjectStore: store,
 		retentionURL:        appregistry.RetentionStorageURL(appregistry.StorageURL("gs://gestalt-app-registry", appregistry.AppIndexPath("g-issues")), "g-issues"),
@@ -289,7 +289,7 @@ func TestPublishSessionFinalizeTransientPromotionRetryAfterExpiredClaim(t *testi
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.retry-promote")
 	first, wantPublishedAt := h.claimSession()
 
-	store := h.service.Store.(appregistry.WritableRegistryStore)
+	store := h.service.Store
 	h.service.Store = &promoteTransientFailStore{WritableRegistryStore: store}
 	_, err := h.service.Finalize(h.ctx, h.finalizeInput())
 	if err == nil {
@@ -406,14 +406,6 @@ type promoteTransientFailStore struct {
 
 func (s *promoteTransientFailStore) PromoteObject(input appregistry.PromoteObjectInput) error {
 	return fmt.Errorf("simulated transient gcs promotion failure")
-}
-
-type promoteFailStore struct {
-	appregistry.WritableRegistryStore
-}
-
-func (s *promoteFailStore) PromoteObject(input appregistry.PromoteObjectInput) error {
-	return fmt.Errorf("%w: simulated promotion failure", appregistry.ErrObjectPreconditionFailed)
 }
 
 type retentionFailStore struct {
