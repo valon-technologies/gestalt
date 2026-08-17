@@ -24,17 +24,17 @@ Explicit `group#member` relationships remain valid and are ORed with derived mem
 
 ## Authorization contract
 
-Extend [`sdk/proto/v1/authorization.proto`](../sdk/proto/v1/authorization.proto) with a `SubjectSelector` relationship target containing a subject type and exact property constraints. Regenerate all SDK bindings and conversions.
+Extend [`sdk/proto/v1/authorization.proto`](../../sdk/proto/v1/authorization.proto) with a `SubjectSelector` relationship target containing a subject type and exact property constraints. Regenerate all SDK bindings and conversions.
 
-Extend [`gestaltd/internal/config/config.go`](../gestaltd/internal/config/config.go) with `authorization.groups.<id>.verifiedEmailDomains`. Normalize domains to lowercase exact DNS names and reject wildcards, email addresses, URLs, and empty values. Update strict config validation and bump the configuration API version if needed so an older daemon fails clearly instead of ignoring the rule.
+Extend [`gestaltd/internal/config/config.go`](../../gestaltd/internal/config/config.go) with `authorization.groups.<id>.verifiedEmailDomains`. Normalize domains to lowercase exact DNS names and reject wildcards, email addresses, URLs, and empty values. Update strict config validation and bump the configuration API version if needed so an older daemon fails clearly instead of ignoring the rule.
 
-Update [`gestaltd/internal/bootstrap/authorization_bootstrap.go`](../gestaltd/internal/bootstrap/authorization_bootstrap.go) to compile each configured domain into a static selector membership while preserving runtime relationships. The authorization state digest must remain deterministic.
+Update [`gestaltd/internal/bootstrap/authorization_bootstrap.go`](../../gestaltd/internal/bootstrap/authorization_bootstrap.go) to compile each configured domain into a static selector membership while preserving runtime relationships. The authorization state digest must remain deterministic.
 
 Add configuration and bootstrap tests covering multiple domains, explicit plus derived membership, malformed domains, deterministic state, and static/runtime relationship preservation.
 
 ## Trusted identity attributes
 
-The authorization evaluator currently receives a canonical user ID plus scope, client ID, and audience. Extend the shared subject-property builder in [`gestaltd/services/invocation/broker.go`](../gestaltd/services/invocation/broker.go) with a reserved `identity.email_domain` property only for bearer-authenticated users enriched through identity-provider UserInfo.
+The authorization evaluator currently receives a canonical user ID plus scope, client ID, and audience. Extend the shared subject-property builder in [`gestaltd/services/invocation/broker.go`](../../gestaltd/services/invocation/broker.go) with a reserved `identity.email_domain` property only for bearer-authenticated users enriched through identity-provider UserInfo.
 
 Use one shared builder for operation invocation, batched listings, mounted UIs, MCP, and admin HTTP checks so every surface asks the evaluator the same question. Include selector-relevant properties in listing decision cache keys.
 
