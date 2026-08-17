@@ -39,29 +39,39 @@ type AppVersions struct {
 }
 
 type IndexVersion struct {
-	Metadata         string       `json:"metadata"`
-	Platforms        []string     `json:"platforms,omitempty"`
-	PublishedAt      time.Time    `json:"publishedAt"`
-	PublishStartedAt *time.Time   `json:"publishStartedAt,omitempty"`
-	SourceRef        string       `json:"sourceRef,omitempty"`
-	Repository       string       `json:"repository,omitempty"`
-	Publication      *Publication `json:"publication,omitempty"`
+	Metadata          string            `json:"metadata"`
+	Platforms         []string          `json:"platforms,omitempty"`
+	PublishedAt       time.Time         `json:"publishedAt"`
+	PublishStartedAt  *time.Time        `json:"publishStartedAt,omitempty"`
+	SourceRef         string            `json:"sourceRef,omitempty"`
+	Repository        string            `json:"repository,omitempty"`
+	Publication       *Publication      `json:"publication,omitempty"`
+	PublicationKind   PublicationKind   `json:"publicationKind,omitempty"`
+	PublishID         string            `json:"publishId,omitempty"`
+	BuilderVersion    string            `json:"builderVersion,omitempty"`
+	DeclarationDigest string            `json:"declarationDigest,omitempty"`
+	LocalSource       *LocalSourceState `json:"localSource,omitempty"`
 }
 
 type Entry struct {
-	SchemaVersion    int                 `json:"schemaVersion"`
-	App              string              `json:"app"`
-	Version          string              `json:"version"`
-	SourceRef        string              `json:"sourceRef"`
-	ManifestPath     string              `json:"manifestPath"`
-	Repository       string              `json:"repository"`
-	Publication      *Publication        `json:"publication,omitempty"`
-	Artifacts        map[string]Artifact `json:"artifacts"`
-	Interface        Interface           `json:"interface,omitempty"`
-	Requires         Requires            `json:"requires,omitempty"`
-	Compatibility    Compatibility       `json:"compatibility,omitempty"`
-	PublishedAt      time.Time           `json:"publishedAt"`
-	PublishStartedAt *time.Time          `json:"publishStartedAt,omitempty"`
+	SchemaVersion     int                 `json:"schemaVersion"`
+	App               string              `json:"app"`
+	Version           string              `json:"version"`
+	SourceRef         string              `json:"sourceRef"`
+	ManifestPath      string              `json:"manifestPath"`
+	Repository        string              `json:"repository"`
+	Publication       *Publication        `json:"publication,omitempty"`
+	PublicationKind   PublicationKind     `json:"publicationKind,omitempty"`
+	PublishID         string              `json:"publishId,omitempty"`
+	BuilderVersion    string              `json:"builderVersion,omitempty"`
+	DeclarationDigest string              `json:"declarationDigest,omitempty"`
+	LocalSource       *LocalSourceState   `json:"localSource,omitempty"`
+	Artifacts         map[string]Artifact `json:"artifacts"`
+	Interface         Interface           `json:"interface,omitempty"`
+	Requires          Requires            `json:"requires,omitempty"`
+	Compatibility     Compatibility       `json:"compatibility,omitempty"`
+	PublishedAt       time.Time           `json:"publishedAt"`
+	PublishStartedAt  *time.Time          `json:"publishStartedAt,omitempty"`
 }
 
 type Publication struct {
@@ -201,30 +211,10 @@ func requirementForApp(requires Requires, targetApp string) (AppRequirement, boo
 	return AppRequirement{}, false
 }
 
-func ValidatePublishInput(manifest *providermanifestv1.Manifest, version, sourceRef string) error {
-	if manifest == nil {
-		return fmt.Errorf("manifest is required")
-	}
-	if providermanifestv1.NormalizeKind(manifest.Kind) != providermanifestv1.KindApp {
-		return fmt.Errorf("app registry publish only supports kind %q, got %q", providermanifestv1.KindApp, manifest.Kind)
-	}
-	if err := source.ValidateVersion(strings.TrimSpace(version)); err != nil {
-		return fmt.Errorf("invalid version: %w", err)
-	}
-	if err := validateSourceRef(strings.ToLower(strings.TrimSpace(sourceRef))); err != nil {
-		return err
-	}
-	if strings.TrimSpace(manifest.Source) == "" {
-		return fmt.Errorf("manifest source is required")
-	}
-	if _, _, err := parseAppSource(manifest.Source); err != nil {
-		return fmt.Errorf("invalid manifest source: %w", err)
-	}
-	return nil
-}
-
 func BuildEntry(input BuildEntryInput) (Entry, error) {
-	if err := ValidatePublishInput(input.Manifest, input.Version, input.SourceRef); err != nil {
+	if err := ValidatePublishInputWithOptions(input.Manifest, input.Version, input.SourceRef, PublishValidationOptions{
+		PublicationKind: input.PublicationKind,
+	}); err != nil {
 		return Entry{}, err
 	}
 	if input.Release == nil {
@@ -245,18 +235,23 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		publishedAt = time.Now().UTC()
 	}
 	entry := Entry{
-		SchemaVersion: EntrySchemaVersion,
-		App:           appName,
-		Version:       strings.TrimSpace(input.Version),
-		SourceRef:     strings.ToLower(strings.TrimSpace(input.SourceRef)),
-		ManifestPath:  strings.TrimSpace(input.ManifestPath),
-		Repository:    repository,
-		Publication:   clonePublication(input.Publication),
-		Artifacts:     artifacts,
-		Interface:     InterfaceFromRelease(input.Release),
-		Requires:      requires,
-		Compatibility: compatibility,
-		PublishedAt:   publishedAt.UTC(),
+		SchemaVersion:     EntrySchemaVersion,
+		App:               appName,
+		Version:           strings.TrimSpace(input.Version),
+		SourceRef:         strings.ToLower(strings.TrimSpace(input.SourceRef)),
+		ManifestPath:      strings.TrimSpace(input.ManifestPath),
+		Repository:        repository,
+		Publication:       clonePublication(input.Publication),
+		PublicationKind:   input.PublicationKind,
+		PublishID:         strings.TrimSpace(input.PublishID),
+		BuilderVersion:    strings.TrimSpace(input.BuilderVersion),
+		DeclarationDigest: strings.TrimSpace(input.DeclarationDigest),
+		LocalSource:       cloneLocalSourceState(input.LocalSource),
+		Artifacts:         artifacts,
+		Interface:         InterfaceFromRelease(input.Release),
+		Requires:          requires,
+		Compatibility:     compatibility,
+		PublishedAt:       publishedAt.UTC(),
 	}
 	if !input.PublishStartedAt.IsZero() {
 		startedAt := input.PublishStartedAt.UTC()
@@ -269,15 +264,20 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 }
 
 type BuildEntryInput struct {
-	Manifest         *providermanifestv1.Manifest
-	Version          string
-	SourceRef        string
-	ManifestPath     string
-	Publication      *Publication
-	Release          *providerrelease.Metadata
-	Artifacts        []PublishArtifact
-	PublishedAt      time.Time
-	PublishStartedAt time.Time
+	Manifest          *providermanifestv1.Manifest
+	Version           string
+	SourceRef         string
+	ManifestPath      string
+	Publication       *Publication
+	PublicationKind   PublicationKind
+	PublishID         string
+	BuilderVersion    string
+	DeclarationDigest string
+	LocalSource       *LocalSourceState
+	Release           *providerrelease.Metadata
+	Artifacts         []PublishArtifact
+	PublishedAt       time.Time
+	PublishStartedAt  time.Time
 }
 
 func buildArtifacts(artifacts []PublishArtifact) (map[string]Artifact, error) {
@@ -422,17 +422,20 @@ func validateEntry(entry *Entry) error {
 	if err := source.ValidateVersion(strings.TrimSpace(entry.Version)); err != nil {
 		return fmt.Errorf("registry entry version: %w", err)
 	}
-	if err := validateSourceRef(entry.SourceRef); err != nil {
-		return fmt.Errorf("registry entry sourceRef: %w", err)
+	if err := validateEntrySourceRef(entry); err != nil {
+		return err
 	}
 	if strings.TrimSpace(entry.ManifestPath) == "" {
 		return fmt.Errorf("registry entry manifestPath is required")
 	}
-	if err := validateEntryRepository(entry.Repository, entry.App); err != nil {
+	if err := validateEntryRepositoryField(entry); err != nil {
 		return fmt.Errorf("registry entry repository: %w", err)
 	}
 	if err := validatePublication(entry.Publication); err != nil {
 		return fmt.Errorf("registry entry publication: %w", err)
+	}
+	if err := validateEntryPublicationMetadata(entry); err != nil {
+		return err
 	}
 	if len(entry.Artifacts) == 0 {
 		return fmt.Errorf("registry entry artifacts are required")
@@ -479,18 +482,8 @@ func validateIndex(index *Index) error {
 			if release.PublishedAt.IsZero() {
 				return fmt.Errorf("app registry index app %q version %q publishedAt is required", appName, version)
 			}
-			hasSourceRef := strings.TrimSpace(release.SourceRef) != ""
-			hasRepository := strings.TrimSpace(release.Repository) != ""
-			if hasSourceRef != hasRepository {
-				return fmt.Errorf("app registry index app %q version %q sourceRef and repository must be recorded together", appName, version)
-			}
-			if hasSourceRef {
-				if err := validateSourceRef(release.SourceRef); err != nil {
-					return fmt.Errorf("app registry index app %q version %q sourceRef: %w", appName, version, err)
-				}
-				if err := validateEntryRepository(release.Repository, appName); err != nil {
-					return fmt.Errorf("app registry index app %q version %q repository: %w", appName, version, err)
-				}
+			if err := validateIndexVersionSourceRef(appName, version, release); err != nil {
+				return err
 			}
 			if err := validatePublication(release.Publication); err != nil {
 				return fmt.Errorf("app registry index app %q version %q publication: %w", appName, version, err)
@@ -588,12 +581,17 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 	platforms := artifactPlatforms(entry.Artifacts)
 	sort.Strings(platforms)
 	indexVersion := IndexVersion{
-		Metadata:    strings.TrimSpace(metadataPath),
-		Platforms:   platforms,
-		PublishedAt: entry.PublishedAt.UTC(),
-		SourceRef:   strings.TrimSpace(entry.SourceRef),
-		Repository:  strings.TrimSpace(entry.Repository),
-		Publication: clonePublication(entry.Publication),
+		Metadata:          strings.TrimSpace(metadataPath),
+		Platforms:         platforms,
+		PublishedAt:       entry.PublishedAt.UTC(),
+		SourceRef:         strings.TrimSpace(entry.SourceRef),
+		Repository:        strings.TrimSpace(entry.Repository),
+		Publication:       clonePublication(entry.Publication),
+		PublicationKind:   entry.PublicationKind,
+		PublishID:         strings.TrimSpace(entry.PublishID),
+		BuilderVersion:    strings.TrimSpace(entry.BuilderVersion),
+		DeclarationDigest: strings.TrimSpace(entry.DeclarationDigest),
+		LocalSource:       cloneLocalSourceState(entry.LocalSource),
 	}
 	if entry.PublishStartedAt != nil && !entry.PublishStartedAt.IsZero() {
 		startedAt := entry.PublishStartedAt.UTC()
@@ -666,19 +664,6 @@ func validateEntryRepository(repository, appName string) error {
 	}
 	if parsedApp != appName {
 		return fmt.Errorf("does not match app %q", appName)
-	}
-	return nil
-}
-
-func validateSourceRef(sourceRef string) error {
-	sourceRef = strings.TrimSpace(sourceRef)
-	if len(sourceRef) != 40 {
-		return fmt.Errorf("must be a 40-character commit SHA")
-	}
-	for _, r := range sourceRef {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
-			return fmt.Errorf("must be a 40-character lowercase commit SHA")
-		}
 	}
 	return nil
 }
