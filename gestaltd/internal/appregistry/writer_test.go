@@ -85,6 +85,8 @@ func TestDecodeEntry_LocalPublicationWithoutSourceRef(t *testing.T) {
 }
 
 func TestWriter_Publish_IdempotentRetry(t *testing.T) {
+	t.Parallel()
+
 	store := NewMemoryObjectStore()
 	writer := &Writer{Store: store}
 	manifest, entryPath, artifactPath := writePublishManifestFixture(t, store, "0.0.1")
@@ -137,6 +139,8 @@ func TestWriter_Publish_IdempotentRetry(t *testing.T) {
 }
 
 func TestWriter_Preflight_RejectsConflictingBytes(t *testing.T) {
+	t.Parallel()
+
 	store := NewMemoryObjectStore()
 	manifest, _, artifactPath := writePublishManifestFixture(t, store, "0.0.1")
 	if err := store.WriteImmutableObject(WriteImmutableObjectInput{
@@ -158,6 +162,8 @@ func TestWriter_Preflight_RejectsConflictingBytes(t *testing.T) {
 }
 
 func TestWriter_Publish_IndexCASPreservesConcurrentVersions(t *testing.T) {
+	t.Parallel()
+
 	store := NewMemoryObjectStore()
 	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.2")
 
@@ -300,6 +306,8 @@ func testPublishEntry(t *testing.T) Entry {
 }
 
 func TestWriter_NeverDeletesObjects(t *testing.T) {
+	t.Parallel()
+
 	store := NewMemoryObjectStore()
 	writer := &Writer{Store: store}
 	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.1")
