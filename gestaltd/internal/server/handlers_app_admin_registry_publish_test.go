@@ -436,7 +436,7 @@ func stubProbeGCSRegistryBucket(t *testing.T, err error) func() {
 func stubCheckUploadSigning(t *testing.T, err error) func() {
 	t.Helper()
 	prev := server.CheckUploadSigningForTest()
-	server.SetCheckUploadSigningForTest(func(*appregistry.GCSUploadSigner, string) error { return err })
+	server.SetCheckUploadSigningForTest(func(*appregistry.GCSUploadSigner) error { return err })
 	return func() { server.SetCheckUploadSigningForTest(prev) }
 }
 

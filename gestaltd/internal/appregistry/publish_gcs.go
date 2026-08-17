@@ -153,18 +153,26 @@ func NewGCSRegistryStore(sourceRef, storageRoot string) (*GCSRegistryStore, erro
 	return &GCSRegistryStore{SourceRef: sourceRef, Bucket: bucket}, nil
 }
 
-func (s *GCSRegistryStore) validateStorageURL(storageURL string) (bucket, object string, err error) {
+func validateBoundGCSStorageURL(storageURL, boundBucket string) (bucket, object string, err error) {
 	bucket, object, err = gcsBucketObjectFromURL(storageURL)
 	if err != nil {
 		return "", "", err
 	}
-	if s == nil || strings.TrimSpace(s.Bucket) == "" {
+	boundBucket = strings.TrimSpace(boundBucket)
+	if boundBucket == "" {
 		return "", "", fmt.Errorf("registry store bucket is not configured")
 	}
-	if bucket != s.Bucket {
-		return "", "", fmt.Errorf("storage URL bucket %q is outside bound registry bucket %q", bucket, s.Bucket)
+	if bucket != boundBucket {
+		return "", "", fmt.Errorf("storage URL bucket %q is outside bound registry bucket %q", bucket, boundBucket)
 	}
 	return bucket, object, nil
+}
+
+func (s *GCSRegistryStore) validateStorageURL(storageURL string) (bucket, object string, err error) {
+	if s == nil {
+		return validateBoundGCSStorageURL(storageURL, "")
+	}
+	return validateBoundGCSStorageURL(storageURL, s.Bucket)
 }
 
 func (s *GCSRegistryStore) storageClient() (*storage.Client, error) {
@@ -359,6 +367,7 @@ func gcsObjectMetadata(sourceRef, sha256 string) map[string]string {
 
 // GCSUploadSigner mints short-lived create-only signed PUT URLs for staged uploads.
 type GCSUploadSigner struct {
+	Bucket     string
 	clientOnce sync.Once
 	client     *storage.Client
 	clientErr  error
@@ -367,8 +376,18 @@ type GCSUploadSigner struct {
 	signURL   func(client *storage.Client, bucket, object string, opts *storage.SignedURLOptions) (string, error)
 }
 
-func NewGCSUploadSigner() *GCSUploadSigner {
-	return &GCSUploadSigner{}
+func NewGCSUploadSigner(store *GCSRegistryStore) (*GCSUploadSigner, error) {
+	if store == nil || strings.TrimSpace(store.Bucket) == "" {
+		return nil, fmt.Errorf("registry store is required")
+	}
+	return &GCSUploadSigner{Bucket: store.Bucket}, nil
+}
+
+func (s *GCSUploadSigner) validateStorageURL(storageURL string) (bucket, object string, err error) {
+	if s == nil {
+		return validateBoundGCSStorageURL(storageURL, "")
+	}
+	return validateBoundGCSStorageURL(storageURL, s.Bucket)
 }
 
 func (s *GCSUploadSigner) storageClient() (*storage.Client, error) {
@@ -389,15 +408,11 @@ func (s *GCSUploadSigner) signedURL(client *storage.Client, bucket, object strin
 	return client.Bucket(bucket).SignedURL(object, opts)
 }
 
-func (s *GCSUploadSigner) CheckSigningReadiness(ctx context.Context, storageRoot string) error {
+func (s *GCSUploadSigner) CheckSigningReadiness(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("upload signer is not configured")
 	}
-	storageRoot = strings.TrimSpace(storageRoot)
-	if storageRoot == "" {
-		return fmt.Errorf("storage root is required")
-	}
-	probeURL := strings.TrimRight(storageRoot, "/") + "/.gestaltd-signing-readiness-probe/" + uuid.NewString()
+	probeURL := "gs://" + s.Bucket + "/.gestaltd-signing-readiness-probe/" + uuid.NewString()
 	_, err := s.SignCreateUpload(SignCreateUploadInput{
 		StorageURL:    probeURL,
 		SHA256:        strings.Repeat("0", 64),
@@ -407,6 +422,7 @@ func (s *GCSUploadSigner) CheckSigningReadiness(ctx context.Context, storageRoot
 	if err != nil {
 		return fmt.Errorf("gcs upload signing unavailable: %w", err)
 	}
+	_ = ctx
 	return nil
 }
 
@@ -430,7 +446,7 @@ func (s *GCSUploadSigner) SignCreateUpload(input SignCreateUploadInput) (SignCre
 	if err != nil {
 		return SignCreateUploadResult{}, fmt.Errorf("create storage client: %w", err)
 	}
-	bucket, object, err := gcsBucketObjectFromURL(storageURL)
+	bucket, object, err := s.validateStorageURL(storageURL)
 	if err != nil {
 		return SignCreateUploadResult{}, err
 	}

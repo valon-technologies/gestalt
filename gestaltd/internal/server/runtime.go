@@ -816,12 +816,10 @@ func tunnelClientIdentity(setup *reverseRemoteSetup) tls.Certificate {
 
 var (
 	probeGCSRegistryBucketFn = probeGCSRegistryBucket
-	checkUploadSigningFn     = func(signer *appregistry.GCSUploadSigner, storageRoot string) error {
-		return signer.CheckSigningReadiness(context.Background(), storageRoot)
+	checkUploadSigningFn     = func(signer *appregistry.GCSUploadSigner) error {
+		return signer.CheckSigningReadiness(context.Background())
 	}
-	checkGCSRegistryPermissionsFn = func(ctx context.Context, storageRoot string) error {
-		return appregistry.CheckGCSRegistryStorePermissions(ctx, storageRoot)
-	}
+	checkGCSRegistryPermissionsFn = appregistry.CheckGCSRegistryStorePermissions
 )
 
 func bootstrapAppRegistryPublish(cfg *config.Config) (*appregistry.StatelessPublishService, error) {
@@ -844,13 +842,16 @@ func bootstrapAppRegistryPublish(cfg *config.Config) (*appregistry.StatelessPubl
 	if err := checkGCSRegistryPermissionsFn(context.Background(), storageRoot); err != nil {
 		return nil, fmt.Errorf("app registry publish storage IAM permissions unavailable: %w", err)
 	}
-	signer := appregistry.NewGCSUploadSigner()
-	if err := checkUploadSigningFn(signer, storageRoot); err != nil {
-		return nil, err
-	}
 	store, err := appregistry.NewGCSRegistryStore("gestaltd-publish", storageRoot)
 	if err != nil {
 		return nil, fmt.Errorf("app registry publish store: %w", err)
+	}
+	signer, err := appregistry.NewGCSUploadSigner(store)
+	if err != nil {
+		return nil, fmt.Errorf("app registry publish signer: %w", err)
+	}
+	if err := checkUploadSigningFn(signer); err != nil {
+		return nil, err
 	}
 	publicRoot, err := registry.PublicURL()
 	if err != nil {
@@ -907,11 +908,11 @@ func SetProbeGCSRegistryBucketForTest(fn func(string) error) {
 	probeGCSRegistryBucketFn = fn
 }
 
-func CheckUploadSigningForTest() func(*appregistry.GCSUploadSigner, string) error {
+func CheckUploadSigningForTest() func(*appregistry.GCSUploadSigner) error {
 	return checkUploadSigningFn
 }
 
-func SetCheckUploadSigningForTest(fn func(*appregistry.GCSUploadSigner, string) error) {
+func SetCheckUploadSigningForTest(fn func(*appregistry.GCSUploadSigner) error) {
 	checkUploadSigningFn = fn
 }
 
