@@ -36,6 +36,11 @@ func (l PublishLimits) withDefaults() PublishLimits {
 	return l
 }
 
+// DefaultPublishLimits returns the standard remote publish validation limits.
+func DefaultPublishLimits() PublishLimits {
+	return PublishLimits{}.withDefaults()
+}
+
 type AdminPublishResponse struct {
 	PublishID   string               `json:"publishId"`
 	App         string               `json:"app"`
