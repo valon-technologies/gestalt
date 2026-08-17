@@ -42,7 +42,7 @@ func TestPublishSessionFinalizeReconcilesAfterIndexCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	_, err = services.AppRegistryPublishSessions.Update(ctx, result.Session.ID, func(session *core.AppRegistryPublishSession) error {
+	_, err = services.AppRegistryPublishSessions.MutatePublishSessionForTest(ctx, result.Session.ID, func(session *core.AppRegistryPublishSession) error {
 		session.State = core.AppRegistryPublishSessionFinalizing
 		return nil
 	})

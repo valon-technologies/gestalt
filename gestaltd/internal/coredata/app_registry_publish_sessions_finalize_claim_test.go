@@ -29,14 +29,14 @@ func TestAppRegistryPublishSessionRenewFinalizeClaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimFinalize: %v", err)
 	}
-	renewed, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.UpdatedAt, 2*time.Minute)
+	renewed, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.Revision, 2*time.Minute)
 	if err != nil {
 		t.Fatalf("RenewFinalizeClaim: %v", err)
 	}
 	if !renewed.FinalizeClaimExpiresAt.After(claimed.FinalizeClaimExpiresAt) {
 		t.Fatalf("expiresAt = %v, want after %v", renewed.FinalizeClaimExpiresAt, claimed.FinalizeClaimExpiresAt)
 	}
-	if _, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.UpdatedAt, time.Minute); !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
+	if _, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.Revision, time.Minute); !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
 		t.Fatalf("stale revision RenewFinalizeClaim = %v", err)
 	}
 	if _, err := svc.ClaimFinalize(ctx, session.ID, time.Minute); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
@@ -65,7 +65,7 @@ func TestAppRegistryPublishSessionClaimFinalizeTakeoverAfterExpiry(t *testing.T)
 	firstPublishedAt := first.FinalizePublishedAt
 	firstToken := first.FinalizeClaimToken
 
-	expired, err := svc.Update(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
+	expired, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
 		current.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	})
@@ -105,10 +105,10 @@ func TestAppRegistryPublishSessionMarkPublishedRequiresClaimToken(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ClaimFinalize: %v", err)
 	}
-	if _, err := svc.MarkPublished(ctx, claimed.ID, "stale-token", claimed.UpdatedAt, claimed.FinalizePublishedAt); !errors.Is(err, coredata.ErrPublishSessionClaimMismatch) {
+	if _, err := svc.MarkPublished(ctx, claimed.ID, "stale-token", claimed.Revision, claimed.FinalizePublishedAt); !errors.Is(err, coredata.ErrPublishSessionClaimMismatch) {
 		t.Fatalf("MarkPublished stale token error = %v", err)
 	}
-	published, err := svc.MarkPublished(ctx, claimed.ID, claimed.FinalizeClaimToken, claimed.UpdatedAt, claimed.FinalizePublishedAt)
+	published, err := svc.MarkPublished(ctx, claimed.ID, claimed.FinalizeClaimToken, claimed.Revision, claimed.FinalizePublishedAt)
 	if err != nil {
 		t.Fatalf("MarkPublished: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestAppRegistryPublishSessionMarkFailedRejectsStaleClaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimFinalize: %v", err)
 	}
-	if _, err := svc.MarkFailed(ctx, claimed.ID, "stale-token", claimed.UpdatedAt, "boom"); !errors.Is(err, coredata.ErrPublishSessionClaimMismatch) {
+	if _, err := svc.MarkFailed(ctx, claimed.ID, "stale-token", claimed.Revision, "boom"); !errors.Is(err, coredata.ErrPublishSessionClaimMismatch) {
 		t.Fatalf("MarkFailed stale token error = %v", err)
 	}
 }

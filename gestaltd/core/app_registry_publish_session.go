@@ -50,6 +50,7 @@ type AppRegistryPublishSession struct {
 	PublishStartedAt       time.Time
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
+	Revision               int64
 	PublishedAt            time.Time
 	StagingMarkedStale     time.Time
 	FinalizeClaimToken     string

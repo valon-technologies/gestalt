@@ -121,38 +121,6 @@ func (s *AppRegistryPublishSessionService) Create(ctx context.Context, input Cre
 	return s.CreateActive(ctx, input)
 }
 
-func (s *AppRegistryPublishSessionService) Update(ctx context.Context, id string, update func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("update app registry publish session: service is not configured")
-	}
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, fmt.Errorf("update app registry publish session: id is required")
-	}
-	if update == nil {
-		return nil, fmt.Errorf("update app registry publish session: update function is required")
-	}
-	if err := s.EnsureStore(ctx); err != nil {
-		return nil, err
-	}
-	rec, err := s.store.Get(ctx, id)
-	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("update app registry publish session: load: %w", err)
-	}
-	session := recordToAppRegistryPublishSession(rec)
-	if err := update(session); err != nil {
-		return nil, err
-	}
-	session.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	if err := s.store.Put(ctx, appRegistryPublishSessionRecord(session)); err != nil {
-		return nil, fmt.Errorf("update app registry publish session: write: %w", err)
-	}
-	return session, nil
-}
-
 func (s *AppRegistryPublishSessionService) assertNoConflictingVersion(ctx context.Context, app, version, dedupeKey string) error {
 	recs, err := s.store.Index("by_app_version").GetAll(ctx, []any{app, version})
 	if err != nil {
@@ -194,6 +162,7 @@ func appRegistryPublishSessionRecord(session *core.AppRegistryPublishSession) id
 		"publish_started_at":   session.PublishStartedAt,
 		"created_at":           session.CreatedAt,
 		"updated_at":           session.UpdatedAt,
+		"revision":             session.Revision,
 	}
 	if !session.PublishedAt.IsZero() {
 		rec["published_at"] = session.PublishedAt
@@ -233,6 +202,7 @@ func recordToAppRegistryPublishSession(rec idb.Record) *core.AppRegistryPublishS
 		PublishStartedAt:       recTime(rec, "publish_started_at"),
 		CreatedAt:              recTime(rec, "created_at"),
 		UpdatedAt:              recTime(rec, "updated_at"),
+		Revision:               recInt64(rec, "revision"),
 		PublishedAt:            recTime(rec, "published_at"),
 		StagingMarkedStale:     recTime(rec, "staging_marked_stale_at"),
 		FinalizeClaimToken:     recString(rec, "finalize_claim_token"),

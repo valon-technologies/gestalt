@@ -164,7 +164,7 @@ func TestPublishSessionConcurrentFinalizeExpiredTakeoverGetsNewToken(t *testing.
 	if err != nil {
 		t.Fatalf("ClaimFinalize: %v", err)
 	}
-	if _, err := svc.Update(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
+	if _, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
 		current.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	}); err != nil {
@@ -201,7 +201,7 @@ func TestPublishSessionRenewFinalizeClaimPreventsPrematureTakeover(t *testing.T)
 		t.Fatalf("ClaimFinalize: %v", err)
 	}
 	time.Sleep(1500 * time.Millisecond)
-	renewed, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.UpdatedAt, 2*time.Second)
+	renewed, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.Revision, 2*time.Second)
 	if err != nil {
 		t.Fatalf("RenewFinalizeClaim: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestPublishSessionRenewFinalizeClaimPreventsPrematureTakeover(t *testing.T)
 	if _, err := svc.ClaimFinalize(ctx, session.ID, time.Second); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
 		t.Fatalf("renewed claim must block takeover: %v", err)
 	}
-	if _, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, renewed.UpdatedAt, time.Second); err != nil {
+	if _, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, renewed.Revision, time.Second); err != nil {
 		t.Fatalf("RenewFinalizeClaim with current revision: %v", err)
 	}
 }

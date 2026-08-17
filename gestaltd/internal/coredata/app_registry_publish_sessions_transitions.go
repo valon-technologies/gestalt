@@ -21,7 +21,7 @@ var (
 
 type PublishSessionTransition struct {
 	ExpectedStates []core.AppRegistryPublishSessionState
-	ExpectUpdated  time.Time
+	ExpectRevision int64
 	Mutate         func(*core.AppRegistryPublishSession) error
 }
 
@@ -63,12 +63,13 @@ func (s *AppRegistryPublishSessionService) Transition(ctx context.Context, id st
 	if !publishSessionStateAllowed(session.State, transition.ExpectedStates) {
 		return nil, fmt.Errorf("%w: session %q is %s", ErrPublishSessionStateConflict, id, session.State)
 	}
-	if !transition.ExpectUpdated.IsZero() && !session.UpdatedAt.Equal(transition.ExpectUpdated.UTC().Truncate(time.Millisecond)) {
+	if transition.ExpectRevision >= 0 && session.Revision != transition.ExpectRevision {
 		return nil, fmt.Errorf("%w: session %q revision mismatch", ErrPublishSessionStateConflict, id)
 	}
 	if err := transition.Mutate(session); err != nil {
 		return nil, err
 	}
+	session.Revision++
 	session.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
 	if err := store.Put(ctx, appRegistryPublishSessionRecord(session)); err != nil {
 		return nil, fmt.Errorf("transition app registry publish session: write: %w", err)
@@ -80,14 +81,14 @@ func (s *AppRegistryPublishSessionService) Transition(ctx context.Context, id st
 	return session, nil
 }
 
-func (s *AppRegistryPublishSessionService) RenewFinalizeClaim(ctx context.Context, id, claimToken string, expectUpdated time.Time, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error) {
+func (s *AppRegistryPublishSessionService) RenewFinalizeClaim(ctx context.Context, id, claimToken string, expectRevision int64, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error) {
 	claimToken = strings.TrimSpace(claimToken)
 	if claimToken == "" {
 		return nil, fmt.Errorf("%w: session %q claim token is required", ErrPublishSessionClaimMismatch, id)
 	}
 	return s.Transition(ctx, id, PublishSessionTransition{
 		ExpectedStates: []core.AppRegistryPublishSessionState{core.AppRegistryPublishSessionFinalizing},
-		ExpectUpdated:  expectUpdated,
+		ExpectRevision: expectRevision,
 		Mutate: func(current *core.AppRegistryPublishSession) error {
 			if err := requireFinalizeClaimToken(current, claimToken); err != nil {
 				return err
@@ -119,7 +120,7 @@ func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id
 		}
 		return s.Transition(ctx, id, PublishSessionTransition{
 			ExpectedStates: []core.AppRegistryPublishSessionState{core.AppRegistryPublishSessionFinalizing},
-			ExpectUpdated:  session.UpdatedAt,
+			ExpectRevision: session.Revision,
 			Mutate: func(current *core.AppRegistryPublishSession) error {
 				current.FinalizeClaimToken = newFinalizeClaimToken()
 				current.FinalizeClaimExpiresAt = now.Add(normalizeFinalizeClaimLeaseTTL(leaseTTL))
@@ -134,7 +135,7 @@ func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id
 			core.AppRegistryPublishSessionCreated,
 			core.AppRegistryPublishSessionUploading,
 		},
-		ExpectUpdated: session.UpdatedAt,
+		ExpectRevision: session.Revision,
 		Mutate: func(current *core.AppRegistryPublishSession) error {
 			current.State = core.AppRegistryPublishSessionFinalizing
 			current.FinalizeClaimToken = newFinalizeClaimToken()
@@ -145,10 +146,10 @@ func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id
 	})
 }
 
-func (s *AppRegistryPublishSessionService) MarkPublished(ctx context.Context, id, claimToken string, expectUpdated, publishedAt time.Time) (*core.AppRegistryPublishSession, error) {
+func (s *AppRegistryPublishSessionService) MarkPublished(ctx context.Context, id, claimToken string, expectRevision int64, publishedAt time.Time) (*core.AppRegistryPublishSession, error) {
 	return s.Transition(ctx, id, PublishSessionTransition{
 		ExpectedStates: []core.AppRegistryPublishSessionState{core.AppRegistryPublishSessionFinalizing},
-		ExpectUpdated:  expectUpdated,
+		ExpectRevision: expectRevision,
 		Mutate: func(current *core.AppRegistryPublishSession) error {
 			if err := requireFinalizeClaimToken(current, claimToken); err != nil {
 				return err
@@ -168,7 +169,7 @@ func (s *AppRegistryPublishSessionService) MarkPublished(ctx context.Context, id
 	})
 }
 
-func (s *AppRegistryPublishSessionService) MarkFailed(ctx context.Context, id, claimToken string, expectUpdated time.Time, reason string) (*core.AppRegistryPublishSession, error) {
+func (s *AppRegistryPublishSessionService) MarkFailed(ctx context.Context, id, claimToken string, expectRevision int64, reason string) (*core.AppRegistryPublishSession, error) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "finalization failed"
@@ -179,7 +180,7 @@ func (s *AppRegistryPublishSessionService) MarkFailed(ctx context.Context, id, c
 			core.AppRegistryPublishSessionUploading,
 			core.AppRegistryPublishSessionFinalizing,
 		},
-		ExpectUpdated: expectUpdated,
+		ExpectRevision: expectRevision,
 		Mutate: func(current *core.AppRegistryPublishSession) error {
 			if current.State == core.AppRegistryPublishSessionFinalizing {
 				if err := requireFinalizeClaimToken(current, claimToken); err != nil {
@@ -217,7 +218,7 @@ func normalizeFinalizeClaimLeaseTTL(leaseTTL time.Duration) time.Duration {
 	return leaseTTL
 }
 
-func (s *AppRegistryPublishSessionService) RenewLeases(ctx context.Context, id string, expectUpdated time.Time, mutate func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error) {
+func (s *AppRegistryPublishSessionService) RenewLeases(ctx context.Context, id string, expectRevision int64, mutate func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error) {
 	if mutate == nil {
 		return nil, fmt.Errorf("renew publish session leases: mutate function is required")
 	}
@@ -226,7 +227,7 @@ func (s *AppRegistryPublishSessionService) RenewLeases(ctx context.Context, id s
 			core.AppRegistryPublishSessionCreated,
 			core.AppRegistryPublishSessionUploading,
 		},
-		ExpectUpdated: expectUpdated,
+		ExpectRevision: expectRevision,
 		Mutate: func(current *core.AppRegistryPublishSession) error {
 			if err := mutate(current); err != nil {
 				return err
@@ -301,6 +302,7 @@ func (s *AppRegistryPublishSessionService) CreateActive(ctx context.Context, inp
 		PublishStartedAt:   startedAt,
 		CreatedAt:          now,
 		UpdatedAt:          now,
+		Revision:           1,
 	}
 	if err := store.Add(ctx, appRegistryPublishSessionRecord(session)); err != nil {
 		return nil, fmt.Errorf("create app registry publish session: %w", err)
