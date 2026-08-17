@@ -50,25 +50,29 @@ func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov co
 	info.CredentialState = status.CredentialState
 	info.HealthState = status.HealthState
 	info.Actions = status.Actions
+	info.Connected = status.Connected
 }
 
 func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
 	if info == nil {
 		return unknownConnectionStatus()
 	}
-	if status, ok := summarizeReconnectRequiredConnectionStatuses(info.Connections); ok {
-		return status
+	var status connectionStatusInfo
+	if recon, ok := summarizeReconnectRequiredConnectionStatuses(info.Connections); ok {
+		status = recon
+	} else if conn, ok := info.connectionStatusForDefaultTarget(s.defaultConnectionName(info.Name)); ok {
+		status = statusFromConnectionInfo(conn)
+	} else if conn, ok := info.singleConnectionStatus(); ok {
+		status = statusFromConnectionInfo(conn)
+	} else if len(info.Connections) == 0 {
+		status = s.implicitIntegrationStatus(info.Name, prov, instances, authTypes, p)
+	} else {
+		status = summarizeConnectionStatuses(info.Connections)
 	}
-	if conn, ok := info.connectionStatusForDefaultTarget(s.defaultConnectionName(info.Name)); ok {
-		return statusFromConnectionInfo(conn)
+	if len(info.Connections) > 0 {
+		status.Connected = subjectProductConnected(info.Connections)
 	}
-	if conn, ok := info.singleConnectionStatus(); ok {
-		return statusFromConnectionInfo(conn)
-	}
-	if len(info.Connections) == 0 {
-		return s.implicitIntegrationStatus(info.Name, prov, instances, authTypes, p)
-	}
-	return summarizeConnectionStatuses(info.Connections)
+	return status
 }
 
 func (info *integrationInfo) connectionStatusForDefaultTarget(connection string) (*connectionDefInfo, bool) {
@@ -110,10 +114,10 @@ func (s *Server) defaultConnectionName(integration string) string {
 }
 
 func (s *Server) implicitIntegrationStatus(integration string, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
-	mode := core.ConnectionModeSubject
-	if prov != nil {
-		mode = core.NormalizeConnectionMode(prov.ConnectionMode())
+	if prov == nil {
+		return unknownConnectionStatus()
 	}
+	mode := core.NormalizeConnectionMode(prov.ConnectionMode())
 	switch mode {
 	case core.ConnectionModeNone:
 		return connectionStatusInfo{
@@ -121,7 +125,7 @@ func (s *Server) implicitIntegrationStatus(integration string, prov core.Provide
 			CredentialState: credentialStateNotRequired,
 			HealthState:     healthStateNotApplicable,
 			Actions:         []string{},
-			Connected:       true,
+			Connected:       false,
 		}
 	default:
 		return subjectConnectionStatus(groupInstancesForConnection(instances, ""), len(authTypes) > 0, ownerKindForPrincipal(p), "")
@@ -187,7 +191,7 @@ func summarizeConnectionStatuses(connections []connectionDefInfo) connectionStat
 	if allReady {
 		status := statusFromConnectionInfo(&connections[0])
 		status.Actions = []string{}
-		status.Connected = true
+		status.Connected = subjectProductConnected(connections)
 		return status
 	}
 	for i := range connections {
@@ -224,7 +228,7 @@ func summarizeReconnectRequiredConnectionStatuses(connections []connectionDefInf
 			}
 			continue
 		}
-		if conn.Connected || conn.Status == connectionStatusReady || conn.CredentialState == credentialStateConfigured {
+		if connectionHasSubjectIdentity(conn) && conn.Connected {
 			hasConnected = true
 		}
 	}
@@ -266,8 +270,26 @@ func noAuthConnectionStatus() connectionStatusInfo {
 		Actions:         []string{},
 		CredentialMode:  credentialModeNone,
 		OwnerKind:       ownerKindNone,
-		Connected:       true,
+		Connected:       false,
 	}
+}
+
+// subjectProductConnected is true when this subject has a chosen identity on
+// any credential-bearing connection. No-auth / mode-none rows are never that.
+func subjectProductConnected(connections []connectionDefInfo) bool {
+	for i := range connections {
+		if connectionHasSubjectIdentity(&connections[i]) && connections[i].Connected {
+			return true
+		}
+	}
+	return false
+}
+
+func connectionHasSubjectIdentity(conn *connectionDefInfo) bool {
+	if conn == nil {
+		return false
+	}
+	return conn.CredentialMode != credentialModeNone
 }
 
 func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKind string, preferredInstance string) connectionStatusInfo {
@@ -405,7 +427,11 @@ func subjectConnectionActions(disconnectable, connectable, selectInstance bool) 
 }
 
 func ownerKindForPrincipal(p *principal.Principal) string {
-	subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
+	canon := principal.Canonicalized(p)
+	if canon == nil {
+		return ownerKindUnknown
+	}
+	subjectID := strings.TrimSpace(canon.SubjectID)
 	if subjectID == "" {
 		return ownerKindUnknown
 	}

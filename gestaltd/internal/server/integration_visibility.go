@@ -14,35 +14,6 @@ func (s *Server) integrationHiddenFromCatalog(provider string) bool {
 	return ok && entry != nil && entry.Static != nil && entry.Static.CatalogHidden
 }
 
-func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider, info integrationInfo) (bool, error) {
-	if info.MountedPath != "" {
-		return true, nil
-	}
-	if info.ManagementPath != "" {
-		return true, nil
-	}
-	if s.integrationHasSettingsSurface(p, info) {
-		settingsAccessible, err := s.integrationSettingsAccessibleContext(ctx, p, provider)
-		if err != nil {
-			return false, err
-		}
-		if settingsAccessible {
-			return true, nil
-		}
-	}
-	return s.integrationHasVisibleHTTPOperationsContext(ctx, p, provider, prov)
-}
-
-func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info integrationInfo) bool {
-	if principal.IsNonUserPrincipal(p) {
-		return false
-	}
-	return info.CredentialState == credentialStateConnected ||
-		info.CredentialState == credentialStateConfigured ||
-		info.CredentialState == credentialStateNotRequired ||
-		len(info.Connections) > 0
-}
-
 func (s *Server) integrationSettingsAccessibleContext(ctx context.Context, p *principal.Principal, provider string) (bool, error) {
 	if s == nil || s.authorization == nil {
 		return true, nil
