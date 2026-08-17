@@ -1032,6 +1032,16 @@ func defaultRemoteToken() (string, error) {
 	return strings.TrimSpace(creds.APIToken), nil
 }
 
+// ResolveGestaltCLIURL returns GESTALT_URL or the gestalt CLI config from `gestalt init`.
+func ResolveGestaltCLIURL() (string, error) {
+	return defaultRemoteURL()
+}
+
+// ResolveGestaltCLIToken returns GESTALT_API_KEY or credentials from `gestalt auth login`.
+func ResolveGestaltCLIToken() (string, error) {
+	return defaultRemoteToken()
+}
+
 func gestaltCredentialsPath() string {
 	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
 		return filepath.Join(xdg, "gestalt", "credentials.json")
