@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func runAppRegistry(args []string) error {
+func runAppRegistry(args []string, gestaltdVersion string) error {
 	if len(args) == 0 {
 		printAppRegistryUsage(os.Stderr)
 		return flag.ErrHelp
@@ -18,7 +18,7 @@ func runAppRegistry(args []string) error {
 		printAppRegistryUsage(os.Stderr)
 		return flag.ErrHelp
 	case "publish":
-		return runAppRegistryPublish(args[1:])
+		return runAppRegistryPublish(args[1:], gestaltdVersion)
 	case "pending":
 		return runAppRegistryPending(args[1:])
 	case "retention":
@@ -33,7 +33,7 @@ func printAppRegistryUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd app registry <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
-	writeUsageLine(w, "  publish     Publish an installable app version to a GCS app registry bucket")
+	writeUsageLine(w, "  publish     Publish an installable app version to the app registry")
 	writeUsageLine(w, "  pending     Record or clear in-flight publish state in pending.json and failed.json")
 	writeUsageLine(w, "  retention   Prune published app registry versions by retention policy")
 }

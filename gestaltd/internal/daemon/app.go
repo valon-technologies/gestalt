@@ -9,7 +9,7 @@ import (
 
 const appPublishDeprecatedMessage = "gestaltd app publish is deprecated; use gestaltd app registry publish"
 
-func runApp(args []string) error {
+func runApp(args []string, gestaltdVersion string) error {
 	if len(args) == 0 {
 		printAppUsage(os.Stderr)
 		return flag.ErrHelp
@@ -20,7 +20,7 @@ func runApp(args []string) error {
 		printAppUsage(os.Stderr)
 		return flag.ErrHelp
 	case "registry":
-		return runAppRegistry(args[1:])
+		return runAppRegistry(args[1:], gestaltdVersion)
 	case "publish":
 		_, _ = fmt.Fprintln(os.Stderr, appPublishDeprecatedMessage)
 		return runAppPublish(args[1:])
