@@ -10,8 +10,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
 
+func canonicalPublishArtifactFilename(filename string) string {
+	return strings.TrimSpace(filename)
+}
+
 func validatePublishArtifactFilename(filename string) error {
-	filename = strings.TrimSpace(filename)
+	filename = canonicalPublishArtifactFilename(filename)
 	if filename == "" {
 		return fmt.Errorf("filename is required")
 	}
@@ -120,9 +124,9 @@ func PublishStagingArtifactPath(stagingPrefix, platform, filename string) (strin
 	if err != nil {
 		return "", err
 	}
-	return JoinRegistryObjectPath(stagingPrefix, "artifacts", goos, goarch, strings.TrimSpace(filename))
+	return JoinRegistryObjectPath(stagingPrefix, "artifacts", goos, goarch, canonicalPublishArtifactFilename(filename))
 }
 
 func PublishArtifactFinalRel(artifactPrefix, filename string) (string, error) {
-	return JoinRegistryObjectPath(strings.TrimSpace(artifactPrefix), strings.TrimSpace(filename))
+	return JoinRegistryObjectPath(strings.TrimSpace(artifactPrefix), canonicalPublishArtifactFilename(filename))
 }

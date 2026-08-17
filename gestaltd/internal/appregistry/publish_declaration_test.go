@@ -353,6 +353,58 @@ func TestValidatePublishDeclarationRequiresPositiveSize(t *testing.T) {
 	}
 }
 
+func TestValidatePublishDeclarationArtifactIdentity(t *testing.T) {
+	t.Parallel()
+
+	limits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64", "darwin/arm64"}}
+
+	t.Run("distinct filenames", func(t *testing.T) {
+		t.Parallel()
+		decl, _ := testPublishDeclarationMultiPlatform(t, "g-issues", "0.3.0-dev.13")
+		if err := appregistry.ValidatePublishDeclaration("g-issues", decl, limits); err != nil {
+			t.Fatalf("ValidatePublishDeclaration error = %v", err)
+		}
+	})
+
+	t.Run("duplicate platform", func(t *testing.T) {
+		t.Parallel()
+		decl, _ := testPublishDeclarationMultiPlatform(t, "g-issues", "0.3.0-dev.14")
+		decl.Artifacts = append(decl.Artifacts, decl.Artifacts[0])
+		err := appregistry.ValidatePublishDeclaration("g-issues", decl, limits)
+		if !errors.Is(err, appregistry.ErrPublishDeclarationInvalid) || !strings.Contains(err.Error(), "duplicate platform") {
+			t.Fatalf("ValidatePublishDeclaration error = %v, want duplicate platform", err)
+		}
+	})
+
+	t.Run("duplicate filename", func(t *testing.T) {
+		t.Parallel()
+		decl, _ := testPublishDeclarationMultiPlatform(t, "g-issues", "0.3.0-dev.15")
+		shared := decl.Artifacts[0].Filename
+		decl.Artifacts[1].Filename = shared
+		decl.ReleaseMetadata.Artifacts["darwin/arm64"] = providerrelease.Artifact{
+			Path: shared, SHA256: decl.Artifacts[1].SHA256,
+		}
+		err := appregistry.ValidatePublishDeclaration("g-issues", decl, limits)
+		if !errors.Is(err, appregistry.ErrPublishDeclarationInvalid) || !strings.Contains(err.Error(), "duplicate filename") {
+			t.Fatalf("ValidatePublishDeclaration error = %v, want duplicate filename", err)
+		}
+	})
+
+	t.Run("duplicate filename after whitespace trim", func(t *testing.T) {
+		t.Parallel()
+		decl, _ := testPublishDeclarationMultiPlatform(t, "g-issues", "0.3.0-dev.16")
+		shared := strings.TrimSpace(decl.Artifacts[0].Filename)
+		decl.Artifacts[1].Filename = "  " + shared + "  "
+		decl.ReleaseMetadata.Artifacts["darwin/arm64"] = providerrelease.Artifact{
+			Path: "  " + shared + "  ", SHA256: decl.Artifacts[1].SHA256,
+		}
+		err := appregistry.ValidatePublishDeclaration("g-issues", decl, limits)
+		if !errors.Is(err, appregistry.ErrPublishDeclarationInvalid) || !strings.Contains(err.Error(), "duplicate filename") {
+			t.Fatalf("ValidatePublishDeclaration error = %v, want duplicate filename", err)
+		}
+	})
+}
+
 func TestValidatePublishDeclarationRequiresBuilderVersion(t *testing.T) {
 	t.Parallel()
 
