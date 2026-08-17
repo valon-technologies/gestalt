@@ -34,6 +34,7 @@ type appAdminRegistryResponse struct {
 	FleetState        *appAdminFleetState        `json:"fleetState,omitempty"`
 	Recovery          *appAdminRecovery          `json:"recovery,omitempty"`
 	AutoDeploy        appAdminAutoDeploy         `json:"autoDeploy"`
+	PublishSessions   []appAdminRegistryPublishSessionSummary `json:"publishSessions,omitempty"`
 	SelectionDisabled bool                       `json:"selectionDisabled"`
 	DisabledReason    string                     `json:"disabledReason,omitempty"`
 }
@@ -176,6 +177,7 @@ func (s *Server) mountAppAdminRegistryRoutes(r chi.Router) {
 		Post("/apps/{app}/admin/registry/version", s.selectAppAdminRegistryVersion)
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
 		Put("/apps/{app}/admin/registry/auto-deploy", s.updateAppAdminRegistryAutoDeploy)
+	s.mountAppAdminRegistryPublishRoutes(r)
 }
 
 func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler {
@@ -245,6 +247,24 @@ func (s *Server) hasExplicitAppAdmin(ctx context.Context, subjectID, appName str
 		return false, err
 	}
 	return decision.Allowed && decision.Role == appAdminRole, nil
+}
+
+func (s *Server) listAppAdminPublishSessions(ctx context.Context, app string) []appAdminRegistryPublishSessionSummary {
+	if s == nil || s.appRegistryPublishSessions == nil {
+		return nil
+	}
+	sessions, err := s.appRegistryPublishSessions.ListActiveByApp(ctx, app)
+	if err != nil {
+		return nil
+	}
+	out := make([]appAdminRegistryPublishSessionSummary, 0, len(sessions))
+	for _, session := range sessions {
+		if session == nil {
+			continue
+		}
+		out = append(out, appAdminRegistryPublishSessionSummaryFromCore(ctx, s, session))
+	}
+	return out
 }
 
 func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
@@ -320,6 +340,7 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	for _, entry := range appregistry.FailedVersionsForAdmin(failedIndex, publishedKeys, pendingKeys) {
 		failedVersions = append(failedVersions, appAdminFailedVersionFromEntry(entry))
 	}
+	publishSessions := s.listAppAdminPublishSessions(r.Context(), app.name)
 	knownVersions := make([]adminAppInstallationInfo, 0, len(known))
 	for _, installation := range known {
 		knownVersions = append(knownVersions, adminAppInstallationFromCore(installation))
@@ -332,6 +353,7 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		PublishedVersions: published,
 		PendingVersions:   pendingVersions,
 		FailedVersions:    failedVersions,
+		PublishSessions:   publishSessions,
 		AutoDeploy:        autoDeploy,
 	}
 	rollout, err := s.appRollouts.Get(r.Context(), app.name)

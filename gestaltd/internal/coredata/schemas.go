@@ -21,6 +21,7 @@ const (
 	StoreRemoteRegistrations            = "remote_registrations"
 	StoreRemoteProviders                = "remote_providers"
 	StoreConnectionInstancePreferences  = "connection_instance_preferences"
+	StoreAppRegistryPublishSessions     = "app_registry_publish_sessions"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{

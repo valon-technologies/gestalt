@@ -23,6 +23,7 @@ type Services struct {
 	AppVersionRecoveryObservations *AppVersionRecoveryObservationService
 	RemoteRegistrations            *RemoteRegistrationService
 	ConnectionInstancePreferences  *ConnectionInstancePreferenceService
+	AppRegistryPublishSessions     *AppRegistryPublishSessionService
 	DB                             indexeddb.IndexedDB
 }
 
@@ -91,6 +92,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreConnectionInstancePreferences, ConnectionInstancePreferencesSchema); err != nil {
 			return nil, fmt.Errorf("create connection_instance_preferences store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppRegistryPublishSessions, AppRegistryPublishSessionsSchema); err != nil {
+			return nil, fmt.Errorf("create app_registry_publish_sessions store: %w", err)
+		}
 	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
 		return nil, err
 	}
@@ -107,6 +111,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	appVersionRecoveryObservations := NewAppVersionRecoveryObservationService(ds)
 	remoteRegistrations := NewRemoteRegistrationService(ds)
 	connectionInstancePreferences := NewConnectionInstancePreferenceService(ds)
+	appRegistryPublishSessions := NewAppRegistryPublishSessionService(ds)
 	return &Services{
 		ExternalCredentials:            nil,
 		Users:                          users,
@@ -122,6 +127,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		AppVersionRecoveryObservations: appVersionRecoveryObservations,
 		RemoteRegistrations:            remoteRegistrations,
 		ConnectionInstancePreferences:  connectionInstancePreferences,
+		AppRegistryPublishSessions:     appRegistryPublishSessions,
 		DB:                             ds,
 	}, nil
 }

@@ -180,6 +180,8 @@ type Server struct {
 	appRegistries                 map[string]config.AppRegistryConfig
 	appRegistryReader             *appregistry.RegistryReader
 	appRegistryInstaller          *appregistry.Installer
+	appRegistryPublish            *appregistry.PublishSessionService
+	appRegistryPublishSessions    *coredata.AppRegistryPublishSessionService
 	appFleetProjector             *appregistry.FleetProjector
 	appVersionChanges             *coredata.AppVersionChangeRequestService
 	gestaltdSourceVersions        *coredata.GestaltdSourceVersionService
@@ -255,6 +257,7 @@ type Config struct {
 	BuiltinAdminUI          *BuiltinAdminUIOptions
 	AppRegistries           map[string]config.AppRegistryConfig
 	AppRegistryReader       *appregistry.RegistryReader
+	AppRegistryPublish      *appregistry.PublishSessionService
 	AppFleetProjector       *appregistry.FleetProjector
 	AppRegistryHeartbeatTTL time.Duration
 	AppRegistryRolloutMode  config.AppRegistryRolloutMode
@@ -507,6 +510,8 @@ func New(cfg Config) (*Server, error) {
 		appRegistries:                 cloneAppRegistryConfig(cfg.AppRegistries),
 		appRegistryReader:             cfg.AppRegistryReader,
 		appRegistryInstaller:          newAppRegistryInstaller(cfg),
+		appRegistryPublish:            cfg.AppRegistryPublish,
+		appRegistryPublishSessions:    publishSessionLedger(cfg.Services),
 		appFleetProjector:             fleetProjector,
 		appVersionChanges:             cfg.Services.AppVersionChangeRequests,
 		gestaltdSourceVersions:        cfg.Services.GestaltdSourceVersionState,
