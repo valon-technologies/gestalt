@@ -30,6 +30,8 @@ func (s *retentionFailStore) WriteCatalogObject(input WriteCatalogObjectInput) e
 }
 
 func TestWriter_Publish_CommitsRetentionBeforeIndex(t *testing.T) {
+	t.Parallel()
+
 	store := NewMemoryObjectStore()
 	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.3")
 	recorder := &catalogWriteRecorder{RegistryObjectStore: store}
@@ -62,6 +64,8 @@ func TestWriter_Publish_CommitsRetentionBeforeIndex(t *testing.T) {
 }
 
 func TestWriter_Publish_RetentionFailureLeavesIndexUnchanged(t *testing.T) {
+	t.Parallel()
+
 	store := NewMemoryObjectStore()
 	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.4")
 	retentionURL := RetentionStorageURL(manifest.IndexObject.StorageURL, manifest.AppName)
@@ -99,6 +103,8 @@ func TestWriter_Publish_RetentionFailureLeavesIndexUnchanged(t *testing.T) {
 }
 
 func TestWriter_Publish_UsesEntryPublishedAtForIndexAndRetention(t *testing.T) {
+	t.Parallel()
+
 	store := NewMemoryObjectStore()
 	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.5")
 	publishedAt := time.Date(2026, 8, 17, 12, 34, 56, 0, time.UTC)
@@ -151,6 +157,8 @@ func TestWriter_Publish_UsesEntryPublishedAtForIndexAndRetention(t *testing.T) {
 }
 
 func TestWriter_Publish_ReturnsTypedOutcomeOnPartialFailure(t *testing.T) {
+	t.Parallel()
+
 	store := NewMemoryObjectStore()
 	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.6")
 	indexPath := manifest.IndexObject.StorageURL
