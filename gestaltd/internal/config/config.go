@@ -1665,6 +1665,19 @@ func (e *ProviderEntry) HasGitSource() bool {
 	return e != nil && e.Source.IsGit()
 }
 
+// SourceTreeURL is the GitHub website tree for this app's checkout identity.
+// Empty when the app has no GitHub git source.
+func (e *ProviderEntry) SourceTreeURL() string {
+	if e == nil || !e.HasGitSource() {
+		return ""
+	}
+	git := e.Source.GitSource()
+	if git == nil {
+		return ""
+	}
+	return git.TreeURL()
+}
+
 func (e *ProviderEntry) SourceMetadataURL() string {
 	if e == nil {
 		return ""

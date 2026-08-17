@@ -2072,6 +2072,10 @@ apps:
 			manifestPath != "apps/custom_tool/manifest.yaml" {
 			t.Fatalf("NormalizedLocationParts = (%q, %q, %q)", repo, ref, manifestPath)
 		}
+		wantTree := "https://github.com/Valon-Technologies/Gestalt-Providers/tree/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/apps/custom_tool"
+		if got := entry.SourceTreeURL(); got != wantTree {
+			t.Fatalf("SourceTreeURL = %q, want %q", got, wantTree)
+		}
 	})
 
 	t.Run("apiVersion preserves nested source auth on local release metadata sources", func(t *testing.T) {
@@ -7394,5 +7398,140 @@ func TestEffectiveHTTPBindingsOverridesStreaming(t *testing.T) {
 	bindings := entry.EffectiveHTTPBindings()
 	if bindings["echo"] == nil || !bindings["echo"].Streaming {
 		t.Fatalf("EffectiveHTTPBindings did not apply override streaming: got %+v", bindings["echo"])
+	}
+}
+
+func TestGitSourceDefIdentity(t *testing.T) {
+	t.Parallel()
+
+	git := GitSourceDef{
+		Repo: "HTTPS://GitHub.com/Ex/App.git",
+		Ref:  "feat/ui",
+		Path: "apps/foo/manifest.yaml",
+	}
+	got, ok := git.Identity()
+	if !ok {
+		t.Fatal("Identity() = false, want GitHub checkout identity")
+	}
+	want := GitSourceIdentity{
+		Repo:   GitHubRepo{Owner: "Ex", Name: "App"},
+		Ref:    "feat/ui",
+		AppDir: "apps/foo",
+	}
+	if got != want {
+		t.Fatalf("Identity() = %+v, want %+v", got, want)
+	}
+}
+
+func TestAppDirFromManifestPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "nested", path: "apps/foo/manifest.yaml", want: "apps/foo"},
+		{name: "root", path: "manifest.yaml", want: ""},
+		{name: "messy", path: "apps//foo/../foo/manifest.yaml", want: "apps/foo"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := AppDirFromManifestPath(tc.path); got != tc.want {
+				t.Fatalf("AppDirFromManifestPath(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+			git := GitSourceDef{Path: tc.path}
+			if got := git.AppDir(); got != tc.want {
+				t.Fatalf("GitSourceDef.AppDir(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGitSourceDefTreeURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		git  GitSourceDef
+		want string
+	}{
+		{
+			name: "github app directory",
+			git: GitSourceDef{
+				Repo: "https://github.com/example/apps.git",
+				Ref:  "main",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/main/apps/roadmap",
+		},
+		{
+			name: "github root manifest",
+			git: GitSourceDef{
+				Repo: "https://github.com/example/app.git",
+				Ref:  "abc123",
+				Path: "manifest.yaml",
+			},
+			want: "https://github.com/example/app/tree/abc123",
+		},
+		{
+			name: "ssh scp",
+			git: GitSourceDef{
+				Repo: "git@github.com:example/apps.git",
+				Ref:  "main",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/main/apps/roadmap",
+		},
+		{
+			name: "http github",
+			git: GitSourceDef{
+				Repo: "http://github.com/example/apps.git",
+				Ref:  "main",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/main/apps/roadmap",
+		},
+		{
+			name: "preserves configured ref case",
+			git: GitSourceDef{
+				Repo: "https://github.com/example/apps.git",
+				Ref:  "Release-1",
+				Path: "apps/foo/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/Release-1/apps/foo",
+		},
+		{
+			name: "slash in ref is one path segment",
+			git: GitSourceDef{
+				Repo: "https://github.com/example/apps.git",
+				Ref:  "feat/ui",
+				Path: "apps/roadmap/manifest.yaml",
+			},
+			want: "https://github.com/example/apps/tree/feat%2Fui/apps/roadmap",
+		},
+		{
+			name: "non-github omitted",
+			git: GitSourceDef{
+				Repo: "https://gitlab.example.com/group/app.git",
+				Ref:  "main",
+				Path: "apps/foo/manifest.yaml",
+			},
+			want: "",
+		},
+		{
+			name: "missing repo omitted",
+			git:  GitSourceDef{Ref: "main", Path: "apps/foo/manifest.yaml"},
+			want: "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.git.TreeURL(); got != tc.want {
+				t.Fatalf("TreeURL = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

@@ -38,7 +38,7 @@ type SnapshotSourceRefPath struct {
 }
 
 func NewSnapshotSourceRefPath(repoURL, ref, manifestPath string) (SnapshotSourceRefPath, error) {
-	host, owner, name, err := githubRepoPath(repoURL)
+	repo, err := config.ParseGitHubSnapshotRemote(repoURL)
 	if err != nil {
 		return SnapshotSourceRefPath{}, err
 	}
@@ -47,11 +47,8 @@ func NewSnapshotSourceRefPath(repoURL, ref, manifestPath string) (SnapshotSource
 	if manifestPath == "" || manifestPath == "." || strings.HasPrefix(manifestPath, "../") || path.IsAbs(manifestPath) {
 		return SnapshotSourceRefPath{}, fmt.Errorf("source.git.path must be a clean relative path")
 	}
-	providerDir := path.Dir(manifestPath)
-	if providerDir == "." {
-		providerDir = ""
-	}
-	sourceRepository := path.Join(host, owner, name)
+	providerDir := config.AppDirFromManifestPath(manifestPath)
+	sourceRepository := path.Join("github.com", repo.Owner, repo.Name)
 	parts := []string{sourceRepository, sourceRef}
 	if providerDir != "" {
 		parts = append(parts, strings.Split(providerDir, "/")...)
@@ -177,30 +174,6 @@ func snapshotSourceFileURL(base string, snapshotPath SnapshotSourceRefPath, file
 	query.Set("sourceRef", snapshotPath.SourceRef)
 	parsed.RawQuery = query.Encode()
 	return parsed.String(), nil
-}
-
-func githubRepoPath(raw string) (string, string, string, error) {
-	raw = strings.TrimSpace(raw)
-	const sshPrefix = "git@github.com:"
-	if strings.HasPrefix(raw, sshPrefix) {
-		owner, repo, ok := strings.Cut(strings.TrimPrefix(raw, sshPrefix), "/")
-		if ok && owner != "" && repo != "" {
-			return "github.com", owner, strings.TrimSuffix(repo, ".git"), nil
-		}
-	}
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return "", "", "", fmt.Errorf("parse source.git.repo: %w", err)
-	}
-	if parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "github.com") {
-		return "", "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
-	}
-	clean := strings.Trim(path.Clean(parsed.Path), "/")
-	parts := strings.Split(clean, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
-	}
-	return "github.com", parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
 
 func (l *Lifecycle) gitSourceManifestPath(ctx context.Context, paths lifecyclePaths, entry *config.ProviderEntry) (string, error) {
