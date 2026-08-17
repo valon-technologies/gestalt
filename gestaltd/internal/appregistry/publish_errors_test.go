@@ -37,6 +37,8 @@ func TestPublishHTTPStatus(t *testing.T) {
 	}{
 		{name: "registry entry conflict exact", err: ErrRegistryEntryConflict, status: http.StatusConflict},
 		{name: "registry entry conflict wrapped", err: fmt.Errorf("gs://bucket/entry.json: %w; guidance", ErrRegistryEntryConflict), status: http.StatusConflict},
+		{name: "index version conflict exact", err: ErrIndexVersionConflict, status: http.StatusConflict},
+		{name: "index version conflict wrapped", err: fmt.Errorf("app %q version %q index identity mismatch: %w", "demo", "1.0.0", ErrIndexVersionConflict), status: http.StatusConflict},
 		{name: "object precondition exact", err: ErrObjectPreconditionFailed, status: http.StatusConflict},
 		{name: "object precondition wrapped", err: fmt.Errorf("update gs://bucket/index.json: %w", ErrObjectPreconditionFailed), status: http.StatusConflict},
 		{name: "exhausted catalog conflict", err: fmt.Errorf("update gs://bucket/index.json: %w", ErrObjectPreconditionFailed), status: http.StatusConflict},
