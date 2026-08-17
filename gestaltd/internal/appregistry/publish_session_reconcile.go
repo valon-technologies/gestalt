@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 var (
@@ -59,6 +60,36 @@ func LoadPublishedEntry(store RegistryObjectStore, storageRoot, appName, version
 	return DecodeEntry(entryData)
 }
 
+func (s *PublishSessionService) verifyPublishedRegistryProof(
+	session *core.AppRegistryPublishSession,
+	storageRoot, sourceRef string,
+	publishedAt time.Time,
+) error {
+	if s == nil || session == nil || s.Store == nil {
+		return fmt.Errorf("%w: session is required", ErrPublishReconcileMismatch)
+	}
+	entry, err := LoadPublishedEntry(s.Store, storageRoot, session.App, session.Version)
+	if err != nil {
+		return err
+	}
+	expect := PublishedCommitExpectation{
+		App:               session.App,
+		Version:           session.Version,
+		PublishID:         session.ID,
+		DeclarationDigest: session.DeclarationDigest,
+		SourceRef:         sourceRef,
+	}
+	switch {
+	case !publishedAt.IsZero():
+		expect.PublishedAt = publishedAt.UTC()
+	case !session.PublishedAt.IsZero():
+		expect.PublishedAt = session.PublishedAt.UTC()
+	case !session.FinalizePublishedAt.IsZero():
+		expect.PublishedAt = session.FinalizePublishedAt.UTC()
+	}
+	return VerifyPublishedEntry(entry, expect)
+}
+
 func VerifyPublishedEntry(entry *Entry, expect PublishedCommitExpectation) error {
 	if entry == nil {
 		return fmt.Errorf("%w: entry is missing", ErrPublishReconcileMismatch)
@@ -98,6 +129,13 @@ func (s *PublishSessionService) reconcilePublishedSession(
 		return nil, fmt.Errorf("%w: %s", ErrPublishSessionFailed, strings.TrimSpace(session.FailureReason))
 	}
 	if session.State == core.AppRegistryPublishSessionPublished {
+		publishedAt := session.PublishedAt
+		if publishedAt.IsZero() {
+			publishedAt = session.FinalizePublishedAt
+		}
+		if err := s.verifyPublishedRegistryProof(session, storageRoot, sourceRef, publishedAt); err != nil {
+			return nil, err
+		}
 		return session, nil
 	}
 	entry, err := LoadPublishedEntry(s.Store, storageRoot, session.App, session.Version)
@@ -129,6 +167,9 @@ func (s *PublishSessionService) reconcilePublishedSession(
 	if err != nil {
 		return nil, err
 	}
+	if session.State == core.AppRegistryPublishSessionPublished {
+		return session, nil
+	}
 	markAt := expect.PublishedAt
 	if markAt.IsZero() {
 		markAt = entry.PublishedAt.UTC()
@@ -137,17 +178,27 @@ func (s *PublishSessionService) reconcilePublishedSession(
 }
 
 func (s *PublishSessionService) ensureFinalizeClaimForReconcile(ctx context.Context, session *core.AppRegistryPublishSession) (*core.AppRegistryPublishSession, error) {
+	if session.State == core.AppRegistryPublishSessionPublished {
+		return session, nil
+	}
 	if session.State == core.AppRegistryPublishSessionFinalizing {
 		now := s.now()
 		if !session.FinalizeClaimExpiresAt.IsZero() && session.FinalizeClaimExpiresAt.After(now) {
 			return session, nil
 		}
 	}
-	claimed, err := s.Sessions.ClaimFinalize(ctx, session.ID, s.limits().FinalizeClaimLeaseTTL)
+	result, err := s.Sessions.ClaimFinalize(ctx, session.ID, s.limits().FinalizeClaimLeaseTTL)
 	if err != nil {
-		return nil, mapFinalizeClaimConflict(ctx, s, session.ID, err)
+		return nil, err
 	}
-	return claimed, nil
+	switch result.Outcome {
+	case coredata.FinalizeClaimOutcomeAcquired, coredata.FinalizeClaimOutcomeAlreadyPublished:
+		return result.Session, nil
+	case coredata.FinalizeClaimOutcomeInProgress:
+		return nil, ErrPublishFinalizeInProgress
+	default:
+		return nil, fmt.Errorf("unexpected finalize claim outcome %q", result.Outcome)
+	}
 }
 
 func (s *PublishSessionService) markPublished(ctx context.Context, session *core.AppRegistryPublishSession, publishedAt time.Time) (*core.AppRegistryPublishSession, error) {

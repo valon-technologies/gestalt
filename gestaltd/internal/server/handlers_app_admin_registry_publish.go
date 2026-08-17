@@ -270,6 +270,7 @@ func writeAppAdminRegistryPublishError(w http.ResponseWriter, err error) {
 	case errors.Is(err, appregistry.ErrPublishVersionConflict),
 		errors.Is(err, appregistry.ErrPublishUploadMismatch),
 		errors.Is(err, appregistry.ErrPublishFinalizeInProgress),
+		errors.Is(err, appregistry.ErrPublishReconcileMismatch),
 		errors.Is(err, coredata.ErrPublishSessionFinalizeConflict),
 		errors.Is(err, coredata.ErrPublishSessionVersionLocked):
 		status = http.StatusConflict

@@ -19,6 +19,19 @@ var (
 	ErrPublishSessionClaimMismatch    = errors.New("publish session finalize claim mismatch")
 )
 
+type FinalizeClaimOutcome string
+
+const (
+	FinalizeClaimOutcomeAcquired         FinalizeClaimOutcome = "acquired"
+	FinalizeClaimOutcomeInProgress       FinalizeClaimOutcome = "in_progress"
+	FinalizeClaimOutcomeAlreadyPublished FinalizeClaimOutcome = "already_published"
+)
+
+type ClaimFinalizeResult struct {
+	Outcome FinalizeClaimOutcome
+	Session *core.AppRegistryPublishSession
+}
+
 type PublishSessionTransition struct {
 	ExpectedStates []core.AppRegistryPublishSessionState
 	ExpectRevision int64
@@ -103,47 +116,123 @@ func (s *AppRegistryPublishSessionService) RenewFinalizeClaim(ctx context.Contex
 	})
 }
 
-func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id string, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error) {
-	session, err := s.Get(ctx, id)
+func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id string, leaseTTL time.Duration) (*ClaimFinalizeResult, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("claim finalize app registry publish session: service is not configured")
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, fmt.Errorf("claim finalize app registry publish session: id is required")
+	}
+	if err := s.EnsureStore(ctx); err != nil {
+		return nil, err
+	}
+
+	tx, err := s.db.Transaction(ctx, []string{StoreAppRegistryPublishSessions}, idb.TransactionReadwrite, idb.TransactionOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("claim finalize app registry publish session: begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+
+	store := tx.ObjectStore(StoreAppRegistryPublishSessions)
+	rec, err := store.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return nil, core.ErrNotFound
+		}
+		return nil, fmt.Errorf("claim finalize app registry publish session: load: %w", err)
+	}
+	session := recordToAppRegistryPublishSession(rec)
+	outcome, mutate, err := classifyFinalizeClaim(id, session, leaseTTL)
 	if err != nil {
 		return nil, err
 	}
+	switch outcome {
+	case FinalizeClaimOutcomeAlreadyPublished, FinalizeClaimOutcomeInProgress:
+		return &ClaimFinalizeResult{Outcome: outcome, Session: session}, nil
+	case FinalizeClaimOutcomeAcquired:
+		if mutate == nil {
+			return nil, fmt.Errorf("claim finalize app registry publish session: acquired outcome requires mutation")
+		}
+		// Re-read within the transaction before mutating so an uploading snapshot cannot
+		// commit after a concurrent winner publishes.
+		rec, err = store.Get(ctx, id)
+		if err != nil {
+			if errors.Is(err, idb.ErrNotFound) {
+				return nil, core.ErrNotFound
+			}
+			return nil, fmt.Errorf("claim finalize app registry publish session: reload: %w", err)
+		}
+		session = recordToAppRegistryPublishSession(rec)
+		outcome, mutate, err = classifyFinalizeClaim(id, session, leaseTTL)
+		if err != nil {
+			return nil, err
+		}
+		switch outcome {
+		case FinalizeClaimOutcomeAlreadyPublished, FinalizeClaimOutcomeInProgress:
+			return &ClaimFinalizeResult{Outcome: outcome, Session: session}, nil
+		case FinalizeClaimOutcomeAcquired:
+			// proceed with mutation below
+		default:
+			return nil, fmt.Errorf("claim finalize app registry publish session: unexpected reload outcome %q", outcome)
+		}
+		if mutate == nil {
+			return nil, fmt.Errorf("claim finalize app registry publish session: acquired outcome requires mutation")
+		}
+		if err := mutate(session); err != nil {
+			return nil, err
+		}
+		session.Revision++
+		session.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
+		if err := store.Put(ctx, appRegistryPublishSessionRecord(session)); err != nil {
+			return nil, fmt.Errorf("claim finalize app registry publish session: write: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("claim finalize app registry publish session: commit: %w", err)
+		}
+		committed = true
+		return &ClaimFinalizeResult{Outcome: FinalizeClaimOutcomeAcquired, Session: session}, nil
+	default:
+		return nil, fmt.Errorf("claim finalize app registry publish session: unexpected outcome %q", outcome)
+	}
+}
+
+func classifyFinalizeClaim(id string, session *core.AppRegistryPublishSession, leaseTTL time.Duration) (FinalizeClaimOutcome, func(*core.AppRegistryPublishSession) error, error) {
+	if session == nil {
+		return "", nil, fmt.Errorf("claim finalize app registry publish session: session is required")
+	}
 	switch session.State {
-	case core.AppRegistryPublishSessionPublished:
-		return session, nil
 	case core.AppRegistryPublishSessionFailed:
-		return nil, fmt.Errorf("%w: %s", ErrPublishSessionTerminal, strings.TrimSpace(session.FailureReason))
+		return "", nil, fmt.Errorf("%w: %s", ErrPublishSessionTerminal, strings.TrimSpace(session.FailureReason))
+	case core.AppRegistryPublishSessionPublished:
+		return FinalizeClaimOutcomeAlreadyPublished, nil, nil
 	case core.AppRegistryPublishSessionFinalizing:
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		if !session.FinalizeClaimExpiresAt.IsZero() && session.FinalizeClaimExpiresAt.After(now) {
-			return nil, fmt.Errorf("%w: session %q is already finalizing", ErrPublishSessionFinalizeConflict, id)
+			return FinalizeClaimOutcomeInProgress, nil, nil
 		}
-		return s.Transition(ctx, id, PublishSessionTransition{
-			ExpectedStates: []core.AppRegistryPublishSessionState{core.AppRegistryPublishSessionFinalizing},
-			ExpectRevision: session.Revision,
-			Mutate: func(current *core.AppRegistryPublishSession) error {
-				current.FinalizeClaimToken = newFinalizeClaimToken()
-				current.FinalizeClaimExpiresAt = now.Add(normalizeFinalizeClaimLeaseTTL(leaseTTL))
-				return nil
-			},
-		})
-	}
-	now := time.Now().UTC().Truncate(time.Millisecond)
-	publishedAt := now
-	return s.Transition(ctx, id, PublishSessionTransition{
-		ExpectedStates: []core.AppRegistryPublishSessionState{
-			core.AppRegistryPublishSessionCreated,
-			core.AppRegistryPublishSessionUploading,
-		},
-		ExpectRevision: session.Revision,
-		Mutate: func(current *core.AppRegistryPublishSession) error {
+		return FinalizeClaimOutcomeAcquired, func(current *core.AppRegistryPublishSession) error {
+			current.FinalizeClaimToken = newFinalizeClaimToken()
+			current.FinalizeClaimExpiresAt = now.Add(normalizeFinalizeClaimLeaseTTL(leaseTTL))
+			return nil
+		}, nil
+	case core.AppRegistryPublishSessionCreated, core.AppRegistryPublishSessionUploading:
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		return FinalizeClaimOutcomeAcquired, func(current *core.AppRegistryPublishSession) error {
 			current.State = core.AppRegistryPublishSessionFinalizing
 			current.FinalizeClaimToken = newFinalizeClaimToken()
 			current.FinalizeClaimExpiresAt = now.Add(normalizeFinalizeClaimLeaseTTL(leaseTTL))
-			current.FinalizePublishedAt = publishedAt
+			current.FinalizePublishedAt = now
 			return nil
-		},
-	})
+		}, nil
+	default:
+		return "", nil, fmt.Errorf("%w: session %q is %s", ErrPublishSessionStateConflict, id, session.State)
+	}
 }
 
 func (s *AppRegistryPublishSessionService) MarkPublished(ctx context.Context, id, claimToken string, expectRevision int64, publishedAt time.Time) (*core.AppRegistryPublishSession, error) {

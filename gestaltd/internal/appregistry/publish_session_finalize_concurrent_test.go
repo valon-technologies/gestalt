@@ -125,10 +125,7 @@ func TestPublishSessionConcurrentFinalizeCompetitorNeverMarksFailed(t *testing.T
 	t.Parallel()
 
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.concurrent-fail-safe")
-	claimed, err := h.sessions.ClaimFinalize(h.ctx, h.created.Session.ID, 30*time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
+	claimed := mustClaimFinalizeAcquired(t, h.sessions, h.ctx, h.created.Session.ID, 30*time.Minute)
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -181,25 +178,19 @@ func TestPublishSessionConcurrentFinalizeExpiredTakeoverGetsNewToken(t *testing.
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	first, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
+	first := mustClaimFinalizeAcquired(t, svc, ctx, session.ID, time.Minute)
 	if _, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
 		current.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	}); err != nil {
 		t.Fatalf("expire claim: %v", err)
 	}
-	second, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
-	if err != nil {
-		t.Fatalf("takeover ClaimFinalize: %v", err)
-	}
+	second := mustClaimFinalizeAcquired(t, svc, ctx, session.ID, time.Minute)
 	if second.FinalizeClaimToken == first.FinalizeClaimToken {
 		t.Fatal("expected new claim token after expired takeover")
 	}
-	if _, err := svc.ClaimFinalize(ctx, session.ID, time.Minute); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
-		t.Fatalf("active claim must reject second ClaimFinalize: %v", err)
+	if result, err := svc.ClaimFinalize(ctx, session.ID, time.Minute); err != nil || result.Outcome != coredata.FinalizeClaimOutcomeInProgress {
+		t.Fatalf("active claim must reject second ClaimFinalize: %v outcome=%q", err, result.Outcome)
 	}
 }
 
@@ -217,10 +208,7 @@ func TestPublishSessionRenewFinalizeClaimPreventsPrematureTakeover(t *testing.T)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	claimed, err := svc.ClaimFinalize(ctx, session.ID, 2*time.Second)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
+	claimed := mustClaimFinalizeAcquired(t, svc, ctx, session.ID, 2*time.Second)
 	time.Sleep(1500 * time.Millisecond)
 	renewed, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.Revision, 2*time.Second)
 	if err != nil {
@@ -229,8 +217,8 @@ func TestPublishSessionRenewFinalizeClaimPreventsPrematureTakeover(t *testing.T)
 	if !renewed.FinalizeClaimExpiresAt.After(time.Now().UTC()) {
 		t.Fatalf("claim not renewed: %v", renewed.FinalizeClaimExpiresAt)
 	}
-	if _, err := svc.ClaimFinalize(ctx, session.ID, time.Second); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
-		t.Fatalf("renewed claim must block takeover: %v", err)
+	if result, err := svc.ClaimFinalize(ctx, session.ID, time.Second); err != nil || result.Outcome != coredata.FinalizeClaimOutcomeInProgress {
+		t.Fatalf("renewed claim must block takeover: %v outcome=%q", err, result.Outcome)
 	}
 	if _, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, renewed.Revision, time.Second); err != nil {
 		t.Fatalf("RenewFinalizeClaim with current revision: %v", err)
@@ -278,6 +266,135 @@ func TestPublishSessionFinalizeSlowWriterRenewsClaim(t *testing.T) {
 	}
 	if result.Session.State != core.AppRegistryPublishSessionPublished {
 		t.Fatalf("state = %q", result.Session.State)
+	}
+}
+
+func TestPublishSessionFinalizeLoserAfterWinnerPublishedNoSideEffects(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := newPublishSessionServices(t)
+	store, mem := appregistry.NewMemoryPublishStores()
+	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
+	service := newPublishSessionService(t, services.AppRegistryPublishSessions, store, signer)
+	var sideEffects int32
+	countingStore := &promoteCountingStore{
+		WritableRegistryStore: store,
+		onPromote: func() {
+			atomic.AddInt32(&sideEffects, 1)
+		},
+	}
+	service.Store = countingStore
+	service.Writer = &appregistry.Writer{Store: countingStore}
+
+	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.loser-after-winner")
+	created, err := service.Create(ctx, appregistry.CreatePublishSessionInput{
+		App: "g-issues", Registry: "toolshed", StorageRoot: "gs://gestalt-app-registry",
+		PublicRoot:         "https://storage.googleapis.com/gestalt-app-registry",
+		PublisherSubjectID: "user:alice", Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	for _, lease := range created.Session.UploadLeases {
+		if err := appregistry.ApplyMemoryUpload(mem, lease.UploadURL, artifactBytes, declaration.Artifacts[0].SHA256); err != nil {
+			t.Fatalf("upload: %v", err)
+		}
+	}
+	input := appregistry.FinalizePublishSessionInput{
+		App: "g-issues", PublishID: created.Session.ID, StorageRoot: "gs://gestalt-app-registry",
+		PublicRoot: "https://storage.googleapis.com/gestalt-app-registry",
+	}
+	if _, err := service.Finalize(ctx, input); err != nil {
+		t.Fatalf("winner Finalize: %v", err)
+	}
+	if got := atomic.LoadInt32(&sideEffects); got != 1 {
+		t.Fatalf("winner promotion side effects = %d, want 1", got)
+	}
+
+	result, err := service.Finalize(ctx, input)
+	if err != nil {
+		t.Fatalf("loser Finalize after winner published: %v", err)
+	}
+	if result.Session.State != core.AppRegistryPublishSessionPublished {
+		t.Fatalf("loser state = %q", result.Session.State)
+	}
+	if got := atomic.LoadInt32(&sideEffects); got != 1 {
+		t.Fatalf("loser promotion side effects = %d, want 1", got)
+	}
+}
+
+func TestPublishSessionFinalizeFailedSessionIsTerminal(t *testing.T) {
+	t.Parallel()
+
+	h := newFinalizeCrashHarness(t, "0.3.0-dev.concurrent-failed-terminal")
+	if _, err := h.sessions.MarkFailed(h.ctx, h.created.Session.ID, "", h.created.Session.Revision, "boom"); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+	_, err := h.service.Finalize(h.ctx, h.finalizeInput())
+	if !errors.Is(err, appregistry.ErrPublishSessionFailed) {
+		t.Fatalf("Finalize failed session = %v", err)
+	}
+}
+
+func TestPublishSessionConcurrentFinalizeWinnerPublishesBeforeLoserClaim(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := newPublishSessionServices(t)
+	store, mem := appregistry.NewMemoryPublishStores()
+	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
+	service := newPublishSessionService(t, services.AppRegistryPublishSessions, store, signer)
+	var sideEffects int32
+	countingStore := &promoteCountingStore{
+		WritableRegistryStore: store,
+		onPromote: func() {
+			atomic.AddInt32(&sideEffects, 1)
+		},
+	}
+	service.Store = countingStore
+	service.Writer = &appregistry.Writer{Store: countingStore}
+
+	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.winner-before-loser-claim")
+	created, err := service.Create(ctx, appregistry.CreatePublishSessionInput{
+		App: "g-issues", Registry: "toolshed", StorageRoot: "gs://gestalt-app-registry",
+		PublicRoot:         "https://storage.googleapis.com/gestalt-app-registry",
+		PublisherSubjectID: "user:alice", Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	for _, lease := range created.Session.UploadLeases {
+		if err := appregistry.ApplyMemoryUpload(mem, lease.UploadURL, artifactBytes, declaration.Artifacts[0].SHA256); err != nil {
+			t.Fatalf("upload: %v", err)
+		}
+	}
+	input := appregistry.FinalizePublishSessionInput{
+		App: "g-issues", PublishID: created.Session.ID, StorageRoot: "gs://gestalt-app-registry",
+		PublicRoot: "https://storage.googleapis.com/gestalt-app-registry",
+	}
+
+	winnerDone := make(chan error, 1)
+	go func() {
+		_, err := service.Finalize(ctx, input)
+		winnerDone <- err
+	}()
+	if err := <-winnerDone; err != nil {
+		t.Fatalf("winner Finalize: %v", err)
+	}
+	if got := atomic.LoadInt32(&sideEffects); got != 1 {
+		t.Fatalf("winner promotion side effects = %d, want 1", got)
+	}
+
+	result, err := service.Finalize(ctx, input)
+	if err != nil {
+		t.Fatalf("loser Finalize: %v", err)
+	}
+	if result.Session.State != core.AppRegistryPublishSessionPublished {
+		t.Fatalf("loser state = %q", result.Session.State)
+	}
+	if got := atomic.LoadInt32(&sideEffects); got != 1 {
+		t.Fatalf("loser promotion side effects = %d, want 1", got)
 	}
 }
 
