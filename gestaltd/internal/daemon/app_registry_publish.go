@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/daemon/appregistryremote"
 )
 
 func runAppRegistryPublish(args []string, gestaltdVersion string) error {
@@ -70,11 +69,11 @@ func runAppRegistryRemotePublish(version string, distDirs []string, gestaltdVers
 	if err != nil {
 		return err
 	}
-	_, err = appregistryremote.Publish(context.Background(), appregistryremote.PublishInput{
+	_, err = (&remoteRegistryPublisher{
 		Version: version, DistDirs: distDirs, GestaltURL: baseURL, GestaltToken: token,
 		BuilderVersion: gestaltdVersion, Output: os.Stdout,
 		Logf: func(format string, args ...any) { progressStatus(format, args...) },
-	})
+	}).publish(context.Background())
 	return err
 }
 
