@@ -31,12 +31,6 @@ type PublishRequest struct {
 	SourceRef string
 }
 
-// PublishResult summarizes uploaded and skipped registry objects.
-type PublishResult struct {
-	Uploaded []string
-	Skipped  []string
-}
-
 func (w *Writer) catalogAttempts() int {
 	if w == nil || w.CatalogAttempts <= 0 {
 		return defaultCatalogUpdateAttempts
@@ -75,15 +69,32 @@ func (w *Writer) Preflight(req PublishRequest, progress PublishProgress) error {
 	return nil
 }
 
-// Publish uploads immutable objects and updates index and retention catalogs last.
-func (w *Writer) Publish(req PublishRequest, progress PublishProgress) error {
-	if err := w.uploadImmutableObjects(req, progress); err != nil {
-		return err
+// Publish uploads immutable objects, updates the retention catalog, and commits
+// the index last so no fallible registry write occurs after index commit.
+func (w *Writer) Publish(req PublishRequest, progress PublishProgress) (PublishResult, error) {
+	result := PublishResult{
+		Retention: CatalogWriteOutcomeNotAttempted,
+		Index:     CatalogWriteOutcomeNotAttempted,
 	}
-	if err := w.uploadIndex(req, progress); err != nil {
-		return err
+	immutable, err := w.uploadImmutableObjects(req, progress)
+	if err != nil {
+		return result, err
 	}
-	return w.uploadRetention(req, progress)
+	result.Artifacts = immutable.Artifacts
+	result.Entry = immutable.Entry
+
+	retentionOutcome, err := w.uploadRetention(req, progress)
+	result.Retention = retentionOutcome
+	if err != nil {
+		return result, err
+	}
+
+	indexOutcome, err := w.uploadIndex(req, progress)
+	result.Index = indexOutcome
+	if err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func (w *Writer) preflightIndex(plan PublishManifest) error {
@@ -118,26 +129,31 @@ func (w *Writer) preflightImmutableObject(object PublishObject) error {
 	return fmt.Errorf("%s already exists; %s", object.StorageURL, RepublishCorruptObjectGuidance)
 }
 
-func (w *Writer) uploadImmutableObjects(req PublishRequest, progress PublishProgress) error {
+func (w *Writer) uploadImmutableObjects(req PublishRequest, progress PublishProgress) (ImmutablePublishOutcome, error) {
 	plan := req.Manifest
 	objectCount := len(plan.ArtifactObjects) + 1
 	if progress.Start != nil {
 		progress.Start("Uploading %d immutable app objects", objectCount)
 	}
 	stdoutLines := make([]string, 0, objectCount)
+	outcome := ImmutablePublishOutcome{
+		Artifacts: make([]ImmutableObjectOutcome, 0, len(plan.ArtifactObjects)),
+	}
 	for _, object := range plan.ArtifactObjects {
-		line, err := w.uploadImmutableObjectIfNeeded(object, req.SourceRef)
+		objectOutcome, line, err := w.uploadImmutableObjectIfNeeded(object, req.SourceRef)
 		if err != nil {
-			return err
+			return ImmutablePublishOutcome{}, err
 		}
+		outcome.Artifacts = append(outcome.Artifacts, objectOutcome)
 		if line != "" {
 			stdoutLines = append(stdoutLines, line)
 		}
 	}
-	line, err := w.uploadImmutableObjectIfNeeded(plan.EntryObject, req.SourceRef)
+	entryOutcome, line, err := w.uploadImmutableObjectIfNeeded(plan.EntryObject, req.SourceRef)
 	if err != nil {
-		return err
+		return ImmutablePublishOutcome{}, err
 	}
+	outcome.Entry = entryOutcome
 	if line != "" {
 		stdoutLines = append(stdoutLines, line)
 	}
@@ -149,16 +165,19 @@ func (w *Writer) uploadImmutableObjects(req PublishRequest, progress PublishProg
 			progress.Log(line)
 		}
 	}
-	return nil
+	return outcome, nil
 }
 
-func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef string) (string, error) {
+func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef string) (ImmutableObjectOutcome, string, error) {
 	matches, err := w.immutableObjectMatchesExisting(object)
 	if err != nil {
-		return "", err
+		return ImmutableObjectOutcome{}, "", err
 	}
 	if matches {
-		return fmt.Sprintf("skipped existing %s", object.StorageURL), nil
+		return ImmutableObjectOutcome{
+			StorageURL: object.StorageURL,
+			Outcome:    ObjectWriteOutcomeSkipped,
+		}, fmt.Sprintf("skipped existing %s", object.StorageURL), nil
 	}
 	if err := w.Store.WriteImmutableObject(WriteImmutableObjectInput{
 		LocalPath:  object.LocalPath,
@@ -166,9 +185,12 @@ func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef s
 		SourceRef:  sourceRef,
 		SHA256:     object.SHA256,
 	}); err != nil {
-		return "", err
+		return ImmutableObjectOutcome{}, "", err
 	}
-	return fmt.Sprintf("uploaded %s", object.StorageURL), nil
+	return ImmutableObjectOutcome{
+		StorageURL: object.StorageURL,
+		Outcome:    ObjectWriteOutcomeUploaded,
+	}, fmt.Sprintf("uploaded %s", object.StorageURL), nil
 }
 
 func (w *Writer) immutableObjectMatchesExisting(object PublishObject) (bool, error) {
@@ -192,7 +214,7 @@ func (w *Writer) immutableObjectMatchesExisting(object PublishObject) (bool, err
 	return false, nil
 }
 
-func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) error {
+func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) (CatalogWriteOutcome, error) {
 	plan := req.Manifest
 	indexPath := plan.IndexObject.StorageURL
 	if progress.Start != nil {
@@ -204,16 +226,16 @@ func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) error
 		}
 		generation, existing, err := w.Store.ReadObject(indexPath)
 		if err != nil {
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		index, err := decodeIndexOrEmpty(existing)
 		if err != nil {
-			return fmt.Errorf("decode existing app index: %w", err)
+			return CatalogWriteOutcomeNotAttempted, fmt.Errorf("decode existing app index: %w", err)
 		}
 		metadataPath := AppVersionEntryPath(plan.AppName, plan.Version)
 		updated, changed, err := UpsertAppIndex(index, plan.Entry, metadataPath, plan.DisplayName, plan.Description)
 		if err != nil {
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		if !changed {
 			if progress.Done != nil {
@@ -222,15 +244,15 @@ func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) error
 			if progress.Log != nil {
 				progress.Log(fmt.Sprintf("skipped unchanged index for %s %s", plan.AppName, plan.Version))
 			}
-			return nil
+			return CatalogWriteOutcomeUnchanged, nil
 		}
 		data, err := json.MarshalIndent(updated, "", "  ")
 		if err != nil {
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		tmpPath, err := WriteTempJSON("gestalt-app-index-*", append(data, '\n'))
 		if err != nil {
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		err = w.Store.WriteCatalogObject(WriteCatalogObjectInput{
 			LocalPath:  tmpPath,
@@ -246,7 +268,7 @@ func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) error
 				}
 				continue
 			}
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		if progress.Done != nil {
 			progress.Done("Updated app registry index")
@@ -254,14 +276,15 @@ func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) error
 		if progress.Log != nil {
 			progress.Log(fmt.Sprintf("updated %s", indexPath))
 		}
-		return nil
+		return CatalogWriteOutcomeUpdated, nil
 	}
-	return fmt.Errorf("update %s: exceeded retry limit after concurrent index updates", indexPath)
+	return CatalogWriteOutcomeNotAttempted, fmt.Errorf("update %s: exceeded retry limit after concurrent index updates", indexPath)
 }
 
-func (w *Writer) uploadRetention(req PublishRequest, progress PublishProgress) error {
+func (w *Writer) uploadRetention(req PublishRequest, progress PublishProgress) (CatalogWriteOutcome, error) {
 	plan := req.Manifest
 	retentionPath := RetentionStorageURL(plan.IndexObject.StorageURL, plan.AppName)
+	publishedAt := plan.Entry.PublishedAt
 	if progress.Start != nil {
 		progress.Start("Updating app registry retention catalog")
 	}
@@ -271,25 +294,25 @@ func (w *Writer) uploadRetention(req PublishRequest, progress PublishProgress) e
 		}
 		generation, existing, err := w.Store.ReadObject(retentionPath)
 		if err != nil {
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		index, err := decodeRetentionIndexOrEmpty(existing)
 		if err != nil {
-			return fmt.Errorf("decode existing retention index: %w", err)
+			return CatalogWriteOutcomeNotAttempted, fmt.Errorf("decode existing retention index: %w", err)
 		}
-		if !UpsertPublishedRetention(index, plan.Version, plan.Entry.PublishedAt, w.retentionPolicy()) {
+		if !UpsertPublishedRetention(index, plan.Version, publishedAt, w.retentionPolicy()) {
 			if progress.Done != nil {
 				progress.Done("App registry retention catalog unchanged")
 			}
-			return nil
+			return CatalogWriteOutcomeUnchanged, nil
 		}
 		data, err := json.MarshalIndent(index, "", "  ")
 		if err != nil {
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		tmpPath, err := WriteTempJSON("gestalt-app-retention-*", append(data, '\n'))
 		if err != nil {
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		err = w.Store.WriteCatalogObject(WriteCatalogObjectInput{
 			LocalPath:  tmpPath,
@@ -302,7 +325,7 @@ func (w *Writer) uploadRetention(req PublishRequest, progress PublishProgress) e
 			if isCatalogPreconditionFailed(err) && attempt < w.catalogAttempts() {
 				continue
 			}
-			return err
+			return CatalogWriteOutcomeNotAttempted, err
 		}
 		if progress.Done != nil {
 			progress.Done("Updated app registry retention catalog")
@@ -310,9 +333,9 @@ func (w *Writer) uploadRetention(req PublishRequest, progress PublishProgress) e
 		if progress.Log != nil {
 			progress.Log(fmt.Sprintf("updated %s", retentionPath))
 		}
-		return nil
+		return CatalogWriteOutcomeUpdated, nil
 	}
-	return fmt.Errorf("update %s: exceeded retry limit after concurrent retention updates", retentionPath)
+	return CatalogWriteOutcomeNotAttempted, fmt.Errorf("update %s: exceeded retry limit after concurrent retention updates", retentionPath)
 }
 
 // LoadPublishStartedAt reads pending.json for an in-flight publish startedAt timestamp.

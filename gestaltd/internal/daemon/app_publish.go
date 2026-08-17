@@ -185,7 +185,8 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 	if err := writer.Preflight(req, progress.progress()); err != nil {
 		return err
 	}
-	return writer.Publish(req, progress.progress())
+	_, err = writer.Publish(req, progress.progress())
+	return err
 }
 
 type buildAppPublishManifestInput struct {

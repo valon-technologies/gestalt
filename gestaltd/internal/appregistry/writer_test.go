@@ -90,11 +90,31 @@ func TestWriter_Publish_IdempotentRetry(t *testing.T) {
 	manifest, entryPath, artifactPath := writePublishManifestFixture(t, store, "0.0.1")
 	req := PublishRequest{Manifest: manifest, SourceRef: "651a5c30feb995c9364c38f63d0d5c3880bc2055"}
 
-	if err := writer.Publish(req, PublishProgress{}); err != nil {
+	result, err := writer.Publish(req, PublishProgress{})
+	if err != nil {
 		t.Fatalf("first Publish() = %v", err)
 	}
-	if err := writer.Publish(req, PublishProgress{}); err != nil {
+	if result.Entry.Outcome != ObjectWriteOutcomeUploaded {
+		t.Fatalf("first entry outcome = %q, want uploaded", result.Entry.Outcome)
+	}
+	if result.Retention != CatalogWriteOutcomeUpdated {
+		t.Fatalf("first retention outcome = %q, want updated", result.Retention)
+	}
+	if result.Index != CatalogWriteOutcomeUpdated {
+		t.Fatalf("first index outcome = %q, want updated", result.Index)
+	}
+	result, err = writer.Publish(req, PublishProgress{})
+	if err != nil {
 		t.Fatalf("retry Publish() = %v", err)
+	}
+	if result.Entry.Outcome != ObjectWriteOutcomeSkipped {
+		t.Fatalf("retry entry outcome = %q, want skipped", result.Entry.Outcome)
+	}
+	if result.Retention != CatalogWriteOutcomeUnchanged {
+		t.Fatalf("retry retention outcome = %q, want unchanged", result.Retention)
+	}
+	if result.Index != CatalogWriteOutcomeUnchanged {
+		t.Fatalf("retry index outcome = %q, want unchanged", result.Index)
 	}
 
 	described, err := store.DescribeObject(manifest.EntryObject.StorageURL)
@@ -171,7 +191,7 @@ func TestWriter_Publish_IndexCASPreservesConcurrentVersions(t *testing.T) {
 		failRemaining:       1,
 	}
 	writer := &Writer{Store: failStore}
-	if err := writer.Publish(PublishRequest{
+	if _, err := writer.Publish(PublishRequest{
 		Manifest:  manifest,
 		SourceRef: "651a5c30feb995c9364c38f63d0d5c3880bc2055",
 	}, PublishProgress{}); err != nil {
@@ -283,7 +303,7 @@ func TestWriter_NeverDeletesObjects(t *testing.T) {
 	store := NewMemoryObjectStore()
 	writer := &Writer{Store: store}
 	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.1")
-	if err := writer.Publish(PublishRequest{
+	if _, err := writer.Publish(PublishRequest{
 		Manifest:  manifest,
 		SourceRef: "651a5c30feb995c9364c38f63d0d5c3880bc2055",
 	}, PublishProgress{}); err != nil {
