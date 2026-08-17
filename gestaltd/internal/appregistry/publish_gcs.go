@@ -442,13 +442,13 @@ func (s *GCSUploadSigner) SignCreateUpload(input SignCreateUploadInput) (SignCre
 	if expiresAt.IsZero() {
 		expiresAt = time.Now().UTC().Add(time.Hour)
 	}
-	client, err := s.storageClient()
-	if err != nil {
-		return SignCreateUploadResult{}, fmt.Errorf("create storage client: %w", err)
-	}
 	bucket, object, err := s.validateStorageURL(storageURL)
 	if err != nil {
 		return SignCreateUploadResult{}, err
+	}
+	client, err := s.storageClient()
+	if err != nil {
+		return SignCreateUploadResult{}, fmt.Errorf("create storage client: %w", err)
 	}
 	uploadURL, err := s.signedURL(client, bucket, object, &storage.SignedURLOptions{
 		Scheme:  storage.SigningSchemeV4,
