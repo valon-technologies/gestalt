@@ -264,10 +264,10 @@ func warnRemotePublishProvenance(w io.Writer, localSource *appregistry.LocalSour
 	}
 	switch {
 	case localSource == nil:
-		fmt.Fprintln(w, "warning: remote publish has no git provenance; version metadata will omit commitSha")
+		_, _ = fmt.Fprintln(w, "warning: remote publish has no git provenance; version metadata will omit commitSha")
 	case localSource.Dirty:
-		fmt.Fprintf(w, "warning: remote publish is from a dirty checkout at %s\n", localSource.CommitSHA)
+		_, _ = fmt.Fprintf(w, "warning: remote publish is from a dirty checkout at %s\n", localSource.CommitSHA)
 	case localSource.Untracked:
-		fmt.Fprintf(w, "warning: remote publish has untracked files at commit %s\n", localSource.CommitSHA)
+		_, _ = fmt.Fprintf(w, "warning: remote publish has untracked files at commit %s\n", localSource.CommitSHA)
 	}
 }

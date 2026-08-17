@@ -112,7 +112,6 @@ func rejectDirectOnlyPublishFlags(bucket, app, ref string, dryRun bool, workflow
 	}
 }
 
-
 func runAppRegistryRemotePublish(version string, distDirs []string, gestaltdVersion string) error {
 	baseURL, err := config.ResolveGestaltCLIURL()
 	if err != nil {
