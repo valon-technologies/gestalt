@@ -57,19 +57,22 @@ func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provi
 	if info == nil {
 		return unknownConnectionStatus()
 	}
-	if status, ok := summarizeReconnectRequiredConnectionStatuses(info.Connections); ok {
-		return status
+	var status connectionStatusInfo
+	if recon, ok := summarizeReconnectRequiredConnectionStatuses(info.Connections); ok {
+		status = recon
+	} else if conn, ok := info.connectionStatusForDefaultTarget(s.defaultConnectionName(info.Name)); ok {
+		status = statusFromConnectionInfo(conn)
+	} else if conn, ok := info.singleConnectionStatus(); ok {
+		status = statusFromConnectionInfo(conn)
+	} else if len(info.Connections) == 0 {
+		status = s.implicitIntegrationStatus(info.Name, prov, instances, authTypes, p)
+	} else {
+		status = summarizeConnectionStatuses(info.Connections)
 	}
-	if conn, ok := info.connectionStatusForDefaultTarget(s.defaultConnectionName(info.Name)); ok {
-		return statusFromConnectionInfo(conn)
+	if len(info.Connections) > 0 {
+		status.Connected = subjectProductConnected(info.Connections)
 	}
-	if conn, ok := info.singleConnectionStatus(); ok {
-		return statusFromConnectionInfo(conn)
-	}
-	if len(info.Connections) == 0 {
-		return s.implicitIntegrationStatus(info.Name, prov, instances, authTypes, p)
-	}
-	return summarizeConnectionStatuses(info.Connections)
+	return status
 }
 
 func (info *integrationInfo) connectionStatusForDefaultTarget(connection string) (*connectionDefInfo, bool) {

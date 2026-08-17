@@ -145,3 +145,52 @@ func TestSummarizeReconnectNoAuthDoesNotConnectTheApp(t *testing.T) {
 		t.Fatal("mode-none ready must not mark the app connected during reconnect rollup")
 	}
 }
+
+func TestDefaultModeNoneDoesNotHideSubjectProductConnected(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{defaultConnection: map[string]string{"demo": "webhook"}}
+	info := &integrationInfo{
+		Name: "demo",
+		Connections: []connectionDefInfo{
+			{
+				Name:            "webhook",
+				Status:          connectionStatusReady,
+				CredentialState: credentialStateNotRequired,
+				CredentialMode:  credentialModeNone,
+				Connected:       false,
+			},
+			{
+				Name:            "workspace",
+				Status:          connectionStatusReady,
+				CredentialState: credentialStateConnected,
+				CredentialMode:  credentialModeSubject,
+				Connected:       true,
+			},
+		},
+	}
+	s.applyIntegrationConnectionStatus(info, nil, nil, nil, nil)
+	if !info.Connected {
+		t.Fatal("chosen subject account must keep the app product-connected when the default row is mode-none")
+	}
+}
+
+func TestDefaultModeNoneAloneIsNotProductConnected(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{defaultConnection: map[string]string{"demo": "webhook"}}
+	info := &integrationInfo{
+		Name: "demo",
+		Connections: []connectionDefInfo{{
+			Name:            "webhook",
+			Status:          connectionStatusReady,
+			CredentialState: credentialStateNotRequired,
+			CredentialMode:  credentialModeNone,
+			Connected:       false,
+		}},
+	}
+	s.applyIntegrationConnectionStatus(info, nil, nil, nil, nil)
+	if info.Connected {
+		t.Fatal("a mode-none default row must not mark the app product-connected")
+	}
+}
