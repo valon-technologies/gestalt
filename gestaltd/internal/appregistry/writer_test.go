@@ -332,3 +332,27 @@ func TestGcloudPreconditionFailed(t *testing.T) {
 		t.Fatal("expected memory store precondition detection")
 	}
 }
+
+func TestGcloudObjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "404", err: errors.New("404 Not Found"), want: true},
+		{name: "not found", err: errors.New("object not found"), want: true},
+		{name: "no urls matched", err: errors.New("ERROR: (gcloud.storage.objects.describe) no urls matched"), want: true},
+		{name: "other", err: errors.New("permission denied"), want: false},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := gcloudObjectNotFound(tc.err); got != tc.want {
+				t.Fatalf("gcloudObjectNotFound(%q) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}

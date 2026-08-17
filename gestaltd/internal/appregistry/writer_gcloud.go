@@ -130,6 +130,7 @@ func gcloudObjectNotFound(err error) bool {
 	}
 	text := strings.ToLower(err.Error())
 	return strings.Contains(text, "not found") ||
+		strings.Contains(text, "no urls matched") ||
 		strings.Contains(text, "404") ||
 		os.IsNotExist(err)
 }
