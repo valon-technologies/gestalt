@@ -22,6 +22,51 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
+func TestAppAdminRegistryPublishCreateReturnsUploadHeaders(t *testing.T) {
+	t.Parallel()
+
+	publishHarness := newRegistryPublishHarness(t)
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": publishHarness.registry}
+		cfg.AppRegistryPublish = publishHarness.service
+	})
+
+	createBody, _ := json.Marshal(map[string]any{"declaration": publishHarness.declaration})
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes", bytes.NewReader(createBody))
+	createReq.Header.Set("Authorization", "Bearer alice-token")
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("POST publish create: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	var created struct {
+		Uploads []struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"uploads"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if len(created.Uploads) != 1 || created.Uploads[0].Headers == nil {
+		t.Fatalf("create uploads = %#v", created.Uploads)
+	}
+	if created.Uploads[0].Headers[appregistry.UploadHeaderXGoogMetaSHA256] == "" {
+		t.Fatalf("headers = %#v", created.Uploads[0].Headers)
+	}
+}
+
 func TestAppAdminRegistryPublishAuthAndFlow(t *testing.T) {
 	t.Parallel()
 

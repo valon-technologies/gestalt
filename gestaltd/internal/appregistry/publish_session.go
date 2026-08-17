@@ -17,9 +17,9 @@ type PublishSessionStore interface {
 	GetByDedupeKey(ctx context.Context, dedupeKey string) (*core.AppRegistryPublishSession, error)
 	Create(ctx context.Context, input coredata.CreateAppRegistryPublishSessionInput) (*core.AppRegistryPublishSession, error)
 	Update(ctx context.Context, id string, update func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
-	ClaimFinalize(ctx context.Context, id string) (*core.AppRegistryPublishSession, error)
-	MarkPublished(ctx context.Context, id string, expectUpdated, publishedAt time.Time) (*core.AppRegistryPublishSession, error)
-	MarkFailed(ctx context.Context, id string, expectUpdated time.Time, reason string) (*core.AppRegistryPublishSession, error)
+	ClaimFinalize(ctx context.Context, id string, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error)
+	MarkPublished(ctx context.Context, id, claimToken string, expectUpdated, publishedAt time.Time) (*core.AppRegistryPublishSession, error)
+	MarkFailed(ctx context.Context, id, claimToken string, expectUpdated time.Time, reason string) (*core.AppRegistryPublishSession, error)
 	RenewLeases(ctx context.Context, id string, expectUpdated time.Time, mutate func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
 }
 
@@ -210,11 +210,12 @@ func (s *PublishSessionService) buildUploadLeases(
 			Size:     artifact.Size,
 		})
 		outLeases = append(outLeases, core.AppRegistryUploadLease{
-			Kind:       string(PublishObjectKindArchive),
-			Platform:   platform,
-			StorageURL: storageURL,
-			UploadURL:  signed.UploadURL,
-			ExpiresAt:  signed.ExpiresAt,
+			Kind:          string(PublishObjectKindArchive),
+			Platform:      platform,
+			StorageURL:    storageURL,
+			UploadURL:     signed.UploadURL,
+			UploadHeaders: cloneSignedUploadHeaders(signed.Headers),
+			ExpiresAt:     signed.ExpiresAt,
 		})
 	}
 	return outArtifacts, outLeases, nil

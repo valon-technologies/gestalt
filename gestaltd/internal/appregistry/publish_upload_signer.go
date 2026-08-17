@@ -46,7 +46,15 @@ func (s *memoryUploadSigner) SignCreateUpload(input SignCreateUploadInput) (Sign
 		q.Set("length", fmt.Sprintf("%d", input.ContentLength))
 	}
 	u.RawQuery = q.Encode()
-	return SignCreateUploadResult{UploadURL: u.String(), ExpiresAt: expiresAt.UTC()}, nil
+	headers, err := BuildSignedUploadHeaders(input.ContentLength, input.SHA256)
+	if err != nil {
+		return SignCreateUploadResult{}, err
+	}
+	return SignCreateUploadResult{
+		UploadURL: u.String(),
+		ExpiresAt: expiresAt.UTC(),
+		Headers:   cloneSignedUploadHeaders(headers),
+	}, nil
 }
 
 // ApplyMemoryUpload applies a signed memory upload URL to the backing store.

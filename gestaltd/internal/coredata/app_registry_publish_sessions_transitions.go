@@ -16,6 +16,7 @@ import (
 var (
 	ErrPublishSessionStateConflict    = errors.New("publish session state conflict")
 	ErrPublishSessionFinalizeConflict = errors.New("publish session finalize conflict")
+	ErrPublishSessionClaimMismatch    = errors.New("publish session finalize claim mismatch")
 )
 
 type PublishSessionTransition struct {
@@ -79,7 +80,7 @@ func (s *AppRegistryPublishSessionService) Transition(ctx context.Context, id st
 	return session, nil
 }
 
-func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id string) (*core.AppRegistryPublishSession, error) {
+func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id string, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error) {
 	session, err := s.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -90,8 +91,22 @@ func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id
 	case core.AppRegistryPublishSessionFailed:
 		return nil, fmt.Errorf("%w: %s", ErrPublishSessionTerminal, strings.TrimSpace(session.FailureReason))
 	case core.AppRegistryPublishSessionFinalizing:
-		return nil, fmt.Errorf("%w: session %q is already finalizing", ErrPublishSessionFinalizeConflict, id)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		if !session.FinalizeClaimExpiresAt.IsZero() && session.FinalizeClaimExpiresAt.After(now) {
+			return nil, fmt.Errorf("%w: session %q is already finalizing", ErrPublishSessionFinalizeConflict, id)
+		}
+		return s.Transition(ctx, id, PublishSessionTransition{
+			ExpectedStates: []core.AppRegistryPublishSessionState{core.AppRegistryPublishSessionFinalizing},
+			ExpectUpdated:  session.UpdatedAt,
+			Mutate: func(current *core.AppRegistryPublishSession) error {
+				current.FinalizeClaimToken = newFinalizeClaimToken()
+				current.FinalizeClaimExpiresAt = now.Add(normalizeFinalizeClaimLeaseTTL(leaseTTL))
+				return nil
+			},
+		})
 	}
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	publishedAt := now
 	return s.Transition(ctx, id, PublishSessionTransition{
 		ExpectedStates: []core.AppRegistryPublishSessionState{
 			core.AppRegistryPublishSessionCreated,
@@ -100,29 +115,38 @@ func (s *AppRegistryPublishSessionService) ClaimFinalize(ctx context.Context, id
 		ExpectUpdated: session.UpdatedAt,
 		Mutate: func(current *core.AppRegistryPublishSession) error {
 			current.State = core.AppRegistryPublishSessionFinalizing
+			current.FinalizeClaimToken = newFinalizeClaimToken()
+			current.FinalizeClaimExpiresAt = now.Add(normalizeFinalizeClaimLeaseTTL(leaseTTL))
+			current.FinalizePublishedAt = publishedAt
 			return nil
 		},
 	})
 }
 
-func (s *AppRegistryPublishSessionService) MarkPublished(ctx context.Context, id string, expectUpdated, publishedAt time.Time) (*core.AppRegistryPublishSession, error) {
-	publishedAt = publishedAt.UTC().Truncate(time.Millisecond)
+func (s *AppRegistryPublishSessionService) MarkPublished(ctx context.Context, id, claimToken string, expectUpdated, publishedAt time.Time) (*core.AppRegistryPublishSession, error) {
 	return s.Transition(ctx, id, PublishSessionTransition{
 		ExpectedStates: []core.AppRegistryPublishSessionState{core.AppRegistryPublishSessionFinalizing},
 		ExpectUpdated:  expectUpdated,
 		Mutate: func(current *core.AppRegistryPublishSession) error {
+			if err := requireFinalizeClaimToken(current, claimToken); err != nil {
+				return err
+			}
+			markAt := publishedAt.UTC().Truncate(time.Millisecond)
+			if !current.FinalizePublishedAt.IsZero() {
+				markAt = current.FinalizePublishedAt.UTC().Truncate(time.Millisecond)
+			}
 			current.State = core.AppRegistryPublishSessionPublished
-			current.PublishedAt = publishedAt
+			current.PublishedAt = markAt
 			current.FailureReason = ""
 			if current.StagingMarkedStale.IsZero() {
-				current.StagingMarkedStale = publishedAt
+				current.StagingMarkedStale = markAt
 			}
 			return nil
 		},
 	})
 }
 
-func (s *AppRegistryPublishSessionService) MarkFailed(ctx context.Context, id string, expectUpdated time.Time, reason string) (*core.AppRegistryPublishSession, error) {
+func (s *AppRegistryPublishSessionService) MarkFailed(ctx context.Context, id, claimToken string, expectUpdated time.Time, reason string) (*core.AppRegistryPublishSession, error) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "finalization failed"
@@ -135,6 +159,11 @@ func (s *AppRegistryPublishSessionService) MarkFailed(ctx context.Context, id st
 		},
 		ExpectUpdated: expectUpdated,
 		Mutate: func(current *core.AppRegistryPublishSession) error {
+			if current.State == core.AppRegistryPublishSessionFinalizing {
+				if err := requireFinalizeClaimToken(current, claimToken); err != nil {
+					return err
+				}
+			}
 			current.State = core.AppRegistryPublishSessionFailed
 			current.FailureReason = reason
 			now := time.Now().UTC().Truncate(time.Millisecond)
@@ -144,6 +173,26 @@ func (s *AppRegistryPublishSessionService) MarkFailed(ctx context.Context, id st
 			return nil
 		},
 	})
+}
+
+func requireFinalizeClaimToken(session *core.AppRegistryPublishSession, claimToken string) error {
+	expected := strings.TrimSpace(session.FinalizeClaimToken)
+	got := strings.TrimSpace(claimToken)
+	if expected == "" || got == "" || expected != got {
+		return fmt.Errorf("%w: session %q claim token mismatch", ErrPublishSessionClaimMismatch, session.ID)
+	}
+	return nil
+}
+
+func newFinalizeClaimToken() string {
+	return "fclaim_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+}
+
+func normalizeFinalizeClaimLeaseTTL(leaseTTL time.Duration) time.Duration {
+	if leaseTTL <= 0 {
+		return 15 * time.Minute
+	}
+	return leaseTTL
 }
 
 func (s *AppRegistryPublishSessionService) RenewLeases(ctx context.Context, id string, expectUpdated time.Time, mutate func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error) {
