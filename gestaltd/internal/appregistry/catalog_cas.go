@@ -7,13 +7,13 @@ import (
 )
 
 type catalogCASLabels struct {
-	start          string
-	doneUnchanged  string
-	doneUpdated    string
-	retryStatus    func(attempt, max int) string
-	retryConflict  string
-	logUnchanged   func(storageURL string) string
-	logUpdated     func(storageURL string) string
+	start         string
+	doneUnchanged string
+	doneUpdated   string
+	retryStatus   func(attempt, max int) string
+	retryConflict string
+	logUnchanged  func(storageURL string) string
+	logUpdated    func(storageURL string) string
 }
 
 // DefaultCatalogUpdateAttempts is the retry budget for generation-matched catalog writes.

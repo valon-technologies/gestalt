@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	PublishManifestSchemaVersion = "gestaltd.app.publish.plan.v1"
+	PublishManifestSchemaVersion   = "gestaltd.app.publish.plan.v1"
 	RepublishCorruptObjectGuidance = "delete the object or entire snapshot SHA prefix and republish"
 )
 
