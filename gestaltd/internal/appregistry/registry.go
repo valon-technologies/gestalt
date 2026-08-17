@@ -132,20 +132,6 @@ type PublishArtifact struct {
 	SHA256     string
 }
 
-type PublishPlan struct {
-	RegistryName string
-	AppName      string
-	Version      string
-	Entry        Entry
-	EntryPath    string
-	EntryURL     string
-	EntryPublic  string
-	IndexPath    string
-	IndexURL     string
-	IndexPublic  string
-	Artifacts    []PublishArtifact
-}
-
 func parseAppSource(raw string) (appName, repository string, err error) {
 	src, err := source.Parse(strings.TrimSpace(raw))
 	if err != nil {

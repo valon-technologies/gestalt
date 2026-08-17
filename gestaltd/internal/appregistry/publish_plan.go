@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	PublishPlanSchemaVersion       = "gestaltd.app.publish.plan.v1"
+	PublishManifestSchemaVersion = "gestaltd.app.publish.plan.v1"
 	RepublishCorruptObjectGuidance = "delete the object or entire snapshot SHA prefix and republish"
 )
 
@@ -145,7 +145,7 @@ func BuildPublishManifest(input BuildPublishManifestInput) (PublishManifest, err
 	}
 
 	return PublishManifest{
-		Schema:      PublishPlanSchemaVersion,
+		Schema:      PublishManifestSchemaVersion,
 		AppName:     entry.App,
 		DisplayName: input.DisplayName,
 		Description: input.Description,
@@ -167,7 +167,13 @@ func BuildPublishManifest(input BuildPublishManifestInput) (PublishManifest, err
 	}, nil
 }
 
-// RetentionStorageURL derives the app retention catalog URL from an index object URL.
+// Cleanup removes temporary local files referenced by the publish manifest.
+func (plan PublishManifest) Cleanup() {
+	if path := strings.TrimSpace(plan.EntryObject.LocalPath); path != "" {
+		_ = os.Remove(path)
+	}
+}
+
 func RetentionStorageURL(indexStorageURL string, appName string) string {
 	storageRoot := strings.TrimSuffix(indexStorageURL, AppIndexPath(appName))
 	return StorageURL(storageRoot, AppRetentionPath(appName))
