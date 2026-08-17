@@ -12,8 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/storage"
-
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
@@ -815,8 +813,7 @@ func tunnelClientIdentity(setup *reverseRemoteSetup) tls.Certificate {
 }
 
 var (
-	probeGCSRegistryBucketFn = probeGCSRegistryBucket
-	checkUploadSigningFn     = func(signer *appregistry.GCSUploadSigner) error {
+	checkUploadSigningFn = func(signer *appregistry.GCSUploadSigner) error {
 		return signer.CheckSigningReadiness(context.Background())
 	}
 	checkGCSRegistryPermissionsFn = appregistry.CheckGCSRegistryStorePermissions
@@ -835,9 +832,6 @@ func bootstrapAppRegistryPublish(cfg *config.Config) (*appregistry.StatelessPubl
 	storageRoot, err := registry.StorageURL()
 	if err != nil {
 		return nil, fmt.Errorf("app registry publish writable registry %q: %w", registryName, err)
-	}
-	if err := probeGCSRegistryBucketFn(storageRoot); err != nil {
-		return nil, fmt.Errorf("app registry publish storage credentials or bucket access unavailable: %w", err)
 	}
 	if err := checkGCSRegistryPermissionsFn(context.Background(), storageRoot); err != nil {
 		return nil, fmt.Errorf("app registry publish storage IAM permissions unavailable: %w", err)
@@ -881,31 +875,8 @@ func bootstrapAppRegistryPublish(cfg *config.Config) (*appregistry.StatelessPubl
 	}, nil
 }
 
-func probeGCSRegistryBucket(storageRoot string) error {
-	bucket := strings.TrimPrefix(strings.TrimSpace(storageRoot), "gs://")
-	bucket = strings.Trim(bucket, "/")
-	if bucket == "" || strings.Contains(bucket, "/") {
-		return fmt.Errorf("invalid storage root %q", storageRoot)
-	}
-	client, err := storage.NewClient(context.Background())
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-	_, err = client.Bucket(bucket).Attrs(context.Background())
-	return err
-}
-
 func BootstrapAppRegistryPublishForTest(cfg *config.Config) (*appregistry.StatelessPublishService, error) {
 	return bootstrapAppRegistryPublish(cfg)
-}
-
-func ProbeGCSRegistryBucketForTest() func(string) error {
-	return probeGCSRegistryBucketFn
-}
-
-func SetProbeGCSRegistryBucketForTest(fn func(string) error) {
-	probeGCSRegistryBucketFn = fn
 }
 
 func CheckUploadSigningForTest() func(*appregistry.GCSUploadSigner) error {

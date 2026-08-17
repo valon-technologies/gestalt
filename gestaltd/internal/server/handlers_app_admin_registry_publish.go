@@ -100,7 +100,7 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 	result, err := service.Finalize(r.Context(), app.registry, appregistry.AdminPublishInput{
 		App: app.name, PublishID: publishID,
 		DisplayName: displayName, Description: description,
-		GestaltdVersion: strings.TrimSpace(s.sourceVersion), Declaration: declaration,
+		Declaration: declaration,
 	})
 	if err != nil {
 		s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, publishID, "app.registry.publish.finalize", false, err.Error())

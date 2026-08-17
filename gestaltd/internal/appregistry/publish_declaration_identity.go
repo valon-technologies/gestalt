@@ -151,6 +151,9 @@ func validatePublishDeclaration(appName string, declaration *PublishDeclaration,
 	if err := validateLocalSourceState(declaration.LocalSource); err != nil {
 		return fmt.Errorf("%w: localSource: %v", ErrPublishDeclarationInvalid, err)
 	}
+	if strings.TrimSpace(declaration.BuilderVersion) == "" {
+		return fmt.Errorf("%w: builderVersion is required", ErrPublishDeclarationInvalid)
+	}
 	return nil
 }
 

@@ -154,6 +154,13 @@ func (w *Writer) preflightImmutableObject(object PublishObject) error {
 		return nil
 	}
 	if object.Kind == PublishObjectKindEntry {
+		matches, err := w.entryObjectMatchesExistingBytes(object)
+		if err != nil {
+			return err
+		}
+		if matches {
+			return nil
+		}
 		return fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
 	}
 	return fmt.Errorf("%s already exists; %s", object.StorageURL, RepublishCorruptObjectGuidance)
@@ -214,6 +221,16 @@ func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef s
 		return ImmutableObjectOutcome{}, "", err
 	}
 	if described.Generation != 0 && object.Kind == PublishObjectKindEntry {
+		matches, err := w.entryObjectMatchesExistingBytes(object)
+		if err != nil {
+			return ImmutableObjectOutcome{}, "", err
+		}
+		if matches {
+			return ImmutableObjectOutcome{
+				StorageURL: object.StorageURL,
+				Outcome:    ObjectWriteOutcomeSkipped,
+			}, fmt.Sprintf("skipped existing %s", object.StorageURL), nil
+		}
 		return ImmutableObjectOutcome{}, "", fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
 	}
 	if err := w.Store.WriteImmutableObject(WriteImmutableObjectInput{
@@ -242,13 +259,23 @@ func (w *Writer) immutableObjectMatchesExisting(object PublishObject) (bool, err
 		return true, nil
 	}
 	if object.Kind == PublishObjectKindEntry && object.LocalPath != "" {
-		_, existing, err := w.Store.ReadObject(object.StorageURL)
-		if err != nil {
-			return false, err
-		}
-		return EntryFileEquivalentIgnoringPublishedAt(object.LocalPath, existing)
+		return w.entryObjectMatchesExistingBytes(object)
 	}
 	return false, nil
+}
+
+func (w *Writer) entryObjectMatchesExistingBytes(object PublishObject) (bool, error) {
+	if object.Kind != PublishObjectKindEntry || object.LocalPath == "" {
+		return false, nil
+	}
+	_, existing, err := w.Store.ReadObject(object.StorageURL)
+	if err != nil {
+		return false, err
+	}
+	if len(existing) == 0 {
+		return false, nil
+	}
+	return EntryFileEquivalentIgnoringPublishedAt(object.LocalPath, existing)
 }
 
 func (w *Writer) uploadIndex(req PublishRequest, entry Entry, progress PublishProgress) (CatalogWriteOutcome, error) {

@@ -56,19 +56,18 @@ type AdminPublishUpload struct {
 }
 
 type AdminPublishInput struct {
-	App             string
-	PublishID       string
-	DisplayName     string
-	Description     string
-	GestaltdVersion string
-	Declaration     *PublishDeclaration
+	App         string
+	PublishID   string
+	DisplayName string
+	Description string
+	Declaration *PublishDeclaration
 }
 
 type StatelessPublishService struct {
 	Registry    string
 	StorageRoot string
 	PublicRoot  string
-	Store       RegistryObjectStore
+	Store       RegistryObjectStoreWithPromoter
 	Signer      RegistryUploadSigner
 	Writer      *Writer
 	Limits      PublishLimits
@@ -326,9 +325,6 @@ func (s *StatelessPublishService) buildFinalManifest(
 	}
 	sourceRef := declarationSourceRef(declaration)
 	builderVersion := strings.TrimSpace(declaration.BuilderVersion)
-	if builderVersion == "" {
-		builderVersion = strings.TrimSpace(input.GestaltdVersion)
-	}
 	layout, err := ResolvePublishLayout(declaration.Manifest.Source, version)
 	if err != nil {
 		return PublishManifest{}, err

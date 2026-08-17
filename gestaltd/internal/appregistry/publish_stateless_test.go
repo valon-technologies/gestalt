@@ -226,6 +226,81 @@ func TestStatelessPublishCorruptIndexFailsClosed(t *testing.T) {
 	}
 }
 
+func TestStatelessPublishRejectsMissingBuilderVersionBeforeSigning(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	service, _ := newStatelessPublishHarness(t)
+	declaration, _ := testPublishDeclaration(t, "g-issues", "0.3.0-dev.7")
+	declaration.BuilderVersion = ""
+	_, err := service.Begin(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", Declaration: declaration,
+	})
+	if !errors.Is(err, appregistry.ErrPublishDeclarationInvalid) {
+		t.Fatalf("Begin error = %v, want declaration invalid", err)
+	}
+}
+
+func TestStatelessPublishEntryStableAcrossServiceInstances(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mem := appregistry.NewMemoryObjectStore()
+	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
+	limits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}}
+	newService := func() *appregistry.StatelessPublishService {
+		return &appregistry.StatelessPublishService{
+			Registry: "toolshed", StorageRoot: testPublishStorageRoot, PublicRoot: testPublishPublicRoot,
+			Store: mem, Signer: signer, Writer: &appregistry.Writer{Store: mem}, Limits: limits,
+		}
+	}
+	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.8")
+	declaration.BuilderVersion = "client-builder-1.2.3"
+
+	serviceA := newService()
+	serviceB := newService()
+	beginA, err := serviceA.Begin(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Begin A: %v", err)
+	}
+	beginB, err := serviceB.Begin(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Begin B: %v", err)
+	}
+	if beginA.PublishID != beginB.PublishID {
+		t.Fatalf("publish ids differ: %q vs %q", beginA.PublishID, beginB.PublishID)
+	}
+	if err := appregistry.ApplyMemoryUpload(mem, beginA.Uploads[0].UploadURL, artifactBytes, declaration.Artifacts[0].SHA256); err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	finalA, err := serviceA.Finalize(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", PublishID: beginA.PublishID, Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Finalize A: %v", err)
+	}
+	finalB, err := serviceB.Finalize(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", PublishID: beginB.PublishID, Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Finalize B: %v", err)
+	}
+	if finalA.PublishID != finalB.PublishID {
+		t.Fatalf("final publish ids differ: %q vs %q", finalA.PublishID, finalB.PublishID)
+	}
+	loaded, err := appregistry.LoadPublishedState(mem, testPublishStorageRoot, "g-issues", "0.3.0-dev.8")
+	if err != nil {
+		t.Fatalf("LoadPublishedState: %v", err)
+	}
+	if loaded.Entry.BuilderVersion != "client-builder-1.2.3" {
+		t.Fatalf("entry builderVersion = %q, want client-builder-1.2.3", loaded.Entry.BuilderVersion)
+	}
+}
+
 func newStatelessPublishHarness(t *testing.T) (*appregistry.StatelessPublishService, *appregistry.MemoryObjectStore) {
 	t.Helper()
 	return newStatelessPublishHarnessWithNow(t, func() time.Time { return time.Now().UTC() })
@@ -278,6 +353,7 @@ func testPublishDeclarationMultiPlatform(t *testing.T, appName, version string) 
 		ManifestPath: "apps/" + appName + "/manifest.yaml", ReleaseMetadata: release,
 		PublicationKind: appregistry.PublicationKindLocal,
 		LocalSource:     &appregistry.LocalSourceState{CommitSHA: "651a5c30feb995c9364c38f63d0d5c3880bc2055"},
+		BuilderVersion:  "0.0.1-test-builder",
 		Artifacts: []appregistry.PublishDeclarationArtifact{
 			{Platform: "linux/amd64", Filename: "linux-amd64.tar.gz", SHA256: digestA, Size: int64(len(artifactBytesA))},
 			{Platform: "darwin/arm64", Filename: "darwin-arm64.tar.gz", SHA256: digestB, Size: int64(len(artifactBytesB))},
@@ -317,6 +393,7 @@ func testPublishDeclaration(t *testing.T, appName, version string) (*appregistry
 		ManifestPath: "apps/" + appName + "/manifest.yaml", ReleaseMetadata: release,
 		PublicationKind: appregistry.PublicationKindLocal,
 		LocalSource:     &appregistry.LocalSourceState{CommitSHA: "651a5c30feb995c9364c38f63d0d5c3880bc2055"},
+		BuilderVersion:  "0.0.1-test-builder",
 		Artifacts: []appregistry.PublishDeclarationArtifact{{
 			Platform: "linux/amd64", Filename: "linux-amd64.tar.gz", SHA256: digest, Size: int64(len(artifactBytes)),
 		}},

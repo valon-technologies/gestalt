@@ -554,7 +554,24 @@ func ApplyMemoryUpload(store *MemoryObjectStore, uploadURL string, data []byte, 
 	})
 }
 
-// CheckGCSRegistryStorePermissions verifies non-destructive IAM permissions for publish CAS flows.
+// gcsRegistryStoreIAMPermissions lists IAM permissions checked at publish bootstrap.
+//
+// Publish code never calls DeleteObject, but GCS authorization requires
+// storage.objects.delete to overwrite an existing object during catalog
+// compare-and-swap rewrites (NewWriter with generation match).
+var gcsRegistryStoreIAMPermissions = []string{
+	"storage.objects.get",
+	"storage.objects.create",
+	"storage.objects.delete",
+}
+
+func gcsRegistryStoreIAMPermissionsCopy() []string {
+	out := make([]string, len(gcsRegistryStoreIAMPermissions))
+	copy(out, gcsRegistryStoreIAMPermissions)
+	return out
+}
+
+// CheckGCSRegistryStorePermissions verifies IAM permissions for publish CAS flows.
 func CheckGCSRegistryStorePermissions(ctx context.Context, storageRoot string) error {
 	bucket, err := gcsBucketFromStorageRoot(storageRoot)
 	if err != nil {
@@ -565,33 +582,27 @@ func CheckGCSRegistryStorePermissions(ctx context.Context, storageRoot string) e
 		return err
 	}
 	defer func() { _ = client.Close() }()
-	permissions, err := client.Bucket(bucket).IAM().TestPermissions(ctx, []string{
-		"storage.objects.get",
-		"storage.objects.create",
-		"storage.objects.delete",
-		"storage.objects.update",
-	})
+	required := gcsRegistryStoreIAMPermissionsCopy()
+	permissions, err := client.Bucket(bucket).IAM().TestPermissions(ctx, required)
 	if err != nil {
-		return fmt.Errorf("test gcs registry permissions: %w", err)
+		return fmt.Errorf("test gcs registry object replacement permissions: %w", err)
 	}
-	required := map[string]struct{}{
-		"storage.objects.get":    {},
-		"storage.objects.create": {},
-		"storage.objects.delete": {},
-		"storage.objects.update": {},
+	requiredSet := make(map[string]struct{}, len(required))
+	for _, permission := range required {
+		requiredSet[permission] = struct{}{}
 	}
 	granted := make(map[string]struct{}, len(permissions))
 	for _, permission := range permissions {
 		granted[permission] = struct{}{}
 	}
 	var missing []string
-	for permission := range required {
+	for permission := range requiredSet {
 		if _, ok := granted[permission]; !ok {
 			missing = append(missing, permission)
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("gcs registry permissions missing: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("gcs registry object replacement permissions missing: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }
