@@ -73,8 +73,8 @@ func TestAppRegistryPublishSessionClaimFinalizeIsExclusive(t *testing.T) {
 	if _, err := svc.ClaimFinalize(ctx, session.ID, 15*time.Minute); err != nil {
 		t.Fatalf("first ClaimFinalize: %v", err)
 	}
-	if _, err := svc.ClaimFinalize(ctx, session.ID, 15*time.Minute); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
-		t.Fatalf("second ClaimFinalize error = %v", err)
+	if result, err := svc.ClaimFinalize(ctx, session.ID, 15*time.Minute); err != nil || result.Outcome != coredata.FinalizeClaimOutcomeInProgress {
+		t.Fatalf("second ClaimFinalize outcome = %q err = %v", result.Outcome, err)
 	}
 }
 

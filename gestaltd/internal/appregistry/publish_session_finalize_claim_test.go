@@ -67,11 +67,14 @@ func (h *finalizeCrashHarness) finalizeInput() appregistry.FinalizePublishSessio
 
 func (h *finalizeCrashHarness) claimSession() (*core.AppRegistryPublishSession, time.Time) {
 	h.t.Helper()
-	claimed, err := h.sessions.ClaimFinalize(h.ctx, h.created.Session.ID, 30*time.Minute)
+	result, err := h.sessions.ClaimFinalize(h.ctx, h.created.Session.ID, 30*time.Minute)
 	if err != nil {
 		h.t.Fatalf("ClaimFinalize: %v", err)
 	}
-	return claimed, claimed.FinalizePublishedAt
+	if result.Outcome != coredata.FinalizeClaimOutcomeAcquired {
+		h.t.Fatalf("ClaimFinalize outcome = %q, want acquired", result.Outcome)
+	}
+	return result.Session, result.Session.FinalizePublishedAt
 }
 
 func (h *finalizeCrashHarness) expireClaim(sessionID string) {
@@ -197,10 +200,7 @@ func TestPublishSessionFinalizeCrashAfterIndex(t *testing.T) {
 func TestPublishSessionFinalizeExpiredClaimTakeover(t *testing.T) {
 	t.Parallel()
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.crash5")
-	first, err := h.sessions.ClaimFinalize(h.ctx, h.created.Session.ID, time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
+	first := mustClaimFinalizeAcquired(t, h.sessions, h.ctx, h.created.Session.ID, time.Minute)
 	wantPublishedAt := first.FinalizePublishedAt
 
 	if _, err := h.sessions.MutatePublishSessionForTest(h.ctx, first.ID, func(session *core.AppRegistryPublishSession) error {
@@ -221,11 +221,8 @@ func TestPublishSessionFinalizeExpiredClaimTakeover(t *testing.T) {
 func TestPublishSessionFinalizeRejectsStaleClaimToken(t *testing.T) {
 	t.Parallel()
 	h := newFinalizeCrashHarness(t, "0.3.0-dev.crash6")
-	claimed, err := h.sessions.ClaimFinalize(h.ctx, h.created.Session.ID, 30*time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
-	_, err = h.sessions.MarkPublished(h.ctx, claimed.ID, "stale-token", claimed.Revision, claimed.FinalizePublishedAt)
+	claimed := mustClaimFinalizeAcquired(t, h.sessions, h.ctx, h.created.Session.ID, 30*time.Minute)
+	_, err := h.sessions.MarkPublished(h.ctx, claimed.ID, "stale-token", claimed.Revision, claimed.FinalizePublishedAt)
 	if !errors.Is(err, coredata.ErrPublishSessionClaimMismatch) {
 		t.Fatalf("MarkPublished stale token = %v", err)
 	}

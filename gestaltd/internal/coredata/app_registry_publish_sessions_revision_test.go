@@ -30,10 +30,7 @@ func TestAppRegistryPublishSessionSameClockMultipleTransitions(t *testing.T) {
 		t.Fatalf("create revision = %d, want 1", session.Revision)
 	}
 
-	claimed, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
+	claimed := mustClaimFinalizeAcquired(t, svc, ctx, session.ID, time.Minute)
 	if claimed.Revision != 2 {
 		t.Fatalf("claim revision = %d, want 2", claimed.Revision)
 	}
@@ -89,15 +86,12 @@ func TestAppRegistryPublishSessionLegacyRecordWithoutRevision(t *testing.T) {
 		t.Fatalf("legacy revision = %d, want 0", legacy.Revision)
 	}
 
-	claimed, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize legacy: %v", err)
-	}
+	claimed := mustClaimFinalizeAcquired(t, svc, ctx, session.ID, time.Minute)
 	if claimed.Revision != 1 {
 		t.Fatalf("post-claim revision = %d, want 1", claimed.Revision)
 	}
-	if _, err := svc.ClaimFinalize(ctx, session.ID, time.Minute); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
-		t.Fatalf("active legacy claim must reject takeover: %v", err)
+	if result, err := svc.ClaimFinalize(ctx, session.ID, time.Minute); err != nil || result.Outcome != coredata.FinalizeClaimOutcomeInProgress {
+		t.Fatalf("active legacy claim must reject takeover: %v outcome=%q", err, result.Outcome)
 	}
 }
 
@@ -115,10 +109,7 @@ func TestAppRegistryPublishSessionConcurrentRenewFinalizeClaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	claimed, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
+	claimed := mustClaimFinalizeAcquired(t, svc, ctx, session.ID, time.Minute)
 
 	const workers = 8
 	start := make(chan struct{})
@@ -177,10 +168,7 @@ func TestAppRegistryPublishSessionConcurrentClaimFinalizeTakeover(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	first, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
+	first := mustClaimFinalizeAcquired(t, svc, ctx, session.ID, time.Minute)
 	if _, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
 		current.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
@@ -191,7 +179,7 @@ func TestAppRegistryPublishSessionConcurrentClaimFinalizeTakeover(t *testing.T) 
 	const workers = 4
 	start := make(chan struct{})
 	var wg sync.WaitGroup
-	results := make([]*core.AppRegistryPublishSession, workers)
+	results := make([]*coredata.ClaimFinalizeResult, workers)
 	errs := make([]error, workers)
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
@@ -204,23 +192,24 @@ func TestAppRegistryPublishSessionConcurrentClaimFinalizeTakeover(t *testing.T) 
 	close(start)
 	wg.Wait()
 
-	var okCount, conflictCount int
+	var acquiredCount, inProgressCount int
 	var winner *core.AppRegistryPublishSession
 	for i, err := range errs {
-		switch {
-		case err == nil:
-			okCount++
-			winner = results[i]
-		case errors.Is(err, coredata.ErrPublishSessionFinalizeConflict):
-			conflictCount++
-		case errors.Is(err, coredata.ErrPublishSessionStateConflict):
-			conflictCount++
-		default:
+		if err != nil {
 			t.Fatalf("unexpected takeover error: %v", err)
 		}
+		switch results[i].Outcome {
+		case coredata.FinalizeClaimOutcomeAcquired:
+			acquiredCount++
+			winner = results[i].Session
+		case coredata.FinalizeClaimOutcomeInProgress:
+			inProgressCount++
+		default:
+			t.Fatalf("unexpected takeover outcome: %q", results[i].Outcome)
+		}
 	}
-	if okCount != 1 || conflictCount != workers-1 {
-		t.Fatalf("ok=%d conflict=%d", okCount, conflictCount)
+	if acquiredCount != 1 || inProgressCount != workers-1 {
+		t.Fatalf("acquired=%d inProgress=%d", acquiredCount, inProgressCount)
 	}
 	if winner == nil || winner.FinalizeClaimToken == first.FinalizeClaimToken {
 		t.Fatal("expected new claim token after expired concurrent takeover")
@@ -241,10 +230,7 @@ func TestAppRegistryPublishSessionMutateForTestInvalidatesHeldRevision(t *testin
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	claimed, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
-	if err != nil {
-		t.Fatalf("ClaimFinalize: %v", err)
-	}
+	claimed := mustClaimFinalizeAcquired(t, svc, ctx, session.ID, time.Minute)
 	heldRevision := claimed.Revision
 
 	if _, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {

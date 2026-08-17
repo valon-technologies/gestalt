@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -186,6 +188,151 @@ func TestAppAdminRegistryPublishConcurrentFinalize(t *testing.T) {
 	if retryResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(retryResp.Body)
 		t.Fatalf("retry finalize status = %d: %s", retryResp.StatusCode, body)
+	}
+}
+
+func TestAppAdminRegistryPublishLoserAfterWinnerPublished(t *testing.T) {
+	t.Parallel()
+
+	publishHarness := newRegistryPublishHarness(t)
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": publishHarness.registry}
+		cfg.AppRegistryReader = publishHarness.reader
+		cfg.AppRegistryPublish = publishHarness.service
+	})
+
+	createBody, _ := json.Marshal(map[string]any{"declaration": publishHarness.declaration})
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes", bytes.NewReader(createBody))
+	createReq.Header.Set("Authorization", "Bearer alice-token")
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("POST publish create: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	var created struct {
+		PublishID string `json:"publishId"`
+		Uploads   []struct {
+			UploadURL string `json:"uploadUrl"`
+		} `json:"uploads"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if err := appregistry.ApplyMemoryUpload(publishHarness.mem, created.Uploads[0].UploadURL, publishHarness.artifactBytes, publishHarness.declaration.Artifacts[0].SHA256); err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+
+	finalizeURL := ts.URL + "/api/v1/apps/g-issues/admin/registry/publishes/" + created.PublishID + "/finalize"
+	winnerReq, _ := http.NewRequest(http.MethodPost, finalizeURL, nil)
+	winnerReq.Header.Set("Authorization", "Bearer alice-token")
+	winnerResp, err := http.DefaultClient.Do(winnerReq)
+	if err != nil {
+		t.Fatalf("POST winner finalize: %v", err)
+	}
+	defer func() { _ = winnerResp.Body.Close() }()
+	if winnerResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(winnerResp.Body)
+		t.Fatalf("winner finalize status = %d: %s", winnerResp.StatusCode, body)
+	}
+
+	loserReq, _ := http.NewRequest(http.MethodPost, finalizeURL, nil)
+	loserReq.Header.Set("Authorization", "Bearer alice-token")
+	loserResp, err := http.DefaultClient.Do(loserReq)
+	if err != nil {
+		t.Fatalf("POST loser finalize: %v", err)
+	}
+	defer func() { _ = loserResp.Body.Close() }()
+	if loserResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(loserResp.Body)
+		t.Fatalf("loser finalize status = %d: %s", loserResp.StatusCode, body)
+	}
+}
+
+func TestAppAdminRegistryPublishAlreadyPublishedMismatchedProofFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	publishHarness := newRegistryPublishHarness(t)
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": publishHarness.registry}
+		cfg.AppRegistryReader = publishHarness.reader
+		cfg.AppRegistryPublish = publishHarness.service
+	})
+
+	createBody, _ := json.Marshal(map[string]any{"declaration": publishHarness.declaration})
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes", bytes.NewReader(createBody))
+	createReq.Header.Set("Authorization", "Bearer alice-token")
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("POST publish create: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	var created struct {
+		PublishID string `json:"publishId"`
+		Uploads   []struct {
+			UploadURL string `json:"uploadUrl"`
+		} `json:"uploads"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if err := appregistry.ApplyMemoryUpload(publishHarness.mem, created.Uploads[0].UploadURL, publishHarness.artifactBytes, publishHarness.declaration.Artifacts[0].SHA256); err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+
+	finalizeURL := ts.URL + "/api/v1/apps/g-issues/admin/registry/publishes/" + created.PublishID + "/finalize"
+	winnerReq, _ := http.NewRequest(http.MethodPost, finalizeURL, nil)
+	winnerReq.Header.Set("Authorization", "Bearer alice-token")
+	winnerResp, err := http.DefaultClient.Do(winnerReq)
+	if err != nil {
+		t.Fatalf("POST winner finalize: %v", err)
+	}
+	defer func() { _ = winnerResp.Body.Close() }()
+	if winnerResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(winnerResp.Body)
+		t.Fatalf("winner finalize status = %d: %s", winnerResp.StatusCode, body)
+	}
+
+	if _, err := publishHarness.sessions.MutatePublishSessionForTest(context.Background(), created.PublishID, func(session *core.AppRegistryPublishSession) error {
+		session.DeclarationDigest = "mismatched-digest"
+		return nil
+	}); err != nil {
+		t.Fatalf("MutatePublishSessionForTest: %v", err)
+	}
+
+	retryReq, _ := http.NewRequest(http.MethodPost, finalizeURL, nil)
+	retryReq.Header.Set("Authorization", "Bearer alice-token")
+	retryResp, err := http.DefaultClient.Do(retryReq)
+	if err != nil {
+		t.Fatalf("POST retry finalize: %v", err)
+	}
+	defer func() { _ = retryResp.Body.Close() }()
+	if retryResp.StatusCode != http.StatusConflict {
+		body, _ := io.ReadAll(retryResp.Body)
+		t.Fatalf("retry finalize status = %d: %s, want 409", retryResp.StatusCode, body)
 	}
 }
 
@@ -369,6 +516,7 @@ type registryPublishHarness struct {
 	registry      config.AppRegistryConfig
 	reader        *appregistry.RegistryReader
 	service       *appregistry.PublishSessionService
+	sessions      *coredata.AppRegistryPublishSessionService
 	mem           *appregistry.MemoryObjectStore
 	declaration   *appregistry.PublishDeclaration
 	artifactBytes []byte
@@ -398,6 +546,7 @@ func newRegistryPublishHarness(t *testing.T) registryPublishHarness {
 		registry:      registry,
 		reader:        &appregistry.RegistryReader{},
 		service:       service,
+		sessions:      services.AppRegistryPublishSessions,
 		mem:           mem,
 		declaration:   declaration,
 		artifactBytes: artifactBytes,

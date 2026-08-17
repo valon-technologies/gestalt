@@ -183,6 +183,18 @@ func newPublishSessionServices(t *testing.T) *coredata.Services {
 	return testutil.NewStubServices(t)
 }
 
+func mustClaimFinalizeAcquired(t *testing.T, svc *coredata.AppRegistryPublishSessionService, ctx context.Context, id string, leaseTTL time.Duration) *core.AppRegistryPublishSession {
+	t.Helper()
+	result, err := svc.ClaimFinalize(ctx, id, leaseTTL)
+	if err != nil {
+		t.Fatalf("ClaimFinalize: %v", err)
+	}
+	if result.Outcome != coredata.FinalizeClaimOutcomeAcquired {
+		t.Fatalf("ClaimFinalize outcome = %q, want acquired", result.Outcome)
+	}
+	return result.Session
+}
+
 func newPublishSessionService(t *testing.T, sessions *coredata.AppRegistryPublishSessionService, store appregistry.WritableRegistryStore, signer appregistry.RegistryUploadSigner) *appregistry.PublishSessionService {
 	t.Helper()
 	limits := appregistry.DefaultPublishSessionLimits()
