@@ -146,7 +146,6 @@ func canonicalDeclarationJSON(declaration *PublishDeclaration) ([]byte, error) {
 	normalized.ManifestPath = strings.TrimSpace(normalized.ManifestPath)
 	normalized.SourceRef = strings.ToLower(strings.TrimSpace(normalized.SourceRef))
 	normalized.BuilderVersion = strings.TrimSpace(normalized.BuilderVersion)
-	normalized.PublicationKind = normalized.PublicationKind
 	if normalized.PublicationKind == "" {
 		normalized.PublicationKind = PublicationKindLocal
 	}
