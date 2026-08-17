@@ -1,11 +1,12 @@
-import { appendFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
 import { digest, stableStringify, type PublishedRelease } from "../src/model.ts";
 import { FilesystemRegistry } from "../src/registry.ts";
 import { InstallationManager } from "../src/runtime.ts";
-import { expectCode, manifest, publishWorkingGraph, sdkPath } from "./helpers.ts";
+import { expectCode, linkZod, manifest, publishWorkingGraph, sdkPath } from "./helpers.ts";
 
 describe("recursive admission and non-disruptive activation", () => {
   test("R-ADM-01 validates the exact recursive graph and rejects cycles before promotion", async () => {
@@ -14,11 +15,16 @@ describe("recursive admission and non-disruptive activation", () => {
     await installation.activate("acme/greeter", "1.0.0");
     const stable = installation.activeIdentity;
 
-    const cycleSource = join(fixture.root, "cycle.ts");
+    // Bun snapshots a dynamically imported directory; use a fresh app worktree for this later source.
+    const cycleProject = await mkdtemp(join(tmpdir(), "gestalt-cycle-app-"));
+    await linkZod(cycleProject);
+    const cycleSource = join(cycleProject, "app.ts");
     await writeFile(
       cycleSource,
-      `import { app, tool } from ${JSON.stringify(sdkPath)};
-       export default app({ tools: { ping: tool({ handler: async (input: { value: string }): Promise<{ value: string }> => input }) } });`,
+      `import { z } from "zod";
+       import { app, tool } from ${JSON.stringify(sdkPath)};
+       const Message = z.strictObject({ value: z.string() });
+       export default app({ tools: { ping: tool({ input: Message, output: Message, handler: async (input) => input }) } });`,
     );
     const a = await fixture.registry.publish(cycleSource, manifest("acme/cycle-a", "1.0.0"));
     const b = await fixture.registry.publish(cycleSource, manifest("acme/cycle-b", "1.0.0"));

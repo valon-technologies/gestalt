@@ -8,7 +8,6 @@ import {
   stableStringify,
   type AppManifest,
   type PublishedRelease,
-  type WireSchema,
 } from "./model.ts";
 import { FilesystemRegistry } from "./registry.ts";
 import type { App, Tool } from "./sdk.ts";
@@ -16,7 +15,7 @@ import type { App, Tool } from "./sdk.ts";
 interface InstalledRelease {
   key: string;
   release: PublishedRelease;
-  app: App<Record<string, Tool<unknown, unknown>>>;
+  app: App<Record<string, Tool<any, any>>>;
 }
 
 interface InstalledGraph {
@@ -98,7 +97,7 @@ export class InstallationManager {
     const moduleUrl = pathToFileURL(this.registry.artifactPath(app, version));
     moduleUrl.searchParams.set("digest", release.artifactDigest);
     const module = (await import(moduleUrl.href)) as {
-      default?: App<Record<string, Tool<unknown, unknown>>>;
+      default?: App<Record<string, Tool<any, any>>>;
     };
     if (!module.default || typeof module.default !== "object" || !module.default.tools) {
       throw new ExperimentError("INVALID_ARTIFACT", `${key} has no default app export`);
@@ -139,10 +138,16 @@ export class InstallationManager {
     if (!contract || !tool) {
       throw new ExperimentError("INVALID_TOOL_REFERENCE", `${installed.key}.${toolName} does not exist`);
     }
-    const input = validate(contract.input, rawInput, "$.input");
+    const parsedInput = await tool.input.safeParseAsync(rawInput);
+    if (!parsedInput.success) {
+      throw validationError("$.input", parsedInput.error.issues);
+    }
     let output: unknown;
     try {
-      output = await this.caller.run(installed.key, async () => await tool.handler(input));
+      output = await this.caller.run(
+        installed.key,
+        async () => await tool.handler(parsedInput.data),
+      );
     } catch (error) {
       if (error instanceof ExperimentError) throw error;
       throw new ExperimentError(
@@ -150,7 +155,11 @@ export class InstallationManager {
         error instanceof Error ? error.message : String(error),
       );
     }
-    return validate(contract.output, output, "$.output");
+    const parsedOutput = await tool.output.safeParseAsync(output);
+    if (!parsedOutput.success) {
+      throw validationError("$.output", parsedOutput.error.issues);
+    }
+    return parsedOutput.data;
   }
 }
 
@@ -158,60 +167,16 @@ function coordinate(app: string, version: string): string {
   return `${app}@${version}`;
 }
 
-function validate(schema: WireSchema, value: unknown, path: string): unknown {
-  switch (schema.kind) {
-    case "string":
-      if (typeof value === "string") return value;
-      break;
-    case "number":
-      if (typeof value === "number" && Number.isFinite(value)) return value;
-      break;
-    case "boolean":
-      if (typeof value === "boolean") return value;
-      break;
-    case "null":
-      if (value === null) return value;
-      break;
-    case "literal":
-      if (value === schema.value) return value;
-      break;
-    case "array":
-      if (Array.isArray(value)) return value.map((item, index) => validate(schema.items, item, `${path}[${index}]`));
-      break;
-    case "tuple":
-      if (Array.isArray(value) && value.length === schema.items.length) {
-        return schema.items.map((item, index) => validate(item, value[index], `${path}[${index}]`));
-      }
-      break;
-    case "union": {
-      for (const variant of schema.variants) {
-        try {
-          return validate(variant, value, path);
-        } catch (error) {
-          if (!(error instanceof ExperimentError) || error.code !== "VALIDATION_FAILED") throw error;
-        }
-      }
-      break;
-    }
-    case "object": {
-      if (value === null || typeof value !== "object" || Array.isArray(value)) break;
-      const source = value as Record<string, unknown>;
-      const unknown = Object.keys(source).filter((key) => !schema.properties[key]);
-      if (unknown.length > 0) {
-        throw new ExperimentError("VALIDATION_FAILED", `${path} has unknown field ${unknown[0]}`);
-      }
-      const result: Record<string, unknown> = {};
-      for (const [name, property] of Object.entries(schema.properties)) {
-        if (!(name in source)) {
-          if (property.optional) continue;
-          throw new ExperimentError("VALIDATION_FAILED", `${path}.${name} is required`);
-        }
-        result[name] = validate(property.schema, source[name], `${path}.${name}`);
-      }
-      return result;
-    }
-  }
-  throw new ExperimentError("VALIDATION_FAILED", `${path} does not match ${schema.kind}`);
+function validationError(
+  root: string,
+  issues: ReadonlyArray<{ code: string; path: PropertyKey[]; message: string }>,
+): ExperimentError {
+  const details = issues.map((issue) => ({
+    code: issue.code,
+    path: [root, ...issue.path.map(String)],
+    message: issue.message,
+  }));
+  return new ExperimentError("VALIDATION_FAILED", JSON.stringify(details));
 }
 
 declare global {

@@ -1,4 +1,4 @@
-import { mkdtemp, unlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "bun:test";
@@ -12,6 +12,7 @@ import {
 } from "../src/registry.ts";
 
 export const sdkPath = join(import.meta.dir, "..", "src", "sdk.ts");
+const zodPath = join(import.meta.dir, "..", "node_modules", "zod");
 
 export interface PublishedFixture {
   root: string;
@@ -23,6 +24,7 @@ export interface PublishedFixture {
 
 export async function publishWorkingGraph(): Promise<PublishedFixture> {
   const root = await mkdtemp(join(tmpdir(), "gestalt-functional-"));
+  await linkZod(root);
   const registry = new FilesystemRegistry(join(root, "registry"));
   const usersSource = join(root, "users.ts");
   await writeFile(usersSource, usersSourceText("Ada Lovelace"));
@@ -52,22 +54,25 @@ export function manifest(name: string, version: string): AppManifest {
 
 export function usersSourceText(displayName: string): string {
   return `
+    import { z } from "zod";
     import { app, tool } from ${JSON.stringify(sdkPath)};
 
-    interface GetUserInput { id: string; }
-    interface GetUserOutput {
-      id: string;
-      displayName: string;
-      status: "active" | "disabled";
-    }
+    const GetUserInput = z.strictObject({ id: z.string() });
+    const GetUserOutput = z.strictObject({
+      id: z.string(),
+      displayName: z.string(),
+      status: z.enum(["active", "disabled"]),
+    });
 
     export default app({ tools: {
       getUser: tool({
         description: "Fetch one user.",
-        handler: async (input: GetUserInput): Promise<GetUserOutput> => ({
+        input: GetUserInput,
+        output: GetUserOutput,
+        handler: async (input) => ({
           id: input.id,
           displayName: ${JSON.stringify(displayName)},
-          status: "active",
+          status: "active" as const,
         }),
       }),
     } });
@@ -76,22 +81,34 @@ export function usersSourceText(displayName: string): string {
 
 export function greeterSourceText(idExpression = "input.userId"): string {
   return `
+    import { z } from "zod";
     import { app, tool } from ${JSON.stringify(sdkPath)};
     import { getUser } from "@gestalt/apps/users";
 
-    interface GreetInput { userId: string; punctuation?: "!" | "."; }
-    interface GreetOutput { message: string; }
+    const GreetInput = z.strictObject({
+      userId: z.string(),
+      punctuation: z.enum(["!", "."]).optional(),
+    });
+    const GreetOutput = z.strictObject({ message: z.string() });
 
     export default app({ tools: {
       greet: tool({
         description: "Greet a user owned by another installed app.",
-        handler: async (input: GreetInput): Promise<GreetOutput> => {
+        input: GreetInput,
+        output: GreetOutput,
+        handler: async (input) => {
           const user = await getUser({ id: ${idExpression} });
           return { message: \`Hello, \${user.displayName}\${input.punctuation ?? "!"}\` };
         },
       }),
     } });
   `;
+}
+
+export async function linkZod(projectDirectory: string): Promise<void> {
+  const nodeModules = join(projectDirectory, "node_modules");
+  await mkdir(nodeModules, { recursive: true });
+  await cp(zodPath, join(nodeModules, "zod"), { recursive: true });
 }
 
 export async function expectCode(promise: Promise<unknown>, code: string): Promise<void> {

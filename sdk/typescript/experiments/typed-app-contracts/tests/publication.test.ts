@@ -14,6 +14,7 @@ import { InstallationManager } from "../src/runtime.ts";
 import {
   greeterSourceText,
   expectCode,
+  linkZod,
   manifest,
   publishWorkingGraph,
   sdkPath,
@@ -42,6 +43,7 @@ describe("immutable publication and exact dependency locks", () => {
 
   test("R-PUB-02 reproduces contracts, generated clients, and executable artifacts", async () => {
     const root = await mkdtemp(join(tmpdir(), "gestalt-reproduction-"));
+    await linkZod(root);
     const firstSource = join(root, "one.ts");
     const secondSource = join(root, "nested", "two.ts");
     await mkdir(join(root, "nested"));
@@ -63,6 +65,7 @@ describe("immutable publication and exact dependency locks", () => {
 
   test("R-DEP-01 rejects ranges, missing releases, and stale contract locks", async () => {
     const root = await mkdtemp(join(tmpdir(), "gestalt-locks-"));
+    await linkZod(root);
     const registry = new FilesystemRegistry(join(root, "registry"));
     const source = join(root, "app.ts");
     await writeFile(source, usersSourceText("Ada Lovelace"));
@@ -100,6 +103,7 @@ describe("immutable publication and exact dependency locks", () => {
 
   test("R-DEP-02 rejects undeclared, unused, and statically mistyped app imports", async () => {
     const root = await mkdtemp(join(tmpdir(), "gestalt-usage-"));
+    await linkZod(root);
     const registry = new FilesystemRegistry(join(root, "registry"));
     const usersSource = join(root, "users.ts");
     await writeFile(usersSource, usersSourceText("Ada Lovelace"));
@@ -112,8 +116,10 @@ describe("immutable publication and exact dependency locks", () => {
 
     await writeFile(
       source,
-      `import { app, tool } from ${JSON.stringify(sdkPath)};
-       export default app({ tools: { local: tool({ handler: async (input: { id: string }): Promise<{ id: string }> => input }) } });`,
+      `import { z } from "zod";
+       import { app, tool } from ${JSON.stringify(sdkPath)};
+       const Message = z.strictObject({ id: z.string() });
+       export default app({ tools: { local: tool({ input: Message, output: Message, handler: async (input) => input }) } });`,
     );
     await expectCode(
       registry.publish(source, await readProjectManifest(project)),
@@ -137,8 +143,12 @@ describe("immutable publication and exact dependency locks", () => {
 
     await writeFile(
       source,
-      `import { app, tool } from ${JSON.stringify(sdkPath)};
-       export default app({ tools: { dynamic: tool({ handler: async (input: { id: string }): Promise<{ name: string }> => {
+      `import { z } from "zod";
+       import { app, tool } from ${JSON.stringify(sdkPath)};
+       export default app({ tools: { dynamic: tool({
+         input: z.strictObject({ id: z.string() }),
+         output: z.strictObject({ name: z.string() }),
+         handler: async (input) => {
          const { getUser } = await import("@gestalt/apps/users");
          const user = await getUser(input);
          return { name: user.displayName };

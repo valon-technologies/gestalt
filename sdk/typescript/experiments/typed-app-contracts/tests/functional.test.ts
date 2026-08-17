@@ -38,9 +38,12 @@ describe("cross-app publication, installation, and invocation", () => {
     await writeFile(
       liarSource,
       `
+        import { z } from "zod";
         import { app, tool } from ${JSON.stringify(sdkPath)};
         export default app({ tools: { lie: tool({
-          handler: async (_input: { value: string }): Promise<{ value: string }> => ({
+          input: z.strictObject({ value: z.string() }),
+          output: z.strictObject({ value: z.string() }),
+          handler: async (_input) => ({
             value: 42 as unknown as string,
           }),
         }) } });
@@ -61,9 +64,12 @@ describe("cross-app publication, installation, and invocation", () => {
     await writeFile(
       source,
       `
+        import { z } from "zod";
         import { app, tool } from ${JSON.stringify(sdkPath)};
         export default app({ tools: { fail: tool({
-          handler: async (_input: { value: string }): Promise<{ ok: boolean }> => {
+          input: z.strictObject({ value: z.string() }),
+          output: z.strictObject({ ok: z.boolean() }),
+          handler: async (_input) => {
             throw new Error("intentional provider failure");
           },
         }) } });

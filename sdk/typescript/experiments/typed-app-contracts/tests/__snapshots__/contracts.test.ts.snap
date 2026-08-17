@@ -1,0 +1,77 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Zod-derived canonical contracts R-TYPE-01 lowers Zod contracts into a canonical golden contract and generated client 1`] = `
+"{
+  "app": {
+    "name": "acme/users",
+    "version": "1.0.0"
+  },
+  "compiler": {
+    "adapter": "zod-json-schema/0.1",
+    "typescript": "5.9.3",
+    "zod": "4.4.3"
+  },
+  "formatVersion": 1,
+  "tools": {
+    "getUser": {
+      "description": "Fetch one user.",
+      "digest": "057faa33454539fea29b58370e8db9f6551ff12d4e8cfebe7565736d296c2f73",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "includeHistory": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "score": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "status",
+          "labels",
+          "score"
+        ],
+        "type": "object"
+      }
+    }
+  }
+}
+"
+`;

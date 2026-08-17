@@ -1,30 +1,32 @@
+import { z } from "zod";
+
 import { app, tool } from "../../../src/sdk.ts";
 
-type UserStatus = "active" | "disabled";
+const GetUserInput = z.strictObject({
+  id: z.string(),
+  includeHistory: z.boolean().optional(),
+});
 
-interface GetUserInput {
-  id: string;
-  includeHistory?: boolean;
-}
-
-interface GetUserOutput {
-  id: string;
-  displayName: string;
-  status: UserStatus;
-  labels: string[];
-  coordinates: readonly [number, number];
-}
+const GetUserOutput = z.strictObject({
+  id: z.string(),
+  displayName: z.string(),
+  status: z.enum(["active", "disabled"]),
+  labels: z.array(z.string()),
+  score: z.number().min(0).max(100),
+});
 
 export default app({
   tools: {
     getUser: tool({
       description: "Fetch one user.",
-      handler: async (input: GetUserInput): Promise<GetUserOutput> => ({
+      input: GetUserInput,
+      output: GetUserOutput,
+      handler: async (input) => ({
         id: input.id,
         displayName: "Ada Lovelace",
-        status: "active",
+        status: "active" as const,
         labels: input.includeHistory ? ["historical"] : [],
-        coordinates: [51.5, -0.1],
+        score: 100,
       }),
     }),
   },

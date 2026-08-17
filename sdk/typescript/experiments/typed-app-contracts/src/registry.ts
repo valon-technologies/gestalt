@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { compileApp } from "./compiler.ts";
+import { compileApp } from "./contracts.ts";
 import {
   ExperimentError,
   FORMAT_VERSION,
@@ -57,8 +57,9 @@ export class FilesystemRegistry {
       const artifactPath = join(buildDirectory, "provider.js");
       const artifact = await readFile(artifactPath);
       const build = {
-        extractor: compilation.contract.compiler.extractor,
+        adapter: compilation.contract.compiler.adapter,
         typescript: compilation.contract.compiler.typescript,
+        zod: compilation.contract.compiler.zod,
         bun: Bun.version,
       };
       const release: PublishedRelease = {

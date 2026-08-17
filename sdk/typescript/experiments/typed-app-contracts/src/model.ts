@@ -1,36 +1,29 @@
 import { createHash } from "node:crypto";
 
 export const FORMAT_VERSION = 1 as const;
-export const EXTRACTOR_VERSION = "typed-app-contracts/0.1";
+export const ADAPTER_VERSION = "zod-json-schema/0.1";
 
-export type Scalar = string | number | boolean | null;
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
-export type WireSchema =
-  | { kind: "string" }
-  | { kind: "number" }
-  | { kind: "boolean" }
-  | { kind: "null" }
-  | { kind: "literal"; value: Exclude<Scalar, null> }
-  | { kind: "array"; items: WireSchema }
-  | { kind: "tuple"; items: WireSchema[] }
-  | {
-      kind: "object";
-      additionalProperties: false;
-      properties: Record<string, { optional: boolean; schema: WireSchema }>;
-    }
-  | { kind: "union"; variants: WireSchema[] };
+export type CanonicalJsonSchema = { [key: string]: JsonValue };
 
 export interface ToolContract {
   description: string;
-  input: WireSchema;
-  output: WireSchema;
+  input: CanonicalJsonSchema;
+  output: CanonicalJsonSchema;
   digest: string;
 }
 
 export interface AppContract {
   formatVersion: typeof FORMAT_VERSION;
   app: { name: string; version: string };
-  compiler: { extractor: typeof EXTRACTOR_VERSION; typescript: string };
+  compiler: { adapter: typeof ADAPTER_VERSION; typescript: string; zod: string };
   tools: Record<string, ToolContract>;
 }
 
@@ -48,7 +41,7 @@ export interface AppManifest {
 
 export interface PublishedRelease {
   formatVersion: typeof FORMAT_VERSION;
-  build: { extractor: string; typescript: string; bun: string; digest: string };
+  build: { adapter: string; typescript: string; zod: string; bun: string; digest: string };
   manifest: AppManifest;
   manifestDigest: string;
   contract: AppContract;
@@ -75,9 +68,7 @@ export function stableStringify(value: unknown): string {
 }
 
 function sortValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortValue);
-  }
+  if (Array.isArray(value)) return value.map(sortValue);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
@@ -98,27 +89,25 @@ export function validateManifest(manifest: AppManifest): void {
   if (!coordinate.test(manifest.name)) {
     throw new ExperimentError("INVALID_MANIFEST", `invalid app name ${manifest.name}`);
   }
-  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version)) {
+  if (!isExactVersion(manifest.version)) {
     throw new ExperimentError("INVALID_MANIFEST", `version ${manifest.version} is not exact semver`);
   }
   for (const [dependencyAlias, dependency] of Object.entries(manifest.dependencies)) {
-    if (!alias.test(dependencyAlias)) {
-      throw new ExperimentError("INVALID_MANIFEST", `invalid dependency alias ${dependencyAlias}`);
+    if (!alias.test(dependencyAlias) || !coordinate.test(dependency.app)) {
+      throw new ExperimentError("INVALID_MANIFEST", `invalid dependency ${dependencyAlias}`);
     }
-    if (!coordinate.test(dependency.app)) {
-      throw new ExperimentError("INVALID_MANIFEST", `invalid dependency app ${dependency.app}`);
-    }
-    if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(dependency.version)) {
+    if (!isExactVersion(dependency.version)) {
       throw new ExperimentError(
         "DEPENDENCY_NOT_EXACT",
         `${dependency.app} uses non-exact version ${dependency.version}`,
       );
     }
     if (!/^[a-f0-9]{64}$/.test(dependency.contractDigest)) {
-      throw new ExperimentError(
-        "INVALID_MANIFEST",
-        `${dependency.app}@${dependency.version} has an invalid contract digest`,
-      );
+      throw new ExperimentError("INVALID_MANIFEST", `${dependencyAlias} has an invalid contract digest`);
     }
   }
+}
+
+function isExactVersion(value: string): boolean {
+  return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value);
 }
