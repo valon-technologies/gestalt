@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -417,5 +418,111 @@ func TestWriter_Publish_PartialEntryWithoutIndexRemainsRetryable(t *testing.T) {
 	}
 	if result.Index != CatalogWriteOutcomeUpdated {
 		t.Fatalf("retry index outcome = %q, want updated", result.Index)
+	}
+}
+
+type entryFinalizeRaceStore struct {
+	RegistryObjectStore
+	entryURL        string
+	injectLocalPath string
+	describeCount   map[string]int
+	mu              sync.Mutex
+}
+
+func (s *entryFinalizeRaceStore) DescribeObject(storageURL string) (ObjectDescription, error) {
+	s.mu.Lock()
+	if storageURL != s.entryURL {
+		s.mu.Unlock()
+		return s.RegistryObjectStore.DescribeObject(storageURL)
+	}
+	s.describeCount[storageURL]++
+	count := s.describeCount[storageURL]
+	s.mu.Unlock()
+	if count == 1 {
+		return ObjectDescription{}, nil
+	}
+	if count == 2 {
+		if err := s.WriteImmutableObject(WriteImmutableObjectInput{
+			LocalPath:  s.injectLocalPath,
+			StorageURL: s.entryURL,
+			SourceRef:  "651a5c30feb995c9364c38f63d0d5c3880bc2055",
+		}); err != nil {
+			return ObjectDescription{}, err
+		}
+	}
+	return s.RegistryObjectStore.DescribeObject(storageURL)
+}
+
+func TestWriter_uploadImmutableObjectIfNeeded_ReconcilesConcurrentEquivalentEntry(t *testing.T) {
+	t.Parallel()
+
+	store := NewMemoryObjectStore()
+	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.11")
+	winningPublishedAt := time.Date(2026, 8, 17, 10, 0, 0, 0, time.UTC)
+	laterPublishedAt := time.Date(2026, 8, 17, 11, 0, 0, 0, time.UTC)
+
+	winningEntry := manifest.Entry
+	winningEntry.PublishedAt = winningPublishedAt
+	winningData, err := json.MarshalIndent(winningEntry, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal winning entry: %v", err)
+	}
+	winningPath, err := WriteTempJSON("gestalt-app-entry-winning-*", append(winningData, '\n'))
+	if err != nil {
+		t.Fatalf("WriteTempJSON(): %v", err)
+	}
+
+	localEntry := manifest.Entry
+	localEntry.PublishedAt = laterPublishedAt
+	localData, err := json.MarshalIndent(localEntry, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal local entry: %v", err)
+	}
+	if err := os.WriteFile(manifest.EntryObject.LocalPath, append(localData, '\n'), 0o644); err != nil {
+		t.Fatalf("rewrite local entry: %v", err)
+	}
+
+	raceStore := &entryFinalizeRaceStore{
+		RegistryObjectStore: store,
+		entryURL:            manifest.EntryObject.StorageURL,
+		injectLocalPath:     winningPath,
+		describeCount:       map[string]int{},
+	}
+	writer := &Writer{Store: raceStore}
+	outcome, _, err := writer.uploadImmutableObjectIfNeeded(manifest.EntryObject, "651a5c30feb995c9364c38f63d0d5c3880bc2055")
+	if err != nil {
+		t.Fatalf("uploadImmutableObjectIfNeeded() = %v", err)
+	}
+	if outcome.Outcome != ObjectWriteOutcomeSkipped {
+		t.Fatalf("outcome = %q, want skipped", outcome.Outcome)
+	}
+}
+
+func TestWriter_uploadImmutableObjectIfNeeded_RejectsConcurrentConflictingEntry(t *testing.T) {
+	t.Parallel()
+
+	store := NewMemoryObjectStore()
+	manifest, _, _ := writePublishManifestFixture(t, store, "0.0.12")
+	conflicting := manifest.Entry
+	conflicting.SourceRef = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	conflictingData, err := json.MarshalIndent(conflicting, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal conflicting entry: %v", err)
+	}
+	conflictingPath, err := WriteTempJSON("gestalt-app-entry-conflicting-*", append(conflictingData, '\n'))
+	if err != nil {
+		t.Fatalf("WriteTempJSON(): %v", err)
+	}
+
+	raceStore := &entryFinalizeRaceStore{
+		RegistryObjectStore: store,
+		entryURL:            manifest.EntryObject.StorageURL,
+		injectLocalPath:     conflictingPath,
+		describeCount:       map[string]int{},
+	}
+	writer := &Writer{Store: raceStore}
+	_, _, err = writer.uploadImmutableObjectIfNeeded(manifest.EntryObject, "651a5c30feb995c9364c38f63d0d5c3880bc2055")
+	if !errors.Is(err, ErrRegistryEntryConflict) {
+		t.Fatalf("uploadImmutableObjectIfNeeded() = %v, want ErrRegistryEntryConflict", err)
 	}
 }
