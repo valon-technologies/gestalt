@@ -189,6 +189,83 @@ func TestAppAdminRegistryPublishRejectsNonAdmin(t *testing.T) {
 	}
 }
 
+func TestAppAdminRegistryPublishRejectsWrongWritableRegistry(t *testing.T) {
+	t.Parallel()
+
+	harness := newRegistryPublishHarness(t)
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "other-registry"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{
+			"other-registry": harness.registry,
+			"toolshed":       harness.registry,
+		}
+		cfg.AppRegistryPublish = harness.service
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body, _ := json.Marshal(map[string]any{"declaration": harness.declaration})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer alice-token")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST publish: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		responseBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d: %s, want 404 for non-writable registry", resp.StatusCode, responseBody)
+	}
+}
+
+func TestAppAdminRegistryPublishRejectsZeroArtifactSize(t *testing.T) {
+	t.Parallel()
+
+	harness := newRegistryPublishHarness(t)
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
+		cfg.AppRegistryPublish = harness.service
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	declaration := *harness.declaration
+	declaration.Artifacts[0].Size = 0
+	body, _ := json.Marshal(map[string]any{"declaration": &declaration})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer alice-token")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST publish: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		responseBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d: %s, want 400 for zero artifact size", resp.StatusCode, responseBody)
+	}
+}
+
 func TestAppAdminRegistryPublishRejectsCrossAppFinalize(t *testing.T) {
 	t.Parallel()
 
@@ -308,7 +385,7 @@ func newRegistryPublishHarness(t *testing.T) registryPublishHarness {
 	service := &appregistry.StatelessPublishService{
 		Registry: "toolshed", StorageRoot: "gs://gitlab-peach-street-gestalt-app-registry",
 		PublicRoot: "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry",
-		Store:      store, Signer: signer, Writer: &appregistry.Writer{Store: store}, Limits: limits,
+		Store:      store, Promoter: store, Signer: signer, Writer: &appregistry.Writer{Store: store}, Limits: limits,
 	}
 	declaration, artifactBytes := testServerPublishDeclaration(t, "g-issues", "0.3.0-dev.server")
 	return registryPublishHarness{

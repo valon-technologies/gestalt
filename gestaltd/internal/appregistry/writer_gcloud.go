@@ -86,27 +86,6 @@ func (s *GcloudObjectStore) WriteCatalogObject(input WriteCatalogObjectInput) er
 	return err
 }
 
-func (s *GcloudObjectStore) PromoteObject(input PromoteObjectInput) error {
-	if s == nil || s.Runner == nil {
-		return fmt.Errorf("gcloud object store runner is required")
-	}
-	metadata := fmt.Sprintf("source-ref=%s", input.SourceRef)
-	if input.ExpectedSHA256 != "" {
-		metadata += ",sha256=" + strings.ToLower(strings.TrimSpace(input.ExpectedSHA256))
-	}
-	args := []string{
-		"storage", "cp",
-		"--if-generation-match=0",
-		"--custom-metadata=" + metadata,
-	}
-	if input.SourceGeneration > 0 {
-		args = append(args, "--source-generation="+strconv.FormatInt(input.SourceGeneration, 10))
-	}
-	args = append(args, input.SourceURL, input.DestURL)
-	_, err := s.Runner.Run("gcloud", args...)
-	return err
-}
-
 type gcsObjectGeneration int64
 
 func (g *gcsObjectGeneration) UnmarshalJSON(data []byte) error {

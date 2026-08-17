@@ -873,7 +873,7 @@ func bootstrapAppRegistryPublish(cfg *config.Config) (*appregistry.StatelessPubl
 	}
 	return &appregistry.StatelessPublishService{
 		Registry: registryName, StorageRoot: storageRoot, PublicRoot: publicRoot,
-		Store: store, Signer: signer, Writer: writer,
+		Store: store, Promoter: store, Signer: signer, Writer: writer,
 		Limits: appregistry.PublishLimits{
 			UploadURLTTL: limitsCfg.UploadURLTTL, MaxArtifacts: limitsCfg.MaxArtifacts,
 			MaxArtifactBytes: limitsCfg.MaxArtifactBytes, RequiredPlatforms: limitsCfg.RequiredPlatforms,

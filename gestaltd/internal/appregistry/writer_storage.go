@@ -28,7 +28,20 @@ type RegistryObjectStore interface {
 	ReadObject(storageURL string) (generation int64, data []byte, err error)
 	WriteImmutableObject(input WriteImmutableObjectInput) error
 	WriteCatalogObject(input WriteCatalogObjectInput) error
+}
+
+// RegistryObjectPromoter copies staged uploads to immutable final artifact paths.
+// Only stateless publish finalize needs this capability; the direct registry writer
+// and gcloud CLI store do not.
+type RegistryObjectPromoter interface {
 	PromoteObject(input PromoteObjectInput) error
+}
+
+// RegistryObjectStoreWithPromoter is implemented by stores that support both writer
+// and stateless publish finalize flows.
+type RegistryObjectStoreWithPromoter interface {
+	RegistryObjectStore
+	RegistryObjectPromoter
 }
 
 // PromoteObjectInput copies a staged object to an immutable final path.

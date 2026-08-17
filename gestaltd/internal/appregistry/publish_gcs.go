@@ -554,7 +554,19 @@ func ApplyMemoryUpload(store *MemoryObjectStore, uploadURL string, data []byte, 
 	})
 }
 
-// CheckGCSRegistryStorePermissions verifies non-destructive IAM permissions for publish CAS flows.
+// GCSRegistryStoreIAMPermissions lists IAM permissions checked at publish bootstrap.
+//
+// Publish code never calls DeleteObject, but GCS catalog compare-and-swap rewrites
+// (NewWriter with generation match on index.json and retention.json) replace existing
+// objects by deleting the prior generation internally. storage.objects.delete is
+// therefore required as a replacement capability, not for destructive deletes.
+var GCSRegistryStoreIAMPermissions = []string{
+	"storage.objects.get",
+	"storage.objects.create",
+	"storage.objects.delete",
+}
+
+// CheckGCSRegistryStorePermissions verifies IAM permissions for publish CAS flows.
 func CheckGCSRegistryStorePermissions(ctx context.Context, storageRoot string) error {
 	bucket, err := gcsBucketFromStorageRoot(storageRoot)
 	if err != nil {
@@ -565,20 +577,13 @@ func CheckGCSRegistryStorePermissions(ctx context.Context, storageRoot string) e
 		return err
 	}
 	defer func() { _ = client.Close() }()
-	permissions, err := client.Bucket(bucket).IAM().TestPermissions(ctx, []string{
-		"storage.objects.get",
-		"storage.objects.create",
-		"storage.objects.delete",
-		"storage.objects.update",
-	})
+	permissions, err := client.Bucket(bucket).IAM().TestPermissions(ctx, GCSRegistryStoreIAMPermissions)
 	if err != nil {
-		return fmt.Errorf("test gcs registry permissions: %w", err)
+		return fmt.Errorf("test gcs registry object replacement permissions: %w", err)
 	}
-	required := map[string]struct{}{
-		"storage.objects.get":    {},
-		"storage.objects.create": {},
-		"storage.objects.delete": {},
-		"storage.objects.update": {},
+	required := make(map[string]struct{}, len(GCSRegistryStoreIAMPermissions))
+	for _, permission := range GCSRegistryStoreIAMPermissions {
+		required[permission] = struct{}{}
 	}
 	granted := make(map[string]struct{}, len(permissions))
 	for _, permission := range permissions {
@@ -591,7 +596,7 @@ func CheckGCSRegistryStorePermissions(ctx context.Context, storageRoot string) e
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("gcs registry permissions missing: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("gcs registry object replacement permissions missing: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

@@ -69,6 +69,7 @@ type StatelessPublishService struct {
 	StorageRoot string
 	PublicRoot  string
 	Store       RegistryObjectStore
+	Promoter    RegistryObjectPromoter
 	Signer      RegistryUploadSigner
 	Writer      *Writer
 	Limits      PublishLimits
@@ -116,7 +117,7 @@ func (s *StatelessPublishService) Begin(ctx context.Context, appRegistry string,
 }
 
 func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry string, input AdminPublishInput) (*AdminPublishResponse, error) {
-	if s == nil || s.Store == nil || s.Writer == nil {
+	if s == nil || s.Store == nil || s.Promoter == nil || s.Writer == nil {
 		return nil, ErrPublishUnavailable
 	}
 	if err := s.ensureWritableRegistry(appRegistry); err != nil {
@@ -285,7 +286,7 @@ func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, 
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
 		}
-		if err := s.Store.PromoteObject(PromoteObjectInput{
+		if err := s.Promoter.PromoteObject(PromoteObjectInput{
 			SourceURL: stagingURL, SourceGeneration: described.Generation,
 			DestURL: StorageURL(s.StorageRoot, finalRel), ExpectedSHA256: artifact.SHA256, SourceRef: sourceRef,
 		}); err != nil {

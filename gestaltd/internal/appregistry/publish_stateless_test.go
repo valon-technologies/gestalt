@@ -238,7 +238,7 @@ func newStatelessPublishHarnessWithNow(t *testing.T, now func() time.Time) (*app
 	limits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}}
 	return &appregistry.StatelessPublishService{
 		Registry: "toolshed", StorageRoot: testPublishStorageRoot, PublicRoot: testPublishPublicRoot,
-		Store: mem, Signer: signer, Writer: &appregistry.Writer{Store: mem}, Limits: limits, Now: now,
+		Store: mem, Promoter: mem, Signer: signer, Writer: &appregistry.Writer{Store: mem}, Limits: limits, Now: now,
 	}, mem
 }
 
