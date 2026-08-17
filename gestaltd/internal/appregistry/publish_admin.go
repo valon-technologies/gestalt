@@ -97,6 +97,8 @@ type preparedPublishAttempt struct {
 	published     *Entry
 }
 
+// preparePublishAttempt validates a declaration, resolves publish identity, and
+// returns an already-published entry when the index/entry pair is complete.
 func (s *StatelessPublishService) preparePublishAttempt(appRegistry string, input AdminPublishInput) (*preparedPublishAttempt, error) {
 	if s == nil || s.Store == nil {
 		return nil, ErrPublishUnavailable
