@@ -45,6 +45,18 @@ func TestRunAppRegistryPublishDirectModeStillRequiresBucket(t *testing.T) {
 	}
 }
 
+func TestRunAppRegistryPublishRemoteFalseUsesDirectMode(t *testing.T) {
+	t.Parallel()
+	err := runAppRegistryPublish([]string{
+		"--remote=false",
+		"--app", "demo", "--version", "0.3.0-dev.1",
+		"--ref", "651a5c30feb995c9364c38f63d0d5c3880bc2055", "--dist-dir", t.TempDir(),
+	}, "test")
+	if err == nil || !strings.Contains(err.Error(), "--bucket is required") {
+		t.Fatalf("runAppRegistryPublish(--remote=false) = %v", err)
+	}
+}
+
 func TestRunAppRegistryPublishRejectsRemoteWithDirectFlags(t *testing.T) {
 	t.Parallel()
 	err := runAppRegistryPublish([]string{

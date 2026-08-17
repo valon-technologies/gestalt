@@ -430,10 +430,22 @@ func providerPublishObjectNotFound(err error) bool {
 	if !errors.As(err, &cmdErr) {
 		return false
 	}
-	text := strings.ToLower(cmdErr.Stdout + "\n" + cmdErr.Stderr + "\n" + cmdErr.Err.Error())
+	text := gitCommandErrorText(cmdErr)
 	return strings.Contains(text, "not found") ||
 		strings.Contains(text, "no urls matched") ||
 		strings.Contains(text, "404")
+}
+
+func isGitNotRepository(err error) bool {
+	var cmdErr *providerPublishCommandError
+	if !errors.As(err, &cmdErr) {
+		return false
+	}
+	return strings.Contains(gitCommandErrorText(cmdErr), "not a git repository")
+}
+
+func gitCommandErrorText(cmdErr *providerPublishCommandError) string {
+	return strings.ToLower(cmdErr.Stdout + "\n" + cmdErr.Stderr + "\n" + cmdErr.Err.Error())
 }
 
 type providerPublishCommandError struct {

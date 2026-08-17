@@ -22,29 +22,16 @@ const (
 )
 
 var (
-	remotePublishBearerRedactor = regexp.MustCompile(`(?i)Bearer\s+\S+`)
-	remoteSignedUploadHeaders   = []string{
+	remotePublishBearerRedactor     = regexp.MustCompile(`(?i)Bearer\s+\S+`)
+	remotePublishURLRedactor        = regexp.MustCompile(`https?://\S+`)
+	remotePublishGoogSignatureValue = regexp.MustCompile(`(?i)(X-Goog-Signature=)[^&\s"]+`)
+	remoteSignedUploadHeaders       = []string{
 		appregistry.UploadHeaderContentLength,
 		appregistry.UploadHeaderXGoogIfGenerationMatch,
 		appregistry.UploadHeaderXGoogMetaSHA256,
 		appregistry.UploadHeaderXGoogContentSHA256,
 	}
 )
-
-type remoteRegistryUpload struct {
-	Platform  string            `json:"platform"`
-	UploadURL string            `json:"uploadUrl"`
-	Headers   map[string]string `json:"headers,omitempty"`
-}
-
-type remoteRegistryResponse struct {
-	PublishID   string                 `json:"publishId"`
-	App         string                 `json:"app"`
-	Version     string                 `json:"version"`
-	State       string                 `json:"state"`
-	Uploads     []remoteRegistryUpload `json:"uploads,omitempty"`
-	PublishedAt string                 `json:"publishedAt,omitempty"`
-}
 
 type remoteRegistryPublishResult struct {
 	PublishID, App, Version, State, AdminURL, PublishedAt string
@@ -62,28 +49,28 @@ type remoteRegistryUploadInput struct {
 
 type remoteRegistryUploader struct{ HTTPClient *http.Client }
 
-func (c *remoteRegistryClient) begin(ctx context.Context, app string, declaration *appregistry.PublishDeclaration) (remoteRegistryResponse, error) {
+func (c *remoteRegistryClient) begin(ctx context.Context, app string, declaration *appregistry.PublishDeclaration) (appregistry.AdminPublishResponse, error) {
 	path := fmt.Sprintf("/api/v1/apps/%s/admin/registry/publishes", url.PathEscape(strings.TrimSpace(app)))
 	return c.postDeclaration(ctx, path, declaration)
 }
 
-func (c *remoteRegistryClient) finalize(ctx context.Context, app, publishID string, declaration *appregistry.PublishDeclaration) (remoteRegistryResponse, error) {
+func (c *remoteRegistryClient) finalize(ctx context.Context, app, publishID string, declaration *appregistry.PublishDeclaration) (appregistry.AdminPublishResponse, error) {
 	path := fmt.Sprintf("/api/v1/apps/%s/admin/registry/publishes/%s/finalize", url.PathEscape(strings.TrimSpace(app)), url.PathEscape(strings.TrimSpace(publishID)))
 	return c.postDeclaration(ctx, path, declaration)
 }
 
-func (c *remoteRegistryClient) postDeclaration(ctx context.Context, path string, declaration *appregistry.PublishDeclaration) (remoteRegistryResponse, error) {
+func (c *remoteRegistryClient) postDeclaration(ctx context.Context, path string, declaration *appregistry.PublishDeclaration) (appregistry.AdminPublishResponse, error) {
 	body, err := json.Marshal(struct {
 		Declaration *appregistry.PublishDeclaration `json:"declaration"`
 	}{declaration})
 	if err != nil {
-		return remoteRegistryResponse{}, err
+		return appregistry.AdminPublishResponse{}, err
 	}
 	return c.doJSON(ctx, http.MethodPost, path, body)
 }
 
-func (c *remoteRegistryClient) doJSON(ctx context.Context, method, path string, body []byte) (remoteRegistryResponse, error) {
-	var zero remoteRegistryResponse
+func (c *remoteRegistryClient) doJSON(ctx context.Context, method, path string, body []byte) (appregistry.AdminPublishResponse, error) {
+	var zero appregistry.AdminPublishResponse
 	if c == nil {
 		return zero, fmt.Errorf("publish client is not configured")
 	}
@@ -123,7 +110,7 @@ func (c *remoteRegistryClient) doJSON(ctx context.Context, method, path string, 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return zero, parseRemoteRegistryAPIError(resp.StatusCode, respBody)
 	}
-	var parsed remoteRegistryResponse
+	var parsed appregistry.AdminPublishResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return zero, fmt.Errorf("decode %s response: %w", redactRemotePublishSecrets(path), err)
 	}
@@ -156,7 +143,7 @@ func (u *remoteRegistryUploader) upload(ctx context.Context, input remoteRegistr
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, input.UploadURL, file)
 	if err != nil {
-		return err
+		return remoteUploadError(platform, err)
 	}
 	req.ContentLength = info.Size()
 	for key, value := range input.Headers {
@@ -168,12 +155,12 @@ func (u *remoteRegistryUploader) upload(ctx context.Context, input remoteRegistr
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("upload platform %q: %w", platform, err)
+		return remoteUploadError(platform, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("upload platform %q returned %d: %s", platform, resp.StatusCode, strings.TrimSpace(string(body)))
+		return remoteUploadHTTPError(platform, resp.StatusCode, body)
 	}
 	return nil
 }
@@ -215,12 +202,33 @@ func parseRemoteRegistryAPIError(status int, body []byte) error {
 
 func redactRemotePublishSecrets(value string) string {
 	value = remotePublishBearerRedactor.ReplaceAllString(value, "Bearer [REDACTED]")
-	for _, prefix := range []string{"api_token", "GESTALT_API_KEY", "token=", "X-Goog-Signature", "uploadUrl"} {
+	value = remotePublishURLRedactor.ReplaceAllString(value, "[REDACTED-URL]")
+	value = remotePublishGoogSignatureValue.ReplaceAllString(value, `${1}[REDACTED]`)
+	for _, header := range remoteSignedUploadHeaders {
+		pattern := regexp.MustCompile(`(?i)(` + regexp.QuoteMeta(header) + `=)[^&\s"]+`)
+		value = pattern.ReplaceAllString(value, `${1}[REDACTED]`)
+	}
+	for _, prefix := range []string{"api_token", "GESTALT_API_KEY", "token=", "uploadUrl"} {
 		if idx := strings.Index(strings.ToLower(value), strings.ToLower(prefix)); idx >= 0 {
 			value = value[:idx] + prefix + "[REDACTED]"
 		}
 	}
 	return value
+}
+
+func remoteUploadError(platform string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("upload platform %q: %s", platform, redactRemotePublishSecrets(err.Error()))
+}
+
+func remoteUploadHTTPError(platform string, status int, body []byte) error {
+	message := redactRemotePublishSecrets(strings.TrimSpace(string(body)))
+	if message == "" {
+		message = http.StatusText(status)
+	}
+	return fmt.Errorf("upload platform %q returned %d: %s", platform, status, message)
 }
 
 func remoteRegistryAdminURL(baseURL, app string) string {

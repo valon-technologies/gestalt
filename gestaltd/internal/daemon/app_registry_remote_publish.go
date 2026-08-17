@@ -83,7 +83,11 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 	if runner == nil {
 		runner = appRegistryCommandRunner{}
 	}
-	declaration, err := buildRemotePublishDeclaration(appName, version, relManifestPath, sourceManifest, releaseMetadata, archives, collectRemoteLocalSourceState(manifestPath, runner), p.BuilderVersion)
+	localSource, err := collectRemoteLocalSourceState(manifestPath, runner)
+	if err != nil {
+		return zero, err
+	}
+	declaration, err := buildRemotePublishDeclaration(appName, version, relManifestPath, sourceManifest, releaseMetadata, archives, localSource, p.BuilderVersion)
 	if err != nil {
 		return zero, err
 	}
@@ -164,35 +168,51 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 }
 
 func resolveRemotePublishManifest(appName string) (string, string, error) {
-	root, err := gitRootFromWorkingDirectory()
+	cwd, err := os.Getwd()
 	if err != nil {
-		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-			root = cwd
-		} else {
-			return "", "", err
-		}
+		return "", "", fmt.Errorf("resolve working directory: %w", err)
 	}
-	path, err := resolveAppPublishManifestFromGitRoot(root, appName)
+	rootOut, err := runProviderPublishCommand("git", "-C", cwd, "rev-parse", "--show-toplevel")
+	if err != nil {
+		if isGitNotRepository(err) {
+			rootOut = cwd
+		} else {
+			return "", "", fmt.Errorf("resolve git root from %s: %w", cwd, err)
+		}
+	} else {
+		rootOut = normalizeGitRoot(strings.TrimSpace(rootOut))
+	}
+	path, err := resolveAppPublishManifestFromGitRoot(rootOut, appName)
 	if err != nil {
 		return "", "", err
 	}
-	rel, err := filepath.Rel(root, path)
+	rel, err := filepath.Rel(rootOut, path)
 	if err != nil {
 		return "", "", err
 	}
 	return path, filepath.ToSlash(rel), nil
 }
 
+func normalizeGitRoot(gitRoot string) string {
+	if absGitRoot, err := filepath.Abs(gitRoot); err == nil {
+		gitRoot = absGitRoot
+	}
+	if evaluatedGitRoot, err := filepath.EvalSymlinks(gitRoot); err == nil {
+		gitRoot = evaluatedGitRoot
+	}
+	return gitRoot
+}
+
 func buildRemotePublishDeclaration(appName, version, manifestPath string, source *providermanifestv1.Manifest, release *providerrelease.Metadata, archives []releaseArchive, localSource *appregistry.LocalSourceState, builderVersion string) (*appregistry.PublishDeclaration, error) {
 	artifacts := make([]appregistry.PublishDeclarationArtifact, 0, len(archives))
 	for _, archive := range archives {
-		size := int64(0)
-		if info, err := os.Stat(archive.Path); err == nil {
-			size = info.Size()
+		info, err := os.Stat(archive.Path)
+		if err != nil {
+			return nil, fmt.Errorf("stat archive %s: %w", archive.Path, err)
 		}
 		artifacts = append(artifacts, appregistry.PublishDeclarationArtifact{
 			Platform: strings.TrimSpace(archive.Target), Filename: filepath.Base(archive.Path),
-			SHA256: strings.ToLower(strings.TrimSpace(archive.SHA256)), Size: size,
+			SHA256: strings.ToLower(strings.TrimSpace(archive.SHA256)), Size: info.Size(),
 		})
 	}
 	manifest := *source
@@ -208,26 +228,32 @@ func buildRemotePublishDeclaration(appName, version, manifestPath string, source
 	return declaration, nil
 }
 
-func collectRemoteLocalSourceState(manifestPath string, runner remoteGitRunner) *appregistry.LocalSourceState {
+func collectRemoteLocalSourceState(manifestPath string, runner remoteGitRunner) (*appregistry.LocalSourceState, error) {
 	if runner == nil {
 		runner = appRegistryCommandRunner{}
 	}
 	manifestDir := filepath.Dir(manifestPath)
 	if _, err := runner.Run("git", "-C", manifestDir, "rev-parse", "--show-toplevel"); err != nil {
-		return nil
+		if isGitNotRepository(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("git rev-parse --show-toplevel: %w", err)
 	}
 	commitOut, err := runner.Run("git", "-C", manifestDir, "rev-parse", "HEAD")
 	if err != nil {
-		return nil
+		if isGitNotRepository(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
 	commitSHA := strings.ToLower(strings.TrimSpace(commitOut))
 	if !fullGitSHARe.MatchString(commitSHA) {
-		return nil
+		return nil, fmt.Errorf("git rev-parse HEAD returned invalid commit SHA %q", commitSHA)
 	}
 	state := &appregistry.LocalSourceState{CommitSHA: commitSHA}
 	statusOut, err := runner.Run("git", "-C", manifestDir, "status", "--porcelain")
 	if err != nil {
-		return state
+		return nil, fmt.Errorf("git status --porcelain: %w", err)
 	}
 	for _, line := range strings.Split(statusOut, "\n") {
 		line = strings.TrimRight(line, "\r")
@@ -240,7 +266,7 @@ func collectRemoteLocalSourceState(manifestPath string, runner remoteGitRunner) 
 			state.Dirty = true
 		}
 	}
-	return state
+	return state, nil
 }
 
 func validateRemoteRequiredPlatforms(archives []releaseArchive) error {

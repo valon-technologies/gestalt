@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,14 +23,28 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-type fakeRemoteGitRunner map[string]string
+type fakeRemoteGitRunner map[string]fakeRemoteGitResult
+
+type fakeRemoteGitResult struct {
+	Out string
+	Err error
+}
 
 func (f fakeRemoteGitRunner) Run(name string, args ...string) (string, error) {
 	key := name + " " + strings.Join(args, " ")
-	if out, ok := f[key]; ok {
-		return out, nil
+	if result, ok := f[key]; ok {
+		return result.Out, result.Err
 	}
 	return "", fmt.Errorf("unexpected command: %s", key)
+}
+
+func fakeGitNotRepositoryError() error {
+	return &providerPublishCommandError{
+		Name:   "git",
+		Args:   []string{"-C", "/tmp", "rev-parse", "--show-toplevel"},
+		Err:    fmt.Errorf("exit status 128"),
+		Stderr: "fatal: not a git repository (or any of the parent directories): .git\n",
+	}
 }
 
 func TestRemoteRegistryPublishFlowAndResume(t *testing.T) { //nolint:paralleltest // chdirs
@@ -59,20 +74,20 @@ func TestRemoteRegistryPublishFlowAndResume(t *testing.T) { //nolint:paralleltes
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/finalize"):
 			state = appregistry.PublishStatePublished
-			writeRemotePublishJSON(w, remoteRegistryResponse{PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state, PublishedAt: "2026-08-17T12:00:00Z"})
+			writeRemotePublishJSON(w, appregistry.AdminPublishResponse{PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state, PublishedAt: "2026-08-17T12:00:00Z"})
 		case strings.HasSuffix(r.URL.Path, "/publishes"):
 			if state == appregistry.PublishStatePublished {
-				writeRemotePublishJSON(w, remoteRegistryResponse{PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state, PublishedAt: "2026-08-17T12:00:00Z"})
+				writeRemotePublishJSON(w, appregistry.AdminPublishResponse{PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state, PublishedAt: "2026-08-17T12:00:00Z"})
 				return
 			}
-			var uploads []remoteRegistryUpload
+			var uploads []appregistry.AdminPublishUpload
 			if uploaded["linux/amd64"] == 0 {
-				uploads = append(uploads, remoteRegistryUpload{Platform: "linux/amd64", UploadURL: uploadServer.URL + "/upload/linux/amd64?sha256=" + linuxDigest, Headers: linuxHeaders})
+				uploads = append(uploads, appregistry.AdminPublishUpload{Platform: "linux/amd64", UploadURL: uploadServer.URL + "/upload/linux/amd64?sha256=" + linuxDigest, Headers: linuxHeaders})
 			}
 			if uploaded["darwin/arm64"] == 0 {
-				uploads = append(uploads, remoteRegistryUpload{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64?sha256=" + darwinDigest, Headers: darwinHeaders})
+				uploads = append(uploads, appregistry.AdminPublishUpload{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64?sha256=" + darwinDigest, Headers: darwinHeaders})
 			}
-			writeRemotePublishJSON(w, remoteRegistryResponse{PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state, Uploads: uploads})
+			writeRemotePublishJSON(w, appregistry.AdminPublishResponse{PublishID: publishID, App: "demo", Version: "0.3.0-dev.1", State: state, Uploads: uploads})
 		}
 	}))
 	t.Cleanup(apiServer.Close)
@@ -98,7 +113,7 @@ func TestRemoteRegistryPublishAlreadyPublishedAndAuth(t *testing.T) { //nolint:p
 	var authHeader string
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader = r.Header.Get("Authorization")
-		writeRemotePublishJSON(w, remoteRegistryResponse{PublishID: "pub_done", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStatePublished})
+		writeRemotePublishJSON(w, appregistry.AdminPublishResponse{PublishID: "pub_done", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStatePublished})
 	}))
 	t.Cleanup(apiServer.Close)
 
@@ -126,14 +141,14 @@ func TestRemoteRegistryPublishInterruptedResume(t *testing.T) { //nolint:paralle
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/finalize"):
-			writeRemotePublishJSON(w, remoteRegistryResponse{PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStatePublished})
+			writeRemotePublishJSON(w, appregistry.AdminPublishResponse{PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStatePublished})
 		case strings.HasSuffix(r.URL.Path, "/publishes"):
 			if firstCreate {
 				firstCreate = false
 				_, linuxHeaders := remotePublishArtifactFixture(t, filepath.Join(distDir, "linux-amd64.tar.gz"))
-				writeRemotePublishJSON(w, remoteRegistryResponse{
+				writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
 					PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStateUploading,
-					Uploads: []remoteRegistryUpload{
+					Uploads: []appregistry.AdminPublishUpload{
 						{Platform: "linux/amd64", UploadURL: uploadServer.URL + "/upload/linux/amd64", Headers: linuxHeaders},
 						{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64", Headers: darwinHeaders},
 					},
@@ -141,13 +156,13 @@ func TestRemoteRegistryPublishInterruptedResume(t *testing.T) { //nolint:paralle
 				return
 			}
 			if !uploaded["darwin/arm64"] {
-				writeRemotePublishJSON(w, remoteRegistryResponse{
+				writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
 					PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStateUploading,
-					Uploads: []remoteRegistryUpload{{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64", Headers: darwinHeaders}},
+					Uploads: []appregistry.AdminPublishUpload{{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64", Headers: darwinHeaders}},
 				})
 				return
 			}
-			writeRemotePublishJSON(w, remoteRegistryResponse{PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStateUploading})
+			writeRemotePublishJSON(w, appregistry.AdminPublishResponse{PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStateUploading})
 		}
 	}))
 	t.Cleanup(apiServer.Close)
@@ -165,22 +180,51 @@ func TestRemoteRegistryPublishInterruptedResume(t *testing.T) { //nolint:paralle
 func TestRemotePublishValidationAndProvenance(t *testing.T) {
 	t.Parallel()
 	runner := fakeRemoteGitRunner{
-		"git -C /repo/apps/demo rev-parse --show-toplevel": "/repo\n",
-		"git -C /repo/apps/demo rev-parse HEAD":            "651a5c30feb995c9364c38f63d0d5c3880bc2055\n",
-		"git -C /repo/apps/demo status --porcelain":        " M file\n?? scratch\n",
+		"git -C /repo/apps/demo rev-parse --show-toplevel": {Out: "/repo\n"},
+		"git -C /repo/apps/demo rev-parse HEAD":            {Out: "651a5c30feb995c9364c38f63d0d5c3880bc2055\n"},
+		"git -C /repo/apps/demo status --porcelain":        {Out: " M file\n?? scratch\n"},
 	}
-	state := collectRemoteLocalSourceState("/repo/apps/demo/manifest.yaml", runner)
-	if state == nil || !state.Dirty || !state.Untracked {
-		t.Fatalf("state = %#v", state)
+	state, err := collectRemoteLocalSourceState("/repo/apps/demo/manifest.yaml", runner)
+	if err != nil || state == nil || !state.Dirty || !state.Untracked {
+		t.Fatalf("state = %#v err=%v", state, err)
 	}
-	if collectRemoteLocalSourceState("/tmp/manifest.yaml", fakeRemoteGitRunner{}) != nil {
-		t.Fatal("expected nil local source for non-git")
+	nonGitRunner := fakeRemoteGitRunner{
+		"git -C /tmp rev-parse --show-toplevel": {Err: fakeGitNotRepositoryError()},
 	}
-	_, err := buildRemotePublishDeclaration("demo", "0.3.0-dev.1", "apps/demo/manifest.yaml", remoteTestManifest("demo", "0.3.0-dev.1"), remoteTestReleaseMetadata("demo", "0.3.0-dev.1"), []releaseArchive{
-		{Target: "linux/amd64", Path: "linux-amd64.tar.gz", SHA256: strings.Repeat("a", 64)},
-	}, state, "1.2.3")
+	state, err = collectRemoteLocalSourceState("/tmp/manifest.yaml", nonGitRunner)
+	if err != nil || state != nil {
+		t.Fatalf("non-git state = %#v err=%v", state, err)
+	}
+	gitFailureRunner := fakeRemoteGitRunner{
+		"git -C /tmp rev-parse --show-toplevel": {Err: fmt.Errorf("git: permission denied")},
+	}
+	if _, err := collectRemoteLocalSourceState("/tmp/manifest.yaml", gitFailureRunner); err == nil {
+		t.Fatal("expected git failure error")
+	}
+	statusFailureRunner := fakeRemoteGitRunner{
+		"git -C /repo/apps/demo rev-parse --show-toplevel": {Out: "/repo\n"},
+		"git -C /repo/apps/demo rev-parse HEAD":            {Out: "651a5c30feb995c9364c38f63d0d5c3880bc2055\n"},
+		"git -C /repo/apps/demo status --porcelain":        {Err: fmt.Errorf("git status failed")},
+	}
+	if _, err := collectRemoteLocalSourceState("/repo/apps/demo/manifest.yaml", statusFailureRunner); err == nil {
+		t.Fatal("expected git status failure")
+	}
+	archives := []releaseArchive{
+		{Target: "linux/amd64", Path: filepath.Join(t.TempDir(), "linux-amd64.tar.gz"), SHA256: strings.Repeat("a", 64)},
+	}
+	if err := os.WriteFile(archives[0].Path, []byte("linux"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = buildRemotePublishDeclaration("demo", "0.3.0-dev.1", "apps/demo/manifest.yaml", remoteTestManifest("demo", "0.3.0-dev.1"), remoteTestReleaseMetadata("demo", "0.3.0-dev.1"), archives, state, "1.2.3")
 	if err == nil || !errors.Is(err, appregistry.ErrPublishRequiredPlatform) {
 		t.Fatalf("buildRemotePublishDeclaration() = %v", err)
+	}
+	_, err = buildRemotePublishDeclaration("demo", "0.3.0-dev.1", "apps/demo/manifest.yaml", remoteTestManifest("demo", "0.3.0-dev.1"), remoteTestReleaseMetadata("demo", "0.3.0-dev.1"), []releaseArchive{
+		{Target: "linux/amd64", Path: filepath.Join(t.TempDir(), "missing.tgz"), SHA256: strings.Repeat("a", 64)},
+		{Target: "darwin/arm64", Path: filepath.Join(t.TempDir(), "missing2.tgz"), SHA256: strings.Repeat("b", 64)},
+	}, nil, "1.2.3")
+	if err == nil || !strings.Contains(err.Error(), "stat archive") {
+		t.Fatalf("buildRemotePublishDeclaration() stat = %v", err)
 	}
 }
 
@@ -193,9 +237,15 @@ func TestRemoteRegistryUploaderHeadersAndRedaction(t *testing.T) {
 	}
 	headers[appregistry.UploadHeaderContentLength] = "99"
 	path := filepath.Join(t.TempDir(), "artifact.tgz")
-	if err := os.WriteFile(path, []byte("payload"), 0o644); err != nil {
+	payload := []byte("payload")
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	validHeaders, err := appregistry.BuildSignedUploadHeaders(int64(len(payload)), digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signedURL := "https://storage.googleapis.com/bucket/object?X-Goog-Algorithm=GOOG4&X-Goog-Signature=secret-signature-value"
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
@@ -207,11 +257,39 @@ func TestRemoteRegistryUploaderHeadersAndRedaction(t *testing.T) {
 	}); err == nil || requests.Load() != 0 {
 		t.Fatalf("upload() = %v requests=%d", err, requests.Load())
 	}
-	got := redactRemotePublishSecrets("Bearer secret-token X-Goog-Signature=abc")
-	if strings.Contains(got, "secret-token") || strings.Contains(got, "abc") {
+	transportErr := (&remoteRegistryUploader{HTTPClient: &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("dial tcp: connection refused to %s with X-Goog-Signature=secret-signature-value", signedURL)
+	})}}).upload(t.Context(), remoteRegistryUploadInput{
+		Platform: "linux/amd64", LocalPath: path, SHA256: digest, UploadURL: signedURL, Headers: validHeaders,
+	})
+	if transportErr == nil {
+		t.Fatal("expected transport error")
+	}
+	transportMsg := transportErr.Error()
+	if strings.Contains(transportMsg, signedURL) || strings.Contains(transportMsg, "secret-signature-value") {
+		t.Fatalf("transport error leaked secrets: %q", transportMsg)
+	}
+	statusErr := (&remoteRegistryUploader{HTTPClient: &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader("denied for " + signedURL))}, nil
+	})}}).upload(t.Context(), remoteRegistryUploadInput{
+		Platform: "linux/amd64", LocalPath: path, SHA256: digest, UploadURL: signedURL, Headers: validHeaders,
+	})
+	if statusErr == nil {
+		t.Fatal("expected status error")
+	}
+	statusMsg := statusErr.Error()
+	if strings.Contains(statusMsg, signedURL) || strings.Contains(statusMsg, "secret-signature-value") {
+		t.Fatalf("status error leaked secrets: %q", statusMsg)
+	}
+	got := redactRemotePublishSecrets("Bearer secret-token X-Goog-Signature=abc https://example/upload?token=xyz")
+	if strings.Contains(got, "secret-token") || strings.Contains(got, "abc") || strings.Contains(got, "xyz") {
 		t.Fatalf("redactRemotePublishSecrets() = %q", got)
 	}
 }
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func writeRemotePublishJSON(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -268,10 +346,10 @@ func setupRemotePublishFixture(t *testing.T) (root, distDir string, runner fakeR
 	manifestDirAbs := filepath.Join(workDir, "apps", "demo")
 	distDir = filepath.Join(workDir, "dist")
 	runner = fakeRemoteGitRunner{
-		"git -C " + workDir + " rev-parse --show-toplevel":        workDir + "\n",
-		"git -C " + manifestDirAbs + " rev-parse --show-toplevel": workDir + "\n",
-		"git -C " + manifestDirAbs + " rev-parse HEAD":            "651a5c30feb995c9364c38f63d0d5c3880bc2055\n",
-		"git -C " + manifestDirAbs + " status --porcelain":        "",
+		"git -C " + workDir + " rev-parse --show-toplevel":        {Out: workDir + "\n"},
+		"git -C " + manifestDirAbs + " rev-parse --show-toplevel": {Out: workDir + "\n"},
+		"git -C " + manifestDirAbs + " rev-parse HEAD":            {Out: "651a5c30feb995c9364c38f63d0d5c3880bc2055\n"},
+		"git -C " + manifestDirAbs + " status --porcelain":        {Out: ""},
 	}
 	pub = &remoteRegistryPublisher{
 		GitRunner: runner,
@@ -299,8 +377,8 @@ func setupRemotePublishFixture(t *testing.T) (root, distDir string, runner fakeR
 			path := filepath.Join(cwd, "apps", appName, "manifest.yaml")
 			return path, filepath.ToSlash(filepath.Join("apps", appName, "manifest.yaml")), nil
 		},
-		buildReleaseMetadata: func(*providermanifestv1.Manifest, string, []releaseArchive, []byte) (*providerrelease.Metadata, error) {
-			return remoteTestReleaseMetadata("demo", "0.3.0-dev.1"), nil
+		buildReleaseMetadata: func(_ *providermanifestv1.Manifest, _ string, archives []releaseArchive, _ []byte) (*providerrelease.Metadata, error) {
+			return remoteTestReleaseMetadataFromArchives("demo", "0.3.0-dev.1", archives), nil
 		},
 	}
 	return workDir, distDir, runner, pub
@@ -311,10 +389,24 @@ func remoteTestManifest(appName, version string) *providermanifestv1.Manifest {
 }
 
 func remoteTestReleaseMetadata(appName, version string) *providerrelease.Metadata {
+	return remoteTestReleaseMetadataFromArchives(appName, version, nil)
+}
+
+func remoteTestReleaseMetadataFromArchives(appName, version string, archives []releaseArchive) *providerrelease.Metadata {
+	artifacts := providerrelease.Artifacts{"linux/amd64": {Path: "linux-amd64.tar.gz", SHA256: strings.Repeat("a", 64)}}
+	if len(archives) > 0 {
+		artifacts = providerrelease.Artifacts{}
+		for _, archive := range archives {
+			artifacts[strings.TrimSpace(archive.Target)] = providerrelease.Artifact{
+				Path:   filepath.Base(archive.Path),
+				SHA256: strings.ToLower(strings.TrimSpace(archive.SHA256)),
+			}
+		}
+	}
 	return &providerrelease.Metadata{
 		Schema: providerrelease.SchemaName, SchemaVersion: providerrelease.SchemaVersion,
 		Package: "github.com/valon-technologies/valon-tools/apps/" + appName, Kind: "app", Version: version, Runtime: providerrelease.RuntimeExecutable,
-		Artifacts: providerrelease.Artifacts{"linux/amd64": {Path: "linux-amd64.tar.gz", SHA256: strings.Repeat("a", 64)}},
+		Artifacts: artifacts,
 		StaticValidation: &providerrelease.StaticValidation{
 			Manifest: remoteTestManifest(appName, version),
 			Catalog:  &catalog.Catalog{Name: appName, Operations: []catalog.CatalogOperation{{ID: "echo", Method: "POST"}}},

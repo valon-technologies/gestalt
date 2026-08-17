@@ -11,7 +11,54 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
+type appRegistryPublishOptions struct {
+	Remote           bool
+	Bucket           string
+	AppName          string
+	Version          string
+	Ref              string
+	WorkflowRunURL   string
+	TriggerPRNumber  int
+	TriggerPRURL     string
+	TriggerPRTitle   string
+	TriggerCommitSHA string
+	TriggerCommitURL string
+	DryRun           bool
+	DistDirs         appPublishDistDirs
+}
+
 func runAppRegistryPublish(args []string, gestaltdVersion string) error {
+	opts, err := parseAppRegistryPublishOptions(args)
+	if err != nil {
+		return err
+	}
+	if opts.Remote {
+		if err := rejectDirectOnlyPublishFlags(opts.Bucket, opts.AppName, opts.Ref, opts.DryRun, opts.WorkflowRunURL, opts.TriggerPRNumber, opts.TriggerPRURL, opts.TriggerPRTitle, opts.TriggerCommitSHA, opts.TriggerCommitURL); err != nil {
+			return err
+		}
+		return runAppRegistryRemotePublish(opts.Version, []string(opts.DistDirs), gestaltdVersion)
+	}
+	if err := rejectRemoteOnlyPublishFlags(); err != nil {
+		return err
+	}
+	return runAppPublishWithOptions(appPublishCommandOptions{
+		Bucket:           opts.Bucket,
+		AppName:          opts.AppName,
+		Version:          opts.Version,
+		Ref:              opts.Ref,
+		WorkflowRunURL:   opts.WorkflowRunURL,
+		TriggerPRNumber:  opts.TriggerPRNumber,
+		TriggerPRURL:     opts.TriggerPRURL,
+		TriggerPRTitle:   opts.TriggerPRTitle,
+		TriggerCommitSHA: opts.TriggerCommitSHA,
+		TriggerCommitURL: opts.TriggerCommitURL,
+		DryRun:           opts.DryRun,
+		DistDirs:         opts.DistDirs,
+	})
+}
+
+func parseAppRegistryPublishOptions(args []string) (appRegistryPublishOptions, error) {
+	var zero appRegistryPublishOptions
 	fs := flag.NewFlagSet("gestaltd app registry publish", flag.ContinueOnError)
 	fs.Usage = func() { printAppRegistryPublishUsage(fs.Output()) }
 	remote := fs.Bool("remote", false, "publish through authenticated Gestalt instead of direct GCS")
@@ -29,18 +76,26 @@ func runAppRegistryPublish(args []string, gestaltdVersion string) error {
 	var distDirs appPublishDistDirs
 	fs.Var(&distDirs, "dist-dir", "directory containing release archives (repeatable)")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return zero, err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+		return zero, fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
-	if *remote {
-		if err := rejectDirectOnlyPublishFlags(*bucket, *appName, *ref, *dryRun, *workflowRunURL, *triggerPRNumber, *triggerPRURL, *triggerPRTitle, *triggerCommitSHA, *triggerCommitURL); err != nil {
-			return err
-		}
-		return runAppRegistryRemotePublish(*version, []string(distDirs), gestaltdVersion)
-	}
-	return runAppPublishCommand("gestaltd app registry publish", printAppRegistryPublishUsage, args)
+	return appRegistryPublishOptions{
+		Remote:           *remote,
+		Bucket:           *bucket,
+		AppName:          *appName,
+		Version:          *version,
+		Ref:              *ref,
+		WorkflowRunURL:   *workflowRunURL,
+		TriggerPRNumber:  *triggerPRNumber,
+		TriggerPRURL:     *triggerPRURL,
+		TriggerPRTitle:   *triggerPRTitle,
+		TriggerCommitSHA: *triggerCommitSHA,
+		TriggerCommitURL: *triggerCommitURL,
+		DryRun:           *dryRun,
+		DistDirs:         distDirs,
+	}, nil
 }
 
 func rejectDirectOnlyPublishFlags(bucket, app, ref string, dryRun bool, workflowRunURL string, triggerPRNumber int, triggerPRURL, triggerPRTitle, triggerCommitSHA, triggerCommitURL string) error {
@@ -58,6 +113,10 @@ func rejectDirectOnlyPublishFlags(bucket, app, ref string, dryRun bool, workflow
 	default:
 		return nil
 	}
+}
+
+func rejectRemoteOnlyPublishFlags() error {
+	return nil
 }
 
 func runAppRegistryRemotePublish(version string, distDirs []string, gestaltdVersion string) error {
