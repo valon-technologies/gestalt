@@ -1,204 +1,207 @@
-# Zod-derived cross-app contracts experiment
+# Zod contracts and literal IndexedDB over Gestalt tools
 
 Status: verification prototype. Date: 2026-08-17.
 
 ## Context
 
-Gestalt needs one app to publish tool contracts that another app can import, typecheck, install, and invoke without retaining the producer source. The original experiment derived those contracts by walking TypeScript types and maintained a separate validator. This version tests the simpler design: Zod is the authoring and runtime-validation system, while canonical JSON Schema is the immutable release contract.
+Gestalt needs one App to publish tool contracts that another App can import, typecheck, install, and invoke after the producer source is gone. It also needs stateful domain APIs, including IndexedDB transactions and cursors, to work when consecutive calls reach different App replicas.
 
 ## Conclusion
 
-The design is feasible without a bespoke type extractor or validation library. App authors define each input and output once as a Zod schema. Zod supplies handler inference and authoritative runtime validation. Publication accepts a deliberately strict Zod profile, uses Zod’s JSON Schema conversion, canonicalizes and hashes that data, and emits the exact client consumed by dependent apps.
+Both requirements are feasible without a custom type extractor, validator, or streaming tool. Authors define public inputs and outputs once with [Zod](https://zod.dev/); publication derives a canonical [JSON Schema](https://json-schema.org/draft/2020-12), generated TypeScript client, and immutable release from those schemas.
 
-Runtime installation still cannot make static types appear in already compiled code. An add or sync step must resolve one immutable release and materialize its generated client before the consumer is compiled. Zod solves type erasure and validation; the registry, lock, admission, and activation protocols remain necessary distributed-system machinery.
+The ordinary unary `tool` interface can expose the literal [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase) transaction API. The SDK returns local `IDBDatabase`, `IDBTransaction`, `IDBRequest`, object-store, index, key-range, and cursor objects while translating their operations into calls to one Zod-typed tool. Each call carries a hidden transaction ID and sequence, so any App replica can forward it to the coordinator that owns the backend transaction. Streaming would change transport behavior, not the domain API, and is not required for correctness.
 
-The same unary `tool` proposal can also support an IndexedDB-style transaction facade. A local callback can issue several calls to one Zod-typed `transaction` tool while the facade carries an opaque transaction ID, sequence number, and terminal nonce. This preserves the desired domain API, but it requires a logical transaction coordinator that owns the live MySQL connection. The tool protocol does not make a connection portable or solve replication inside that coordinator.
+This does require a transaction coordinator behind the App replicas. The coordinator, not the JavaScript App replica, owns the live database transaction, enforces command order, retains cursor state, and makes terminal operations idempotent. The proof uses [`fake-indexeddb`](https://github.com/dumbmatter/fakeIndexedDB) as that backend so the experiment can test IndexedDB behavior without claiming a production MySQL implementation.
 
-## Authoring
+## Requirements
+
+### R-TYPE-01 — One public contract
+
+One supported Zod input and output definition must provide handler types, runtime validation, canonical JSON Schema, and the generated consumer type. The Zod validator and an independent JSON Schema validator must agree on tested values.
+
+### R-TYPE-02 — Reproducible derivation
+
+Equivalent source and pinned toolchain inputs must produce identical contracts, clients, source digests, and release contract digests regardless of source path.
+
+### R-TYPE-03 — Portable schema profile
+
+Publication must reject schemas that the canonical contract cannot reproduce; it must never weaken them to unconstrained values.
+
+### R-TYPE-04 — Schema-inferred handlers
+
+Handler types must be inferred from their Zod schemas, and TypeScript must reject implementations that disagree with them.
+
+### R-PUB-01 — Complete immutable releases
+
+An App coordinate may be published once and must contain the provider, contract, client, manifest, pinned build identity, and integrity evidence needed after source deletion.
+
+### R-PUB-02 — Reproducible providers
+
+Equivalent source and pinned build inputs must produce the same provider artifact digest without non-semantic source-path differences.
+
+### R-DEP-01 — Exact dependency locks
+
+Every dependency must name one immutable App version and contract digest; ranges, missing releases, and mismatched digests must fail publication.
+
+### R-DEP-02 — Import and manifest alignment
+
+Static App imports must correspond exactly to direct manifest dependencies and generated modules. Undeclared, unused, dynamic, stale, and ill-typed references must fail before publication.
+
+### R-DEP-03 — Snapshot pinning
+
+A new dependency release must not alter an existing consumer until the consumer updates and republishes its lock.
+
+### R-ADM-01 — Recursive graph admission
+
+Installation must verify the complete exact dependency graph and reject cycles before routing traffic.
+
+### R-ADM-02 — Non-disruptive activation
+
+A candidate must remain unroutable until admission succeeds, and its failure must leave the previous active graph unchanged.
+
+### R-ADM-03 — Release integrity
+
+Admission must reject any release whose provider, contract, client, manifest, or build evidence no longer matches its published digest.
+
+### R-E2E-01 — Source-independent App use
+
+A consumer must typecheck, publish, install, and invoke a dependency using registry artifacts after the dependency source is removed.
+
+### R-E2E-02 — One compile-time and runtime contract
+
+The Zod schemas must drive generated TypeScript definitions and runtime input and output validation, including unknown-field and dishonest-output rejection.
+
+### R-E2E-03 — Stable invocation errors
+
+Provider, routing, and validation failures must cross the App boundary as stable Gestalt errors rather than raw library or transport failures.
+
+### R-IDB-01 — Literal IDBDatabase lifecycle
+
+The facade must implement the `IDBDatabase` properties, synchronous `transaction()` return, `close()`, upgrade-only schema methods, event handlers, and required synchronous errors without changing their signatures.
+
+### R-IDB-02 — Replica-independent requests
+
+Literal `IDBRequest` and transaction behavior must survive consecutive commands reaching different App replicas through one ordinary unary tool.
+
+### R-IDB-03 — Literal cursor control
+
+Index cursors and key ranges must use `continue()`, `advance()`, and request events rather than pagination or callback substitutes.
+
+### R-IDB-04 — Upgrade schema changes
+
+`createObjectStore()`, `deleteObjectStore()`, `createIndex()`, and `deleteIndex()` must operate only in a version-change transaction and persist through the coordinator.
+
+### R-IDB-05 — Abort and error semantics
+
+Explicit aborts and failed requests must roll back writes and surface DOMException-compatible request, transaction, and database events.
+
+### R-IDB-06 — Returned IndexedDB objects
+
+The object stores, indexes, key ranges, and mutable cursors returned from `IDBDatabase` must retain their standard properties and method signatures.
+
+## App authoring and use
+
+An App author writes Zod contracts and a handler once:
 
 ```ts
 import { z } from "zod";
 import { app, tool } from "@gestalt/sdk";
 
-const GetUserInput = z.strictObject({
-  id: z.string(),
-});
-
-const GetUserOutput = z.strictObject({
-  id: z.string(),
-  displayName: z.string(),
-  status: z.enum(["active", "disabled"]),
-});
+const GetUser = z.strictObject({ id: z.string() });
+const User = z.strictObject({ id: z.string(), displayName: z.string() });
 
 export default app({
   tools: {
     getUser: tool({
-      input: GetUserInput,
-      output: GetUserOutput,
-      async handler(input) {
-        return {
-          id: input.id,
-          displayName: "Ada Lovelace",
-          status: "active",
-        };
+      input: GetUser,
+      output: User,
+      async handler({ id }) {
+        return { id, displayName: "Ada Lovelace" };
       },
     }),
   },
 });
 ```
 
-The handler input and output are inferred from the Zod schemas. There are no parallel TypeScript interfaces, schema objects, or explicit public handler annotations.
-
-## Consumption
+After an exact add or sync step materializes the registry client, a consumer imports it without publishing either App to npm:
 
 ```ts
 import * as users from "@gestalt/apps/users";
 
 const user = await users.getUser({ id: "42" });
-console.log(user.displayName);
 ```
 
-The generated module is derived from the dependency’s canonical published contract and carries the exact tool-contract digest used by runtime routing.
+The public schema profile supports strict objects, primitive JSON values, literals, enums, arrays, optional and nullable properties, unions, portable checks, and canonical recursive JSON values through `z.json()`. It rejects coercion, transforms, arbitrary refinements, defaults, open records, arbitrary recursion, dates, maps, sets, functions, and other constructs whose canonical behavior has not been proven.
 
-### Transaction facade
+## IndexedDB use
 
-The prototype consumer uses the same callback shape intended for Datastore:
+The consumer uses the browser API shape directly. Because an IndexedDB transaction is active while its request event is dispatched, dependent requests are queued in those handlers just as they are in a browser:
 
 ```ts
-import { database } from "@gestalt/sdk/transactions";
-import { transaction as invokeTransaction } from "@gestalt/apps/datastore";
-
-const State = database<{ accounts: Account }>(invokeTransaction);
-
-await State.transaction(["accounts"], "readwrite", async ({ accounts }) => {
-  const account = await accounts.get("account-1");
-  await accounts.put({ ...account!, balance: account!.balance + 10 });
+const tx = database.transaction(["accounts"], "readwrite", {
+  durability: "strict",
 });
+const accounts = tx.objectStore("accounts");
+const read = accounts.get("from");
+
+read.onsuccess = () => {
+  const account = read.result;
+  const write = accounts.put({ ...account, balance: account.balance - 25 });
+  write.onsuccess = () => tx.commit();
+};
+
+tx.oncomplete = () => console.log("committed");
+tx.onabort = () => console.error(tx.error);
 ```
 
-The callback, store handles, and closures remain in the consumer process. The facade translates store operations into validated commands on the one generated tool; app authors do not call `begin`, `execute`, `commit`, `abort`, or `status` methods.
+Cursors also retain their standard control methods:
 
-## Architecture
+```ts
+const tx = database.transaction("tasks");
+const request = tx.objectStore("tasks").index("byStatus").openCursor("queued");
+
+request.onsuccess = () => {
+  const cursor = request.result;
+  if (cursor === null) return;
+  console.log(cursor.primaryKey, cursor.value);
+  cursor.continue();
+};
+```
+
+The App exposes only one public `transaction` tool. Begin, request, commit, abort, and status are variants of its Zod input and output contract; transaction IDs, command sequences, cursor IDs, and commit nonces are SDK details and do not appear in the IndexedDB call surface.
 
 ```mermaid
 flowchart LR
-    A["Zod input and output schemas"] --> B["Zod handler inference and validation"]
-    A --> C["Zod to JSON Schema"]
-    C --> D["Gestalt public-profile check"]
-    D --> E["Canonical contract and digest"]
-    E --> F["Generated dependency client"]
-    B --> G["Provider artifact"]
-    E --> H["Immutable release"]
-    F --> H
-    G --> H
-    H --> I["Exact add or sync"]
-    I --> J["Consumer typecheck"]
-    H --> K["Recursive candidate admission"]
-    J --> K
-    K --> L["Atomic active snapshot"]
-```
-
-For transactions, the request path is:
-
-```mermaid
-flowchart LR
-    A["Local transaction callback"] --> B["Datastore facade"]
+    A["Literal IndexedDB objects"] --> B["SDK request/event facade"]
     B --> C["Unary transaction tool"]
-    C --> D["Any Datastore App replica"]
-    D --> E["Logical transaction coordinator"]
-    E --> F["One live MySQL connection"]
+    C --> D["Any App replica"]
+    D --> E["Transaction coordinator"]
+    E --> F["One backend transaction"]
 ```
 
-The App replicas are stateless with respect to live transactions. Each command carries the hidden transaction identity and sequence to the coordinator. A production coordinator may be a database proxy, durable actor, or another service with explicit ownership and failover, but that component must still ensure that every command reaches the connection that began the transaction.
+## Publication and installation
 
-Publication typechecks the app, executes its declarative app definition to obtain Zod schemas, rejects schemas outside the public profile, and calls `z.toJSONSchema` with Draft 2020-12, input semantics, unrepresentable-type failure, cycle failure, and inline reuse. The release records the Zod, TypeScript, adapter, and Bun versions plus content digests for the manifest, contract, client, source, and executable provider.
+Publication evaluates the declarative App definition in a build environment, converts its Zod schemas to Draft 2020-12 JSON Schema, rejects unsupported constructs, and records the pinned toolchain and content digests. The registry stores the canonical contract and generated client rather than relying on Zod objects as a durable or language-neutral format.
 
-The initial public profile supports strict objects, strings, booleans, finite numbers and integers, null, literals, enums, arrays, optional properties, nullable values, unions, and Zod checks that survive JSON Schema conversion. It rejects unconstrained values, coercion, arbitrary refinements, transforms, defaults, open objects and records, recursive schemas, dates, maps, sets, functions, and tuples until their portable semantics are proven. The profile is intentionally conservative: publication fails rather than silently weakening a contract.
-
-## Requirements
-
-### R-TYPE-01 — One canonical public contract
-
-One Zod input and output definition must supply producer inference, runtime validation, canonical JSON Schema, and the importable client without a second author-written schema. Zod and an independent Draft 2020-12 validator must agree over the exercised payload corpus.
-
-### R-TYPE-02 — Reproducible derivation
-
-Equivalent source and pinned toolchain inputs must produce identical canonical contracts, generated clients, source digests, and release contract digests regardless of source path.
-
-### R-TYPE-03 — Closed portable Zod profile
-
-Publication must reject Zod constructs whose accepted values or behavior cannot be reproduced by the canonical release contract. It must never widen an unsupported schema to an unconstrained value.
-
-### R-TYPE-04 — Schema-inferred handlers
-
-Tool handler input and output types must be inferred from the declared Zod contracts, and TypeScript must reject implementations that disagree with them.
-
-### R-PUB-01 — Complete immutable releases
-
-An app coordinate must be publishable only once and must contain the executable artifact, canonical contract, generated client, exact manifest, build identity, and content digests needed to validate and invoke it without producer source.
-
-### R-PUB-02 — Reproducible executable artifacts
-
-Equivalent source and pinned build inputs must produce the same provider artifact digest without retaining non-semantic source-path differences.
-
-### R-DEP-01 — Exact resolvable dependency locks
-
-Every direct dependency must identify one exact immutable app version and contract digest. Version ranges, missing releases, and stale or incompatible contract digests must fail publication.
-
-### R-DEP-02 — Source, manifest, and generated-module alignment
-
-App imports must be static and correspond exactly to direct manifest dependencies. Generated modules must match their locks, and TypeScript must reject calls that violate the imported tool contract. Undeclared, unused, dynamic, stale, and statically invalid references must fail before publication.
-
-### R-DEP-03 — Snapshot pinning
-
-Publishing a newer dependency release must not change an existing consumer’s admitted graph or behavior until the consumer explicitly updates and republishes its lock.
-
-### R-ADM-01 — Recursive graph admission
-
-Installation must expand and validate the complete exact dependency graph and reject cycles before a candidate receives traffic.
-
-### R-ADM-02 — Non-disruptive activation
-
-An initial installation must remain unroutable until admission succeeds, and failure of a later candidate must leave the prior stable activation serving unchanged.
-
-### R-ADM-03 — Release integrity
-
-Admission must reject altered build identities, contracts, generated clients, manifests, or executable artifacts when their content no longer matches published evidence.
-
-### R-E2E-01 — Source-independent cross-app use
-
-A consumer must typecheck, publish, install, and invoke a dependency using only registry artifacts after the dependency source has been removed.
-
-### R-E2E-02 — One contract at compile time and runtime
-
-The Zod-authored contract must drive generated TypeScript definitions and authoritative runtime input and output validation, including unknown-field and dishonest-output rejection.
-
-### R-E2E-03 — Structured invocation failure
-
-Provider, routing, and Zod validation failures must cross the app boundary as stable Gestalt error codes rather than raw library exceptions.
-
-### R-TXN-01 — IndexedDB-style facade over one unary tool
-
-A consumer must be able to call `database.transaction(scope, mode, callback)` while the installed Datastore App publishes only one ordinary Zod-typed transaction tool. Callback functions and store handles must stay local rather than cross the tool boundary.
-
-### R-TXN-02 — Replica-independent ordered commands
-
-Commands from one transaction may reach different Datastore App replicas. The facade must carry an opaque transaction identity and monotonic sequence so a shared coordinator can apply them to one backend transaction in order without pinning the caller to an App replica.
-
-### R-TXN-03 — Determinate terminal behavior
-
-A failed callback must request rollback. Commit must use a stable nonce, and a lost commit acknowledgement must be resolved from a durable coordinator receipt or fail as an unknown outcome rather than rerun the callback.
+Adding or syncing a dependency resolves one exact immutable release and materializes its generated module before TypeScript compilation. Runtime installation separately verifies the recursively locked graph and atomically activates it. Static types therefore come from the precompile step; runtime routing follows the same admitted identity and digest.
 
 ## Verification
 
-The suite contains a golden canonical contract, Zod-versus-Ajv conformance cases, path and artifact reproducibility checks, table-driven public-profile rejection, exact-lock and generated-client alignment checks, a source-deletion functional flow, recursive admission failures, integrity attacks, input and output failures, stable-to-candidate activation tests, and cross-replica transaction tests. Requirement identifiers in this document are compared automatically with those in the suite, so documentation and executable requirements cannot drift silently.
+The suite checks Zod and independent-validator agreement, deterministic contract and provider generation, schema-profile rejection, exact dependency locks, generated imports, source deletion, recursive admission, integrity failures, runtime validation, and stable activation. Documentation and tests share requirement IDs and fail if their traceability differs.
 
-The decisive flow publishes `acme/users@1.0.0`, removes its source, adds the generated users client to `acme/greeter@1.0.0`, typechecks and publishes the greeter, recursively installs both releases, and invokes the user tool through the generated module. Publishing `acme/users@2.0.0` does not alter the locked greeter.
+The IndexedDB functional tests publish an App containing only the union-shaped `transaction` tool and a separate consumer using literal IndexedDB objects. Begin, reads, writes, cursors, commit, abort, and recovery are routed round-robin across three App replicas to one coordinator. The tests cover the complete `IDBDatabase` surface and the principal returned object operations, including upgrade changes, rollback, key ranges, indexes, mutable cursors, and event-driven request ordering.
 
-The transaction flow publishes a Datastore App with one union-shaped tool and a consumer that exposes `State.transaction(...)`. Its begin, reads, writes, and commit are routed round-robin across three App replicas. A shared in-memory coordinator stands in for a MySQL-aware proxy, owns the transaction state, rejects out-of-order commands, rolls back failed callbacks, and stores commit receipts. This proves the SDK interface and wire composition, not production coordinator availability or MySQL failover.
+## Implementation details
 
-## Constraints and non-goals
+The facade keeps JavaScript objects, closures, and event handlers in the consumer process; none crosses the tool boundary. The coordinator applies monotonic commands to the backend transaction and records terminal receipts so a lost acknowledgement can be resolved without replaying user code. The prototype uses a keepalive request only because its in-process `fake-indexeddb` backend follows browser transaction activity rules; a production MySQL coordinator would hold the connection explicitly.
 
-Zod objects are not themselves the durable registry format because the control plane must not execute publisher JavaScript or depend on Zod internals. The immutable contract is canonical JSON Schema plus build and content evidence. The provider artifact retains Zod for authoritative validation, and publication pins the exact Zod version that produced the contract. This prototype evaluates the declarative app module during publication; a production publisher must do that in a hermetic, credential-free build sandbox and reject installation-time side effects.
+Canonical JSON values are represented recursively by `z.json()` and lowered with JSON Schema references. Generated clients name that recursive value type explicitly. Arbitrary recursive domain schemas remain outside the verified profile.
 
-This experiment does not implement App-owned client packaging, bindings, credentials, authorization policy, streaming, lifecycle hooks, distributed coordinator replication, signatures, sandboxing, or compatibility policy beyond exact digest equality. Its transaction helper is an SDK-side stand-in for the eventual App-owned facade. It proves that ordered session behavior can be composed over unary tools when a hidden transaction identity is carried on every call; it does not prove that generic MySQL can preserve a live transaction without a coordinator or connection owner.
+## Remaining work
+
+This experiment implements the `IDBDatabase` page and the objects needed to use its returned transactions; it is not a complete browser IndexedDB engine. `IDBFactory.open()`, `deleteDatabase()`, `databases()`, and `cmp()`, `IDBOpenDBRequest`, upgrade blocking between multiple connections, and `upgradeneeded` orchestration remain outside the implemented surface. The test controller creates or reopens a connection and supplies its version-change transaction.
+
+The tool contract currently transports canonical JSON. IndexedDB structured-clone values such as `Date`, binary data, `Blob`, `File`, `undefined`, cyclic objects, and shared references are not yet encoded. Keys support strings, finite numbers, and nested arrays; date, binary, and infinite-number keys and their complete IndexedDB ordering remain. Object-store and index `name` setters do not yet perform remote renames, and the newer `getAllRecords()` operation is not implemented. Cursor deletion is implemented but is not yet covered by the replica functional flow.
+
+The facade reproduces the tested request, transaction, and database events, but it has not run the browser Web Platform Test corpus, so exact browser task scheduling, garbage-collection behavior, connection queuing, event propagation, and every default-cancellation edge case remain unproven. The in-memory coordinator demonstrates the protocol but does not implement durable replication, coordinator failover, MySQL connection recovery, authorization, production sandboxing, or a compatibility policy beyond exact digest equality.

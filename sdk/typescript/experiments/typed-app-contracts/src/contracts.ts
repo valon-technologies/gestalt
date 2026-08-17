@@ -19,6 +19,14 @@ import type { App, Tool } from "./sdk.ts";
 
 const require = createRequire(import.meta.url);
 const zodVersion = (require("zod/package.json") as { version: string }).version;
+const jsonSchemaOptions = {
+  target: "draft-2020-12",
+  io: "input",
+  unrepresentable: "throw",
+  cycles: "ref",
+  reused: "inline",
+} as const;
+const canonicalJsonValueSchema = stableStringify(z.toJSONSchema(z.json(), jsonSchemaOptions));
 
 export interface Compilation {
   contract: AppContract;
@@ -193,6 +201,16 @@ function assertPublicZodSchema(schema: z.ZodType, path: string, ancestors: Set<o
           assertPublicZodSchema(option, `${path}.variant[${index}]`, ancestors);
         }
         return;
+      case "lazy": {
+        const converted = z.toJSONSchema(schema, jsonSchemaOptions);
+        if (stableStringify(converted) !== canonicalJsonValueSchema) {
+          throw new ExperimentError(
+            "UNSUPPORTED_PUBLIC_SCHEMA",
+            `${path} uses recursion other than Zod's canonical JSON value schema`,
+          );
+        }
+        return;
+      }
       case "object": {
         const catchall = definition.catchall as
           | { _zod?: { def?: Record<string, unknown> } }
@@ -223,11 +241,7 @@ function lowerZodSchema(schema: z.ZodType, path: string): CanonicalJsonSchema {
   let converted: unknown;
   try {
     converted = z.toJSONSchema(schema, {
-      target: "draft-2020-12",
-      io: "input",
-      unrepresentable: "throw",
-      cycles: "throw",
-      reused: "inline",
+      ...jsonSchemaOptions,
     });
   } catch (error) {
     throw new ExperimentError(
@@ -245,6 +259,8 @@ function lowerZodSchema(schema: z.ZodType, path: string): CanonicalJsonSchema {
 function generateClientTemplate(contract: AppContract): string {
   const declarations: string[] = [
     "// Generated from the immutable Zod-derived Gestalt contract. Do not edit.",
+    "export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };",
+    "",
     "declare global {",
     "  var __gestaltExperimentInvoke: ((alias: string, tool: string, input: unknown, digest: string) => Promise<unknown>) | undefined;",
     "}",
@@ -268,6 +284,7 @@ function generateClientTemplate(contract: AppContract): string {
 }
 
 function schemaToTypeScript(schema: CanonicalJsonSchema): string {
+  if (typeof schema.$ref === "string") return "JsonValue";
   if ("const" in schema) return JSON.stringify(schema.const);
   if (Array.isArray(schema.enum)) return schema.enum.map((value) => JSON.stringify(value)).join(" | ");
   if (Array.isArray(schema.anyOf)) {
@@ -281,6 +298,9 @@ function schemaToTypeScript(schema: CanonicalJsonSchema): string {
     case "null": return "null";
     case "array": return `Array<${schemaToTypeScript(schema.items as CanonicalJsonSchema)}>`;
     case "object": {
+      if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
+        return `{ [key: string]: ${schemaToTypeScript(schema.additionalProperties as CanonicalJsonSchema)} }`;
+      }
       const required = new Set(Array.isArray(schema.required) ? schema.required : []);
       const properties = Object.entries(schema.properties ?? {}).map(
         ([name, property]) =>

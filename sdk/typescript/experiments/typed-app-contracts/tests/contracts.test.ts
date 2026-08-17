@@ -51,6 +51,36 @@ describe("Zod-derived canonical contracts", () => {
     }
   });
 
+  test("R-TYPE-01 supports canonical recursive JSON values without accepting arbitrary recursion", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "zod-json-contract-"));
+    await linkZod(directory);
+    const path = join(directory, "app.ts");
+    await writeFile(path, `
+      import { z } from "zod";
+      import { app, tool } from ${JSON.stringify(sdkPath)};
+      export default app({ tools: { roundTrip: tool({
+        input: z.strictObject({ value: z.json() }),
+        output: z.strictObject({ value: z.json() }),
+        handler: async (input) => input,
+      }) } });
+    `);
+    const compilation = await compileApp(path, manifest("acme/json", "1.0.0"));
+    const schema = compilation.contract.tools.roundTrip!.input;
+    const validate = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
+    for (const value of [
+      null,
+      "value",
+      42,
+      ["nested", { valid: true }],
+      { deeply: { nested: [1, 2, 3] } },
+    ]) {
+      expect(validate({ value })).toBe(true);
+    }
+    expect(validate({ value: undefined })).toBe(false);
+    expect(compilation.clientTemplate).toContain("export type JsonValue");
+    expect(compilation.clientTemplate).toContain('"value": JsonValue');
+  });
+
   test("R-TYPE-02 is reproducible across source paths and repeated builds", async () => {
     const firstDirectory = await mkdtemp(join(tmpdir(), "zod-contract-first-"));
     const secondDirectory = await mkdtemp(join(tmpdir(), "zod-contract-second-"));
