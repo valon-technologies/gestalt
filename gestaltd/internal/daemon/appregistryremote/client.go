@@ -56,11 +56,11 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body []byte) (
 	var zero SessionResponse
 	base := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
 	if base == "" {
-		return zero, fmt.Errorf("Gestalt URL is required; set GESTALT_URL or run `gestalt auth login`")
+		return zero, fmt.Errorf("gestalt URL is required; set GESTALT_URL or run `gestalt auth login`")
 	}
 	token := strings.TrimSpace(c.Token)
 	if token == "" {
-		return zero, fmt.Errorf("Gestalt credentials are required; set GESTALT_API_KEY or run `gestalt auth login`")
+		return zero, fmt.Errorf("gestalt credentials are required; set GESTALT_API_KEY or run `gestalt auth login`")
 	}
 	var bodyReader io.Reader
 	if len(body) > 0 {

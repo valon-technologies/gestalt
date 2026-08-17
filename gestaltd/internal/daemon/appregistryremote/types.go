@@ -47,10 +47,6 @@ type PublishResult struct {
 	PublishedAt string
 }
 
-func (r SessionResponse) terminal() bool {
-	return r.State == sessionStatePublished || r.State == sessionStateFailed
-}
-
 func (r SessionResponse) uploadByPlatform() map[string]SessionUpload {
 	out := make(map[string]SessionUpload, len(r.Uploads))
 	for _, upload := range r.Uploads {

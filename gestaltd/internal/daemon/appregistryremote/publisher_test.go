@@ -20,6 +20,7 @@ import (
 )
 
 func TestPublishUploadFinalizeAndResume(t *testing.T) {
+	t.Parallel()
 	registerTestPublishHelpers(t)
 
 	root, distDir, runner := setupTestPublishRepo(t)
@@ -153,6 +154,7 @@ func TestPublishUploadFinalizeAndResume(t *testing.T) {
 }
 
 func TestPublishReturnsCompletedSessionWithoutUpload(t *testing.T) {
+	t.Parallel()
 	registerTestPublishHelpers(t)
 	_, distDir, runner := setupTestPublishRepo(t)
 
@@ -205,6 +207,7 @@ func TestPublishAuthPrecedenceUsesExplicitToken(t *testing.T) {
 }
 
 func TestPublishUsesRenewedUploadLease(t *testing.T) {
+	t.Parallel()
 	registerTestPublishHelpers(t)
 
 	_, distDir, runner := setupTestPublishRepo(t)
@@ -336,48 +339,45 @@ func writeJSON(w http.ResponseWriter, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
+var (
+	testPublishHelpersOnce sync.Once
+	testWorkingDirMu       sync.Mutex
+)
+
 func registerTestPublishHelpers(t *testing.T) {
 	t.Helper()
-	RegisterPublishHelpers(PublishHelpers{
-		CollectReleaseArchivesFromDirs: func(distDirs []string, version string) (*providermanifestv1.Manifest, string, []DaemonReleaseArchive, error) {
-			var archives []DaemonReleaseArchive
-			for _, distDir := range distDirs {
-				for _, name := range []string{"linux-amd64.tar.gz", "darwin-arm64.tar.gz"} {
-					path := filepath.Join(distDir, name)
-					data, err := os.ReadFile(path)
-					if err != nil {
-						return nil, "", nil, err
+	testPublishHelpersOnce.Do(func() {
+		RegisterPublishHelpers(PublishHelpers{
+			CollectReleaseArchivesFromDirs: func(distDirs []string, version string) (*providermanifestv1.Manifest, string, []DaemonReleaseArchive, error) {
+				var archives []DaemonReleaseArchive
+				for _, distDir := range distDirs {
+					for _, name := range []string{"linux-amd64.tar.gz", "darwin-arm64.tar.gz"} {
+						path := filepath.Join(distDir, name)
+						data, err := os.ReadFile(path)
+						if err != nil {
+							return nil, "", nil, err
+						}
+						sum := sha256.Sum256(data)
+						platform := strings.ReplaceAll(strings.TrimSuffix(name, ".tar.gz"), "-", "/")
+						archives = append(archives, DaemonReleaseArchive{
+							Path: path, SHA256: hex.EncodeToString(sum[:]), Target: platform, Size: int64(len(data)),
+						})
 					}
-					sum := sha256.Sum256(data)
-					platform := strings.ReplaceAll(strings.TrimSuffix(name, ".tar.gz"), "-", "/")
-					archives = append(archives, DaemonReleaseArchive{
-						Path: path, SHA256: hex.EncodeToString(sum[:]), Target: platform, Size: int64(len(data)),
-					})
 				}
-			}
-			manifest := testManifest("demo", version)
-			return manifest, version, archives, nil
-		},
-		BuildProviderReleaseMetadata: func(manifest *providermanifestv1.Manifest, version string, archives []DaemonReleaseArchive, raw []byte) (*providerrelease.Metadata, error) {
-			return testReleaseMetadata("demo", version), nil
-		},
-		ValidateProviderPublishManifest: func(source, release *providermanifestv1.Manifest, releaseVersion, version string) error {
-			if source.Source != release.Source || releaseVersion != version {
-				return appregistry.ErrPublishDeclarationInvalid
-			}
-			return nil
-		},
+				manifest := testManifest("demo", version)
+				return manifest, version, archives, nil
+			},
+			BuildProviderReleaseMetadata: func(manifest *providermanifestv1.Manifest, version string, archives []DaemonReleaseArchive, raw []byte) (*providerrelease.Metadata, error) {
+				return testReleaseMetadata("demo", version), nil
+			},
+			ValidateProviderPublishManifest: func(source, release *providermanifestv1.Manifest, releaseVersion, version string) error {
+				if source.Source != release.Source || releaseVersion != version {
+					return appregistry.ErrPublishDeclarationInvalid
+				}
+				return nil
+			},
+		})
 	})
-}
-
-func writeTestArchive(t *testing.T, name string, data []byte) (string, string) {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256(data)
-	return path, hex.EncodeToString(sum[:])
 }
 
 func setupTestPublishRepo(t *testing.T) (root, distDir string, runner fakeRunner) {
@@ -402,42 +402,34 @@ func setupTestPublishRepo(t *testing.T) (root, distDir string, runner fakeRunner
 	if err := os.WriteFile(filepath.Join(distDir, "darwin-arm64.tar.gz"), []byte("darwin"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	testWorkingDirMu.Lock()
 	cwd, err := os.Getwd()
 	if err != nil {
+		testWorkingDirMu.Unlock()
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+		testWorkingDirMu.Unlock()
+	})
 	if err := os.Chdir(root); err != nil {
+		testWorkingDirMu.Unlock()
 		t.Fatal(err)
 	}
-	runner = fakeRunner{
-		"git -C " + root + " rev-parse --show-toplevel":        root + "\n",
-		"git -C " + manifestDir + " rev-parse --show-toplevel": root + "\n",
-		"git -C " + manifestDir + " rev-parse HEAD":            "651a5c30feb995c9364c38f63d0d5c3880bc2055\n",
-		"git -C " + manifestDir + " status --porcelain":        "",
-	}
-	return root, distDir, runner
-}
-
-func writeTestDistDir(t *testing.T) string {
-	_, distDir, _ := setupTestPublishRepo(t)
-	return distDir
-}
-
-func testManifestPath(t *testing.T) string {
-	root := t.TempDir()
-	return filepath.Join(root, "apps", "demo", "manifest.yaml")
-}
-
-func copyFile(t *testing.T, src, dst string) {
-	t.Helper()
-	data, err := os.ReadFile(src)
+	workDir, err := os.Getwd()
 	if err != nil {
+		testWorkingDirMu.Unlock()
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(dst, data, 0o644); err != nil {
-		t.Fatal(err)
+	manifestDirAbs := filepath.Join(workDir, "apps", "demo")
+	distDir = filepath.Join(workDir, "dist")
+	runner = fakeRunner{
+		"git -C " + workDir + " rev-parse --show-toplevel":        workDir + "\n",
+		"git -C " + manifestDirAbs + " rev-parse --show-toplevel": workDir + "\n",
+		"git -C " + manifestDirAbs + " rev-parse HEAD":            "651a5c30feb995c9364c38f63d0d5c3880bc2055\n",
+		"git -C " + manifestDirAbs + " status --porcelain":        "",
 	}
+	return workDir, distDir, runner
 }
 
 func TestPrintPublishResult(t *testing.T) {

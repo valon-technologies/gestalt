@@ -61,6 +61,34 @@ func TestCollectLocalSourceStateNonGit(t *testing.T) {
 	}
 }
 
+type notGitRepositoryRunner struct{}
+
+func (notGitRepositoryRunner) Run(string, ...string) (string, error) {
+	return "", fmt.Errorf("fatal: not a git repository")
+}
+
+type failingGitRunner struct{}
+
+func (failingGitRunner) Run(string, ...string) (string, error) {
+	return "", fmt.Errorf("git: command not found")
+}
+
+func TestGitRootFromWorkingDirectoryNotGitRepository(t *testing.T) {
+	t.Parallel()
+	_, err := gitRootFromWorkingDirectory(notGitRepositoryRunner{})
+	if !errors.Is(err, errNotGitRepository) {
+		t.Fatalf("gitRootFromWorkingDirectory() = %v, want errNotGitRepository", err)
+	}
+}
+
+func TestGitRootFromWorkingDirectoryUnexpectedFailure(t *testing.T) {
+	t.Parallel()
+	_, err := gitRootFromWorkingDirectory(failingGitRunner{})
+	if err == nil || errors.Is(err, errNotGitRepository) {
+		t.Fatalf("gitRootFromWorkingDirectory() = %v, want unexpected git error", err)
+	}
+}
+
 func TestValidateRequiredPlatformsFailsBeforeNetwork(t *testing.T) {
 	t.Parallel()
 	err := validateRequiredPlatforms(map[string]struct{}{"linux/amd64": {}}, []string{"linux/amd64", "darwin/arm64"})

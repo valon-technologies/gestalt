@@ -1,6 +1,7 @@
 package appregistryremote
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -11,7 +12,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 )
 
-var fullGitSHARe = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
+var (
+	fullGitSHARe        = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
+	errNotGitRepository = errors.New("not a git repository")
+)
 
 type commandRunner interface {
 	Run(name string, args ...string) (string, error)
@@ -34,10 +38,12 @@ func resolvePublishManifest(appName string, runner commandRunner) (absPath, relP
 		if resolveErr == nil {
 			rel, relErr := filepath.Rel(gitRoot, path)
 			if relErr != nil {
-				return "", "", relErr
+				return "", "", fmt.Errorf("relative manifest path from git root: %w", relErr)
 			}
 			return path, filepath.ToSlash(rel), nil
 		}
+	} else if !errors.Is(gitErr, errNotGitRepository) {
+		return "", "", gitErr
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -49,7 +55,7 @@ func resolvePublishManifest(appName string, runner commandRunner) (absPath, relP
 	}
 	rel, err := filepath.Rel(cwd, path)
 	if err != nil {
-		return path, filepath.ToSlash(path), nil
+		return "", "", fmt.Errorf("relative manifest path from working directory: %w", err)
 	}
 	return path, filepath.ToSlash(rel), nil
 }
@@ -99,7 +105,10 @@ func gitRootFromWorkingDirectory(runner commandRunner) (string, error) {
 	}
 	rootOut, err := runner.Run("git", "-C", cwd, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return "", fmt.Errorf("remote publish requires a git checkout or apps/{app}/manifest.yaml under the working directory: %w", err)
+		if isNotGitRepositoryError(err) {
+			return "", errNotGitRepository
+		}
+		return "", fmt.Errorf("resolve git root from %s: %w", cwd, err)
 	}
 	gitRoot := strings.TrimSpace(rootOut)
 	if absGitRoot, err := filepath.Abs(gitRoot); err == nil {
@@ -109,6 +118,10 @@ func gitRootFromWorkingDirectory(runner commandRunner) (string, error) {
 		gitRoot = evaluatedGitRoot
 	}
 	return gitRoot, nil
+}
+
+func isNotGitRepositoryError(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "not a git repository")
 }
 
 func collectLocalSourceState(manifestPath string, runner commandRunner) *appregistry.LocalSourceState {

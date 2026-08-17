@@ -106,10 +106,10 @@ func Publish(ctx context.Context, input PublishInput) (PublishResult, error) {
 		}
 	}
 	if strings.TrimSpace(baseURL) == "" {
-		return zero, fmt.Errorf("Gestalt URL is required; set GESTALT_URL or run `gestalt init`")
+		return zero, fmt.Errorf("gestalt URL is required; set GESTALT_URL or run `gestalt init`")
 	}
 	if strings.TrimSpace(token) == "" {
-		return zero, fmt.Errorf("Gestalt credentials are required; set GESTALT_API_KEY or run `gestalt auth login`")
+		return zero, fmt.Errorf("gestalt credentials are required; set GESTALT_API_KEY or run `gestalt auth login`")
 	}
 
 	client := input.Client
