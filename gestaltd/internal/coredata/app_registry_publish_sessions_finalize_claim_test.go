@@ -65,7 +65,7 @@ func TestAppRegistryPublishSessionClaimFinalizeTakeoverAfterExpiry(t *testing.T)
 	firstPublishedAt := first.FinalizePublishedAt
 	firstToken := first.FinalizeClaimToken
 
-	expired, err := svc.Update(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
+	expired, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
 		current.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	})

@@ -16,7 +16,6 @@ type PublishSessionStore interface {
 	Get(ctx context.Context, id string) (*core.AppRegistryPublishSession, error)
 	GetByDedupeKey(ctx context.Context, dedupeKey string) (*core.AppRegistryPublishSession, error)
 	Create(ctx context.Context, input coredata.CreateAppRegistryPublishSessionInput) (*core.AppRegistryPublishSession, error)
-	Update(ctx context.Context, id string, update func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
 	ClaimFinalize(ctx context.Context, id string, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error)
 	RenewFinalizeClaim(ctx context.Context, id, claimToken string, expectRevision int64, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error)
 	MarkPublished(ctx context.Context, id, claimToken string, expectRevision int64, publishedAt time.Time) (*core.AppRegistryPublishSession, error)

@@ -181,7 +181,7 @@ func TestAppRegistryPublishSessionConcurrentClaimFinalizeTakeover(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ClaimFinalize: %v", err)
 	}
-	if _, err := svc.Update(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
+	if _, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
 		current.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	}); err != nil {
@@ -224,5 +224,36 @@ func TestAppRegistryPublishSessionConcurrentClaimFinalizeTakeover(t *testing.T) 
 	}
 	if winner == nil || winner.FinalizeClaimToken == first.FinalizeClaimToken {
 		t.Fatal("expected new claim token after expired concurrent takeover")
+	}
+}
+
+func TestAppRegistryPublishSessionMutateForTestInvalidatesHeldRevision(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t).AppRegistryPublishSessions
+	session, err := svc.Create(ctx, coredata.CreateAppRegistryPublishSessionInput{
+		App: "g-issues", Registry: "toolshed", Version: "0.2.11",
+		DedupeKey: "dedupe-mutate-revision", DeclarationDigest: "digest",
+		DeclarationJSON: []byte(`{"schema":"gestaltd.app.publish.declaration.v1"}`),
+		StagingPrefix:   "apps/g-issues/publish-staging/pub_mutate_revision",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	claimed, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
+	if err != nil {
+		t.Fatalf("ClaimFinalize: %v", err)
+	}
+	heldRevision := claimed.Revision
+
+	if _, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
+		current.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
+		return nil
+	}); err != nil {
+		t.Fatalf("MutatePublishSessionForTest: %v", err)
+	}
+	if _, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, heldRevision, time.Minute); !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
+		t.Fatalf("stale revision after MutatePublishSessionForTest = %v", err)
 	}
 }

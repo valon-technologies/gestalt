@@ -164,7 +164,7 @@ func TestPublishSessionConcurrentFinalizeExpiredTakeoverGetsNewToken(t *testing.
 	if err != nil {
 		t.Fatalf("ClaimFinalize: %v", err)
 	}
-	if _, err := svc.Update(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
+	if _, err := svc.MutatePublishSessionForTest(ctx, session.ID, func(current *core.AppRegistryPublishSession) error {
 		current.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	}); err != nil {

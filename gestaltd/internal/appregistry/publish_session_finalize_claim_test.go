@@ -76,7 +76,7 @@ func (h *finalizeCrashHarness) claimSession() (*core.AppRegistryPublishSession, 
 
 func (h *finalizeCrashHarness) expireClaim(sessionID string) {
 	h.t.Helper()
-	if _, err := h.sessions.Update(h.ctx, sessionID, func(session *core.AppRegistryPublishSession) error {
+	if _, err := h.sessions.MutatePublishSessionForTest(h.ctx, sessionID, func(session *core.AppRegistryPublishSession) error {
 		session.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	}); err != nil {
@@ -175,7 +175,7 @@ func TestPublishSessionFinalizeCrashAfterIndex(t *testing.T) {
 	}
 	wantPublishedAt := result.Session.PublishedAt
 
-	_, err = h.sessions.Update(h.ctx, result.Session.ID, func(session *core.AppRegistryPublishSession) error {
+	_, err = h.sessions.MutatePublishSessionForTest(h.ctx, result.Session.ID, func(session *core.AppRegistryPublishSession) error {
 		session.State = core.AppRegistryPublishSessionFinalizing
 		return nil
 	})
@@ -203,7 +203,7 @@ func TestPublishSessionFinalizeExpiredClaimTakeover(t *testing.T) {
 	}
 	wantPublishedAt := first.FinalizePublishedAt
 
-	if _, err := h.sessions.Update(h.ctx, first.ID, func(session *core.AppRegistryPublishSession) error {
+	if _, err := h.sessions.MutatePublishSessionForTest(h.ctx, first.ID, func(session *core.AppRegistryPublishSession) error {
 		session.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	}); err != nil {
@@ -244,7 +244,7 @@ func TestPublishSessionFinalizeTimestampStabilityAcrossRetries(t *testing.T) {
 	if _, err := h.service.Finalize(h.ctx, h.finalizeInput()); err == nil {
 		t.Fatal("expected first finalize failure")
 	}
-	if _, err := h.sessions.Update(h.ctx, claimed.ID, func(session *core.AppRegistryPublishSession) error {
+	if _, err := h.sessions.MutatePublishSessionForTest(h.ctx, claimed.ID, func(session *core.AppRegistryPublishSession) error {
 		session.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	}); err != nil {
@@ -306,7 +306,7 @@ func TestPublishSessionFinalizeTransientPromotionRetryAfterExpiredClaim(t *testi
 		t.Fatalf("state = %q, want finalizing", stillFinalizing.State)
 	}
 
-	if _, err := h.sessions.Update(h.ctx, first.ID, func(session *core.AppRegistryPublishSession) error {
+	if _, err := h.sessions.MutatePublishSessionForTest(h.ctx, first.ID, func(session *core.AppRegistryPublishSession) error {
 		session.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
 		return nil
 	}); err != nil {
