@@ -2,7 +2,6 @@ package appregistry
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"sort"
@@ -28,7 +27,7 @@ func BuildSignedUploadHeaders(contentLength int64, sha256Hex string) (map[string
 	if contentLength <= 0 {
 		return nil, fmt.Errorf("content length is required")
 	}
-	digestHex, contentSHA256, err := normalizeUploadSHA256(sha256Hex)
+	digestHex, err := normalizeUploadSHA256(sha256Hex)
 	if err != nil {
 		return nil, err
 	}
@@ -36,23 +35,23 @@ func BuildSignedUploadHeaders(contentLength int64, sha256Hex string) (map[string
 		UploadHeaderContentLength:          fmt.Sprintf("%d", contentLength),
 		UploadHeaderXGoogIfGenerationMatch: "0",
 		UploadHeaderXGoogMetaSHA256:        digestHex,
-		UploadHeaderXGoogContentSHA256:     contentSHA256,
+		UploadHeaderXGoogContentSHA256:     digestHex,
 	}, nil
 }
 
-func normalizeUploadSHA256(sha256Hex string) (digestHex, contentSHA256 string, err error) {
+func normalizeUploadSHA256(sha256Hex string) (digestHex string, err error) {
 	digestHex = strings.ToLower(strings.TrimSpace(sha256Hex))
 	if digestHex == "" {
-		return "", "", fmt.Errorf("sha256 is required")
+		return "", fmt.Errorf("sha256 is required")
 	}
 	sum, err := hex.DecodeString(digestHex)
 	if err != nil {
-		return "", "", fmt.Errorf("decode sha256: %w", err)
+		return "", fmt.Errorf("decode sha256: %w", err)
 	}
 	if len(sum) != sha256.Size {
-		return "", "", fmt.Errorf("sha256 must be %d bytes", sha256.Size)
+		return "", fmt.Errorf("sha256 must be %d bytes", sha256.Size)
 	}
-	return digestHex, base64.StdEncoding.EncodeToString(sum), nil
+	return digestHex, nil
 }
 
 func signedUploadHeaderLines(headers map[string]string) []string {

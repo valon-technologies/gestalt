@@ -28,8 +28,8 @@ func TestBuildSignedUploadHeadersContract(t *testing.T) {
 	if headers[UploadHeaderXGoogMetaSHA256] != digest {
 		t.Fatalf("meta sha256 = %q", headers[UploadHeaderXGoogMetaSHA256])
 	}
-	if headers[UploadHeaderXGoogContentSHA256] == "" {
-		t.Fatal("content sha256 header is required")
+	if headers[UploadHeaderXGoogContentSHA256] != digest {
+		t.Fatalf("content sha256 = %q, want lowercase hex %q", headers[UploadHeaderXGoogContentSHA256], digest)
 	}
 }
 
@@ -89,11 +89,12 @@ func TestMemoryUploadSignerReturnsSignedHeaders(t *testing.T) {
 func TestSignedUploadHeadersForResponseIsCanonical(t *testing.T) {
 	t.Parallel()
 
+	digest := strings.Repeat("d", 64)
 	raw := map[string]string{
-		"x-goog-meta-sha256":         strings.Repeat("d", 64),
+		"x-goog-meta-sha256":         digest,
 		"Content-Length":             "1",
 		"x-goog-if-generation-match": "0",
-		"x-goog-content-sha256":      "abc",
+		"x-goog-content-sha256":      digest,
 		"ignored":                    "value",
 	}
 	got := SignedUploadHeadersForResponse(raw)

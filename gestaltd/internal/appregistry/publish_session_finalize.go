@@ -43,6 +43,7 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 	}
 	declaration, err := DecodePublishDeclaration(session.DeclarationJSON)
 	if err != nil {
+		_, _ = s.failSession(ctx, session, err)
 		return nil, err
 	}
 	sourceRef := strings.ToLower(strings.TrimSpace(declaration.SourceRef))
@@ -76,19 +77,23 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 	}
 
 	if err := s.verifyAndPromoteUploads(session, declaration, input.StorageRoot, sourceRef); err != nil {
-		_, _ = s.failSession(ctx, session, err)
+		if isTerminalFinalizeError(err) {
+			_, _ = s.failSession(ctx, session, err)
+		}
 		return nil, err
 	}
 	manifest, err := s.buildFinalManifest(input, session, declaration, publishedAt)
 	if err != nil {
-		_, _ = s.failSession(ctx, session, err)
+		if isTerminalFinalizeError(err) {
+			_, _ = s.failSession(ctx, session, err)
+		}
 		return nil, err
 	}
 	defer func() { _ = os.Remove(manifest.EntryObject.LocalPath) }()
 
 	req := PublishRequest{Manifest: manifest, SourceRef: sourceRef}
 	if err := s.Writer.Preflight(req, PublishProgress{}); err != nil {
-		if isTerminalPublishConflict(err) {
+		if isTerminalFinalizeError(err) {
 			_, _ = s.failSession(ctx, session, err)
 		}
 		return nil, err

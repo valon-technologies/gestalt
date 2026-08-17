@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -258,6 +259,130 @@ func TestPublishSessionFailedSessionsNeverRevive(t *testing.T) {
 	if !errors.Is(err, appregistry.ErrPublishSessionFailed) {
 		t.Fatalf("Finalize failed session = %v", err)
 	}
+}
+
+func TestPublishSessionFinalizeTransientPromotionRetryAfterExpiredClaim(t *testing.T) {
+	t.Parallel()
+	h := newFinalizeCrashHarness(t, "0.3.0-dev.retry-promote")
+	first, wantPublishedAt := h.claimSession()
+
+	store := h.service.Store.(appregistry.WritableRegistryStore)
+	h.service.Store = &promoteTransientFailStore{WritableRegistryStore: store}
+	_, err := h.service.Finalize(h.ctx, h.finalizeInput())
+	if err == nil {
+		t.Fatal("expected transient promotion failure")
+	}
+	if errors.Is(err, appregistry.ErrPublishSessionFailed) {
+		t.Fatalf("transient promotion failure must not mark session failed: %v", err)
+	}
+	stillFinalizing, err := h.sessions.Get(h.ctx, first.ID)
+	if err != nil {
+		t.Fatalf("Get session: %v", err)
+	}
+	if stillFinalizing.State != core.AppRegistryPublishSessionFinalizing {
+		t.Fatalf("state = %q, want finalizing", stillFinalizing.State)
+	}
+
+	if _, err := h.sessions.Update(h.ctx, first.ID, func(session *core.AppRegistryPublishSession) error {
+		session.FinalizeClaimExpiresAt = time.Now().UTC().Add(-time.Minute).Truncate(time.Millisecond)
+		return nil
+	}); err != nil {
+		t.Fatalf("expire claim: %v", err)
+	}
+	h.service.Store = store
+	result, err := h.service.Finalize(h.ctx, h.finalizeInput())
+	if err != nil {
+		t.Fatalf("retry Finalize: %v", err)
+	}
+	if !result.Session.PublishedAt.Equal(wantPublishedAt) {
+		t.Fatalf("PublishedAt = %v, want %v", result.Session.PublishedAt, wantPublishedAt)
+	}
+}
+
+func TestPublishSessionFinalizeMissingUploadIsRetryable(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	services := newPublishSessionServices(t)
+	store, mem := appregistry.NewMemoryPublishStores()
+	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
+	service := newPublishSessionService(t, services.AppRegistryPublishSessions, store, signer)
+	service.Now = func() time.Time { return time.Now().UTC() }
+
+	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.retry-upload")
+	created, err := service.Create(ctx, appregistry.CreatePublishSessionInput{
+		App: "g-issues", Registry: "toolshed", StorageRoot: "gs://gestalt-app-registry",
+		PublicRoot:         "https://storage.googleapis.com/gestalt-app-registry",
+		PublisherSubjectID: "user:alice", Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	_, err = service.Finalize(ctx, appregistry.FinalizePublishSessionInput{
+		App: "g-issues", PublishID: created.Session.ID, StorageRoot: "gs://gestalt-app-registry",
+		PublicRoot: "https://storage.googleapis.com/gestalt-app-registry",
+	})
+	if !errors.Is(err, appregistry.ErrPublishUploadMissing) {
+		t.Fatalf("Finalize missing upload = %v", err)
+	}
+	session, err := services.AppRegistryPublishSessions.Get(ctx, created.Session.ID)
+	if err != nil {
+		t.Fatalf("Get session: %v", err)
+	}
+	if session.State == core.AppRegistryPublishSessionFailed {
+		t.Fatal("missing upload must not mark session failed")
+	}
+
+	for _, lease := range created.Session.UploadLeases {
+		if err := appregistry.ApplyMemoryUpload(mem, lease.UploadURL, artifactBytes, declaration.Artifacts[0].SHA256); err != nil {
+			t.Fatalf("upload: %v", err)
+		}
+	}
+	result, err := service.Finalize(ctx, appregistry.FinalizePublishSessionInput{
+		App: "g-issues", PublishID: created.Session.ID, StorageRoot: "gs://gestalt-app-registry",
+		PublicRoot: "https://storage.googleapis.com/gestalt-app-registry",
+	})
+	if err != nil {
+		t.Fatalf("retry Finalize: %v", err)
+	}
+	if result.Session.State != core.AppRegistryPublishSessionPublished {
+		t.Fatalf("state = %q", result.Session.State)
+	}
+}
+
+func TestPublishSessionFinalizeTerminalDigestConflict(t *testing.T) {
+	t.Parallel()
+	h := newFinalizeCrashHarness(t, "0.3.0-dev.terminal-digest")
+	stagingPath := appregistry.PublishStagingArtifactPath(h.created.Session.StagingPrefix, h.declaration.Artifacts[0].Platform, h.declaration.Artifacts[0].Filename)
+	stagingURL := appregistry.StorageURL("gs://gestalt-app-registry", stagingPath)
+	wrongDigest := strings.Repeat("f", 64)
+	if err := h.mem.SetMemoryObjectSHA256ForTest(stagingURL, wrongDigest); err != nil {
+		t.Fatalf("corrupt staging digest: %v", err)
+	}
+	described, err := h.mem.DescribeObject(stagingURL)
+	if err != nil || described.SHA256 != wrongDigest {
+		t.Fatalf("staging digest = %#v, err=%v", described, err)
+	}
+
+	_, err = h.service.Finalize(h.ctx, h.finalizeInput())
+	if !errors.Is(err, appregistry.ErrPublishUploadMismatch) {
+		t.Fatalf("Finalize digest mismatch = %v", err)
+	}
+	session, err := h.sessions.Get(h.ctx, h.created.Session.ID)
+	if err != nil {
+		t.Fatalf("Get session: %v", err)
+	}
+	if session.State != core.AppRegistryPublishSessionFailed {
+		t.Fatalf("state = %q, want failed", session.State)
+	}
+}
+
+type promoteTransientFailStore struct {
+	appregistry.WritableRegistryStore
+}
+
+func (s *promoteTransientFailStore) PromoteObject(input appregistry.PromoteObjectInput) error {
+	return fmt.Errorf("simulated transient gcs promotion failure")
 }
 
 type promoteFailStore struct {
