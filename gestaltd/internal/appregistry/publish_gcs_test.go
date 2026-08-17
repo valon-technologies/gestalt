@@ -2,6 +2,7 @@ package appregistry
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -55,7 +56,7 @@ func TestGCSRegistryStoreRejectsForeignBucket(t *testing.T) {
 func TestGCSUploadSignerRejectsCrossBucketURL(t *testing.T) {
 	t.Parallel()
 
-	signer := testBoundUploadSigner(t)
+	signer := testBoundUploadSigner(t, mustNotSignURL(t))
 	_, err := signer.SignCreateUpload(SignCreateUploadInput{
 		StorageURL:    "gs://other-bucket/apps/g-issues/publish-staging/0.1.0/digest/artifacts/linux/amd64/file.tgz",
 		SHA256:        strings.Repeat("a", 64),
@@ -70,7 +71,7 @@ func TestGCSUploadSignerRejectsCrossBucketURL(t *testing.T) {
 func TestGCSUploadSignerRejectsSiblingBucketPrefix(t *testing.T) {
 	t.Parallel()
 
-	signer := testBoundUploadSigner(t)
+	signer := testBoundUploadSigner(t, mustNotSignURL(t))
 	_, err := signer.SignCreateUpload(SignCreateUploadInput{
 		StorageURL:    "gs://gestalt-app-registry-staging/apps/g-issues/publish-staging/0.1.0/digest/artifacts/linux/amd64/file.tgz",
 		SHA256:        strings.Repeat("a", 64),
@@ -103,13 +104,20 @@ func TestGCSUploadSignerAcceptsBoundBucketURL(t *testing.T) {
 func TestGCSUploadSignerCheckSigningReadinessUsesBoundBucket(t *testing.T) {
 	t.Parallel()
 
-	signer := testBoundUploadSigner(t)
+	var signedBucket string
+	signer := testBoundUploadSigner(t, func(_ *storage.Client, bucket, _ string, _ *storage.SignedURLOptions) (string, error) {
+		signedBucket = bucket
+		return "https://signed.example/upload", nil
+	})
 	if err := signer.CheckSigningReadiness(context.Background()); err != nil {
 		t.Fatalf("CheckSigningReadiness: %v", err)
 	}
+	if signedBucket != "gestalt-app-registry" {
+		t.Fatalf("signed bucket = %q, want gestalt-app-registry", signedBucket)
+	}
 }
 
-func testBoundUploadSigner(t *testing.T) *GCSUploadSigner {
+func testBoundUploadSigner(t *testing.T, signURL ...func(*storage.Client, string, string, *storage.SignedURLOptions) (string, error)) *GCSUploadSigner {
 	t.Helper()
 	store, err := NewGCSRegistryStore("gestaltd-publish", "gs://gestalt-app-registry")
 	if err != nil {
@@ -119,10 +127,26 @@ func testBoundUploadSigner(t *testing.T) *GCSUploadSigner {
 	if err != nil {
 		t.Fatalf("NewGCSUploadSigner: %v", err)
 	}
-	signer.signURL = func(_ *storage.Client, _, _ string, _ *storage.SignedURLOptions) (string, error) {
-		return "https://signed.example/upload", nil
+	signer.newClient = func(context.Context) (*storage.Client, error) {
+		return nil, nil
+	}
+	switch len(signURL) {
+	case 0:
+		signer.signURL = func(_ *storage.Client, _, _ string, _ *storage.SignedURLOptions) (string, error) {
+			return "https://signed.example/upload", nil
+		}
+	default:
+		signer.signURL = signURL[0]
 	}
 	return signer
+}
+
+func mustNotSignURL(t *testing.T) func(*storage.Client, string, string, *storage.SignedURLOptions) (string, error) {
+	t.Helper()
+	return func(_ *storage.Client, _, _ string, _ *storage.SignedURLOptions) (string, error) {
+		t.Fatal("signURL must not be called for out-of-bound storage URLs")
+		return "", fmt.Errorf("signURL must not be called")
+	}
 }
 
 func stringsRepeat(s string, count int) string {
