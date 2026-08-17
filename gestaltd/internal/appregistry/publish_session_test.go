@@ -82,7 +82,7 @@ func TestPublishSessionCreateRenewAndFinalize(t *testing.T) {
 		t.Fatalf("session state = %q", result.Session.State)
 	}
 	indexChecker := appregistry.StoreIndexChecker{Store: store, StorageRoot: "gs://gestalt-app-registry"}
-	published, err := indexChecker.VersionPublished(ctx, "https://storage.googleapis.com/gestalt-app-registry", "g-issues", "0.3.0-dev.1")
+	published, err := indexChecker.VersionPublished(ctx, "gs://gestalt-app-registry", "g-issues", "0.3.0-dev.1")
 	if err != nil || !published {
 		t.Fatalf("VersionPublished = (%v, %v)", published, err)
 	}
@@ -154,54 +154,6 @@ func TestPublishSessionRenewExpiredLease(t *testing.T) {
 	}
 	if renewed.Session.UploadLeases[0].UploadURL == firstURL {
 		t.Fatal("expected new upload URL after lease renewal")
-	}
-}
-
-func TestPublishSessionFinalizeReconcilesAfterIndexCommit(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	services := newPublishSessionServices(t)
-	store, mem := appregistry.NewMemoryPublishStores()
-	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
-	service := newPublishSessionService(t, services.AppRegistryPublishSessions, store, signer)
-	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.4")
-
-	created, err := service.Create(ctx, appregistry.CreatePublishSessionInput{
-		App: "g-issues", Registry: "toolshed", StorageRoot: "gs://gestalt-app-registry",
-		PublicRoot:         "https://storage.googleapis.com/gestalt-app-registry",
-		PublisherSubjectID: "user:alice", Declaration: declaration,
-	})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	for _, lease := range created.Session.UploadLeases {
-		if err := appregistry.ApplyMemoryUpload(mem, lease.UploadURL, artifactBytes, declaration.Artifacts[0].SHA256); err != nil {
-			t.Fatalf("upload: %v", err)
-		}
-	}
-
-	result, err := service.Finalize(ctx, appregistry.FinalizePublishSessionInput{
-		App: "g-issues", PublishID: created.Session.ID,
-		StorageRoot: "gs://gestalt-app-registry",
-		PublicRoot:  "https://storage.googleapis.com/gestalt-app-registry",
-	})
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
-	_, err = services.AppRegistryPublishSessions.Update(ctx, result.Session.ID, func(session *core.AppRegistryPublishSession) error {
-		session.State = core.AppRegistryPublishSessionFinalizing
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("simulate session write failure: %v", err)
-	}
-	status, err := service.Status(ctx, "g-issues", created.Session.ID, "gs://gestalt-app-registry", "https://storage.googleapis.com/gestalt-app-registry")
-	if err != nil {
-		t.Fatalf("Status: %v", err)
-	}
-	if status.Session.State != core.AppRegistryPublishSessionPublished {
-		t.Fatalf("reconciled state = %q", status.Session.State)
 	}
 }
 

@@ -62,9 +62,11 @@ type RegistryUploadSigner interface {
 }
 
 type SignCreateUploadInput struct {
-	StorageURL string
-	SHA256     string
-	ExpiresAt  time.Time
+	StorageURL    string
+	SHA256        string
+	ContentLength int64
+	SourceRef     string
+	ExpiresAt     time.Time
 }
 
 type SignCreateUploadResult struct {

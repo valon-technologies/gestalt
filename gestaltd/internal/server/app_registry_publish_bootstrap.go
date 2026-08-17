@@ -13,12 +13,12 @@ type AppRegistryPublishRuntime struct {
 }
 
 func NewAppRegistryPublishRuntime(
-	cfg config.AppRegistryPublishConfig,
+	cfg config.AppRegistryPublishSettings,
 	sessions *coredata.AppRegistryPublishSessionService,
 	store appregistry.WritableRegistryStore,
 	signer appregistry.RegistryUploadSigner,
-	reader *appregistry.RegistryReader,
-	retention appregistry.RetentionPolicy,
+	writer *appregistry.Writer,
+	storageRoot string,
 ) (*AppRegistryPublishRuntime, error) {
 	if !cfg.Enabled {
 		return nil, nil
@@ -32,6 +32,9 @@ func NewAppRegistryPublishRuntime(
 	if signer == nil {
 		return nil, fmt.Errorf("app registry upload signer is required")
 	}
+	if writer == nil || writer.Store == nil {
+		return nil, fmt.Errorf("app registry writer is required")
+	}
 	limitsCfg, err := cfg.Limits()
 	if err != nil {
 		return nil, err
@@ -42,11 +45,7 @@ func NewAppRegistryPublishRuntime(
 		MaxArtifactBytes:  limitsCfg.MaxArtifactBytes,
 		RequiredPlatforms: limitsCfg.RequiredPlatforms,
 	}
-	indexChecker := appregistry.RegistryReaderIndexChecker{Reader: reader}
-	writer := &appregistry.Writer{
-		Store:           store,
-		RetentionPolicy: retention,
-	}
+	indexChecker := appregistry.StoreIndexChecker{Store: store, StorageRoot: storageRoot}
 	return &AppRegistryPublishRuntime{
 		Service: &appregistry.PublishSessionService{
 			Sessions: sessions,

@@ -1,18 +1,23 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
-// AppRegistryPublishConfig configures authenticated app-admin publish sessions.
-type AppRegistryPublishConfig struct {
+// AppRegistryPublishSettings configures authenticated app-admin publish sessions.
+// Settings live under server.appRegistry.publish in gestaltd config.
+type AppRegistryPublishSettings struct {
 	Enabled           bool     `yaml:"enabled,omitempty"`
+	WritableRegistry  string   `yaml:"writableRegistry,omitempty"`
 	UploadLeaseTTL    string   `yaml:"uploadLeaseTTL,omitempty"`
 	MaxArtifacts      int      `yaml:"maxArtifacts,omitempty"`
 	MaxArtifactBytes  int64    `yaml:"maxArtifactBytes,omitempty"`
 	RequiredPlatforms []string `yaml:"requiredPlatforms,omitempty"`
-	WritableRegistry  string   `yaml:"writableRegistry,omitempty"`
 }
 
-func (c AppRegistryPublishConfig) Limits() (AppRegistryPublishLimits, error) {
+func (c AppRegistryPublishSettings) Limits() (AppRegistryPublishLimits, error) {
 	limits := AppRegistryPublishLimits{
 		MaxArtifacts:      c.MaxArtifacts,
 		MaxArtifactBytes:  c.MaxArtifactBytes,
@@ -26,6 +31,34 @@ func (c AppRegistryPublishConfig) Limits() (AppRegistryPublishLimits, error) {
 		limits.UploadLeaseTTL = duration
 	}
 	return limits, nil
+}
+
+func validateAppRegistryPublishSettings(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	publish := cfg.Server.AppRegistry.Publish
+	if !publish.Enabled {
+		return nil
+	}
+	registryName := strings.TrimSpace(publish.WritableRegistry)
+	if registryName == "" {
+		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry is required when publish is enabled")
+	}
+	registry, ok := cfg.AppRegistries[registryName]
+	if !ok {
+		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q is not configured under appRegistries", registryName)
+	}
+	if strings.TrimSpace(registry.Kind) != AppRegistryKindGCS {
+		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q must be a GCS app registry", registryName)
+	}
+	if _, err := registry.StorageURL(); err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q: %w", registryName, err)
+	}
+	if _, err := publish.Limits(); err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.publish: %w", err)
+	}
+	return nil
 }
 
 type AppRegistryPublishLimits struct {

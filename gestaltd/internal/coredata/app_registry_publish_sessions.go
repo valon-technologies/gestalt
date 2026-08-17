@@ -10,7 +10,6 @@ import (
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
-	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
@@ -119,61 +118,7 @@ type CreateAppRegistryPublishSessionInput struct {
 }
 
 func (s *AppRegistryPublishSessionService) Create(ctx context.Context, input CreateAppRegistryPublishSessionInput) (*core.AppRegistryPublishSession, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("create app registry publish session: service is not configured")
-	}
-	if err := s.EnsureStore(ctx); err != nil {
-		return nil, err
-	}
-	app := strings.TrimSpace(input.App)
-	if app == "" {
-		return nil, fmt.Errorf("create app registry publish session: app is required")
-	}
-	version := strings.TrimSpace(input.Version)
-	if version == "" {
-		return nil, fmt.Errorf("create app registry publish session: version is required")
-	}
-	dedupeKey := strings.TrimSpace(input.DedupeKey)
-	if dedupeKey == "" {
-		return nil, fmt.Errorf("create app registry publish session: dedupe key is required")
-	}
-	if existing, err := s.GetByDedupeKey(ctx, dedupeKey); err == nil && existing != nil {
-		return nil, fmt.Errorf("%w: dedupe key already exists", ErrPublishSessionConflict)
-	} else if err != nil && !errors.Is(err, core.ErrNotFound) {
-		return nil, err
-	}
-	if err := s.assertNoConflictingVersion(ctx, app, version, dedupeKey); err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC().Truncate(time.Millisecond)
-	startedAt := input.PublishStartedAt
-	if startedAt.IsZero() {
-		startedAt = now
-	} else {
-		startedAt = startedAt.UTC().Truncate(time.Millisecond)
-	}
-	session := &core.AppRegistryPublishSession{
-		ID:                 uuid.NewString(),
-		App:                app,
-		Registry:           strings.TrimSpace(input.Registry),
-		Version:            version,
-		DedupeKey:          dedupeKey,
-		DeclarationDigest:  strings.TrimSpace(input.DeclarationDigest),
-		DeclarationJSON:    append([]byte(nil), input.DeclarationJSON...),
-		State:              core.AppRegistryPublishSessionUploading,
-		PublisherSubjectID: strings.TrimSpace(input.PublisherSubjectID),
-		Artifacts:          append([]core.AppRegistryPublishArtifact(nil), input.Artifacts...),
-		UploadLeases:       append([]core.AppRegistryUploadLease(nil), input.UploadLeases...),
-		StagingPrefix:      strings.TrimSpace(input.StagingPrefix),
-		PublishStartedAt:   startedAt,
-		CreatedAt:          now,
-		UpdatedAt:          now,
-	}
-	if err := s.store.Add(ctx, appRegistryPublishSessionRecord(session)); err != nil {
-		return nil, fmt.Errorf("create app registry publish session: %w", err)
-	}
-	return session, nil
+	return s.CreateActive(ctx, input)
 }
 
 func (s *AppRegistryPublishSessionService) Update(ctx context.Context, id string, update func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error) {

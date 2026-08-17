@@ -42,6 +42,9 @@ func (s *memoryUploadSigner) SignCreateUpload(input SignCreateUploadInput) (Sign
 	if digest := strings.ToLower(strings.TrimSpace(input.SHA256)); digest != "" {
 		q.Set("sha256", digest)
 	}
+	if input.ContentLength > 0 {
+		q.Set("length", fmt.Sprintf("%d", input.ContentLength))
+	}
 	u.RawQuery = q.Encode()
 	return SignCreateUploadResult{UploadURL: u.String(), ExpiresAt: expiresAt.UTC()}, nil
 }

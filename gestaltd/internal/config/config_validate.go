@@ -284,7 +284,7 @@ func validateServerAppRegistry(cfg *Config) error {
 			AppRegistryRolloutModeHeartbeat,
 		)
 	}
-	return nil
+	return validateAppRegistryPublishSettings(cfg)
 }
 
 func validateProviderSnapshotRepositoryPublish(name string, publish ProviderSnapshotRepositoryPublishConfig) error {
