@@ -17,6 +17,7 @@ var (
 type ObjectDescription struct {
 	Generation int64
 	SHA256     string
+	Size       int64
 }
 
 // RegistryObjectStore reads and writes registry bucket objects. Implementations must
@@ -49,6 +50,7 @@ type memoryStoredObject struct {
 	generation int64
 	data       []byte
 	sha256     string
+	size       int64
 }
 
 // MemoryObjectStore is an in-memory RegistryObjectStore for unit tests.
@@ -72,7 +74,7 @@ func (s *MemoryObjectStore) DescribeObject(storageURL string) (ObjectDescription
 	if !ok {
 		return ObjectDescription{}, nil
 	}
-	return ObjectDescription{Generation: object.generation, SHA256: object.sha256}, nil
+	return ObjectDescription{Generation: object.generation, SHA256: object.sha256, Size: object.size}, nil
 }
 
 func (s *MemoryObjectStore) ReadObject(storageURL string) (int64, []byte, error) {
@@ -101,6 +103,7 @@ func (s *MemoryObjectStore) WriteImmutableObject(input WriteImmutableObjectInput
 		generation: s.nextGen,
 		data:       data,
 		sha256:     strings.TrimSpace(input.SHA256),
+		size:       int64(len(data)),
 	}
 	return nil
 }

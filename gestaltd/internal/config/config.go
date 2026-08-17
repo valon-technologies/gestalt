@@ -2000,14 +2000,15 @@ type ServerAppRegistryConfig struct {
 	RestartDelay string `yaml:"restartDelay,omitempty"`
 	// MaxReconcileAttempts bounds failed convergence attempts per app/version.
 	// Omission defaults to DefaultAppRegistryMaxReconcileAttempts.
-	MaxReconcileAttempts    int                    `yaml:"maxReconcileAttempts,omitempty"`
-	AutoDeployPollInterval  string                 `yaml:"autoDeployPollInterval,omitempty"`
-	HeartbeatInterval       string                 `yaml:"heartbeatInterval,omitempty"`
-	HeartbeatTTL            string                 `yaml:"heartbeatTtl,omitempty"`
-	HealthyStabilityWindow  string                 `yaml:"healthyStabilityWindow,omitempty"`
-	HeartbeatRetention      string                 `yaml:"heartbeatRetention,omitempty"`
-	RolloutMode             AppRegistryRolloutMode `yaml:"rolloutMode,omitempty"`
-	maxReconcileAttemptsSet bool                   `yaml:"-"`
+	MaxReconcileAttempts    int                        `yaml:"maxReconcileAttempts,omitempty"`
+	AutoDeployPollInterval  string                     `yaml:"autoDeployPollInterval,omitempty"`
+	HeartbeatInterval       string                     `yaml:"heartbeatInterval,omitempty"`
+	HeartbeatTTL            string                     `yaml:"heartbeatTtl,omitempty"`
+	HealthyStabilityWindow  string                     `yaml:"healthyStabilityWindow,omitempty"`
+	HeartbeatRetention      string                     `yaml:"heartbeatRetention,omitempty"`
+	RolloutMode             AppRegistryRolloutMode     `yaml:"rolloutMode,omitempty"`
+	Publish                 AppRegistryPublishSettings `yaml:"publish,omitempty"`
+	maxReconcileAttemptsSet bool                       `yaml:"-"`
 }
 
 const DefaultAppRegistryMaxReconcileAttempts = 3

@@ -176,6 +176,7 @@ func (s *Server) mountAppAdminRegistryRoutes(r chi.Router) {
 		Post("/apps/{app}/admin/registry/version", s.selectAppAdminRegistryVersion)
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
 		Put("/apps/{app}/admin/registry/auto-deploy", s.updateAppAdminRegistryAutoDeploy)
+	s.mountAppAdminRegistryPublishRoutes(r)
 }
 
 func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler {
