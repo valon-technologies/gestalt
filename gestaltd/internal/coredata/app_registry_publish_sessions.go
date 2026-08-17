@@ -121,27 +121,6 @@ func (s *AppRegistryPublishSessionService) Create(ctx context.Context, input Cre
 	return s.CreateActive(ctx, input)
 }
 
-func (s *AppRegistryPublishSessionService) assertNoConflictingVersion(ctx context.Context, app, version, dedupeKey string) error {
-	recs, err := s.store.Index("by_app_version").GetAll(ctx, []any{app, version})
-	if err != nil {
-		return fmt.Errorf("check publish session version conflicts: %w", err)
-	}
-	for _, rec := range recs {
-		session := recordToAppRegistryPublishSession(rec)
-		if session == nil {
-			continue
-		}
-		if session.DedupeKey == dedupeKey {
-			continue
-		}
-		if session.State == core.AppRegistryPublishSessionFailed {
-			continue
-		}
-		return fmt.Errorf("%w: app %q version %q already has publish session %q", ErrPublishSessionVersionLocked, app, version, session.ID)
-	}
-	return nil
-}
-
 func appRegistryPublishSessionRecord(session *core.AppRegistryPublishSession) idb.Record {
 	artifactsJSON, _ := json.Marshal(session.Artifacts)
 	leasesJSON, _ := json.Marshal(session.UploadLeases)

@@ -75,6 +75,13 @@ func TestAppAdminRegistryPublishConcurrentFinalize(t *testing.T) {
 	limits := publishHarness.service.Limits
 	limits.FinalizeClaimLeaseTTL = 30 * time.Minute
 	publishHarness.service.Limits = limits
+	claimed := make(chan struct{})
+	proceed := make(chan struct{})
+	var claimOnce sync.Once
+	publishHarness.service.FinalizeAfterClaimHook = func() {
+		claimOnce.Do(func() { close(claimed) })
+		<-proceed
+	}
 	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
@@ -114,15 +121,28 @@ func TestAppAdminRegistryPublishConcurrentFinalize(t *testing.T) {
 		t.Fatalf("upload: %v", err)
 	}
 
-	const workers = 6
-	start := make(chan struct{})
+	const competitors = 5
+	ownerDone := make(chan int, 1)
+	go func() {
+		finalReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes/"+created.PublishID+"/finalize", nil)
+		finalReq.Header.Set("Authorization", "Bearer alice-token")
+		finalResp, err := http.DefaultClient.Do(finalReq)
+		if err != nil {
+			t.Errorf("POST owner finalize: %v", err)
+			ownerDone <- 0
+			return
+		}
+		defer func() { _ = finalResp.Body.Close() }()
+		ownerDone <- finalResp.StatusCode
+	}()
+	<-claimed
+
 	var wg sync.WaitGroup
-	statuses := make(chan int, workers)
-	for i := 0; i < workers; i++ {
+	statuses := make(chan int, competitors)
+	for i := 0; i < competitors; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-start
 			finalReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes/"+created.PublishID+"/finalize", nil)
 			finalReq.Header.Set("Authorization", "Bearer alice-token")
 			finalResp, err := http.DefaultClient.Do(finalReq)
@@ -135,23 +155,37 @@ func TestAppAdminRegistryPublishConcurrentFinalize(t *testing.T) {
 			statuses <- finalResp.StatusCode
 		}()
 	}
-	close(start)
 	wg.Wait()
 	close(statuses)
 
-	var okCount, conflictCount int
+	var conflictCount int
 	for status := range statuses {
-		switch status {
-		case http.StatusOK:
-			okCount++
-		case http.StatusConflict:
+		if status == http.StatusConflict {
 			conflictCount++
-		default:
-			t.Fatalf("unexpected finalize status = %d", status)
+			continue
 		}
+		t.Fatalf("unexpected competitor finalize status = %d", status)
 	}
-	if okCount != 1 || conflictCount != workers-1 {
-		t.Fatalf("ok=%d conflict=%d", okCount, conflictCount)
+	if conflictCount != competitors {
+		t.Fatalf("conflict=%d, want %d", conflictCount, competitors)
+	}
+
+	close(proceed)
+	ownerStatus := <-ownerDone
+	if ownerStatus != http.StatusOK {
+		t.Fatalf("owner finalize status = %d, want 200", ownerStatus)
+	}
+
+	retryReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes/"+created.PublishID+"/finalize", nil)
+	retryReq.Header.Set("Authorization", "Bearer alice-token")
+	retryResp, err := http.DefaultClient.Do(retryReq)
+	if err != nil {
+		t.Fatalf("POST retry finalize: %v", err)
+	}
+	defer func() { _ = retryResp.Body.Close() }()
+	if retryResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(retryResp.Body)
+		t.Fatalf("retry finalize status = %d: %s", retryResp.StatusCode, body)
 	}
 }
 

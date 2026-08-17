@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 var (
@@ -76,7 +75,7 @@ func VerifyPublishedEntry(entry *Entry, expect PublishedCommitExpectation) error
 	if strings.TrimSpace(entry.DeclarationDigest) != strings.TrimSpace(expect.DeclarationDigest) {
 		return fmt.Errorf("%w: declarationDigest mismatch", ErrPublishReconcileMismatch)
 	}
-	if strings.ToLower(strings.TrimSpace(entry.SourceRef)) != strings.ToLower(strings.TrimSpace(expect.SourceRef)) {
+	if !strings.EqualFold(strings.TrimSpace(entry.SourceRef), strings.TrimSpace(expect.SourceRef)) {
 		return fmt.Errorf("%w: sourceRef %q != %q", ErrPublishReconcileMismatch, entry.SourceRef, expect.SourceRef)
 	}
 	if !expect.PublishedAt.IsZero() && !entry.PublishedAt.Equal(expect.PublishedAt.UTC()) {
@@ -115,11 +114,12 @@ func (s *PublishSessionService) reconcilePublishedSession(
 		DeclarationDigest: session.DeclarationDigest,
 		SourceRef:         sourceRef,
 	}
-	if !session.FinalizePublishedAt.IsZero() {
+	switch {
+	case !session.FinalizePublishedAt.IsZero():
 		expect.PublishedAt = session.FinalizePublishedAt.UTC()
-	} else if !publishedAt.IsZero() {
+	case !publishedAt.IsZero():
 		expect.PublishedAt = publishedAt.UTC()
-	} else {
+	default:
 		expect.PublishedAt = entry.PublishedAt.UTC()
 	}
 	if err := VerifyPublishedEntry(entry, expect); err != nil {
@@ -145,10 +145,7 @@ func (s *PublishSessionService) ensureFinalizeClaimForReconcile(ctx context.Cont
 	}
 	claimed, err := s.Sessions.ClaimFinalize(ctx, session.ID, s.limits().FinalizeClaimLeaseTTL)
 	if err != nil {
-		if errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
-			return nil, ErrPublishFinalizeInProgress
-		}
-		return nil, err
+		return nil, mapFinalizeClaimConflict(ctx, s, session.ID, err)
 	}
 	return claimed, nil
 }

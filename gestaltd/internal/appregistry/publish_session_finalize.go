@@ -78,6 +78,9 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 		}
 		return nil, err
 	}
+	if s.FinalizeAfterClaimHook != nil {
+		s.FinalizeAfterClaimHook()
+	}
 	publishedAt := session.FinalizePublishedAt
 	if publishedAt.IsZero() {
 		publishedAt = s.now()
@@ -159,12 +162,40 @@ func (s *PublishSessionService) Finalize(ctx context.Context, input FinalizePubl
 func (s *PublishSessionService) claimFinalize(ctx context.Context, session *core.AppRegistryPublishSession) (*core.AppRegistryPublishSession, error) {
 	claimed, err := s.Sessions.ClaimFinalize(ctx, session.ID, s.limits().FinalizeClaimLeaseTTL)
 	if err != nil {
-		if errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
-			return nil, ErrPublishFinalizeInProgress
-		}
-		return nil, err
+		return nil, mapFinalizeClaimConflict(ctx, s, session.ID, err)
 	}
 	return claimed, nil
+}
+
+func mapFinalizeClaimConflict(ctx context.Context, s *PublishSessionService, sessionID string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
+		return ErrPublishFinalizeInProgress
+	}
+	if errors.Is(err, coredata.ErrPublishSessionStateConflict) {
+		active, activeErr := s.hasActiveFinalizeClaim(ctx, sessionID)
+		if activeErr != nil {
+			return activeErr
+		}
+		if active {
+			return ErrPublishFinalizeInProgress
+		}
+	}
+	return err
+}
+
+func (s *PublishSessionService) hasActiveFinalizeClaim(ctx context.Context, sessionID string) (bool, error) {
+	session, err := s.Sessions.Get(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	if session.State != core.AppRegistryPublishSessionFinalizing {
+		return false, nil
+	}
+	now := s.now()
+	return !session.FinalizeClaimExpiresAt.IsZero() && session.FinalizeClaimExpiresAt.After(now), nil
 }
 
 func (s *PublishSessionService) renewFinalizeClaim(ctx context.Context, session *core.AppRegistryPublishSession) (*core.AppRegistryPublishSession, error) {
@@ -185,7 +216,7 @@ func (s *PublishSessionService) verifyStagingUploads(session *core.AppRegistryPu
 		if described.Generation == 0 {
 			return fmt.Errorf("%w: %s", ErrPublishUploadMissing, artifact.Platform)
 		}
-		if strings.ToLower(strings.TrimSpace(described.SHA256)) != strings.ToLower(strings.TrimSpace(artifact.SHA256)) {
+		if !strings.EqualFold(strings.TrimSpace(described.SHA256), strings.TrimSpace(artifact.SHA256)) {
 			return fmt.Errorf("%w: %s", ErrPublishUploadMismatch, artifact.Platform)
 		}
 		if artifact.Size > 0 && described.Size > 0 && described.Size != artifact.Size {
@@ -220,7 +251,7 @@ func (s *PublishSessionService) verifyAndPromoteUploads(
 		if described.Generation == 0 {
 			return nil, fmt.Errorf("%w: %s", ErrPublishUploadMissing, artifact.Platform)
 		}
-		if strings.ToLower(strings.TrimSpace(described.SHA256)) != strings.ToLower(strings.TrimSpace(artifact.SHA256)) {
+		if !strings.EqualFold(strings.TrimSpace(described.SHA256), strings.TrimSpace(artifact.SHA256)) {
 			return nil, fmt.Errorf("%w: %s", ErrPublishUploadMismatch, artifact.Platform)
 		}
 		if artifact.Size > 0 && described.Size > 0 && described.Size != artifact.Size {

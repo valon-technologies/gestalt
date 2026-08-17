@@ -131,8 +131,8 @@ func (s *GCSRegistryStore) WriteCatalogObject(input WriteCatalogObjectInput) err
 	}
 	obj := client.Bucket(bucket).Object(object)
 	var writer *storage.Writer
-	switch {
-	case input.Generation == 0:
+	switch input.Generation {
+	case 0:
 		writer = obj.If(storage.Conditions{DoesNotExist: true}).NewWriter(context.Background())
 	default:
 		writer = obj.If(storage.Conditions{GenerationMatch: input.Generation}).NewWriter(context.Background())
@@ -197,7 +197,7 @@ func (s *GCSRegistryStore) PromoteObject(input PromoteObjectInput) error {
 	}
 
 	copier := dest.If(storage.Conditions{DoesNotExist: true}).CopierFrom(src.If(storage.Conditions{GenerationMatch: srcAttrs.Generation}))
-	copier.ObjectAttrs.Metadata = gcsObjectMetadata(input.SourceRef, expected)
+	copier.Metadata = gcsObjectMetadata(input.SourceRef, expected)
 	if _, err := copier.Run(context.Background()); err != nil {
 		if gcsPreconditionFailed(err) {
 			destAttrs, readErr := dest.Attrs(context.Background())

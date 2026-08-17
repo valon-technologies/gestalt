@@ -35,6 +35,9 @@ type PublishSessionService struct {
 	Index    PublishSessionIndexChecker
 	Limits   PublishSessionLimits
 	Now      func() time.Time
+	// FinalizeAfterClaimHook runs after a successful finalize claim and before side effects.
+	// Tests use it to block the winning owner while competitors observe in-progress conflicts.
+	FinalizeAfterClaimHook func()
 }
 
 func (s *PublishSessionService) now() time.Time {
@@ -259,7 +262,7 @@ func (s *PublishSessionService) Status(ctx context.Context, app, publishID, stor
 		switch {
 		case described.Generation == 0:
 			status.MissingUploads = append(status.MissingUploads, artifact.Platform)
-		case strings.ToLower(strings.TrimSpace(described.SHA256)) != strings.ToLower(strings.TrimSpace(artifact.SHA256)):
+		case !strings.EqualFold(strings.TrimSpace(described.SHA256), strings.TrimSpace(artifact.SHA256)):
 			status.MismatchedUploads = append(status.MismatchedUploads, artifact.Platform)
 		}
 	}

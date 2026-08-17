@@ -57,36 +57,50 @@ func TestPublishSessionConcurrentFinalizeExactlyOneOwner(t *testing.T) {
 	service.Store = countingStore
 	service.Writer = &appregistry.Writer{Store: countingStore}
 
-	const workers = 8
-	start := make(chan struct{})
+	claimed := make(chan struct{})
+	proceed := make(chan struct{})
+	var claimOnce sync.Once
+	service.FinalizeAfterClaimHook = func() {
+		claimOnce.Do(func() { close(claimed) })
+		<-proceed
+	}
+
+	const competitors = 7
+	ownerDone := make(chan error, 1)
+	go func() {
+		_, err := service.Finalize(ctx, input)
+		ownerDone <- err
+	}()
+	<-claimed
+
 	var wg sync.WaitGroup
-	results := make(chan error, workers)
-	for i := 0; i < workers; i++ {
+	results := make(chan error, competitors)
+	for i := 0; i < competitors; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-start
 			_, err := service.Finalize(ctx, input)
 			results <- err
 		}()
 	}
-	close(start)
 	wg.Wait()
 	close(results)
 
-	var successCount, inProgressCount int
+	var inProgressCount int
 	for err := range results {
-		switch {
-		case err == nil:
-			successCount++
-		case errors.Is(err, appregistry.ErrPublishFinalizeInProgress):
+		if errors.Is(err, appregistry.ErrPublishFinalizeInProgress) {
 			inProgressCount++
-		default:
-			t.Fatalf("unexpected finalize error: %v", err)
+			continue
 		}
+		t.Fatalf("competitor finalize error: %v", err)
 	}
-	if successCount != 1 || inProgressCount != workers-1 {
-		t.Fatalf("success=%d inProgress=%d", successCount, inProgressCount)
+	if inProgressCount != competitors {
+		t.Fatalf("inProgress=%d, want %d", inProgressCount, competitors)
+	}
+
+	close(proceed)
+	if err := <-ownerDone; err != nil {
+		t.Fatalf("owner finalize: %v", err)
 	}
 	if got := atomic.LoadInt32(&sideEffects); got != 1 {
 		t.Fatalf("promotion side effects = %d, want 1", got)
@@ -97,6 +111,13 @@ func TestPublishSessionConcurrentFinalizeExactlyOneOwner(t *testing.T) {
 	}
 	if session.State != core.AppRegistryPublishSessionPublished {
 		t.Fatalf("state = %q, want published", session.State)
+	}
+
+	if _, err := service.Finalize(ctx, input); err != nil {
+		t.Fatalf("retry Finalize after publish: %v", err)
+	}
+	if got := atomic.LoadInt32(&sideEffects); got != 1 {
+		t.Fatalf("retry promotion side effects = %d, want 1", got)
 	}
 }
 
