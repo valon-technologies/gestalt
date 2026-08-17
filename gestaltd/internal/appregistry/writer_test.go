@@ -328,7 +328,10 @@ func TestGcloudPreconditionFailed(t *testing.T) {
 	if !gcloudPreconditionFailed(errors.New("412 Precondition Failed")) {
 		t.Fatal("expected gcloud precondition detection")
 	}
-	if !isCatalogPreconditionFailed(fmt.Errorf("wrap: %w", ErrObjectPreconditionFailed)) {
+	if !isObjectGenerationPreconditionFailed(fmt.Errorf("wrap: %w", ErrObjectPreconditionFailed)) {
 		t.Fatal("expected memory store precondition detection")
+	}
+	if !isObjectGenerationPreconditionFailed(errors.New("412 Precondition Failed")) {
+		t.Fatal("expected raw gcloud precondition detection")
 	}
 }
