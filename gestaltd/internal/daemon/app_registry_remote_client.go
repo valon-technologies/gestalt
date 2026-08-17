@@ -22,10 +22,12 @@ const (
 )
 
 var (
-	remotePublishBearerRedactor     = regexp.MustCompile(`(?i)Bearer\s+\S+`)
-	remotePublishURLRedactor        = regexp.MustCompile(`https?://\S+`)
-	remotePublishGoogSignatureValue = regexp.MustCompile(`(?i)(X-Goog-Signature=)[^&\s"]+`)
-	remoteSignedUploadHeaders       = []string{
+	remotePublishBearerRedactor      = regexp.MustCompile(`(?i)Bearer\s+\S+`)
+	remotePublishSignedURLRedactor   = regexp.MustCompile(`https?://[^\s"]*(?i:x-goog-)[^\s"]*`)
+	remotePublishQuerySecretRedactor = regexp.MustCompile(`(?i)([?&](?:token|api_token|credential|authorization|X-Goog-Signature|X-Goog-Credential|X-Goog-Algorithm|X-Goog-Date|X-Goog-Expires|X-Goog-SignedHeaders)=)[^&\s"]+`)
+	remotePublishAssignSecretKeys    = []string{"token", "api_token", "GESTALT_API_KEY", "credential", "authorization", "X-Goog-Signature", "X-Goog-Credential", "X-Goog-Algorithm", "X-Goog-Date", "X-Goog-Expires", "X-Goog-SignedHeaders"}
+	remotePublishJSONSecretKeys      = []string{"token", "api_token", "GESTALT_API_KEY", "uploadUrl", "credential", "authorization"}
+	remoteSignedUploadHeaders        = []string{
 		appregistry.UploadHeaderContentLength,
 		appregistry.UploadHeaderXGoogIfGenerationMatch,
 		appregistry.UploadHeaderXGoogMetaSHA256,
@@ -202,17 +204,20 @@ func parseRemoteRegistryAPIError(status int, body []byte) error {
 
 func redactRemotePublishSecrets(value string) string {
 	value = remotePublishBearerRedactor.ReplaceAllString(value, "Bearer [REDACTED]")
-	value = remotePublishURLRedactor.ReplaceAllString(value, "[REDACTED-URL]")
-	value = remotePublishGoogSignatureValue.ReplaceAllString(value, `${1}[REDACTED]`)
+	value = remotePublishQuerySecretRedactor.ReplaceAllString(value, `${1}[REDACTED]`)
+	for _, key := range remotePublishAssignSecretKeys {
+		pattern := regexp.MustCompile(`(?i)(` + regexp.QuoteMeta(key) + `=)[^&\s";]+`)
+		value = pattern.ReplaceAllString(value, `${1}[REDACTED]`)
+	}
+	for _, key := range remotePublishJSONSecretKeys {
+		pattern := regexp.MustCompile(`(?i)("` + regexp.QuoteMeta(key) + `"\s*:\s*")([^"]*)(")`)
+		value = pattern.ReplaceAllString(value, `${1}[REDACTED]${3}`)
+	}
 	for _, header := range remoteSignedUploadHeaders {
 		pattern := regexp.MustCompile(`(?i)(` + regexp.QuoteMeta(header) + `=)[^&\s"]+`)
 		value = pattern.ReplaceAllString(value, `${1}[REDACTED]`)
 	}
-	for _, prefix := range []string{"api_token", "GESTALT_API_KEY", "token=", "uploadUrl"} {
-		if idx := strings.Index(strings.ToLower(value), strings.ToLower(prefix)); idx >= 0 {
-			value = value[:idx] + prefix + "[REDACTED]"
-		}
-	}
+	value = remotePublishSignedURLRedactor.ReplaceAllString(value, "[REDACTED-URL]")
 	return value
 }
 

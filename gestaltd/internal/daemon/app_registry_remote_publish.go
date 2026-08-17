@@ -75,7 +75,7 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 	if buildMeta == nil {
 		buildMeta = buildProviderReleaseMetadata
 	}
-	releaseMetadata, err := buildMeta(sourceManifest, version, archives, nil)
+	releaseMetadata, err := buildMeta(releaseManifest, releaseVersion, archives, nil)
 	if err != nil {
 		return zero, fmt.Errorf("build release metadata: %w", err)
 	}

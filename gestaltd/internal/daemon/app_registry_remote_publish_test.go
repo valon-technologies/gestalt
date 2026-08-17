@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 const remotePublishTestBuilderVersion = "0.0.1-test-builder"
@@ -245,6 +246,200 @@ func TestRemotePublishValidationAndProvenance(t *testing.T) {
 	}
 }
 
+func TestRemoteRegistryPublishUsesReleaseManifestMetadata(t *testing.T) { //nolint:paralleltest // chdirs
+	const (
+		checkoutVersion = "0.2.0"
+		releaseVersion  = "0.3.0-dev.1"
+	)
+	root, distDir, runner := setupRemotePublishReleaseManifestFixture(t, checkoutVersion, releaseVersion, "Checkout Display", "Release Display")
+
+	var capturedDeclaration *appregistry.PublishDeclaration
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/publishes") && r.Method == http.MethodPost {
+			var payload struct {
+				Declaration *appregistry.PublishDeclaration `json:"declaration"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			capturedDeclaration = payload.Declaration
+		}
+		writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
+			PublishID: "pub_release_meta", App: "demo", Version: releaseVersion, State: appregistry.PublishStatePublished,
+		})
+	}))
+	t.Cleanup(apiServer.Close)
+
+	result, err := (&remoteRegistryPublisher{
+		Version: releaseVersion, DistDirs: []string{distDir}, GestaltURL: apiServer.URL, GestaltToken: "token",
+		BuilderVersion: remotePublishTestBuilderVersion,
+		Client:         &remoteRegistryClient{BaseURL: apiServer.URL, Token: "token"},
+		GitRunner:      runner,
+		resolveManifest: func(appName string) (string, string, error) {
+			return filepath.Join(root, "apps", appName, "manifest.yaml"), filepath.ToSlash(filepath.Join("apps", appName, "manifest.yaml")), nil
+		},
+	}).publish(t.Context())
+	if err != nil {
+		t.Fatalf("publish() err=%v", err)
+	}
+	if result.State != appregistry.PublishStatePublished {
+		t.Fatalf("publish() state = %q, want published", result.State)
+	}
+	if capturedDeclaration == nil || capturedDeclaration.ReleaseMetadata == nil {
+		t.Fatal("expected publish declaration with release metadata")
+	}
+	if capturedDeclaration.ReleaseMetadata.Version != releaseVersion {
+		t.Fatalf("release metadata version = %q, want %q", capturedDeclaration.ReleaseMetadata.Version, releaseVersion)
+	}
+	if capturedDeclaration.ReleaseMetadata.StaticValidation == nil || capturedDeclaration.ReleaseMetadata.StaticValidation.Manifest == nil {
+		t.Fatal("expected static validation manifest in release metadata")
+	}
+	if capturedDeclaration.ReleaseMetadata.StaticValidation.Manifest.Version != releaseVersion {
+		t.Fatalf("static validation manifest version = %q, want release version %q", capturedDeclaration.ReleaseMetadata.StaticValidation.Manifest.Version, releaseVersion)
+	}
+	if capturedDeclaration.ReleaseMetadata.StaticValidation.Manifest.DisplayName != "Release Display" {
+		t.Fatalf("static validation displayName = %q, want release manifest display name", capturedDeclaration.ReleaseMetadata.StaticValidation.Manifest.DisplayName)
+	}
+	if capturedDeclaration.Manifest == nil || capturedDeclaration.Manifest.Version != releaseVersion {
+		t.Fatalf("declaration manifest version = %q, want requested version %q", capturedDeclaration.Manifest.Version, releaseVersion)
+	}
+}
+
+func TestRemoteRegistryPublishRejectsReleaseManifestMismatch(t *testing.T) { //nolint:paralleltest // chdirs
+	const releaseVersion = "0.3.0-dev.1"
+	root, distDir, runner := setupRemotePublishReleaseManifestFixture(t, releaseVersion, releaseVersion, "Checkout Display", "Release Display")
+	if err := os.WriteFile(filepath.Join(root, "apps", "demo", "manifest.yaml"), []byte("kind: ui\nsource: github.com/valon-technologies/valon-tools/apps/demo\nversion: "+releaseVersion+"\nspec: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := (&remoteRegistryPublisher{
+		Version: releaseVersion, DistDirs: []string{distDir}, GestaltURL: "http://example.test", GestaltToken: "token",
+		BuilderVersion: remotePublishTestBuilderVersion,
+		GitRunner:      runner,
+		resolveManifest: func(appName string) (string, string, error) {
+			return filepath.Join(root, "apps", appName, "manifest.yaml"), filepath.ToSlash(filepath.Join("apps", appName, "manifest.yaml")), nil
+		},
+	}).publish(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "kind") {
+		t.Fatalf("publish() = %v, want release/source kind mismatch error", err)
+	}
+}
+
+func TestRedactRemotePublishSecrets(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		input          string
+		want           string
+		mustNotContain []string
+	}{
+		{
+			name:  "preserves trailing diagnostics after query token",
+			input: "upload failed token=secret123; retry after 30s",
+			want:  "upload failed token=[REDACTED]; retry after 30s",
+		},
+		{
+			name:  "preserves trailing diagnostics after bearer",
+			input: "Bearer secret-token request denied status=403",
+			want:  "Bearer [REDACTED] request denied status=403",
+		},
+		{
+			name:  "preserves trailing diagnostics after signature",
+			input: "denied X-Goog-Signature=abc123 while validating upload status=403",
+			want:  "denied X-Goog-Signature=[REDACTED] while validating upload status=403",
+		},
+		{
+			name:  "redacts json token and keeps trailing fields",
+			input: `{"error":"invalid","token":"secret-token","code":403}`,
+			want:  `{"error":"invalid","token":"[REDACTED]","code":403}`,
+		},
+		{
+			name:  "redacts json upload url and keeps trailing fields",
+			input: `{"uploadUrl":"https://storage.googleapis.com/bucket/object?X-Goog-Signature=abc","status":"uploading"}`,
+			want:  `{"uploadUrl":"[REDACTED]","status":"uploading"}`,
+		},
+		{
+			name:  "redacts signed upload url and keeps trailing diagnostics",
+			input: "transport failed for https://storage.googleapis.com/bucket/object?X-Goog-Signature=abc123 after timeout",
+			want:  "transport failed for [REDACTED-URL] after timeout",
+		},
+		{
+			name:           "mixed secrets",
+			input:          "Bearer secret-token X-Goog-Signature=abc https://example/upload?token=xyz status=503",
+			want:           "Bearer [REDACTED] X-Goog-Signature=[REDACTED] https://example/upload?token=[REDACTED] status=503",
+			mustNotContain: []string{"secret-token", "abc", "xyz"},
+		},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := redactRemotePublishSecrets(tc.input)
+			if got != tc.want {
+				t.Fatalf("redactRemotePublishSecrets() = %q, want %q", got, tc.want)
+			}
+			for _, secret := range tc.mustNotContain {
+				if strings.Contains(got, secret) {
+					t.Fatalf("redactRemotePublishSecrets() leaked %q in %q", secret, got)
+				}
+			}
+		})
+	}
+}
+
+func setupRemotePublishReleaseManifestFixture(t *testing.T, checkoutVersion, releaseVersion, checkoutDisplay, releaseDisplay string) (root, distDir string, runner fakeRemoteGitRunner) {
+	t.Helper()
+	remotePublishWorkingDirMu.Lock()
+	t.Cleanup(remotePublishWorkingDirMu.Unlock)
+	root = t.TempDir()
+	manifestDir := filepath.Join(root, "apps", "demo")
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkoutManifest := demoReleaseManifestForTest(checkoutVersion, checkoutDisplay, "linux", "amd64")
+	checkoutManifest.Artifacts = nil
+	checkoutManifest.Entrypoint = nil
+	checkoutData, err := encodeTestManifestFormat(checkoutManifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(manifestDir, "manifest.yaml"), checkoutData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	distDir = filepath.Join(root, "dist")
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	releaseManifest := demoReleaseManifestForTest(releaseVersion, releaseDisplay, "linux", "amd64")
+	writeProviderReleaseArchiveForTest(t, distDir, "linux-amd64.tar.gz", releaseManifest)
+	releaseManifest = demoReleaseManifestForTest(releaseVersion, releaseDisplay, "darwin", "arm64")
+	writeProviderReleaseArchiveForTest(t, distDir, "darwin-arm64.tar.gz", releaseManifest)
+	runner = fakeRemoteGitRunner{
+		"git -C " + manifestDir + " rev-parse --show-toplevel": {Out: root + "\n"},
+		"git -C " + manifestDir + " rev-parse HEAD":            {Out: "651a5c30feb995c9364c38f63d0d5c3880bc2055\n"},
+		"git -C " + manifestDir + " status --porcelain":        {Out: ""},
+	}
+	return root, distDir, runner
+}
+
+func demoReleaseManifestForTest(version, displayName, goos, goarch string) *providermanifestv1.Manifest {
+	artifactPath := filepath.ToSlash(filepath.Join("bin", "provider-"+goos+"-"+goarch))
+	return &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/valon-technologies/valon-tools/apps/demo",
+		Version:     version,
+		DisplayName: displayName,
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:   goos,
+			Arch: goarch,
+			Path: artifactPath,
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+	}
+}
+
 func TestRemoteRegistryUploaderHeadersAndRedaction(t *testing.T) {
 	t.Parallel()
 	digest := strings.Repeat("a", 64)
@@ -297,10 +492,6 @@ func TestRemoteRegistryUploaderHeadersAndRedaction(t *testing.T) {
 	statusMsg := statusErr.Error()
 	if strings.Contains(statusMsg, signedURL) || strings.Contains(statusMsg, "secret-signature-value") {
 		t.Fatalf("status error leaked secrets: %q", statusMsg)
-	}
-	got := redactRemotePublishSecrets("Bearer secret-token X-Goog-Signature=abc https://example/upload?token=xyz")
-	if strings.Contains(got, "secret-token") || strings.Contains(got, "abc") || strings.Contains(got, "xyz") {
-		t.Fatalf("redactRemotePublishSecrets() = %q", got)
 	}
 }
 
