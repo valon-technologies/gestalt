@@ -23,6 +23,8 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
+const remotePublishTestBuilderVersion = "0.0.1-test-builder"
+
 type fakeRemoteGitRunner map[string]fakeRemoteGitResult
 
 type fakeRemoteGitResult struct {
@@ -95,7 +97,8 @@ func TestRemoteRegistryPublishFlowAndResume(t *testing.T) { //nolint:paralleltes
 	var out bytes.Buffer
 	pub := &remoteRegistryPublisher{
 		Version: "0.3.0-dev.1", DistDirs: []string{distDir}, GestaltURL: apiServer.URL, GestaltToken: "token",
-		Client: &remoteRegistryClient{BaseURL: apiServer.URL, Token: "token"}, Output: &out,
+		BuilderVersion: remotePublishTestBuilderVersion,
+		Client:         &remoteRegistryClient{BaseURL: apiServer.URL, Token: "token"}, Output: &out,
 		GitRunner: base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
 	}
 	result, err := pub.publish(t.Context())
@@ -119,8 +122,9 @@ func TestRemoteRegistryPublishAlreadyPublishedAndAuth(t *testing.T) { //nolint:p
 
 	result, err := (&remoteRegistryPublisher{
 		Version: "0.3.0-dev.1", DistDirs: []string{distDir}, GestaltURL: apiServer.URL, GestaltToken: "explicit-token",
-		Client:    &remoteRegistryClient{BaseURL: apiServer.URL, Token: "explicit-token"},
-		GitRunner: base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
+		BuilderVersion: remotePublishTestBuilderVersion,
+		Client:         &remoteRegistryClient{BaseURL: apiServer.URL, Token: "explicit-token"},
+		GitRunner:      base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
 	}).publish(t.Context())
 	if err != nil || result.PublishID != "pub_done" || authHeader != "Bearer explicit-token" {
 		t.Fatalf("publish() = %#v auth=%q err=%v", result, authHeader, err)
@@ -170,10 +174,23 @@ func TestRemoteRegistryPublishInterruptedResume(t *testing.T) { //nolint:paralle
 	uploaded["linux/amd64"] = true
 	if _, err := (&remoteRegistryPublisher{
 		Version: "0.3.0-dev.1", DistDirs: []string{distDir}, GestaltURL: apiServer.URL, GestaltToken: "token",
-		Client:    &remoteRegistryClient{BaseURL: apiServer.URL, Token: "token"},
-		GitRunner: base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
+		BuilderVersion: remotePublishTestBuilderVersion,
+		Client:         &remoteRegistryClient{BaseURL: apiServer.URL, Token: "token"},
+		GitRunner:      base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
 	}).publish(t.Context()); err != nil || !uploaded["darwin/arm64"] {
 		t.Fatalf("resume upload = %#v err=%v", uploaded, err)
+	}
+}
+
+func TestRemoteRegistryPublishRejectsMissingBuilderVersion(t *testing.T) { //nolint:paralleltest // chdirs
+	_, distDir, _, base := setupRemotePublishFixture(t)
+
+	_, err := (&remoteRegistryPublisher{
+		Version: "0.3.0-dev.1", DistDirs: []string{distDir},
+		GitRunner: base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
+	}).publish(t.Context())
+	if err == nil || !errors.Is(err, appregistry.ErrPublishDeclarationInvalid) || !strings.Contains(err.Error(), "builderVersion is required") {
+		t.Fatalf("publish() = %v, want missing builderVersion validation error", err)
 	}
 }
 
@@ -352,7 +369,8 @@ func setupRemotePublishFixture(t *testing.T) (root, distDir string, runner fakeR
 		"git -C " + manifestDirAbs + " status --porcelain":        {Out: ""},
 	}
 	pub = &remoteRegistryPublisher{
-		GitRunner: runner,
+		BuilderVersion: remotePublishTestBuilderVersion,
+		GitRunner:      runner,
 		collectArchives: func(distDirs []string, version string) (*providermanifestv1.Manifest, string, []releaseArchive, error) {
 			var archives []releaseArchive
 			for _, dir := range distDirs {
