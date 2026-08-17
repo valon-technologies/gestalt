@@ -200,6 +200,10 @@ func (s *GCSRegistryStore) PromoteObject(input PromoteObjectInput) error {
 	copier.ObjectAttrs.Metadata = gcsObjectMetadata(input.SourceRef, expected)
 	if _, err := copier.Run(context.Background()); err != nil {
 		if gcsPreconditionFailed(err) {
+			destAttrs, readErr := dest.Attrs(context.Background())
+			if readErr == nil && expected != "" && strings.ToLower(strings.TrimSpace(destAttrs.Metadata["sha256"])) == expected {
+				return nil
+			}
 			return fmt.Errorf("%w: %s", ErrObjectPreconditionFailed, input.DestURL)
 		}
 		return fmt.Errorf("promote %s -> %s: %w", input.SourceURL, input.DestURL, err)

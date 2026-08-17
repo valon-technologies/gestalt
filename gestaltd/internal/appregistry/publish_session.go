@@ -18,6 +18,7 @@ type PublishSessionStore interface {
 	Create(ctx context.Context, input coredata.CreateAppRegistryPublishSessionInput) (*core.AppRegistryPublishSession, error)
 	Update(ctx context.Context, id string, update func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)
 	ClaimFinalize(ctx context.Context, id string, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error)
+	RenewFinalizeClaim(ctx context.Context, id, claimToken string, expectUpdated time.Time, leaseTTL time.Duration) (*core.AppRegistryPublishSession, error)
 	MarkPublished(ctx context.Context, id, claimToken string, expectUpdated, publishedAt time.Time) (*core.AppRegistryPublishSession, error)
 	MarkFailed(ctx context.Context, id, claimToken string, expectUpdated time.Time, reason string) (*core.AppRegistryPublishSession, error)
 	RenewLeases(ctx context.Context, id string, expectUpdated time.Time, mutate func(*core.AppRegistryPublishSession) error) (*core.AppRegistryPublishSession, error)

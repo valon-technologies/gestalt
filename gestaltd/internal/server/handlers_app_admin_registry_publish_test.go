@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -64,6 +65,93 @@ func TestAppAdminRegistryPublishCreateReturnsUploadHeaders(t *testing.T) {
 	}
 	if created.Uploads[0].Headers[appregistry.UploadHeaderXGoogMetaSHA256] == "" {
 		t.Fatalf("headers = %#v", created.Uploads[0].Headers)
+	}
+}
+
+func TestAppAdminRegistryPublishConcurrentFinalize(t *testing.T) {
+	t.Parallel()
+
+	publishHarness := newRegistryPublishHarness(t)
+	limits := publishHarness.service.Limits
+	limits.FinalizeClaimLeaseTTL = 30 * time.Minute
+	publishHarness.service.Limits = limits
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": publishHarness.registry}
+		cfg.AppRegistryReader = publishHarness.reader
+		cfg.AppRegistryPublish = publishHarness.service
+	})
+
+	createBody, _ := json.Marshal(map[string]any{"declaration": publishHarness.declaration})
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes", bytes.NewReader(createBody))
+	createReq.Header.Set("Authorization", "Bearer alice-token")
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("POST publish create: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	var created struct {
+		PublishID string `json:"publishId"`
+		Uploads   []struct {
+			UploadURL string `json:"uploadUrl"`
+		} `json:"uploads"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if err := appregistry.ApplyMemoryUpload(publishHarness.mem, created.Uploads[0].UploadURL, publishHarness.artifactBytes, publishHarness.declaration.Artifacts[0].SHA256); err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+
+	const workers = 6
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	statuses := make(chan int, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			finalReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/registry/publishes/"+created.PublishID+"/finalize", nil)
+			finalReq.Header.Set("Authorization", "Bearer alice-token")
+			finalResp, err := http.DefaultClient.Do(finalReq)
+			if err != nil {
+				t.Errorf("POST finalize: %v", err)
+				statuses <- 0
+				return
+			}
+			defer func() { _ = finalResp.Body.Close() }()
+			statuses <- finalResp.StatusCode
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(statuses)
+
+	var okCount, conflictCount int
+	for status := range statuses {
+		switch status {
+		case http.StatusOK:
+			okCount++
+		case http.StatusConflict:
+			conflictCount++
+		default:
+			t.Fatalf("unexpected finalize status = %d", status)
+		}
+	}
+	if okCount != 1 || conflictCount != workers-1 {
+		t.Fatalf("ok=%d conflict=%d", okCount, conflictCount)
 	}
 }
 

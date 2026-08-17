@@ -11,6 +11,39 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
+func TestAppRegistryPublishSessionRenewFinalizeClaim(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t).AppRegistryPublishSessions
+	session, err := svc.Create(ctx, coredata.CreateAppRegistryPublishSessionInput{
+		App: "g-issues", Registry: "toolshed", Version: "0.2.6",
+		DedupeKey: "dedupe-renew", DeclarationDigest: "digest",
+		DeclarationJSON: []byte(`{"schema":"gestaltd.app.publish.declaration.v1"}`),
+		StagingPrefix:   "apps/g-issues/publish-staging/pub_renew",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	claimed, err := svc.ClaimFinalize(ctx, session.ID, time.Minute)
+	if err != nil {
+		t.Fatalf("ClaimFinalize: %v", err)
+	}
+	renewed, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.UpdatedAt, 2*time.Minute)
+	if err != nil {
+		t.Fatalf("RenewFinalizeClaim: %v", err)
+	}
+	if !renewed.FinalizeClaimExpiresAt.After(claimed.FinalizeClaimExpiresAt) {
+		t.Fatalf("expiresAt = %v, want after %v", renewed.FinalizeClaimExpiresAt, claimed.FinalizeClaimExpiresAt)
+	}
+	if _, err := svc.RenewFinalizeClaim(ctx, session.ID, claimed.FinalizeClaimToken, claimed.UpdatedAt, time.Minute); !errors.Is(err, coredata.ErrPublishSessionStateConflict) {
+		t.Fatalf("stale revision RenewFinalizeClaim = %v", err)
+	}
+	if _, err := svc.ClaimFinalize(ctx, session.ID, time.Minute); !errors.Is(err, coredata.ErrPublishSessionFinalizeConflict) {
+		t.Fatalf("active claim must reject ClaimFinalize: %v", err)
+	}
+}
+
 func TestAppRegistryPublishSessionClaimFinalizeTakeoverAfterExpiry(t *testing.T) {
 	t.Parallel()
 

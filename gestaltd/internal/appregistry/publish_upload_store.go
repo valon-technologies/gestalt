@@ -1,6 +1,7 @@
 package appregistry
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -18,7 +19,9 @@ type PublishSessionLimits struct {
 
 func DefaultPublishSessionLimits() PublishSessionLimits {
 	return PublishSessionLimits{
-		UploadLeaseTTL:        time.Hour,
+		UploadLeaseTTL: time.Hour,
+		// FinalizeClaimLeaseTTL must cover the longest single GCS copy/write the
+		// finalize flow performs between explicit RenewFinalizeClaim calls.
 		FinalizeClaimLeaseTTL: 15 * time.Minute,
 		MaxArtifacts:          16,
 		MaxArtifactBytes:      512 << 20,
@@ -131,10 +134,19 @@ func (s *memoryPromoteStore) PromoteObject(input PromoteObjectInput) error {
 		return err
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
-	return s.WriteImmutableObject(WriteImmutableObjectInput{
+	if err := s.WriteImmutableObject(WriteImmutableObjectInput{
 		LocalPath:  tmpPath,
 		StorageURL: input.DestURL,
 		SourceRef:  input.SourceRef,
 		SHA256:     expected,
-	})
+	}); err != nil {
+		if errors.Is(err, ErrObjectPreconditionFailed) {
+			reread, readErr := s.DescribeObject(input.DestURL)
+			if readErr == nil && reread.Generation != 0 && expected != "" && strings.ToLower(strings.TrimSpace(reread.SHA256)) == expected {
+				return nil
+			}
+		}
+		return err
+	}
+	return nil
 }
