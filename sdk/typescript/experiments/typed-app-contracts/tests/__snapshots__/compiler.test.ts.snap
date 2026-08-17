@@ -1,0 +1,97 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`canonical TypeScript contract extraction R-TYPE-01 lowers explicit public types into a canonical golden contract 1`] = `
+"{
+  "app": {
+    "name": "acme/users",
+    "version": "1.0.0"
+  },
+  "compiler": {
+    "extractor": "typed-app-contracts/0.1",
+    "typescript": "5.9.3"
+  },
+  "formatVersion": 1,
+  "tools": {
+    "getUser": {
+      "description": "Fetch one user.",
+      "digest": "43fa0595df13ee3580d4825fd3e41ac04ea92c1736cd12afa04e0477d8b218db",
+      "input": {
+        "additionalProperties": false,
+        "kind": "object",
+        "properties": {
+          "id": {
+            "optional": false,
+            "schema": {
+              "kind": "string"
+            }
+          },
+          "includeHistory": {
+            "optional": true,
+            "schema": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "output": {
+        "additionalProperties": false,
+        "kind": "object",
+        "properties": {
+          "coordinates": {
+            "optional": false,
+            "schema": {
+              "items": [
+                {
+                  "kind": "number"
+                },
+                {
+                  "kind": "number"
+                }
+              ],
+              "kind": "tuple"
+            }
+          },
+          "displayName": {
+            "optional": false,
+            "schema": {
+              "kind": "string"
+            }
+          },
+          "id": {
+            "optional": false,
+            "schema": {
+              "kind": "string"
+            }
+          },
+          "labels": {
+            "optional": false,
+            "schema": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          },
+          "status": {
+            "optional": false,
+            "schema": {
+              "kind": "union",
+              "variants": [
+                {
+                  "kind": "literal",
+                  "value": "active"
+                },
+                {
+                  "kind": "literal",
+                  "value": "disabled"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"
+`;
