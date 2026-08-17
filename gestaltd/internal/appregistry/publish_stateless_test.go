@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -226,6 +227,183 @@ func TestStatelessPublishCorruptIndexFailsClosed(t *testing.T) {
 	}
 }
 
+func TestStatelessPublishFinalizePreflightBeforePromotion(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mem := appregistry.NewMemoryObjectStore()
+	recorder := &promoteRecorder{MemoryObjectStore: mem}
+	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
+	limits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}}
+	service := &appregistry.StatelessPublishService{
+		Registry: "toolshed", StorageRoot: testPublishStorageRoot, PublicRoot: testPublishPublicRoot,
+		Store: recorder, Signer: signer, Writer: &appregistry.Writer{Store: recorder}, Limits: limits,
+	}
+	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.12")
+
+	begin, err := service.Begin(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	if err := appregistry.ApplyMemoryUpload(mem, begin.Uploads[0].UploadURL, artifactBytes, declaration.Artifacts[0].SHA256); err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+
+	layout, err := appregistry.ResolvePublishLayout(declaration.Manifest.Source, declaration.Manifest.Version)
+	if err != nil {
+		t.Fatalf("ResolvePublishLayout: %v", err)
+	}
+	entryURL := appregistry.StorageURL(testPublishStorageRoot, layout.EntryPath)
+	finalRel, err := appregistry.PublishArtifactFinalRel(layout.ArtifactPrefix, declaration.Artifacts[0].Filename)
+	if err != nil {
+		t.Fatalf("PublishArtifactFinalRel: %v", err)
+	}
+	declarationDigest, err := appregistry.DeclarationDigest(declaration)
+	if err != nil {
+		t.Fatalf("DeclarationDigest: %v", err)
+	}
+	conflictingEntry, err := appregistry.BuildEntry(appregistry.BuildEntryInput{
+		Manifest: declaration.Manifest, Version: declaration.Manifest.Version,
+		SourceRef:    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		ManifestPath: declaration.ManifestPath, PublicationKind: declaration.PublicationKind,
+		PublishID: begin.PublishID, BuilderVersion: declaration.BuilderVersion,
+		DeclarationDigest: declarationDigest, LocalSource: declaration.LocalSource,
+		Release: declaration.ReleaseMetadata,
+		Artifacts: []appregistry.PublishArtifact{{
+			Target: declaration.Artifacts[0].Platform, Filename: declaration.Artifacts[0].Filename,
+			StorageURL: appregistry.StorageURL(testPublishStorageRoot, finalRel),
+			PublicURL:  appregistry.PublicURL(testPublishPublicRoot, finalRel),
+			SHA256:     declaration.Artifacts[0].SHA256,
+		}},
+		PublishedAt: time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("BuildEntry: %v", err)
+	}
+	entryData, err := json.MarshalIndent(conflictingEntry, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal entry: %v", err)
+	}
+	entryPath, err := appregistry.WriteTempJSON("gestalt-orphan-entry-*", append(entryData, '\n'))
+	if err != nil {
+		t.Fatalf("WriteTempJSON: %v", err)
+	}
+	defer func() { _ = os.Remove(entryPath) }()
+	if err := mem.WriteImmutableObject(appregistry.WriteImmutableObjectInput{
+		LocalPath: entryPath, StorageURL: entryURL, SourceRef: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+	}); err != nil {
+		t.Fatalf("seed orphan entry: %v", err)
+	}
+
+	_, err = service.Finalize(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", PublishID: begin.PublishID, Declaration: declaration,
+	})
+	if !errors.Is(err, appregistry.ErrRegistryEntryConflict) {
+		t.Fatalf("Finalize error = %v, want ErrRegistryEntryConflict", err)
+	}
+	if len(recorder.promotions) != 0 {
+		t.Fatalf("PromoteObject calls = %#v, want none", recorder.promotions)
+	}
+	finalURL := appregistry.StorageURL(testPublishStorageRoot, finalRel)
+	described, err := mem.DescribeObject(finalURL)
+	if err != nil {
+		t.Fatalf("DescribeObject(final): %v", err)
+	}
+	if described.Generation != 0 {
+		t.Fatalf("final artifact created before preflight: %#v", described)
+	}
+}
+
+func TestStatelessPublishFinalizeResumesMatchingPromotedArtifacts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mem := appregistry.NewMemoryObjectStore()
+	recorder := &promoteRecorder{MemoryObjectStore: mem}
+	signer := appregistry.NewMemoryRegistryUploadSigner(mem, "memory-upload://")
+	limits := appregistry.PublishLimits{RequiredPlatforms: []string{"linux/amd64"}}
+	service := &appregistry.StatelessPublishService{
+		Registry: "toolshed", StorageRoot: testPublishStorageRoot, PublicRoot: testPublishPublicRoot,
+		Store: recorder, Signer: signer, Writer: &appregistry.Writer{Store: recorder}, Limits: limits,
+	}
+	declaration, artifactBytes := testPublishDeclaration(t, "g-issues", "0.3.0-dev.13")
+
+	begin, err := service.Begin(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	if err := appregistry.ApplyMemoryUpload(mem, begin.Uploads[0].UploadURL, artifactBytes, declaration.Artifacts[0].SHA256); err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+
+	layout, err := appregistry.ResolvePublishLayout(declaration.Manifest.Source, declaration.Manifest.Version)
+	if err != nil {
+		t.Fatalf("ResolvePublishLayout: %v", err)
+	}
+	digest, err := appregistry.DeclarationDigest(declaration)
+	if err != nil {
+		t.Fatalf("DeclarationDigest: %v", err)
+	}
+	stagingPrefix, err := appregistry.PublishStagingPrefix("g-issues", declaration.Manifest.Version, digest)
+	if err != nil {
+		t.Fatalf("PublishStagingPrefix: %v", err)
+	}
+	stagingPath, err := appregistry.PublishStagingArtifactPath(stagingPrefix, declaration.Artifacts[0].Platform, declaration.Artifacts[0].Filename)
+	if err != nil {
+		t.Fatalf("PublishStagingArtifactPath: %v", err)
+	}
+	stagingURL := appregistry.StorageURL(testPublishStorageRoot, stagingPath)
+	stagingDescribed, err := mem.DescribeObject(stagingURL)
+	if err != nil {
+		t.Fatalf("DescribeObject(staging): %v", err)
+	}
+	finalRel, err := appregistry.PublishArtifactFinalRel(layout.ArtifactPrefix, declaration.Artifacts[0].Filename)
+	if err != nil {
+		t.Fatalf("PublishArtifactFinalRel: %v", err)
+	}
+	finalURL := appregistry.StorageURL(testPublishStorageRoot, finalRel)
+	sourceRef := declaration.LocalSource.CommitSHA
+	if err := mem.PromoteObject(appregistry.PromoteObjectInput{
+		SourceURL: stagingURL, SourceGeneration: stagingDescribed.Generation,
+		DestURL: finalURL, ExpectedSHA256: declaration.Artifacts[0].SHA256, SourceRef: sourceRef,
+	}); err != nil {
+		t.Fatalf("pre-promote artifact: %v", err)
+	}
+	promotedBefore, err := mem.DescribeObject(finalURL)
+	if err != nil {
+		t.Fatalf("DescribeObject(final before finalize): %v", err)
+	}
+	recorder.promotions = nil
+
+	final, err := service.Finalize(ctx, "toolshed", appregistry.AdminPublishInput{
+		App: "g-issues", PublishID: begin.PublishID, Declaration: declaration,
+	})
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if final.State != appregistry.PublishStatePublished {
+		t.Fatalf("finalize = %#v", final)
+	}
+	promotedAfter, err := mem.DescribeObject(finalURL)
+	if err != nil {
+		t.Fatalf("DescribeObject(final after finalize): %v", err)
+	}
+	if promotedAfter.Generation != promotedBefore.Generation {
+		t.Fatalf("final artifact generation changed: before=%d after=%d", promotedBefore.Generation, promotedAfter.Generation)
+	}
+	loaded, err := appregistry.LoadPublishedState(mem, testPublishStorageRoot, "g-issues", declaration.Manifest.Version)
+	if err != nil {
+		t.Fatalf("LoadPublishedState: %v", err)
+	}
+	if loaded.State != appregistry.PublishedLoadVerified {
+		t.Fatalf("published state = %v, want verified", loaded.State)
+	}
+}
+
 func TestStatelessPublishRejectsMissingBuilderVersionBeforeSigning(t *testing.T) {
 	t.Parallel()
 
@@ -299,6 +477,16 @@ func TestStatelessPublishEntryStableAcrossServiceInstances(t *testing.T) {
 	if loaded.Entry.BuilderVersion != "client-builder-1.2.3" {
 		t.Fatalf("entry builderVersion = %q, want client-builder-1.2.3", loaded.Entry.BuilderVersion)
 	}
+}
+
+type promoteRecorder struct {
+	*appregistry.MemoryObjectStore
+	promotions []appregistry.PromoteObjectInput
+}
+
+func (r *promoteRecorder) PromoteObject(input appregistry.PromoteObjectInput) error {
+	r.promotions = append(r.promotions, input)
+	return r.MemoryObjectStore.PromoteObject(input)
 }
 
 func newStatelessPublishHarness(t *testing.T) (*appregistry.StatelessPublishService, *appregistry.MemoryObjectStore) {

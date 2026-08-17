@@ -141,10 +141,6 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry stri
 		return adminPublishResponse(publishID, input.App, s.Registry, version, PublishStatePublished, nil, entry.PublishedAt), nil
 	}
 
-	if err := s.promoteStagingArtifacts(stagingPrefix, canonical, sourceRef); err != nil {
-		return nil, err
-	}
-
 	publishedAt := s.now()
 	manifest, err := s.buildFinalManifest(input, canonical, publishID, digest, version, publishedAt)
 	if err != nil {
@@ -154,6 +150,9 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry stri
 
 	req := PublishRequest{Manifest: manifest, SourceRef: sourceRef}
 	if err := s.Writer.Preflight(req, PublishProgress{}); err != nil {
+		return nil, err
+	}
+	if err := s.promoteStagingArtifacts(stagingPrefix, canonical, sourceRef); err != nil {
 		return nil, err
 	}
 	result, err := s.publishWithCatalogRetry(req)
