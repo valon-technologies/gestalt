@@ -31,6 +31,15 @@ func cloneLocalSourceState(value *LocalSourceState) *LocalSourceState {
 	return &out
 }
 
+func normalizeLocalSourceState(value *LocalSourceState) *LocalSourceState {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	out.CommitSHA = strings.ToLower(strings.TrimSpace(out.CommitSHA))
+	return &out
+}
+
 func validatePublicationKind(kind PublicationKind) error {
 	switch kind {
 	case "", PublicationKindGitHub, PublicationKindLocal:

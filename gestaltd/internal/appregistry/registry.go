@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -25,6 +26,11 @@ const (
 	EntrySchemaVersion  = 1
 	IndexFileName       = "index.json"
 	appSourcePathPrefix = "apps/"
+)
+
+var (
+	ErrRegistryEntryConflict = errors.New("registry entry conflict")
+	ErrIndexVersionConflict  = errors.New("app registry index version conflict")
 )
 
 type Index struct {
@@ -538,6 +544,41 @@ func applyAppIndexAppMetadata(app *AppVersions, displayName, description string)
 	return changed
 }
 
+func indexVersionFromEntry(entry Entry, metadataPath string) IndexVersion {
+	platforms := artifactPlatforms(entry.Artifacts)
+	sort.Strings(platforms)
+	indexVersion := IndexVersion{
+		Metadata:          strings.TrimSpace(metadataPath),
+		Platforms:         platforms,
+		PublishedAt:       entry.PublishedAt.UTC(),
+		SourceRef:         strings.TrimSpace(entry.SourceRef),
+		Repository:        strings.TrimSpace(entry.Repository),
+		Publication:       clonePublication(entry.Publication),
+		PublicationKind:   entry.PublicationKind,
+		PublishID:         strings.TrimSpace(entry.PublishID),
+		BuilderVersion:    strings.TrimSpace(entry.BuilderVersion),
+		DeclarationDigest: strings.TrimSpace(entry.DeclarationDigest),
+		LocalSource:       cloneLocalSourceState(entry.LocalSource),
+	}
+	if entry.PublishStartedAt != nil && !entry.PublishStartedAt.IsZero() {
+		startedAt := entry.PublishStartedAt.UTC()
+		indexVersion.PublishStartedAt = &startedAt
+	}
+	return indexVersion
+}
+
+func indexVersionsEqual(a, b IndexVersion) bool {
+	aData, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	bData, err := json.Marshal(b)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(aData, bData)
+}
+
 // UpsertAppIndex updates the per-app index for a published version. The second
 // return value reports whether the index was modified.
 func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName, description string) (*Index, bool, error) {
@@ -562,6 +603,10 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 		if strings.TrimSpace(existing.Metadata) != strings.TrimSpace(metadataPath) {
 			return nil, false, fmt.Errorf("app %q version %q is already indexed", appName, entry.Version)
 		}
+		expected := indexVersionFromEntry(entry, metadataPath)
+		if !indexVersionsEqual(existing, expected) {
+			return nil, false, fmt.Errorf("app %q version %q index identity mismatch: %w; %s", appName, entry.Version, ErrIndexVersionConflict, RepublishCorruptObjectGuidance)
+		}
 		changed := applyAppIndexAppMetadata(&app, displayName, description)
 		if !changed {
 			return index, false, nil
@@ -573,26 +618,7 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 		return index, true, nil
 	}
 	applyAppIndexAppMetadata(&app, displayName, description)
-	platforms := artifactPlatforms(entry.Artifacts)
-	sort.Strings(platforms)
-	indexVersion := IndexVersion{
-		Metadata:          strings.TrimSpace(metadataPath),
-		Platforms:         platforms,
-		PublishedAt:       entry.PublishedAt.UTC(),
-		SourceRef:         strings.TrimSpace(entry.SourceRef),
-		Repository:        strings.TrimSpace(entry.Repository),
-		Publication:       clonePublication(entry.Publication),
-		PublicationKind:   entry.PublicationKind,
-		PublishID:         strings.TrimSpace(entry.PublishID),
-		BuilderVersion:    strings.TrimSpace(entry.BuilderVersion),
-		DeclarationDigest: strings.TrimSpace(entry.DeclarationDigest),
-		LocalSource:       cloneLocalSourceState(entry.LocalSource),
-	}
-	if entry.PublishStartedAt != nil && !entry.PublishStartedAt.IsZero() {
-		startedAt := entry.PublishStartedAt.UTC()
-		indexVersion.PublishStartedAt = &startedAt
-	}
-	app.Versions[entry.Version] = indexVersion
+	app.Versions[entry.Version] = indexVersionFromEntry(entry, metadataPath)
 	index.Apps[appName] = app
 	if err := validateIndex(index); err != nil {
 		return nil, false, err

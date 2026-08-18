@@ -11,10 +11,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
-	PublishManifestSchemaVersion   = "gestaltd.app.publish.plan.v1"
+	PublishPlanSchemaVersion       = "gestaltd.app.publish.plan.v1"
 	RepublishCorruptObjectGuidance = "delete the object or entire snapshot SHA prefix and republish"
 )
 
@@ -145,7 +146,7 @@ func BuildPublishManifest(input BuildPublishManifestInput) (PublishManifest, err
 	}
 
 	return PublishManifest{
-		Schema:      PublishManifestSchemaVersion,
+		Schema:      PublishPlanSchemaVersion,
 		AppName:     entry.App,
 		DisplayName: input.DisplayName,
 		Description: input.Description,
@@ -174,6 +175,110 @@ func (plan PublishManifest) Cleanup() {
 	}
 }
 
+// BuildPublishManifestFromDeclarationInput plans a registry publish from a
+// canonical remote declaration whose artifacts are already at final storage paths.
+type BuildPublishManifestFromDeclarationInput struct {
+	StorageRoot       string
+	PublicRoot        string
+	DisplayName       string
+	Description       string
+	Declaration       *PublishDeclaration
+	PublishID         string
+	DeclarationDigest string
+	Version           string
+	PublishedAt       time.Time
+}
+
+// BuildPublishManifestFromDeclaration is the shared manifest builder for remote finalize.
+func BuildPublishManifestFromDeclaration(input BuildPublishManifestFromDeclarationInput) (PublishManifest, error) {
+	declaration := input.Declaration
+	if declaration == nil || declaration.Manifest == nil {
+		return PublishManifest{}, fmt.Errorf("publish declaration manifest is required")
+	}
+	storageRoot := strings.TrimRight(strings.TrimSpace(input.StorageRoot), "/")
+	publicRoot := strings.TrimRight(strings.TrimSpace(input.PublicRoot), "/")
+	if storageRoot == "" {
+		return PublishManifest{}, fmt.Errorf("storage root is required")
+	}
+	if publicRoot == "" {
+		return PublishManifest{}, fmt.Errorf("public root is required")
+	}
+	version := strings.TrimSpace(input.Version)
+	publicationKind := declaration.PublicationKind
+	if publicationKind == "" {
+		publicationKind = PublicationKindLocal
+	}
+	sourceRef := declarationSourceRef(declaration)
+	builderVersion := strings.TrimSpace(declaration.BuilderVersion)
+	layout, err := ResolvePublishLayout(declaration.Manifest.Source, version)
+	if err != nil {
+		return PublishManifest{}, err
+	}
+	artifacts := make([]PublishArtifact, 0, len(declaration.Artifacts))
+	for _, artifact := range declaration.Artifacts {
+		finalRel, err := PublishArtifactFinalRel(layout.ArtifactPrefix, artifact.Filename)
+		if err != nil {
+			return PublishManifest{}, err
+		}
+		digestHex, err := normalizePublishArtifactSHA256(artifact.SHA256)
+		if err != nil {
+			return PublishManifest{}, err
+		}
+		artifacts = append(artifacts, PublishArtifact{
+			Target: strings.TrimSpace(artifact.Platform), Filename: strings.TrimSpace(artifact.Filename),
+			StorageURL: StorageURL(storageRoot, finalRel), PublicURL: PublicURL(publicRoot, finalRel),
+			SHA256: digestHex,
+		})
+	}
+	entry, err := BuildEntry(BuildEntryInput{
+		Manifest: declaration.Manifest, Version: version, SourceRef: sourceRef,
+		ManifestPath: strings.TrimSpace(declaration.ManifestPath), PublicationKind: publicationKind,
+		PublishID: input.PublishID, BuilderVersion: builderVersion, DeclarationDigest: input.DeclarationDigest,
+		LocalSource: normalizeLocalSourceState(declaration.LocalSource), Release: declaration.ReleaseMetadata,
+		Artifacts: artifacts, PublishedAt: input.PublishedAt.UTC(),
+	})
+	if err != nil {
+		return PublishManifest{}, err
+	}
+	entryData, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		return PublishManifest{}, err
+	}
+	entryPath, err := WriteTempJSON("gestalt-publish-entry-*", entryData)
+	if err != nil {
+		return PublishManifest{}, err
+	}
+	entryDigest, err := SHA256File(entryPath)
+	if err != nil {
+		_ = os.Remove(entryPath)
+		return PublishManifest{}, err
+	}
+	artifactPublishObjects := make([]PublishObject, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		artifactPublishObjects = append(artifactPublishObjects, PublishObject{
+			Kind: PublishObjectKindArchive, Target: artifact.Target,
+			StorageURL: artifact.StorageURL, PublicURL: artifact.PublicURL, SHA256: artifact.SHA256,
+		})
+	}
+	return PublishManifest{
+		Schema: PublishPlanSchemaVersion, AppName: entry.App,
+		DisplayName: input.DisplayName, Description: input.Description, Version: version,
+		Entry: entry,
+		EntryObject: PublishObject{
+			Kind: PublishObjectKindEntry, LocalPath: entryPath,
+			StorageURL: StorageURL(storageRoot, layout.EntryPath),
+			PublicURL:  PublicURL(publicRoot, layout.EntryPath), SHA256: entryDigest,
+		},
+		IndexObject: PublishObject{
+			Kind:       PublishObjectKindIndex,
+			StorageURL: StorageURL(storageRoot, layout.IndexPath),
+			PublicURL:  PublicURL(publicRoot, layout.IndexPath),
+		},
+		ArtifactObjects: artifactPublishObjects,
+	}, nil
+}
+
+// RetentionStorageURL derives the app retention catalog URL from an index object URL.
 func RetentionStorageURL(indexStorageURL string, appName string) string {
 	storageRoot := strings.TrimSuffix(indexStorageURL, AppIndexPath(appName))
 	return StorageURL(storageRoot, AppRetentionPath(appName))

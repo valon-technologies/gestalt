@@ -284,6 +284,34 @@ func validateServerAppRegistry(cfg *Config) error {
 			AppRegistryRolloutModeHeartbeat,
 		)
 	}
+	return validateAppRegistryPublishSettings(cfg)
+}
+
+func validateAppRegistryPublishSettings(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	publish := cfg.Server.AppRegistry.Publish
+	if !publish.Enabled {
+		return nil
+	}
+	registryName := strings.TrimSpace(publish.WritableRegistry)
+	if registryName == "" {
+		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry is required when publish is enabled")
+	}
+	registry, ok := cfg.AppRegistries[registryName]
+	if !ok {
+		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q is not configured under appRegistries", registryName)
+	}
+	if strings.TrimSpace(registry.Kind) != AppRegistryKindGCS {
+		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q must be a GCS app registry", registryName)
+	}
+	if _, err := registry.StorageURL(); err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q: %w", registryName, err)
+	}
+	if _, err := publish.PublishLimits(); err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.publish: %w", err)
+	}
 	return nil
 }
 

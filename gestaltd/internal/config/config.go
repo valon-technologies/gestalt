@@ -2000,14 +2000,48 @@ type ServerAppRegistryConfig struct {
 	RestartDelay string `yaml:"restartDelay,omitempty"`
 	// MaxReconcileAttempts bounds failed convergence attempts per app/version.
 	// Omission defaults to DefaultAppRegistryMaxReconcileAttempts.
-	MaxReconcileAttempts    int                    `yaml:"maxReconcileAttempts,omitempty"`
-	AutoDeployPollInterval  string                 `yaml:"autoDeployPollInterval,omitempty"`
-	HeartbeatInterval       string                 `yaml:"heartbeatInterval,omitempty"`
-	HeartbeatTTL            string                 `yaml:"heartbeatTtl,omitempty"`
-	HealthyStabilityWindow  string                 `yaml:"healthyStabilityWindow,omitempty"`
-	HeartbeatRetention      string                 `yaml:"heartbeatRetention,omitempty"`
-	RolloutMode             AppRegistryRolloutMode `yaml:"rolloutMode,omitempty"`
-	maxReconcileAttemptsSet bool                   `yaml:"-"`
+	MaxReconcileAttempts    int                        `yaml:"maxReconcileAttempts,omitempty"`
+	AutoDeployPollInterval  string                     `yaml:"autoDeployPollInterval,omitempty"`
+	HeartbeatInterval       string                     `yaml:"heartbeatInterval,omitempty"`
+	HeartbeatTTL            string                     `yaml:"heartbeatTtl,omitempty"`
+	HealthyStabilityWindow  string                     `yaml:"healthyStabilityWindow,omitempty"`
+	HeartbeatRetention      string                     `yaml:"heartbeatRetention,omitempty"`
+	RolloutMode             AppRegistryRolloutMode     `yaml:"rolloutMode,omitempty"`
+	Publish                 AppRegistryPublishSettings `yaml:"publish,omitempty"`
+	maxReconcileAttemptsSet bool                       `yaml:"-"`
+}
+
+// AppRegistryPublishSettings configures authenticated app-admin stateless publishing.
+type AppRegistryPublishSettings struct {
+	Enabled           bool     `yaml:"enabled,omitempty"`
+	WritableRegistry  string   `yaml:"writableRegistry,omitempty"`
+	UploadURLTTL      string   `yaml:"uploadURLTTL,omitempty"`
+	MaxArtifacts      int      `yaml:"maxArtifacts,omitempty"`
+	MaxArtifactBytes  int64    `yaml:"maxArtifactBytes,omitempty"`
+	RequiredPlatforms []string `yaml:"requiredPlatforms,omitempty"`
+}
+
+func (c AppRegistryPublishSettings) PublishLimits() (AppRegistryPublishLimits, error) {
+	limits := AppRegistryPublishLimits{
+		MaxArtifacts:      c.MaxArtifacts,
+		MaxArtifactBytes:  c.MaxArtifactBytes,
+		RequiredPlatforms: append([]string(nil), c.RequiredPlatforms...),
+	}
+	if ttl := c.UploadURLTTL; ttl != "" {
+		duration, err := ParseDuration(ttl)
+		if err != nil {
+			return AppRegistryPublishLimits{}, err
+		}
+		limits.UploadURLTTL = duration
+	}
+	return limits, nil
+}
+
+type AppRegistryPublishLimits struct {
+	UploadURLTTL      time.Duration
+	MaxArtifacts      int
+	MaxArtifactBytes  int64
+	RequiredPlatforms []string
 }
 
 const DefaultAppRegistryMaxReconcileAttempts = 3
