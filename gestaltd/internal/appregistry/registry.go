@@ -63,9 +63,9 @@ type Entry struct {
 	SchemaVersion     int                 `json:"schemaVersion"`
 	App               string              `json:"app"`
 	Version           string              `json:"version"`
-	SourceRef         string              `json:"sourceRef"`
+	SourceRef         string              `json:"sourceRef,omitempty"`
 	ManifestPath      string              `json:"manifestPath"`
-	Repository        string              `json:"repository"`
+	Repository        string              `json:"repository,omitempty"`
 	Publication       *Publication        `json:"publication,omitempty"`
 	PublicationKind   PublicationKind     `json:"publicationKind,omitempty"`
 	PublishID         string              `json:"publishId,omitempty"`
@@ -136,20 +136,6 @@ type PublishArtifact struct {
 	StorageURL string
 	PublicURL  string
 	SHA256     string
-}
-
-type PublishPlan struct {
-	RegistryName string
-	AppName      string
-	Version      string
-	Entry        Entry
-	EntryPath    string
-	EntryURL     string
-	EntryPublic  string
-	IndexPath    string
-	IndexURL     string
-	IndexPublic  string
-	Artifacts    []PublishArtifact
 }
 
 func parseAppSource(raw string) (appName, repository string, err error) {
@@ -690,33 +676,6 @@ func validateEntryRepository(repository, appName string) error {
 	}
 	if parsedApp != appName {
 		return fmt.Errorf("does not match app %q", appName)
-	}
-	return nil
-}
-
-func validatePublication(publication *Publication) error {
-	if publication == nil {
-		return nil
-	}
-	if strings.TrimSpace(publication.WorkflowRunURL) == "" {
-		return fmt.Errorf("workflowRunUrl is required")
-	}
-	hasPR := publication.TriggerPullRequest != nil
-	hasCommit := publication.TriggerCommit != nil
-	if hasPR == hasCommit {
-		return fmt.Errorf("exactly one trigger is required")
-	}
-	if hasPR {
-		if publication.TriggerPullRequest.Number <= 0 || strings.TrimSpace(publication.TriggerPullRequest.URL) == "" {
-			return fmt.Errorf("triggerPullRequest number and URL are required")
-		}
-		return nil
-	}
-	if err := validateSourceRef(publication.TriggerCommit.SHA); err != nil {
-		return fmt.Errorf("triggerCommit sha: %w", err)
-	}
-	if strings.TrimSpace(publication.TriggerCommit.URL) == "" {
-		return fmt.Errorf("triggerCommit URL is required")
 	}
 	return nil
 }

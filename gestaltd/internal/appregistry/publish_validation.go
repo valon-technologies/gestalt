@@ -8,6 +8,66 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
 )
 
+// PublicationKind identifies how a registry version was published.
+type PublicationKind string
+
+const (
+	PublicationKindGitHub PublicationKind = "github"
+	PublicationKindLocal  PublicationKind = "local"
+)
+
+// LocalSourceState captures optional Git working-tree provenance for local publishes.
+type LocalSourceState struct {
+	CommitSHA string `json:"commitSha,omitempty"`
+	Dirty     bool   `json:"dirty,omitempty"`
+	Untracked bool   `json:"untracked,omitempty"`
+}
+
+func cloneLocalSourceState(value *LocalSourceState) *LocalSourceState {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	return &out
+}
+
+func normalizeLocalSourceState(value *LocalSourceState) *LocalSourceState {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	out.CommitSHA = strings.ToLower(strings.TrimSpace(out.CommitSHA))
+	return &out
+}
+
+func validatePublicationKind(kind PublicationKind) error {
+	switch kind {
+	case "", PublicationKindGitHub, PublicationKindLocal:
+		return nil
+	default:
+		return fmt.Errorf("unsupported publication kind %q", kind)
+	}
+}
+
+func validateLocalSourceState(state *LocalSourceState) error {
+	if state == nil {
+		return nil
+	}
+	if strings.TrimSpace(state.CommitSHA) == "" && !state.Dirty && !state.Untracked {
+		return fmt.Errorf("localSource must record commitSha and/or dirty/untracked state")
+	}
+	return nil
+}
+
+func publicationKindRequiresSourceRef(kind PublicationKind) bool {
+	switch kind {
+	case PublicationKindLocal:
+		return false
+	default:
+		return true
+	}
+}
+
 // PublishValidationOptions controls publication-kind-specific validation.
 type PublishValidationOptions struct {
 	PublicationKind PublicationKind
@@ -58,6 +118,33 @@ func validateSourceRef(sourceRef string) error {
 		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 			return fmt.Errorf("must be a 40-character lowercase commit SHA")
 		}
+	}
+	return nil
+}
+
+func validatePublication(publication *Publication) error {
+	if publication == nil {
+		return nil
+	}
+	if strings.TrimSpace(publication.WorkflowRunURL) == "" {
+		return fmt.Errorf("workflowRunUrl is required")
+	}
+	hasPR := publication.TriggerPullRequest != nil
+	hasCommit := publication.TriggerCommit != nil
+	if hasPR == hasCommit {
+		return fmt.Errorf("exactly one trigger is required")
+	}
+	if hasPR {
+		if publication.TriggerPullRequest.Number <= 0 || strings.TrimSpace(publication.TriggerPullRequest.URL) == "" {
+			return fmt.Errorf("triggerPullRequest number and URL are required")
+		}
+		return nil
+	}
+	if err := validateSourceRef(publication.TriggerCommit.SHA); err != nil {
+		return fmt.Errorf("triggerCommit sha: %w", err)
+	}
+	if strings.TrimSpace(publication.TriggerCommit.URL) == "" {
+		return fmt.Errorf("triggerCommit URL is required")
 	}
 	return nil
 }

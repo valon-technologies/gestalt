@@ -186,7 +186,7 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry stri
 	if err := s.promoteStagingArtifacts(prepared.stagingPrefix, prepared.canonical, prepared.sourceRef); err != nil {
 		return nil, err
 	}
-	result, err := s.Writer.Publish(req, PublishProgress{})
+	result, err := s.publishUntilIndexed(req, prepared, input.App)
 	if err != nil {
 		return nil, err
 	}
@@ -346,6 +346,28 @@ func (s *StatelessPublishService) promoteStagingArtifacts(stagingPrefix string, 
 		}
 	}
 	return nil
+}
+
+func (s *StatelessPublishService) publishUntilIndexed(req PublishRequest, prepared *preparedPublishAttempt, app string) (PublishResult, error) {
+	attempts := DefaultCatalogUpdateAttempts
+	if s != nil && s.Writer != nil && s.Writer.CatalogAttempts > 0 {
+		attempts = s.Writer.CatalogAttempts
+	}
+	var lastResult PublishResult
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		lastResult, lastErr = s.Writer.Publish(req, PublishProgress{})
+		if lastErr == nil && publishIndexCommitted(lastResult) {
+			return lastResult, nil
+		}
+		if entry, matchErr := s.loadMatchingPublished(app, prepared.version, prepared.publishID, prepared.digest, prepared.sourceRef); matchErr == nil && entry != nil {
+			return PublishResult{Index: CatalogWriteOutcomeUnchanged}, nil
+		}
+		if lastErr != nil && !CatalogPreconditionFailed(lastErr) {
+			return lastResult, lastErr
+		}
+	}
+	return lastResult, lastErr
 }
 
 func adminPublishResponse(publishID, app, registry, version, state string, uploads []AdminPublishUpload, publishedAt time.Time) *AdminPublishResponse {
