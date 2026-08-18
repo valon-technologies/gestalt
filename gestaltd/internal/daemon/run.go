@@ -76,7 +76,7 @@ func run(args []string, version string) error {
 		case "provider":
 			return runProvider(args[1:])
 		case "app":
-			return runApp(args[1:])
+			return runApp(args[1:], version)
 		case "agent":
 			return runAgent(args[1:])
 		case "dev":

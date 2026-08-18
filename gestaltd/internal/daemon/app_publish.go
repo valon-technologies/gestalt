@@ -38,6 +38,21 @@ func runAppPublish(args []string) error {
 	return runAppPublishCommand("gestaltd app publish", printAppPublishUsage, args)
 }
 
+type appPublishCommandOptions struct {
+	Bucket           string
+	AppName          string
+	Version          string
+	Ref              string
+	WorkflowRunURL   string
+	TriggerPRNumber  int
+	TriggerPRURL     string
+	TriggerPRTitle   string
+	TriggerCommitSHA string
+	TriggerCommitURL string
+	DryRun           bool
+	DistDirs         appPublishDistDirs
+}
+
 func runAppPublishCommand(commandName string, usage func(io.Writer), args []string) error {
 	fs := flag.NewFlagSet(commandName, flag.ContinueOnError)
 	fs.Usage = func() { usage(fs.Output()) }
@@ -60,86 +75,76 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
-	if strings.TrimSpace(*bucket) == "" {
+	return runAppPublishWithOptions(appPublishCommandOptions{
+		Bucket:           *bucket,
+		AppName:          *appName,
+		Version:          *version,
+		Ref:              *ref,
+		WorkflowRunURL:   *workflowRunURL,
+		TriggerPRNumber:  *triggerPRNumber,
+		TriggerPRURL:     *triggerPRURL,
+		TriggerPRTitle:   *triggerPRTitle,
+		TriggerCommitSHA: *triggerCommitSHA,
+		TriggerCommitURL: *triggerCommitURL,
+		DryRun:           *dryRun,
+		DistDirs:         distDirs,
+	})
+}
+
+func runAppPublishWithOptions(opts appPublishCommandOptions) error {
+	if strings.TrimSpace(opts.Bucket) == "" {
 		return fmt.Errorf("--bucket is required")
 	}
-	if strings.TrimSpace(*appName) == "" {
+	if strings.TrimSpace(opts.AppName) == "" {
 		return fmt.Errorf("--app is required")
 	}
-	if err := providerregistry.ValidateRepositoryName(*appName); err != nil {
+	if err := providerregistry.ValidateRepositoryName(opts.AppName); err != nil {
 		return fmt.Errorf("--app: %w", err)
 	}
-	if len(distDirs) == 0 {
+	if len(opts.DistDirs) == 0 {
 		return fmt.Errorf("--dist-dir is required")
 	}
-	if strings.TrimSpace(*version) == "" {
+	if strings.TrimSpace(opts.Version) == "" {
 		return fmt.Errorf("--version is required")
 	}
-	sourceRef := strings.ToLower(strings.TrimSpace(*ref))
+	sourceRef := strings.ToLower(strings.TrimSpace(opts.Ref))
 	if !fullGitSHARe.MatchString(sourceRef) {
 		return fmt.Errorf("--ref must be a 40-character commit SHA")
 	}
 	publication, err := appPublishPublication(
-		*workflowRunURL,
-		*triggerPRNumber,
-		*triggerPRURL,
-		*triggerPRTitle,
-		*triggerCommitSHA,
-		*triggerCommitURL,
+		opts.WorkflowRunURL,
+		opts.TriggerPRNumber,
+		opts.TriggerPRURL,
+		opts.TriggerPRTitle,
+		opts.TriggerCommitSHA,
+		opts.TriggerCommitURL,
 	)
 	if err != nil {
 		return err
 	}
 
-	registry, err := config.NewGCSAppRegistry(*bucket)
+	registry, err := config.NewGCSAppRegistry(opts.Bucket)
 	if err != nil {
 		return fmt.Errorf("--bucket: %w", err)
 	}
-	manifestPath, err := resolveAppPublishManifest(*appName)
+	prepared, err := prepareAppPublishRelease(prepareAppPublishReleaseInput{
+		AppName:      opts.AppName,
+		VersionGuard: opts.Version,
+		DistDirs:     []string(opts.DistDirs),
+	})
 	if err != nil {
 		return err
 	}
-	_, sourceManifest, err := readAppPublishManifest(manifestPath)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", manifestPath, err)
-	}
-	manifestApp, err := appregistry.AppNameFromManifestSource(sourceManifest.Source)
-	if err != nil {
-		return fmt.Errorf("%s: invalid manifest source: %w", manifestPath, err)
-	}
-	if manifestApp != strings.TrimSpace(*appName) {
-		return fmt.Errorf("%s: manifest source app %q does not match --app %q; update manifest source or pass the matching --app name", manifestPath, manifestApp, strings.TrimSpace(*appName))
-	}
-	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivesFromDirsWithProgress([]string(distDirs), *version)
-	if err != nil {
-		return err
-	}
-	if err := validateProviderPublishManifest(sourceManifest, releaseManifest, releaseVersion, *version); err != nil {
-		return err
-	}
-	if err := appregistry.ValidatePublishInputWithOptions(sourceManifest, *version, sourceRef, appregistry.PublishValidationOptions{
+	sourceManifest := prepared.SourceManifest
+	releaseArchives := prepared.Archives
+	manifestPath := prepared.ManifestPath
+	if err := appregistry.ValidatePublishInputWithOptions(sourceManifest, opts.Version, sourceRef, appregistry.PublishValidationOptions{
 		PublicationKind: appregistry.PublicationKindGitHub,
 	}); err != nil {
 		return err
 	}
 
-	tmpDir, err := os.MkdirTemp("", "gestalt-app-publish-*")
-	if err != nil {
-		return fmt.Errorf("create publish temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-	if err := writeProviderReleaseMetadata(tmpDir, releaseManifest, releaseVersion, releaseArchives, nil, false); err != nil {
-		return fmt.Errorf("write release metadata: %w", err)
-	}
-
-	releaseMetadataBytes, err := readProviderReleaseMetadata(filepath.Join(tmpDir, providerrelease.MetadataFile))
-	if err != nil {
-		return err
-	}
-	releaseMetadata, err := providerrelease.Decode(releaseMetadataBytes)
-	if err != nil {
-		return fmt.Errorf("decode provider release metadata: %w", err)
-	}
+	releaseMetadata := prepared.ReleaseMetadata
 
 	sourceInfo, err := providerPublishSourceRef(manifestPath, sourceRef)
 	if err != nil {
@@ -156,14 +161,14 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 	}
 
 	writer := newAppRegistryWriter()
-	publishStartedAt := appregistry.LoadPublishStartedAt(writer.Store, storageRoot, strings.TrimSpace(*appName), strings.TrimSpace(*version))
+	publishStartedAt := appregistry.LoadPublishStartedAt(writer.Store, storageRoot, strings.TrimSpace(opts.AppName), strings.TrimSpace(opts.Version))
 
 	plan, err := buildAppPublishManifest(buildAppPublishManifestInput{
 		StorageRoot:  storageRoot,
 		PublicRoot:   publicRoot,
 		DisplayName:  sourceManifest.DisplayName,
 		Description:  sourceManifest.Description,
-		Version:      *version,
+		Version:      opts.Version,
 		SourceRef:    sourceRef,
 		ManifestPath: sourceInfo.ManifestPath,
 		Publication:  publication,
@@ -177,7 +182,7 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 	}
 	defer func() { _ = os.Remove(plan.EntryObject.LocalPath) }()
 
-	if *dryRun {
+	if opts.DryRun {
 		return printAppPublishPlanJSON(plan)
 	}
 	progress := newAppPublishProgressReporter()
@@ -238,14 +243,6 @@ func buildAppPublishManifest(input buildAppPublishManifestInput) (appregistry.Pu
 			}
 		},
 	})
-}
-
-func readProviderReleaseMetadata(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return data, nil
 }
 
 func readAppPublishManifest(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
@@ -360,14 +357,7 @@ func gitRootFromWorkingDirectory() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("app publish must run inside a git repository checkout (from %s): %w", cwd, err)
 	}
-	gitRoot := strings.TrimSpace(rootOut)
-	if absGitRoot, err := filepath.Abs(gitRoot); err == nil {
-		gitRoot = absGitRoot
-	}
-	if evaluatedGitRoot, err := filepath.EvalSymlinks(gitRoot); err == nil {
-		gitRoot = evaluatedGitRoot
-	}
-	return gitRoot, nil
+	return normalizeGitRoot(strings.TrimSpace(rootOut)), nil
 }
 
 func printAppPublishPlanJSON(plan appregistry.PublishManifest) error {

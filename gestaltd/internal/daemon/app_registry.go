@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func runAppRegistry(args []string) error {
+func runAppRegistry(args []string, gestaltdVersion string) error {
 	if len(args) == 0 {
 		printAppRegistryUsage(os.Stderr)
 		return flag.ErrHelp
@@ -18,7 +18,7 @@ func runAppRegistry(args []string) error {
 		printAppRegistryUsage(os.Stderr)
 		return flag.ErrHelp
 	case "publish":
-		return runAppRegistryPublish(args[1:])
+		return runAppRegistryPublish(args[1:], gestaltdVersion)
 	case "pending":
 		return runAppRegistryPending(args[1:])
 	case "retention":
