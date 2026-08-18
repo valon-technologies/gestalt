@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
@@ -98,6 +99,7 @@ func TestCreateAPITokenForwardsExpiresIn(t *testing.T) {
 	}
 
 	var created struct {
+		ID        string     `json:"id"`
 		Name      string     `json:"name"`
 		ExpiresAt *time.Time `json:"expiresAt"`
 	}
@@ -109,6 +111,16 @@ func TestCreateAPITokenForwardsExpiresIn(t *testing.T) {
 	}
 	if created.Name != "ci-pipeline" {
 		t.Fatalf("name = %q, want ci-pipeline", created.Name)
+	}
+	if created.ID == "" {
+		t.Fatal("expected grant id in create response")
+	}
+	grant, err := stub.GetGrant(t.Context(), &core.GetGrantRequest{GrantID: created.ID})
+	if err != nil {
+		t.Fatalf("GetGrant(%q): %v", created.ID, err)
+	}
+	if grant.Name != "ci-pipeline" {
+		t.Fatalf("GetGrant name = %q, want ci-pipeline", grant.Name)
 	}
 	wantExpiry := time.Now().UTC().Add(90 * 24 * time.Hour)
 	if created.ExpiresAt.Before(wantExpiry.Add(-time.Minute)) || created.ExpiresAt.After(wantExpiry.Add(time.Minute)) {

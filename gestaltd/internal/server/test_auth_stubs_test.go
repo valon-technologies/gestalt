@@ -153,6 +153,7 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 				CreatedAt: now.Unix(),
 				ExpiresAt: now.Add(time.Duration(ttlSeconds) * time.Second).Unix(),
 				Scopes:    scopesFromString(scope),
+				Name:      strings.TrimSpace(req.Name),
 			}
 			stub.mu.Unlock()
 			return &core.TokenResponse{
