@@ -1,7 +1,12 @@
 package invocation
 
 import (
+	"context"
 	"testing"
+
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 func TestAuthorizationResource(t *testing.T) {
@@ -86,5 +91,34 @@ func TestAuthorizationResourceMapperZeroValueIsUsable(t *testing.T) {
 	resource := mapper.Resource("unknown")
 	if resource.GetType() != "unknown" || resource.GetId() != "unknown" {
 		t.Fatalf("Resource = %v, want unknown/unknown", resource)
+	}
+}
+
+func TestBrokerInfersAppResourceFromRegisteredProvider(t *testing.T) {
+	t.Parallel()
+
+	authz := &authorizationCheckTestProvider{allowed: true}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "it-account-onboarding"}),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+	)
+	p := &principal.Principal{
+		SubjectID: "service_account:it-account-onboarding-jobs",
+		Kind:      principal.Kind("service_account"),
+	}
+
+	if err := broker.CheckOperationAccess(
+		context.Background(),
+		p,
+		"it-account-onboarding",
+		"jobs.syncValonEmployeeRoster",
+	); err != nil {
+		t.Fatalf("CheckOperationAccess: %v", err)
+	}
+	resource := authz.lastReq.GetResource()
+	if resource.GetType() != "app" || resource.GetId() != "it-account-onboarding" {
+		t.Fatalf("Resource = %v, want app/it-account-onboarding", resource)
 	}
 }

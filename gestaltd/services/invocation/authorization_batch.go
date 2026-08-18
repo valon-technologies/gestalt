@@ -150,7 +150,7 @@ func (b *Broker) CheckOperationAccessMany(
 		reqs = append(reqs, ResourceAccessRequest{
 			SubjectID:         subjectID,
 			Action:            queries[i].Operation,
-			Resource:          b.authorizationResource(queries[i].Provider),
+			Resource:          b.authorizationResource(ctx, queries[i].Provider),
 			AllowedRoles:      queries[i].AllowedRoles,
 			SubjectProperties: properties,
 		})
