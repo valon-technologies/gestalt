@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -10,28 +9,20 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-func invocationRejectedStoredCredential(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, invocation.ErrReconnectRequired) || errors.Is(err, core.ErrReconnectRequired) {
-		return true
-	}
-	var upstream *apiexec.UpstreamHTTPError
-	return errors.As(err, &upstream) && upstream != nil && upstream.Status == http.StatusUnauthorized
-}
-
 // persistReconnectRequiredGrant writes the catalog reconnect fact onto the
-// stored OAuth grant after upstream rejected it. Catalog GET does not probe
-// the provider; it reads ExpiresAt + RefreshErrorCount. Persist failures are
-// logged and must not change the invocation error returned to the caller.
+// Grant this invocation used. Catalog GET does not probe the provider; it
+// reads ExpiresAt + RefreshErrorCount. Persist failures are logged and must
+// not change the invocation error returned to the caller.
+//
+// Identity comes from the invoke (credential context, then WithConnection),
+// not from listing every grant for the subject. A 401 on archive must not
+// expire a healthy default sibling.
 func (s *Server) persistReconnectRequiredGrant(r *http.Request, providerName string, err error) {
-	if s == nil || r == nil || !invocationRejectedStoredCredential(err) {
+	if s == nil || r == nil || !invocation.StoredCredentialRejected(err) {
 		return
 	}
 	if core.ExternalCredentialProviderMissing(s.externalCredentials) {
@@ -46,14 +37,18 @@ func (s *Server) persistReconnectRequiredGrant(r *http.Request, providerName str
 	if resolveErr != nil || strings.TrimSpace(subjectID) == "" {
 		return
 	}
-	credentials, listErr := s.externalCredentials.ListCredentials(ctx, subjectID, "")
-	if listErr != nil {
-		slog.WarnContext(ctx, "listing credentials after stored-credential reject", "provider", providerName, "error", listErr)
+	cred := invocation.CredentialContextFromContext(ctx)
+	connection := firstNonEmpty(
+		cred.Connection,
+		invocation.ConnectionFromContext(ctx),
+		r.URL.Query().Get(httpConnectionParam),
+	)
+	instance := firstNonEmpty(cred.Instance, r.URL.Query().Get(httpInstanceParam))
+	audience := s.reconnectAudience(providerName, connection)
+	if audience == "" {
 		return
 	}
-	requestedConnection := strings.TrimSpace(r.URL.Query().Get(httpConnectionParam))
-	requestedInstance := strings.TrimSpace(r.URL.Query().Get(httpInstanceParam))
-	target := s.selectReconnectGrant(ctx, subjectID, providerName, requestedConnection, requestedInstance, credentials)
+	target := s.loadReconnectGrant(ctx, subjectID, audience, instance)
 	if target == nil || target.Grant == nil {
 		return
 	}
@@ -70,87 +65,82 @@ func (s *Server) persistReconnectRequiredGrant(r *http.Request, providerName str
 	}
 }
 
-func (s *Server) selectReconnectGrant(
-	ctx context.Context,
-	subjectID, providerName, requestedConnection, requestedInstance string,
-	credentials []*core.ExternalCredential,
-) *core.ExternalCredential {
-	requestedConnection = config.ResolveConnectionAlias(strings.TrimSpace(requestedConnection))
-	requestedInstance = strings.TrimSpace(requestedInstance)
-	matches := make([]*core.ExternalCredential, 0, 1)
+func (s *Server) reconnectAudience(providerName, connection string) string {
+	connection = config.ResolveConnectionAlias(strings.TrimSpace(connection))
+	if connection == "" {
+		connection = s.defaultConnectionName(providerName)
+	}
+	if connection == "" {
+		return ""
+	}
+	if s.pluginDefs != nil {
+		if entry := s.pluginDefs[providerName]; entry != nil && entry.Connections != nil {
+			if def := entry.Connections[connection]; def != nil {
+				if id := strings.TrimSpace(def.ConnectionID); id != "" {
+					return id
+				}
+			}
+		}
+	}
+	return strings.TrimSpace(providerName) + ":" + connection
+}
+
+func (s *Server) loadReconnectGrant(ctx context.Context, subjectID, audience, instance string) *core.ExternalCredential {
+	instance = strings.TrimSpace(instance)
+	if instance != "" {
+		stored, err := s.externalCredentials.GetCredential(ctx, subjectID, audience, instance)
+		if err != nil || stored == nil {
+			return nil
+		}
+		return stored
+	}
+	credentials, listErr := s.externalCredentials.ListCredentials(ctx, subjectID, audience)
+	if listErr != nil {
+		slog.WarnContext(ctx, "listing credentials after stored-credential reject", "audience", audience, "error", listErr)
+		return nil
+	}
+	preferred := ""
+	if s.connectionInstancePreferences != nil {
+		preferred, _ = s.connectionInstancePreferences.PreferredInstance(ctx, subjectID, audience)
+	}
+	chosen, ok := chosenReconnectInstance(credentials, preferred)
+	if !ok {
+		return nil
+	}
+	stored, err := s.externalCredentials.GetCredential(ctx, subjectID, audience, chosen)
+	if err != nil || stored == nil {
+		return nil
+	}
+	return stored
+}
+
+func chosenReconnectInstance(credentials []*core.ExternalCredential, preferred string) (string, bool) {
+	matches := make([]*core.ExternalCredential, 0, len(credentials))
 	for _, credential := range credentials {
 		if credential == nil || credential.Grant == nil {
 			continue
 		}
-		if !s.credentialMatchesProvider(credential, providerName, requestedConnection) {
-			continue
-		}
-		if requestedInstance != "" && strings.TrimSpace(credential.Qualifier) != requestedInstance {
-			continue
-		}
 		matches = append(matches, credential)
 	}
-	switch len(matches) {
-	case 0:
-		return nil
-	case 1:
-		return matches[0]
-	}
-
-	byAudience := map[string][]*core.ExternalCredential{}
-	for _, credential := range matches {
-		audience := strings.TrimSpace(credential.Audience)
-		byAudience[audience] = append(byAudience[audience], credential)
-	}
-	candidates := matches
-	if requestedConnection == "" && len(byAudience) > 1 {
-		defaultAudience := strings.TrimSpace(providerName) + ":" + config.AppConnectionName
-		namedDefault := strings.TrimSpace(providerName) + ":" + defaultTokenInstance
-		if group, ok := byAudience[namedDefault]; ok {
-			candidates = group
-		} else if group, ok := byAudience[defaultAudience]; ok {
-			candidates = group
-		} else {
-			return nil
+	preferred = strings.TrimSpace(preferred)
+	if preferred != "" {
+		for _, credential := range matches {
+			if strings.TrimSpace(credential.Qualifier) == preferred {
+				return preferred, true
+			}
 		}
 	}
-	if len(candidates) == 1 {
-		return candidates[0]
+	if len(matches) == 1 {
+		return strings.TrimSpace(matches[0].Qualifier), true
 	}
-	preferred := s.preferredInstanceForConnection(ctx, subjectID, strings.TrimSpace(candidates[0].Audience))
-	if preferred == "" {
-		return nil
-	}
-	for _, credential := range candidates {
-		if strings.TrimSpace(credential.Qualifier) == preferred {
-			return credential
-		}
-	}
-	return nil
+	return "", false
 }
 
-func (s *Server) credentialMatchesProvider(credential *core.ExternalCredential, providerName, requestedConnection string) bool {
-	if credential == nil {
-		return false
-	}
-	for _, binding := range s.pluginConnectionBindingsForCredentialID(credential.Audience) {
-		if binding.App != providerName {
-			continue
-		}
-		if requestedConnection == "" {
-			return true
-		}
-		if config.ResolveConnectionAlias(binding.Connection) == requestedConnection {
-			return true
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
 		}
 	}
-	prefix := strings.TrimSpace(providerName) + ":"
-	audience := strings.TrimSpace(credential.Audience)
-	if !strings.HasPrefix(audience, prefix) {
-		return false
-	}
-	if requestedConnection == "" {
-		return true
-	}
-	return audience == prefix+requestedConnection
+	return ""
 }

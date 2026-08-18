@@ -1434,7 +1434,7 @@ func TestBrokerInvoke_UpstreamUnauthorizedPersistsReconnectRequired(t *testing.T
 	if err == nil {
 		t.Fatal("expected invoke error")
 	}
-	if !storedCredentialRejected(err) {
+	if !StoredCredentialRejected(err) {
 		t.Fatalf("err = %v, want stored-credential reject", err)
 	}
 

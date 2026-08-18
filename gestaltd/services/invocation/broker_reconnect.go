@@ -12,7 +12,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-func storedCredentialRejected(err error) bool {
+// StoredCredentialRejected is the shared predicate for persist-on-reject.
+// HTTP handlers must use this instead of re-deriving a grant from the URL.
+func StoredCredentialRejected(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -27,7 +29,7 @@ func storedCredentialRejected(err error) bool {
 // that this invocation actually used. HTTP, MCP, and gRPC all go through
 // Broker.Invoke*, so a 401 here must survive the next catalog GET.
 func (b *Broker) persistReconnectRequired(ctx context.Context, p *principal.Principal, providerName, connection, instance string, err error) {
-	if b == nil || !storedCredentialRejected(err) || core.ExternalCredentialProviderMissing(b.externalCreds) {
+	if b == nil || !StoredCredentialRejected(err) || core.ExternalCredentialProviderMissing(b.externalCreds) {
 		return
 	}
 	providerName = strings.TrimSpace(providerName)

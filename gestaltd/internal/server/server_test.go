@@ -13722,6 +13722,95 @@ func TestExecuteOperation_StubInvokerUnauthorizedPersistsReconnectRequired(t *te
 	assertNotionNeedsReconnect(t, ts, false)
 }
 
+func TestExecuteOperation_UnauthorizedNamedConnectionDoesNotMarkSibling(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	subjectID := principal.UserSubjectID(u.ID)
+	future := time.Now().Add(time.Hour)
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "named-stale-default",
+		Subject:   subjectID,
+		Audience:  "named-stale:" + testDefaultConnection,
+		Qualifier: "default",
+		Grant: &core.ExternalCredentialGrant{
+			AccessToken: "default-access",
+			ExpiresAt:   &future,
+		},
+	})
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "named-stale-archive",
+		Subject:   subjectID,
+		Audience:  "named-stale:archive",
+		Qualifier: "archive",
+		Grant: &core.ExternalCredentialGrant{
+			AccessToken: "archive-access",
+			ExpiresAt:   &future,
+		},
+	})
+
+	defaultConn := oauthConnectionDef(nil)
+	defaultConn.ConnectionID = "named-stale:" + testDefaultConnection
+	archiveConn := oauthConnectionDef(nil)
+	archiveConn.ConnectionID = "named-stale:archive"
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "named-stale", DN: "Named Stale"},
+		ops: []core.Operation{
+			{Name: "search", Description: "Search", Method: http.MethodGet},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"named-stale": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: defaultConn,
+					"archive":             archiveConn,
+				},
+			},
+		}
+		cfg.Services = svc
+		cfg.Invoker = &testutil.StubInvoker{
+			Err: &apiexec.UpstreamHTTPError{Status: http.StatusUnauthorized, Body: []byte("")},
+		}
+		cfg.DefaultConnection = map[string]string{"named-stale": testDefaultConnection}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/named-stale/search?_connection=archive", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 412: %s", resp.StatusCode, body)
+	}
+
+	archive, err := svc.ExternalCredentials.GetCredential(context.Background(), subjectID, "named-stale:archive", "archive")
+	if err != nil {
+		t.Fatalf("GetCredential(archive): %v", err)
+	}
+	if archive.Grant == nil || archive.Grant.RefreshErrorCount < 1 {
+		t.Fatalf("archive grant = %+v, want RefreshErrorCount >= 1", archive.Grant)
+	}
+	healthy, err := svc.ExternalCredentials.GetCredential(context.Background(), subjectID, "named-stale:"+testDefaultConnection, "default")
+	if err != nil {
+		t.Fatalf("GetCredential(default): %v", err)
+	}
+	if healthy.Grant == nil {
+		t.Fatal("default grant missing")
+	}
+	if healthy.Grant.RefreshErrorCount != 0 {
+		t.Fatalf("default RefreshErrorCount = %d, want 0 (sibling must stay connected)", healthy.Grant.RefreshErrorCount)
+	}
+	if healthy.Grant.ExpiresAt == nil || !healthy.Grant.ExpiresAt.After(time.Now()) {
+		t.Fatalf("default ExpiresAt = %v, want still in the future", healthy.Grant.ExpiresAt)
+	}
+}
+
 func TestExecuteOperation_UserFacingErrorMessage(t *testing.T) {
 	t.Parallel()
 
