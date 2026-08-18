@@ -415,3 +415,24 @@ func ApplyPendingSet(pending *PendingIndex, failed *FailedIndex, published *Inde
 	}
 	return pendingChanged, failedChanged
 }
+
+// LoadPublishStartedAt reads pending.json for an in-flight publish startedAt timestamp.
+func LoadPublishStartedAt(store RegistryObjectStore, storageRoot, appName, version string) time.Time {
+	if store == nil {
+		return time.Time{}
+	}
+	pendingURL := StorageURL(storageRoot, AppPendingPath(appName))
+	_, pendingData, err := store.ReadObject(pendingURL)
+	if err != nil || len(pendingData) == 0 {
+		return time.Time{}
+	}
+	pending, err := DecodePendingIndex(pendingData)
+	if err != nil {
+		return time.Time{}
+	}
+	startedAt, ok := PublishStartedAtFromPending(pending, version)
+	if !ok {
+		return time.Time{}
+	}
+	return startedAt
+}
