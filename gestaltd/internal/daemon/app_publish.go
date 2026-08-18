@@ -1,17 +1,13 @@
 package daemon
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -22,8 +18,6 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
-
-const appPublishPlanSchema = "gestaltd.app.publish.plan.v1"
 
 type appPublishDistDirs []string
 
@@ -38,29 +32,6 @@ func (d *appPublishDistDirs) Set(value string) error {
 	}
 	*d = append(*d, value)
 	return nil
-}
-
-type appPublishPlan struct {
-	Schema          string             `json:"schema"`
-	AppName         string             `json:"appName"`
-	DisplayName     string             `json:"displayName,omitempty"`
-	Description     string             `json:"description,omitempty"`
-	Version         string             `json:"version"`
-	Entry           appregistry.Entry  `json:"entry"`
-	EntryObject     appPublishObject   `json:"entryObject"`
-	IndexObject     appPublishObject   `json:"indexObject"`
-	ArtifactObjects []appPublishObject `json:"artifactObjects"`
-}
-
-const appPublishIndexUpdateAttempts = 5
-
-type appPublishObject struct {
-	Kind       string `json:"kind"`
-	Target     string `json:"target,omitempty"`
-	LocalPath  string `json:"localPath"`
-	StorageURL string `json:"storageUrl"`
-	PublicURL  string `json:"publicUrl"`
-	SHA256     string `json:"sha256,omitempty"`
 }
 
 func runAppPublish(args []string) error {
@@ -146,7 +117,9 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 	if err := validateProviderPublishManifest(sourceManifest, releaseManifest, releaseVersion, *version); err != nil {
 		return err
 	}
-	if err := appregistry.ValidatePublishInput(sourceManifest, *version, sourceRef); err != nil {
+	if err := appregistry.ValidatePublishInputWithOptions(sourceManifest, *version, sourceRef, appregistry.PublishValidationOptions{
+		PublicationKind: appregistry.PublicationKindGitHub,
+	}); err != nil {
 		return err
 	}
 
@@ -173,21 +146,31 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 		return err
 	}
 
-	publishStartedAt := loadAppRegistryPublishStartedAt(registry, strings.TrimSpace(*appName), strings.TrimSpace(*version))
+	storageRoot, err := registry.StorageURL()
+	if err != nil {
+		return err
+	}
+	publicRoot, err := registry.PublicURL()
+	if err != nil {
+		return err
+	}
 
-	plan, err := buildAppPublishPlan(appPublishPlanInput{
-		Registry:         registry,
-		DisplayName:      sourceManifest.DisplayName,
-		Description:      sourceManifest.Description,
-		Version:          *version,
-		SourceRef:        sourceRef,
-		ManifestPath:     sourceInfo.ManifestPath,
-		Publication:      publication,
-		Manifest:         sourceManifest,
-		Release:          releaseMetadata,
-		Archives:         releaseArchives,
-		MetadataPath:     filepath.Join(tmpDir, providerrelease.MetadataFile),
-		PublishStartedAt: publishStartedAt,
+	writer := newAppRegistryWriter()
+	publishStartedAt := appregistry.LoadPublishStartedAt(writer.Store, storageRoot, strings.TrimSpace(*appName), strings.TrimSpace(*version))
+
+	plan, err := buildAppPublishManifest(buildAppPublishManifestInput{
+		StorageRoot:  storageRoot,
+		PublicRoot:   publicRoot,
+		DisplayName:  sourceManifest.DisplayName,
+		Description:  sourceManifest.Description,
+		Version:      *version,
+		SourceRef:    sourceRef,
+		ManifestPath: sourceInfo.ManifestPath,
+		Publication:  publication,
+		Manifest:     sourceManifest,
+		Release:      releaseMetadata,
+		Archives:     releaseArchives,
+		StartedAt:    publishStartedAt,
 	})
 	if err != nil {
 		return err
@@ -197,10 +180,64 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 	if *dryRun {
 		return printAppPublishPlanJSON(plan)
 	}
-	if err := preflightAppPublishPlan(plan); err != nil {
+	progress := newAppPublishProgressReporter()
+	req := appregistry.PublishRequest{Manifest: plan, SourceRef: sourceRef}
+	if err := writer.Preflight(req, progress.progress()); err != nil {
 		return err
 	}
-	return uploadAppPublishPlan(plan, sourceRef)
+	_, err = writer.Publish(req, progress.progress())
+	return err
+}
+
+type buildAppPublishManifestInput struct {
+	StorageRoot  string
+	PublicRoot   string
+	DisplayName  string
+	Description  string
+	Version      string
+	SourceRef    string
+	ManifestPath string
+	Publication  *appregistry.Publication
+	Manifest     *providermanifestv1.Manifest
+	Release      *providerrelease.Metadata
+	Archives     []releaseArchive
+	StartedAt    time.Time
+}
+
+func buildAppPublishManifest(input buildAppPublishManifestInput) (appregistry.PublishManifest, error) {
+	localArtifacts := make([]appregistry.LocalPublishArtifact, 0, len(input.Archives))
+	for _, archive := range input.Archives {
+		localArtifacts = append(localArtifacts, appregistry.LocalPublishArtifact{
+			Target:    archive.Target,
+			LocalPath: archive.Path,
+		})
+	}
+	var hashProgress *commandProgress
+	return appregistry.BuildPublishManifest(appregistry.BuildPublishManifestInput{
+		StorageRoot: input.StorageRoot,
+		PublicRoot:  input.PublicRoot,
+		DisplayName: input.DisplayName,
+		Description: input.Description,
+		EntryInput: appregistry.BuildEntryInput{
+			Manifest:         input.Manifest,
+			Version:          input.Version,
+			SourceRef:        input.SourceRef,
+			ManifestPath:     input.ManifestPath,
+			Publication:      input.Publication,
+			PublicationKind:  appregistry.PublicationKindGitHub,
+			Release:          input.Release,
+			PublishStartedAt: input.StartedAt,
+		},
+		LocalArtifacts: localArtifacts,
+		OnHashStart: func(fileCount int) {
+			hashProgress = startCommandProgress("Hashing %d app publish files", fileCount)
+		},
+		OnHashDone: func(fileCount int) {
+			if hashProgress != nil {
+				hashProgress.done("Hashed %d app publish files", fileCount)
+			}
+		},
+	})
 }
 
 func readProviderReleaseMetadata(path string) ([]byte, error) {
@@ -333,496 +370,7 @@ func gitRootFromWorkingDirectory() (string, error) {
 	return gitRoot, nil
 }
 
-type appPublishPlanInput struct {
-	Registry         config.AppRegistryConfig
-	DisplayName      string
-	Description      string
-	Version          string
-	SourceRef        string
-	ManifestPath     string
-	Publication      *appregistry.Publication
-	Manifest         *providermanifestv1.Manifest
-	Release          *providerrelease.Metadata
-	Archives         []releaseArchive
-	MetadataPath     string
-	PublishStartedAt time.Time
-}
-
-func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
-	storageRoot, err := input.Registry.StorageURL()
-	if err != nil {
-		return appPublishPlan{}, err
-	}
-	publicRoot, err := input.Registry.PublicURL()
-	if err != nil {
-		return appPublishPlan{}, err
-	}
-	storageRoot = strings.TrimRight(storageRoot, "/")
-	publicRoot = strings.TrimRight(publicRoot, "/")
-
-	layout, err := appregistry.ResolvePublishLayout(input.Manifest.Source, input.Version)
-	if err != nil {
-		return appPublishPlan{}, err
-	}
-
-	artifactPrefix := layout.ArtifactPrefix
-	sortedArchives := append([]releaseArchive(nil), input.Archives...)
-	sort.Slice(sortedArchives, func(i, j int) bool {
-		return filepath.Base(sortedArchives[i].Path) < filepath.Base(sortedArchives[j].Path)
-	})
-
-	publishArtifacts := make([]appregistry.PublishArtifact, 0, len(sortedArchives))
-	artifactObjects := make([]appPublishObject, 0, len(sortedArchives))
-	hashProgress := startCommandProgress("Hashing %d app publish files", len(sortedArchives)+1)
-	for _, archive := range sortedArchives {
-		filename := filepath.Base(archive.Path)
-		rel := path.Join(artifactPrefix, filename)
-		digest, err := sha256File(archive.Path)
-		if err != nil {
-			return appPublishPlan{}, err
-		}
-		publishArtifacts = append(publishArtifacts, appregistry.PublishArtifact{
-			Target:     archive.Target,
-			LocalPath:  archive.Path,
-			Filename:   filename,
-			StorageURL: appregistry.StorageURL(storageRoot, rel),
-			PublicURL:  appregistry.PublicURL(publicRoot, rel),
-			SHA256:     digest,
-		})
-		artifactObjects = append(artifactObjects, appPublishObject{
-			Kind:       providerPublishFileKindArchive,
-			Target:     archive.Target,
-			LocalPath:  archive.Path,
-			StorageURL: appregistry.StorageURL(storageRoot, rel),
-			PublicURL:  appregistry.PublicURL(publicRoot, rel),
-			SHA256:     digest,
-		})
-	}
-
-	entry, err := appregistry.BuildEntry(appregistry.BuildEntryInput{
-		Manifest:         input.Manifest,
-		Version:          input.Version,
-		SourceRef:        input.SourceRef,
-		ManifestPath:     input.ManifestPath,
-		Publication:      input.Publication,
-		Release:          input.Release,
-		Artifacts:        publishArtifacts,
-		PublishStartedAt: input.PublishStartedAt,
-	})
-	if err != nil {
-		return appPublishPlan{}, err
-	}
-
-	entryRel := layout.EntryPath
-	entryData, err := json.MarshalIndent(entry, "", "  ")
-	if err != nil {
-		return appPublishPlan{}, err
-	}
-	entryPath, err := writeTempJSON("gestalt-app-entry-*", entryData)
-	if err != nil {
-		return appPublishPlan{}, err
-	}
-	entryDigest, err := sha256File(entryPath)
-	if err != nil {
-		return appPublishPlan{}, err
-	}
-	hashProgress.done("Hashed %d app publish files", len(sortedArchives)+1)
-
-	indexRel := layout.IndexPath
-	return appPublishPlan{
-		Schema:      appPublishPlanSchema,
-		AppName:     entry.App,
-		DisplayName: input.DisplayName,
-		Description: input.Description,
-		Version:     input.Version,
-		Entry:       entry,
-		EntryObject: appPublishObject{
-			Kind:       "entry",
-			LocalPath:  entryPath,
-			StorageURL: appregistry.StorageURL(storageRoot, entryRel),
-			PublicURL:  appregistry.PublicURL(publicRoot, entryRel),
-			SHA256:     entryDigest,
-		},
-		IndexObject: appPublishObject{
-			Kind:       "index",
-			StorageURL: appregistry.StorageURL(storageRoot, indexRel),
-			PublicURL:  appregistry.PublicURL(publicRoot, indexRel),
-		},
-		ArtifactObjects: artifactObjects,
-	}, nil
-}
-
-func writeTempJSON(pattern string, data []byte) (string, error) {
-	file, err := os.CreateTemp("", pattern)
-	if err != nil {
-		return "", err
-	}
-	path := file.Name()
-	if _, err := file.Write(data); err != nil {
-		_ = file.Close()
-		_ = os.Remove(path)
-		return "", err
-	}
-	if err := file.Close(); err != nil {
-		_ = os.Remove(path)
-		return "", err
-	}
-	return path, nil
-}
-
-func preflightAppPublishPlan(plan appPublishPlan) error {
-	objectCount := len(plan.ArtifactObjects) + 2 // artifacts, entry metadata, and the app index
-	progress := startCommandProgress("Checking %d remote app objects before upload", objectCount)
-	if err := preflightAppRegistryIndex(plan); err != nil {
-		return err
-	}
-	for _, object := range append([]appPublishObject{plan.EntryObject}, plan.ArtifactObjects...) {
-		if err := preflightAppPublishObject(object); err != nil {
-			return err
-		}
-	}
-	progress.done("Checked %d remote app objects", objectCount)
-	return nil
-}
-
-func preflightAppRegistryIndex(plan appPublishPlan) error {
-	_, existing, err := downloadAppRegistryObject(plan.IndexObject.StorageURL)
-	if err != nil {
-		return err
-	}
-	var index *appregistry.Index
-	if len(existing) == 0 {
-		index = appregistry.NewEmptyIndex()
-	} else {
-		index, err = appregistry.DecodeIndex(existing)
-		if err != nil {
-			return fmt.Errorf("decode existing app index: %w", err)
-		}
-	}
-	metadataPath := appregistry.AppVersionEntryPath(plan.AppName, plan.Version)
-	_, _, err = appregistry.UpsertAppIndex(index, plan.Entry, metadataPath, plan.DisplayName, plan.Description)
-	return err
-}
-
-func preflightAppPublishObject(object appPublishObject) error {
-	matches, err := appPublishObjectMatchesExisting(object)
-	if err != nil {
-		return err
-	}
-	if matches {
-		return nil
-	}
-	generation, _, err := describeAppPublishObject(object.StorageURL)
-	if err != nil {
-		return err
-	}
-	if generation == 0 {
-		return nil
-	}
-	return fmt.Errorf("%s already exists; %s", object.StorageURL, republishCorruptObjectGuidance)
-}
-
-func uploadAppPublishPlan(plan appPublishPlan, sourceRef string) error {
-	if err := uploadAppPublishImmutableObjects(plan, sourceRef); err != nil {
-		return err
-	}
-	if err := uploadAppRegistryIndex(plan, sourceRef); err != nil {
-		return err
-	}
-	return uploadAppRegistryRetention(plan, sourceRef)
-}
-
-func uploadAppPublishImmutableObjects(plan appPublishPlan, sourceRef string) error {
-	objectCount := len(plan.ArtifactObjects) + 1
-	progress := startCommandProgress("Uploading %d immutable app objects", objectCount)
-	stdoutLines := make([]string, 0, objectCount)
-	for _, object := range plan.ArtifactObjects {
-		line, err := uploadAppPublishObjectIfNeeded(object, sourceRef)
-		if err != nil {
-			return err
-		}
-		if line != "" {
-			stdoutLines = append(stdoutLines, line)
-		}
-	}
-	line, err := uploadAppPublishObjectIfNeeded(plan.EntryObject, sourceRef)
-	if err != nil {
-		return err
-	}
-	if line != "" {
-		stdoutLines = append(stdoutLines, line)
-	}
-	progress.done("Processed %d immutable app objects", objectCount)
-	for _, line := range stdoutLines {
-		_, _ = fmt.Fprintln(os.Stdout, line)
-	}
-	return nil
-}
-
-func uploadAppPublishObjectIfNeeded(object appPublishObject, sourceRef string) (string, error) {
-	matches, err := appPublishObjectMatchesExisting(object)
-	if err != nil {
-		return "", err
-	}
-	if matches {
-		return fmt.Sprintf("skipped existing %s", object.StorageURL), nil
-	}
-	if err := uploadAppPublishObject(object, sourceRef); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("uploaded %s", object.StorageURL), nil
-}
-
-func appPublishObjectMatchesExisting(object appPublishObject) (bool, error) {
-	generation, existingSHA, err := describeAppPublishObject(object.StorageURL)
-	if err != nil {
-		return false, err
-	}
-	if generation == 0 {
-		return false, nil
-	}
-	if object.SHA256 != "" && existingSHA == object.SHA256 {
-		return true, nil
-	}
-	if object.Kind == "entry" && object.LocalPath != "" {
-		_, existing, err := downloadAppRegistryObject(object.StorageURL)
-		if err != nil {
-			return false, err
-		}
-		return appregistry.EntryFileEquivalentIgnoringPublishedAt(object.LocalPath, existing)
-	}
-	return false, nil
-}
-
-func uploadAppPublishObject(object appPublishObject, sourceRef string) error {
-	metadata := fmt.Sprintf("source-ref=%s", sourceRef)
-	if object.SHA256 != "" {
-		metadata += ",sha256=" + object.SHA256
-	}
-	if _, err := runProviderPublishCommand("gcloud", "storage", "cp", "--if-generation-match=0", "--custom-metadata="+metadata, object.LocalPath, object.StorageURL); err != nil {
-		return err
-	}
-	return nil
-}
-
-func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
-	indexPath := plan.IndexObject.StorageURL
-	progress := startCommandProgress("Updating app registry index")
-	for attempt := 1; attempt <= appPublishIndexUpdateAttempts; attempt++ {
-		if attempt > 1 {
-			progress.status("App registry index changed concurrently; retrying attempt %d/%d", attempt, appPublishIndexUpdateAttempts)
-		}
-		generation, existing, err := downloadAppRegistryObject(indexPath)
-		if err != nil {
-			return err
-		}
-		var index *appregistry.Index
-		if len(existing) == 0 {
-			index = appregistry.NewEmptyIndex()
-		} else {
-			index, err = appregistry.DecodeIndex(existing)
-			if err != nil {
-				return fmt.Errorf("decode existing app index: %w", err)
-			}
-		}
-		metadataPath := appregistry.AppVersionEntryPath(plan.AppName, plan.Version)
-		updated, changed, err := appregistry.UpsertAppIndex(index, plan.Entry, metadataPath, plan.DisplayName, plan.Description)
-		if err != nil {
-			return err
-		}
-		if !changed {
-			progress.done("App registry index unchanged")
-			_, _ = fmt.Fprintf(os.Stdout, "skipped unchanged index for %s %s\n", plan.AppName, plan.Version)
-			return nil
-		}
-		data, err := json.MarshalIndent(updated, "", "  ")
-		if err != nil {
-			return err
-		}
-		tmpPath, err := writeTempJSON("gestalt-app-index-*", append(data, '\n'))
-		if err != nil {
-			return err
-		}
-		if err := uploadAppRegistryIndexFile(tmpPath, indexPath, sourceRef, generation); err != nil {
-			_ = os.Remove(tmpPath)
-			if appPublishPreconditionFailed(err) && attempt < appPublishIndexUpdateAttempts {
-				progress.status("App registry index update conflict; retrying")
-				continue
-			}
-			return err
-		}
-		_ = os.Remove(tmpPath)
-		progress.done("Updated app registry index")
-		_, _ = fmt.Fprintf(os.Stdout, "updated %s\n", indexPath)
-		return nil
-	}
-	return fmt.Errorf("update %s: exceeded retry limit after concurrent index updates", indexPath)
-}
-
-func uploadAppRegistryRetention(plan appPublishPlan, sourceRef string) error {
-	storageRoot := strings.TrimSuffix(plan.IndexObject.StorageURL, appregistry.AppIndexPath(plan.AppName))
-	retentionPath := appregistry.StorageURL(storageRoot, appregistry.AppRetentionPath(plan.AppName))
-	progress := startCommandProgress("Updating app registry retention catalog")
-	for attempt := 1; attempt <= appPublishIndexUpdateAttempts; attempt++ {
-		if attempt > 1 {
-			progress.status("App registry retention catalog changed concurrently; retrying attempt %d/%d", attempt, appPublishIndexUpdateAttempts)
-		}
-		generation, existing, err := downloadAppRegistryObject(retentionPath)
-		if err != nil {
-			return err
-		}
-		var index *appregistry.RetentionIndex
-		if len(existing) == 0 {
-			index = appregistry.NewEmptyRetentionIndex()
-		} else {
-			index, err = appregistry.DecodeRetentionIndex(existing)
-			if err != nil {
-				return fmt.Errorf("decode existing retention index: %w", err)
-			}
-		}
-		if !appregistry.UpsertPublishedRetention(index, plan.Version, plan.Entry.PublishedAt, appregistry.DefaultRetentionPolicy()) {
-			progress.done("App registry retention catalog unchanged")
-			return nil
-		}
-		data, err := json.MarshalIndent(index, "", "  ")
-		if err != nil {
-			return err
-		}
-		tmpPath, err := writeTempJSON("gestalt-app-retention-*", append(data, '\n'))
-		if err != nil {
-			return err
-		}
-		if err := uploadAppRegistryIndexFile(tmpPath, retentionPath, sourceRef, generation); err != nil {
-			_ = os.Remove(tmpPath)
-			if appPublishPreconditionFailed(err) && attempt < appPublishIndexUpdateAttempts {
-				continue
-			}
-			return err
-		}
-		_ = os.Remove(tmpPath)
-		progress.done("Updated app registry retention catalog")
-		_, _ = fmt.Fprintf(os.Stdout, "updated %s\n", retentionPath)
-		return nil
-	}
-	return fmt.Errorf("update %s: exceeded retry limit after concurrent retention updates", retentionPath)
-}
-
-func uploadAppRegistryIndexFile(localPath, storageURL, sourceRef string, generation int64) error {
-	args := []string{
-		"storage", "cp",
-		"--custom-metadata=source-ref=" + sourceRef,
-		localPath,
-		storageURL,
-	}
-	if generation == 0 {
-		args = append(args, "--if-generation-match=0")
-	} else {
-		args = append(args, "--if-generation-match="+strconv.FormatInt(generation, 10))
-	}
-	_, err := runProviderPublishCommand("gcloud", args...)
-	return err
-}
-
-func appPublishPreconditionFailed(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "precondition") ||
-		strings.Contains(text, "generation") ||
-		strings.Contains(text, "412")
-}
-
-func loadAppRegistryPublishStartedAt(registry config.AppRegistryConfig, appName, version string) time.Time {
-	storageRoot, err := registry.StorageURL()
-	if err != nil {
-		return time.Time{}
-	}
-	pendingURL := appregistry.StorageURL(storageRoot, appregistry.AppPendingPath(appName))
-	_, pendingData, err := downloadAppRegistryObject(pendingURL)
-	if err != nil || len(pendingData) == 0 {
-		return time.Time{}
-	}
-	pending, err := appregistry.DecodePendingIndex(pendingData)
-	if err != nil {
-		return time.Time{}
-	}
-	startedAt, ok := appregistry.PublishStartedAtFromPending(pending, version)
-	if !ok {
-		return time.Time{}
-	}
-	return startedAt
-}
-
-func downloadAppRegistryObject(storageURL string) (int64, []byte, error) {
-	generation, _, err := describeAppPublishObject(storageURL)
-	if err != nil {
-		return 0, nil, err
-	}
-	if generation == 0 {
-		return 0, nil, nil
-	}
-	out, err := runProviderPublishCommand("gcloud", "storage", "cat", storageURL)
-	if err != nil {
-		return 0, nil, err
-	}
-	return generation, []byte(out), nil
-}
-
-type gcsObjectGeneration int64
-
-func (g *gcsObjectGeneration) UnmarshalJSON(data []byte) error {
-	data = bytes.TrimSpace(data)
-	if len(data) == 0 || string(data) == "null" {
-		*g = 0
-		return nil
-	}
-	if data[0] == '"' {
-		var value string
-		if err := json.Unmarshal(data, &value); err != nil {
-			return err
-		}
-		value = strings.TrimSpace(value)
-		if value == "" {
-			*g = 0
-			return nil
-		}
-		parsed, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return fmt.Errorf("parse generation %q: %w", value, err)
-		}
-		*g = gcsObjectGeneration(parsed)
-		return nil
-	}
-	var parsed int64
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return fmt.Errorf("parse generation: %w", err)
-	}
-	*g = gcsObjectGeneration(parsed)
-	return nil
-}
-
-type appPublishObjectDescription struct {
-	Generation gcsObjectGeneration `json:"generation"`
-	Metadata   map[string]string   `json:"metadata"`
-}
-
-func describeAppPublishObject(storageURL string) (int64, string, error) {
-	out, err := runProviderPublishCommand("gcloud", "storage", "objects", "describe", storageURL, "--format=json")
-	if err != nil {
-		if providerPublishObjectNotFound(err) {
-			return 0, "", nil
-		}
-		return 0, "", err
-	}
-	var described appPublishObjectDescription
-	if err := json.Unmarshal([]byte(out), &described); err != nil {
-		return 0, "", fmt.Errorf("parse object metadata for %s: %w", storageURL, err)
-	}
-	return int64(described.Generation), strings.TrimSpace(described.Metadata["sha256"]), nil
-}
-
-func printAppPublishPlanJSON(plan appPublishPlan) error {
+func printAppPublishPlanJSON(plan appregistry.PublishManifest) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(plan)
@@ -885,4 +433,46 @@ func appPublishPublication(workflowRunURL string, triggerPRNumber int, triggerPR
 	}
 	publication.TriggerCommit = &appregistry.PublicationCommit{SHA: triggerCommitSHA, URL: triggerCommitURL}
 	return publication, nil
+}
+
+type appRegistryCommandRunner struct{}
+
+func (appRegistryCommandRunner) Run(name string, args ...string) (string, error) {
+	return runProviderPublishCommand(name, args...)
+}
+
+func newAppRegistryWriter() *appregistry.Writer {
+	return &appregistry.Writer{Store: appRegistryObjectStore()}
+}
+
+type appPublishProgressReporter struct {
+	current *commandProgress
+}
+
+func newAppPublishProgressReporter() *appPublishProgressReporter {
+	return &appPublishProgressReporter{}
+}
+
+func (r *appPublishProgressReporter) progress() appregistry.PublishProgress {
+	return appregistry.PublishProgress{
+		Start: func(format string, args ...any) {
+			r.current = startCommandProgress(format, args...)
+		},
+		Status: func(format string, args ...any) {
+			if r.current != nil {
+				r.current.status(format, args...)
+				return
+			}
+			progressStatus(format, args...)
+		},
+		Done: func(format string, args ...any) {
+			if r.current != nil {
+				r.current.done(format, args...)
+				r.current = nil
+			}
+		},
+		Log: func(line string) {
+			_, _ = fmt.Fprintln(os.Stdout, line)
+		},
+	}
 }
