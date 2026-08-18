@@ -170,6 +170,15 @@ func (s *MemoryObjectStore) PromoteObject(input PromoteObjectInput) error {
 	if expected != "" && strings.ToLower(strings.TrimSpace(described.SHA256)) != expected {
 		return fmt.Errorf("%w: %s digest mismatch", ErrPublishUploadMismatch, input.SourceURL)
 	}
+	_, data, err := s.ReadObject(input.SourceURL)
+	if err != nil {
+		return err
+	}
+	if expected != "" {
+		if err := verifyObjectDigestBytes(data, expected); err != nil {
+			return fmt.Errorf("%w: %s content digest mismatch", err, input.SourceURL)
+		}
+	}
 	finalDescribed, err := s.DescribeObject(input.DestURL)
 	if err != nil {
 		return err
@@ -179,10 +188,6 @@ func (s *MemoryObjectStore) PromoteObject(input PromoteObjectInput) error {
 			return nil
 		}
 		return fmt.Errorf("%w: %s", ErrObjectPreconditionFailed, input.DestURL)
-	}
-	_, data, err := s.ReadObject(input.SourceURL)
-	if err != nil {
-		return err
 	}
 	tmpPath, err := WriteTempJSON("gestalt-promote-*", data)
 	if err != nil {

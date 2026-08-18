@@ -244,23 +244,6 @@ func (s *StatelessPublishService) resolveIdentity(app string, declaration *Publi
 	return publishID, digest, version, stagingPrefix, nil
 }
 
-func verifyArtifactDescribed(described ObjectDescription, artifact PublishDeclarationArtifact) error {
-	if described.Generation == 0 {
-		return fmt.Errorf("%w: %s", ErrPublishUploadMissing, artifact.Platform)
-	}
-	expected, err := normalizePublishArtifactSHA256(artifact.SHA256)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrPublishUploadMismatch, artifact.Platform)
-	}
-	if !strings.EqualFold(strings.TrimSpace(described.SHA256), expected) {
-		return fmt.Errorf("%w: %s", ErrPublishUploadMismatch, artifact.Platform)
-	}
-	if artifact.Size > 0 && described.Size > 0 && described.Size != artifact.Size {
-		return fmt.Errorf("%w: %s size mismatch", ErrPublishUploadMismatch, artifact.Platform)
-	}
-	return nil
-}
-
 func (s *StatelessPublishService) signMissingUploads(stagingPrefix string, declaration *PublishDeclaration, limits PublishLimits) ([]AdminPublishUpload, error) {
 	uploads := make([]AdminPublishUpload, 0, len(declaration.Artifacts))
 	expiresAt := s.now().Add(limits.UploadURLTTL)
@@ -270,29 +253,25 @@ func (s *StatelessPublishService) signMissingUploads(stagingPrefix string, decla
 			return nil, fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
 		}
 		stagingURL := StorageURL(s.StorageRoot, stagingPath)
-		described, err := s.Store.DescribeObject(stagingURL)
-		if err != nil {
-			return nil, err
-		}
-		if described.Generation != 0 {
-			if err := verifyArtifactDescribed(described, artifact); err != nil && !errors.Is(err, ErrPublishUploadMissing) {
-				return nil, err
+		if _, err := verifyArtifactStored(s.Store, stagingURL, artifact); err != nil {
+			if errors.Is(err, ErrPublishUploadMissing) {
+				signed, err := s.Signer.SignCreateUpload(SignCreateUploadInput{
+					StorageURL: stagingURL, SHA256: artifact.SHA256, ContentLength: artifact.Size,
+					ExpiresAt: expiresAt,
+				})
+				if err != nil {
+					return nil, err
+				}
+				uploads = append(uploads, AdminPublishUpload{
+					Platform:  strings.TrimSpace(artifact.Platform),
+					UploadURL: signed.UploadURL,
+					ExpiresAt: signed.ExpiresAt.UTC().Format(time.RFC3339Nano),
+					Headers:   signed.Headers,
+				})
+				continue
 			}
-			continue
-		}
-		signed, err := s.Signer.SignCreateUpload(SignCreateUploadInput{
-			StorageURL: stagingURL, SHA256: artifact.SHA256, ContentLength: artifact.Size,
-			ExpiresAt: expiresAt,
-		})
-		if err != nil {
 			return nil, err
 		}
-		uploads = append(uploads, AdminPublishUpload{
-			Platform:  strings.TrimSpace(artifact.Platform),
-			UploadURL: signed.UploadURL,
-			ExpiresAt: signed.ExpiresAt.UTC().Format(time.RFC3339Nano),
-			Headers:   signed.Headers,
-		})
 	}
 	return uploads, nil
 }
@@ -316,11 +295,8 @@ func (s *StatelessPublishService) planStagedArtifactPromotions(stagingPrefix str
 			return nil, fmt.Errorf("%w: %v", ErrPublishDeclarationInvalid, err)
 		}
 		stagingURL := StorageURL(s.StorageRoot, stagingPath)
-		described, err := s.Store.DescribeObject(stagingURL)
+		described, err := verifyArtifactStored(s.Store, stagingURL, artifact)
 		if err != nil {
-			return nil, err
-		}
-		if err := verifyArtifactDescribed(described, artifact); err != nil {
 			return nil, err
 		}
 		finalRel, err := PublishArtifactFinalRel(layout.ArtifactPrefix, artifact.Filename)

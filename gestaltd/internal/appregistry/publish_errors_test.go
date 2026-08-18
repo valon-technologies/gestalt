@@ -42,6 +42,7 @@ func TestPublishHTTPStatus(t *testing.T) {
 		{name: "object precondition exact", err: ErrObjectPreconditionFailed, status: http.StatusConflict},
 		{name: "object precondition wrapped", err: fmt.Errorf("update gs://bucket/index.json: %w", ErrObjectPreconditionFailed), status: http.StatusConflict},
 		{name: "exhausted catalog conflict", err: fmt.Errorf("update gs://bucket/index.json: %w", ErrObjectPreconditionFailed), status: http.StatusConflict},
+		{name: "identity mismatch", err: ErrPublishIdentityMismatch, status: http.StatusConflict},
 		{name: "version conflict", err: ErrPublishVersionConflict, status: http.StatusConflict},
 		{name: "backend failure", err: backendFailure, status: http.StatusBadGateway},
 		{name: "wrapped backend failure", err: wrappedBackendFailure, status: http.StatusBadGateway},
