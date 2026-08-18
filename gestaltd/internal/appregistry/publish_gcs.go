@@ -326,6 +326,20 @@ func (s *GCSRegistryStore) PromoteObject(input PromoteObjectInput) error {
 		return fmt.Errorf("%w: %s generation %d != %d", ErrPublishUploadMismatch, input.SourceURL, srcAttrs.Generation, input.SourceGeneration)
 	}
 	expected := strings.ToLower(strings.TrimSpace(input.ExpectedSHA256))
+	reader, err := src.NewReader(context.Background())
+	if err != nil {
+		return fmt.Errorf("open source %s: %w", input.SourceURL, err)
+	}
+	sourceData, err := io.ReadAll(reader)
+	_ = reader.Close()
+	if err != nil {
+		return fmt.Errorf("read source %s: %w", input.SourceURL, err)
+	}
+	if expected != "" {
+		if err := verifyObjectDigestBytes(sourceData, expected); err != nil {
+			return fmt.Errorf("%w: %s content digest mismatch", err, input.SourceURL)
+		}
+	}
 	if expected != "" && strings.ToLower(strings.TrimSpace(srcAttrs.Metadata["sha256"])) != expected {
 		return fmt.Errorf("%w: %s digest mismatch", ErrPublishUploadMismatch, input.SourceURL)
 	}

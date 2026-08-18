@@ -31,6 +31,7 @@ func PublishHTTPStatus(err error) int {
 	case errors.Is(err, ErrPublishVersionConflict),
 		errors.Is(err, ErrPublishUploadMismatch),
 		errors.Is(err, ErrPublishReconcileMismatch),
+		errors.Is(err, ErrPublishIdentityMismatch),
 		errors.Is(err, ErrRegistryEntryConflict),
 		errors.Is(err, ErrIndexVersionConflict),
 		errors.Is(err, ErrObjectPreconditionFailed):
