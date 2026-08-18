@@ -155,6 +155,7 @@ impl IdentityProvider for TestAuthProvider {
             }],
             created_at: 1_700_000_000,
             expires_at: 1_800_000_000,
+            name: String::new(),
         })
     }
 
@@ -423,6 +424,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
             subject_token: String::new(),
             subject_token_type: String::new(),
             expires_in: 0,
+            name: String::new(),
         })
         .await
         .expect("token")
