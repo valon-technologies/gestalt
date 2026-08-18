@@ -2932,26 +2932,29 @@ func (p *serverTestAuthorizationProvider) ListActiveModelResourceTypes(_ context
 	return &proto.ListActiveModelResourceTypesResponse{ResourceTypes: out}, nil
 }
 
-func (p *serverTestAuthorizationProvider) recordedCheckAccess() []*proto.CheckAccessRequest {
+func (p *serverTestAuthorizationProvider) checkAccessCallCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]*proto.CheckAccessRequest, len(p.checkAccessRequests))
-	copy(out, p.checkAccessRequests)
-	return out
+	return len(p.checkAccessRequests)
 }
 
-func (p *serverTestAuthorizationProvider) recordedCheckAccessMany() []*proto.CheckAccessManyRequest {
+func (p *serverTestAuthorizationProvider) checkAccessManyCallCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]*proto.CheckAccessManyRequest, len(p.checkAccessManyRequests))
-	copy(out, p.checkAccessManyRequests)
-	return out
+	return len(p.checkAccessManyRequests)
+}
+
+func (p *serverTestAuthorizationProvider) listRelationshipCallCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.listRelationshipRequests)
 }
 
 func TestServerTestAuthorizationProviderRecordsConcurrentRPCs(t *testing.T) {
 	t.Parallel()
 
 	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	resource := &proto.Resource{Type: "app", Id: "g-issues"}
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
@@ -2960,12 +2963,15 @@ func TestServerTestAuthorizationProviderRecordsConcurrentRPCs(t *testing.T) {
 	req := &proto.CheckAccessRequest{
 		Subject:  &proto.Subject{Type: "subject", Id: subjectID},
 		Action:   &proto.Action{Name: "g-issues"},
-		Resource: &proto.Resource{Type: "app", Id: "g-issues"},
+		Resource: resource,
+	}
+	listReq := &proto.ListRelationshipsRequest{
+		Filter: &proto.RelationshipFilter{Resource: resource},
 	}
 	const n = 32
 	var wg sync.WaitGroup
-	errCh := make(chan error, n*2)
-	wg.Add(n * 2)
+	errCh := make(chan error, n*4)
+	wg.Add(n * 4)
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
@@ -2981,17 +2987,32 @@ func TestServerTestAuthorizationProviderRecordsConcurrentRPCs(t *testing.T) {
 				errCh <- err
 			}
 		}()
+		go func() {
+			defer wg.Done()
+			if _, err := authz.ListRelationships(context.Background(), listReq); err != nil {
+				errCh <- err
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if _, err := authz.ListActiveModelResourceTypes(context.Background(), &proto.ListActiveModelResourceTypesRequest{}); err != nil {
+				errCh <- err
+			}
+		}()
 	}
 	wg.Wait()
 	close(errCh)
 	for err := range errCh {
 		t.Fatalf("concurrent authorization RPC: %v", err)
 	}
-	if got := len(authz.recordedCheckAccess()); got != n {
+	if got := authz.checkAccessCallCount(); got != n {
 		t.Fatalf("CheckAccess recordings = %d, want %d", got, n)
 	}
-	if got := len(authz.recordedCheckAccessMany()); got != n {
+	if got := authz.checkAccessManyCallCount(); got != n {
 		t.Fatalf("CheckAccessMany recordings = %d, want %d", got, n)
+	}
+	if got := authz.listRelationshipCallCount(); got != n {
+		t.Fatalf("ListRelationships recordings = %d, want %d", got, n)
 	}
 }
 
