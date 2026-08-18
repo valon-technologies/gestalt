@@ -245,14 +245,6 @@ func buildAppPublishManifest(input buildAppPublishManifestInput) (appregistry.Pu
 	})
 }
 
-func readProviderReleaseMetadata(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return data, nil
-}
-
 func readAppPublishManifest(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {

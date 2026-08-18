@@ -23,10 +23,10 @@ func TestPrepareAppPublishReleaseRejectsMismatchedApp(t *testing.T) { //nolint:p
 func TestPrepareAppPublishReleaseDerivesAppFromArchives(t *testing.T) { //nolint:paralleltest // chdirs
 	_, distDir, _, base := setupRemotePublishFixture(t)
 	prepared, err := prepareAppPublishRelease(prepareAppPublishReleaseInput{
-		VersionGuard:    "0.3.0-dev.1",
-		DistDirs:        []string{distDir},
-		CollectArchives: base.collectArchives,
-		ResolveManifest: base.resolveManifest,
+		VersionGuard:         "0.3.0-dev.1",
+		DistDirs:             []string{distDir},
+		CollectArchives:      base.collectArchives,
+		ResolveManifest:      base.resolveManifest,
 		BuildReleaseMetadata: base.buildReleaseMetadata,
 	})
 	if err != nil {
