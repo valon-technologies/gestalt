@@ -2766,6 +2766,8 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 type serverTestAuthorizationProvider struct {
 	core.AuthorizationProvider
 
+	mu sync.Mutex
+
 	resourceTypes            []*proto.AuthorizationModelResourceType
 	relationships            []*proto.Relationship
 	listRelationshipRequests []*proto.ListRelationshipsRequest
@@ -2777,8 +2779,11 @@ type serverTestAuthorizationProvider struct {
 
 // CheckAccess models the provider-owned evaluator: it expands subject sets so a
 // subject that only holds a grant through a group is allowed, exactly as the
-// real relationship-graph provider does.
+// real relationship-graph provider does. HTTP tests share one stub across
+// concurrent requests, so recordings are taken under mu.
 func (p *serverTestAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.checkAccessRequests = append(p.checkAccessRequests, req)
 	return p.decide(req)
 }
@@ -2799,6 +2804,8 @@ func (p *serverTestAuthorizationProvider) decide(req *proto.CheckAccessRequest) 
 }
 
 func (p *serverTestAuthorizationProvider) CheckAccessMany(_ context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.checkAccessManyRequests = append(p.checkAccessManyRequests, req)
 	if p.checkAccessManyErr != nil {
 		return nil, p.checkAccessManyErr
@@ -2882,6 +2889,8 @@ func (p *serverTestAuthorizationProvider) targetIncludesSubject(target *proto.Re
 }
 
 func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.listRelationshipRequests = append(p.listRelationshipRequests, req)
 	filter := req.GetFilter()
 	out := []*proto.Relationship{}
@@ -2897,16 +2906,21 @@ func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, r
 type serviceAccountCredentialAuthorizationProvider struct {
 	core.AuthorizationProvider
 
+	mu       sync.Mutex
 	allowed  bool
 	requests []*proto.CheckAccessRequest
 }
 
 func (p *serviceAccountCredentialAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.requests = append(p.requests, req)
 	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
 }
 
 func (p *serverTestAuthorizationProvider) ListActiveModelResourceTypes(_ context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	name := strings.TrimSpace(req.GetFilter().GetName())
 	out := []*proto.AuthorizationModelResourceType{}
 	for _, resourceType := range p.resourceTypes {
@@ -2916,6 +2930,69 @@ func (p *serverTestAuthorizationProvider) ListActiveModelResourceTypes(_ context
 		out = append(out, resourceType)
 	}
 	return &proto.ListActiveModelResourceTypesResponse{ResourceTypes: out}, nil
+}
+
+func (p *serverTestAuthorizationProvider) recordedCheckAccess() []*proto.CheckAccessRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*proto.CheckAccessRequest, len(p.checkAccessRequests))
+	copy(out, p.checkAccessRequests)
+	return out
+}
+
+func (p *serverTestAuthorizationProvider) recordedCheckAccessMany() []*proto.CheckAccessManyRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*proto.CheckAccessManyRequest, len(p.checkAccessManyRequests))
+	copy(out, p.checkAccessManyRequests)
+	return out
+}
+
+func TestServerTestAuthorizationProviderRecordsConcurrentRPCs(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	req := &proto.CheckAccessRequest{
+		Subject:  &proto.Subject{Type: "subject", Id: subjectID},
+		Action:   &proto.Action{Name: "g-issues"},
+		Resource: &proto.Resource{Type: "app", Id: "g-issues"},
+	}
+	const n = 32
+	var wg sync.WaitGroup
+	errCh := make(chan error, n*2)
+	wg.Add(n * 2)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			if _, err := authz.CheckAccess(context.Background(), req); err != nil {
+				errCh <- err
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if _, err := authz.CheckAccessMany(context.Background(), &proto.CheckAccessManyRequest{
+				Requests: []*proto.CheckAccessRequest{req},
+			}); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		t.Fatalf("concurrent authorization RPC: %v", err)
+	}
+	if got := len(authz.recordedCheckAccess()); got != n {
+		t.Fatalf("CheckAccess recordings = %d, want %d", got, n)
+	}
+	if got := len(authz.recordedCheckAccessMany()); got != n {
+		t.Fatalf("CheckAccessMany recordings = %d, want %d", got, n)
+	}
 }
 
 func relationshipMatchesFilter(relationship *proto.Relationship, filter *proto.RelationshipFilter) bool {
