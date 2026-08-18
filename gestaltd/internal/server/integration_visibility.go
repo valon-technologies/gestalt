@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -39,29 +38,11 @@ func (s *Server) integrationSettingsAccessibleContext(ctx context.Context, p *pr
 	return decision.Allowed, nil
 }
 
-// integrationHasVisibleHTTPOperationsContext reports whether the principal can
-// invoke any of this app's public HTTP operations. The filter is a batched
-// evaluator decision, so an app whose every operation the caller would be
-// denied is not advertised. An evaluator failure is surfaced as an error, not
-// as "no operations": hiding an app on a transport error is exactly the silent
-// access loss this must not cause.
-func (s *Server) integrationHasVisibleHTTPOperationsContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider) (bool, error) {
-	cat := prov.Catalog()
-	if cat == nil {
-		return false, nil
-	}
-	cat, err := invocation.FilterCatalogForPrincipal(ctx, cat, provider, p, s.operationAccess)
-	if err != nil {
-		return false, err
-	}
-	return len(s.publicHTTPOperations(provider, prov, cat.Operations)) > 0, nil
-}
-
 // prefetchIntegrationListingDecisions answers every authorization question the
-// /apps listing is about to ask - one mounted-UI question and one app-admin
-// question per app - with a single batched evaluator call. The per-app handlers
-// below are unchanged and still ask checkResourceAccess; they simply find the
-// answer already cached.
+// Apps list is about to ask — may they use this app, open its web UI, or
+// admin it — with a single batched evaluator call. The per-app handlers
+// below still ask checkResourceAccess; they simply find the answer already
+// cached.
 func (s *Server) prefetchIntegrationListingDecisions(ctx context.Context, p *principal.Principal, appNames []string) {
 	if s == nil || s.authorization == nil || p == nil || principal.IsNonUserPrincipal(p) {
 		return

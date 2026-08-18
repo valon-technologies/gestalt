@@ -133,6 +133,9 @@ type Server struct {
 	workflowSchedules             *workflowmanager.Manager
 	agentRuns                     agentmanager.Service
 	providers                     *registry.ProviderMap[core.Provider]
+	tenantDirectoryMu             sync.Mutex
+	tenantDirectoryEpoch          tenantAppDirectoryEpoch
+	tenantDirectory               *tenantAppDirectory
 	workflow                      bootstrap.WorkflowControl
 	pluginRuntimes                bootstrap.RuntimeInspector
 	resolver                      *principal.Resolver
@@ -216,8 +219,9 @@ type Config struct {
 	ProviderKinds         map[string]invocation.ProviderKind
 	AuthorizationPolicies map[string]string
 	// OperationAccessChecker answers batched operation-access questions for
-	// catalog listing. Nil disables catalog filtering; invoke-time
-	// enforcement is unaffected either way.
+	// GET /apps/{app}/operations. Nil disables that filter; invoke-time
+	// enforcement is unaffected either way. Apps catalog membership uses
+	// app-level use grants, not this checker.
 	OperationAccessChecker invocation.OperationAccessChecker
 	// UserLookup gates resolving other people's identities on an explicit
 	// employee operator role.

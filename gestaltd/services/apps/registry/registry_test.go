@@ -96,3 +96,34 @@ func TestProviderMapRemoteResolverNonErrNotFoundErrorPropagates(t *testing.T) {
 		t.Fatalf("Get should propagate the resolver error, got: %v", err)
 	}
 }
+
+func TestProviderMapGenerationBumpsOnMutations(t *testing.T) {
+	t.Parallel()
+	m := newProviderMap[int]("test")
+	if m.Generation() != 0 {
+		t.Fatalf("empty generation = %d, want 0", m.Generation())
+	}
+	if err := m.Register("foo", 1); err != nil {
+		t.Fatal(err)
+	}
+	afterRegister := m.Generation()
+	if afterRegister == 0 {
+		t.Fatal("register did not bump generation")
+	}
+	if err := m.Replace("foo", 2); err != nil {
+		t.Fatal(err)
+	}
+	if m.Generation() == afterRegister {
+		t.Fatal("replace did not bump generation")
+	}
+	afterReplace := m.Generation()
+	m.Remove("foo")
+	if m.Generation() == afterReplace {
+		t.Fatal("remove did not bump generation")
+	}
+	afterRemove := m.Generation()
+	m.SetRemoteResolver(&stubRemoteResolver[int]{err: core.ErrNotFound})
+	if m.Generation() == afterRemove {
+		t.Fatal("SetRemoteResolver did not bump generation")
+	}
+}

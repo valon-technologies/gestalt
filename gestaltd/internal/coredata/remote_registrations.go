@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
@@ -48,8 +49,9 @@ type RemoteProvider struct {
 }
 
 type RemoteRegistrationService struct {
-	db  indexeddb.IndexedDB
-	now func() time.Time
+	db       indexeddb.IndexedDB
+	now      func() time.Time
+	topology atomic.Uint64
 }
 
 func NewRemoteRegistrationService(ds indexeddb.IndexedDB) *RemoteRegistrationService {
@@ -69,6 +71,22 @@ func (s *RemoteRegistrationService) Now() time.Time {
 		return time.Now().UTC().Truncate(time.Millisecond)
 	}
 	return normalizedRemoteTime(s.now())
+}
+
+// Topology bumps when the set of remote providers changes so cached app
+// directories can drop tunnel-shadowed copy without polling IndexedDB.
+func (s *RemoteRegistrationService) Topology() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.topology.Load()
+}
+
+func (s *RemoteRegistrationService) bumpTopology() {
+	if s == nil {
+		return
+	}
+	s.topology.Add(1)
 }
 
 func (s *RemoteRegistrationService) Replace(
@@ -206,6 +224,7 @@ func (s *RemoteRegistrationService) Replace(
 		return nil, fmt.Errorf("replace remote registration: commit: %w", err)
 	}
 	committed = true
+	s.bumpTopology()
 	return stored, nil
 }
 
@@ -487,6 +506,7 @@ func (s *RemoteRegistrationService) removeRegistrationWithGenerationCheck(ctx co
 	if err := regStore.Delete(ctx, registrationID); err != nil && !errors.Is(err, idb.ErrNotFound) {
 		return err
 	}
+	s.bumpTopology()
 	return nil
 }
 

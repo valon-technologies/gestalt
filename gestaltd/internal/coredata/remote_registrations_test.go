@@ -300,4 +300,46 @@ func TestRemoteRegistrationService(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("topology_bumps_on_replace_delete_and_expire", func(t *testing.T) {
+		t.Parallel()
+		svc := newService(start)
+		if svc.Topology() != 0 {
+			t.Fatalf("topology = %d, want 0", svc.Topology())
+		}
+		got, err := svc.Replace(ctx, "subject:alice", newRegistration("reg-1"), []*RemoteProvider{
+			newProvider("app", "test-app"),
+		}, 0)
+		if err != nil {
+			t.Fatalf("Replace: %v", err)
+		}
+		afterReplace := svc.Topology()
+		if afterReplace == 0 {
+			t.Fatal("Replace did not bump topology")
+		}
+		if err := svc.Delete(ctx, "reg-1", got.Generation); err != nil {
+			t.Fatalf("Delete: %v", err)
+		}
+		afterDelete := svc.Topology()
+		if afterDelete <= afterReplace {
+			t.Fatalf("Delete topology = %d, want > %d", afterDelete, afterReplace)
+		}
+		got, err = svc.Replace(ctx, "subject:alice", newRegistration("reg-1"), []*RemoteProvider{
+			newProvider("app", "test-app"),
+		}, 0)
+		if err != nil {
+			t.Fatalf("second Replace: %v", err)
+		}
+		afterSecondReplace := svc.Topology()
+		if afterSecondReplace <= afterDelete {
+			t.Fatalf("second Replace topology = %d, want > %d", afterSecondReplace, afterDelete)
+		}
+		svc.now = func() time.Time { return start.Add(lease) }
+		if err := svc.Expire(ctx, "reg-1", got.Generation, got.LeaseExpiresAt); err != nil {
+			t.Fatalf("Expire: %v", err)
+		}
+		if svc.Topology() <= afterSecondReplace {
+			t.Fatalf("Expire topology = %d, want > %d", svc.Topology(), afterSecondReplace)
+		}
+	})
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/valon-technologies/gestalt/server/core"
 )
@@ -21,10 +22,11 @@ type RemoteResolver[T any] interface {
 
 // ProviderMap is a thread-safe, named collection of providers of a single type.
 type ProviderMap[T any] struct {
-	mu       sync.RWMutex
-	items    map[string]T
-	kind     string
-	resolver RemoteResolver[T]
+	mu         sync.RWMutex
+	items      map[string]T
+	kind       string
+	resolver   RemoteResolver[T]
+	generation atomic.Uint64
 }
 
 func newProviderMap[T any](kind string) ProviderMap[T] {
@@ -38,6 +40,7 @@ func (m *ProviderMap[T]) Register(name string, val T) error {
 		return fmt.Errorf("%s %q: %w", m.kind, name, core.ErrAlreadyRegistered)
 	}
 	m.items[name] = val
+	m.generation.Add(1)
 	return nil
 }
 
@@ -48,6 +51,7 @@ func (m *ProviderMap[T]) Replace(name string, val T) error {
 		return fmt.Errorf("%s %q: %w", m.kind, name, core.ErrNotFound)
 	}
 	m.items[name] = val
+	m.generation.Add(1)
 	return nil
 }
 
@@ -55,6 +59,16 @@ func (m *ProviderMap[T]) Remove(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.items, name)
+	m.generation.Add(1)
+}
+
+// Generation bumps whenever the local map or remote resolver changes so
+// callers can drop a cached directory instead of serving replaced apps.
+func (m *ProviderMap[T]) Generation() uint64 {
+	if m == nil {
+		return 0
+	}
+	return m.generation.Load()
 }
 
 func (m *ProviderMap[T]) Get(name string) (T, error) {
@@ -99,6 +113,7 @@ func (m *ProviderMap[T]) SetRemoteResolver(r RemoteResolver[T]) {
 	m.mu.Lock()
 	m.resolver = r
 	m.mu.Unlock()
+	m.generation.Add(1)
 }
 
 // List returns all registered names, sorted alphabetically.
