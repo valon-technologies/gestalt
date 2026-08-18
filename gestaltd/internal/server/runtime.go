@@ -172,6 +172,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		return err
 	}
 	baseConfig.AppRegistryPublish = publishService
+	baseConfig.AppRegistryPublishAllowedApps = cfg.Server.AppRegistry.Publish.AllowedAppSet()
 
 	result.RegistryAppStartup = registryAppStartup(cfg, result, nil)
 	if err := result.Start(ctx); err != nil {

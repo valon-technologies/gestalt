@@ -184,6 +184,7 @@ type Server struct {
 	appRegistryReader             *appregistry.RegistryReader
 	appRegistryInstaller          *appregistry.Installer
 	appRegistryPublish            *appregistry.StatelessPublishService
+	appRegistryPublishAllowedApps map[string]struct{}
 	appFleetProjector             *appregistry.FleetProjector
 	appVersionChanges             *coredata.AppVersionChangeRequestService
 	gestaltdSourceVersions        *coredata.GestaltdSourceVersionService
@@ -260,8 +261,9 @@ type Config struct {
 	BuiltinAdminUI          *BuiltinAdminUIOptions
 	AppRegistries           map[string]config.AppRegistryConfig
 	AppRegistryReader       *appregistry.RegistryReader
-	AppRegistryPublish      *appregistry.StatelessPublishService
-	AppFleetProjector       *appregistry.FleetProjector
+	AppRegistryPublish            *appregistry.StatelessPublishService
+	AppRegistryPublishAllowedApps map[string]struct{}
+	AppFleetProjector             *appregistry.FleetProjector
 	AppRegistryHeartbeatTTL time.Duration
 	AppRegistryRolloutMode  config.AppRegistryRolloutMode
 	ArtifactsDir            string
@@ -514,6 +516,7 @@ func New(cfg Config) (*Server, error) {
 		appRegistryReader:             cfg.AppRegistryReader,
 		appRegistryInstaller:          newAppRegistryInstaller(cfg),
 		appRegistryPublish:            cfg.AppRegistryPublish,
+		appRegistryPublishAllowedApps: cloneStringSet(cfg.AppRegistryPublishAllowedApps),
 		appFleetProjector:             fleetProjector,
 		appVersionChanges:             cfg.Services.AppVersionChangeRequests,
 		gestaltdSourceVersions:        cfg.Services.GestaltdSourceVersionState,
@@ -588,6 +591,17 @@ func (s *Server) Close() {
 		s.publicGatewayConn.Close()
 		s.publicGatewayConn = nil
 	}
+}
+
+func cloneStringSet(src map[string]struct{}) map[string]struct{} {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(src))
+	for key := range src {
+		out[key] = struct{}{}
+	}
+	return out
 }
 
 func withRequestTelemetryProviders(next http.Handler, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) http.Handler {

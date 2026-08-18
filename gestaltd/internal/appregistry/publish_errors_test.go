@@ -16,6 +16,14 @@ func TestPublishHTTPStatusDeclarationInvalidIs400(t *testing.T) {
 	}
 }
 
+func TestPublishHTTPStatusAppNotAllowlistedIs403(t *testing.T) {
+	t.Parallel()
+
+	if status := PublishHTTPStatus(ErrPublishAppNotAllowlisted); status != http.StatusForbidden {
+		t.Fatalf("PublishHTTPStatus = %d, want 403", status)
+	}
+}
+
 func TestPublishHTTPStatusRegistryNotEnrolledIs404(t *testing.T) {
 	t.Parallel()
 

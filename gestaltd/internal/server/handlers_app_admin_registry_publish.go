@@ -38,6 +38,10 @@ func (s *Server) beginAppAdminRegistryPublish(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	if !s.appAdminPublishAllowed(w, app.name) {
+		s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, "", "app.registry.publish.begin", false, appregistry.ErrPublishAppNotAllowlisted.Error())
+		return
+	}
 	declaration, decodeErr := s.decodePublishDeclaration(w, r)
 	if decodeErr != "" {
 		s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, "", "app.registry.publish.begin", false, decodeErr)
@@ -71,6 +75,10 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 	publishID := strings.TrimSpace(chi.URLParam(r, "publishID"))
 	if publishID == "" {
 		writeError(w, http.StatusBadRequest, "publishID is required")
+		return
+	}
+	if !s.appAdminPublishAllowed(w, app.name) {
+		s.auditAppRegistryPublish(r.Context(), r, subjectID, app.name, publishID, "app.registry.publish.finalize", false, appregistry.ErrPublishAppNotAllowlisted.Error())
 		return
 	}
 	declaration, decodeErr := s.decodePublishDeclaration(w, r)
@@ -139,6 +147,18 @@ func (s *Server) appAdminPublishService(w http.ResponseWriter) (*appregistry.Sta
 		return nil, false
 	}
 	return s.appRegistryPublish, true
+}
+
+func (s *Server) appAdminPublishAllowed(w http.ResponseWriter, app string) bool {
+	if len(s.appRegistryPublishAllowedApps) == 0 {
+		writeError(w, http.StatusServiceUnavailable, appregistry.ErrPublishUnavailable.Error())
+		return false
+	}
+	if _, ok := s.appRegistryPublishAllowedApps[app]; !ok {
+		writeError(w, appregistry.PublishHTTPStatus(appregistry.ErrPublishAppNotAllowlisted), appregistry.ErrPublishAppNotAllowlisted.Error())
+		return false
+	}
+	return true
 }
 
 func (s *Server) appAdminPublisherSubjectID(w http.ResponseWriter, r *http.Request) (string, bool) {

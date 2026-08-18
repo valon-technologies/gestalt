@@ -12,6 +12,7 @@ var (
 	ErrPublishRequiredPlatform    = errors.New("required publish platform missing")
 	ErrPublishAppIdentityMismatch = errors.New("publish app identity mismatch")
 	ErrPublishRegistryNotEnrolled = errors.New("app is not enrolled in the registry")
+	ErrPublishAppNotAllowlisted   = errors.New("app is not allowlisted for registry publish")
 	ErrPublishIDMismatch          = errors.New("publish id mismatch")
 	ErrPublishReconcileMismatch   = errors.New("published registry entry does not match publish declaration")
 	ErrPublishIdentityMismatch    = errors.New("published entry identity mismatch")
@@ -38,6 +39,8 @@ func PublishHTTPStatus(err error) int {
 		return 409
 	case errors.Is(err, ErrPublishRegistryNotEnrolled):
 		return 404
+	case errors.Is(err, ErrPublishAppNotAllowlisted):
+		return 403
 	default:
 		return 502
 	}
