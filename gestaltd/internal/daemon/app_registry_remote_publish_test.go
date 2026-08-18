@@ -112,6 +112,31 @@ func TestRemoteRegistryPublishFlowAndResume(t *testing.T) { //nolint:paralleltes
 	}
 }
 
+func TestRemoteRegistryPublishProvenanceWarningsUseStderr(t *testing.T) { //nolint:paralleltest // chdirs
+	_, distDir, runner, base := setupRemotePublishFixture(t)
+	workDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestDir := filepath.Join(workDir, "apps", "demo")
+	runner["git -C "+manifestDir+" status --porcelain"] = fakeRemoteGitResult{Out: " M apps/demo/manifest.yaml\n"}
+
+	var stdout bytes.Buffer
+	_, err = (&remoteRegistryPublisher{
+		Version: "0.3.0-dev.1", DistDirs: []string{distDir},
+		GestaltURL: "http://example.invalid", GestaltToken: "token",
+		BuilderVersion: remotePublishTestBuilderVersion, Output: &stdout,
+		GitRunner: runner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest,
+		buildReleaseMetadata: base.buildReleaseMetadata,
+	}).publish(t.Context())
+	if err == nil {
+		t.Fatal("expected publish to fail before remote API call")
+	}
+	if strings.Contains(stdout.String(), "warning:") {
+		t.Fatalf("stdout = %q, want provenance warnings off structured stdout", stdout.String())
+	}
+}
+
 func TestRemoteRegistryPublishAlreadyPublishedAndAuth(t *testing.T) { //nolint:paralleltest // chdirs
 	_, distDir, _, base := setupRemotePublishFixture(t)
 	var authHeader string

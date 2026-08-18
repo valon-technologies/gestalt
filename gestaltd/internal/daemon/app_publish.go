@@ -127,51 +127,24 @@ func runAppPublishWithOptions(opts appPublishCommandOptions) error {
 	if err != nil {
 		return fmt.Errorf("--bucket: %w", err)
 	}
-	manifestPath, err := resolveAppPublishManifest(opts.AppName)
+	prepared, err := prepareAppPublishRelease(prepareAppPublishReleaseInput{
+		AppName:      opts.AppName,
+		VersionGuard: opts.Version,
+		DistDirs:     []string(opts.DistDirs),
+	})
 	if err != nil {
 		return err
 	}
-	_, sourceManifest, err := readAppPublishManifest(manifestPath)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", manifestPath, err)
-	}
-	manifestApp, err := appregistry.AppNameFromManifestSource(sourceManifest.Source)
-	if err != nil {
-		return fmt.Errorf("%s: invalid manifest source: %w", manifestPath, err)
-	}
-	if manifestApp != strings.TrimSpace(opts.AppName) {
-		return fmt.Errorf("%s: manifest source app %q does not match --app %q; update manifest source or pass the matching --app name", manifestPath, manifestApp, strings.TrimSpace(opts.AppName))
-	}
-	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivesFromDirsWithProgress([]string(opts.DistDirs), opts.Version)
-	if err != nil {
-		return err
-	}
-	if err := validateProviderPublishManifest(sourceManifest, releaseManifest, releaseVersion, opts.Version); err != nil {
-		return err
-	}
+	sourceManifest := prepared.SourceManifest
+	releaseArchives := prepared.Archives
+	manifestPath := prepared.ManifestPath
 	if err := appregistry.ValidatePublishInputWithOptions(sourceManifest, opts.Version, sourceRef, appregistry.PublishValidationOptions{
 		PublicationKind: appregistry.PublicationKindGitHub,
 	}); err != nil {
 		return err
 	}
 
-	tmpDir, err := os.MkdirTemp("", "gestalt-app-publish-*")
-	if err != nil {
-		return fmt.Errorf("create publish temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-	if err := writeProviderReleaseMetadata(tmpDir, releaseManifest, releaseVersion, releaseArchives, nil, false); err != nil {
-		return fmt.Errorf("write release metadata: %w", err)
-	}
-
-	releaseMetadataBytes, err := readProviderReleaseMetadata(filepath.Join(tmpDir, providerrelease.MetadataFile))
-	if err != nil {
-		return err
-	}
-	releaseMetadata, err := providerrelease.Decode(releaseMetadataBytes)
-	if err != nil {
-		return fmt.Errorf("decode provider release metadata: %w", err)
-	}
+	releaseMetadata := prepared.ReleaseMetadata
 
 	sourceInfo, err := providerPublishSourceRef(manifestPath, sourceRef)
 	if err != nil {

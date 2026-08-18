@@ -11,7 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 type remoteGitRunner interface {
@@ -33,65 +32,41 @@ type remoteRegistryPublisher struct {
 
 func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPublishResult, error) {
 	var zero remoteRegistryPublishResult
-	version := strings.TrimSpace(p.Version)
-	if version == "" {
-		return zero, fmt.Errorf("--version is required")
-	}
-	if len(p.DistDirs) == 0 {
-		return zero, fmt.Errorf("--dist-dir is required")
-	}
 	collect := p.collectArchives
 	if collect == nil {
 		collect = collectReleaseArchivesFromDirsWithProgress
-	}
-	releaseManifest, releaseVersion, archives, err := collect(p.DistDirs, version)
-	if err != nil {
-		return zero, err
-	}
-	appName, err := appregistry.AppNameFromManifestSource(releaseManifest.Source)
-	if err != nil {
-		return zero, fmt.Errorf("manifest source: %w", err)
 	}
 	resolve := p.resolveManifest
 	if resolve == nil {
 		resolve = resolveRemotePublishManifest
 	}
-	manifestPath, relManifestPath, err := resolve(appName)
+	prepared, err := prepareAppPublishRelease(prepareAppPublishReleaseInput{
+		VersionGuard:         p.Version,
+		DistDirs:             p.DistDirs,
+		CollectArchives:      collect,
+		ResolveManifest:      resolve,
+		BuildReleaseMetadata: p.buildReleaseMetadata,
+	})
 	if err != nil {
 		return zero, err
-	}
-	_, sourceManifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		return zero, fmt.Errorf("read %s: %w", manifestPath, err)
-	}
-	if err := validateProviderPublishManifest(sourceManifest, releaseManifest, releaseVersion, version); err != nil {
-		return zero, err
-	}
-	manifestBytes, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return zero, fmt.Errorf("read %s: %w", manifestPath, err)
-	}
-	buildMeta := p.buildReleaseMetadata
-	if buildMeta == nil {
-		buildMeta = buildProviderReleaseMetadata
-	}
-	releaseMetadata, err := buildMeta(releaseManifest, releaseVersion, archives, manifestBytes)
-	if err != nil {
-		return zero, fmt.Errorf("build release metadata: %w", err)
 	}
 	runner := p.GitRunner
 	if runner == nil {
 		runner = appRegistryCommandRunner{}
 	}
-	localSource, err := collectRemoteLocalSourceState(manifestPath, runner)
+	localSource, err := collectRemoteLocalSourceState(prepared.ManifestPath, runner)
 	if err != nil {
 		return zero, err
 	}
-	warnRemotePublishProvenance(p.Output, localSource)
-	declaration, err := buildRemotePublishDeclaration(appName, version, relManifestPath, sourceManifest, releaseMetadata, archives, localSource, p.BuilderVersion)
+	warnRemotePublishProvenance(os.Stderr, localSource)
+	declaration, err := buildRemotePublishDeclaration(
+		prepared.AppName, prepared.VersionGuard, prepared.RelativeManifestPath,
+		prepared.SourceManifest, prepared.ReleaseMetadata, prepared.Archives, localSource, p.BuilderVersion,
+	)
 	if err != nil {
 		return zero, err
 	}
+	appName := prepared.AppName
 	baseURL := strings.TrimSpace(p.GestaltURL)
 	token := strings.TrimSpace(p.GestaltToken)
 	if baseURL == "" {
@@ -124,8 +99,8 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 		printRemoteRegistryPublishResult(p.Output, result)
 		return result, nil
 	}
-	archiveByPlatform := make(map[string]releaseArchive, len(archives))
-	for _, archive := range archives {
+	archiveByPlatform := make(map[string]releaseArchive, len(prepared.Archives))
+	for _, archive := range prepared.Archives {
 		archiveByPlatform[strings.TrimSpace(archive.Target)] = archive
 	}
 	for _, upload := range created.Uploads {
