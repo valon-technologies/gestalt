@@ -188,6 +188,9 @@ func (s *StatelessPublishService) Finalize(ctx context.Context, appRegistry stri
 	}
 	result, err := s.publishUntilIndexed(req, prepared, input.App)
 	if err != nil {
+		if entry, matchErr := s.loadMatchingPublished(input.App, prepared.version, prepared.publishID, prepared.digest, prepared.sourceRef); matchErr == nil && entry != nil {
+			return adminPublishResponse(prepared.publishID, input.App, s.Registry, prepared.version, PublishStatePublished, nil, entry.PublishedAt), nil
+		}
 		return nil, err
 	}
 	if !publishIndexCommitted(result) {
@@ -363,7 +366,10 @@ func (s *StatelessPublishService) publishUntilIndexed(req PublishRequest, prepar
 		if entry, matchErr := s.loadMatchingPublished(app, prepared.version, prepared.publishID, prepared.digest, prepared.sourceRef); matchErr == nil && entry != nil {
 			return PublishResult{Index: CatalogWriteOutcomeUnchanged}, nil
 		}
-		if lastErr != nil && !CatalogPreconditionFailed(lastErr) {
+		if lastErr != nil && (CatalogPreconditionFailed(lastErr) || errors.Is(lastErr, ErrRegistryEntryConflict)) {
+			continue
+		}
+		if lastErr != nil {
 			return lastResult, lastErr
 		}
 	}
