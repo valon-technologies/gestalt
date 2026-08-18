@@ -84,6 +84,40 @@ func TestDecodeEntry_LocalPublicationWithoutSourceRef(t *testing.T) {
 	}
 }
 
+func TestWriter_Publish_ReturnsPartialImmutableOutcomes(t *testing.T) {
+	t.Parallel()
+
+	store := &failSecondImmutableStore{RegistryObjectStore: NewMemoryObjectStore()}
+	writer := &Writer{Store: store}
+	manifest, _, _ := writePublishManifestFixture(t, store.RegistryObjectStore, "0.0.1")
+	result, err := writer.Publish(PublishRequest{
+		Manifest:  manifest,
+		SourceRef: "651a5c30feb995c9364c38f63d0d5c3880bc2055",
+	}, PublishProgress{})
+	if err == nil {
+		t.Fatal("expected publish to fail on second immutable object")
+	}
+	if len(result.Artifacts) != 1 || result.Artifacts[0].Outcome != ObjectWriteOutcomeUploaded {
+		t.Fatalf("partial artifacts = %#v, want one uploaded artifact", result.Artifacts)
+	}
+	if result.Entry.Outcome != "" {
+		t.Fatalf("entry outcome = %#v, want empty on failed entry upload", result.Entry)
+	}
+}
+
+type failSecondImmutableStore struct {
+	RegistryObjectStore
+	writes int
+}
+
+func (s *failSecondImmutableStore) WriteImmutableObject(input WriteImmutableObjectInput) error {
+	s.writes++
+	if s.writes > 1 {
+		return fmt.Errorf("simulated immutable upload failure")
+	}
+	return s.RegistryObjectStore.WriteImmutableObject(input)
+}
+
 func TestWriter_Publish_IdempotentRetry(t *testing.T) {
 	t.Parallel()
 
