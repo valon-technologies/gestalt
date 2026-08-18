@@ -357,10 +357,12 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
+		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
 	result, err = prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
+		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
 	b.observePlugin5xxResult(ctx, span, p, providerName, opMeta.ID, transport, result)
@@ -513,6 +515,7 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	}
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
+		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
 	// Verify the catalog declares this operation as streaming before
@@ -527,6 +530,7 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	}
 	reader, err := streamExec.ExecuteStream(ctx, operation, params, accessToken)
 	if err != nil {
+		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
 	// Wrap the reader so the first metadata frame is observed for 5xx,
@@ -696,6 +700,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	}
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
+		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
 
@@ -706,6 +711,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 		}
 		reader, err := streamExec.ExecuteStream(ctx, operation, params, accessToken)
 		if err != nil {
+			b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 			return fail(err)
 		}
 		spanOwned = true
@@ -723,6 +729,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 
 	result, err := prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
+		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
 	b.observePlugin5xxResult(ctx, span, p, providerName, opMeta.ID, transport, result)
@@ -922,10 +929,12 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
+		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
 	result, err = graphQLProv.InvokeGraphQL(ctx, request, accessToken)
 	if err != nil {
+		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
 	return result, nil

@@ -233,6 +233,26 @@ type ExternalCredentialGrant struct {
 	RefreshErrorCount int
 }
 
+// MarkGrantReconnectRequired records that the stored OAuth grant was rejected
+// by the upstream provider. Catalog reconnect is ExpiresAt not after now and
+// RefreshErrorCount > 0. This writes that fact without deleting the account.
+func MarkGrantReconnectRequired(grant *ExternalCredentialGrant, now time.Time) bool {
+	if grant == nil {
+		return false
+	}
+	changed := false
+	if grant.RefreshErrorCount < 1 {
+		grant.RefreshErrorCount = 1
+		changed = true
+	}
+	if grant.ExpiresAt == nil || grant.ExpiresAt.After(now) {
+		expired := now
+		grant.ExpiresAt = &expired
+		changed = true
+	}
+	return changed
+}
+
 type ExternalCredentialClientInfo struct {
 	ClientID              string
 	ClientSecret          string

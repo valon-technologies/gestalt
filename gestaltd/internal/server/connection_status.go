@@ -368,7 +368,18 @@ func preferredInstanceValid(instances []instanceInfo, preferredInstance string) 
 }
 
 func markPreferredInstances(instances []instanceInfo, preferredInstance string) []instanceInfo {
-	if !preferredInstanceValid(instances, preferredInstance) || len(instances) == 0 {
+	preferredInstance = strings.TrimSpace(preferredInstance)
+	if preferredInstance == "" || len(instances) == 0 {
+		return instances
+	}
+	found := false
+	for _, instance := range instances {
+		if instance.Name == preferredInstance {
+			found = true
+			break
+		}
+	}
+	if !found {
 		return instances
 	}
 	out := make([]instanceInfo, len(instances))
