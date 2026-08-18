@@ -104,6 +104,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		Scope:            scope,
 		ClientID:         core.DefaultOAuthClientID,
 		ExpiresIn:        expiresIn,
+		Name:             strings.TrimSpace(req.Name),
 	})
 	grantID := ""
 	if tokenResp != nil {
@@ -120,7 +121,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditErr = nil
 	writeJSON(w, http.StatusCreated, createGrantResponse{
 		ID:        grantID,
-		Name:      grantID,
+		Name:      strings.TrimSpace(req.Name),
 		Token:     tokenResp.AccessToken,
 		Scopes:    principal.ParseScopeString(tokenResp.Scope),
 		ExpiresAt: tokenExpiresAt(s.now, tokenResp.ExpiresIn),

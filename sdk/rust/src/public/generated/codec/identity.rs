@@ -230,6 +230,12 @@ pub(crate) fn encode_wire_get_grant_response_json(
             crate::public::proto_json::encode_i64(value.expires_at),
         );
     }
+    if !value.name.is_empty() {
+        object.insert(
+            "name".into(),
+            serde_json::Value::String(value.name.to_string()),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -262,6 +268,10 @@ pub(crate) fn decode_wire_get_grant_response_json(
         expires_at: match object.get("expiresAt") {
             Some(value) => crate::public::proto_json::decode_i64(value)?,
             None => 0,
+        },
+        name: match object.get("name") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
         },
         ..Default::default()
     })
@@ -583,6 +593,12 @@ pub(crate) fn encode_wire_token_request_json(value: &v1::TokenRequest) -> serde_
             crate::public::proto_json::encode_i64(value.expires_in),
         );
     }
+    if !value.name.is_empty() {
+        object.insert(
+            "name".into(),
+            serde_json::Value::String(value.name.to_string()),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -632,6 +648,10 @@ pub(crate) fn decode_wire_token_request_json(
         expires_in: match object.get("expiresIn") {
             Some(value) => crate::public::proto_json::decode_i64(value)?,
             None => 0,
+        },
+        name: match object.get("name") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
         },
         ..Default::default()
     })

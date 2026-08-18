@@ -66,6 +66,10 @@ pub struct GetGrantResponse {
     pub created_at: i64,
     /// The `expires_at` field.
     pub expires_at: i64,
+    /// name is the human label supplied at create, when one was stored.
+    ///
+    /// The `name` field.
+    pub name: String,
 }
 
 /// GrantScope describes one authorized scope and optional resources.
@@ -192,6 +196,11 @@ pub struct TokenRequest {
     ///
     /// The `expires_in` field.
     pub expires_in: i64,
+    /// name is a Gestalt request-side extension: a human label for API-token
+    /// grants created via token exchange. Empty means the grant has no label.
+    ///
+    /// The `name` field.
+    pub name: String,
 }
 
 /// TokenResponse models RFC 6749 token endpoint response fields.
@@ -338,6 +347,7 @@ impl Identity {
             subject_token,
             subject_token_type,
             expires_in: options.expires_in,
+            name: options.name,
         };
         let mut tonic_request = tonic::Request::new(to_wire_token_request(request));
         if let Some(timeout) = self.timeout {
@@ -480,4 +490,9 @@ pub struct IdentityTokenOptions {
     ///
     /// The `expires_in` field.
     pub expires_in: i64,
+    /// name is a Gestalt request-side extension: a human label for API-token
+    /// grants created via token exchange. Empty means the grant has no label.
+    ///
+    /// The `name` field.
+    pub name: String,
 }

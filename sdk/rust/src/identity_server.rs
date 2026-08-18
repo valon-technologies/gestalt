@@ -60,6 +60,7 @@ fn token_request_from_proto(value: ProtoTokenRequest) -> TokenRequest {
         subject_token: value.subject_token,
         subject_token_type: value.subject_token_type,
         expires_in: value.expires_in,
+        name: value.name,
     }
 }
 
@@ -129,6 +130,7 @@ fn get_grant_response_to_proto(value: GetGrantResponse) -> ProtoGetGrantResponse
             .collect(),
         created_at: value.created_at,
         expires_at: value.expires_at,
+        name: value.name,
     }
 }
 

@@ -89,6 +89,7 @@ type TokenRequest struct {
 	SubjectToken     string
 	SubjectTokenType string
 	ExpiresIn        int64
+	Name             string
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -147,6 +148,7 @@ type GetGrantResponse struct {
 	Scopes    []GrantScope
 	CreatedAt int64
 	ExpiresAt int64
+	Name      string
 }
 
 // RevokeGrantRequest revokes one grant by ID.

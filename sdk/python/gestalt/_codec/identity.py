@@ -59,6 +59,7 @@ def to_wire_get_grant_response(value: native.GetGrantResponse) -> Any:
         scopes=[to_wire_grant_scope(item) for item in value.scopes],
         created_at=value.created_at,
         expires_at=value.expires_at,
+        name=value.name,
     )
 
 
@@ -67,6 +68,7 @@ def from_wire_get_grant_response(value: Any) -> native.GetGrantResponse:
         scopes=[from_wire_grant_scope(item) for item in value.scopes],
         created_at=value.created_at,
         expires_at=value.expires_at,
+        name=value.name,
     )
 
 
@@ -169,6 +171,7 @@ def to_wire_token_request(value: native.TokenRequest) -> Any:
         subject_token=value.subject_token,
         subject_token_type=value.subject_token_type,
         expires_in=value.expires_in,
+        name=value.name,
     )
 
 
@@ -183,6 +186,7 @@ def from_wire_token_request(value: Any) -> native.TokenRequest:
         subject_token=value.subject_token,
         subject_token_type=value.subject_token_type,
         expires_in=value.expires_in,
+        name=value.name,
     )
 
 

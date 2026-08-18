@@ -2129,6 +2129,10 @@ pub struct TokenRequest {
     /// default.
     #[prost(int64, tag = "10")]
     pub expires_in: i64,
+    /// name is a Gestalt request-side extension: a human label for API-token
+    /// grants created via token exchange. Empty means the grant has no label.
+    #[prost(string, tag = "11")]
+    pub name: ::prost::alloc::string::String,
 }
 /// TokenResponse models RFC 6749 token endpoint response fields.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2207,6 +2211,9 @@ pub struct GetGrantResponse {
     pub created_at: i64,
     #[prost(int64, tag = "3")]
     pub expires_at: i64,
+    /// name is the human label supplied at create, when one was stored.
+    #[prost(string, tag = "4")]
+    pub name: ::prost::alloc::string::String,
 }
 /// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

@@ -45,6 +45,7 @@ pub(crate) fn from_wire_get_grant_response(value: v1::GetGrantResponse) -> GetGr
             .collect(),
         created_at: value.created_at,
         expires_at: value.expires_at,
+        name: value.name,
     }
 }
 
@@ -113,6 +114,7 @@ pub(crate) fn to_wire_token_request(value: TokenRequest) -> v1::TokenRequest {
         subject_token: value.subject_token,
         subject_token_type: value.subject_token_type,
         expires_in: value.expires_in,
+        name: value.name,
     }
 }
 

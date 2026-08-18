@@ -85,6 +85,7 @@ export function toWireGetGrantResponse(
     scopes: (value.scopes ?? []).map(toWireGrantScope),
     createdAt: value.createdAt ?? 0n,
     expiresAt: value.expiresAt ?? 0n,
+    name: value.name ?? "",
   });
 }
 
@@ -95,6 +96,7 @@ export function fromWireGetGrantResponse(
     scopes: value.scopes.map(fromWireGrantScope),
     createdAt: value.createdAt,
     expiresAt: value.expiresAt,
+    name: value.name,
   };
 }
 
@@ -223,6 +225,7 @@ export function toWireTokenRequest(
     subjectToken: value.subjectToken ?? "",
     subjectTokenType: value.subjectTokenType ?? "",
     expiresIn: value.expiresIn ?? 0n,
+    name: value.name ?? "",
   });
 }
 
@@ -237,6 +240,7 @@ export function fromWireTokenRequest(value: wire.TokenRequest): TokenRequest {
     subjectToken: value.subjectToken,
     subjectTokenType: value.subjectTokenType,
     expiresIn: value.expiresIn,
+    name: value.name,
   };
 }
 

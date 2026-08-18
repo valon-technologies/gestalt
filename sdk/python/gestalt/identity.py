@@ -55,6 +55,8 @@ class GetGrantResponse:
     scopes: list[GrantScope] = field(default_factory=list)
     created_at: int = 0
     expires_at: int = 0
+    #: name is the human label supplied at create, when one was stored.
+    name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +143,9 @@ class TokenRequest:
     #: TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
     #: default.
     expires_in: int = 0
+    #: name is a Gestalt request-side extension: a human label for API-token
+    #: grants created via token exchange. Empty means the grant has no label.
+    name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,6 +287,7 @@ class Identity:
         subject_token: str = ...,
         subject_token_type: str = ...,
         expires_in: int = ...,
+        name: str = ...,
     ) -> TokenResponse: ...
 
     def token(
@@ -297,6 +303,7 @@ class Identity:
         subject_token: str | None = None,
         subject_token_type: str | None = None,
         expires_in: int | None = None,
+        name: str | None = None,
     ) -> TokenResponse:
         if request is None:
             request = TokenRequest(
@@ -309,6 +316,7 @@ class Identity:
                 subject_token=subject_token or "",
                 subject_token_type=subject_token_type or "",
                 expires_in=expires_in or 0,
+                name=name or "",
             )
         elif (
             grant_type is not None
@@ -320,6 +328,7 @@ class Identity:
             or subject_token is not None
             or subject_token_type is not None
             or expires_in is not None
+            or name is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(

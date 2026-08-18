@@ -36,6 +36,7 @@ type TokenRequest struct {
 	SubjectToken     string
 	SubjectTokenType string
 	ExpiresIn        int64
+	Name             string
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -95,6 +96,7 @@ type GetGrantResponse struct {
 	Scopes    []GrantScope
 	CreatedAt int64
 	ExpiresAt int64
+	Name      string
 }
 
 // RevokeGrantRequest revokes one caller-visible API-token grant by ID.
@@ -150,6 +152,7 @@ func tokenRequestFromProto(req *proto.TokenRequest) *TokenRequest {
 		SubjectToken:     req.GetSubjectToken(),
 		SubjectTokenType: req.GetSubjectTokenType(),
 		ExpiresIn:        req.GetExpiresIn(),
+		Name:             req.GetName(),
 	}
 }
 
@@ -211,6 +214,7 @@ func getGrantResponseToProto(resp *GetGrantResponse) *proto.GetGrantResponse {
 	out := &proto.GetGrantResponse{
 		CreatedAt: resp.CreatedAt,
 		ExpiresAt: resp.ExpiresAt,
+		Name:      resp.Name,
 	}
 	for _, scope := range resp.Scopes {
 		out.Scopes = append(out.Scopes, &proto.GrantScope{
