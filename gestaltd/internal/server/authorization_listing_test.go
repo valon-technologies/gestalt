@@ -242,6 +242,14 @@ func TestAppsListingDoesNotAdvertiseOperationOnlyAccess(t *testing.T) {
 	if _, ok := mountedPathFor(integrations, "sampleApp"); ok {
 		t.Fatalf("operation-only access must not put the app in Apps: %#v", integrations)
 	}
+	catalog := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "Bearer listing-token")
+	var catalogApps []listedIntegration
+	if err := json.Unmarshal(catalog, &catalogApps); err != nil {
+		t.Fatalf("decode catalog: %v", err)
+	}
+	if _, ok := mountedPathFor(catalogApps, "sampleApp"); ok {
+		t.Fatalf("operation-only access must not put the app in catalog: %#v", catalogApps)
+	}
 	if checker.calls != 0 {
 		t.Fatalf("Apps listing asked operation access %d times, want 0", checker.calls)
 	}

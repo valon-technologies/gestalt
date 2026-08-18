@@ -168,7 +168,7 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
-func (s *Server) attachDirectoryConnections(entry *appDirectoryEntry, plugin *config.ProviderEntry) {
+func (s *Server) attachDirectoryConnections(entry *tenantAppDirectoryEntry, plugin *config.ProviderEntry) {
 	if entry == nil {
 		return
 	}

@@ -9,16 +9,45 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 const appCatalogIconPathPrefix = "/api/v1/catalog/apps/"
 
-// appDirectory is a list of apps. The tenant snapshot has identity, copy,
-// icons, and connection fields for every installed app. A viewer copy is that
-// list filtered to apps this signed-in user may use, with their mount and
-// admin paths filled in. It does not include saved accounts or connection
-// status — those belong on the overlay.
+// tenantAppDirectory is the process-wide Apps snapshot: names, copy, icons,
+// and connection schema. It never holds a live Provider. Tunnel proxies are
+// bound to one HTTP request and must be resolved again for overlay status.
+type tenantAppDirectory struct {
+	entries []tenantAppDirectoryEntry
+}
+
+type tenantAppDirectoryEntry struct {
+	Name             string
+	DisplayName      string
+	Description      string
+	IconSVG          string
+	DeclaredMount    string
+	Prompts          []appPromptInfo
+	SourceTreeURL    string
+	Advertised       []advertisedConnection
+	ConnectionSchema []connectionSchemaInfo
+	Loaded           bool
+}
+
+// tenantAppDirectoryEpoch is the cheap invalidation key for the tenant
+// snapshot. providers is ProviderMap.Generation. remote is the tunnel
+// registration topology. plugins covers catalog-relevant plugin config so an
+// in-place AppDefs edit does not leave stale connection schema in the cache.
+type tenantAppDirectoryEpoch struct {
+	providers uint64
+	remote    uint64
+	plugins   string
+}
+
+// appDirectory is one signed-in viewer's slice of the tenant snapshot, with
+// mount and admin paths filled in. It still does not include saved accounts
+// or connection status, and it still does not hold a live Provider.
 type appDirectory struct {
 	entries []appDirectoryEntry
 }
@@ -35,7 +64,7 @@ type appDirectoryEntry struct {
 	SourceTreeURL    string
 	Advertised       []advertisedConnection
 	ConnectionSchema []connectionSchemaInfo
-	Provider         core.Provider
+	Loaded           bool
 }
 
 type connectionSchemaInfo struct {
@@ -147,6 +176,23 @@ func (dir *appDirectory) catalogJSON() []appCatalogEntry {
 	return out
 }
 
+func viewerDirectoryEntry(entry tenantAppDirectoryEntry, mountedPath, managementPath string) appDirectoryEntry {
+	return appDirectoryEntry{
+		Name:             entry.Name,
+		DisplayName:      entry.DisplayName,
+		Description:      entry.Description,
+		IconSVG:          entry.IconSVG,
+		DeclaredMount:    entry.DeclaredMount,
+		MountedPath:      mountedPath,
+		ManagementPath:   managementPath,
+		Prompts:          entry.Prompts,
+		SourceTreeURL:    entry.SourceTreeURL,
+		Advertised:       entry.Advertised,
+		ConnectionSchema: entry.ConnectionSchema,
+		Loaded:           entry.Loaded,
+	}
+}
+
 func connectionStatusViews(connections []connectionDefInfo) []connectionStatusView {
 	if connections == nil {
 		return []connectionStatusView{}
@@ -209,10 +255,10 @@ func (s *Server) assembleAppDirectory(r *http.Request) (*appDirectory, error) {
 	return s.projectViewerAppDirectory(r, snapshot)
 }
 
-func (s *Server) tenantAppDirectory(ctx context.Context) (*appDirectory, error) {
-	key := s.tenantDirectoryFingerprint()
+func (s *Server) tenantAppDirectory(ctx context.Context) (*tenantAppDirectory, error) {
+	epoch := s.tenantAppDirectoryEpoch()
 	s.tenantDirectoryMu.Lock()
-	if s.tenantDirectory != nil && s.tenantDirectoryKey == key {
+	if s.tenantDirectory != nil && s.tenantDirectoryEpoch == epoch {
 		dir := s.tenantDirectory
 		s.tenantDirectoryMu.Unlock()
 		return dir, nil
@@ -226,52 +272,88 @@ func (s *Server) tenantAppDirectory(ctx context.Context) (*appDirectory, error) 
 
 	s.tenantDirectoryMu.Lock()
 	defer s.tenantDirectoryMu.Unlock()
-	if s.tenantDirectory != nil && s.tenantDirectoryKey == key {
+	if s.tenantDirectory != nil && s.tenantDirectoryEpoch == epoch {
 		return s.tenantDirectory, nil
 	}
 	s.tenantDirectory = dir
-	s.tenantDirectoryKey = key
+	s.tenantDirectoryEpoch = epoch
 	return dir, nil
 }
 
-func (s *Server) tenantDirectoryFingerprint() string {
-	var b strings.Builder
+func (s *Server) tenantAppDirectoryEpoch() tenantAppDirectoryEpoch {
+	var providers uint64
 	if s.providers != nil {
-		fmt.Fprintf(&b, "g:%d", s.providers.Generation())
-		for _, name := range s.providers.List() {
-			b.WriteByte(',')
-			b.WriteString(name)
-		}
+		providers = s.providers.Generation()
 	}
-	names := make([]string, 0, len(s.pluginDefs))
+	return tenantAppDirectoryEpoch{
+		providers: providers,
+		remote:    s.remoteDirectoryTopology(),
+		plugins:   s.pluginDirectoryFingerprint(),
+	}
+}
+
+func (s *Server) remoteDirectoryTopology() uint64 {
+	if s == nil || s.tunnelResolver == nil {
+		return 0
+	}
+	return s.tunnelResolver.cfg.RemoteRegistrations.Topology()
+}
+
+func (s *Server) pluginDirectoryFingerprint() string {
+	names := make([]string, 0, len(s.pluginDefs)+len(s.appPrompts))
+	seen := make(map[string]struct{}, len(s.pluginDefs)+len(s.appPrompts))
 	for name := range s.pluginDefs {
+		names = append(names, name)
+		seen[name] = struct{}{}
+	}
+	for name := range s.appPrompts {
+		if _, ok := seen[name]; ok {
+			continue
+		}
 		names = append(names, name)
 	}
 	slices.Sort(names)
+	var b strings.Builder
 	for _, name := range names {
 		b.WriteByte(';')
 		b.WriteString(name)
 		plugin := s.pluginDefs[name]
-		if plugin == nil {
-			continue
+		if plugin != nil {
+			fmt.Fprintf(&b, ":%s:%s:%t:%s:%s",
+				strings.TrimSpace(plugin.DisplayName),
+				strings.TrimSpace(plugin.Description),
+				s.integrationHiddenFromCatalog(name),
+				pluginDeclaredMount(plugin),
+				plugin.SourceTreeURL(),
+			)
+			connNames := make([]string, 0, len(plugin.Connections))
+			for connName := range plugin.Connections {
+				connNames = append(connNames, connName)
+			}
+			slices.Sort(connNames)
+			for _, connName := range connNames {
+				mode := ""
+				if def := plugin.Connections[connName]; def != nil {
+					mode = string(def.Mode)
+				}
+				fmt.Fprintf(&b, ",%s=%s", connName, mode)
+			}
 		}
-		fmt.Fprintf(&b, ":%s:%t", strings.TrimSpace(plugin.DisplayName), s.integrationHiddenFromCatalog(name))
-		if plugin.Static != nil {
-			b.WriteByte(':')
-			b.WriteString(strings.TrimSpace(plugin.Static.Mount))
+		for _, prompt := range s.appPrompts[name] {
+			fmt.Fprintf(&b, "#%s=%s", prompt.ID, prompt.Text)
 		}
 	}
 	return b.String()
 }
 
-func (s *Server) buildTenantAppDirectory(ctx context.Context) (*appDirectory, error) {
+func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirectory, error) {
 	names := []string{}
 	if s.providers != nil {
 		names = s.providers.List()
 	}
 	registryApps := s.configuredRegistryApps()
 	seen := make(map[string]struct{}, len(names)+len(registryApps))
-	dir := &appDirectory{entries: make([]appDirectoryEntry, 0, len(names)+len(registryApps))}
+	dir := &tenantAppDirectory{entries: make([]tenantAppDirectoryEntry, 0, len(names)+len(registryApps))}
 	for _, name := range names {
 		entry, ok, err := s.tenantProviderDirectoryEntry(ctx, name)
 		if err != nil {
@@ -295,58 +377,68 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*appDirectory, er
 	return dir, nil
 }
 
-func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) (appDirectoryEntry, bool, error) {
+func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) (tenantAppDirectoryEntry, bool, error) {
 	if s.integrationHiddenFromCatalog(name) {
-		return appDirectoryEntry{}, false, nil
+		return tenantAppDirectoryEntry{}, false, nil
 	}
 	prov, err := s.providers.GetWithContext(ctx, name)
 	if err != nil {
-		return appDirectoryEntry{}, false, nil
+		return tenantAppDirectoryEntry{}, false, nil
 	}
 	plugin := s.pluginDefs[name]
-	entry := appDirectoryEntry{
-		Name:          name,
-		DisplayName:   prov.DisplayName(),
-		Description:   prov.Description(),
-		Prompts:       s.appPrompts[name],
-		SourceTreeURL: plugin.SourceTreeURL(),
-		Provider:      prov,
+	entry := tenantAppDirectoryEntry{
+		Name:        name,
+		DisplayName: prov.DisplayName(),
+		Description: prov.Description(),
+		Loaded:      true,
 	}
+	s.applyPluginDirectoryFields(&entry, plugin)
 	s.attachDirectoryConnections(&entry, plugin)
 	if cat := prov.Catalog(); cat != nil {
 		entry.IconSVG = cat.IconSVG
 	}
-	if plugin != nil && plugin.Static != nil {
-		entry.DeclaredMount = strings.TrimSpace(plugin.Static.Mount)
-	}
 	return entry, true, nil
 }
 
-func (s *Server) tenantRegistryDirectoryEntry(name string) appDirectoryEntry {
+func (s *Server) tenantRegistryDirectoryEntry(name string) tenantAppDirectoryEntry {
 	plugin := s.pluginDefs[name]
-	entry := appDirectoryEntry{
-		Name:          name,
-		DisplayName:   name,
-		Prompts:       s.appPrompts[name],
-		SourceTreeURL: plugin.SourceTreeURL(),
+	entry := tenantAppDirectoryEntry{
+		Name:        name,
+		DisplayName: name,
 	}
-	s.attachDirectoryConnections(&entry, plugin)
+	s.applyPluginDirectoryFields(&entry, plugin)
 	if plugin != nil && strings.TrimSpace(plugin.DisplayName) != "" {
 		entry.DisplayName = strings.TrimSpace(plugin.DisplayName)
 	}
-	if plugin != nil && plugin.Static != nil {
-		entry.DeclaredMount = strings.TrimSpace(plugin.Static.Mount)
-	}
+	s.attachDirectoryConnections(&entry, plugin)
 	return entry
 }
 
-func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *appDirectory) (*appDirectory, error) {
+func (s *Server) applyPluginDirectoryFields(entry *tenantAppDirectoryEntry, plugin *config.ProviderEntry) {
+	if entry == nil {
+		return
+	}
+	entry.Prompts = s.appPrompts[entry.Name]
+	if plugin == nil {
+		return
+	}
+	entry.SourceTreeURL = plugin.SourceTreeURL()
+	entry.DeclaredMount = pluginDeclaredMount(plugin)
+}
+
+func pluginDeclaredMount(plugin *config.ProviderEntry) string {
+	if plugin == nil || plugin.Static == nil {
+		return ""
+	}
+	return strings.TrimSpace(plugin.Static.Mount)
+}
+
+func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *tenantAppDirectory) (*appDirectory, error) {
 	if snapshot == nil {
 		return &appDirectory{entries: []appDirectoryEntry{}}, nil
 	}
 	p := PrincipalFromContext(r.Context())
 	ctx, _ := withListingDecisionCache(r.Context())
-	r = r.WithContext(ctx)
 	names := make([]string, 0, len(snapshot.entries))
 	for i := range snapshot.entries {
 		names = append(names, snapshot.entries[i].Name)
@@ -355,9 +447,7 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *appDirecto
 
 	out := &appDirectory{entries: make([]appDirectoryEntry, 0, len(snapshot.entries))}
 	for i := range snapshot.entries {
-		entry := snapshot.entries[i]
-		entry.MountedPath = s.integrationMountedPathForPrincipalContext(ctx, p, entry.Name, entry.DeclaredMount)
-		entry.ManagementPath = s.integrationManagementPath(ctx, p, entry.Name)
+		entry := s.viewerDirectoryEntry(ctx, p, snapshot.entries[i])
 		usable, err := s.directoryEntryUsable(ctx, p, entry)
 		if err != nil {
 			return nil, err
@@ -370,6 +460,14 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *appDirecto
 	return out, nil
 }
 
+func (s *Server) viewerDirectoryEntry(ctx context.Context, p *principal.Principal, entry tenantAppDirectoryEntry) appDirectoryEntry {
+	return viewerDirectoryEntry(
+		entry,
+		s.integrationMountedPathForPrincipalContext(ctx, p, entry.Name, entry.DeclaredMount),
+		s.integrationManagementPath(ctx, p, entry.Name),
+	)
+}
+
 func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (appDirectoryEntry, bool, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -379,7 +477,7 @@ func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (ap
 	if err != nil {
 		return appDirectoryEntry{}, false, err
 	}
-	var found appDirectoryEntry
+	var found tenantAppDirectoryEntry
 	ok := false
 	for i := range snapshot.entries {
 		if snapshot.entries[i].Name == name {
@@ -391,22 +489,26 @@ func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (ap
 	if !ok {
 		return appDirectoryEntry{}, false, nil
 	}
-	viewer, err := s.projectViewerAppDirectory(r, &appDirectory{entries: []appDirectoryEntry{found}})
+	p := PrincipalFromContext(r.Context())
+	ctx, _ := withListingDecisionCache(r.Context())
+	s.prefetchIntegrationListingDecisions(ctx, p, []string{found.Name})
+	entry := s.viewerDirectoryEntry(ctx, p, found)
+	usable, err := s.directoryEntryUsable(ctx, p, entry)
 	if err != nil {
 		return appDirectoryEntry{}, false, err
 	}
-	if viewer == nil || len(viewer.entries) == 0 {
+	if !usable {
 		return appDirectoryEntry{}, false, nil
 	}
-	return viewer.entries[0], true, nil
+	return entry, true, nil
 }
 
 func (s *Server) directoryEntryUsable(ctx context.Context, p *principal.Principal, entry appDirectoryEntry) (bool, error) {
-	// Registry-only rows (no loaded provider) stay admin-only. Loaded apps
-	// appear when this user may use them (Admin people/groups), including
-	// opening the web UI or the admin page. One callable HTTP operation is
-	// not enough to put the app in Apps.
-	if entry.Provider == nil {
+	// Registry-only rows stay admin-only. Loaded apps appear when this user
+	// may use them (Admin people/groups), including opening the web UI or
+	// the admin page. One callable HTTP operation is not enough to put the
+	// app in Apps.
+	if !entry.Loaded {
 		return entry.ManagementPath != "", nil
 	}
 	if entry.MountedPath != "" || entry.ManagementPath != "" {
@@ -460,8 +562,19 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 		instances := connected[entry.Name]
 		info.Connections = s.connectionInfosFromAdvertised(r.Context(), entry.Name, entry.Advertised, instances, p)
 		authTypes := resolvedAuthTypesFromConnections(info.Connections)
-		s.applyIntegrationConnectionStatus(&info, entry.Provider, instances, authTypes, p)
+		s.applyIntegrationConnectionStatus(&info, s.liveProviderForListing(r.Context(), entry), instances, authTypes, p)
 		out = append(out, info)
 	}
 	return out, nil
+}
+
+func (s *Server) liveProviderForListing(ctx context.Context, entry *appDirectoryEntry) core.Provider {
+	if entry == nil || !entry.Loaded || s == nil || s.providers == nil {
+		return nil
+	}
+	prov, err := s.providers.GetWithContext(ctx, entry.Name)
+	if err != nil {
+		return nil
+	}
+	return prov
 }

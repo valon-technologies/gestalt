@@ -134,8 +134,8 @@ type Server struct {
 	agentRuns                     agentmanager.Service
 	providers                     *registry.ProviderMap[core.Provider]
 	tenantDirectoryMu             sync.Mutex
-	tenantDirectoryKey            string
-	tenantDirectory               *appDirectory
+	tenantDirectoryEpoch          tenantAppDirectoryEpoch
+	tenantDirectory               *tenantAppDirectory
 	workflow                      bootstrap.WorkflowControl
 	pluginRuntimes                bootstrap.RuntimeInspector
 	resolver                      *principal.Resolver

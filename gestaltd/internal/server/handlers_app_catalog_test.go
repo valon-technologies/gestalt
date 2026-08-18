@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -569,12 +570,239 @@ func TestAppCatalogReusesTenantDirectoryAcrossRequests(t *testing.T) {
 		t.Fatalf("second catalog rebuilt the tenant directory: resolver calls %d after first, %d after second", afterCatalog, resolver.calls.Load())
 	}
 	_ = getJSONPath(t, ts, "/api/v1/me/app-connections", http.StatusOK, "")
-	if resolver.calls.Load() != afterCatalog {
-		t.Fatalf("connection overlay rebuilt the tenant directory: resolver calls %d after catalog, %d after overlay", afterCatalog, resolver.calls.Load())
+	afterOverlay := resolver.calls.Load()
+	if afterOverlay <= afterCatalog {
+		t.Fatal("connection overlay must resolve a live provider instead of reusing the snapshot handle")
+	}
+	_ = getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	if resolver.calls.Load() != afterOverlay {
+		t.Fatalf("catalog after overlay rebuilt the tenant directory: resolver calls %d after overlay, %d after later catalog", afterOverlay, resolver.calls.Load())
 	}
 	if string(first) != string(second) {
 		t.Fatalf("cached catalog changed: %s vs %s", first, second)
 	}
+}
+
+type requestScopedStubResolver struct {
+	stub  *coretesting.StubIntegration
+	calls atomic.Int32
+}
+
+type requestScopedStub struct {
+	*coretesting.StubIntegration
+	closed atomic.Bool
+}
+
+func (p *requestScopedStub) Close() error {
+	p.closed.Store(true)
+	return nil
+}
+
+func (p *requestScopedStub) ConnectionMode() core.ConnectionMode {
+	if p.closed.Load() {
+		panic("ConnectionMode on closed provider")
+	}
+	return p.StubIntegration.ConnectionMode()
+}
+
+func (r *requestScopedStubResolver) ResolveProvider(ctx context.Context, _ string) (core.Provider, error) {
+	r.calls.Add(1)
+	p := &requestScopedStub{StubIntegration: r.stub}
+	context.AfterFunc(ctx, func() { _ = p.Close() })
+	return p, nil
+}
+
+func TestAppCatalogDoesNotCacheRequestScopedProviders(t *testing.T) {
+	t.Parallel()
+
+	resolver := &requestScopedStubResolver{
+		stub: &coretesting.StubIntegration{N: "slack", DN: "Slack", ConnMode: core.ConnectionModeNone},
+	}
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Local Slack", ConnMode: core.ConnectionModeNone})
+	providers.SetRemoteResolver(resolver)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.AppDefs = testPluginDefsForConnections("slack", "default")
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	first := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	afterCatalog := resolver.calls.Load()
+	if afterCatalog == 0 {
+		t.Fatal("catalog snapshot never resolved providers")
+	}
+	overlay := getJSONPath(t, ts, "/api/v1/me/app-connections", http.StatusOK, "")
+	if resolver.calls.Load() <= afterCatalog {
+		t.Fatal("overlay reused a closed snapshot provider instead of resolving a live one")
+	}
+	var statuses []struct {
+		Name   string `json:"name"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(overlay, &statuses); err != nil {
+		t.Fatalf("decode overlay: %v", err)
+	}
+	if len(statuses) != 1 || statuses[0].Name != "slack" || statuses[0].Status == "" {
+		t.Fatalf("overlay = %s", overlay)
+	}
+	second := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	if string(first) != string(second) {
+		t.Fatalf("cached catalog changed: %s vs %s", first, second)
+	}
+}
+
+func TestAppCatalogRefreshesAfterProviderGenerationBump(t *testing.T) {
+	t.Parallel()
+
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack", ConnMode: core.ConnectionModeNone})
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.AppDefs = testPluginDefsForConnections("slack", "default")
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	first := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	var firstApps []appCatalogName
+	if err := json.Unmarshal(first, &firstApps); err != nil {
+		t.Fatalf("decode first catalog: %v", err)
+	}
+	if len(firstApps) != 1 || firstApps[0].DisplayName != "Slack" {
+		t.Fatalf("first catalog = %s", first)
+	}
+	if err := providers.Replace("slack", &coretesting.StubIntegration{N: "slack", DN: "Slack Workspace", ConnMode: core.ConnectionModeNone}); err != nil {
+		t.Fatalf("replace provider: %v", err)
+	}
+	second := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	var secondApps []appCatalogName
+	if err := json.Unmarshal(second, &secondApps); err != nil {
+		t.Fatalf("decode second catalog: %v", err)
+	}
+	if len(secondApps) != 1 || secondApps[0].DisplayName != "Slack Workspace" {
+		t.Fatalf("second catalog = %s, want Slack Workspace after generation bump", second)
+	}
+}
+
+func TestAppCatalogRefreshesAfterPluginConnectionChange(t *testing.T) {
+	t.Parallel()
+
+	defs := testPluginDefsForConnections("slack", "default")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack", ConnMode: core.ConnectionModeNone})
+		cfg.AppDefs = defs
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	first := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	if connectionNamesFromCatalog(t, first, "slack")["workspace"] {
+		t.Fatalf("first catalog already has workspace: %s", first)
+	}
+	defs["slack"].Connections["workspace"] = &config.ConnectionDef{
+		ConnectionID: "slack:workspace",
+		DisplayName:  "Workspace",
+		Mode:         providermanifestv1.ConnectionModeSubject,
+		Auth: config.ConnectionAuthDef{
+			Type: providermanifestv1.AuthTypeManual,
+		},
+	}
+	second := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	if !connectionNamesFromCatalog(t, second, "slack")["workspace"] {
+		t.Fatalf("second catalog missing workspace after plugin edit: %s", second)
+	}
+}
+
+func TestAppCatalogSharesTenantSnapshotAcrossViewers(t *testing.T) {
+	t.Parallel()
+
+	aliceID := principal.UserSubjectID(testCanonicalViewerUserID)
+	bobID := principal.UserSubjectID(testCanonicalAdminUserID)
+	resolver := &countingMissResolver{}
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack", ConnMode: core.ConnectionModeNone})
+	providers.SetRemoteResolver(resolver)
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>app</html>")
+	authz := &serverTestAuthorizationProvider{
+		relationships: subjectSetGrant(aliceID, "viewer", "app", "slack"),
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = testAuthStubWithIntrospect(func(_ context.Context, token string) (*core.IntrospectResponse, error) {
+			switch token {
+			case "alice-token":
+				return testIntrospectActive(aliceID, ""), nil
+			case "bob-token":
+				return testIntrospectActive(bobID, ""), nil
+			default:
+				return &core.IntrospectResponse{Active: false}, nil
+			}
+		})
+		cfg.Authorization = authz
+		cfg.Providers = providers
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				Static:             &config.AppStaticConfig{Mount: "/slack"},
+				ResolvedStaticRoot: rootDir,
+			},
+		}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	alice := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "Bearer alice-token")
+	afterAlice := resolver.calls.Load()
+	if afterAlice == 0 {
+		t.Fatal("alice catalog never resolved providers")
+	}
+	var aliceApps []listedIntegration
+	if err := json.Unmarshal(alice, &aliceApps); err != nil {
+		t.Fatalf("decode alice catalog: %v", err)
+	}
+	if mounted, ok := mountedPathFor(aliceApps, "slack"); !ok || mounted == "" {
+		t.Fatalf("alice catalog missing granted app: %s", alice)
+	}
+
+	bob := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "Bearer bob-token")
+	if resolver.calls.Load() != afterAlice {
+		t.Fatalf("bob catalog rebuilt the tenant directory: resolver calls %d after alice, %d after bob", afterAlice, resolver.calls.Load())
+	}
+	var bobApps []listedIntegration
+	if err := json.Unmarshal(bob, &bobApps); err != nil {
+		t.Fatalf("decode bob catalog: %v", err)
+	}
+	if _, ok := mountedPathFor(bobApps, "slack"); ok {
+		t.Fatalf("bob catalog advertised an app they cannot use: %s", bob)
+	}
+}
+
+type appCatalogName struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+}
+
+func connectionNamesFromCatalog(t *testing.T, body []byte, app string) map[string]bool {
+	t.Helper()
+	var apps []struct {
+		Name        string `json:"name"`
+		Connections []struct {
+			Name string `json:"name"`
+		} `json:"connections"`
+	}
+	if err := json.Unmarshal(body, &apps); err != nil {
+		t.Fatalf("decode catalog connections: %v", err)
+	}
+	out := map[string]bool{}
+	for _, entry := range apps {
+		if entry.Name != app {
+			continue
+		}
+		for _, connection := range entry.Connections {
+			out[connection.Name] = true
+		}
+	}
+	return out
 }
 
 func getJSONPath(t *testing.T, ts *httptest.Server, path string, wantStatus int, authorization string) []byte {
