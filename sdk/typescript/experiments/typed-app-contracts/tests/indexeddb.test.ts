@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import {
   IDBKeyRange,
   connectRemoteIDBDatabase,
+  createRemoteIDBFactory,
   type RemoteObjectStoreDefinition,
 } from "../src/indexeddb.ts";
 import { FilesystemRegistry, addDependency, initializeProject, readProjectManifest } from "../src/registry.ts";
@@ -219,6 +220,192 @@ describe("literal IDBDatabase facade over unary tools", () => {
     const verify = database.transaction("tasks");
     expect(await requestValue(verify.objectStore("tasks").count())).toBe(4);
   });
+
+  test("R-IDB-07 implements IDBFactory opening, upgrades, discovery, comparison, and deletion", async () => {
+    const coordinator = new IndexedDBCoordinator();
+    await coordinator.initialize();
+    const factory = createRemoteIDBFactory(coordinatorInvoke(coordinator));
+
+    expect(factory.cmp(-Infinity, new Date(0))).toBe(-1);
+    expect(factory.cmp(new Date(0), "a")).toBe(-1);
+    expect(factory.cmp("a", new Uint8Array([0]))).toBe(-1);
+    expect(factory.cmp(new Uint8Array([0]), [])).toBe(-1);
+    expect(factory.cmp(new Uint8Array([1, 2]), new Uint8Array([1, 3]))).toBe(-1);
+    expect(factory.cmp([1, "a"], [1, "a"])).toBe(0);
+    expectDOMException(() => factory.cmp(false, true), "DataError");
+    expectDOMException(() => factory.cmp(NaN, 1), "DataError");
+    expect(() => factory.open("invalid", 0)).toThrow(TypeError);
+
+    const existing = await requestValue(factory.open("gestalt-indexeddb"));
+    expect(existing.name).toBe("gestalt-indexeddb");
+    expect(existing.version).toBe(1);
+
+    const created = await openDatabase(factory, "factory-created", 1, (database) => {
+      const draft = database.createObjectStore("draft", { keyPath: "id" });
+      draft.name = "records";
+      const temporary = draft.createIndex("temporary", "owner");
+      temporary.name = "byOwner";
+    });
+    expect(created.version).toBe(1);
+    expect([...created.objectStoreNames]).toEqual(["records"]);
+    const metadata = created.transaction("records").objectStore("records");
+    expect([...metadata.indexNames]).toEqual(["byOwner"]);
+
+    const upgraded = await openDatabase(factory, "factory-created", 2, (_database, transaction) => {
+      const records = transaction.objectStore("records");
+      records.name = "renamedRecords";
+      records.index("byOwner").name = "renamedOwner";
+    });
+    expect(upgraded.version).toBe(2);
+    expect([...upgraded.objectStoreNames]).toEqual(["renamedRecords"]);
+    expect([...upgraded.transaction("renamedRecords").objectStore("renamedRecords").indexNames]).toEqual([
+      "renamedOwner",
+    ]);
+
+    const listed = await factory.databases();
+    expect(listed).toContainEqual({ name: "factory-created", version: 2 });
+    await requestValue(factory.deleteDatabase("factory-created"));
+    expect(await factory.databases()).not.toContainEqual({ name: "factory-created", version: 2 });
+
+    const fixture = await publishIndexedDBGraph();
+    expect(await fixture.installation.invoke("factoryLifecycle", {})).toEqual({
+      name: "consumer-factory",
+      upgradeSeen: true,
+      cyclePreserved: true,
+      mapValue: "mapped",
+      binaryValue: 3,
+      listed: true,
+      deleted: true,
+      comparison: -1,
+    });
+    const factoryRoutes = fixture.routes.filter((route) => route.app === "acme/indexeddb");
+    expect(new Set(factoryRoutes.map((route) => route.replica))).toEqual(new Set([0, 1, 2]));
+  });
+
+  test("R-IDB-08 transports structured-clone graphs and the complete IndexedDB key domain", async () => {
+    const coordinator = new IndexedDBCoordinator();
+    await coordinator.initialize();
+    const factory = createRemoteIDBFactory(coordinatorInvoke(coordinator));
+    const database = await openDatabase(factory, "wire-values", 1, (connection) => {
+      connection.createObjectStore("values");
+    });
+
+    const shared = { label: "shared" };
+    const buffer = new Uint8Array([1, 2, 3, 4]).buffer;
+    const sparse = new Array(2);
+    sparse[1] = "present";
+    const graph: any = {
+      undefined,
+      nan: NaN,
+      positiveInfinity: Infinity,
+      negativeZero: -0,
+      bigint: 9_007_199_254_740_993n,
+      date: new Date("2026-08-17T12:00:00.000Z"),
+      invalidDate: new Date(NaN),
+      regexp: /gestalt/gi,
+      map: new Map([[shared, new Set(["one", "two"])]]),
+      sharedA: shared,
+      sharedB: shared,
+      buffer,
+      view: new Uint8Array(buffer, 1, 2),
+      dataView: new DataView(buffer, 0, 2),
+      blob: new Blob(["blob-value"], { type: "text/plain" }),
+      file: new File(["file-value"], "value.txt", { type: "text/plain", lastModified: 42 }),
+      error: new TypeError("failed", { cause: shared }),
+      domException: new DOMException("missing", "NotFoundError"),
+      boxedBigInt: Object(7n),
+      sparse,
+    };
+    graph.self = graph;
+
+    const write = database.transaction("values", "readwrite");
+    const writeDone = eventOnce(write, "complete");
+    await requestValue(write.objectStore("values").put(graph, "graph"));
+    for (const [key, value] of [
+      [-Infinity, "negative infinity"],
+      [Infinity, "positive infinity"],
+      [new Date(0), "date"],
+      ["string", "string"],
+      [new Uint8Array([1, 2, 3]), "binary"],
+      [[1, new Date(1), new Uint8Array([2])], "array"],
+    ] as Array<[IDBValidKey, string]>) {
+      await requestValue(write.objectStore("values").put(value, key));
+    }
+    write.commit();
+    await writeDone;
+
+    const read = database.transaction("values");
+    const result = await requestValue(read.objectStore("values").get("graph"));
+    expect(result.self).toBe(result);
+    expect(result.sharedA).toBe(result.sharedB);
+    expect([...result.map.keys()][0]).toBe(result.sharedA);
+    expect([...result.map.values()][0]).toEqual(new Set(["one", "two"]));
+    expect(result.undefined).toBeUndefined();
+    expect(Number.isNaN(result.nan)).toBe(true);
+    expect(result.positiveInfinity).toBe(Infinity);
+    expect(Object.is(result.negativeZero, -0)).toBe(true);
+    expect(result.bigint).toBe(9_007_199_254_740_993n);
+    expect(result.date).toEqual(new Date("2026-08-17T12:00:00.000Z"));
+    expect(Number.isNaN(result.invalidDate.valueOf())).toBe(true);
+    expect(result.regexp).toEqual(/gestalt/gi);
+    expect(result.view).toBeInstanceOf(Uint8Array);
+    expect(result.view.buffer).toBe(result.buffer);
+    expect([...result.view]).toEqual([2, 3]);
+    expect(result.dataView.buffer).toBe(result.buffer);
+    expect(result.dataView.getUint16(0)).toBe(258);
+    expect(await result.blob.text()).toBe("blob-value");
+    expect(result.file.name).toBe("value.txt");
+    expect(result.file.lastModified).toBe(42);
+    expect(await result.file.text()).toBe("file-value");
+    expect(result.error).toBeInstanceOf(TypeError);
+    expect(result.error.cause).toBe(result.sharedA);
+    expect(result.domException).toMatchObject({ name: "NotFoundError", message: "missing" });
+    expect(result.boxedBigInt.valueOf()).toBe(7n);
+    expect(0 in result.sparse).toBe(false);
+    expect(result.sparse[1]).toBe("present");
+    expect(await requestValue(read.objectStore("values").get(new Uint8Array([1, 2, 3])))).toBe("binary");
+    expect(await requestValue(read.objectStore("values").get(new Date(0)))).toBe("date");
+
+    const rejected = database.transaction("values", "readwrite");
+    await expect(requestValue(rejected.objectStore("values").put({ method() {} }, "invalid"))).rejects.toMatchObject({
+      name: "DataCloneError",
+    });
+  });
+
+  test("R-IDB-09 supports getAll options and record snapshots on stores and indexes", async () => {
+    const coordinator = new IndexedDBCoordinator();
+    await coordinator.initialize();
+    const factory = createRemoteIDBFactory(coordinatorInvoke(coordinator));
+    const database = await openDatabase(factory, "record-retrieval", 1, (connection) => {
+      const records = connection.createObjectStore("records", { keyPath: "id" });
+      records.createIndex("byGroup", "group");
+    });
+    const write = database.transaction("records", "readwrite");
+    const done = eventOnce(write, "complete");
+    for (const record of [
+      { id: 1, group: "a", value: "one" },
+      { id: 2, group: "a", value: "two" },
+      { id: 3, group: "b", value: "three" },
+    ]) await requestValue(write.objectStore("records").put(record));
+    write.commit();
+    await done;
+
+    const read = database.transaction("records");
+    const store = read.objectStore("records");
+    expect((await requestValue(store.getAll({ direction: "prev", count: 2 }))).map((value) => value.id)).toEqual([3, 2]);
+    expect(await requestValue(store.getAllKeys({ direction: "prev", count: 2 }))).toEqual([3, 2]);
+    expect(await requestValue(store.getAllRecords({ direction: "prev", count: 2 }))).toEqual([
+      { key: 3, primaryKey: 3, value: { id: 3, group: "b", value: "three" } },
+      { key: 2, primaryKey: 2, value: { id: 2, group: "a", value: "two" } },
+    ]);
+    expect(await requestValue(store.index("byGroup").getAllRecords({
+      query: IDBKeyRange.only("a"),
+      direction: "prev",
+    }))).toEqual([
+      { key: "a", primaryKey: 2, value: { id: 2, group: "a", value: "two" } },
+      { key: "a", primaryKey: 1, value: { id: 1, group: "a", value: "one" } },
+    ]);
+  });
 });
 
 async function publishIndexedDBGraph(): Promise<{
@@ -302,7 +489,13 @@ function datastoreSourceText(): string {
 
     const Input = z.union([
       z.strictObject({
-        op: z.literal("begin"), scope: z.array(z.string()),
+        op: z.literal("factoryOpen"), name: z.string(),
+        version: z.number().int().positive().optional(),
+      }),
+      z.strictObject({ op: z.literal("factoryDelete"), name: z.string() }),
+      z.strictObject({ op: z.literal("factoryDatabases") }),
+      z.strictObject({
+        op: z.literal("begin"), database: z.string(), scope: z.array(z.string()),
         mode: z.enum(["readonly", "readwrite", "versionchange"]),
         durability: z.enum(["default", "strict", "relaxed"]),
       }),
@@ -320,6 +513,23 @@ function datastoreSourceText(): string {
       z.strictObject({ op: z.literal("status"), transactionId: z.string(), nonce: z.string() }),
     ]);
     const Output = z.union([
+      z.strictObject({
+        op: z.literal("database"), name: z.string(), version: z.number().int().positive(),
+        objectStores: z.json(),
+      }),
+      z.strictObject({
+        op: z.literal("upgrade"), name: z.string(), oldVersion: z.number().int().min(0),
+        newVersion: z.number().int().positive(), objectStores: z.json(),
+        transactionId: z.string(), nextSequence: z.number().int().min(0),
+      }),
+      z.strictObject({
+        op: z.literal("deleted"), name: z.string(), oldVersion: z.number().int().min(0),
+      }),
+      z.strictObject({
+        op: z.literal("databases"), databases: z.array(z.strictObject({
+          name: z.string(), version: z.number().int().min(0),
+        })),
+      }),
       z.strictObject({
         op: z.literal("opened"), transactionId: z.string(), nextSequence: z.number().int().min(0),
       }),
@@ -361,7 +571,7 @@ function consumerSourceText(): string {
   return `
     import { z } from "zod";
     import { app, tool } from ${JSON.stringify(sdkPath)};
-    import { connectRemoteIDBDatabase, IDBKeyRange } from ${JSON.stringify(indexedDBPath)};
+    import { connectRemoteIDBDatabase, createRemoteIDBFactory, IDBKeyRange } from ${JSON.stringify(indexedDBPath)};
     import { transaction } from "@gestalt/apps/indexeddb";
 
     const database = connectRemoteIDBDatabase(transaction, {
@@ -375,6 +585,7 @@ function consumerSourceText(): string {
         ] },
       ],
     }).database;
+    const indexedDB = createRemoteIDBFactory(transaction);
 
     function result<T>(request: IDBRequest<T>): Promise<T> {
       return new Promise((resolve, reject) => {
@@ -500,12 +711,70 @@ function consumerSourceText(): string {
           return { errorName, abortEvent: true, databaseAbortEvent, databaseErrorEvent };
         },
       }),
+      factoryLifecycle: tool({
+        input: z.strictObject({}),
+        output: z.strictObject({
+          name: z.string(), upgradeSeen: z.boolean(), cyclePreserved: z.boolean(),
+          mapValue: z.string(), binaryValue: z.number().int(), listed: z.boolean(),
+          deleted: z.boolean(), comparison: z.number().int(),
+        }),
+        handler: async () => {
+          const open = indexedDB.open("consumer-factory", 1);
+          let upgradeSeen = false;
+          open.onupgradeneeded = () => {
+            upgradeSeen = true;
+            open.result.createObjectStore("values");
+          };
+          const opened = await result(open);
+          const shared = { value: "mapped" };
+          const graph: any = {
+            map: new Map([["key", shared]]),
+            binary: new Uint8Array([1, 2, 3]),
+          };
+          graph.self = graph;
+          const write = opened.transaction("values", "readwrite");
+          const completed = terminal(write, "complete");
+          await result(write.objectStore("values").put(graph, "graph"));
+          write.commit();
+          await completed;
+          const read = opened.transaction("values");
+          const restored = await result(read.objectStore("values").get("graph"));
+          const listed = (await indexedDB.databases()).some((entry) => entry.name === "consumer-factory");
+          opened.close();
+          await result(indexedDB.deleteDatabase("consumer-factory"));
+          const deleted = !(await indexedDB.databases()).some((entry) => entry.name === "consumer-factory");
+          return {
+            name: opened.name,
+            upgradeSeen,
+            cyclePreserved: restored.self === restored,
+            mapValue: restored.map.get("key").value,
+            binaryValue: restored.binary[2],
+            listed,
+            deleted,
+            comparison: indexedDB.cmp(new Date(0), "a"),
+          };
+        },
+      }),
     } });
   `;
 }
 
 function requestValue<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function openDatabase(
+  factory: IDBFactory,
+  name: string,
+  version: number,
+  upgrade: (database: IDBDatabase, transaction: IDBTransaction) => void,
+): Promise<IDBDatabase> {
+  const request = factory.open(name, version);
+  return new Promise((resolve, reject) => {
+    request.onupgradeneeded = () => upgrade(request.result, request.transaction!);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });

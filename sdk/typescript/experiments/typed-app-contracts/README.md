@@ -10,7 +10,7 @@ Gestalt needs one App to publish tool contracts that another App can import, typ
 
 Both requirements are feasible without a custom type extractor, validator, or streaming tool. Authors define public inputs and outputs once with [Zod](https://zod.dev/); publication derives a canonical [JSON Schema](https://json-schema.org/draft/2020-12), generated TypeScript client, and immutable release from those schemas.
 
-The ordinary unary `tool` interface can expose the literal [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase) transaction API. The SDK returns local `IDBDatabase`, `IDBTransaction`, `IDBRequest`, object-store, index, key-range, and cursor objects while translating their operations into calls to one Zod-typed tool. Each call carries a hidden transaction ID and sequence, so any App replica can forward it to the coordinator that owns the backend transaction. Streaming would change transport behavior, not the domain API, and is not required for correctness.
+The ordinary unary `tool` interface can expose the literal [`IndexedDB`](https://www.w3.org/TR/IndexedDB-3/) API. The SDK returns local factory, database, request, transaction, object-store, index, key-range, and cursor objects while translating their operations into calls to one Zod-typed tool. Each stateful call carries a hidden database identity, transaction ID, and sequence, so any App replica can forward it to the coordinator that owns the backend transaction. Streaming would change transport behavior, not the domain API, and is not required for correctness.
 
 This does require a transaction coordinator behind the App replicas. The coordinator, not the JavaScript App replica, owns the live database transaction, enforces command order, retains cursor state, and makes terminal operations idempotent. The proof uses [`fake-indexeddb`](https://github.com/dumbmatter/fakeIndexedDB) as that backend so the experiment can test IndexedDB behavior without claiming a production MySQL implementation.
 
@@ -100,6 +100,18 @@ Explicit aborts and failed requests must roll back writes and surface DOMExcepti
 
 The object stores, indexes, key ranges, and mutable cursors returned from `IDBDatabase` must retain their standard properties and method signatures.
 
+### R-IDB-07 — Factory and database upgrades
+
+`IDBFactory` must open, create, discover, compare keys for, upgrade, and delete named databases through `IDBOpenDBRequest`; version changes must support persistent object-store and index renames.
+
+### R-IDB-08 — Portable values and keys
+
+Values must cross the JSON tool boundary with structured-clone graph identity and supported built-in types intact. Keys must cover the complete IndexedDB number, date, string, binary, and recursive-array domain and ordering.
+
+### R-IDB-09 — IndexedDB 3 record retrieval
+
+Object stores and indexes must support direction-aware `getAll()`, `getAllKeys()`, and `getAllRecords()` with their literal option and result shapes.
+
 ## App authoring and use
 
 An App author writes Zod contracts and a handler once:
@@ -169,7 +181,7 @@ request.onsuccess = () => {
 };
 ```
 
-The App exposes only one public `transaction` tool. Begin, request, commit, abort, and status are variants of its Zod input and output contract; transaction IDs, command sequences, cursor IDs, and commit nonces are SDK details and do not appear in the IndexedDB call surface.
+The App exposes only one public `transaction` tool. Factory, begin, request, commit, abort, and status commands are variants of its Zod input and output contract; database identities, transaction IDs, command sequences, cursor IDs, and commit nonces are SDK details and do not appear in the IndexedDB call surface.
 
 ```mermaid
 flowchart LR
@@ -190,7 +202,7 @@ Adding or syncing a dependency resolves one exact immutable release and material
 
 The suite checks Zod and independent-validator agreement, deterministic contract and provider generation, schema-profile rejection, exact dependency locks, generated imports, source deletion, recursive admission, integrity failures, runtime validation, and stable activation. Documentation and tests share requirement IDs and fail if their traceability differs.
 
-The IndexedDB functional tests publish an App containing only the union-shaped `transaction` tool and a separate consumer using literal IndexedDB objects. Begin, reads, writes, cursors, commit, abort, and recovery are routed round-robin across three App replicas to one coordinator. The tests cover the complete `IDBDatabase` surface and the principal returned object operations, including upgrade changes, rollback, key ranges, indexes, mutable cursors, and event-driven request ordering.
+The IndexedDB functional tests publish an App containing only the union-shaped `transaction` tool and a separate consumer using literal IndexedDB objects. Factory operations, reads, writes, cursors, commit, abort, and terminal-status checks are routed round-robin across three App replicas to one coordinator. The tests cover factory creation and deletion, upgrades and renames, rollback, the complete key domain, structured-clone graphs, key ranges, indexes, mutable cursors, and IndexedDB 3 record retrieval.
 
 ## Implementation details
 
@@ -200,8 +212,8 @@ Canonical JSON values are represented recursively by `z.json()` and lowered with
 
 ## Remaining work
 
-This experiment implements the `IDBDatabase` page and the objects needed to use its returned transactions; it is not a complete browser IndexedDB engine. `IDBFactory.open()`, `deleteDatabase()`, `databases()`, and `cmp()`, `IDBOpenDBRequest`, upgrade blocking between multiple connections, and `upgradeneeded` orchestration remain outside the implemented surface. The test controller creates or reopens a connection and supplies its version-change transaction.
+This is not a browser engine. The facade reproduces the tested request, transaction, database, and upgrade events, but exact browser task scheduling, garbage-collection behavior, multi-connection blocking, event propagation, and every cancellation edge case remain unproven. Those behaviors were intentionally excluded from this verification.
 
-The tool contract currently transports canonical JSON. IndexedDB structured-clone values such as `Date`, binary data, `Blob`, `File`, `undefined`, cyclic objects, and shared references are not yet encoded. Keys support strings, finite numbers, and nested arrays; date, binary, and infinite-number keys and their complete IndexedDB ordering remain. Object-store and index `name` setters do not yet perform remote renames, and the newer `getAllRecords()` operation is not implemented.
+The wire codec covers the IndexedDB key domain and the broadly useful structured-clone types exercised here, including cyclic and shared graphs, sparse arrays, `undefined`, non-finite numbers, `bigint`, dates, regular expressions, maps, sets, errors, buffers and views, blobs, and files. Runtime-specific host objects such as cryptographic keys or filesystem handles need explicit codecs before they can be claimed portable.
 
-The facade reproduces the tested request, transaction, and database events, but it has not run the browser Web Platform Test corpus, so exact browser task scheduling, garbage-collection behavior, connection queuing, event propagation, and every default-cancellation edge case remain unproven. The in-memory coordinator demonstrates the protocol but does not implement durable replication, coordinator failover, MySQL connection recovery, authorization, production sandboxing, or a compatibility policy beyond exact digest equality.
+The in-memory coordinator proves the unary protocol and literal interfaces, not a production service. Durable replication, failover, MySQL connection recovery, authorization, sandboxing, and a compatibility policy beyond exact digest equality remain outside the experiment.

@@ -1,4 +1,39 @@
 import type { JsonValue } from "./model.ts";
+import {
+  assertIDBKey,
+  cloneIDBKey,
+  compareIDBKeys,
+  decodeIDBKey,
+  decodeStructuredClone,
+  encodeIDBKey,
+  encodeStructuredClone,
+} from "./indexeddb-wire.ts";
+
+declare global {
+  interface IDBGetAllOptions {
+    query?: IDBValidKey | IDBKeyRange | null;
+    count?: number;
+    direction?: IDBCursorDirection;
+  }
+
+  interface IDBRecord {
+    readonly key: IDBValidKey;
+    readonly primaryKey: IDBValidKey;
+    readonly value: any;
+  }
+
+  interface IDBObjectStore {
+    getAll(queryOrOptions?: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null, count?: number): IDBRequest<any[]>;
+    getAllKeys(queryOrOptions?: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null, count?: number): IDBRequest<IDBValidKey[]>;
+    getAllRecords(options?: IDBGetAllOptions): IDBRequest<IDBRecord[]>;
+  }
+
+  interface IDBIndex {
+    getAll(queryOrOptions?: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null, count?: number): IDBRequest<any[]>;
+    getAllKeys(queryOrOptions?: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null, count?: number): IDBRequest<IDBValidKey[]>;
+    getAllRecords(options?: IDBGetAllOptions): IDBRequest<IDBRecord[]>;
+  }
+}
 
 type TransactionTool = (input: any) => Promise<any>;
 type Handler<Target, EventType extends Event> = ((this: Target, event: EventType) => any) | null;
@@ -32,6 +67,17 @@ export interface RemoteIDBDatabaseConnection {
   versionChange(oldVersion: number, newVersion: number | null): void;
 }
 
+export interface RemoteIDBFactoryOptions {
+  nonce?: () => string;
+}
+
+export function createRemoteIDBFactory(
+  invoke: TransactionTool,
+  options: RemoteIDBFactoryOptions = {},
+): IDBFactory {
+  return new RemoteFactory(invoke, options.nonce ?? (() => globalThis.crypto.randomUUID()));
+}
+
 interface StoreMetadata {
   name: string;
   keyPath: string | string[] | null;
@@ -51,6 +97,11 @@ interface CursorDescriptor {
   key: IDBValidKey;
   primaryKey: IDBValidKey;
   value?: unknown;
+}
+
+interface ExistingTransactionSession {
+  transactionId: string;
+  nextSequence: number;
 }
 
 export function connectRemoteIDBDatabase(
@@ -150,9 +201,14 @@ class RemoteDatabase extends EventTarget implements IDBDatabase {
     transaction.schemaCommand("deleteObjectStore", { store: name });
   }
 
-  startUpgrade(): IDBTransaction {
+  startUpgrade(session?: ExistingTransactionSession): IDBTransaction {
     if (this.upgrade) throw domError("InvalidStateError");
-    const transaction = this.createTransaction([...this.stores.keys()], "versionchange", "strict");
+    const transaction = this.createTransaction(
+      [...this.stores.keys()],
+      "versionchange",
+      "strict",
+      session,
+    );
     this.upgrade = transaction;
     return transaction;
   }
@@ -187,6 +243,15 @@ class RemoteDatabase extends EventTarget implements IDBDatabase {
     return metadata;
   }
 
+  renameStore(metadata: StoreMetadata, name: string): void {
+    const previous = metadata.name;
+    if (name === previous) return;
+    if (this.stores.has(name)) throw domError("ConstraintError", name);
+    this.stores.delete(previous);
+    metadata.name = name;
+    this.stores.set(name, metadata);
+  }
+
   private activeUpgrade(): RemoteTransaction {
     if (!this.upgrade) throw domError("InvalidStateError");
     this.upgrade.assertActive();
@@ -197,6 +262,7 @@ class RemoteDatabase extends EventTarget implements IDBDatabase {
     scope: string[],
     mode: IDBTransactionMode,
     durability: IDBTransactionDurability,
+    session?: ExistingTransactionSession,
   ): RemoteTransaction {
     const transaction = new RemoteTransaction(
       this,
@@ -205,6 +271,7 @@ class RemoteDatabase extends EventTarget implements IDBDatabase {
       mode,
       durability,
       this.nonce,
+      session,
     );
     this.transactions.add(transaction);
     return transaction;
@@ -238,13 +305,20 @@ class RemoteTransaction extends EventTarget implements IDBTransaction {
     mode: IDBTransactionMode,
     durability: IDBTransactionDurability,
     private readonly nonce: () => string,
+    session?: ExistingTransactionSession,
   ) {
     super();
     this.db = database;
     this.mode = mode;
     this.durability = durability;
     for (const name of scope) this.scope.add(name);
-    this.opened = this.open();
+    if (session) {
+      this.transactionId = session.transactionId;
+      this.nextSequence = session.nextSequence;
+      this.opened = Promise.resolve();
+    } else {
+      this.opened = this.open();
+    }
     this.scheduleAutoCommit();
   }
 
@@ -297,6 +371,18 @@ class RemoteTransaction extends EventTarget implements IDBTransaction {
     this.scope.add(name);
   }
 
+  renameObjectStore(store: RemoteObjectStore, metadata: StoreMetadata, name: string): void {
+    this.assertVersionChange();
+    const previous = metadata.name;
+    if (name === previous) return;
+    (this.db as RemoteDatabase).renameStore(metadata, name);
+    this.scope.delete(previous);
+    this.scope.add(name);
+    this.stores.delete(previous);
+    this.stores.set(name, store);
+    this.schemaCommand("renameObjectStore", { store: previous, name });
+  }
+
   schemaCommand(kind: string, payload: Record<string, JsonValue>): void {
     this.assertVersionChange();
     this.enqueue(async () => {
@@ -307,7 +393,7 @@ class RemoteTransaction extends EventTarget implements IDBTransaction {
   request<T>(
     source: IDBObjectStore | IDBIndex | IDBCursor,
     kind: string,
-    payload: Record<string, JsonValue>,
+    payload: Record<string, JsonValue> | Promise<Record<string, JsonValue>>,
     decode: (value: JsonValue, request: RemoteRequest<T>) => T,
     write = false,
   ): IDBRequest<T> {
@@ -315,7 +401,7 @@ class RemoteTransaction extends EventTarget implements IDBTransaction {
     const request = new RemoteRequest<T>(source, this);
     this.enqueue(async () => {
       try {
-        const value = await this.sendRequest(kind, payload);
+        const value = await this.sendRequest(kind, await payload);
         request.succeed(decode(value, request));
       } catch (error) {
         const exception = asDOMException(error);
@@ -359,6 +445,7 @@ class RemoteTransaction extends EventTarget implements IDBTransaction {
   private async open(): Promise<void> {
     const reply = expectReply(await this.invoke({
       op: "begin",
+      database: this.db.name,
       scope: [...this.scope],
       mode: this.mode,
       durability: this.durability,
@@ -436,15 +523,19 @@ class RemoteRequest<T> extends EventTarget implements IDBRequest<T> {
   onerror: Handler<IDBRequest<T>, Event> = null;
   onsuccess: Handler<IDBRequest<T>, Event> = null;
   readonly source: IDBObjectStore | IDBIndex | IDBCursor;
-  readonly transaction: IDBTransaction | null;
-  private state: IDBRequestReadyState = "pending";
-  private value: T | undefined;
-  private exception: DOMException | null = null;
+  protected transactionValue: IDBTransaction | null;
+  protected state: IDBRequestReadyState = "pending";
+  protected value: T | undefined;
+  protected exception: DOMException | null = null;
 
   constructor(source: IDBObjectStore | IDBIndex | IDBCursor, transaction: IDBTransaction | null) {
     super();
     this.source = source;
-    this.transaction = transaction;
+    this.transactionValue = transaction;
+  }
+
+  get transaction(): IDBTransaction | null {
+    return this.transactionValue;
   }
 
   get readyState(): IDBRequestReadyState {
@@ -466,6 +557,12 @@ class RemoteRequest<T> extends EventTarget implements IDBRequest<T> {
     this.exception = null;
   }
 
+  prepare(value: T): void {
+    this.value = value;
+    this.exception = null;
+    this.state = "done";
+  }
+
   succeed(value: T): void {
     this.value = value;
     this.exception = null;
@@ -480,6 +577,122 @@ class RemoteRequest<T> extends EventTarget implements IDBRequest<T> {
     const event = new Event("error", { bubbles: true, cancelable: true });
     emit(this, event, this.onerror);
     return event.defaultPrevented;
+  }
+}
+
+class RemoteOpenRequest extends RemoteRequest<IDBDatabase> implements IDBOpenDBRequest {
+  onblocked: Handler<IDBOpenDBRequest, IDBVersionChangeEvent> = null;
+  onupgradeneeded: Handler<IDBOpenDBRequest, IDBVersionChangeEvent> = null;
+
+  constructor() {
+    super(null as unknown as IDBObjectStore, null);
+  }
+
+  async upgrade(
+    database: IDBDatabase,
+    transaction: IDBTransaction,
+    oldVersion: number,
+    newVersion: number,
+  ): Promise<void> {
+    this.prepare(database);
+    this.transactionValue = transaction;
+    emit(
+      this,
+      new RemoteVersionChangeEvent("upgradeneeded", { oldVersion, newVersion }),
+      this.onupgradeneeded,
+    );
+    await new Promise<void>((resolve, reject) => {
+      transaction.addEventListener("complete", () => resolve(), { once: true });
+      transaction.addEventListener("abort", () => reject(transaction.error ?? domError("AbortError")), {
+        once: true,
+      });
+    });
+    this.transactionValue = null;
+    this.succeed(database);
+  }
+
+  clearTransaction(): void {
+    this.transactionValue = null;
+  }
+}
+
+class RemoteFactory implements IDBFactory {
+  constructor(
+    private readonly invoke: TransactionTool,
+    private readonly nonce: () => string,
+  ) {}
+
+  cmp(first: any, second: any): number {
+    return compareIDBKeys(first, second);
+  }
+
+  databases(): Promise<IDBDatabaseInfo[]> {
+    return Promise.resolve().then(async () => {
+      const reply = expectReply(await this.invoke({ op: "factoryDatabases" }), "databases");
+      if (!Array.isArray(reply.databases)) throw new IndexedDBProtocolError("databases must be an array");
+      return reply.databases.map((entry) => {
+        if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+          throw new IndexedDBProtocolError("database metadata must be an object");
+        }
+        const info = entry as Record<string, unknown>;
+        return { name: stringField(info, "name"), version: integerField(info, "version") };
+      });
+    });
+  }
+
+  deleteDatabase(name: string): IDBOpenDBRequest {
+    const request = new RemoteOpenRequest();
+    void Promise.resolve().then(async () => {
+      try {
+        expectReply(await this.invoke({ op: "factoryDelete", name: String(name) }), "deleted");
+        request.succeed(undefined as unknown as IDBDatabase);
+      } catch (error) {
+        request.fail(asDOMException(error));
+      }
+    });
+    return request;
+  }
+
+  open(name: string, version?: number): IDBOpenDBRequest {
+    const databaseName = String(name);
+    if (version !== undefined) assertDatabaseVersion(version);
+    const request = new RemoteOpenRequest();
+    void Promise.resolve().then(async () => {
+      try {
+        const reply = expectOneReply(
+          await this.invoke({
+            op: "factoryOpen",
+            name: databaseName,
+            ...(version === undefined ? {} : { version }),
+          }),
+          ["database", "upgrade"],
+        );
+        const database = new RemoteDatabase(this.invoke, {
+          name: stringField(reply, "name"),
+          version: integerField(reply, reply.op === "upgrade" ? "newVersion" : "version"),
+          objectStores: objectStoreDefinitions(reply.objectStores),
+          nonce: this.nonce,
+        });
+        if (reply.op === "database") {
+          request.succeed(database);
+          return;
+        }
+        const transaction = database.startUpgrade({
+          transactionId: stringField(reply, "transactionId"),
+          nextSequence: integerField(reply, "nextSequence"),
+        });
+        await request.upgrade(
+          database,
+          transaction,
+          integerField(reply, "oldVersion"),
+          integerField(reply, "newVersion"),
+        );
+      } catch (error) {
+        request.clearTransaction();
+        request.fail(asDOMException(error));
+      }
+    });
+    return request;
   }
 }
 
@@ -503,8 +716,7 @@ class RemoteObjectStore implements IDBObjectStore {
   }
 
   set name(value: string) {
-    this.remoteTransaction.assertVersionChange();
-    if (value !== this.metadata.name) throw domError("NotSupportedError", "store renaming is not implemented");
+    this.remoteTransaction.renameObjectStore(this, this.metadata, String(value));
   }
 
   get indexNames(): DOMStringList {
@@ -557,24 +769,36 @@ class RemoteObjectStore implements IDBObjectStore {
     );
   }
 
-  getAll(query: IDBValidKey | IDBKeyRange | null = null, count?: number): IDBRequest<any[]> {
+  getAll(
+    queryOrOptions: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null = null,
+    count?: number,
+  ): IDBRequest<any[]> {
     return this.remoteTransaction.request(
       this,
       "getAll",
-      listPayload(this.name, query, count),
-      (value) => arrayValue(value),
+      listOrOptionsPayload(this.name, queryOrOptions, count),
+      decodeValues,
     );
   }
 
   getAllKeys(
-    query: IDBValidKey | IDBKeyRange | null = null,
+    queryOrOptions: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null = null,
     count?: number,
   ): IDBRequest<IDBValidKey[]> {
     return this.remoteTransaction.request(
       this,
       "getAllKeys",
-      listPayload(this.name, query, count),
-      (value) => arrayValue(value) as IDBValidKey[],
+      listOrOptionsPayload(this.name, queryOrOptions, count),
+      decodeKeys,
+    );
+  }
+
+  getAllRecords(options: IDBGetAllOptions = {}): IDBRequest<IDBRecord[]> {
+    return this.remoteTransaction.request(
+      this,
+      "getAllRecords",
+      getAllOptionsPayload(this.name, options),
+      decodeRecords,
     );
   }
 
@@ -652,12 +876,30 @@ class RemoteObjectStore implements IDBObjectStore {
     this.remoteTransaction.schemaCommand("deleteIndex", { store: this.name, index: name });
   }
 
-  private write(kind: "add" | "put", value: unknown, key?: IDBValidKey): IDBRequest<IDBValidKey> {
-    const payload: Record<string, JsonValue> = {
+  renameIndex(index: RemoteIndex, metadata: IndexMetadata, name: string): void {
+    this.remoteTransaction.assertVersionChange();
+    const previous = metadata.name;
+    if (name === previous) return;
+    if (this.metadata.indexes.has(name)) throw domError("ConstraintError", name);
+    this.metadata.indexes.delete(previous);
+    metadata.name = name;
+    this.metadata.indexes.set(name, metadata);
+    this.indexes.delete(previous);
+    this.indexes.set(name, index);
+    this.remoteTransaction.schemaCommand("renameIndex", {
       store: this.name,
-      value: jsonValue(value),
-    };
-    if (key !== undefined) payload.key = serializeKey(key);
+      index: previous,
+      name,
+    });
+  }
+
+  private write(kind: "add" | "put", value: unknown, key?: IDBValidKey): IDBRequest<IDBValidKey> {
+    const encodedValue = encodeStructuredClone(value);
+    const payload = encodedValue.then((encoded): Record<string, JsonValue> => ({
+      store: this.name,
+      value: encoded,
+      ...(key === undefined ? {} : { key: serializeKey(key) }),
+    }));
     return this.remoteTransaction.request(
       this,
       kind,
@@ -721,8 +963,7 @@ class RemoteIndex implements IDBIndex {
   }
 
   set name(value: string) {
-    this.transaction.assertVersionChange();
-    if (value !== this.metadata.name) throw domError("NotSupportedError", "index renaming is not implemented");
+    (this.objectStore as RemoteObjectStore).renameIndex(this, this.metadata, String(value));
   }
 
   get(query: IDBValidKey | IDBKeyRange): IDBRequest<any> {
@@ -733,15 +974,27 @@ class RemoteIndex implements IDBIndex {
     return this.read("indexGetKey", query, decodeOptionalKey);
   }
 
-  getAll(query: IDBValidKey | IDBKeyRange | null = null, count?: number): IDBRequest<any[]> {
-    return this.list("indexGetAll", query, count) as IDBRequest<any[]>;
+  getAll(
+    queryOrOptions: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null = null,
+    count?: number,
+  ): IDBRequest<any[]> {
+    return this.list("indexGetAll", queryOrOptions, count, decodeValues) as IDBRequest<any[]>;
   }
 
   getAllKeys(
-    query: IDBValidKey | IDBKeyRange | null = null,
+    queryOrOptions: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null = null,
     count?: number,
   ): IDBRequest<IDBValidKey[]> {
-    return this.list("indexGetAllKeys", query, count) as IDBRequest<IDBValidKey[]>;
+    return this.list("indexGetAllKeys", queryOrOptions, count, decodeKeys) as IDBRequest<IDBValidKey[]>;
+  }
+
+  getAllRecords(options: IDBGetAllOptions = {}): IDBRequest<IDBRecord[]> {
+    return this.transaction.request(
+      this,
+      "indexGetAllRecords",
+      { ...getAllOptionsPayload(this.objectStore.name, options), index: this.name },
+      decodeRecords,
+    );
   }
 
   count(query?: IDBValidKey | IDBKeyRange): IDBRequest<number> {
@@ -786,17 +1039,18 @@ class RemoteIndex implements IDBIndex {
 
   private list(
     kind: string,
-    query: IDBValidKey | IDBKeyRange | null,
+    queryOrOptions: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null,
     count?: number,
+    decode: (value: JsonValue) => unknown[] = decodeValues,
   ): IDBRequest<unknown[]> {
     return this.transaction.request(
       this,
       kind,
       {
-        ...listPayload(this.objectStore.name, query, count),
+        ...listOrOptionsPayload(this.objectStore.name, queryOrOptions, count),
         index: this.name,
       },
-      arrayValue,
+      decode,
     );
   }
 
@@ -870,7 +1124,7 @@ class RemoteCursor implements IDBCursorWithValue {
 
   get value(): any {
     if (this.keyOnly) return undefined;
-    return structuredClone(this.currentValue);
+    return this.currentValue;
   }
 
   advance(count: number): void {
@@ -898,10 +1152,11 @@ class RemoteCursor implements IDBCursorWithValue {
 
   update(value: any): IDBRequest<IDBValidKey> {
     this.assertValue();
+    const encoded = encodeStructuredClone(value);
     return this.transaction.request(
       this,
       "cursorUpdate",
-      { cursorId: this.cursorId, value: jsonValue(value) },
+      encoded.then((wire) => ({ cursorId: this.cursorId, value: wire })),
       keyValue,
       true,
     );
@@ -1108,6 +1363,44 @@ function listPayload(
   return payload;
 }
 
+function getAllOptionsPayload(
+  store: string,
+  options: IDBGetAllOptions,
+): Record<string, JsonValue> {
+  const direction = options.direction ?? "next";
+  assertDirection(direction);
+  return {
+    ...listPayload(store, options.query ?? null, options.count),
+    direction,
+  };
+}
+
+function listOrOptionsPayload(
+  store: string,
+  queryOrOptions: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null,
+  count: number | undefined,
+): Record<string, JsonValue> {
+  if (isGetAllOptions(queryOrOptions)) {
+    if (count !== undefined) throw new TypeError("count cannot accompany IDBGetAllOptions");
+    return getAllOptionsPayload(store, queryOrOptions);
+  }
+  return { ...listPayload(store, queryOrOptions, count), direction: "next" };
+}
+
+function isGetAllOptions(
+  value: IDBValidKey | IDBKeyRange | IDBGetAllOptions | null,
+): value is IDBGetAllOptions {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Date) &&
+    !ArrayBuffer.isView(value) &&
+    !(value instanceof ArrayBuffer) &&
+    !isKeyRange(value as IDBValidKey | IDBKeyRange)
+  );
+}
+
 function serializeQuery(query: IDBValidKey | IDBKeyRange): JsonValue {
   if (isKeyRange(query)) {
     return {
@@ -1133,25 +1426,21 @@ function isKeyRange(value: IDBValidKey | IDBKeyRange): value is IDBKeyRange {
 }
 
 function serializeKey(key: IDBValidKey): JsonValue {
-  assertKey(key);
-  return jsonValue(key);
+  return encodeIDBKey(key);
 }
 
 function keyValue(value: JsonValue): IDBValidKey {
-  assertKey(value);
-  return cloneKey(value);
+  return decodeIDBKey(value);
 }
 
 function decodeOptional(value: JsonValue): unknown {
   const envelope = recordValue(value);
-  return envelope.present === true ? structuredClone(envelope.value) : undefined;
+  return envelope.present === true ? decodeStructuredClone(envelope.value as JsonValue) : undefined;
 }
 
 function decodeOptionalKey(value: JsonValue): IDBValidKey | undefined {
-  const result = decodeOptional(value);
-  if (result === undefined) return undefined;
-  assertKey(result);
-  return cloneKey(result);
+  const envelope = recordValue(value);
+  return envelope.present === true ? decodeIDBKey(envelope.value as JsonValue) : undefined;
 }
 
 function cursorDescriptor(value: JsonValue): CursorDescriptor | null {
@@ -1159,42 +1448,18 @@ function cursorDescriptor(value: JsonValue): CursorDescriptor | null {
   const descriptor = recordValue(value);
   const cursorId = descriptor.cursorId;
   if (typeof cursorId !== "string") throw new IndexedDBProtocolError("cursorId must be a string");
-  assertKey(descriptor.key);
-  assertKey(descriptor.primaryKey);
   return {
     cursorId,
-    key: cloneKey(descriptor.key),
-    primaryKey: cloneKey(descriptor.primaryKey),
-    ...(Object.hasOwn(descriptor, "value") ? { value: structuredClone(descriptor.value) } : {}),
+    key: decodeIDBKey(descriptor.key as JsonValue),
+    primaryKey: decodeIDBKey(descriptor.primaryKey as JsonValue),
+    ...(Object.hasOwn(descriptor, "value")
+      ? { value: decodeStructuredClone(descriptor.value as JsonValue) }
+      : {}),
   };
 }
 
-function jsonValue(value: unknown): JsonValue {
-  let cloned: unknown;
-  try {
-    cloned = structuredClone(value);
-  } catch {
-    throw domError("DataCloneError");
-  }
-  if (!isJsonValue(cloned)) throw domError("DataCloneError", "wire value is outside canonical JSON");
-  return cloned;
-}
-
-function isJsonValue(value: unknown): value is JsonValue {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
-  if (typeof value === "number") return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isJsonValue);
-  if (typeof value !== "object") return false;
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-  return Object.values(value as Record<string, unknown>).every(isJsonValue);
-}
-
 function assertKey(value: unknown): asserts value is IDBValidKey {
-  if (typeof value === "string") return;
-  if (typeof value === "number" && !Number.isNaN(value)) return;
-  if (Array.isArray(value) && value.every((entry) => entry !== undefined && isSupportedKey(entry))) return;
-  throw domError("DataError");
+  assertIDBKey(value);
 }
 
 function isSupportedKey(value: unknown): value is IDBValidKey {
@@ -1207,28 +1472,11 @@ function isSupportedKey(value: unknown): value is IDBValidKey {
 }
 
 function compareKeys(left: IDBValidKey, right: IDBValidKey): number {
-  const leftRank = keyRank(left);
-  const rightRank = keyRank(right);
-  if (leftRank !== rightRank) return leftRank < rightRank ? -1 : 1;
-  if (typeof left === "number" && typeof right === "number") return Math.sign(left - right);
-  if (typeof left === "string" && typeof right === "string") return left < right ? -1 : left > right ? 1 : 0;
-  const leftArray = left as IDBValidKey[];
-  const rightArray = right as IDBValidKey[];
-  for (let index = 0; index < Math.min(leftArray.length, rightArray.length); index += 1) {
-    const compared = compareKeys(leftArray[index]!, rightArray[index]!);
-    if (compared !== 0) return compared;
-  }
-  return Math.sign(leftArray.length - rightArray.length);
-}
-
-function keyRank(value: IDBValidKey): number {
-  if (typeof value === "number") return 1;
-  if (typeof value === "string") return 3;
-  return 5;
+  return compareIDBKeys(left, right);
 }
 
 function cloneKey<T extends IDBValidKey>(value: T): T {
-  return structuredClone(value);
+  return cloneIDBKey(value);
 }
 
 function validateKeyPath(keyPath: string | string[] | null): void {
@@ -1250,9 +1498,26 @@ function assertDirection(direction: string): asserts direction is IDBCursorDirec
   }
 }
 
-function arrayValue(value: JsonValue): any[] {
+function decodeValues(value: JsonValue): any[] {
   if (!Array.isArray(value)) throw new IndexedDBProtocolError("expected an array result");
-  return structuredClone(value);
+  return value.map(decodeStructuredClone);
+}
+
+function decodeKeys(value: JsonValue): IDBValidKey[] {
+  if (!Array.isArray(value)) throw new IndexedDBProtocolError("expected an array result");
+  return value.map(decodeIDBKey);
+}
+
+function decodeRecords(value: JsonValue): IDBRecord[] {
+  if (!Array.isArray(value)) throw new IndexedDBProtocolError("expected an array result");
+  return value.map((entry) => {
+    const record = recordValue(entry);
+    return {
+      key: decodeIDBKey(record.key as JsonValue),
+      primaryKey: decodeIDBKey(record.primaryKey as JsonValue),
+      value: decodeStructuredClone(record.value as JsonValue),
+    };
+  });
 }
 
 function numberValue(value: JsonValue): number {
@@ -1282,6 +1547,69 @@ function expectReply(value: unknown, op: string): Record<string, unknown> {
   return reply;
 }
 
+function expectOneReply(value: unknown, operations: string[]): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new IndexedDBProtocolError("tool reply must be an object");
+  }
+  const reply = value as Record<string, unknown>;
+  if (reply.op === "failed") {
+    throw domError(
+      typeof reply.errorName === "string" ? reply.errorName : "UnknownError",
+      typeof reply.message === "string" ? reply.message : "remote IndexedDB request failed",
+    );
+  }
+  if (typeof reply.op !== "string" || !operations.includes(reply.op)) {
+    throw new IndexedDBProtocolError(`expected ${operations.join(" or ")} reply`);
+  }
+  return reply;
+}
+
+function objectStoreDefinitions(value: unknown): RemoteObjectStoreDefinition[] {
+  if (!Array.isArray(value)) throw new IndexedDBProtocolError("objectStores must be an array");
+  return value.map((entry) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      throw new IndexedDBProtocolError("object-store metadata must be an object");
+    }
+    const store = entry as Record<string, unknown>;
+    const keyPath = store.keyPath;
+    if (!(keyPath === null || typeof keyPath === "string" || isStringArray(keyPath))) {
+      throw new IndexedDBProtocolError("object-store keyPath is invalid");
+    }
+    if (!Array.isArray(store.indexes)) throw new IndexedDBProtocolError("indexes must be an array");
+    return {
+      name: stringField(store, "name"),
+      keyPath,
+      autoIncrement: booleanField(store, "autoIncrement"),
+      indexes: store.indexes.map((indexEntry) => {
+        if (typeof indexEntry !== "object" || indexEntry === null || Array.isArray(indexEntry)) {
+          throw new IndexedDBProtocolError("index metadata must be an object");
+        }
+        const index = indexEntry as Record<string, unknown>;
+        const indexKeyPath = index.keyPath;
+        if (!(typeof indexKeyPath === "string" || isStringArray(indexKeyPath))) {
+          throw new IndexedDBProtocolError("index keyPath is invalid");
+        }
+        return {
+          name: stringField(index, "name"),
+          keyPath: indexKeyPath,
+          multiEntry: booleanField(index, "multiEntry"),
+          unique: booleanField(index, "unique"),
+        };
+      }),
+    };
+  });
+}
+
+function assertDatabaseVersion(value: number): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError("database version must be a positive safe integer");
+  }
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
 function stringField(value: Record<string, unknown>, field: string): string {
   const result = value[field];
   if (typeof result !== "string") throw new IndexedDBProtocolError(`${field} must be a string`);
@@ -1294,6 +1622,12 @@ function integerField(value: Record<string, unknown>, field: string): number {
     throw new IndexedDBProtocolError(`${field} must be a non-negative safe integer`);
   }
   return result as number;
+}
+
+function booleanField(value: Record<string, unknown>, field: string): boolean {
+  const result = value[field];
+  if (typeof result !== "boolean") throw new IndexedDBProtocolError(`${field} must be a boolean`);
+  return result;
 }
 
 function emit<Target extends EventTarget, EventType extends Event>(
