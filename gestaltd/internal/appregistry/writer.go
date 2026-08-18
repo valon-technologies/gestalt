@@ -125,6 +125,13 @@ func (w *Writer) preflightImmutableObject(object PublishObject) error {
 	if described.Generation == 0 {
 		return nil
 	}
+	return immutableObjectConflictError(object)
+}
+
+func immutableObjectConflictError(object PublishObject) error {
+	if object.Kind == PublishObjectKindEntry {
+		return fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
+	}
 	return fmt.Errorf("%s already exists; %s", object.StorageURL, RepublishCorruptObjectGuidance)
 }
 
@@ -184,6 +191,9 @@ func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef s
 		SourceRef:  sourceRef,
 		SHA256:     object.SHA256,
 	}); err != nil {
+		if errors.Is(err, ErrObjectPreconditionFailed) {
+			return ImmutableObjectOutcome{}, "", immutableObjectConflictError(object)
+		}
 		return ImmutableObjectOutcome{}, "", err
 	}
 	return ImmutableObjectOutcome{
