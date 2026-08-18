@@ -194,3 +194,35 @@ func TestDefaultModeNoneAloneIsNotProductConnected(t *testing.T) {
 		t.Fatal("a mode-none default row must not mark the app product-connected")
 	}
 }
+
+func TestMarkPreferredInstances_MarksInvalidChosenAccount(t *testing.T) {
+	t.Parallel()
+
+	got := markPreferredInstances([]instanceInfo{
+		{Name: "default", credentialInvalid: true},
+	}, "default")
+	if len(got) != 1 || !got[0].Preferred {
+		t.Fatalf("preferred = %+v, want chosen invalid account marked preferred", got)
+	}
+}
+
+func TestMarkPreferredInstances_IgnoresStalePreference(t *testing.T) {
+	t.Parallel()
+
+	got := markPreferredInstances([]instanceInfo{
+		{Name: "default"},
+	}, "gone")
+	if len(got) != 1 || got[0].Preferred {
+		t.Fatalf("preferred = %+v, stale preference must not mark an instance", got)
+	}
+}
+
+func TestPreferredInstanceValid_RejectsInvalidGrant(t *testing.T) {
+	t.Parallel()
+
+	if preferredInstanceValid([]instanceInfo{
+		{Name: "default", credentialInvalid: true},
+	}, "default") {
+		t.Fatal("invalid chosen account is not a valid acting account")
+	}
+}

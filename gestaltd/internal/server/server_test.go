@@ -13619,6 +13619,296 @@ func TestExecuteOperation_UpstreamUnauthorizedRequiresReconnect(t *testing.T) {
 	}
 }
 
+func notionReconnectPluginDefs() map[string]*config.ProviderEntry {
+	conn := oauthConnectionDef(nil)
+	conn.ConnectionID = "notion:" + testDefaultConnection
+	return map[string]*config.ProviderEntry{
+		"notion": {
+			Connections: map[string]*config.ConnectionDef{
+				testDefaultConnection: conn,
+			},
+		},
+	}
+}
+
+func assertNotionNeedsReconnect(t *testing.T, ts *httptest.Server, wantPreferred bool) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	if err != nil {
+		t.Fatalf("apps request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("apps: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("apps status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	type statusConnection struct {
+		Name              string           `json:"name"`
+		Status            string           `json:"status"`
+		CredentialState   string           `json:"credentialState"`
+		HealthState       string           `json:"healthState"`
+		Actions           []string         `json:"actions"`
+		PreferredInstance string           `json:"preferredInstance"`
+		Connected         bool             `json:"connected"`
+		Instances         []map[string]any `json:"instances"`
+	}
+	type statusIntegration struct {
+		Name            string             `json:"name"`
+		Connections     []statusConnection `json:"connections"`
+		Status          string             `json:"status"`
+		CredentialState string             `json:"credentialState"`
+		HealthState     string             `json:"healthState"`
+		Actions         []string           `json:"actions"`
+	}
+	var integrations []statusIntegration
+	if err := json.Unmarshal(body, &integrations); err != nil {
+		t.Fatalf("decode apps: %v (body: %s)", err, body)
+	}
+	var integration statusIntegration
+	for _, item := range integrations {
+		if item.Name == "notion" {
+			integration = item
+			break
+		}
+	}
+	if integration.Name == "" {
+		t.Fatalf("notion missing from apps: %s", body)
+	}
+	if integration.Status != "needs_user_connection" || integration.CredentialState != "invalid" || integration.HealthState != "unhealthy" {
+		t.Fatalf("notion status = {status:%q credential:%q health:%q}, want needs_user_connection invalid unhealthy",
+			integration.Status, integration.CredentialState, integration.HealthState)
+	}
+	if !reflect.DeepEqual(integration.Actions, []string{"reconnect", "disconnect"}) {
+		t.Fatalf("notion actions = %v, want [reconnect disconnect]", integration.Actions)
+	}
+	if len(integration.Connections) != 1 {
+		t.Fatalf("connections = %+v", integration.Connections)
+	}
+	conn := integration.Connections[0]
+	if conn.PreferredInstance != "" {
+		t.Fatalf("preferredInstance = %q, want omitted when the chosen grant is invalid", conn.PreferredInstance)
+	}
+	if conn.Connected {
+		t.Fatal("connected = true, want false when the chosen grant is invalid")
+	}
+	if len(conn.Instances) != 1 {
+		t.Fatalf("instances = %+v, want one chosen account", conn.Instances)
+	}
+	preferred, _ := conn.Instances[0]["preferred"].(bool)
+	if preferred != wantPreferred {
+		t.Fatalf("instances[0].preferred = %v, want %v: %+v", preferred, wantPreferred, conn.Instances[0])
+	}
+}
+
+func TestExecuteOperation_UpstreamUnauthorizedPersistsReconnectRequired(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	subjectID := principal.UserSubjectID(u.ID)
+	future := time.Now().Add(time.Hour)
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "notion-oauth-default",
+		Subject:   subjectID,
+		Audience:  "notion:" + testDefaultConnection,
+		Qualifier: "default",
+		Grant: &core.ExternalCredentialGrant{
+			AccessToken:  "notion-access",
+			RefreshToken: "notion-refresh",
+			ExpiresAt:    &future,
+		},
+	})
+	if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, "notion:"+testDefaultConnection, "default"); err != nil {
+		t.Fatalf("Set preference: %v", err)
+	}
+
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:  "notion",
+			DN: "Notion",
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return nil, &apiexec.UpstreamHTTPError{Status: http.StatusUnauthorized, Body: []byte("")}
+			},
+		},
+		ops: []core.Operation{
+			{Name: "search", Description: "Search", Method: http.MethodGet},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.AppDefs = notionReconnectPluginDefs()
+		cfg.Services = svc
+		cfg.DefaultConnection = map[string]string{"notion": testDefaultConnection}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/notion/search", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 412: %s", resp.StatusCode, body)
+	}
+
+	stored, err := svc.ExternalCredentials.GetCredential(context.Background(), subjectID, "notion:"+testDefaultConnection, "default")
+	if err != nil {
+		t.Fatalf("GetCredential: %v", err)
+	}
+	if stored.Grant == nil || stored.Grant.RefreshErrorCount < 1 {
+		t.Fatalf("stored grant = %+v, want RefreshErrorCount >= 1", stored.Grant)
+	}
+	if stored.Grant.ExpiresAt == nil || stored.Grant.ExpiresAt.After(time.Now().Add(time.Second)) {
+		t.Fatalf("stored ExpiresAt = %v, want in the past", stored.Grant.ExpiresAt)
+	}
+
+	assertNotionNeedsReconnect(t, ts, true)
+}
+
+func TestExecuteOperation_StubInvokerUnauthorizedPersistsReconnectRequired(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	subjectID := principal.UserSubjectID(u.ID)
+	future := time.Now().Add(time.Hour)
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "notion-oauth-default",
+		Subject:   subjectID,
+		Audience:  "notion:" + testDefaultConnection,
+		Qualifier: "default",
+		Grant: &core.ExternalCredentialGrant{
+			AccessToken: "notion-access",
+			ExpiresAt:   &future,
+		},
+	})
+
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "notion", DN: "Notion"},
+		ops: []core.Operation{
+			{Name: "search", Description: "Search", Method: http.MethodGet},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.AppDefs = notionReconnectPluginDefs()
+		cfg.Services = svc
+		cfg.Invoker = &testutil.StubInvoker{
+			Err: &apiexec.UpstreamHTTPError{Status: http.StatusUnauthorized, Body: []byte("")},
+		}
+		cfg.DefaultConnection = map[string]string{"notion": testDefaultConnection}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/notion/search", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 412: %s", resp.StatusCode, body)
+	}
+
+	assertNotionNeedsReconnect(t, ts, false)
+}
+
+func TestExecuteOperation_UnauthorizedNamedConnectionDoesNotMarkSibling(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	subjectID := principal.UserSubjectID(u.ID)
+	future := time.Now().Add(time.Hour)
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "named-stale-default",
+		Subject:   subjectID,
+		Audience:  "named-stale:" + testDefaultConnection,
+		Qualifier: "default",
+		Grant: &core.ExternalCredentialGrant{
+			AccessToken: "default-access",
+			ExpiresAt:   &future,
+		},
+	})
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "named-stale-archive",
+		Subject:   subjectID,
+		Audience:  "named-stale:archive",
+		Qualifier: "archive",
+		Grant: &core.ExternalCredentialGrant{
+			AccessToken: "archive-access",
+			ExpiresAt:   &future,
+		},
+	})
+
+	defaultConn := oauthConnectionDef(nil)
+	defaultConn.ConnectionID = "named-stale:" + testDefaultConnection
+	archiveConn := oauthConnectionDef(nil)
+	archiveConn.ConnectionID = "named-stale:archive"
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "named-stale", DN: "Named Stale"},
+		ops: []core.Operation{
+			{Name: "search", Description: "Search", Method: http.MethodGet},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"named-stale": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: defaultConn,
+					"archive":             archiveConn,
+				},
+			},
+		}
+		cfg.Services = svc
+		cfg.Invoker = &testutil.StubInvoker{
+			Err: &apiexec.UpstreamHTTPError{Status: http.StatusUnauthorized, Body: []byte("")},
+		}
+		cfg.DefaultConnection = map[string]string{"named-stale": testDefaultConnection}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/named-stale/search?_connection=archive", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 412: %s", resp.StatusCode, body)
+	}
+
+	archive, err := svc.ExternalCredentials.GetCredential(context.Background(), subjectID, "named-stale:archive", "archive")
+	if err != nil {
+		t.Fatalf("GetCredential(archive): %v", err)
+	}
+	if archive.Grant == nil || archive.Grant.RefreshErrorCount < 1 {
+		t.Fatalf("archive grant = %+v, want RefreshErrorCount >= 1", archive.Grant)
+	}
+	healthy, err := svc.ExternalCredentials.GetCredential(context.Background(), subjectID, "named-stale:"+testDefaultConnection, "default")
+	if err != nil {
+		t.Fatalf("GetCredential(default): %v", err)
+	}
+	if healthy.Grant == nil {
+		t.Fatal("default grant missing")
+	}
+	if healthy.Grant.RefreshErrorCount != 0 {
+		t.Fatalf("default RefreshErrorCount = %d, want 0 (sibling must stay connected)", healthy.Grant.RefreshErrorCount)
+	}
+	if healthy.Grant.ExpiresAt == nil || !healthy.Grant.ExpiresAt.After(time.Now()) {
+		t.Fatalf("default ExpiresAt = %v, want still in the future", healthy.Grant.ExpiresAt)
+	}
+}
+
 func TestExecuteOperation_UserFacingErrorMessage(t *testing.T) {
 	t.Parallel()
 

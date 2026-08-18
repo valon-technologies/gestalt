@@ -5,14 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -1382,5 +1385,67 @@ func TestBrokerResolveToken_FallsBackToSoleWhenPreferredStale(t *testing.T) {
 	}
 	if token != "team-a-token" {
 		t.Fatalf("token = %q, want team-a-token (sole remaining account)", token)
+	}
+}
+
+func TestBrokerInvoke_UpstreamUnauthorizedPersistsReconnectRequired(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	subjectID := principal.UserSubjectID("user-notion-reconnect")
+	future := time.Now().Add(time.Hour)
+	connectionID := "notion:" + core.AppConnectionName
+	if err := svc.ExternalCredentials.UpsertCredential(context.Background(), &core.ExternalCredential{
+		ID:        "notion-default",
+		Subject:   subjectID,
+		Audience:  connectionID,
+		Qualifier: "default",
+		Grant: &core.ExternalCredentialGrant{
+			AccessToken: "notion-access",
+			ExpiresAt:   &future,
+		},
+	}); err != nil {
+		t.Fatalf("UpsertCredential: %v", err)
+	}
+
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "notion",
+			ConnMode: core.ConnectionModeSubject,
+			CatalogVal: &catalog.Catalog{
+				Name: "notion",
+				Operations: []catalog.CatalogOperation{
+					{ID: "search", Method: "GET"},
+				},
+			},
+			ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+				return nil, &apiexec.UpstreamHTTPError{Status: http.StatusUnauthorized, Body: []byte("")}
+			},
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+
+	_, err := broker.Invoke(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+		UserID:    "user-notion-reconnect",
+		Kind:      principal.KindUser,
+	}, "notion", "default", "search", nil)
+	if err == nil {
+		t.Fatal("expected invoke error")
+	}
+	if !StoredCredentialRejected(err) {
+		t.Fatalf("err = %v, want stored-credential reject", err)
+	}
+
+	stored, getErr := svc.ExternalCredentials.GetCredential(context.Background(), subjectID, connectionID, "default")
+	if getErr != nil {
+		t.Fatalf("GetCredential: %v", getErr)
+	}
+	if stored.Grant == nil || stored.Grant.RefreshErrorCount < 1 {
+		t.Fatalf("stored grant = %+v, want RefreshErrorCount >= 1", stored.Grant)
+	}
+	if stored.Grant.ExpiresAt == nil || stored.Grant.ExpiresAt.After(time.Now().Add(time.Second)) {
+		t.Fatalf("stored ExpiresAt = %v, want in the past", stored.Grant.ExpiresAt)
 	}
 }

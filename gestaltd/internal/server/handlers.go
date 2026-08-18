@@ -863,6 +863,7 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 			fmt.Sprintf("no external credential stored for integration %q; connect via OAuth first", providerName),
 		)
 	case errors.Is(err, invocation.ErrReconnectRequired):
+		s.persistReconnectRequiredGrant(r, providerName, err)
 		writeTypedError(
 			w,
 			http.StatusPreconditionFailed,
@@ -898,6 +899,7 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.As(err, &upstreamErr):
 		if upstreamErr.Status == http.StatusUnauthorized {
+			s.persistReconnectRequiredGrant(r, providerName, err)
 			writeTypedError(
 				w,
 				http.StatusPreconditionFailed,
