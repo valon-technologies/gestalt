@@ -577,6 +577,16 @@ func TestProviderAuthorizationPolicies(t *testing.T) {
 		Apps: map[string]*config.ProviderEntry{
 			"shared": {AuthorizationPolicy: " workspace "},
 			"own":    {},
+			"legacy": {},
+		},
+		Authorization: config.AuthorizationConfig{
+			Models: map[string]config.AuthorizationModelDef{
+				"default": {
+					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
+						"legacy": {},
+					},
+				},
+			},
 		},
 	}
 
@@ -586,6 +596,9 @@ func TestProviderAuthorizationPolicies(t *testing.T) {
 	}
 	if _, ok := got["own"]; ok {
 		t.Fatal("own app should use its app name instead of an explicit policy")
+	}
+	if got["legacy"] != "legacy" {
+		t.Fatalf("legacy policy = %q, want self-alias", got["legacy"])
 	}
 }
 

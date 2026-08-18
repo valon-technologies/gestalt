@@ -122,3 +122,29 @@ func TestBrokerInfersAppResourceFromRegisteredProvider(t *testing.T) {
 		t.Fatalf("Resource = %v, want app/it-account-onboarding", resource)
 	}
 }
+
+func TestBrokerPreservesDedicatedResourceForRegisteredProvider(t *testing.T) {
+	t.Parallel()
+
+	authz := &authorizationCheckTestProvider{allowed: true}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "legacy"}),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+		WithAuthorizationPolicies(map[string]string{"legacy": "legacy"}),
+	)
+
+	if err := broker.CheckOperationAccess(
+		context.Background(),
+		&principal.Principal{SubjectID: "service_account:job", Kind: principal.Kind("service_account")},
+		"legacy",
+		"run",
+	); err != nil {
+		t.Fatalf("CheckOperationAccess: %v", err)
+	}
+	resource := authz.lastReq.GetResource()
+	if resource.GetType() != "legacy" || resource.GetId() != "legacy" {
+		t.Fatalf("Resource = %v, want legacy/legacy", resource)
+	}
+}
