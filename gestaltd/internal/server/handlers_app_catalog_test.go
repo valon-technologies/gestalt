@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -532,6 +533,47 @@ func TestAppOverlayNoAuthIsNotProductConnected(t *testing.T) {
 		if connection.Connected {
 			t.Fatalf("composed no-auth connection[%d] must not be product-connected: %s", i, composed)
 		}
+	}
+}
+
+type countingMissResolver struct {
+	calls atomic.Int32
+}
+
+func (c *countingMissResolver) ResolveProvider(context.Context, string) (core.Provider, error) {
+	c.calls.Add(1)
+	return nil, core.ErrNotFound
+}
+
+func TestAppCatalogReusesTenantDirectoryAcrossRequests(t *testing.T) {
+	t.Parallel()
+
+	resolver := &countingMissResolver{}
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
+	providers.SetRemoteResolver(resolver)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.AppDefs = testPluginDefsForConnections("slack", "default")
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	first := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	afterCatalog := resolver.calls.Load()
+	if afterCatalog == 0 {
+		t.Fatal("catalog snapshot never resolved providers")
+	}
+	second := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	if resolver.calls.Load() != afterCatalog {
+		t.Fatalf("second catalog rebuilt the tenant directory: resolver calls %d after first, %d after second", afterCatalog, resolver.calls.Load())
+	}
+	_ = getJSONPath(t, ts, "/api/v1/me/app-connections", http.StatusOK, "")
+	if resolver.calls.Load() != afterCatalog {
+		t.Fatalf("connection overlay rebuilt the tenant directory: resolver calls %d after catalog, %d after overlay", afterCatalog, resolver.calls.Load())
+	}
+	if string(first) != string(second) {
+		t.Fatalf("cached catalog changed: %s vs %s", first, second)
 	}
 }
 

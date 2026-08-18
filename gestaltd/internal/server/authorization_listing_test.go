@@ -212,7 +212,7 @@ func TestAppsListingFallsBackWhenBatchFails(t *testing.T) {
 	}
 }
 
-func TestAppsListingFallsThroughDeniedSettingsToAuthorizedOperations(t *testing.T) {
+func TestAppsListingDoesNotAdvertiseOperationOnlyAccess(t *testing.T) {
 	t.Parallel()
 
 	subjectID := principal.UserSubjectID(testCanonicalViewerUserID)
@@ -239,11 +239,11 @@ func TestAppsListingFallsThroughDeniedSettingsToAuthorizedOperations(t *testing.
 	testutil.CloseOnCleanup(t, ts)
 
 	integrations := listIntegrationsForTest(t, ts)
-	if _, ok := mountedPathFor(integrations, "sampleApp"); !ok {
-		t.Fatalf("operation-authorized app missing from listing: %#v", integrations)
+	if _, ok := mountedPathFor(integrations, "sampleApp"); ok {
+		t.Fatalf("operation-only access must not put the app in Apps: %#v", integrations)
 	}
-	if checker.calls != 1 || checker.queries != 1 {
-		t.Fatalf("operation checks = {%d calls, %d queries}, want {1, 1}", checker.calls, checker.queries)
+	if checker.calls != 0 {
+		t.Fatalf("Apps listing asked operation access %d times, want 0", checker.calls)
 	}
 }
 
