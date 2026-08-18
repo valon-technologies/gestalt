@@ -2169,6 +2169,10 @@
         {
           "name": "provider",
           "jsonName": "provider"
+        },
+        {
+          "name": "definition_id",
+          "jsonName": "definitionId"
         }
       ],
       "grpcPath": "/gestalt.provider.v1.Workflow/ListRuns",
@@ -2192,6 +2196,9 @@
       },
       "fill": [
         "context"
+      ],
+      "reject": [
+        "known_apps"
       ],
       "requestPolicy": "omit"
     },
