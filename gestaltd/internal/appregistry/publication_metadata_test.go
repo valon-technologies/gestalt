@@ -7,6 +7,17 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 )
 
+func TestEntriesEqualIgnoringPublishedAt_DefaultsLegacyPublicationKind(t *testing.T) {
+	t.Parallel()
+
+	legacy := testPublishEntry(t)
+	github := legacy
+	github.PublicationKind = PublicationKindGitHub
+	if !EntriesEqualIgnoringPublishedAt(legacy, github) {
+		t.Fatal("expected legacy empty publicationKind to match explicit github")
+	}
+}
+
 func TestPublicationMetadataValidation(t *testing.T) {
 	t.Parallel()
 
