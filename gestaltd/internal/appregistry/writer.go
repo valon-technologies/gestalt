@@ -253,7 +253,10 @@ func (w *Writer) adoptStoredEntryPublishedAt(plan *PublishManifest, entryOutcome
 		return err
 	}
 	stored, err := DecodeEntry(data)
-	if err != nil || stored.PublishedAt.IsZero() {
+	if err != nil {
+		return err
+	}
+	if stored.PublishedAt.IsZero() {
 		return nil
 	}
 	plan.Entry.PublishedAt = stored.PublishedAt.UTC()
