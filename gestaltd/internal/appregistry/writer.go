@@ -76,11 +76,11 @@ func (w *Writer) Publish(req PublishRequest, progress PublishProgress) (PublishR
 		Index:     CatalogWriteOutcomeNotAttempted,
 	}
 	immutable, err := w.uploadImmutableObjects(req, progress)
+	result.Artifacts = immutable.Artifacts
+	result.Entry = immutable.Entry
 	if err != nil {
 		return result, err
 	}
-	result.Artifacts = immutable.Artifacts
-	result.Entry = immutable.Entry
 
 	retentionOutcome, err := w.uploadRetention(req, progress)
 	result.Retention = retentionOutcome
@@ -148,7 +148,7 @@ func (w *Writer) uploadImmutableObjects(req PublishRequest, progress PublishProg
 	for _, object := range plan.ArtifactObjects {
 		objectOutcome, line, err := w.uploadImmutableObjectIfNeeded(object, req.SourceRef)
 		if err != nil {
-			return ImmutablePublishOutcome{}, err
+			return outcome, err
 		}
 		outcome.Artifacts = append(outcome.Artifacts, objectOutcome)
 		if line != "" {
@@ -157,7 +157,7 @@ func (w *Writer) uploadImmutableObjects(req PublishRequest, progress PublishProg
 	}
 	entryOutcome, line, err := w.uploadImmutableObjectIfNeeded(plan.EntryObject, req.SourceRef)
 	if err != nil {
-		return ImmutablePublishOutcome{}, err
+		return outcome, err
 	}
 	outcome.Entry = entryOutcome
 	if line != "" {

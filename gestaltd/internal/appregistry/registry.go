@@ -365,9 +365,18 @@ func requiresFromProviderRelease(requires providerrelease.Requires) Requires {
 	return Requires{Apps: apps}
 }
 
+func normalizeEntryPublicationKindForEquality(entry Entry) Entry {
+	if entry.PublicationKind == "" {
+		entry.PublicationKind = PublicationKindGitHub
+	}
+	return entry
+}
+
 // EntriesEqualIgnoringPublishedAt reports whether two entries are identical except
 // for publishedAt and publishStartedAt, which are ignored for idempotent republish checks.
 func EntriesEqualIgnoringPublishedAt(a, b Entry) bool {
+	a = normalizeEntryPublicationKindForEquality(a)
+	b = normalizeEntryPublicationKindForEquality(b)
 	a.PublishedAt = time.Time{}
 	b.PublishedAt = time.Time{}
 	a.PublishStartedAt = nil
