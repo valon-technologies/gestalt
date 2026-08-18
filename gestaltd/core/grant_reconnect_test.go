@@ -9,9 +9,10 @@ func TestMarkGrantReconnectRequired(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 18, 17, 0, 0, 0, time.UTC)
-	future := now.Add(time.Hour)
 
 	t.Run("unexpired grant is force-expired", func(t *testing.T) {
+		t.Parallel()
+		future := now.Add(time.Hour)
 		grant := &ExternalCredentialGrant{
 			AccessToken: "tok",
 			ExpiresAt:   &future,
@@ -28,6 +29,7 @@ func TestMarkGrantReconnectRequired(t *testing.T) {
 	})
 
 	t.Run("already reconnect-required is a no-op", func(t *testing.T) {
+		t.Parallel()
 		past := now.Add(-time.Minute)
 		grant := &ExternalCredentialGrant{
 			AccessToken:       "tok",
@@ -43,6 +45,7 @@ func TestMarkGrantReconnectRequired(t *testing.T) {
 	})
 
 	t.Run("nil grant is a no-op", func(t *testing.T) {
+		t.Parallel()
 		if MarkGrantReconnectRequired(nil, now) {
 			t.Fatal("nil grant should not change")
 		}
