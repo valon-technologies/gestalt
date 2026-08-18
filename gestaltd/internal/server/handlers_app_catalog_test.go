@@ -714,6 +714,86 @@ func TestAppCatalogRefreshesAfterPluginConnectionChange(t *testing.T) {
 	}
 }
 
+func TestAppCatalogRefreshesAfterConnectionSchemaChange(t *testing.T) {
+	t.Parallel()
+
+	defs := testPluginDefsForConnections("slack", "default")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack", ConnMode: core.ConnectionModeNone})
+		cfg.AppDefs = defs
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	first := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	if got := connectionDisplayNameFromCatalog(t, first, "slack", "default"); got != "" && got != "default" {
+		t.Fatalf("first catalog default displayName = %q: %s", got, first)
+	}
+	defs["slack"].Connections["default"].DisplayName = "Workspace"
+	second := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	if got := connectionDisplayNameFromCatalog(t, second, "slack", "default"); got != "Workspace" {
+		t.Fatalf("second catalog default displayName = %q, want Workspace after schema edit: %s", got, second)
+	}
+}
+
+type oneShotFailResolver struct {
+	failName string
+	failed   atomic.Bool
+}
+
+func (r *oneShotFailResolver) ResolveProvider(_ context.Context, name string) (core.Provider, error) {
+	if name == r.failName && r.failed.CompareAndSwap(false, true) {
+		return nil, fmt.Errorf("tunnel dial failed")
+	}
+	return nil, core.ErrNotFound
+}
+
+func TestAppCatalogDoesNotCacheFailedProviderResolve(t *testing.T) {
+	t.Parallel()
+
+	resolver := &oneShotFailResolver{failName: "slack"}
+	providers := testutil.NewProviderRegistry(t,
+		&coretesting.StubIntegration{N: "slack", DN: "Slack", ConnMode: core.ConnectionModeNone},
+		&coretesting.StubIntegration{N: "email", DN: "Email", ConnMode: core.ConnectionModeNone},
+	)
+	providers.SetRemoteResolver(resolver)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"slack": testPluginDefsForConnections("slack", "default")["slack"],
+			"email": testPluginDefsForConnections("email", "default")["email"],
+		}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	first := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	var firstApps []appCatalogName
+	if err := json.Unmarshal(first, &firstApps); err != nil {
+		t.Fatalf("decode first catalog: %v", err)
+	}
+	if _, ok := catalogNameSet(firstApps)["slack"]; ok {
+		t.Fatalf("first catalog included slack after resolve failure: %s", first)
+	}
+	if _, ok := catalogNameSet(firstApps)["email"]; !ok {
+		t.Fatalf("first catalog missing email: %s", first)
+	}
+
+	second := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
+	var secondApps []appCatalogName
+	if err := json.Unmarshal(second, &secondApps); err != nil {
+		t.Fatalf("decode second catalog: %v", err)
+	}
+	names := catalogNameSet(secondApps)
+	if _, ok := names["slack"]; !ok {
+		t.Fatalf("second catalog still missing slack after failed resolve was not cached: %s", second)
+	}
+	if _, ok := names["email"]; !ok {
+		t.Fatalf("second catalog missing email: %s", second)
+	}
+}
+
 func TestAppCatalogSharesTenantSnapshotAcrossViewers(t *testing.T) {
 	t.Parallel()
 
@@ -787,7 +867,8 @@ func connectionNamesFromCatalog(t *testing.T, body []byte, app string) map[strin
 	var apps []struct {
 		Name        string `json:"name"`
 		Connections []struct {
-			Name string `json:"name"`
+			Name        string `json:"name"`
+			DisplayName string `json:"displayName"`
 		} `json:"connections"`
 	}
 	if err := json.Unmarshal(body, &apps); err != nil {
@@ -801,6 +882,39 @@ func connectionNamesFromCatalog(t *testing.T, body []byte, app string) map[strin
 		for _, connection := range entry.Connections {
 			out[connection.Name] = true
 		}
+	}
+	return out
+}
+
+func connectionDisplayNameFromCatalog(t *testing.T, body []byte, app, connection string) string {
+	t.Helper()
+	var apps []struct {
+		Name        string `json:"name"`
+		Connections []struct {
+			Name        string `json:"name"`
+			DisplayName string `json:"displayName"`
+		} `json:"connections"`
+	}
+	if err := json.Unmarshal(body, &apps); err != nil {
+		t.Fatalf("decode catalog connections: %v", err)
+	}
+	for _, entry := range apps {
+		if entry.Name != app {
+			continue
+		}
+		for _, conn := range entry.Connections {
+			if conn.Name == connection {
+				return conn.DisplayName
+			}
+		}
+	}
+	return ""
+}
+
+func catalogNameSet(apps []appCatalogName) map[string]struct{} {
+	out := make(map[string]struct{}, len(apps))
+	for _, app := range apps {
+		out[app.Name] = struct{}{}
 	}
 	return out
 }

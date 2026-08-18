@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -265,9 +266,12 @@ func (s *Server) tenantAppDirectory(ctx context.Context) (*tenantAppDirectory, e
 	}
 	s.tenantDirectoryMu.Unlock()
 
-	dir, err := s.buildTenantAppDirectory(ctx)
+	dir, cacheable, err := s.buildTenantAppDirectory(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if !cacheable {
+		return dir, nil
 	}
 
 	s.tenantDirectoryMu.Lock()
@@ -326,18 +330,7 @@ func (s *Server) pluginDirectoryFingerprint() string {
 				pluginDeclaredMount(plugin),
 				plugin.SourceTreeURL(),
 			)
-			connNames := make([]string, 0, len(plugin.Connections))
-			for connName := range plugin.Connections {
-				connNames = append(connNames, connName)
-			}
-			slices.Sort(connNames)
-			for _, connName := range connNames {
-				mode := ""
-				if def := plugin.Connections[connName]; def != nil {
-					mode = string(def.Mode)
-				}
-				fmt.Fprintf(&b, ",%s=%s", connName, mode)
-			}
+			appendConnectionSchemaFingerprint(&b, s.connectionSchemasFromAdvertised(name, s.advertisedConnectionsForPlugin(name, plugin)))
 		}
 		for _, prompt := range s.appPrompts[name] {
 			fmt.Fprintf(&b, "#%s=%s", prompt.ID, prompt.Text)
@@ -346,7 +339,38 @@ func (s *Server) pluginDirectoryFingerprint() string {
 	return b.String()
 }
 
-func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirectory, error) {
+func appendConnectionSchemaFingerprint(b *strings.Builder, schemas []connectionSchemaInfo) {
+	if b == nil || len(schemas) == 0 {
+		return
+	}
+	ordered := append([]connectionSchemaInfo(nil), schemas...)
+	slices.SortFunc(ordered, func(a, b connectionSchemaInfo) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	for _, schema := range ordered {
+		fmt.Fprintf(b, ",%s=%s:%s", schema.Name, schema.Mode, schema.DisplayName)
+		authTypes := append([]string(nil), schema.AuthTypes...)
+		slices.Sort(authTypes)
+		for _, authType := range authTypes {
+			b.WriteByte('|')
+			b.WriteString(authType)
+		}
+		paramNames := make([]string, 0, len(schema.ConnectionParams))
+		for name := range schema.ConnectionParams {
+			paramNames = append(paramNames, name)
+		}
+		slices.Sort(paramNames)
+		for _, name := range paramNames {
+			param := schema.ConnectionParams[name]
+			fmt.Fprintf(b, "@%s=%t:%s:%s", name, param.Required, param.Description, param.Default)
+		}
+		for _, field := range schema.CredentialFields {
+			fmt.Fprintf(b, "$%s=%s:%s", field.Name, field.Label, field.Description)
+		}
+	}
+}
+
+func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirectory, bool, error) {
 	names := []string{}
 	if s.providers != nil {
 		names = s.providers.List()
@@ -354,10 +378,15 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 	registryApps := s.configuredRegistryApps()
 	seen := make(map[string]struct{}, len(names)+len(registryApps))
 	dir := &tenantAppDirectory{entries: make([]tenantAppDirectoryEntry, 0, len(names)+len(registryApps))}
+	cacheable := true
 	for _, name := range names {
 		entry, ok, err := s.tenantProviderDirectoryEntry(ctx, name)
 		if err != nil {
-			return nil, err
+			if ctx.Err() != nil {
+				return nil, false, err
+			}
+			cacheable = false
+			continue
 		}
 		if !ok {
 			continue
@@ -374,7 +403,7 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 		}
 		dir.entries = append(dir.entries, s.tenantRegistryDirectoryEntry(app.name))
 	}
-	return dir, nil
+	return dir, cacheable, nil
 }
 
 func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) (tenantAppDirectoryEntry, bool, error) {
@@ -383,7 +412,10 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 	}
 	prov, err := s.providers.GetWithContext(ctx, name)
 	if err != nil {
-		return tenantAppDirectoryEntry{}, false, nil
+		if errors.Is(err, core.ErrNotFound) {
+			return tenantAppDirectoryEntry{}, false, nil
+		}
+		return tenantAppDirectoryEntry{}, false, fmt.Errorf("resolve app %q: %w", name, err)
 	}
 	plugin := s.pluginDefs[name]
 	entry := tenantAppDirectoryEntry{
