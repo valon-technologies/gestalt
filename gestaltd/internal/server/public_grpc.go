@@ -105,6 +105,7 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 			ctx = principal.WithPrincipal(ctx, canonical)
 			if subjectID := strings.TrimSpace(canonical.SubjectID); subjectID != "" {
 				ctx = gestalt.WithTrustedCallerSubject(ctx, subjectID)
+				ctx = attachGrantEmailSubjectAlias(ctx, canonical)
 			}
 			return handler(ctx, adapted)
 		}
@@ -153,6 +154,7 @@ func (s *publicAuthStream) Context() context.Context {
 		ctx = principal.WithPrincipal(ctx, canonical)
 		if subjectID := strings.TrimSpace(canonical.SubjectID); subjectID != "" {
 			ctx = gestalt.WithTrustedCallerSubject(ctx, subjectID)
+			ctx = attachGrantEmailSubjectAlias(ctx, canonical)
 		}
 	}
 	return ctx

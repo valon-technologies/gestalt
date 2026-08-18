@@ -32,14 +32,15 @@ func (s *Server) callerAuthContext(ctx context.Context, r *http.Request) context
 	if p == nil {
 		return ctx
 	}
-	subject := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
-	if subject == "" {
+	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.users, p)
+	if err != nil || strings.TrimSpace(subjectID) == "" {
 		return ctx
 	}
 	call := gestalt.IdentityCallContextFromContext(ctx)
-	call.CallerSubjectID = subject
+	call.CallerSubjectID = subjectID
 	ctx = gestalt.WithIdentityCallContext(ctx, call)
-	return gestalt.WithTrustedCallerSubject(ctx, subject)
+	ctx = gestalt.WithTrustedCallerSubject(ctx, subjectID)
+	return attachGrantEmailSubjectAlias(ctx, p)
 }
 
 func (s *Server) callerBearerToken(r *http.Request) (string, error) {
