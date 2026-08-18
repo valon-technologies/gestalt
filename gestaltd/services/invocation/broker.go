@@ -1052,7 +1052,7 @@ func (b *Broker) authorizationDecision(
 	if err != nil {
 		return nil, err
 	}
-	resource := b.authorizationResource(providerName)
+	resource := b.authorizationResource(ctx, providerName)
 	return b.authorization.CheckAccess(
 		ctx,
 		accessRequest(p, subjectID, resource, operationID),
@@ -1072,8 +1072,20 @@ func (b *Broker) authorizationPolicy(providerName string) string {
 	return b.authorizationMapper().Policy(providerName)
 }
 
-func (b *Broker) authorizationResource(providerName string) *proto.Resource {
-	return b.authorizationMapper().Resource(providerName)
+func (b *Broker) authorizationResource(ctx context.Context, providerName string) *proto.Resource {
+	providerName = strings.TrimSpace(providerName)
+	mapper := b.authorizationMapper()
+	if b != nil {
+		if strings.TrimSpace(b.authorizationPolicies[providerName]) != "" || b.providerKinds[providerName] != "" {
+			return mapper.Resource(providerName)
+		}
+		if b.providers != nil {
+			if _, err := b.providers.GetWithContext(ctx, providerName); err == nil {
+				return &proto.Resource{Type: string(ProviderKindApp), Id: providerName}
+			}
+		}
+	}
+	return mapper.Resource(providerName)
 }
 
 func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
