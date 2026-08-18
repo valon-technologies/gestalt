@@ -41,6 +41,7 @@ func TestPublishHTTPStatus(t *testing.T) {
 		{name: "index version conflict wrapped", err: fmt.Errorf("app %q version %q index identity mismatch: %w", "demo", "1.0.0", ErrIndexVersionConflict), status: http.StatusConflict},
 		{name: "object precondition exact", err: ErrObjectPreconditionFailed, status: http.StatusConflict},
 		{name: "object precondition wrapped", err: fmt.Errorf("update gs://bucket/index.json: %w", ErrObjectPreconditionFailed), status: http.StatusConflict},
+		{name: "immutable artifact conflict wrapped", err: fmt.Errorf("gs://bucket/artifact.tgz: %w; guidance", ErrObjectPreconditionFailed), status: http.StatusConflict},
 		{name: "exhausted catalog conflict", err: fmt.Errorf("update gs://bucket/index.json: %w", ErrObjectPreconditionFailed), status: http.StatusConflict},
 		{name: "identity mismatch", err: ErrPublishIdentityMismatch, status: http.StatusConflict},
 		{name: "version conflict", err: ErrPublishVersionConflict, status: http.StatusConflict},

@@ -81,6 +81,9 @@ func (w *Writer) Publish(req PublishRequest, progress PublishProgress) (PublishR
 	if err != nil {
 		return result, err
 	}
+	if err := w.adoptStoredEntryPublishedAt(&req.Manifest, immutable.Entry); err != nil {
+		return result, err
+	}
 
 	retentionOutcome, err := w.uploadRetention(req, progress)
 	result.Retention = retentionOutcome
@@ -132,7 +135,7 @@ func immutableObjectConflictError(object PublishObject) error {
 	if object.Kind == PublishObjectKindEntry {
 		return fmt.Errorf("%s: %w; %s", object.StorageURL, ErrRegistryEntryConflict, RepublishCorruptObjectGuidance)
 	}
-	return fmt.Errorf("%s already exists; %s", object.StorageURL, RepublishCorruptObjectGuidance)
+	return fmt.Errorf("%s: %w; %s", object.StorageURL, ErrObjectPreconditionFailed, RepublishCorruptObjectGuidance)
 }
 
 func (w *Writer) uploadImmutableObjects(req PublishRequest, progress PublishProgress) (ImmutablePublishOutcome, error) {
@@ -192,6 +195,13 @@ func (w *Writer) uploadImmutableObjectIfNeeded(object PublishObject, sourceRef s
 		SHA256:     object.SHA256,
 	}); err != nil {
 		if errors.Is(err, ErrObjectPreconditionFailed) {
+			matches, matchErr := w.immutableObjectMatchesExisting(object)
+			if matchErr == nil && matches {
+				return ImmutableObjectOutcome{
+					StorageURL: object.StorageURL,
+					Outcome:    ObjectWriteOutcomeSkipped,
+				}, fmt.Sprintf("skipped existing %s", object.StorageURL), nil
+			}
 			return ImmutableObjectOutcome{}, "", immutableObjectConflictError(object)
 		}
 		return ImmutableObjectOutcome{}, "", err
@@ -221,6 +231,33 @@ func (w *Writer) immutableObjectMatchesExisting(object PublishObject) (bool, err
 		return EntryFileEquivalentIgnoringPublishedAt(object.LocalPath, existing)
 	}
 	return false, nil
+}
+
+func (w *Writer) adoptStoredEntryPublishedAt(plan *PublishManifest, entryOutcome ImmutableObjectOutcome) error {
+	if w == nil || w.Store == nil || plan == nil {
+		return nil
+	}
+	if entryOutcome.Outcome != ObjectWriteOutcomeSkipped {
+		return nil
+	}
+	storageURL := plan.EntryObject.StorageURL
+	described, err := w.Store.DescribeObject(storageURL)
+	if err != nil {
+		return err
+	}
+	if described.Generation == 0 {
+		return nil
+	}
+	_, data, err := w.Store.ReadObject(storageURL)
+	if err != nil {
+		return err
+	}
+	stored, err := DecodeEntry(data)
+	if err != nil || stored.PublishedAt.IsZero() {
+		return nil
+	}
+	plan.Entry.PublishedAt = stored.PublishedAt.UTC()
+	return nil
 }
 
 func (w *Writer) uploadIndex(req PublishRequest, progress PublishProgress) (CatalogWriteOutcome, error) {
