@@ -342,7 +342,10 @@ func (s *StatelessPublishService) publishUntilIndexed(req PublishRequest, prepar
 		if entry, matchErr := s.loadMatchingPublished(app, prepared.version, prepared.publishID, prepared.digest, prepared.sourceRef); matchErr == nil && entry != nil {
 			return PublishResult{Index: CatalogWriteOutcomeUnchanged}, nil
 		}
-		if lastErr != nil && (CatalogPreconditionFailed(lastErr) || errors.Is(lastErr, ErrRegistryEntryConflict)) {
+		if lastErr != nil && (CatalogPreconditionFailed(lastErr) ||
+			errors.Is(lastErr, ErrRegistryEntryConflict) ||
+			errors.Is(lastErr, ErrIndexVersionConflict) ||
+			errors.Is(lastErr, ErrObjectPreconditionFailed)) {
 			continue
 		}
 		if lastErr != nil {

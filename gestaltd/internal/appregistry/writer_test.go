@@ -193,6 +193,9 @@ func TestWriter_Preflight_RejectsConflictingBytes(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected conflicting artifact preflight to fail")
 	}
+	if !errors.Is(err, ErrObjectPreconditionFailed) {
+		t.Fatalf("error = %v, want ErrObjectPreconditionFailed", err)
+	}
 }
 
 func TestWriter_Publish_IndexCASPreservesConcurrentVersions(t *testing.T) {
