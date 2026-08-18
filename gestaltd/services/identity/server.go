@@ -183,6 +183,7 @@ func tokenRequestFromProto(req *proto.TokenRequest) *core.TokenRequest {
 		SubjectToken:     req.GetSubjectToken(),
 		SubjectTokenType: req.GetSubjectTokenType(),
 		ExpiresIn:        req.GetExpiresIn(),
+		Name:             req.GetName(),
 	}
 }
 
@@ -259,6 +260,7 @@ func getGrantResponseToProto(resp *core.GetGrantResponse) *proto.GetGrantRespons
 	out := &proto.GetGrantResponse{
 		CreatedAt: resp.CreatedAt,
 		ExpiresAt: resp.ExpiresAt,
+		Name:      resp.Name,
 	}
 	for _, scope := range resp.Scopes {
 		out.Scopes = append(out.Scopes, &proto.GrantScope{

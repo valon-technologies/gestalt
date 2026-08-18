@@ -40,6 +40,7 @@ class TokenRequest(_message.Message):
     SUBJECT_TOKEN_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_TOKEN_TYPE_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
     grant_type: str
     code: str
     redirect_uri: str
@@ -49,7 +50,8 @@ class TokenRequest(_message.Message):
     subject_token: str
     subject_token_type: str
     expires_in: int
-    def __init__(self, grant_type: _Optional[str] = ..., code: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., client_id: _Optional[str] = ..., state: _Optional[str] = ..., scope: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ..., expires_in: _Optional[int] = ...) -> None: ...
+    name: str
+    def __init__(self, grant_type: _Optional[str] = ..., code: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., client_id: _Optional[str] = ..., state: _Optional[str] = ..., scope: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ..., expires_in: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
 
 class TokenResponse(_message.Message):
     __slots__ = ()
@@ -118,10 +120,12 @@ class GetGrantResponse(_message.Message):
     SCOPES_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
     scopes: _containers.RepeatedCompositeFieldContainer[GrantScope]
     created_at: int
     expires_at: int
-    def __init__(self, scopes: _Optional[_Iterable[_Union[GrantScope, _Mapping]]] = ..., created_at: _Optional[int] = ..., expires_at: _Optional[int] = ...) -> None: ...
+    name: str
+    def __init__(self, scopes: _Optional[_Iterable[_Union[GrantScope, _Mapping]]] = ..., created_at: _Optional[int] = ..., expires_at: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
 
 class RevokeGrantRequest(_message.Message):
     __slots__ = ()

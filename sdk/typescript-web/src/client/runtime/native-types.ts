@@ -738,6 +738,10 @@ export interface GetGrantResponse {
   scopes: GrantScope[];
   createdAt: bigint;
   expiresAt: bigint;
+  /**
+   * name is the human label supplied at create, when one was stored.
+   */
+  name: string;
 }
 
 /**
@@ -835,6 +839,11 @@ export interface TokenRequest {
    * default.
    */
   expiresIn: bigint;
+  /**
+   * name is a Gestalt request-side extension: a human label for API-token
+   * grants created via token exchange. Empty means the grant has no label.
+   */
+  name: string;
 }
 
 /**

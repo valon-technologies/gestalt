@@ -44,6 +44,8 @@ type GetGrantResponse struct {
 	Scopes    []*GrantScope
 	CreatedAt int64
 	ExpiresAt int64
+	// name is the human label supplied at create, when one was stored.
+	Name string
 }
 
 // GrantScope is the native message type for gestalt.provider.v1.GrantScope.
@@ -127,6 +129,9 @@ type TokenRequest struct {
 	// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
 	// default.
 	ExpiresIn int64
+	// name is a Gestalt request-side extension: a human label for API-token
+	// grants created via token exchange. Empty means the grant has no label.
+	Name string
 }
 
 // TokenResponse is the native message type for gestalt.provider.v1.TokenResponse.
@@ -217,6 +222,9 @@ type IdentityTokenOptions struct {
 	// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
 	// default.
 	ExpiresIn int64
+	// name is a Gestalt request-side extension: a human label for API-token
+	// grants created via token exchange. Empty means the grant has no label.
+	Name string
 }
 
 // Token is the ergonomic form of [Identity.TokenRaw].
@@ -224,7 +232,7 @@ func (c *Identity) Token(ctx context.Context, grantType string, code string, red
 	if opts == nil {
 		opts = &IdentityTokenOptions{}
 	}
-	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType, ExpiresIn: opts.ExpiresIn}
+	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType, ExpiresIn: opts.ExpiresIn, Name: opts.Name}
 	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

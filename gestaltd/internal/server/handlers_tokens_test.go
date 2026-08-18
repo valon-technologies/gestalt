@@ -93,8 +93,12 @@ func TestCreateAPITokenForwardsExpiresIn(t *testing.T) {
 	if stub.lastTokenExchangeReq.ExpiresIn != 7776000 {
 		t.Fatalf("ExpiresIn = %d, want 7776000", stub.lastTokenExchangeReq.ExpiresIn)
 	}
+	if stub.lastTokenExchangeReq.Name != "ci-pipeline" {
+		t.Fatalf("Name = %q, want ci-pipeline", stub.lastTokenExchangeReq.Name)
+	}
 
 	var created struct {
+		Name      string     `json:"name"`
 		ExpiresAt *time.Time `json:"expiresAt"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
@@ -102,6 +106,9 @@ func TestCreateAPITokenForwardsExpiresIn(t *testing.T) {
 	}
 	if created.ExpiresAt == nil {
 		t.Fatal("expected expiresAt in create response")
+	}
+	if created.Name != "ci-pipeline" {
+		t.Fatalf("name = %q, want ci-pipeline", created.Name)
 	}
 	wantExpiry := time.Now().UTC().Add(90 * 24 * time.Hour)
 	if created.ExpiresAt.Before(wantExpiry.Add(-time.Minute)) || created.ExpiresAt.After(wantExpiry.Add(time.Minute)) {
