@@ -123,6 +123,32 @@ func TestBrokerInfersAppResourceFromRegisteredProvider(t *testing.T) {
 	}
 }
 
+func TestBrokerRegisteredAppOverridesStaleProviderKind(t *testing.T) {
+	t.Parallel()
+
+	authz := &authorizationCheckTestProvider{allowed: true}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "it-account-onboarding"}),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+		WithProviderKinds(map[string]ProviderKind{"it-account-onboarding": ProviderKindWorkflow}),
+	)
+
+	if err := broker.CheckOperationAccess(
+		context.Background(),
+		&principal.Principal{SubjectID: "service_account:it-account-onboarding-jobs", Kind: principal.Kind("service_account")},
+		"it-account-onboarding",
+		"jobs.syncValonEmployeeRoster",
+	); err != nil {
+		t.Fatalf("CheckOperationAccess: %v", err)
+	}
+	resource := authz.lastReq.GetResource()
+	if resource.GetType() != "app" || resource.GetId() != "it-account-onboarding" {
+		t.Fatalf("Resource = %v, want app/it-account-onboarding", resource)
+	}
+}
+
 func TestBrokerPreservesDedicatedResourceForRegisteredProvider(t *testing.T) {
 	t.Parallel()
 
