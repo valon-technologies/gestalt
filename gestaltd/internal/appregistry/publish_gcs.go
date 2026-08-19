@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -192,7 +193,7 @@ func (s *GCSRegistryStore) DescribeObject(storageURL string) (ObjectDescription,
 		return ObjectDescription{}, err
 	}
 	attrs, err := client.Bucket(bucket).Object(object).Attrs(context.Background())
-	if err == storage.ErrObjectNotExist {
+	if errors.Is(err, storage.ErrObjectNotExist) {
 		return ObjectDescription{}, nil
 	}
 	if err != nil {
@@ -215,7 +216,7 @@ func (s *GCSRegistryStore) ReadObject(storageURL string) (int64, []byte, error) 
 		return 0, nil, err
 	}
 	attrs, err := client.Bucket(bucket).Object(object).Attrs(context.Background())
-	if err == storage.ErrObjectNotExist {
+	if errors.Is(err, storage.ErrObjectNotExist) {
 		return 0, nil, nil
 	}
 	if err != nil {
@@ -316,7 +317,7 @@ func (s *GCSRegistryStore) PromoteObject(input PromoteObjectInput) error {
 	}
 	src := client.Bucket(srcBucket).Object(srcObject)
 	srcAttrs, err := src.Attrs(context.Background())
-	if err == storage.ErrObjectNotExist {
+	if errors.Is(err, storage.ErrObjectNotExist) {
 		return fmt.Errorf("%w: %s", ErrPublishUploadMissing, input.SourceURL)
 	}
 	if err != nil {
@@ -347,7 +348,7 @@ func (s *GCSRegistryStore) PromoteObject(input PromoteObjectInput) error {
 	dest := client.Bucket(destBucket).Object(destObject)
 	destAttrs, err := dest.Attrs(context.Background())
 	switch {
-	case err == storage.ErrObjectNotExist:
+	case errors.Is(err, storage.ErrObjectNotExist):
 	case err != nil:
 		return fmt.Errorf("describe destination %s: %w", input.DestURL, err)
 	case expected != "" && strings.ToLower(strings.TrimSpace(destAttrs.Metadata["sha256"])) == expected:
