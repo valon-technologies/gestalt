@@ -184,6 +184,7 @@ type Server struct {
 	appRegistryReader             *appregistry.RegistryReader
 	appRegistryInstaller          *appregistry.Installer
 	appRegistryPublish            *appregistry.StatelessPublishService
+	appRegistryPublishAllowedApps map[string]struct{}
 	appFleetProjector             *appregistry.FleetProjector
 	appVersionChanges             *coredata.AppVersionChangeRequestService
 	gestaltdSourceVersions        *coredata.GestaltdSourceVersionService
@@ -225,58 +226,59 @@ type Config struct {
 	OperationAccessChecker invocation.OperationAccessChecker
 	// UserLookup gates resolving other people's identities on an explicit
 	// employee operator role.
-	UserLookup              UserLookupRouteConfig
-	AuditSink               core.AuditSink
-	Services                *coredata.Services
-	Providers               *registry.ProviderMap[core.Provider]
-	Agent                   bootstrap.AgentControl
-	AgentManager            agentmanager.Service
-	Workflow                bootstrap.WorkflowControl
-	Runtimes                bootstrap.RuntimeInspector
-	Invoker                 invocation.Invoker
-	AppInvocation           invocation.Invoker
-	DefaultConnection       map[string]string
-	CatalogConnection       map[string]string
-	MCPConnection           map[string]string
-	ConnectionAuth          func() map[string]map[string]bootstrap.OAuthHandler
-	ManualConnectionAuth    func() map[string]map[string]bootstrap.ManualTokenExchanger
-	AppDefs                 map[string]*config.ProviderEntry
-	PublicBaseURL           string
-	ManagementBaseURL       string
-	SecureCookies           bool
-	StateSecret             []byte
-	APIRouteTimeout         time.Duration
-	Now                     func() time.Time
-	Readiness               ReadinessChecker
-	PrometheusMetrics       http.Handler
-	MCPHandler              http.Handler
-	PublicHostServices      *runtimehost.PublicHostServiceRegistry
-	PublicGatewayTransport  *providergateway.ProviderGatewayTransport
-	S3                      map[string]s3sdk.S3
-	MountedUIs              []MountedUI
-	DevHandlerResolver      func(name string) http.Handler
-	Admin                   AdminRouteConfig
-	AdminUI                 http.Handler
-	BuiltinAdminUI          *BuiltinAdminUIOptions
-	AppRegistries           map[string]config.AppRegistryConfig
-	AppRegistryReader       *appregistry.RegistryReader
-	AppRegistryPublish      *appregistry.StatelessPublishService
-	AppFleetProjector       *appregistry.FleetProjector
-	AppRegistryHeartbeatTTL time.Duration
-	AppRegistryRolloutMode  config.AppRegistryRolloutMode
-	ArtifactsDir            string
-	GestaltdVersion         string
-	SourceVersion           string
-	AppRuntimeState         AppRuntimeState
-	RouteProfile            RouteProfile
-	MeterProvider           metric.MeterProvider
-	TracerProvider          trace.TracerProvider
-	ActivateAppProviders    func(context.Context)
-	IndexedDB               indexeddb.IndexedDB
-	RemoteManagement        proto.RemoteManagementServer
-	FrpsHandler             http.Handler
-	FrpsConnectHandler      http.Handler
-	TunnelResolver          TunnelResolverConfig
+	UserLookup                    UserLookupRouteConfig
+	AuditSink                     core.AuditSink
+	Services                      *coredata.Services
+	Providers                     *registry.ProviderMap[core.Provider]
+	Agent                         bootstrap.AgentControl
+	AgentManager                  agentmanager.Service
+	Workflow                      bootstrap.WorkflowControl
+	Runtimes                      bootstrap.RuntimeInspector
+	Invoker                       invocation.Invoker
+	AppInvocation                 invocation.Invoker
+	DefaultConnection             map[string]string
+	CatalogConnection             map[string]string
+	MCPConnection                 map[string]string
+	ConnectionAuth                func() map[string]map[string]bootstrap.OAuthHandler
+	ManualConnectionAuth          func() map[string]map[string]bootstrap.ManualTokenExchanger
+	AppDefs                       map[string]*config.ProviderEntry
+	PublicBaseURL                 string
+	ManagementBaseURL             string
+	SecureCookies                 bool
+	StateSecret                   []byte
+	APIRouteTimeout               time.Duration
+	Now                           func() time.Time
+	Readiness                     ReadinessChecker
+	PrometheusMetrics             http.Handler
+	MCPHandler                    http.Handler
+	PublicHostServices            *runtimehost.PublicHostServiceRegistry
+	PublicGatewayTransport        *providergateway.ProviderGatewayTransport
+	S3                            map[string]s3sdk.S3
+	MountedUIs                    []MountedUI
+	DevHandlerResolver            func(name string) http.Handler
+	Admin                         AdminRouteConfig
+	AdminUI                       http.Handler
+	BuiltinAdminUI                *BuiltinAdminUIOptions
+	AppRegistries                 map[string]config.AppRegistryConfig
+	AppRegistryReader             *appregistry.RegistryReader
+	AppRegistryPublish            *appregistry.StatelessPublishService
+	AppRegistryPublishAllowedApps map[string]struct{}
+	AppFleetProjector             *appregistry.FleetProjector
+	AppRegistryHeartbeatTTL       time.Duration
+	AppRegistryRolloutMode        config.AppRegistryRolloutMode
+	ArtifactsDir                  string
+	GestaltdVersion               string
+	SourceVersion                 string
+	AppRuntimeState               AppRuntimeState
+	RouteProfile                  RouteProfile
+	MeterProvider                 metric.MeterProvider
+	TracerProvider                trace.TracerProvider
+	ActivateAppProviders          func(context.Context)
+	IndexedDB                     indexeddb.IndexedDB
+	RemoteManagement              proto.RemoteManagementServer
+	FrpsHandler                   http.Handler
+	FrpsConnectHandler            http.Handler
+	TunnelResolver                TunnelResolverConfig
 	// AppAutoDeployNotify requests prompt auto-deploy reconciliation for an app.
 	AppAutoDeployNotify func(app string)
 }
@@ -514,6 +516,7 @@ func New(cfg Config) (*Server, error) {
 		appRegistryReader:             cfg.AppRegistryReader,
 		appRegistryInstaller:          newAppRegistryInstaller(cfg),
 		appRegistryPublish:            cfg.AppRegistryPublish,
+		appRegistryPublishAllowedApps: cloneStringSet(cfg.AppRegistryPublishAllowedApps),
 		appFleetProjector:             fleetProjector,
 		appVersionChanges:             cfg.Services.AppVersionChangeRequests,
 		gestaltdSourceVersions:        cfg.Services.GestaltdSourceVersionState,
@@ -588,6 +591,17 @@ func (s *Server) Close() {
 		s.publicGatewayConn.Close()
 		s.publicGatewayConn = nil
 	}
+}
+
+func cloneStringSet(src map[string]struct{}) map[string]struct{} {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(src))
+	for key := range src {
+		out[key] = struct{}{}
+	}
+	return out
 }
 
 func withRequestTelemetryProviders(next http.Handler, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) http.Handler {

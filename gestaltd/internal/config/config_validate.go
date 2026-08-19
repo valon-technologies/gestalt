@@ -312,6 +312,9 @@ func validateAppRegistryPublishSettings(cfg *Config) error {
 	if _, err := publish.PublishLimits(); err != nil {
 		return fmt.Errorf("config validation: server.appRegistry.publish: %w", err)
 	}
+	if len(publish.AllowedAppSet()) == 0 {
+		return fmt.Errorf("config validation: server.appRegistry.publish.allowedApps must list at least one app when publish is enabled")
+	}
 	return nil
 }
 

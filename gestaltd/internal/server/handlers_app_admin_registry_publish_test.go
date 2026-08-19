@@ -43,6 +43,7 @@ func TestAppAdminRegistryPublishCreateReturnsUploadHeaders(t *testing.T) {
 		}
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
 		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -96,6 +97,7 @@ func TestAppAdminRegistryPublishFlow(t *testing.T) {
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
 		cfg.AppRegistryReader = harness.reader
 		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -131,6 +133,7 @@ func TestAppAdminRegistryPublishConcurrentFinalizeMatching(t *testing.T) {
 		}
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
 		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -171,6 +174,7 @@ func TestAppAdminRegistryPublishRejectsNonAdmin(t *testing.T) {
 		}
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
 		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -210,6 +214,7 @@ func TestAppAdminRegistryPublishRejectsWrongWritableRegistry(t *testing.T) {
 			"toolshed":       harness.registry,
 		}
 		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -246,6 +251,7 @@ func TestAppAdminRegistryPublishRejectsZeroArtifactSize(t *testing.T) {
 		}
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
 		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -286,6 +292,7 @@ func TestAppAdminRegistryPublishRejectsCrossAppFinalize(t *testing.T) {
 		}
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
 		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -296,8 +303,44 @@ func TestAppAdminRegistryPublishRejectsCrossAppFinalize(t *testing.T) {
 		Version: harness.declaration.Manifest.Version, Spec: &providermanifestv1.Spec{},
 	}
 	status := postPublishFinalizeStatusForApp(t, ts.URL, "other-app", created.PublishID, &otherDecl)
-	if status != http.StatusBadRequest {
-		t.Fatalf("cross-app finalize status = %d, want 400", status)
+	if status != http.StatusForbidden {
+		t.Fatalf("cross-app finalize status = %d, want 403", status)
+	}
+}
+
+func TestAppAdminRegistryPublishRejectsNonAllowlistedApp(t *testing.T) {
+	t.Parallel()
+
+	harness := newRegistryPublishHarness(t)
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "hello-world"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"hello-world": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
+		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createBody, _ := json.Marshal(map[string]any{"declaration": harness.declaration})
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/hello-world/admin/registry/publishes", bytes.NewReader(createBody))
+	createReq.Header.Set("Authorization", "Bearer alice-token")
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("POST publish begin: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", createResp.StatusCode)
 	}
 }
 
@@ -325,6 +368,7 @@ func TestBootstrapAppRegistryPublishFailsWhenSigningUnavailable(t *testing.T) {
 	}
 	cfg.Server.AppRegistry.Publish.Enabled = true
 	cfg.Server.AppRegistry.Publish.WritableRegistry = "toolshed"
+	cfg.Server.AppRegistry.Publish.AllowedApps = []string{"g-issues"}
 
 	restorePermissions := stubCheckGCSRegistryPermissions(t, nil)
 	defer restorePermissions()
@@ -349,6 +393,7 @@ func TestBootstrapAppRegistryPublishFailsWhenObjectPermissionsUnavailable(t *tes
 	}
 	cfg.Server.AppRegistry.Publish.Enabled = true
 	cfg.Server.AppRegistry.Publish.WritableRegistry = "toolshed"
+	cfg.Server.AppRegistry.Publish.AllowedApps = []string{"g-issues"}
 
 	restorePermissions := stubCheckGCSRegistryPermissions(t, errors.New("storage.objects.get denied"))
 	defer restorePermissions()
@@ -500,6 +545,14 @@ func postPublishFinalizeStatusForApp(t *testing.T, baseURL, app, publishID strin
 	return resp.StatusCode
 }
 
+func withAppRegistryPublishAllowlist(cfg *server.Config, apps ...string) {
+	allowed := make(map[string]struct{}, len(apps))
+	for _, app := range apps {
+		allowed[app] = struct{}{}
+	}
+	cfg.AppRegistryPublishAllowedApps = allowed
+}
+
 func TestAppAdminRegistryPublishRejectsMissingBuilderVersion(t *testing.T) {
 	t.Parallel()
 
@@ -518,6 +571,7 @@ func TestAppAdminRegistryPublishRejectsMissingBuilderVersion(t *testing.T) {
 		}
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": harness.registry}
 		cfg.AppRegistryPublish = harness.service
+		withAppRegistryPublishAllowlist(cfg, "g-issues")
 	})
 	testutil.CloseOnCleanup(t, ts)
 

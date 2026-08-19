@@ -2019,6 +2019,34 @@ type AppRegistryPublishSettings struct {
 	MaxArtifacts      int      `yaml:"maxArtifacts,omitempty"`
 	MaxArtifactBytes  int64    `yaml:"maxArtifactBytes,omitempty"`
 	RequiredPlatforms []string `yaml:"requiredPlatforms,omitempty"`
+	AllowedApps       []string `yaml:"allowedApps,omitempty"`
+}
+
+func (c AppRegistryPublishSettings) AllowedAppSet() map[string]struct{} {
+	if len(c.AllowedApps) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(c.AllowedApps))
+	for _, app := range c.AllowedApps {
+		app = strings.TrimSpace(app)
+		if app == "" {
+			continue
+		}
+		allowed[app] = struct{}{}
+	}
+	if len(allowed) == 0 {
+		return nil
+	}
+	return allowed
+}
+
+func (c AppRegistryPublishSettings) AllowsApp(app string) bool {
+	allowed := c.AllowedAppSet()
+	if len(allowed) == 0 {
+		return false
+	}
+	_, ok := allowed[strings.TrimSpace(app)]
+	return ok
 }
 
 func (c AppRegistryPublishSettings) PublishLimits() (AppRegistryPublishLimits, error) {
