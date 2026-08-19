@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -76,6 +78,91 @@ func TestManagerServerPublicApplyRequiresServiceAccountManagement(t *testing.T) 
 	})
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("status = %s, want PermissionDenied (err=%v)", status.Code(err), err)
+	}
+}
+
+func TestManagerServerPublicStartSeparatesDefinitionAndRunAsAuthorization(t *testing.T) {
+	t.Parallel()
+
+	const (
+		definitionID = "definition-1"
+		runAs        = "service_account:workflow-runner"
+	)
+	authz := &managerServerAuthorizationProvider{
+		allow: func(req *proto.CheckAccessRequest) bool {
+			subjectID := req.GetSubject().GetId()
+			resource := req.GetResource()
+			action := req.GetAction().GetName()
+			switch {
+			case subjectID == "user:user-123" &&
+				resource.GetType() == "workflow" &&
+				resource.GetId() == "local" &&
+				action == "runs.start":
+				return true
+			case subjectID == "user:user-123" &&
+				resource.GetType() == "workflow_definition" &&
+				resource.GetId() == "local/"+definitionID &&
+				action == "runs.start":
+				return true
+			case subjectID == runAs &&
+				resource.GetType() == "app" &&
+				resource.GetId() == "slack" &&
+				action == "chat.postMessage":
+				return true
+			default:
+				return false
+			}
+		},
+	}
+	workflowProvider := &recordingWorkflowProvider{runAs: runAs}
+	appProviders := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack"})
+	manager := workflowmanager.New(workflowmanager.Config{
+		Providers: appProviders,
+		Workflow: managerServerWorkflowControl{
+			defaultName: "local",
+			names:       []string{"local"},
+			providers: map[string]coreworkflow.Provider{
+				"local": workflowProvider,
+			},
+		},
+		Invoker: invocation.NewBroker(
+			appProviders,
+			nil,
+			nil,
+			invocation.WithAuthorizationProvider(authz),
+			invocation.WithProviderKinds(map[string]invocation.ProviderKind{"slack": invocation.ProviderKindApp}),
+		),
+	})
+	server := NewProviderServer("gestaltd", manager, authz)
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.Workflow_StartRun_FullMethodName)
+
+	run, err := server.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
+		Provider:     "local",
+		DefinitionId: definitionID,
+		WorkflowKey:  "manual-start",
+		Context:      managerServerRequestContext("gestaltd"),
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if run.GetId() != "run-1" {
+		t.Fatalf("run id = %q, want run-1", run.GetId())
+	}
+	if len(workflowProvider.startReqs) != 1 {
+		t.Fatalf("provider start requests = %d, want 1", len(workflowProvider.startReqs))
+	}
+	requests := authz.Requests()
+	if len(requests) != 3 {
+		t.Fatalf("authorization checks = %d, want provider caller, definition caller, and run-as target checks", len(requests))
+	}
+	if got := requests[0].GetSubject().GetId(); got != "user:user-123" {
+		t.Fatalf("provider authorization subject = %q, want human caller", got)
+	}
+	if got := requests[1].GetSubject().GetId(); got != "user:user-123" {
+		t.Fatalf("definition authorization subject = %q, want human caller", got)
+	}
+	if got := requests[2].GetSubject().GetId(); got != runAs {
+		t.Fatalf("target authorization subject = %q, want workflow run-as", got)
 	}
 }
 
@@ -266,6 +353,7 @@ type managerServerAuthorizationProvider struct {
 
 	mu       sync.Mutex
 	allowed  bool
+	allow    func(*proto.CheckAccessRequest) bool
 	requests []*proto.CheckAccessRequest
 }
 
@@ -273,7 +361,11 @@ func (p *managerServerAuthorizationProvider) CheckAccess(_ context.Context, req 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.requests = append(p.requests, gproto.Clone(req).(*proto.CheckAccessRequest))
-	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
+	allowed := p.allowed
+	if p.allow != nil {
+		allowed = p.allow(req)
+	}
+	return &proto.CheckAccessResponse{Allowed: allowed}, nil
 }
 
 func (p *managerServerAuthorizationProvider) Requests() []*proto.CheckAccessRequest {
@@ -308,6 +400,8 @@ type recordingWorkflowProvider struct {
 	coreworkflow.Provider
 	deliverReqs []*proto.DeliverWorkflowProviderEventRequest
 	deliveredID string
+	runAs       string
+	startReqs   []*proto.StartWorkflowProviderRunRequest
 }
 
 func (p *recordingWorkflowProvider) DeliverEvent(_ context.Context, req *proto.DeliverWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
@@ -330,5 +424,15 @@ func (p *recordingWorkflowProvider) GetDefinition(context.Context, *proto.GetWor
 	if err != nil {
 		return nil, err
 	}
-	return &proto.WorkflowDefinition{Id: "definition-1", Target: target}, nil
+	return &proto.WorkflowDefinition{Id: "definition-1", Target: target, RunAs: p.runAs}, nil
+}
+
+func (p *recordingWorkflowProvider) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
+	p.startReqs = append(p.startReqs, gproto.Clone(req).(*proto.StartWorkflowProviderRunRequest))
+	return &proto.WorkflowRun{
+		Id:           "run-1",
+		DefinitionId: strings.TrimSpace(req.GetDefinitionId()),
+		WorkflowKey:  strings.TrimSpace(req.GetWorkflowKey()),
+		RunAs:        p.runAs,
+	}, nil
 }
