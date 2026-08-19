@@ -303,13 +303,20 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
+	definitionID := strings.TrimSpace(req.GetDefinitionId())
+	if definitionID == "" {
+		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
+	}
 	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "StartRun", "runs.start")
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requirePublicWorkflowDefinitionAccess(ctx, authCtx, "runs.start", providerName, definitionID); err != nil {
+		return nil, err
+	}
 	managed, err := s.manager.StartRun(s.managerContext(ctx, authCtx), p, workflowmanager.RunStart{
 		ProviderName:                 providerName,
-		DefinitionID:                 strings.TrimSpace(req.GetDefinitionId()),
+		DefinitionID:                 definitionID,
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 		Input:                        protoutil.MapFromStruct(req.GetInput()),
 		IdempotencyKey:               strings.TrimSpace(req.GetIdempotencyKey()),
@@ -617,6 +624,39 @@ func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx work
 	}
 	if !allowed {
 		return status.Errorf(codes.PermissionDenied, "workflow RPC %q is not allowed for subject %q", action, subjectID)
+	}
+	return nil
+}
+
+func (s *ProviderServer) requirePublicWorkflowDefinitionAccess(ctx context.Context, authCtx workflowManagerAuthContext, action, providerName, definitionID string) error {
+	origin, public := publicrpc.PublicOriginFromContext(ctx)
+	if !public || authCtx.CallerName() != "gestaltd" || origin.FullMethod == "" {
+		return nil
+	}
+	if s == nil || s.authorization == nil {
+		return status.Error(codes.FailedPrecondition, "authorization provider is required for workflow definition operation")
+	}
+	subjectID := ""
+	if p := authCtx.Principal(); p != nil {
+		subjectID = strings.TrimSpace(p.SubjectID)
+	}
+	if subjectID == "" {
+		return status.Error(codes.PermissionDenied, "workflow definition operation requires an authenticated subject")
+	}
+	resourceID := strings.TrimSpace(providerName) + "/" + strings.TrimSpace(definitionID)
+	resources := []*proto.Resource{
+		{Type: "workflow", Id: strings.TrimSpace(providerName)},
+		{Type: "workflow_definition", Id: resourceID},
+	}
+	for _, resource := range resources {
+		req := invocation.SubjectAccessRequest(subjectID, action, resource)
+		allowed, err := invocation.CheckSubjectAccess(ctx, s.authorization, req)
+		if err != nil {
+			return status.Errorf(codes.PermissionDenied, "%s %q action %q is not allowed for subject %q: %v", resource.GetType(), resource.GetId(), action, subjectID, err)
+		}
+		if !allowed {
+			return status.Errorf(codes.PermissionDenied, "%s %q action %q is not allowed for subject %q", resource.GetType(), resource.GetId(), action, subjectID)
+		}
 	}
 	return nil
 }
