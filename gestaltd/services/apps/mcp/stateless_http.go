@@ -168,97 +168,31 @@ func (h *StatelessHTTPHandler) handleMessage(ctx context.Context, headers http.H
 	}
 }
 
-// listedTool is one tools/list candidate and the operation it maps to, so the
-// authorization question asked about it is the same question tools/call asks.
-type listedTool struct {
-	tool  mcpgo.Tool
-	query invocation.OperationAccessQuery
-}
-
-// listTools answers tools/list. A tool is listed only when the caller's token
-// scope permits the app AND the authorization evaluator allows the underlying
-// operation - scope and authorization, not scope or authorization.
-//
-// The authorization answers come from one batched call through the same
-// decision path tools/call uses, so a listed tool is a callable tool. When the
-// evaluator cannot be reached the request fails with an error rather than
-// returning a short or empty tool list, because an empty tools/list is
-// indistinguishable from "you have no tools". tools/call enforcement is
-// unchanged and remains the authority.
-func (h *StatelessHTTPHandler) listTools(ctx context.Context, req mcpgo.ListToolsRequest) (mcpgo.ListToolsResult, error) {
+// listTools answers the MCP handshake. Hosts mark the server connected only
+// after this returns, so it never walks app catalogs or asks the evaluator.
+// Workspace operations are found through gestalt_search / gestalt_describe
+// and authorized on gestalt_invoke (and on leftover flattened tool names).
+func (h *StatelessHTTPHandler) listTools(_ context.Context, req mcpgo.ListToolsRequest) (mcpgo.ListToolsResult, error) {
 	if strings.TrimSpace(string(req.Params.Cursor)) != "" {
 		return mcpgo.ListToolsResult{}, fmt.Errorf("tools/list cursor is not supported")
 	}
-	p := principal.FromContext(ctx)
-	candidates := make([]listedTool, 0)
-	for _, provName := range h.providerNames {
-		if p != nil && !principal.AllowsProviderPermission(p, provName) {
-			continue
-		}
-		prov, ok := h.provider(ctx, provName)
-		if !ok {
-			continue
-		}
-		rawCat, err := h.resolveCatalog(ctx, provName, prov, "", true)
-		if err != nil {
-			continue
-		}
-		cat := projectCatalog(h.cfg, provName, prov, rawCat)
-		if cat == nil {
-			continue
-		}
-		toolMap, refs := statelessToolMap(h.cfg, provName, cat)
-		names := make([]string, 0, len(toolMap))
-		for name := range toolMap {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			operation := refs[name].operation
-			var allowedRoles []string
-			if op, found := invocation.CatalogOperation(cat, operation); found {
-				allowedRoles = op.AllowedRoles
-			}
-			candidates = append(candidates, listedTool{
-				tool: toolMap[name],
-				query: invocation.OperationAccessQuery{
-					Provider:     provName,
-					Operation:    operation,
-					AllowedRoles: allowedRoles,
-				},
-			})
-		}
-	}
-
-	if h.cfg.OperationAccess == nil || len(candidates) == 0 {
-		tools := make([]mcpgo.Tool, 0, len(candidates))
-		for i := range candidates {
-			tools = append(tools, candidates[i].tool)
-		}
-		return mcpgo.ListToolsResult{Tools: tools}, nil
-	}
-
-	queries := make([]invocation.OperationAccessQuery, len(candidates))
-	for i := range candidates {
-		queries[i] = candidates[i].query
-	}
-	results, err := h.cfg.OperationAccess.CheckOperationAccessMany(ctx, p, queries)
-	if err != nil {
-		return mcpgo.ListToolsResult{}, fmt.Errorf("tools/list authorization is unavailable: %w", err)
-	}
-	if len(results) != len(candidates) {
-		return mcpgo.ListToolsResult{}, fmt.Errorf("tools/list authorization returned %d decisions for %d tools", len(results), len(candidates))
-	}
-	tools := make([]mcpgo.Tool, 0, len(candidates))
-	for i := range candidates {
-		if results[i] == nil {
-			tools = append(tools, candidates[i].tool)
-		}
-	}
-	return mcpgo.ListToolsResult{Tools: tools}, nil
+	return mcpgo.ListToolsResult{Tools: workspaceFrontDoorTools()}, nil
 }
 
 func (h *StatelessHTTPHandler) callTool(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	switch strings.TrimSpace(req.Params.Name) {
+	case SearchToolName:
+		return h.callSearch(ctx, req)
+	case DescribeToolName:
+		return h.callDescribe(ctx, req)
+	case InvokeToolName:
+		return h.callInvoke(ctx, req)
+	default:
+		return h.callAppTool(ctx, req)
+	}
+}
+
+func (h *StatelessHTTPHandler) callAppTool(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	p := principal.FromContext(ctx)
 	if p == nil {
 		return mcpgo.NewToolResultError("not authenticated"), nil

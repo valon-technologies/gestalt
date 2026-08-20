@@ -12429,6 +12429,71 @@ func newMCPHandler(t *testing.T, providers *registry.ProviderMap[core.Provider],
 	})
 }
 
+func mcpListedToolNames(t *testing.T, resp map[string]any) []string {
+	t.Helper()
+	result, _ := resp["result"].(map[string]any)
+	tools, _ := result["tools"].([]any)
+	names := make([]string, 0, len(tools))
+	for _, raw := range tools {
+		tool, _ := raw.(map[string]any)
+		if name, ok := tool["name"].(string); ok {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func requireMCPFrontDoor(t *testing.T, resp map[string]any) {
+	t.Helper()
+	names := mcpListedToolNames(t, resp)
+	want := []string{gestaltmcp.DescribeToolName, gestaltmcp.InvokeToolName, gestaltmcp.SearchToolName}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("tools/list = %v, want workspace front door %v", names, want)
+	}
+}
+
+func mcpSearchOperations(t *testing.T, ts *httptest.Server, headers map[string]string, args map[string]any) []string {
+	t.Helper()
+	status, resp := mcpJSONRPC(t, ts, headers, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      gestaltmcp.SearchToolName,
+			"arguments": args,
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("gestalt_search status = %d: %v", status, resp)
+	}
+	if rpcErr, ok := resp["error"]; ok {
+		t.Fatalf("gestalt_search rpc error: %v", rpcErr)
+	}
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] == true {
+		t.Fatalf("gestalt_search tool error: %v", result)
+	}
+	content, _ := result["content"].([]any)
+	if len(content) == 0 {
+		t.Fatalf("gestalt_search missing content: %v", result)
+	}
+	block, _ := content[0].(map[string]any)
+	text, _ := block["text"].(string)
+	var body struct {
+		Results []struct {
+			Operation string `json:"operation"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		t.Fatalf("decode gestalt_search: %v body=%s", err, text)
+	}
+	names := make([]string, 0, len(body.Results))
+	for _, hit := range body.Results {
+		names = append(names, hit.Operation)
+	}
+	return names
+}
+
 func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	t.Parallel()
 
@@ -12500,13 +12565,10 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	if !ok || len(tools) == 0 {
 		t.Fatalf("tools/list: expected non-empty tools, got %v", result)
 	}
-	firstTool := tools[0].(map[string]any)
-	if firstTool["name"] != "linear_search_issues" {
-		t.Fatalf("expected tool linear_search_issues, got %v", firstTool["name"])
-	}
+	requireMCPFrontDoor(t, resp)
 }
 
-func TestMCPEndpoint_EmptyAllowedProvidersExposesNoTools(t *testing.T) {
+func TestMCPEndpoint_EmptyAllowedProvidersRejectsAppToolCalls(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubIntegrationWithOps{
@@ -12540,17 +12602,7 @@ func TestMCPEndpoint_EmptyAllowedProvidersExposesNoTools(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("tools/list status = %d, want 200", status)
 	}
-	result, ok := resp["result"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected result object, got %v", resp)
-	}
-	tools, ok := result["tools"].([]any)
-	if !ok {
-		t.Fatalf("expected tools list, got %v", result["tools"])
-	}
-	if len(tools) != 0 {
-		t.Fatalf("tools = %v, want empty list", tools)
-	}
+	requireMCPFrontDoor(t, resp)
 
 	status, resp = mcpJSONRPC(t, ts, nil, map[string]any{
 		"jsonrpc": "2.0",
@@ -12612,17 +12664,7 @@ func TestMCPEndpoint_ListUsesStrictCatalogResolution(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("tools/list status = %d, want 200", status)
 	}
-	result, ok := resp["result"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected result object, got %v", resp)
-	}
-	tools, ok := result["tools"].([]any)
-	if !ok {
-		t.Fatalf("expected tools list, got %v", result["tools"])
-	}
-	if len(tools) != 0 {
-		t.Fatalf("tools = %v, want empty list when strict catalog resolution fails", tools)
-	}
+	requireMCPFrontDoor(t, resp)
 
 	status, resp = mcpJSONRPC(t, ts, map[string]string{
 		"Authorization": "Bearer session-token",
@@ -12638,7 +12680,7 @@ func TestMCPEndpoint_ListUsesStrictCatalogResolution(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("tools/call status = %d, want 200", status)
 	}
-	result, ok = resp["result"].(map[string]any)
+	result, ok := resp["result"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected tool result object, got %v", resp)
 	}
@@ -12957,11 +12999,23 @@ func TestMCPEndpoint_IgnoresSessionIDForDynamicCatalogIsolation(t *testing.T) {
 		return names
 	}
 
-	if got := listToolNames("auth-a"); !reflect.DeepEqual(got, []string{"sample_only_a"}) {
-		t.Fatalf("auth-a tools = %v, want [sample_only_a]", got)
+	if got := listToolNames("auth-a"); !reflect.DeepEqual(got, []string{gestaltmcp.DescribeToolName, gestaltmcp.InvokeToolName, gestaltmcp.SearchToolName}) {
+		t.Fatalf("auth-a tools/list = %v, want workspace front door", got)
 	}
-	if got := listToolNames("auth-b"); !reflect.DeepEqual(got, []string{"sample_only_b"}) {
-		t.Fatalf("auth-b tools = %v, want [sample_only_b]", got)
+	if got := listToolNames("auth-b"); !reflect.DeepEqual(got, []string{gestaltmcp.DescribeToolName, gestaltmcp.InvokeToolName, gestaltmcp.SearchToolName}) {
+		t.Fatalf("auth-b tools/list = %v, want workspace front door", got)
+	}
+	searchHeaders := func(authToken string) map[string]string {
+		return map[string]string{
+			"Authorization":  "Bearer " + authToken,
+			"Mcp-Session-Id": "shared-session-id",
+		}
+	}
+	if got := mcpSearchOperations(t, ts, searchHeaders("auth-a"), map[string]any{"app": "sample"}); !reflect.DeepEqual(got, []string{"only_a"}) {
+		t.Fatalf("auth-a search = %v, want [only_a]", got)
+	}
+	if got := mcpSearchOperations(t, ts, searchHeaders("auth-b"), map[string]any{"app": "sample"}); !reflect.DeepEqual(got, []string{"only_b"}) {
+		t.Fatalf("auth-b search = %v, want [only_b]", got)
 	}
 }
 
@@ -13306,10 +13360,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	if !ok || len(tools) == 0 {
 		t.Fatalf("expected tools, got %v", result)
 	}
-	firstTool := tools[0].(map[string]any)
-	if firstTool["name"] != "clickhouse_run_query" {
-		t.Fatalf("expected clickhouse_run_query, got %v", firstTool["name"])
-	}
+	requireMCPFrontDoor(t, resp)
 
 	status, resp = mcpJSONRPC(t, ts, headers, map[string]any{
 		"jsonrpc": "2.0",
