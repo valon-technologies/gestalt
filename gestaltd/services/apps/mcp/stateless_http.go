@@ -221,11 +221,7 @@ func (h *StatelessHTTPHandler) callAppTool(ctx context.Context, req mcpgo.CallTo
 		return mcpgo.NewToolResultError(err.Error()), nil
 	}
 	projectedCat := projectCatalog(h.cfg, provName, prov, rawCat)
-	projectedTools, projectedRefs := statelessToolMap(h.cfg, provName, projectedCat)
-	if _, ok := projectedTools[req.Params.Name]; !ok {
-		return nil, fmt.Errorf("%w: %q", invocation.ErrOperationNotFound, req.Params.Name)
-	}
-	ref, ok := projectedRefs[req.Params.Name]
+	ref, ok := statelessToolRefs(h.cfg, provName, projectedCat)[req.Params.Name]
 	if !ok || ref.provider != provName {
 		return nil, fmt.Errorf("%w: %q", invocation.ErrOperationNotFound, req.Params.Name)
 	}
@@ -269,41 +265,20 @@ func (h *StatelessHTTPHandler) callAppTool(ctx context.Context, req mcpgo.CallTo
 	return operationResultToMCP(result), nil
 }
 
-func statelessToolMap(cfg Config, provName string, cat *catalog.Catalog) (map[string]mcpgo.Tool, map[string]statelessToolRef) {
+func statelessToolRefs(cfg Config, provName string, cat *catalog.Catalog) map[string]statelessToolRef {
 	if cat == nil {
-		return map[string]mcpgo.Tool{}, map[string]statelessToolRef{}
+		return map[string]statelessToolRef{}
 	}
-	tools := make(map[string]mcpgo.Tool, len(cat.Operations))
 	refs := make(map[string]statelessToolRef, len(cat.Operations))
 	for i := range cat.Operations {
-		op := &cat.Operations[i]
-		if !catalogOperationProjectedToMCP(cfg, provName, *op) {
+		op := cat.Operations[i]
+		if !catalogOperationProjectedToMCP(cfg, provName, op) {
 			continue
 		}
-
 		name := toolName(cfg.ToolPrefixes, provName, op.ID)
-		var tool mcpgo.Tool
-		if len(op.InputSchema) > 0 {
-			tool = mcpgo.NewToolWithRawSchema(name, op.Description, op.InputSchema)
-		} else {
-			tool = mcpgo.NewTool(name, mcpgo.WithDescription(op.Description))
-		}
-
-		tool.Annotations = mapAnnotations(op.Annotations)
-		if op.Title != "" {
-			tool.Annotations.Title = op.Title
-		} else {
-			tool.Annotations.Title = op.ID
-		}
-
-		if len(op.OutputSchema) > 0 {
-			tool.RawOutputSchema = op.OutputSchema
-		}
-
-		tools[name] = tool
 		refs[name] = statelessToolRef{provider: provName, operation: op.ID}
 	}
-	return tools, refs
+	return refs
 }
 
 func (h *StatelessHTTPHandler) provider(ctx context.Context, provName string) (core.Provider, bool) {

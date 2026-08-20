@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -475,14 +476,9 @@ func (h *conformanceHarness) mcpToolNames(t *testing.T, cred conformanceCredenti
 
 func requireWorkspaceFrontDoor(t *testing.T, names []string) {
 	t.Helper()
-	want := []string{gestaltmcp.DescribeToolName, gestaltmcp.InvokeToolName, gestaltmcp.SearchToolName}
-	if len(names) != len(want) {
+	want := gestaltmcp.WorkspaceFrontDoorToolNames()
+	if !slices.Equal(names, want) {
 		t.Fatalf("tools/list = %v, want workspace front door %v", names, want)
-	}
-	for i := range want {
-		if names[i] != want[i] {
-			t.Fatalf("tools/list = %v, want workspace front door %v", names, want)
-		}
 	}
 }
 

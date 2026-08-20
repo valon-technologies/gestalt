@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,10 +27,9 @@ const (
 )
 
 const (
-	defaultSearchLimit  = 20
-	maxSearchLimit      = 100
-	maxSearchCandidates = 1000
-	liveSearchTimeout   = 8 * time.Second
+	defaultSearchLimit = 20
+	maxSearchLimit     = 100
+	liveSearchTimeout  = 8 * time.Second
 )
 
 var (
@@ -42,7 +42,7 @@ var (
     },
     "app": {
       "type": "string",
-      "description": "If set, search only this app and include its live catalog."
+      "description": "If set, search only this app and load its current catalog. If omitted, search uses each app's static catalog."
     },
     "limit": {
       "type": "integer",
@@ -65,16 +65,20 @@ var (
     "app": {"type": "string", "description": "App name, for example linear."},
     "operation": {"type": "string", "description": "Operation id, for example search_issues."},
     "arguments": {"type": "object", "description": "Arguments for the operation."},
-    "_instance": {"type": "string", "description": "Optional catalog instance."}
+    "_instance": {"type": "string", "description": "Optional. Use when the app exposes more than one catalog instance."}
   }
 }`)
 )
+
+func WorkspaceFrontDoorToolNames() []string {
+	return []string{DescribeToolName, InvokeToolName, SearchToolName}
+}
 
 func workspaceFrontDoorTools() []mcpgo.Tool {
 	return []mcpgo.Tool{
 		mcpgo.NewToolWithRawSchema(DescribeToolName, "Return one workspace operation's schema. Use this before gestalt_invoke when you need argument names.", describeToolSchema),
 		mcpgo.NewToolWithRawSchema(InvokeToolName, "Invoke a workspace app operation. Pass app, operation, and arguments. Authorization is enforced on this call.", invokeToolSchema),
-		mcpgo.NewToolWithRawSchema(SearchToolName, "Search workspace apps and operations the caller may use. Pass query and optionally app. Then call gestalt_describe or gestalt_invoke.", searchToolSchema),
+		mcpgo.NewToolWithRawSchema(SearchToolName, "Search workspace apps and operations the caller may use. Pass query, app, or both. Then call gestalt_describe or gestalt_invoke.", searchToolSchema),
 	}
 }
 
@@ -94,6 +98,7 @@ type searchUnavailable struct {
 type searchResult struct {
 	Results     []searchHit         `json:"results"`
 	Unavailable []searchUnavailable `json:"unavailable,omitempty"`
+	Hint        string              `json:"hint,omitempty"`
 }
 
 type searchCandidate struct {
@@ -127,7 +132,10 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 		limit = maxSearchLimit
 	}
 	if query == "" && appFilter == "" {
-		return toolJSONResult(searchResult{Results: []searchHit{}}), nil
+		return toolJSONResult(searchResult{
+			Results: []searchHit{},
+			Hint:    "Pass query or app to search workspace operations.",
+		}), nil
 	}
 
 	candidates := make([]searchCandidate, 0)
@@ -143,8 +151,7 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 		if !ok {
 			continue
 		}
-		live := appFilter != "" || queryMentionsProvider(query, provName, prov)
-		cat, liveErr := h.catalogForSearch(ctx, provName, prov, live)
+		cat, liveErr := h.catalogForSearch(ctx, provName, prov, appFilter != "")
 		if liveErr != nil {
 			unavailable = append(unavailable, searchUnavailable{App: provName, Error: liveErr.Error()})
 			continue
@@ -175,12 +182,6 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 					AllowedRoles: op.AllowedRoles,
 				},
 			})
-			if len(candidates) >= maxSearchCandidates {
-				break
-			}
-		}
-		if len(candidates) >= maxSearchCandidates {
-			break
 		}
 	}
 
@@ -188,6 +189,12 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 	if err != nil {
 		return mcpgo.NewToolResultError(err.Error()), nil
 	}
+	sort.Slice(allowed, func(i, j int) bool {
+		if allowed[i].App != allowed[j].App {
+			return allowed[i].App < allowed[j].App
+		}
+		return allowed[i].Operation < allowed[j].Operation
+	})
 	if len(allowed) > limit {
 		allowed = allowed[:limit]
 	}
@@ -211,10 +218,10 @@ func (h *StatelessHTTPHandler) filterSearchHits(ctx context.Context, p *principa
 	}
 	results, err := h.cfg.OperationAccess.CheckOperationAccessMany(ctx, p, queries)
 	if err != nil {
-		return nil, fmt.Errorf("search authorization is unavailable: %w", err)
+		return nil, fmt.Errorf("operation access is unavailable: %w", err)
 	}
 	if len(results) != len(candidates) {
-		return nil, fmt.Errorf("search authorization returned %d decisions for %d operations", len(results), len(candidates))
+		return nil, fmt.Errorf("operation access returned %d decisions for %d operations", len(results), len(candidates))
 	}
 	hits := make([]searchHit, 0, len(candidates))
 	for i := range candidates {
@@ -226,19 +233,16 @@ func (h *StatelessHTTPHandler) filterSearchHits(ctx context.Context, p *principa
 }
 
 func (h *StatelessHTTPHandler) catalogForSearch(ctx context.Context, provName string, prov core.Provider, live bool) (*catalog.Catalog, error) {
-	if live {
-		liveCtx, cancel := context.WithTimeout(ctx, liveSearchTimeout)
-		defer cancel()
-		raw, err := h.resolveCatalog(liveCtx, provName, prov, "", false)
-		if err == nil {
-			return projectCatalog(h.cfg, provName, prov, raw), nil
-		}
-		if static := projectCatalog(h.cfg, provName, prov, prov.Catalog()); static != nil {
-			return static, nil
-		}
+	if !live {
+		return projectCatalog(h.cfg, provName, prov, prov.Catalog()), nil
+	}
+	liveCtx, cancel := context.WithTimeout(ctx, liveSearchTimeout)
+	defer cancel()
+	raw, err := h.resolveCatalog(liveCtx, provName, prov, "", true)
+	if err != nil {
 		return nil, err
 	}
-	return projectCatalog(h.cfg, provName, prov, prov.Catalog()), nil
+	return projectCatalog(h.cfg, provName, prov, raw), nil
 }
 
 func (h *StatelessHTTPHandler) callDescribe(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -319,24 +323,6 @@ func operationTitle(op catalog.CatalogOperation) string {
 		return op.Title
 	}
 	return op.ID
-}
-
-func queryMentionsProvider(query, provName string, prov core.Provider) bool {
-	q := strings.ToLower(strings.TrimSpace(query))
-	if q == "" {
-		return false
-	}
-	names := []string{provName}
-	if prov != nil {
-		names = append(names, prov.DisplayName(), prov.Name())
-	}
-	for _, name := range names {
-		name = strings.ToLower(strings.TrimSpace(name))
-		if name != "" && strings.Contains(q, name) {
-			return true
-		}
-	}
-	return false
 }
 
 func searchTextMatches(query string, parts ...string) bool {

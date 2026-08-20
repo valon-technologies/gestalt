@@ -5,8 +5,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-
-	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
 func projectCatalog(cfg Config, provName string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
@@ -60,13 +58,4 @@ func toolName(prefixes map[string]string, provider, operation string) string {
 			return '_'
 		}
 	}, raw)
-}
-
-func mapAnnotations(a catalog.CapabilityAnnotations) mcpgo.ToolAnnotation {
-	return mcpgo.ToolAnnotation{
-		ReadOnlyHint:    a.ReadOnlyHint,
-		DestructiveHint: a.DestructiveHint,
-		IdempotentHint:  a.IdempotentHint,
-		OpenWorldHint:   a.OpenWorldHint,
-	}
 }

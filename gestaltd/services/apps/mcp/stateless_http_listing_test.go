@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -21,14 +22,12 @@ type recordingOperationAccess struct {
 	allowed map[string]bool
 	err     error
 	calls   int
-	queries []invocation.OperationAccessQuery
 }
 
 func (r *recordingOperationAccess) CheckOperationAccessMany(
 	_ context.Context, _ *principal.Principal, queries []invocation.OperationAccessQuery,
 ) ([]error, error) {
 	r.calls++
-	r.queries = append(r.queries, queries...)
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -58,7 +57,7 @@ func listingTestConfig(t *testing.T, access invocation.OperationAccessChecker) C
 		CatalogVal: &catalog.Catalog{
 			Name: "sampleApp",
 			Operations: []catalog.CatalogOperation{
-				{ID: "items.list", Title: "List items", Description: "List items", Method: "GET", Path: "/items"},
+				{ID: "items.list", Title: "List items", Description: "List items", Method: "GET", Path: "/items", InputSchema: json.RawMessage(`{"type":"object","properties":{"limit":{"type":"integer"}}}`)},
 				{ID: "items.create", Title: "Create item", Description: "Create an item", Method: "POST", Path: "/items"},
 			},
 		},
@@ -170,6 +169,25 @@ func callToolJSON(t *testing.T, cfg Config, p *principal.Principal, name string,
 	return result
 }
 
+func requireToolError(t *testing.T, cfg Config, p *principal.Principal, name string, args map[string]any) map[string]any {
+	t.Helper()
+	status, envelope := callMCP(t, cfg, p, map[string]any{
+		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"params": map[string]any{"name": name, "arguments": args},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/call status = %d: %v", status, envelope)
+	}
+	if rpcErr, ok := envelope["error"]; ok {
+		t.Fatalf("tools/call rpc error: %v", rpcErr)
+	}
+	result, _ := envelope["result"].(map[string]any)
+	if result["isError"] != true {
+		t.Fatalf("tools/call returned %v, want a tool error", envelope)
+	}
+	return result
+}
+
 func TestListToolsReturnsWorkspaceFrontDoor(t *testing.T) {
 	t.Parallel()
 
@@ -178,7 +196,7 @@ func TestListToolsReturnsWorkspaceFrontDoor(t *testing.T) {
 	if rpcErr != nil {
 		t.Fatalf("tools/list error: %v", rpcErr)
 	}
-	if got, want := names, []string{DescribeToolName, InvokeToolName, SearchToolName}; !equalStrings(got, want) {
+	if got, want := names, WorkspaceFrontDoorToolNames(); !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want front door %v", got, want)
 	}
 	if access.calls != 0 {
@@ -298,6 +316,37 @@ func TestSearchWithoutCheckerReturnsMatchingOperations(t *testing.T) {
 	}
 }
 
+func TestSearchWithoutQueryOrAppReturnsHint(t *testing.T) {
+	t.Parallel()
+
+	body := callToolJSON(t, listingTestConfig(t, nil), listingTestPrincipal(), SearchToolName, map[string]any{})
+	results, _ := body["results"].([]any)
+	if len(results) != 0 {
+		t.Fatalf("empty search returned %v", body)
+	}
+	if body["hint"] == "" {
+		t.Fatalf("empty search missing hint: %v", body)
+	}
+}
+
+func TestSearchOrdersAndLimitsResults(t *testing.T) {
+	t.Parallel()
+
+	access := &recordingOperationAccess{allowed: map[string]bool{"items.list": true, "items.create": true}}
+	body := callToolJSON(t, listingTestConfig(t, access), listingTestPrincipal(), SearchToolName, map[string]any{
+		"query": "items",
+		"limit": 1,
+	})
+	results, _ := body["results"].([]any)
+	if len(results) != 1 {
+		t.Fatalf("search results = %v, want one hit", body)
+	}
+	hit, _ := results[0].(map[string]any)
+	if hit["operation"] != "items.create" {
+		t.Fatalf("first limited hit = %v, want items.create", hit)
+	}
+}
+
 func TestInvokeFrontDoorRunsGrantedOperation(t *testing.T) {
 	t.Parallel()
 
@@ -332,16 +381,28 @@ func TestDescribeReturnsGrantedOperationSchema(t *testing.T) {
 	if body["app"] != "sampleApp" || body["operation"] != "items.list" {
 		t.Fatalf("describe = %v", body)
 	}
+	schema, _ := body["inputSchema"].(map[string]any)
+	if schema["type"] != "object" {
+		t.Fatalf("describe schema = %v, want the list input schema", body["inputSchema"])
+	}
 }
 
-func equalStrings(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			return false
-		}
-	}
-	return true
+func TestDescribeDeniesUngrantedOperation(t *testing.T) {
+	t.Parallel()
+
+	access := &recordingOperationAccess{allowed: map[string]bool{}}
+	requireToolError(t, listingTestConfig(t, access), listingTestPrincipal(), DescribeToolName, map[string]any{
+		"app":       "sampleApp",
+		"operation": "items.list",
+	})
+}
+
+func TestDescribeFailsLoudlyWhenEvaluatorUnavailable(t *testing.T) {
+	t.Parallel()
+
+	access := &recordingOperationAccess{allowed: map[string]bool{}, err: errors.New("evaluator unavailable")}
+	requireToolError(t, listingTestConfig(t, access), listingTestPrincipal(), DescribeToolName, map[string]any{
+		"app":       "sampleApp",
+		"operation": "items.list",
+	})
 }

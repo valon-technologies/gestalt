@@ -12446,7 +12446,7 @@ func mcpListedToolNames(t *testing.T, resp map[string]any) []string {
 func requireMCPFrontDoor(t *testing.T, resp map[string]any) {
 	t.Helper()
 	names := mcpListedToolNames(t, resp)
-	want := []string{gestaltmcp.DescribeToolName, gestaltmcp.InvokeToolName, gestaltmcp.SearchToolName}
+	want := gestaltmcp.WorkspaceFrontDoorToolNames()
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("tools/list = %v, want workspace front door %v", names, want)
 	}
@@ -12999,10 +12999,10 @@ func TestMCPEndpoint_IgnoresSessionIDForDynamicCatalogIsolation(t *testing.T) {
 		return names
 	}
 
-	if got := listToolNames("auth-a"); !reflect.DeepEqual(got, []string{gestaltmcp.DescribeToolName, gestaltmcp.InvokeToolName, gestaltmcp.SearchToolName}) {
+	if got := listToolNames("auth-a"); !reflect.DeepEqual(got, gestaltmcp.WorkspaceFrontDoorToolNames()) {
 		t.Fatalf("auth-a tools/list = %v, want workspace front door", got)
 	}
-	if got := listToolNames("auth-b"); !reflect.DeepEqual(got, []string{gestaltmcp.DescribeToolName, gestaltmcp.InvokeToolName, gestaltmcp.SearchToolName}) {
+	if got := listToolNames("auth-b"); !reflect.DeepEqual(got, gestaltmcp.WorkspaceFrontDoorToolNames()) {
 		t.Fatalf("auth-b tools/list = %v, want workspace front door", got)
 	}
 	searchHeaders := func(authToken string) map[string]string {
@@ -13010,6 +13010,9 @@ func TestMCPEndpoint_IgnoresSessionIDForDynamicCatalogIsolation(t *testing.T) {
 			"Authorization":  "Bearer " + authToken,
 			"Mcp-Session-Id": "shared-session-id",
 		}
+	}
+	if got := mcpSearchOperations(t, ts, searchHeaders("auth-a"), map[string]any{"query": "sample"}); len(got) != 0 {
+		t.Fatalf("auth-a query-only search = %v, want empty static catalog", got)
 	}
 	if got := mcpSearchOperations(t, ts, searchHeaders("auth-a"), map[string]any{"app": "sample"}); !reflect.DeepEqual(got, []string{"only_a"}) {
 		t.Fatalf("auth-a search = %v, want [only_a]", got)
