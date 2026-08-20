@@ -541,7 +541,7 @@ func TestUpsertAppIndex_MatchingRepublishKeepsFirstPublishedAt(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("UpsertAppIndex() = changed %v, err %v", changed, err)
 	}
-	firstPublishedAt := index.Apps[entry.App].Versions[entry.Version].PublishedAt
+	first := index.Apps[entry.App].Versions[entry.Version]
 
 	retry := entry
 	retry.PublishedAt = entry.PublishedAt.Add(3 * time.Second)
@@ -555,8 +555,11 @@ func TestUpsertAppIndex_MatchingRepublishKeepsFirstPublishedAt(t *testing.T) {
 		t.Fatal("matching republish with a later clock should not rewrite the index")
 	}
 	got := updated.Apps[entry.App].Versions[entry.Version]
-	if !got.PublishedAt.Equal(firstPublishedAt) {
-		t.Fatalf("publishedAt = %v, want first writer %v", got.PublishedAt, firstPublishedAt)
+	if !got.PublishedAt.Equal(first.PublishedAt) {
+		t.Fatalf("publishedAt = %v, want first writer %v", got.PublishedAt, first.PublishedAt)
+	}
+	if first.PublishStartedAt != nil || got.PublishStartedAt != nil {
+		t.Fatalf("publishStartedAt = %v, want first writer %v", got.PublishStartedAt, first.PublishStartedAt)
 	}
 }
 
