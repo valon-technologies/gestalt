@@ -128,6 +128,15 @@ func sampleProvider(sample prometheusSample) string {
 	return strings.TrimSpace(sample.labels[promLabelProviderName])
 }
 
+func isAppOperationMetric(name string) bool {
+	switch name {
+	case promMetricOpCount, promMetricOpErrors, promMetricOpDurationSum, promMetricOpDurationCount:
+		return true
+	default:
+		return false
+	}
+}
+
 func samplesForProvider(samples []prometheusSample, provider string) []prometheusSample {
 	provider = strings.TrimSpace(provider)
 	if provider == "" {
@@ -149,7 +158,7 @@ func summarizeAppMetrics(app string, samples []prometheusSample) appAdminMetrics
 		Available: true,
 	}
 	for _, sample := range samples {
-		if math.IsNaN(sample.value) {
+		if math.IsNaN(sample.value) || !isAppOperationMetric(sample.name) {
 			continue
 		}
 		operation := strings.TrimSpace(sample.labels[promLabelOperation])

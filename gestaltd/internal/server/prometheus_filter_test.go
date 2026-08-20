@@ -64,6 +64,27 @@ func TestSummarizeAppMetricsEmpty(t *testing.T) {
 	}
 }
 
+func TestSummarizeAppMetricsIgnoresNonOperationSeries(t *testing.T) {
+	t.Parallel()
+
+	text := `
+gestaltd_operation_count_total{gestalt_provider="slack",gestalt_operation="post"} 3
+http_server_request_duration_seconds_count{gestalt_provider="slack",gestalt_operation="get",code="200"} 40
+go_goroutines{gestalt_provider="slack"} 12
+`
+	parsed, err := parsePrometheus(text)
+	if err != nil {
+		t.Fatalf("parsePrometheus: %v", err)
+	}
+	got := summarizeAppMetrics("slack", samplesForProvider(parsed, "slack"))
+	if got.Requests != 3 || got.Errors != 0 {
+		t.Fatalf("totals = %#v", got)
+	}
+	if len(got.Operations) != 1 || got.Operations[0].Operation != "post" || got.Operations[0].Requests != 3 {
+		t.Fatalf("operations = %#v", got.Operations)
+	}
+}
+
 func TestParsePrometheusHistogramSumAndCount(t *testing.T) {
 	t.Parallel()
 
