@@ -532,6 +532,34 @@ func TestUpsertAppIndex_RejectsStaleIdentityWithSameMetadataPath(t *testing.T) {
 	}
 }
 
+func TestUpsertAppIndex_MatchingRepublishKeepsFirstPublishedAt(t *testing.T) {
+	t.Parallel()
+
+	entry := testPublishEntryForUpsert(t)
+	metadataPath := AppVersionEntryPath(entry.App, entry.Version)
+	index, changed, err := UpsertAppIndex(NewEmptyIndex(), entry, metadataPath, "", "")
+	if err != nil || !changed {
+		t.Fatalf("UpsertAppIndex() = changed %v, err %v", changed, err)
+	}
+	firstPublishedAt := index.Apps[entry.App].Versions[entry.Version].PublishedAt
+
+	retry := entry
+	retry.PublishedAt = entry.PublishedAt.Add(3 * time.Second)
+	startedAt := retry.PublishedAt.Add(-time.Minute)
+	retry.PublishStartedAt = &startedAt
+	updated, changed, err := UpsertAppIndex(index, retry, metadataPath, "", "")
+	if err != nil {
+		t.Fatalf("UpsertAppIndex(matching republish) = %v", err)
+	}
+	if changed {
+		t.Fatal("matching republish with a later clock should not rewrite the index")
+	}
+	got := updated.Apps[entry.App].Versions[entry.Version]
+	if !got.PublishedAt.Equal(firstPublishedAt) {
+		t.Fatalf("publishedAt = %v, want first writer %v", got.PublishedAt, firstPublishedAt)
+	}
+}
+
 func testPublishEntryForUpsert(t *testing.T) Entry {
 	t.Helper()
 	return Entry{
