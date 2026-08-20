@@ -16,7 +16,7 @@ require (
 	github.com/hashicorp/yamux v0.1.1
 	github.com/landlock-lsm/go-landlock v0.8.1
 	github.com/mark3labs/mcp-go v0.54.0
-	github.com/pb33f/libopenapi v0.36.4
+	github.com/pb33f/libopenapi v0.38.7
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.5
@@ -39,7 +39,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.19.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
-	go.yaml.in/yaml/v4 v4.0.0-rc.4
+	go.yaml.in/yaml/v4 v4.0.0-rc.6
 	golang.org/x/crypto v0.54.0
 	golang.org/x/mod v0.37.0
 	golang.org/x/net v0.56.0
