@@ -579,8 +579,21 @@ func indexVersionsEqual(a, b IndexVersion) bool {
 	return bytes.Equal(aData, bData)
 }
 
+// indexVersionsEqualIgnoringPublishedAt reports whether two index rows name the
+// same published version. publishedAt and publishStartedAt are facts of the
+// first writer, not identity, so matching republishes keep the stored clock.
+func indexVersionsEqualIgnoringPublishedAt(a, b IndexVersion) bool {
+	a.PublishedAt = time.Time{}
+	b.PublishedAt = time.Time{}
+	a.PublishStartedAt = nil
+	b.PublishStartedAt = nil
+	return indexVersionsEqual(a, b)
+}
+
 // UpsertAppIndex updates the per-app index for a published version. The second
-// return value reports whether the index was modified.
+// return value reports whether the index was modified. A matching republish
+// (same declaration identity, different clock) keeps the first writer's
+// publishedAt and is not a conflict.
 func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName, description string) (*Index, bool, error) {
 	if index == nil {
 		index = &Index{
@@ -604,7 +617,7 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 			return nil, false, fmt.Errorf("app %q version %q is already indexed", appName, entry.Version)
 		}
 		expected := indexVersionFromEntry(entry, metadataPath)
-		if !indexVersionsEqual(existing, expected) {
+		if !indexVersionsEqualIgnoringPublishedAt(existing, expected) {
 			return nil, false, fmt.Errorf("app %q version %q index identity mismatch: %w; %s", appName, entry.Version, ErrIndexVersionConflict, RepublishCorruptObjectGuidance)
 		}
 		changed := applyAppIndexAppMetadata(&app, displayName, description)
