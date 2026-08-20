@@ -185,9 +185,9 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 		}
 	}
 
-	allowed, err := h.filterSearchHits(ctx, p, candidates)
-	if err != nil {
-		return mcpgo.NewToolResultError(err.Error()), nil
+	allowed, accessErr := h.filterSearchHits(ctx, p, candidates)
+	if accessErr != nil {
+		return accessErr, nil
 	}
 	sort.Slice(allowed, func(i, j int) bool {
 		if allowed[i].App != allowed[j].App {
@@ -201,35 +201,49 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 	return toolJSONResult(searchResult{Results: allowed, Unavailable: unavailable}), nil
 }
 
-func (h *StatelessHTTPHandler) filterSearchHits(ctx context.Context, p *principal.Principal, candidates []searchCandidate) ([]searchHit, error) {
-	if len(candidates) == 0 {
-		return []searchHit{}, nil
-	}
-	if h.cfg.OperationAccess == nil {
-		hits := make([]searchHit, len(candidates))
-		for i := range candidates {
-			hits[i] = candidates[i].hit
-		}
-		return hits, nil
-	}
+func (h *StatelessHTTPHandler) filterSearchHits(ctx context.Context, p *principal.Principal, candidates []searchCandidate) ([]searchHit, *mcpgo.CallToolResult) {
 	queries := make([]invocation.OperationAccessQuery, len(candidates))
 	for i := range candidates {
 		queries[i] = candidates[i].query
 	}
-	results, err := h.cfg.OperationAccess.CheckOperationAccessMany(ctx, p, queries)
-	if err != nil {
-		return nil, fmt.Errorf("operation access is unavailable: %w", err)
-	}
-	if len(results) != len(candidates) {
-		return nil, fmt.Errorf("operation access returned %d decisions for %d operations", len(results), len(candidates))
+	ok, accessErr := h.allowedOperations(ctx, p, queries)
+	if accessErr != nil {
+		return nil, accessErr
 	}
 	hits := make([]searchHit, 0, len(candidates))
 	for i := range candidates {
-		if results[i] == nil {
+		if ok[i] {
 			hits = append(hits, candidates[i].hit)
 		}
 	}
 	return hits, nil
+}
+
+// allowedOperations answers the same evaluator questions FilterCatalogForPrincipal
+// asks, then maps those answers to booleans so MCP handlers can return tool
+// errors instead of JSON-RPC errors.
+func (h *StatelessHTTPHandler) allowedOperations(ctx context.Context, p *principal.Principal, queries []invocation.OperationAccessQuery) ([]bool, *mcpgo.CallToolResult) {
+	allowed := make([]bool, len(queries))
+	if len(queries) == 0 {
+		return allowed, nil
+	}
+	if h.cfg.OperationAccess == nil {
+		for i := range allowed {
+			allowed[i] = true
+		}
+		return allowed, nil
+	}
+	results, checkErr := h.cfg.OperationAccess.CheckOperationAccessMany(ctx, p, queries)
+	if checkErr != nil {
+		return nil, mcpgo.NewToolResultError("operation access is unavailable: " + checkErr.Error())
+	}
+	if len(results) != len(queries) {
+		return nil, mcpgo.NewToolResultError(fmt.Sprintf("operation access returned %d decisions for %d operations", len(results), len(queries)))
+	}
+	for i := range results {
+		allowed[i] = results[i] == nil
+	}
+	return allowed, nil
 }
 
 func (h *StatelessHTTPHandler) catalogForSearch(ctx context.Context, provName string, prov core.Provider, live bool) (*catalog.Catalog, error) {
@@ -272,18 +286,16 @@ func (h *StatelessHTTPHandler) callDescribe(ctx context.Context, req mcpgo.CallT
 	if !found || !catalogOperationProjectedToMCP(h.cfg, app, op) {
 		return mcpgo.NewToolResultError(fmt.Sprintf("operation %q is not available on app %q", operation, app)), nil
 	}
-	if h.cfg.OperationAccess != nil {
-		results, err := h.cfg.OperationAccess.CheckOperationAccessMany(ctx, p, []invocation.OperationAccessQuery{{
-			Provider:     app,
-			Operation:    operation,
-			AllowedRoles: op.AllowedRoles,
-		}})
-		if err != nil {
-			return mcpgo.NewToolResultError("operation access is unavailable: " + err.Error()), nil
-		}
-		if len(results) != 1 || results[0] != nil {
-			return mcpgo.NewToolResultError("operation access denied"), nil
-		}
+	allowed, accessErr := h.allowedOperations(ctx, p, []invocation.OperationAccessQuery{{
+		Provider:     app,
+		Operation:    operation,
+		AllowedRoles: op.AllowedRoles,
+	}})
+	if accessErr != nil {
+		return accessErr, nil
+	}
+	if len(allowed) != 1 || !allowed[0] {
+		return mcpgo.NewToolResultError("operation access denied"), nil
 	}
 	return toolJSONResult(describeResult{
 		App:          app,
