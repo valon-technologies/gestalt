@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -67,6 +68,106 @@ gestaltd_operation_error_count_total{gestalt_provider="g-issues",gestalt_operati
 	}
 	if len(payload.Operations) != 1 || payload.Operations[0].Operation != "list" {
 		t.Fatalf("operations = %#v", payload.Operations)
+	}
+}
+
+func TestAppAdminMetricsIgnoresCallerGzipAccept(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
+		},
+	}
+	scrape := `gestaltd_operation_count_total{gestalt_provider="g-issues",gestalt_operation="list"} 4
+gestaltd_operation_count_total{gestalt_provider="slack",gestalt_operation="post"} 9
+`
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+		cfg.PrometheusMetrics = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				w.Header().Set("Content-Encoding", "gzip")
+				gz := gzip.NewWriter(w)
+				_, _ = gz.Write([]byte(scrape))
+				_ = gz.Close()
+				return
+			}
+			_, _ = w.Write([]byte(scrape))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/metrics", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	request.Header.Set("Accept-Encoding", "gzip")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET metrics: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	body, _ := io.ReadAll(response.Body)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.StatusCode, body)
+	}
+	var payload struct {
+		App      string  `json:"app"`
+		Requests float64 `json:"requests"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.App != "g-issues" || payload.Requests != 4 {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestAppAdminMetricsDecodesGzipScrape(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
+		},
+	}
+	scrape := `gestaltd_operation_count_total{gestalt_provider="g-issues",gestalt_operation="list"} 4
+`
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+		cfg.PrometheusMetrics = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Encoding", "gzip")
+			gz := gzip.NewWriter(w)
+			_, _ = gz.Write([]byte(scrape))
+			_ = gz.Close()
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/metrics", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET metrics: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	body, _ := io.ReadAll(response.Body)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.StatusCode, body)
+	}
+	var payload struct {
+		App      string  `json:"app"`
+		Requests float64 `json:"requests"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.App != "g-issues" || payload.Requests != 4 {
+		t.Fatalf("payload = %#v", payload)
 	}
 }
 

@@ -58,3 +58,28 @@ func TestAdminRegistryBookmarkRedirectOnManagementProfile(t *testing.T) {
 		t.Fatalf("Location = %q", got)
 	}
 }
+
+func TestManagementAdminPagesDoNotRedirectWithoutPublicBaseURL(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfileManagement
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	client := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	for _, path := range []string{"/", "/admin", "/admin/", "/admin/metrics", "/admin/versions"} {
+		resp, err := client.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
+			t.Fatalf("%s status = %d Location = %q, want no redirect", path, resp.StatusCode, resp.Header.Get("Location"))
+		}
+	}
+}

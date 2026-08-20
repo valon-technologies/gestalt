@@ -2,6 +2,8 @@ package server
 
 import (
 	"bytes"
+	"compress/gzip"
+	"io"
 	"net/http"
 	"strings"
 
@@ -37,7 +39,11 @@ func (s *Server) scrapePrometheus(r *http.Request) (body []byte, status int, con
 		return nil, http.StatusServiceUnavailable, "", false
 	}
 	capture := &captureResponseWriter{}
-	s.prometheusMetrics.ServeHTTP(capture, r.Clone(r.Context()))
+	req := r.Clone(r.Context())
+	// Parsing needs plaintext. Do not ask the scrape handler to gzip, and
+	// decompress if it still does.
+	req.Header.Del("Accept-Encoding")
+	s.prometheusMetrics.ServeHTTP(capture, req)
 	status = capture.code
 	if status == 0 {
 		status = http.StatusOK
@@ -46,7 +52,20 @@ func (s *Server) scrapePrometheus(r *http.Request) (body []byte, status int, con
 	if contentType == "" {
 		contentType = "text/plain; version=0.0.4; charset=utf-8"
 	}
-	return capture.body.Bytes(), status, contentType, true
+	body = capture.body.Bytes()
+	if strings.EqualFold(capture.Header().Get("Content-Encoding"), "gzip") {
+		reader, err := gzip.NewReader(bytes.NewReader(body))
+		if err != nil {
+			return nil, http.StatusServiceUnavailable, contentType, true
+		}
+		decoded, err := io.ReadAll(reader)
+		_ = reader.Close()
+		if err != nil {
+			return nil, http.StatusServiceUnavailable, contentType, true
+		}
+		body = decoded
+	}
+	return body, status, contentType, true
 }
 
 func (s *Server) mountAdminMetricsRoutes(r chi.Router) {
@@ -54,14 +73,11 @@ func (s *Server) mountAdminMetricsRoutes(r chi.Router) {
 }
 
 func (s *Server) serveAdminPrometheusMetrics(w http.ResponseWriter, r *http.Request) {
-	body, status, contentType, ok := s.scrapePrometheus(r)
-	if !ok {
+	if s.prometheusMetrics == nil {
 		writeError(w, http.StatusServiceUnavailable, "prometheus metrics are unavailable because telemetry metrics are disabled")
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
+	s.prometheusMetrics.ServeHTTP(w, r)
 }
 
 func (s *Server) mountAppAdminMetricsRoutes(r chi.Router) {

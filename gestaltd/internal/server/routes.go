@@ -90,12 +90,18 @@ func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 }
 
 func (s *Server) mountManagementRootRedirect(r chi.Router) {
+	if s.adminProductBase() == "" {
+		return
+	}
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		redirectPreservingQuery(w, r, s.adminProductURL("/admin"), http.StatusMovedPermanently)
 	})
 }
 
 func (s *Server) mountAdminPageRedirects(r chi.Router) {
+	if s.routeProfile == RouteProfileManagement && s.adminProductBase() == "" {
+		return
+	}
 	r.Get("/admin/registry", func(w http.ResponseWriter, r *http.Request) {
 		redirectPreservingQuery(w, r, s.adminProductURL("/admin/versions"), http.StatusMovedPermanently)
 	})
@@ -123,15 +129,19 @@ func (s *Server) mountAdminPageRedirects(r chi.Router) {
 	}
 }
 
+func (s *Server) adminProductBase() string {
+	if s.routeProfile != RouteProfileManagement {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(s.publicBaseURL), "/")
+}
+
 func (s *Server) adminProductURL(path string) string {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	if s.routeProfile == RouteProfileManagement {
-		base := strings.TrimRight(strings.TrimSpace(s.publicBaseURL), "/")
-		if base != "" {
-			return base + path
-		}
+	if base := s.adminProductBase(); base != "" {
+		return base + path
 	}
 	return path
 }
