@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -89,13 +90,19 @@ func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appA
 }
 
 func (s *Server) listAppAuthorizationMemberRows(ctx context.Context, appName string) ([]appAdminMemberRow, error) {
-	appName = strings.TrimSpace(appName)
+	return s.listAuthorizationMemberRows(ctx, s.authorizationResource(strings.TrimSpace(appName)))
+}
+
+func (s *Server) listAuthorizationMemberRows(ctx context.Context, resource *proto.Resource) ([]appAdminMemberRow, error) {
+	if resource == nil || strings.TrimSpace(resource.GetId()) == "" {
+		return nil, fmt.Errorf("authorization resource is required")
+	}
 	rows := make([]appAdminMemberRow, 0)
 	pageToken := ""
 	for {
 		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
 			Filter: &proto.RelationshipFilter{
-				Resource: s.authorizationResource(appName),
+				Resource: resource,
 			},
 			PageSize:  500,
 			PageToken: pageToken,

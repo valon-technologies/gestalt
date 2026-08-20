@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
 )
 
 const browserLoginPath = "/api/v1/auth/login"
@@ -94,17 +93,6 @@ func parseAbsoluteBaseURL(label, raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func resolveBuiltinAdminUI(opts BuiltinAdminUIOptions) (http.Handler, error) {
-	handler := adminui.EmbeddedHandler(adminui.Options{
-		BrandHref: opts.BrandHref,
-		LoginBase: opts.LoginBase,
-	})
-	if handler == nil {
-		return nil, fmt.Errorf("embedded admin ui assets not found")
-	}
-	return handler, nil
-}
-
 func normalizeMountedUIs(mounted []MountedUI) ([]MountedUI, error) {
 	if len(mounted) == 0 {
 		return nil, nil
@@ -140,23 +128,13 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	return s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
 }
 
-func (s *Server) adminUIHandler() http.Handler {
-	if s.adminUI == nil {
-		return http.NotFoundHandler()
-	}
-	mounted := s.adminMountedUI()
-	inner := http.StripPrefix(mounted.Path, mounted.Handler)
-	return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectAdminUILogin))
-}
-
-func (s *Server) adminMountedUI() MountedUI {
+func (s *Server) adminAPIAuthTarget() MountedUI {
 	return MountedUI{
-		Name:                "builtin_admin",
-		Path:                "/admin",
+		Name:                "admin_api",
+		Path:                "/admin/api/v1",
 		AuthorizationPolicy: s.adminRoute.AuthorizationPolicy,
 		AllowedRoles:        append([]string(nil), s.adminRoute.AllowedRoles...),
 		builtInAdmin:        true,
-		Handler:             s.adminUI,
 	}
 }
 
@@ -176,7 +154,7 @@ func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redir
 
 func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, ok := s.authorizeMountedResource(w, r, s.adminMountedUI(), nil)
+		ctx, ok := s.authorizeMountedResource(w, r, s.adminAPIAuthTarget(), nil)
 		if !ok {
 			return
 		}
@@ -573,22 +551,6 @@ func (s *Server) legacyDirectGrantRoles(ctx context.Context, subjectID, resource
 
 func (s *Server) redirectMountedUILogin(w http.ResponseWriter, r *http.Request) error {
 	target := browserLoginPath + "?next=" + url.QueryEscape(r.URL.RequestURI())
-	http.Redirect(w, r, target, http.StatusFound)
-	return nil
-}
-
-func (s *Server) redirectAdminUILogin(w http.ResponseWriter, r *http.Request) error {
-	if s.routeProfile != RouteProfileManagement {
-		return s.redirectMountedUILogin(w, r)
-	}
-	if s.publicBaseURL == "" {
-		return fmt.Errorf("admin login redirect requires server.baseUrl")
-	}
-	if s.managementBaseURL == "" {
-		return fmt.Errorf("admin login redirect requires server.management.baseUrl")
-	}
-
-	target := s.publicBaseURL + browserLoginPath + "?next=" + url.QueryEscape(s.managementBaseURL+r.URL.RequestURI())
 	http.Redirect(w, r, target, http.StatusFound)
 	return nil
 }

@@ -128,8 +128,5 @@ func newAuthorizedAdminTestServer(t *testing.T, grantAdmin bool) *httptest.Serve
 		})
 		cfg.Services = svc
 		cfg.Authorization = authz
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin-shell"))
-		})
 	})
 }

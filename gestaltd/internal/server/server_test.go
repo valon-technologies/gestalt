@@ -2683,7 +2683,6 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 			},
 		}
 		cfg.Admin = server.AdminRouteConfig{AuthorizationPolicy: "adminPolicy"}
-		cfg.AdminUI = shell("admin")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -2741,19 +2740,16 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 		t.Fatalf("explicit default-role mounted UI body = %q, want default-role-shell", body)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/app-registries", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: sessionToken})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("GET admin UI: %v", err)
+		t.Fatalf("GET admin API: %v", err)
 	}
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("admin UI status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	if !bytes.Contains(body, []byte("admin-shell")) {
-		t.Fatalf("admin UI body = %q, want admin-shell", body)
+		t.Fatalf("admin API status = %d, want 200: %s", resp.StatusCode, body)
 	}
 	if len(authz.checkAccessRequests) < 2 {
 		t.Fatalf("authorization CheckAccess calls = %d, want at least 2", len(authz.checkAccessRequests))

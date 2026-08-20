@@ -67,14 +67,6 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		)
 	}
 
-	publicBrandHref := "/admin/"
-	for _, entry := range cfg.Apps {
-		if entry != nil && entry.Static != nil && strings.TrimSpace(entry.Static.Mount) == "/" {
-			publicBrandHref = "/"
-			break
-		}
-	}
-
 	managementAddr := cfg.Server.ManagementAddr()
 	mcpSlot := &switchableHandler{}
 	workflowProvidersReady := make(chan struct{})
@@ -222,11 +214,6 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		publicConfig.DevHandlerResolver = devSupervisor.DevHandler
 	}
 
-	publicConfig.BuiltinAdminUI = &BuiltinAdminUIOptions{
-		BrandHref: publicBrandHref,
-		LoginBase: browserLoginPath,
-	}
-
 	publicHandler, err := New(publicConfig)
 	if err != nil {
 		if devSupervisor != nil {
@@ -243,11 +230,11 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if managementAddr != "" {
 		if cfg.Server.Admin.AuthorizationPolicy != "" {
 			slog.Warn(
-				"management listener serves /metrics without Gestalt auth; /admin requires Gestalt session auth and server.admin policy access",
+				"management listener serves /metrics without Gestalt auth; /admin/api/v1 requires Gestalt session auth and server.admin policy access",
 			)
 		} else {
 			slog.Warn(
-				"management listener serves /admin and /metrics without Gestalt auth; protect server.management with private networking or an internal reverse proxy",
+				"management listener serves /metrics and /admin/api/v1 without Gestalt auth; protect server.management with private networking or an internal reverse proxy",
 			)
 		}
 		slog.Debug("management listener address", "addr", managementAddr)
@@ -255,14 +242,6 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		managementConfig := baseConfig
 		managementConfig.RouteProfile = RouteProfileManagement
 		managementConfig.DevHandlerResolver = publicConfig.DevHandlerResolver
-		managementLoginBase := browserLoginPath
-		if baseURL := strings.TrimRight(cfg.Server.BaseURL, "/"); baseURL != "" {
-			managementLoginBase = baseURL + browserLoginPath
-		}
-		managementConfig.BuiltinAdminUI = &BuiltinAdminUIOptions{
-			BrandHref: "/admin/",
-			LoginBase: managementLoginBase,
-		}
 
 		managementHandler, err := New(managementConfig)
 		if err != nil {

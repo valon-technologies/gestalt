@@ -131,9 +131,6 @@ func (s *Server) mountedUIForPath(path string) (MountedUI, bool) {
 	for i := range s.mountedUIs {
 		consider(s.mountedUIs[i])
 	}
-	if s.adminUI != nil {
-		consider(s.adminMountedUI())
-	}
 	return best, bestMatched
 }
 
