@@ -78,6 +78,26 @@ func TestAdminPlatformAdminsList(t *testing.T) {
 	if len(payload.Members) != 2 {
 		t.Fatalf("members = %#v", payload.Members)
 	}
+	var staticGroup, runtimeUser int
+	for _, member := range payload.Members {
+		switch {
+		case member.SelectorKind == "subject_set" && member.SelectorValue == "group:eng#member":
+			staticGroup++
+			if member.Source != "static" || member.Mutable {
+				t.Fatalf("config-locked group = %#v", member)
+			}
+		case member.SelectorKind == "subject_id":
+			runtimeUser++
+			if member.Source != "dynamic" || !member.Mutable {
+				t.Fatalf("runtime member = %#v", member)
+			}
+		default:
+			t.Fatalf("unexpected member = %#v", member)
+		}
+	}
+	if staticGroup != 1 || runtimeUser != 1 {
+		t.Fatalf("members = %#v", payload.Members)
+	}
 }
 
 func TestAdminPlatformAdminsUnavailableWithoutAuthorization(t *testing.T) {
@@ -94,5 +114,22 @@ func TestAdminPlatformAdminsUnavailableWithoutAuthorization(t *testing.T) {
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, want 503: %s", resp.StatusCode, body)
+	}
+}
+
+func TestAdminPlatformAdminsRequiresSessionWhenAdminAuthorizationEnabled(t *testing.T) {
+	t.Parallel()
+
+	ts := newAuthorizedAdminTestServer(t, true)
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/platform-admins")
+	if err != nil {
+		t.Fatalf("GET platform-admins: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 401: %s", resp.StatusCode, body)
 	}
 }

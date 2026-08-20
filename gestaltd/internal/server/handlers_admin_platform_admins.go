@@ -31,7 +31,7 @@ func (s *Server) platformAdminResource() *proto.Resource {
 	return s.authorizationResource(name)
 }
 
-func (s *Server) platformAdminRole() string {
+func (s *Server) configuredPlatformAdminRole() string {
 	for _, role := range s.adminRoute.AllowedRoles {
 		role = strings.TrimSpace(role)
 		if role != "" {
@@ -57,7 +57,7 @@ func (s *Server) listAdminPlatformAdmins(w http.ResponseWriter, r *http.Request)
 			Type: resource.GetType(),
 			ID:   resource.GetId(),
 		},
-		Role:    s.platformAdminRole(),
+		Role:    s.configuredPlatformAdminRole(),
 		Members: s.projectAppAdminHumanMemberRows(r.Context(), rows),
 	})
 }

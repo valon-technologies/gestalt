@@ -1,10 +1,14 @@
 package server
 
 import (
+	"fmt"
 	"math"
 	"sort"
-	"strconv"
 	"strings"
+
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 )
 
 const (
@@ -41,96 +45,80 @@ type appAdminMetricsResponse struct {
 	Operations           []appAdminOperationMetric `json:"operations"`
 }
 
-func parsePrometheus(text string) []prometheusSample {
+func parsePrometheus(text string) ([]prometheusSample, error) {
+	parser := expfmt.NewTextParser(model.UTF8Validation)
+	families, err := parser.TextToMetricFamilies(strings.NewReader(text))
+	if err != nil {
+		return nil, fmt.Errorf("parse prometheus text: %w", err)
+	}
 	samples := make([]prometheusSample, 0)
-	for _, raw := range strings.Split(text, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
+	for _, family := range families {
+		if family == nil {
 			continue
 		}
-		sample, ok := parsePrometheusLine(line)
-		if ok {
-			samples = append(samples, sample)
+		samples = append(samples, prometheusSamplesFromFamily(family)...)
+	}
+	return samples, nil
+}
+
+func prometheusSamplesFromFamily(family *dto.MetricFamily) []prometheusSample {
+	name := family.GetName()
+	samples := make([]prometheusSample, 0, len(family.GetMetric()))
+	for _, metric := range family.GetMetric() {
+		if metric == nil {
+			continue
+		}
+		labels := prometheusLabelsFromMetric(metric)
+		switch family.GetType() {
+		case dto.MetricType_HISTOGRAM, dto.MetricType_GAUGE_HISTOGRAM:
+			hist := metric.GetHistogram()
+			samples = append(samples,
+				prometheusSample{name: name + "_sum", labels: labels, value: hist.GetSampleSum()},
+				prometheusSample{name: name + "_count", labels: labels, value: float64(hist.GetSampleCount())},
+			)
+		case dto.MetricType_SUMMARY:
+			summary := metric.GetSummary()
+			samples = append(samples,
+				prometheusSample{name: name + "_sum", labels: labels, value: summary.GetSampleSum()},
+				prometheusSample{name: name + "_count", labels: labels, value: float64(summary.GetSampleCount())},
+			)
+		default:
+			value, ok := prometheusScalarValue(metric)
+			if !ok {
+				continue
+			}
+			samples = append(samples, prometheusSample{name: name, labels: labels, value: value})
 		}
 	}
 	return samples
 }
 
-func parsePrometheusLine(line string) (prometheusSample, bool) {
-	nameEnd := 0
-	for nameEnd < len(line) {
-		c := line[nameEnd]
-		if c == '{' || c == ' ' || c == '\t' {
-			break
+func prometheusLabelsFromMetric(metric *dto.Metric) map[string]string {
+	labels := make(map[string]string, len(metric.GetLabel()))
+	for _, pair := range metric.GetLabel() {
+		if pair == nil {
+			continue
 		}
-		nameEnd++
-	}
-	if nameEnd == 0 {
-		return prometheusSample{}, false
-	}
-	name := line[:nameEnd]
-	rest := strings.TrimSpace(line[nameEnd:])
-	labels := map[string]string{}
-	if strings.HasPrefix(rest, "{") {
-		end := strings.IndexByte(rest, '}')
-		if end < 0 {
-			return prometheusSample{}, false
+		key := strings.TrimSpace(pair.GetName())
+		if key == "" {
+			continue
 		}
-		labels = parsePrometheusLabels(rest[1:end])
-		rest = strings.TrimSpace(rest[end+1:])
-	}
-	fields := strings.Fields(rest)
-	if len(fields) == 0 {
-		return prometheusSample{}, false
-	}
-	value, err := strconv.ParseFloat(fields[0], 64)
-	if err != nil || math.IsNaN(value) {
-		return prometheusSample{}, false
-	}
-	return prometheusSample{name: name, labels: labels, value: value}, true
-}
-
-func parsePrometheusLabels(raw string) map[string]string {
-	labels := map[string]string{}
-	rest := strings.TrimSpace(raw)
-	for rest != "" {
-		eq := strings.IndexByte(rest, '=')
-		if eq <= 0 {
-			break
-		}
-		key := strings.TrimSpace(rest[:eq])
-		rest = strings.TrimSpace(rest[eq+1:])
-		if !strings.HasPrefix(rest, `"`) {
-			break
-		}
-		rest = rest[1:]
-		var value strings.Builder
-		escaped := false
-		closed := false
-		for i := 0; i < len(rest); i++ {
-			c := rest[i]
-			if escaped {
-				value.WriteByte(c)
-				escaped = false
-				continue
-			}
-			if c == '\\' {
-				escaped = true
-				continue
-			}
-			if c == '"' {
-				rest = strings.TrimSpace(strings.TrimPrefix(rest[i+1:], ","))
-				closed = true
-				break
-			}
-			value.WriteByte(c)
-		}
-		if !closed || key == "" {
-			break
-		}
-		labels[key] = value.String()
+		labels[key] = pair.GetValue()
 	}
 	return labels
+}
+
+func prometheusScalarValue(metric *dto.Metric) (float64, bool) {
+	switch {
+	case metric.Counter != nil:
+		return metric.GetCounter().GetValue(), true
+	case metric.Gauge != nil:
+		return metric.GetGauge().GetValue(), true
+	case metric.Untyped != nil:
+		return metric.GetUntyped().GetValue(), true
+	default:
+		return 0, false
+	}
 }
 
 func sampleProvider(sample prometheusSample) string {
@@ -161,6 +149,9 @@ func summarizeAppMetrics(app string, samples []prometheusSample) appAdminMetrics
 		Available: true,
 	}
 	for _, sample := range samples {
+		if math.IsNaN(sample.value) {
+			continue
+		}
 		operation := strings.TrimSpace(sample.labels[promLabelOperation])
 		if operation == "" {
 			operation = "unknown"

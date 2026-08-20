@@ -56,7 +56,7 @@ func (s *Server) mountAdminMetricsRoutes(r chi.Router) {
 func (s *Server) serveAdminPrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 	body, status, contentType, ok := s.scrapePrometheus(r)
 	if !ok {
-		writeError(w, http.StatusServiceUnavailable, "Prometheus metrics are unavailable because telemetry metrics are disabled.")
+		writeError(w, http.StatusServiceUnavailable, "prometheus metrics are unavailable because telemetry metrics are disabled")
 		return
 	}
 	w.Header().Set("Content-Type", contentType)
@@ -77,13 +77,18 @@ func (s *Server) getAppAdminMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	body, status, _, ok := s.scrapePrometheus(r)
 	if !ok {
-		writeError(w, http.StatusServiceUnavailable, "Prometheus metrics are unavailable because telemetry metrics are disabled.")
+		writeError(w, http.StatusServiceUnavailable, "prometheus metrics are unavailable because telemetry metrics are disabled")
 		return
 	}
 	if status != http.StatusOK {
-		writeError(w, http.StatusServiceUnavailable, "Prometheus metrics are unavailable.")
+		writeError(w, http.StatusServiceUnavailable, "prometheus metrics are unavailable because the metrics scrape failed")
 		return
 	}
-	samples := samplesForProvider(parsePrometheus(string(body)), appName)
+	parsed, err := parsePrometheus(string(body))
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "prometheus metrics are unavailable because the metrics scrape could not be parsed")
+		return
+	}
+	samples := samplesForProvider(parsed, appName)
 	writeJSON(w, http.StatusOK, summarizeAppMetrics(appName, samples))
 }

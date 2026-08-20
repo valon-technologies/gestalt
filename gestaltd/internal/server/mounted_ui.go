@@ -128,14 +128,13 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	return s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
 }
 
-func (s *Server) adminMountedUI() MountedUI {
+func (s *Server) adminAPIAuthTarget() MountedUI {
 	return MountedUI{
-		Name:                "builtin_admin",
-		Path:                "/admin",
+		Name:                "admin_api",
+		Path:                "/admin/api/v1",
 		AuthorizationPolicy: s.adminRoute.AuthorizationPolicy,
 		AllowedRoles:        append([]string(nil), s.adminRoute.AllowedRoles...),
 		builtInAdmin:        true,
-		Handler:             s.adminUI,
 	}
 }
 
@@ -155,7 +154,7 @@ func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redir
 
 func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, ok := s.authorizeMountedResource(w, r, s.adminMountedUI(), nil)
+		ctx, ok := s.authorizeMountedResource(w, r, s.adminAPIAuthTarget(), nil)
 		if !ok {
 			return
 		}

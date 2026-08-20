@@ -1815,6 +1815,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 		url          string
 		wantStatus   int
 		wantContains string
+		wantLocation string
 		noFollow     bool
 	}{
 		{
@@ -1854,10 +1855,11 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 			wantContains: "# TYPE",
 		},
 		{
-			name:       "management redirects admin pages to public",
-			url:        managementURL + "/admin",
-			wantStatus: http.StatusMovedPermanently,
-			noFollow:   true,
+			name:         "management redirects admin pages to public",
+			url:          managementURL + "/admin",
+			wantStatus:   http.StatusMovedPermanently,
+			wantLocation: publicURL + "/admin",
+			noFollow:     true,
 		},
 	} {
 		tc := tc
@@ -1879,6 +1881,11 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 			}
 			if tc.wantContains != "" && !strings.Contains(string(body), tc.wantContains) {
 				t.Fatalf("expected %s body to contain %q, got: %s", tc.url, tc.wantContains, body)
+			}
+			if tc.wantLocation != "" {
+				if got := resp.Header.Get("Location"); got != tc.wantLocation {
+					t.Fatalf("expected %s Location %q, got %q", tc.url, tc.wantLocation, got)
+				}
 			}
 		})
 	}

@@ -156,26 +156,51 @@ func TestAdminPrometheusMetricsEndpoint(t *testing.T) {
 	}
 }
 
-func TestAdminRegistryBookmarkRedirect(t *testing.T) {
+func TestAdminPrometheusMetricsRequiresSessionWhenAdminAuthorizationEnabled(t *testing.T) {
 	t.Parallel()
 
-	ts := newTestServer(t)
+	ts := newAuthorizedAdminTestServer(t, true)
 	testutil.CloseOnCleanup(t, ts)
 
-	client := &http.Client{
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := client.Get(ts.URL + "/admin/registry/g-issues")
+	resp, err := http.Get(ts.URL + "/admin/api/v1/metrics")
 	if err != nil {
-		t.Fatalf("GET registry bookmark: %v", err)
+		t.Fatalf("GET admin metrics: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusMovedPermanently {
-		t.Fatalf("status = %d, want 301", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 401: %s", resp.StatusCode, body)
 	}
-	if got := resp.Header.Get("Location"); got != "/admin/versions/g-issues" {
-		t.Fatalf("Location = %q", got)
+}
+
+func TestAppAdminMetricsRejectsMalformedPrometheus(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+		cfg.PrometheusMetrics = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("not a metric line {\n"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/metrics", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET metrics: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusServiceUnavailable {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d, want 503: %s", response.StatusCode, body)
 	}
 }
