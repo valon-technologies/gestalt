@@ -189,6 +189,7 @@ type Server struct {
 	appRolloutOutcomes            *coredata.AppVersionRolloutOutcomeService
 	recoveryObservations          *coredata.AppVersionRecoveryObservationService
 	appAutoDeployNotify           func(string)
+	appRegistryReconcileNotify    func(string)
 	artifactsDir                  string
 	sourceVersion                 string
 	appRegistryRolloutMode        config.AppRegistryRolloutMode
@@ -273,6 +274,8 @@ type Config struct {
 	TunnelResolver                TunnelResolverConfig
 	// AppAutoDeployNotify requests prompt auto-deploy reconciliation for an app.
 	AppAutoDeployNotify func(app string)
+	// AppRegistryReconcileNotify requests prompt local runtime reconciliation.
+	AppRegistryReconcileNotify func(app string)
 }
 
 func New(cfg Config) (*Server, error) {
@@ -510,6 +513,7 @@ func New(cfg Config) (*Server, error) {
 		appRolloutOutcomes:            cfg.Services.AppVersionRolloutOutcomes,
 		recoveryObservations:          cfg.Services.AppVersionRecoveryObservations,
 		appAutoDeployNotify:           cfg.AppAutoDeployNotify,
+		appRegistryReconcileNotify:    cfg.AppRegistryReconcileNotify,
 		artifactsDir:                  strings.TrimSpace(cfg.ArtifactsDir),
 		sourceVersion:                 strings.TrimSpace(cfg.SourceVersion),
 		appRegistryRolloutMode:        cfg.AppRegistryRolloutMode,

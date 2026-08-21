@@ -61,6 +61,152 @@ func (r *recordingAppRestarter) RunningVersion(string) (string, bool) {
 	return r.runningVersion, r.runningVersion != ""
 }
 
+func TestCatalogPollerNotifyCoalesces(t *testing.T) {
+	t.Parallel()
+
+	poller := NewCatalogPoller(CatalogPollerConfig{})
+	poller.Notify("g-issues")
+	poller.Notify("another-app")
+	if got := len(poller.notify); got != 1 {
+		t.Fatalf("queued notifications = %d, want 1", got)
+	}
+}
+
+func TestCatalogPollerNotifyIsNonBlocking(t *testing.T) {
+	t.Parallel()
+
+	poller := NewCatalogPoller(CatalogPollerConfig{})
+	poller.notify <- struct{}{}
+	done := make(chan struct{})
+	go func() {
+		for range 1000 {
+			poller.Notify("g-issues")
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Notify blocked while notification buffer was full")
+	}
+}
+
+func TestCatalogPollerNotifyTriggersReconcile(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	services := testutil.NewStubServices(t)
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	appendRolloutFixture(t, services, "g-issues", "v1", now)
+
+	ready := make(chan struct{})
+	restarter := &recordingAppRestarter{}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        restarter,
+		InstanceID:          "replica-a",
+		Interval:            time.Hour,
+		RestartReady:        ready,
+		BootstrapReady:      ready,
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return now },
+	})
+	poller.Start(ctx)
+	close(ready)
+
+	waitForStartCalls := func(want int) {
+		t.Helper()
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			if len(restarter.startCalls) >= want {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatalf("startCalls = %d, want >= %d", len(restarter.startCalls), want)
+	}
+	waitForStartCalls(1)
+
+	appendRolloutFixture(t, services, "g-issues", "v2", now.Add(time.Minute))
+	poller.Notify("g-issues")
+	waitForStartCalls(2)
+	if got := restarter.startVersions[len(restarter.startVersions)-1]; got != "v2" {
+		t.Fatalf("last started version = %q, want v2", got)
+	}
+
+	poller.Stop()
+}
+
+func TestCatalogPollerNotifyRetriesAfterReconcileFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	services := testutil.NewStubServices(t)
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	appendRolloutFixture(t, services, "g-issues", "v1", now)
+
+	ready := make(chan struct{})
+	restarter := &recordingAppRestarter{startErr: errors.New("start failed")}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:       services.AppVersionChangeRequests,
+		Materializations:     services.AppInstanceMaterializations,
+		Rollouts:             services.AppRollouts,
+		AppRestarter:         restarter,
+		InstanceID:           "replica-a",
+		Interval:             time.Hour,
+		RestartReady:         ready,
+		BootstrapReady:       ready,
+		DisableRestartDelay:  true,
+		MaxReconcileAttempts: 3,
+		Now:                  func() time.Time { return now },
+	})
+	poller.Start(ctx)
+	close(ready)
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		materialization, err := services.AppInstanceMaterializations.Get(
+			context.Background(), "replica-a", "g-issues", "v1",
+		)
+		if err == nil && materialization.AttemptCount > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	materialization, err := services.AppInstanceMaterializations.Get(
+		context.Background(), "replica-a", "g-issues", "v1",
+	)
+	if err != nil {
+		t.Fatalf("Get materialization: %v", err)
+	}
+	if materialization.AttemptCount == 0 {
+		t.Fatal("expected a recorded reconciliation failure before retry")
+	}
+
+	restarter.startErr = nil
+	poller.Notify("g-issues")
+
+	deadline = time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		materialization, err = services.AppInstanceMaterializations.Get(
+			context.Background(), "replica-a", "g-issues", "v1",
+		)
+		if err == nil && materialization.RestartedAt == now {
+			poller.Stop()
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	poller.Stop()
+	t.Fatalf("materialization after notify = %#v, err = %v", materialization, err)
+}
+
 func TestCatalogPollerStopsRetryingAtConfiguredLimit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

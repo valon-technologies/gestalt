@@ -510,6 +510,17 @@ func (s *Server) notifyAppAutoDeploy(app string) {
 	s.appAutoDeployNotify(app)
 }
 
+func (s *Server) notifyAppRegistryReconcile(app string) {
+	if s == nil || s.appRegistryReconcileNotify == nil {
+		return
+	}
+	app = strings.TrimSpace(app)
+	if app == "" {
+		return
+	}
+	s.appRegistryReconcileNotify(app)
+}
+
 func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Request) {
 	app, registry, ok := s.appAdminRegistryConfig(w, r)
 	if !ok {
@@ -675,6 +686,7 @@ func (s *Server) selectAppAdminRegistryVersion(w http.ResponseWriter, r *http.Re
 		writeAppAdminRegistryInstallError(w, err)
 		return
 	}
+	s.notifyAppRegistryReconcile(app.name)
 	writeJSON(w, http.StatusOK, appAdminRegistryVersionResponse{
 		App:            app.name,
 		Registry:       app.registry,
