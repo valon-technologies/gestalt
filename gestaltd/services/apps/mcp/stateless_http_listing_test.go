@@ -533,6 +533,24 @@ func TestInvokeRejectsOutOfScopeAppBeforeCatalogLookup(t *testing.T) {
 	})
 }
 
+func TestInvokeReturnsToolErrorForMissingApp(t *testing.T) {
+	t.Parallel()
+
+	requireToolError(t, listingTestConfig(t, nil), listingTestPrincipal(), InvokeToolName, map[string]any{
+		"app":       "missingApp",
+		"operation": "items.list",
+	})
+}
+
+func TestInvokeReturnsToolErrorForMissingOperation(t *testing.T) {
+	t.Parallel()
+
+	requireToolError(t, listingTestConfig(t, nil), listingTestPrincipal(), InvokeToolName, map[string]any{
+		"app":       "sampleApp",
+		"operation": "missing.operation",
+	})
+}
+
 func TestFlattenedToolNamesReserveFrontDoorNames(t *testing.T) {
 	t.Parallel()
 

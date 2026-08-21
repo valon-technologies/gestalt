@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -349,7 +350,11 @@ func (h *StatelessHTTPHandler) callInvoke(ctx context.Context, req mcpgo.CallToo
 	}
 	inner := req
 	inner.Params.Arguments = nested
-	return h.callResolvedAppTool(ctx, inner, statelessToolRef{provider: app, operation: operation})
+	result, err := h.callResolvedAppTool(ctx, inner, statelessToolRef{provider: app, operation: operation})
+	if errors.Is(err, core.ErrNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
+		return mcpgo.NewToolResultError(err.Error()), nil
+	}
+	return result, err
 }
 
 func operationTitle(op catalog.CatalogOperation) string {
