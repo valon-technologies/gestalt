@@ -292,6 +292,9 @@ func statelessToolRefs(cfg Config, provName string, cat *catalog.Catalog) map[st
 			continue
 		}
 		name := toolName(cfg.ToolPrefixes, provName, op.ID)
+		if isWorkspaceFrontDoorToolName(name) {
+			continue
+		}
 		refs[name] = statelessToolRef{provider: provName, operation: op.ID}
 	}
 	return refs

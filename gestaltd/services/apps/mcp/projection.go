@@ -58,9 +58,6 @@ func toolName(prefixes map[string]string, provider, operation string) string {
 			return '_'
 		}
 	}, raw)
-	if isWorkspaceFrontDoorToolName(name) {
-		return name + "_app"
-	}
 	return name
 }
 

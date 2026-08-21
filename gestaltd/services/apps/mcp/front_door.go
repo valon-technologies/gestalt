@@ -28,7 +28,7 @@ const (
 
 // workspaceFrontDoorInstructions is returned on initialize so hosts do not
 // treat the three handshake tools as an inventory of app operations.
-const workspaceFrontDoorInstructions = "tools/list is the connect handshake: gestalt_search, gestalt_describe, and gestalt_invoke. Search to find operations you may use, describe for one operation's schema, then invoke with app, operation, and arguments. App operations are not listed."
+const workspaceFrontDoorInstructions = "tools/list is the connect handshake: gestalt_search, gestalt_describe, and gestalt_invoke. Search to find operations you may use, describe for one operation's schema, then invoke with app, operation, and arguments. App operations are not listed; these three names are reserved for the workspace front door."
 
 const (
 	defaultSearchLimit = 20

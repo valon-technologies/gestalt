@@ -555,14 +555,18 @@ func TestFlattenedToolNamesReserveFrontDoorNames(t *testing.T) {
 		IncludeREST:      map[string]bool{"gestalt": true},
 	}
 
+	refs := statelessToolRefs(cfg, "gestalt", stub.Catalog())
 	for _, operation := range []string{"search", "describe", "invoke"} {
 		name := toolName(nil, "gestalt", operation)
-		if name == SearchToolName || name == DescribeToolName || name == InvokeToolName {
-			t.Fatalf("flattened %s tool still collides with front door: %q", operation, name)
+		if _, ok := refs[name]; ok {
+			t.Fatalf("flattened %s tool is mapped to reserved front-door name %q", operation, name)
 		}
-		body := callToolJSON(t, cfg, listingTestPrincipal(), name, map[string]any{})
+		body := callToolJSON(t, cfg, listingTestPrincipal(), InvokeToolName, map[string]any{
+			"app":       "gestalt",
+			"operation": operation,
+		})
 		if body["op"] != operation {
-			t.Fatalf("flattened %s invoke = %v", operation, body)
+			t.Fatalf("front-door %s invoke = %v", operation, body)
 		}
 	}
 }
