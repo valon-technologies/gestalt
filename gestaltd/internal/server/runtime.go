@@ -185,6 +185,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	catalogPoller := startAppRegistryCatalogPoller(ctx, cfg, result, restartDelay, disableRestartDelay, onRolloutTerminal)
 	if catalogPoller != nil {
 		defer catalogPoller.Stop()
+		baseConfig.AppRegistryReconcileNotify = catalogPoller.Notify
 	}
 	heartbeatWriter, err := startAppRegistryHeartbeatWriter(ctx, cfg, result)
 	if err != nil {

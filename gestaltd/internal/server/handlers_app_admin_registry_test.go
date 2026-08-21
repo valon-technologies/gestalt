@@ -31,6 +31,7 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
 		},
 	}
+	reconciled := make(chan string, 1)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
 		cfg.Authorization = authz
@@ -39,6 +40,9 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 		}
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
 		cfg.AppRegistryReader = fixture.Reader
+		cfg.AppRegistryReconcileNotify = func(app string) {
+			reconciled <- app
+		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -66,6 +70,14 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 	}
 	if selected.FromVersion != "registry:first-install" || selected.DesiredVersion != fixture.Version || selected.Rollout.State != "enrolling" {
 		t.Fatalf("selection response = %#v", selected)
+	}
+	select {
+	case app := <-reconciled:
+		if app != "g-issues" {
+			t.Fatalf("reconciled app = %q, want g-issues", app)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("manual selection did not request local reconciliation")
 	}
 
 	request, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry", nil)
@@ -106,6 +118,70 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 	if len(state.PublishedVersions) != 1 || state.PublishedVersions[0].SourceRef == "" ||
 		state.PublishedVersions[0].SourceURL == "" || state.PublishedVersions[0].Publication.WorkflowRunURL == "" {
 		t.Fatalf("published versions = %#v", state.PublishedVersions)
+	}
+}
+
+func TestAppAdminRegistrySelectRejectedDoesNotReconcile(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	reconciled := make(chan string, 2)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+		cfg.AppRegistryReconcileNotify = func(app string) {
+			reconciled <- app
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	selectVersion := func() int {
+		t.Helper()
+		request, _ := http.NewRequest(
+			http.MethodPost,
+			ts.URL+"/api/v1/apps/g-issues/admin/registry/version",
+			bytes.NewBufferString(`{"version":"`+fixture.Version+`"}`),
+		)
+		request.Header.Set("Authorization", "Bearer alice-token")
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("POST registry version: %v", err)
+		}
+		defer func() { _ = response.Body.Close() }()
+		return response.StatusCode
+	}
+
+	if status := selectVersion(); status != http.StatusOK {
+		t.Fatalf("first select status = %d, want 200", status)
+	}
+	select {
+	case app := <-reconciled:
+		if app != "g-issues" {
+			t.Fatalf("reconciled app = %q, want g-issues", app)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("successful selection did not request local reconciliation")
+	}
+
+	if status := selectVersion(); status != http.StatusConflict {
+		t.Fatalf("duplicate select status = %d, want 409", status)
+	}
+	select {
+	case app := <-reconciled:
+		t.Fatalf("rejected selection requested local reconciliation for %q", app)
+	case <-time.After(100 * time.Millisecond):
 	}
 }
 

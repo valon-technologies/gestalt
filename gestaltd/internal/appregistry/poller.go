@@ -58,6 +58,7 @@ type CatalogPoller struct {
 	mu        sync.Mutex
 	inflight  map[string]struct{}
 	stoppedAt map[string]time.Time
+	notify    chan struct{}
 }
 
 type CatalogPollerConfig struct {
@@ -107,6 +108,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 		HeartbeatEvaluationInterval: cfg.HeartbeatEvaluationInterval,
 		inflight:                    make(map[string]struct{}),
 		stoppedAt:                   make(map[string]time.Time),
+		notify:                      make(chan struct{}, 1),
 	}
 }
 
@@ -174,6 +176,18 @@ func (p *CatalogPoller) Stop() {
 	}
 }
 
+// Notify requests an immediate local reconciliation pass. Notifications
+// coalesce so callers never block while a pass is already running.
+func (p *CatalogPoller) Notify(_ string) {
+	if p == nil {
+		return
+	}
+	select {
+	case p.notify <- struct{}{}:
+	default:
+	}
+}
+
 func (p *CatalogPoller) loop(ctx context.Context) {
 	if p.BootstrapReady != nil {
 		select {
@@ -197,6 +211,8 @@ func (p *CatalogPoller) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			p.runOnce(ctx)
+		case <-p.notify:
 			p.runOnce(ctx)
 		case <-heartbeatTick:
 			p.runHeartbeatEvaluations(ctx)
