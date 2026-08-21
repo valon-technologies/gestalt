@@ -144,7 +144,7 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 	}
 	for name, entry := range cfg.Apps {
 		name = strings.TrimSpace(name)
-		if name == "" || entry == nil || config.EntryBuildsLocal(entry) {
+		if name == "" || entry == nil || config.EntryBuildsLocal(entry) || entry.RemotePreviewActive {
 			continue
 		}
 		if entry.Source.IsRegistry() && !cfg.Server.Dev {
@@ -1142,6 +1142,9 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 }
 
 func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec appservice.StaticProviderSpec, deps Deps) (core.Provider, error) {
+	if entry != nil && entry.RemotePreviewActive {
+		return buildRemotePreviewAppProvider(ctx, name, entry, pluginConfig, spec, deps)
+	}
 	if entry != nil && entry.DevActive && deps.DevSupervisor != nil {
 		return buildDevSupervisedAppProvider(ctx, name, entry, pluginConfig, spec, deps)
 	}
@@ -1319,6 +1322,76 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	stopSession = false
 	cleanup = nil
 	return prov, nil
+}
+
+func buildRemotePreviewAppProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec appservice.StaticProviderSpec, deps Deps) (core.Provider, error) {
+	if deps.DevSupervisor == nil {
+		return nil, fmt.Errorf("remote-preview app %q: dev supervisor is not configured", name)
+	}
+	target, err := providerdev.AppTargetUIOnlyForEntry(name, entry)
+	if err != nil {
+		return nil, err
+	}
+	if target.BaseEnv == nil {
+		target.BaseEnv = map[string]string{}
+	}
+	if baseURL := strings.TrimSpace(deps.BaseURL); baseURL != "" {
+		target.BaseEnv["GESTALT_BASE_URL"] = strings.TrimRight(baseURL, "/")
+	}
+	if token := strings.TrimSpace(deps.RemoteToken); token != "" {
+		target.BaseEnv["GESTALT_DEV_API_PROXY_TOKEN"] = token
+	}
+	handle, err := deps.DevSupervisor.StartApp(ctx, target)
+	if err != nil {
+		return nil, fmt.Errorf("remote-preview app %q: %w", name, err)
+	}
+	stopUI := func() {
+		deps.DevSupervisor.StopApp(name)
+	}
+	clients, err := remoteClientsForEntry(nil, entry, deps)
+	if err != nil {
+		stopUI()
+		return nil, fmt.Errorf("remote-preview app %q: %w", name, err)
+	}
+	if clients.App == nil {
+		stopUI()
+		return nil, fmt.Errorf("remote-preview app %q: provider client is required", name)
+	}
+	client := clients.App
+	if rawConn := clients.Conn(); rawConn != nil {
+		conn := grpc.ClientConnInterface(rawConn)
+		gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindApp, Name: name}, conn)
+		if err != nil {
+			stopUI()
+			return nil, fmt.Errorf("remote-preview app %q: %w", name, err)
+		}
+		client = proto.NewAppClient(gwConn)
+	}
+	_ = handle
+	provider := appservice.NewGestaltRemote(client, spec)
+	if provider == nil {
+		stopUI()
+		return nil, fmt.Errorf("remote-preview app %q: provider client is required", name)
+	}
+	return remotePreviewUIProvider{
+		Provider: provider,
+		stopUI:   stopUI,
+	}, nil
+}
+
+type remotePreviewUIProvider struct {
+	core.Provider
+	stopUI func()
+}
+
+func (p remotePreviewUIProvider) Close() error {
+	if p.stopUI != nil {
+		p.stopUI()
+	}
+	if closer, ok := p.Provider.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
 }
 
 func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec appservice.StaticProviderSpec, deps Deps) (core.Provider, error) {

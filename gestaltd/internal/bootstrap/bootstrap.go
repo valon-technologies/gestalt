@@ -975,8 +975,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 				return nil, fmt.Errorf("bootstrap: remote %q is not configured under server.remotes", name)
 			}
 			remoteConfigs[name] = remote.Config{
-				URL:   remoteCfg.URL,
-				Token: remoteCfg.Token,
+				URL:         remoteCfg.URL,
+				Token:       remoteCfg.Token,
+				CloudRunIAM: remoteCfg.CloudRunIAM,
 			}
 		}
 		var err error

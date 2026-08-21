@@ -90,7 +90,7 @@ func runAppRegistryRetentionPrune(args []string) error {
 		if !okRegistry {
 			return fmt.Errorf("registry %q is not configured", registryName)
 		}
-		env, err := setupBootstrapWithConfigPaths([]string(*flags.configPaths), "", cfg.Server.ArtifactsDir, true, true, "", "", false)
+		env, err := setupBootstrapWithConfigPaths([]string(*flags.configPaths), "", cfg.Server.ArtifactsDir, true, true, "", "", false, "")
 		if err != nil {
 			return err
 		}

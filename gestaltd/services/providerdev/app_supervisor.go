@@ -107,15 +107,34 @@ type appCommandProc struct {
 }
 
 func AppTargetForEntry(name string, entry *config.ProviderEntry) (AppTarget, error) {
+	return appTargetForEntry(name, entry, false)
+}
+
+func AppTargetUIOnlyForEntry(name string, entry *config.ProviderEntry) (AppTarget, error) {
+	return appTargetForEntry(name, entry, true)
+}
+
+func appTargetForEntry(name string, entry *config.ProviderEntry, uiOnly bool) (AppTarget, error) {
 	if entry == nil {
 		return AppTarget{}, fmt.Errorf("app %q: entry is required", name)
 	}
 	if !entry.DevActive {
 		return AppTarget{}, fmt.Errorf("app %q: dev-active required", name)
 	}
-	commands, err := providerpkg.SourceRunCommands(entry.ResolvedManifestPath)
+	var (
+		commands []providerpkg.ResolvedCommand
+		err      error
+	)
+	if uiOnly || entry.RemotePreviewActive {
+		commands, err = providerpkg.SourceUIRunCommands(entry.ResolvedManifestPath)
+	} else {
+		commands, err = providerpkg.SourceRunCommands(entry.ResolvedManifestPath)
+	}
 	if err != nil {
 		return AppTarget{}, fmt.Errorf("app %q: %w", name, err)
+	}
+	if len(commands) == 0 {
+		return AppTarget{}, fmt.Errorf("app %q: at least one run command is required", name)
 	}
 	basePath := ""
 	if entry.Static != nil {

@@ -1014,6 +1014,77 @@ func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string, dev bool
 	return ValidateRemoteGestaltd(cfg)
 }
 
+// ApplyServeRemotePreviewOverrides configures gestaltd serve --remote-preview.
+// It resolves the Gestalt bearer token from CLI config when omitted and marks
+// the default remote for Cloud Run IAM authentication to the preview URL.
+func ApplyServeRemotePreviewOverrides(cfg *Config, previewURL, remoteToken string) error {
+	if cfg == nil {
+		return nil
+	}
+	previewURL = normalizeRemoteURL(previewURL)
+	if previewURL == "" {
+		return fmt.Errorf("--remote-preview URL is required")
+	}
+	if strings.TrimSpace(remoteToken) == "" {
+		var err error
+		remoteToken, err = defaultRemoteToken()
+		if err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(remoteToken) == "" {
+		return fmt.Errorf("remote-preview requires a Gestalt API token; run gestalt auth login or set GESTALT_API_KEY")
+	}
+	cfg.Server.RemotePreviewServe = true
+	cfg.Server.Remote = previewURL
+	cfg.Server.RemoteToken = remoteToken
+	if cfg.Server.Remotes == nil {
+		cfg.Server.Remotes = make(map[string]*RemoteConfig)
+	}
+	cfg.Server.Remotes[DefaultRemoteName] = &RemoteConfig{
+		URL:         previewURL,
+		Token:       remoteToken,
+		Default:     true,
+		CloudRunIAM: shouldUseCloudRunIAM(previewURL),
+	}
+	if err := canonicalizeRemotes(cfg); err != nil {
+		return err
+	}
+	stampDefaultRemote(cfg.Apps, DefaultRemoteName, false)
+	for _, entries := range []map[string]*ProviderEntry{
+		cfg.Providers.Identity,
+		cfg.Providers.Authorization,
+		cfg.Providers.IndexedDB,
+		cfg.Providers.Workflow,
+		cfg.Providers.Agent,
+	} {
+		stampDefaultRemote(entries, DefaultRemoteName, false)
+	}
+	return ValidateRemoteGestaltd(cfg)
+}
+
+func shouldUseCloudRunIAM(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	switch parsed.Scheme {
+	case "https":
+		return !actionableLoopbackHost(parsed.Hostname())
+	default:
+		return false
+	}
+}
+
+func actionableLoopbackHost(host string) bool {
+	switch strings.TrimSpace(host) {
+	case "", "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
 func defaultRemoteToken() (string, error) {
 	if token := strings.TrimSpace(os.Getenv("GESTALT_API_KEY")); token != "" {
 		return token, nil

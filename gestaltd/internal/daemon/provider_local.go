@@ -39,6 +39,7 @@ type providerLocalCommandOptions struct {
 	NoSync          bool
 	Remote          string
 	RemoteToken     string
+	RemotePreview   string
 	Dev             bool
 	ArtifactsDir    string
 	LockfilePath    string
@@ -131,7 +132,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	if session.Locked {
 		forcedDevAppKeys = session.DevAppKeys
 	}
-	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, opts.Remote, opts.RemoteToken, opts.Dev, forcedDevAppKeys...)
+	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, opts.Remote, opts.RemoteToken, opts.Dev, opts.RemotePreview, forcedDevAppKeys...)
 	if err != nil {
 		return err
 	}
@@ -870,4 +871,12 @@ func printProviderValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")
 	writeUsageLine(w, "  --config   Additional config file to merge; repeat to add support providers or null deletions")
+}
+
+func manifestPathForRemotePreviewValidation(path string) string {
+	manifestPath, _, err := resolveProviderTargetManifest(path)
+	if err != nil {
+		return path
+	}
+	return manifestPath
 }

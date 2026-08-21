@@ -544,6 +544,9 @@ type ProviderEntry struct {
 	// declares run:. ResolvedDevWorkdir is the absolute cwd for the run command.
 	DevActive          bool                                  `yaml:"-"`
 	ResolvedDevWorkdir string                                `yaml:"-"`
+	// RemotePreviewActive marks a local-source app whose provider runs on a
+	// remote preview gestaltd while only role: ui run commands start locally.
+	RemotePreviewActive bool `yaml:"-"`
 	HostBinary         string                                `yaml:"-"`
 	ConnectionMode     providermanifestv1.ConnectionMode     `yaml:"-"`
 	Auth               *ConnectionAuthDef                    `yaml:"-"`
@@ -1991,6 +1994,8 @@ type ServerConfig struct {
 	// Dev is set programmatically when gestaltd is launched via the dev
 	// subcommand. It gates CLI config resolution and reverse-tunnel startup.
 	Dev bool `yaml:"-"`
+	// RemotePreviewServe is set when gestaltd serve runs with --remote-preview.
+	RemotePreviewServe bool `yaml:"-"`
 }
 
 // TODO(app-registry-step-9): Remove this temporary rollout configuration after step 9 is complete.
