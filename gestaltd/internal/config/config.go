@@ -542,20 +542,20 @@ type ProviderEntry struct {
 	ResolvedIconFile           string                       `yaml:"-"`
 	// DevActive is set when the provider has a local source and its manifest
 	// declares run:. ResolvedDevWorkdir is the absolute cwd for the run command.
-	DevActive          bool                                  `yaml:"-"`
-	ResolvedDevWorkdir string                                `yaml:"-"`
+	DevActive          bool   `yaml:"-"`
+	ResolvedDevWorkdir string `yaml:"-"`
 	// RemotePreviewActive marks a local-source app whose provider runs on a
 	// remote preview gestaltd while only role: ui run commands start locally.
-	RemotePreviewActive bool `yaml:"-"`
-	HostBinary         string                                `yaml:"-"`
-	ConnectionMode     providermanifestv1.ConnectionMode     `yaml:"-"`
-	Auth               *ConnectionAuthDef                    `yaml:"-"`
-	DefaultConnection  string                                `yaml:"-"`
-	ConnectionParams   map[string]ConnectionParamDef         `yaml:"-"`
-	Discovery          *providermanifestv1.ProviderDiscovery `yaml:"-"`
-	ResolvedAssetRoot  string                                `yaml:"-"`
-	Static             *AppStaticConfig                      `yaml:"static,omitempty"`
-	ResolvedStaticRoot string                                `yaml:"-"`
+	RemotePreviewActive bool                                  `yaml:"-"`
+	HostBinary          string                                `yaml:"-"`
+	ConnectionMode      providermanifestv1.ConnectionMode     `yaml:"-"`
+	Auth                *ConnectionAuthDef                    `yaml:"-"`
+	DefaultConnection   string                                `yaml:"-"`
+	ConnectionParams    map[string]ConnectionParamDef         `yaml:"-"`
+	Discovery           *providermanifestv1.ProviderDiscovery `yaml:"-"`
+	ResolvedAssetRoot   string                                `yaml:"-"`
+	Static              *AppStaticConfig                      `yaml:"static,omitempty"`
+	ResolvedStaticRoot  string                                `yaml:"-"`
 	// Runtime-resolved theme paths (populated during sync from static.theme or
 	// ui config.theme, not from YAML).
 	ResolvedThemeStylesheet string `yaml:"-"`

@@ -1,0 +1,117 @@
+\documentclass{muratcan_cv}
+%!TEX TS-program = xelatex
+
+\setname{Michael Wang}{}
+\setaddress{Brooklyn, NY}
+\setmail{mzywang@gmail.com}
+\setlinkedinaccount{https://www.linkedin.com/in/mzywang}
+\setgithubaccount{https://github.com/mzywang}
+\setthemecolor{MidnightBlue}
+
+\begin{document}
+
+\headerview
+\vspace{1ex}
+
+\section{Skills}
+    \newcommand{\skillone}{\createskill{Programming Languages}{Python \cpshalf TypeScript}}
+    \newcommand{\skilltwo}{\createskill{Technologies}{Kubernetes \cpshalf Helm \cpshalf Valkey \cpshalf ClickHouse}}
+    \createskills{\skillone, \skilltwo}
+    \vspace{-3mm}
+
+\section{Experience}
+    \datedexperience{Valon}{June 2025 - Present}
+    \explanation{Software Engineer}{New York, NY}
+    \explanationdetail{
+    \smallskip
+    \coloredbullet\ %
+    Implemented CDC from MySQL into BigQuery and ClickHouse.
+
+    \smallskip
+    \coloredbullet\ %
+    Implemented a new test runner that was more reliable, faster, and cheaper than the existing GitLab runners.
+
+    \smallskip
+    \coloredbullet\ %
+    Introduced ClickHouse as a new datastore for batch processing events and resource management.
+
+    \smallskip
+    \coloredbullet\ %
+    Introduced Valkey as a cache for MySQL and as a new datastore for the batch processing control plane.
+
+    \smallskip
+    \coloredbullet\ %
+    Implemented autoscaling on background processing workers.
+
+    \smallskip
+    \coloredbullet\ %
+    Implemented a secure file transfer service backed by SFTPGo.
+
+    \smallskip
+    }
+
+    \datedexperience{Uniswap Labs}{June 2022 - June 2025}
+    \explanation{Software Engineer}{New York, NY}
+    \explanationdetail{
+    \smallskip
+    \coloredbullet\ %
+    Designed and implemented a GraphQL API used by applications to display token, wallet, and NFT data.
+
+    \smallskip
+    \coloredbullet\ %
+    Built background processing functions to source data for the backend API.
+
+    \smallskip
+    \coloredbullet\ %
+    Migrated the API's ERC-20 endpoints off a legacy data provider to reduce latency and improve reliability.
+
+    \smallskip
+    }
+
+    \datedexperience{Two Sigma Investments}{January 2020 - June 2022}
+    \explanation{Software Engineer}{New York, NY}
+    \explanationdetail{
+    \smallskip
+    \coloredbullet\ %
+    Set up and supported production data pipelines feeding into models.
+
+    \smallskip
+    \coloredbullet\ %
+    Triaged and delegated new data productionalization requests to contractors on the team.
+
+    \smallskip
+    \coloredbullet\ %
+    Captured and reported team metrics to key stakeholders.
+
+    \smallskip
+    \coloredbullet\ %
+    Organized, supported, and led ERG reading groups for employees.
+
+    \smallskip
+    }
+
+    \datedexperience{Two Sigma Investments}{May 2018 - August 2018}
+    \explanation{Software Engineering Intern}{New York, NY}
+
+    \datedexperience{Dropbox}{May 2017 - August 2017}
+    \explanation{Software Engineering Intern}{San Francisco, CA}
+
+\section{Education}
+    \datedexperience{Bachelor of Science - Computer Science}{August 2015 - May 2019}
+    \explanation{Georgia Institute of Technology}{Atlanta, GA}
+
+    \datedexperience{Bachelor of Science - Industrial Engineering}{}
+    \explanation{Georgia Institute of Technology}{Atlanta, GA}
+    \explanationdetail{
+    \smallskip
+    \coloredbullet\ %
+    Teaching Assistant for Computer Systems, Advanced Optimization, and Supply Chain Economics.
+
+    \smallskip
+    \coloredbullet\ %
+    Presented a poster at the NeurIPS Workshop on Ethical, Social, and Governance Issues in AI (2018).
+
+    \smallskip
+    }
+
+\end{document}
