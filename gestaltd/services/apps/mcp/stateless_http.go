@@ -135,6 +135,7 @@ func (h *StatelessHTTPHandler) handleMessage(ctx context.Context, headers http.H
 					ListChanged bool `json:"listChanged,omitempty"`
 				}{},
 			},
+			Instructions: workspaceFrontDoorInstructions,
 		}), false, nil
 	case string(mcpgo.MethodPing):
 		return rpcResponse(base.id(), mcpgo.EmptyResult{}), false, nil

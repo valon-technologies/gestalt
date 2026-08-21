@@ -12466,26 +12466,9 @@ func mcpSearchOperations(t *testing.T, ts *httptest.Server, headers map[string]s
 	if status != http.StatusOK {
 		t.Fatalf("gestalt_search status = %d: %v", status, resp)
 	}
-	if rpcErr, ok := resp["error"]; ok {
-		t.Fatalf("gestalt_search rpc error: %v", rpcErr)
-	}
-	result, _ := resp["result"].(map[string]any)
-	if result["isError"] == true {
-		t.Fatalf("gestalt_search tool error: %v", result)
-	}
-	content, _ := result["content"].([]any)
-	if len(content) == 0 {
-		t.Fatalf("gestalt_search missing content: %v", result)
-	}
-	block, _ := content[0].(map[string]any)
-	text, _ := block["text"].(string)
-	var body struct {
-		Results []struct {
-			Operation string `json:"operation"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal([]byte(text), &body); err != nil {
-		t.Fatalf("decode gestalt_search: %v body=%s", err, text)
+	body, err := gestaltmcp.DecodeSearchToolResult(resp)
+	if err != nil {
+		t.Fatalf("%v", err)
 	}
 	names := make([]string, 0, len(body.Results))
 	for _, hit := range body.Results {
@@ -12533,6 +12516,12 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	}
 	if result["serverInfo"] == nil {
 		t.Fatal("initialize: missing serverInfo")
+	}
+	instructions, _ := result["instructions"].(string)
+	for _, name := range gestaltmcp.WorkspaceFrontDoorToolNames() {
+		if !strings.Contains(instructions, name) {
+			t.Fatalf("initialize instructions %q missing %s", instructions, name)
+		}
 	}
 	if got := header.Get("Mcp-Session-Id"); got != "" {
 		t.Fatalf("initialize returned MCP session id %q, want none", got)

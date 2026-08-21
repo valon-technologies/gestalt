@@ -499,26 +499,9 @@ func (h *conformanceHarness) mcpSearchOperations(t *testing.T, cred conformanceC
 		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
 		"params": map[string]any{"name": gestaltmcp.SearchToolName, "arguments": args},
 	})
-	if rpcErr, ok := envelope["error"]; ok {
-		t.Fatalf("gestalt_search error: %v", rpcErr)
-	}
-	result, _ := envelope["result"].(map[string]any)
-	if isError, _ := result["isError"].(bool); isError {
-		t.Fatalf("gestalt_search tool error: %v", result)
-	}
-	content, _ := result["content"].([]any)
-	if len(content) == 0 {
-		return nil
-	}
-	block, _ := content[0].(map[string]any)
-	text, _ := block["text"].(string)
-	var body struct {
-		Results []struct {
-			Operation string `json:"operation"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal([]byte(text), &body); err != nil {
-		t.Fatalf("decode gestalt_search: %v body=%s", err, text)
+	body, err := gestaltmcp.DecodeSearchToolResult(envelope)
+	if err != nil {
+		t.Fatalf("%v", err)
 	}
 	names := make([]string, 0, len(body.Results))
 	for _, hit := range body.Results {

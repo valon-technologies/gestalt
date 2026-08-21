@@ -26,6 +26,10 @@ const (
 	InvokeToolName   = "gestalt_invoke"
 )
 
+// workspaceFrontDoorInstructions is returned on initialize so hosts do not
+// treat the three handshake tools as an inventory of app operations.
+const workspaceFrontDoorInstructions = "tools/list is the connect handshake: gestalt_search, gestalt_describe, and gestalt_invoke. Search to find operations you may use, describe for one operation's schema, then invoke with app, operation, and arguments. App operations are not listed."
+
 const (
 	defaultSearchLimit = 20
 	maxSearchLimit     = 100
@@ -82,27 +86,27 @@ func workspaceFrontDoorTools() []mcpgo.Tool {
 	}
 }
 
-type searchHit struct {
+type SearchHit struct {
 	App         string `json:"app"`
 	Operation   string `json:"operation"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
-	MCPName     string `json:"mcpName"`
 }
 
-type searchUnavailable struct {
+type SearchUnavailable struct {
 	App   string `json:"app"`
 	Error string `json:"error"`
 }
 
-type searchResult struct {
-	Results     []searchHit         `json:"results"`
-	Unavailable []searchUnavailable `json:"unavailable,omitempty"`
+type SearchResult struct {
+	Results     []SearchHit         `json:"results"`
+	Unavailable []SearchUnavailable `json:"unavailable,omitempty"`
 	Hint        string              `json:"hint,omitempty"`
+	Truncated   bool                `json:"truncated,omitempty"`
 }
 
 type searchCandidate struct {
-	hit   searchHit
+	hit   SearchHit
 	query invocation.OperationAccessQuery
 }
 
@@ -111,7 +115,6 @@ type describeResult struct {
 	Operation    string          `json:"operation"`
 	Title        string          `json:"title,omitempty"`
 	Description  string          `json:"description,omitempty"`
-	MCPName      string          `json:"mcpName"`
 	InputSchema  json.RawMessage `json:"inputSchema,omitempty"`
 	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
 }
@@ -132,14 +135,14 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 		limit = maxSearchLimit
 	}
 	if query == "" && appFilter == "" {
-		return toolJSONResult(searchResult{
-			Results: []searchHit{},
+		return toolJSONResult(SearchResult{
+			Results: []SearchHit{},
 			Hint:    "Pass query or app to search workspace operations.",
 		}), nil
 	}
 
 	candidates := make([]searchCandidate, 0)
-	unavailable := make([]searchUnavailable, 0)
+	unavailable := make([]SearchUnavailable, 0)
 	for _, provName := range h.providerNames {
 		if appFilter != "" && provName != appFilter {
 			continue
@@ -153,7 +156,7 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 		}
 		cat, liveErr := h.catalogForSearch(ctx, provName, prov, appFilter != "")
 		if liveErr != nil {
-			unavailable = append(unavailable, searchUnavailable{App: provName, Error: liveErr.Error()})
+			unavailable = append(unavailable, SearchUnavailable{App: provName, Error: liveErr.Error()})
 			continue
 		}
 		if cat == nil {
@@ -169,12 +172,11 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 				continue
 			}
 			candidates = append(candidates, searchCandidate{
-				hit: searchHit{
+				hit: SearchHit{
 					App:         provName,
 					Operation:   op.ID,
 					Title:       operationTitle(op),
 					Description: op.Description,
-					MCPName:     toolName(h.cfg.ToolPrefixes, provName, op.ID),
 				},
 				query: invocation.OperationAccessQuery{
 					Provider:     provName,
@@ -185,38 +187,47 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 		}
 	}
 
-	allowed, accessErr := h.filterSearchHits(ctx, p, candidates)
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].hit.App != candidates[j].hit.App {
+			return candidates[i].hit.App < candidates[j].hit.App
+		}
+		return candidates[i].hit.Operation < candidates[j].hit.Operation
+	})
+	allowed, truncated, accessErr := h.pageSearchHits(ctx, p, candidates, limit)
 	if accessErr != nil {
 		return accessErr, nil
 	}
-	sort.Slice(allowed, func(i, j int) bool {
-		if allowed[i].App != allowed[j].App {
-			return allowed[i].App < allowed[j].App
-		}
-		return allowed[i].Operation < allowed[j].Operation
-	})
-	if len(allowed) > limit {
-		allowed = allowed[:limit]
-	}
-	return toolJSONResult(searchResult{Results: allowed, Unavailable: unavailable}), nil
+	return toolJSONResult(SearchResult{Results: allowed, Unavailable: unavailable, Truncated: truncated}), nil
 }
 
-func (h *StatelessHTTPHandler) filterSearchHits(ctx context.Context, p *principal.Principal, candidates []searchCandidate) ([]searchHit, *mcpgo.CallToolResult) {
-	queries := make([]invocation.OperationAccessQuery, len(candidates))
-	for i := range candidates {
-		queries[i] = candidates[i].query
-	}
-	ok, accessErr := h.allowedOperations(ctx, p, queries)
-	if accessErr != nil {
-		return nil, accessErr
-	}
-	hits := make([]searchHit, 0, len(candidates))
-	for i := range candidates {
-		if ok[i] {
-			hits = append(hits, candidates[i].hit)
+func (h *StatelessHTTPHandler) pageSearchHits(ctx context.Context, p *principal.Principal, candidates []searchCandidate, limit int) ([]SearchHit, bool, *mcpgo.CallToolResult) {
+	hits := make([]SearchHit, 0, min(limit, len(candidates)))
+	offset := 0
+	for offset < len(candidates) && len(hits) < limit {
+		need := limit - len(hits)
+		take := min(len(candidates)-offset, invocation.MaxBatchedAccessChecks, max(need, defaultSearchLimit))
+		window := candidates[offset : offset+take]
+		queries := make([]invocation.OperationAccessQuery, len(window))
+		for i := range window {
+			queries[i] = window[i].query
 		}
+		ok, accessErr := h.allowedOperations(ctx, p, queries)
+		if accessErr != nil {
+			return nil, false, accessErr
+		}
+		consumed := 0
+		for i := range window {
+			consumed++
+			if ok[i] {
+				hits = append(hits, window[i].hit)
+				if len(hits) == limit {
+					break
+				}
+			}
+		}
+		offset += consumed
 	}
-	return hits, nil
+	return hits, offset < len(candidates), nil
 }
 
 // allowedOperations answers the same evaluator questions FilterCatalogForPrincipal
@@ -302,7 +313,6 @@ func (h *StatelessHTTPHandler) callDescribe(ctx context.Context, req mcpgo.CallT
 		Operation:    operation,
 		Title:        operationTitle(op),
 		Description:  op.Description,
-		MCPName:      toolName(h.cfg.ToolPrefixes, app, operation),
 		InputSchema:  op.InputSchema,
 		OutputSchema: op.OutputSchema,
 	}), nil
@@ -402,4 +412,36 @@ func toolJSONResult(v any) *mcpgo.CallToolResult {
 		return mcpgo.NewToolResultError(err.Error())
 	}
 	return mcpgo.NewToolResultText(string(raw))
+}
+
+// DecodeSearchToolResult reads gestalt_search's JSON body from a tools/call
+// envelope. Tests and clients use this so they do not each invent a decoder.
+func DecodeSearchToolResult(envelope map[string]any) (SearchResult, error) {
+	if envelope == nil {
+		return SearchResult{}, fmt.Errorf("missing MCP envelope")
+	}
+	if rpcErr, ok := envelope["error"]; ok {
+		return SearchResult{}, fmt.Errorf("gestalt_search rpc error: %v", rpcErr)
+	}
+	result, _ := envelope["result"].(map[string]any)
+	if result == nil {
+		return SearchResult{}, fmt.Errorf("gestalt_search missing result")
+	}
+	if isError, _ := result["isError"].(bool); isError {
+		return SearchResult{}, fmt.Errorf("gestalt_search tool error: %v", result)
+	}
+	content, _ := result["content"].([]any)
+	if len(content) == 0 {
+		return SearchResult{Results: []SearchHit{}}, nil
+	}
+	block, _ := content[0].(map[string]any)
+	text, _ := block["text"].(string)
+	var body SearchResult
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return SearchResult{}, fmt.Errorf("decode gestalt_search: %w", err)
+	}
+	if body.Results == nil {
+		body.Results = []SearchHit{}
+	}
+	return body, nil
 }

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -19,15 +21,19 @@ import (
 )
 
 type recordingOperationAccess struct {
-	allowed map[string]bool
-	err     error
-	calls   int
+	allowed      map[string]bool
+	err          error
+	calls        int
+	lastBatch    int
+	totalQueries int
 }
 
 func (r *recordingOperationAccess) CheckOperationAccessMany(
 	_ context.Context, _ *principal.Principal, queries []invocation.OperationAccessQuery,
 ) ([]error, error) {
 	r.calls++
+	r.lastBatch = len(queries)
+	r.totalQueries += len(queries)
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -50,16 +56,21 @@ func (p *panicCatalogProvider) Catalog() *catalog.Catalog {
 
 func listingTestConfig(t *testing.T, access invocation.OperationAccessChecker) Config {
 	t.Helper()
+	return listingConfig(t, access, []catalog.CatalogOperation{
+		{ID: "items.list", Title: "List items", Description: "List items", Method: "GET", Path: "/items", InputSchema: json.RawMessage(`{"type":"object","properties":{"limit":{"type":"integer"}}}`)},
+		{ID: "items.create", Title: "Create item", Description: "Create an item", Method: "POST", Path: "/items"},
+	})
+}
+
+func listingConfig(t *testing.T, access invocation.OperationAccessChecker, ops []catalog.CatalogOperation) Config {
+	t.Helper()
 	stub := &coretesting.StubIntegration{
 		N:        "sampleApp",
 		DN:       "Sample App",
 		ConnMode: core.ConnectionModeNone,
 		CatalogVal: &catalog.Catalog{
-			Name: "sampleApp",
-			Operations: []catalog.CatalogOperation{
-				{ID: "items.list", Title: "List items", Description: "List items", Method: "GET", Path: "/items", InputSchema: json.RawMessage(`{"type":"object","properties":{"limit":{"type":"integer"}}}`)},
-				{ID: "items.create", Title: "Create item", Description: "Create an item", Method: "POST", Path: "/items"},
-			},
+			Name:       "sampleApp",
+			Operations: ops,
 		},
 		ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 			return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"op":"` + op + `"}`)}, nil
@@ -169,6 +180,22 @@ func callToolJSON(t *testing.T, cfg Config, p *principal.Principal, name string,
 	return result
 }
 
+func callSearch(t *testing.T, cfg Config, p *principal.Principal, args map[string]any) SearchResult {
+	t.Helper()
+	status, envelope := callMCP(t, cfg, p, map[string]any{
+		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"params": map[string]any{"name": SearchToolName, "arguments": args},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("gestalt_search status = %d: %v", status, envelope)
+	}
+	body, err := DecodeSearchToolResult(envelope)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	return body
+}
+
 func requireToolError(t *testing.T, cfg Config, p *principal.Principal, name string, args map[string]any) map[string]any {
 	t.Helper()
 	status, envelope := callMCP(t, cfg, p, map[string]any{
@@ -186,6 +213,31 @@ func requireToolError(t *testing.T, cfg Config, p *principal.Principal, name str
 		t.Fatalf("tools/call returned %v, want a tool error", envelope)
 	}
 	return result
+}
+
+func TestInitializeExplainsWorkspaceFrontDoor(t *testing.T) {
+	t.Parallel()
+
+	status, envelope := callMCP(t, listingTestConfig(t, nil), listingTestPrincipal(), map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("initialize status = %d: %v", status, envelope)
+	}
+	result, _ := envelope["result"].(map[string]any)
+	instructions, _ := result["instructions"].(string)
+	for _, name := range []string{SearchToolName, DescribeToolName, InvokeToolName} {
+		if !strings.Contains(instructions, name) {
+			t.Fatalf("initialize instructions %q missing %s", instructions, name)
+		}
+	}
 }
 
 func TestListToolsReturnsWorkspaceFrontDoor(t *testing.T) {
@@ -240,16 +292,15 @@ func TestSearchReturnsGrantedOperations(t *testing.T) {
 	t.Parallel()
 
 	access := &recordingOperationAccess{allowed: map[string]bool{"items.list": true}}
-	body := callToolJSON(t, listingTestConfig(t, access), listingTestPrincipal(), SearchToolName, map[string]any{
+	body := callSearch(t, listingTestConfig(t, access), listingTestPrincipal(), map[string]any{
 		"query": "items",
 	})
-	results, _ := body["results"].([]any)
-	if len(results) != 1 {
-		t.Fatalf("search results = %v, want the granted list operation", body)
+	if len(body.Results) != 1 {
+		t.Fatalf("search results = %+v, want the granted list operation", body)
 	}
-	hit, _ := results[0].(map[string]any)
-	if hit["app"] != "sampleApp" || hit["operation"] != "items.list" {
-		t.Fatalf("hit = %v", hit)
+	hit := body.Results[0]
+	if hit.App != "sampleApp" || hit.Operation != "items.list" {
+		t.Fatalf("hit = %+v", hit)
 	}
 	if access.calls != 1 {
 		t.Fatalf("search evaluator calls = %d, want 1", access.calls)
@@ -260,12 +311,11 @@ func TestSearchHidesUngrantedOperations(t *testing.T) {
 	t.Parallel()
 
 	access := &recordingOperationAccess{allowed: map[string]bool{}}
-	body := callToolJSON(t, listingTestConfig(t, access), listingTestPrincipal(), SearchToolName, map[string]any{
+	body := callSearch(t, listingTestConfig(t, access), listingTestPrincipal(), map[string]any{
 		"query": "items",
 	})
-	results, _ := body["results"].([]any)
-	if len(results) != 0 {
-		t.Fatalf("ungranted search returned %v", body)
+	if len(body.Results) != 0 {
+		t.Fatalf("ungranted search returned %+v", body)
 	}
 }
 
@@ -275,12 +325,11 @@ func TestSearchKeepsScopeAsAnAdditionalFilter(t *testing.T) {
 	access := &recordingOperationAccess{allowed: map[string]bool{"items.list": true, "items.create": true}}
 	scoped := listingTestPrincipal()
 	scoped.Scopes = []string{"otherApp"}
-	body := callToolJSON(t, listingTestConfig(t, access), scoped, SearchToolName, map[string]any{
+	body := callSearch(t, listingTestConfig(t, access), scoped, map[string]any{
 		"query": "items",
 	})
-	results, _ := body["results"].([]any)
-	if len(results) != 0 {
-		t.Fatalf("out-of-scope search returned %v", body)
+	if len(body.Results) != 0 {
+		t.Fatalf("out-of-scope search returned %+v", body)
 	}
 	if access.calls != 0 {
 		t.Fatalf("evaluator consulted for out-of-scope app: %d calls", access.calls)
@@ -307,25 +356,23 @@ func TestSearchFailsLoudlyWhenEvaluatorUnavailable(t *testing.T) {
 func TestSearchWithoutCheckerReturnsMatchingOperations(t *testing.T) {
 	t.Parallel()
 
-	body := callToolJSON(t, listingTestConfig(t, nil), listingTestPrincipal(), SearchToolName, map[string]any{
+	body := callSearch(t, listingTestConfig(t, nil), listingTestPrincipal(), map[string]any{
 		"query": "create",
 	})
-	results, _ := body["results"].([]any)
-	if len(results) != 1 {
-		t.Fatalf("search results = %v, want create", body)
+	if len(body.Results) != 1 {
+		t.Fatalf("search results = %+v, want create", body)
 	}
 }
 
 func TestSearchWithoutQueryOrAppReturnsHint(t *testing.T) {
 	t.Parallel()
 
-	body := callToolJSON(t, listingTestConfig(t, nil), listingTestPrincipal(), SearchToolName, map[string]any{})
-	results, _ := body["results"].([]any)
-	if len(results) != 0 {
-		t.Fatalf("empty search returned %v", body)
+	body := callSearch(t, listingTestConfig(t, nil), listingTestPrincipal(), map[string]any{})
+	if len(body.Results) != 0 {
+		t.Fatalf("empty search returned %+v", body)
 	}
-	if body["hint"] == "" {
-		t.Fatalf("empty search missing hint: %v", body)
+	if body.Hint == "" {
+		t.Fatalf("empty search missing hint: %+v", body)
 	}
 }
 
@@ -333,17 +380,76 @@ func TestSearchOrdersAndLimitsResults(t *testing.T) {
 	t.Parallel()
 
 	access := &recordingOperationAccess{allowed: map[string]bool{"items.list": true, "items.create": true}}
-	body := callToolJSON(t, listingTestConfig(t, access), listingTestPrincipal(), SearchToolName, map[string]any{
+	body := callSearch(t, listingTestConfig(t, access), listingTestPrincipal(), map[string]any{
 		"query": "items",
 		"limit": 1,
 	})
-	results, _ := body["results"].([]any)
+	if len(body.Results) != 1 {
+		t.Fatalf("search results = %+v, want one hit", body)
+	}
+	if body.Results[0].Operation != "items.create" {
+		t.Fatalf("first limited hit = %+v, want items.create", body.Results[0])
+	}
+	if !body.Truncated {
+		t.Fatalf("limited search missing truncated: %+v", body)
+	}
+}
+
+func TestSearchAuthorizesAPageNotTheWholeMatchSet(t *testing.T) {
+	t.Parallel()
+
+	ops := make([]catalog.CatalogOperation, 0, 40)
+	allowed := map[string]bool{}
+	for i := 0; i < 40; i++ {
+		id := "item_" + strconv.Itoa(i)
+		ops = append(ops, catalog.CatalogOperation{ID: id, Title: id, Description: "item op", Method: "GET", Path: "/" + id})
+		allowed[id] = true
+	}
+	access := &recordingOperationAccess{allowed: allowed}
+	body := callSearch(t, listingConfig(t, access, ops), listingTestPrincipal(), map[string]any{
+		"query": "item",
+		"limit": 1,
+	})
+	if len(body.Results) != 1 || body.Results[0].Operation != "item_0" {
+		t.Fatalf("paged search = %+v, want item_0", body)
+	}
+	if !body.Truncated {
+		t.Fatalf("paged search missing truncated: %+v", body)
+	}
+	if access.totalQueries != defaultSearchLimit {
+		t.Fatalf("search authorized %d operations, want a page of %d", access.totalQueries, defaultSearchLimit)
+	}
+}
+
+func TestSearchWalksDeniedOperationsToFillThePage(t *testing.T) {
+	t.Parallel()
+
+	access := &recordingOperationAccess{allowed: map[string]bool{"items.list": true}}
+	body := callSearch(t, listingTestConfig(t, access), listingTestPrincipal(), map[string]any{
+		"query": "items",
+		"limit": 1,
+	})
+	if len(body.Results) != 1 || body.Results[0].Operation != "items.list" {
+		t.Fatalf("search skipped the granted operation: %+v", body)
+	}
+}
+
+func TestSearchOmitsFlattenedToolNames(t *testing.T) {
+	t.Parallel()
+
+	raw := callToolJSON(t, listingTestConfig(t, nil), listingTestPrincipal(), SearchToolName, map[string]any{
+		"query": "items.list",
+	})
+	results, _ := raw["results"].([]any)
 	if len(results) != 1 {
-		t.Fatalf("search results = %v, want one hit", body)
+		t.Fatalf("search results = %v, want items.list", raw)
 	}
 	hit, _ := results[0].(map[string]any)
-	if hit["operation"] != "items.create" {
-		t.Fatalf("first limited hit = %v, want items.create", hit)
+	if _, ok := hit["mcpName"]; ok {
+		t.Fatalf("search advertised flattened mcpName: %v", hit)
+	}
+	if hit["app"] != "sampleApp" || hit["operation"] != "items.list" {
+		t.Fatalf("hit = %v, want app and operation", hit)
 	}
 }
 
@@ -384,6 +490,9 @@ func TestDescribeReturnsGrantedOperationSchema(t *testing.T) {
 	schema, _ := body["inputSchema"].(map[string]any)
 	if schema["type"] != "object" {
 		t.Fatalf("describe schema = %v, want the list input schema", body["inputSchema"])
+	}
+	if _, ok := body["mcpName"]; ok {
+		t.Fatalf("describe advertised flattened mcpName: %v", body)
 	}
 }
 
