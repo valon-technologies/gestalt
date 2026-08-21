@@ -1234,6 +1234,7 @@ var sourceRunWireFields = map[string]struct{}{
 	"workdir":      {},
 	"env":          {},
 	"readyTimeout": {},
+	"role":         {},
 }
 
 var specWireFields = map[string]struct{}{
