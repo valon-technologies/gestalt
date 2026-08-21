@@ -557,8 +557,12 @@ func instanceListingConfig(t *testing.T, resolver invocation.TokenResolver) Conf
 		N:        "sampleApp",
 		DN:       "Sample App",
 		ConnMode: core.ConnectionModeSubject,
+		ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"op":"` + op + `"}`)}, nil
+		},
 	}}
 	return Config{
+		Invoker:          &listingInvoker{stub: &stub.StubIntegration},
 		Providers:        testutil.NewProviderRegistry(t, stub),
 		AllowedProviders: []string{"sampleApp"},
 		IncludeREST:      map[string]bool{"sampleApp": true},
@@ -582,6 +586,9 @@ func TestDescribeUsesCatalogInstance(t *testing.T) {
 	if resolver.lastInstance != "team-a" {
 		t.Fatalf("describe resolved instance %q, want team-a", resolver.lastInstance)
 	}
+	if body["_instance"] != "team-a" {
+		t.Fatalf("describe instance = %v, want team-a", body["_instance"])
+	}
 	requireToolError(t, cfg, listingTestPrincipal(), DescribeToolName, map[string]any{
 		"app":       "sampleApp",
 		"operation": "op_team-a",
@@ -602,6 +609,35 @@ func TestSearchUsesCatalogInstance(t *testing.T) {
 	}
 	if resolver.lastInstance != "team-a" {
 		t.Fatalf("search resolved instance %q, want team-a", resolver.lastInstance)
+	}
+	if body.Results[0].CatalogInstance != "team-a" {
+		t.Fatalf("search result instance = %q, want team-a", body.Results[0].CatalogInstance)
+	}
+}
+
+func TestSearchResultCarriesCatalogInstanceIntoInvoke(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingTokenResolver{}
+	cfg := instanceListingConfig(t, resolver)
+	search := callSearch(t, cfg, listingTestPrincipal(), map[string]any{
+		"app":       "sampleApp",
+		"_instance": "team-a",
+	})
+	if len(search.Results) != 1 {
+		t.Fatalf("search = %+v, want one result", search)
+	}
+	hit := search.Results[0]
+	body := callToolJSON(t, cfg, listingTestPrincipal(), InvokeToolName, map[string]any{
+		"app":       hit.App,
+		"operation": hit.Operation,
+		"_instance": hit.CatalogInstance,
+	})
+	if body["op"] != hit.Operation {
+		t.Fatalf("invoke result = %v, want operation %q", body, hit.Operation)
+	}
+	if resolver.lastInstance != "team-a" {
+		t.Fatalf("invoke resolved instance %q, want team-a", resolver.lastInstance)
 	}
 }
 

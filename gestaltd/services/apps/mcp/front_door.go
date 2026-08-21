@@ -91,10 +91,11 @@ func workspaceFrontDoorTools() []mcpgo.Tool {
 }
 
 type SearchHit struct {
-	App         string `json:"app"`
-	Operation   string `json:"operation"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
+	App             string `json:"app"`
+	Operation       string `json:"operation"`
+	CatalogInstance string `json:"_instance,omitempty"`
+	Title           string `json:"title,omitempty"`
+	Description     string `json:"description,omitempty"`
 }
 
 type SearchUnavailable struct {
@@ -115,12 +116,13 @@ type searchCandidate struct {
 }
 
 type describeResult struct {
-	App          string          `json:"app"`
-	Operation    string          `json:"operation"`
-	Title        string          `json:"title,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	InputSchema  json.RawMessage `json:"inputSchema,omitempty"`
-	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
+	App             string          `json:"app"`
+	Operation       string          `json:"operation"`
+	CatalogInstance string          `json:"_instance,omitempty"`
+	Title           string          `json:"title,omitempty"`
+	Description     string          `json:"description,omitempty"`
+	InputSchema     json.RawMessage `json:"inputSchema,omitempty"`
+	OutputSchema    json.RawMessage `json:"outputSchema,omitempty"`
 }
 
 func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -181,10 +183,11 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 			}
 			candidates = append(candidates, searchCandidate{
 				hit: SearchHit{
-					App:         provName,
-					Operation:   op.ID,
-					Title:       operationTitle(op),
-					Description: op.Description,
+					App:             provName,
+					Operation:       op.ID,
+					CatalogInstance: instance,
+					Title:           operationTitle(op),
+					Description:     op.Description,
 				},
 				query: invocation.OperationAccessQuery{
 					Provider:     provName,
@@ -296,7 +299,8 @@ func (h *StatelessHTTPHandler) callDescribe(ctx context.Context, req mcpgo.CallT
 	if !ok {
 		return mcpgo.NewToolResultError(fmt.Sprintf("app %q is not available", app)), nil
 	}
-	rawCat, err := h.resolveCatalog(ctx, app, prov, normalizedSessionCatalogInstance(args["_instance"]), true)
+	instance := normalizedSessionCatalogInstance(args["_instance"])
+	rawCat, err := h.resolveCatalog(ctx, app, prov, instance, true)
 	if err != nil {
 		return mcpgo.NewToolResultError(err.Error()), nil
 	}
@@ -317,12 +321,13 @@ func (h *StatelessHTTPHandler) callDescribe(ctx context.Context, req mcpgo.CallT
 		return mcpgo.NewToolResultError("operation access denied"), nil
 	}
 	return toolJSONResult(describeResult{
-		App:          app,
-		Operation:    operation,
-		Title:        operationTitle(op),
-		Description:  op.Description,
-		InputSchema:  op.InputSchema,
-		OutputSchema: op.OutputSchema,
+		App:             app,
+		Operation:       operation,
+		CatalogInstance: instance,
+		Title:           operationTitle(op),
+		Description:     op.Description,
+		InputSchema:     op.InputSchema,
+		OutputSchema:    op.OutputSchema,
 	}), nil
 }
 
