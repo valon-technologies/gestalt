@@ -344,9 +344,12 @@ func TestRemoteRegistryPublishAlreadyPublishedAndAuth(t *testing.T) { //nolint:p
 func TestRemoteRegistryPublishInterruptedResume(t *testing.T) { //nolint:paralleltest // chdirs
 	_, distDir, _, base := setupRemotePublishFixture(t)
 	_, darwinHeaders := remotePublishArtifactFixture(t, filepath.Join(distDir, "darwin-arm64.tar.gz"))
+	var stateMu sync.Mutex
 	uploaded := map[string]bool{}
 	uploadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		stateMu.Lock()
 		uploaded[strings.TrimPrefix(r.URL.Path, "/upload/")] = true
+		stateMu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(uploadServer.Close)
@@ -357,8 +360,15 @@ func TestRemoteRegistryPublishInterruptedResume(t *testing.T) { //nolint:paralle
 		case strings.HasSuffix(r.URL.Path, "/finalize"):
 			writeRemotePublishJSON(w, appregistry.AdminPublishResponse{PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStatePublished})
 		case strings.HasSuffix(r.URL.Path, "/publishes"):
+			stateMu.Lock()
+			first := firstCreate
 			if firstCreate {
 				firstCreate = false
+			}
+			darwinDone := uploaded["darwin/arm64"]
+			stateMu.Unlock()
+
+			if first {
 				_, linuxHeaders := remotePublishArtifactFixture(t, filepath.Join(distDir, "linux-amd64.tar.gz"))
 				writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
 					PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStateUploading,
@@ -369,7 +379,7 @@ func TestRemoteRegistryPublishInterruptedResume(t *testing.T) { //nolint:paralle
 				})
 				return
 			}
-			if !uploaded["darwin/arm64"] {
+			if !darwinDone {
 				writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
 					PublishID: "pub_resume", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStateUploading,
 					Uploads: []appregistry.AdminPublishUpload{{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/upload/darwin/arm64", Headers: darwinHeaders}},
@@ -381,14 +391,22 @@ func TestRemoteRegistryPublishInterruptedResume(t *testing.T) { //nolint:paralle
 	}))
 	t.Cleanup(apiServer.Close)
 
+	stateMu.Lock()
 	uploaded["linux/amd64"] = true
+	stateMu.Unlock()
 	if _, err := (&remoteRegistryPublisher{
 		Version: "0.3.0-dev.1", DistDirs: []string{distDir}, GestaltURL: apiServer.URL, GestaltToken: "token",
 		BuilderVersion: remotePublishTestBuilderVersion,
 		Client:         &remoteRegistryClient{BaseURL: apiServer.URL, Token: "token"},
 		GitRunner:      base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
-	}).publish(t.Context()); err != nil || !uploaded["darwin/arm64"] {
-		t.Fatalf("resume upload = %#v err=%v", uploaded, err)
+	}).publish(t.Context()); err != nil {
+		t.Fatalf("resume upload err=%v", err)
+	}
+	stateMu.Lock()
+	darwinDone := uploaded["darwin/arm64"]
+	stateMu.Unlock()
+	if !darwinDone {
+		t.Fatalf("resume upload = %#v, want darwin/arm64 uploaded", uploaded)
 	}
 }
 
