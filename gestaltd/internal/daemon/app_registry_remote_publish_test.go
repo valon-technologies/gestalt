@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
@@ -110,6 +112,188 @@ func TestRemoteRegistryPublishFlowAndResume(t *testing.T) { //nolint:paralleltes
 	if _, err := pub.publish(t.Context()); err != nil || uploaded["linux/amd64"] != 1 || uploaded["darwin/arm64"] != 1 {
 		t.Fatalf("resume changed uploads: %#v err=%v", uploaded, err)
 	}
+}
+
+func TestRemoteRegistryPublishUploadsOverlapAndFinalizeAfterCompletion(t *testing.T) { //nolint:paralleltest // chdirs
+	_, distDir, _, base := setupRemotePublishFixture(t)
+	_, linuxHeaders := remotePublishArtifactFixture(t, filepath.Join(distDir, "linux-amd64.tar.gz"))
+	_, darwinHeaders := remotePublishArtifactFixture(t, filepath.Join(distDir, "darwin-arm64.tar.gz"))
+
+	var active, maxActive, completed, finalized atomic.Int32
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	uploadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nowActive := active.Add(1)
+		defer active.Add(-1)
+		for {
+			previous := maxActive.Load()
+			if nowActive <= previous || maxActive.CompareAndSwap(previous, nowActive) {
+				break
+			}
+		}
+		if nowActive == 2 {
+			releaseOnce.Do(func() { close(release) })
+		}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		completed.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(uploadServer.Close)
+
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/finalize") {
+			finalized.Store(completed.Load())
+			writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
+				PublishID: "pub_concurrent", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStatePublished,
+			})
+			return
+		}
+		writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
+			PublishID: "pub_concurrent", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStateUploading,
+			Uploads: []appregistry.AdminPublishUpload{
+				{Platform: "linux/amd64", UploadURL: uploadServer.URL + "/linux", Headers: linuxHeaders},
+				{Platform: "darwin/arm64", UploadURL: uploadServer.URL + "/darwin", Headers: darwinHeaders},
+			},
+		})
+	}))
+	t.Cleanup(apiServer.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	_, err := (&remoteRegistryPublisher{
+		Version: "0.3.0-dev.1", DistDirs: []string{distDir}, GestaltURL: apiServer.URL, GestaltToken: "token",
+		BuilderVersion: remotePublishTestBuilderVersion,
+		Client:         &remoteRegistryClient{BaseURL: apiServer.URL, Token: "token"},
+		GitRunner:      base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
+	}).publish(ctx)
+	if err != nil {
+		t.Fatalf("publish() err=%v", err)
+	}
+	if maxActive.Load() < 2 {
+		t.Fatalf("maximum concurrent uploads = %d, want at least 2", maxActive.Load())
+	}
+	if finalized.Load() != 2 {
+		t.Fatalf("finalize observed %d completed uploads, want 2", finalized.Load())
+	}
+}
+
+func TestRemoteRegistryPublishFailureCancelsSiblingAndSkipsFinalize(t *testing.T) { //nolint:paralleltest // chdirs
+	_, distDir, _, base := setupRemotePublishFixture(t)
+	_, linuxHeaders := remotePublishArtifactFixture(t, filepath.Join(distDir, "linux-amd64.tar.gz"))
+	_, darwinHeaders := remotePublishArtifactFixture(t, filepath.Join(distDir, "darwin-arm64.tar.gz"))
+
+	siblingStarted := make(chan struct{})
+	siblingCanceled := make(chan struct{})
+	var startedOnce, canceledOnce sync.Once
+	uploadClient := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/darwin":
+			startedOnce.Do(func() { close(siblingStarted) })
+			<-r.Context().Done()
+			canceledOnce.Do(func() { close(siblingCanceled) })
+			return nil, r.Context().Err()
+		case "/linux":
+			select {
+			case <-siblingStarted:
+			case <-r.Context().Done():
+				return nil, r.Context().Err()
+			}
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Body:       io.NopCloser(strings.NewReader("controlled failure")),
+			}, nil
+		default:
+			return nil, fmt.Errorf("unexpected upload path %q", r.URL.Path)
+		}
+	})}
+
+	var finalizeCalls atomic.Int32
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/finalize") {
+			finalizeCalls.Add(1)
+			writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
+				PublishID: "pub_failed", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStatePublished,
+			})
+			return
+		}
+		writeRemotePublishJSON(w, appregistry.AdminPublishResponse{
+			PublishID: "pub_failed", App: "demo", Version: "0.3.0-dev.1", State: appregistry.PublishStateUploading,
+			Uploads: []appregistry.AdminPublishUpload{
+				{Platform: "linux/amd64", UploadURL: "http://upload.test/linux", Headers: linuxHeaders},
+				{Platform: "darwin/arm64", UploadURL: "http://upload.test/darwin", Headers: darwinHeaders},
+			},
+		})
+	}))
+	t.Cleanup(apiServer.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	_, err := (&remoteRegistryPublisher{
+		Version: "0.3.0-dev.1", DistDirs: []string{distDir}, GestaltURL: apiServer.URL, GestaltToken: "token",
+		BuilderVersion: remotePublishTestBuilderVersion,
+		Client:         &remoteRegistryClient{BaseURL: apiServer.URL, Token: "token"},
+		Uploader:       &remoteRegistryUploader{HTTPClient: uploadClient},
+		GitRunner:      base.GitRunner, collectArchives: base.collectArchives, resolveManifest: base.resolveManifest, buildReleaseMetadata: base.buildReleaseMetadata,
+	}).publish(ctx)
+	if err == nil || !strings.Contains(err.Error(), `upload platform "linux/amd64" returned 503`) {
+		t.Fatalf("publish() err=%v, want controlled linux upload failure", err)
+	}
+	select {
+	case <-siblingCanceled:
+	default:
+		t.Fatal("publish returned before the sibling upload observed cancellation")
+	}
+	if finalizeCalls.Load() != 0 {
+		t.Fatalf("finalize calls = %d, want 0", finalizeCalls.Load())
+	}
+}
+
+func BenchmarkRemoteRegistryArtifactUploads(b *testing.B) {
+	payload := bytes.Repeat([]byte("benchmark"), 128)
+	path := filepath.Join(b.TempDir(), "artifact.tar.gz")
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		b.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	digest := hex.EncodeToString(sum[:])
+	headers, err := appregistry.BuildSignedUploadHeaders(int64(len(payload)), digest)
+	if err != nil {
+		b.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(15 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	b.Cleanup(server.Close)
+
+	inputs := make([]remoteRegistryUploadInput, remoteRegistryUploadParallelism)
+	for i := range inputs {
+		inputs[i] = remoteRegistryUploadInput{
+			Platform: fmt.Sprintf("benchmark/%d", i), LocalPath: path, SHA256: digest,
+			UploadURL: fmt.Sprintf("%s/%d", server.URL, i), Headers: headers,
+		}
+	}
+	uploader := &remoteRegistryUploader{}
+	b.Run("serial", func(b *testing.B) {
+		for range b.N {
+			for _, input := range inputs {
+				if err := uploader.upload(context.Background(), input); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	})
+	b.Run("bounded-concurrent", func(b *testing.B) {
+		for range b.N {
+			if err := uploadRemoteRegistryArtifacts(context.Background(), uploader, inputs, nil); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
 
 func TestRemoteRegistryPublishProvenanceWarningsUseStderr(t *testing.T) { //nolint:paralleltest // chdirs

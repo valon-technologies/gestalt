@@ -103,18 +103,28 @@ func runProviderPackage(args []string) (err error) {
 	}
 	validationProgress.done("Validated provider source manifest for %s", appName)
 
+	preparation, err := providerpkg.PrepareSourcePackaging(manifestPath, providerpkg.CommandOutput{})
+	if err != nil {
+		return fmt.Errorf("prepare provider packaging: %w", err)
+	}
+	defer func() {
+		if closeErr := preparation.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("clean up provider packaging preparation: %w", closeErr)
+		}
+	}()
+
 	archiveCount := 0
 	if len(buildPlatforms) > 0 {
 		for _, platform := range buildPlatforms {
 			platformName := providerpkg.PlatformString(platform.GOOS, platform.GOARCH)
-			_, err := buildPlatformArchive(manifestPath, appName, *version, platform, *outputDir)
+			_, err := buildPlatformArchive(manifestPath, appName, *version, platform, *outputDir, preparation)
 			if err != nil {
 				return fmt.Errorf("build %s: %w", platformName, err)
 			}
 			archiveCount++
 		}
 	} else {
-		_, err := buildSourceArchive(manifestPath, appName, *version, *outputDir)
+		_, err := buildSourceArchive(manifestPath, appName, *version, *outputDir, preparation)
 		if err != nil {
 			return err
 		}
@@ -303,7 +313,7 @@ func expandReleasePlatformValue(value string) (string, error) {
 	}
 }
 
-func buildPlatformArchive(manifestPath, appName, version string, platform releasePlatform, outputDir string) (string, error) {
+func buildPlatformArchive(manifestPath, appName, version string, platform releasePlatform, outputDir string, preparation *providerpkg.SourcePackagingPreparation) (string, error) {
 	archiveName := platformArchiveName(appName, version, platform)
 	platformName := providerpkg.PlatformString(platform.GOOS, platform.GOARCH)
 	return createReleaseArchive(outputDir, archiveName, "platform "+platformName, func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
@@ -312,6 +322,7 @@ func buildPlatformArchive(manifestPath, appName, version string, platform releas
 			AppName:         appName,
 			GOOS:            platform.GOOS,
 			GOARCH:          platform.GOARCH,
+			Preparation:     preparation,
 		})
 	})
 }
@@ -364,11 +375,12 @@ func currentReleasePlatform() string {
 	return runtime.GOOS + "/" + runtime.GOARCH
 }
 
-func buildSourceArchive(manifestPath, appName, version, outputDir string) (string, error) {
+func buildSourceArchive(manifestPath, appName, version, outputDir string, preparation *providerpkg.SourcePackagingPreparation) (string, error) {
 	archiveName := fmt.Sprintf("gestalt-app-%s_v%s.tar.gz", appName, version)
 	return createReleaseArchive(outputDir, archiveName, "generic archive", func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
 		return providerpkg.StageSourcePreparedInstallDir(manifestPath, stagingDir, providerpkg.StageSourcePreparedInstallOptions{
 			VersionOverride: version,
+			Preparation:     preparation,
 		})
 	})
 }

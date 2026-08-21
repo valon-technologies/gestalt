@@ -511,6 +511,211 @@ fi
 	}
 }
 
+func TestSourceBuildOutputUsesTargetOS(t *testing.T) {
+	t.Parallel()
+
+	const source = "github.com/test/apps/provider"
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  source,
+		Version: "0.0.1-alpha.1",
+		Build: &providermanifestv1.SourceBuild{
+			Commands: []providermanifestv1.SourcePhaseCommand{{Command: []string{"build"}}},
+		},
+	}
+
+	got, kind, err := sourceBuildOutput(manifest, SourceBuildOptions{GOOS: windowsOS, GOARCH: "amd64"})
+	if err != nil {
+		t.Fatalf("sourceBuildOutput: %v", err)
+	}
+	want := sourceBuildOutputRel(t, source, windowsOS)
+	if got != want {
+		t.Fatalf("sourceBuildOutput path = %q, want %q", got, want)
+	}
+	if kind != "executable" {
+		t.Fatalf("sourceBuildOutput kind = %q, want executable", kind)
+	}
+}
+
+func TestRunSourceBuildForPackagingDoesNotSkipStaticOnlyCommands(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	script := `#!/bin/sh
+set -eu
+mkdir -p "$GESTALT_BUILD_STATIC"
+printf '<html>%s</html>\n' "$GESTALT_TARGET_PLATFORM" > "$GESTALT_BUILD_STATIC/index.html"
+`
+	mustWriteFile(t, filepath.Join(root, "build-static.sh"), []byte(script), 0o755)
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/test/apps/static-only",
+		Version: "0.0.1-alpha.1",
+		Spec:    &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Commands: []providermanifestv1.SourcePhaseCommand{{Command: []string{"sh", "./build-static.sh"}}},
+		},
+		Run: sourceRunCommand("./run.sh"),
+	}
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, manifest))
+
+	plan, err := runSourceBuildForPackaging(manifestPath, manifest, SourceBuildOptions{
+		GOOS: "linux", GOARCH: "amd64",
+	})
+	if err != nil {
+		t.Fatalf("runSourceBuildForPackaging: %v", err)
+	}
+	if len(plan.skipTargetCommands) != 0 {
+		t.Fatalf("skipTargetCommands = %v, want none for a static-only build", plan.skipTargetCommands)
+	}
+	if err := runSourceBuildWithPackagingPlan(manifestPath, manifest, SourceBuildOptions{
+		GOOS: "darwin", GOARCH: "arm64",
+	}, plan); err != nil {
+		t.Fatalf("runSourceBuildWithPackagingPlan: %v", err)
+	}
+	staticIndex := mustReadFile(t, filepath.Join(SourceStaticBuildDir(manifestPath), "index.html"))
+	if !strings.Contains(string(staticIndex), "darwin/arm64") {
+		t.Fatalf("static index = %q, want rebuilt target assets", staticIndex)
+	}
+}
+
+func TestSourcePackagingPreparation_ReusesHostWorkAndStaticAssetsAcrossTargets(t *testing.T) {
+	t.Parallel()
+
+	targetGOOS, targetGOARCH := "linux", "amd64"
+	if runtime.GOOS == targetGOOS && runtime.GOARCH == targetGOARCH {
+		targetGOOS, targetGOARCH = "darwin", "arm64"
+	}
+
+	root := t.TempDir()
+	const source = "github.com/test/apps/provider"
+	hostOutputRel := sourceBuildOutputRel(t, source, runtime.GOOS)
+	targetOutputRel := sourceBuildOutputRel(t, source, targetGOOS)
+	logPath := filepath.Join(root, "phases.log")
+	buildScript := `#!/bin/sh
+set -eu
+printf 'build:%s\n' "$GESTALT_TARGET_PLATFORM" >> ` + shellQuote(logPath) + `
+mkdir -p .gestaltd/bin
+if [ "$GESTALT_TARGET_OS" = "` + targetGOOS + `" ]; then
+  output=` + shellQuote(targetOutputRel) + `
+else
+  output=` + shellQuote(hostOutputRel) + `
+fi
+cat > "$output" <<'SH'
+#!/bin/sh
+if [ -n "${GESTALT_APP_WRITE_CATALOG:-}" ]; then
+  printf 'name: provider\noperations:\n  - id: packaged_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
+fi
+SH
+printf '# target:%s\n' "$GESTALT_TARGET_PLATFORM" >> "$output"
+chmod +x "$output"
+`
+	uiScript := `#!/bin/sh
+set -eu
+printf 'ui:%s\n' "$GESTALT_TARGET_PLATFORM" >> ` + shellQuote(logPath) + `
+mkdir -p "$GESTALT_BUILD_STATIC"
+printf '<html>%s</html>\n' "$GESTALT_TARGET_PLATFORM" > "$GESTALT_BUILD_STATIC/index.html"
+`
+	mustWriteFile(t, filepath.Join(root, "install.sh"), []byte("#!/bin/sh\nprintf 'install\\n' >> "+shellQuote(logPath)+"\n"), 0o755)
+	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
+	mustWriteFile(t, filepath.Join(root, "ui.sh"), []byte(uiScript), 0o755)
+	mustWriteFile(t, filepath.Join(root, "run.sh"), []byte(`#!/bin/sh
+if [ -n "${GESTALT_APP_WRITE_CATALOG:-}" ]; then
+  printf 'name: provider\noperations:\n  - id: run_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
+fi
+`), 0o755)
+	mustWriteFile(t, filepath.Join(root, StaticCatalogFile), []byte("name: provider\noperations:\n  - id: stale_catalog\n    method: POST\n"), 0o644)
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  source,
+		Version: "0.0.1-alpha.1",
+		Spec:    &providermanifestv1.Spec{},
+		Install: &providermanifestv1.SourceInstall{
+			Command: []string{"sh", "./install.sh"},
+		},
+		Build: &providermanifestv1.SourceBuild{
+			Commands: []providermanifestv1.SourcePhaseCommand{
+				{Command: []string{"sh", "./build.sh"}},
+				{Command: []string{"sh", "./ui.sh"}, Workdir: "."},
+			},
+		},
+		Run: sourceRunCommand("./run.sh"),
+	}))
+
+	preparation, err := PrepareSourcePackaging(manifestPath, CommandOutput{})
+	if err != nil {
+		t.Fatalf("PrepareSourcePackaging: %v", err)
+	}
+	defer func() {
+		if err := preparation.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	}()
+
+	targetStage := filepath.Join(t.TempDir(), "target")
+	if _, err := StageSourcePreparedInstallDir(manifestPath, targetStage, StageSourcePreparedInstallOptions{
+		AppName:     "prepared-stage-test",
+		GOOS:        targetGOOS,
+		GOARCH:      targetGOARCH,
+		Preparation: preparation,
+	}); err != nil {
+		t.Fatalf("stage target: %v", err)
+	}
+	hostStage := filepath.Join(t.TempDir(), "host")
+	if _, err := StageSourcePreparedInstallDir(manifestPath, hostStage, StageSourcePreparedInstallOptions{
+		AppName:     "prepared-stage-test",
+		GOOS:        runtime.GOOS,
+		GOARCH:      runtime.GOARCH,
+		Preparation: preparation,
+	}); err != nil {
+		t.Fatalf("stage host: %v", err)
+	}
+
+	logText := readLog(t, logPath)
+	if strings.Count(logText, "install\n") != 1 {
+		t.Fatalf("phase log = %q, want one install", logText)
+	}
+	expectedHostBuilds := 1
+	hostTargetOpts := SourceBuildOptions{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
+	if HostLibC() != effectiveTargetLibC(hostTargetOpts) {
+		// Linux catalog generation uses a host-libc executable, while the
+		// packaged host target defaults to musl and needs its own build.
+		expectedHostBuilds = 2
+	}
+	if got, want := strings.Count(logText, "build:"), expectedHostBuilds+1; got != want {
+		t.Fatalf("phase log = %q, build count = %d, want %d", logText, got, want)
+	}
+	if got := strings.Count(logText, "build:"+runtime.GOOS+"/"+runtime.GOARCH+"\n"); got != expectedHostBuilds {
+		t.Fatalf("phase log = %q, host build count = %d, want %d", logText, got, expectedHostBuilds)
+	}
+	if strings.Count(logText, "build:"+targetGOOS+"/"+targetGOARCH+"\n") != 1 {
+		t.Fatalf("phase log = %q, want exactly one target build", logText)
+	}
+	if strings.Count(logText, "ui:") != 1 {
+		t.Fatalf("phase log = %q, want one shared UI build", logText)
+	}
+
+	targetBinary := mustReadFile(t, filepath.Join(targetStage, filepath.FromSlash(stagedExecutableRel("prepared-stage-test", targetGOOS))))
+	if !strings.Contains(string(targetBinary), "# target:"+targetGOOS+"/"+targetGOARCH) {
+		t.Fatalf("target executable = %q, want target platform marker", targetBinary)
+	}
+	hostBinary := mustReadFile(t, filepath.Join(hostStage, filepath.FromSlash(stagedExecutableRel("prepared-stage-test", runtime.GOOS))))
+	if !strings.Contains(string(hostBinary), "# target:"+runtime.GOOS+"/"+runtime.GOARCH) {
+		t.Fatalf("host executable = %q, want host platform marker", hostBinary)
+	}
+
+	targetCatalog := mustReadFile(t, filepath.Join(targetStage, StaticCatalogFile))
+	hostCatalog := mustReadFile(t, filepath.Join(hostStage, StaticCatalogFile))
+	if !slices.Equal(targetCatalog, hostCatalog) || !strings.Contains(string(targetCatalog), "packaged_catalog") {
+		t.Fatalf("staged catalogs differ or are stale: target=%q host=%q", targetCatalog, hostCatalog)
+	}
+	targetStatic := mustReadFile(t, filepath.Join(targetStage, "static", "index.html"))
+	hostStatic := mustReadFile(t, filepath.Join(hostStage, "static", "index.html"))
+	if !slices.Equal(targetStatic, hostStatic) || !strings.Contains(string(targetStatic), runtime.GOOS+"/"+runtime.GOARCH) {
+		t.Fatalf("staged static assets differ or are not host-prepared: target=%q host=%q", targetStatic, hostStatic)
+	}
+}
+
 func TestStageSourcePreparedInstallDir_RunOnlyFailsReleasePackaging(t *testing.T) {
 	t.Parallel()
 
@@ -575,11 +780,18 @@ func assertLogContains(t *testing.T, logPath, want string) {
 func readLog(t *testing.T, logPath string) string {
 	t.Helper()
 
-	logData, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", logPath, err)
-	}
+	logData := mustReadFile(t, logPath)
 	return string(logData)
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	return data
 }
 
 func shellQuote(value string) string {

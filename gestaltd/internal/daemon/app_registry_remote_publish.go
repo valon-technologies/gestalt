@@ -7,11 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
+
+const remoteRegistryUploadParallelism = 4
 
 type remoteGitRunner interface {
 	Run(name string, args ...string) (string, error)
@@ -103,18 +106,19 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 	for _, archive := range prepared.Archives {
 		archiveByPlatform[strings.TrimSpace(archive.Target)] = archive
 	}
+	uploadInputs := make([]remoteRegistryUploadInput, 0, len(created.Uploads))
 	for _, upload := range created.Uploads {
 		platform := strings.TrimSpace(upload.Platform)
 		archive, ok := archiveByPlatform[platform]
 		if !ok {
 			return zero, fmt.Errorf("local archive for platform %q is missing from --dist-dir", platform)
 		}
-		logf("Uploading %s (%s)", filepath.Base(archive.Path), platform)
-		if err := uploader.upload(ctx, remoteRegistryUploadInput{
+		uploadInputs = append(uploadInputs, remoteRegistryUploadInput{
 			Platform: platform, LocalPath: archive.Path, SHA256: archive.SHA256, UploadURL: upload.UploadURL, Headers: upload.Headers,
-		}); err != nil {
-			return zero, err
-		}
+		})
+	}
+	if err := uploadRemoteRegistryArtifacts(ctx, uploader, uploadInputs, logf); err != nil {
+		return zero, err
 	}
 	finalized, err := client.finalize(ctx, appName, created.PublishID, declaration)
 	if err != nil {
@@ -129,6 +133,67 @@ func (p *remoteRegistryPublisher) publish(ctx context.Context) (remoteRegistryPu
 	}
 	printRemoteRegistryPublishResult(p.Output, result)
 	return result, nil
+}
+
+func uploadRemoteRegistryArtifacts(ctx context.Context, uploader *remoteRegistryUploader, inputs []remoteRegistryUploadInput, logf func(string, ...any)) error {
+	if len(inputs) == 0 {
+		return nil
+	}
+	if logf == nil {
+		logf = func(string, ...any) {}
+	}
+	workerCount := min(remoteRegistryUploadParallelism, len(inputs))
+	uploadCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	jobs := make(chan remoteRegistryUploadInput, len(inputs))
+	for _, input := range inputs {
+		jobs <- input
+	}
+	close(jobs)
+
+	var (
+		firstErr     error
+		firstErrOnce sync.Once
+		logMu        sync.Mutex
+		workers      sync.WaitGroup
+	)
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for {
+				select {
+				case <-uploadCtx.Done():
+					return
+				case input, ok := <-jobs:
+					if !ok {
+						return
+					}
+					// Both cases can be ready after cancellation, so check again
+					// before opening a file or starting another request.
+					if uploadCtx.Err() != nil {
+						return
+					}
+					logMu.Lock()
+					logf("Uploading %s (%s)", filepath.Base(input.LocalPath), input.Platform)
+					logMu.Unlock()
+					if err := uploader.upload(uploadCtx, input); err != nil {
+						firstErrOnce.Do(func() {
+							firstErr = err
+							cancel()
+						})
+						return
+					}
+				}
+			}
+		}()
+	}
+	workers.Wait()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return firstErr
 }
 
 func resolveRemotePublishManifest(appName string) (string, string, error) {
