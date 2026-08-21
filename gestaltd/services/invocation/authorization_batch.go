@@ -9,14 +9,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-// maxBatchedAccessChecks bounds one batched authorization call so a large
+// MaxBatchedAccessChecks bounds one batched authorization call so a large
 // catalog or app roster cannot turn a single listing request into an unbounded
 // provider request.
-const maxBatchedAccessChecks = 1000
+const MaxBatchedAccessChecks = 1000
 
 // ErrBatchedAccessTooLarge reports that a caller asked for more decisions in
 // one batch than the server will send to the evaluator.
-var ErrBatchedAccessTooLarge = fmt.Errorf("batched authorization check exceeds %d requests", maxBatchedAccessChecks)
+var ErrBatchedAccessTooLarge = fmt.Errorf("batched authorization check exceeds %d requests", MaxBatchedAccessChecks)
 
 // CheckResourceAccessMany answers many authorization questions with ONE
 // provider call. Listing surfaces use it so a catalog or app roster costs one
@@ -39,7 +39,7 @@ func CheckResourceAccessMany(
 	if authorization == nil {
 		return nil, ErrAuthorizationUnavailable
 	}
-	if len(reqs) > maxBatchedAccessChecks {
+	if len(reqs) > MaxBatchedAccessChecks {
 		return nil, ErrBatchedAccessTooLarge
 	}
 

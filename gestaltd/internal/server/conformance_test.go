@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -473,6 +474,42 @@ func (h *conformanceHarness) mcpToolNames(t *testing.T, cred conformanceCredenti
 	return names
 }
 
+func requireWorkspaceFrontDoor(t *testing.T, names []string) {
+	t.Helper()
+	want := gestaltmcp.WorkspaceFrontDoorToolNames()
+	if !slices.Equal(names, want) {
+		t.Fatalf("tools/list = %v, want workspace front door %v", names, want)
+	}
+}
+
+func conformanceFlattenedListTool() string {
+	return conformanceMountedApp + "_items_list"
+}
+
+func (h *conformanceHarness) mcpSearchOperations(t *testing.T, cred conformanceCredential, query, app string) []string {
+	t.Helper()
+	args := map[string]any{}
+	if query != "" {
+		args["query"] = query
+	}
+	if app != "" {
+		args["app"] = app
+	}
+	envelope := h.mcp(t, cred, map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+		"params": map[string]any{"name": gestaltmcp.SearchToolName, "arguments": args},
+	})
+	body, err := gestaltmcp.DecodeSearchToolResult(envelope)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	names := make([]string, 0, len(body.Results))
+	for _, hit := range body.Results {
+		names = append(names, hit.Operation)
+	}
+	return names
+}
+
 // mcpCallSucceeds reports whether tools/call for the list operation ran. A
 // denied call comes back as a JSON-RPC error or an isError result.
 func (h *conformanceHarness) mcpCallSucceeds(t *testing.T, cred conformanceCredential, toolName string) bool {
@@ -509,18 +546,6 @@ func (h *conformanceHarness) invokeOperation(t *testing.T, appName string, cred 
 		t.Fatalf("POST operation status = %d: %s", status, body)
 		return false
 	}
-}
-
-// conformanceListToolName finds the list tool's prefixed MCP name.
-func conformanceListToolName(t *testing.T, names []string) string {
-	t.Helper()
-	for _, name := range names {
-		if strings.Contains(name, "items") {
-			return name
-		}
-	}
-	t.Fatalf("list tool not found in %v", names)
-	return ""
 }
 
 // --- grant shapes ----------------------------------------------------------
@@ -907,11 +932,8 @@ func TestConformanceEmployeeUsesDefaultRole(t *testing.T) {
 	if got := harness.mountedPaths(t, cred)[conformanceMountedApp]; got == "" {
 		t.Fatal("defaultRole employee lost the mounted path in /apps")
 	}
-	names := harness.mcpToolNames(t, cred)
-	if len(names) == 0 {
-		t.Fatal("defaultRole employee saw no MCP tools")
-	}
-	if !harness.mcpCallSucceeds(t, cred, conformanceListToolName(t, names)) {
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cred))
+	if !harness.mcpCallSucceeds(t, cred, conformanceFlattenedListTool()) {
 		t.Fatal("defaultRole employee could not call an MCP tool")
 	}
 	if !harness.invokeOperation(t, conformanceMountedApp, cred) {
@@ -972,10 +994,7 @@ func TestConformanceElevatedAdminPassesEveryGate(t *testing.T) {
 	if status, _ := harness.members(t, conformanceAdminApp, cred); status != http.StatusOK {
 		t.Fatalf("app admin status = %d, want 200", status)
 	}
-	names := harness.mcpToolNames(t, cred)
-	if len(names) == 0 {
-		t.Fatal("admin saw no MCP tools")
-	}
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cred))
 }
 
 // TestConformanceUngrantedExternalIsDeniedEverywhere is the baseline external
@@ -998,10 +1017,11 @@ func TestConformanceUngrantedExternalIsDeniedEverywhere(t *testing.T) {
 	if status, _ := harness.members(t, conformanceAdminApp, cred); status != http.StatusForbidden {
 		t.Fatalf("app admin status = %d, want 403", status)
 	}
-	if names := harness.mcpToolNames(t, cred); len(names) != 0 {
-		t.Fatalf("tools/list exposed %v to an ungranted external user", names)
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cred))
+	if ops := harness.mcpSearchOperations(t, cred, "items", conformanceMountedApp); len(ops) != 0 {
+		t.Fatalf("gestalt_search exposed %v to an ungranted external user", ops)
 	}
-	if harness.mcpCallSucceeds(t, cred, conformanceMountedApp+"_items_list") {
+	if harness.mcpCallSucceeds(t, cred, conformanceFlattenedListTool()) {
 		t.Fatal("tools/call succeeded for an ungranted external user")
 	}
 	if harness.invokeOperation(t, conformanceMountedApp, cred) {
@@ -1038,11 +1058,11 @@ func TestConformanceGrantedExternalIsAllowedOnEverySurface(t *testing.T) {
 	if paths[conformanceOtherApp] != "" {
 		t.Fatalf("/apps exposed ungranted app %q", conformanceOtherApp)
 	}
-	names := harness.mcpToolNames(t, cred)
-	if len(names) == 0 {
-		t.Fatal("tools/list hid every tool from a granted external user")
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cred))
+	if ops := harness.mcpSearchOperations(t, cred, "items", conformanceMountedApp); len(ops) == 0 {
+		t.Fatal("gestalt_search hid every operation from a granted external user")
 	}
-	if !harness.mcpCallSucceeds(t, cred, conformanceListToolName(t, names)) {
+	if !harness.mcpCallSucceeds(t, cred, conformanceFlattenedListTool()) {
 		t.Fatal("tools/call denied a granted external user")
 	}
 	if !harness.invokeOperation(t, conformanceMountedApp, cred) {
@@ -1075,7 +1095,8 @@ func TestConformanceRevokedExternalIsDeniedPromptly(t *testing.T) {
 	if status, body := harness.mountedUI(t, conformanceGatedSamplePath, cred); status != http.StatusOK {
 		t.Fatalf("pre-revoke mounted UI status = %d, want 200: %s", status, body)
 	}
-	toolName := conformanceListToolName(t, harness.mcpToolNames(t, cred))
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cred))
+	toolName := conformanceFlattenedListTool()
 
 	harness.authz.revoke(t, membership)
 
@@ -1085,8 +1106,9 @@ func TestConformanceRevokedExternalIsDeniedPromptly(t *testing.T) {
 	if got := harness.mountedPaths(t, cred)[conformanceMountedApp]; got != "" {
 		t.Fatalf("post-revoke /apps still exposed mounted path %q", got)
 	}
-	if names := harness.mcpToolNames(t, cred); len(names) != 0 {
-		t.Fatalf("post-revoke tools/list still exposed %v", names)
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cred))
+	if ops := harness.mcpSearchOperations(t, cred, "items", conformanceMountedApp); len(ops) != 0 {
+		t.Fatalf("post-revoke gestalt_search still exposed %v", ops)
 	}
 	if harness.mcpCallSucceeds(t, cred, toolName) {
 		t.Fatal("post-revoke tools/call still succeeded")
@@ -1135,8 +1157,9 @@ func TestConformanceExternalAppAdminIsIsolated(t *testing.T) {
 	if got := harness.mountedPaths(t, cred)[conformanceMountedApp]; got != "" {
 		t.Fatalf("/apps exposed an unadministered app's mounted path %q", got)
 	}
-	if names := harness.mcpToolNames(t, cred); len(names) != 0 {
-		t.Fatalf("tools/list exposed %v to an admin of a different app", names)
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cred))
+	if ops := harness.mcpSearchOperations(t, cred, "items", conformanceMountedApp); len(ops) != 0 {
+		t.Fatalf("gestalt_search exposed %v to an admin of a different app", ops)
 	}
 }
 
@@ -1257,7 +1280,8 @@ func TestConformanceCredentialSurfacesAgree(t *testing.T) {
 			t.Fatalf("%s: /apps hid the mounted path from a granted user", name)
 		}
 	}
-	toolName := conformanceListToolName(t, harness.mcpToolNames(t, cliToken))
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cliToken))
+	toolName := conformanceFlattenedListTool()
 	if !harness.mcpCallSucceeds(t, cliToken, toolName) {
 		t.Fatal("CLI exchanged token: tools/call denied a granted user")
 	}
@@ -1277,8 +1301,9 @@ func TestConformanceCredentialSurfacesAgree(t *testing.T) {
 			t.Fatalf("%s: /apps still exposed mounted path %q after revoke", name, got)
 		}
 	}
-	if names := harness.mcpToolNames(t, cliToken); len(names) != 0 {
-		t.Fatalf("CLI exchanged token: tools/list still exposed %v after revoke", names)
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, cliToken))
+	if ops := harness.mcpSearchOperations(t, cliToken, "items", conformanceMountedApp); len(ops) != 0 {
+		t.Fatalf("CLI exchanged token: gestalt_search still exposed %v after revoke", ops)
 	}
 	if harness.mcpCallSucceeds(t, cliToken, toolName) {
 		t.Fatal("CLI exchanged token: tools/call still succeeded after revoke")
@@ -1290,9 +1315,9 @@ func TestConformanceCredentialSurfacesAgree(t *testing.T) {
 	}
 }
 
-// TestConformanceMCPListingAndCallAgree closes the listing/invocation gap: a
-// tool the caller cannot invoke must not appear in tools/list, and a tool that
-// does appear must be callable. Both answers come from the same evaluator.
+// TestConformanceMCPListingAndCallAgree proves the workspace front door is
+// listed to every authenticated caller, while app operations stay fail-closed
+// on search and invoke using the same evaluator as the REST surface.
 func TestConformanceMCPListingAndCallAgree(t *testing.T) {
 	t.Parallel()
 
@@ -1311,17 +1336,22 @@ func TestConformanceMCPListingAndCallAgree(t *testing.T) {
 	granted := conformanceBearer(conformanceExternalToken)
 	ungranted := conformanceBearer(conformanceOutsiderToken)
 
-	names := harness.mcpToolNames(t, granted)
-	if len(names) == 0 {
-		t.Fatal("tools/list hid every tool from a granted caller")
-	}
-	toolName := conformanceListToolName(t, names)
-	if !harness.mcpCallSucceeds(t, granted, toolName) {
-		t.Fatalf("tools/list offered %q but tools/call denied it", toolName)
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, granted))
+	requireWorkspaceFrontDoor(t, harness.mcpToolNames(t, ungranted))
+	if !harness.mcpCallSucceeds(t, granted, gestaltmcp.SearchToolName) {
+		t.Fatal("tools/list offered gestalt_search but tools/call denied it")
 	}
 
-	if listed := harness.mcpToolNames(t, ungranted); len(listed) != 0 {
-		t.Fatalf("tools/list offered %v to an ungranted caller", listed)
+	toolName := conformanceFlattenedListTool()
+	if ops := harness.mcpSearchOperations(t, granted, "items", conformanceMountedApp); len(ops) == 0 {
+		t.Fatal("gestalt_search hid the granted list operation")
+	}
+	if !harness.mcpCallSucceeds(t, granted, toolName) {
+		t.Fatalf("granted caller could not invoke %q", toolName)
+	}
+
+	if ops := harness.mcpSearchOperations(t, ungranted, "items", conformanceMountedApp); len(ops) != 0 {
+		t.Fatalf("gestalt_search offered %v to an ungranted caller", ops)
 	}
 	if harness.mcpCallSucceeds(t, ungranted, toolName) {
 		t.Fatalf("tools/call ran %q for an ungranted caller", toolName)

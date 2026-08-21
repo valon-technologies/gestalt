@@ -25,10 +25,11 @@ type Config struct {
 	IncludeREST       map[string]bool
 	MCPConnection     map[string]string
 	CatalogProjection func(provName string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog
-	// OperationAccess answers tools/list authorization questions in one
-	// batched evaluator call, using the same decision path tools/call uses.
-	// Nil means tools/list is not authorization-filtered; tools/call
-	// enforcement is unaffected either way.
+	// OperationAccess filters gestalt_search and gestalt_describe results
+	// using the same decision path tools/call uses. Nil means those tools
+	// are not authorization-filtered; tools/call enforcement is unaffected.
+	// tools/list does not consult this checker: it returns the static
+	// workspace front door so hosts can connect without walking catalogs.
 	OperationAccess     invocation.OperationAccessChecker
 	InvocationValidator func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error
 }

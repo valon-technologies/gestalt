@@ -5,8 +5,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-
-	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
 func projectCatalog(cfg Config, provName string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
@@ -46,7 +44,7 @@ func providerNameForTool(prefixes map[string]string, providers []string, tool st
 
 func toolName(prefixes map[string]string, provider, operation string) string {
 	raw := prefixes[provider] + provider + toolNameSep + operation
-	return strings.Map(func(r rune) rune {
+	name := strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z':
 			return r
@@ -60,13 +58,14 @@ func toolName(prefixes map[string]string, provider, operation string) string {
 			return '_'
 		}
 	}, raw)
+	return name
 }
 
-func mapAnnotations(a catalog.CapabilityAnnotations) mcpgo.ToolAnnotation {
-	return mcpgo.ToolAnnotation{
-		ReadOnlyHint:    a.ReadOnlyHint,
-		DestructiveHint: a.DestructiveHint,
-		IdempotentHint:  a.IdempotentHint,
-		OpenWorldHint:   a.OpenWorldHint,
+func isWorkspaceFrontDoorToolName(name string) bool {
+	switch name {
+	case SearchToolName, DescribeToolName, InvokeToolName:
+		return true
+	default:
+		return false
 	}
 }
