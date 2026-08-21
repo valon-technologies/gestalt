@@ -247,6 +247,9 @@ func validateServerAppRegistry(cfg *Config) error {
 	} else if attempts <= 0 {
 		return fmt.Errorf("config validation: server.appRegistry.maxReconcileAttempts must be a positive integer")
 	}
+	if _, err := cfg.Server.AppRegistry.CatalogPollIntervalDuration(); err != nil {
+		return fmt.Errorf("config validation: server.appRegistry.catalogPollInterval: %w", err)
+	}
 	if _, err := cfg.Server.AppRegistry.AutoDeployPollIntervalDuration(); err != nil {
 		return fmt.Errorf("config validation: server.appRegistry.autoDeployPollInterval: %w", err)
 	}
