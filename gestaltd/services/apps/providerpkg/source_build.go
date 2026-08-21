@@ -1,12 +1,15 @@
 package providerpkg
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,6 +42,16 @@ type SourceBuildOptions struct {
 	GOARCH string
 	LibC   string
 	Output CommandOutput
+}
+
+type sourcePackagingBuildPlan struct {
+	skipTargetCommands map[int]struct{}
+}
+
+type sourceBuildCommandObservation struct {
+	executableChanged bool
+	staticChanged     bool
+	supportChanged    bool
 }
 
 type SourceExecutionIntent int
@@ -192,12 +205,46 @@ func envMapToSlice(env map[string]string) []string {
 
 // RunSourceBuild execs declared build commands serially (no shell) and verifies output.
 func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
+	_, err := runSourceBuild(manifestPath, manifest, opts, nil, false)
+	return err
+}
+
+func runSourceBuildForPackaging(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) (*sourcePackagingBuildPlan, error) {
+	observations, err := runSourceBuild(manifestPath, manifest, opts, nil, true)
+	if err != nil {
+		return nil, err
+	}
+	lastExecutableCommand := -1
+	for i, observation := range observations {
+		if observation.executableChanged {
+			lastExecutableCommand = i
+		}
+	}
+	plan := &sourcePackagingBuildPlan{skipTargetCommands: make(map[int]struct{})}
+	for i, observation := range observations {
+		if i > lastExecutableCommand && observation.staticChanged && !observation.supportChanged {
+			plan.skipTargetCommands[i] = struct{}{}
+		}
+	}
+	return plan, nil
+}
+
+func runSourceBuildWithPackagingPlan(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions, plan *sourcePackagingBuildPlan) error {
+	var skip map[int]struct{}
+	if plan != nil {
+		skip = plan.skipTargetCommands
+	}
+	_, err := runSourceBuild(manifestPath, manifest, opts, skip, false)
+	return err
+}
+
+func runSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions, skip map[int]struct{}, observe bool) ([]sourceBuildCommandObservation, error) {
 	build := EffectiveSourceBuild(manifest)
 	if build == nil {
-		return nil
+		return nil, nil
 	}
 	if len(build.Commands) == 0 {
-		return fmt.Errorf("build.command is required")
+		return nil, fmt.Errorf("build.command is required")
 	}
 
 	rootDir := filepath.Dir(manifestPath)
@@ -207,21 +254,41 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 		var err error
 		outputRel, outputKind, err = SourceBuildOutput(manifest)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if outputRel != "" {
 			outputPath = filepath.Join(rootDir, filepath.FromSlash(outputRel))
 			if err := os.RemoveAll(outputPath); err != nil {
-				return fmt.Errorf("remove build output %q: %w", outputRel, err)
+				return nil, fmt.Errorf("remove build output %q: %w", outputRel, err)
 			}
 		}
 		staticBuildEnv, err = prepareSourceStaticBuildDir(manifestPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
+	observations := make([]sourceBuildCommandObservation, len(build.Commands))
 	for i, command := range build.Commands {
+		if _, ok := skip[i]; ok {
+			continue
+		}
+		var beforeExecutable, beforeStatic, beforeSupport string
+		if observe {
+			var err error
+			beforeExecutable, err = digestBuildPath(outputPath)
+			if err != nil {
+				return nil, err
+			}
+			beforeStatic, err = digestBuildPath(SourceStaticBuildDir(manifestPath))
+			if err != nil {
+				return nil, err
+			}
+			beforeSupport, err = digestPackagedSupport(rootDir, manifest)
+			if err != nil {
+				return nil, err
+			}
+		}
 		label := "build"
 		if len(build.Commands) > 1 {
 			label = fmt.Sprintf("build[%d]", i)
@@ -231,13 +298,103 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 			envOverrides = append(envOverrides, envGestaltBuildStatic+"="+staticBuildEnv)
 		}
 		if err := runSourcePhase(manifestPath, label, command.Workdir, command.Command, envOverrides, opts); err != nil {
-			return err
+			return nil, err
+		}
+		if observe {
+			afterExecutable, err := digestBuildPath(outputPath)
+			if err != nil {
+				return nil, err
+			}
+			afterStatic, err := digestBuildPath(SourceStaticBuildDir(manifestPath))
+			if err != nil {
+				return nil, err
+			}
+			afterSupport, err := digestPackagedSupport(rootDir, manifest)
+			if err != nil {
+				return nil, err
+			}
+			observations[i] = sourceBuildCommandObservation{
+				executableChanged: beforeExecutable != afterExecutable,
+				staticChanged:     beforeStatic != afterStatic,
+				supportChanged:    beforeSupport != afterSupport,
+			}
 		}
 	}
 	if build.PrepareOnly {
-		return nil
+		return observations, nil
 	}
-	return verifyAppBuildOutputs(manifestPath, manifest, outputPath, outputRel, outputKind, opts)
+	return observations, verifyAppBuildOutputs(manifestPath, manifest, outputPath, outputRel, outputKind, opts)
+}
+
+func digestPackagedSupport(root string, manifest *providermanifestv1.Manifest) (string, error) {
+	if manifest == nil {
+		return "", nil
+	}
+	paths := []string{manifest.IconFile}
+	for _, ref := range LocalPackageReferences(manifest) {
+		paths = append(paths, ref.Path)
+	}
+	if manifest.Spec != nil {
+		paths = append(paths, manifest.Spec.ConfigSchemaPath, manifest.Spec.AssetRoot)
+	}
+	for _, artifact := range manifest.Artifacts {
+		paths = append(paths, artifact.Path)
+	}
+	sort.Strings(paths)
+	hash := sha256.New()
+	for _, rel := range paths {
+		if strings.TrimSpace(rel) == "" {
+			continue
+		}
+		digest, err := digestBuildPath(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			return "", err
+		}
+		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00", rel, digest)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func digestBuildPath(root string) (string, error) {
+	if strings.TrimSpace(root) == "" {
+		return "", nil
+	}
+	info, err := os.Stat(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	if !info.IsDir() {
+		return FileSHA256(root)
+	}
+	var files []string
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() {
+			files = append(files, path)
+		}
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	sort.Strings(files)
+	hash := sha256.New()
+	for _, path := range files {
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return "", err
+		}
+		digest, err := FileSHA256(path)
+		if err != nil {
+			return "", err
+		}
+		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00", filepath.ToSlash(rel), digest)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func runSourcePhase(manifestPath, label, workdir string, command, envOverrides []string, opts SourceBuildOptions) error {

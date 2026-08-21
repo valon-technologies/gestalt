@@ -33,6 +33,7 @@ type StageSourcePreparedInstallOptions struct {
 	GOOS            string
 	GOARCH          string
 	BuildOutput     CommandOutput
+	Preparation     *SourcePackagingPreparation
 }
 
 type StagedPreparedInstall struct {
@@ -40,6 +41,170 @@ type StagedPreparedInstall struct {
 	ManifestPath   string
 	ManifestFile   string
 	ManifestFormat string
+}
+
+// SourcePackagingPreparation owns work and artifacts that are shared by every
+// target in one packaging invocation. It is intentionally opt-in so callers
+// that stage a single source tree retain the existing self-contained behavior.
+type SourcePackagingPreparation struct {
+	manifestPath       string
+	manifest           *providermanifestv1.Manifest
+	hostBuilt          bool
+	hostExecutablePath string
+	staticDir          string
+	staticReady        bool
+	buildPlan          *sourcePackagingBuildPlan
+}
+
+// PrepareSourcePackaging runs platform-independent source preparation once.
+// The returned preparation is not safe for concurrent use.
+func PrepareSourcePackaging(manifestPath string, output CommandOutput) (*SourcePackagingPreparation, error) {
+	if strings.TrimSpace(manifestPath) == "" {
+		return nil, fmt.Errorf("manifest path is required")
+	}
+	absoluteManifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve manifest path: %w", err)
+	}
+	manifestPath = absoluteManifestPath
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", manifestPath, err)
+	}
+	if _, err := ManifestKind(manifest); err != nil {
+		return nil, err
+	}
+	if err := ValidateExplicitRunPackaging(filepath.Dir(manifestPath), manifest); err != nil {
+		return nil, err
+	}
+
+	hostOpts := SourceBuildOptions{Output: output, LibC: HostLibC()}
+	if err := RunSourceInstall(manifestPath, manifest, hostOpts); err != nil {
+		return nil, err
+	}
+
+	preparation := &SourcePackagingPreparation{
+		manifestPath: manifestPath,
+		manifest:     manifest,
+	}
+	shouldBuildHost, err := sourceStaticCatalogShouldBePreparedForPackaging(manifestPath, manifest)
+	if err != nil {
+		return nil, err
+	}
+	if SourceBuildProducesOutput(manifest) && shouldBuildHost {
+		buildPlan, err := runSourceBuildForPackaging(manifestPath, manifest, hostOpts)
+		if err != nil {
+			return nil, err
+		}
+		preparation.hostBuilt = true
+		preparation.buildPlan = buildPlan
+		if err := preparation.cacheHostExecutable(); err != nil {
+			_ = preparation.Close()
+			return nil, err
+		}
+	}
+
+	_, preparedManifest, err := prepareSourceManifestForPreparedInstallWithOptions(manifestPath, SourceBuildOptions{Output: output})
+	if err != nil {
+		_ = preparation.Close()
+		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
+	}
+	preparation.manifest = preparedManifest
+	if preparation.hostBuilt {
+		if err := preparation.captureOrRestoreStatic(); err != nil {
+			_ = preparation.Close()
+			return nil, err
+		}
+	}
+	return preparation, nil
+}
+
+func (p *SourcePackagingPreparation) cacheHostExecutable() error {
+	outputRel, err := SourceBuildOutputPath(p.manifest, runtime.GOOS)
+	if err != nil {
+		return err
+	}
+	sourcePath := filepath.Join(filepath.Dir(p.manifestPath), filepath.FromSlash(outputRel))
+	if _, err := os.Stat(sourcePath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat host build output %q: %w", outputRel, err)
+	}
+	cacheDir, err := os.MkdirTemp("", "gestalt-package-host-*")
+	if err != nil {
+		return fmt.Errorf("create host build cache: %w", err)
+	}
+	cachePath := filepath.Join(cacheDir, filepath.Base(sourcePath))
+	if err := copyPreparedInstallFile(sourcePath, cachePath); err != nil {
+		_ = os.RemoveAll(cacheDir)
+		return fmt.Errorf("cache host build output %q: %w", outputRel, err)
+	}
+	p.hostExecutablePath = cachePath
+	return nil
+}
+
+func (p *SourcePackagingPreparation) restoreHostExecutable() error {
+	if p.hostExecutablePath == "" {
+		return nil
+	}
+	outputRel, err := SourceBuildOutputPath(p.manifest, runtime.GOOS)
+	if err != nil {
+		return err
+	}
+	destination := filepath.Join(filepath.Dir(p.manifestPath), filepath.FromSlash(outputRel))
+	if err := copyPreparedInstallFile(p.hostExecutablePath, destination); err != nil {
+		return fmt.Errorf("restore host build output %q: %w", outputRel, err)
+	}
+	return nil
+}
+
+func (p *SourcePackagingPreparation) captureOrRestoreStatic() error {
+	sourceDir := SourceStaticBuildDir(p.manifestPath)
+	if !p.staticReady {
+		ok, err := sourceStaticQualifies(sourceDir)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		cacheDir, err := os.MkdirTemp("", "gestalt-package-static-*")
+		if err != nil {
+			return fmt.Errorf("create static build cache: %w", err)
+		}
+		if err := copyPreparedInstallDir(sourceDir, cacheDir); err != nil {
+			_ = os.RemoveAll(cacheDir)
+			return fmt.Errorf("cache static build output: %w", err)
+		}
+		p.staticDir = cacheDir
+		p.staticReady = true
+		return nil
+	}
+	if err := os.RemoveAll(sourceDir); err != nil {
+		return fmt.Errorf("remove target static build output: %w", err)
+	}
+	if err := copyPreparedInstallDir(p.staticDir, sourceDir); err != nil {
+		return fmt.Errorf("restore shared static build output: %w", err)
+	}
+	return nil
+}
+
+func (p *SourcePackagingPreparation) Close() error {
+	if p == nil {
+		return nil
+	}
+	var firstErr error
+	for _, dir := range []string{filepath.Dir(p.hostExecutablePath), p.staticDir} {
+		if dir == "" || dir == "." {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // StageSourcePreparedInstallDir stages a source tree into its prepared-install layout.
@@ -54,6 +219,10 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 		return nil, fmt.Errorf("resolve manifest path: %w", err)
 	}
 	manifestPath = absoluteManifestPath
+
+	if opts.Preparation != nil {
+		return opts.Preparation.stage(manifestPath, stagingDir, opts)
+	}
 
 	_, manifest, err := ReadSourceManifestFile(manifestPath)
 	if err != nil {
@@ -95,6 +264,50 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 		}
 	}
 	return stagePreparedInstallDir(manifestPath, stagingDir, srcManifest, StagePreparedInstallOptions{
+		VersionOverride: opts.VersionOverride,
+		AppName:         opts.AppName,
+		GOOS:            opts.GOOS,
+		GOARCH:          opts.GOARCH,
+		BuildOutput:     opts.BuildOutput,
+	})
+}
+
+func (p *SourcePackagingPreparation) stage(manifestPath, stagingDir string, opts StageSourcePreparedInstallOptions) (*StagedPreparedInstall, error) {
+	if p == nil || p.manifest == nil {
+		return nil, fmt.Errorf("source packaging preparation is required")
+	}
+	if manifestPath != p.manifestPath {
+		return nil, fmt.Errorf("source packaging preparation is for %s, not %s", p.manifestPath, manifestPath)
+	}
+	targetOpts := SourceBuildOptions{GOOS: opts.GOOS, GOARCH: opts.GOARCH, Output: opts.BuildOutput}
+	producesOutput, err := SourceReleaseBuildProducesOutput(filepath.Dir(manifestPath), p.manifest)
+	if err != nil {
+		return nil, err
+	}
+	reuseHostBuild := p.hostBuilt &&
+		sourceBuildTargetsHost(targetOpts) &&
+		HostLibC() == effectiveTargetLibC(targetOpts)
+	if producesOutput {
+		if reuseHostBuild {
+			if err := p.restoreHostExecutable(); err != nil {
+				return nil, err
+			}
+		} else if p.buildPlan == nil {
+			buildPlan, err := runSourceBuildForPackaging(manifestPath, p.manifest, targetOpts)
+			if err != nil {
+				return nil, err
+			}
+			p.buildPlan = buildPlan
+		} else {
+			if err := runSourceBuildWithPackagingPlan(manifestPath, p.manifest, targetOpts, p.buildPlan); err != nil {
+				return nil, err
+			}
+		}
+		if err := p.captureOrRestoreStatic(); err != nil {
+			return nil, err
+		}
+	}
+	return stagePreparedInstallDir(manifestPath, stagingDir, p.manifest, StagePreparedInstallOptions{
 		VersionOverride: opts.VersionOverride,
 		AppName:         opts.AppName,
 		GOOS:            opts.GOOS,
