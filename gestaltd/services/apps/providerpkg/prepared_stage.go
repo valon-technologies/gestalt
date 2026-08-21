@@ -288,17 +288,18 @@ func (p *SourcePackagingPreparation) stage(manifestPath, stagingDir string, opts
 		sourceBuildTargetsHost(targetOpts) &&
 		HostLibC() == effectiveTargetLibC(targetOpts)
 	if producesOutput {
-		if reuseHostBuild {
+		switch {
+		case reuseHostBuild:
 			if err := p.restoreHostExecutable(); err != nil {
 				return nil, err
 			}
-		} else if p.buildPlan == nil {
+		case p.buildPlan == nil:
 			buildPlan, err := runSourceBuildForPackaging(manifestPath, p.manifest, targetOpts)
 			if err != nil {
 				return nil, err
 			}
 			p.buildPlan = buildPlan
-		} else {
+		default:
 			if err := runSourceBuildWithPackagingPlan(manifestPath, p.manifest, targetOpts, p.buildPlan); err != nil {
 				return nil, err
 			}

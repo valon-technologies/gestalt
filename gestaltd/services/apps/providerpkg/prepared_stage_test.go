@@ -607,11 +607,18 @@ fi
 	if strings.Count(logText, "install\n") != 1 {
 		t.Fatalf("phase log = %q, want one install", logText)
 	}
-	if strings.Count(logText, "build:") != 2 {
-		t.Fatalf("phase log = %q, want one host build and one target build", logText)
+	expectedHostBuilds := 1
+	hostTargetOpts := SourceBuildOptions{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
+	if HostLibC() != effectiveTargetLibC(hostTargetOpts) {
+		// Linux catalog generation uses a host-libc executable, while the
+		// packaged host target defaults to musl and needs its own build.
+		expectedHostBuilds = 2
 	}
-	if strings.Count(logText, "build:"+runtime.GOOS+"/"+runtime.GOARCH+"\n") != 1 {
-		t.Fatalf("phase log = %q, want exactly one host build", logText)
+	if got, want := strings.Count(logText, "build:"), expectedHostBuilds+1; got != want {
+		t.Fatalf("phase log = %q, build count = %d, want %d", logText, got, want)
+	}
+	if got := strings.Count(logText, "build:"+runtime.GOOS+"/"+runtime.GOARCH+"\n"); got != expectedHostBuilds {
+		t.Fatalf("phase log = %q, host build count = %d, want %d", logText, got, expectedHostBuilds)
 	}
 	if strings.Count(logText, "build:"+targetGOOS+"/"+targetGOARCH+"\n") != 1 {
 		t.Fatalf("phase log = %q, want exactly one target build", logText)
