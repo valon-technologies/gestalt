@@ -154,9 +154,6 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		if err != nil {
 			return fmt.Errorf("remote app %q: %w", name, err)
 		}
-		if clients.App == nil {
-			return fmt.Errorf("remote app %q: provider client is required", name)
-		}
 		var spec appservice.StaticProviderSpec
 		if entry.Source.IsRegistry() {
 			catalog, err := buildRemoteRegistryCatalog(name, entry.AllowedOperations)
@@ -171,18 +168,9 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 				return fmt.Errorf("remote app %q: %w", name, err)
 			}
 		}
-		client := clients.App
-		if rawConn := clients.Conn(); rawConn != nil {
-			conn := grpc.ClientConnInterface(rawConn)
-			gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindApp, Name: name}, conn)
-			if err != nil {
-				return fmt.Errorf("remote app %q: %w", name, err)
-			}
-			client = proto.NewAppClient(gwConn)
-		}
-		provider := appservice.NewGestaltRemote(client, spec)
-		if provider == nil {
-			return fmt.Errorf("remote app %q: provider client is required", name)
+		provider, err := remoteAppProviderFromClients(name, clients, spec, deps)
+		if err != nil {
+			return fmt.Errorf("remote app %q: %w", name, err)
 		}
 		if err := providers.Register(name, provider); err != nil {
 			return fmt.Errorf("remote app %q: %w", name, err)
@@ -1353,26 +1341,12 @@ func buildRemotePreviewAppProvider(ctx context.Context, name string, entry *conf
 		stopUI()
 		return nil, fmt.Errorf("remote-preview app %q: %w", name, err)
 	}
-	if clients.App == nil {
+	provider, err := remoteAppProviderFromClients(name, clients, spec, deps)
+	if err != nil {
 		stopUI()
-		return nil, fmt.Errorf("remote-preview app %q: provider client is required", name)
-	}
-	client := clients.App
-	if rawConn := clients.Conn(); rawConn != nil {
-		conn := grpc.ClientConnInterface(rawConn)
-		gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindApp, Name: name}, conn)
-		if err != nil {
-			stopUI()
-			return nil, fmt.Errorf("remote-preview app %q: %w", name, err)
-		}
-		client = proto.NewAppClient(gwConn)
+		return nil, fmt.Errorf("remote-preview app %q: %w", name, err)
 	}
 	_ = handle
-	provider := appservice.NewGestaltRemote(client, spec)
-	if provider == nil {
-		stopUI()
-		return nil, fmt.Errorf("remote-preview app %q: provider client is required", name)
-	}
 	return remotePreviewUIProvider{
 		Provider: provider,
 		stopUI:   stopUI,
@@ -2653,6 +2627,26 @@ func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, deps Deps) *
 		ClientID:     conn.Auth.ClientID,
 		ClientSecret: conn.Auth.ClientSecret,
 	})
+}
+
+func remoteAppProviderFromClients(name string, clients *remote.ClientSet, spec appservice.StaticProviderSpec, deps Deps) (core.Provider, error) {
+	if clients == nil || clients.App == nil {
+		return nil, fmt.Errorf("provider client is required")
+	}
+	client := clients.App
+	if rawConn := clients.Conn(); rawConn != nil {
+		conn := grpc.ClientConnInterface(rawConn)
+		gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindApp, Name: name}, conn)
+		if err != nil {
+			return nil, err
+		}
+		client = proto.NewAppClient(gwConn)
+	}
+	provider := appservice.NewGestaltRemote(client, spec)
+	if provider == nil {
+		return nil, fmt.Errorf("provider client is required")
+	}
+	return provider, nil
 }
 
 func remoteClientsForEntry(cfg *config.Config, entry *config.ProviderEntry, deps Deps) (*remote.ClientSet, error) {

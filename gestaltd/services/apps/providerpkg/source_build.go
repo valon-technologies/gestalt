@@ -700,20 +700,26 @@ func SourceUIRunCommands(manifestPath string) ([]ResolvedCommand, error) {
 	return ui, nil
 }
 
-// ValidateRemotePreviewUIRunTarget ensures remote-preview serve has exactly one UI run command.
-func ValidateRemotePreviewUIRunTarget(manifestPath string) error {
+// RemotePreviewUIRunCommand returns the sole role: ui run command for remote-preview serve.
+func RemotePreviewUIRunCommand(manifestPath string) (ResolvedCommand, error) {
 	ui, err := SourceUIRunCommands(manifestPath)
 	if err != nil {
-		return err
+		return ResolvedCommand{}, err
 	}
 	switch len(ui) {
 	case 0:
-		return fmt.Errorf("%s: no manifest run command with role: ui", manifestPath)
+		return ResolvedCommand{}, fmt.Errorf("%s: no manifest run command with role: ui", manifestPath)
 	case 1:
-		return nil
+		return ui[0], nil
 	default:
-		return fmt.Errorf("%s: %s (found %d)", manifestPath, errRemotePreviewUICommandCount, len(ui))
+		return ResolvedCommand{}, fmt.Errorf("%s: %s (found %d)", manifestPath, errRemotePreviewUICommandCount, len(ui))
 	}
+}
+
+// ValidateRemotePreviewUIRunTarget ensures remote-preview serve has exactly one UI run command.
+func ValidateRemotePreviewUIRunTarget(manifestPath string) error {
+	_, err := RemotePreviewUIRunCommand(manifestPath)
+	return err
 }
 
 func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions) (SourceExecution, error) {

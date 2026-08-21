@@ -979,22 +979,14 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 			}
 			if l != nil && l.shouldMarkAppForDev(name) {
 				if l.remotePreviewServe {
-					if err := providerpkg.ValidateRemotePreviewUIRunTarget(normalized.manifestPath); err != nil {
-						return fmt.Errorf("app %q: %w", name, err)
-					}
-					uiCommands, err := providerpkg.SourceUIRunCommands(normalized.manifestPath)
+					ui, err := providerpkg.RemotePreviewUIRunCommand(normalized.manifestPath)
 					if err != nil {
 						return fmt.Errorf("app %q: %w", name, err)
-					}
-					ui := uiCommands[0]
-					workdir := normalized.sourceDir
-					if w := strings.TrimSpace(ui.Workdir); w != "" && w != "." {
-						workdir = ui.Workdir
 					}
 					entry.RemotePreviewActive = true
 					entry.DevActive = true
 					entry.Remote = config.DefaultRemoteName
-					entry.ResolvedDevWorkdir = workdir
+					entry.ResolvedDevWorkdir = ui.Workdir
 					continue
 				}
 				workdir := normalized.sourceDir

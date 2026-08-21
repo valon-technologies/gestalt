@@ -125,7 +125,7 @@ func appTargetForEntry(name string, entry *config.ProviderEntry, uiOnly bool) (A
 		commands []providerpkg.ResolvedCommand
 		err      error
 	)
-	if uiOnly || entry.RemotePreviewActive {
+	if uiOnly {
 		commands, err = providerpkg.SourceUIRunCommands(entry.ResolvedManifestPath)
 	} else {
 		commands, err = providerpkg.SourceRunCommands(entry.ResolvedManifestPath)
