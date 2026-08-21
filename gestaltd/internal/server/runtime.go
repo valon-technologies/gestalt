@@ -576,6 +576,10 @@ func startAppRegistryCatalogPoller(
 			}
 		}
 	}
+	catalogPollInterval, err := cfg.Server.AppRegistry.CatalogPollIntervalDuration()
+	if err != nil {
+		catalogPollInterval = config.DefaultAppRegistryCatalogPollInterval
+	}
 	heartbeatInterval, err := cfg.Server.AppRegistry.HeartbeatIntervalDuration()
 	if err != nil {
 		heartbeatInterval = config.DefaultAppRegistryHeartbeatInterval
@@ -598,6 +602,7 @@ func startAppRegistryCatalogPoller(
 		AppRestarter:                result.AppRestarter,
 		InstanceID:                  appregistry.ResolveInstanceID(),
 		SourceVersion:               appregistry.ResolveSourceVersion(),
+		Interval:                    catalogPollInterval,
 		HeartbeatEvaluationInterval: heartbeatInterval,
 		HeartbeatTTL:                heartbeatTTL,
 		HealthyStabilityWindow:      stabilityWindow,

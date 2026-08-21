@@ -14,6 +14,7 @@ func TestAppRegistryHeartbeatConfigDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
+	assertAppRegistryDuration(t, "catalog poll interval", cfg.Server.AppRegistry.CatalogPollIntervalDuration, time.Minute)
 	assertAppRegistryDuration(t, "heartbeat interval", cfg.Server.AppRegistry.HeartbeatIntervalDuration, 15*time.Second)
 	assertAppRegistryDuration(t, "heartbeat TTL", cfg.Server.AppRegistry.HeartbeatTTLDuration, 45*time.Second)
 	assertAppRegistryDuration(t, "healthy stability window", cfg.Server.AppRegistry.HealthyStabilityWindowDuration, 60*time.Second)
@@ -29,6 +30,7 @@ func TestAppRegistryHeartbeatConfigAcceptsExplicitValues(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 server:
   appRegistry:
+    catalogPollInterval: 5s
     heartbeatInterval: 10s
     heartbeatTtl: 35s
     healthyStabilityWindow: 50s
@@ -39,6 +41,7 @@ server:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
+	assertAppRegistryDuration(t, "catalog poll interval", cfg.Server.AppRegistry.CatalogPollIntervalDuration, 5*time.Second)
 	assertAppRegistryDuration(t, "heartbeat interval", cfg.Server.AppRegistry.HeartbeatIntervalDuration, 10*time.Second)
 	assertAppRegistryDuration(t, "heartbeat TTL", cfg.Server.AppRegistry.HeartbeatTTLDuration, 35*time.Second)
 	assertAppRegistryDuration(t, "healthy stability window", cfg.Server.AppRegistry.HealthyStabilityWindowDuration, 50*time.Second)
@@ -56,6 +59,7 @@ func TestAppRegistryHeartbeatConfigValidation(t *testing.T) {
 		config  string
 		wantErr string
 	}{
+		{name: "catalog interval positive", config: "catalogPollInterval: 0s", wantErr: "catalogPollInterval"},
 		{name: "interval positive", config: "heartbeatInterval: 0s", wantErr: "heartbeatInterval"},
 		{name: "ttl positive", config: "heartbeatTtl: -1s", wantErr: "heartbeatTtl"},
 		{name: "ttl exceeds interval", config: "heartbeatInterval: 15s\n    heartbeatTtl: 15s", wantErr: "must be greater than heartbeatInterval"},

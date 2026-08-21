@@ -2001,6 +2001,7 @@ type ServerAppRegistryConfig struct {
 	// MaxReconcileAttempts bounds failed convergence attempts per app/version.
 	// Omission defaults to DefaultAppRegistryMaxReconcileAttempts.
 	MaxReconcileAttempts    int                        `yaml:"maxReconcileAttempts,omitempty"`
+	CatalogPollInterval     string                     `yaml:"catalogPollInterval,omitempty"`
 	AutoDeployPollInterval  string                     `yaml:"autoDeployPollInterval,omitempty"`
 	HeartbeatInterval       string                     `yaml:"heartbeatInterval,omitempty"`
 	HeartbeatTTL            string                     `yaml:"heartbeatTtl,omitempty"`
@@ -2073,6 +2074,7 @@ type AppRegistryPublishLimits struct {
 }
 
 const DefaultAppRegistryMaxReconcileAttempts = 3
+const DefaultAppRegistryCatalogPollInterval = time.Minute
 const DefaultAppRegistryAutoDeployPollInterval = time.Minute
 const DefaultAppRegistryHeartbeatInterval = 15 * time.Second
 const DefaultAppRegistryHeartbeatTTL = 45 * time.Second
@@ -2092,6 +2094,10 @@ func (c ServerAppRegistryConfig) AutoDeployPollIntervalDuration() (time.Duration
 		return DefaultAppRegistryAutoDeployPollInterval, nil
 	}
 	return ParseDuration(raw)
+}
+
+func (c ServerAppRegistryConfig) CatalogPollIntervalDuration() (time.Duration, error) {
+	return appRegistryDuration(c.CatalogPollInterval, DefaultAppRegistryCatalogPollInterval)
 }
 
 func (c ServerAppRegistryConfig) HeartbeatIntervalDuration() (time.Duration, error) {

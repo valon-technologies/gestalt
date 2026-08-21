@@ -77,10 +77,11 @@ func TestServerInstallerWiringPreservesConfiguredRolloutMode(t *testing.T) {
 	}
 }
 
-func TestCatalogPollerWiringPreservesCatalogCadence(t *testing.T) {
+func TestCatalogPollerWiringPreservesIndependentCadences(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{}
+	cfg.Server.AppRegistry.CatalogPollInterval = "5s"
 	cfg.Server.AppRegistry.HeartbeatInterval = "7s"
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -96,8 +97,8 @@ func TestCatalogPollerWiringPreservesCatalogCadence(t *testing.T) {
 		t.Fatal("catalog poller is nil")
 	}
 	poller.Stop()
-	if poller.Interval != 0 {
-		t.Fatalf("catalog interval = %v, want default %v", poller.Interval, appregistry.DefaultCatalogPollInterval)
+	if poller.Interval != 5*time.Second {
+		t.Fatalf("catalog interval = %v, want 5s", poller.Interval)
 	}
 	if poller.HeartbeatEvaluationInterval != 7*time.Second {
 		t.Fatalf("heartbeat evaluation interval = %v, want 7s", poller.HeartbeatEvaluationInterval)

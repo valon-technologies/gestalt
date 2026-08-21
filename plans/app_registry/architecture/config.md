@@ -155,6 +155,21 @@ This limit does not apply to bootstrap. Bootstrap never consults rollout-progres
 
 A newly accepted desired version uses a new materialization row and starts with zero failed attempts. Increasing the configured limit allows rows below the new limit to resume retrying.
 
+### Catalog Poll Interval
+
+```yaml
+server:
+  appRegistry:
+    catalogPollInterval: 1m
+```
+
+`server.appRegistry.catalogPollInterval` controls how often each replica checks
+shared desired-version state and reconciles registry app runtimes. It defaults
+to `1m` and must be a positive duration. Manual selection also requests an
+immediate reconciliation on the replica that serves the request; the interval
+remains the upper bound for the rest of the fleet. Shorter values improve fleet
+convergence at the cost of proportionally more shared-state reads.
+
 ### Auto-Deploy Poll Interval
 
 ```yaml
