@@ -348,9 +348,8 @@ func (h *StatelessHTTPHandler) callInvoke(ctx context.Context, req mcpgo.CallToo
 		nested["_instance"] = inst
 	}
 	inner := req
-	inner.Params.Name = toolName(h.cfg.ToolPrefixes, app, operation)
 	inner.Params.Arguments = nested
-	return h.callAppTool(ctx, inner)
+	return h.callResolvedAppTool(ctx, inner, statelessToolRef{provider: app, operation: operation})
 }
 
 func operationTitle(op catalog.CatalogOperation) string {

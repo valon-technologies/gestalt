@@ -202,6 +202,15 @@ func (h *StatelessHTTPHandler) callAppTool(ctx context.Context, req mcpgo.CallTo
 	if provName == "" {
 		return nil, fmt.Errorf("%w: %q", invocation.ErrOperationNotFound, req.Params.Name)
 	}
+	return h.callResolvedAppTool(ctx, req, statelessToolRef{provider: provName})
+}
+
+func (h *StatelessHTTPHandler) callResolvedAppTool(ctx context.Context, req mcpgo.CallToolRequest, ref statelessToolRef) (*mcpgo.CallToolResult, error) {
+	p := principal.FromContext(ctx)
+	if p == nil {
+		return mcpgo.NewToolResultError("not authenticated"), nil
+	}
+	provName := ref.provider
 	prov, ok := h.provider(ctx, provName)
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", core.ErrNotFound, provName)
@@ -222,9 +231,12 @@ func (h *StatelessHTTPHandler) callAppTool(ctx context.Context, req mcpgo.CallTo
 		return mcpgo.NewToolResultError(err.Error()), nil
 	}
 	projectedCat := projectCatalog(h.cfg, provName, prov, rawCat)
-	ref, ok := statelessToolRefs(h.cfg, provName, projectedCat)[req.Params.Name]
-	if !ok || ref.provider != provName {
-		return nil, fmt.Errorf("%w: %q", invocation.ErrOperationNotFound, req.Params.Name)
+	if ref.operation == "" {
+		var found bool
+		ref, found = statelessToolRefs(h.cfg, provName, projectedCat)[req.Params.Name]
+		if !found || ref.provider != provName {
+			return nil, fmt.Errorf("%w: %q", invocation.ErrOperationNotFound, req.Params.Name)
+		}
 	}
 	rawOp, ok := invocation.CatalogOperation(rawCat, ref.operation)
 	if !ok {

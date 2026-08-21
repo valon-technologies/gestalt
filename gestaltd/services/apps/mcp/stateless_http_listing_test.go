@@ -93,6 +93,17 @@ func (i *listingInvoker) Invoke(ctx context.Context, _ *principal.Principal, _, 
 	return i.stub.Execute(ctx, operation, params, "")
 }
 
+type recordingProviderInvoker struct {
+	provider  string
+	operation string
+}
+
+func (i *recordingProviderInvoker) Invoke(_ context.Context, _ *principal.Principal, provider, _, operation string, _ map[string]any) (*core.OperationResult, error) {
+	i.provider = provider
+	i.operation = operation
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
+}
+
 func listingTestPrincipal() *principal.Principal {
 	return &principal.Principal{SubjectID: "user:u-1", UserID: "u-1", Kind: principal.KindUser}
 }
@@ -464,6 +475,40 @@ func TestInvokeFrontDoorRunsGrantedOperation(t *testing.T) {
 	})
 	if body["op"] != "items.list" {
 		t.Fatalf("invoke result = %v", body)
+	}
+}
+
+func TestInvokeFrontDoorUsesExplicitAppIdentity(t *testing.T) {
+	t.Parallel()
+
+	foo := &coretesting.StubIntegration{
+		N:        "foo",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+			ID: "bar.items", Method: "GET", Path: "/bar-items",
+		}}},
+	}
+	fooBar := &coretesting.StubIntegration{
+		N:        "foo_bar",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+			ID: "items", Method: "GET", Path: "/items",
+		}}},
+	}
+	invoker := &recordingProviderInvoker{}
+	cfg := Config{
+		Invoker:          invoker,
+		Providers:        testutil.NewProviderRegistry(t, foo, fooBar),
+		AllowedProviders: []string{"foo", "foo_bar"},
+		IncludeREST:      map[string]bool{"foo": true, "foo_bar": true},
+	}
+
+	callToolJSON(t, cfg, listingTestPrincipal(), InvokeToolName, map[string]any{
+		"app":       "foo",
+		"operation": "bar.items",
+	})
+	if invoker.provider != "foo" || invoker.operation != "bar.items" {
+		t.Fatalf("invoke target = %s.%s, want foo.bar.items", invoker.provider, invoker.operation)
 	}
 }
 
