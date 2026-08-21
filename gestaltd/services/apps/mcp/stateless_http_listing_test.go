@@ -496,6 +496,123 @@ func TestDescribeReturnsGrantedOperationSchema(t *testing.T) {
 	}
 }
 
+func TestFrontDoorToolsAdvertiseCatalogInstance(t *testing.T) {
+	t.Parallel()
+
+	status, envelope := callMCP(t, listingTestConfig(t, nil), listingTestPrincipal(), map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": map[string]any{},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/list status = %d: %v", status, envelope)
+	}
+	result, _ := envelope["result"].(map[string]any)
+	tools, _ := result["tools"].([]any)
+	found := map[string]bool{}
+	for _, raw := range tools {
+		tool, _ := raw.(map[string]any)
+		name, _ := tool["name"].(string)
+		schema, _ := tool["inputSchema"].(map[string]any)
+		props, _ := schema["properties"].(map[string]any)
+		if _, ok := props["_instance"]; !ok {
+			t.Fatalf("%s schema missing _instance: %v", name, schema)
+		}
+		found[name] = true
+	}
+	for _, name := range WorkspaceFrontDoorToolNames() {
+		if !found[name] {
+			t.Fatalf("tools/list missing %s", name)
+		}
+	}
+}
+
+type recordingTokenResolver struct {
+	lastInstance string
+}
+
+func (r *recordingTokenResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _, _, instance string) (context.Context, string, error) {
+	r.lastInstance = instance
+	return ctx, instance, nil
+}
+
+type instanceCatalogProvider struct {
+	coretesting.StubIntegration
+}
+
+func (p *instanceCatalogProvider) CatalogForRequest(_ context.Context, token string) (*catalog.Catalog, error) {
+	id := "op_default"
+	if token != "" {
+		id = "op_" + token
+	}
+	return &catalog.Catalog{
+		Name: p.N,
+		Operations: []catalog.CatalogOperation{{
+			ID: id, Title: id, Description: "instance op", Method: "GET", Path: "/" + id,
+		}},
+	}, nil
+}
+
+func instanceListingConfig(t *testing.T, resolver invocation.TokenResolver) Config {
+	t.Helper()
+	stub := &instanceCatalogProvider{StubIntegration: coretesting.StubIntegration{
+		N:        "sampleApp",
+		DN:       "Sample App",
+		ConnMode: core.ConnectionModeSubject,
+	}}
+	return Config{
+		Providers:        testutil.NewProviderRegistry(t, stub),
+		AllowedProviders: []string{"sampleApp"},
+		IncludeREST:      map[string]bool{"sampleApp": true},
+		TokenResolver:    resolver,
+	}
+}
+
+func TestDescribeUsesCatalogInstance(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingTokenResolver{}
+	cfg := instanceListingConfig(t, resolver)
+	body := callToolJSON(t, cfg, listingTestPrincipal(), DescribeToolName, map[string]any{
+		"app":       "sampleApp",
+		"operation": "op_team-a",
+		"_instance": "team-a",
+	})
+	if body["operation"] != "op_team-a" {
+		t.Fatalf("describe = %v, want op_team-a from instance team-a", body)
+	}
+	if resolver.lastInstance != "team-a" {
+		t.Fatalf("describe resolved instance %q, want team-a", resolver.lastInstance)
+	}
+	requireToolError(t, cfg, listingTestPrincipal(), DescribeToolName, map[string]any{
+		"app":       "sampleApp",
+		"operation": "op_team-a",
+	})
+}
+
+func TestSearchUsesCatalogInstance(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingTokenResolver{}
+	cfg := instanceListingConfig(t, resolver)
+	body := callSearch(t, cfg, listingTestPrincipal(), map[string]any{
+		"app":       "sampleApp",
+		"_instance": "team-a",
+	})
+	if len(body.Results) != 1 || body.Results[0].Operation != "op_team-a" {
+		t.Fatalf("search = %+v, want op_team-a", body)
+	}
+	if resolver.lastInstance != "team-a" {
+		t.Fatalf("search resolved instance %q, want team-a", resolver.lastInstance)
+	}
+}
+
+func TestSearchRequiresAppWhenInstanceIsSet(t *testing.T) {
+	t.Parallel()
+
+	requireToolError(t, listingTestConfig(t, nil), listingTestPrincipal(), SearchToolName, map[string]any{
+		"_instance": "team-a",
+	})
+}
+
 func TestDescribeDeniesUngrantedOperation(t *testing.T) {
 	t.Parallel()
 

@@ -36,6 +36,8 @@ const (
 	liveSearchTimeout  = 8 * time.Second
 )
 
+const catalogInstanceToolPropertyJSON = `"_instance": {"type": "string", "description": "Optional. Use when the app exposes more than one catalog instance."}`
+
 var (
 	searchToolSchema = json.RawMessage(`{
   "type": "object",
@@ -51,7 +53,8 @@ var (
     "limit": {
       "type": "integer",
       "description": "Maximum number of operations to return. Defaults to 20, max 100."
-    }
+    },
+    ` + catalogInstanceToolPropertyJSON + `
   }
 }`)
 	describeToolSchema = json.RawMessage(`{
@@ -59,7 +62,8 @@ var (
   "required": ["app", "operation"],
   "properties": {
     "app": {"type": "string", "description": "App name, for example linear."},
-    "operation": {"type": "string", "description": "Operation id, for example search_issues."}
+    "operation": {"type": "string", "description": "Operation id, for example search_issues."},
+    ` + catalogInstanceToolPropertyJSON + `
   }
 }`)
 	invokeToolSchema = json.RawMessage(`{
@@ -69,7 +73,7 @@ var (
     "app": {"type": "string", "description": "App name, for example linear."},
     "operation": {"type": "string", "description": "Operation id, for example search_issues."},
     "arguments": {"type": "object", "description": "Arguments for the operation."},
-    "_instance": {"type": "string", "description": "Optional. Use when the app exposes more than one catalog instance."}
+    ` + catalogInstanceToolPropertyJSON + `
   }
 }`)
 )
@@ -127,12 +131,16 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 	args := req.GetArguments()
 	query := stringArg(args, "query")
 	appFilter := stringArg(args, "app")
+	instance := stringArg(args, "_instance")
 	limit := intArg(args, "limit", defaultSearchLimit)
 	if limit < 1 {
 		limit = defaultSearchLimit
 	}
 	if limit > maxSearchLimit {
 		limit = maxSearchLimit
+	}
+	if instance != "" && appFilter == "" {
+		return mcpgo.NewToolResultError("app is required when _instance is set"), nil
 	}
 	if query == "" && appFilter == "" {
 		return toolJSONResult(SearchResult{
@@ -154,7 +162,7 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 		if !ok {
 			continue
 		}
-		cat, liveErr := h.catalogForSearch(ctx, provName, prov, appFilter != "")
+		cat, liveErr := h.catalogForSearch(ctx, provName, prov, instance, appFilter != "")
 		if liveErr != nil {
 			unavailable = append(unavailable, SearchUnavailable{App: provName, Error: liveErr.Error()})
 			continue
@@ -257,13 +265,13 @@ func (h *StatelessHTTPHandler) allowedOperations(ctx context.Context, p *princip
 	return allowed, nil
 }
 
-func (h *StatelessHTTPHandler) catalogForSearch(ctx context.Context, provName string, prov core.Provider, live bool) (*catalog.Catalog, error) {
+func (h *StatelessHTTPHandler) catalogForSearch(ctx context.Context, provName string, prov core.Provider, instance string, live bool) (*catalog.Catalog, error) {
 	if !live {
 		return projectCatalog(h.cfg, provName, prov, prov.Catalog()), nil
 	}
 	liveCtx, cancel := context.WithTimeout(ctx, liveSearchTimeout)
 	defer cancel()
-	raw, err := h.resolveCatalog(liveCtx, provName, prov, "", true)
+	raw, err := h.resolveCatalog(liveCtx, provName, prov, instance, true)
 	if err != nil {
 		return nil, err
 	}
