@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 )
 
 type recordingAppRestarter struct {
+	mu             sync.Mutex
 	stopCalls      []string
 	startCalls     []string
 	startVersions  []string
@@ -30,6 +32,8 @@ func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
 	if r == nil {
 		return false, nil
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.restartableErr != nil {
 		return false, r.restartableErr
 	}
@@ -42,22 +46,36 @@ func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
 }
 
 func (r *recordingAppRestarter) StopApp(_ context.Context, app string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.stopCalls = append(r.stopCalls, app)
-	if r.stopErr == nil && r.afterStop != nil {
-		r.afterStop()
+	stopErr := r.stopErr
+	afterStop := r.afterStop
+	if stopErr == nil && afterStop != nil {
+		afterStop()
 	}
-	return r.stopErr
+	return stopErr
 }
 
 func (r *recordingAppRestarter) StartApp(_ context.Context, app, version string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.startCalls = append(r.startCalls, app)
 	r.startVersions = append(r.startVersions, version)
 	return r.startErr
 }
 
+func (r *recordingAppRestarter) clearStartErr() {
+	r.mu.Lock()
+	r.startErr = nil
+	r.mu.Unlock()
+}
+
 func (r *recordingAppRestarter) AbortRestarts() {}
 
 func (r *recordingAppRestarter) RunningVersion(string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.runningVersion, r.runningVersion != ""
 }
 
@@ -91,67 +109,13 @@ func TestCatalogPollerNotifyIsNonBlocking(t *testing.T) {
 	}
 }
 
-func TestCatalogPollerNotifyTriggersReconcile(t *testing.T) {
+func TestCatalogPollerReconcileOnceRetriesAfterRecordedFailure(t *testing.T) {
 	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 
 	services := testutil.NewStubServices(t)
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	appendRolloutFixture(t, services, "g-issues", "v1", now)
 
-	ready := make(chan struct{})
-	restarter := &recordingAppRestarter{}
-	poller := NewCatalogPoller(CatalogPollerConfig{
-		ChangeRequests:      services.AppVersionChangeRequests,
-		Materializations:    services.AppInstanceMaterializations,
-		Rollouts:            services.AppRollouts,
-		AppRestarter:        restarter,
-		InstanceID:          "replica-a",
-		Interval:            time.Hour,
-		RestartReady:        ready,
-		BootstrapReady:      ready,
-		DisableRestartDelay: true,
-		Now:                 func() time.Time { return now },
-	})
-	poller.Start(ctx)
-	close(ready)
-
-	waitForStartCalls := func(want int) {
-		t.Helper()
-		deadline := time.Now().Add(time.Second)
-		for time.Now().Before(deadline) {
-			if len(restarter.startCalls) >= want {
-				return
-			}
-			time.Sleep(5 * time.Millisecond)
-		}
-		t.Fatalf("startCalls = %d, want >= %d", len(restarter.startCalls), want)
-	}
-	waitForStartCalls(1)
-
-	appendRolloutFixture(t, services, "g-issues", "v2", now.Add(time.Minute))
-	poller.Notify("g-issues")
-	waitForStartCalls(2)
-	if got := restarter.startVersions[len(restarter.startVersions)-1]; got != "v2" {
-		t.Fatalf("last started version = %q, want v2", got)
-	}
-
-	poller.Stop()
-}
-
-func TestCatalogPollerNotifyRetriesAfterReconcileFailure(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	services := testutil.NewStubServices(t)
-	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
-	appendRolloutFixture(t, services, "g-issues", "v1", now)
-
-	ready := make(chan struct{})
 	restarter := &recordingAppRestarter{startErr: errors.New("start failed")}
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:       services.AppVersionChangeRequests,
@@ -159,25 +123,13 @@ func TestCatalogPollerNotifyRetriesAfterReconcileFailure(t *testing.T) {
 		Rollouts:             services.AppRollouts,
 		AppRestarter:         restarter,
 		InstanceID:           "replica-a",
-		Interval:             time.Hour,
-		RestartReady:         ready,
-		BootstrapReady:       ready,
 		DisableRestartDelay:  true,
 		MaxReconcileAttempts: 3,
 		Now:                  func() time.Time { return now },
 	})
-	poller.Start(ctx)
-	close(ready)
 
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		materialization, err := services.AppInstanceMaterializations.Get(
-			context.Background(), "replica-a", "g-issues", "v1",
-		)
-		if err == nil && materialization.AttemptCount > 0 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
+	if err := poller.ReconcileOnce(context.Background()); err == nil {
+		t.Fatal("ReconcileOnce: want start failure")
 	}
 	materialization, err := services.AppInstanceMaterializations.Get(
 		context.Background(), "replica-a", "g-issues", "v1",
@@ -189,22 +141,19 @@ func TestCatalogPollerNotifyRetriesAfterReconcileFailure(t *testing.T) {
 		t.Fatal("expected a recorded reconciliation failure before retry")
 	}
 
-	restarter.startErr = nil
-	poller.Notify("g-issues")
-
-	deadline = time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		materialization, err = services.AppInstanceMaterializations.Get(
-			context.Background(), "replica-a", "g-issues", "v1",
-		)
-		if err == nil && materialization.RestartedAt.Equal(now) {
-			poller.Stop()
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	restarter.clearStartErr()
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("second ReconcileOnce: %v", err)
 	}
-	poller.Stop()
-	t.Fatalf("materialization after notify = %#v, err = %v", materialization, err)
+	materialization, err = services.AppInstanceMaterializations.Get(
+		context.Background(), "replica-a", "g-issues", "v1",
+	)
+	if err != nil {
+		t.Fatalf("Get materialization after retry: %v", err)
+	}
+	if !materialization.RestartedAt.Equal(now) {
+		t.Fatalf("RestartedAt = %v, want %v", materialization.RestartedAt, now)
+	}
 }
 
 func TestCatalogPollerStopsRetryingAtConfiguredLimit(t *testing.T) {
