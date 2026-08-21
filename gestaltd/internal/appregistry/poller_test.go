@@ -197,7 +197,7 @@ func TestCatalogPollerNotifyRetriesAfterReconcileFailure(t *testing.T) {
 		materialization, err = services.AppInstanceMaterializations.Get(
 			context.Background(), "replica-a", "g-issues", "v1",
 		)
-		if err == nil && materialization.RestartedAt == now {
+		if err == nil && materialization.RestartedAt.Equal(now) {
 			poller.Stop()
 			return
 		}
