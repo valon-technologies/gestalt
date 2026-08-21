@@ -221,6 +221,9 @@ func runSourceBuildForPackaging(manifestPath string, manifest *providermanifestv
 		}
 	}
 	plan := &sourcePackagingBuildPlan{skipTargetCommands: make(map[int]struct{})}
+	if lastExecutableCommand < 0 {
+		return plan, nil
+	}
 	for i, observation := range observations {
 		if i > lastExecutableCommand && observation.staticChanged && !observation.supportChanged {
 			plan.skipTargetCommands[i] = struct{}{}
@@ -252,7 +255,7 @@ func runSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 	var staticBuildEnv string
 	if !build.PrepareOnly {
 		var err error
-		outputRel, outputKind, err = SourceBuildOutput(manifest)
+		outputRel, outputKind, err = sourceBuildOutput(manifest, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -475,13 +478,17 @@ func lookupEnv(env []string, key string) (string, bool) {
 }
 
 func SourceBuildOutput(manifest *providermanifestv1.Manifest) (rel string, kind string, err error) {
+	return sourceBuildOutput(manifest, SourceBuildOptions{})
+}
+
+func sourceBuildOutput(manifest *providermanifestv1.Manifest, opts SourceBuildOptions) (rel string, kind string, err error) {
 	if build := EffectiveSourceBuild(manifest); build != nil && build.PrepareOnly {
 		return "", "", nil
 	}
 	if _, err := ManifestKind(manifest); err != nil {
 		return "", "", err
 	}
-	goos, _ := SourceBuildTarget(SourceBuildOptions{})
+	goos, _ := SourceBuildTarget(opts)
 	outputRel, err := SourceBuildOutputPath(manifest, goos)
 	if err != nil {
 		return "", "", err
@@ -580,7 +587,7 @@ func EnsureSourceBuildOutput(manifestPath string, manifest *providermanifestv1.M
 	if !SourceBuildProducesOutput(manifest) {
 		return nil
 	}
-	outputRel, outputKind, err := SourceBuildOutput(manifest)
+	outputRel, outputKind, err := sourceBuildOutput(manifest, opts)
 	if err != nil {
 		if EffectiveSourceBuild(manifest) == nil {
 			return nil

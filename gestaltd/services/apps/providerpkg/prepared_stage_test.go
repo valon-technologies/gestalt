@@ -511,6 +511,74 @@ fi
 	}
 }
 
+func TestSourceBuildOutputUsesTargetOS(t *testing.T) {
+	t.Parallel()
+
+	const source = "github.com/test/apps/provider"
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  source,
+		Version: "0.0.1-alpha.1",
+		Build: &providermanifestv1.SourceBuild{
+			Commands: []providermanifestv1.SourcePhaseCommand{{Command: []string{"build"}}},
+		},
+	}
+
+	got, kind, err := sourceBuildOutput(manifest, SourceBuildOptions{GOOS: windowsOS, GOARCH: "amd64"})
+	if err != nil {
+		t.Fatalf("sourceBuildOutput: %v", err)
+	}
+	want := sourceBuildOutputRel(t, source, windowsOS)
+	if got != want {
+		t.Fatalf("sourceBuildOutput path = %q, want %q", got, want)
+	}
+	if kind != "executable" {
+		t.Fatalf("sourceBuildOutput kind = %q, want executable", kind)
+	}
+}
+
+func TestRunSourceBuildForPackagingDoesNotSkipStaticOnlyCommands(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	script := `#!/bin/sh
+set -eu
+mkdir -p "$GESTALT_BUILD_STATIC"
+printf '<html>%s</html>\n' "$GESTALT_TARGET_PLATFORM" > "$GESTALT_BUILD_STATIC/index.html"
+`
+	mustWriteFile(t, filepath.Join(root, "build-static.sh"), []byte(script), 0o755)
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/test/apps/static-only",
+		Version: "0.0.1-alpha.1",
+		Spec:    &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Commands: []providermanifestv1.SourcePhaseCommand{{Command: []string{"sh", "./build-static.sh"}}},
+		},
+		Run: sourceRunCommand("./run.sh"),
+	}
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, manifest))
+
+	plan, err := runSourceBuildForPackaging(manifestPath, manifest, SourceBuildOptions{
+		GOOS: "linux", GOARCH: "amd64",
+	})
+	if err != nil {
+		t.Fatalf("runSourceBuildForPackaging: %v", err)
+	}
+	if len(plan.skipTargetCommands) != 0 {
+		t.Fatalf("skipTargetCommands = %v, want none for a static-only build", plan.skipTargetCommands)
+	}
+	if err := runSourceBuildWithPackagingPlan(manifestPath, manifest, SourceBuildOptions{
+		GOOS: "darwin", GOARCH: "arm64",
+	}, plan); err != nil {
+		t.Fatalf("runSourceBuildWithPackagingPlan: %v", err)
+	}
+	staticIndex := mustReadFile(t, filepath.Join(SourceStaticBuildDir(manifestPath), "index.html"))
+	if !strings.Contains(string(staticIndex), "darwin/arm64") {
+		t.Fatalf("static index = %q, want rebuilt target assets", staticIndex)
+	}
+}
+
 func TestSourcePackagingPreparation_ReusesHostWorkAndStaticAssetsAcrossTargets(t *testing.T) {
 	t.Parallel()
 
