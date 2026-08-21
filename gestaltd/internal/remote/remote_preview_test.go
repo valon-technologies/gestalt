@@ -9,9 +9,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func TestCloudRunDialOptionsAddsGestaltAuthorizationMetadata(t *testing.T) {
-	t.Parallel()
-
+func TestCloudRunDialOptionsAddsGestaltAuthorizationMetadata(t *testing.T) { //nolint:paralleltest // mutates package-level Cloud Run token hooks
 	remote.TestCloudRunTokenSourceHook = func(context.Context, string) (oauth2.TokenSource, error) {
 		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "google-id-token"}), nil
 	}
@@ -26,9 +24,7 @@ func TestCloudRunDialOptionsAddsGestaltAuthorizationMetadata(t *testing.T) {
 	}
 }
 
-func TestCloudRunDialOptionsRejectsMissingTokenSource(t *testing.T) {
-	t.Parallel()
-
+func TestCloudRunDialOptionsRejectsMissingTokenSource(t *testing.T) { //nolint:paralleltest // mutates package-level Cloud Run token hooks
 	remote.TestCloudRunTokenSourceHook = func(context.Context, string) (oauth2.TokenSource, error) {
 		return nil, context.DeadlineExceeded
 	}
