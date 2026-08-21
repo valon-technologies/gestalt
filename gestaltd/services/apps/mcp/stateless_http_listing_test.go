@@ -512,6 +512,61 @@ func TestInvokeFrontDoorUsesExplicitAppIdentity(t *testing.T) {
 	}
 }
 
+func TestInvokeRejectsOutOfScopeAppBeforeCatalogLookup(t *testing.T) {
+	t.Parallel()
+
+	stub := &panicCatalogProvider{StubIntegration: coretesting.StubIntegration{
+		N:        "sampleApp",
+		ConnMode: core.ConnectionModeNone,
+	}}
+	cfg := Config{
+		Providers:        testutil.NewProviderRegistry(t, stub),
+		AllowedProviders: []string{"sampleApp"},
+		IncludeREST:      map[string]bool{"sampleApp": true},
+	}
+	scoped := listingTestPrincipal()
+	scoped.Scopes = []string{"otherApp"}
+
+	requireToolError(t, cfg, scoped, InvokeToolName, map[string]any{
+		"app":       "sampleApp",
+		"operation": "items.list",
+	})
+}
+
+func TestFlattenedToolNamesReserveFrontDoorNames(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{
+		N:        "gestalt",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+			{ID: "search", Method: "GET", Path: "/search"},
+			{ID: "describe", Method: "GET", Path: "/describe"},
+			{ID: "invoke", Method: "GET", Path: "/invoke"},
+		}},
+		ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"op":"` + op + `"}`)}, nil
+		},
+	}
+	cfg := Config{
+		Invoker:          &listingInvoker{stub: stub},
+		Providers:        testutil.NewProviderRegistry(t, stub),
+		AllowedProviders: []string{"gestalt"},
+		IncludeREST:      map[string]bool{"gestalt": true},
+	}
+
+	for _, operation := range []string{"search", "describe", "invoke"} {
+		name := toolName(nil, "gestalt", operation)
+		if name == SearchToolName || name == DescribeToolName || name == InvokeToolName {
+			t.Fatalf("flattened %s tool still collides with front door: %q", operation, name)
+		}
+		body := callToolJSON(t, cfg, listingTestPrincipal(), name, map[string]any{})
+		if body["op"] != operation {
+			t.Fatalf("flattened %s invoke = %v", operation, body)
+		}
+	}
+}
+
 func TestFlattenedToolNamesStillInvoke(t *testing.T) {
 	t.Parallel()
 

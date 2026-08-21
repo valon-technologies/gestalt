@@ -44,7 +44,7 @@ func providerNameForTool(prefixes map[string]string, providers []string, tool st
 
 func toolName(prefixes map[string]string, provider, operation string) string {
 	raw := prefixes[provider] + provider + toolNameSep + operation
-	return strings.Map(func(r rune) rune {
+	name := strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z':
 			return r
@@ -58,4 +58,17 @@ func toolName(prefixes map[string]string, provider, operation string) string {
 			return '_'
 		}
 	}, raw)
+	if isWorkspaceFrontDoorToolName(name) {
+		return name + "_app"
+	}
+	return name
+}
+
+func isWorkspaceFrontDoorToolName(name string) bool {
+	switch name {
+	case SearchToolName, DescribeToolName, InvokeToolName:
+		return true
+	default:
+		return false
+	}
 }

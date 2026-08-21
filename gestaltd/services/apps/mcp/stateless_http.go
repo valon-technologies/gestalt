@@ -211,6 +211,9 @@ func (h *StatelessHTTPHandler) callResolvedAppTool(ctx context.Context, req mcpg
 		return mcpgo.NewToolResultError("not authenticated"), nil
 	}
 	provName := ref.provider
+	if !principal.AllowsProviderPermission(p, provName) {
+		return mcpgo.NewToolResultError("operation access denied"), nil
+	}
 	prov, ok := h.provider(ctx, provName)
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", core.ErrNotFound, provName)
