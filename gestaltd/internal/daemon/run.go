@@ -128,6 +128,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	portFlag := fs.Int("port", 0, "public listener port; overrides server.public.port. If in use, gestaltd tries the next free port unless --port was given explicitly")
 	remoteFlag := fs.String("remote", "", "remote gestaltd URL; overrides server.remote")
 	remoteTokenFlag := fs.String("remote-token", "", "bearer token for remote gestaltd; overrides server.remoteToken")
+	remotePreviewFlag := fs.String("remote-preview", "", "preview gestaltd URL for local UI + remote provider dev; resolves Gestalt auth from CLI config")
 	var lockedFlag *bool
 	var noSyncFlag *bool
 	if opts.allowLocked {
@@ -164,6 +165,9 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	if noSync && !locked {
 		return fmt.Errorf("--no-sync requires --locked")
 	}
+	if strings.TrimSpace(*remoteFlag) != "" && strings.TrimSpace(*remotePreviewFlag) != "" {
+		return fmt.Errorf("--remote and --remote-preview cannot be used together")
+	}
 
 	if opts.allowProviderLocal {
 		ranProviderLocal, err := maybeRunServeProviderLocal(serveProviderLocalOptions{
@@ -176,6 +180,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			NoSync:          noSync,
 			Remote:          *remoteFlag,
 			RemoteToken:     *remoteTokenFlag,
+			RemotePreview:   *remotePreviewFlag,
 			Dev:             opts.dev,
 			LockedAllowed:   lockedFlag != nil,
 			GestaltdVersion: gestaltdVersion,
@@ -184,7 +189,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			return err
 		}
 	}
-	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, *lockfilePath, *artifactsDir, locked, noSync, *remoteFlag, *remoteTokenFlag, opts.dev)
+	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, *lockfilePath, *artifactsDir, locked, noSync, *remoteFlag, *remoteTokenFlag, opts.dev, "")
 	if err != nil {
 		return err
 	}
@@ -207,6 +212,7 @@ type serveProviderLocalOptions struct {
 	NoSync          bool
 	Remote          string
 	RemoteToken     string
+	RemotePreview   string
 	Dev             bool
 	LockedAllowed   bool
 	GestaltdVersion string
@@ -228,6 +234,16 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 	if len(opts.ConfigPaths) == 0 && (opts.ArtifactsDir != "" || opts.LockfilePath != "") {
 		return true, fmt.Errorf("--lockfile and --artifacts-dir require --config when serving local PATH arguments")
 	}
+	if strings.TrimSpace(opts.Remote) != "" && strings.TrimSpace(opts.RemotePreview) != "" {
+		return true, fmt.Errorf("--remote and --remote-preview cannot be used together")
+	}
+	if strings.TrimSpace(opts.RemotePreview) != "" {
+		for _, path := range paths {
+			if err := providerpkg.ValidateRemotePreviewUIRunTarget(manifestPathForRemotePreviewValidation(path)); err != nil {
+				return true, err
+			}
+		}
+	}
 	return true, runServeProviderLocal(providerLocalCommandOptions{
 		Paths:           paths,
 		ConfigPaths:     opts.ConfigPaths,
@@ -236,6 +252,7 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 		NoSync:          opts.NoSync,
 		Remote:          opts.Remote,
 		RemoteToken:     opts.RemoteToken,
+		RemotePreview:   opts.RemotePreview,
 		Dev:             opts.Dev,
 		ArtifactsDir:    opts.ArtifactsDir,
 		LockfilePath:    opts.LockfilePath,
@@ -547,7 +564,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
 	writeUsageLine(w, "  gestaltd dev [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--port PORT] [--remote URL] [--remote-token TOKEN]")
-	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN]")
+	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN] [--remote-preview URL]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd app <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
@@ -576,11 +593,13 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN]")
+	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN] [--remote-preview URL]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
 	writeUsageLine(w, "--port overrides server.public.port; if the port is in use, gestaltd tries the next free port unless --port was given explicitly.")
 	writeUsageLine(w, "--remote overrides server.remote; --remote-token overrides server.remoteToken.")
+	writeUsageLine(w, "--remote-preview runs only the manifest role: ui dev server locally and delegates the provider to a preview gestaltd URL.")
+	writeUsageLine(w, "--remote-preview resolves Gestalt auth from ~/.config/gestalt; it cannot be combined with --remote.")
 	writeUsageLine(w, "PATH arguments (repeatable) override selected UIs to local source trees; with --config and --locked,")
 	writeUsageLine(w, "the fleet loads pinned artifacts while PATH UIs with a manifest run: block hot-reload.")
 	writeUsageLine(w, "Without --config, PATH arguments run an isolated synthesized baseline (unlocked).")

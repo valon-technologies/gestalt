@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+const SourceRunRoleUI = "ui"
 
 // SourcePhaseCommand is one serial step in an install, build, or run phase.
 type SourcePhaseCommand struct {
@@ -15,6 +18,7 @@ type SourcePhaseCommand struct {
 	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	Inputs       []string          `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+	Role         string            `json:"role,omitempty" yaml:"role,omitempty"`
 }
 
 type phaseWireForm int
@@ -32,6 +36,18 @@ type sourcePhaseCommandWire struct {
 	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	Inputs       []string          `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+	Role         string            `json:"role,omitempty" yaml:"role,omitempty"`
+}
+
+func validateSourceRunRole(role, subject string) error {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return nil
+	}
+	if role != SourceRunRoleUI {
+		return fmt.Errorf("%s.role %q is not supported (allowed: %q)", subject, role, SourceRunRoleUI)
+	}
+	return nil
 }
 
 func parsePhaseCommandFromJSON(data []byte, allowed map[string]struct{}, subject string) (SourcePhaseCommand, error) {
@@ -44,6 +60,9 @@ func parsePhaseCommandFromJSON(data []byte, allowed map[string]struct{}, subject
 	}
 	if len(raw.Command) == 0 {
 		return SourcePhaseCommand{}, fmt.Errorf("%s.command is required", subject)
+	}
+	if err := validateSourceRunRole(raw.Role, subject); err != nil {
+		return SourcePhaseCommand{}, err
 	}
 	return SourcePhaseCommand(raw), nil
 }
@@ -61,6 +80,9 @@ func parsePhaseCommandFromYAML(node *yaml.Node, allowed map[string]struct{}, sub
 	}
 	if len(raw.Command) == 0 {
 		return SourcePhaseCommand{}, fmt.Errorf("%s.command is required", subject)
+	}
+	if err := validateSourceRunRole(raw.Role, subject); err != nil {
+		return SourcePhaseCommand{}, err
 	}
 	return SourcePhaseCommand(raw), nil
 }
@@ -194,7 +216,7 @@ func syncLegacyPhaseFields(command *[]string, workdir *string, env *map[string]s
 func marshalPhaseCommandListJSONValue(commands []SourcePhaseCommand, allowed map[string]struct{}) []any {
 	out := make([]any, 0, len(commands))
 	for _, cmd := range commands {
-		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" {
+		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" && cmd.Role == "" {
 			out = append(out, append([]string(nil), cmd.Command...))
 			continue
 		}
@@ -210,7 +232,7 @@ func marshalPhaseCommandListJSON(commands []SourcePhaseCommand, allowed map[stri
 func marshalPhaseCommandListYAML(commands []SourcePhaseCommand, allowed map[string]struct{}) ([]any, error) {
 	out := make([]any, 0, len(commands))
 	for _, cmd := range commands {
-		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" {
+		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" && cmd.Role == "" {
 			out = append(out, append([]string(nil), cmd.Command...))
 			continue
 		}

@@ -5754,6 +5754,61 @@ func TestApplyServeRemoteOverridesDev(t *testing.T) {
 	})
 }
 
+func TestApplyServeRemotePreviewOverrides(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("GESTALT_API_KEY", "")
+	if err := os.MkdirAll(filepath.Join(dir, "gestalt"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "gestalt", "credentials.json"), []byte(`{"api_token":"preview-token"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile credentials: %v", err)
+	}
+
+	cfg := &Config{
+		Apps: map[string]*ProviderEntry{
+			"demo": {},
+		},
+	}
+	if err := ApplyServeRemotePreviewOverrides(cfg, "https://gestalt-preview-demo-pr-123.run.app", ""); err != nil {
+		t.Fatalf("ApplyServeRemotePreviewOverrides: %v", err)
+	}
+	if !cfg.Server.RemotePreviewServe {
+		t.Fatal("RemotePreviewServe = false, want true")
+	}
+	_, remote, ok := cfg.DefaultRemoteEntry()
+	if !ok || remote == nil {
+		t.Fatal("expected default remote")
+	}
+	if remote.URL != "https://gestalt-preview-demo-pr-123.run.app" {
+		t.Fatalf("url = %q", remote.URL)
+	}
+	if remote.Token != "preview-token" {
+		t.Fatalf("token = %q", remote.Token)
+	}
+	if !remote.CloudRunIAM {
+		t.Fatal("CloudRunIAM = false, want true")
+	}
+	if cfg.Apps["demo"].Remote != DefaultRemoteName {
+		t.Fatalf("apps.demo.remote = %q", cfg.Apps["demo"].Remote)
+	}
+
+	t.Run("loopback preview disables cloud run iam", func(t *testing.T) {
+		t.Parallel()
+		localCfg := &Config{}
+		if err := ApplyServeRemotePreviewOverrides(localCfg, "http://127.0.0.1:8080", "token"); err != nil {
+			t.Fatalf("ApplyServeRemotePreviewOverrides: %v", err)
+		}
+		_, localRemote, ok := localCfg.DefaultRemoteEntry()
+		if !ok || localRemote == nil {
+			t.Fatal("expected default remote")
+		}
+		if localRemote.CloudRunIAM {
+			t.Fatal("CloudRunIAM = true, want false for loopback preview")
+		}
+	})
+}
+
 func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
 	t.Parallel()
 

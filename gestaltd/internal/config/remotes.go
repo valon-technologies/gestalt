@@ -11,9 +11,10 @@ const DefaultRemoteName = "default"
 
 // RemoteConfig names one upstream gestaltd origin.
 type RemoteConfig struct {
-	URL     string `yaml:"url"`
-	Token   string `yaml:"token,omitempty"`
-	Default bool   `yaml:"default,omitempty"`
+	URL         string `yaml:"url"`
+	Token       string `yaml:"token,omitempty"`
+	Default     bool   `yaml:"default,omitempty"`
+	CloudRunIAM bool   `yaml:"-"`
 }
 
 // EntryPlacementRemote returns the canonical remote name for provider placement.
@@ -30,6 +31,9 @@ func EntryBuildsLocal(entry *ProviderEntry) bool {
 	if entry == nil {
 		return false
 	}
+	if entry.RemotePreviewActive {
+		return false
+	}
 	if entry.DevActive || entry.Local {
 		return true
 	}
@@ -44,7 +48,10 @@ func (cfg *Config) ReferencedRemoteNames() []string {
 	}
 	seen := make(map[string]struct{})
 	add := func(entry *ProviderEntry) {
-		if entry == nil || entry.DevActive || entry.Local {
+		if entry == nil || entry.Local {
+			return
+		}
+		if entry.DevActive && !entry.RemotePreviewActive {
 			return
 		}
 		if name := EntryPlacementRemote(entry); name != "" {

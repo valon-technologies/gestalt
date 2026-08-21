@@ -125,8 +125,11 @@ func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, 
 	return lc.SyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 }
 
-func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*config.Config, error) {
+func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, remotePreview bool, forcedDevAppKeys ...string) (*config.Config, error) {
 	lc := operatorLifecycleWithCLIProgress(false).WithDevServeEligible(!locked)
+	if remotePreview {
+		lc = lc.WithRemotePreviewServe(true)
+	}
 	if len(forcedDevAppKeys) > 0 {
 		lc = lc.WithForcedDevAppKeys(forcedDevAppKeys)
 	}

@@ -9,17 +9,23 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"golang.org/x/oauth2"
+	"google.golang.org/api/idtoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials/oauth"
 	"google.golang.org/grpc/metadata"
 )
 
+const gestaltAuthorizationMetadataKey = "gestalt-authorization"
+
 // Config configures a client to a remote public gestaltd API.
 type Config struct {
-	URL       string
-	Token     string
-	TLSConfig *tls.Config
+	URL         string
+	Token       string
+	TLSConfig   *tls.Config
+	CloudRunIAM bool
 }
 
 // ClientSet exposes typed public gRPC clients for a remote gestaltd instance.
@@ -37,7 +43,7 @@ type ClientSet struct {
 
 // Dial opens a gRPC connection to the remote public gestaltd surface.
 // Token is optional; when set, bearer authorization is attached to every RPC.
-func Dial(_ context.Context, cfg Config) (*grpc.ClientConn, error) {
+func Dial(ctx context.Context, cfg Config) (*grpc.ClientConn, error) {
 	url := strings.TrimSpace(cfg.URL)
 	if url == "" {
 		return nil, fmt.Errorf("remote: URL is required")
@@ -49,8 +55,14 @@ func Dial(_ context.Context, cfg Config) (*grpc.ClientConn, error) {
 	}
 
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
-	if token := strings.TrimSpace(cfg.Token); token != "" {
-		unary, stream := bearerTokenInterceptors(token)
+	if cfg.CloudRunIAM {
+		cloudRunOpts, err := cloudRunDialOptions(ctx, url, cfg.Token)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, cloudRunOpts...)
+	} else if token := strings.TrimSpace(cfg.Token); token != "" {
+		unary, stream := bearerTokenInterceptors(token, "authorization")
 		opts = append(opts,
 			grpc.WithChainUnaryInterceptor(unary),
 			grpc.WithChainStreamInterceptor(stream),
@@ -140,13 +152,13 @@ func grpcTarget(rawURL string, tlsConfig *tls.Config) (target string, creds cred
 	return net.JoinHostPort(host, port), creds, nil
 }
 
-func bearerTokenInterceptors(token string) (grpc.UnaryClientInterceptor, grpc.StreamClientInterceptor) {
+func bearerTokenInterceptors(token, metadataKey string) (grpc.UnaryClientInterceptor, grpc.StreamClientInterceptor) {
 	withBearer := func(ctx context.Context) context.Context {
 		token = strings.TrimSpace(token)
 		if token == "" {
 			return ctx
 		}
-		return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+		return metadata.AppendToOutgoingContext(ctx, metadataKey, "Bearer "+token)
 	}
 	unary := func(
 		ctx context.Context,
@@ -169,6 +181,40 @@ func bearerTokenInterceptors(token string) (grpc.UnaryClientInterceptor, grpc.St
 		return streamer(withBearer(ctx), desc, cc, method, opts...)
 	}
 	return unary, stream
+}
+
+var newCloudRunTokenSource = func(ctx context.Context, audience string) (oauth2.TokenSource, error) {
+	return idtoken.NewTokenSource(ctx, audience)
+}
+
+// TestCloudRunTokenSourceHook overrides Cloud Run token acquisition in tests.
+var TestCloudRunTokenSourceHook func(context.Context, string) (oauth2.TokenSource, error)
+
+// TestCloudRunDialOptions exposes cloudRunDialOptions for unit tests.
+func TestCloudRunDialOptions(ctx context.Context, rawURL, gestaltToken string) ([]grpc.DialOption, error) {
+	if TestCloudRunTokenSourceHook != nil {
+		previous := newCloudRunTokenSource
+		newCloudRunTokenSource = TestCloudRunTokenSourceHook
+		defer func() { newCloudRunTokenSource = previous }()
+	}
+	return cloudRunDialOptions(ctx, rawURL, gestaltToken)
+}
+
+func cloudRunDialOptions(ctx context.Context, rawURL, gestaltToken string) ([]grpc.DialOption, error) {
+	audience := strings.TrimRight(strings.TrimSpace(rawURL), "/")
+	tokenSource, err := newCloudRunTokenSource(ctx, audience)
+	if err != nil {
+		return nil, fmt.Errorf("remote: cloud run identity token: %w", err)
+	}
+	opts := []grpc.DialOption{grpc.WithPerRPCCredentials(oauth.TokenSource{TokenSource: tokenSource})}
+	if token := strings.TrimSpace(gestaltToken); token != "" {
+		unary, stream := bearerTokenInterceptors(token, gestaltAuthorizationMetadataKey)
+		opts = append(opts,
+			grpc.WithChainUnaryInterceptor(unary),
+			grpc.WithChainStreamInterceptor(stream),
+		)
+	}
+	return opts, nil
 }
 
 // ClientSets maps named remotes to typed public gRPC clients.

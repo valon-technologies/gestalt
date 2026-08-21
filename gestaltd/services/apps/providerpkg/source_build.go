@@ -22,6 +22,7 @@ type ResolvedCommand struct {
 	Env          map[string]string
 	Inputs       []string
 	ReadyTimeout time.Duration
+	Role         string
 }
 
 type ResolvedSourceBuild struct {
@@ -93,6 +94,7 @@ func resolvePhaseCommands(label string, phases []providermanifestv1.SourcePhaseC
 			Env:          maps.Clone(phase.Env),
 			Inputs:       append([]string(nil), phase.Inputs...),
 			ReadyTimeout: readyTimeout,
+			Role:         strings.TrimSpace(phase.Role),
 		})
 	}
 	return out, nil
@@ -679,6 +681,45 @@ func SourceRunCommands(manifestPath string) ([]ResolvedCommand, error) {
 		}
 	}
 	return commands, nil
+}
+
+const errRemotePreviewUICommandCount = "remote-preview requires exactly one manifest run command with role: ui"
+
+// SourceUIRunCommands returns manifest run entries tagged with role: ui.
+func SourceUIRunCommands(manifestPath string) ([]ResolvedCommand, error) {
+	commands, err := SourceRunCommands(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	var ui []ResolvedCommand
+	for _, command := range commands {
+		if command.Role == providermanifestv1.SourceRunRoleUI {
+			ui = append(ui, command)
+		}
+	}
+	return ui, nil
+}
+
+// RemotePreviewUIRunCommand returns the sole role: ui run command for remote-preview serve.
+func RemotePreviewUIRunCommand(manifestPath string) (ResolvedCommand, error) {
+	ui, err := SourceUIRunCommands(manifestPath)
+	if err != nil {
+		return ResolvedCommand{}, err
+	}
+	switch len(ui) {
+	case 0:
+		return ResolvedCommand{}, fmt.Errorf("%s: no manifest run command with role: ui", manifestPath)
+	case 1:
+		return ui[0], nil
+	default:
+		return ResolvedCommand{}, fmt.Errorf("%s: %s (found %d)", manifestPath, errRemotePreviewUICommandCount, len(ui))
+	}
+}
+
+// ValidateRemotePreviewUIRunTarget ensures remote-preview serve has exactly one UI run command.
+func ValidateRemotePreviewUIRunTarget(manifestPath string) error {
+	_, err := RemotePreviewUIRunCommand(manifestPath)
+	return err
 }
 
 func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions) (SourceExecution, error) {

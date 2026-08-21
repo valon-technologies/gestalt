@@ -107,6 +107,9 @@ type Lifecycle struct {
 	// forcedDevAppKeys marks specific app keys dev-active even when devServeEligible
 	// is false (serve --locked --config … --path … overlay mode).
 	forcedDevAppKeys map[string]bool
+	// remotePreviewServe enables serve --remote-preview: only role: ui run
+	// commands start locally while the provider delegates to the preview remote.
+	remotePreviewServe bool
 }
 
 type SyncOptions struct {
@@ -213,6 +216,11 @@ func (l *Lifecycle) WithForcedDevAppKeys(keys []string) *Lifecycle {
 			l.forcedDevAppKeys[key] = true
 		}
 	}
+	return l
+}
+
+func (l *Lifecycle) WithRemotePreviewServe(v bool) *Lifecycle {
+	l.remotePreviewServe = v
 	return l
 }
 
@@ -970,6 +978,17 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 				return fmt.Errorf("app %q: %w", name, err)
 			}
 			if l != nil && l.shouldMarkAppForDev(name) {
+				if l.remotePreviewServe {
+					ui, err := providerpkg.RemotePreviewUIRunCommand(normalized.manifestPath)
+					if err != nil {
+						return fmt.Errorf("app %q: %w", name, err)
+					}
+					entry.RemotePreviewActive = true
+					entry.DevActive = true
+					entry.Remote = config.DefaultRemoteName
+					entry.ResolvedDevWorkdir = ui.Workdir
+					continue
+				}
 				workdir := normalized.sourceDir
 				if run := providerpkg.EffectiveSourceRunCommand(manifest); run != nil {
 					if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
