@@ -72,6 +72,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithConnectionInstancePreferences(prepared.Services.ConnectionInstancePreferences),
+		invocation.WithAppAccessProfiles(prepared.Services.AppAccessProfiles),
 	)
 	workflowTools := newWorkflowSystemTools(prepared.WorkflowManager, prepared.Deps.WorkflowRuntime)
 	prepared.WorkflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{

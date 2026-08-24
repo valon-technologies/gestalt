@@ -534,13 +534,25 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 	return s.completeConnection(ctx, prov, tm)
 }
 
-func (s *Server) completeConnection(ctx context.Context, _ core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
+func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
 	enriched := s.enrichAccountIdentity(ctx, tm)
+	if err := s.ensureAppAccessDefaults(ctx, enriched.SubjectID, enriched.Integration, prov); err != nil {
+		return nil, err
+	}
 	if _, err := s.storeCredentialFromMaterial(ctx, enriched); err != nil {
 		return nil, err
 	}
 	s.maybeSetDefaultInstancePreference(ctx, enriched.SubjectID, enriched.Integration, enriched.Connection, enriched.Instance)
 	return &connectionSetupResult{Status: "connected", Integration: enriched.Integration}, nil
+}
+
+func (s *Server) ensureAppAccessDefaults(ctx context.Context, subjectID, app string, prov core.Provider) error {
+	if s == nil || s.appAccessProfiles == nil || prov == nil || principal.KindFromSubjectID(strings.TrimSpace(subjectID)) != principal.KindUser {
+		return nil
+	}
+	cat := s.publicCatalog(app, prov, prov.Catalog())
+	_, err := s.appAccessProfiles.EnsureAppAccessDefaults(ctx, subjectID, app, defaultAppAccessOperationsForProvider(prov, cat))
+	return err
 }
 
 func manualConnectionAllowed(conn config.ConnectionDef) bool {

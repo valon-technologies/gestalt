@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -481,8 +482,16 @@ type Spec struct {
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+	Access            *ProviderAccess                       `json:"access,omitempty" yaml:"access,omitempty"`
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
+}
+
+// ProviderAccess declares the initial user-facing app capability profile.
+// These are app operation IDs, not upstream OAuth scopes; the connection
+// provider remains responsible for requesting the scopes it needs.
+type ProviderAccess struct {
+	DefaultOperations []string `json:"defaultOperations,omitempty" yaml:"defaultOperations,omitempty"`
 }
 
 type RouteAuthRef struct {
@@ -609,6 +618,13 @@ func (s *Spec) RESTOperations() []ProviderOperation {
 		return nil
 	}
 	return s.Surfaces.REST.Operations
+}
+
+func (s *Spec) AccessDefaultOperations() []string {
+	if s == nil || s.Access == nil {
+		return nil
+	}
+	return slices.Clone(s.Access.DefaultOperations)
 }
 
 func (s *Spec) SurfaceConnectionName(surface string) string {

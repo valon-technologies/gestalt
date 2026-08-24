@@ -21,6 +21,7 @@ const (
 	StoreRemoteRegistrations            = "remote_registrations"
 	StoreRemoteProviders                = "remote_providers"
 	StoreConnectionInstancePreferences  = "connection_instance_preferences"
+	StoreAppAccessProfiles              = "app_access_profiles"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -228,6 +229,22 @@ var ConnectionInstancePreferencesSchema = idb.ObjectStoreOptions{
 		{Name: "subject_id", Type: idb.TypeString, NotNull: true},
 		{Name: "connection_id", Type: idb.TypeString, NotNull: true},
 		{Name: "instance", Type: idb.TypeString, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+	},
+}
+
+var AppAccessProfilesSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_subject", KeyPath: []string{"subject_id"}},
+		{Name: "by_app", KeyPath: []string{"app"}},
+		{Name: "by_subject_app", KeyPath: []string{"subject_id", "app"}, Unique: true},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "subject_id", Type: idb.TypeString, NotNull: true},
+		{Name: "app", Type: idb.TypeString, NotNull: true},
+		{Name: "enabled_operations", Type: idb.TypeString},
+		{Name: "defaults_initialized", Type: idb.TypeBool, NotNull: true},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},
 }

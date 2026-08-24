@@ -131,6 +131,7 @@ type Broker struct {
 	connMapper                    ConnectionMapper
 	mcpMapper                     ConnectionMapper
 	connectionRuntime             ConnectionRuntimeResolver
+	appAccessProfiles             core.AppAccessProfileStore
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]ProviderKind
 	authorizationPolicies         map[string]string
@@ -163,6 +164,12 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 
 func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
 	return func(b *Broker) { b.authorization = provider }
+}
+
+// WithAppAccessProfiles installs the user-owned app capability policy. It is
+// checked in the broker so every invocation surface shares the same decision.
+func WithAppAccessProfiles(store core.AppAccessProfileStore) BrokerOption {
+	return func(b *Broker) { b.appAccessProfiles = store }
 }
 
 func WithProviderKinds(kinds map[string]ProviderKind) BrokerOption {
@@ -300,6 +307,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
+	}
+	if err := b.checkAppAccess(ctx, p, providerName, opMeta.ID); err != nil {
+		return fail(err)
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
 		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
@@ -1095,10 +1105,36 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 	if !principal.AllowsOperationPermission(p, providerName, operationID) {
 		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
+	if err := b.checkAppAccess(ctx, p, providerName, operationID); err != nil {
+		return err
+	}
 	if b.providerDelegatesRemoteAuthorization(ctx, providerName) {
 		return nil
 	}
 	return b.checkAuthorizationAccess(ctx, p, providerName, operationID)
+}
+
+func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+	if b == nil || b.appAccessProfiles == nil || p == nil || principal.IsNonUserPrincipal(p) {
+		return nil
+	}
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+	if err != nil {
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+	}
+	profile, err := b.appAccessProfiles.GetAppAccessProfile(ctx, subjectID, providerName)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+	}
+	for _, enabled := range profile.EnabledOperations {
+		if strings.TrimSpace(enabled) == strings.TrimSpace(operationID) {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 }
 
 func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {

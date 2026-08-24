@@ -20,6 +20,8 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Get("/apps", s.listIntegrations)
 		r.Delete("/apps/{name}", s.disconnectIntegration)
 		r.Put("/apps/{name}/preferred-instance", s.selectPreferredInstance)
+		r.Get("/apps/{name}/access", s.getAppAccess)
+		r.Put("/apps/{name}/access", s.updateAppAccess)
 
 		r.Post("/workflow/events", s.deliverWorkflowEvent)
 

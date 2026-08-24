@@ -21,6 +21,24 @@ func TestPermissionSetFromScopesExplicitEmptyDeniesAll(t *testing.T) {
 	}
 }
 
+func TestOIDCIdentityScopesDoNotRestrictAppPermissions(t *testing.T) {
+	t.Parallel()
+
+	p := &Principal{
+		SubjectID: "user:user-1",
+		Scopes:    []string{"openid", "email", "profile"},
+	}
+	if !AllowsProviderPermission(p, "slack") {
+		t.Fatal("OIDC identity scopes denied provider access")
+	}
+	if !AllowsOperationPermission(p, "slack", "conversations.list") {
+		t.Fatal("OIDC identity scopes denied operation access")
+	}
+	if got := p.EffectivePermissions(); got == nil || len(got) != 0 {
+		t.Fatalf("effective permissions = %#v, want explicit empty app permission set", got)
+	}
+}
+
 func TestResolveTokenPropagatesIntrospectError(t *testing.T) {
 	t.Parallel()
 

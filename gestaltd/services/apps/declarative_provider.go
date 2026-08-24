@@ -74,6 +74,8 @@ type DeclarativeProvider struct {
 	connectionSelectors  map[string]core.OperationConnectionSelector
 	operationLocks       map[string]bool
 	tokenParsers         map[string]egress.TokenParser
+	accessDefaults       []string
+	accessDefaultsSet    bool
 }
 
 func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
@@ -135,11 +137,20 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		connectionSelectors:  cloneOperationConnectionSelectors(options.connectionSelectors),
 		operationLocks:       maps.Clone(options.operationLocks),
 		tokenParsers:         connectionTokenParsers(manifest.Spec.Connections),
+		accessDefaults:       slices.Clone(manifest.Spec.AccessDefaultOperations()),
+		accessDefaultsSet:    manifest.Spec.Access != nil,
 	}, nil
 }
 
 func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
 	return p.Base.Catalog().Clone()
+}
+
+func (p *DeclarativeProvider) DefaultAppAccessOperations() ([]string, bool) {
+	if p == nil || !p.accessDefaultsSet {
+		return nil, false
+	}
+	return slices.Clone(p.accessDefaults), true
 }
 
 func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {

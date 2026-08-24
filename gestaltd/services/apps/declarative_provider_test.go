@@ -273,3 +273,34 @@ func TestDeclarativeProvider_HTTPRequestMaterialization(t *testing.T) {
 		})
 	})
 }
+
+func TestDeclarativeProvider_ExplicitAppAccessDefaults(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/test/access-defaults",
+		Version: "0.0.1-alpha.1",
+		Spec: &providermanifestv1.Spec{
+			Access: &providermanifestv1.ProviderAccess{
+				DefaultOperations: []string{"users.list"},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://example.com",
+					Operations: []providermanifestv1.ProviderOperation{
+						{Name: "users.list", Method: http.MethodGet, Path: "/users"},
+					},
+				},
+			},
+		},
+	}
+	prov, err := NewDeclarativeProvider(manifest, http.DefaultClient)
+	if err != nil {
+		t.Fatalf("NewDeclarativeProvider: %v", err)
+	}
+	operations, configured := prov.DefaultAppAccessOperations()
+	if !configured || len(operations) != 1 || operations[0] != "users.list" {
+		t.Fatalf("default app access operations = %#v, configured=%v", operations, configured)
+	}
+}
