@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -131,6 +132,22 @@ func TestMCPOAuthAccessTokenComesFromProviderTokenExchange(t *testing.T) {
 	}
 	if lastCallerSubject != "user:11111111-1111-1111-1111-111111111111" {
 		t.Fatalf("caller subject = %q, want canonical caller subject", lastCallerSubject)
+	}
+}
+
+func TestMCPOAuthCallerSubjectRejectsNonCanonicalStoredSubject(t *testing.T) {
+	t.Parallel()
+
+	srv := &Server{}
+	for _, subject := range []string{"user:person@example.com", "user:provider-opaque", "provider:subject"} {
+		t.Run(subject, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := srv.resolveMCPOAuthCallerSubject(context.Background(), subject, "unused-subject-token")
+			if !errors.Is(err, principal.ErrInvalidToken) {
+				t.Fatalf("resolveMCPOAuthCallerSubject() error = %v, want invalid token", err)
+			}
+		})
 	}
 }
 

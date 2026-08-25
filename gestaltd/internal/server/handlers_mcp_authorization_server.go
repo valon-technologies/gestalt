@@ -445,6 +445,9 @@ func (s *Server) mcpOAuthRefreshAccessToken(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) resolveMCPOAuthCallerSubject(ctx context.Context, callerSubjectID, subjectToken string) (string, error) {
 	if callerSubjectID = strings.TrimSpace(callerSubjectID); callerSubjectID != "" {
+		if principal.ClassifyUserSubjectID(callerSubjectID) != principal.UserSubjectFormCanonical {
+			return "", fmt.Errorf("%w: caller subject is not canonical", principal.ErrInvalidToken)
+		}
 		return callerSubjectID, nil
 	}
 	if strings.TrimSpace(subjectToken) == "" {
