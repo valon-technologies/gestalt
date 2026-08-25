@@ -211,10 +211,12 @@ func stripInternalIdentityMetadata(ctx context.Context) context.Context {
 	if !ok {
 		return ctx
 	}
-	if len(md.Get(gestalt.TrustedCallerSubjectMetadataKey)) == 0 {
+	if len(md.Get(gestalt.TrustedCallerSubjectMetadataKey)) == 0 &&
+		len(md.Get(gestalt.CallerBearerTokenMetadataKey)) == 0 {
 		return ctx
 	}
 	copied := md.Copy()
 	copied.Delete(gestalt.TrustedCallerSubjectMetadataKey)
+	copied.Delete(gestalt.CallerBearerTokenMetadataKey)
 	return metadata.NewIncomingContext(ctx, copied)
 }

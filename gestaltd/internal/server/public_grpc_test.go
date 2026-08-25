@@ -9,11 +9,12 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-func TestStripInternalIdentityMetadataRemovesForgedCallerSubject(t *testing.T) {
+func TestStripInternalIdentityMetadataRemovesForgedCallerIdentity(t *testing.T) {
 	t.Parallel()
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
 		gestalt.TrustedCallerSubjectMetadataKey, "user:bob",
+		gestalt.CallerBearerTokenMetadataKey, "token-for-bob",
 	))
 	ctx = principal.WithPrincipal(ctx, &principal.Principal{SubjectID: "user:alice"})
 
@@ -24,5 +25,8 @@ func TestStripInternalIdentityMetadataRemovesForgedCallerSubject(t *testing.T) {
 	}
 	if len(md.Get(gestalt.TrustedCallerSubjectMetadataKey)) != 0 {
 		t.Fatalf("forged caller metadata = %v, want stripped", md.Get(gestalt.TrustedCallerSubjectMetadataKey))
+	}
+	if len(md.Get(gestalt.CallerBearerTokenMetadataKey)) != 0 {
+		t.Fatalf("forged caller bearer metadata = %v, want stripped", md.Get(gestalt.CallerBearerTokenMetadataKey))
 	}
 }
