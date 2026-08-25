@@ -565,7 +565,8 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if mode == loginCallbackCLIGrant {
-		apiGrant, exchangeErr := auth.provider.Token(r.Context(), &core.TokenRequest{
+		exchangeCtx := withVerifiedCallerSubject(r.Context(), auditSubjectID)
+		apiGrant, exchangeErr := auth.provider.Token(exchangeCtx, &core.TokenRequest{
 			GrantType:        core.GrantTypeTokenExchange,
 			SubjectToken:     tokenResp.AccessToken,
 			SubjectTokenType: core.SubjectTokenTypeAccessToken,

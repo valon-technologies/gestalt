@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -8866,12 +8867,16 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 		auth := newHostIssuedSessionAuthStub([]byte("host-issued-secret"), hostIssuedSessionAuthOpts{})
 		baseTokenFn := auth.TokenFn
 		var gotAuthorizationCodeState string
+		var gotExchangeCaller string
 		auth.TokenFn = func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
 			if req != nil && req.GrantType == core.GrantTypeAuthorizationCode {
 				gotAuthorizationCodeState = req.State
 				if req.State != "cli:54305:test-state" {
 					return nil, fmt.Errorf("authorization code state = %q, want prefixed CLI state", req.State)
 				}
+			}
+			if req != nil && req.GrantType == core.GrantTypeTokenExchange {
+				gotExchangeCaller = gestalt.IdentityCallContextFromContext(ctx).CallerSubjectID
 			}
 			return baseTokenFn(ctx, req)
 		}
@@ -8913,6 +8918,9 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 		}
 		if gotAuthorizationCodeState != "cli:54305:test-state" {
 			t.Fatalf("authorization code state = %q, want prefixed CLI state", gotAuthorizationCodeState)
+		}
+		if gotExchangeCaller != principal.UserSubjectID("host-user") {
+			t.Fatalf("token exchange caller = %q, want %q", gotExchangeCaller, principal.UserSubjectID("host-user"))
 		}
 	})
 

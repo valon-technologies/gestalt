@@ -36,6 +36,14 @@ func (s *Server) callerAuthContext(ctx context.Context, r *http.Request) context
 	if subject == "" {
 		return ctx
 	}
+	return withVerifiedCallerSubject(ctx, subject)
+}
+
+func withVerifiedCallerSubject(ctx context.Context, subject string) context.Context {
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		return ctx
+	}
 	call := gestalt.IdentityCallContextFromContext(ctx)
 	call.CallerSubjectID = subject
 	ctx = gestalt.WithIdentityCallContext(ctx, call)

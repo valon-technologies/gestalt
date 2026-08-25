@@ -157,4 +157,16 @@ func TestPublicPrepareStreamSanitizesBeforeProvider(t *testing.T) {
 	if got := providerMetadata.Get("authorization"); len(got) != 1 || got[0] != "Bearer public-token" {
 		t.Fatalf("provider authorization = %v, want public bearer", got)
 	}
+	streamCtx := stream.Context()
+	streamMetadata, ok := metadata.FromIncomingContext(streamCtx)
+	if !ok {
+		t.Fatal("expected stream incoming metadata")
+	}
+	if len(streamMetadata.Get(gestalt.TrustedCallerSubjectMetadataKey)) != 0 ||
+		len(streamMetadata.Get(gestalt.CallerBearerTokenMetadataKey)) != 0 {
+		t.Fatalf("stream context retained internal identity metadata: %v", streamMetadata)
+	}
+	if got := gestalt.TrustedCallerSubjectFromContext(streamCtx); got != "user:alice" {
+		t.Fatalf("stream trusted subject = %q, want user:alice", got)
+	}
 }
