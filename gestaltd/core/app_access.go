@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// GraphQLCapabilityID is the reserved app capability for raw GraphQL
+// requests, which do not correspond to one catalog operation.
+const GraphQLCapabilityID = "graphql"
+
 // AppAccessProfile is the user-owned allow list for one app. Workspace
 // authorization remains a separate ceiling: enabling an operation here never
 // grants access the workspace has not granted.

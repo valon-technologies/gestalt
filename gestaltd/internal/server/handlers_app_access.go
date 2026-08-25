@@ -174,7 +174,7 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 }
 
 func (s *Server) appAccessCatalog(r *http.Request, app string, prov core.Provider) (*catalog.Catalog, error) {
-	staticCat := s.publicCatalog(app, prov, prov.Catalog())
+	staticCat := appAccessCapabilityCatalog(prov, s.publicCatalog(app, prov, prov.Catalog()))
 	if !core.SupportsSessionCatalog(prov) {
 		return staticCat, nil
 	}
@@ -198,7 +198,37 @@ func (s *Server) appAccessCatalog(r *http.Request, app string, prov core.Provide
 		}
 		return nil, err
 	}
-	return s.publicCatalog(app, prov, cat), nil
+	return appAccessCapabilityCatalog(prov, s.publicCatalog(app, prov, cat)), nil
+}
+
+func appAccessCapabilityCatalog(prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
+	if prov == nil {
+		return cat
+	}
+	if _, ok := prov.(core.GraphQLSurfaceInvoker); !ok {
+		return cat
+	}
+	if cat == nil {
+		cat = &catalog.Catalog{
+			Name:        prov.Name(),
+			DisplayName: prov.DisplayName(),
+			Description: prov.Description(),
+		}
+	} else {
+		cat = cat.Clone()
+	}
+	if _, ok := catalog.OperationByID(cat, core.GraphQLCapabilityID); ok {
+		return cat
+	}
+	cat.Operations = append(cat.Operations, catalog.CatalogOperation{
+		ID:          core.GraphQLCapabilityID,
+		Title:       "GraphQL",
+		Description: "Run GraphQL queries against this app",
+		Method:      "POST",
+		Tags:        []string{"graphql"},
+		Transport:   "graphql",
+	})
+	return cat
 }
 
 func defaultAppAccessOperations(cat *catalog.Catalog) []string {

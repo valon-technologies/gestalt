@@ -146,7 +146,10 @@ func TestAppAccessHandlersUseSessionCatalogBeforeInitializingProfile(t *testing.
 		UserID:    user.ID,
 		Kind:      principal.KindUser,
 	}
-	if err := server.ensureAppAccessDefaults(context.Background(), p.SubjectID, "slack", provider); err != nil {
+	if err := server.ensureAppAccessDefaults(context.Background(), credentialMaterial{
+		SubjectID:   p.SubjectID,
+		Integration: "slack",
+	}, provider); err != nil {
 		t.Fatalf("ensureAppAccessDefaults: %v", err)
 	}
 	if _, err := services.AppAccessProfiles.GetAppAccessProfile(context.Background(), p.SubjectID, "slack"); !errors.Is(err, core.ErrNotFound) {
@@ -172,6 +175,46 @@ func TestAppAccessHandlersUseSessionCatalogBeforeInitializingProfile(t *testing.
 	decodeAppAccessTestResponse(t, response, &body)
 	if !body.DefaultsInitialized || len(body.EnabledOperations) != 1 || body.EnabledOperations[0] != "dynamic.list" {
 		t.Fatalf("session catalog update = %#v, want persisted dynamic operation", body)
+	}
+}
+
+func TestEnsureAppAccessDefaultsCanonicalizesOpaqueCredentialSubject(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	user := seedAppAccessTestUser(t, services, "canonical@example.com")
+	identityJSON, err := json.Marshal(accountIdentity{Facts: []identityFact{{Kind: "email", Value: user.Email}}})
+	if err != nil {
+		t.Fatalf("marshal account identity: %v", err)
+	}
+	metadataJSON, err := json.Marshal(map[string]string{core.AccountIdentityMetadataKey: string(identityJSON)})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	provider := &coretesting.StubIntegration{
+		N:        "slack",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+			{ID: "conversations.list", Method: http.MethodGet},
+		}},
+	}
+	server := &Server{users: services.Users, appAccessProfiles: services.AppAccessProfiles}
+	if err := server.ensureAppAccessDefaults(context.Background(), credentialMaterial{
+		SubjectID:    principal.UserSubjectID("auth0|opaque-user"),
+		Integration:  "slack",
+		MetadataJSON: string(metadataJSON),
+	}, provider); err != nil {
+		t.Fatalf("ensureAppAccessDefaults: %v", err)
+	}
+	profile, err := services.AppAccessProfiles.GetAppAccessProfile(context.Background(), principal.UserSubjectID(user.ID), "slack")
+	if err != nil {
+		t.Fatalf("canonical profile: %v", err)
+	}
+	if len(profile.EnabledOperations) != 1 || profile.EnabledOperations[0] != "conversations.list" {
+		t.Fatalf("canonical profile operations = %#v, want conversations.list", profile.EnabledOperations)
+	}
+	if _, err := services.AppAccessProfiles.GetAppAccessProfile(context.Background(), principal.UserSubjectID("auth0|opaque-user"), "slack"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("raw opaque profile = %v, want core.ErrNotFound", err)
 	}
 }
 

@@ -181,3 +181,49 @@ func TestBrokerAppAccessProfileCoversEveryInvocationMode(t *testing.T) {
 		t.Fatal("a disabled operation reached the provider")
 	}
 }
+
+func TestBrokerAppAccessProfileAllowsGraphQLCapability(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	called := false
+	provider := &brokerGraphQLProvider{
+		StubIntegration: &coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+				{ID: "conversations.list", Method: "GET"},
+			}},
+		},
+		invokeGraphQL: func(context.Context, core.GraphQLRequest, string) (*core.OperationResult, error) {
+			called = true
+			return &core.OperationResult{Status: 200}, nil
+		},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		nil,
+		WithAppAccessProfiles(svc.AppAccessProfiles),
+	)
+	const userID = "4f1d2e3c-5b6a-47c8-9d0e-1f2a3b4c5d6e"
+	if _, err := svc.AppAccessProfiles.EnsureAppAccessDefaults(
+		context.Background(),
+		principal.UserSubjectID(userID),
+		"slack",
+		[]string{core.GraphQLCapabilityID},
+	); err != nil {
+		t.Fatalf("EnsureAppAccessDefaults: %v", err)
+	}
+	p := &principal.Principal{
+		SubjectID: principal.UserSubjectID(userID),
+		UserID:    userID,
+		Kind:      principal.KindUser,
+	}
+	if _, err := broker.InvokeGraphQL(context.Background(), p, "slack", "", core.GraphQLRequest{Document: "query { viewer { id } }"}); err != nil {
+		t.Fatalf("InvokeGraphQL = %v, want allowed", err)
+	}
+	if !called {
+		t.Fatal("GraphQL provider was not called")
+	}
+}

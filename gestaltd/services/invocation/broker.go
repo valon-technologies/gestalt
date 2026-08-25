@@ -24,7 +24,7 @@ import (
 
 const (
 	tracerName         = "gestaltd"
-	graphQLOperationID = "graphql"
+	graphQLOperationID = core.GraphQLCapabilityID
 	resultBodyLogLimit = 4096
 
 	attrProvider       = metricutil.AttrProvider

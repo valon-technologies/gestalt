@@ -536,7 +536,7 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 
 func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
 	enriched := s.enrichAccountIdentity(ctx, tm)
-	if err := s.ensureAppAccessDefaults(ctx, enriched.SubjectID, enriched.Integration, prov); err != nil {
+	if err := s.ensureAppAccessDefaults(ctx, enriched, prov); err != nil {
 		return nil, err
 	}
 	if _, err := s.storeCredentialFromMaterial(ctx, enriched); err != nil {
@@ -546,18 +546,47 @@ func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm 
 	return &connectionSetupResult{Status: "connected", Integration: enriched.Integration}, nil
 }
 
-func (s *Server) ensureAppAccessDefaults(ctx context.Context, subjectID, app string, prov core.Provider) error {
-	if s == nil || s.appAccessProfiles == nil || prov == nil || principal.KindFromSubjectID(strings.TrimSpace(subjectID)) != principal.KindUser {
+func (s *Server) ensureAppAccessDefaults(ctx context.Context, tm credentialMaterial, prov core.Provider) error {
+	if s == nil || s.appAccessProfiles == nil || prov == nil {
 		return nil
 	}
-	cat := s.publicCatalog(app, prov, prov.Catalog())
-	if len(catOperations(cat)) == 0 && core.SupportsSessionCatalog(prov) {
+	credentialPrincipal := principalForCredentialMaterial(nil, tm)
+	if credentialPrincipal == nil || principal.IsNonUserPrincipal(credentialPrincipal) {
+		return nil
+	}
+	if identity := identityFromMetadataJSON(tm.MetadataJSON); identity != nil {
+		for _, fact := range identity.Facts {
+			if fact.Kind == "email" {
+				clone := *credentialPrincipal
+				clone.Identity = &core.UserIdentity{Email: fact.Value}
+				credentialPrincipal = principal.Canonicalize(&clone)
+				break
+			}
+		}
+	}
+	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), credentialPrincipal)
+	if err != nil {
+		if errors.Is(err, principal.ErrOpaqueCredentialSubject) {
+			// A legacy/local subject without a canonical user identity cannot
+			// safely own a persisted profile; leave it uninitialized so the
+			// connection itself remains usable.
+			return nil
+		}
+		return fmt.Errorf("resolve app access subject: %w", err)
+	}
+	app := strings.TrimSpace(tm.Integration)
+	if app == "" {
+		return nil
+	}
+	staticCat := s.publicCatalog(app, prov, prov.Catalog())
+	if core.SupportsSessionCatalog(prov) {
 		// Session catalogs are resolved with the connected user's credential at
 		// request time. Do not turn an empty static catalog into a permanent
 		// empty allow list before those operations are discoverable.
 		return nil
 	}
-	_, err := s.appAccessProfiles.EnsureAppAccessDefaults(ctx, subjectID, app, defaultAppAccessOperationsForProvider(prov, cat))
+	cat := appAccessCapabilityCatalog(prov, staticCat)
+	_, err = s.appAccessProfiles.EnsureAppAccessDefaults(ctx, subjectID, app, defaultAppAccessOperationsForProvider(prov, cat))
 	return err
 }
 
