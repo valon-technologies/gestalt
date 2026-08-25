@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -8862,16 +8863,26 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 		t.Parallel()
 
 		svc := testutil.NewStubServices(t)
-		_ = seedUser(t, svc, "host@example.com")
+		u := seedUser(t, svc, "host@example.com")
 		auth := newHostIssuedSessionAuthStub([]byte("host-issued-secret"), hostIssuedSessionAuthOpts{})
+		auth.UserInfoFn = func(context.Context, *core.UserInfoRequest) (*core.UserInfoResponse, error) {
+			return &core.UserInfoResponse{
+				SubjectID: principal.UserSubjectID("host-user"),
+				Email:     "host@example.com",
+			}, nil
+		}
 		baseTokenFn := auth.TokenFn
 		var gotAuthorizationCodeState string
+		var gotExchangeCaller string
 		auth.TokenFn = func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
 			if req != nil && req.GrantType == core.GrantTypeAuthorizationCode {
 				gotAuthorizationCodeState = req.State
 				if req.State != "cli:54305:test-state" {
 					return nil, fmt.Errorf("authorization code state = %q, want prefixed CLI state", req.State)
 				}
+			}
+			if req != nil && req.GrantType == core.GrantTypeTokenExchange {
+				gotExchangeCaller = gestalt.IdentityCallContextFromContext(ctx).CallerSubjectID
 			}
 			return baseTokenFn(ctx, req)
 		}
@@ -8913,6 +8924,71 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 		}
 		if gotAuthorizationCodeState != "cli:54305:test-state" {
 			t.Fatalf("authorization code state = %q, want prefixed CLI state", gotAuthorizationCodeState)
+		}
+		if gotExchangeCaller != principal.UserSubjectID(u.ID) {
+			t.Fatalf("token exchange caller = %q, want %q", gotExchangeCaller, principal.UserSubjectID(u.ID))
+		}
+	})
+
+	t.Run("fails closed when subject cannot be canonicalized", func(t *testing.T) {
+		t.Parallel()
+
+		exchangeCalled := false
+		auth := &coretesting.StubAuthProvider{
+			N: "opaque-subject",
+			TokenFn: func(_ context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+				if req == nil {
+					return nil, fmt.Errorf("token request is required")
+				}
+				switch req.GrantType {
+				case core.GrantTypeAuthorizationCode:
+					return &core.TokenResponse{
+						AccessToken: "opaque-session-token",
+						TokenType:   "Bearer",
+						ExpiresIn:   3600,
+						GrantID:     "opaque-session",
+					}, nil
+				case core.GrantTypeTokenExchange:
+					exchangeCalled = true
+					return &core.TokenResponse{AccessToken: "must-not-be-issued", GrantID: "must-not-be-issued"}, nil
+				default:
+					return nil, fmt.Errorf("unsupported grant type %q", req.GrantType)
+				}
+			},
+			IntrospectFn: func(_ context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+				if req != nil && req.Token == "opaque-session-token" {
+					return &core.IntrospectResponse{
+						Active:  true,
+						Subject: principal.UserSubjectID("provider-opaque-subject"),
+					}, nil
+				}
+				return &core.IntrospectResponse{Active: false}, nil
+			},
+		}
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = auth
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		jar, _ := cookiejar.New(nil)
+		client := &http.Client{Jar: jar}
+		loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", bytes.NewBufferString(`{"state":"test-state"}`))
+		if err != nil {
+			t.Fatalf("start login: %v", err)
+		}
+		_ = loginResp.Body.Close()
+
+		resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state&cli=1")
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+		}
+		if exchangeCalled {
+			t.Fatal("token exchange was called for a non-canonical grant owner")
 		}
 	})
 

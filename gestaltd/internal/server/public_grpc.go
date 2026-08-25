@@ -91,6 +91,7 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 		if !ok {
 			return nil, status.Error(codes.Unauthenticated, "bearer token is required")
 		}
+		ctx = stripInternalIdentityMetadata(ctx)
 		msg, ok := req.(gproto.Message)
 		if !ok {
 			return nil, status.Error(codes.Internal, "request type mismatch")
@@ -100,7 +101,6 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 			return nil, err
 		}
 		if p != nil {
-			ctx = stripInternalIdentityMetadata(ctx)
 			canonical := principal.Canonicalized(p)
 			ctx = principal.WithPrincipal(ctx, canonical)
 			if subjectID := strings.TrimSpace(canonical.SubjectID); subjectID != "" {
@@ -168,7 +168,8 @@ func (s *publicAuthStream) RecvMsg(msg any) error {
 		if !ok {
 			return status.Error(codes.Internal, "request type mismatch")
 		}
-		p, adapted, err := s.transport.PreparePublicRequest(s.ServerStream.Context(), s.fullMethod, m)
+		ctx := stripInternalIdentityMetadata(s.ServerStream.Context())
+		p, adapted, err := s.transport.PreparePublicRequest(ctx, s.fullMethod, m)
 		if err != nil {
 			return err
 		}
@@ -211,10 +212,12 @@ func stripInternalIdentityMetadata(ctx context.Context) context.Context {
 	if !ok {
 		return ctx
 	}
-	if len(md.Get(gestalt.TrustedCallerSubjectMetadataKey)) == 0 {
+	if len(md.Get(gestalt.TrustedCallerSubjectMetadataKey)) == 0 &&
+		len(md.Get(gestalt.CallerBearerTokenMetadataKey)) == 0 {
 		return ctx
 	}
 	copied := md.Copy()
 	copied.Delete(gestalt.TrustedCallerSubjectMetadataKey)
+	copied.Delete(gestalt.CallerBearerTokenMetadataKey)
 	return metadata.NewIncomingContext(ctx, copied)
 }

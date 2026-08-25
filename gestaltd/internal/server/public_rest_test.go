@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
+	"google.golang.org/grpc/metadata"
 )
 
 func configurePublicRESTTestServer(t *testing.T, cfg *server.Config) {
@@ -56,6 +58,69 @@ func startPublicRESTServer(t *testing.T, profile server.RouteProfile, configure 
 
 func publicRESTTestBearer(scope string) string {
 	return scopedTestBearerToken("public-rest-user", scope)
+}
+
+func TestPublicRESTInvokeSanitizesBeforeProvider(t *testing.T) {
+	t.Parallel()
+
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		t.Fatalf("NewGeneratedRegistry: %v", err)
+	}
+	var providerMetadata metadata.MD
+	identity := testAuthStubForScopedBearer()
+	identity.IntrospectFn = func(ctx context.Context, _ *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+		providerMetadata, _ = metadata.FromIncomingContext(ctx)
+		return &core.IntrospectResponse{Active: true, Subject: "user:alice"}, nil
+	}
+	transport := providergateway.NewProviderGatewayTransport()
+	transport.SetIdentityProvider(identity)
+	transport.SetPublicMethods(registry)
+	transport.SetPublicBaseURL("https://gestalt.test")
+
+	ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+		cfg.Auth = identity
+		cfg.PublicGatewayTransport = transport
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "example",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "example",
+				Operations: []catalog.CatalogOperation{{
+					ID:     "sync",
+					Method: "POST",
+				}},
+			},
+			ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte("ok")}, nil
+			},
+		})
+	})
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v2/app/example/operations/sync", bytes.NewReader([]byte(`{"params":{}}`)))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+publicRESTTestBearer("example"))
+	req.Header.Set(gestalt.TrustedCallerSubjectMetadataKey, "user:forged")
+	req.Header.Set(gestalt.CallerBearerTokenMetadataKey, "token-forged")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST invoke: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if len(providerMetadata.Get(gestalt.TrustedCallerSubjectMetadataKey)) != 0 {
+		t.Fatalf("provider saw forged caller subject = %v", providerMetadata.Get(gestalt.TrustedCallerSubjectMetadataKey))
+	}
+	if len(providerMetadata.Get(gestalt.CallerBearerTokenMetadataKey)) != 0 {
+		t.Fatalf("provider saw forged caller bearer = %v", providerMetadata.Get(gestalt.CallerBearerTokenMetadataKey))
+	}
+	if got := providerMetadata.Get("authorization"); len(got) != 1 || got[0] != "Bearer "+publicRESTTestBearer("example") {
+		t.Fatalf("provider authorization = %v, want public bearer", got)
+	}
 }
 
 // TestPublicRESTRouting verifies /api/v2 server wiring. Bearer auth, gRPC routing,

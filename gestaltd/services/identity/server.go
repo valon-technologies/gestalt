@@ -146,7 +146,42 @@ func identityToGRPCError(operation string, err error) error {
 	if errors.Is(err, core.ErrNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
+	if code, ok := gestalt.StatusCodeOf(err); ok {
+		return status.Error(identityGRPCCode(code), err.Error())
+	}
+	if providerStatus, ok := status.FromError(err); ok && providerStatus.Code() != codes.Unknown {
+		return providerStatus.Err()
+	}
 	return status.Errorf(codes.Unknown, "%s: %v", operation, err)
+}
+
+func identityGRPCCode(code gestalt.StatusCode) codes.Code {
+	switch code {
+	case gestalt.CodeCanceled:
+		return codes.Canceled
+	case gestalt.CodeInvalidArgument:
+		return codes.InvalidArgument
+	case gestalt.CodeNotFound:
+		return codes.NotFound
+	case gestalt.CodeAlreadyExists:
+		return codes.AlreadyExists
+	case gestalt.CodeFailedPrecondition:
+		return codes.FailedPrecondition
+	case gestalt.CodeOutOfRange:
+		return codes.OutOfRange
+	case gestalt.CodeUnauthenticated:
+		return codes.Unauthenticated
+	case gestalt.CodePermissionDenied:
+		return codes.PermissionDenied
+	case gestalt.CodeUnavailable:
+		return codes.Unavailable
+	case gestalt.CodeUnimplemented:
+		return codes.Unimplemented
+	case gestalt.CodeInternal:
+		return codes.Internal
+	default:
+		return codes.Unknown
+	}
 }
 
 func authorizeRequestFromProto(req *proto.AuthorizeRequest) *core.AuthorizeRequest {

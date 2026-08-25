@@ -131,6 +131,7 @@ func handleRESTInvoke(
 		existingMD,
 		httpHeadersToGRPCMetadata(r.Header),
 	))
+	ctx = stripInternalIdentityMetadata(ctx)
 
 	p, adapted, err := transport.PreparePublicRequest(ctx, invokeFullMethod, &protoReq)
 	if err != nil {
@@ -142,7 +143,6 @@ func handleRESTInvoke(
 		req = &protoReq
 	}
 
-	ctx = stripInternalIdentityMetadata(ctx)
 	if p != nil {
 		canonical := principal.Canonicalized(p)
 		ctx = principal.WithPrincipal(ctx, canonical)
