@@ -935,6 +935,7 @@ type specJSONWire struct {
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty"`
+	Access            *ProviderAccess                       `json:"access,omitempty"`
 	Requires          []string                              `json:"requires,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty"`
 }
@@ -953,6 +954,7 @@ type specYAMLWire struct {
 	Connections       map[string]*ManifestConnectionDef     `yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `yaml:"pagination,omitempty"`
+	Access            *ProviderAccess                       `yaml:"access,omitempty"`
 	Requires          []string                              `yaml:"requires,omitempty"`
 	AssetRoot         string                                `yaml:"assetRoot,omitempty"`
 }
@@ -971,6 +973,7 @@ type specWire struct {
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+	Access            *ProviderAccess                       `json:"access,omitempty" yaml:"access,omitempty"`
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
 }
@@ -999,6 +1002,7 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 		Connections:       raw.Connections,
 		ResponseMapping:   raw.ResponseMapping,
 		Pagination:        raw.Pagination,
+		Access:            cloneProviderAccess(raw.Access),
 		Requires:          raw.Requires,
 		AssetRoot:         raw.AssetRoot,
 	}
@@ -1046,6 +1050,7 @@ func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
 		Connections:       raw.Connections,
 		ResponseMapping:   raw.ResponseMapping,
 		Pagination:        raw.Pagination,
+		Access:            cloneProviderAccess(raw.Access),
 		Requires:          raw.Requires,
 		AssetRoot:         raw.AssetRoot,
 	}
@@ -1076,9 +1081,19 @@ func (s Spec) canonicalWire() (specWire, error) {
 		Connections:       cloneManifestConnections(s.Connections),
 		ResponseMapping:   s.ResponseMapping,
 		Pagination:        s.Pagination,
+		Access:            cloneProviderAccess(s.Access),
 		Requires:          s.Requires,
 		AssetRoot:         s.AssetRoot,
 	}, nil
+}
+
+func cloneProviderAccess(src *ProviderAccess) *ProviderAccess {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.DefaultOperations = slices.Clone(src.DefaultOperations)
+	return &dst
 }
 
 func cloneManifestConnections(src map[string]*ManifestConnectionDef) map[string]*ManifestConnectionDef {
@@ -1267,6 +1282,7 @@ var specWireFields = map[string]struct{}{
 	"connections":       {},
 	"responseMapping":   {},
 	"pagination":        {},
+	"access":            {},
 	"requires":          {},
 	"assetRoot":         {},
 }

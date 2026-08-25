@@ -304,3 +304,29 @@ func TestDeclarativeProvider_ExplicitAppAccessDefaults(t *testing.T) {
 		t.Fatalf("default app access operations = %#v, configured=%v", operations, configured)
 	}
 }
+
+func TestDeclarativeProvider_RejectsUnknownAppAccessDefault(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/test/access-defaults",
+		Version: "0.0.1-alpha.1",
+		Spec: &providermanifestv1.Spec{
+			Access: &providermanifestv1.ProviderAccess{
+				DefaultOperations: []string{"missing.operation"},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://example.com",
+					Operations: []providermanifestv1.ProviderOperation{
+						{Name: "users.list", Method: http.MethodGet, Path: "/users"},
+					},
+				},
+			},
+		},
+	}
+	if _, err := NewDeclarativeProvider(manifest, http.DefaultClient); err == nil {
+		t.Fatal("NewDeclarativeProvider succeeded with an unknown app access default")
+	}
+}

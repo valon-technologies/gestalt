@@ -355,6 +355,9 @@
         "pagination": {
           "$ref": "#/$defs/paginationConfig"
         },
+        "access": {
+          "$ref": "#/$defs/providerAccess"
+        },
         "allowedOperations": {
           "type": "object",
           "additionalProperties": {
@@ -1322,6 +1325,19 @@
         },
         "graphql": {
           "$ref": "#/$defs/manifestGraphQLOperation"
+        }
+      }
+    },
+    "providerAccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaultOperations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },

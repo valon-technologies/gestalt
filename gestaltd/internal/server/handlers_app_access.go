@@ -3,10 +3,10 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -74,13 +74,13 @@ func (s *Server) updateAppAccess(w http.ResponseWriter, r *http.Request) {
 	cat := s.publicCatalog(name, prov, prov.Catalog())
 	valid := make(map[string]struct{})
 	if cat != nil {
-		for _, op := range cat.Operations {
-			valid[op.ID] = struct{}{}
+		for i := range cat.Operations {
+			valid[cat.Operations[i].ID] = struct{}{}
 		}
 	}
 	enabled, invalid := normalizeRequestedAppAccess(req.EnabledOperations, valid)
 	if len(invalid) > 0 {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown app operation: %s", invalid[0]))
+		writeError(w, http.StatusBadRequest, "that app operation is not available; choose an operation from the list and try again")
 		return
 	}
 	if s.appAccessProfiles == nil {
@@ -104,7 +104,7 @@ func (s *Server) resolveAppAccessSubject(r *http.Request) (string, error) {
 	if p == nil || principal.IsNonUserPrincipal(p) {
 		return "", errors.New("user principal required")
 	}
-	return principal.ResolveCredentialSubjectID(r.Context(), s.credentialUserResolver(), p)
+	return principal.ResolveAuthorizationSubjectID(r.Context(), s.credentialUserResolver(), p)
 }
 
 func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov core.Provider) (*appAccessResponse, error) {
@@ -139,7 +139,8 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 		return response, nil
 	}
 	response.Operations = make([]appAccessOperationInfo, 0, len(cat.Operations))
-	for _, op := range cat.Operations {
+	for i := range cat.Operations {
+		op := &cat.Operations[i]
 		readOnly := op.ReadOnly
 		if op.Annotations.ReadOnlyHint != nil {
 			readOnly = readOnly || *op.Annotations.ReadOnlyHint
@@ -148,7 +149,7 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 		_, isDefault := defaultSet[op.ID]
 		response.Operations = append(response.Operations, appAccessOperationInfo{
 			ID:          op.ID,
-			Title:       op.Title,
+			Title:       appAccessOperationTitle(op.ID, op.Title),
 			Description: op.Description,
 			Method:      op.Method,
 			Tags:        append([]string(nil), op.Tags...),
@@ -169,8 +170,9 @@ func defaultAppAccessOperations(cat *catalog.Catalog) []string {
 	}
 	readOnly := make([]string, 0, len(cat.Operations))
 	all := make([]string, 0, len(cat.Operations))
-	for _, op := range cat.Operations {
-		if !catalog.OperationVisibleByDefault(op) {
+	for i := range cat.Operations {
+		op := &cat.Operations[i]
+		if !catalog.OperationVisibleByDefault(*op) {
 			continue
 		}
 		all = append(all, op.ID)
@@ -213,12 +215,45 @@ func catOperations(cat *catalog.Catalog) []string {
 		return nil
 	}
 	operations := make([]string, 0, len(cat.Operations))
-	for _, operation := range cat.Operations {
-		if catalog.OperationVisibleByDefault(operation) {
+	for i := range cat.Operations {
+		operation := &cat.Operations[i]
+		if catalog.OperationVisibleByDefault(*operation) {
 			operations = append(operations, operation.ID)
 		}
 	}
 	return operations
+}
+
+func appAccessOperationTitle(id, title string) string {
+	if title = strings.TrimSpace(title); title != "" {
+		return title
+	}
+
+	var words []string
+	var word []rune
+	flush := func() {
+		if len(word) == 0 {
+			return
+		}
+		word[0] = unicode.ToUpper(word[0])
+		words = append(words, string(word))
+		word = nil
+	}
+	var previous rune
+	for _, r := range strings.TrimSpace(id) {
+		if r == '.' || r == '_' || r == '-' {
+			flush()
+			previous = 0
+			continue
+		}
+		if len(word) > 0 && unicode.IsUpper(r) && (unicode.IsLower(previous) || unicode.IsDigit(previous)) {
+			flush()
+		}
+		word = append(word, unicode.ToLower(r))
+		previous = r
+	}
+	flush()
+	return strings.Join(words, " ")
 }
 
 func normalizeRequestedAppAccess(operations []string, valid map[string]struct{}) ([]string, []string) {

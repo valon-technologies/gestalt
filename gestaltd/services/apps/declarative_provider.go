@@ -105,6 +105,15 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		discovery = def.Discovery
 	}
 	cat := declarativeCatalog(manifest, options)
+	accessDefaults := manifest.Spec.AccessDefaultOperations()
+	accessDefaultsSet := manifest.Spec.Access != nil
+	if accessDefaultsSet {
+		for _, operation := range accessDefaults {
+			if !declarativeHasOperation(cat, operation) {
+				return nil, fmt.Errorf("manifest spec.access.defaultOperations contains unknown operation %q", operation)
+			}
+		}
+	}
 	authType := providermanifestv1.AuthType("")
 	authorizationURL := ""
 	base := &integration.Base{
@@ -137,8 +146,8 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		connectionSelectors:  cloneOperationConnectionSelectors(options.connectionSelectors),
 		operationLocks:       maps.Clone(options.operationLocks),
 		tokenParsers:         connectionTokenParsers(manifest.Spec.Connections),
-		accessDefaults:       slices.Clone(manifest.Spec.AccessDefaultOperations()),
-		accessDefaultsSet:    manifest.Spec.Access != nil,
+		accessDefaults:       slices.Clone(accessDefaults),
+		accessDefaultsSet:    accessDefaultsSet,
 	}, nil
 }
 
