@@ -123,6 +123,7 @@ type Server struct {
 	users                         userStore
 	externalCredentials           core.ExternalCredentialProvider
 	connectionInstancePreferences *coredata.ConnectionInstancePreferenceService
+	appAccessProfiles             *coredata.AppAccessProfileService
 	managedSubjects               *coredata.ManagedSubjectService
 	agent                         bootstrap.AgentControl
 	workflowSchedules             *workflowmanager.Manager
@@ -459,6 +460,7 @@ func New(cfg Config) (*Server, error) {
 		users:                         users,
 		externalCredentials:           externalCredentials,
 		connectionInstancePreferences: connectionInstancePreferences,
+		appAccessProfiles:             cfg.Services.AppAccessProfiles,
 		managedSubjects:               managedSubjects,
 		agent:                         cfg.Agent,
 		agentRuns:                     cfg.AgentManager,

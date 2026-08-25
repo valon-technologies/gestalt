@@ -123,6 +123,8 @@ func (b *Broker) CheckOperationAccessMany(
 		switch {
 		case !principal.AllowsOperationPermission(p, query.Provider, query.Operation):
 			results[i] = operationAccessDenied(query)
+		case b.checkAppAccess(ctx, p, query.Provider, query.Operation) != nil:
+			results[i] = operationAccessDenied(query)
 		case b.providerDelegatesRemoteAuthorization(ctx, query.Provider):
 			// The remote app owns this decision, exactly as at invoke time.
 		default:

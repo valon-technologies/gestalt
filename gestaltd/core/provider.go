@@ -52,6 +52,14 @@ type Provider interface {
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
 
+// AppAccessDefaultsProvider is implemented by manifest-backed apps that
+// publish an explicit, provider-owned recommendation for the operations a new
+// user profile should enable. The bool distinguishes an explicit empty policy
+// from an older provider with no policy metadata.
+type AppAccessDefaultsProvider interface {
+	DefaultAppAccessOperations() ([]string, bool)
+}
+
 // OperationConnectionSelector maps a caller-supplied parameter value to the
 // named connection Gestalt should use for an operation invocation.
 type OperationConnectionSelector struct {

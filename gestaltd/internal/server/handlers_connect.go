@@ -534,13 +534,66 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 	return s.completeConnection(ctx, prov, tm)
 }
 
-func (s *Server) completeConnection(ctx context.Context, _ core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
+func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
 	enriched := s.enrichAccountIdentity(ctx, tm)
+	if err := s.ensureAppAccessDefaults(ctx, enriched, prov); err != nil {
+		return nil, err
+	}
 	if _, err := s.storeCredentialFromMaterial(ctx, enriched); err != nil {
 		return nil, err
 	}
 	s.maybeSetDefaultInstancePreference(ctx, enriched.SubjectID, enriched.Integration, enriched.Connection, enriched.Instance)
 	return &connectionSetupResult{Status: "connected", Integration: enriched.Integration}, nil
+}
+
+func (s *Server) ensureAppAccessDefaults(ctx context.Context, tm credentialMaterial, prov core.Provider) error {
+	if s == nil || s.appAccessProfiles == nil || prov == nil {
+		return nil
+	}
+	credentialPrincipal := principalForCredentialMaterial(nil, tm)
+	if credentialPrincipal == nil || principal.IsNonUserPrincipal(credentialPrincipal) {
+		return nil
+	}
+	if principal.ClassifyUserSubjectID(credentialPrincipal.SubjectID) == principal.UserSubjectFormOpaque {
+		// Account identity can bridge a provider-opaque subject to the
+		// persisted user, but it must not replace a meaningful user subject.
+		// The connected account may belong to someone else than the Gestalt
+		// user who owns this credential.
+		if identity := identityFromMetadataJSON(tm.MetadataJSON); identity != nil {
+			for _, fact := range identity.Facts {
+				if fact.Kind == "email" {
+					clone := *credentialPrincipal
+					clone.Identity = &core.UserIdentity{Email: fact.Value}
+					credentialPrincipal = principal.Canonicalize(&clone)
+					break
+				}
+			}
+		}
+	}
+	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), credentialPrincipal)
+	if err != nil {
+		if errors.Is(err, principal.ErrOpaqueCredentialSubject) {
+			// A legacy/local subject without a canonical user identity cannot
+			// safely own a persisted profile; leave it uninitialized so the
+			// connection itself remains usable.
+			return nil
+		}
+		return fmt.Errorf("resolve app access subject: %w", err)
+	}
+	app := strings.TrimSpace(tm.Integration)
+	if app == "" {
+		return nil
+	}
+	staticCat := s.publicCatalog(app, prov, prov.Catalog())
+	if core.SupportsSessionCatalog(prov) {
+		// Session catalogs are resolved with the connected user's credential at
+		// request time. Do not turn an empty static catalog into a permanent
+		// empty allow list before those operations are discoverable.
+		return nil
+	}
+	cat := appAccessCapabilityCatalog(prov, staticCat)
+	_, err = s.appAccessProfiles.EnsureAppAccessDefaults(ctx, subjectID, app, defaultAppAccessOperationsForProvider(prov, cat))
+	return err
 }
 
 func manualConnectionAllowed(conn config.ConnectionDef) bool {

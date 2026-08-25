@@ -24,7 +24,7 @@ import (
 
 const (
 	tracerName         = "gestaltd"
-	graphQLOperationID = "graphql"
+	graphQLOperationID = core.GraphQLCapabilityID
 	resultBodyLogLimit = 4096
 
 	attrProvider       = metricutil.AttrProvider
@@ -131,6 +131,7 @@ type Broker struct {
 	connMapper                    ConnectionMapper
 	mcpMapper                     ConnectionMapper
 	connectionRuntime             ConnectionRuntimeResolver
+	appAccessProfiles             core.AppAccessProfileStore
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]ProviderKind
 	authorizationPolicies         map[string]string
@@ -163,6 +164,12 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 
 func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
 	return func(b *Broker) { b.authorization = provider }
+}
+
+// WithAppAccessProfiles installs the user-owned app capability policy. It is
+// checked in the broker so every invocation surface shares the same decision.
+func WithAppAccessProfiles(store core.AppAccessProfileStore) BrokerOption {
+	return func(b *Broker) { b.appAccessProfiles = store }
 }
 
 func WithProviderKinds(kinds map[string]ProviderKind) BrokerOption {
@@ -298,8 +305,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
-	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
+	if err := b.checkInvocationOperationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+		return fail(err)
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
 		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
@@ -457,8 +464,8 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	if err != nil {
 		return fail(err)
 	}
-	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
+	if err := b.checkInvocationOperationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+		return fail(err)
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
 		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
@@ -642,8 +649,8 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return fail(err)
 	}
-	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
+	if err := b.checkInvocationOperationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+		return fail(err)
 	}
 	if !providerDelegatesRemoteAuthorization(prov) {
 		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
@@ -905,8 +912,8 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	if !principal.AllowsProviderPermission(p, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
-	if !principal.AllowsOperationPermission(p, providerName, graphQLOperationID) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, graphQLOperationID))
+	if err := b.checkInvocationOperationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
+		return fail(err)
 	}
 	setSubjectAttribute(p)
 	ctx = withResolvedPrincipal(ctx, p)
@@ -1095,10 +1102,70 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 	if !principal.AllowsOperationPermission(p, providerName, operationID) {
 		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
+	if err := b.checkAppAccess(ctx, p, providerName, operationID); err != nil {
+		return err
+	}
 	if b.providerDelegatesRemoteAuthorization(ctx, providerName) {
 		return nil
 	}
 	return b.checkAuthorizationAccess(ctx, p, providerName, operationID)
+}
+
+// checkInvocationOperationAccess is the shared caller-side operation gate for
+// every invocation mode. Workspace authorization is applied separately because
+// remote-delegated providers own that decision, but user app capabilities and
+// token operation scopes must be enforced before any provider dispatch.
+func (b *Broker) checkInvocationOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+	if !principal.AllowsOperationPermission(p, providerName, operationID) {
+		return fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, operationID)
+	}
+	return b.checkAppAccess(ctx, p, providerName, operationID)
+}
+
+func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+	if b == nil || b.appAccessProfiles == nil || p == nil || principal.IsNonUserPrincipal(p) {
+		return nil
+	}
+	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, b.users, p)
+	if err != nil {
+		if !errors.Is(err, principal.ErrOpaqueCredentialSubject) {
+			return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+		}
+		subjectID = legacyAppAccessSubjectID(p)
+		if subjectID == "" {
+			return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+		}
+		// Older local callers can carry a non-UUID user ID. Preserve their
+		// existing no-profile allow behavior, but honor a legacy raw profile
+		// if one exists. Provider-namespaced opaque subjects are rejected above
+		// instead of being allowed to bypass a canonical profile.
+	}
+	profile, err := b.appAccessProfiles.GetAppAccessProfile(ctx, subjectID, providerName)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+	}
+	for _, enabled := range profile.EnabledOperations {
+		if strings.TrimSpace(enabled) == strings.TrimSpace(operationID) {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+}
+
+func legacyAppAccessSubjectID(p *principal.Principal) string {
+	p = principal.Canonicalized(p)
+	if p == nil || p.Kind != principal.KindUser {
+		return ""
+	}
+	subjectID := strings.TrimSpace(p.SubjectID)
+	userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
+	if userID == "" || strings.ContainsAny(userID, "|:/\\") {
+		return ""
+	}
+	return subjectID
 }
 
 func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {

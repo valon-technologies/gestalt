@@ -250,11 +250,12 @@ func AllowsProviderPermission(p *Principal, provider string) bool {
 	if p == nil || provider == "" {
 		return false
 	}
-	if len(p.Scopes) == 0 {
+	scopes := appPermissionScopes(p.Scopes)
+	if len(scopes) == 0 {
 		return true
 	}
 	prefix := provider + ":"
-	for _, scope := range p.Scopes {
+	for _, scope := range scopes {
 		if scope == provider || strings.HasPrefix(scope, prefix) {
 			return true
 		}
@@ -266,16 +267,37 @@ func AllowsOperationPermission(p *Principal, provider, operation string) bool {
 	if p == nil || provider == "" || operation == "" {
 		return false
 	}
-	if len(p.Scopes) == 0 {
+	scopes := appPermissionScopes(p.Scopes)
+	if len(scopes) == 0 {
 		return true
 	}
 	opScope := provider + ":" + operation
-	for _, scope := range p.Scopes {
+	for _, scope := range scopes {
 		if scope == provider || scope == opScope {
 			return true
 		}
 	}
 	return false
+}
+
+// appPermissionScopes separates OIDC identity scopes from Gestalt app
+// permissions. A browser/MCP token commonly carries openid, email, and
+// profile; those scopes describe who the caller is and must not accidentally
+// turn into a deny-all app permission set.
+func appPermissionScopes(scopes []string) []string {
+	if len(scopes) == 0 {
+		return nil
+	}
+	filtered := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		switch strings.ToLower(strings.TrimSpace(scope)) {
+		case "", "openid", "email", "profile", "offline_access":
+			continue
+		default:
+			filtered = append(filtered, scope)
+		}
+	}
+	return filtered
 }
 
 func clonePermissionOps(src map[string]struct{}) map[string]struct{} {
@@ -298,7 +320,7 @@ func PermissionSetFromScopes(scopes []string) PermissionSet {
 	set := make(PermissionSet)
 	for _, scope := range scopes {
 		scope = strings.TrimSpace(scope)
-		if scope == "" {
+		if scope == "" || isIdentityScope(scope) {
 			continue
 		}
 		app, op, hasOp := strings.Cut(scope, ":")
@@ -320,6 +342,15 @@ func PermissionSetFromScopes(scopes []string) PermissionSet {
 		return PermissionSet{}
 	}
 	return set
+}
+
+func isIdentityScope(scope string) bool {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "openid", "email", "profile", "offline_access":
+		return true
+	default:
+		return false
+	}
 }
 
 // ScopeStringsFromPermissionSet flattens a permission set into OAuth scope strings.

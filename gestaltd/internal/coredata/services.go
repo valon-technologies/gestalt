@@ -23,6 +23,7 @@ type Services struct {
 	AppVersionRecoveryObservations *AppVersionRecoveryObservationService
 	RemoteRegistrations            *RemoteRegistrationService
 	ConnectionInstancePreferences  *ConnectionInstancePreferenceService
+	AppAccessProfiles              *AppAccessProfileService
 	DB                             indexeddb.IndexedDB
 }
 
@@ -91,6 +92,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreConnectionInstancePreferences, ConnectionInstancePreferencesSchema); err != nil {
 			return nil, fmt.Errorf("create connection_instance_preferences store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppAccessProfiles, AppAccessProfilesSchema); err != nil {
+			return nil, fmt.Errorf("create app_access_profiles store: %w", err)
+		}
 	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
 		return nil, err
 	}
@@ -107,6 +111,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	appVersionRecoveryObservations := NewAppVersionRecoveryObservationService(ds)
 	remoteRegistrations := NewRemoteRegistrationService(ds)
 	connectionInstancePreferences := NewConnectionInstancePreferenceService(ds)
+	appAccessProfiles := NewAppAccessProfileService(ds)
 	return &Services{
 		ExternalCredentials:            nil,
 		Users:                          users,
@@ -122,6 +127,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		AppVersionRecoveryObservations: appVersionRecoveryObservations,
 		RemoteRegistrations:            remoteRegistrations,
 		ConnectionInstancePreferences:  connectionInstancePreferences,
+		AppAccessProfiles:              appAccessProfiles,
 		DB:                             ds,
 	}, nil
 }
@@ -146,6 +152,16 @@ func ensureDeferredAppRegistryStores(ctx context.Context, ds indexeddb.IndexedDB
 	}
 	if err := ensureAppVersionRecoveryObservationsStore(ctx, ds); err != nil {
 		return err
+	}
+	if err := ensureAppAccessProfilesStore(ctx, ds); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureAppAccessProfilesStore(ctx context.Context, ds indexeddb.IndexedDB) error {
+	if _, err := ds.CreateObjectStore(ctx, StoreAppAccessProfiles, AppAccessProfilesSchema); err != nil {
+		return fmt.Errorf("ensure app_access_profiles store: %w", err)
 	}
 	return nil
 }
