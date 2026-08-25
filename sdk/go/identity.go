@@ -67,23 +67,28 @@ func IdentityCallContextFromContext(ctx context.Context) IdentityCallContext {
 	return call
 }
 
-// AuthCallContextFromIncoming builds identity call context from verified relay
-// state or legacy caller bearer metadata.
+// AuthCallContextFromIncoming builds identity call context from the existing
+// call, verified relay state, or legacy caller bearer metadata. Existing call
+// fields are preserved so provider handlers do not lose trusted aliases or
+// other caller-scoped identity data while adding transport metadata.
 func AuthCallContextFromIncoming(ctx context.Context) context.Context {
+	call := IdentityCallContextFromContext(ctx)
 	if subjectID := TrustedCallerSubjectFromContext(ctx); subjectID != "" {
-		return WithIdentityCallContext(ctx, IdentityCallContext{
-			CallerSubjectID: subjectID,
-		})
+		call.CallerSubjectID = subjectID
+	} else if subjectID := trustedCallerSubjectFromIncomingMetadata(ctx); subjectID != "" {
+		call.CallerSubjectID = subjectID
 	}
-	if subjectID := trustedCallerSubjectFromIncomingMetadata(ctx); subjectID != "" {
-		return WithIdentityCallContext(ctx, IdentityCallContext{
-			CallerSubjectID: subjectID,
-		})
+	if strings.TrimSpace(call.CallerBearerToken) == "" {
+		if token := CallerBearerTokenFromIncomingContext(ctx); token != "" {
+			call.CallerBearerToken = token
+		}
 	}
-	if token := CallerBearerTokenFromIncomingContext(ctx); token != "" {
-		return WithIdentityCallContext(ctx, IdentityCallContext{CallerBearerToken: token})
+	if strings.TrimSpace(call.CallerBearerToken) == "" {
+		if token := bearerTokenFromIncomingContext(ctx); token != "" {
+			call.CallerBearerToken = token
+		}
 	}
-	return ctx
+	return WithIdentityCallContext(ctx, call)
 }
 
 // AppendIdentityCallMetadata attaches caller identity metadata to outgoing gRPC
@@ -125,6 +130,23 @@ func CallerBearerTokenFromIncomingContext(ctx context.Context) string {
 	for _, value := range md.Get(CallerBearerTokenMetadataKey) {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			return trimmed
+		}
+	}
+	return ""
+}
+
+func bearerTokenFromIncomingContext(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	for _, value := range md.Get("authorization") {
+		value = strings.TrimSpace(value)
+		if len(value) <= len("Bearer ") || !strings.EqualFold(value[:len("Bearer ")], "Bearer ") {
+			continue
+		}
+		if token := strings.TrimSpace(value[len("Bearer "):]); token != "" {
+			return token
 		}
 	}
 	return ""

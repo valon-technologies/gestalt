@@ -309,9 +309,6 @@ func validateMCPOAuthAuthorizationCode(state *mcpOAuthAuthorizationCodeState, no
 	if state.Email == "" {
 		return fmt.Errorf("mcp oauth authorization code missing email")
 	}
-	if strings.TrimSpace(state.CallerSubjectID) == "" {
-		return fmt.Errorf("mcp oauth authorization code missing caller subject")
-	}
 	if state.CodeChallenge == "" {
 		return fmt.Errorf("mcp oauth authorization code missing code challenge")
 	}
@@ -353,9 +350,6 @@ func validateMCPOAuthRefreshToken(state *mcpOAuthRefreshTokenState, now time.Tim
 	}
 	if state.Email == "" {
 		return fmt.Errorf("mcp oauth refresh token missing email")
-	}
-	if strings.TrimSpace(state.CallerSubjectID) == "" {
-		return fmt.Errorf("mcp oauth refresh token missing caller subject")
 	}
 	if state.ExpiresAt == 0 {
 		return fmt.Errorf("mcp oauth refresh token missing expiration")

@@ -209,6 +209,90 @@ func TestMCPOAuthAuthorizeStoresCanonicalCallerSubject(t *testing.T) {
 	}
 }
 
+func TestMCPOAuthAuthorizationCodeUpgradesLegacyCallerSubject(t *testing.T) {
+	t.Parallel()
+
+	const canonicalOwner = "user:11111111-1111-1111-1111-111111111111"
+	var gotCallerSubject string
+	auth := &coretesting.StubAuthProvider{
+		N: "mcp-oauth",
+		IntrospectFn: func(_ context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			if req != nil && req.Token == "legacy-subject-token" {
+				return &core.IntrospectResponse{Active: true, Subject: "user:test@example.com"}, nil
+			}
+			return &core.IntrospectResponse{Active: false}, nil
+		},
+		TokenFn: func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+			gotCallerSubject = gestalt.TrustedCallerSubjectFromContext(ctx)
+			return &core.TokenResponse{AccessToken: "provider-mcp-access-token", ExpiresIn: 3600, Scope: req.Scope}, nil
+		},
+	}
+	enc, err := cryptoutil.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("NewAESGCM() error = %v", err)
+	}
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	srv := &Server{
+		auth:          auth,
+		resolver:      principal.NewResolver(auth),
+		users:         boundaryUserStore{usersByEmail: map[string]string{"test@example.com": strings.TrimPrefix(canonicalOwner, "user:")}},
+		encryptor:     enc,
+		publicBaseURL: "http://example.test",
+		now:           func() time.Time { return now },
+	}
+	clientID, err := encodeMCPOAuthClientRegistration(enc, mcpOAuthClientRegistrationState{
+		RedirectURIs:            []string{"http://localhost/callback"},
+		TokenEndpointAuthMethod: mcpOAuthTokenAuthMethodNone,
+		ExpiresAt:               now.Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthClientRegistration() error = %v", err)
+	}
+	verifier := "mcp-oauth-legacy-code-verifier"
+	code, err := encodeMCPOAuthAuthorizationCode(enc, mcpOAuthAuthorizationCodeState{
+		ClientID:            clientID,
+		RedirectURI:         "http://localhost/callback",
+		Email:               "test@example.com",
+		SubjectToken:        "legacy-subject-token",
+		CodeChallenge:       oauth.ComputeS256Challenge(verifier),
+		CodeChallengeMethod: "S256",
+		ExpiresAt:           now.Add(time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthAuthorizationCode() error = %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", "http://localhost/callback")
+	form.Set("client_id", clientID)
+	form.Set("code_verifier", verifier)
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "example.test"
+	rec := httptest.NewRecorder()
+
+	srv.mcpOAuthToken(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if gotCallerSubject != canonicalOwner {
+		t.Fatalf("caller subject = %q, want %q", gotCallerSubject, canonicalOwner)
+	}
+	var resp mcpOAuthTokenResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	rotated, err := decodeMCPOAuthRefreshToken(enc, resp.RefreshToken, now)
+	if err != nil {
+		t.Fatalf("decode rotated refresh token: %v", err)
+	}
+	if rotated.CallerSubjectID != canonicalOwner {
+		t.Fatalf("rotated caller subject = %q, want %q", rotated.CallerSubjectID, canonicalOwner)
+	}
+}
+
 func TestMCPOAuthRefreshPreservesCallerSubject(t *testing.T) {
 	t.Parallel()
 
@@ -283,6 +367,153 @@ func TestMCPOAuthRefreshPreservesCallerSubject(t *testing.T) {
 	}
 }
 
+func TestMCPOAuthRefreshUpgradesLegacyCallerSubject(t *testing.T) {
+	t.Parallel()
+
+	const canonicalOwner = "user:11111111-1111-1111-1111-111111111111"
+	var gotCallerSubject string
+	auth := &coretesting.StubAuthProvider{
+		N: "mcp-oauth",
+		IntrospectFn: func(_ context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			if req != nil && req.Token == "legacy-subject-token" {
+				return &core.IntrospectResponse{Active: true, Subject: "user:test@example.com"}, nil
+			}
+			return &core.IntrospectResponse{Active: false}, nil
+		},
+		TokenFn: func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+			gotCallerSubject = gestalt.TrustedCallerSubjectFromContext(ctx)
+			return &core.TokenResponse{AccessToken: "provider-mcp-refresh-access-token", ExpiresIn: 3600, Scope: req.Scope}, nil
+		},
+	}
+	enc, err := cryptoutil.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("NewAESGCM() error = %v", err)
+	}
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	srv := &Server{
+		auth:          auth,
+		resolver:      principal.NewResolver(auth),
+		users:         boundaryUserStore{usersByEmail: map[string]string{"test@example.com": strings.TrimPrefix(canonicalOwner, "user:")}},
+		encryptor:     enc,
+		publicBaseURL: "http://example.test",
+		now:           func() time.Time { return now },
+	}
+	clientID, err := encodeMCPOAuthClientRegistration(enc, mcpOAuthClientRegistrationState{
+		RedirectURIs:            []string{"http://localhost/callback"},
+		TokenEndpointAuthMethod: mcpOAuthTokenAuthMethodNone,
+		ExpiresAt:               now.Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthClientRegistration() error = %v", err)
+	}
+	refreshToken, err := encodeMCPOAuthRefreshToken(enc, mcpOAuthRefreshTokenState{
+		ClientID:     clientID,
+		Email:        "test@example.com",
+		Scope:        "profile",
+		SubjectToken: "legacy-subject-token",
+		ExpiresAt:    now.Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthRefreshToken() error = %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", refreshToken)
+	form.Set("client_id", clientID)
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "example.test"
+	rec := httptest.NewRecorder()
+
+	srv.mcpOAuthToken(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if gotCallerSubject != canonicalOwner {
+		t.Fatalf("caller subject = %q, want %q", gotCallerSubject, canonicalOwner)
+	}
+	var resp mcpOAuthTokenResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	rotated, err := decodeMCPOAuthRefreshToken(enc, resp.RefreshToken, now)
+	if err != nil {
+		t.Fatalf("decode rotated refresh token: %v", err)
+	}
+	if rotated.CallerSubjectID != canonicalOwner {
+		t.Fatalf("rotated caller subject = %q, want %q", rotated.CallerSubjectID, canonicalOwner)
+	}
+}
+
+func TestMCPOAuthReauthenticatesLegacyRefreshToken(t *testing.T) {
+	t.Parallel()
+
+	auth := &coretesting.StubAuthProvider{
+		N: "mcp-oauth",
+		IntrospectFn: func(_ context.Context, _ *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			return &core.IntrospectResponse{Active: false}, nil
+		},
+		TokenFn: func(context.Context, *core.TokenRequest) (*core.TokenResponse, error) {
+			t.Fatal("provider token exchange should not run for a legacy refresh token")
+			return nil, nil
+		},
+	}
+	enc, err := cryptoutil.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("NewAESGCM() error = %v", err)
+	}
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	srv := &Server{
+		auth:          auth,
+		resolver:      principal.NewResolver(auth),
+		encryptor:     enc,
+		publicBaseURL: "http://example.test",
+		now:           func() time.Time { return now },
+	}
+	clientID, err := encodeMCPOAuthClientRegistration(enc, mcpOAuthClientRegistrationState{
+		RedirectURIs:            []string{"http://localhost/callback"},
+		TokenEndpointAuthMethod: mcpOAuthTokenAuthMethodNone,
+		ExpiresAt:               now.Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthClientRegistration() error = %v", err)
+	}
+	refreshToken, err := encodeMCPOAuthRefreshToken(enc, mcpOAuthRefreshTokenState{
+		ClientID:     clientID,
+		Email:        "test@example.com",
+		SubjectToken: "subject-token",
+		ExpiresAt:    now.Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthRefreshToken() error = %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", refreshToken)
+	form.Set("client_id", clientID)
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "example.test"
+	rec := httptest.NewRecorder()
+
+	srv.mcpOAuthToken(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body.String())
+	}
+	var oauthErr mcpOAuthErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&oauthErr); err != nil {
+		t.Fatalf("decode OAuth error: %v", err)
+	}
+	if oauthErr.Error != "invalid_grant" {
+		t.Fatalf("error = %q, want invalid_grant", oauthErr.Error)
+	}
+	if oauthErr.ErrorDescription != mcpOAuthReauthorizationDescription {
+		t.Fatalf("error_description = %q, want %q", oauthErr.ErrorDescription, mcpOAuthReauthorizationDescription)
+	}
+}
+
 func TestMCPOAuthReauthenticatesInactiveSubjectToken(t *testing.T) {
 	t.Parallel()
 
@@ -346,6 +577,9 @@ func TestMCPOAuthReauthenticatesInactiveSubjectToken(t *testing.T) {
 	}
 	if oauthErr.Error != "invalid_grant" {
 		t.Fatalf("error = %q, want invalid_grant", oauthErr.Error)
+	}
+	if oauthErr.ErrorDescription != mcpOAuthReauthorizationDescription {
+		t.Fatalf("error_description = %q, want %q", oauthErr.ErrorDescription, mcpOAuthReauthorizationDescription)
 	}
 }
 

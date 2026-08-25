@@ -54,3 +54,62 @@ func TestAuthCallContextFromIncomingReadsTrustedSubjectMetadata(t *testing.T) {
 		t.Fatalf("CallerSubjectID = %q, want user:caller-123", call.CallerSubjectID)
 	}
 }
+
+func TestAuthCallContextFromIncomingPreservesExistingIdentityContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithTrustedCallerSubject(context.Background(), "user:verified")
+	ctx = WithIdentityCallContext(ctx, IdentityCallContext{
+		CallerSubjectID:   "user:stale",
+		CallerBearerToken: "session-token",
+		Introspection: &IntrospectResponse{
+			Active:  true,
+			Subject: "user:alias@example.com",
+		},
+	})
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(
+		TrustedCallerSubjectMetadataKey, "user:metadata",
+		CallerBearerTokenMetadataKey, "metadata-token",
+	))
+
+	call := IdentityCallContextFromContext(AuthCallContextFromIncoming(ctx))
+	if call.CallerSubjectID != "user:verified" {
+		t.Fatalf("CallerSubjectID = %q, want user:verified", call.CallerSubjectID)
+	}
+	if call.CallerBearerToken != "session-token" {
+		t.Fatalf("CallerBearerToken = %q, want session-token", call.CallerBearerToken)
+	}
+	if call.Introspection == nil || call.Introspection.Subject != "user:alias@example.com" {
+		t.Fatalf("Introspection = %#v, want preserved provider alias", call.Introspection)
+	}
+}
+
+func TestAuthCallContextFromIncomingPreservesIncomingIdentityMetadataTogether(t *testing.T) {
+	t.Parallel()
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		TrustedCallerSubjectMetadataKey, "user:caller-123",
+		CallerBearerTokenMetadataKey, "session-token",
+	))
+
+	call := IdentityCallContextFromContext(AuthCallContextFromIncoming(ctx))
+	if call.CallerSubjectID != "user:caller-123" {
+		t.Fatalf("CallerSubjectID = %q, want user:caller-123", call.CallerSubjectID)
+	}
+	if call.CallerBearerToken != "session-token" {
+		t.Fatalf("CallerBearerToken = %q, want session-token", call.CallerBearerToken)
+	}
+}
+
+func TestAuthCallContextFromIncomingReadsAuthorizationBearer(t *testing.T) {
+	t.Parallel()
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		"authorization", "Bearer session-token",
+	))
+
+	call := IdentityCallContextFromContext(AuthCallContextFromIncoming(ctx))
+	if call.CallerBearerToken != "session-token" {
+		t.Fatalf("CallerBearerToken = %q, want session-token", call.CallerBearerToken)
+	}
+}
