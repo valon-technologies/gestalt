@@ -554,13 +554,19 @@ func (s *Server) ensureAppAccessDefaults(ctx context.Context, tm credentialMater
 	if credentialPrincipal == nil || principal.IsNonUserPrincipal(credentialPrincipal) {
 		return nil
 	}
-	if identity := identityFromMetadataJSON(tm.MetadataJSON); identity != nil {
-		for _, fact := range identity.Facts {
-			if fact.Kind == "email" {
-				clone := *credentialPrincipal
-				clone.Identity = &core.UserIdentity{Email: fact.Value}
-				credentialPrincipal = principal.Canonicalize(&clone)
-				break
+	if principal.ClassifyUserSubjectID(credentialPrincipal.SubjectID) == principal.UserSubjectFormOpaque {
+		// Account identity can bridge a provider-opaque subject to the
+		// persisted user, but it must not replace a meaningful user subject.
+		// The connected account may belong to someone else than the Gestalt
+		// user who owns this credential.
+		if identity := identityFromMetadataJSON(tm.MetadataJSON); identity != nil {
+			for _, fact := range identity.Facts {
+				if fact.Kind == "email" {
+					clone := *credentialPrincipal
+					clone.Identity = &core.UserIdentity{Email: fact.Value}
+					credentialPrincipal = principal.Canonicalize(&clone)
+					break
+				}
 			}
 		}
 	}

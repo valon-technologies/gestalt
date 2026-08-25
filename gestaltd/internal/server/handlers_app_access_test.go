@@ -218,6 +218,43 @@ func TestEnsureAppAccessDefaultsCanonicalizesOpaqueCredentialSubject(t *testing.
 	}
 }
 
+func TestEnsureAppAccessDefaultsKeepsEmailSubjectOwner(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	owner := seedAppAccessTestUser(t, services, "owner@example.com")
+	connectedAccount := seedAppAccessTestUser(t, services, "connected@example.com")
+	identityJSON, err := json.Marshal(accountIdentity{Facts: []identityFact{{Kind: "email", Value: connectedAccount.Email}}})
+	if err != nil {
+		t.Fatalf("marshal account identity: %v", err)
+	}
+	metadataJSON, err := json.Marshal(map[string]string{core.AccountIdentityMetadataKey: string(identityJSON)})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	provider := &coretesting.StubIntegration{
+		N:        "slack",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+			{ID: "conversations.list", Method: http.MethodGet},
+		}},
+	}
+	server := &Server{users: services.Users, appAccessProfiles: services.AppAccessProfiles}
+	if err := server.ensureAppAccessDefaults(context.Background(), credentialMaterial{
+		SubjectID:    principal.UserSubjectID("owner@example.com"),
+		Integration:  "slack",
+		MetadataJSON: string(metadataJSON),
+	}, provider); err != nil {
+		t.Fatalf("ensureAppAccessDefaults: %v", err)
+	}
+	if _, err := services.AppAccessProfiles.GetAppAccessProfile(context.Background(), principal.UserSubjectID(owner.ID), "slack"); err != nil {
+		t.Fatalf("owner profile: %v", err)
+	}
+	if _, err := services.AppAccessProfiles.GetAppAccessProfile(context.Background(), principal.UserSubjectID(connectedAccount.ID), "slack"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("connected-account profile = %v, want core.ErrNotFound", err)
+	}
+}
+
 func newAppAccessTestFixture(t *testing.T) (*Server, *principal.Principal, *principal.Principal) {
 	t.Helper()
 	services := testutil.NewStubServices(t)
