@@ -145,19 +145,21 @@ type mcpOAuthAuthorizationCodeState struct {
 	AvatarURL           string `json:"av,omitempty"`
 	Scope               string `json:"sc,omitempty"`
 	SubjectToken        string `json:"st,omitempty"`
+	CallerSubjectID     string `json:"cs,omitempty"`
 	CodeChallenge       string `json:"cc"`
 	CodeChallengeMethod string `json:"cm,omitempty"`
 	ExpiresAt           int64  `json:"exp"`
 }
 
 type mcpOAuthRefreshTokenState struct {
-	ClientID     string `json:"cid"`
-	Email        string `json:"em"`
-	DisplayName  string `json:"dn,omitempty"`
-	AvatarURL    string `json:"av,omitempty"`
-	Scope        string `json:"sc,omitempty"`
-	SubjectToken string `json:"st,omitempty"`
-	ExpiresAt    int64  `json:"exp"`
+	ClientID        string `json:"cid"`
+	Email           string `json:"em"`
+	DisplayName     string `json:"dn,omitempty"`
+	AvatarURL       string `json:"av,omitempty"`
+	Scope           string `json:"sc,omitempty"`
+	SubjectToken    string `json:"st,omitempty"`
+	CallerSubjectID string `json:"cs,omitempty"`
+	ExpiresAt       int64  `json:"exp"`
 }
 
 func encodeLoginState(enc *cryptoutil.AESGCMEncryptor, state loginState) (string, error) {
@@ -307,6 +309,9 @@ func validateMCPOAuthAuthorizationCode(state *mcpOAuthAuthorizationCodeState, no
 	if state.Email == "" {
 		return fmt.Errorf("mcp oauth authorization code missing email")
 	}
+	if strings.TrimSpace(state.CallerSubjectID) == "" {
+		return fmt.Errorf("mcp oauth authorization code missing caller subject")
+	}
 	if state.CodeChallenge == "" {
 		return fmt.Errorf("mcp oauth authorization code missing code challenge")
 	}
@@ -348,6 +353,9 @@ func validateMCPOAuthRefreshToken(state *mcpOAuthRefreshTokenState, now time.Tim
 	}
 	if state.Email == "" {
 		return fmt.Errorf("mcp oauth refresh token missing email")
+	}
+	if strings.TrimSpace(state.CallerSubjectID) == "" {
+		return fmt.Errorf("mcp oauth refresh token missing caller subject")
 	}
 	if state.ExpiresAt == 0 {
 		return fmt.Errorf("mcp oauth refresh token missing expiration")

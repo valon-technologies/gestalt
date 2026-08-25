@@ -8,7 +8,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func TestProviderServerPreservesCallerContextAcrossGrantHandlers(t *testing.T) {
@@ -93,5 +95,17 @@ func TestProviderServerPreservesCallerContextAcrossGrantHandlers(t *testing.T) {
 		if got.call.Introspection == nil || got.call.Introspection.Subject != "user:alice@example.com" {
 			t.Errorf("%s Introspection = %#v, want preserved provider alias", got.name, got.call.Introspection)
 		}
+	}
+}
+
+func TestIdentityToGRPCErrorPreservesProviderStatus(t *testing.T) {
+	t.Parallel()
+
+	err := identityToGRPCError("token", gestalt.Unauthenticated("subject token is inactive"))
+	if got := status.Code(err); got != codes.Unauthenticated {
+		t.Fatalf("status.Code() = %v, want %v", got, codes.Unauthenticated)
+	}
+	if got := status.Convert(err).Message(); got != "subject token is inactive" {
+		t.Fatalf("status message = %q, want subject token is inactive", got)
 	}
 }

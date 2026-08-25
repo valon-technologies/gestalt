@@ -7,13 +7,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -258,6 +262,18 @@ func (s *Server) mcpOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/api/v1/auth/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 		return
 	}
+	p, err = s.resolvePrincipalUserID(r.Context(), p)
+	if err != nil || p == nil || p.Identity == nil || p.Identity.Email == "" {
+		slog.ErrorContext(r.Context(), "mcp oauth canonical user resolution failed", "error", err)
+		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "MCP OAuth authorization is unavailable")
+		return
+	}
+	p = principal.Canonicalized(p)
+	callerSubjectID := strings.TrimSpace(p.SubjectID)
+	if callerSubjectID == "" {
+		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "MCP OAuth authorization is unavailable")
+		return
+	}
 
 	code, err := encodeMCPOAuthAuthorizationCode(s.encryptor, mcpOAuthAuthorizationCodeState{
 		ClientID:            clientID,
@@ -267,6 +283,7 @@ func (s *Server) mcpOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		AvatarURL:           p.Identity.AvatarURL,
 		Scope:               strings.TrimSpace(query.Get("scope")),
 		SubjectToken:        subjectTokenFromRequest(r),
+		CallerSubjectID:     callerSubjectID,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
 		ExpiresAt:           s.now().Add(mcpOAuthAuthorizationCodeTTL).Unix(),
@@ -367,20 +384,21 @@ func (s *Server) mcpOAuthExchangeAuthorizationCode(w http.ResponseWriter, r *htt
 	}
 
 	refreshToken, err := encodeMCPOAuthRefreshToken(s.encryptor, mcpOAuthRefreshTokenState{
-		ClientID:     clientID,
-		Email:        codeState.Email,
-		DisplayName:  codeState.DisplayName,
-		AvatarURL:    codeState.AvatarURL,
-		Scope:        codeState.Scope,
-		SubjectToken: codeState.SubjectToken,
-		ExpiresAt:    s.now().Add(mcpOAuthRefreshTokenTTL).Unix(),
+		ClientID:        clientID,
+		Email:           codeState.Email,
+		DisplayName:     codeState.DisplayName,
+		AvatarURL:       codeState.AvatarURL,
+		Scope:           codeState.Scope,
+		SubjectToken:    codeState.SubjectToken,
+		CallerSubjectID: codeState.CallerSubjectID,
+		ExpiresAt:       s.now().Add(mcpOAuthRefreshTokenTTL).Unix(),
 	})
 	if err != nil {
 		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue refresh token")
 		return
 	}
 
-	s.writeMCPOAuthTokenResponse(w, r, codeState.Scope, refreshToken, codeState.SubjectToken)
+	s.writeMCPOAuthTokenResponse(w, r, codeState.Scope, refreshToken, codeState.CallerSubjectID, codeState.SubjectToken)
 }
 
 func (s *Server) mcpOAuthRefreshAccessToken(w http.ResponseWriter, r *http.Request, clientID string) {
@@ -395,23 +413,24 @@ func (s *Server) mcpOAuthRefreshAccessToken(w http.ResponseWriter, r *http.Reque
 	}
 
 	refreshToken, err := encodeMCPOAuthRefreshToken(s.encryptor, mcpOAuthRefreshTokenState{
-		ClientID:     clientID,
-		Email:        refreshState.Email,
-		DisplayName:  refreshState.DisplayName,
-		AvatarURL:    refreshState.AvatarURL,
-		Scope:        refreshState.Scope,
-		SubjectToken: refreshState.SubjectToken,
-		ExpiresAt:    s.now().Add(mcpOAuthRefreshTokenTTL).Unix(),
+		ClientID:        clientID,
+		Email:           refreshState.Email,
+		DisplayName:     refreshState.DisplayName,
+		AvatarURL:       refreshState.AvatarURL,
+		Scope:           refreshState.Scope,
+		SubjectToken:    refreshState.SubjectToken,
+		CallerSubjectID: refreshState.CallerSubjectID,
+		ExpiresAt:       s.now().Add(mcpOAuthRefreshTokenTTL).Unix(),
 	})
 	if err != nil {
 		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to rotate refresh token")
 		return
 	}
 
-	s.writeMCPOAuthTokenResponse(w, r, refreshState.Scope, refreshToken, refreshState.SubjectToken)
+	s.writeMCPOAuthTokenResponse(w, r, refreshState.Scope, refreshToken, refreshState.CallerSubjectID, refreshState.SubjectToken)
 }
 
-func (s *Server) writeMCPOAuthTokenResponse(w http.ResponseWriter, r *http.Request, scope, refreshToken, subjectToken string) {
+func (s *Server) writeMCPOAuthTokenResponse(w http.ResponseWriter, r *http.Request, scope, refreshToken, callerSubjectID, subjectToken string) {
 	if s.auth == nil {
 		writeMCPOAuthError(w, http.StatusServiceUnavailable, "server_error", "provider-backed MCP access tokens are unavailable")
 		return
@@ -421,15 +440,30 @@ func (s *Server) writeMCPOAuthTokenResponse(w http.ResponseWriter, r *http.Reque
 		writeMCPOAuthError(w, http.StatusServiceUnavailable, "server_error", "provider-backed MCP access tokens are unavailable")
 		return
 	}
+	callerSubjectID = strings.TrimSpace(callerSubjectID)
+	if callerSubjectID == "" {
+		writeMCPOAuthError(w, http.StatusBadRequest, "invalid_grant", "MCP authorization has expired; reauthorization is required")
+		return
+	}
 
-	tokenResp, err := s.auth.Token(r.Context(), &core.TokenRequest{
+	exchangeCtx := withVerifiedCallerSubject(r.Context(), callerSubjectID)
+	tokenResp, err := s.auth.Token(exchangeCtx, &core.TokenRequest{
 		GrantType:        core.GrantTypeTokenExchange,
 		SubjectToken:     subjectToken,
 		SubjectTokenType: core.SubjectTokenTypeAccessToken,
 		Scope:            strings.TrimSpace(scope),
 		ClientID:         core.DefaultOAuthClientID,
 	})
-	if err != nil || tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
+	if err != nil {
+		slog.ErrorContext(r.Context(), "mcp oauth provider token exchange failed", "status", status.Code(err), "error", err)
+		if mcpOAuthTokenExchangeNeedsReauthorization(err) {
+			writeMCPOAuthError(w, http.StatusBadRequest, "invalid_grant", "MCP authorization has expired; reauthorization is required")
+			return
+		}
+		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue provider-backed access token")
+		return
+	}
+	if tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
 		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue provider-backed access token")
 		return
 	}
@@ -442,6 +476,17 @@ func (s *Server) writeMCPOAuthTokenResponse(w http.ResponseWriter, r *http.Reque
 		RefreshToken: refreshToken,
 		Scope:        strings.TrimSpace(tokenResp.Scope),
 	})
+}
+
+func mcpOAuthTokenExchangeNeedsReauthorization(err error) bool {
+	if err == nil {
+		return false
+	}
+	if status.Code(err) == codes.Unauthenticated {
+		return true
+	}
+	code, ok := gestalt.StatusCodeOf(err)
+	return ok && code == gestalt.CodeUnauthenticated
 }
 
 func subjectTokenFromRequest(r *http.Request) string {
