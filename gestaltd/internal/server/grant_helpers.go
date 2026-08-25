@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -48,6 +49,30 @@ func withVerifiedCallerSubject(ctx context.Context, subject string) context.Cont
 	call.CallerSubjectID = subject
 	ctx = gestalt.WithIdentityCallContext(ctx, call)
 	return gestalt.WithTrustedCallerSubject(ctx, subject)
+}
+
+// resolveCLICallerSubject resolves the identity provider token to the
+// persisted Gestalt user subject required by a CLI grant. A provider-opaque
+// subject must never be used as a grant owner because it cannot participate in
+// canonical authorization lookups later.
+func (s *Server) resolveCLICallerSubject(ctx context.Context, token string) (string, error) {
+	if s == nil || s.resolver == nil {
+		return "", errors.New("identity resolver is unavailable")
+	}
+
+	p, err := s.resolver.ResolveToken(ctx, token)
+	if err != nil {
+		return "", err
+	}
+	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), p)
+	if err != nil {
+		return "", err
+	}
+	subjectID = strings.TrimSpace(subjectID)
+	if principal.ClassifyUserSubjectID(subjectID) != principal.UserSubjectFormCanonical {
+		return "", fmt.Errorf("%w: caller subject is not canonical", principal.ErrInvalidToken)
+	}
+	return subjectID, nil
 }
 
 func (s *Server) callerBearerToken(r *http.Request) (string, error) {

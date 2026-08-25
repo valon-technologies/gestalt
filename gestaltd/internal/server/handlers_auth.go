@@ -556,15 +556,15 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		s.clearLoginStateCookie(w)
 	}
 
-	if p, err := s.resolver.ResolveToken(r.Context(), tokenResp.AccessToken); err == nil && p != nil {
-		if enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p); enrichErr == nil && enriched != nil && strings.TrimSpace(enriched.SubjectID) != "" {
-			auditSubjectID = enriched.SubjectID
-		} else if strings.TrimSpace(p.SubjectID) != "" {
-			auditSubjectID = p.SubjectID
-		}
-	}
-
 	if mode == loginCallbackCLIGrant {
+		var resolveErr error
+		auditSubjectID, resolveErr = s.resolveCLICallerSubject(r.Context(), tokenResp.AccessToken)
+		if resolveErr != nil {
+			auditErr = fmt.Errorf("resolve CLI grant owner: %w", resolveErr)
+			slog.ErrorContext(r.Context(), "CLI grant owner resolution failed", "error", resolveErr)
+			writeError(w, http.StatusInternalServerError, "failed to resolve CLI grant owner")
+			return
+		}
 		exchangeCtx := withVerifiedCallerSubject(r.Context(), auditSubjectID)
 		apiGrant, exchangeErr := auth.provider.Token(exchangeCtx, &core.TokenRequest{
 			GrantType:        core.GrantTypeTokenExchange,
@@ -584,6 +584,14 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 			Token: apiGrant.AccessToken,
 		})
 		return
+	}
+
+	if p, err := s.resolver.ResolveToken(r.Context(), tokenResp.AccessToken); err == nil && p != nil {
+		if enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p); enrichErr == nil && enriched != nil && strings.TrimSpace(enriched.SubjectID) != "" {
+			auditSubjectID = enriched.SubjectID
+		} else if strings.TrimSpace(p.SubjectID) != "" {
+			auditSubjectID = p.SubjectID
+		}
 	}
 
 	s.setSessionCookie(w, tokenResp.AccessToken, tokenResp.ExpiresIn)
