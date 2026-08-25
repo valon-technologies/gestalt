@@ -551,6 +551,12 @@ func (s *Server) ensureAppAccessDefaults(ctx context.Context, subjectID, app str
 		return nil
 	}
 	cat := s.publicCatalog(app, prov, prov.Catalog())
+	if len(catOperations(cat)) == 0 && core.SupportsSessionCatalog(prov) {
+		// Session catalogs are resolved with the connected user's credential at
+		// request time. Do not turn an empty static catalog into a permanent
+		// empty allow list before those operations are discoverable.
+		return nil
+	}
 	_, err := s.appAccessProfiles.EnsureAppAccessDefaults(ctx, subjectID, app, defaultAppAccessOperationsForProvider(prov, cat))
 	return err
 }

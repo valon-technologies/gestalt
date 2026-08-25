@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type appAccessOperationInfo struct {
@@ -47,7 +48,12 @@ func (s *Server) getAppAccess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "a user session is required")
 		return
 	}
-	response, err := s.appAccessResponse(r, subjectID, name, prov)
+	cat, err := s.appAccessCatalog(r, name, prov)
+	if err != nil {
+		s.writeAppAccessError(w, err)
+		return
+	}
+	response, err := s.appAccessResponse(r, subjectID, name, prov, cat)
 	if err != nil {
 		s.writeAppAccessError(w, err)
 		return
@@ -71,7 +77,11 @@ func (s *Server) updateAppAccess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	cat := s.publicCatalog(name, prov, prov.Catalog())
+	cat, err := s.appAccessCatalog(r, name, prov)
+	if err != nil {
+		s.writeAppAccessError(w, err)
+		return
+	}
 	valid := make(map[string]struct{})
 	if cat != nil {
 		for i := range cat.Operations {
@@ -91,7 +101,7 @@ func (s *Server) updateAppAccess(w http.ResponseWriter, r *http.Request) {
 		s.writeAppAccessError(w, err)
 		return
 	}
-	response, err := s.appAccessResponse(r, subjectID, name, prov)
+	response, err := s.appAccessResponse(r, subjectID, name, prov, cat)
 	if err != nil {
 		s.writeAppAccessError(w, err)
 		return
@@ -107,8 +117,7 @@ func (s *Server) resolveAppAccessSubject(r *http.Request) (string, error) {
 	return principal.ResolveAuthorizationSubjectID(r.Context(), s.credentialUserResolver(), p)
 }
 
-func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov core.Provider) (*appAccessResponse, error) {
-	cat := s.publicCatalog(app, prov, prov.Catalog())
+func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov core.Provider, cat *catalog.Catalog) (*appAccessResponse, error) {
 	defaults := defaultAppAccessOperationsForProvider(prov, cat)
 	enabled := defaults
 	initialized := false
@@ -162,6 +171,34 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 		return strings.Compare(a.ID, b.ID)
 	})
 	return response, nil
+}
+
+func (s *Server) appAccessCatalog(r *http.Request, app string, prov core.Provider) (*catalog.Catalog, error) {
+	staticCat := s.publicCatalog(app, prov, prov.Catalog())
+	if !core.SupportsSessionCatalog(prov) {
+		return staticCat, nil
+	}
+	p := PrincipalFromContext(r.Context())
+	resolver, _ := s.invoker.(invocation.TokenResolver)
+	if p == nil || resolver == nil {
+		return staticCat, nil
+	}
+	cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
+		core.WithCatalogSurface(r.Context(), core.CatalogSurfaceAPI),
+		prov,
+		app,
+		resolver,
+		p,
+		s.catalogSelectorConfig().APICatalogTargets(app, "", ""),
+		true,
+	)
+	if err != nil {
+		if staticCat != nil {
+			return staticCat, nil
+		}
+		return nil, err
+	}
+	return s.publicCatalog(app, prov, cat), nil
 }
 
 func defaultAppAccessOperations(cat *catalog.Catalog) []string {

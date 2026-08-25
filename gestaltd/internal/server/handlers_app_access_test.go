@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 func TestAppAccessHandlers(t *testing.T) {
@@ -110,6 +112,67 @@ func TestAppAccessHandlers(t *testing.T) {
 			t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusUnauthorized, response.Body.String())
 		}
 	})
+}
+
+func TestAppAccessHandlersUseSessionCatalogBeforeInitializingProfile(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	provider := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "slack",
+				connMode: core.ConnectionModeSubject,
+			},
+		},
+		sessionCat: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+			{ID: "dynamic.list", Method: http.MethodGet},
+		}},
+	}
+	server := &Server{
+		providers:         testutil.NewProviderRegistry(t, provider),
+		users:             services.Users,
+		appAccessProfiles: services.AppAccessProfiles,
+		invoker: struct {
+			invocation.Invoker
+			invocation.TokenResolver
+		}{
+			TokenResolver: &stubTokenResolver{token: "session-token"},
+		},
+	}
+	user := seedAppAccessTestUser(t, services, "dynamic@example.com")
+	p := &principal.Principal{
+		SubjectID: principal.UserSubjectID(user.ID),
+		UserID:    user.ID,
+		Kind:      principal.KindUser,
+	}
+	if err := server.ensureAppAccessDefaults(context.Background(), p.SubjectID, "slack", provider); err != nil {
+		t.Fatalf("ensureAppAccessDefaults: %v", err)
+	}
+	if _, err := services.AppAccessProfiles.GetAppAccessProfile(context.Background(), p.SubjectID, "slack"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("profile after empty static catalog = %v, want core.ErrNotFound", err)
+	}
+
+	response := serveAppAccessTestRequest(t, server, http.MethodGet, nil, p)
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var body appAccessResponse
+	decodeAppAccessTestResponse(t, response, &body)
+	if len(body.Operations) != 1 || body.Operations[0].ID != "dynamic.list" || body.DefaultsInitialized {
+		t.Fatalf("session catalog response = %#v, want dynamic operation without initialized profile", body)
+	}
+
+	response = serveAppAccessTestRequest(t, server, http.MethodPut, map[string]any{
+		"enabledOperations": []string{"dynamic.list"},
+	}, p)
+	if response.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	decodeAppAccessTestResponse(t, response, &body)
+	if !body.DefaultsInitialized || len(body.EnabledOperations) != 1 || body.EnabledOperations[0] != "dynamic.list" {
+		t.Fatalf("session catalog update = %#v, want persisted dynamic operation", body)
+	}
 }
 
 func newAppAccessTestFixture(t *testing.T) (*Server, *principal.Principal, *principal.Principal) {
