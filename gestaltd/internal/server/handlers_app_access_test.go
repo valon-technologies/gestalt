@@ -114,6 +114,23 @@ func TestAppAccessHandlers(t *testing.T) {
 	})
 }
 
+func TestDefaultAppAccessOperationsTreatReadOnlyHintsAsMetadata(t *testing.T) {
+	t.Parallel()
+
+	readOnly := true
+	hidden := false
+	cat := &catalog.Catalog{Operations: []catalog.CatalogOperation{
+		{ID: "values.get", Annotations: catalog.CapabilityAnnotations{ReadOnlyHint: &readOnly}},
+		{ID: "values.update"},
+		{ID: "internal.operation", Visible: &hidden},
+	}}
+
+	got := defaultAppAccessOperationsForProvider(nil, cat)
+	if len(got) != 2 || got[0] != "values.get" || got[1] != "values.update" {
+		t.Fatalf("default operations = %#v, want all visible operations", got)
+	}
+}
+
 func TestAppAccessHandlersUseSessionCatalogBeforeInitializingProfile(t *testing.T) {
 	t.Parallel()
 

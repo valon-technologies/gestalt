@@ -231,50 +231,20 @@ func appAccessCapabilityCatalog(prov core.Provider, cat *catalog.Catalog) *catal
 	return cat
 }
 
-func defaultAppAccessOperations(cat *catalog.Catalog) []string {
-	if cat == nil {
-		return nil
-	}
-	readOnly := make([]string, 0, len(cat.Operations))
-	all := make([]string, 0, len(cat.Operations))
-	for i := range cat.Operations {
-		op := &cat.Operations[i]
-		if !catalog.OperationVisibleByDefault(*op) {
-			continue
-		}
-		all = append(all, op.ID)
-		isReadOnly := op.ReadOnly
-		if op.Annotations.ReadOnlyHint != nil {
-			isReadOnly = isReadOnly || *op.Annotations.ReadOnlyHint
-		}
-		if isReadOnly {
-			readOnly = append(readOnly, op.ID)
-		}
-	}
-	// Providers that declare read-only hints get a safe read-first profile.
-	// Older providers without that metadata retain their existing behavior until
-	// they publish capability annotations.
-	if len(readOnly) > 0 {
-		slices.Sort(readOnly)
-		return readOnly
-	}
-	slices.Sort(all)
-	return all
-}
-
 func defaultAppAccessOperationsForProvider(prov core.Provider, cat *catalog.Catalog) []string {
+	operations := catOperations(cat)
 	if provider, ok := prov.(core.AppAccessDefaultsProvider); ok {
-		operations, configured := provider.DefaultAppAccessOperations()
+		defaults, configured := provider.DefaultAppAccessOperations()
 		if configured {
-			valid := make(map[string]struct{}, len(catOperations(cat)))
-			for _, operation := range catOperations(cat) {
+			valid := make(map[string]struct{}, len(operations))
+			for _, operation := range operations {
 				valid[operation] = struct{}{}
 			}
-			filtered, _ := normalizeRequestedAppAccess(operations, valid)
+			filtered, _ := normalizeRequestedAppAccess(defaults, valid)
 			return filtered
 		}
 	}
-	return defaultAppAccessOperations(cat)
+	return operations
 }
 
 func catOperations(cat *catalog.Catalog) []string {
@@ -288,6 +258,7 @@ func catOperations(cat *catalog.Catalog) []string {
 			operations = append(operations, operation.ID)
 		}
 	}
+	slices.Sort(operations)
 	return operations
 }
 
