@@ -34,10 +34,13 @@ func TestAppAccessHandlers(t *testing.T) {
 			t.Fatal("defaultsInitialized = true before a profile was persisted")
 		}
 		if len(body.EnabledOperations) != 2 {
-			t.Fatalf("enabled operations = %#v, want catalog defaults", body.EnabledOperations)
+			t.Fatalf("enabled operations = %#v, want all catalog defaults regardless of read-only hints", body.EnabledOperations)
 		}
 		if got := body.Operations[0].Title; got != "Chat Post Message" {
 			t.Fatalf("fallback operation title = %q, want human-readable title", got)
+		}
+		if !body.Operations[1].ReadOnly {
+			t.Fatal("conversations.list readOnly = false, want read-only hint preserved as metadata")
 		}
 	})
 
@@ -112,23 +115,6 @@ func TestAppAccessHandlers(t *testing.T) {
 			t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusUnauthorized, response.Body.String())
 		}
 	})
-}
-
-func TestDefaultAppAccessOperationsTreatReadOnlyHintsAsMetadata(t *testing.T) {
-	t.Parallel()
-
-	readOnly := true
-	hidden := false
-	cat := &catalog.Catalog{Operations: []catalog.CatalogOperation{
-		{ID: "values.get", Annotations: catalog.CapabilityAnnotations{ReadOnlyHint: &readOnly}},
-		{ID: "values.update"},
-		{ID: "internal.operation", Visible: &hidden},
-	}}
-
-	got := defaultAppAccessOperationsForProvider(nil, cat)
-	if len(got) != 2 || got[0] != "values.get" || got[1] != "values.update" {
-		t.Fatalf("default operations = %#v, want all visible operations", got)
-	}
 }
 
 func TestAppAccessHandlersUseSessionCatalogBeforeInitializingProfile(t *testing.T) {
@@ -275,12 +261,17 @@ func TestEnsureAppAccessDefaultsKeepsEmailSubjectOwner(t *testing.T) {
 func newAppAccessTestFixture(t *testing.T) (*Server, *principal.Principal, *principal.Principal) {
 	t.Helper()
 	services := testutil.NewStubServices(t)
+	readOnly := true
 	provider := &coretesting.StubIntegration{
 		N:        "slack",
 		ConnMode: core.ConnectionModeNone,
 		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
 			{ID: "chat.postMessage", Method: http.MethodPost},
-			{ID: "conversations.list", Method: http.MethodGet},
+			{
+				ID:          "conversations.list",
+				Method:      http.MethodGet,
+				Annotations: catalog.CapabilityAnnotations{ReadOnlyHint: &readOnly},
+			},
 		}},
 	}
 	server := &Server{
