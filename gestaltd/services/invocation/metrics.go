@@ -20,6 +20,36 @@ type operationMetrics struct {
 	duration   metric.Float64Histogram
 }
 
+const (
+	operationReasonProviderNotFound        = "provider_not_found"
+	operationReasonOperationNotFound       = "operation_not_found"
+	operationReasonNotAuthenticated        = "not_authenticated"
+	operationReasonAuthorizationDenied     = "authorization_denied"
+	operationReasonCredentialMissing       = "credential_missing"
+	operationReasonReconnectRequired       = "reconnect_required"
+	operationReasonAmbiguousInstance       = "ambiguous_instance"
+	operationReasonUserResolution          = "user_resolution"
+	operationReasonInternal                = "internal"
+	operationReasonInvalidInvocation       = "invalid_invocation"
+	operationReasonStreamingUnsupported    = "streaming_unsupported"
+	operationReasonMaxDepth                = "max_depth"
+	operationReasonRecursiveInvocation     = "recursive_invocation"
+	operationReasonRateLimited             = "rate_limited"
+	operationReasonProviderScope           = "provider_scope"
+	operationReasonCanceled                = "canceled"
+	operationReasonUpstreamUnavailable     = "upstream_unavailable"
+	operationReasonUpstreamTimeout         = "upstream_timeout"
+	operationReasonUpstreamResponseRead    = "upstream_response_read"
+	operationReasonUpstreamInvalidResponse = "upstream_invalid_response"
+	operationReasonUpstreamHTTPError       = "upstream_http_error"
+	operationReasonUpstreamOperationError  = "upstream_operation_error"
+	operationReasonExecutionError          = "execution_error"
+	operationReasonResultError             = "operation_result_error"
+	operationReasonInvalidResult           = "invalid_result"
+)
+
+var successfulOperationOutcome = metricutil.SuccessOutcome()
+
 func newOperationMetrics(meter metric.Meter) operationMetrics {
 	return operationMetrics{
 		count: metricutil.NewInt64Counter(
@@ -30,7 +60,7 @@ func newOperationMetrics(meter metric.Meter) operationMetrics {
 		errorCount: metricutil.NewInt64Counter(
 			meter,
 			"gestaltd.operation.error_count",
-			"Counts gestaltd operation invocations that fail.",
+			"Counts unsuccessful gestaltd operation invocations for compatibility.",
 		),
 		duration: metricutil.NewFloat64Histogram(
 			meter,
@@ -51,7 +81,7 @@ func recordOperationMetrics(
 	transport string,
 	connectionMode string,
 	resultStatus int,
-	failed bool,
+	outcome metricutil.TerminalOutcome,
 ) {
 	metrics := operationMetricsCache.Load(ctx, tracerName, newOperationMetrics)
 	resultStatusValue, resultStatusClass := resultStatusAttributes(resultStatus)
@@ -62,6 +92,9 @@ func recordOperationMetrics(
 		attrConnectionMode.String(metricutil.AttrValue(connectionMode)),
 		metricutil.AttrResultStatus.String(resultStatusValue),
 		metricutil.AttrResultStatusClass.String(resultStatusClass),
+		metricutil.AttrOutcome.String(outcome.Status),
+		metricutil.AttrFailureCause.String(outcome.Cause),
+		metricutil.AttrFailureReason.String(outcome.Reason),
 	}
 	surface := InvocationSurfaceFromContext(ctx)
 	binding := HTTPBindingFromContext(ctx)
@@ -89,9 +122,93 @@ func recordOperationMetrics(
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
 	duration := time.Since(startedAt)
 	metrics.duration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
-	if failed {
+	// Retain the old counter while dashboards migrate to filtering the canonical
+	// operation count by outcome. It is deliberately derived from the same
+	// classification so the two views cannot disagree.
+	if outcome.Unsuccessful() {
 		metrics.errorCount.Add(ctx, 1, metric.WithAttributes(attrs...))
 	}
+}
+
+func classifyOperationOutcome(result *core.OperationResult, err error, dispatched bool) metricutil.TerminalOutcome {
+	if err == nil {
+		if result == nil || !validHTTPStatus(result.Status) {
+			return failedOperation(metricutil.CauseGestalt, operationReasonInvalidResult)
+		}
+		if result.Status < http.StatusBadRequest {
+			return successfulOperationOutcome
+		}
+		return metricutil.TerminalOutcome{
+			Status: metricutil.OutcomeFailed,
+			Cause:  metricutil.CauseUnknown,
+			Reason: operationReasonResultError,
+		}
+	}
+
+	var upstreamHTTPError *apiexec.UpstreamHTTPError
+	var upstreamOperationError *apiexec.UpstreamOperationError
+	var maxDepthError *MaxDepthError
+	var recursionError *RecursionError
+	var rateLimitError *RateLimitError
+	var scopeError *providerScopeError
+	switch {
+	case errors.Is(err, ErrProviderNotFound):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonProviderNotFound)
+	case errors.Is(err, ErrOperationNotFound):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonOperationNotFound)
+	case errors.Is(err, ErrNotAuthenticated):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonNotAuthenticated)
+	case errors.Is(err, ErrAuthorizationDenied), errors.Is(err, ErrScopeDenied):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonAuthorizationDenied)
+	case errors.Is(err, ErrNoCredential):
+		return rejectedOperation(metricutil.CauseConnection, operationReasonCredentialMissing)
+	case errors.Is(err, ErrReconnectRequired), errors.Is(err, core.ErrReconnectRequired):
+		return rejectedOperation(metricutil.CauseConnection, operationReasonReconnectRequired)
+	case errors.Is(err, ErrAmbiguousInstance), errors.Is(err, core.ErrAmbiguousCredential):
+		return rejectedOperation(metricutil.CauseConnection, operationReasonAmbiguousInstance)
+	case errors.Is(err, ErrInvalidInvocation), errors.Is(err, core.ErrMCPOnly), errors.Is(err, apiexec.ErrMissingPathParam):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonInvalidInvocation)
+	case errors.Is(err, ErrStreamingUnsupported):
+		return rejectedOperation(metricutil.CauseGestalt, operationReasonStreamingUnsupported)
+	case errors.As(err, &maxDepthError):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonMaxDepth)
+	case errors.As(err, &recursionError):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonRecursiveInvocation)
+	case errors.As(err, &rateLimitError):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonRateLimited)
+	case errors.As(err, &scopeError):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonProviderScope)
+	case errors.Is(err, context.Canceled):
+		return rejectedOperation(metricutil.CauseCaller, operationReasonCanceled)
+	case errors.Is(err, ErrUserResolution):
+		return failedOperation(metricutil.CauseGestalt, operationReasonUserResolution)
+	case errors.Is(err, ErrInternal):
+		return failedOperation(metricutil.CauseGestalt, operationReasonInternal)
+	case errors.Is(err, apiexec.ErrUpstreamTimedOut):
+		return failedOperation(metricutil.CauseUpstream, operationReasonUpstreamTimeout)
+	case errors.Is(err, apiexec.ErrUpstreamUnavailable):
+		return failedOperation(metricutil.CauseUpstream, operationReasonUpstreamUnavailable)
+	case errors.Is(err, apiexec.ErrUpstreamResponseRead):
+		return failedOperation(metricutil.CauseUpstream, operationReasonUpstreamResponseRead)
+	case errors.Is(err, apiexec.ErrUpstreamInvalidResponse):
+		return failedOperation(metricutil.CauseUpstream, operationReasonUpstreamInvalidResponse)
+	case errors.As(err, &upstreamHTTPError):
+		return failedOperation(metricutil.CauseUpstream, operationReasonUpstreamHTTPError)
+	case errors.As(err, &upstreamOperationError):
+		return failedOperation(metricutil.CauseUpstream, operationReasonUpstreamOperationError)
+	case dispatched:
+		return failedOperation(metricutil.CauseProvider, operationReasonExecutionError)
+	default:
+		return failedOperation(metricutil.CauseGestalt, operationReasonInternal)
+	}
+}
+
+func rejectedOperation(cause, reason string) metricutil.TerminalOutcome {
+	return metricutil.RejectedOutcome(cause, reason)
+}
+
+func failedOperation(cause, reason string) metricutil.TerminalOutcome {
+	return metricutil.FailedOutcome(cause, reason)
 }
 
 func operationResultStatus(result *core.OperationResult, err error) int {
@@ -137,10 +254,6 @@ func OperationErrorResultStatus(err error) (int, bool) {
 	default:
 		return 0, false
 	}
-}
-
-func operationResultFailed(status int, err error) bool {
-	return err != nil || status >= http.StatusBadRequest && status <= 599
 }
 
 func resultStatusAttributes(status int) (string, string) {

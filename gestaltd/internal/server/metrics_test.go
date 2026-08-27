@@ -185,18 +185,36 @@ func TestConnectionAuthMetrics(t *testing.T) {
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "start",
 		"gestalt.connection_mode": "subject",
+		"gestalt.outcome":         "success",
+		"gestalt.failure_cause":   "none",
+		"gestalt.failure_reason":  "none",
 	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "subject",
+		"gestalt.outcome":         "success",
+		"gestalt.failure_cause":   "none",
+		"gestalt.failure_reason":  "none",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "complete",
+		"gestalt.connection_mode": "subject",
+		"gestalt.outcome":         "failed",
+		"gestalt.failure_cause":   "upstream",
+		"gestalt.failure_reason":  "token_exchange",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "subject",
+		"gestalt.outcome":         "failed",
+		"gestalt.failure_cause":   "upstream",
+		"gestalt.failure_reason":  "token_exchange",
 	})
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
 		"gestalt.provider": providerName,
@@ -302,17 +320,32 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "refresh",
 		"gestalt.connection_mode": "subject",
+		"gestalt.outcome":         "success",
+		"gestalt.failure_cause":   "none",
+		"gestalt.failure_reason":  "none",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "refresh",
+		"gestalt.connection_mode": "subject",
+		"gestalt.outcome":         "failed",
+		"gestalt.failure_cause":   "unknown",
+		"gestalt.failure_reason":  "unknown",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "refresh",
 		"gestalt.connection_mode": "subject",
+		"gestalt.outcome":         "failed",
+		"gestalt.failure_cause":   "unknown",
+		"gestalt.failure_reason":  "unknown",
 	})
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
 		"gestalt.provider": providerName,
@@ -326,6 +359,9 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.connection_mode":     "subject",
 		"gestalt.result_status":       "200",
 		"gestalt.result_status_class": "2xx",
+		"gestalt.outcome":             "success",
+		"gestalt.failure_cause":       "none",
+		"gestalt.failure_reason":      "none",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
 		"gestalt.provider":            providerName,
@@ -334,6 +370,9 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.connection_mode":     "subject",
 		"gestalt.result_status":       "412",
 		"gestalt.result_status_class": "4xx",
+		"gestalt.outcome":             "rejected",
+		"gestalt.failure_cause":       "connection",
+		"gestalt.failure_reason":      "reconnect_required",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.error_count", 1, map[string]string{
 		"gestalt.provider":            providerName,
@@ -342,6 +381,9 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.connection_mode":     "subject",
 		"gestalt.result_status":       "412",
 		"gestalt.result_status_class": "4xx",
+		"gestalt.outcome":             "rejected",
+		"gestalt.failure_cause":       "connection",
+		"gestalt.failure_reason":      "reconnect_required",
 	})
 }
 
@@ -423,6 +465,9 @@ func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
 		"gestalt.invocation_surface":  "http",
 		"gestalt.result_status":       "404",
 		"gestalt.result_status_class": "4xx",
+		"gestalt.outcome":             "failed",
+		"gestalt.failure_cause":       "unknown",
+		"gestalt.failure_reason":      "operation_result_error",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.error_count", 1, map[string]string{
 		"gestalt.provider":            providerName,
@@ -498,6 +543,9 @@ func TestManualConnectionMetrics(t *testing.T) {
 		"gestalt.type":            "manual",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "subject",
+		"gestalt.outcome":         "success",
+		"gestalt.failure_cause":   "none",
+		"gestalt.failure_reason":  "none",
 	})
 }
 
@@ -540,24 +588,36 @@ func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "start",
 		"gestalt.connection_mode": "unknown",
+		"gestalt.outcome":         "rejected",
+		"gestalt.failure_cause":   "caller",
+		"gestalt.failure_reason":  "invalid_request",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        "unknown",
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "start",
 		"gestalt.connection_mode": "unknown",
+		"gestalt.outcome":         "rejected",
+		"gestalt.failure_cause":   "caller",
+		"gestalt.failure_reason":  "invalid_request",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
 		"gestalt.provider":        "unknown",
 		"gestalt.type":            "manual",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "unknown",
+		"gestalt.outcome":         "rejected",
+		"gestalt.failure_cause":   "caller",
+		"gestalt.failure_reason":  "invalid_request",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        "unknown",
 		"gestalt.type":            "manual",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "unknown",
+		"gestalt.outcome":         "rejected",
+		"gestalt.failure_cause":   "caller",
+		"gestalt.failure_reason":  "invalid_request",
 	})
 }
 

@@ -37,6 +37,10 @@ These fields are emitted when available:
 | `target_kind` | Generic kind for the object the event acted on, such as `api_token` or `connection` |
 | `target_id` | Stable identifier for the affected object when one exists |
 | `target_name` | Human-readable label for the affected object |
+| `outcome` | Terminal result for operation and connection events: `success`, `rejected`, or `failed` |
+| `failure_cause` | Owning boundary for a rejection or failure, such as `caller`, `connection`, `gestalt`, `provider`, `upstream`, or `unknown` |
+| `failure_reason` | Bounded actionable reason shared with the corresponding metrics and trace |
+| `caller_app` | App that initiated a nested invocation or workflow call |
 | `error` | Denial or failure reason |
 | `client_ip` | Client IP, preferring `X-Forwarded-For` |
 | `remote_addr` | Immediate peer address |
@@ -58,7 +62,6 @@ Workflow events also use workflow-specific fields when available:
 
 | Field | Meaning |
 | --- | --- |
-| `caller_app` | App that called `WorkflowManager`, such as a Slack event provider. |
 | `workflow_key_sha256` | SHA-256 hash of the workflow key for run start and signal-or-start events. The raw workflow key is not emitted. |
 | `workflow_target_kind` | Target kind, currently `steps`. |
 | `workflow_target_component` | Target subcomponent involved in a workflow target authorization denial, such as `target`, `app_step`, `agent_provider`, or `agent_tool_ref`. |
@@ -208,8 +211,8 @@ With the default `providers.audit.default.source: inherit`, you can still split 
 
 ## Metrics Notes
 
-Audit logs are a good source for invocation-based activity metrics. In
-particular, `source`, `subject_id`, `provider`, `operation`, and
-`allowed` are enough to derive distinct-user activity over guarded invocations.
+Audit logs are a good source for invocation-based activity metrics. `allowed`
+records the authorization decision; it does not mean that execution succeeded.
+Use `outcome` for reliability and completion analysis.
 
-For DAU, WAU, or MAU built from tool usage, filter to successful top-level invocations where `allowed = true`, `depth = 0`, and `subject_id` is non-empty. That produces a clean “subjects who actually invoked a tool” metric. If you need a broader product-activity definition, treat the non-invocation audit events as a separate metric family rather than mixing them into invocation counts.
+For DAU, WAU, or MAU built from tool usage, filter to successful top-level invocations where `outcome = success`, `depth = 0`, and `subject_id` is non-empty. That produces a clean “subjects who actually invoked a tool” metric. If you need a broader product-activity definition, treat the non-invocation audit events as a separate metric family rather than mixing them into invocation counts.

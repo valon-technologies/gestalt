@@ -266,14 +266,14 @@ These metrics are recorded around `broker.invoke`.
     | Metric | Type | Meaning |
     | --- | --- | --- |
     | `gestaltd.operation.count` | Counter | Operation invocations |
-    | `gestaltd.operation.error_count` | Counter | Failed operation invocations |
+    | `gestaltd.operation.error_count` | Counter | Unsuccessful operation invocations (compatibility) |
     | `gestaltd.operation.duration` | Histogram | Operation invocation duration |
   </Tabs.Tab>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
     | `gestaltd_operation_count_total` | Counter | Operation invocations |
-    | `gestaltd_operation_error_count_total` | Counter | Failed operation invocations |
+    | `gestaltd_operation_error_count_total` | Counter | Unsuccessful operation invocations (compatibility) |
     | `gestaltd_operation_duration_seconds` | Histogram | Operation invocation duration |
   </Tabs.Tab>
 </Tabs>
@@ -297,6 +297,25 @@ invocations with an invocation error or an operation result status of `400` or
 higher, so provider-returned 4xx and 5xx results are counted as operation
 failures.
 
+Use the terminal outcome attributes instead of HTTP status to measure
+reliability:
+
+| Attribute | Values | Meaning |
+| --- | --- | --- |
+| `gestalt.outcome` | `success`, `rejected`, `failed` | Whether the invocation succeeded, was rejected before useful execution, or failed after admission |
+| `gestalt.failure_cause` | `none`, `caller`, `connection`, `gestalt`, `provider`, `upstream`, `unknown` | The boundary that owns the failure |
+| `gestalt.failure_reason` | A bounded reason such as `authorization_denied`, `reconnect_required`, `upstream_timeout`, or `execution_error` | The actionable failure class |
+
+An availability calculation should use `success` and `failed` as its
+denominator and exclude `rejected`. The legacy `error_count` instrument remains
+available for compatibility and includes both `rejected` and `failed`; it is
+derived from the same terminal classification as `count`.
+
+Gestaltd classifies all host-owned failures and declarative REST or GraphQL
+upstream failures directly. An executable app result that contains only an
+HTTP-like error status is `failed` with cause `unknown`, because the host cannot safely
+infer caller, provider, or upstream ownership from a response body.
+
 When a request references an unknown provider or operation, `gestaltd` records
 `unknown` for the missing metric attributes instead of using raw user input.
 
@@ -310,14 +329,14 @@ OAuth start and completion, manual connect, and token refresh.
     | Metric | Type | Meaning |
     | --- | --- | --- |
     | `gestaltd.connection.auth.count` | Counter | Connection authentication attempts |
-    | `gestaltd.connection.auth.error_count` | Counter | Failed connection authentication attempts |
+    | `gestaltd.connection.auth.error_count` | Counter | Unsuccessful connection authentication attempts (compatibility) |
     | `gestaltd.connection.auth.duration` | Histogram | Connection authentication duration |
   </Tabs.Tab>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
     | `gestaltd_connection_auth_count_total` | Counter | Connection authentication attempts |
-    | `gestaltd_connection_auth_error_count_total` | Counter | Failed connection authentication attempts |
+    | `gestaltd_connection_auth_error_count_total` | Counter | Unsuccessful connection authentication attempts (compatibility) |
     | `gestaltd_connection_auth_duration_seconds` | Histogram | Connection authentication duration |
   </Tabs.Tab>
 </Tabs>
@@ -326,7 +345,11 @@ These metrics carry low-cardinality attributes: `gestalt.provider` (the
 plugin key), `gestalt.type` (`oauth` or `manual`),
 `gestalt.action` (`start`, `complete`, or `refresh`), and
 `gestalt.connection_mode` (the provider authentication mode: `none`
-or `subject`).
+or `subject`). They also carry the same `gestalt.outcome`,
+`gestalt.failure_cause`, and `gestalt.failure_reason` attributes as operation
+metrics. This separates invalid caller input from missing Gestalt
+configuration, upstream token exchange failures, and provider-owned connection
+setup failures.
 
 When a request references an unknown plugin, `gestaltd` records
 `unknown` for the provider and connection mode metric attributes instead of

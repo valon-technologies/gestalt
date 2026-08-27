@@ -34,6 +34,9 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 		Operation:               "fetch",
 		Depth:                   1,
 		Allowed:                 true,
+		Outcome:                 "success",
+		FailureCause:            "none",
+		FailureReason:           "none",
 		WorkflowKeySHA256:       "workflow-key-hash",
 		CallerApp:               "slack",
 		WorkflowTargetKind:      "steps",
@@ -89,6 +92,9 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 	if record["allowed"] != true {
 		t.Errorf("expected allowed=true, got %v", record["allowed"])
 	}
+	if record["outcome"] != "success" || record["failure_cause"] != "none" || record["failure_reason"] != "none" {
+		t.Errorf("unexpected outcome fields: outcome=%v cause=%v reason=%v", record["outcome"], record["failure_cause"], record["failure_reason"])
+	}
 	if record["workflow_key_sha256"] != "workflow-key-hash" {
 		t.Errorf("expected workflow_key_sha256=workflow-key-hash, got %v", record["workflow_key_sha256"])
 	}
@@ -109,6 +115,22 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 	}
 	if _, hasError := record["error"]; hasError {
 		t.Errorf("expected no error field for allowed entry, got %v", record["error"])
+	}
+}
+
+func TestBuildAuditEntryIncludesCallerApp(t *testing.T) {
+	t.Parallel()
+
+	ctx := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "slack")
+	_, entry := invocation.BuildAuditEntry(
+		ctx,
+		&principal.Principal{SubjectID: principal.UserSubjectID("user-42")},
+		"app",
+		"github",
+		"search",
+	)
+	if entry.CallerApp != "slack" {
+		t.Fatalf("CallerApp = %q, want slack", entry.CallerApp)
 	}
 }
 

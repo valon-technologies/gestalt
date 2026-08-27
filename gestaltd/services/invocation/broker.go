@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -17,7 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -231,28 +230,15 @@ func (b *Broker) ListCapabilities() []core.Capability {
 }
 
 func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (result *core.OperationResult, err error) {
-	startedAt := time.Now()
-	metricProvider := metricutil.UnknownAttrValue
-	metricOperation := metricutil.UnknownAttrValue
-	metricTransport := metricutil.UnknownAttrValue
-	metricConnectionMode := metricutil.UnknownAttrValue
+	ctx, _ = ensureMeta(ctx)
+	observation := newOperationObservation(providerName, operation)
 
 	ctx, span := b.tracer().Start(ctx, "broker.invoke",
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
-	defer span.End()
 	defer func() {
-		resultStatus := operationResultStatus(result, err)
-		recordOperationMetrics(
-			ctx,
-			startedAt,
-			metricProvider,
-			metricOperation,
-			metricTransport,
-			metricConnectionMode,
-			resultStatus,
-			operationResultFailed(resultStatus, err),
-		)
+		b.observeOperation(ctx, span, p, observation, result, err)
+		span.End()
 	}()
 
 	span.SetAttributes(
@@ -261,8 +247,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	)
 
 	fail := func(err error) (*core.OperationResult, error) {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	setSubjectAttribute := func(p *principal.Principal) {
@@ -288,7 +272,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 
-	metricProvider = providerName
+	observation.provider = providerName
 
 	if p == nil {
 		return fail(ErrNotAuthenticated)
@@ -314,9 +298,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 			return fail(err)
 		}
 	}
-	metricOperation = operation
-	metricTransport = metricutil.AttrValue(transport)
-	span.SetAttributes(attrTransport.String(metricTransport))
+	observation.operation = opMeta.ID
+	observation.transport = metricutil.AttrValue(transport)
+	span.SetAttributes(attrTransport.String(observation.transport))
 	ctx = WithCatalogOperation(ctx, providerName, opMeta)
 
 	operationConnection := resolvedConnection
@@ -355,8 +339,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
-	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
-	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
+	observation.connectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
+	span.SetAttributes(attrConnectionMode.String(observation.connectionMode))
 
 	ctx, err = ApplyInvokeHeaderOverrides(ctx, prov)
 	if err != nil {
@@ -367,13 +351,12 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
+	observation.dispatched = true
 	result, err = prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
 		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
-	b.observePlugin5xxResult(ctx, span, p, providerName, opMeta.ID, transport, result)
-
 	return result, nil
 }
 
@@ -382,11 +365,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 // The returned StreamReader yields InvokeFrame frames (metadata first, then
 // data). The caller is responsible for forwarding frames to the transport.
 func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error) {
-	startedAt := time.Now()
-	metricProvider := metricutil.UnknownAttrValue
-	metricOperation := metricutil.UnknownAttrValue
-	metricTransport := metricutil.UnknownAttrValue
-	metricConnectionMode := metricutil.UnknownAttrValue
+	ctx, _ = ensureMeta(ctx)
+	observation := newOperationObservation(providerName, operation)
 	var dispatchErr error
 
 	ctx, span := b.tracer().Start(ctx, "broker.invoke_stream",
@@ -395,24 +375,9 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	spanOwned := false
 	defer func() {
 		if !spanOwned {
+			b.observeOperation(ctx, span, p, observation, nil, dispatchErr)
 			span.End()
 		}
-		// Record dispatch-phase metrics. If the stream was successfully
-		// dispatched (dispatchErr is nil), the final stream status is not
-		// known here — it is observed by observingStreamReader on the first
-		// Recv. Dispatch failures (auth, resolve, token, etc.) are recorded
-		// as failed operations, mirroring unary Invoke.
-		resultStatus := operationResultStatus(nil, dispatchErr)
-		recordOperationMetrics(
-			ctx,
-			startedAt,
-			metricProvider,
-			metricOperation,
-			metricTransport,
-			metricConnectionMode,
-			resultStatus,
-			operationResultFailed(resultStatus, dispatchErr),
-		)
 	}()
 
 	span.SetAttributes(
@@ -422,8 +387,6 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 
 	fail := func(err error) (core.StreamReader, error) {
 		dispatchErr = err
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	setSubjectAttribute := func(p *principal.Principal) {
@@ -447,7 +410,7 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 		return fail(fmt.Errorf("%w: looking up provider: %v", ErrInternal, err))
 	}
 
-	metricProvider = providerName
+	observation.provider = providerName
 
 	if p == nil {
 		return fail(ErrNotAuthenticated)
@@ -473,9 +436,9 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 			return fail(err)
 		}
 	}
-	metricOperation = operation
-	metricTransport = metricutil.AttrValue(transport)
-	span.SetAttributes(attrTransport.String(metricTransport))
+	observation.operation = opMeta.ID
+	observation.transport = metricutil.AttrValue(transport)
+	span.SetAttributes(attrTransport.String(observation.transport))
 	ctx = WithCatalogOperation(ctx, providerName, opMeta)
 
 	operationConnection := resolvedConnection
@@ -513,8 +476,8 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
-	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
-	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
+	observation.connectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
+	span.SetAttributes(attrConnectionMode.String(observation.connectionMode))
 
 	ctx, err = ApplyInvokeHeaderOverrides(ctx, prov)
 	if err != nil {
@@ -535,25 +498,20 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	if !ok {
 		return fail(fmt.Errorf("%w: %s.%s does not support streaming", ErrStreamingUnsupported, providerName, opMeta.ID))
 	}
+	observation.dispatched = true
 	reader, err := streamExec.ExecuteStream(ctx, operation, params, accessToken)
 	if err != nil {
 		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
-	// Wrap the reader so the first metadata frame is observed for 5xx,
-	// mirroring the unary observePlugin5xxResult telemetry. A streaming 5xx
-	// arrives as a metadata frame with status >= 500, not a terminal
-	// *OperationResult, so the observation happens on the first Recv.
 	spanOwned = true
 	return &observingStreamReader{
-		inner:        reader,
-		broker:       b,
-		ctx:          ctx,
-		span:         span,
-		principal:    p,
-		providerName: providerName,
-		operation:    opMeta.ID,
-		transport:    metricutil.AttrValue(transport),
+		inner:       reader,
+		broker:      b,
+		ctx:         ctx,
+		span:        span,
+		principal:   p,
+		observation: observation,
 	}, nil
 }
 
@@ -570,11 +528,8 @@ func (o *InvokeOutcome) IsStream() bool { return o != nil && o.Stream != nil }
 // InvokeMaybeStream resolves and authorizes an invocation once, then dispatches
 // to the unary or streaming executor based on the catalog response mode.
 func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*InvokeOutcome, error) {
-	startedAt := time.Now()
-	metricProvider := metricutil.UnknownAttrValue
-	metricOperation := metricutil.UnknownAttrValue
-	metricTransport := metricutil.UnknownAttrValue
-	metricConnectionMode := metricutil.UnknownAttrValue
+	ctx, _ = ensureMeta(ctx)
+	observation := newOperationObservation(providerName, operation)
 	var dispatchErr error
 	var unaryResult *core.OperationResult
 
@@ -584,19 +539,9 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	spanOwned := false
 	defer func() {
 		if !spanOwned {
+			b.observeOperation(ctx, span, p, observation, unaryResult, dispatchErr)
 			span.End()
 		}
-		resultStatus := operationResultStatus(unaryResult, dispatchErr)
-		recordOperationMetrics(
-			ctx,
-			startedAt,
-			metricProvider,
-			metricOperation,
-			metricTransport,
-			metricConnectionMode,
-			resultStatus,
-			operationResultFailed(resultStatus, dispatchErr),
-		)
 	}()
 
 	span.SetAttributes(
@@ -606,8 +551,6 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 
 	fail := func(err error) (*InvokeOutcome, error) {
 		dispatchErr = err
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	setSubjectAttribute := func(p *principal.Principal) {
@@ -631,7 +574,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 		return fail(fmt.Errorf("%w: looking up provider: %v", ErrInternal, err))
 	}
 
-	metricProvider = providerName
+	observation.provider = providerName
 
 	if p == nil {
 		return fail(ErrNotAuthenticated)
@@ -658,9 +601,9 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 			return fail(err)
 		}
 	}
-	metricOperation = operation
-	metricTransport = metricutil.AttrValue(transport)
-	span.SetAttributes(attrTransport.String(metricTransport))
+	observation.operation = opMeta.ID
+	observation.transport = metricutil.AttrValue(transport)
+	span.SetAttributes(attrTransport.String(observation.transport))
 	ctx = WithCatalogOperation(ctx, providerName, opMeta)
 
 	operationConnection := resolvedConnection
@@ -698,8 +641,8 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
-	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
-	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
+	observation.connectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
+	span.SetAttributes(attrConnectionMode.String(observation.connectionMode))
 
 	ctx, err = ApplyInvokeHeaderOverrides(ctx, prov)
 	if err != nil {
@@ -716,6 +659,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 		if !ok {
 			return fail(fmt.Errorf("%w: %s.%s does not support streaming", ErrStreamingUnsupported, providerName, opMeta.ID))
 		}
+		observation.dispatched = true
 		reader, err := streamExec.ExecuteStream(ctx, operation, params, accessToken)
 		if err != nil {
 			b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
@@ -723,156 +667,95 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 		}
 		spanOwned = true
 		return &InvokeOutcome{Stream: &observingStreamReader{
-			inner:        reader,
-			broker:       b,
-			ctx:          ctx,
-			span:         span,
-			principal:    p,
-			providerName: providerName,
-			operation:    opMeta.ID,
-			transport:    metricutil.AttrValue(transport),
+			inner:       reader,
+			broker:      b,
+			ctx:         ctx,
+			span:        span,
+			principal:   p,
+			observation: observation,
 		}}, nil
 	}
 
+	observation.dispatched = true
 	result, err := prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
 		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
-	b.observePlugin5xxResult(ctx, span, p, providerName, opMeta.ID, transport, result)
 	unaryResult = result
 	return &InvokeOutcome{Unary: result}, nil
 }
 
-// observingStreamReader wraps a StreamReader and inspects the first metadata
-// frame for 5xx status, calling observePlugin5xxResult for telemetry parity
-// with the unary Invoke path.
+// observingStreamReader owns completion observation for a dispatched stream.
+// The last metadata frame is authoritative, including trailing error metadata.
 type observingStreamReader struct {
-	inner        core.StreamReader
-	broker       *Broker
-	ctx          context.Context
-	span         trace.Span
-	principal    *principal.Principal
-	providerName string
-	operation    string
-	transport    string
-	observed     bool
-	ended        bool
+	inner       core.StreamReader
+	broker      *Broker
+	ctx         context.Context
+	span        trace.Span
+	principal   *principal.Principal
+	observation *operationObservation
+	result      *core.OperationResult
+	ended       bool
 }
 
 func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 	frame, err := r.inner.Recv()
 	if err != nil {
-		r.endSpan()
+		if errors.Is(err, io.EOF) {
+			r.finish(nil)
+		} else {
+			r.finish(err)
+		}
 		return nil, err
 	}
-	if !r.observed && frame != nil && frame.Metadata != nil {
-		r.observed = true
-		result := &core.OperationResult{
+	if frame != nil && frame.Metadata != nil {
+		r.result = &core.OperationResult{
 			Status:  frame.Metadata.Status,
 			Headers: frame.Metadata.Headers,
-			Body:    frame.Data,
 		}
-		r.broker.observePlugin5xxResult(r.ctx, r.span, r.principal, r.providerName, r.operation, r.transport, result)
+	} else if frame != nil && r.result != nil && r.result.Status >= http.StatusInternalServerError && len(r.result.Body) < resultBodyLogLimit {
+		remaining := resultBodyLogLimit - len(r.result.Body)
+		if len(frame.Data) < remaining {
+			remaining = len(frame.Data)
+		}
+		r.result.Body = append(r.result.Body, frame.Data[:remaining]...)
 	}
 	if frame == nil {
-		r.endSpan()
+		r.finish(nil)
 	}
 	return frame, nil
 }
 
-// endSpan ends the tracing span exactly once. It is called on EOF, error, or
-// a nil frame so the span stays open long enough for observePlugin5xxResult
-// to set status and attributes on a streaming 5xx.
-func (r *observingStreamReader) endSpan() {
+func (r *observingStreamReader) finish(err error) {
 	if !r.ended {
 		r.ended = true
+		r.broker.observeOperation(r.ctx, r.span, r.principal, r.observation, r.result, err)
 		r.span.End()
 	}
 }
 
-func (b *Broker) observePlugin5xxResult(ctx context.Context, span trace.Span, p *principal.Principal, providerName, operation, transport string, result *core.OperationResult) {
-	if result == nil || transport != catalog.TransportApp || !validHTTPStatus(result.Status) || result.Status < http.StatusInternalServerError {
-		return
-	}
-
-	status, statusClass := resultStatusAttributes(result.Status)
-	span.SetStatus(codes.Error, "provider operation returned 5xx result")
-	span.SetAttributes(
-		metricutil.AttrResultStatus.String(status),
-		metricutil.AttrResultStatusClass.String(statusClass),
-	)
-
-	attrs := []any{
-		"provider", strings.TrimSpace(providerName),
-		"operation", strings.TrimSpace(operation),
-		"transport", strings.TrimSpace(transport),
-		"result_status", result.Status,
-		"result_status_class", statusClass,
-		"result_body", truncateResultBodyForLog(result.Body),
-	}
-	if surface := InvocationSurfaceFromContext(ctx); surface != "" {
-		attrs = append(attrs, "surface", string(surface))
-	}
-	if binding := HTTPBindingFromContext(ctx); binding != "" {
-		attrs = append(attrs, "http_binding", binding)
-	}
-	if subjectID := resultSubjectID(p); subjectID != "" {
-		attrs = append(attrs, "subject_id", subjectID)
-	}
-
-	b.log().WarnContext(ctx, "provider operation returned 5xx result", attrs...)
-}
-
-func truncateResultBodyForLog(body []byte) string {
-	if len(body) <= resultBodyLogLimit {
-		return string(body)
-	}
-	return string(body[:resultBodyLogLimit])
-}
-
-func resultSubjectID(p *principal.Principal) string {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.SubjectID)
-}
-
 func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (result *core.OperationResult, err error) {
-	startedAt := time.Now()
-	metricProvider := metricutil.UnknownAttrValue
-	metricOperation := metricutil.AttrValue("graphql")
-	metricTransport := metricutil.AttrValue("graphql")
-	metricConnectionMode := metricutil.UnknownAttrValue
+	ctx, _ = ensureMeta(ctx)
+	observation := newOperationObservation(providerName, graphQLOperationID)
+	observation.operation = metricutil.AttrValue("graphql")
+	observation.transport = metricutil.AttrValue("graphql")
 
 	ctx, span := b.tracer().Start(ctx, "broker.invoke_graphql",
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
-	defer span.End()
 	defer func() {
-		resultStatus := operationResultStatus(result, err)
-		recordOperationMetrics(
-			ctx,
-			startedAt,
-			metricProvider,
-			metricOperation,
-			metricTransport,
-			metricConnectionMode,
-			resultStatus,
-			operationResultFailed(resultStatus, err),
-		)
+		b.observeOperation(ctx, span, p, observation, result, err)
+		span.End()
 	}()
 
 	span.SetAttributes(
 		attrProvider.String(providerName),
 		attrOperation.String(graphQLOperationID),
-		attrTransport.String(metricTransport),
+		attrTransport.String(observation.transport),
 	)
 
 	fail := func(err error) (*core.OperationResult, error) {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	setSubjectAttribute := func(p *principal.Principal) {
@@ -902,7 +785,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 		return fail(fmt.Errorf("%w: %s.%s", ErrOperationNotFound, providerName, graphQLOperationID))
 	}
 
-	metricProvider = providerName
+	observation.provider = providerName
 
 	if p == nil {
 		return fail(ErrNotAuthenticated)
@@ -927,8 +810,8 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
-	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
-	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
+	observation.connectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
+	span.SetAttributes(attrConnectionMode.String(observation.connectionMode))
 
 	ctx, err = ApplyInvokeHeaderOverrides(ctx, prov)
 	if err != nil {
@@ -939,6 +822,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)
 		return fail(err)
 	}
+	observation.dispatched = true
 	result, err = graphQLProv.InvokeGraphQL(ctx, request, accessToken)
 	if err != nil {
 		b.persistReconnectRequired(ctx, p, providerName, conn, instance, err)

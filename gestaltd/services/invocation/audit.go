@@ -63,6 +63,9 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 	if p != nil {
 		entry.SubjectID = p.SubjectID
 	}
+	if caller := CallerProviderFromContext(ctx); caller.Kind == ProviderKindApp {
+		entry.CallerApp = caller.Name
+	}
 	if delegation := RunAsAuditFromContext(ctx); delegation.RunAsSubject != nil {
 		if agentSubject := delegation.AgentSubject; agentSubject != nil {
 			entry.AgentSubjectID = agentSubject.SubjectID
@@ -111,6 +114,15 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 		slog.String("operation", entry.Operation),
 		slog.Int("depth", entry.Depth),
 		slog.Bool("allowed", entry.Allowed),
+	}
+	if entry.Outcome != "" {
+		attrs = append(attrs, slog.String("outcome", entry.Outcome))
+	}
+	if entry.FailureCause != "" {
+		attrs = append(attrs, slog.String("failure_cause", entry.FailureCause))
+	}
+	if entry.FailureReason != "" {
+		attrs = append(attrs, slog.String("failure_reason", entry.FailureReason))
 	}
 
 	if entry.SubjectID != "" {

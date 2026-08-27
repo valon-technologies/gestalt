@@ -89,7 +89,7 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 
 	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false
-		entry.Error = err.Error()
+		setAuditOperationOutcome(&entry, nil, err, false)
 		g.logAudit(ctx, entry)
 		return nil, err
 	}
@@ -112,12 +112,7 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	ctx = ContextWithMeta(ctx, next)
 
 	result, err := g.inner.Invoke(ctx, p, providerName, instance, operation, params)
-	if err != nil {
-		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
-			entry.Allowed = false
-		}
-	}
+	setAuditOperationOutcome(&entry, result, err, true)
 	return result, err
 }
 
@@ -141,7 +136,7 @@ func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Princip
 
 	if err := g.check(meta, providerName, instance, "graphql"); err != nil {
 		entry.Allowed = false
-		entry.Error = err.Error()
+		setAuditOperationOutcome(&entry, nil, err, false)
 		g.logAudit(ctx, entry)
 		return nil, err
 	}
@@ -164,12 +159,7 @@ func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Princip
 	ctx = ContextWithMeta(ctx, next)
 
 	result, err := graphqlInvoker.InvokeGraphQL(ctx, p, providerName, instance, request)
-	if err != nil {
-		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
-			entry.Allowed = false
-		}
-	}
+	setAuditOperationOutcome(&entry, result, err, true)
 	return result, err
 }
 
@@ -189,7 +179,7 @@ func (g *GuardedInvoker) InvokeStream(ctx context.Context, p *principal.Principa
 	ctx = withAuditEntry(ctx, &entry)
 	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false
-		entry.Error = err.Error()
+		setAuditOperationOutcome(&entry, nil, err, false)
 		g.logAudit(ctx, entry)
 		return nil, err
 	}
@@ -210,10 +200,7 @@ func (g *GuardedInvoker) InvokeStream(ctx context.Context, p *principal.Principa
 	ctx = ContextWithMeta(ctx, next)
 	reader, err := streamInvoker.InvokeStream(ctx, p, providerName, instance, operation, params)
 	if err != nil {
-		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
-			entry.Allowed = false
-		}
+		setAuditOperationOutcome(&entry, nil, err, true)
 	}
 	return reader, err
 }
@@ -234,7 +221,7 @@ func (g *GuardedInvoker) InvokeMaybeStream(ctx context.Context, p *principal.Pri
 	ctx = withAuditEntry(ctx, &entry)
 	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false
-		entry.Error = err.Error()
+		setAuditOperationOutcome(&entry, nil, err, false)
 		g.logAudit(ctx, entry)
 		return nil, err
 	}
@@ -255,10 +242,9 @@ func (g *GuardedInvoker) InvokeMaybeStream(ctx context.Context, p *principal.Pri
 	ctx = ContextWithMeta(ctx, next)
 	outcome, err := maybeInvoker.InvokeMaybeStream(ctx, p, providerName, instance, operation, params)
 	if err != nil {
-		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
-			entry.Allowed = false
-		}
+		setAuditOperationOutcome(&entry, nil, err, true)
+	} else if outcome != nil && outcome.Unary != nil {
+		setAuditOperationOutcome(&entry, outcome.Unary, nil, true)
 	}
 	return outcome, err
 }
@@ -300,7 +286,7 @@ func (g *GuardedInvoker) check(meta *InvocationMeta, providerName, instance, ope
 
 	if g.allowed != nil {
 		if _, ok := g.allowed[providerName]; !ok {
-			return fmt.Errorf("provider %q is not available in this scope", providerName)
+			return &providerScopeError{provider: providerName}
 		}
 	}
 
@@ -335,5 +321,22 @@ func (g *GuardedInvoker) ResolveSubjectToken(ctx context.Context, prov core.Prov
 func (g *GuardedInvoker) logAudit(ctx context.Context, entry core.AuditEntry) {
 	if g.audit != nil {
 		g.audit.Log(ctx, entry)
+	}
+}
+
+func setAuditOperationOutcome(entry *core.AuditEntry, result *core.OperationResult, err error, dispatched bool) {
+	if entry == nil {
+		return
+	}
+	outcome := classifyOperationOutcome(result, err, dispatched)
+	entry.Outcome = outcome.Status
+	entry.FailureCause = outcome.Cause
+	entry.FailureReason = outcome.Reason
+	if err == nil {
+		return
+	}
+	entry.Error = err.Error()
+	if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
+		entry.Allowed = false
 	}
 }

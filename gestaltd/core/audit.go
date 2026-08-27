@@ -33,6 +33,9 @@ type AuditEntry struct {
 	Operation               string
 	Depth                   int
 	Allowed                 bool
+	Outcome                 string
+	FailureCause            string
+	FailureReason           string
 	Error                   string
 	ClientIP                string
 	RemoteAddr              string

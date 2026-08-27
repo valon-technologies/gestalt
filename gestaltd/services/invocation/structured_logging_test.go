@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"go.opentelemetry.io/otel/attribute"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -98,17 +99,16 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) {
 	}
 }
 
-func TestBrokerPlugin5xxResultObservability(t *testing.T) {
+func TestBroker5xxResultObservability(t *testing.T) {
 	t.Parallel()
 
 	longBody := `{"error":"` + strings.Repeat("x", 5000) + `"}`
 	tests := []struct {
-		name          string
-		operation     string
-		transport     string
-		ctx           context.Context
-		wantWarning   bool
-		wantSpanError bool
+		name      string
+		operation string
+		transport string
+		ctx       context.Context
+		wantBody  bool
 	}{
 		{
 			name:      "plugin transport",
@@ -118,8 +118,7 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) {
 				invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTPBinding),
 				"slack_events",
 			),
-			wantWarning:   true,
-			wantSpanError: true,
+			wantBody: true,
 		},
 		{
 			name:      "rest transport",
@@ -175,25 +174,30 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) {
 				t.Fatalf("status = %d, want %d", result.Status, http.StatusInternalServerError)
 			}
 
-			record, found := findStructuredLogRecord(t, buf.String(), "provider operation returned 5xx result")
-			if found != tt.wantWarning {
-				t.Fatalf("warning found = %v, want %v; output:\n%s", found, tt.wantWarning, buf.String())
+			record, found := findStructuredLogRecord(t, buf.String(), "gestaltd operation completed")
+			if !found {
+				t.Fatalf("completion log not found; output:\n%s", buf.String())
 			}
-			if tt.wantWarning {
-				assertStructuredLogField(t, record, "provider", "slack")
-				assertStructuredLogField(t, record, "operation", tt.operation)
-				assertStructuredLogField(t, record, "transport", catalog.TransportApp)
+			assertStructuredLogField(t, record, "provider", "slack")
+			assertStructuredLogField(t, record, "operation", tt.operation)
+			assertStructuredLogField(t, record, "transport", tt.transport)
+			assertStructuredLogField(t, record, "outcome", "failed")
+			assertStructuredLogField(t, record, "failure_cause", "unknown")
+			assertStructuredLogField(t, record, "failure_reason", "operation_result_error")
+			assertStructuredLogField(t, record, "result_status_class", "5xx")
+			if tt.transport == catalog.TransportApp {
 				assertStructuredLogField(t, record, "surface", string(invocation.InvocationSurfaceHTTPBinding))
 				assertStructuredLogField(t, record, "http_binding", "slack_events")
 				assertStructuredLogField(t, record, "subject_id", "service_account:workflow-config")
-				assertStructuredLogField(t, record, "result_status_class", "5xx")
-				if got := record["result_status"]; got != float64(http.StatusInternalServerError) {
-					t.Fatalf("result_status = %v, want %d", got, http.StatusInternalServerError)
-				}
-				body, ok := record["result_body"].(string)
-				if !ok {
-					t.Fatalf("result_body = %T, want string", record["result_body"])
-				}
+			}
+			if got := record["result_status"]; got != float64(http.StatusInternalServerError) {
+				t.Fatalf("result_status = %v, want %d", got, http.StatusInternalServerError)
+			}
+			body, hasBody := record["result_body"].(string)
+			if hasBody != tt.wantBody {
+				t.Fatalf("result_body present = %v, want %v", hasBody, tt.wantBody)
+			}
+			if tt.wantBody {
 				if len(body) != 4096 {
 					t.Fatalf("result_body length = %d, want 4096", len(body))
 				}
@@ -208,11 +212,8 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) {
 			}
 
 			span := findTestSpan(t, exporter.GetSpans(), "broker.invoke")
-			if tt.wantSpanError && span.Status.Code != otelcodes.Error {
+			if span.Status.Code != otelcodes.Error {
 				t.Fatalf("broker.invoke span status = %v, want %v", span.Status.Code, otelcodes.Error)
-			}
-			if !tt.wantSpanError && span.Status.Code == otelcodes.Error {
-				t.Fatalf("broker.invoke span status = %v, want non-error", span.Status.Code)
 			}
 			for _, event := range span.Events {
 				if event.Name == "exception" {
@@ -221,6 +222,44 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBrokerRejectedInvocationIsNotATraceFailure(t *testing.T) {
+	t.Parallel()
+
+	exporter, tracerProvider := newTestTracerProvider(t)
+	provider := &coretesting.StubIntegration{
+		N:        "slack",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "slack",
+			Operations: []catalog.CatalogOperation{{
+				ID:        "chat.postMessage",
+				Method:    http.MethodPost,
+				Transport: catalog.TransportREST,
+			}},
+		},
+	}
+	svc := testutil.NewStubServices(t)
+	broker := invocation.NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+		invocation.WithTracerProvider(tracerProvider),
+	)
+
+	_, err := broker.Invoke(context.Background(), nil, "slack", "", "chat.postMessage", nil)
+	if err == nil {
+		t.Fatal("Invoke succeeded, want authentication rejection")
+	}
+
+	span := findTestSpan(t, exporter.GetSpans(), "broker.invoke")
+	if span.Status.Code == otelcodes.Error {
+		t.Fatalf("broker.invoke span status = %v, want non-error rejection", span.Status.Code)
+	}
+	assertTestSpanAttribute(t, span, "gestalt.outcome", "rejected")
+	assertTestSpanAttribute(t, span, "gestalt.failure_cause", "caller")
+	assertTestSpanAttribute(t, span, "gestalt.failure_reason", "not_authenticated")
 }
 
 func newTestLogger(buf *bytes.Buffer) *slog.Logger {
@@ -270,4 +309,17 @@ func findTestSpan(t *testing.T, spans tracetest.SpanStubs, name string) *tracete
 	}
 	t.Fatalf("span %q not found; got %d spans", name, len(spans))
 	return nil
+}
+
+func assertTestSpanAttribute(t *testing.T, span *tracetest.SpanStub, key, want string) {
+	t.Helper()
+	for _, attr := range span.Attributes {
+		if attr.Key == attribute.Key(key) {
+			if got := attr.Value.AsString(); got != want {
+				t.Fatalf("span attribute %q = %q, want %q", key, got, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("span attribute %q not found", key)
 }

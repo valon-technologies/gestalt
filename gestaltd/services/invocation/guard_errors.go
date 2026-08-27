@@ -27,3 +27,11 @@ type RateLimitError struct {
 func (e *RateLimitError) Error() string {
 	return fmt.Sprintf("rate limit exceeded for provider %q", e.Provider)
 }
+
+type providerScopeError struct {
+	provider string
+}
+
+func (e *providerScopeError) Error() string {
+	return fmt.Sprintf("provider %q is not available in this scope", e.provider)
+}

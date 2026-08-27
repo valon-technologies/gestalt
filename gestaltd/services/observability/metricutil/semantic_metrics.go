@@ -67,15 +67,25 @@ func RecordAuthMetrics(ctx context.Context, startedAt time.Time, provider string
 }
 
 func RecordConnectionAuthMetrics(ctx context.Context, startedAt time.Time, provider string, authType string, action string, connectionMode string, failed bool) {
+	outcome := SuccessOutcome()
+	if failed {
+		outcome = FailedOutcome(CauseUnknown, ReasonUnknown)
+	}
+	RecordConnectionAuthOutcome(ctx, startedAt, provider, authType, action, connectionMode, outcome)
+}
+
+func RecordConnectionAuthOutcome(ctx context.Context, startedAt time.Time, provider string, authType string, action string, connectionMode string, outcome TerminalOutcome) {
 	metrics := connectionAuthMetricsCache.Load(ctx, meterName, func(meter metric.Meter) counterMetrics {
 		return newCounterMetrics(meter, "gestaltd.connection.auth", "gestaltd connection auth actions")
 	})
-	recordCounterMetrics(ctx, metrics, startedAt, failed,
+	attrs := []attribute.KeyValue{
 		attrProvider.String(AttrValue(provider)),
 		attrType.String(AttrValue(authType)),
 		attrAction.String(AttrValue(action)),
 		attrConnectionMode.String(AttrValue(connectionMode)),
-	)
+	}
+	attrs = append(attrs, outcome.Attributes()...)
+	recordCounterMetrics(ctx, metrics, startedAt, outcome.Unsuccessful(), attrs...)
 }
 
 func RecordDiscoveryMetrics(ctx context.Context, startedAt time.Time, provider string, action string, connectionMode string, failed bool) {

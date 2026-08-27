@@ -33,7 +33,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	metricProviderName := metricutil.UnknownAttrValue
 	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
-		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "oauth", "start", connectionMode, auditErr != nil)
+		metricutil.RecordConnectionAuthOutcome(r.Context(), startedAt, metricProviderName, "oauth", "start", connectionMode, classifyConnectionOutcome(auditErr))
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.oauth.start", auditAllowed, auditErr, auditTarget)
 	}()
 	var req startOAuthRequest
@@ -145,7 +145,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	providerName := ""
 	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
-		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, providerName, "oauth", "complete", connectionMode, auditErr != nil)
+		metricutil.RecordConnectionAuthOutcome(r.Context(), startedAt, providerName, "oauth", "complete", connectionMode, classifyConnectionOutcome(auditErr))
 		if auditSubjectID != "" {
 			s.auditHTTPEventWithSubjectIDAndTarget(r.Context(), auditSubjectID, stateAuthSource, providerName, "connection.oauth.complete", auditAllowed, auditErr, auditTarget)
 			return

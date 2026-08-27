@@ -267,6 +267,9 @@ func TestGuardedInvoker_AuditLogged(t *testing.T) {
 	if !entry.Allowed {
 		t.Error("expected Allowed=true")
 	}
+	if entry.Outcome != "success" || entry.FailureCause != "none" || entry.FailureReason != "none" {
+		t.Errorf("unexpected success outcome: %#v", entry)
+	}
 	if entry.RequestID == "" {
 		t.Error("expected non-empty RequestID")
 	}
@@ -281,6 +284,9 @@ func TestGuardedInvoker_AuditLogged(t *testing.T) {
 	}
 	if denied.Error == "" {
 		t.Error("expected denied call to include an error")
+	}
+	if denied.Outcome != "rejected" || denied.FailureCause != "caller" || denied.FailureReason != "provider_scope" {
+		t.Errorf("unexpected denied outcome: %#v", denied)
 	}
 }
 

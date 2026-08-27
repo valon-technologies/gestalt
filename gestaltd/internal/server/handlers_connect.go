@@ -39,7 +39,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	metricProviderName := metricutil.UnknownAttrValue
 	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
-		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "manual", "complete", connectionMode, auditErr != nil)
+		metricutil.RecordConnectionAuthOutcome(r.Context(), startedAt, metricProviderName, "manual", "complete", connectionMode, classifyConnectionOutcome(auditErr))
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.manual.connect", auditAllowed, auditErr, auditTarget)
 	}()
 	var req connectManualRequest

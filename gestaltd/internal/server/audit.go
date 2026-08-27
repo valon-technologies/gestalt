@@ -96,6 +96,12 @@ func (s *Server) auditEventWithSubjectIDAndTarget(ctx context.Context, subjectID
 
 func populateAuditEntry(entry *core.AuditEntry, allowed bool, err error, target auditTarget) {
 	entry.Allowed = allowed
+	if target.Kind == auditTargetKindConnection {
+		outcome := classifyConnectionOutcome(err)
+		entry.Outcome = outcome.Status
+		entry.FailureCause = outcome.Cause
+		entry.FailureReason = outcome.Reason
+	}
 	if err != nil {
 		entry.Error = err.Error()
 	}

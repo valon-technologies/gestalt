@@ -909,6 +909,9 @@ func TestBrokerInvokeMaybeStreamDispatchesStreaming(t *testing.T) {
 	if string(data.Data) != `{"event":"start"}`+"\n" {
 		t.Fatalf("data = %q", string(data.Data))
 	}
+	if _, err := outcome.Stream.Recv(); err != io.EOF {
+		t.Fatalf("Recv after end = %v, want io.EOF", err)
+	}
 }
 
 func TestBrokerInvokeMaybeStreamDispatchesUnary(t *testing.T) {
