@@ -144,7 +144,7 @@ func (c *AppRegistryGCSConfig) UnmarshalYAML(value *yaml.Node) error {
 	}
 	c.Bucket = raw.Bucket
 	if c.Bucket != "" {
-		normalized, err := normalizeGCSAppRegistryBucket(c.Bucket)
+		normalized, err := normalizeGCSBucket(c.Bucket)
 		if err != nil {
 			return fmt.Errorf("gcs.bucket: %w", err)
 		}
@@ -153,7 +153,7 @@ func (c *AppRegistryGCSConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func normalizeGCSAppRegistryBucket(raw string) (string, error) {
+func normalizeGCSBucket(raw string) (string, error) {
 	bucket := strings.TrimSpace(raw)
 	if bucket == "" {
 		return "", fmt.Errorf("bucket is required")
@@ -179,7 +179,7 @@ func (c AppRegistryConfig) StorageURL() (string, error) {
 	if c.GCS == nil {
 		return "", fmt.Errorf("gcs config is required")
 	}
-	bucket, err := normalizeGCSAppRegistryBucket(c.GCS.Bucket)
+	bucket, err := normalizeGCSBucket(c.GCS.Bucket)
 	if err != nil {
 		return "", fmt.Errorf("gcs.bucket: %w", err)
 	}

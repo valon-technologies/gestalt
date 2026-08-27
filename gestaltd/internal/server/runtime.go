@@ -106,6 +106,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		Agent:                 result.AgentControl,
 		AgentManager:          result.AgentManager,
 		Workflow:              result.WorkflowControl,
+		FeatureFlags:          result.FeatureFlags,
 		Runtimes:              result.Runtimes,
 		Invoker:               httpInvoker,
 		AppInvocation:         result.AppInvocation,

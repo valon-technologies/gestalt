@@ -13,6 +13,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -132,6 +133,7 @@ func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
 	}
 	result := &bootstrap.Result{
 		ExtraWorkflows: []coreworkflow.Provider{provider},
+		FeatureFlags:   featureflags.AllEnabled(),
 	}
 
 	workflowProvidersReady := make(chan struct{})

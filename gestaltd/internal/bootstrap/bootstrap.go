@@ -22,6 +22,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -253,6 +254,7 @@ type Result struct {
 	WorkflowControl         WorkflowControl
 	AgentControl            AgentControl
 	AgentManager            agentmanager.Service
+	FeatureFlags            featureflags.Snapshot
 	StartupProvidersReady   <-chan struct{}
 	AppProvidersInitialized <-chan struct{}
 	ProvidersReady          <-chan struct{}
@@ -335,11 +337,13 @@ func (r *Result) StartAppProviders(ctx context.Context) error {
 			close(r.appProvidersInitialized)
 		}
 	})
-	r.startupWorkflowConfigReconcileOnce.Do(func() {
-		if r.startupWorkflowConfigReconcile != nil {
-			r.startupWorkflowConfigReconcileErr = r.startupWorkflowConfigReconcile(ctx)
-		}
-	})
+	if r.FeatureFlags.Enabled(featureflags.Workflow) {
+		r.startupWorkflowConfigReconcileOnce.Do(func() {
+			if r.startupWorkflowConfigReconcile != nil {
+				r.startupWorkflowConfigReconcileErr = r.startupWorkflowConfigReconcile(ctx)
+			}
+		})
+	}
 	return r.startupWorkflowConfigReconcileErr
 }
 
@@ -378,7 +382,7 @@ func (r *Result) Start(ctx context.Context) error {
 }
 
 func (r *Result) StartWorkflowProviders(ctx context.Context) error {
-	if r == nil {
+	if r == nil || !r.FeatureFlags.Enabled(featureflags.Workflow) {
 		return nil
 	}
 
@@ -405,7 +409,7 @@ func (r *Result) StartWorkflowProviders(ctx context.Context) error {
 }
 
 func (r *Result) StartWorkflowConfigReconciliation(ctx context.Context) {
-	if r == nil {
+	if r == nil || !r.FeatureFlags.Enabled(featureflags.Workflow) {
 		return
 	}
 
@@ -1240,10 +1244,11 @@ func (p *preparedCore) Close(ctx context.Context) error {
 type BootstrapOptions struct {
 	DeferAppProviderStartup bool
 	RegistryResolver        RegistryInstalledResolver
+	FeatureFlags            featureflags.Snapshot
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
-	return BootstrapWithOptions(ctx, cfg, factories, BootstrapOptions{})
+	return BootstrapWithOptions(ctx, cfg, factories, BootstrapOptions{FeatureFlags: featureflags.AllEnabled()})
 }
 
 func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, opts BootstrapOptions) (*Result, error) {
@@ -1258,10 +1263,16 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		}
 	}()
 
+	flags := opts.FeatureFlags
 	pluginInvoker := prepared.AppInvocation
 	workflowManager := prepared.WorkflowManager
 	agentManager := prepared.AgentManager
-	workflowTools := newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
+	agentControl := newFeatureGatedAgentControl(flags.Enabled(featureflags.Agent), prepared.Deps.AgentRuntime)
+	workflowControl := newFeatureGatedWorkflowControl(flags.Enabled(featureflags.Workflow), prepared.Deps.WorkflowRuntime)
+	var workflowTools agentmanager.WorkflowSystemTools
+	if flags.Enabled(featureflags.Workflow) {
+		workflowTools = newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
+	}
 	publicHostServices := prepared.PublicHostServices
 
 	providerBuilds, err := prepareProviderBuilds(cfg, factories, prepared.Deps)
@@ -1331,10 +1342,10 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 			_ = auditClose(context.Background())
 		}
 	}()
-	workflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
+	workflowManager.SetTarget(workflowmanager.NewFeatureGate(flags.Enabled(featureflags.Workflow), workflowmanager.New(workflowmanager.Config{
 		Providers:         providers,
-		Workflow:          prepared.Deps.WorkflowRuntime,
-		Agent:             prepared.Deps.AgentRuntime,
+		Workflow:          workflowControl,
+		Agent:             agentControl,
 		AgentManager:      agentManager,
 		Invoker:           sharedInvoker,
 		Audit:             audit,
@@ -1342,10 +1353,10 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		CatalogConnection: connMaps.APIConnection,
 		MCPConnection:     connMaps.MCPConnection,
 		AppNames:          slices.Collect(maps.Keys(cfg.Apps)),
-	}))
-	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
+	})))
+	agentManager.SetTarget(agentmanager.NewFeatureGate(flags.Enabled(featureflags.Agent), agentmanager.New(agentmanager.Config{
 		Providers:         providers,
-		Agent:             prepared.Deps.AgentRuntime,
+		Agent:             agentControl,
 		WorkflowTools:     workflowTools,
 		TurnScopes:        prepared.Deps.AgentTurnScopes,
 		ToolIDs:           prepared.Deps.AgentToolIDs,
@@ -1355,12 +1366,12 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		MCPConnection:     connMaps.MCPConnection,
 		AgentConnections:  agentConnectionBindings(cfg),
 		SessionStart:      agentSessionStartConfigs(cfg),
-	}))
+	})))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	appHostServiceCleanup := registerGlobalAppInvocationPublicHostService(prepared.Deps)
 	// Build workflow/agent providers before app providers: they establish their
 	// backend connection during build, which must not race concurrent app startup.
-	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
+	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps, flags)
 	if err != nil {
 		_ = closeWorkflows(extraWorkflows...)
 		_ = closeAgents(extraAgents...)
@@ -1464,30 +1475,32 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
 		return reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Deps.AppWorkflowDeclarations, includeProvider)
 	}
-	defaultWorkflowProvider, _, defaultProviderErr := cfg.EffectiveWorkflowProvider("")
 	var deferredWorkflowConfigReconcileTasks []workflowConfigReconcileTask
-	switch {
-	case defaultProviderErr == nil && strings.TrimSpace(defaultWorkflowProvider) != "":
-		deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, deferredAppWorkflowReconcileTask(deferred, prepared.Deps.WorkflowRuntime, defaultWorkflowProvider, reconcileWorkflowConfig))
-	case defaultProviderErr != nil:
-		slog.Warn("skipping deferred app workflow declaration reconcile: default workflow provider unavailable", "error", defaultProviderErr)
-	default:
-		slog.Warn("skipping deferred app workflow declaration reconcile: no default workflow provider configured")
-	}
-	runtimePlacedWorkflowProviders := runtimePlacedWorkflowProviderNames(cfg)
 	var startupWorkflowConfigReconcile func(context.Context) error
-	if len(runtimePlacedWorkflowProviders) > 0 {
-		localWorkflowProviders := func(providerName string) bool {
-			_, runtimePlaced := runtimePlacedWorkflowProviders[strings.TrimSpace(providerName)]
-			return !runtimePlaced
+	if flags.Enabled(featureflags.Workflow) {
+		defaultWorkflowProvider, _, defaultProviderErr := cfg.EffectiveWorkflowProvider("")
+		switch {
+		case defaultProviderErr == nil && strings.TrimSpace(defaultWorkflowProvider) != "":
+			deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, deferredAppWorkflowReconcileTask(deferred, prepared.Deps.WorkflowRuntime, defaultWorkflowProvider, reconcileWorkflowConfig))
+		case defaultProviderErr != nil:
+			slog.Warn("skipping deferred app workflow declaration reconcile: default workflow provider unavailable", "error", defaultProviderErr)
+		default:
+			slog.Warn("skipping deferred app workflow declaration reconcile: no default workflow provider configured")
 		}
-		startupWorkflowConfigReconcile = func(ctx context.Context) error {
-			return reconcileWorkflowConfig(ctx, localWorkflowProviders)
-		}
-		deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, runtimeWorkflowConfigReconcileTasks(prepared.Deps.WorkflowRuntime, runtimePlacedWorkflowProviders, reconcileWorkflowConfig)...)
-	} else {
-		startupWorkflowConfigReconcile = func(ctx context.Context) error {
-			return reconcileWorkflowConfig(ctx, nil)
+		runtimePlacedWorkflowProviders := runtimePlacedWorkflowProviderNames(cfg)
+		if len(runtimePlacedWorkflowProviders) > 0 {
+			localWorkflowProviders := func(providerName string) bool {
+				_, runtimePlaced := runtimePlacedWorkflowProviders[strings.TrimSpace(providerName)]
+				return !runtimePlaced
+			}
+			startupWorkflowConfigReconcile = func(ctx context.Context) error {
+				return reconcileWorkflowConfig(ctx, localWorkflowProviders)
+			}
+			deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, runtimeWorkflowConfigReconcileTasks(prepared.Deps.WorkflowRuntime, runtimePlacedWorkflowProviders, reconcileWorkflowConfig)...)
+		} else {
+			startupWorkflowConfigReconcile = func(ctx context.Context) error {
+				return reconcileWorkflowConfig(ctx, nil)
+			}
 		}
 	}
 	if !opts.DeferAppProviderStartup {
@@ -1538,9 +1551,10 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		ExtraWorkflows:                 extraWorkflows,
 		ExtraAgents:                    extraAgents,
 		Providers:                      providers,
-		WorkflowControl:                prepared.Deps.WorkflowRuntime,
-		AgentControl:                   prepared.Deps.AgentRuntime,
+		WorkflowControl:                workflowControl,
+		AgentControl:                   agentControl,
 		AgentManager:                   prepared.Deps.AgentManager,
+		FeatureFlags:                   flags,
 		StartupProvidersReady:          startup.ready(),
 		AppProvidersInitialized:        appProvidersInitialized,
 		ProvidersReady:                 deferred.ready(),
@@ -1639,15 +1653,29 @@ type configuredProviderBuilds[T any] struct {
 	err            error
 }
 
-func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []coreagent.Provider, error) {
+func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps, snapshots ...featureflags.Snapshot) ([]coreworkflow.Provider, []coreagent.Provider, error) {
+	flags := featureflags.AllEnabled()
+	if len(snapshots) > 0 {
+		flags = snapshots[0]
+	}
 	workflowCh := make(chan configuredProviderBuilds[coreworkflow.Provider], 1)
 	agentCh := make(chan configuredProviderBuilds[coreagent.Provider], 1)
 	go func() {
-		providers, publishedNames, err := buildWorkflows(ctx, cfg, factories, deps)
+		var providers []coreworkflow.Provider
+		var publishedNames []string
+		var err error
+		if flags.Enabled(featureflags.Workflow) {
+			providers, publishedNames, err = buildWorkflows(ctx, cfg, factories, deps)
+		}
 		workflowCh <- configuredProviderBuilds[coreworkflow.Provider]{providers: providers, publishedNames: publishedNames, err: err}
 	}()
 	go func() {
-		providers, publishedNames, err := buildAgents(ctx, cfg, factories, deps)
+		var providers []coreagent.Provider
+		var publishedNames []string
+		var err error
+		if flags.Enabled(featureflags.Agent) {
+			providers, publishedNames, err = buildAgents(ctx, cfg, factories, deps)
+		}
 		agentCh <- configuredProviderBuilds[coreagent.Provider]{providers: providers, publishedNames: publishedNames, err: err}
 	}()
 

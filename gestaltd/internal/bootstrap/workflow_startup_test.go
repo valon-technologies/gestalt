@@ -15,6 +15,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
@@ -205,6 +206,7 @@ func TestResultStartWorkflowProvidersIsSeparateFromAuthorizerStart(t *testing.T)
 	provider := &startableStartupTestWorkflowProvider{}
 	result := &Result{
 		ExtraWorkflows: []coreworkflow.Provider{provider},
+		FeatureFlags:   featureflags.AllEnabled(),
 	}
 
 	if err := result.Start(context.Background()); err != nil {
@@ -218,6 +220,19 @@ func TestResultStartWorkflowProvidersIsSeparateFromAuthorizerStart(t *testing.T)
 	}
 	if provider.started != 1 {
 		t.Fatalf("workflow provider started = %d, want 1", provider.started)
+	}
+}
+
+func TestResultSkipsWorkflowStartupWhenFeatureDisabled(t *testing.T) {
+	t.Parallel()
+
+	provider := &startableStartupTestWorkflowProvider{}
+	result := &Result{ExtraWorkflows: []coreworkflow.Provider{provider}}
+	if err := result.StartWorkflowProviders(context.Background()); err != nil {
+		t.Fatalf("StartWorkflowProviders: %v", err)
+	}
+	if provider.started != 0 {
+		t.Fatalf("workflow provider started = %d, want 0", provider.started)
 	}
 }
 
@@ -241,7 +256,7 @@ func TestWorkflowCleanupWrappersForwardStart(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := &Result{ExtraWorkflows: []coreworkflow.Provider{tc.provider}}
+			result := &Result{ExtraWorkflows: []coreworkflow.Provider{tc.provider}, FeatureFlags: featureflags.AllEnabled()}
 			if err := result.StartWorkflowProviders(context.Background()); err != nil {
 				t.Fatalf("StartWorkflowProviders: %v", err)
 			}

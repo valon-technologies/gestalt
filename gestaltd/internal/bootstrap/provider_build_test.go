@@ -20,6 +20,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -287,6 +288,46 @@ func TestBuildWorkflowsAndAgentsClosesSuccessesOnCrossGroupFailure(t *testing.T)
 	}
 	if _, _, err := workflowRuntime.ResolveProvider(context.Background(), "temporal"); err == nil {
 		t.Fatal("successful workflow provider remained published after cross-group failure")
+	}
+}
+
+func TestBuildWorkflowsAndAgentsSkipsDisabledFeatures(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{Providers: config.ProvidersConfig{
+		Workflow: map[string]*config.ProviderEntry{"workflow": {Source: config.ProviderSource{Path: "stub"}}},
+		Agent:    map[string]*config.ProviderEntry{"agent": {Source: config.ProviderSource{Path: "stub"}}},
+	}}
+	workflowRuntime, err := newWorkflowRuntime(cfg)
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
+	if err != nil {
+		t.Fatalf("newAgentRuntime: %v", err)
+	}
+	deps := Deps{WorkflowRuntime: workflowRuntime, AgentRuntime: agentRuntime}
+	var workflowBuilds atomic.Int32
+	var agentBuilds atomic.Int32
+	factories := NewFactoryRegistry()
+	factories.Workflow = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreworkflow.Provider, error) {
+		workflowBuilds.Add(1)
+		return nil, nil
+	}
+	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreagent.Provider, error) {
+		agentBuilds.Add(1)
+		return nil, nil
+	}
+
+	workflows, agents, err := buildWorkflowsAndAgents(context.Background(), cfg, factories, deps, featureflags.Defaults())
+	if err != nil {
+		t.Fatalf("buildWorkflowsAndAgents: %v", err)
+	}
+	if len(workflows) != 0 || len(agents) != 0 {
+		t.Fatalf("providers = workflows:%d agents:%d, want none", len(workflows), len(agents))
+	}
+	if workflowBuilds.Load() != 0 || agentBuilds.Load() != 0 {
+		t.Fatalf("factory calls = workflows:%d agents:%d, want none", workflowBuilds.Load(), agentBuilds.Load())
 	}
 }
 

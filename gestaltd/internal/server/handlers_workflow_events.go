@@ -14,6 +14,7 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -134,6 +135,8 @@ func workflowRunEventInfoFromCore(event coreworkflow.Event) workflowRunEventInfo
 
 func (s *Server) writeWorkflowDeliverEventError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case featureflags.IsDisabled(err, featureflags.Workflow):
+		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired):

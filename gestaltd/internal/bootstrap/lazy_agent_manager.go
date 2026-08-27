@@ -14,14 +14,14 @@ import (
 
 type lazyAgentManager struct {
 	mu     sync.RWMutex
-	target *agentmanager.Manager
+	target agentmanager.Service
 }
 
 func newLazyAgentManager() *lazyAgentManager {
 	return &lazyAgentManager{}
 }
 
-func (l *lazyAgentManager) SetTarget(target *agentmanager.Manager) {
+func (l *lazyAgentManager) SetTarget(target agentmanager.Service) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.target = target
@@ -163,7 +163,7 @@ func (l *lazyAgentManager) AuthorizeWorkflowInvocation(ctx context.Context, req 
 	return target.AuthorizeWorkflowInvocation(ctx, req)
 }
 
-func (l *lazyAgentManager) current() (*agentmanager.Manager, error) {
+func (l *lazyAgentManager) current() (agentmanager.Service, error) {
 	l.mu.RLock()
 	target := l.target
 	l.mu.RUnlock()

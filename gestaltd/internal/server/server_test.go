@@ -40,6 +40,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -130,7 +131,8 @@ func newTestHTTPServer(t *testing.T, start func(http.Handler) *httptest.Server, 
 func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	t.Helper()
 	cfg := server.Config{
-		Services: testutil.NewStubServices(t),
+		Services:     testutil.NewStubServices(t),
+		FeatureFlags: featureflags.AllEnabled(),
 		Providers: func() *registry.ProviderMap[core.Provider] {
 			reg := registry.New()
 			return &reg.Providers
@@ -10729,6 +10731,31 @@ func TestAuthInfoAgentFeature(t *testing.T) {
 		t.Fatalf("decoding: %v", err)
 	}
 	requireAuthInfoAgentFeature(t, body, true)
+	requireAuthInfoWorkflowDefaultProvider(t, body, "")
+}
+
+func TestAuthInfoHidesDisabledAgentAndWorkflowFeatures(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.FeatureFlags = featureflags.Defaults()
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent: &stubAgentControl{defaultProviderName: "managed", provider: newMemoryAgentProvider()},
+		})
+		cfg.Workflow = &stubWorkflowControl{defaultProviderName: "local", provider: newMemoryWorkflowProvider()}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/info: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	requireAuthInfoAgentFeature(t, body, false)
 	requireAuthInfoWorkflowDefaultProvider(t, body, "")
 }
 

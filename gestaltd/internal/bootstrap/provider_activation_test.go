@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
+
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
@@ -20,6 +22,7 @@ func TestResultStartAppProvidersReconcilesAfterProvidersReady(t *testing.T) {
 	var reconciled atomic.Int32
 	wantErr := errors.New("reconcile failed")
 	result := &Result{
+		FeatureFlags:          featureflags.AllEnabled(),
 		StartupProvidersReady: startup.ready(),
 		startup:               startup,
 		startAppProviders: func() {
@@ -78,6 +81,7 @@ func TestResultStartupOperationsWaitForWorkflowReconcile(t *testing.T) {
 	reconcileStarted := make(chan struct{})
 	reconcileRelease := make(chan struct{})
 	result := &Result{
+		FeatureFlags:          featureflags.AllEnabled(),
 		StartupProvidersReady: startup.ready(),
 		startup:               startup,
 		startAppProviders:     func() {},
