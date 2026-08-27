@@ -13,18 +13,27 @@ import (
 )
 
 type lazyAgentManager struct {
-	mu     sync.RWMutex
-	target agentmanager.Service
+	mu             sync.RWMutex
+	target         *agentmanager.Manager
+	unavailableErr error
 }
 
 func newLazyAgentManager() *lazyAgentManager {
 	return &lazyAgentManager{}
 }
 
-func (l *lazyAgentManager) SetTarget(target agentmanager.Service) {
+func (l *lazyAgentManager) SetTarget(target *agentmanager.Manager) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.target = target
+	l.unavailableErr = nil
+}
+
+func (l *lazyAgentManager) SetUnavailable(err error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.target = nil
+	l.unavailableErr = err
 }
 
 func (l *lazyAgentManager) Available() bool {
@@ -163,10 +172,14 @@ func (l *lazyAgentManager) AuthorizeWorkflowInvocation(ctx context.Context, req 
 	return target.AuthorizeWorkflowInvocation(ctx, req)
 }
 
-func (l *lazyAgentManager) current() (agentmanager.Service, error) {
+func (l *lazyAgentManager) current() (*agentmanager.Manager, error) {
 	l.mu.RLock()
 	target := l.target
+	unavailableErr := l.unavailableErr
 	l.mu.RUnlock()
+	if unavailableErr != nil {
+		return nil, unavailableErr
+	}
 	if target == nil {
 		return nil, fmt.Errorf("agent manager is not available")
 	}

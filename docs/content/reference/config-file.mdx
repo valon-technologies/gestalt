@@ -167,9 +167,6 @@ server:
     relayBaseUrl: https://gestalt.example.com
   agent:
     defaultToolNarrowingThreshold: 200
-  featureFlags:
-    gcs:
-      bucket: my-project-gestaltd-feature-flags
   providers:
     authorization: indexeddb
     identity: oidc
@@ -204,16 +201,6 @@ authorization:
 `runtime.defaultProvider` selects the runtime provider used when a app, agent provider, or workflow provider opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private listener or internal reverse proxy while browser and OAuth flows still use the public origin. The target may be the management listener when that listener is reachable from the hosted runtime network.
 
 `agent.defaultToolNarrowingThreshold` controls implicit default MCP catalog grants for agent providers that support the catalog. When the total visible catalog is larger than this threshold and the latest user message exactly names a provider, Gestalt grants that provider instead of a global wildcard. Omit it to use the server default; set it to `0` to narrow whenever any visible catalog tool exists.
-
-`featureFlags.gcs.bucket` selects a Google Cloud Storage bucket containing
-deployment feature flags. Gestaltd reads the root-level objects `agent` and
-`workflow` once during server startup using application-default credentials.
-Each object must contain exactly `true` or `false` after surrounding whitespace
-is removed. Both flags default to `false` when the bucket or corresponding
-object is absent. Other GCS read errors and invalid contents fail startup. A
-running process does not poll for changes, so update the object and restart or
-redeploy gestaltd to apply a new value. The bucket may be written as a bare name
-or a `gs://` URL without path segments.
 
 `admin.authorizationPolicy` names the policy used to protect the built-in `/admin` route. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 

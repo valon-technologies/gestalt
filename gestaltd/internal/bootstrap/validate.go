@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -101,7 +102,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	}))
 	prepared.AppInvocation.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", nil, invocation.WithoutRateLimit()))
 	providersReady, _, _, errResolver = providerBuilds.Start(ctx, prepared.Deps, buildProviderForValidation)
-	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
+	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps, featureflags.AllEnabled())
 	if err != nil {
 		if providersReady != nil {
 			<-providersReady

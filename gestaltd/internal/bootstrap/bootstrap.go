@@ -337,13 +337,11 @@ func (r *Result) StartAppProviders(ctx context.Context) error {
 			close(r.appProvidersInitialized)
 		}
 	})
-	if r.FeatureFlags.Enabled(featureflags.Workflow) {
-		r.startupWorkflowConfigReconcileOnce.Do(func() {
-			if r.startupWorkflowConfigReconcile != nil {
-				r.startupWorkflowConfigReconcileErr = r.startupWorkflowConfigReconcile(ctx)
-			}
-		})
-	}
+	r.startupWorkflowConfigReconcileOnce.Do(func() {
+		if r.startupWorkflowConfigReconcile != nil {
+			r.startupWorkflowConfigReconcileErr = r.startupWorkflowConfigReconcile(ctx)
+		}
+	})
 	return r.startupWorkflowConfigReconcileErr
 }
 
@@ -382,7 +380,7 @@ func (r *Result) Start(ctx context.Context) error {
 }
 
 func (r *Result) StartWorkflowProviders(ctx context.Context) error {
-	if r == nil || !r.FeatureFlags.Enabled(featureflags.Workflow) {
+	if r == nil {
 		return nil
 	}
 
@@ -409,7 +407,7 @@ func (r *Result) StartWorkflowProviders(ctx context.Context) error {
 }
 
 func (r *Result) StartWorkflowConfigReconciliation(ctx context.Context) {
-	if r == nil || !r.FeatureFlags.Enabled(featureflags.Workflow) {
+	if r == nil {
 		return
 	}
 
@@ -1267,8 +1265,6 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	pluginInvoker := prepared.AppInvocation
 	workflowManager := prepared.WorkflowManager
 	agentManager := prepared.AgentManager
-	agentControl := newFeatureGatedAgentControl(flags.Enabled(featureflags.Agent), prepared.Deps.AgentRuntime)
-	workflowControl := newFeatureGatedWorkflowControl(flags.Enabled(featureflags.Workflow), prepared.Deps.WorkflowRuntime)
 	var workflowTools agentmanager.WorkflowSystemTools
 	if flags.Enabled(featureflags.Workflow) {
 		workflowTools = newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
@@ -1342,10 +1338,10 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 			_ = auditClose(context.Background())
 		}
 	}()
-	workflowManager.SetTarget(workflowmanager.NewFeatureGate(flags.Enabled(featureflags.Workflow), workflowmanager.New(workflowmanager.Config{
+	workflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
 		Providers:         providers,
-		Workflow:          workflowControl,
-		Agent:             agentControl,
+		Workflow:          prepared.Deps.WorkflowRuntime,
+		Agent:             prepared.Deps.AgentRuntime,
 		AgentManager:      agentManager,
 		Invoker:           sharedInvoker,
 		Audit:             audit,
@@ -1353,10 +1349,13 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		CatalogConnection: connMaps.APIConnection,
 		MCPConnection:     connMaps.MCPConnection,
 		AppNames:          slices.Collect(maps.Keys(cfg.Apps)),
-	})))
-	agentManager.SetTarget(agentmanager.NewFeatureGate(flags.Enabled(featureflags.Agent), agentmanager.New(agentmanager.Config{
+	}))
+	if !flags.Enabled(featureflags.Workflow) {
+		workflowManager.SetUnavailable(featureflags.Disabled(featureflags.Workflow))
+	}
+	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
-		Agent:             agentControl,
+		Agent:             prepared.Deps.AgentRuntime,
 		WorkflowTools:     workflowTools,
 		TurnScopes:        prepared.Deps.AgentTurnScopes,
 		ToolIDs:           prepared.Deps.AgentToolIDs,
@@ -1366,7 +1365,10 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		MCPConnection:     connMaps.MCPConnection,
 		AgentConnections:  agentConnectionBindings(cfg),
 		SessionStart:      agentSessionStartConfigs(cfg),
-	})))
+	}))
+	if !flags.Enabled(featureflags.Agent) {
+		agentManager.SetUnavailable(featureflags.Disabled(featureflags.Agent))
+	}
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	appHostServiceCleanup := registerGlobalAppInvocationPublicHostService(prepared.Deps)
 	// Build workflow/agent providers before app providers: they establish their
@@ -1503,7 +1505,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 			}
 		}
 	}
-	if !opts.DeferAppProviderStartup {
+	if !opts.DeferAppProviderStartup && startupWorkflowConfigReconcile != nil {
 		if err := startupWorkflowConfigReconcile(ctx); err != nil {
 			return nil, err
 		}
@@ -1551,8 +1553,8 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		ExtraWorkflows:                 extraWorkflows,
 		ExtraAgents:                    extraAgents,
 		Providers:                      providers,
-		WorkflowControl:                workflowControl,
-		AgentControl:                   agentControl,
+		WorkflowControl:                prepared.Deps.WorkflowRuntime,
+		AgentControl:                   prepared.Deps.AgentRuntime,
 		AgentManager:                   prepared.Deps.AgentManager,
 		FeatureFlags:                   flags,
 		StartupProvidersReady:          startup.ready(),
@@ -1653,11 +1655,7 @@ type configuredProviderBuilds[T any] struct {
 	err            error
 }
 
-func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps, snapshots ...featureflags.Snapshot) ([]coreworkflow.Provider, []coreagent.Provider, error) {
-	flags := featureflags.AllEnabled()
-	if len(snapshots) > 0 {
-		flags = snapshots[0]
-	}
+func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps, flags featureflags.Snapshot) ([]coreworkflow.Provider, []coreagent.Provider, error) {
 	workflowCh := make(chan configuredProviderBuilds[coreworkflow.Provider], 1)
 	agentCh := make(chan configuredProviderBuilds[coreagent.Provider], 1)
 	go func() {

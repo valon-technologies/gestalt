@@ -1983,7 +1983,6 @@ type ServerConfig struct {
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 	UserLookup    UserLookupConfig         `yaml:"userLookup,omitempty"`
 	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
-	FeatureFlags  ServerFeatureFlagsConfig `yaml:"featureFlags,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
 	// AuthorizationStateApply gates whether server startup is allowed to
 	// overwrite active authorization provider state. When unset, the

@@ -72,6 +72,10 @@ type workflowEventDeliverResponse struct {
 }
 
 func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
+	if !s.featureFlags.Enabled(featureflags.Workflow) {
+		writeError(w, http.StatusPreconditionFailed, featureflags.Disabled(featureflags.Workflow).Error())
+		return
+	}
 	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
@@ -135,8 +139,6 @@ func workflowRunEventInfoFromCore(event coreworkflow.Event) workflowRunEventInfo
 
 func (s *Server) writeWorkflowDeliverEventError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case featureflags.IsDisabled(err, featureflags.Workflow):
-		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired):

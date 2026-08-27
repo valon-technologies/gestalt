@@ -14,11 +14,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -422,6 +425,47 @@ func TestPublicRESTRouting(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, string(body))
 		}
 	})
+}
+
+func TestPublicRESTRejectsDisabledFeatures(t *testing.T) {
+	t.Parallel()
+
+	ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+		cfg.FeatureFlags = featureflags.Defaults()
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent: &stubAgentControl{defaultProviderName: "managed", provider: newMemoryAgentProvider()},
+		})
+		cfg.Workflow = &stubWorkflowControl{defaultProviderName: "local", provider: newMemoryWorkflowProvider()}
+	})
+
+	for _, test := range []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "agent", path: "/api/v2/agent/sessions", want: "agent feature is not enabled"},
+		{name: "workflow", path: "/api/v2/workflow/definitions", want: "workflow feature is not enabled"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			resp, err := http.Get(ts.URL + test.path)
+			if err != nil {
+				t.Fatalf("GET %s: %v", test.path, err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+			}
+			var body map[string]any
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body["error"] != test.want || body["code"] != codes.FailedPrecondition.String() {
+				t.Fatalf("response = %#v", body)
+			}
+		})
+	}
 }
 
 // TestPublicRESTStreamingInvoke verifies that POST /api/v2/app/{app}/operations/{operation}

@@ -448,10 +448,6 @@ func New(cfg Config) (*Server, error) {
 			Now:            now,
 		}
 	}
-	agentManager := cfg.AgentManager
-	if agentManager != nil {
-		agentManager = agentmanager.NewFeatureGate(cfg.FeatureFlags.Enabled(featureflags.Agent), agentManager)
-	}
 	s := &Server{
 		router:                        router,
 		handler:                       withRequestTelemetryProviders(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider, cfg.TracerProvider),
@@ -470,7 +466,7 @@ func New(cfg Config) (*Server, error) {
 		appAccessProfiles:             cfg.Services.AppAccessProfiles,
 		managedSubjects:               managedSubjects,
 		agent:                         cfg.Agent,
-		agentRuns:                     agentManager,
+		agentRuns:                     cfg.AgentManager,
 		featureFlags:                  cfg.FeatureFlags,
 		providers:                     cfg.Providers,
 		tunnelResolver:                tunnelResolver,
@@ -531,11 +527,11 @@ func New(cfg Config) (*Server, error) {
 		routeProfile:                  cfg.RouteProfile,
 		activateAppProviders:          cfg.ActivateAppProviders,
 	}
-	s.workflowSchedules = workflowmanager.NewFeatureGate(cfg.FeatureFlags.Enabled(featureflags.Workflow), workflowmanager.New(workflowmanager.Config{
+	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,
 		Workflow:          cfg.Workflow,
 		Agent:             cfg.Agent,
-		AgentManager:      agentManager,
+		AgentManager:      cfg.AgentManager,
 		Invoker:           cfg.Invoker,
 		Audit:             cfg.AuditSink,
 		DefaultConnection: cfg.DefaultConnection,
@@ -543,13 +539,14 @@ func New(cfg Config) (*Server, error) {
 		MCPConnection:     cfg.MCPConnection,
 		AppNames:          slices.Collect(maps.Keys(cfg.AppDefs)),
 		Now:               now,
-	}))
+	})
 	if cfg.RouteProfile != RouteProfileManagement {
 		conn, restHandler, err := buildPublicGateway(publicGRPCConfig{
 			Transport:           cfg.PublicGatewayTransport,
 			Invoker:             cfg.Invoker,
-			AgentManager:        agentManager,
+			AgentManager:        cfg.AgentManager,
 			WorkflowManager:     s.workflowSchedules,
+			FeatureFlags:        cfg.FeatureFlags,
 			Authentication:      cfg.Auth,
 			Authorization:       cfg.Authorization,
 			IndexedDB:           cfg.IndexedDB,

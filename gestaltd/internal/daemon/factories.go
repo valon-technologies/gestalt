@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -57,13 +58,14 @@ func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.Canc
 		stop()
 		return nil, err
 	}
-	flags, err := featureflags.LoadGCS(ctx, cfg.Server.FeatureFlags.GCSBucket())
+	featureFlagsBucket := strings.TrimSpace(os.Getenv(featureflags.BucketEnv))
+	flags, err := featureflags.LoadGCS(ctx, featureFlagsBucket)
 	if err != nil {
 		stop()
 		return nil, fmt.Errorf("load feature flags: %w", err)
 	}
 	slog.InfoContext(ctx, "feature flags loaded",
-		"bucket", cfg.Server.FeatureFlags.GCSBucket(),
+		"bucket", featureFlagsBucket,
 		"agent", flags.Enabled(featureflags.Agent),
 		"workflow", flags.Enabled(featureflags.Workflow),
 	)
