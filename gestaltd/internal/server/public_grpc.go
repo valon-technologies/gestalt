@@ -8,6 +8,7 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -35,11 +36,41 @@ type publicGRPCConfig struct {
 	Invoker             invocation.Invoker
 	AgentManager        agentmanager.Service
 	WorkflowManager     workflowmanager.Service
+	FeatureFlags        featureflags.Snapshot
 	Authentication      core.IdentityProvider
 	Authorization       core.AuthorizationProvider
 	IndexedDB           indexeddb.IndexedDB
 	ExternalCredentials core.ExternalCredentialProvider
 	RemoteManagement    proto.RemoteManagementServer
+}
+
+func publicFeatureFlagError(flags featureflags.Snapshot, fullMethod string) error {
+	switch {
+	case strings.HasPrefix(fullMethod, "/"+proto.Agent_ServiceDesc.ServiceName+"/") && !flags.Enabled(featureflags.Agent):
+		return featureflags.Disabled(featureflags.Agent)
+	case strings.HasPrefix(fullMethod, "/"+proto.Workflow_ServiceDesc.ServiceName+"/") && !flags.Enabled(featureflags.Workflow):
+		return featureflags.Disabled(featureflags.Workflow)
+	default:
+		return nil
+	}
+}
+
+func publicFeatureFlagUnaryInterceptor(flags featureflags.Snapshot) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if err := publicFeatureFlagError(flags, info.FullMethod); err != nil {
+			return nil, err
+		}
+		return handler(ctx, req)
+	}
+}
+
+func publicFeatureFlagStreamInterceptor(flags featureflags.Snapshot) grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if err := publicFeatureFlagError(flags, info.FullMethod); err != nil {
+			return err
+		}
+		return handler(srv, stream)
+	}
 }
 
 func appAccessServer(cfg publicGRPCConfig) proto.AppServer {

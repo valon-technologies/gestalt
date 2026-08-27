@@ -12,8 +12,9 @@ import (
 )
 
 type lazyWorkflowManager struct {
-	mu     sync.RWMutex
-	target workflowmanager.Service
+	mu             sync.RWMutex
+	target         workflowmanager.Service
+	unavailableErr error
 }
 
 func newLazyWorkflowManager() *lazyWorkflowManager {
@@ -24,6 +25,14 @@ func (l *lazyWorkflowManager) SetTarget(target workflowmanager.Service) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.target = target
+	l.unavailableErr = nil
+}
+
+func (l *lazyWorkflowManager) SetUnavailable(err error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.target = nil
+	l.unavailableErr = err
 }
 
 func (l *lazyWorkflowManager) ApplyDefinition(ctx context.Context, p *principal.Principal, req workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
@@ -149,7 +158,11 @@ func (l *lazyWorkflowManager) DeliverEvent(ctx context.Context, p *principal.Pri
 func (l *lazyWorkflowManager) current() (workflowmanager.Service, error) {
 	l.mu.RLock()
 	target := l.target
+	unavailableErr := l.unavailableErr
 	l.mu.RUnlock()
+	if unavailableErr != nil {
+		return nil, unavailableErr
+	}
 	if target == nil {
 		return nil, fmt.Errorf("workflow manager is not available")
 	}

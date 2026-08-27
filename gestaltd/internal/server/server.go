@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -126,8 +127,9 @@ type Server struct {
 	appAccessProfiles             *coredata.AppAccessProfileService
 	managedSubjects               *coredata.ManagedSubjectService
 	agent                         bootstrap.AgentControl
-	workflowSchedules             *workflowmanager.Manager
+	workflowSchedules             workflowmanager.Service
 	agentRuns                     agentmanager.Service
+	featureFlags                  featureflags.Snapshot
 	providers                     *registry.ProviderMap[core.Provider]
 	tenantDirectoryMu             sync.Mutex
 	tenantDirectoryEpoch          tenantAppDirectoryEpoch
@@ -229,6 +231,7 @@ type Config struct {
 	Agent                         bootstrap.AgentControl
 	AgentManager                  agentmanager.Service
 	Workflow                      bootstrap.WorkflowControl
+	FeatureFlags                  featureflags.Snapshot
 	Runtimes                      bootstrap.RuntimeInspector
 	Invoker                       invocation.Invoker
 	AppInvocation                 invocation.Invoker
@@ -464,6 +467,7 @@ func New(cfg Config) (*Server, error) {
 		managedSubjects:               managedSubjects,
 		agent:                         cfg.Agent,
 		agentRuns:                     cfg.AgentManager,
+		featureFlags:                  cfg.FeatureFlags,
 		providers:                     cfg.Providers,
 		tunnelResolver:                tunnelResolver,
 		workflow:                      cfg.Workflow,
@@ -542,6 +546,7 @@ func New(cfg Config) (*Server, error) {
 			Invoker:             cfg.Invoker,
 			AgentManager:        cfg.AgentManager,
 			WorkflowManager:     s.workflowSchedules,
+			FeatureFlags:        cfg.FeatureFlags,
 			Authentication:      cfg.Auth,
 			Authorization:       cfg.Authorization,
 			IndexedDB:           cfg.IndexedDB,

@@ -20,6 +20,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -188,7 +189,7 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 		t.Fatal("provider build finished before configured agent provider was published")
 	default:
 	}
-	workflows, agents, err := buildWorkflowsAndAgents(context.Background(), cfg, factories, deps)
+	workflows, agents, err := buildWorkflowsAndAgents(context.Background(), cfg, factories, deps, featureflags.AllEnabled())
 	if err != nil {
 		t.Fatalf("buildWorkflowsAndAgents: %v", err)
 	}
@@ -272,7 +273,7 @@ func TestBuildWorkflowsAndAgentsClosesSuccessesOnCrossGroupFailure(t *testing.T)
 		return nil, boom
 	}
 
-	workflows, agents, err := buildWorkflowsAndAgents(context.Background(), cfg, factories, deps)
+	workflows, agents, err := buildWorkflowsAndAgents(context.Background(), cfg, factories, deps, featureflags.AllEnabled())
 	if !errors.Is(err, boom) {
 		t.Fatalf("buildWorkflowsAndAgents err = %v, want boom", err)
 	}

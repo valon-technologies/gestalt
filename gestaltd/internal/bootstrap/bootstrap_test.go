@@ -1886,6 +1886,38 @@ func TestBootstrap(t *testing.T) {
 	})
 }
 
+func TestBootstrapDisablesAgentAndWorkflowByDefault(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"agent": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"workflow": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	factories := validFactories()
+	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
+		return nil, errors.New("disabled agent factory called")
+	}
+	factories.Workflow = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+		return nil, errors.New("disabled workflow factory called")
+	}
+
+	result, err := bootstrap.BootstrapWithOptions(context.Background(), cfg, factories, bootstrap.BootstrapOptions{})
+	if err != nil {
+		t.Fatalf("BootstrapWithOptions: %v", err)
+	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
+	if result.AgentManager.Available() {
+		t.Fatal("agent manager is available")
+	}
+	_, err = result.AgentManager.ListSessions(context.Background(), nil, &proto.ListAgentProviderSessionsRequest{})
+	if status.Code(err) != codes.FailedPrecondition || err.Error() != "agent feature is not enabled" {
+		t.Fatalf("disabled agent error = %v", err)
+	}
+}
+
 func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *testing.T) {
 	t.Parallel()
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/services/observability/drivers/otlp"
@@ -56,6 +58,17 @@ func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.Canc
 		stop()
 		return nil, err
 	}
+	featureFlagsBucket := strings.TrimSpace(os.Getenv(featureflags.BucketEnv))
+	flags, err := featureflags.LoadGCS(ctx, featureFlagsBucket)
+	if err != nil {
+		stop()
+		return nil, fmt.Errorf("load feature flags: %w", err)
+	}
+	slog.InfoContext(ctx, "feature flags loaded",
+		"bucket", featureFlagsBucket,
+		"agent", flags.Enabled(featureflags.Agent),
+		"workflow", flags.Enabled(featureflags.Workflow),
+	)
 
 	factories := buildFactories()
 
@@ -73,6 +86,7 @@ func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.Canc
 	result, err := bootstrap.BootstrapWithOptions(ctx, cfg, factories, bootstrap.BootstrapOptions{
 		DeferAppProviderStartup: true,
 		RegistryResolver:        registryResolver,
+		FeatureFlags:            flags,
 	})
 	if err != nil {
 		if devSupervisor != nil {

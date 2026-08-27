@@ -9,6 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
@@ -71,6 +72,44 @@ func TestWorkflowEventDeliveryUsesAuthorizedSourceAsCallerApp(t *testing.T) {
 	delivered := provider.deliveredEvents[0]
 	if delivered.GetEvent().GetSource() != "roadmap" {
 		t.Fatalf("delivered provider event = %#v", delivered)
+	}
+}
+
+func TestWorkflowEventDeliveryRejectsDisabledFeature(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	plaintext := scopedTestBearerToken("event-user", "roadmap")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.FeatureFlags = featureflags.Defaults()
+		cfg.Auth = testAuthStubForScopedBearer()
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N: "roadmap", ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Name: "roadmap", Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}}},
+		})
+		cfg.Workflow = &stubWorkflowControl{defaultProviderName: "basic", provider: newMemoryWorkflowProvider()}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"source":"roadmap","type":"roadmap.item.updated"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/events", body)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("deliver request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusPreconditionFailed)
+	}
+	var got map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got["error"] != "workflow feature is not enabled" {
+		t.Fatalf("error = %#v", got["error"])
 	}
 }
 

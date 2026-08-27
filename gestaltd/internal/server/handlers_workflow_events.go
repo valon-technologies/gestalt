@@ -14,6 +14,7 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -71,6 +72,10 @@ type workflowEventDeliverResponse struct {
 }
 
 func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
+	if !s.featureFlags.Enabled(featureflags.Workflow) {
+		writeError(w, http.StatusPreconditionFailed, featureflags.Disabled(featureflags.Workflow).Error())
+		return
+	}
 	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return

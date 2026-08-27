@@ -14,6 +14,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -96,14 +97,14 @@ func (s *Server) authEnabled() bool {
 }
 
 func (s *Server) agentFeatureAvailable() bool {
-	return s != nil && s.agentRuns != nil && s.agentRuns.Available()
+	return s != nil && s.featureFlags.Enabled(featureflags.Agent) && s.agentRuns != nil && s.agentRuns.Available()
 }
 
 // defaultWorkflowProviderName returns the deployment's configured workflow
 // platform provider name from WorkflowControl. Empty means no default is
 // selected (auth/info omits workflowDefaultProvider).
 func (s *Server) defaultWorkflowProviderName() string {
-	if s == nil || s.workflow == nil {
+	if s == nil || !s.featureFlags.Enabled(featureflags.Workflow) || s.workflow == nil {
 		return ""
 	}
 	return strings.TrimSpace(s.workflow.DefaultProviderName())
