@@ -1915,6 +1915,57 @@ type AuthorizationResourceDef struct {
 	Properties map[string]string `yaml:"properties,omitempty"`
 }
 
+// ServerSCIMConfig configures inbound SCIM provisioning clients. Credential
+// IDs are local audit/rotation labels; only BearerToken is sent by clients.
+type ServerSCIMConfig struct {
+	Clients       map[string]SCIMClientConfig `yaml:"clients,omitempty"`
+	RetryInterval string                      `yaml:"retryInterval,omitempty"`
+	DriftInterval string                      `yaml:"driftInterval,omitempty"`
+}
+
+const (
+	DefaultSCIMRetryInterval = time.Second
+	DefaultSCIMDriftInterval = 10 * time.Minute
+)
+
+func (c ServerSCIMConfig) RetryIntervalDuration() (time.Duration, error) {
+	return scimDuration(c.RetryInterval, DefaultSCIMRetryInterval)
+}
+
+func (c ServerSCIMConfig) DriftIntervalDuration() (time.Duration, error) {
+	return scimDuration(c.DriftInterval, DefaultSCIMDriftInterval)
+}
+
+func scimDuration(raw string, defaultValue time.Duration) (time.Duration, error) {
+	if strings.TrimSpace(raw) == "" {
+		return defaultValue, nil
+	}
+	duration, err := ParseDuration(raw)
+	if err != nil {
+		return 0, err
+	}
+	if duration <= 0 {
+		return 0, fmt.Errorf("duration must be positive")
+	}
+	return duration, nil
+}
+
+type SCIMClientConfig struct {
+	Credentials              []SCIMCredentialConfig   `yaml:"credentials,omitempty"`
+	AuthoritativeUserDomains []string                 `yaml:"authoritativeUserDomains,omitempty"`
+	ActiveUserRelationships  []SCIMRelationshipConfig `yaml:"activeUserRelationships,omitempty"`
+}
+
+type SCIMCredentialConfig struct {
+	ID          string `yaml:"id"`
+	BearerToken string `yaml:"bearerToken"`
+}
+
+type SCIMRelationshipConfig struct {
+	Relation string                   `yaml:"relation"`
+	Resource AuthorizationResourceDef `yaml:"resource"`
+}
+
 type AuthorizationRelationshipTargetDef struct {
 	Subject    *AuthorizationSubjectDef    `yaml:"subject,omitempty"`
 	Resource   *AuthorizationResourceDef   `yaml:"resource,omitempty"`
@@ -1982,6 +2033,7 @@ type ServerConfig struct {
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 	UserLookup    UserLookupConfig         `yaml:"userLookup,omitempty"`
+	SCIM          ServerSCIMConfig         `yaml:"scim,omitempty"`
 	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
 	// AuthorizationStateApply gates whether server startup is allowed to

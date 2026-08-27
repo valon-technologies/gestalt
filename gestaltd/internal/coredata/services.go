@@ -95,7 +95,15 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppAccessProfiles, AppAccessProfilesSchema); err != nil {
 			return nil, fmt.Errorf("create app_access_profiles store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreSCIMUsers, SCIMUsersSchema); err != nil {
+			return nil, fmt.Errorf("create scim_users store: %w", err)
+		}
+		if _, err := ds.CreateObjectStore(ctx, StoreSCIMProjectionIntents, SCIMProjectionIntentsSchema); err != nil {
+			return nil, fmt.Errorf("create scim_projection_intents store: %w", err)
+		}
 	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
+		return nil, err
+	} else if err := ensureSCIMStores(ctx, ds); err != nil {
 		return nil, err
 	}
 	users := NewUserService(ds)
@@ -130,6 +138,16 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		AppAccessProfiles:              appAccessProfiles,
 		DB:                             ds,
 	}, nil
+}
+
+func ensureSCIMStores(ctx context.Context, ds indexeddb.IndexedDB) error {
+	if _, err := ds.CreateObjectStore(ctx, StoreSCIMUsers, SCIMUsersSchema); err != nil {
+		return fmt.Errorf("ensure scim_users store: %w", err)
+	}
+	if _, err := ds.CreateObjectStore(ctx, StoreSCIMProjectionIntents, SCIMProjectionIntentsSchema); err != nil {
+		return fmt.Errorf("ensure scim_projection_intents store: %w", err)
+	}
+	return nil
 }
 
 func (s *Services) Ping(ctx context.Context) error {

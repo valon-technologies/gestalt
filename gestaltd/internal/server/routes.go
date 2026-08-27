@@ -36,6 +36,7 @@ func (s *Server) routes() {
 	switch s.routeProfile {
 	case RouteProfilePublic:
 		s.mountCoreRoutes(r, metricsHidden)
+		s.mountSCIMRoutes(r)
 		s.mountMCPRoutes(r)
 		s.mountHTTPBindingRoutes(r)
 		s.mountS3ObjectAccessRoutes(r)
@@ -52,6 +53,7 @@ func (s *Server) routes() {
 		s.mountActivateRoute(r)
 	default:
 		s.mountCoreRoutes(r, metricsAuthenticated)
+		s.mountSCIMRoutes(r)
 		s.mountMCPRoutes(r)
 		s.mountHTTPBindingRoutes(r)
 		s.mountS3ObjectAccessRoutes(r)
@@ -61,6 +63,14 @@ func (s *Server) routes() {
 		s.mountMountedUIRoutes(r)
 		s.mountActivateRoute(r)
 	}
+}
+
+func (s *Server) mountSCIMRoutes(r chi.Router) {
+	if s.scimHandler == nil {
+		return
+	}
+	r.Handle("/scim/v2/*", s.scimHandler)
+	r.Handle("/scim/v2", s.scimHandler)
 }
 
 type metricsExposure int

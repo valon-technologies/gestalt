@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"os"
 	"slices"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
+	"github.com/valon-technologies/gestalt/server/internal/scim"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -270,6 +272,7 @@ type Result struct {
 	Runtimes                RuntimeInspector
 	PublicHostServices      *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport  *providergateway.ProviderGatewayTransport
+	SCIMHandler             http.Handler
 	DevSupervisor           *providerdev.Supervisor
 	AppRestarter            interface {
 		Restartable(string) (bool, error)
@@ -299,6 +302,8 @@ type Result struct {
 	deferred                            *deferredProviders
 	mu                                  sync.Mutex
 	closed                              bool
+	scimService                         *scim.Service
+	scimStart                           sync.Once
 }
 
 // StartAppProviders starts app providers that are required during normal
@@ -376,6 +381,11 @@ func (r *Result) Start(ctx context.Context) error {
 	if r.closed {
 		return fmt.Errorf("bootstrap result already closed")
 	}
+	r.scimStart.Do(func() {
+		if r.scimService != nil {
+			r.scimService.Start(ctx)
+		}
+	})
 	return nil
 }
 
@@ -784,6 +794,7 @@ type preparedCore struct {
 	WorkflowManager      *lazyWorkflowManager
 	AgentManager         *lazyAgentManager
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
+	SCIM                 *scim.Service
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -1138,13 +1149,20 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders)
+	authorizationProviderName, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
+	scimService, err := scim.NewService(svc.DB, authorizationProvider, cfg.Server.BaseURL, cfg.Server.SCIM)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, fmt.Errorf("bootstrap: scim: %w", err)
+	}
 	if authorizationProvider != nil {
-		deps.Authorization = authorizationProvider
+		wrapped := scim.WrapAuthorization(authorizationProvider, svc.Users, scimService)
+		authorizationProviders[authorizationProviderName] = wrapped
+		deps.Authorization = wrapped
 	}
 	closeExternalCredentialsOnError := true
 	defer func() {
@@ -1187,6 +1205,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		WorkflowManager:      workflowManager,
 		AgentManager:         agentManager,
 		PublicHostServices:   deps.PublicHostServices,
+		SCIM:                 scimService,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1540,6 +1559,10 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		},
 	})
 	appProvidersInitialized := make(chan struct{})
+	var scimHandler http.Handler
+	if prepared.SCIM != nil && prepared.SCIM.Enabled() {
+		scimHandler = scim.NewHandler(prepared.SCIM)
+	}
 	result := &Result{
 		Auth:                           prepared.Auth,
 		SelectedAuthProvider:           prepared.SelectedAuthProvider,
@@ -1572,6 +1595,8 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		Runtimes:                       prepared.runtimeRegistry,
 		PublicHostServices:             publicHostServices,
 		PublicGatewayTransport:         publicGatewayTransport,
+		SCIMHandler:                    scimHandler,
+		scimService:                    prepared.SCIM,
 		DevSupervisor:                  prepared.Deps.DevSupervisor,
 		AppRestarter:                   appRestarter,
 		AppRuntimeSnapshotter:          appRestarter,

@@ -32,19 +32,26 @@ func (c *stubCursor) buildIndexKeys() {
 	if kp == nil {
 		return
 	}
-	c.indexKeys = make([]any, len(c.keys))
-	for i, k := range c.keys {
+	keys := make([]string, 0, len(c.keys))
+	indexKeys := make([]any, 0, len(c.keys))
+	for _, k := range c.keys {
 		rec := c.snapshot[k]
+		if !recordHasIndexKey(rec, kp) {
+			continue
+		}
+		keys = append(keys, k)
 		if len(kp) == 1 {
-			c.indexKeys[i] = rec[kp[0]]
+			indexKeys = append(indexKeys, rec[kp[0]])
 		} else {
 			vals := make([]any, len(kp))
 			for j, field := range kp {
 				vals[j] = rec[field]
 			}
-			c.indexKeys[i] = vals
+			indexKeys = append(indexKeys, vals)
 		}
 	}
+	c.keys = keys
+	c.indexKeys = indexKeys
 	sort.Sort(&indexKeySorter{keys: c.keys, indexKeys: c.indexKeys, reverse: c.reverse})
 }
 
