@@ -700,6 +700,17 @@ func normalizedEmail(raw string) string {
 	return normalize(parsed.Address)
 }
 
+func getTransactionRecord(ctx context.Context, store idb.TransactionObjectStore, id string) (idb.Record, error) {
+	records, err := store.GetAll(ctx, id, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, idb.ErrNotFound
+	}
+	return records[0], nil
+}
+
 func displayName(resource persistedUser) string {
 	if value := strings.TrimSpace(resource.DisplayName); value != "" {
 		return value
@@ -1035,7 +1046,7 @@ func (s *Service) convergeUserLocked(ctx context.Context, userID string) error {
 			_ = tx.Abort(context.WithoutCancel(ctx))
 		}
 	}()
-	latest, err := tx.ObjectStore(coredata.StoreSCIMProjectionIntents).Get(ctx, intent.id)
+	latest, err := getTransactionRecord(ctx, tx.ObjectStore(coredata.StoreSCIMProjectionIntents), intent.id)
 	if errors.Is(err, idb.ErrNotFound) {
 		alreadyCommitted, committedErr := intentAlreadyCommitted(ctx, tx, intent)
 		if committedErr != nil {
@@ -1051,11 +1062,13 @@ func (s *Service) convergeUserLocked(ctx context.Context, userID string) error {
 	}
 	createdAt := intent.createdAt
 	lastFingerprint := intent.operationFingerprint
-	if existing, getErr := tx.ObjectStore(coredata.StoreSCIMUsers).Get(ctx, intent.userID); getErr == nil {
+	if existing, getErr := getTransactionRecord(ctx, tx.ObjectStore(coredata.StoreSCIMUsers), intent.userID); getErr == nil {
 		createdAt = recordTime(existing, "created_at")
 		if lastFingerprint == "" {
 			lastFingerprint = recordString(existing, "last_operation_fingerprint")
 		}
+	} else if !errors.Is(getErr, idb.ErrNotFound) {
+		return unavailable("could not inspect current SCIM User")
 	}
 	row := idb.Record{
 		"id": intent.userID, "client_id": intent.clientID, "core_user_id": intent.coreUserID,
@@ -1091,7 +1104,7 @@ func (s *Service) convergeUserLocked(ctx context.Context, userID string) error {
 }
 
 func intentAlreadyCommitted(ctx context.Context, tx idb.Transaction, intent intentRow) (bool, error) {
-	rec, err := tx.ObjectStore(coredata.StoreSCIMUsers).Get(ctx, intent.userID)
+	rec, err := getTransactionRecord(ctx, tx.ObjectStore(coredata.StoreSCIMUsers), intent.userID)
 	if errors.Is(err, idb.ErrNotFound) {
 		return false, nil
 	}
@@ -1119,7 +1132,7 @@ func (s *Service) recordProjectionFailure(ctx context.Context, rec idb.Record, p
 			_ = tx.Abort(context.WithoutCancel(ctx))
 		}
 	}()
-	latest, err := tx.ObjectStore(coredata.StoreSCIMProjectionIntents).Get(ctx, recordString(rec, "id"))
+	latest, err := getTransactionRecord(ctx, tx.ObjectStore(coredata.StoreSCIMProjectionIntents), recordString(rec, "id"))
 	if errors.Is(err, idb.ErrNotFound) {
 		return nil
 	}

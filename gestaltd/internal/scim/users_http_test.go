@@ -303,14 +303,14 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 	}
 }
 
-func TestSCIMCreateSupportsTerminalTransactionalIndexMisses(t *testing.T) {
+func TestSCIMCreateSupportsTerminalTransactionalMisses(t *testing.T) {
 	t.Parallel()
 
 	db := &transactionFaultDB{IndexedDB: &coretesting.StubIndexedDB{}}
 	_, _, handler := newSCIMService(t, db, nil, testSCIMConfig(map[string]config.SCIMClientConfig{
 		"rippling": ripplingClient(nil),
 	}))
-	db.arm(transactionFaultTerminalIndexMiss)
+	db.arm(transactionFaultTerminalMiss)
 
 	_, response := createUser(t, handler, testCurrentToken, "alice@valon.com", true, nil)
 	if response.Code != http.StatusCreated {
@@ -1059,7 +1059,7 @@ const (
 	transactionFaultIntentAdd transactionFault = iota + 1
 	transactionFaultSCIMUserGet
 	transactionFaultCoreUserAdd
-	transactionFaultTerminalIndexMiss
+	transactionFaultTerminalMiss
 )
 
 type transactionFaultDB struct {
@@ -1086,6 +1086,12 @@ func (d *transactionFaultDB) trip(fault transactionFault) bool {
 	}
 	d.tripped = true
 	return true
+}
+
+func (d *transactionFaultDB) active(fault transactionFault) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.armed && d.fault == fault
 }
 
 func (d *transactionFaultDB) Transaction(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
@@ -1120,7 +1126,11 @@ func (s *transactionFaultStore) Get(ctx context.Context, id string) (idb.Record,
 	if s.name == coredata.StoreSCIMUsers && s.db.trip(transactionFaultSCIMUserGet) {
 		return nil, errors.New("injected datastore failure")
 	}
-	return s.TransactionObjectStore.Get(ctx, id)
+	record, err := s.TransactionObjectStore.Get(ctx, id)
+	if errors.Is(err, idb.ErrNotFound) && s.db.active(transactionFaultTerminalMiss) {
+		_ = s.tx.Abort(ctx)
+	}
+	return record, err
 }
 
 func (s *transactionFaultStore) Add(ctx context.Context, record idb.Record) error {
@@ -1145,7 +1155,7 @@ type transactionFaultIndex struct {
 
 func (i *transactionFaultIndex) Get(ctx context.Context, query any) (idb.Record, error) {
 	record, err := i.TransactionIndex.Get(ctx, query)
-	if errors.Is(err, idb.ErrNotFound) && i.db.trip(transactionFaultTerminalIndexMiss) {
+	if errors.Is(err, idb.ErrNotFound) && i.db.active(transactionFaultTerminalMiss) {
 		_ = i.tx.Abort(ctx)
 	}
 	return record, err
