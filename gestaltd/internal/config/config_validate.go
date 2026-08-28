@@ -50,13 +50,37 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeAppStaticMounts(cfg); err != nil {
 		return err
 	}
+	normalizeSCIMConfig(cfg)
 	return canonicalizeRemotes(cfg)
+}
+
+func normalizeSCIMConfig(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	for clientID, client := range cfg.Server.SCIM.Clients {
+		for i := range client.Credentials {
+			client.Credentials[i].ID = strings.TrimSpace(client.Credentials[i].ID)
+		}
+		for i := range client.AuthoritativeUserDomains {
+			client.AuthoritativeUserDomains[i] = strings.ToLower(strings.TrimSpace(client.AuthoritativeUserDomains[i]))
+		}
+		for i := range client.ActiveUserRelationships {
+			client.ActiveUserRelationships[i].Relation = strings.TrimSpace(client.ActiveUserRelationships[i].Relation)
+			client.ActiveUserRelationships[i].Resource.Type = strings.TrimSpace(client.ActiveUserRelationships[i].Resource.Type)
+			client.ActiveUserRelationships[i].Resource.ID = strings.TrimSpace(client.ActiveUserRelationships[i].Resource.ID)
+		}
+		cfg.Server.SCIM.Clients[clientID] = client
+	}
 }
 
 // ValidateCanonicalStructure checks config shape assuming canonicalization has
 // already run on the config.
 func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateAuthorizationModelConfig(cfg); err != nil {
+		return err
+	}
+	if err := validateSCIMConfig(cfg); err != nil {
 		return err
 	}
 	if err := validateServerListeners(cfg.Server); err != nil {
@@ -136,6 +160,95 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		}
 	}
 	return validateWorkflowsConfig(cfg)
+}
+
+func validateSCIMConfig(cfg *Config) error {
+	if cfg == nil || len(cfg.Server.SCIM.Clients) == 0 {
+		return nil
+	}
+	if _, err := cfg.Server.SCIM.RetryIntervalDuration(); err != nil {
+		return fmt.Errorf("config validation: server.scim.retryInterval: %w", err)
+	}
+	if _, err := cfg.Server.SCIM.DriftIntervalDuration(); err != nil {
+		return fmt.Errorf("config validation: server.scim.driftInterval: %w", err)
+	}
+	resourceTypes := make(map[string]AuthorizationResourceTypeDef)
+	for _, model := range cfg.Authorization.Models {
+		for name, resourceType := range model.ResourceTypes {
+			resourceTypes[name] = resourceType
+		}
+	}
+	domainOwners := make(map[string]string)
+	credentialIDs := make(map[string]string)
+	tokens := make(map[string]string)
+	needsAuthorization := false
+	for clientID, client := range cfg.Server.SCIM.Clients {
+		path := "server.scim.clients." + clientID
+		if strings.TrimSpace(clientID) == "" || strings.TrimSpace(clientID) != clientID {
+			return fmt.Errorf("config validation: server.scim.clients keys must be non-empty and trimmed")
+		}
+		if len(client.Credentials) == 0 || len(client.Credentials) > 2 {
+			return fmt.Errorf("config validation: %s.credentials must contain one or two credentials", path)
+		}
+		for i, credential := range client.Credentials {
+			credentialPath := fmt.Sprintf("%s.credentials[%d]", path, i)
+			id := strings.TrimSpace(credential.ID)
+			if id == "" {
+				return fmt.Errorf("config validation: %s.id is required", credentialPath)
+			}
+			if previous, ok := credentialIDs[clientID+"\x00"+id]; ok {
+				return fmt.Errorf("config validation: %s.id duplicates %s", credentialPath, previous)
+			}
+			credentialIDs[clientID+"\x00"+id] = credentialPath
+			token := strings.TrimSpace(credential.BearerToken)
+			if token == "" {
+				return fmt.Errorf("config validation: %s.bearerToken is required", credentialPath)
+			}
+			if previous, ok := tokens[token]; ok {
+				return fmt.Errorf("config validation: %s.bearerToken duplicates %s", credentialPath, previous)
+			}
+			tokens[token] = credentialPath
+		}
+		for i, rawDomain := range client.AuthoritativeUserDomains {
+			domain := strings.ToLower(strings.TrimSpace(rawDomain))
+			if domain == "" || domain != rawDomain || strings.Contains(domain, "@") {
+				return fmt.Errorf("config validation: %s.authoritativeUserDomains[%d] must be a normalized domain", path, i)
+			}
+			if previous, ok := domainOwners[domain]; ok {
+				return fmt.Errorf("config validation: %s.authoritativeUserDomains[%d] overlaps client %q", path, i, previous)
+			}
+			domainOwners[domain] = clientID
+			needsAuthorization = true
+		}
+		for i, projection := range client.ActiveUserRelationships {
+			projectionPath := fmt.Sprintf("%s.activeUserRelationships[%d]", path, i)
+			resourceTypeName := strings.TrimSpace(projection.Resource.Type)
+			resourceType, ok := resourceTypes[resourceTypeName]
+			if !ok {
+				return fmt.Errorf("config validation: %s.resource.type references unknown resource type %q", projectionPath, resourceTypeName)
+			}
+			if strings.TrimSpace(projection.Resource.ID) == "" {
+				return fmt.Errorf("config validation: %s.resource.id is required", projectionPath)
+			}
+			if _, ok := resourceType.Relations[strings.TrimSpace(projection.Relation)]; !ok {
+				return fmt.Errorf("config validation: %s.relation references unknown relation %q for resource type %q", projectionPath, projection.Relation, resourceTypeName)
+			}
+			if !resourceType.Dynamic.AllowAdditionalRelationships {
+				return fmt.Errorf("config validation: authorization resource type %q must set dynamic.allowAdditionalRelationships: true for SCIM projections", resourceTypeName)
+			}
+			needsAuthorization = true
+		}
+	}
+	if needsAuthorization {
+		_, provider, err := cfg.SelectedAuthorizationProvider()
+		if err != nil {
+			return err
+		}
+		if provider == nil {
+			return fmt.Errorf("config validation: SCIM authoritative domains and projections require providers.authorization to be configured")
+		}
+	}
+	return nil
 }
 
 func validateAPIVersion(cfg *Config) error {

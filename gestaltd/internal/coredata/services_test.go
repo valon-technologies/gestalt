@@ -256,6 +256,8 @@ func TestNew(t *testing.T) {
 			coredata.StoreRemoteProviders,
 			coredata.StoreConnectionInstancePreferences,
 			coredata.StoreAppAccessProfiles,
+			coredata.StoreSCIMUsers,
+			coredata.StoreSCIMProjectionIntents,
 		} {
 			if _, ok := contexts[store]; !ok {
 				t.Fatalf("NewWithContext did not create store %q", store)
@@ -276,8 +278,8 @@ func TestNew(t *testing.T) {
 			t.Fatalf("coredata.NewWithOptions: %v", err)
 		}
 		contexts := db.createdStoreContexts()
-		if len(contexts) != 5 {
-			t.Fatalf("CreateObjectStore calls = %d, want 5", len(contexts))
+		if len(contexts) != 7 {
+			t.Fatalf("CreateObjectStore calls = %d, want 7", len(contexts))
 		}
 		for _, store := range []string{
 			coredata.StoreAppAutoDeploySettings,
@@ -285,6 +287,8 @@ func TestNew(t *testing.T) {
 			coredata.StoreGestaltdInstanceHeartbeats,
 			coredata.StoreAppVersionRecoveryObservations,
 			coredata.StoreAppAccessProfiles,
+			coredata.StoreSCIMUsers,
+			coredata.StoreSCIMProjectionIntents,
 		} {
 			if _, ok := contexts[store]; !ok {
 				t.Fatalf("CreateObjectStore calls = %v, want %q", contexts, store)

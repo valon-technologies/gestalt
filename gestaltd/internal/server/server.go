@@ -161,6 +161,7 @@ type Server struct {
 	meterProvider                 metric.MeterProvider
 	prometheusMetrics             http.Handler
 	mcpHandler                    http.Handler
+	scimHandler                   http.Handler
 	hostServiceRelayTokens        *runtimehost.HostServiceRelayTokenManager
 	hostServiceMu                 sync.Mutex
 	hostServiceHandlers           map[uint64]http.Handler
@@ -250,6 +251,7 @@ type Config struct {
 	Readiness                     ReadinessChecker
 	PrometheusMetrics             http.Handler
 	MCPHandler                    http.Handler
+	SCIMHandler                   http.Handler
 	PublicHostServices            *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport        *providergateway.ProviderGatewayTransport
 	S3                            map[string]s3sdk.S3
@@ -496,6 +498,7 @@ func New(cfg Config) (*Server, error) {
 		meterProvider:                 cfg.MeterProvider,
 		prometheusMetrics:             cfg.PrometheusMetrics,
 		mcpHandler:                    cfg.MCPHandler,
+		scimHandler:                   cfg.SCIMHandler,
 		hostServiceRelayTokens:        hostServiceRelayTokens,
 		publicHostServices:            cfg.PublicHostServices,
 		s3:                            cfg.S3,

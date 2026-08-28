@@ -115,8 +115,14 @@ func (o *stubObjectStore) hasUniqueConflict(record idb.Record, ignoreID *string)
 		if !idx.Unique {
 			continue
 		}
+		if !recordHasIndexKey(record, idx.KeyPath) {
+			continue
+		}
 		for id, existing := range o.records {
 			if ignoreID != nil && id == *ignoreID {
+				continue
+			}
+			if !recordHasIndexKey(existing, idx.KeyPath) {
 				continue
 			}
 			match := true
@@ -132,6 +138,16 @@ func (o *stubObjectStore) hasUniqueConflict(record idb.Record, ignoreID *string)
 		}
 	}
 	return false
+}
+
+func recordHasIndexKey(record idb.Record, keyPath []string) bool {
+	for _, field := range keyPath {
+		value, ok := record[field]
+		if !ok || value == nil {
+			return false
+		}
+	}
+	return true
 }
 
 func (o *stubObjectStore) Delete(_ context.Context, id string) error {
@@ -228,7 +244,12 @@ func (o *stubObjectStore) DeleteRange(_ context.Context, query any) (int64, erro
 }
 
 func (o *stubObjectStore) Index(name string) idb.Index {
-	return &stubIndex{store: o, name: name, schema: o.schema}
+	done := o.readSchedule()
+	defer done()
+	o.mu.RLock()
+	schema := o.schema
+	o.mu.RUnlock()
+	return &stubIndex{store: o, name: name, schema: schema}
 }
 
 func (o *stubObjectStore) OpenCursor(_ context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {

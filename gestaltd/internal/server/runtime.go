@@ -115,6 +115,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		// Dynamic session/MCP operation resolution uses MCPConnection below.
 		CatalogConnection:      httpCatalogConnectionMap(connMaps),
 		MCPConnection:          connMaps.MCPConnection,
+		SCIMHandler:            result.SCIMHandler,
 		ConnectionAuth:         result.ConnectionAuth,
 		ManualConnectionAuth:   result.ManualConnectionAuth,
 		AppDefs:                cfg.Apps,

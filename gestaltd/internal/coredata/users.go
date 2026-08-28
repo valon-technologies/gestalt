@@ -18,6 +18,8 @@ type UserService struct {
 	store idb.ObjectStore
 }
 
+var ErrUserEmailConflict = errors.New("user email is already linked to another user")
+
 func NewUserService(ds indexeddb.IndexedDB) *UserService {
 	return &UserService{store: ds.ObjectStore(StoreUsers)}
 }
@@ -52,14 +54,7 @@ func (s *UserService) FindOrCreateUserWithName(ctx context.Context, email, name 
 	}
 
 	now := time.Now()
-	newRec := idb.Record{
-		"id":               uuid.New().String(),
-		"email":            email,
-		"normalized_email": email,
-		"display_name":     strings.TrimSpace(name),
-		"created_at":       now,
-		"updated_at":       now,
-	}
+	newRec := newUserRecord(uuid.NewString(), email, name, now)
 	if err := s.store.Add(ctx, newRec); err != nil {
 		user, retryErr := s.findUserByNormalizedEmail(ctx, email)
 		if retryErr != nil {
@@ -99,8 +94,65 @@ func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*core.
 	return s.findUserByNormalizedEmail(ctx, email)
 }
 
+// LinkUserInTransaction links an externally managed identity to a Gestalt
+// user while participating in the caller's transaction. An empty userID
+// reuses the single user with the normalized email or creates one.
+func LinkUserInTransaction(ctx context.Context, tx idb.Transaction, userID, email, displayName string, now time.Time) (*core.User, error) {
+	email = normalizeEmail(email)
+	if email == "" {
+		return nil, fmt.Errorf("link user: email is required")
+	}
+	store := tx.ObjectStore(StoreUsers)
+	records, err := store.Index("by_normalized_email").GetAll(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("link user: find normalized email: %w", err)
+	}
+	if len(records) > 1 || len(records) == 1 && userID != "" && recString(records[0], "id") != userID {
+		return nil, fmt.Errorf("%w: %s", ErrUserEmailConflict, email)
+	}
+	if userID == "" {
+		if len(records) == 1 {
+			userID = recString(records[0], "id")
+		} else {
+			rec := newUserRecord(uuid.NewString(), email, displayName, now)
+			if err := store.Add(ctx, rec); err != nil {
+				return nil, fmt.Errorf("link user: create: %w", err)
+			}
+			return recordToUser(rec), nil
+		}
+	}
+	rec, err := store.Get(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("link user: get %q: %w", userID, err)
+	}
+	rec["email"] = email
+	rec["normalized_email"] = email
+	if displayName = strings.TrimSpace(displayName); displayName != "" {
+		rec["display_name"] = displayName
+	}
+	rec["updated_at"] = now
+	if err := store.Put(ctx, rec); err != nil {
+		if errors.Is(err, idb.ErrAlreadyExists) {
+			return nil, fmt.Errorf("%w: %s", ErrUserEmailConflict, email)
+		}
+		return nil, fmt.Errorf("link user: update: %w", err)
+	}
+	return recordToUser(rec), nil
+}
+
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func newUserRecord(id, email, displayName string, now time.Time) idb.Record {
+	return idb.Record{
+		"id":               id,
+		"email":            email,
+		"normalized_email": email,
+		"display_name":     strings.TrimSpace(displayName),
+		"created_at":       now,
+		"updated_at":       now,
+	}
 }
 
 func (s *UserService) findUserByNormalizedEmail(ctx context.Context, normalizedEmail string) (*core.User, error) {

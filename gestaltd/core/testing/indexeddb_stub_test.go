@@ -184,3 +184,37 @@ func TestStubTransactionAbortsOnOperationError(t *testing.T) {
 		t.Fatalf("user-3 after aborted transaction error = %v, want idb.ErrNotFound", err)
 	}
 }
+
+func TestStubUniqueIndexOmitsMissingAndNullKeys(t *testing.T) {
+	t.Parallel()
+
+	db := &StubIndexedDB{}
+	ctx := context.Background()
+	if _, err := db.CreateObjectStore(ctx, "items", idb.ObjectStoreOptions{
+		Indexes: []idb.IndexSchema{{Name: "by_external_id", KeyPath: []string{"external_id"}, Unique: true}},
+	}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	store := db.ObjectStore("items")
+	for _, record := range []idb.Record{
+		{"id": "missing-1"},
+		{"id": "missing-2"},
+		{"id": "null-1", "external_id": nil},
+		{"id": "null-2", "external_id": nil},
+		{"id": "present", "external_id": "employee-1"},
+	} {
+		if err := store.Add(ctx, record); err != nil {
+			t.Fatalf("Add(%q): %v", record["id"], err)
+		}
+	}
+	if err := store.Add(ctx, idb.Record{"id": "duplicate", "external_id": "employee-1"}); !errors.Is(err, idb.ErrAlreadyExists) {
+		t.Fatalf("duplicate present key error = %v, want idb.ErrAlreadyExists", err)
+	}
+	records, err := store.Index("by_external_id").GetAll(ctx, nil)
+	if err != nil {
+		t.Fatalf("index GetAll: %v", err)
+	}
+	if len(records) != 1 || records[0]["id"] != "present" {
+		t.Fatalf("indexed records = %#v, want only present key", records)
+	}
+}
