@@ -24,6 +24,7 @@ func (s *Server) connectMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) routes() {
 	r := s.router
+	r.Use(clientKindTelemetryMiddleware)
 	r.Use(requestMetaMiddleware)
 	r.Use(routePatternTelemetryMiddleware)
 	r.Use(s.securityHeadersMiddleware)
@@ -188,13 +189,13 @@ func (s *Server) mountMountedUIRoutes(r chi.Router) {
 			rootHandler = handler
 			continue
 		}
-		r.Get(path, func(w http.ResponseWriter, r *http.Request) {
+		r.Get(path, ingressKindTelemetryHandler(metricutil.IngressKindMountedUI, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			redirectPreservingQuery(w, r, path+"/", http.StatusMovedPermanently)
-		})
-		r.Handle(path+"/*", handler)
+		})))
+		r.Handle(path+"/*", ingressKindTelemetryHandler(metricutil.IngressKindMountedUI, handler))
 	}
 	if rootHandler != nil {
-		r.NotFound(rootHandler.ServeHTTP)
+		r.NotFound(ingressKindTelemetryHandler(metricutil.IngressKindMountedUI, rootHandler).ServeHTTP)
 	}
 }
 
@@ -257,7 +258,7 @@ func (s *Server) mountPublicRESTRoutes(r chi.Router) {
 			r.MethodNotAllowed(apiMethodNotAllowed)
 			return
 		}
-		r.Handle("/*", s.publicRESTHandler)
+		r.Handle("/*", ingressKindTelemetryHandler(metricutil.IngressKindPublicREST, s.publicRESTHandler))
 		r.NotFound(apiNotFound)
 		r.MethodNotAllowed(apiMethodNotAllowed)
 	})

@@ -1,6 +1,5 @@
 use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value, json};
-use std::sync::Arc;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::api::ApiClient;
@@ -19,7 +18,6 @@ use gestalt_sdk::agent::{
     AgentSessionState, AgentTextOutput, AgentToolConfig, AgentToolConfigSource,
 };
 use gestalt_sdk::app::AgentToolRef;
-use gestalt_sdk::public::auth::BearerAuth;
 use gestalt_sdk::public::generated::app_client::AgentClient;
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
 use gestalt_sdk::rpc_support::GestaltError;
@@ -36,8 +34,7 @@ pub(crate) const DEFAULT_SESSION_LIST_LIMIT: usize = 50;
 pub(crate) const INTERRUPT_CANCEL_REASON: &str = "operator interrupted";
 
 fn agent_client(api: &ApiClient) -> Result<AgentClient<SyncRestTransport>> {
-    let transport = SyncRestTransport::new(api.base_url(), Arc::new(BearerAuth::new(api.token())))
-        .with_timeout(std::time::Duration::from_secs(30));
+    let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
     Ok(AgentClient::new(transport))
 }
 

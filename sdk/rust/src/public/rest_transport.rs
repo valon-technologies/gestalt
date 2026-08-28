@@ -23,6 +23,7 @@ pub struct RestTransport {
     base_url: String,
     auth: Arc<dyn Auth>,
     client: reqwest::Client,
+    gestalt_client_kind: Option<String>,
 }
 
 impl RestTransport {
@@ -35,7 +36,14 @@ impl RestTransport {
                 .use_rustls_tls()
                 .build()
                 .expect("reqwest client"),
+            gestalt_client_kind: None,
         }
+    }
+
+    /// Sets the `X-Gestalt-Client` header value sent on every request.
+    pub fn with_gestalt_client_kind(mut self, kind: impl Into<String>) -> Self {
+        self.gestalt_client_kind = Some(kind.into());
+        self
     }
 
     /// Applies a per-request timeout to the underlying HTTP client.
@@ -93,6 +101,7 @@ impl UnaryTransport for RestTransport {
         let base_url = self.base_url.clone();
         let auth = Arc::clone(&self.auth);
         let client = self.client.clone();
+        let gestalt_client_kind = self.gestalt_client_kind.clone();
         let request_bytes = request.encode_to_vec();
         let method = method.clone();
 
@@ -103,7 +112,13 @@ impl UnaryTransport for RestTransport {
                     format!("method {} has no REST decoder", method.full_method),
                 )
             })?;
-            let prepared = build_rest_request(&method, &request_bytes, &base_url, &auth)?;
+            let prepared = build_rest_request(
+                &method,
+                &request_bytes,
+                &base_url,
+                &auth,
+                gestalt_client_kind.as_deref(),
+            )?;
             let mut builder = client
                 .request(prepared.method, prepared.url)
                 .headers(prepared.headers);
@@ -125,6 +140,7 @@ pub struct SyncRestTransport {
     base_url: String,
     auth: Arc<dyn Auth>,
     client: reqwest::blocking::Client,
+    gestalt_client_kind: Option<String>,
 }
 
 impl SyncRestTransport {
@@ -137,7 +153,14 @@ impl SyncRestTransport {
                 .use_rustls_tls()
                 .build()
                 .expect("reqwest blocking client"),
+            gestalt_client_kind: None,
         }
+    }
+
+    /// Sets the `X-Gestalt-Client` header value sent on every request.
+    pub fn with_gestalt_client_kind(mut self, kind: impl Into<String>) -> Self {
+        self.gestalt_client_kind = Some(kind.into());
+        self
     }
 
     /// Applies a per-request timeout to the underlying HTTP client.
@@ -168,8 +191,13 @@ impl SyncUnaryTransport for SyncRestTransport {
                 format!("method {} has no REST decoder", method.full_method),
             )
         })?;
-        let prepared =
-            build_rest_request(method, &request.encode_to_vec(), &self.base_url, &self.auth)?;
+        let prepared = build_rest_request(
+            method,
+            &request.encode_to_vec(),
+            &self.base_url,
+            &self.auth,
+            self.gestalt_client_kind.as_deref(),
+        )?;
         let mut builder = self
             .client
             .request(prepared.method, prepared.url)

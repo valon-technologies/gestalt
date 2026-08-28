@@ -1,11 +1,9 @@
 use anyhow::{Context, Result};
-use std::sync::Arc;
 
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
 use gestalt_sdk::identity::{GetGrantRequest, ListGrantsRequest, RevokeGrantRequest, TokenRequest};
-use gestalt_sdk::public::auth::BearerAuth;
 use gestalt_sdk::public::generated::app_client::IdentityClient;
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
@@ -14,8 +12,7 @@ const SUBJECT_TOKEN_TYPE_ACCESS_TOKEN: &str = "urn:ietf:params:oauth:token-type:
 const DEFAULT_CLIENT_ID: &str = "gestalt-cli";
 
 fn identity_client(api: &ApiClient) -> Result<IdentityClient<SyncRestTransport>> {
-    let transport = SyncRestTransport::new(api.base_url(), Arc::new(BearerAuth::new(api.token())))
-        .with_timeout(std::time::Duration::from_secs(30));
+    let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
     Ok(IdentityClient::new(transport))
 }
 

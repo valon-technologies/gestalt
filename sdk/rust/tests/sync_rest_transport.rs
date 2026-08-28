@@ -12,7 +12,7 @@ use gestalt::public::generated::app_client::AuthorizationClient;
 use gestalt::public::rest_transport::SyncRestTransport;
 use gestalt::rpc_support::gestalt_error_code;
 use serde_json::json;
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // wiremock::MockServer::start() is async, so we use a one-shot tokio runtime
@@ -23,7 +23,8 @@ fn start_mock_server() -> MockServer {
 }
 
 fn sync_client(server: &MockServer) -> AuthorizationClient<SyncRestTransport> {
-    let transport = SyncRestTransport::new(server.uri(), Arc::new(BearerAuth::new("test-token")));
+    let transport = SyncRestTransport::new(server.uri(), Arc::new(BearerAuth::new("test-token")))
+        .with_gestalt_client_kind("cli");
     AuthorizationClient::new(transport)
 }
 
@@ -34,6 +35,7 @@ fn sync_rest_transport_check_access_success() {
     rt.block_on(async {
         Mock::given(method("POST"))
             .and(path("/api/v2/authorization/access:check"))
+            .and(header("X-Gestalt-Client", "cli"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .set_body_json(json!({"allowed": true, "modelId": "model-1"})),
