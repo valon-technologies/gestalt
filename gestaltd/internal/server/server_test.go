@@ -10273,6 +10273,52 @@ func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 	}
 }
 
+func TestHostedHTTPBinding_RejectsWebhooksOperationRouteConflict(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "reports",
+			ConnMode: core.ConnectionModeNone,
+		},
+		ops: []core.Operation{
+			{Name: "webhooks", Method: http.MethodPost},
+			{Name: "handle_event", Method: http.MethodPost},
+		},
+	})
+	cfg := server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   providers,
+		Invoker:     invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		AppDefs: map[string]*config.ProviderEntry{
+			"reports": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"none": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/",
+						Method:   http.MethodPost,
+						Security: "none",
+						Target:   "handle_event",
+					},
+				},
+			},
+		},
+	}
+
+	_, err := server.New(cfg)
+	if err == nil {
+		t.Fatal("expected webhooks operation route conflict")
+	}
+	if !strings.Contains(err.Error(), "generic operation route") {
+		t.Fatalf("error = %v, want generic operation route conflict", err)
+	}
+}
+
 func TestHostedHTTPBinding_AllowsOverrideOfGenericOperationRoute(t *testing.T) {
 	t.Parallel()
 

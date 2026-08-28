@@ -37,6 +37,8 @@ var coreAPIRouteNamespaces = []string{
 	"/api/v1/s3",
 }
 
+const httpBindingRouteNamespace = "/webhooks"
+
 func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], mountedUIs []MountedUI) ([]MountedHTTPBinding, error) {
 	if len(entries) == 0 {
 		return nil, nil
@@ -49,6 +51,7 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 	slices.Sort(names)
 
 	mounted := make([]MountedHTTPBinding, 0)
+	legacyMounted := make([]MountedHTTPBinding, 0)
 	for _, pluginName := range names {
 		entry := entries[pluginName]
 		if entry == nil {
@@ -101,6 +104,9 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 				if relativePathConflictsWithGenericOperation(relativePath, target, operationIDs) {
 					return nil, fmt.Errorf("http binding %s.%s path %q conflicts with the generic operation route", pluginName, bindingName, binding.Path)
 				}
+				if relativePathConflictsWithGenericOperation(namespacedHTTPBindingRelativePath(relativePath), target, operationIDs) {
+					return nil, fmt.Errorf("http binding %s.%s namespaced path conflicts with the generic operation route", pluginName, bindingName)
+				}
 			}
 			securityName := strings.TrimSpace(binding.Security)
 			scheme := schemes[securityName]
@@ -124,9 +130,10 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			// Keep the pre-namespace route as a temporary rollback alias while
 			// callers migrate to the host-owned /webhooks namespace.
 			mountedBinding.Path = legacyMountedHTTPBindingPath(pluginName, relativePath)
-			mounted = append(mounted, mountedBinding)
+			legacyMounted = append(legacyMounted, mountedBinding)
 		}
 	}
+	mounted = appendNonConflictingLegacyHTTPBindings(mounted, legacyMounted)
 	if err := validateMountedHTTPBindingRoutes(mounted, mountedUIs); err != nil {
 		return nil, err
 	}
@@ -152,11 +159,14 @@ func normalizeHTTPBindingMountedPath(pathValue string) (string, error) {
 }
 
 func mountedHTTPBindingPath(pluginName, relativePath string) string {
-	base := legacyMountedHTTPBindingPath(pluginName, "/") + "/webhooks"
+	return legacyMountedHTTPBindingPath(pluginName, namespacedHTTPBindingRelativePath(relativePath))
+}
+
+func namespacedHTTPBindingRelativePath(relativePath string) string {
 	if relativePath == "" || relativePath == "/" {
-		return base
+		return httpBindingRouteNamespace
 	}
-	return base + relativePath
+	return httpBindingRouteNamespace + relativePath
 }
 
 func legacyMountedHTTPBindingPath(pluginName, relativePath string) string {
@@ -165,6 +175,20 @@ func legacyMountedHTTPBindingPath(pluginName, relativePath string) string {
 		return base
 	}
 	return base + relativePath
+}
+
+func appendNonConflictingLegacyHTTPBindings(canonical, legacy []MountedHTTPBinding) []MountedHTTPBinding {
+	canonicalRoutes := make(map[string]struct{}, len(canonical))
+	for i := range canonical {
+		canonicalRoutes[canonical[i].Method+" "+canonical[i].Path] = struct{}{}
+	}
+	for i := range legacy {
+		if _, exists := canonicalRoutes[legacy[i].Method+" "+legacy[i].Path]; exists {
+			continue
+		}
+		canonical = append(canonical, legacy[i])
+	}
+	return canonical
 }
 
 func relativePathConflictsWithGenericOperation(relativePath, target string, operationIDs map[string]struct{}) bool {
