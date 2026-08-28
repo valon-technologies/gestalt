@@ -2,10 +2,13 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
+
+const maxReferrerLen = 2048
 
 func clientKindTelemetryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,4 +44,66 @@ func ingressKindTelemetryMiddleware(kind string) func(http.Handler) http.Handler
 
 func ingressKindTelemetryHandler(kind string, next http.Handler) http.HandlerFunc {
 	return ingressKindTelemetryMiddleware(kind)(next).ServeHTTP
+}
+
+func (s *Server) uiAPIIngressTelemetryMiddleware(kind string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			dims := metricutil.HTTPMetricDims{IngressKind: kind}
+			if classifyClientKind(r) == metricutil.ClientKindWeb {
+				dims.ClientApp = s.classifyClientAppFromReferrer(r)
+			}
+			metricutil.AddHTTPServerMetricDims(r.Context(), dims)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func (s *Server) uiAPIIngressTelemetryHandler(kind string, next http.Handler) http.HandlerFunc {
+	return s.uiAPIIngressTelemetryMiddleware(kind)(next).ServeHTTP
+}
+
+func (s *Server) classifyClientAppFromReferrer(r *http.Request) string {
+	referer := strings.TrimSpace(r.Referer())
+	if referer == "" || len(referer) > maxReferrerLen {
+		return metricutil.ClientAppUnknown
+	}
+	parsed, err := url.Parse(referer)
+	if err != nil || !s.referrerSameOrigin(r, parsed) {
+		return metricutil.ClientAppUnknown
+	}
+	mounted, ok := s.mountedUIForPath(parsed.Path)
+	if !ok {
+		return metricutil.ClientAppUnknown
+	}
+	name := strings.TrimSpace(mounted.Name)
+	if name == "" {
+		return metricutil.ClientAppUnknown
+	}
+	return name
+}
+
+func (s *Server) referrerSameOrigin(r *http.Request, referer *url.URL) bool {
+	if referer == nil || referer.Host == "" || referer.Scheme == "" {
+		return false
+	}
+
+	expectedOrigin := strings.TrimSpace(s.publicBaseURL)
+	if expectedOrigin == "" {
+		if strings.TrimSpace(r.Host) == "" {
+			return false
+		}
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		expectedOrigin = scheme + "://" + r.Host
+	}
+
+	canonicalExpected, ok := canonicalOriginFromBaseURL(expectedOrigin)
+	if !ok {
+		return false
+	}
+	canonicalReferer := strings.ToLower(referer.Scheme) + "://" + canonicalHost(referer)
+	return canonicalReferer == canonicalExpected
 }

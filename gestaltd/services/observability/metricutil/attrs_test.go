@@ -13,15 +13,19 @@ func TestHTTPServerAttrsIngressAndClientKinds(t *testing.T) {
 	attrs := metricutil.HTTPServerAttrs(metricutil.HTTPMetricDims{
 		IngressKind: metricutil.IngressKindAppInvokeV1,
 		ClientKind:  metricutil.ClientKindCLI,
+		ClientApp:   metricutil.ClientAppUnknown,
 	})
-	if len(attrs) != 2 {
-		t.Fatalf("len(attrs) = %d, want 2", len(attrs))
+	if len(attrs) != 3 {
+		t.Fatalf("len(attrs) = %d, want 3", len(attrs))
 	}
 	if attrs[0] != attribute.String("gestaltd.ingress.kind", metricutil.IngressKindAppInvokeV1) {
 		t.Fatalf("ingress attr = %+v", attrs[0])
 	}
 	if attrs[1] != attribute.String("gestaltd.client.kind", metricutil.ClientKindCLI) {
 		t.Fatalf("client attr = %+v", attrs[1])
+	}
+	if attrs[2] != attribute.String("gestaltd.client.app", metricutil.ClientAppUnknown) {
+		t.Fatalf("client app attr = %+v", attrs[2])
 	}
 }
 
