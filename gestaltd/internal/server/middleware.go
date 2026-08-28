@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
@@ -306,6 +307,23 @@ func (s *Server) pluginRouteAuthMiddleware(pluginParam string) func(http.Handler
 			}
 
 			s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
+		})
+	}
+}
+
+func (s *Server) pluginRouteAuthWithSubjectLabelMiddleware(pluginParam string) func(http.Handler) http.Handler {
+	authMiddleware := s.pluginRouteAuthMiddleware(pluginParam)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resolved := false
+			authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				resolved = true
+				addSubjectLabelMetricDims(r.Context(), PrincipalFromContext(r.Context()))
+				next.ServeHTTP(w, r)
+			})).ServeHTTP(w, r)
+			if !resolved {
+				recordSubjectLabel(r.Context(), metricutil.SubjectLabelUnknown)
+			}
 		})
 	}
 }

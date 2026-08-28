@@ -1,14 +1,28 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 const maxReferrerLen = 2048
+
+const subjectLabelMetadataKey = "gestaltd-subject-label"
+
+type subjectLabelRecorder struct {
+	label string
+}
+
+type subjectLabelRecorderKey struct{}
 
 func clientKindTelemetryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +95,82 @@ func (s *Server) classifyClientAppFromReferrer(r *http.Request) string {
 		return metricutil.ClientAppUnknown
 	}
 	return name
+}
+
+func subjectLabelFromPrincipal(p *principal.Principal) string {
+	if p == nil {
+		return metricutil.SubjectLabelUnknown
+	}
+	p = principal.Canonicalized(p)
+	switch p.Kind {
+	case principal.KindUser:
+		if p.Identity == nil {
+			return metricutil.SubjectLabelUnknown
+		}
+		if email := strings.ToLower(strings.TrimSpace(p.Identity.Email)); email != "" {
+			return email
+		}
+	case principal.Kind("service_account"):
+		kind, name, ok := core.ParseSubjectID(p.SubjectID)
+		if !ok || kind != "service_account" {
+			return metricutil.SubjectLabelUnknown
+		}
+		if name = strings.TrimSpace(name); name != "" {
+			return name
+		}
+	}
+	return metricutil.SubjectLabelUnknown
+}
+
+func addSubjectLabelMetricDims(ctx context.Context, p *principal.Principal) {
+	recordSubjectLabel(ctx, subjectLabelFromPrincipal(p))
+}
+
+func recordSubjectLabel(ctx context.Context, label string) {
+	if recorder, ok := ctx.Value(subjectLabelRecorderKey{}).(*subjectLabelRecorder); ok {
+		recorder.label = label
+		return
+	}
+	metricutil.AddHTTPServerMetricDims(ctx, metricutil.HTTPMetricDims{
+		SubjectLabel: label,
+	})
+}
+
+func withSubjectLabelRecorder(r *http.Request) (*http.Request, *subjectLabelRecorder) {
+	recorder := &subjectLabelRecorder{}
+	ctx := context.WithValue(r.Context(), subjectLabelRecorderKey{}, recorder)
+	return r.WithContext(ctx), recorder
+}
+
+func (r *subjectLabelRecorder) flush(ctx context.Context) {
+	label := r.label
+	if label == "" {
+		label = metricutil.SubjectLabelUnknown
+	}
+	metricutil.AddHTTPServerMetricDims(ctx, metricutil.HTTPMetricDims{
+		SubjectLabel: label,
+	})
+}
+
+func setSubjectLabelResponseMetadata(ctx context.Context, p *principal.Principal) {
+	_ = grpc.SetHeader(ctx, metadata.Pairs(subjectLabelMetadataKey, subjectLabelFromPrincipal(p)))
+}
+
+func setSubjectLabelStreamResponseMetadata(stream grpc.ServerStream, p *principal.Principal) {
+	_ = stream.SetHeader(metadata.Pairs(subjectLabelMetadataKey, subjectLabelFromPrincipal(p)))
+}
+
+func recordSubjectLabelResponseMetadata(ctx context.Context) {
+	serverMetadata, ok := runtime.ServerMetadataFromContext(ctx)
+	if !ok {
+		return
+	}
+	for _, md := range []metadata.MD{serverMetadata.HeaderMD, serverMetadata.TrailerMD} {
+		if labels := md.Get(subjectLabelMetadataKey); len(labels) > 0 {
+			recordSubjectLabel(ctx, labels[0])
+			return
+		}
+	}
 }
 
 func (s *Server) referrerSameOrigin(r *http.Request, referer *url.URL) bool {

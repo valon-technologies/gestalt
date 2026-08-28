@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
@@ -104,6 +106,62 @@ func TestClassifyClientAppFromReferrer(t *testing.T) {
 			}
 			if got := s.classifyClientAppFromReferrer(req); got != tc.want {
 				t.Fatalf("classifyClientAppFromReferrer() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSubjectLabelFromPrincipal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		p    *principal.Principal
+		want string
+	}{
+		{
+			name: "normalized user email",
+			p: &principal.Principal{
+				Identity: &core.UserIdentity{Email: " USER@Example.com "},
+				Kind:     principal.KindUser,
+			},
+			want: "user@example.com",
+		},
+		{
+			name: "service account name",
+			p: &principal.Principal{
+				SubjectID: "service_account:oauth-bot",
+				Kind:      "service_account",
+				Identity:  &core.UserIdentity{Email: "wrong@example.com"},
+			},
+			want: "oauth-bot",
+		},
+		{
+			name: "unsupported principal with identity",
+			p: &principal.Principal{
+				SubjectID: "agent:researcher",
+				Kind:      "agent",
+				Identity:  &core.UserIdentity{Email: "wrong@example.com"},
+			},
+			want: metricutil.SubjectLabelUnknown,
+		},
+		{
+			name: "missing identity",
+			p:    &principal.Principal{SubjectID: "user:9f2c1c2e-1a2b-4c3d-8e4f-5a6b7c8d9e01", Kind: principal.KindUser},
+			want: metricutil.SubjectLabelUnknown,
+		},
+		{
+			name: "nil principal",
+			p:    nil,
+			want: metricutil.SubjectLabelUnknown,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := subjectLabelFromPrincipal(tc.p); got != tc.want {
+				t.Fatalf("subjectLabelFromPrincipal() = %q, want %q", got, tc.want)
 			}
 		})
 	}

@@ -63,7 +63,7 @@ func TestPublicPrepareUnaryInterceptorSanitizesBeforeProvider(t *testing.T) {
 	))
 	var handlerMetadata metadata.MD
 	var handlerSubject string
-	_, err = publicPrepareUnaryInterceptor(transport)(
+	_, err = publicPrepareUnaryInterceptor(transport, nil)(
 		ctx,
 		&proto.AppInvokeRequest{App: "example", Operation: "sync"},
 		&grpc.UnaryServerInfo{FullMethod: proto.App_Invoke_FullMethodName},
@@ -91,6 +91,46 @@ func TestPublicPrepareUnaryInterceptorSanitizesBeforeProvider(t *testing.T) {
 	}
 	if handlerSubject != "user:alice" {
 		t.Fatalf("handler trusted subject = %q, want user:alice", handlerSubject)
+	}
+}
+
+func TestDirectPublicGRPCDoesNotExposeSubjectLabelMetadata(t *testing.T) {
+	t.Parallel()
+
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		t.Fatalf("NewGeneratedRegistry: %v", err)
+	}
+	identity := &coretesting.StubIdentityProvider{
+		N: "stub",
+		IntrospectFn: func(_ context.Context, _ *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			return &core.IntrospectResponse{Active: true, Subject: "user:test-user"}, nil
+		},
+		UserInfoFn: func(_ context.Context, _ *core.UserInfoRequest) (*core.UserInfoResponse, error) {
+			return &core.UserInfoResponse{Email: "user@example.com"}, nil
+		},
+	}
+	transport := providergateway.NewProviderGatewayTransport()
+	transport.SetIdentityProvider(identity)
+	transport.SetPublicMethods(registry)
+
+	srv, _ := newPublicGRPCServer(publicGRPCConfig{
+		Transport:      transport,
+		Authentication: identity,
+	}, nil, nil)
+	conn, err := publicrpc.NewInProcessConn(srv)
+	if err != nil {
+		t.Fatalf("NewInProcessConn: %v", err)
+	}
+	t.Cleanup(conn.Close)
+
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer public-token"))
+	var header metadata.MD
+	if _, err := proto.NewIdentityClient(conn.ClientConn()).UserInfo(ctx, &proto.UserInfoRequest{}, grpc.Header(&header)); err != nil {
+		t.Fatalf("UserInfo: %v", err)
+	}
+	if got := header.Get(subjectLabelMetadataKey); len(got) != 0 {
+		t.Fatalf("subject label metadata = %v, want omitted", got)
 	}
 }
 

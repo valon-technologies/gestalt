@@ -44,6 +44,9 @@ type publicGRPCConfig struct {
 	RemoteManagement    proto.RemoteManagementServer
 }
 
+type publicUnarySubjectLabelReporter func(context.Context, *principal.Principal)
+type publicStreamSubjectLabelReporter func(grpc.ServerStream, *principal.Principal)
+
 func publicFeatureFlagError(flags featureflags.Snapshot, fullMethod string) error {
 	switch {
 	case strings.HasPrefix(fullMethod, "/"+proto.Agent_ServiceDesc.ServiceName+"/") && !flags.Enabled(featureflags.Agent):
@@ -116,10 +119,13 @@ func externalCredentialsProviderServer(cfg publicGRPCConfig) proto.ExternalCrede
 	return externalcredentialsservice.NewProviderServer(cfg.ExternalCredentials)
 }
 
-func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTransport) grpc.UnaryServerInterceptor {
+func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTransport, reportSubject publicUnarySubjectLabelReporter) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		origin, ok := publicrpc.PublicOriginFromContext(ctx)
 		if !ok {
+			if reportSubject != nil {
+				reportSubject(ctx, nil)
+			}
 			return nil, status.Error(codes.Unauthenticated, "bearer token is required")
 		}
 		ctx = stripInternalIdentityMetadata(ctx)
@@ -129,7 +135,13 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 		}
 		p, adapted, err := transport.PreparePublicRequest(ctx, origin.FullMethod, msg)
 		if err != nil {
+			if reportSubject != nil {
+				reportSubject(ctx, nil)
+			}
 			return nil, err
+		}
+		if reportSubject != nil {
+			reportSubject(ctx, p)
 		}
 		if p != nil {
 			canonical := principal.Canonicalized(p)
@@ -146,7 +158,7 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 // publicPrepareStreamInterceptor mirrors publicPrepareUnaryInterceptor for
 // server-streaming public methods: it verifies a public origin, authenticates
 // the bearer, and attaches the resolved principal to the stream context.
-func publicPrepareStreamInterceptor(transport *providergateway.ProviderGatewayTransport) grpc.StreamServerInterceptor {
+func publicPrepareStreamInterceptor(transport *providergateway.ProviderGatewayTransport, reportSubject publicStreamSubjectLabelReporter) grpc.StreamServerInterceptor {
 	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		// Stream interceptors run before wrapPublicStreamHandler attaches the
 		// public-origin marker, so derive the origin from the gRPC full method
@@ -159,7 +171,12 @@ func publicPrepareStreamInterceptor(transport *providergateway.ProviderGatewayTr
 		if _, ok := reg.Lookup(fullMethod); !ok {
 			return status.Error(codes.Unauthenticated, "bearer token is required")
 		}
-		authStream := &publicAuthStream{ServerStream: stream, transport: transport, fullMethod: fullMethod}
+		authStream := &publicAuthStream{
+			ServerStream:  stream,
+			transport:     transport,
+			fullMethod:    fullMethod,
+			reportSubject: reportSubject,
+		}
 		return handler(srv, authStream)
 	}
 }
@@ -168,10 +185,11 @@ func publicPrepareStreamInterceptor(transport *providergateway.ProviderGatewayTr
 // principal onto the context for downstream handlers.
 type publicAuthStream struct {
 	grpc.ServerStream
-	transport  *providergateway.ProviderGatewayTransport
-	fullMethod string
-	authed     bool
-	principal  *principal.Principal
+	transport     *providergateway.ProviderGatewayTransport
+	fullMethod    string
+	authed        bool
+	principal     *principal.Principal
+	reportSubject publicStreamSubjectLabelReporter
 }
 
 func (s *publicAuthStream) Context() context.Context {
@@ -202,7 +220,13 @@ func (s *publicAuthStream) RecvMsg(msg any) error {
 		ctx := stripInternalIdentityMetadata(s.ServerStream.Context())
 		p, adapted, err := s.transport.PreparePublicRequest(ctx, s.fullMethod, m)
 		if err != nil {
+			if s.reportSubject != nil {
+				s.reportSubject(s, nil)
+			}
 			return err
+		}
+		if s.reportSubject != nil {
+			s.reportSubject(s, p)
 		}
 		s.principal = p
 		if adapted != nil && m != adapted {
