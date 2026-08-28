@@ -47,7 +47,7 @@ func TestRegistryOnlyStaticSurfaceStartsUnavailable(t *testing.T) {
 		t.Fatalf("status = %d, want 503: %s", resp.StatusCode, body)
 	}
 
-	httpResp, err := http.Get(ts.URL + "/api/v1/g-issues/status")
+	httpResp, err := http.Get(ts.URL + "/api/v1/g-issues/webhooks/status")
 	if err != nil {
 		t.Fatalf("GET HTTP binding: %v", err)
 	}

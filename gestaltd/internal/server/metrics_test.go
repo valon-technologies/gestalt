@@ -739,7 +739,7 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, srv)
 
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/"+providerName+"/delivery", strings.NewReader(`{"event":"opened"}`))
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/"+providerName+"/webhooks/delivery", strings.NewReader(`{"event":"opened"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -775,7 +775,7 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 		"gestalt.result_status_class": "2xx",
 	}
 	httpAttrs := map[string]string{
-		"http.route":                  "/api/v1/" + providerName + "/delivery",
+		"http.route":                  "/api/v1/" + providerName + "/webhooks/delivery",
 		"gestaltd.provider.name":      providerName,
 		"gestaltd.operation.name":     "receive_event",
 		"gestaltd.invocation.surface": "http_binding",

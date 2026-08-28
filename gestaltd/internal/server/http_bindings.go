@@ -107,7 +107,7 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			if scheme == nil {
 				return nil, fmt.Errorf("http binding %s.%s references undefined security scheme %q", pluginName, bindingName, securityName)
 			}
-			mounted = append(mounted, MountedHTTPBinding{
+			mountedBinding := MountedHTTPBinding{
 				Name:           bindingName,
 				AppName:        pluginName,
 				Path:           mountedHTTPBindingPath(pluginName, relativePath),
@@ -118,7 +118,13 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 				RequestBody:    binding.RequestBody,
 				SecurityName:   securityName,
 				Security:       scheme,
-			})
+			}
+			mounted = append(mounted, mountedBinding)
+
+			// Keep the pre-namespace route as a temporary rollback alias while
+			// callers migrate to the host-owned /webhooks namespace.
+			mountedBinding.Path = legacyMountedHTTPBindingPath(pluginName, relativePath)
+			mounted = append(mounted, mountedBinding)
 		}
 	}
 	if err := validateMountedHTTPBindingRoutes(mounted, mountedUIs); err != nil {
@@ -146,6 +152,14 @@ func normalizeHTTPBindingMountedPath(pathValue string) (string, error) {
 }
 
 func mountedHTTPBindingPath(pluginName, relativePath string) string {
+	base := legacyMountedHTTPBindingPath(pluginName, "/") + "/webhooks"
+	if relativePath == "" || relativePath == "/" {
+		return base
+	}
+	return base + relativePath
+}
+
+func legacyMountedHTTPBindingPath(pluginName, relativePath string) string {
 	base := "/api/v1/" + strings.TrimSpace(pluginName)
 	if relativePath == "" || relativePath == "/" {
 		return base

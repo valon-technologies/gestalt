@@ -10356,43 +10356,52 @@ func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	const body = `{"event":"opened"}`
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/"+providerName+"/delivery", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Slack-Request-Timestamp", "123")
-	req.Header.Set("X-Slack-Signature", "v0=abc")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("http binding request: %v", err)
+	paths := []string{
+		"/api/v1/" + providerName + "/webhooks/delivery",
+		"/api/v1/" + providerName + "/delivery",
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	for _, requestPath := range paths {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+requestPath, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Slack-Request-Timestamp", "123")
+		req.Header.Set("X-Slack-Signature", "v0=abc")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("http binding request: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
 
-	var workflow map[string]any
-	select {
-	case workflow = <-workflowSeen:
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("timed out waiting for http binding invocation")
-	}
-	httpContext := invocation.WorkflowContextMap(workflow, "http")
-	if httpContext == nil {
-		t.Fatal("workflow http context is missing")
-	}
-	headers, ok := httpContext["headers"].(map[string]any)
-	if !ok {
-		t.Fatalf("workflow http headers = %#v, want map", httpContext["headers"])
-	}
-	signatures, ok := headers["X-Slack-Signature"].([]string)
-	if !ok || len(signatures) != 1 || signatures[0] != "v0=abc" {
-		t.Fatalf("X-Slack-Signature header = %#v, want [v0=abc]", headers["X-Slack-Signature"])
-	}
-	timestamps, ok := headers["X-Slack-Request-Timestamp"].([]string)
-	if !ok || len(timestamps) != 1 || timestamps[0] != "123" {
-		t.Fatalf("X-Slack-Request-Timestamp header = %#v, want [123]", headers["X-Slack-Request-Timestamp"])
-	}
-	if got, want := invocation.WorkflowContextString(httpContext, "rawBodyBase64"), base64.StdEncoding.EncodeToString([]byte(body)); got != want {
-		t.Fatalf("workflow http rawBodyBase64 = %q, want %q", got, want)
+		var workflow map[string]any
+		select {
+		case workflow = <-workflowSeen:
+		case <-time.After(200 * time.Millisecond):
+			t.Fatal("timed out waiting for http binding invocation")
+		}
+		httpContext := invocation.WorkflowContextMap(workflow, "http")
+		if httpContext == nil {
+			t.Fatal("workflow http context is missing")
+		}
+		if got := invocation.WorkflowContextString(httpContext, "path"); got != requestPath {
+			t.Fatalf("workflow http path = %q, want %q", got, requestPath)
+		}
+		headers, ok := httpContext["headers"].(map[string]any)
+		if !ok {
+			t.Fatalf("workflow http headers = %#v, want map", httpContext["headers"])
+		}
+		signatures, ok := headers["X-Slack-Signature"].([]string)
+		if !ok || len(signatures) != 1 || signatures[0] != "v0=abc" {
+			t.Fatalf("X-Slack-Signature header = %#v, want [v0=abc]", headers["X-Slack-Signature"])
+		}
+		timestamps, ok := headers["X-Slack-Request-Timestamp"].([]string)
+		if !ok || len(timestamps) != 1 || timestamps[0] != "123" {
+			t.Fatalf("X-Slack-Request-Timestamp header = %#v, want [123]", headers["X-Slack-Request-Timestamp"])
+		}
+		if got, want := invocation.WorkflowContextString(httpContext, "rawBodyBase64"), base64.StdEncoding.EncodeToString([]byte(body)); got != want {
+			t.Fatalf("workflow http rawBodyBase64 = %q, want %q", got, want)
+		}
 	}
 }
 

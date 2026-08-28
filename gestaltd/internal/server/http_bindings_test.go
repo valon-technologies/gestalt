@@ -6,6 +6,33 @@ import (
 	"testing"
 )
 
+func TestMountedHTTPBindingPaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		relativePath string
+		canonical    string
+		legacy       string
+	}{
+		{name: "binding path", relativePath: "/event", canonical: "/api/v1/github/webhooks/event", legacy: "/api/v1/github/event"},
+		{name: "root binding", relativePath: "/", canonical: "/api/v1/github/webhooks", legacy: "/api/v1/github"},
+		{name: "nested webhooks suffix", relativePath: "/webhooks/event", canonical: "/api/v1/github/webhooks/webhooks/event", legacy: "/api/v1/github/webhooks/event"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := mountedHTTPBindingPath("github", test.relativePath); got != test.canonical {
+				t.Fatalf("mountedHTTPBindingPath() = %q, want %q", got, test.canonical)
+			}
+			if got := legacyMountedHTTPBindingPath("github", test.relativePath); got != test.legacy {
+				t.Fatalf("legacyMountedHTTPBindingPath() = %q, want %q", got, test.legacy)
+			}
+		})
+	}
+}
+
 func TestValidateMountedHTTPBindingRoutesRejectsCoreRouteNamespace(t *testing.T) {
 	t.Parallel()
 
