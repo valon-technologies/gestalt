@@ -844,6 +844,13 @@ export interface TokenRequest {
    * grants created via token exchange. Empty means the grant has no label.
    */
   name: string;
+  /**
+   * grant_subject is a Gestalt request-side extension: when set, the issued
+   * API-token grant is owned by this canonical subject instead of the caller
+   * or subject_token subject. The host must authorize the caller before
+   * forwarding this value to the identity provider.
+   */
+  grantSubject: string;
 }
 
 /**

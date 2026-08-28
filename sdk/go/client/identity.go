@@ -230,6 +230,11 @@ type IdentityTokenOptions struct {
 	// name is a Gestalt request-side extension: a human label for API-token
 	// grants created via token exchange. Empty means the grant has no label.
 	Name string
+	// grant_subject is a Gestalt request-side extension: when set, the issued
+	// API-token grant is owned by this canonical subject instead of the caller
+	// or subject_token subject. The host must authorize the caller before
+	// forwarding this value to the identity provider.
+	GrantSubject string
 }
 
 // Token is the ergonomic form of [Identity.TokenRaw].
@@ -237,7 +242,7 @@ func (c *Identity) Token(ctx context.Context, grantType string, code string, red
 	if opts == nil {
 		opts = &IdentityTokenOptions{}
 	}
-	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType, ExpiresIn: opts.ExpiresIn, Name: opts.Name}
+	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType, ExpiresIn: opts.ExpiresIn, Name: opts.Name, GrantSubject: opts.GrantSubject}
 	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

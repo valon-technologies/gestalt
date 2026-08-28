@@ -599,6 +599,12 @@ pub(crate) fn encode_wire_token_request_json(value: &v1::TokenRequest) -> serde_
             serde_json::Value::String(value.name.to_string()),
         );
     }
+    if !value.grant_subject.is_empty() {
+        object.insert(
+            "grantSubject".into(),
+            serde_json::Value::String(value.grant_subject.to_string()),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -650,6 +656,10 @@ pub(crate) fn decode_wire_token_request_json(
             None => 0,
         },
         name: match object.get("name") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        grant_subject: match object.get("grantSubject") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },

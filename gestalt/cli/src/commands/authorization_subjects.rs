@@ -8,23 +8,15 @@ use crate::cli::{
 };
 use crate::output::{self, Format};
 
-use gestalt_sdk::authorization::{
-    AddRelationshipRequest, Relationship, RelationshipTarget, RelationshipTargetKind, RelationshipTuple, Resource,
-    Subject,
-};
-use gestalt_sdk::public::generated::app_client::AuthorizationClient;
-use gestalt_sdk::public::rest_transport::SyncRestTransport;
-
 pub fn dispatch(
     api: &ApiClient,
-    authz: &AuthorizationClient<SyncRestTransport>,
     command: AuthorizationSubjectCommands,
     format: Format,
 ) -> Result<()> {
     match command {
         AuthorizationSubjectCommands::Create(args) => create(api, &args, format),
         AuthorizationSubjectCommands::Grants { command } => match command {
-            AuthorizationSubjectGrantCommands::Set(args) => set_grant(authz, &args, format),
+            AuthorizationSubjectGrantCommands::Set(args) => set_grant(api, &args, format),
         },
         AuthorizationSubjectCommands::Tokens { command } => match command {
             AuthorizationSubjectTokenCommands::Create(args) => create_token(api, &args, format),
@@ -108,36 +100,25 @@ fn create_token(
 }
 
 fn set_grant(
-    authz: &AuthorizationClient<SyncRestTransport>,
+    api: &ApiClient,
     args: &AuthorizationSubjectGrantSetArgs,
     format: Format,
 ) -> Result<()> {
     let subject_id = normalize_service_account_subject_id(&args.subject_id)?;
-    let request = AddRelationshipRequest {
-        relationship: Some(Relationship {
-            tuple: Some(RelationshipTuple {
-                relation: args.relation.trim().to_string(),
-                resource: Some(Resource {
-                    r#type: args.resource_type.trim().to_string(),
-                    id: args.resource_id.trim().to_string(),
-                    properties: None,
-                }),
-                target: Some(RelationshipTarget {
-                    kind: Some(RelationshipTargetKind::Subject(Subject {
-                        r#type: "subject".to_string(),
-                        id: subject_id,
-                        properties: None,
-                    })),
-                }),
-            }),
-            ..Default::default()
-        }),
-    };
-    authz
-        .add_relationship_sync(request)
+    let body = serde_json::json!({
+        "relation": args.relation.trim(),
+        "resourceType": args.resource_type.trim(),
+        "resourceId": args.resource_id.trim(),
+    });
+    let path = format!(
+        "/api/v1/authorization/subjects/{}/grants",
+        encode_path_segment(&subject_id)
+    );
+    let resp = api
+        .put(&path, &body)
         .context("failed to set authorization grant")?;
     match format {
-        Format::Json => output::print_json(&serde_json::json!({"status": "created"})),
+        Format::Json => output::print_json(&resp),
         Format::Table => output::print_success("Authorization grant created."),
     }
     Ok(())

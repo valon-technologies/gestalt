@@ -114,3 +114,33 @@ func TestCreateAuthorizationSubjectTokenForwardsGrantSubject(t *testing.T) {
 		t.Fatal("expected token in create response")
 	}
 }
+
+func TestCreateAuthorizationSubjectTokenRequiresManagedSubject(t *testing.T) {
+	t.Parallel()
+
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+	svc := testutil.NewStubServices(t)
+	seedUserRecord(t, svc, testCanonicalAdminUserID, "grant-test@example.test", time.Now())
+	ts := newTestServer(t, func(cfg *server.Config) {
+		configureGrantTestAuthForUser(cfg, testCanonicalAdminUserID)
+		cfg.Authorization = authz
+		cfg.Providers = grantTestProviders(t)
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"ingress-verify-sa","permissions":["testapp:list"]}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/authorization/subjects/missing-bot/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, respBody)
+	}
+}

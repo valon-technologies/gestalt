@@ -115,6 +115,7 @@ pub(crate) fn to_wire_token_request(value: TokenRequest) -> v1::TokenRequest {
         subject_token_type: value.subject_token_type,
         expires_in: value.expires_in,
         name: value.name,
+        grant_subject: value.grant_subject,
     }
 }
 

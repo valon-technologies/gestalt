@@ -95,7 +95,7 @@ pub fn dispatch(
             },
         },
         AuthorizationCommands::Subjects { command } => {
-            authorization_subjects::dispatch(api, authz, command, format)
+            authorization_subjects::dispatch(api, command, format)
         }
     }
 }

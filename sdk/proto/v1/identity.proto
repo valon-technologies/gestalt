@@ -171,6 +171,7 @@ service Identity {
     option (signature) = "subject_token_type";
     option (optional_signature) = "expires_in";
     option (optional_signature) = "name";
+    option (optional_signature) = "grant_subject";
   }
   rpc Introspect(IntrospectRequest) returns (IntrospectResponse) {
     option (google.api.http) = {

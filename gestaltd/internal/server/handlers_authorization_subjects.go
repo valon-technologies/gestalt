@@ -12,10 +12,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
+
+var errManagedSubjectsUnavailable = errors.New("managed subjects are unavailable")
 
 type createAuthorizationSubjectRequest struct {
 	ID          string `json:"id"`
@@ -112,6 +114,18 @@ func (s *Server) createAuthorizationSubjectToken(w http.ResponseWriter, r *http.
 	if err := s.authorizeServiceAccountTokenMint(r.Context(), PrincipalFromContext(r.Context()), subjectID); err != nil {
 		auditErr = err
 		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	if err := s.requireManagedServiceAccountSubject(r.Context(), subjectID); err != nil {
+		auditErr = err
+		switch {
+		case errors.Is(err, core.ErrNotFound):
+			writeError(w, http.StatusNotFound, "managed subject not found")
+		case errors.Is(err, errManagedSubjectsUnavailable):
+			writeError(w, http.StatusNotFound, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "failed to resolve managed subject")
+		}
 		return
 	}
 
@@ -234,6 +248,17 @@ func (s *Server) setAuthorizationSubjectGrant(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
+	if err := s.requireManagedServiceAccountSubject(r.Context(), targetSubjectID); err != nil {
+		switch {
+		case errors.Is(err, core.ErrNotFound):
+			writeError(w, http.StatusNotFound, "managed subject not found")
+		case errors.Is(err, errManagedSubjectsUnavailable):
+			writeError(w, http.StatusNotFound, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "failed to resolve managed subject")
+		}
+		return
+	}
 
 	var req setAuthorizationSubjectGrantRequest
 	if err := decodeAuthorizationSubjectGrantRequest(r.Body, &req); err != nil {
@@ -278,6 +303,14 @@ func decodeAuthorizationSubjectGrantRequest(r io.Reader, req *setAuthorizationSu
 	decoder := json.NewDecoder(r)
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(req)
+}
+
+func (s *Server) requireManagedServiceAccountSubject(ctx context.Context, subjectID string) error {
+	if s == nil || s.managedSubjects == nil {
+		return errManagedSubjectsUnavailable
+	}
+	_, err := s.managedSubjects.GetManagedSubject(ctx, subjectID)
+	return err
 }
 
 func (s *Server) authorizeServiceAccountTokenMint(ctx context.Context, p *principal.Principal, serviceAccountSubjectID string) error {

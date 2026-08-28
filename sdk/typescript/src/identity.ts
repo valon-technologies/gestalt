@@ -178,6 +178,13 @@ export interface TokenRequest {
    * grants created via token exchange. Empty means the grant has no label.
    */
   name: string;
+  /**
+   * grant_subject is a Gestalt request-side extension: when set, the issued
+   * API-token grant is owned by this canonical subject instead of the caller
+   * or subject_token subject. The host must authorize the caller before
+   * forwarding this value to the identity provider.
+   */
+  grantSubject: string;
 }
 
 /**
@@ -281,7 +288,11 @@ export class Identity {
     scope: string,
     subjectToken: string,
     subjectTokenType: string,
-    options?: { expiresIn?: bigint | undefined; name?: string | undefined },
+    options?: {
+      expiresIn?: bigint | undefined;
+      name?: string | undefined;
+      grantSubject?: string | undefined;
+    },
   ): Promise<TokenResponse> {
     const request = {
       grantType,
@@ -294,6 +305,7 @@ export class Identity {
       subjectTokenType,
       expiresIn: options?.expiresIn ?? 0n,
       name: options?.name ?? "",
+      grantSubject: options?.grantSubject ?? "",
     } satisfies Init<TokenRequest>;
     const response = await callUnary(() =>
       this.client.token(
