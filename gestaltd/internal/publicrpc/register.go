@@ -11,6 +11,22 @@ import (
 
 type publicOriginKey struct{}
 
+type httpMetricContextKey struct{}
+
+// WithHTTPMetricContext links the active HTTP request context used for otelhttp
+// metric dimensions so public gRPC interceptors can stamp HTTP metrics.
+func WithHTTPMetricContext(ctx context.Context, httpCtx context.Context) context.Context {
+	return context.WithValue(ctx, httpMetricContextKey{}, httpCtx)
+}
+
+// HTTPMetricContextFrom returns the linked HTTP request context when present.
+func HTTPMetricContextFrom(ctx context.Context) context.Context {
+	if httpCtx, ok := ctx.Value(httpMetricContextKey{}).(context.Context); ok && httpCtx != nil {
+		return httpCtx
+	}
+	return ctx
+}
+
 // PublicOrigin records that a request entered through the public gRPC surface.
 type PublicOrigin struct {
 	FullMethod string

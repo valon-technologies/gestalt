@@ -81,7 +81,7 @@ func (s *Server) serveAdminPrometheusMetrics(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) mountAppAdminMetricsRoutes(r chi.Router) {
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app", false), s.appAdminAuthorizationMiddleware).
 		Get("/apps/{app}/admin/metrics", s.getAppAdminMetrics)
 }
 

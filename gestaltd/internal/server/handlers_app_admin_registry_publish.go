@@ -19,9 +19,9 @@ import (
 )
 
 func (s *Server) mountAppAdminRegistryPublishRoutes(r chi.Router) {
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app", false), s.appAdminAuthorizationMiddleware).
 		Post("/apps/{app}/admin/registry/publishes", s.beginAppAdminRegistryPublish)
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app", false), s.appAdminAuthorizationMiddleware).
 		Post("/apps/{app}/admin/registry/publishes/{publishID}/finalize", s.finalizeAppAdminRegistryPublish)
 }
 

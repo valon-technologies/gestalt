@@ -22,6 +22,13 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+func publicRESTIncomingHeaderMatcher(key string) (string, bool) {
+	if strings.EqualFold(key, subjectLabelSlotHeader) {
+		return strings.ToLower(subjectLabelSlotHeader), true
+	}
+	return runtime.DefaultHeaderMatcher(key)
+}
+
 func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Handler, error) {
 	if cfg.Transport == nil || cfg.Invoker == nil {
 		return nil, nil, nil
@@ -36,7 +43,10 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 	if err != nil {
 		return nil, nil, err
 	}
-	mux := runtime.NewServeMux(runtime.WithErrorHandler(publicRESTErrorHandler))
+	mux := runtime.NewServeMux(
+		runtime.WithErrorHandler(publicRESTErrorHandler),
+		runtime.WithIncomingHeaderMatcher(publicRESTIncomingHeaderMatcher),
+	)
 	if err := publicrpc.RegisterRESTGateway(context.Background(), mux, conn.ClientConn(), servers); err != nil {
 		conn.Close()
 		return nil, nil, err
@@ -56,6 +66,9 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 				r.Header.Set("Authorization", "Bearer "+token)
 			}
 		}
+		cleanup := bindSubjectLabelSlot(r)
+		defer cleanup()
+		defer flushSubjectLabelSlot(r)
 		mux.ServeHTTP(w, r)
 	}), nil
 }
@@ -138,8 +151,14 @@ func handleRESTInvoke(
 
 	p, adapted, err := transport.PreparePublicRequest(ctx, invokeFullMethod, &protoReq)
 	if err != nil {
+		addUnknownSubjectLabelMetricDims(ctx, r)
 		publicRESTErrorHandler(ctx, nil, nil, w, r, err)
 		return
+	}
+	if p != nil {
+		addSubjectLabelMetricDims(ctx, r, p)
+	} else {
+		addUnknownSubjectLabelMetricDims(ctx, r)
 	}
 	req, ok := adapted.(*proto.AppInvokeRequest)
 	if !ok || req == nil {

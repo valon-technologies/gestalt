@@ -168,13 +168,13 @@ type appAdminRegistryRevision struct {
 }
 
 func (s *Server) mountAppAdminRegistryRoutes(r chi.Router) {
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app", false), s.appAdminAuthorizationMiddleware).
 		Get("/apps/{app}/admin/registry", s.getAppAdminRegistry)
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app", false), s.appAdminAuthorizationMiddleware).
 		Get("/apps/{app}/admin/registry/history", s.getAppAdminRegistryHistory)
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app", false), s.appAdminAuthorizationMiddleware).
 		Post("/apps/{app}/admin/registry/version", s.selectAppAdminRegistryVersion)
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app", false), s.appAdminAuthorizationMiddleware).
 		Put("/apps/{app}/admin/registry/auto-deploy", s.updateAppAdminRegistryAutoDeploy)
 	s.mountAppAdminRegistryPublishRoutes(r)
 }

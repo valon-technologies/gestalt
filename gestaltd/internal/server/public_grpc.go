@@ -120,6 +120,7 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		origin, ok := publicrpc.PublicOriginFromContext(ctx)
 		if !ok {
+			addUnknownSubjectLabelMetricDims(ctx, nil)
 			return nil, status.Error(codes.Unauthenticated, "bearer token is required")
 		}
 		ctx = stripInternalIdentityMetadata(ctx)
@@ -129,7 +130,13 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 		}
 		p, adapted, err := transport.PreparePublicRequest(ctx, origin.FullMethod, msg)
 		if err != nil {
+			addUnknownSubjectLabelMetricDims(ctx, nil)
 			return nil, err
+		}
+		if p != nil {
+			addSubjectLabelMetricDims(ctx, nil, p)
+		} else {
+			addUnknownSubjectLabelMetricDims(ctx, nil)
 		}
 		if p != nil {
 			canonical := principal.Canonicalized(p)
@@ -202,7 +209,13 @@ func (s *publicAuthStream) RecvMsg(msg any) error {
 		ctx := stripInternalIdentityMetadata(s.ServerStream.Context())
 		p, adapted, err := s.transport.PreparePublicRequest(ctx, s.fullMethod, m)
 		if err != nil {
+			addUnknownSubjectLabelMetricDims(s.ServerStream.Context(), nil)
 			return err
+		}
+		if p != nil {
+			addSubjectLabelMetricDims(s.ServerStream.Context(), nil, p)
+		} else {
+			addUnknownSubjectLabelMetricDims(s.ServerStream.Context(), nil)
 		}
 		s.principal = p
 		if adapted != nil && m != adapted {
