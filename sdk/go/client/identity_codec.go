@@ -263,6 +263,7 @@ func ToWireTokenRequest(value *TokenRequest) *proto.TokenRequest {
 		SubjectTokenType: value.SubjectTokenType,
 		ExpiresIn:        value.ExpiresIn,
 		Name:             value.Name,
+		GrantSubject:     value.GrantSubject,
 	}
 	return out
 }
@@ -282,6 +283,7 @@ func FromWireTokenRequest(value *proto.TokenRequest) *TokenRequest {
 		SubjectTokenType: value.SubjectTokenType,
 		ExpiresIn:        value.ExpiresIn,
 		Name:             value.Name,
+		GrantSubject:     value.GrantSubject,
 	}
 	return out
 }

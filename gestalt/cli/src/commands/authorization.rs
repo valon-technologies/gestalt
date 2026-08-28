@@ -7,6 +7,9 @@ use crate::cli::{
 };
 use crate::output::{self, Format};
 
+use crate::api::ApiClient;
+use crate::commands::authorization_subjects;
+
 use gestalt_sdk::authorization::source_layer::{
     SOURCE_LAYER_RUNTIME, SOURCE_LAYER_STATIC_CONFIG, SOURCE_LAYER_UNSPECIFIED,
 };
@@ -19,6 +22,7 @@ use gestalt_sdk::public::generated::app_client::AuthorizationClient;
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
 pub fn dispatch(
+    api: &ApiClient,
     authz: &AuthorizationClient<SyncRestTransport>,
     command: AuthorizationCommands,
     format: Format,
@@ -90,6 +94,9 @@ pub fn dispatch(
                 },
             },
         },
+        AuthorizationCommands::Subjects { command } => {
+            authorization_subjects::dispatch(api, authz, command, format)
+        }
     }
 }
 

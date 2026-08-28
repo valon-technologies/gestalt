@@ -219,6 +219,7 @@ func tokenRequestFromProto(req *proto.TokenRequest) *core.TokenRequest {
 		SubjectTokenType: req.GetSubjectTokenType(),
 		ExpiresIn:        req.GetExpiresIn(),
 		Name:             req.GetName(),
+		GrantSubject:     req.GetGrantSubject(),
 	}
 }
 

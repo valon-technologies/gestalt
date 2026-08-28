@@ -38,7 +38,7 @@ fn run() -> anyhow::Result<()> {
             let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
             let authz =
                 gestalt_sdk::public::generated::app_client::AuthorizationClient::new(transport);
-            commands::authorization::dispatch(&authz, command, format)
+            commands::authorization::dispatch(&api, &authz, command, format)
         }
         Commands::App { command } => dispatch_app_command(command, url, format),
         Commands::Invoke(args) => dispatch_app_command(AppCommands::Invoke(args), url, format),

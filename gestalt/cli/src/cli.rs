@@ -228,6 +228,11 @@ pub enum AuthorizationCommands {
         #[command(subcommand)]
         command: AuthorizationModelCommands,
     },
+    /// Manage service-account subjects
+    Subjects {
+        #[command(subcommand)]
+        command: AuthorizationSubjectCommands,
+    },
 }
 
 #[derive(Args)]
@@ -281,6 +286,76 @@ pub struct AuthorizationRelationshipListArgs {
     /// Pagination cursor returned by a previous list response
     #[arg(long = "page-token")]
     pub page_token: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectCommands {
+    /// Create a managed service-account subject
+    Create(AuthorizationSubjectCreateArgs),
+    /// Manage grants for a service-account subject
+    Grants {
+        #[command(subcommand)]
+        command: AuthorizationSubjectGrantCommands,
+    },
+    /// Manage bearer tokens for a service-account subject
+    Tokens {
+        #[command(subcommand)]
+        command: AuthorizationSubjectTokenCommands,
+    },
+}
+
+#[derive(Args)]
+pub struct AuthorizationSubjectCreateArgs {
+    /// Service-account id without the service_account: prefix
+    pub id: String,
+    /// Human-readable display name
+    #[arg(long = "display-name")]
+    pub display_name: String,
+    /// Optional description
+    #[arg(long)]
+    pub description: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectGrantCommands {
+    /// Create an authorization relationship for a service-account subject
+    Set(AuthorizationSubjectGrantSetArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationSubjectGrantSetArgs {
+    /// Service-account id or canonical service_account:<id> subject id
+    pub subject_id: String,
+    /// Relationship relation, such as admin or viewer
+    #[arg(long)]
+    pub relation: String,
+    /// Resource type on the relationship tuple
+    #[arg(long = "resource-type")]
+    pub resource_type: String,
+    /// Resource id on the relationship tuple
+    #[arg(long = "resource-id")]
+    pub resource_id: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectTokenCommands {
+    /// Mint a bearer token owned by the service-account subject
+    Create(AuthorizationSubjectTokenCreateArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationSubjectTokenCreateArgs {
+    /// Service-account id or canonical service_account:<id> subject id
+    pub subject_id: String,
+    /// Human-readable grant label
+    #[arg(long)]
+    pub name: String,
+    /// Permission scope entries such as github:list
+    #[arg(long = "permission", required = true)]
+    pub permission: Vec<String>,
+    /// Token lifetime in seconds
+    #[arg(long = "expires-in")]
+    pub expires_in: Option<i64>,
 }
 
 #[derive(Subcommand)]
