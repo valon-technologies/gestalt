@@ -258,7 +258,7 @@ func (s *Server) mountPublicRESTRoutes(r chi.Router) {
 			r.MethodNotAllowed(apiMethodNotAllowed)
 			return
 		}
-		r.Handle("/*", ingressKindTelemetryHandler(metricutil.IngressKindPublicREST, s.publicRESTHandler))
+		r.Handle("/*", s.uiAPIIngressTelemetryHandler(metricutil.IngressKindPublicREST, s.publicRESTHandler))
 		r.NotFound(apiNotFound)
 		r.MethodNotAllowed(apiMethodNotAllowed)
 	})

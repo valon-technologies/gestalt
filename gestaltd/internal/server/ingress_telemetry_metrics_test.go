@@ -214,5 +214,84 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
 		})
 		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.client.app")
+	})
+
+	t.Run("public rest web labels matched client app from referer", func(t *testing.T) {
+		t.Parallel()
+
+		metrics := metrictest.NewManualMeterProvider(t)
+		ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+			cfg.MeterProvider = metrics.Provider
+			cfg.MountedUIs = []server.MountedUI{{
+				Name: "app:telemetry-ui",
+				Path: "/telemetry-ui",
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte("ok"))
+				}),
+			}}
+		})
+
+		req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v2/identity/userinfo", nil)
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		req.Header.Set("Referer", ts.URL+"/telemetry-ui/page")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		attrs := map[string]string{
+			"http.route":            "/api/v2/*",
+			"gestaltd.ingress.kind": metricutil.IngressKindPublicREST,
+			"gestaltd.client.kind":  metricutil.ClientKindWeb,
+			"gestaltd.client.app":   "app:telemetry-ui",
+		}
+		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
+		})
+		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
+	})
+
+	t.Run("public rest web labels unknown client app without matching referer", func(t *testing.T) {
+		t.Parallel()
+
+		metrics := metrictest.NewManualMeterProvider(t)
+		ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+			cfg.MeterProvider = metrics.Provider
+			cfg.MountedUIs = []server.MountedUI{{
+				Name: "app:telemetry-ui",
+				Path: "/telemetry-ui",
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte("ok"))
+				}),
+			}}
+		})
+
+		req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v2/identity/userinfo", nil)
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		req.Header.Set("Referer", ts.URL+"/other-ui/page")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		attrs := map[string]string{
+			"http.route":            "/api/v2/*",
+			"gestaltd.ingress.kind": metricutil.IngressKindPublicREST,
+			"gestaltd.client.kind":  metricutil.ClientKindWeb,
+			"gestaltd.client.app":   metricutil.ClientAppUnknown,
+		}
+		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
+		})
+		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
 	})
 }
