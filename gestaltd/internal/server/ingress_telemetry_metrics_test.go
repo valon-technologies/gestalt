@@ -143,6 +143,8 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
 				req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/"+providerName+"/list", nil)
 				req.Header.Set("Sec-Fetch-Site", "same-origin")
 				req.Header.Set("Referer", tc.referer)
