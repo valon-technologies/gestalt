@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
@@ -35,6 +36,10 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 	})
 
 	r.With(s.pluginRouteAuthMiddleware("name")).Get("/apps/{name}/operations", s.listOperations)
-	r.With(s.pluginRouteAuthMiddleware("integration")).Get("/{integration}/{operation}", s.executeOperation)
-	r.With(s.pluginRouteAuthMiddleware("integration")).Post("/{integration}/{operation}", s.executeOperation)
+	r.Group(func(r chi.Router) {
+		r.Use(ingressKindTelemetryMiddleware(metricutil.IngressKindAppInvokeV1))
+		r.Use(s.pluginRouteAuthMiddleware("integration"))
+		r.Get("/{integration}/{operation}", s.executeOperation)
+		r.Post("/{integration}/{operation}", s.executeOperation)
+	})
 }

@@ -11,7 +11,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use http::HeaderMap;
 use reqwest::Method as HttpMethod;
 use reqwest::Url;
-use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderValue};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderName, HeaderValue};
 use serde_json::{Map, Value};
 
 use crate::public::auth::Auth;
@@ -43,6 +43,7 @@ pub(crate) fn build_rest_request(
     request_bytes: &[u8],
     base_url: &str,
     auth: &Arc<dyn Auth>,
+    gestalt_client_kind: Option<&str>,
 ) -> Result<PreparedRequest, GestaltError> {
     let encode = method.encode_request_json.ok_or_else(|| {
         GestaltError::new(
@@ -69,6 +70,14 @@ pub(crate) fn build_rest_request(
         headers.insert(
             AUTHORIZATION,
             HeaderValue::from_str(&authorization).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?,
+        );
+    }
+    if let Some(kind) = gestalt_client_kind {
+        headers.insert(
+            HeaderName::from_static("x-gestalt-client"),
+            HeaderValue::from_str(kind).map_err(|err| {
                 GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
             })?,
         );

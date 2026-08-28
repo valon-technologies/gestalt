@@ -10,7 +10,7 @@ use gestalt::public::generated::app_client::AppClient;
 use gestalt::public::rest_transport::RestTransport;
 use gestalt::rpc_support::gestalt_error_code;
 use serde_json::json;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
@@ -53,14 +53,15 @@ async fn rest_transport_invoke_success() {
     });
     Mock::given(method("POST"))
         .and(path("/api/v2/app/example/operations/sync"))
+        .and(header("X-Gestalt-Client", "cli"))
         .respond_with(ResponseTemplate::new(200).set_body_json(body))
         .mount(&server)
         .await;
 
-    let client = AppClient::new(RestTransport::new(
-        server.uri(),
-        Arc::new(BearerAuth::new("test-token")),
-    ));
+    let client = AppClient::new(
+        RestTransport::new(server.uri(), Arc::new(BearerAuth::new("test-token")))
+            .with_gestalt_client_kind("cli"),
+    );
     let result = client
         .invoke(AppInvokeRequest {
             app: "example".to_string(),

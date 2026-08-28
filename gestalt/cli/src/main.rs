@@ -35,11 +35,7 @@ fn run() -> anyhow::Result<()> {
         },
         Commands::Authorization { command } => {
             let api = ApiClient::from_env(url)?;
-            let transport = gestalt_sdk::public::rest_transport::SyncRestTransport::new(
-                api.base_url(),
-                std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(api.token())),
-            )
-            .with_timeout(std::time::Duration::from_secs(30));
+            let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
             let authz =
                 gestalt_sdk::public::generated::app_client::AuthorizationClient::new(transport);
             commands::authorization::dispatch(&authz, command, format)
@@ -49,11 +45,7 @@ fn run() -> anyhow::Result<()> {
         Commands::Describe(args) => dispatch_app_command(AppCommands::Describe(args), url, format),
         Commands::Workflow { command } => {
             let api = ApiClient::from_env(url)?;
-            let transport = gestalt_sdk::public::rest_transport::SyncRestTransport::new(
-                api.base_url(),
-                std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(api.token())),
-            )
-            .with_timeout(std::time::Duration::from_secs(30));
+            let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
             let workflow =
                 gestalt_sdk::public::generated::app_client::WorkflowClient::new(transport);
             commands::workflows::dispatch(&api, &workflow, command, format)

@@ -33,6 +33,8 @@ const (
 	attrGestaltdRPCRole            = attribute.Key("gestaltd.rpc.role")
 	attrGestaltdHostServiceName    = attribute.Key("gestaltd.host_service.name")
 	attrGestaltdIndexedDBIndexName = attribute.Key("gestaltd.idb.index.name")
+	attrGestaltdIngressKind        = attribute.Key("gestaltd.ingress.kind")
+	attrGestaltdClientKind         = attribute.Key("gestaltd.client.kind")
 
 	attrDBSystemName     = attribute.Key("db.system.name")
 	attrDBNamespace      = attribute.Key("db.namespace")
@@ -52,6 +54,16 @@ const (
 	RPCRoleHostServiceServer = "host_service_server"
 
 	DBSystemNameGestaltdIndexedDB = "gestaltd.indexeddb"
+
+	IngressKindMountedUI   = "mounted_ui"
+	IngressKindPublicREST  = "public_rest"
+	IngressKindAppInvokeV1 = "app_invoke_v1"
+
+	ClientKindCLI     = "cli"
+	ClientKindWeb     = "web"
+	ClientKindUnknown = "unknown"
+
+	HeaderGestaltClient = "X-Gestalt-Client"
 )
 
 type TelemetryProviders interface {
@@ -67,6 +79,8 @@ type HTTPMetricDims struct {
 	Surface         string
 	HTTPBindingName string
 	UIName          string
+	IngressKind     string
+	ClientKind      string
 }
 
 type RPCMetricDims struct {
@@ -86,7 +100,7 @@ type DBMetricDims struct {
 }
 
 func HTTPServerAttrs(dims HTTPMetricDims) []attribute.KeyValue {
-	attrs := make([]attribute.KeyValue, 0, 7)
+	attrs := make([]attribute.KeyValue, 0, 9)
 	attrs = appendStringAttr(attrs, attrGestaltdProviderName, dims.ProviderName)
 	attrs = appendStringAttr(attrs, attrGestaltdOperationName, dims.OperationName)
 	attrs = appendStringAttr(attrs, attrGestaltdOperationTransport, dims.Transport)
@@ -94,6 +108,8 @@ func HTTPServerAttrs(dims HTTPMetricDims) []attribute.KeyValue {
 	attrs = appendStringAttr(attrs, attrGestaltdInvocationSurface, dims.Surface)
 	attrs = appendStringAttr(attrs, attrGestaltdHTTPBindingName, dims.HTTPBindingName)
 	attrs = appendStringAttr(attrs, attrGestaltdUIName, dims.UIName)
+	attrs = appendStringAttr(attrs, attrGestaltdIngressKind, dims.IngressKind)
+	attrs = appendStringAttr(attrs, attrGestaltdClientKind, dims.ClientKind)
 	return attrs
 }
 

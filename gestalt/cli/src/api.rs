@@ -76,6 +76,7 @@ pub fn fetch_auth_info(base_url: &str) -> Result<AuthInfo> {
     let auth_info_url = format!("{}{}", base_url.trim_end_matches('/'), AUTH_INFO_PATH);
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(5))
+        .default_headers(http::gestalt_cli_headers())
         .build()
         .context("failed to build HTTP client")?;
     let resp = client
@@ -239,7 +240,7 @@ impl ApiClient {
     }
 
     pub fn new(base_url: &str, token: &str) -> Result<Self> {
-        let mut default_headers = header::HeaderMap::new();
+        let mut default_headers = http::gestalt_cli_headers();
         default_headers.insert(
             header::ACCEPT,
             HeaderValue::from_static(http::APPLICATION_JSON),
@@ -273,6 +274,18 @@ impl ApiClient {
 
     pub fn token(&self) -> &str {
         &self.token
+    }
+
+    pub fn sync_rest_transport(
+        &self,
+        timeout: std::time::Duration,
+    ) -> gestalt_sdk::public::rest_transport::SyncRestTransport {
+        gestalt_sdk::public::rest_transport::SyncRestTransport::new(
+            self.base_url(),
+            std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(self.token())),
+        )
+        .with_timeout(timeout)
+        .with_gestalt_client_kind(http::GESTALT_CLIENT_KIND_CLI)
     }
 
     pub fn get(&self, path: &str) -> Result<serde_json::Value> {

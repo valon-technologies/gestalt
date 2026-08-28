@@ -73,6 +73,7 @@ where
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .cookie_store(true)
+        .default_headers(http::gestalt_cli_headers())
         .build()
         .context("failed to build HTTP client")?;
     let resp = client
