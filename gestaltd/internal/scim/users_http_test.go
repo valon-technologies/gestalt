@@ -303,6 +303,26 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 	}
 }
 
+func TestSCIMCreateSupportsTerminalTransactionalIndexMisses(t *testing.T) {
+	t.Parallel()
+
+	db := &transactionFaultDB{IndexedDB: &coretesting.StubIndexedDB{}}
+	_, _, handler := newSCIMService(t, db, nil, testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+	}))
+	db.arm(transactionFaultTerminalIndexMiss)
+
+	_, response := createUser(t, handler, testCurrentToken, "alice@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create with empty uniqueness indexes = %d %s", response.Code, response.Body.String())
+	}
+
+	_, response = createUser(t, handler, testCurrentToken, "alice@valon.com", true, map[string]any{"displayName": "Different Alice"})
+	if response.Code != http.StatusConflict {
+		t.Fatalf("duplicate create = %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestSCIMCredentialRotationAndClientNamespaces(t *testing.T) {
 	t.Parallel()
 
@@ -1039,6 +1059,7 @@ const (
 	transactionFaultIntentAdd transactionFault = iota + 1
 	transactionFaultSCIMUserGet
 	transactionFaultCoreUserAdd
+	transactionFaultTerminalIndexMiss
 )
 
 type transactionFaultDB struct {
@@ -1081,13 +1102,18 @@ type transactionFaultTransaction struct {
 }
 
 func (t *transactionFaultTransaction) ObjectStore(name string) idb.TransactionObjectStore {
-	return &transactionFaultStore{TransactionObjectStore: t.Transaction.ObjectStore(name), db: t.db, name: name}
+	return &transactionFaultStore{TransactionObjectStore: t.Transaction.ObjectStore(name), tx: t.Transaction, db: t.db, name: name}
 }
 
 type transactionFaultStore struct {
 	idb.TransactionObjectStore
+	tx   idb.Transaction
 	db   *transactionFaultDB
 	name string
+}
+
+func (s *transactionFaultStore) Index(name string) idb.TransactionIndex {
+	return &transactionFaultIndex{TransactionIndex: s.TransactionObjectStore.Index(name), tx: s.tx, db: s.db}
 }
 
 func (s *transactionFaultStore) Get(ctx context.Context, id string) (idb.Record, error) {
@@ -1109,6 +1135,20 @@ func (s *transactionFaultStore) Add(ctx context.Context, record idb.Record) erro
 		}
 	}
 	return s.TransactionObjectStore.Add(ctx, record)
+}
+
+type transactionFaultIndex struct {
+	idb.TransactionIndex
+	tx idb.Transaction
+	db *transactionFaultDB
+}
+
+func (i *transactionFaultIndex) Get(ctx context.Context, query any) (idb.Record, error) {
+	record, err := i.TransactionIndex.Get(ctx, query)
+	if errors.Is(err, idb.ErrNotFound) && i.db.trip(transactionFaultTerminalIndexMiss) {
+		_ = i.tx.Abort(ctx)
+	}
+	return record, err
 }
 
 var _ coredb.IndexedDB = (*transactionFaultDB)(nil)

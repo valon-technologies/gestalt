@@ -725,13 +725,17 @@ func ensureUnique(ctx context.Context, tx idb.Transaction, clientID, userID stri
 	for _, storeName := range []string{coredata.StoreSCIMUsers, coredata.StoreSCIMProjectionIntents} {
 		store := tx.ObjectStore(storeName)
 		for _, check := range checks {
-			rec, err := store.Index(check.index).Get(ctx, check.key)
-			if errors.Is(err, idb.ErrNotFound) {
-				continue
-			}
+			// Use GetAll for compatibility with remote providers that treat a
+			// transactional Get miss as terminal. An empty GetAll is a successful
+			// query, so subsequent uniqueness checks can use the same transaction.
+			records, err := store.Index(check.index).GetAll(ctx, check.key, 1)
 			if err != nil {
 				return unavailable("could not validate SCIM uniqueness")
 			}
+			if len(records) == 0 {
+				continue
+			}
+			rec := records[0]
 			if recordString(rec, "user_id") != userID && recordString(rec, "id") != userID {
 				return conflict(check.name + " is already assigned in this SCIM client namespace")
 			}
