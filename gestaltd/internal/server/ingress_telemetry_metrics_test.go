@@ -83,10 +83,10 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 		}
 
 		attrs := map[string]string{
-			"http.route":              "/api/v1/{integration}/{operation}",
-			"gestaltd.ingress.kind":   metricutil.IngressKindAppInvokeV1,
-			"gestaltd.client.kind":    metricutil.ClientKindCLI,
-			"gestaltd.subject.label":  "anonymous@gestalt",
+			"http.route":             "/api/v1/{integration}/{operation}",
+			"gestaltd.ingress.kind":  metricutil.IngressKindAppInvokeV1,
+			"gestaltd.client.kind":   metricutil.ClientKindCLI,
+			"gestaltd.subject.label": "anonymous@gestalt",
 		}
 		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
 			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
@@ -460,6 +460,9 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 			t.Fatalf("request: %v", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
+		if got := resp.Header.Values("Grpc-Metadata-Gestaltd-Subject-Label"); len(got) != 0 {
+			t.Fatalf("response exposed subject label metadata: %v", got)
+		}
 
 		attrs := map[string]string{
 			"http.route":             "/api/v2/*",

@@ -128,7 +128,7 @@ func TestDevRemoteAppInvocationUsesPublicGatewayContextAndAllowlist(t *testing.T
 			}
 			return handler(ctx, req)
 		},
-		publicPrepareUnaryInterceptor(remoteTransport),
+		publicPrepareUnaryInterceptor(remoteTransport, nil),
 	))
 	publicrpc.RegisterPublicServers(publicServer, publicrpc.Servers{App: appaccessservice.NewServer(remoteBroker)})
 	remoteConn := newBufconnClientConn(t, publicServer, func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {

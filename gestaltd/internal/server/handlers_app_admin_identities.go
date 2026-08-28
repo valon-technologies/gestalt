@@ -22,7 +22,7 @@ type appAdminIdentityRow struct {
 }
 
 func (s *Server) mountAppAdminIdentitiesRoutes(r chi.Router) {
-	r.With(s.pluginRouteAuthMiddleware("app", false), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
 		Get("/apps/{app}/admin/identities", s.listAppAdminIdentities)
 }
 

@@ -123,6 +123,7 @@ func TestSubjectLabelFromPrincipal(t *testing.T) {
 			name: "normalized user email",
 			p: &principal.Principal{
 				Identity: &core.UserIdentity{Email: " USER@Example.com "},
+				Kind:     principal.KindUser,
 			},
 			want: "user@example.com",
 		},
@@ -131,8 +132,18 @@ func TestSubjectLabelFromPrincipal(t *testing.T) {
 			p: &principal.Principal{
 				SubjectID: "service_account:oauth-bot",
 				Kind:      "service_account",
+				Identity:  &core.UserIdentity{Email: "wrong@example.com"},
 			},
 			want: "oauth-bot",
+		},
+		{
+			name: "unsupported principal with identity",
+			p: &principal.Principal{
+				SubjectID: "agent:researcher",
+				Kind:      "agent",
+				Identity:  &core.UserIdentity{Email: "wrong@example.com"},
+			},
+			want: metricutil.SubjectLabelUnknown,
 		},
 		{
 			name: "missing identity",

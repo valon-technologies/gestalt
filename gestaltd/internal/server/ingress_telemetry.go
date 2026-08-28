@@ -4,31 +4,25 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
 const maxReferrerLen = 2048
 
-const subjectLabelSlotHeader = "X-Gestalt-Subject-Label-Slot"
+const subjectLabelMetadataKey = "gestaltd-subject-label"
 
-type subjectLabelSlot struct {
+type subjectLabelRecorder struct {
 	label string
-	set   bool
 }
 
-var (
-	subjectLabelSlotSeq   atomic.Uint64
-	subjectLabelSlotStore sync.Map
-)
+type subjectLabelRecorderKey struct{}
 
 func clientKindTelemetryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,12 +102,19 @@ func subjectLabelFromPrincipal(p *principal.Principal) string {
 		return metricutil.SubjectLabelUnknown
 	}
 	p = principal.Canonicalized(p)
-	if p.Identity != nil {
+	switch p.Kind {
+	case principal.KindUser:
+		if p.Identity == nil {
+			return metricutil.SubjectLabelUnknown
+		}
 		if email := strings.ToLower(strings.TrimSpace(p.Identity.Email)); email != "" {
 			return email
 		}
-	}
-	if kind, name, ok := core.ParseSubjectID(p.SubjectID); ok && kind == "service_account" {
+	case principal.Kind("service_account"):
+		kind, name, ok := core.ParseSubjectID(p.SubjectID)
+		if !ok || kind != "service_account" {
+			return metricutil.SubjectLabelUnknown
+		}
 		if name = strings.TrimSpace(name); name != "" {
 			return name
 		}
@@ -121,100 +122,55 @@ func subjectLabelFromPrincipal(p *principal.Principal) string {
 	return metricutil.SubjectLabelUnknown
 }
 
-func addSubjectLabelMetricDims(ctx context.Context, r *http.Request, p *principal.Principal) {
-	recordSubjectLabel(ctx, r, subjectLabelFromPrincipal(p))
+func addSubjectLabelMetricDims(ctx context.Context, p *principal.Principal) {
+	recordSubjectLabel(ctx, subjectLabelFromPrincipal(p))
 }
 
-func addUnknownSubjectLabelMetricDims(ctx context.Context, r *http.Request) {
-	recordSubjectLabel(ctx, r, metricutil.SubjectLabelUnknown)
-}
-
-func bindSubjectLabelSlot(r *http.Request) func() {
-	slot := &subjectLabelSlot{}
-	id := subjectLabelSlotSeq.Add(1)
-	subjectLabelSlotStore.Store(id, slot)
-	r.Header.Set(subjectLabelSlotHeader, strconv.FormatUint(id, 10))
-	return func() {
-		subjectLabelSlotStore.Delete(id)
-	}
-}
-
-func flushSubjectLabelSlot(r *http.Request) {
-	slot := subjectLabelSlotForRequest(r)
-	if slot == nil || !slot.set {
+func recordSubjectLabel(ctx context.Context, label string) {
+	if recorder, ok := ctx.Value(subjectLabelRecorderKey{}).(*subjectLabelRecorder); ok {
+		recorder.label = label
 		return
 	}
-	metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-		SubjectLabel: slot.label,
-	})
-}
-
-func recordSubjectLabel(ctx context.Context, r *http.Request, label string) {
-	if r != nil {
-		if slot := subjectLabelSlotForRequest(r); slot != nil {
-			slot.label = label
-			slot.set = true
-			return
-		}
-	}
-	if slot := subjectLabelSlotFromContext(ctx); slot != nil {
-		slot.label = label
-		slot.set = true
-		return
-	}
-	metricCtx := metricContextForHTTPMetrics(ctx)
-	if r != nil {
-		metricCtx = r.Context()
-	}
-	metricutil.AddHTTPServerMetricDims(metricCtx, metricutil.HTTPMetricDims{
+	metricutil.AddHTTPServerMetricDims(ctx, metricutil.HTTPMetricDims{
 		SubjectLabel: label,
 	})
 }
 
-func subjectLabelSlotForRequest(r *http.Request) *subjectLabelSlot {
-	if r == nil {
-		return nil
-	}
-	id, err := strconv.ParseUint(strings.TrimSpace(r.Header.Get(subjectLabelSlotHeader)), 10, 64)
-	if err != nil {
-		return nil
-	}
-	raw, ok := subjectLabelSlotStore.Load(id)
-	if !ok {
-		return nil
-	}
-	slot, ok := raw.(*subjectLabelSlot)
-	if !ok {
-		return nil
-	}
-	return slot
+func withSubjectLabelRecorder(r *http.Request) (*http.Request, *subjectLabelRecorder) {
+	recorder := &subjectLabelRecorder{}
+	ctx := context.WithValue(r.Context(), subjectLabelRecorderKey{}, recorder)
+	return r.WithContext(ctx), recorder
 }
 
-func subjectLabelSlotFromContext(ctx context.Context) *subjectLabelSlot {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil
+func (r *subjectLabelRecorder) flush(ctx context.Context) {
+	label := r.label
+	if label == "" {
+		label = metricutil.SubjectLabelUnknown
 	}
-	for _, value := range md.Get(strings.ToLower(subjectLabelSlotHeader)) {
-		id, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
-		if err != nil {
-			continue
-		}
-		raw, ok := subjectLabelSlotStore.Load(id)
-		if !ok {
-			return nil
-		}
-		slot, ok := raw.(*subjectLabelSlot)
-		if !ok {
-			return nil
-		}
-		return slot
-	}
-	return nil
+	metricutil.AddHTTPServerMetricDims(ctx, metricutil.HTTPMetricDims{
+		SubjectLabel: label,
+	})
 }
 
-func metricContextForHTTPMetrics(ctx context.Context) context.Context {
-	return publicrpc.HTTPMetricContextFrom(ctx)
+func setSubjectLabelResponseMetadata(ctx context.Context, p *principal.Principal) {
+	_ = grpc.SetHeader(ctx, metadata.Pairs(subjectLabelMetadataKey, subjectLabelFromPrincipal(p)))
+}
+
+func setSubjectLabelStreamResponseMetadata(stream grpc.ServerStream, p *principal.Principal) {
+	_ = stream.SetHeader(metadata.Pairs(subjectLabelMetadataKey, subjectLabelFromPrincipal(p)))
+}
+
+func recordSubjectLabelResponseMetadata(ctx context.Context) {
+	serverMetadata, ok := runtime.ServerMetadataFromContext(ctx)
+	if !ok {
+		return
+	}
+	for _, md := range []metadata.MD{serverMetadata.HeaderMD, serverMetadata.TrailerMD} {
+		if labels := md.Get(subjectLabelMetadataKey); len(labels) > 0 {
+			recordSubjectLabel(ctx, labels[0])
+			return
+		}
+	}
 }
 
 func (s *Server) referrerSameOrigin(r *http.Request, referer *url.URL) bool {

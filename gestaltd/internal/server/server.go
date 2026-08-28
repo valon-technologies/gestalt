@@ -38,6 +38,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
 )
 
 // ReadinessChecker reports whether the server is ready to handle requests.
@@ -166,6 +167,7 @@ type Server struct {
 	hostServiceMu                 sync.Mutex
 	hostServiceHandlers           map[uint64]http.Handler
 	publicGRPCHandler             http.Handler
+	publicGRPCServer              *grpc.Server
 	publicRESTHandler             http.Handler
 	frpsHandler                   http.Handler
 	frpsConnectHandler            http.Handler
@@ -544,7 +546,7 @@ func New(cfg Config) (*Server, error) {
 		Now:               now,
 	})
 	if cfg.RouteProfile != RouteProfileManagement {
-		conn, restHandler, err := buildPublicGateway(publicGRPCConfig{
+		publicConfig := publicGRPCConfig{
 			Transport:           cfg.PublicGatewayTransport,
 			Invoker:             cfg.Invoker,
 			AgentManager:        cfg.AgentManager,
@@ -555,13 +557,15 @@ func New(cfg Config) (*Server, error) {
 			IndexedDB:           cfg.IndexedDB,
 			ExternalCredentials: externalCredentials,
 			RemoteManagement:    cfg.RemoteManagement,
-		})
+		}
+		conn, restHandler, err := buildPublicGateway(publicConfig)
 		if err != nil {
 			return nil, err
 		}
 		s.publicGatewayConn = conn
-		if conn != nil && conn.Server != nil {
-			s.publicGRPCHandler = http.HandlerFunc(conn.Server.ServeHTTP)
+		if conn != nil {
+			s.publicGRPCServer, _ = newPublicGRPCServer(publicConfig, nil, nil)
+			s.publicGRPCHandler = http.HandlerFunc(s.publicGRPCServer.ServeHTTP)
 		}
 		s.publicRESTHandler = restHandler
 	}
@@ -587,6 +591,10 @@ func (s *Server) Close() {
 	if s.publicGatewayConn != nil {
 		s.publicGatewayConn.Close()
 		s.publicGatewayConn = nil
+	}
+	if s.publicGRPCServer != nil {
+		s.publicGRPCServer.Stop()
+		s.publicGRPCServer = nil
 	}
 }
 

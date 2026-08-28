@@ -20,32 +20,38 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	gproto "google.golang.org/protobuf/proto"
 )
 
-func publicRESTIncomingHeaderMatcher(key string) (string, bool) {
-	if strings.EqualFold(key, subjectLabelSlotHeader) {
-		return strings.ToLower(subjectLabelSlotHeader), true
+func publicRESTOutgoingHeaderMatcher(key string) (string, bool) {
+	if strings.EqualFold(key, subjectLabelMetadataKey) {
+		return "", false
 	}
 	return runtime.DefaultHeaderMatcher(key)
+}
+
+func recordPublicRESTSubjectLabel(ctx context.Context, _ http.ResponseWriter, _ gproto.Message) error {
+	recordSubjectLabelResponseMetadata(ctx)
+	return nil
 }
 
 func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Handler, error) {
 	if cfg.Transport == nil || cfg.Invoker == nil {
 		return nil, nil, nil
 	}
-	servers := buildPublicServers(cfg)
-	srv := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(publicFeatureFlagUnaryInterceptor(cfg.FeatureFlags), publicPrepareUnaryInterceptor(cfg.Transport)),
-		grpc.ChainStreamInterceptor(publicFeatureFlagStreamInterceptor(cfg.FeatureFlags), publicPrepareStreamInterceptor(cfg.Transport)),
+	srv, servers := newPublicGRPCServer(
+		cfg,
+		setSubjectLabelResponseMetadata,
+		setSubjectLabelStreamResponseMetadata,
 	)
-	publicrpc.RegisterPublicServers(srv, servers)
 	conn, err := publicrpc.NewInProcessConn(srv)
 	if err != nil {
 		return nil, nil, err
 	}
 	mux := runtime.NewServeMux(
 		runtime.WithErrorHandler(publicRESTErrorHandler),
-		runtime.WithIncomingHeaderMatcher(publicRESTIncomingHeaderMatcher),
+		runtime.WithForwardResponseOption(recordPublicRESTSubjectLabel),
+		runtime.WithOutgoingHeaderMatcher(publicRESTOutgoingHeaderMatcher),
 	)
 	if err := publicrpc.RegisterRESTGateway(context.Background(), mux, conn.ClientConn(), servers); err != nil {
 		conn.Close()
@@ -66,11 +72,30 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 				r.Header.Set("Authorization", "Bearer "+token)
 			}
 		}
-		cleanup := bindSubjectLabelSlot(r)
-		defer cleanup()
-		defer flushSubjectLabelSlot(r)
+		r, recorder := withSubjectLabelRecorder(r)
+		defer recorder.flush(r.Context())
 		mux.ServeHTTP(w, r)
 	}), nil
+}
+
+func newPublicGRPCServer(
+	cfg publicGRPCConfig,
+	reportUnarySubject publicUnarySubjectLabelReporter,
+	reportStreamSubject publicStreamSubjectLabelReporter,
+) (*grpc.Server, publicrpc.Servers) {
+	servers := buildPublicServers(cfg)
+	srv := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			publicFeatureFlagUnaryInterceptor(cfg.FeatureFlags),
+			publicPrepareUnaryInterceptor(cfg.Transport, reportUnarySubject),
+		),
+		grpc.ChainStreamInterceptor(
+			publicFeatureFlagStreamInterceptor(cfg.FeatureFlags),
+			publicPrepareStreamInterceptor(cfg.Transport, reportStreamSubject),
+		),
+	)
+	publicrpc.RegisterPublicServers(srv, servers)
+	return srv, servers
 }
 
 func buildPublicServers(cfg publicGRPCConfig) publicrpc.Servers {
@@ -101,7 +126,8 @@ func buildPublicServers(cfg publicGRPCConfig) publicrpc.Servers {
 	return servers
 }
 
-func publicRESTErrorHandler(_ context.Context, _ *runtime.ServeMux, _ runtime.Marshaler, w http.ResponseWriter, _ *http.Request, err error) {
+func publicRESTErrorHandler(ctx context.Context, _ *runtime.ServeMux, _ runtime.Marshaler, w http.ResponseWriter, _ *http.Request, err error) {
+	recordSubjectLabelResponseMetadata(ctx)
 	st := status.Convert(err)
 	httpStatus := runtime.HTTPStatusFromCode(st.Code())
 	if httpStatus == 0 {
@@ -151,15 +177,10 @@ func handleRESTInvoke(
 
 	p, adapted, err := transport.PreparePublicRequest(ctx, invokeFullMethod, &protoReq)
 	if err != nil {
-		addUnknownSubjectLabelMetricDims(ctx, r)
 		publicRESTErrorHandler(ctx, nil, nil, w, r, err)
 		return
 	}
-	if p != nil {
-		addSubjectLabelMetricDims(ctx, r, p)
-	} else {
-		addUnknownSubjectLabelMetricDims(ctx, r)
-	}
+	addSubjectLabelMetricDims(ctx, p)
 	req, ok := adapted.(*proto.AppInvokeRequest)
 	if !ok || req == nil {
 		req = &protoReq

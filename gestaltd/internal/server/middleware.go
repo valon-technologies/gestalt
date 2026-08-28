@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
@@ -225,7 +226,7 @@ func (s *Server) resolveRequestPrincipalWithUserID(r *http.Request) (*principal.
 	return s.resolvePrincipalUserID(r.Context(), p)
 }
 
-func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next http.Handler, resolver *principal.Resolver, noAuth bool, anonymous *principal.Principal, auditProvider string, tagSubjectLabel bool) {
+func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next http.Handler, resolver *principal.Resolver, noAuth bool, anonymous *principal.Principal, auditProvider string) {
 	if noAuth {
 		p := anonymous
 		if p != nil {
@@ -236,9 +237,6 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 			case err != nil:
 				slog.WarnContext(r.Context(), "auth: unable to resolve anonymous user ID", "error", err)
 			}
-		}
-		if tagSubjectLabel {
-			addSubjectLabelMetricDims(r.Context(), r, p)
 		}
 		ctx := principal.WithPrincipal(r.Context(), p)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -254,9 +252,6 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 		case enrichErr != nil:
 			slog.WarnContext(r.Context(), "auth: unable to resolve user ID", "error", enrichErr)
 		}
-		if tagSubjectLabel {
-			addSubjectLabelMetricDims(r.Context(), r, p)
-		}
 		ctx := principal.WithPrincipal(r.Context(), p)
 		next.ServeHTTP(w, r.WithContext(ctx))
 		return
@@ -265,34 +260,22 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 	authSource := requestedAuthSource(r)
 	switch {
 	case err == nil:
-		if tagSubjectLabel {
-			addUnknownSubjectLabelMetricDims(r.Context(), r)
-		}
 		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errors.New("missing authorization"))
 		s.maybeSetMCPResourceMetadataHeader(w, r)
 		writeError(w, http.StatusUnauthorized, "missing authorization")
 		return
 	case errors.Is(err, errInvalidAuthorizationHeader):
-		if tagSubjectLabel {
-			addUnknownSubjectLabelMetricDims(r.Context(), r)
-		}
 		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errInvalidAuthorizationHeader)
 		s.maybeSetMCPResourceMetadataHeader(w, r)
 		writeError(w, http.StatusUnauthorized, "invalid authorization header format")
 		return
 	case errors.Is(err, principal.ErrInvalidToken):
-		if tagSubjectLabel {
-			addUnknownSubjectLabelMetricDims(r.Context(), r)
-		}
 		slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
 		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, principal.ErrInvalidToken)
 		s.maybeSetMCPResourceMetadataHeader(w, r)
 		writeError(w, http.StatusUnauthorized, "invalid token")
 		return
 	default:
-		if tagSubjectLabel {
-			addUnknownSubjectLabelMetricDims(r.Context(), r)
-		}
 		slog.ErrorContext(r.Context(), "auth: token validation failed", "remote_addr", r.RemoteAddr, "error", err)
 		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errors.New("token validation failed"))
 		writeError(w, http.StatusInternalServerError, "token validation failed")
@@ -302,17 +285,17 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "", false)
+		s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "")
 	})
 }
 
-func (s *Server) pluginRouteAuthMiddleware(pluginParam string, tagSubjectLabel bool) func(http.Handler) http.Handler {
+func (s *Server) pluginRouteAuthMiddleware(pluginParam string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			pluginName := strings.TrimSpace(chi.URLParam(r, pluginParam))
 			if pluginName == "" {
 				auth := s.serverAuthRuntime()
-				s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName, tagSubjectLabel)
+				s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
 				return
 			}
 
@@ -323,7 +306,24 @@ func (s *Server) pluginRouteAuthMiddleware(pluginParam string, tagSubjectLabel b
 				return
 			}
 
-			s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName, tagSubjectLabel)
+			s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
+		})
+	}
+}
+
+func (s *Server) pluginRouteAuthWithSubjectLabelMiddleware(pluginParam string) func(http.Handler) http.Handler {
+	authMiddleware := s.pluginRouteAuthMiddleware(pluginParam)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resolved := false
+			authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				resolved = true
+				addSubjectLabelMetricDims(r.Context(), PrincipalFromContext(r.Context()))
+				next.ServeHTTP(w, r)
+			})).ServeHTTP(w, r)
+			if !resolved {
+				recordSubjectLabel(r.Context(), metricutil.SubjectLabelUnknown)
+			}
 		})
 	}
 }
