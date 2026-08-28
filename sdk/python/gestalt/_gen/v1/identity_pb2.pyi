@@ -41,6 +41,7 @@ class TokenRequest(_message.Message):
     SUBJECT_TOKEN_TYPE_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
+    GRANT_SUBJECT_FIELD_NUMBER: _ClassVar[int]
     grant_type: str
     code: str
     redirect_uri: str
@@ -51,7 +52,8 @@ class TokenRequest(_message.Message):
     subject_token_type: str
     expires_in: int
     name: str
-    def __init__(self, grant_type: _Optional[str] = ..., code: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., client_id: _Optional[str] = ..., state: _Optional[str] = ..., scope: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ..., expires_in: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
+    grant_subject: str
+    def __init__(self, grant_type: _Optional[str] = ..., code: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., client_id: _Optional[str] = ..., state: _Optional[str] = ..., scope: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ..., expires_in: _Optional[int] = ..., name: _Optional[str] = ..., grant_subject: _Optional[str] = ...) -> None: ...
 
 class TokenResponse(_message.Message):
     __slots__ = ()

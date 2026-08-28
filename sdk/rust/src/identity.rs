@@ -201,6 +201,13 @@ pub struct TokenRequest {
     ///
     /// The `name` field.
     pub name: String,
+    /// grant_subject is a Gestalt request-side extension: when set, the issued
+    /// API-token grant is owned by this canonical subject instead of the caller
+    /// or subject_token subject. The host must authorize the caller before
+    /// forwarding this value to the identity provider.
+    ///
+    /// The `grant_subject` field.
+    pub grant_subject: String,
 }
 
 /// TokenResponse models RFC 6749 token endpoint response fields.
@@ -348,6 +355,7 @@ impl Identity {
             subject_token_type,
             expires_in: options.expires_in,
             name: options.name,
+            grant_subject: options.grant_subject,
         };
         let mut tonic_request = tonic::Request::new(to_wire_token_request(request));
         if let Some(timeout) = self.timeout {
@@ -495,4 +503,11 @@ pub struct IdentityTokenOptions {
     ///
     /// The `name` field.
     pub name: String,
+    /// grant_subject is a Gestalt request-side extension: when set, the issued
+    /// API-token grant is owned by this canonical subject instead of the caller
+    /// or subject_token subject. The host must authorize the caller before
+    /// forwarding this value to the identity provider.
+    ///
+    /// The `grant_subject` field.
+    pub grant_subject: String,
 }

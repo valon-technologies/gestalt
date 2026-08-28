@@ -146,6 +146,11 @@ class TokenRequest:
     #: name is a Gestalt request-side extension: a human label for API-token
     #: grants created via token exchange. Empty means the grant has no label.
     name: str = ""
+    #: grant_subject is a Gestalt request-side extension: when set, the issued
+    #: API-token grant is owned by this canonical subject instead of the caller
+    #: or subject_token subject. The host must authorize the caller before
+    #: forwarding this value to the identity provider.
+    grant_subject: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,6 +293,7 @@ class Identity:
         subject_token_type: str = ...,
         expires_in: int = ...,
         name: str = ...,
+        grant_subject: str = ...,
     ) -> TokenResponse: ...
 
     def token(
@@ -304,6 +310,7 @@ class Identity:
         subject_token_type: str | None = None,
         expires_in: int | None = None,
         name: str | None = None,
+        grant_subject: str | None = None,
     ) -> TokenResponse:
         if request is None:
             request = TokenRequest(
@@ -317,6 +324,7 @@ class Identity:
                 subject_token_type=subject_token_type or "",
                 expires_in=expires_in or 0,
                 name=name or "",
+                grant_subject=grant_subject or "",
             )
         elif (
             grant_type is not None
@@ -329,6 +337,7 @@ class Identity:
             or subject_token_type is not None
             or expires_in is not None
             or name is not None
+            or grant_subject is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(

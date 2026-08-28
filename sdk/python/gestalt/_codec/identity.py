@@ -172,6 +172,7 @@ def to_wire_token_request(value: native.TokenRequest) -> Any:
         subject_token_type=value.subject_token_type,
         expires_in=value.expires_in,
         name=value.name,
+        grant_subject=value.grant_subject,
     )
 
 
@@ -187,6 +188,7 @@ def from_wire_token_request(value: Any) -> native.TokenRequest:
         subject_token_type=value.subject_token_type,
         expires_in=value.expires_in,
         name=value.name,
+        grant_subject=value.grant_subject,
     )
 
 

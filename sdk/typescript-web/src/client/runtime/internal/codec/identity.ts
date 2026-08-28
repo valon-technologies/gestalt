@@ -226,6 +226,7 @@ export function toWireTokenRequest(
     subjectTokenType: value.subjectTokenType ?? "",
     expiresIn: value.expiresIn ?? 0n,
     name: value.name ?? "",
+    grantSubject: value.grantSubject ?? "",
   });
 }
 
@@ -241,6 +242,7 @@ export function fromWireTokenRequest(value: wire.TokenRequest): TokenRequest {
     subjectTokenType: value.subjectTokenType,
     expiresIn: value.expiresIn,
     name: value.name,
+    grantSubject: value.grantSubject,
   };
 }
 

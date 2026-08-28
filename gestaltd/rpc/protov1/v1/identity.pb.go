@@ -172,7 +172,12 @@ type TokenRequest struct {
 	ExpiresIn int64 `protobuf:"varint,10,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
 	// name is a Gestalt request-side extension: a human label for API-token
 	// grants created via token exchange. Empty means the grant has no label.
-	Name          string `protobuf:"bytes,11,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,11,opt,name=name,proto3" json:"name,omitempty"`
+	// grant_subject is a Gestalt request-side extension: when set, the issued
+	// API-token grant is owned by this canonical subject instead of the caller
+	// or subject_token subject. The host must authorize the caller before
+	// forwarding this value to the identity provider.
+	GrantSubject  string `protobuf:"bytes,12,opt,name=grant_subject,json=grantSubject,proto3" json:"grant_subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -273,6 +278,13 @@ func (x *TokenRequest) GetExpiresIn() int64 {
 func (x *TokenRequest) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *TokenRequest) GetGrantSubject() string {
+	if x != nil {
+		return x.GrantSubject
 	}
 	return ""
 }
@@ -942,7 +954,7 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\"6\n" +
 	"\x11AuthorizeResponse\x12!\n" +
-	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\xc8\x02\n" +
+	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\xed\x02\n" +
 	"\fTokenRequest\x12\x1d\n" +
 	"\n" +
 	"grant_type\x18\x01 \x01(\tR\tgrantType\x12\x12\n" +
@@ -956,7 +968,8 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\n" +
 	"expires_in\x18\n" +
 	" \x01(\x03R\texpiresIn\x12\x12\n" +
-	"\x04name\x18\v \x01(\tR\x04nameJ\x04\b\x04\x10\x05R\rrefresh_token\"\xc6\x01\n" +
+	"\x04name\x18\v \x01(\tR\x04name\x12#\n" +
+	"\rgrant_subject\x18\f \x01(\tR\fgrantSubjectJ\x04\b\x04\x10\x05R\rrefresh_token\"\xc6\x01\n" +
 	"\rTokenResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
 	"\n" +
@@ -999,13 +1012,13 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\n" +
 	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name2\x84\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name2\x95\n" +
 	"\n" +
 	"\bIdentity\x12\xcf\x01\n" +
-	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"s\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/api/v2/identity/authorize\x12\x82\x02\n" +
-	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"\xb1\x01\x8a\xb5\x18\n" +
+	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"s\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/api/v2/identity/authorize\x12\x93\x02\n" +
+	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"\xc2\x01\x8a\xb5\x18\n" +
 	"grant_type\x8a\xb5\x18\x04code\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\xa2\xb5\x18\n" +
-	"expires_in\xa2\xb5\x18\x04name\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/api/v2/identity/token\x12\xaf\x01\n" +
+	"expires_in\xa2\xb5\x18\x04name\xa2\xb5\x18\rgrant_subject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/api/v2/identity/token\x12\xaf\x01\n" +
 	"\n" +
 	"Introspect\x12&.gestalt.provider.v1.IntrospectRequest\x1a'.gestalt.provider.v1.IntrospectResponse\"P\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/api/v2/identity/introspect\x12\x88\x01\n" +
 	"\bUserInfo\x12$.gestalt.provider.v1.UserInfoRequest\x1a%.gestalt.provider.v1.UserInfoResponse\"/\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b\x12\x19/api/v2/identity/userinfo\x12\x8c\x01\n" +

@@ -2133,6 +2133,12 @@ pub struct TokenRequest {
     /// grants created via token exchange. Empty means the grant has no label.
     #[prost(string, tag = "11")]
     pub name: ::prost::alloc::string::String,
+    /// grant_subject is a Gestalt request-side extension: when set, the issued
+    /// API-token grant is owned by this canonical subject instead of the caller
+    /// or subject_token subject. The host must authorize the caller before
+    /// forwarding this value to the identity provider.
+    #[prost(string, tag = "12")]
+    pub grant_subject: ::prost::alloc::string::String,
 }
 /// TokenResponse models RFC 6749 token endpoint response fields.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

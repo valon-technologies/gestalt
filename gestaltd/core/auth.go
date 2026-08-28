@@ -90,6 +90,7 @@ type TokenRequest struct {
 	SubjectTokenType string
 	ExpiresIn        int64
 	Name             string
+	GrantSubject     string
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
