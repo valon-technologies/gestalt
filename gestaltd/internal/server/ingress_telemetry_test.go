@@ -60,68 +60,49 @@ func TestClassifyClientKind(t *testing.T) {
 func TestClassifyClientAppFromReferrer(t *testing.T) {
 	t.Parallel()
 
-	mounted := []MountedUI{
-		{Name: "app:sample", Path: "/sample"},
-		{Name: "app:nested", Path: "/nested"},
+	s := &Server{
+		publicBaseURL: "https://valon.tools",
+		mountedUIs: []MountedUI{
+			{Name: "app:nested", Path: "/nested"},
+			{Name: "app:deeply-nested", Path: "/nested/admin"},
+		},
 	}
 
 	tests := []struct {
 		name    string
-		target  string
 		referer string
-		headers func(*http.Request)
 		want    string
 	}{
 		{
 			name:    "matches registered ui by longest prefix",
-			target:  "http://valon.tools/api/v2/identity/userinfo",
-			referer: "http://valon.tools/nested/page",
-			headers: func(r *http.Request) {
-				r.Header.Set("Sec-Fetch-Site", "same-origin")
-			},
-			want: "app:nested",
+			referer: "https://valon.tools/nested/admin/page",
+			want:    "app:deeply-nested",
 		},
 		{
 			name:    "unknown without referer",
-			target:  "http://valon.tools/api/v2/identity/userinfo",
 			referer: "",
-			headers: func(r *http.Request) {
-				r.Header.Set("Sec-Fetch-Site", "same-origin")
-			},
-			want: metricutil.ClientAppUnknown,
+			want:    metricutil.ClientAppUnknown,
 		},
 		{
 			name:    "unknown for cross origin referer",
-			target:  "http://valon.tools/api/v2/identity/userinfo",
-			referer: "http://example.com/sample/",
-			headers: func(r *http.Request) {
-				r.Header.Set("Sec-Fetch-Site", "cross-site")
-			},
-			want: metricutil.ClientAppUnknown,
+			referer: "https://example.com/nested/",
+			want:    metricutil.ClientAppUnknown,
 		},
 		{
 			name:    "unknown for unmatched same origin referer",
-			target:  "http://valon.tools/api/v2/identity/userinfo",
-			referer: "http://valon.tools/other/",
-			headers: func(r *http.Request) {
-				r.Header.Set("Sec-Fetch-Site", "same-origin")
-			},
-			want: metricutil.ClientAppUnknown,
+			referer: "https://valon.tools/other/",
+			want:    metricutil.ClientAppUnknown,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			req := httptest.NewRequest(http.MethodGet, tc.target, nil)
-			req.Host = "valon.tools"
+			req := httptest.NewRequest(http.MethodGet, "http://internal/api/v2/identity/userinfo", nil)
 			if tc.referer != "" {
 				req.Header.Set("Referer", tc.referer)
 			}
-			if tc.headers != nil {
-				tc.headers(req)
-			}
-			if got := classifyClientAppFromReferrer(mounted, req); got != tc.want {
+			if got := s.classifyClientAppFromReferrer(req); got != tc.want {
 				t.Fatalf("classifyClientAppFromReferrer() = %q, want %q", got, tc.want)
 			}
 		})
@@ -131,22 +112,31 @@ func TestClassifyClientAppFromReferrer(t *testing.T) {
 func TestReferrerSameOrigin(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodGet, "http://valon.tools/api/v2/foo", nil)
-	req.Host = "valon.tools"
+	s := &Server{publicBaseURL: "https://valon.tools"}
+	req := httptest.NewRequest(http.MethodGet, "http://internal/api/v2/foo", nil)
+	req.Header.Set("X-Forwarded-Proto", "http")
 
-	same, err := url.Parse("http://valon.tools/sample/")
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if !referrerSameOrigin(req, same) {
-		t.Fatal("expected same-origin referer")
+	tests := []struct {
+		name    string
+		referer string
+		want    bool
+	}{
+		{name: "same origin", referer: "https://valon.tools/sample/", want: true},
+		{name: "canonical default port", referer: "https://valon.tools:443/sample/", want: true},
+		{name: "different scheme", referer: "http://valon.tools/sample/", want: false},
+		{name: "non-default port", referer: "https://valon.tools:8443/sample/", want: false},
 	}
 
-	cross, err := url.Parse("https://valon.tools/sample/")
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if referrerSameOrigin(req, cross) {
-		t.Fatal("expected different scheme to be cross-origin")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			referer, err := url.Parse(tc.referer)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got := s.referrerSameOrigin(req, referer); got != tc.want {
+				t.Fatalf("referrerSameOrigin() = %t, want %t", got, tc.want)
+			}
+		})
 	}
 }

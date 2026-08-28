@@ -90,6 +90,80 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
 		})
 		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.client.app")
+	})
+
+	t.Run("app invoke v1 labels matched and unknown web client apps", func(t *testing.T) {
+		t.Parallel()
+
+		metrics := metrictest.NewManualMeterProvider(t)
+		const providerName = "ingress-web-metrics"
+		srv := newTestServer(t, func(cfg *server.Config) {
+			cfg.MeterProvider = metrics.Provider
+			cfg.PublicBaseURL = "https://valon.tools"
+			cfg.MountedUIs = []server.MountedUI{{
+				Name: "app:telemetry-ui",
+				Path: "/telemetry-ui",
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte("ok"))
+				}),
+			}}
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithCatalog{
+				StubIntegration: coretesting.StubIntegration{
+					N:        providerName,
+					ConnMode: core.ConnectionModeNone,
+					ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+						return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"operation":"` + operation + `"}`)}, nil
+					},
+				},
+				catalog: &catalog.Catalog{
+					Name: providerName,
+					Operations: []catalog.CatalogOperation{
+						{ID: "list", Method: http.MethodGet, Path: "/list"},
+					},
+				},
+			})
+		})
+		testutil.CloseOnCleanup(t, srv)
+
+		for _, tc := range []struct {
+			name      string
+			referer   string
+			clientApp string
+		}{
+			{
+				name:      "matched",
+				referer:   "https://valon.tools/telemetry-ui/page",
+				clientApp: "app:telemetry-ui",
+			},
+			{
+				name:      "unknown",
+				referer:   "https://valon.tools/other-ui/page",
+				clientApp: metricutil.ClientAppUnknown,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/"+providerName+"/list", nil)
+				req.Header.Set("Sec-Fetch-Site", "same-origin")
+				req.Header.Set("Referer", tc.referer)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("request: %v", err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+
+				attrs := map[string]string{
+					"http.route":            "/api/v1/{integration}/{operation}",
+					"gestaltd.ingress.kind": metricutil.IngressKindAppInvokeV1,
+					"gestaltd.client.kind":  metricutil.ClientKindWeb,
+					"gestaltd.client.app":   tc.clientApp,
+				}
+				rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+					return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
+				})
+				metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
+			})
+		}
 	})
 
 	t.Run("rejected app invoke retains ingress kind", func(t *testing.T) {
@@ -237,7 +311,7 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 			t.Fatalf("NewRequest: %v", err)
 		}
 		req.Header.Set("Sec-Fetch-Site", "same-origin")
-		req.Header.Set("Referer", ts.URL+"/telemetry-ui/page")
+		req.Header.Set("Referer", "https://gestalt.test/telemetry-ui/page")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -276,7 +350,7 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 			t.Fatalf("NewRequest: %v", err)
 		}
 		req.Header.Set("Sec-Fetch-Site", "same-origin")
-		req.Header.Set("Referer", ts.URL+"/other-ui/page")
+		req.Header.Set("Referer", "https://gestalt.test/other-ui/page")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
