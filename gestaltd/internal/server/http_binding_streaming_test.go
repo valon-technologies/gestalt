@@ -103,7 +103,7 @@ func TestHTTPBindingStreaming(t *testing.T) {
 			cfg.AppDefs = map[string]*config.ProviderEntry{"streamer": streamingAppEntry(provider)}
 		})
 
-		resp, err := http.Post(ts.URL+"/api/v1/streamer/hooks/echo", "application/json", bytes.NewReader([]byte(`{"message":"hello"}`)))
+		resp, err := http.Post(ts.URL+"/api/v1/streamer/webhooks/hooks/echo", "application/json", bytes.NewReader([]byte(`{"message":"hello"}`)))
 		if err != nil {
 			t.Fatalf("POST: %v", err)
 		}
@@ -160,7 +160,7 @@ func TestHTTPBindingStreaming(t *testing.T) {
 			}
 		})
 
-		resp, err := http.Post(ts.URL+"/api/v1/unary/hooks/ping", "application/json", bytes.NewReader([]byte(`{"message":"hello"}`)))
+		resp, err := http.Post(ts.URL+"/api/v1/unary/webhooks/hooks/ping", "application/json", bytes.NewReader([]byte(`{"message":"hello"}`)))
 		if err != nil {
 			t.Fatalf("POST: %v", err)
 		}
@@ -196,7 +196,7 @@ func TestHTTPBindingStreaming(t *testing.T) {
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, ts.URL+"/api/v1/streamer/hooks/echo", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, ts.URL+"/api/v1/streamer/webhooks/hooks/echo", nil)
 		if err != nil {
 			t.Fatalf("NewRequest: %v", err)
 		}
@@ -237,7 +237,7 @@ func TestHTTPBindingStreamingWithGuardedInvoker(t *testing.T) {
 		cfg.Invoker = invocation.NewGuarded(broker, nil, "http", nil, invocation.WithoutRateLimit())
 	})
 
-	resp, err := http.Post(ts.URL+"/api/v1/streamer/hooks/echo", "application/json", bytes.NewReader([]byte(`{"message":"hello"}`)))
+	resp, err := http.Post(ts.URL+"/api/v1/streamer/webhooks/hooks/echo", "application/json", bytes.NewReader([]byte(`{"message":"hello"}`)))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
