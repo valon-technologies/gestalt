@@ -8,7 +8,9 @@ pub const TEXT_HTML: &str = "text/html";
 pub const TEXT_PLAIN: &str = "text/plain";
 pub const CACHE_CONTROL_NO_STORE: &str = "no-store";
 pub const GESTALT_CLIENT_KIND_CLI: &str = "cli";
-pub const GESTALT_CLIENT_VERSION_HEADER: &str = "x-gestalt-client-version";
+
+const GESTALT_CLIENT_HEADER: &str = "x-gestalt-client";
+const GESTALT_CLIENT_VERSION_HEADER: &str = "x-gestalt-client-version";
 
 const CONNECTION_CLOSE: &str = "close";
 const UTF_8: &str = "utf-8";
@@ -16,7 +18,7 @@ const UTF_8: &str = "utf-8";
 pub fn gestalt_cli_headers() -> header::HeaderMap {
     let mut headers = header::HeaderMap::new();
     headers.insert(
-        header::HeaderName::from_static("x-gestalt-client"),
+        header::HeaderName::from_static(GESTALT_CLIENT_HEADER),
         header::HeaderValue::from_static(GESTALT_CLIENT_KIND_CLI),
     );
     headers.insert(

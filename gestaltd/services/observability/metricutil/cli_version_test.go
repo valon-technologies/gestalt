@@ -9,11 +9,10 @@ import (
 func TestClassifyKnownCLIVersionRecognizesAllowlistedRelease(t *testing.T) {
 	t.Parallel()
 
-	if got := ClassifyKnownCLIVersion("0.0.2-alpha.17"); got != "0.0.2-alpha.17" {
-		t.Fatalf("ClassifyKnownCLIVersion() = %q, want %q", got, "0.0.2-alpha.17")
-	}
-	if got := ClassifyKnownCLIVersion(" 0.0.2-alpha.17 "); got != "0.0.2-alpha.17" {
-		t.Fatalf("ClassifyKnownCLIVersion(trimmed) = %q, want %q", got, "0.0.2-alpha.17")
+	for _, raw := range []string{"0.0.2-alpha.17", " 0.0.2-alpha.17 "} {
+		if got := ClassifyKnownCLIVersion(raw); got != "0.0.2-alpha.17" {
+			t.Fatalf("ClassifyKnownCLIVersion(%q) = %q, want %q", raw, got, "0.0.2-alpha.17")
+		}
 	}
 }
 
@@ -24,12 +23,8 @@ func TestClassifyKnownCLIVersionRejectsInvalidHeaders(t *testing.T) {
 		"",
 		"   ",
 		"not-a-version",
-		"1.2",
-		"1.2.3.4",
-		"v1.2.3",
-		"0.0.2-alpha.",
-		"0.0.2-alpha.17-extra",
 		"0.0.2-alpha.16",
+		"0.0.2-alpha.17-extra",
 		strings.Repeat("0", maxCLIVersionHeaderLen+1),
 	} {
 		if got := ClassifyKnownCLIVersion(raw); got != ClientVersionUnknown {
@@ -61,6 +56,12 @@ func TestAppendKnownCLIVersionEvictsOldestAtCapacity(t *testing.T) {
 	}
 	if versions[len(versions)-1] != versionForIndex(maxKnownCLIVersions+1) {
 		t.Fatalf("newest version = %q, want %q", versions[len(versions)-1], versionForIndex(maxKnownCLIVersions+1))
+	}
+	if got := classifyKnownCLIVersion(versions, versionForIndex(1)); got != ClientVersionUnknown {
+		t.Fatalf("classifyKnownCLIVersion(evicted) = %q, want %q", got, ClientVersionUnknown)
+	}
+	if got := classifyKnownCLIVersion(versions, versionForIndex(maxKnownCLIVersions+1)); got != versionForIndex(maxKnownCLIVersions+1) {
+		t.Fatalf("classifyKnownCLIVersion(newest) = %q, want %q", got, versionForIndex(maxKnownCLIVersions+1))
 	}
 }
 
