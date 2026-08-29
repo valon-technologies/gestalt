@@ -83,10 +83,11 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 		}
 
 		attrs := map[string]string{
-			"http.route":             "/api/v1/{integration}/{operation}",
-			"gestaltd.ingress.kind":  metricutil.IngressKindAppInvokeV1,
-			"gestaltd.client.kind":   metricutil.ClientKindCLI,
-			"gestaltd.subject.label": "anonymous@gestalt",
+			"http.route":               "/api/v1/{integration}/{operation}",
+			"gestaltd.ingress.kind":    metricutil.IngressKindAppInvokeV1,
+			"gestaltd.client.kind":     metricutil.ClientKindCLI,
+			"gestaltd.client.version":  metricutil.ClientVersionUnknown,
+			"gestaltd.subject.label":   "anonymous@gestalt",
 		}
 		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
 			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
@@ -358,8 +359,9 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 		}
 
 		attrs := map[string]string{
-			"http.route":           "/api/v1/catalog/apps",
-			"gestaltd.client.kind": metricutil.ClientKindCLI,
+			"http.route":              "/api/v1/catalog/apps",
+			"gestaltd.client.kind":    metricutil.ClientKindCLI,
+			"gestaltd.client.version": metricutil.ClientVersionUnknown,
 		}
 		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
 			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
@@ -367,6 +369,83 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
 		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.ingress.kind")
 		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.subject.label")
+	})
+
+	t.Run("app invoke v1 labels allowlisted cli version", func(t *testing.T) {
+		t.Parallel()
+
+		metrics := metrictest.NewManualMeterProvider(t)
+		const providerName = "ingress-cli-version-metrics"
+		srv := newTestServer(t, func(cfg *server.Config) {
+			cfg.MeterProvider = metrics.Provider
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithCatalog{
+				StubIntegration: coretesting.StubIntegration{
+					N:        providerName,
+					ConnMode: core.ConnectionModeNone,
+					ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+						return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"operation":"` + operation + `"}`)}, nil
+					},
+				},
+				catalog: &catalog.Catalog{
+					Name: providerName,
+					Operations: []catalog.CatalogOperation{
+						{ID: "list", Method: http.MethodGet, Path: "/list"},
+					},
+				},
+			})
+		})
+		testutil.CloseOnCleanup(t, srv)
+
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/"+providerName+"/list", nil)
+		req.Header.Set(metricutil.HeaderGestaltClient, metricutil.ClientKindCLI)
+		req.Header.Set(metricutil.HeaderGestaltClientVersion, "0.0.2-alpha.17")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+
+		attrs := map[string]string{
+			"http.route":              "/api/v1/{integration}/{operation}",
+			"gestaltd.ingress.kind":   metricutil.IngressKindAppInvokeV1,
+			"gestaltd.client.kind":    metricutil.ClientKindCLI,
+			"gestaltd.client.version": "0.0.2-alpha.17",
+		}
+		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
+		})
+		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
+	})
+
+	t.Run("ready request omits cli version for non-cli clients", func(t *testing.T) {
+		t.Parallel()
+
+		metrics := metrictest.NewManualMeterProvider(t)
+		srv := newTestServer(t, func(cfg *server.Config) {
+			cfg.MeterProvider = metrics.Provider
+		})
+		testutil.CloseOnCleanup(t, srv)
+
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/ready", nil)
+		req.Header.Set(metricutil.HeaderGestaltClientVersion, "0.0.2-alpha.17")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		attrs := map[string]string{
+			"http.route":           "/ready",
+			"gestaltd.client.kind": metricutil.ClientKindUnknown,
+		}
+		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
+		})
+		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.client.version")
 	})
 
 	t.Run("mounted ui labels web client and ingress kind", func(t *testing.T) {
@@ -424,10 +503,11 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 		defer func() { _ = resp.Body.Close() }()
 
 		attrs := map[string]string{
-			"http.route":             "/api/v2/*",
-			"gestaltd.ingress.kind":  metricutil.IngressKindPublicREST,
-			"gestaltd.client.kind":   metricutil.ClientKindCLI,
-			"gestaltd.subject.label": metricutil.SubjectLabelUnknown,
+			"http.route":               "/api/v2/*",
+			"gestaltd.ingress.kind":    metricutil.IngressKindPublicREST,
+			"gestaltd.client.kind":     metricutil.ClientKindCLI,
+			"gestaltd.client.version":  metricutil.ClientVersionUnknown,
+			"gestaltd.subject.label":   metricutil.SubjectLabelUnknown,
 		}
 		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
 			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)

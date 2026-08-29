@@ -44,6 +44,7 @@ pub(crate) fn build_rest_request(
     base_url: &str,
     auth: &Arc<dyn Auth>,
     gestalt_client_kind: Option<&str>,
+    gestalt_client_version: Option<&str>,
 ) -> Result<PreparedRequest, GestaltError> {
     let encode = method.encode_request_json.ok_or_else(|| {
         GestaltError::new(
@@ -78,6 +79,14 @@ pub(crate) fn build_rest_request(
         headers.insert(
             HeaderName::from_static("x-gestalt-client"),
             HeaderValue::from_str(kind).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?,
+        );
+    }
+    if let Some(version) = gestalt_client_version {
+        headers.insert(
+            HeaderName::from_static("x-gestalt-client-version"),
+            HeaderValue::from_str(version).map_err(|err| {
                 GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
             })?,
         );

@@ -36,6 +36,7 @@ const (
 	attrGestaltdIngressKind        = attribute.Key("gestaltd.ingress.kind")
 	attrGestaltdClientKind         = attribute.Key("gestaltd.client.kind")
 	attrGestaltdClientApp          = attribute.Key("gestaltd.client.app")
+	attrGestaltdClientVersion      = attribute.Key("gestaltd.client.version")
 	attrGestaltdSubjectLabel       = attribute.Key("gestaltd.subject.label")
 
 	attrDBSystemName     = attribute.Key("db.system.name")
@@ -88,6 +89,7 @@ type HTTPMetricDims struct {
 	IngressKind     string
 	ClientKind      string
 	ClientApp       string
+	ClientVersion   string
 	SubjectLabel    string
 }
 
@@ -119,6 +121,7 @@ func HTTPServerAttrs(dims HTTPMetricDims) []attribute.KeyValue {
 	attrs = appendStringAttr(attrs, attrGestaltdIngressKind, dims.IngressKind)
 	attrs = appendStringAttr(attrs, attrGestaltdClientKind, dims.ClientKind)
 	attrs = appendStringAttr(attrs, attrGestaltdClientApp, dims.ClientApp)
+	attrs = appendStringAttr(attrs, attrGestaltdClientVersion, dims.ClientVersion)
 	attrs = appendStringAttr(attrs, attrGestaltdSubjectLabel, dims.SubjectLabel)
 	return attrs
 }

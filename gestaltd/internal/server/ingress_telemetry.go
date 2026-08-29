@@ -28,9 +28,14 @@ type subjectLabelRecorderKey struct{}
 
 func clientKindTelemetryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-			ClientKind: classifyClientKind(r),
-		})
+		kind := classifyClientKind(r)
+		dims := metricutil.HTTPMetricDims{ClientKind: kind}
+		if kind == metricutil.ClientKindCLI {
+			dims.ClientVersion = metricutil.ClassifyKnownCLIVersion(
+				r.Header.Get(metricutil.HeaderGestaltClientVersion),
+			)
+		}
+		metricutil.AddHTTPServerMetricDims(r.Context(), dims)
 		next.ServeHTTP(w, r)
 	})
 }
