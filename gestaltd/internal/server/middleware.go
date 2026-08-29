@@ -327,3 +327,45 @@ func (s *Server) pluginRouteAuthWithSubjectLabelMiddleware(pluginParam string) f
 		})
 	}
 }
+
+func (s *Server) subjectLabelFromOptionalRequest(r *http.Request, resolver *principal.Resolver) {
+	token, err := requestBearerToken(r)
+	if err != nil || token == "" {
+		return
+	}
+	p, err := resolver.ResolveToken(r.Context(), token)
+	if err != nil || p == nil {
+		return
+	}
+	enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p)
+	if enrichErr == nil && enriched != nil {
+		p = enriched
+	}
+	addSubjectLabelMetricDims(r.Context(), p)
+}
+
+func (s *Server) cliOptionalSubjectLabelMiddleware(pluginParam string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if classifyClientKind(r) != metricutil.ClientKindCLI {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			r, recorder := withSubjectLabelRecorder(r)
+			defer recorder.flush(r.Context())
+
+			resolver := s.resolver
+			if pluginParam != "" {
+				if pluginName := strings.TrimSpace(chi.URLParam(r, pluginParam)); pluginName != "" {
+					if auth, err := s.pluginAuthRuntime(pluginName); err == nil {
+						resolver = auth.resolver
+					}
+				}
+			}
+			s.subjectLabelFromOptionalRequest(r, resolver)
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
