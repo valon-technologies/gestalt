@@ -1,0 +1,161 @@
+import { Callout } from 'nextra/components'
+
+# Northflank
+
+Deploy Gestalt to Northflank as a deployment service that runs the published
+`valontechnologies/gestaltd` image on port `8080`.
+
+Use the [Docker](/deploy/docker) guide for the base image contract: the server
+expects a config file at `/etc/gestalt/config.yaml`, stores runtime state under
+`/data` when configured that way, and exposes `/health` and `/ready`.
+
+Northflank expects the full image path for external images, such as
+`docker.io/valontechnologies/gestaltd:latest`.
+
+## Recommended production shape
+
+For production, prepare Gestalt before it reaches Northflank:
+
+1. Run `gestaltd init` in CI or locally against the exact config you will
+   deploy.
+2. Bake the generated `deploy/` directory into a derived image, as shown in
+   [Production image](/deploy/docker#production-image).
+3. Push that image to Docker Hub, GitHub Container Registry, or another
+   registry.
+4. Create a Northflank deployment service from that image, selecting saved
+   registry credentials if the image is private.
+
+This keeps Northflank startup deterministic: `gestaltd serve --locked` reads the
+pinned lockfile and prepared artifacts instead of resolving provider packages at
+container boot.
+
+Keep raw secret values in Northflank runtime variables or secret groups. It is
+safe to bake a config file into the image when it contains only `${VAR}`
+placeholders or structured secret refs.
+
+<Callout type="warning">
+  Avoid relying on runtime provider resolution for production. It works for
+  staging and experiments, but production deployments should use prepared lock
+  state and `serve --locked`.
+</Callout>
+
+## Quick setup
+
+Use this path for a first Northflank deployment, staging environment, or
+single-instance install.
+
+In Northflank, create a deployment service from a container registry image:
+
+```text
+docker.io/valontechnologies/gestaltd:latest
+```
+
+Then configure the service:
+
+| Northflank setting | Value |
+| --- | --- |
+| Deployment source | External image / container registry |
+| Image path | `docker.io/valontechnologies/gestaltd:latest` |
+| Port | `8080`, HTTP, public |
+| Instances | `1` when using SQLite on a volume |
+| Volume | Single Read/Write persistent volume mounted at `/data` |
+| Docker runtime mode | Custom command, default entrypoint |
+
+Set the custom command to the equivalent of this Docker `CMD`:
+
+```json
+["serve", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
+```
+
+The command override intentionally omits `--locked` so the first boot can
+prepare provider state under `/data`. Move to a prepared image before promoting
+the service to production. If your derived image already sets a locked
+production `CMD`, use Northflank's default Docker runtime mode instead.
+
+## Runtime variables
+
+Add these runtime variables directly on the service or through a Northflank
+secret group. If the same values are needed by more than one service or job,
+prefer a secret group.
+
+```dotenv
+GESTALT_BASE_URL=https://your-gestalt-domain.example.com
+GESTALT_ENCRYPTION_KEY=<hex value from openssl rand -hex 32>
+```
+
+Set `GESTALT_BASE_URL` to the final Northflank-generated URL or custom domain
+that users will visit. If you later change the public URL, update this value so
+OAuth callbacks and UI links are generated from the right origin.
+
+Do not rotate `GESTALT_ENCRYPTION_KEY` casually. Gestalt derives token
+encryption and session material from it, so changing it invalidates existing
+sessions and tokens.
+
+## Config file
+
+Add a Northflank secret file mounted at:
+
+```text
+/etc/gestalt/config.yaml
+```
+
+For a single-instance SQLite deployment, start with:
+
+```yaml
+server:
+  public:
+    host: 0.0.0.0
+    port: 8080
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: sqlite:///data/gestalt.db
+```
+
+This stores the SQLite database on the `/data` volume. For horizontally scaled
+deployments, replace SQLite with a networked IndexedDB provider such as
+Postgres, MySQL, DynamoDB, or MongoDB and remove the single-replica volume
+constraint. See [IndexedDB](/providers/indexeddb) for provider options.
+
+## Health checks
+
+Configure HTTP health checks against the public `8080` port:
+
+| Check | Path | Purpose |
+| --- | --- | --- |
+| Liveness | `/health` | Process is running |
+| Readiness | `/ready` | Providers and datastore are ready |
+
+If you configure a separate `server.management` listener, `/health` and
+`/ready` move to that listener. In that topology, keep the management port
+private and point Northflank health checks at the private management port.
+
+## Storage and scaling
+
+SQLite on `/data` is appropriate for demos, internal tools, and small
+single-instance deployments. Use a Northflank Single Read/Write persistent
+volume mounted at `/data` and keep the service at one instance.
+
+For production scale or high availability, use a managed database or external
+datastore provider instead of SQLite. Northflank Multi Read/Write volumes can be
+shared across replicas, but they are not a replacement for a database that
+coordinates concurrent writes. Do not use a shared filesystem volume to scale a
+SQLite-backed Gestalt service horizontally.
+
+## Northflank references
+
+- [Run an image from a container registry](https://northflank.com/docs/v1/application/run/run-an-image-from-a-container-registry)
+- [Override command or entrypoint](https://northflank.com/docs/v1/application/run/override-command-entrypoint)
+- [Configure ports](https://northflank.com/docs/v1/application/network/configure-ports)
+- [Inject runtime variables](https://northflank.com/docs/v1/application/run/inject-runtime-variables)
+- [Upload secret files](https://northflank.com/docs/v1/application/secure/upload-secret-files)
+- [Add a persistent volume](https://northflank.com/docs/v1/application/databases-and-persistence/add-a-volume)
+- [Configure health checks](https://northflank.com/docs/v1/application/observe/configure-health-checks)
+- [Scale instances](https://northflank.com/docs/v1/application/scale/scale-instances)
