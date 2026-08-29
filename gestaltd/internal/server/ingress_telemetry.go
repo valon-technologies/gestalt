@@ -37,7 +37,7 @@ func classifyClientMetricDims(r *http.Request) metricutil.HTTPMetricDims {
 	kind := classifyClientKind(r)
 	dims := metricutil.HTTPMetricDims{ClientKind: kind}
 	if kind == metricutil.ClientKindCLI {
-		dims.ClientVersion = metricutil.ClassifyKnownCLIVersion(
+		dims.ClientVersion = metricutil.NormalizeCLIVersion(
 			r.Header.Get(metricutil.HeaderGestaltClientVersion),
 		)
 	}
