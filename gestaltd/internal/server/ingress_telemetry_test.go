@@ -62,6 +62,58 @@ func TestClassifyClientKind(t *testing.T) {
 	}
 }
 
+func TestClassifyClientMetricDims(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		header func(*http.Request)
+		want   metricutil.HTTPMetricDims
+	}{
+		{
+			name: "cli with allowlisted version",
+			header: func(r *http.Request) {
+				r.Header.Set(metricutil.HeaderGestaltClient, metricutil.ClientKindCLI)
+				r.Header.Set(metricutil.HeaderGestaltClientVersion, "0.0.2-alpha.17")
+			},
+			want: metricutil.HTTPMetricDims{
+				ClientKind:    metricutil.ClientKindCLI,
+				ClientVersion: "0.0.2-alpha.17",
+			},
+		},
+		{
+			name: "cli without version header",
+			header: func(r *http.Request) {
+				r.Header.Set(metricutil.HeaderGestaltClient, metricutil.ClientKindCLI)
+			},
+			want: metricutil.HTTPMetricDims{
+				ClientKind:    metricutil.ClientKindCLI,
+				ClientVersion: metricutil.ClientVersionUnknown,
+			},
+		},
+		{
+			name: "non-cli omits version",
+			header: func(r *http.Request) {
+				r.Header.Set(metricutil.HeaderGestaltClientVersion, "0.0.2-alpha.17")
+			},
+			want: metricutil.HTTPMetricDims{
+				ClientKind: metricutil.ClientKindUnknown,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			tc.header(req)
+			if got := classifyClientMetricDims(req); got != tc.want {
+				t.Fatalf("classifyClientMetricDims() = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestClassifyClientAppFromReferrer(t *testing.T) {
 	t.Parallel()
 

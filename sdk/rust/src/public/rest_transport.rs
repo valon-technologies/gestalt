@@ -24,6 +24,7 @@ pub struct RestTransport {
     auth: Arc<dyn Auth>,
     client: reqwest::Client,
     gestalt_client_kind: Option<String>,
+    gestalt_client_version: Option<String>,
 }
 
 impl RestTransport {
@@ -37,12 +38,19 @@ impl RestTransport {
                 .build()
                 .expect("reqwest client"),
             gestalt_client_kind: None,
+            gestalt_client_version: None,
         }
     }
 
     /// Sets the `X-Gestalt-Client` header value sent on every request.
     pub fn with_gestalt_client_kind(mut self, kind: impl Into<String>) -> Self {
         self.gestalt_client_kind = Some(kind.into());
+        self
+    }
+
+    /// Sets the `X-Gestalt-Client-Version` header value sent on every request.
+    pub fn with_gestalt_client_version(mut self, version: impl Into<String>) -> Self {
+        self.gestalt_client_version = Some(version.into());
         self
     }
 
@@ -102,6 +110,7 @@ impl UnaryTransport for RestTransport {
         let auth = Arc::clone(&self.auth);
         let client = self.client.clone();
         let gestalt_client_kind = self.gestalt_client_kind.clone();
+        let gestalt_client_version = self.gestalt_client_version.clone();
         let request_bytes = request.encode_to_vec();
         let method = method.clone();
 
@@ -118,6 +127,7 @@ impl UnaryTransport for RestTransport {
                 &base_url,
                 &auth,
                 gestalt_client_kind.as_deref(),
+                gestalt_client_version.as_deref(),
             )?;
             let mut builder = client
                 .request(prepared.method, prepared.url)
@@ -141,6 +151,7 @@ pub struct SyncRestTransport {
     auth: Arc<dyn Auth>,
     client: reqwest::blocking::Client,
     gestalt_client_kind: Option<String>,
+    gestalt_client_version: Option<String>,
 }
 
 impl SyncRestTransport {
@@ -154,12 +165,19 @@ impl SyncRestTransport {
                 .build()
                 .expect("reqwest blocking client"),
             gestalt_client_kind: None,
+            gestalt_client_version: None,
         }
     }
 
     /// Sets the `X-Gestalt-Client` header value sent on every request.
     pub fn with_gestalt_client_kind(mut self, kind: impl Into<String>) -> Self {
         self.gestalt_client_kind = Some(kind.into());
+        self
+    }
+
+    /// Sets the `X-Gestalt-Client-Version` header value sent on every request.
+    pub fn with_gestalt_client_version(mut self, version: impl Into<String>) -> Self {
+        self.gestalt_client_version = Some(version.into());
         self
     }
 
@@ -197,6 +215,7 @@ impl SyncUnaryTransport for SyncRestTransport {
             &self.base_url,
             &self.auth,
             self.gestalt_client_kind.as_deref(),
+            self.gestalt_client_version.as_deref(),
         )?;
         let mut builder = self
             .client

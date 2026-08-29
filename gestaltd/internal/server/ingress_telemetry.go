@@ -28,11 +28,20 @@ type subjectLabelRecorderKey struct{}
 
 func clientKindTelemetryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-			ClientKind: classifyClientKind(r),
-		})
+		metricutil.AddHTTPServerMetricDims(r.Context(), classifyClientMetricDims(r))
 		next.ServeHTTP(w, r)
 	})
+}
+
+func classifyClientMetricDims(r *http.Request) metricutil.HTTPMetricDims {
+	kind := classifyClientKind(r)
+	dims := metricutil.HTTPMetricDims{ClientKind: kind}
+	if kind == metricutil.ClientKindCLI {
+		dims.ClientVersion = metricutil.ClassifyKnownCLIVersion(
+			r.Header.Get(metricutil.HeaderGestaltClientVersion),
+		)
+	}
+	return dims
 }
 
 func classifyClientKind(r *http.Request) string {

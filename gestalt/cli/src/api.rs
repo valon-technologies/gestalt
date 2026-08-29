@@ -286,6 +286,7 @@ impl ApiClient {
         )
         .with_timeout(timeout)
         .with_gestalt_client_kind(http::GESTALT_CLIENT_KIND_CLI)
+        .with_gestalt_client_version(env!("CARGO_PKG_VERSION"))
     }
 
     pub fn get(&self, path: &str) -> Result<serde_json::Value> {
