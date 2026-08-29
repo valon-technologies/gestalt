@@ -127,23 +127,6 @@ func AddHTTPServerMetricDims(ctx context.Context, dims HTTPMetricDims) {
 	AddHTTPAttributes(ctx, HTTPServerAttrs(dims)...)
 }
 
-// AddHTTPServerLabelerAttrs stamps HTTP server metric dimensions on the otelhttp
-// labeler that records http.server.request.duration. Prefer this over
-// AddHTTPServerMetricDims when the caller holds the request-scoped labeler
-// captured at HTTP entry, because gRPC-gateway and auth middleware can derive
-// contexts that no longer resolve LabelerFromContext even though otelhttp will
-// read the original labeler when the request completes.
-func AddHTTPServerLabelerAttrs(labeler *otelhttp.Labeler, dims HTTPMetricDims) {
-	if labeler == nil {
-		return
-	}
-	attrs := HTTPServerAttrs(dims)
-	if len(attrs) == 0 {
-		return
-	}
-	addMissingHTTPAttributes(labeler, attrs...)
-}
-
 func RPCAttrs(dims RPCMetricDims) []attribute.KeyValue {
 	attrs := make([]attribute.KeyValue, 0, 3)
 	attrs = appendStringAttr(attrs, attrGestaltdRPCRole, dims.Role)

@@ -162,9 +162,6 @@ func (r *subjectLabelRecorder) setLabel(label string) {
 		return
 	}
 	r.label = label
-	metricutil.AddHTTPServerLabelerAttrs(r.labeler, metricutil.HTTPMetricDims{
-		SubjectLabel: label,
-	})
 }
 
 func (r *subjectLabelRecorder) flush(ctx context.Context) {
@@ -173,10 +170,7 @@ func (r *subjectLabelRecorder) flush(ctx context.Context) {
 		label = metricutil.SubjectLabelUnknown
 	}
 	if r.labeler != nil {
-		metricutil.AddHTTPServerLabelerAttrs(r.labeler, metricutil.HTTPMetricDims{
-			SubjectLabel: label,
-		})
-		return
+		ctx = otelhttp.ContextWithLabeler(ctx, r.labeler)
 	}
 	metricutil.AddHTTPServerMetricDims(ctx, metricutil.HTTPMetricDims{
 		SubjectLabel: label,
