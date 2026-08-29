@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,6 +10,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func TestClassifyClientKind(t *testing.T) {
@@ -164,6 +167,31 @@ func TestSubjectLabelFromPrincipal(t *testing.T) {
 				t.Fatalf("subjectLabelFromPrincipal() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSubjectLabelRecorderUsesCapturedLabeler(t *testing.T) {
+	t.Parallel()
+
+	labeler := &otelhttp.Labeler{}
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/identity/userinfo", nil)
+	req = req.WithContext(otelhttp.ContextWithLabeler(req.Context(), labeler))
+	req, recorder := withSubjectLabelRecorder(req)
+
+	grpcCtx := context.WithValue(
+		context.Background(),
+		subjectLabelRecorderKey{},
+		req.Context().Value(subjectLabelRecorderKey{}),
+	)
+	recordSubjectLabel(grpcCtx, "user@example.com")
+	recorder.flush(context.Background())
+
+	attrs := labeler.Get()
+	if len(attrs) != 1 {
+		t.Fatalf("len(attrs) = %d, want 1", len(attrs))
+	}
+	if attrs[0] != attribute.String("gestaltd.subject.label", "user@example.com") {
+		t.Fatalf("subject label attr = %+v", attrs[0])
 	}
 }
 

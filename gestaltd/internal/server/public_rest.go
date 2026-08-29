@@ -64,7 +64,7 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 		conn.Close()
 		return nil, nil, err
 	}
-	return conn, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return conn, subjectLabelRecorderMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, err := requestBearerTokenPreferringHeader(r)
 		if err == nil && token != "" {
 			headerToken, _ := requestBearerToken(r)
@@ -72,10 +72,8 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 				r.Header.Set("Authorization", "Bearer "+token)
 			}
 		}
-		r, recorder := withSubjectLabelRecorder(r)
-		defer recorder.flush(r.Context())
 		mux.ServeHTTP(w, r)
-	}), nil
+	})), nil
 }
 
 func newPublicGRPCServer(

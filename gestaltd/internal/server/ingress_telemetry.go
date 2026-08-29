@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -19,7 +20,8 @@ const maxReferrerLen = 2048
 const subjectLabelMetadataKey = "gestaltd-subject-label"
 
 type subjectLabelRecorder struct {
-	label string
+	label   string
+	labeler *otelhttp.Labeler
 }
 
 type subjectLabelRecorderKey struct{}
@@ -77,6 +79,14 @@ func (s *Server) uiAPIIngressTelemetryHandler(kind string, next http.Handler) ht
 	return s.uiAPIIngressTelemetryMiddleware(kind)(next).ServeHTTP
 }
 
+func subjectLabelRecorderMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r, recorder := withSubjectLabelRecorder(r)
+		defer recorder.flush(r.Context())
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) classifyClientAppFromReferrer(r *http.Request) string {
 	referer := strings.TrimSpace(r.Referer())
 	if referer == "" || len(referer) > maxReferrerLen {
@@ -128,7 +138,7 @@ func addSubjectLabelMetricDims(ctx context.Context, p *principal.Principal) {
 
 func recordSubjectLabel(ctx context.Context, label string) {
 	if recorder, ok := ctx.Value(subjectLabelRecorderKey{}).(*subjectLabelRecorder); ok {
-		recorder.label = label
+		recorder.setLabel(label)
 		return
 	}
 	metricutil.AddHTTPServerMetricDims(ctx, metricutil.HTTPMetricDims{
@@ -137,15 +147,30 @@ func recordSubjectLabel(ctx context.Context, label string) {
 }
 
 func withSubjectLabelRecorder(r *http.Request) (*http.Request, *subjectLabelRecorder) {
-	recorder := &subjectLabelRecorder{}
+	var labeler *otelhttp.Labeler
+	if l, ok := otelhttp.LabelerFromContext(r.Context()); ok {
+		labeler = l
+	}
+	recorder := &subjectLabelRecorder{labeler: labeler}
 	ctx := context.WithValue(r.Context(), subjectLabelRecorderKey{}, recorder)
 	return r.WithContext(ctx), recorder
 }
 
+func (r *subjectLabelRecorder) setLabel(label string) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return
+	}
+	r.label = label
+}
+
 func (r *subjectLabelRecorder) flush(ctx context.Context) {
-	label := r.label
+	label := strings.TrimSpace(r.label)
 	if label == "" {
 		label = metricutil.SubjectLabelUnknown
+	}
+	if r.labeler != nil {
+		ctx = otelhttp.ContextWithLabeler(ctx, r.labeler)
 	}
 	metricutil.AddHTTPServerMetricDims(ctx, metricutil.HTTPMetricDims{
 		SubjectLabel: label,
