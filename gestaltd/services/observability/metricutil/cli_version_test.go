@@ -19,9 +19,12 @@ func TestNormalizeCLIVersionAcceptsDeclaredSemver(t *testing.T) {
 		{raw: "v1.2.3", want: "v1.2.3"},
 	}
 	for _, tc := range tests {
-		if got := NormalizeCLIVersion(tc.raw); got != tc.want {
-			t.Fatalf("NormalizeCLIVersion(%q) = %q, want %q", tc.raw, got, tc.want)
-		}
+		t.Run(tc.raw, func(t *testing.T) {
+			t.Parallel()
+			if got := NormalizeCLIVersion(tc.raw); got != tc.want {
+				t.Fatalf("NormalizeCLIVersion(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
 	}
 }
 

@@ -3,7 +3,7 @@ package metricutil
 import (
 	"strings"
 
-	"golang.org/x/mod/semver"
+	"github.com/valon-technologies/gestalt/server/internal/semvervalidate"
 )
 
 const (
@@ -19,22 +19,8 @@ func NormalizeCLIVersion(raw string) string {
 	if raw == "" || len(raw) > maxCLIVersionHeaderLen {
 		return ClientVersionUnknown
 	}
-
-	canonical := raw
-	if !strings.HasPrefix(canonical, "v") {
-		canonical = "v" + canonical
-	}
-	if !semver.IsValid(canonical) {
+	if !semvervalidate.Valid(strings.TrimPrefix(raw, "v")) {
 		return ClientVersionUnknown
 	}
-
-	base := canonical
-	if i := strings.IndexByte(base, '+'); i != -1 {
-		base = base[:i]
-	}
-	if semver.Canonical(canonical) != base {
-		return ClientVersionUnknown
-	}
-
 	return raw
 }
