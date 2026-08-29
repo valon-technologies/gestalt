@@ -52,6 +52,14 @@ type dialTelemetryProviders struct {
 
 const hostedGRPCReadyTimeout = 30 * time.Second
 
+// maxHostedAppGRPCMsgSize bounds the size of gRPC messages exchanged with
+// hosted-app providers. The grpc-go default client receive cap is 4 MiB,
+// which truncates large provider responses (e.g. BigQuery query results)
+// with ResourceExhausted. 64 MiB matches the largest payloads we have
+// observed in production with headroom; revisit if providers begin
+// returning larger responses.
+const maxHostedAppGRPCMsgSize = 64 * 1024 * 1024
+
 func (p dialTelemetryProviders) MeterProvider() metric.MeterProvider {
 	return p.meterProvider
 }
@@ -283,6 +291,7 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 			return d.DialContext(ctx, "unix", socket)
 		}),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedAppCallOptions(),
 	)
 	if err != nil {
 		return nil, err
@@ -296,6 +305,7 @@ func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedAppCallOptions(),
 	)
 	if err != nil {
 		return nil, err
@@ -317,6 +327,7 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 			NextProtos: []string{"h2"},
 		})),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedAppCallOptions(),
 	)
 	if err != nil {
 		return nil, err
@@ -330,6 +341,20 @@ func hostedAppGRPCOptions(cfg dialConfig) []otelgrpc.Option {
 		Role:         metricutil.RPCRoleHostedAppClient,
 		ProviderName: cfg.providerName,
 	})
+}
+
+// hostedAppCallOptions returns the gRPC default call options applied to every
+// hosted-app client connection. Bumping both the receive and send caps to
+// maxHostedAppGRPCMsgSize replaces grpc-go's 4 MiB client receive default,
+// which was rejecting legitimate large provider responses with
+// ResourceExhausted. Raising the send cap is defensive: it has no effect on
+// today's request shapes but avoids the inverse failure mode if a future
+// provider streams a large request body.
+func hostedAppCallOptions() grpc.DialOption {
+	return grpc.WithDefaultCallOptions(
+		grpc.MaxCallRecvMsgSize(maxHostedAppGRPCMsgSize),
+		grpc.MaxCallSendMsgSize(maxHostedAppGRPCMsgSize),
+	)
 }
 
 func (cfg dialConfig) telemetryProviders() metricutil.TelemetryProviders {
