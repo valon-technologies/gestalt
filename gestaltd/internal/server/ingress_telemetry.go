@@ -96,27 +96,6 @@ func subjectLabelRecorderMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) catalogCLISubjectLabelMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if classifyClientKind(r) != metricutil.ClientKindCLI {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		r, recorder := withSubjectLabelRecorder(r)
-		defer recorder.flush(r.Context())
-
-		if p, err := s.resolveRequestPrincipal(r); err == nil && p != nil {
-			if enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p); enrichErr == nil && enriched != nil {
-				p = enriched
-			}
-			addSubjectLabelMetricDims(r.Context(), p)
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (s *Server) classifyClientAppFromReferrer(r *http.Request) string {
 	referer := strings.TrimSpace(r.Referer())
 	if referer == "" || len(referer) > maxReferrerLen {

@@ -388,6 +388,18 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 				},
 			},
 		}
+		userAuth := coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "user-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "USER@example.com"}, nil
+		})
+		saAuth := testAuthStubWithIntrospect(func(_ context.Context, token string) (*core.IntrospectResponse, error) {
+			if token != "sa-token" {
+				return &core.IntrospectResponse{Active: false}, nil
+			}
+			return testIntrospectActive("service_account:oauth-bot", ""), nil
+		})
 
 		for _, tc := range []struct {
 			name         string
@@ -398,51 +410,31 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 			subjectLabel string
 		}{
 			{
-				name: "catalog apps user email",
-				path: "/api/v1/catalog/apps",
-				auth: coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "user-token" {
-						return nil, core.ErrNotFound
-					}
-					return &core.UserIdentity{Email: "USER@example.com"}, nil
-				}),
+				name:         "catalog apps user email",
+				path:         "/api/v1/catalog/apps",
+				auth:         userAuth,
 				token:        "user-token",
 				subjectLabel: "user@example.com",
 			},
 			{
-				name: "catalog apps service account",
-				path: "/api/v1/catalog/apps",
-				auth: testAuthStubWithIntrospect(func(_ context.Context, token string) (*core.IntrospectResponse, error) {
-					if token != "sa-token" {
-						return &core.IntrospectResponse{Active: false}, nil
-					}
-					return testIntrospectActive("service_account:oauth-bot", ""), nil
-				}),
+				name:         "catalog apps service account",
+				path:         "/api/v1/catalog/apps",
+				auth:         saAuth,
 				token:        "sa-token",
 				subjectLabel: "oauth-bot",
 			},
 			{
-				name: "apps list user email",
-				path: "/api/v1/apps",
-				auth: coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "user-token" {
-						return nil, core.ErrNotFound
-					}
-					return &core.UserIdentity{Email: "USER@example.com"}, nil
-				}),
+				name:         "apps list user email",
+				path:         "/api/v1/apps",
+				auth:         userAuth,
 				token:        "user-token",
 				subjectLabel: "user@example.com",
 			},
 			{
-				name:  "app operations service account",
-				path:  "/api/v1/apps/" + providerName + "/operations",
-				route: "/api/v1/apps/{name}/operations",
-				auth: testAuthStubWithIntrospect(func(_ context.Context, token string) (*core.IntrospectResponse, error) {
-					if token != "sa-token" {
-						return &core.IntrospectResponse{Active: false}, nil
-					}
-					return testIntrospectActive("service_account:oauth-bot", ""), nil
-				}),
+				name:         "app operations service account",
+				path:         "/api/v1/apps/" + providerName + "/operations",
+				route:        "/api/v1/apps/{name}/operations",
+				auth:         saAuth,
 				token:        "sa-token",
 				subjectLabel: "oauth-bot",
 			},
@@ -487,6 +479,46 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 				metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.ingress.kind")
 			})
 		}
+	})
+
+	t.Run("catalog cli subject label ignores session cookie", func(t *testing.T) {
+		t.Parallel()
+
+		metrics := metrictest.NewManualMeterProvider(t)
+		srv := newTestServer(t, func(cfg *server.Config) {
+			cfg.MeterProvider = metrics.Provider
+			cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "cookie@example.com"}, nil
+			})
+		})
+		testutil.CloseOnCleanup(t, srv)
+
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/catalog/apps", nil)
+		req.Header.Set(metricutil.HeaderGestaltClient, metricutil.ClientKindCLI)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+
+		attrs := map[string]string{
+			"http.route":              "/api/v1/catalog/apps",
+			"gestaltd.client.kind":    metricutil.ClientKindCLI,
+			"gestaltd.client.version": metricutil.ClientVersionUnknown,
+			"gestaltd.subject.label":  metricutil.SubjectLabelUnknown,
+		}
+		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
+		})
+		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.ingress.kind")
 	})
 
 	t.Run("catalog route omits subject label for web clients", func(t *testing.T) {
