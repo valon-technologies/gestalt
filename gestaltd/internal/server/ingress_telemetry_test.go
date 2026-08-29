@@ -66,9 +66,9 @@ func TestClassifyClientMetricDims(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		header  func(*http.Request)
-		want    metricutil.HTTPMetricDims
+		name   string
+		header func(*http.Request)
+		want   metricutil.HTTPMetricDims
 	}{
 		{
 			name: "cli with allowlisted version",
