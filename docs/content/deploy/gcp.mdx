@@ -1,0 +1,215 @@
+import { Callout } from 'nextra/components'
+
+# Google Cloud
+
+This guide deploys `gestaltd` to [Cloud Run](https://cloud.google.com/run/docs/deploying) with a prepared image in Artifact Registry, secrets in Secret Manager, and a networked datastore such as Cloud SQL. For GKE, use the [Helm](/deploy/helm) guide instead.
+
+## Architecture
+
+The recommended Cloud Run shape is:
+
+- Cloud Run runs one prepared `gestaltd` container on port `8080`
+- Artifact Registry stores the derived image that contains `config.yaml`, `gestalt.lock.json`, and vendored provider artifacts
+- Secret Manager stores the root encryption key and database DSN
+- Cloud SQL or another networked datastore backs the `indexeddb/relationaldb` provider
+- A custom domain or external HTTPS load balancer terminates TLS and matches `server.baseUrl`
+
+<Callout type="warning">
+  Do not use SQLite for a durable Cloud Run deployment. Cloud Run instances have
+  ephemeral local filesystems and can scale beyond one instance. Use Cloud SQL,
+  AlloyDB, or another networked IndexedDB provider for persistent state.
+</Callout>
+
+## Prerequisites
+
+Install the Google Cloud CLI and Docker, then set the project values used by the examples:
+
+```sh
+export PROJECT_ID="my-gcp-project"
+export REGION="us-central1"
+export SERVICE="gestalt"
+export REPOSITORY="gestalt"
+export IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/gestaltd:$(git rev-parse --short HEAD)"
+export RUN_SERVICE_ACCOUNT="gestalt-run@${PROJECT_ID}.iam.gserviceaccount.com"
+
+gcloud config set project "${PROJECT_ID}"
+gcloud services enable \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  secretmanager.googleapis.com \
+  sqladmin.googleapis.com
+```
+
+Create the Artifact Registry repository once:
+
+```sh
+gcloud artifacts repositories create "${REPOSITORY}" \
+  --repository-format=docker \
+  --location="${REGION}" \
+  --description="Gestalt container images"
+```
+
+Configure Docker authentication for Artifact Registry:
+
+```sh
+gcloud auth configure-docker "${REGION}-docker.pkg.dev"
+```
+
+## Prepare the config
+
+Create `deploy/config.yaml` with runtime placeholders for values supplied by Cloud Run:
+
+```yaml
+server:
+  public:
+    port: 8080
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+```
+
+Set `DATABASE_URL` to the DSN expected by the RelationalDB provider. For Cloud SQL, use a PostgreSQL or MySQL DSN that works from Cloud Run. If you use Cloud SQL's built-in Cloud Run integration, also pass `--add-cloudsql-instances` at deploy time and use a socket-compatible DSN. See Google's [Cloud SQL from Cloud Run](https://cloud.google.com/sql/docs/postgres/connect-run) guide for connection options.
+
+Set `GESTALT_BASE_URL` to the public HTTPS origin users will open in a browser. If you use a custom domain, set it before the first production deploy. If you use the generated `run.app` URL, deploy once, read the service URL, then redeploy with `GESTALT_BASE_URL` set to that exact URL.
+
+Prepare locked provider state before building the image:
+
+```sh
+export GESTALT_BASE_URL="https://gestalt.example.com"
+export GESTALT_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export DATABASE_URL="postgres://gestalt:password@db.example.com:5432/gestalt?sslmode=require"
+
+gestaltd init --config deploy/config.yaml --platform linux/amd64
+```
+
+The generated lockfile records resolved provider artifacts, not the environment variable values. Keep real secret values out of source control and CI logs.
+
+## Build the image
+
+Create `deploy/Dockerfile.cloudrun`:
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest-alpine
+COPY deploy/ /app/
+CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+```
+
+Build and push the prepared image:
+
+```sh
+docker build -f deploy/Dockerfile.cloudrun -t "${IMAGE}" .
+docker push "${IMAGE}"
+```
+
+Cloud Run can deploy public Docker Hub images directly, but Artifact Registry is the better production target and avoids Docker Hub availability and rate-limit concerns.
+
+## Create secrets
+
+Create the Cloud Run service account:
+
+```sh
+gcloud iam service-accounts create gestalt-run \
+  --display-name="Gestalt Cloud Run"
+```
+
+Create the root encryption key once and store it in Secret Manager:
+
+```sh
+printf '%s' "${GESTALT_ENCRYPTION_KEY}" \
+  | gcloud secrets create gestalt-encryption-key --data-file=-
+```
+
+Store the database DSN:
+
+```sh
+printf '%s' "${DATABASE_URL}" \
+  | gcloud secrets create gestalt-database-url --data-file=-
+```
+
+Grant the runtime service account access to those secrets:
+
+```sh
+gcloud secrets add-iam-policy-binding gestalt-encryption-key \
+  --member="serviceAccount:${RUN_SERVICE_ACCOUNT}" \
+  --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding gestalt-database-url \
+  --member="serviceAccount:${RUN_SERVICE_ACCOUNT}" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+If you connect to Cloud SQL through the Cloud Run integration, also grant Cloud SQL Client:
+
+```sh
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${RUN_SERVICE_ACCOUNT}" \
+  --role="roles/cloudsql.client"
+```
+
+For existing secrets, add a new version with `gcloud secrets versions add` instead of recreating the secret.
+
+## Deploy to Cloud Run
+
+Deploy the image with the base URL as a normal environment variable and sensitive values injected from Secret Manager. Cloud Run supports Secret Manager values as environment variables through `--update-secrets`; pin numbered secret versions in production instead of `latest`.
+
+```sh
+gcloud run deploy "${SERVICE}" \
+  --image="${IMAGE}" \
+  --region="${REGION}" \
+  --service-account="${RUN_SERVICE_ACCOUNT}" \
+  --port=8080 \
+  --allow-unauthenticated \
+  --set-env-vars="GESTALT_BASE_URL=${GESTALT_BASE_URL}" \
+  --update-secrets="GESTALT_ENCRYPTION_KEY=gestalt-encryption-key:1,DATABASE_URL=gestalt-database-url:1"
+```
+
+Add the Cloud SQL instance connection if your DSN uses the Cloud SQL socket:
+
+```sh
+gcloud run deploy "${SERVICE}" \
+  --image="${IMAGE}" \
+  --region="${REGION}" \
+  --service-account="${RUN_SERVICE_ACCOUNT}" \
+  --port=8080 \
+  --allow-unauthenticated \
+  --add-cloudsql-instances="${PROJECT_ID}:${REGION}:gestalt-db" \
+  --set-env-vars="GESTALT_BASE_URL=${GESTALT_BASE_URL}" \
+  --update-secrets="GESTALT_ENCRYPTION_KEY=gestalt-encryption-key:1,DATABASE_URL=gestalt-database-url:1"
+```
+
+Use `--no-allow-unauthenticated` only when another layer, such as an internal load balancer, Identity-Aware Proxy, or private service caller, handles browser and API access. If users need to complete OAuth callbacks directly against Gestalt, the callback origin must be reachable from their browser.
+
+## Verify
+
+Read the deployed URL:
+
+```sh
+gcloud run services describe "${SERVICE}" \
+  --region="${REGION}" \
+  --format="value(status.url)"
+```
+
+Then check the service endpoints:
+
+```sh
+curl -fsS "${GESTALT_BASE_URL}/health"
+curl -fsS "${GESTALT_BASE_URL}/ready"
+```
+
+`/health` confirms the process is running. `/ready` returns success only after providers and the datastore are ready.
+
+## Operational notes
+
+Use a minimum instance count only if cold starts are unacceptable. Use a maximum instance count that your database can absorb, because each instance can open datastore connections.
+
+When you rotate the encryption key, existing sessions and stored tokens become unreadable. Treat that as a planned migration event. For database password rotation, add a new Secret Manager version, update the Cloud Run secret binding to that version, and deploy a new revision.
+
+For production domains, prefer a custom domain or external HTTPS load balancer and keep `server.baseUrl` aligned with that public origin. Cloud Run creates a new immutable revision for every image, environment variable, secret, or Cloud SQL connection change.
