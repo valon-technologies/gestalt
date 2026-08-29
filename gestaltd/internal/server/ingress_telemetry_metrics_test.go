@@ -363,12 +363,160 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 			"http.route":              "/api/v1/catalog/apps",
 			"gestaltd.client.kind":    metricutil.ClientKindCLI,
 			"gestaltd.client.version": metricutil.ClientVersionUnknown,
+			"gestaltd.subject.label":  metricutil.SubjectLabelUnknown,
 		}
 		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
 			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
 		})
 		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
 		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.ingress.kind")
+	})
+
+	t.Run("catalog route labels authenticated cli subjects", func(t *testing.T) {
+		t.Parallel()
+
+		const providerName = "ingress-catalog-subject"
+		provider := &stubIntegrationWithCatalog{
+			StubIntegration: coretesting.StubIntegration{
+				N:        providerName,
+				ConnMode: core.ConnectionModeNone,
+			},
+			catalog: &catalog.Catalog{
+				Name: providerName,
+				Operations: []catalog.CatalogOperation{
+					{ID: "list", Method: http.MethodGet, Path: "/list"},
+				},
+			},
+		}
+
+		for _, tc := range []struct {
+			name         string
+			path         string
+			route        string
+			auth         core.IdentityProvider
+			token        string
+			subjectLabel string
+		}{
+			{
+				name: "catalog apps user email",
+				path: "/api/v1/catalog/apps",
+				auth: coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "user-token" {
+						return nil, core.ErrNotFound
+					}
+					return &core.UserIdentity{Email: "USER@example.com"}, nil
+				}),
+				token:        "user-token",
+				subjectLabel: "user@example.com",
+			},
+			{
+				name: "catalog apps service account",
+				path: "/api/v1/catalog/apps",
+				auth: testAuthStubWithIntrospect(func(_ context.Context, token string) (*core.IntrospectResponse, error) {
+					if token != "sa-token" {
+						return &core.IntrospectResponse{Active: false}, nil
+					}
+					return testIntrospectActive("service_account:oauth-bot", ""), nil
+				}),
+				token:        "sa-token",
+				subjectLabel: "oauth-bot",
+			},
+			{
+				name: "apps list user email",
+				path: "/api/v1/apps",
+				auth: coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "user-token" {
+						return nil, core.ErrNotFound
+					}
+					return &core.UserIdentity{Email: "USER@example.com"}, nil
+				}),
+				token:        "user-token",
+				subjectLabel: "user@example.com",
+			},
+			{
+				name:  "app operations service account",
+				path:  "/api/v1/apps/" + providerName + "/operations",
+				route: "/api/v1/apps/{name}/operations",
+				auth: testAuthStubWithIntrospect(func(_ context.Context, token string) (*core.IntrospectResponse, error) {
+					if token != "sa-token" {
+						return &core.IntrospectResponse{Active: false}, nil
+					}
+					return testIntrospectActive("service_account:oauth-bot", ""), nil
+				}),
+				token:        "sa-token",
+				subjectLabel: "oauth-bot",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				metrics := metrictest.NewManualMeterProvider(t)
+				srv := newTestServer(t, func(cfg *server.Config) {
+					cfg.MeterProvider = metrics.Provider
+					cfg.Auth = tc.auth
+					cfg.StateSecret = []byte("0123456789abcdef0123456789abcdef")
+					cfg.Providers = testutil.NewProviderRegistry(t, provider)
+				})
+				testutil.CloseOnCleanup(t, srv)
+
+				req, _ := http.NewRequest(http.MethodGet, srv.URL+tc.path, nil)
+				req.Header.Set(metricutil.HeaderGestaltClient, metricutil.ClientKindCLI)
+				req.Header.Set("Authorization", "Bearer "+tc.token)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("request: %v", err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+				}
+
+				route := tc.path
+				if tc.route != "" {
+					route = tc.route
+				}
+				attrs := map[string]string{
+					"http.route":             route,
+					"gestaltd.client.kind":   metricutil.ClientKindCLI,
+					"gestaltd.subject.label": tc.subjectLabel,
+				}
+				rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+					return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
+				})
+				metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
+				metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.ingress.kind")
+			})
+		}
+	})
+
+	t.Run("catalog route omits subject label for web clients", func(t *testing.T) {
+		t.Parallel()
+
+		metrics := metrictest.NewManualMeterProvider(t)
+		srv := newTestServer(t, func(cfg *server.Config) {
+			cfg.MeterProvider = metrics.Provider
+		})
+		testutil.CloseOnCleanup(t, srv)
+
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/catalog/apps", nil)
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+
+		attrs := map[string]string{
+			"http.route":           "/api/v1/catalog/apps",
+			"gestaltd.client.kind": metricutil.ClientKindWeb,
+		}
+		rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+			return metrictest.HasFloat64Histogram(rm, "http.server.request.duration", attrs)
+		})
+		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
 		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.subject.label")
 	})
 

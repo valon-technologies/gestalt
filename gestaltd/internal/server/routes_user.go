@@ -12,13 +12,18 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 	s.mountAppAdminMetricsRoutes(r)
 
 	r.Group(func(r chi.Router) {
+		r.Use(s.catalogCLISubjectLabelMiddleware)
 		r.Use(s.authMiddleware)
 
 		r.Get("/catalog/apps", s.listAppCatalog)
 		r.Get("/catalog/apps/{name}/icon", s.serveAppCatalogIcon)
+		r.Get("/apps", s.listIntegrations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Use(s.authMiddleware)
+
 		r.Get("/me/app-connections", s.listAppConnections)
 
-		r.Get("/apps", s.listIntegrations)
 		r.Delete("/apps/{name}", s.disconnectIntegration)
 		r.Put("/apps/{name}/preferred-instance", s.selectPreferredInstance)
 		r.Get("/apps/{name}/access", s.getAppAccess)
@@ -39,7 +44,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 
 	})
 
-	r.With(s.pluginRouteAuthMiddleware("name")).Get("/apps/{name}/operations", s.listOperations)
+	r.With(s.catalogCLISubjectLabelMiddleware, s.pluginRouteAuthMiddleware("name")).Get("/apps/{name}/operations", s.listOperations)
 	r.Group(func(r chi.Router) {
 		r.Use(s.uiAPIIngressTelemetryMiddleware(metricutil.IngressKindAppInvokeV1))
 		r.Use(subjectLabelRecorderMiddleware)
