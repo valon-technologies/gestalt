@@ -127,12 +127,15 @@ func HTTPServerAttrs(dims HTTPMetricDims) []attribute.KeyValue {
 }
 
 func AddHTTPServerMetricDims(ctx context.Context, dims HTTPMetricDims) {
+	if httpServerHasIngressKind(ctx) {
+		dims.Transport = ""
+		dims.ConnectionMode = ""
+		dims.Surface = ""
+	}
 	AddHTTPAttributes(ctx, HTTPServerAttrs(dims)...)
 }
 
-// HTTPServerHasIngressKind reports whether P1 ingress telemetry has already
-// tagged the current HTTP request via gestaltd.ingress.kind.
-func HTTPServerHasIngressKind(ctx context.Context) bool {
+func httpServerHasIngressKind(ctx context.Context) bool {
 	labeler, ok := otelhttp.LabelerFromContext(ctx)
 	if !ok {
 		return false

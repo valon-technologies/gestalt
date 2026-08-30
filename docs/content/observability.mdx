@@ -547,7 +547,10 @@ when available. Gestalt also attaches stable dimensions for request surfaces it
 can resolve, including `gestaltd.provider.name`,
 `gestaltd.operation.name`, `gestaltd.operation.transport`,
 `gestaltd.connection.mode`, `gestaltd.invocation.surface`,
-`gestaltd.http.binding.name`, and `gestaltd.ui.name`. For hosted HTTP bindings,
+`gestaltd.http.binding.name`, and `gestaltd.ui.name`. Ingress-covered routes
+(those tagged with `gestaltd.ingress.kind`) omit `gestaltd.operation.transport`,
+`gestaltd.connection.mode`, and `gestaltd.invocation.surface` on
+`http.server.request.duration`. For hosted HTTP bindings,
 use `gestaltd.http.binding.name` on `http.server.request.duration` with
 `gestalt.http_binding` on `gestaltd.operation.*` to correlate the accepted HTTP
 delivery with the provider operation it dispatched.
