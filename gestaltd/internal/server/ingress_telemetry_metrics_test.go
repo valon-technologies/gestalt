@@ -95,6 +95,9 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 		})
 		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
 		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.client.app")
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.invocation.surface")
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.operation.transport")
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.connection.mode")
 	})
 
 	t.Run("app invoke v1 labels authenticated user and service account subjects", func(t *testing.T) {
@@ -585,6 +588,7 @@ func TestIngressTelemetryRequestMetrics(t *testing.T) {
 		})
 		metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", attrs)
 		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.subject.label")
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", attrs, "gestaltd.invocation.surface")
 	})
 
 	t.Run("public rest labels cli client and ingress kind", func(t *testing.T) {

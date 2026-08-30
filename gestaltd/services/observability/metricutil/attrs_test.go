@@ -1,9 +1,11 @@
 package metricutil_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -38,5 +40,24 @@ func TestHTTPServerAttrsOmitsUnsetDimensions(t *testing.T) {
 
 	if attrs := metricutil.HTTPServerAttrs(metricutil.HTTPMetricDims{}); len(attrs) != 0 {
 		t.Fatalf("expected no attrs for empty dims, got %+v", attrs)
+	}
+}
+
+func TestHTTPServerHasIngressKind(t *testing.T) {
+	t.Parallel()
+
+	if metricutil.HTTPServerHasIngressKind(context.Background()) {
+		t.Fatal("expected false without labeler")
+	}
+
+	labeler := &otelhttp.Labeler{}
+	ctx := otelhttp.ContextWithLabeler(context.Background(), labeler)
+	if metricutil.HTTPServerHasIngressKind(ctx) {
+		t.Fatal("expected false before ingress kind is labeled")
+	}
+
+	labeler.Add(attribute.String("gestaltd.ingress.kind", metricutil.IngressKindAppInvokeV1))
+	if !metricutil.HTTPServerHasIngressKind(ctx) {
+		t.Fatal("expected true after ingress kind is labeled")
 	}
 }

@@ -98,8 +98,8 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) {
 	}
 	assertSpanHasAttr(t, httpSpan, "gestaltd.provider.name", "tracer-prov")
 	assertSpanHasAttr(t, httpSpan, "gestaltd.operation.name", "ping")
-	assertSpanHasAttr(t, httpSpan, "gestaltd.connection.mode", "none")
-	assertSpanHasAttr(t, httpSpan, "gestaltd.invocation.surface", "http")
+	assertSpanLacksAttr(t, httpSpan, "gestaltd.connection.mode")
+	assertSpanLacksAttr(t, httpSpan, "gestaltd.invocation.surface")
 	assertSpanLacksAttr(t, httpSpan, "gestalt.provider")
 	assertSpanLacksAttr(t, httpSpan, "gestalt.operation")
 

@@ -84,6 +84,11 @@ func recordOperationMetrics(
 		httpDims.HTTPBindingName = binding
 		httpDims.Surface = metricutil.InvocationSurfaceHTTPBinding
 	}
+	if metricutil.HTTPServerHasIngressKind(ctx) {
+		httpDims.Transport = ""
+		httpDims.ConnectionMode = ""
+		httpDims.Surface = ""
+	}
 	metricutil.AddHTTPServerMetricDims(ctx, httpDims)
 
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))

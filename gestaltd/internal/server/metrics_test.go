@@ -443,12 +443,9 @@ func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
 		"gestalt.result_status_class": "4xx",
 	})
 	httpAttrs := map[string]string{
-		"http.route":                   "/api/v1/{integration}/{operation}",
-		"gestaltd.provider.name":       providerName,
-		"gestaltd.operation.name":      "list",
-		"gestaltd.operation.transport": "rest",
-		"gestaltd.connection.mode":     "none",
-		"gestaltd.invocation.surface":  "http",
+		"http.route":               "/api/v1/{integration}/{operation}",
+		"gestaltd.provider.name":   providerName,
+		"gestaltd.operation.name":  "list",
 	}
 	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", httpAttrs)
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", httpAttrs, "gestalt.provider")
