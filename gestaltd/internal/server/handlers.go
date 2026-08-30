@@ -824,10 +824,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		ctx = invocation.WithConnection(ctx, connection)
 	}
 	metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-		ProviderName:   providerName,
-		OperationName:  opMeta.ID,
-		ConnectionMode: metricutil.NormalizeConnectionMode(s.invocationConnectionMode(prov, providerName, connection)),
-		Surface:        metricutil.InvocationSurfaceHTTP,
+		ProviderName:  providerName,
+		OperationName: opMeta.ID,
 	})
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
 	ctx = invocation.WithEntry(ctx, invocation.EntryHTTP)

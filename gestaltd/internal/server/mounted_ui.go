@@ -244,9 +244,7 @@ func (s *Server) writeMountedUnauthenticated(w http.ResponseWriter, r *http.Requ
 func mountedUITelemetryHandler(mounted MountedUI, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-			ProviderName: mounted.AppName,
-			Surface:      metricutil.InvocationSurfaceUI,
-			UIName:       mounted.Name,
+			UIName: mounted.Name,
 		})
 		next.ServeHTTP(w, r)
 	})
