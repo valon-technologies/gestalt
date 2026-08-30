@@ -138,12 +138,14 @@ that set `artifactRepository`.
 providerSnapshotRepositories:
   valon:
     url: https://storage.googleapis.com/valon-gestalt-provider-snapshots
+    auth: gcpADC
     gestaltRef: 651a5c30feb995c9364c38f63d0d5c3880bc2055
 ```
 
 | Field | Description |
 | --- | --- |
 | `providerSnapshotRepositories.<name>.url` | HTTP(S) root containing deterministic snapshot `provider-release.yaml` files and archives. |
+| `providerSnapshotRepositories.<name>.auth` | Optional. `gcpADC` uses Application Default Credentials for `storage.googleapis.com` requests. Omit it for unauthenticated fetching. |
 | `providerSnapshotRepositories.<name>.gestaltRef` | Optional full Gestalt commit SHA expected for snapshots from this repository. |
 
 ## `server`

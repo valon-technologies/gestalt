@@ -69,8 +69,13 @@ type ProviderRepositoryConfig struct {
 type ProviderSnapshotRepositoryConfig struct {
 	URL        string                                  `yaml:"url,omitempty"`
 	GestaltRef string                                  `yaml:"gestaltRef,omitempty"`
+	Auth       ProviderSnapshotRepositoryAuth          `yaml:"auth,omitempty"`
 	Publish    ProviderSnapshotRepositoryPublishConfig `yaml:"publish,omitempty"`
 }
+
+type ProviderSnapshotRepositoryAuth string
+
+const ProviderSnapshotRepositoryAuthGCPADC ProviderSnapshotRepositoryAuth = "gcpADC"
 
 type ProviderSnapshotRepositoryPublishConfig struct {
 	PathLayout string                                  `yaml:"pathLayout,omitempty"`

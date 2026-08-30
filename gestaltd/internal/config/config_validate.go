@@ -304,6 +304,15 @@ func validateProviderSnapshotRepositories(cfg *Config) error {
 		if ref := strings.TrimSpace(repo.GestaltRef); ref != "" && !isFullGitSHA(ref) {
 			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.gestaltRef must be a 40-character commit SHA", name)
 		}
+		switch repo.Auth {
+		case "":
+		case ProviderSnapshotRepositoryAuthGCPADC:
+			if parsed.Scheme != "https" || !strings.EqualFold(parsed.Hostname(), "storage.googleapis.com") || parsed.Port() != "" || parsed.User != nil {
+				return fmt.Errorf("config validation: providerSnapshotRepositories.%s.auth %q requires an https://storage.googleapis.com URL", name, repo.Auth)
+			}
+		default:
+			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.auth must be %q when set", name, ProviderSnapshotRepositoryAuthGCPADC)
+		}
 		if err := validateProviderSnapshotRepositoryPublish(name, repo.Publish); err != nil {
 			return err
 		}
