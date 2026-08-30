@@ -397,18 +397,6 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 	return infos
 }
 
-func (s *Server) invocationConnectionMode(prov core.Provider, integration, connection string) core.ConnectionMode {
-	if conn, ok := s.effectiveConnectionDef(integration, connection); ok {
-		if mode := config.ConnectionModeForConnection(conn); mode != "" {
-			return mode
-		}
-	}
-	if prov == nil {
-		return ""
-	}
-	return core.NormalizeConnectionMode(prov.ConnectionMode())
-}
-
 func (s *Server) effectiveConnectionDef(integration, connection string) (config.ConnectionDef, bool) {
 	entry, ok := s.pluginDefs[integration]
 	if !ok || entry == nil {
