@@ -71,7 +71,7 @@ func TestClassifyClientMetricDims(t *testing.T) {
 		want   metricutil.HTTPMetricDims
 	}{
 		{
-			name: "cli with allowlisted version",
+			name: "cli with declared version",
 			header: func(r *http.Request) {
 				r.Header.Set(metricutil.HeaderGestaltClient, metricutil.ClientKindCLI)
 				r.Header.Set(metricutil.HeaderGestaltClientVersion, "0.0.2-alpha.17")

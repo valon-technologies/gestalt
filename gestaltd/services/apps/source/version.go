@@ -2,21 +2,12 @@ package source
 
 import (
 	"fmt"
-	"strings"
 
-	"golang.org/x/mod/semver"
+	"github.com/valon-technologies/gestalt/server/internal/semvervalidate"
 )
 
 func ValidateVersion(version string) error {
-	canonical := versionPrefix + version
-	if !semver.IsValid(canonical) {
-		return fmt.Errorf("plugin source: invalid semver %q", version)
-	}
-	base := canonical
-	if i := strings.IndexByte(base, '+'); i != -1 {
-		base = base[:i]
-	}
-	if semver.Canonical(canonical) != base {
+	if !semvervalidate.Valid(version) {
 		return fmt.Errorf("plugin source: invalid semver %q", version)
 	}
 	return nil
