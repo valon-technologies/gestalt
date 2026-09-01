@@ -1,4 +1,4 @@
-FROM nginx:1.31.0-alpine@sha256:2f07d83bf561b506400dc183b1b2003803e39efbd22451f848adaba14d28c7c7
+FROM nginx:1.31.4-alpine@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
 COPY out /usr/share/nginx/html
 # The machine-consumed provider index is published with the registry so
 # `gestaltd provider repo add` has a consumer-neutral URL. Baked at image
