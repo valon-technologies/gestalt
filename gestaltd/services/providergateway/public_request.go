@@ -116,6 +116,9 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	if err != nil {
 		return status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
+	if isAuthorizationServiceMethod(fullMethod) {
+		return t.enforceAuthorizationPublicAccess(ctx, subjectID, fullMethod)
+	}
 	target := ProviderTarget{Kind: providerKindFromFullMethod(fullMethod), Name: providerID}
 	resource := &proto.Resource{Type: string(target.Kind), Id: strings.TrimSpace(target.Name)}
 	action := &proto.Action{Name: strings.TrimSpace(target.Name)}
