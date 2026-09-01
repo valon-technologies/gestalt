@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -25,23 +26,34 @@ func boolPtr(value bool) *bool {
 }
 
 type stubAuthorizationProvider struct {
-	called        bool
-	allowedResult *bool
-	fail          bool
-	ctx           context.Context
-	request       *proto.CheckAccessRequest
+	called         bool
+	allowedResult  *bool
+	allowedActions map[string]bool
+	fail           bool
+	ctx            context.Context
+	request        *proto.CheckAccessRequest
+	requests       []*proto.CheckAccessRequest
 }
 
 func (p *stubAuthorizationProvider) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.called = true
 	p.ctx = ctx
 	p.request = req
+	p.requests = append(p.requests, req)
 	if p.fail {
 		return nil, errors.New("authorization provider down")
 	}
 	allowed := true
 	if p.allowedResult != nil {
 		allowed = *p.allowedResult
+	}
+	if p.allowedActions != nil {
+		action := strings.TrimSpace(req.GetAction().GetName())
+		allowed, ok := p.allowedActions[action]
+		if !ok {
+			allowed = false
+		}
+		return &proto.CheckAccessResponse{Allowed: allowed}, nil
 	}
 	return &proto.CheckAccessResponse{Allowed: allowed}, nil
 }
@@ -186,7 +198,7 @@ func TestPreparePublicRequest(t *testing.T) {
 			wantCode:   codes.InvalidArgument,
 		},
 		{
-			name:       "authorization check uses stable provider resource type",
+			name:       "authorization read checks viewer before admin",
 			fullMethod: proto.Authorization_CheckAccess_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
@@ -197,15 +209,41 @@ func TestPreparePublicRequest(t *testing.T) {
 			},
 			checkAuth: func(t *testing.T, auth *stubAuthorizationProvider) {
 				t.Helper()
-				if got := auth.request.GetResource().GetType(); got != string(ProviderKindAuthorization) {
-					t.Fatalf("authorization resource type = %q, want %q", got, ProviderKindAuthorization)
+				if got := auth.request.GetResource().GetType(); got != authorizationResourceType {
+					t.Fatalf("authorization resource type = %q, want %q", got, authorizationResourceType)
 				}
-				if got := auth.request.GetResource().GetId(); got != "authorization" {
-					t.Fatalf("authorization resource id = %q, want authorization", got)
+				if got := auth.request.GetResource().GetId(); got != authorizationResourceID {
+					t.Fatalf("authorization resource id = %q, want %q", got, authorizationResourceID)
 				}
-				if got := auth.request.GetAction().GetName(); got != "authorization" {
-					t.Fatalf("authorization action = %q, want authorization", got)
+				if got := auth.request.GetAction().GetName(); got != "viewer" {
+					t.Fatalf("authorization action = %q, want viewer", got)
 				}
+			},
+		},
+		{
+			name:       "authorization write requires admin",
+			fullMethod: proto.Authorization_SetActiveModel_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			authAllow:  &denied,
+			req:        &proto.SetActiveModelRequest{},
+			wantCode:   codes.PermissionDenied,
+			setup: func(transport *ProviderGatewayTransport) {
+				transport.SetAuthorizationProvider(&stubAuthorizationProvider{
+					allowedActions: map[string]bool{"viewer": true},
+				})
+			},
+		},
+		{
+			name:       "authorization write allows admin",
+			fullMethod: proto.Authorization_SetActiveModel_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req:        &proto.SetActiveModelRequest{},
+			setup: func(transport *ProviderGatewayTransport) {
+				transport.SetAuthorizationProvider(&stubAuthorizationProvider{
+					allowedActions: map[string]bool{"admin": true},
+				})
 			},
 		},
 		{

@@ -18,7 +18,6 @@ import (
 )
 
 const browserLoginPath = "/api/v1/auth/login"
-const defaultAdminAuthorizationResource = "gestaltAdmin"
 
 type protectedUILoginRedirect func(http.ResponseWriter, *http.Request) error
 
@@ -261,7 +260,7 @@ func (s *Server) authorizeMountedAppAccess(ctx context.Context, p *principal.Pri
 	if err != nil || !ok {
 		return invocation.AccessContext{}, false, err
 	}
-	return s.authorizeMountedResourceRoles(ctx, mountedResourceAccess{
+	return s.authorizeMountedResourceRolesWithLegacy(ctx, mountedResourceAccess{
 		appKey:       strings.TrimSpace(mounted.AppName),
 		resourceName: resourceName,
 		subjectID:    subjectID,
