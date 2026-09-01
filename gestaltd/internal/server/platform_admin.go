@@ -32,7 +32,6 @@ func (s *Server) authorizeMountedResourceRolesWithLegacy(
 		return s.authorizeMountedResourceRoles(ctx, access)
 	}
 
-	var last invocation.AccessContext
 	for _, name := range names {
 		candidate := access
 		candidate.resourceName = name
@@ -43,7 +42,6 @@ func (s *Server) authorizeMountedResourceRolesWithLegacy(
 		if allowed {
 			return decision, true, nil
 		}
-		last = decision
 	}
-	return last, false, nil
+	return invocation.AccessContext{}, false, nil
 }

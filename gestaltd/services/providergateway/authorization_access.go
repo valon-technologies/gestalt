@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	authorizationResourceType = "authorization"
+	authorizationResourceType = string(ProviderKindAuthorization)
 	authorizationResourceID   = "authorization"
 	legacyAuthorizationAction = "authorization"
 )

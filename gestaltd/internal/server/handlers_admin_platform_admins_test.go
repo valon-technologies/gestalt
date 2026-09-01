@@ -18,7 +18,7 @@ func TestAdminPlatformAdminsList(t *testing.T) {
 	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships: []*proto.Relationship{
-			testAuthorizationRelationship(adminID, "admin", "gestaltAdmin", "gestaltAdmin"),
+			testAuthorizationRelationship(adminID, "admin", "gestalt", "gestalt"),
 			{
 				Tuple: &proto.RelationshipTuple{
 					Target: &proto.RelationshipTarget{
@@ -30,7 +30,7 @@ func TestAdminPlatformAdminsList(t *testing.T) {
 						},
 					},
 					Relation: "admin",
-					Resource: &proto.Resource{Type: "gestaltAdmin", Id: "gestaltAdmin"},
+					Resource: &proto.Resource{Type: "gestalt", Id: "gestalt"},
 				},
 				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
 			},
@@ -69,7 +69,7 @@ func TestAdminPlatformAdminsList(t *testing.T) {
 	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if payload.Resource.Type != "gestaltAdmin" || payload.Resource.ID != "gestaltAdmin" {
+	if payload.Resource.Type != "gestalt" || payload.Resource.ID != "gestalt" {
 		t.Fatalf("resource = %#v", payload.Resource)
 	}
 	if payload.Role != "admin" {
