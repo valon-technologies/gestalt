@@ -18,7 +18,7 @@ RUN case "$TARGETARCH" in \
     tar -xzf "$archive" -C /out && \
     test -x /out/gestalt
 
-FROM gcr.io/distroless/cc-debian12@sha256:aa0b7af67fa8211751ea6e00baa8373ba56cc1417ffc986ec9619bd0e1556b56 AS distroless
+FROM gcr.io/distroless/cc-debian12@sha256:e5d81ddde149641e2a9ba55be4545bc125c67de07508b03ba4c22e6eb0ded5aa AS distroless
 ARG GESTALT_VERSION
 ARG GESTALT_REVISION
 ARG GESTALT_CREATED
