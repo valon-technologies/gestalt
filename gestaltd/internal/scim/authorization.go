@@ -18,7 +18,7 @@ type authorizationGate struct {
 }
 
 func WrapAuthorization(underlying core.AuthorizationProvider, users *coredata.UserService, service *Service) core.AuthorizationProvider {
-	if underlying == nil || service == nil || len(service.domainOwners) == 0 && len(service.managed) == 0 {
+	if underlying == nil || !service.Enabled() {
 		return underlying
 	}
 	return &authorizationGate{underlying: underlying, users: users, scim: service}
@@ -91,21 +91,35 @@ func (g *authorizationGate) ListRelationships(ctx context.Context, req *proto.Li
 }
 
 func (g *authorizationGate) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
-	if req != nil && req.Relationship != nil && req.Relationship.Tuple != nil && g.managed(req.Relationship.Tuple) {
-		return nil, fmt.Errorf("relationship is managed by SCIM")
+	if req != nil && req.Relationship != nil {
+		if err := g.checkRelationshipWrite(ctx, req.Relationship.Tuple); err != nil {
+			return nil, err
+		}
 	}
 	return g.underlying.AddRelationship(ctx, req)
 }
 
 func (g *authorizationGate) DeleteRelationship(ctx context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
-	if req != nil && req.RelationshipTuple != nil && g.managed(req.RelationshipTuple) {
-		return nil, fmt.Errorf("relationship is managed by SCIM")
+	if req != nil {
+		if err := g.checkRelationshipWrite(ctx, req.RelationshipTuple); err != nil {
+			return nil, err
+		}
 	}
 	return g.underlying.DeleteRelationship(ctx, req)
 }
 
-func (g *authorizationGate) managed(tuple *proto.RelationshipTuple) bool {
-	return tuple.Resource != nil && g.scim.ManagedRelationship(tuple.Resource.Type, tuple.Resource.Id, tuple.Relation)
+func (g *authorizationGate) checkRelationshipWrite(ctx context.Context, tuple *proto.RelationshipTuple) error {
+	if tuple == nil || tuple.Resource == nil {
+		return nil
+	}
+	managed, err := g.scim.managedRelationship(ctx, tuple.Resource.Type, tuple.Resource.Id, tuple.Relation)
+	if err != nil {
+		return fmt.Errorf("check SCIM relationship ownership: %w", err)
+	}
+	if managed {
+		return fmt.Errorf("relationship is managed by SCIM")
+	}
+	return nil
 }
 
 func (g *authorizationGate) SetAuthorizationState(ctx context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {

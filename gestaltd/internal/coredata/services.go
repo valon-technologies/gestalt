@@ -101,6 +101,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreSCIMProjectionIntents, SCIMProjectionIntentsSchema); err != nil {
 			return nil, fmt.Errorf("create scim_projection_intents store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreSCIMGroups, SCIMGroupsSchema); err != nil {
+			return nil, fmt.Errorf("create scim_groups store: %w", err)
+		}
 	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
 		return nil, err
 	} else if err := ensureSCIMStores(ctx, ds); err != nil {
@@ -146,6 +149,9 @@ func ensureSCIMStores(ctx context.Context, ds indexeddb.IndexedDB) error {
 	}
 	if _, err := ds.CreateObjectStore(ctx, StoreSCIMProjectionIntents, SCIMProjectionIntentsSchema); err != nil {
 		return fmt.Errorf("ensure scim_projection_intents store: %w", err)
+	}
+	if _, err := ds.CreateObjectStore(ctx, StoreSCIMGroups, SCIMGroupsSchema); err != nil {
+		return fmt.Errorf("ensure scim_groups store: %w", err)
 	}
 	return nil
 }

@@ -24,6 +24,7 @@ const (
 	StoreAppAccessProfiles              = "app_access_profiles"
 	StoreSCIMUsers                      = "scim_users"
 	StoreSCIMProjectionIntents          = "scim_projection_intents"
+	StoreSCIMGroups                     = "scim_groups"
 )
 
 var SCIMUsersSchema = idb.ObjectStoreOptions{
@@ -83,6 +84,31 @@ var SCIMProjectionIntentsSchema = idb.ObjectStoreOptions{
 		{Name: "attempt_count", Type: idb.TypeInt, NotNull: true},
 		{Name: "next_attempt_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "last_error", Type: idb.TypeString},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+	},
+}
+
+// SCIMGroupsSchema keeps the committed resource and any pending replacement
+// together so projection recovery does not require a separate intent store.
+var SCIMGroupsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_client", KeyPath: []string{"client_id"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "client_id", Type: idb.TypeString, NotNull: true},
+		{Name: "version", Type: idb.TypeInt, NotNull: true},
+		{Name: "deleted", Type: idb.TypeBool, NotNull: true},
+		{Name: "resource", Type: idb.TypeJSON, NotNull: true},
+		{Name: "pending_resource", Type: idb.TypeJSON},
+		{Name: "pending_deleted", Type: idb.TypeBool},
+		{Name: "pending_version", Type: idb.TypeInt},
+		{Name: "pending_fingerprint", Type: idb.TypeString},
+		{Name: "pending_affected_users", Type: idb.TypeJSON},
+		{Name: "pending_attempt_count", Type: idb.TypeInt},
+		{Name: "pending_next_attempt_at", Type: idb.TypeTime},
+		{Name: "last_operation_fingerprint", Type: idb.TypeString},
 		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},

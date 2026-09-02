@@ -1047,8 +1047,12 @@ func projectedRelationship(coreUserID string, source proto.SourceLayer) *proto.R
 }
 
 func relationshipKey(tuple *proto.RelationshipTuple) string {
-	subject := tuple.GetTarget().GetSubject()
-	return subject.GetType() + "\x00" + subject.GetId() + "\x00" + tuple.GetRelation() + "\x00" + tuple.GetResource().GetType() + "\x00" + tuple.GetResource().GetId()
+	target := tuple.GetTarget()
+	targetKey := "subject\x00" + target.GetSubject().GetType() + "\x00" + target.GetSubject().GetId()
+	if subjectSet := target.GetSubjectSet(); subjectSet != nil {
+		targetKey = "subject-set\x00" + subjectSet.GetResource().GetType() + "\x00" + subjectSet.GetResource().GetId() + "\x00" + subjectSet.GetRelation()
+	}
+	return targetKey + "\x00" + tuple.GetRelation() + "\x00" + tuple.GetResource().GetType() + "\x00" + tuple.GetResource().GetId()
 }
 
 var _ core.AuthorizationProvider = (*recordingAuthorization)(nil)

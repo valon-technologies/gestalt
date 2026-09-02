@@ -26,7 +26,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -188,7 +187,9 @@ func (s *Service) Start(ctx context.Context) {
 	}
 	go func() {
 		s.runReconciliation(ctx, "retry", s.reconcileDueIntents)
+		s.runReconciliation(ctx, "retry-groups", s.reconcilePendingGroups)
 		s.runReconciliation(ctx, "drift", s.reconcileDrift)
+		s.runReconciliation(ctx, "drift-groups", s.reconcileGroupDrift)
 		retryTicks, stopRetry := s.ticker(s.retryInterval)
 		defer stopRetry()
 		driftTicks, stopDrift := s.ticker(s.driftInterval)
@@ -199,8 +200,10 @@ func (s *Service) Start(ctx context.Context) {
 				return
 			case <-retryTicks:
 				s.runReconciliation(ctx, "retry", s.reconcileDueIntents)
+				s.runReconciliation(ctx, "retry-groups", s.reconcilePendingGroups)
 			case <-driftTicks:
 				s.runReconciliation(ctx, "drift", s.reconcileDrift)
+				s.runReconciliation(ctx, "drift-groups", s.reconcileGroupDrift)
 			}
 		}
 	}()
@@ -437,20 +440,20 @@ func (s *Service) Get(ctx context.Context, clientID, id string) (*User, error) {
 	return &user, nil
 }
 
-func (s *Service) list(ctx context.Context, clientID, rawFilter string, startIndex, count int) (listResponse, error) {
+func (s *Service) list(ctx context.Context, clientID, rawFilter string, startIndex, count int) (listResponse[User], error) {
 	clauses, err := parseFilter(rawFilter)
 	if err != nil {
-		return listResponse{}, invalid(err.Error())
+		return listResponse[User]{}, invalid(err.Error())
 	}
 	records, err := s.db.ObjectStore(coredata.StoreSCIMUsers).Index("by_client").GetAll(ctx, clientID)
 	if err != nil {
-		return listResponse{}, unavailable("could not list SCIM Users")
+		return listResponse[User]{}, unavailable("could not list SCIM Users")
 	}
 	rows := make([]storedRow, 0, len(records))
 	for _, rec := range records {
 		row, decodeErr := decodeStoredRow(rec)
 		if decodeErr != nil {
-			return listResponse{}, unavailable("stored SCIM User is invalid")
+			return listResponse[User]{}, unavailable("stored SCIM User is invalid")
 		}
 		if !row.deleted && matchesFilter(row.resource, clauses) {
 			rows = append(rows, row)
@@ -470,7 +473,7 @@ func (s *Service) list(ctx context.Context, clientID, rawFilter string, startInd
 	for i := begin; i < end; i++ {
 		resources = append(resources, s.publicUser(rows[i]))
 	}
-	return listResponse{Schemas: []string{ListSchemaURN}, TotalResults: total, StartIndex: startIndex, ItemsPerPage: len(resources), Resources: resources}, nil
+	return listResponse[User]{Schemas: []string{ListSchemaURN}, TotalResults: total, StartIndex: startIndex, ItemsPerPage: len(resources), Resources: resources}, nil
 }
 
 func (s *Service) Replace(ctx context.Context, clientID, id, ifMatch string, input userInput) (*User, error) {
@@ -520,12 +523,15 @@ func (s *Service) Delete(ctx context.Context, clientID, id, ifMatch string) erro
 	}
 	if current.deleted {
 		if current.lastFingerprint == fingerprint {
-			return nil
+			return s.removeUserFromGroups(ctx, clientID, id)
 		}
 		return notFound()
 	}
 	_, err = s.commitMutationLocked(ctx, clientID, id, ifMatch, current, current.resource, mustLoginEmail(current.resource), true, fingerprint)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.removeUserFromGroups(ctx, clientID, id)
 }
 
 func (s *Service) mutate(ctx context.Context, clientID, id, ifMatch string, proposed persistedUser, email string, deleted bool, fingerprint string) (*User, error) {
@@ -973,28 +979,11 @@ func (s *Service) applyProjections(ctx context.Context, intent intentRow) ([]pro
 }
 
 func (s *Service) findProjection(ctx context.Context, coreUserID string, value projection) (*proto.Relationship, error) {
-	tuple := projectionTuple(coreUserID, value)
-	response, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
-		Filter:   &proto.RelationshipFilter{Target: tuple.Target, Relation: tuple.Relation, Resource: tuple.Resource},
-		PageSize: 2,
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, relationship := range response.GetRelationships() {
-		if gproto.Equal(relationship.GetTuple(), tuple) {
-			return relationship, nil
-		}
-	}
-	return nil, nil
+	return s.findRelationship(ctx, projectionTuple(coreUserID, value))
 }
 
 func relationshipOwnedBy(relationship *proto.Relationship, clientID, userID string) bool {
-	if relationship == nil || relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || relationship.GetProperties() == nil {
-		return false
-	}
-	properties := relationship.GetProperties().AsMap()
-	return properties["managedBy"] == "scim" && properties["scimClientId"] == clientID && properties["scimUserId"] == userID
+	return relationshipOwnedBySCIM(relationship, clientID, "scimUserId", userID)
 }
 
 func projectionTuple(coreUserID string, value projection) *proto.RelationshipTuple {
@@ -1329,7 +1318,37 @@ func (s *Service) IsEligible(ctx context.Context, coreUserID, email string) (boo
 			return false, nil
 		}
 	}
+	if pending, err := s.pendingGroupAffectsUser(ctx, clientID, activeUsers); err != nil {
+		return false, err
+	} else if pending {
+		return false, nil
+	}
 	return true, nil
+}
+
+func (s *Service) pendingGroupAffectsUser(ctx context.Context, clientID string, activeUsers map[string]storedRow) (bool, error) {
+	if clientID == "" {
+		return false, nil
+	}
+	records, err := s.db.ObjectStore(coredata.StoreSCIMGroups).Index("by_client").GetAll(ctx, clientID)
+	if err != nil {
+		return false, err
+	}
+	for _, rec := range records {
+		row, decodeErr := decodeStoredGroup(rec)
+		if decodeErr != nil {
+			return false, decodeErr
+		}
+		if !row.pending {
+			continue
+		}
+		for _, userID := range row.pendingAffectedUsers {
+			if _, ok := activeUsers[userID]; ok {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func intentPreservesEligibility(intent intentRow, committed storedRow) bool {
@@ -1367,7 +1386,19 @@ func (s *Service) clientOwnsDomain(clientID, domain string) bool {
 	return ok
 }
 
-func (s *Service) ManagedRelationship(resourceType, resourceID, relation string) bool {
-	_, ok := s.managed[(projection{ResourceType: resourceType, ResourceID: resourceID, Relation: relation}).key()]
-	return ok
+func (s *Service) managedRelationship(ctx context.Context, resourceType, resourceID, relation string) (bool, error) {
+	if _, ok := s.managed[(projection{ResourceType: resourceType, ResourceID: resourceID, Relation: relation}).key()]; ok {
+		return true, nil
+	}
+	if resourceType != "group" || relation != "member" {
+		return false, nil
+	}
+	rec, err := s.db.ObjectStore(coredata.StoreSCIMGroups).Get(ctx, resourceID)
+	if errors.Is(err, idb.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !recordBool(rec, "deleted"), nil
 }

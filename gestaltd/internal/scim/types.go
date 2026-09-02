@@ -10,6 +10,7 @@ import (
 
 const (
 	UserSchemaURN  = "urn:ietf:params:scim:schemas:core:2.0:User"
+	GroupSchemaURN = "urn:ietf:params:scim:schemas:core:2.0:Group"
 	PatchSchemaURN = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
 	ListSchemaURN  = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
 	ErrorSchemaURN = "urn:ietf:params:scim:api:messages:2.0:Error"
@@ -36,14 +37,39 @@ type Meta struct {
 }
 
 type User struct {
+	Schemas     []string   `json:"schemas"`
+	ID          string     `json:"id"`
+	ExternalID  string     `json:"externalId,omitempty"`
+	UserName    string     `json:"userName"`
+	Active      bool       `json:"active"`
+	DisplayName string     `json:"displayName,omitempty"`
+	Name        Name       `json:"name,omitempty"`
+	Emails      []Email    `json:"emails,omitempty"`
+	Groups      []GroupRef `json:"groups,omitempty"`
+	Meta        Meta       `json:"meta"`
+}
+
+// GroupRef is the read-only User.groups representation defined by RFC 7643.
+type GroupRef struct {
+	Value   string `json:"value"`
+	Ref     string `json:"$ref,omitempty"`
+	Display string `json:"display,omitempty"`
+	Type    string `json:"type,omitempty"`
+}
+
+type Member struct {
+	Value   string `json:"value"`
+	Ref     string `json:"$ref,omitempty"`
+	Display string `json:"display,omitempty"`
+	Type    string `json:"type,omitempty"`
+}
+
+type Group struct {
 	Schemas     []string `json:"schemas"`
 	ID          string   `json:"id"`
 	ExternalID  string   `json:"externalId,omitempty"`
-	UserName    string   `json:"userName"`
-	Active      bool     `json:"active"`
-	DisplayName string   `json:"displayName,omitempty"`
-	Name        Name     `json:"name,omitempty"`
-	Emails      []Email  `json:"emails,omitempty"`
+	DisplayName string   `json:"displayName"`
+	Members     []Member `json:"members,omitempty"`
 	Meta        Meta     `json:"meta"`
 }
 
@@ -57,6 +83,13 @@ type userInput struct {
 	Emails      *[]Email `json:"emails,omitempty"`
 }
 
+type groupInput struct {
+	Schemas     []string  `json:"schemas"`
+	ExternalID  *string   `json:"externalId,omitempty"`
+	DisplayName *string   `json:"displayName,omitempty"`
+	Members     *[]Member `json:"members,omitempty"`
+}
+
 type persistedUser struct {
 	ExternalID  string  `json:"externalId,omitempty"`
 	UserName    string  `json:"userName"`
@@ -66,12 +99,18 @@ type persistedUser struct {
 	Emails      []Email `json:"emails,omitempty"`
 }
 
-type listResponse struct {
+type persistedGroup struct {
+	ExternalID  string   `json:"externalId,omitempty"`
+	DisplayName string   `json:"displayName"`
+	Members     []Member `json:"members,omitempty"`
+}
+
+type listResponse[T any] struct {
 	Schemas      []string `json:"schemas"`
 	TotalResults int      `json:"totalResults"`
 	StartIndex   int      `json:"startIndex"`
 	ItemsPerPage int      `json:"itemsPerPage"`
-	Resources    []User   `json:"Resources"`
+	Resources    []T      `json:"Resources"`
 }
 
 type patchRequest struct {
@@ -98,8 +137,20 @@ func invalid(detail string) *Error {
 	return &Error{Status: http.StatusBadRequest, SCIMType: "invalidValue", Detail: detail}
 }
 
+func invalidFilter(detail string) *Error {
+	return &Error{Status: http.StatusBadRequest, SCIMType: "invalidFilter", Detail: detail}
+}
+
+func noTarget(detail string) *Error {
+	return &Error{Status: http.StatusBadRequest, SCIMType: "noTarget", Detail: detail}
+}
+
 func notFound() *Error {
 	return &Error{Status: http.StatusNotFound, Detail: "SCIM User was not found"}
+}
+
+func notFoundResource(resource string) *Error {
+	return &Error{Status: http.StatusNotFound, Detail: resource + " was not found"}
 }
 
 func conflict(detail string) *Error {
