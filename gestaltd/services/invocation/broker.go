@@ -1010,13 +1010,17 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	if b == nil || b.authorization == nil {
 		return nil
 	}
+	startedAt := time.Now()
 	decision, err := b.authorizationDecision(ctx, p, providerName, operationID)
 	if err != nil {
+		recordInvokeAuthorizationDecision(ctx, startedAt, p, providerName, operationID, false, invokeAuthorizationDenyReasonAuthorizationError)
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
 	}
 	if decision == nil || !decision.GetAllowed() {
+		recordInvokeAuthorizationDecision(ctx, startedAt, p, providerName, operationID, false, invokeAuthorizationDenyReasonRelationDenied)
 		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
+	recordInvokeAuthorizationDecision(ctx, startedAt, p, providerName, operationID, true, "")
 	return nil
 }
 
@@ -1029,20 +1033,26 @@ func (b *Broker) authorizeOperation(
 	if b == nil || b.authorization == nil {
 		return ctx, nil
 	}
+	startedAt := time.Now()
 	decision, err := b.authorizationDecision(ctx, p, providerName, operation.ID)
 	if err != nil {
+		recordInvokeAuthorizationDecision(ctx, startedAt, p, providerName, operation.ID, false, invokeAuthorizationDenyReasonAuthorizationError)
 		return ctx, fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operation.ID, err)
 	}
 	if decision == nil || !decision.GetAllowed() {
+		recordInvokeAuthorizationDecision(ctx, startedAt, p, providerName, operation.ID, false, invokeAuthorizationDenyReasonRelationDenied)
 		return ctx, fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
 	}
 	if len(operation.AllowedRoles) == 0 {
+		recordInvokeAuthorizationDecision(ctx, startedAt, p, providerName, operation.ID, true, "")
 		return ctx, nil
 	}
 	role := matchedAllowedRole(decision.GetMatchedRelations(), operation.AllowedRoles)
 	if role == "" {
+		recordInvokeAuthorizationDecision(ctx, startedAt, p, providerName, operation.ID, false, invokeAuthorizationDenyReasonRoleDenied)
 		return ctx, fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
 	}
+	recordInvokeAuthorizationDecision(ctx, startedAt, p, providerName, operation.ID, true, "")
 	return WithAccessContext(ctx, AccessContext{
 		Policy: b.authorizationPolicy(providerName),
 		Role:   role,
