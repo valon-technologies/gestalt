@@ -88,12 +88,12 @@ func TestEvaluateInvokeAuthorizationRecordsAllowAndDenyMetrics(t *testing.T) {
 	}
 
 	allowAttrs := map[string]string{
-		"gestalt.provider":                          "traffic-cop",
-		"gestalt.operation":                         "sync.workqueue",
-		"gestaltd.invocation.surface":               metricutil.UnknownAttrValue,
-		"gestaltd.invoke.authorization.decision":    "allow",
-		"gestaltd.subject.kind":                     "user",
-		"gestaltd.subject.id":                       "user@example.com",
+		"gestalt.provider":                       "traffic-cop",
+		"gestalt.operation":                      "sync.workqueue",
+		"gestaltd.invocation.surface":            metricutil.UnknownAttrValue,
+		"gestaltd.invoke.authorization.decision": "allow",
+		"gestaltd.subject.kind":                  "user",
+		"gestaltd.subject.id":                    "user@example.com",
 	}
 	_, err := broker.evaluateInvokeAuthorization(ctx, p, "traffic-cop", "sync.workqueue", []string{"admin"})
 	if err != nil {
@@ -105,13 +105,13 @@ func TestEvaluateInvokeAuthorizationRecordsAllowAndDenyMetrics(t *testing.T) {
 
 	authz.matchedRelations = []string{"viewer"}
 	denyAttrs := map[string]string{
-		"gestalt.provider":                            "traffic-cop",
-		"gestalt.operation":                           "sync.workqueue",
-		"gestaltd.invocation.surface":                 metricutil.UnknownAttrValue,
-		"gestaltd.invoke.authorization.decision":      "deny",
-		"gestaltd.invoke.authorization.deny_reason":     "role_denied",
-		"gestaltd.subject.kind":                       "user",
-		"gestaltd.subject.id":                         "user@example.com",
+		"gestalt.provider":                          "traffic-cop",
+		"gestalt.operation":                         "sync.workqueue",
+		"gestaltd.invocation.surface":               metricutil.UnknownAttrValue,
+		"gestaltd.invoke.authorization.decision":    "deny",
+		"gestaltd.invoke.authorization.deny_reason": "role_denied",
+		"gestaltd.subject.kind":                     "user",
+		"gestaltd.subject.id":                       "user@example.com",
 	}
 	_, err = broker.evaluateInvokeAuthorization(ctx, p, "traffic-cop", "sync.workqueue", []string{"admin"})
 	if !errors.Is(err, ErrAuthorizationDenied) {
@@ -134,13 +134,13 @@ func TestCheckAuthorizationAccessRecordsRelationDeniedMetric(t *testing.T) {
 	broker := NewBroker(nil, nil, nil, WithAuthorizationProvider(authz))
 
 	denyAttrs := map[string]string{
-		"gestalt.provider":                            "slack",
-		"gestalt.operation":                           "chat.postMessage",
-		"gestaltd.invocation.surface":                 "http",
-		"gestaltd.invoke.authorization.decision":      "deny",
-		"gestaltd.invoke.authorization.deny_reason":   "relation_denied",
-		"gestaltd.subject.kind":                       "service_account",
-		"gestaltd.subject.id":                         "workflow-roadmap",
+		"gestalt.provider":                          "slack",
+		"gestalt.operation":                         "chat.postMessage",
+		"gestaltd.invocation.surface":               "http",
+		"gestaltd.invoke.authorization.decision":    "deny",
+		"gestaltd.invoke.authorization.deny_reason": "relation_denied",
+		"gestaltd.subject.kind":                     "service_account",
+		"gestaltd.subject.id":                       "workflow-roadmap",
 	}
 	err := broker.checkAuthorizationAccess(
 		ctx,
@@ -154,4 +154,35 @@ func TestCheckAuthorizationAccessRecordsRelationDeniedMetric(t *testing.T) {
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.invoke.authorization.count", 1, denyAttrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.invoke.authorization.error_count", 1, denyAttrs)
+}
+
+func TestCheckProviderAccessDoesNotRecordInvokeAuthorizationMetric(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+	authz := &recordingAuthorizationProvider{allowed: true}
+	broker := NewBroker(
+		nil,
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+		WithProviderKinds(map[string]ProviderKind{"github": ProviderKindApp}),
+	)
+
+	err := broker.CheckProviderAccess(
+		ctx,
+		&principal.Principal{SubjectID: "service_account:workflow-roadmap"},
+		"github",
+	)
+	if err != nil {
+		t.Fatalf("CheckProviderAccess: %v", err)
+	}
+	if authz.checkAccessCalls != 1 {
+		t.Fatalf("CheckAccess calls = %d, want 1", authz.checkAccessCalls)
+	}
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireNoMetric(t, rm, "gestaltd.invoke.authorization.count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.invoke.authorization.error_count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.invoke.authorization.duration")
 }

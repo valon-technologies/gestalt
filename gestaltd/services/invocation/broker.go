@@ -1132,7 +1132,17 @@ func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal
 	if b.providerDelegatesRemoteAuthorization(ctx, providerName) {
 		return nil
 	}
-	return b.checkAuthorizationAccess(ctx, p, providerName, providerName)
+	if b == nil || b.authorization == nil {
+		return nil
+	}
+	decision, err := b.authorizationDecision(ctx, p, providerName, providerName)
+	if err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrAuthorizationDenied, providerName, err)
+	}
+	if decision == nil || !decision.GetAllowed() {
+		return fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
+	}
+	return nil
 }
 
 func accessRequest(p *principal.Principal, subjectID string, resource *proto.Resource, action string) *proto.CheckAccessRequest {
