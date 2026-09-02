@@ -28,6 +28,7 @@ import (
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -96,6 +97,7 @@ type StaticValidationOptions struct {
 type Lifecycle struct {
 	configSecretResolver     func(context.Context, *config.Config) error
 	sourceAuthSecretResolver func(context.Context, *config.Config) error
+	snapshotGCSTokenSource   func(context.Context) (oauth2.TokenSource, error)
 	sourceCommandOutput      providerpkg.CommandOutput
 	progress                 LifecycleProgress
 	httpClient               *http.Client
@@ -1668,6 +1670,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 }
 
 type lifecyclePaths struct {
+	config                 *config.Config
 	configPaths            []string
 	configFlags            string
 	lockFlags              string
@@ -1967,6 +1970,7 @@ func resolveLifecyclePaths(configPaths []string, cfg *config.Config, lockfilePat
 	resolvedArtifactsDir := resolveArtifactsDir(configPath, cfg, artifactsDir)
 	resolvedLockfilePath := resolveLockfilePath(lockfilePath)
 	return lifecyclePaths{
+		config:                 cfg,
 		configPaths:            append([]string(nil), configPaths...),
 		configFlags:            formatConfigStateFlags(configPaths, artifactsDir, lockfilePath),
 		lockFlags:              formatLockFlags(configPaths, lockfilePath),
@@ -2965,9 +2969,9 @@ func localLockEntryFromPreparedInstall(paths lifecyclePaths, kind, name string, 
 	return entry, nil
 }
 
-func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, app *config.ProviderEntry, configDir string, mode artifactMode) (*installedPackage, LockEntry, error) {
+func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, client *http.Client, expectedKind, name, subject, destDir string, app *config.ProviderEntry, configDir string, mode artifactMode) (*installedPackage, LockEntry, error) {
 	sourceLocation := app.SourceReleaseLocation()
-	bundle, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseBundle(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(app))
+	bundle, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseBundle(ctx, client, sourceLocation, sourceAuthToken(app))
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("%s fetch metadata %q: %w", subject, sourceLocation, err)
 	}
@@ -3012,7 +3016,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("resolve archive for %s: %w", subject, err)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, client, sourceAuthToken(app), archiveLocation)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
 	}
@@ -3114,7 +3118,7 @@ func (l *Lifecycle) resolveLockedProvider(ctx context.Context, cfg *config.Confi
 	if !provider.HasReleaseMetadataSource() {
 		return LockEntry{}, fmt.Errorf("%s source %q: only provider-release metadata sources and local manifest paths are supported", subject, sourceLocation)
 	}
-	installed, entry, err := l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, provider, paths.configDir, mode)
+	installed, entry, err := l.installMetadataSourcePackage(ctx, l.metadataHTTPClient(), kind, name, subject, destDir, provider, paths.configDir, mode)
 	if err != nil {
 		return LockEntry{}, err
 	}
@@ -4532,7 +4536,11 @@ func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecycl
 	}
 
 	downloadStart := time.Now()
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
+	client, err := l.snapshotRepositoryHTTPClient(ctx, paths.config, app)
+	if err != nil {
+		return lockedArchiveDownloadError{err: fmt.Errorf("authenticate locked source archive for %s: %w", subject, err)}
+	}
+	download, err := downloadArchiveForSource(ctx, client, sourceAuthToken(app), archiveLocation)
 	if err != nil {
 		return lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
 	}
