@@ -12,7 +12,6 @@ import (
 const (
 	UserSchemaURN                  = "urn:ietf:params:scim:schemas:core:2.0:User"
 	GroupSchemaURN                 = "urn:ietf:params:scim:schemas:core:2.0:Group"
-	PatchSchemaURN                 = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
 	ListSchemaURN                  = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
 	ErrorSchemaURN                 = "urn:ietf:params:scim:api:messages:2.0:Error"
 	ServiceProviderConfigSchemaURN = "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"
@@ -113,12 +112,13 @@ type groupInput struct {
 }
 
 type persistedUser struct {
-	ExternalID  string  `json:"externalId,omitempty"`
-	UserName    string  `json:"userName"`
-	Active      bool    `json:"active"`
-	DisplayName string  `json:"displayName,omitempty"`
-	Name        Name    `json:"name,omitempty"`
-	Emails      []Email `json:"emails,omitempty"`
+	ExternalID     string  `json:"externalId,omitempty"`
+	UserName       string  `json:"userName"`
+	Active         bool    `json:"active"`
+	DisplayName    string  `json:"displayName,omitempty"`
+	DisplayNameSet bool    `json:"-"`
+	Name           Name    `json:"name,omitempty"`
+	Emails         []Email `json:"emails,omitempty"`
 }
 
 type persistedGroup struct {
@@ -133,17 +133,6 @@ type listResponse[T any] struct {
 	StartIndex   int      `json:"startIndex"`
 	ItemsPerPage int      `json:"itemsPerPage"`
 	Resources    []T      `json:"Resources"`
-}
-
-type patchRequest struct {
-	Schemas    []string         `json:"schemas"`
-	Operations []patchOperation `json:"Operations"`
-}
-
-type patchOperation struct {
-	Op    string          `json:"op"`
-	Path  string          `json:"path,omitempty"`
-	Value json.RawMessage `json:"value,omitempty"`
 }
 
 type Error struct {
@@ -225,7 +214,7 @@ func validateResourceSchemas(schemas []string, base string) error {
 		switch schema {
 		case base:
 			found = true
-		case UserSchemaURN, GroupSchemaURN, PatchSchemaURN, ListSchemaURN, ErrorSchemaURN:
+		case UserSchemaURN, GroupSchemaURN, ListSchemaURN, ErrorSchemaURN:
 			return invalidSyntax("schemas contains an unsupported resource schema")
 		default:
 			if !strings.HasPrefix(strings.ToLower(schema), "urn:") {
@@ -235,33 +224,6 @@ func validateResourceSchemas(schemas []string, base string) error {
 	}
 	if !found {
 		return invalidSyntax("schemas must contain the resource base schema")
-	}
-	return nil
-}
-
-func validatePatchSchemas(schemas []string) error {
-	if len(schemas) == 0 {
-		return invalidSyntax("PATCH schemas must contain the PatchOp schema")
-	}
-	seen := map[string]struct{}{}
-	found := false
-	for _, raw := range schemas {
-		schema := strings.TrimSpace(raw)
-		if schema == "" {
-			return invalidSyntax("PATCH schemas must not contain empty values")
-		}
-		if _, ok := seen[schema]; ok {
-			return invalidSyntax("PATCH schemas must not contain duplicate values")
-		}
-		seen[schema] = struct{}{}
-		if schema == PatchSchemaURN {
-			found = true
-		} else if schema == UserSchemaURN || schema == GroupSchemaURN || schema == ListSchemaURN || schema == ErrorSchemaURN || !strings.HasPrefix(strings.ToLower(schema), "urn:") {
-			return invalidSyntax("PATCH schemas contains an unsupported value")
-		}
-	}
-	if !found {
-		return invalidSyntax("PATCH schemas must contain the PatchOp schema")
 	}
 	return nil
 }

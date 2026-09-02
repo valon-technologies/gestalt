@@ -97,7 +97,7 @@ func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*core.
 // LinkUserInTransaction links an externally managed identity to a Gestalt
 // user while participating in the caller's transaction. An empty userID
 // reuses the single user with the normalized email or creates one.
-func LinkUserInTransaction(ctx context.Context, tx idb.Transaction, userID, email, displayName string, now time.Time) (*core.User, error) {
+func LinkUserInTransaction(ctx context.Context, tx idb.Transaction, userID, email string, displayName *string, now time.Time) (*core.User, error) {
 	email = normalizeEmail(email)
 	if email == "" {
 		return nil, fmt.Errorf("link user: email is required")
@@ -114,7 +114,11 @@ func LinkUserInTransaction(ctx context.Context, tx idb.Transaction, userID, emai
 		if len(records) == 1 {
 			userID = recString(records[0], "id")
 		} else {
-			rec := newUserRecord(uuid.NewString(), email, displayName, now)
+			name := ""
+			if displayName != nil {
+				name = *displayName
+			}
+			rec := newUserRecord(uuid.NewString(), email, name, now)
 			if err := store.Add(ctx, rec); err != nil {
 				return nil, fmt.Errorf("link user: create: %w", err)
 			}
@@ -127,8 +131,8 @@ func LinkUserInTransaction(ctx context.Context, tx idb.Transaction, userID, emai
 	}
 	rec["email"] = email
 	rec["normalized_email"] = email
-	if displayName = strings.TrimSpace(displayName); displayName != "" {
-		rec["display_name"] = displayName
+	if displayName != nil {
+		rec["display_name"] = strings.TrimSpace(*displayName)
 	}
 	rec["updated_at"] = now
 	if err := store.Put(ctx, rec); err != nil {
@@ -136,6 +140,20 @@ func LinkUserInTransaction(ctx context.Context, tx idb.Transaction, userID, emai
 			return nil, fmt.Errorf("%w: %s", ErrUserEmailConflict, email)
 		}
 		return nil, fmt.Errorf("link user: update: %w", err)
+	}
+	return recordToUser(rec), nil
+}
+
+// GetUserInTransaction reads a core user through the caller's transaction.
+// SCIM uses this to validate shared-user mutations while holding the same
+// Users/SCIM resources write transaction used for the eventual update.
+func GetUserInTransaction(ctx context.Context, tx idb.Transaction, id string) (*core.User, error) {
+	rec, err := tx.ObjectStore(StoreUsers).Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return nil, core.ErrNotFound
+		}
+		return nil, fmt.Errorf("get user in transaction: %w", err)
 	}
 	return recordToUser(rec), nil
 }

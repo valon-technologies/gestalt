@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -102,13 +101,9 @@ func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
 	if groupProjection.Code != http.StatusOK || bytes.Contains(groupProjection.Body.Bytes(), []byte(`"displayName"`)) || !bytes.Contains(groupProjection.Body.Bytes(), []byte(`"schemas"`)) || !bytes.Contains(groupProjection.Body.Bytes(), []byte(`"id"`)) {
 		t.Fatalf("Group excludedAttributes projection = %d %s", groupProjection.Code, groupProjection.Body.String())
 	}
-	duplicateMemberPatch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": alice.ID, "type": "User"}}}}
-	noOpResponse := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, duplicateMemberPatch, map[string]string{"If-Match": created.Meta.Version})
-	noOp := decodeResponse[scim.Group](t, noOpResponse)
-	if noOpResponse.Code != http.StatusOK {
-		t.Fatalf("duplicate member add = %d %s", noOpResponse.Code, noOpResponse.Body.String())
-	} else if noOp.Meta.Version == "" || noOp.Meta.Version != created.Meta.Version || !noOp.Meta.LastModified.Equal(created.Meta.LastModified) {
-		t.Fatalf("duplicate member add changed metadata = before %#v after %#v", created.Meta, noOp.Meta)
+	unsupportedPatch := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"}, "Operations": []map[string]any{}})
+	if payload := decodeResponse[testErrorResponse](t, unsupportedPatch); unsupportedPatch.Code != http.StatusNotImplemented || payload.Status != "501" {
+		t.Fatalf("unsupported Group PATCH = %d %#v", unsupportedPatch.Code, payload)
 	}
 	coreAlice, err := services.Users.FindUserByEmail(context.Background(), "alice@valon.com")
 	if err != nil {
@@ -117,10 +112,6 @@ func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
 	projected := authorization.relationshipForUser(coreAlice.ID)
 	if projected == nil || projected.GetTuple().GetResource().GetType() != "group" || projected.GetTuple().GetResource().GetId() != created.ID || projected.GetTuple().GetRelation() != "member" {
 		t.Fatalf("projected Group membership = %#v", projected)
-	}
-	badType := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": bob.ID, "type": "Group"}}}}
-	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, badType, map[string]string{"If-Match": created.Meta.Version}); response.Code != http.StatusBadRequest {
-		t.Fatalf("mismatched member type = %d %s", response.Code, response.Body.String())
 	}
 	secondService, _, _ := newSCIMService(t, services.DB, authorization, cfg)
 	if _, err := scim.WrapAuthorization(authorization, services.Users, secondService).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: projected}); err != nil {
@@ -145,6 +136,16 @@ func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
 		t.Fatalf("external User membership was not reflected = before %#v after %#v", bobBeforeExternal, bobAfterExternal)
 	}
 	created = groupAfterExternal
+	replacedResponse := scimRequest(t, handler, http.MethodPut, "/scim/v2/Groups/"+created.ID, testCurrentToken, map[string]any{
+		"schemas":     []string{scim.GroupSchemaURN},
+		"displayName": "Engineering",
+		"members":     []map[string]any{{"value": alice.ID, "type": "User", "display": "ignored"}, {"value": bob.ID, "type": "User"}},
+	}, map[string]string{"If-Match": created.Meta.Version})
+	replaced := decodeResponse[scim.Group](t, replacedResponse)
+	if replacedResponse.Code != http.StatusOK || replaced.ExternalID != "" || len(replaced.Members) != 2 || replaced.Members[0].Display != "" {
+		t.Fatalf("PUT Group replacement = %d %#v", replacedResponse.Code, replaced)
+	}
+	created = replaced
 	filtered := scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups?filter="+url.QueryEscape(`displayName eq "engineering"`), testCurrentToken, nil)
 	groups := decodeResponse[struct {
 		TotalResults int          `json:"totalResults"`
@@ -157,40 +158,6 @@ func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
 	aliceRead := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+alice.ID, testCurrentToken, nil))
 	if len(aliceRead.Groups) != 1 || aliceRead.Groups[0].Value != created.ID || aliceRead.Groups[0].Display != "" || aliceRead.Groups[0].Type != "direct" {
 		t.Fatalf("User.groups after create = %#v", aliceRead.Groups)
-	}
-
-	patch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": bob.ID, "type": "User"}}}}
-	patchedResponse := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, patch, map[string]string{"If-Match": created.Meta.Version})
-	patched := decodeResponse[scim.Group](t, patchedResponse)
-	if patchedResponse.Code != http.StatusOK || len(patched.Members) != 2 || patched.Meta.Version == "" {
-		t.Fatalf("PATCH add member = %d %#v", patchedResponse.Code, patched)
-	}
-
-	removeOne := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "remove", "path": `members[value eq "` + alice.ID + `"]`}}}
-	removedResponse := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, removeOne, map[string]string{"If-Match": patched.Meta.Version})
-	removed := decodeResponse[scim.Group](t, removedResponse)
-	if removedResponse.Code != http.StatusOK || len(removed.Members) != 1 || removed.Members[0].Value != bob.ID {
-		t.Fatalf("PATCH filtered remove = %d %#v", removedResponse.Code, removed)
-	}
-	missing := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, removeOne, map[string]string{"If-Match": removed.Meta.Version})
-	if payload := decodeResponse[testErrorResponse](t, missing); missing.Code != http.StatusBadRequest || payload.SCIMType != "noTarget" {
-		t.Fatalf("PATCH missing member = %d %#v", missing.Code, payload)
-	}
-
-	clear := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "remove", "path": "members", "value": []map[string]any{{"value": bob.ID}}}}}
-	clearedResponse := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, clear, map[string]string{"If-Match": removed.Meta.Version})
-	cleared := decodeResponse[scim.Group](t, clearedResponse)
-	if clearedResponse.Code != http.StatusOK || len(cleared.Members) != 0 {
-		t.Fatalf("PATCH unfiltered remove = %d %#v", clearedResponse.Code, cleared)
-	}
-
-	stale := scimRequest(t, handler, http.MethodPut, "/scim/v2/Groups/"+created.ID, testCurrentToken, map[string]any{"schemas": []string{scim.GroupSchemaURN}, "displayName": "Renamed"}, map[string]string{"If-Match": created.Meta.Version})
-	if stale.Code != http.StatusPreconditionFailed {
-		t.Fatalf("stale Group PUT = %d %s", stale.Code, stale.Body.String())
-	}
-	readd := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": bob.ID}}}}
-	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, readd, map[string]string{"If-Match": cleared.Meta.Version}); response.Code != http.StatusOK {
-		t.Fatalf("PATCH member before delete = %d %s", response.Code, response.Body.String())
 	}
 
 	authorization.setFailures(false, true)
@@ -228,7 +195,8 @@ func TestSCIMGroupsSupportNestedMembershipAndNamespaceIsolation(t *testing.T) {
 			Credentials: []config.SCIMCredentialConfig{{ID: "current", BearerToken: "entra-token"}},
 		},
 	}
-	_, _, handler := newSCIMService(t, nil, newRecordingAuthorization(), testSCIMConfig(clients))
+	authorization := newRecordingAuthorization()
+	service, services, handler := newSCIMService(t, nil, authorization, testSCIMConfig(clients))
 	user, response := createUser(t, handler, testCurrentToken, "nested@valon.com", true, nil)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create nested user = %d %s", response.Code, response.Body.String())
@@ -238,8 +206,15 @@ func TestSCIMGroupsSupportNestedMembershipAndNamespaceIsolation(t *testing.T) {
 	if childResponse.Code != http.StatusCreated {
 		t.Fatalf("create child = %d %s", childResponse.Code, childResponse.Body.String())
 	}
-	addUser := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": user.ID}}}}
-	child = decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+child.ID, testCurrentToken, addUser, map[string]string{"If-Match": child.Meta.Version}))
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "nested@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	childTuple := &proto.RelationshipTuple{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreUser.ID}}}, Relation: "member", Resource: &proto.Resource{Type: "group", Id: child.ID}}
+	if _, err := scim.WrapAuthorization(authorization, services.Users, service).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: childTuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}}); err != nil {
+		t.Fatal(err)
+	}
+	child = decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+child.ID, testCurrentToken, nil))
 	parentResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{"schemas": []string{scim.GroupSchemaURN}, "displayName": "Parent", "members": []map[string]any{{"value": child.ID, "type": "Group"}}})
 	parent := decodeResponse[scim.Group](t, parentResponse)
 	if parentResponse.Code != http.StatusCreated {
@@ -257,16 +232,22 @@ func TestSCIMGroupsSupportNestedMembershipAndNamespaceIsolation(t *testing.T) {
 			t.Fatalf("nested User.groups types = %#v", readUser.Groups)
 		}
 	}
-	addDirect := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": user.ID}}}}
-	parent = decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+parent.ID, testCurrentToken, addDirect, map[string]string{"If-Match": parent.Meta.Version}))
+	parentTuple := &proto.RelationshipTuple{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreUser.ID}}}, Relation: "member", Resource: &proto.Resource{Type: "group", Id: parent.ID}}
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	if _, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: parentTuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}}); err != nil {
+		t.Fatal(err)
+	}
+	parent = decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+parent.ID, testCurrentToken, nil))
 	readUser = decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
 	for _, group := range readUser.Groups {
 		if group.Value == parent.ID && group.Type != "direct" {
 			t.Fatalf("direct membership did not override indirect membership: %#v", readUser.Groups)
 		}
 	}
-	removeDirect := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "remove", "path": `members[value eq "` + user.ID + `"]`}}}
-	parent = decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+parent.ID, testCurrentToken, removeDirect, map[string]string{"If-Match": parent.Meta.Version}))
+	if _, err := gate.DeleteRelationship(context.Background(), &proto.DeleteRelationshipRequest{RelationshipTuple: parentTuple}); err != nil {
+		t.Fatal(err)
+	}
+	parent = decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+parent.ID, testCurrentToken, nil))
 	if response := scimRequest(t, handler, http.MethodDelete, "/scim/v2/Groups/"+child.ID, testCurrentToken, nil, map[string]string{"If-Match": "*"}); response.Code != http.StatusNoContent {
 		t.Fatalf("DELETE nested child = %d %s", response.Code, response.Body.String())
 	}
@@ -342,97 +323,5 @@ func TestSCIMUserDeleteRemovesConfiguredTuplesAndGroupReferences(t *testing.T) {
 	updated := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
 	if len(updated.Members) != 0 || authorization.relationshipForUser(coreUser.ID) != nil {
 		t.Fatalf("group references after user deletion = %#v", updated.Members)
-	}
-}
-
-func TestSCIMGroupMembershipFailureLeavesLiveStateForRetry(t *testing.T) {
-	t.Parallel()
-
-	authorization := newRecordingAuthorization()
-	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
-	_, _, handler := newSCIMService(t, nil, authorization, cfg)
-	user, response := createUser(t, handler, testCurrentToken, "recover@valon.com", true, nil)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
-	}
-	authorization.setFailures(true, false)
-	response = scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
-		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Recovery", "members": []map[string]any{{"value": user.ID}},
-	})
-	if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") != "1" {
-		t.Fatalf("failed Group projection = %d %s", response.Code, response.Body.String())
-	}
-	authorization.setFailures(false, false)
-	listed := decodeResponse[struct {
-		Resources []scim.Group `json:"Resources"`
-	}](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups?filter="+url.QueryEscape(`displayName eq "Recovery"`), testCurrentToken, nil))
-	if len(listed.Resources) != 1 || len(listed.Resources[0].Members) != 0 {
-		t.Fatalf("live Group after failed create = %#v", listed.Resources)
-	}
-	group := listed.Resources[0]
-	second, response := createUser(t, handler, testCurrentToken, "recover-second@valon.com", true, nil)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("create second user = %d %s", response.Code, response.Body.String())
-	}
-	authorization.setFailures(true, false)
-	addSecond := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": second.ID}}}}
-	response = scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, addSecond, map[string]string{"If-Match": group.Meta.Version})
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("failed Group update = %d %s", response.Code, response.Body.String())
-	}
-	visible := decodeResponse[struct {
-		TotalResults int          `json:"totalResults"`
-		Resources    []scim.Group `json:"Resources"`
-	}](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups?filter="+url.QueryEscape(`displayName eq "Recovery"`), testCurrentToken, nil))
-	if visible.TotalResults != 1 || len(visible.Resources) != 1 || len(visible.Resources[0].Members) != 0 {
-		t.Fatalf("live Group after failed update = %#v", visible)
-	}
-	authorization.setFailures(false, false)
-	retried := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, addSecond, map[string]string{"If-Match": group.Meta.Version})
-	if updated := decodeResponse[scim.Group](t, retried); retried.Code != http.StatusOK || len(updated.Members) != 1 {
-		t.Fatalf("retried Group update = %d %#v", retried.Code, updated)
-	}
-}
-
-func TestSCIMGroupMembershipFailureAtEachDiffPositionCanRetry(t *testing.T) {
-	t.Parallel()
-	for failAt := 1; failAt <= 3; failAt++ {
-		t.Run(fmt.Sprintf("failure-%d", failAt), func(t *testing.T) {
-			authorization := newRecordingAuthorization()
-			cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
-			_, _, handler := newSCIMService(t, nil, authorization, cfg)
-			members := make([]map[string]any, 0, 3)
-			for i, name := range []string{"position-a@valon.com", "position-b@valon.com", "position-c@valon.com"} {
-				user, response := createUser(t, handler, testCurrentToken, name, true, nil)
-				if response.Code != http.StatusCreated {
-					t.Fatalf("create user %d = %d %s", i, response.Code, response.Body.String())
-				}
-				members = append(members, map[string]any{"value": user.ID})
-			}
-			created := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{"schemas": []string{scim.GroupSchemaURN}, "displayName": "Positioned"})
-			group := decodeResponse[scim.Group](t, created)
-			if created.Code != http.StatusCreated {
-				t.Fatalf("create group = %d %s", created.Code, created.Body.String())
-			}
-			patch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": members}}}
-			authorization.setFailureAt(failAt, 0)
-			failed := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, patch, map[string]string{"If-Match": group.Meta.Version})
-			if failed.Code != http.StatusServiceUnavailable {
-				t.Fatalf("failure at position %d = %d %s", failAt, failed.Code, failed.Body.String())
-			}
-			live := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
-			if len(live.Members) != failAt-1 {
-				t.Fatalf("live members after position %d failure = %d, want %d", failAt, len(live.Members), failAt-1)
-			}
-			authorization.setFailures(false, false)
-			retried := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, patch, map[string]string{"If-Match": "*"})
-			if retried.Code != http.StatusOK {
-				t.Fatalf("retry after position %d = %d %s", failAt, retried.Code, retried.Body.String())
-			}
-			complete := decodeResponse[scim.Group](t, retried)
-			if len(complete.Members) != len(members) {
-				t.Fatalf("members after retry = %d, want %d", len(complete.Members), len(members))
-			}
-		})
 	}
 }

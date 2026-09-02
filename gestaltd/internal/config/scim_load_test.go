@@ -136,6 +136,15 @@ authorization:
 	if _, err := config.Load(writeSCIMConfig(t, "apiVersion: gestaltd.config/v8\n"+withoutAuthorization)); err == nil || !strings.Contains(err.Error(), "require providers.authorization") {
 		t.Fatalf("configuration without authorization error = %v", err)
 	}
+	subjectTypesOnly := strings.Replace(validAuthorization, "                - subjectType: subject\n", "", 1)
+	if _, err := config.Load(writeSCIMConfig(t, "apiVersion: gestaltd.config/v8\n"+subjectTypesOnly)); err != nil {
+		t.Fatalf("subjectTypes-only direct target should be valid: %v", err)
+	}
+	duplicateClient := "      entra:\n        credentials:\n          - id: current\n            bearerToken: entra-token\n        activeUserRelationships:\n          - relation: member\n            resource:\n              type: group\n              id: valon-employees\n"
+	duplicateProjection := strings.Replace(validAuthorization, "      rippling:\n", duplicateClient+"      rippling:\n", 1)
+	if _, err := config.Load(writeSCIMConfig(t, "apiVersion: gestaltd.config/v8\n"+duplicateProjection)); err == nil || !strings.Contains(err.Error(), "duplicates active projection") {
+		t.Fatalf("duplicate active projection error = %v", err)
+	}
 
 	cases := []struct {
 		name    string

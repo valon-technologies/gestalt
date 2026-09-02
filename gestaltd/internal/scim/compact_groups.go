@@ -2,7 +2,6 @@ package scim
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -32,141 +31,6 @@ func (s *CompactService) groupValue(ctx context.Context, r storedResource) (Grou
 	return g, nil
 }
 
-func applyGroupPatch(current persistedGroup, request patchRequest) (persistedGroup, error) {
-	if err := validatePatchSchemas(request.Schemas); err != nil {
-		return persistedGroup{}, err
-	}
-	if len(request.Operations) == 0 {
-		return persistedGroup{}, invalid("PATCH Operations must not be empty")
-	}
-	result := current
-	for i, operation := range request.Operations {
-		op := strings.ToLower(strings.TrimSpace(operation.Op))
-		if op != "add" && op != "replace" && op != "remove" {
-			return persistedGroup{}, invalid(fmt.Sprintf("Operations[%d].op is unsupported", i))
-		}
-		path := normalizePatchPath(operation.Path, GroupSchemaURN)
-		if path == "" {
-			if op == "remove" {
-				return persistedGroup{}, invalid("remove requires a path")
-			}
-			var input groupInput
-			if err := json.Unmarshal(operation.Value, &input); err != nil {
-				return persistedGroup{}, invalid("pathless PATCH value must be an object")
-			}
-			if input.DisplayName != nil {
-				result.DisplayName = *input.DisplayName
-			}
-			if input.ExternalID != nil {
-				result.ExternalID = *input.ExternalID
-			}
-			if input.Members != nil {
-				if op == "add" {
-					result.Members = appendUniqueMembers(result.Members, *input.Members)
-				} else {
-					result.Members = append([]Member(nil), (*input.Members)...)
-				}
-			}
-			continue
-		}
-		if strings.HasPrefix(path, "members[") {
-			value, ok := parseGroupMemberFilter(path)
-			if !ok {
-				return persistedGroup{}, invalidPath(fmt.Sprintf("Operations[%d] has an invalid members path", i))
-			}
-			switch op {
-			case "remove":
-				filtered := result.Members[:0]
-				found := false
-				for _, member := range result.Members {
-					if member.Value != value {
-						filtered = append(filtered, member)
-					} else {
-						found = true
-					}
-				}
-				if !found {
-					return persistedGroup{}, noTarget(fmt.Sprintf("Operations[%d] member was not found", i))
-				}
-				result.Members = filtered
-			case "replace":
-				var replacement Member
-				if err := json.Unmarshal(operation.Value, &replacement); err != nil || strings.TrimSpace(replacement.Value) == "" {
-					return persistedGroup{}, invalid(fmt.Sprintf("Operations[%d] member replacement is invalid", i))
-				}
-				if replacement.Value != value {
-					return persistedGroup{}, mutability(fmt.Sprintf("Operations[%d] members.value is immutable", i))
-				}
-				found := false
-				for j := range result.Members {
-					if result.Members[j].Value == value {
-						if (replacement.Ref != "" && replacement.Ref != result.Members[j].Ref) || (replacement.Type != "" && !strings.EqualFold(replacement.Type, result.Members[j].Type)) {
-							return persistedGroup{}, mutability(fmt.Sprintf("Operations[%d] member reference attributes are immutable", i))
-						}
-						// Omitted immutable/read-only subattributes remain as
-						// returned; a supplied value was checked above.
-						if replacement.Ref == "" {
-							replacement.Ref = result.Members[j].Ref
-						}
-						if replacement.Type == "" {
-							replacement.Type = result.Members[j].Type
-						}
-						if replacement.Display == "" {
-							replacement.Display = result.Members[j].Display
-						}
-						result.Members[j] = replacement
-						found = true
-					}
-				}
-				if !found {
-					return persistedGroup{}, noTarget(fmt.Sprintf("Operations[%d] member was not found", i))
-				}
-			case "add":
-				return persistedGroup{}, invalid("add is not supported for a filtered members path")
-			}
-			continue
-		}
-		switch path {
-		case "displayname":
-			if op == "remove" {
-				return persistedGroup{}, invalid("displayName cannot be removed")
-			}
-			if err := decodePatchValue(operation.Value, &result.DisplayName); err != nil {
-				return persistedGroup{}, invalid(fmt.Sprintf("Operations[%d]: %v", i, err))
-			}
-		case "externalid":
-			if op == "remove" {
-				result.ExternalID = ""
-			} else if err := decodePatchValue(operation.Value, &result.ExternalID); err != nil {
-				return persistedGroup{}, invalid(fmt.Sprintf("Operations[%d]: %v", i, err))
-			}
-		case "members":
-			if op == "remove" {
-				if len(result.Members) == 0 {
-					return persistedGroup{}, noTarget("members was not found")
-				}
-				result.Members = []Member{}
-				continue
-			}
-			members, err := decodeMembers(operation.Value)
-			if err != nil {
-				return persistedGroup{}, invalid(fmt.Sprintf("Operations[%d]: %v", i, err))
-			}
-			if op == "add" {
-				result.Members = appendUniqueMembers(result.Members, members)
-			} else {
-				result.Members = members
-			}
-		default:
-			return persistedGroup{}, invalidPath(fmt.Sprintf("Operations[%d] has unsupported path %q", i, path))
-		}
-	}
-	if strings.TrimSpace(result.DisplayName) == "" {
-		return persistedGroup{}, invalid("displayName is required")
-	}
-	return result, nil
-}
-
 func validateRetainedMemberAttributes(previous, next []Member) error {
 	old := make(map[string]Member, len(previous))
 	for _, member := range previous {
@@ -180,57 +44,12 @@ func validateRetainedMemberAttributes(previous, next []Member) error {
 		if (member.Ref != "" && member.Ref != before.Ref) || (member.Type != "" && !strings.EqualFold(member.Type, before.Type)) {
 			return mutability("group member reference attributes are immutable")
 		}
-		if member.Display != "" && member.Display != before.Display {
-			return mutability("group member display is readOnly")
-		}
+		// display is a read-only derived value. Providers may send it back on
+		// replacement; it is ignored rather than treated as client state.
 	}
 	return nil
 }
 
-func appendUniqueMembers(existing, additions []Member) []Member {
-	seen := make(map[string]struct{}, len(existing)+len(additions))
-	positions := make(map[string]int, len(existing))
-	result := append([]Member(nil), existing...)
-	for i, member := range result {
-		seen[member.Value] = struct{}{}
-		positions[member.Value] = i
-	}
-	for _, member := range additions {
-		if _, ok := seen[member.Value]; ok {
-			// Preserve omitted subattributes while retaining supplied values so
-			// mutateGroup can enforce their immutability against the resolved
-			// resource.
-			current := result[positions[member.Value]]
-			if member.Ref != "" {
-				current.Ref = member.Ref
-			}
-			if member.Type != "" {
-				current.Type = member.Type
-			}
-			if member.Display != "" {
-				current.Display = member.Display
-			}
-			result[positions[member.Value]] = current
-			continue
-		}
-		seen[member.Value] = struct{}{}
-		positions[member.Value] = len(result)
-		result = append(result, member)
-	}
-	return result
-}
-
-func decodeMembers(raw json.RawMessage) ([]Member, error) {
-	var many []Member
-	if err := json.Unmarshal(raw, &many); err == nil {
-		return many, nil
-	}
-	var one Member
-	if err := json.Unmarshal(raw, &one); err != nil || strings.TrimSpace(one.Value) == "" {
-		return nil, errors.New("members must be an object or array")
-	}
-	return []Member{one}, nil
-}
 func (s *CompactService) liveMembers(ctx context.Context, cid, gid string) ([]Member, error) {
 	rs, e := s.listRelationships(ctx, &proto.RelationshipFilter{Resource: &proto.Resource{Type: "group", Id: gid}, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
 	if e != nil {
@@ -412,11 +231,17 @@ func (s *CompactService) mutateGroup(ctx context.Context, cid, id, ifm string, i
 		}
 		return nil, unavailable("could not load SCIM group")
 	}
-	snapshot := r
-	old, e := s.groupValue(ctx, snapshot)
+	old, e := s.groupValue(ctx, r)
 	if e != nil {
 		return nil, e
 	}
+	return s.mutateGroupLocked(ctx, cid, id, ifm, r, old, in)
+}
+
+// mutateGroupLocked applies a mutation using the provider snapshot captured
+// while the per-resource lock is held.
+func (s *CompactService) mutateGroupLocked(ctx context.Context, cid, id, ifm string, snapshot storedResource, old Group, in groupInput) (*Group, error) {
+	var e error
 	next := persistedGroup{ExternalID: snapshot.ExternalID, DisplayName: snapshot.DisplayName, Members: old.Members}
 	if in.ExternalID != nil {
 		next.ExternalID = *in.ExternalID
@@ -441,9 +266,10 @@ func (s *CompactService) mutateGroup(ctx context.Context, cid, id, ifm string, i
 	if e != nil {
 		return nil, e
 	}
-	// The transaction serializes the compact metadata snapshot across replicas;
-	// provider-derived members remain outside it and are subject to the
-	// provider-atomicity limitation documented for SCIM.
+	r := snapshot
+	// The transaction serializes compact metadata across replicas; provider-
+	// derived members remain outside it and require an atomic provider API for
+	// fully conditional multi-relationship writes.
 	tx, e := s.db.Transaction(ctx, []string{coredata.StoreSCIMResources}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if e != nil {
 		return nil, unavailable("could not start SCIM transaction")
@@ -525,26 +351,11 @@ func (s *CompactService) ReplaceGroup(ctx context.Context, cid, id, ifm string, 
 		empty := []Member{}
 		in.Members = &empty
 	}
+	if in.ExternalID == nil {
+		empty := ""
+		in.ExternalID = &empty
+	}
 	return s.mutateGroup(ctx, cid, id, ifm, in)
-}
-func (s *CompactService) PatchGroup(ctx context.Context, cid, id, ifm string, p patchRequest) (*Group, error) {
-	r, e := s.findGroup(ctx, cid, id)
-	if e != nil {
-		if errors.Is(e, idb.ErrNotFound) {
-			return nil, notFoundResource("SCIM Group")
-		}
-		return nil, unavailable("could not load SCIM group")
-	}
-	v, e := s.groupValue(ctx, r)
-	if e != nil {
-		return nil, e
-	}
-	base := persistedGroup{ExternalID: r.ExternalID, DisplayName: r.DisplayName, Members: v.Members}
-	next, e := applyGroupPatch(base, p)
-	if e != nil {
-		return nil, e
-	}
-	return s.mutateGroup(ctx, cid, id, ifm, groupInput{ExternalID: &next.ExternalID, DisplayName: &next.DisplayName, Members: &next.Members})
 }
 func (s *CompactService) DeleteGroup(ctx context.Context, cid, id, ifm string) error {
 	unlock := s.lock(id)

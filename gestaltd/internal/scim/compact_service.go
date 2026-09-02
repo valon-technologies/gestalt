@@ -129,6 +129,24 @@ func (s *CompactService) get(ctx context.Context, clientID, id, typ string) (idb
 func (s *CompactService) listRecords(ctx context.Context, clientID, typ string) ([]idb.Record, error) {
 	return s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_type").GetAll(ctx, []any{clientID, typ})
 }
+
+type recordStore interface {
+	GetAll(context.Context, any, ...uint32) ([]idb.Record, error)
+}
+
+func coreUserReferencedByOtherClientStore(ctx context.Context, store recordStore, coreID, clientID, resourceID string) (bool, error) {
+	rows, err := store.GetAll(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	for _, row := range rows {
+		if recordString(row, "resource_type") == "User" && recordString(row, "core_user_id") == coreID &&
+			(recordString(row, "client_id") != clientID || recordString(row, "id") != resourceID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 func stored(r idb.Record) storedResource {
 	var p userProfile
 	_ = decodeJSONValue(r["profile"], &p)
@@ -707,6 +725,7 @@ func (s *CompactService) Create(ctx context.Context, clientID string, input user
 	}
 	if input.DisplayName != nil {
 		u.DisplayName = *input.DisplayName
+		u.DisplayNameSet = true
 	}
 	if input.Name != nil {
 		u.Name = *input.Name
@@ -730,7 +749,40 @@ func (s *CompactService) Create(ctx context.Context, clientID string, input user
 	if e != nil {
 		return nil, unavailable("could not start SCIM transaction")
 	}
-	cu, e := coredata.LinkUserInTransaction(ctx, tx, "", email, u.DisplayName, now)
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(ctx)
+		}
+	}()
+	var displayName *string
+	if u.DisplayNameSet {
+		displayName = &u.DisplayName
+	}
+	existing, e := tx.ObjectStore(coredata.StoreUsers).Index("by_normalized_email").GetAll(ctx, email)
+	if e != nil {
+		return nil, unavailable("could not inspect linked user")
+	}
+	if len(existing) > 1 {
+		return nil, conflict("email is linked to multiple core users")
+	}
+	if len(existing) == 1 {
+		existingID := recordString(existing[0], "id")
+		shared, sharedErr := coreUserReferencedByOtherClientStore(ctx, tx.ObjectStore(coredata.StoreSCIMResources), existingID, clientID, "")
+		if sharedErr != nil {
+			return nil, unavailable("could not inspect linked SCIM users")
+		}
+		if shared && u.DisplayNameSet {
+			currentCore, coreErr := coredata.GetUserInTransaction(ctx, tx, existingID)
+			if coreErr != nil {
+				return nil, unavailable("could not load linked user")
+			}
+			if currentCore.DisplayName != u.DisplayName {
+				return nil, conflict("linked core user is referenced by another SCIM client")
+			}
+		}
+	}
+	cu, e := coredata.LinkUserInTransaction(ctx, tx, "", email, displayName, now)
 	if e != nil {
 		_ = tx.Abort(ctx)
 		if errors.Is(e, coredata.ErrUserEmailConflict) {
@@ -749,6 +801,7 @@ func (s *CompactService) Create(ctx context.Context, clientID string, input user
 	if e = tx.Commit(ctx); e != nil {
 		return nil, unavailable("could not commit SCIM user")
 	}
+	committed = true
 	if e = s.apply(ctx, nil, s.desiredUser(row, u.Active)); e != nil {
 		return nil, unavailable("could not apply authorization projection")
 	}
@@ -786,23 +839,28 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 		return listResponse[User]{}, unavailable("could not list SCIM users")
 	}
 	sort.Slice(rs, func(i, j int) bool { return recordString(rs[i], "id") < recordString(rs[j], "id") })
-	out := []User{}
+	matching := make([]storedResource, 0, len(rs))
 	for _, rr := range rs {
 		r := stored(rr)
+		if !matchesFilter(persistedUser{ExternalID: r.ExternalID, UserName: r.UserName, Emails: r.Profile.Emails}, clauses) {
+			continue
+		}
+		matching = append(matching, r)
+	}
+	if start > len(matching)+1 {
+		start = len(matching) + 1
+	}
+	end := pageMin(start-1+count, len(matching))
+	page := matching[start-1 : end]
+	out := make([]User, 0, len(page))
+	for _, r := range page {
 		u, e := s.userValue(ctx, r)
 		if e != nil {
 			return listResponse[User]{}, e
 		}
-		if matchesFilter(persistedUser{ExternalID: r.ExternalID, UserName: r.UserName, Emails: r.Profile.Emails}, clauses) {
-			out = append(out, u)
-		}
+		out = append(out, u)
 	}
-	if start > len(out)+1 {
-		start = len(out) + 1
-	}
-	end := pageMin(start-1+count, len(out))
-	page := out[start-1 : end]
-	return listResponse[User]{Schemas: []string{ListSchemaURN}, TotalResults: len(out), StartIndex: start, ItemsPerPage: len(page), Resources: page}, nil
+	return listResponse[User]{Schemas: []string{ListSchemaURN}, TotalResults: len(matching), StartIndex: start, ItemsPerPage: len(out), Resources: out}, nil
 }
 func pageMin(a, b int) int {
 	if a < b {
@@ -853,6 +911,21 @@ func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch s
 	if recordString(txRow, "client_id") != clientID || recordString(txRow, "resource_type") != "User" {
 		return nil, notFound()
 	}
+	currentCore, e := coredata.GetUserInTransaction(ctx, tx, recordString(txRow, "core_user_id"))
+	if e != nil {
+		return nil, unavailable("could not load linked user")
+	}
+	desiredDisplayName := currentCore.DisplayName
+	if u.DisplayNameSet {
+		desiredDisplayName = u.DisplayName
+	}
+	shared, e := coreUserReferencedByOtherClientStore(ctx, tx.ObjectStore(coredata.StoreSCIMResources), currentCore.ID, clientID, id)
+	if e != nil {
+		return nil, unavailable("could not inspect linked SCIM users")
+	}
+	if shared && (normalize(currentCore.Email) != email || currentCore.DisplayName != desiredDisplayName) {
+		return nil, conflict("linked core user is referenced by another SCIM client")
+	}
 	if ifMatch != "" && ifMatch != "*" && ifMatch != old.Meta.Version {
 		return nil, &Error{Status: 412, Detail: "SCIM resource version does not match"}
 	}
@@ -863,10 +936,14 @@ func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch s
 		return nil, &Error{Status: 412, Detail: "SCIM resource version does not match"}
 	}
 	r = stored(txRow)
-	if u.Active == old.Active && u.ExternalID == r.ExternalID && normalize(u.UserName) == r.UserName && u.DisplayName == old.DisplayName && reflect.DeepEqual(u.Name, r.Profile.Name) && reflect.DeepEqual(u.Emails, r.Profile.Emails) && sameTuples(actual, s.desiredUser(r, u.Active)) {
+	if u.Active == old.Active && u.ExternalID == r.ExternalID && normalize(u.UserName) == r.UserName && desiredDisplayName == old.DisplayName && currentCore.DisplayName == old.DisplayName && reflect.DeepEqual(u.Name, r.Profile.Name) && reflect.DeepEqual(u.Emails, r.Profile.Emails) && sameTuples(actual, s.desiredUser(r, u.Active)) {
 		return &old, nil
 	}
-	cu, e := coredata.LinkUserInTransaction(ctx, tx, r.CoreUserID, email, u.DisplayName, now)
+	var displayName *string
+	if u.DisplayNameSet {
+		displayName = &u.DisplayName
+	}
+	cu, e := coredata.LinkUserInTransaction(ctx, tx, r.CoreUserID, email, displayName, now)
 	if e != nil {
 		if errors.Is(e, coredata.ErrUserEmailConflict) {
 			return nil, conflict(e.Error())
@@ -901,6 +978,7 @@ func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch s
 	}
 	return &v, nil
 }
+
 func (s *CompactService) Replace(ctx context.Context, clientID, id, ifMatch string, in userInput) (*User, error) {
 	if err := validateResourceSchemas(in.Schemas, UserSchemaURN); err != nil {
 		return nil, err
@@ -908,7 +986,7 @@ func (s *CompactService) Replace(ctx context.Context, clientID, id, ifMatch stri
 	if in.UserName == nil || strings.TrimSpace(*in.UserName) == "" {
 		return nil, invalid("userName is required")
 	}
-	u := persistedUser{UserName: *in.UserName}
+	u := persistedUser{UserName: *in.UserName, DisplayNameSet: true}
 	if in.ExternalID != nil {
 		u.ExternalID = *in.ExternalID
 	}
@@ -917,6 +995,7 @@ func (s *CompactService) Replace(ctx context.Context, clientID, id, ifMatch stri
 	}
 	if in.DisplayName != nil {
 		u.DisplayName = *in.DisplayName
+		u.DisplayNameSet = true
 	}
 	if in.Name != nil {
 		u.Name = *in.Name
@@ -926,25 +1005,6 @@ func (s *CompactService) Replace(ctx context.Context, clientID, id, ifMatch stri
 		if err := validateEmails(u.Emails); err != nil {
 			return nil, err
 		}
-	}
-	return s.mutateUser(ctx, clientID, id, ifMatch, u)
-}
-func (s *CompactService) Patch(ctx context.Context, clientID, id, ifMatch string, p patchRequest) (*User, error) {
-	r, e := s.findUser(ctx, clientID, id)
-	if e != nil {
-		if errors.Is(e, idb.ErrNotFound) {
-			return nil, notFound()
-		}
-		return nil, unavailable("could not load SCIM user")
-	}
-	cur, e := s.userValue(ctx, r)
-	if e != nil {
-		return nil, e
-	}
-	u := persistedUser{ExternalID: r.ExternalID, UserName: r.UserName, Active: cur.Active, DisplayName: cur.DisplayName, Name: r.Profile.Name, Emails: r.Profile.Emails}
-	u, e = applyPatch(u, p)
-	if e != nil {
-		return nil, e
 	}
 	return s.mutateUser(ctx, clientID, id, ifMatch, u)
 }

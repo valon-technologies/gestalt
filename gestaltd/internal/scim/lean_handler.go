@@ -53,9 +53,8 @@ func (h *leanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *leanHandler) serviceProviderConfig(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schemas": []string{ServiceProviderConfigSchemaURN},
-		// PATCH is exposed as a best-effort endpoint, but cannot be advertised
-		// as RFC-atomic until AuthorizationProvider gains a multi-tuple
-		// transaction primitive.
+		// PATCH returns 501 until AuthorizationProvider gains a multi-tuple
+		// transaction primitive that can satisfy RFC 7644 atomicity.
 		"patch": map[string]any{"supported": false},
 		"bulk":  map[string]any{"supported": false},
 		// The endpoint accepts the documented equality/conjunction subset; it is
@@ -225,17 +224,7 @@ func (h *leanHandler) user(w http.ResponseWriter, r *http.Request, c, id string)
 		}
 		writeResourceForRequest(w, r, 200, u)
 	case http.MethodPatch:
-		var p patchRequest
-		if e := decodeBody(r, &p); e != nil {
-			writeError(w, e)
-			return
-		}
-		u, e := h.s.Patch(r.Context(), c, id, strings.TrimSpace(r.Header.Get("If-Match")), p)
-		if e != nil {
-			writeError(w, e)
-			return
-		}
-		writeResourceForRequest(w, r, 200, u)
+		writeError(w, &Error{Status: http.StatusNotImplemented, Detail: "SCIM PATCH requires an atomic authorization-provider mutation primitive"})
 	case http.MethodDelete:
 		if e := h.s.Delete(r.Context(), c, id, strings.TrimSpace(r.Header.Get("If-Match"))); e != nil {
 			writeError(w, e)
@@ -310,17 +299,7 @@ func (h *leanHandler) group(w http.ResponseWriter, r *http.Request, c, id string
 		}
 		writeResourceForRequest(w, r, 200, g)
 	case http.MethodPatch:
-		var p patchRequest
-		if e := decodeBody(r, &p); e != nil {
-			writeError(w, e)
-			return
-		}
-		g, e := h.s.PatchGroup(r.Context(), c, id, strings.TrimSpace(r.Header.Get("If-Match")), p)
-		if e != nil {
-			writeError(w, e)
-			return
-		}
-		writeResourceForRequest(w, r, 200, g)
+		writeError(w, &Error{Status: http.StatusNotImplemented, Detail: "SCIM PATCH requires an atomic authorization-provider mutation primitive"})
 	case http.MethodDelete:
 		if e := h.s.DeleteGroup(r.Context(), c, id, strings.TrimSpace(r.Header.Get("If-Match"))); e != nil {
 			writeError(w, e)

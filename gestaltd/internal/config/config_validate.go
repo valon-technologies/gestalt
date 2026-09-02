@@ -184,6 +184,11 @@ func validateSCIMConfig(cfg *Config) error {
 		return fmt.Errorf("config validation: SCIM requires group.member authorization relation")
 	}
 	hasUserSubject, hasGroupSubjectSet := false, false
+	for _, subjectType := range memberRelation.SubjectTypes {
+		if strings.TrimSpace(subjectType) == "subject" {
+			hasUserSubject = true
+		}
+	}
 	for _, target := range memberRelation.AllowedTargets {
 		if target.SubjectType == "subject" {
 			hasUserSubject = true
@@ -199,6 +204,7 @@ func validateSCIMConfig(cfg *Config) error {
 	credentialIDs := make(map[string]string)
 	tokens := make(map[string]string)
 	needsAuthorization := false
+	projectionOwners := make(map[string]string)
 	for clientID, client := range cfg.Server.SCIM.Clients {
 		path := "server.scim.clients." + clientID
 		if strings.TrimSpace(clientID) == "" || strings.TrimSpace(clientID) != clientID {
@@ -253,7 +259,17 @@ func validateSCIMConfig(cfg *Config) error {
 			if _, ok := resourceType.Relations[strings.TrimSpace(projection.Relation)]; !ok {
 				return fmt.Errorf("config validation: %s.relation references unknown relation %q for resource type %q", projectionPath, projection.Relation, resourceTypeName)
 			}
+			projectionKey := resourceTypeName + "\x00" + strings.TrimSpace(projection.Resource.ID) + "\x00" + strings.TrimSpace(projection.Relation)
+			if previous, ok := projectionOwners[projectionKey]; ok {
+				return fmt.Errorf("config validation: %s duplicates active projection configured by client %q", projectionPath, previous)
+			}
+			projectionOwners[projectionKey] = clientID
 			hasSubjectTarget := false
+			for _, subjectType := range resourceType.Relations[strings.TrimSpace(projection.Relation)].SubjectTypes {
+				if strings.TrimSpace(subjectType) == "subject" {
+					hasSubjectTarget = true
+				}
+			}
 			for _, target := range resourceType.Relations[strings.TrimSpace(projection.Relation)].AllowedTargets {
 				if target.SubjectType == "subject" {
 					hasSubjectTarget = true
