@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
@@ -24,12 +23,15 @@ providers:
     secrets:
       source:
         path: ./providers/secrets/test
+  authorization:
+    authz:
+      source:
+        path: ./providers/authorization/test
 server:
   providers:
     indexeddb: sqlite
+    authorization: authz
   scim:
-    retryInterval: 2s
-    driftInterval: 15m
     clients:
       rippling:
         credentials:
@@ -40,16 +42,31 @@ server:
                 name: rippling-scim-token
           - id: next
             bearerToken: rotating-token
+        authoritativeUserDomains: [valon.com]
+        activeUserRelationships:
+          - relation: member
+            resource:
+              type: group
+              id: valon-employees
+authorization:
+  models:
+    default:
+      resourceTypes:
+        group:
+          relations:
+            member:
+              subjectTypes: [subject]
+              allowedTargets:
+                - subjectType: subject
+                - subjectSet:
+                    resourceType: group
+                    relation: member
+          dynamic:
+            allowAdditionalRelationships: true
 `)
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
-	}
-	if got, err := cfg.Server.SCIM.RetryIntervalDuration(); err != nil || got != 2*time.Second {
-		t.Fatalf("RetryIntervalDuration = %v, %v", got, err)
-	}
-	if got, err := cfg.Server.SCIM.DriftIntervalDuration(); err != nil || got != 15*time.Minute {
-		t.Fatalf("DriftIntervalDuration = %v, %v", got, err)
 	}
 	credential := cfg.Server.SCIM.Clients["rippling"].Credentials[0]
 	ref, ok, err := config.ParseSecretRefTransport(credential.BearerToken)
@@ -95,6 +112,11 @@ authorization:
           relations:
             member:
               subjectTypes: [subject]
+              allowedTargets:
+                - subjectType: subject
+                - subjectSet:
+                    resourceType: group
+                    relation: member
           dynamic:
             allowAdditionalRelationships: true
 `
@@ -123,7 +145,6 @@ authorization:
 	}{
 		{name: "limits rotation credentials", replace: "          - id: current\n            bearerToken: rippling-token\n", with: "          - id: one\n            bearerToken: token-one\n          - id: two\n            bearerToken: token-two\n          - id: three\n            bearerToken: token-three\n", want: "one or two"},
 		{name: "requires dynamic projection writes", replace: "allowAdditionalRelationships: true", with: "allowAdditionalRelationships: false", want: "allowAdditionalRelationships"},
-		{name: "validates retry interval", replace: "  scim:\n", with: "  scim:\n    retryInterval: 0s\n", want: "retryInterval"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

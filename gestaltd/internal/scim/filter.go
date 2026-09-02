@@ -38,7 +38,11 @@ func parseFilter(raw string) ([]filterClause, error) {
 		if err := json.Unmarshal([]byte(matches[2]), &value); err != nil {
 			return nil, fmt.Errorf("invalid filter value: %w", err)
 		}
-		clauses = append(clauses, filterClause{attribute: strings.ToLower(matches[1]), value: normalize(value)})
+		attribute := strings.ToLower(matches[1])
+		if attribute != "externalid" {
+			value = normalize(value)
+		}
+		clauses = append(clauses, filterClause{attribute: attribute, value: value})
 	}
 	return clauses, nil
 }
@@ -93,7 +97,7 @@ func matchesFilter(user persistedUser, clauses []filterClause) bool {
 		matched := false
 		switch clause.attribute {
 		case "externalid":
-			matched = normalize(user.ExternalID) == clause.value
+			matched = user.ExternalID == clause.value
 		case "username":
 			matched = normalize(user.UserName) == clause.value
 		case "emails.value":
@@ -143,7 +147,10 @@ func parseGroupFilter(raw string) ([]groupFilterClause, error) {
 		if err := json.Unmarshal([]byte(valueRaw), &value); err != nil {
 			return nil, fmt.Errorf("invalid filter value: %w", err)
 		}
-		clauses = append(clauses, groupFilterClause{attribute: attribute, value: normalize(value)})
+		if attribute != "externalid" {
+			value = normalize(value)
+		}
+		clauses = append(clauses, groupFilterClause{attribute: attribute, value: value})
 	}
 	return clauses, nil
 }
@@ -167,7 +174,7 @@ func matchesGroupFilter(group persistedGroup, clauses []groupFilterClause) bool 
 		case "displayname":
 			matched = normalize(group.DisplayName) == clause.value
 		case "externalid":
-			matched = normalize(group.ExternalID) == clause.value
+			matched = group.ExternalID == clause.value
 		case "members.value":
 			for _, member := range group.Members {
 				if strings.TrimSpace(member.Value) == clause.value {

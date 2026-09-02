@@ -22,93 +22,29 @@ const (
 	StoreRemoteProviders                = "remote_providers"
 	StoreConnectionInstancePreferences  = "connection_instance_preferences"
 	StoreAppAccessProfiles              = "app_access_profiles"
-	StoreSCIMUsers                      = "scim_users"
-	StoreSCIMProjectionIntents          = "scim_projection_intents"
-	StoreSCIMGroups                     = "scim_groups"
+	StoreSCIMResources                  = "scim_resources"
+	// Legacy names are retained only so the one-shot SCIM migration can identify
+	// stores created by older binaries. New installations never create them.
+	StoreSCIMUsers             = "scim_users"
+	StoreSCIMProjectionIntents = "scim_projection_intents"
+	StoreSCIMGroups            = "scim_groups"
 )
 
-var SCIMUsersSchema = idb.ObjectStoreOptions{
+var SCIMResourcesSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
-		{Name: "by_client", KeyPath: []string{"client_id"}},
-		{Name: "by_core_user", KeyPath: []string{"core_user_id"}},
-		{Name: "by_user_name_key", KeyPath: []string{"user_name_key"}, Unique: true},
-		{Name: "by_external_id_key", KeyPath: []string{"external_id_key"}, Unique: true},
-		{Name: "by_email_key", KeyPath: []string{"email_key"}, Unique: true},
+		{Name: "by_client_type", KeyPath: []string{"client_id", "resource_type"}},
+		{Name: "by_client_user_name", KeyPath: []string{"client_id", "resource_type", "user_name"}, Unique: true},
+		{Name: "by_client_core_user", KeyPath: []string{"client_id", "resource_type", "core_user_id"}, Unique: true},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "client_id", Type: idb.TypeString, NotNull: true},
-		{Name: "core_user_id", Type: idb.TypeString, NotNull: true},
-		{Name: "authoritative_domain", Type: idb.TypeString},
-		{Name: "user_name_key", Type: idb.TypeString},
-		{Name: "external_id_key", Type: idb.TypeString},
-		{Name: "email_key", Type: idb.TypeString},
-		{Name: "active", Type: idb.TypeBool, NotNull: true},
-		{Name: "deleted", Type: idb.TypeBool, NotNull: true},
-		{Name: "version", Type: idb.TypeInt, NotNull: true},
-		{Name: "resource", Type: idb.TypeJSON, NotNull: true},
-		{Name: "applied_relationships", Type: idb.TypeJSON},
-		{Name: "last_operation_fingerprint", Type: idb.TypeString},
-		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
-		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
-		{Name: "deleted_at", Type: idb.TypeTime},
-	},
-}
-
-var SCIMProjectionIntentsSchema = idb.ObjectStoreOptions{
-	Indexes: []idb.IndexSchema{
-		{Name: "by_user", KeyPath: []string{"user_id"}, Unique: true},
-		{Name: "by_core_user", KeyPath: []string{"core_user_id"}},
-		{Name: "by_client", KeyPath: []string{"client_id"}},
-		{Name: "by_next_attempt", KeyPath: []string{"next_attempt_at"}},
-		{Name: "by_user_name_key", KeyPath: []string{"user_name_key"}, Unique: true},
-		{Name: "by_external_id_key", KeyPath: []string{"external_id_key"}, Unique: true},
-		{Name: "by_email_key", KeyPath: []string{"email_key"}, Unique: true},
-	},
-	Columns: []idb.ColumnDef{
-		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "user_id", Type: idb.TypeString, NotNull: true},
-		{Name: "client_id", Type: idb.TypeString, NotNull: true},
-		{Name: "core_user_id", Type: idb.TypeString, NotNull: true},
-		{Name: "authoritative_domain", Type: idb.TypeString},
-		{Name: "user_name_key", Type: idb.TypeString},
-		{Name: "external_id_key", Type: idb.TypeString},
-		{Name: "email_key", Type: idb.TypeString},
-		{Name: "base_version", Type: idb.TypeInt, NotNull: true},
-		{Name: "next_version", Type: idb.TypeInt, NotNull: true},
-		{Name: "proposed", Type: idb.TypeJSON, NotNull: true},
-		{Name: "proposed_deleted", Type: idb.TypeBool, NotNull: true},
-		{Name: "from_relationships", Type: idb.TypeJSON},
-		{Name: "to_relationships", Type: idb.TypeJSON},
-		{Name: "operation_fingerprint", Type: idb.TypeString},
-		{Name: "attempt_count", Type: idb.TypeInt, NotNull: true},
-		{Name: "next_attempt_at", Type: idb.TypeTime, NotNull: true},
-		{Name: "last_error", Type: idb.TypeString},
-		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
-		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
-	},
-}
-
-// SCIMGroupsSchema keeps the committed resource and any pending replacement
-// together so projection recovery does not require a separate intent store.
-var SCIMGroupsSchema = idb.ObjectStoreOptions{
-	Indexes: []idb.IndexSchema{
-		{Name: "by_client", KeyPath: []string{"client_id"}},
-	},
-	Columns: []idb.ColumnDef{
-		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "client_id", Type: idb.TypeString, NotNull: true},
-		{Name: "version", Type: idb.TypeInt, NotNull: true},
-		{Name: "deleted", Type: idb.TypeBool, NotNull: true},
-		{Name: "resource", Type: idb.TypeJSON, NotNull: true},
-		{Name: "pending_resource", Type: idb.TypeJSON},
-		{Name: "pending_deleted", Type: idb.TypeBool},
-		{Name: "pending_version", Type: idb.TypeInt},
-		{Name: "pending_fingerprint", Type: idb.TypeString},
-		{Name: "pending_affected_users", Type: idb.TypeJSON},
-		{Name: "pending_attempt_count", Type: idb.TypeInt},
-		{Name: "pending_next_attempt_at", Type: idb.TypeTime},
-		{Name: "last_operation_fingerprint", Type: idb.TypeString},
+		{Name: "resource_type", Type: idb.TypeString, NotNull: true},
+		{Name: "external_id", Type: idb.TypeString},
+		{Name: "core_user_id", Type: idb.TypeString},
+		{Name: "user_name", Type: idb.TypeString},
+		{Name: "profile", Type: idb.TypeJSON},
+		{Name: "display_name", Type: idb.TypeString},
 		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},

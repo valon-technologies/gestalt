@@ -166,17 +166,34 @@ func validateSCIMConfig(cfg *Config) error {
 	if cfg == nil || len(cfg.Server.SCIM.Clients) == 0 {
 		return nil
 	}
-	if _, err := cfg.Server.SCIM.RetryIntervalDuration(); err != nil {
-		return fmt.Errorf("config validation: server.scim.retryInterval: %w", err)
-	}
-	if _, err := cfg.Server.SCIM.DriftIntervalDuration(); err != nil {
-		return fmt.Errorf("config validation: server.scim.driftInterval: %w", err)
-	}
 	resourceTypes := make(map[string]AuthorizationResourceTypeDef)
 	for _, model := range cfg.Authorization.Models {
 		for name, resourceType := range model.ResourceTypes {
 			resourceTypes[name] = resourceType
 		}
+	}
+	groupType, hasGroup := resourceTypes["group"]
+	if !hasGroup {
+		return fmt.Errorf("config validation: SCIM requires authorization resource type %q", "group")
+	}
+	if !groupType.Dynamic.AllowAdditionalRelationships {
+		return fmt.Errorf("config validation: authorization resource type %q must set dynamic.allowAdditionalRelationships: true for SCIM groups", "group")
+	}
+	memberRelation, hasMember := groupType.Relations["member"]
+	if !hasMember {
+		return fmt.Errorf("config validation: SCIM requires group.member authorization relation")
+	}
+	hasUserSubject, hasGroupSubjectSet := false, false
+	for _, target := range memberRelation.AllowedTargets {
+		if target.SubjectType == "subject" {
+			hasUserSubject = true
+		}
+		if target.SubjectSet != nil && target.SubjectSet.ResourceType == "group" && target.SubjectSet.Relation == "member" {
+			hasGroupSubjectSet = true
+		}
+	}
+	if !hasUserSubject || !hasGroupSubjectSet {
+		return fmt.Errorf("config validation: SCIM requires group.member to permit both subject and group#member targets")
 	}
 	domainOwners := make(map[string]string)
 	credentialIDs := make(map[string]string)
@@ -189,6 +206,9 @@ func validateSCIMConfig(cfg *Config) error {
 		}
 		if len(client.Credentials) == 0 || len(client.Credentials) > 2 {
 			return fmt.Errorf("config validation: %s.credentials must contain one or two credentials", path)
+		}
+		if len(client.ActiveUserRelationships) == 0 {
+			return fmt.Errorf("config validation: %s.activeUserRelationships must contain at least one relationship", path)
 		}
 		for i, credential := range client.Credentials {
 			credentialPath := fmt.Sprintf("%s.credentials[%d]", path, i)
@@ -233,13 +253,23 @@ func validateSCIMConfig(cfg *Config) error {
 			if _, ok := resourceType.Relations[strings.TrimSpace(projection.Relation)]; !ok {
 				return fmt.Errorf("config validation: %s.relation references unknown relation %q for resource type %q", projectionPath, projection.Relation, resourceTypeName)
 			}
+			hasSubjectTarget := false
+			for _, target := range resourceType.Relations[strings.TrimSpace(projection.Relation)].AllowedTargets {
+				if target.SubjectType == "subject" {
+					hasSubjectTarget = true
+					break
+				}
+			}
+			if !hasSubjectTarget {
+				return fmt.Errorf("config validation: %s relation must permit direct subject targets for SCIM users", projectionPath)
+			}
 			if !resourceType.Dynamic.AllowAdditionalRelationships {
 				return fmt.Errorf("config validation: authorization resource type %q must set dynamic.allowAdditionalRelationships: true for SCIM projections", resourceTypeName)
 			}
 			needsAuthorization = true
 		}
 	}
-	if needsAuthorization {
+	if needsAuthorization || len(cfg.Server.SCIM.Clients) > 0 {
 		_, provider, err := cfg.SelectedAuthorizationProvider()
 		if err != nil {
 			return err
