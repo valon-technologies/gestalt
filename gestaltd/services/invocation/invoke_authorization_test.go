@@ -6,13 +6,12 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
-func TestInvokeAuthorizationSurface(t *testing.T) {
+func TestAuthorizationSurface(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -56,64 +55,16 @@ func TestInvokeAuthorizationSurface(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := invokeAuthorizationSurface(tc.ctx); got != tc.want {
-				t.Fatalf("invokeAuthorizationSurface() = %q, want %q", got, tc.want)
+			if got := authorizationSurface(tc.ctx); got != tc.want {
+				t.Fatalf("authorizationSurface() = %q, want %q", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestInvokeAuthorizationSubject(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		p        *principal.Principal
-		wantKind string
-		wantID   string
-	}{
-		{
-			name: "user email",
-			p: &principal.Principal{
-				SubjectID: "user:u-1",
-				Kind:      principal.KindUser,
-				Identity:  &core.UserIdentity{Email: "User@Example.com"},
-			},
-			wantKind: "user",
-			wantID:   "user@example.com",
-		},
-		{
-			name: "service account",
-			p: &principal.Principal{
-				SubjectID: "service_account:ingress-verify-probe",
-			},
-			wantKind: "service_account",
-			wantID:   "ingress-verify-probe",
-		},
-		{
-			name:     "nil principal",
-			p:        nil,
-			wantKind: metricutil.UnknownAttrValue,
-			wantID:   metricutil.UnknownAttrValue,
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			gotKind, gotID := invokeAuthorizationSubject(tc.p)
-			if gotKind != tc.wantKind || gotID != tc.wantID {
-				t.Fatalf("invokeAuthorizationSubject() = (%q, %q), want (%q, %q)", gotKind, gotID, tc.wantKind, tc.wantID)
-			}
-		})
-	}
-}
-
-func TestAuthorizeOperationRecordsAllowAndDenyMetrics(t *testing.T) {
+func TestEvaluateInvokeAuthorizationRecordsAllowAndDenyMetrics(t *testing.T) {
 	t.Parallel()
 
 	metrics := metrictest.NewManualMeterProvider(t)
@@ -129,28 +80,24 @@ func TestAuthorizeOperationRecordsAllowAndDenyMetrics(t *testing.T) {
 		WithAuthorizationProvider(authz),
 		WithProviderKinds(map[string]ProviderKind{"traffic-cop": ProviderKindApp}),
 	)
+	p := &principal.Principal{
+		SubjectID: "user:u-123",
+		UserID:    "u-123",
+		Kind:      principal.KindUser,
+		Identity:  &core.UserIdentity{Email: "user@example.com"},
+	}
 
 	allowAttrs := map[string]string{
-		"gestalt.provider":                      "traffic-cop",
-		"gestalt.operation":                     "sync.workqueue",
-		"gestaltd.invocation.surface":           metricutil.UnknownAttrValue,
-		"gestaltd.invoke.authorization.decision": "allow",
-		"gestaltd.subject.kind":                 "user",
-		"gestaltd.subject.id":                   "user@example.com",
+		"gestalt.provider":                          "traffic-cop",
+		"gestalt.operation":                         "sync.workqueue",
+		"gestaltd.invocation.surface":               metricutil.UnknownAttrValue,
+		"gestaltd.invoke.authorization.decision":    "allow",
+		"gestaltd.subject.kind":                     "user",
+		"gestaltd.subject.id":                       "user@example.com",
 	}
-	_, err := broker.authorizeOperation(
-		ctx,
-		&principal.Principal{
-			SubjectID: "user:u-123",
-			UserID:    "u-123",
-			Kind:      principal.KindUser,
-			Identity:  &core.UserIdentity{Email: "user@example.com"},
-		},
-		"traffic-cop",
-		catalog.CatalogOperation{ID: "sync.workqueue", AllowedRoles: []string{"admin"}},
-	)
+	_, err := broker.evaluateInvokeAuthorization(ctx, p, "traffic-cop", "sync.workqueue", []string{"admin"})
 	if err != nil {
-		t.Fatalf("authorizeOperation allow: %v", err)
+		t.Fatalf("evaluateInvokeAuthorization allow: %v", err)
 	}
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.invoke.authorization.count", 1, allowAttrs)
@@ -158,27 +105,17 @@ func TestAuthorizeOperationRecordsAllowAndDenyMetrics(t *testing.T) {
 
 	authz.matchedRelations = []string{"viewer"}
 	denyAttrs := map[string]string{
-		"gestalt.provider":                        "traffic-cop",
-		"gestalt.operation":                       "sync.workqueue",
-		"gestaltd.invocation.surface":             metricutil.UnknownAttrValue,
-		"gestaltd.invoke.authorization.decision":  "deny",
-		"gestaltd.invoke.authorization.deny_reason": "role_denied",
-		"gestaltd.subject.kind":                   "user",
-		"gestaltd.subject.id":                     "user@example.com",
+		"gestalt.provider":                            "traffic-cop",
+		"gestalt.operation":                           "sync.workqueue",
+		"gestaltd.invocation.surface":                 metricutil.UnknownAttrValue,
+		"gestaltd.invoke.authorization.decision":      "deny",
+		"gestaltd.invoke.authorization.deny_reason":     "role_denied",
+		"gestaltd.subject.kind":                       "user",
+		"gestaltd.subject.id":                         "user@example.com",
 	}
-	_, err = broker.authorizeOperation(
-		ctx,
-		&principal.Principal{
-			SubjectID: "user:u-123",
-			UserID:    "u-123",
-			Kind:      principal.KindUser,
-			Identity:  &core.UserIdentity{Email: "user@example.com"},
-		},
-		"traffic-cop",
-		catalog.CatalogOperation{ID: "sync.workqueue", AllowedRoles: []string{"admin"}},
-	)
+	_, err = broker.evaluateInvokeAuthorization(ctx, p, "traffic-cop", "sync.workqueue", []string{"admin"})
 	if !errors.Is(err, ErrAuthorizationDenied) {
-		t.Fatalf("authorizeOperation deny error = %v, want ErrAuthorizationDenied", err)
+		t.Fatalf("evaluateInvokeAuthorization deny error = %v, want ErrAuthorizationDenied", err)
 	}
 	rm = metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.invoke.authorization.count", 1, denyAttrs)
@@ -197,13 +134,13 @@ func TestCheckAuthorizationAccessRecordsRelationDeniedMetric(t *testing.T) {
 	broker := NewBroker(nil, nil, nil, WithAuthorizationProvider(authz))
 
 	denyAttrs := map[string]string{
-		"gestalt.provider":                        "slack",
-		"gestalt.operation":                       "chat.postMessage",
-		"gestaltd.invocation.surface":             "http",
-		"gestaltd.invoke.authorization.decision":  "deny",
-		"gestaltd.invoke.authorization.deny_reason": "relation_denied",
-		"gestaltd.subject.kind":                   "service_account",
-		"gestaltd.subject.id":                     "workflow-roadmap",
+		"gestalt.provider":                            "slack",
+		"gestalt.operation":                           "chat.postMessage",
+		"gestaltd.invocation.surface":                 "http",
+		"gestaltd.invoke.authorization.decision":      "deny",
+		"gestaltd.invoke.authorization.deny_reason":   "relation_denied",
+		"gestaltd.subject.kind":                       "service_account",
+		"gestaltd.subject.id":                         "workflow-roadmap",
 	}
 	err := broker.checkAuthorizationAccess(
 		ctx,

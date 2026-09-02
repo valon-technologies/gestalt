@@ -390,8 +390,7 @@ static catalog and still serves a successful HTTP response.
 
 ### Invoke Authorization Metrics
 
-These metrics are recorded at the single operation invoke authorization gate in
-`Broker.authorizeOperation` and `Broker.checkAuthorizationAccess` before
+These metrics are recorded at `Broker.evaluateInvokeAuthorization` before
 provider dispatch. They cover v1 HTTP UI/CLI, HTTP bindings, cross-app
 `App.Invoke`, workflow runner invokes, and GraphQL authorization checks.
 Remote-delegated providers and MCP invokes are out of scope for this family.

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 type Source int
@@ -436,4 +437,38 @@ func Canonicalize(p *Principal) *Principal {
 		}
 	}
 	return p
+}
+
+// MetricAuthorizationSubject returns low-cardinality subject kind and id for
+// invoke authorization metrics.
+func MetricAuthorizationSubject(p *Principal) (kind, id string) {
+	p = Canonicalized(p)
+	if p == nil {
+		return metricutil.UnknownAttrValue, metricutil.UnknownAttrValue
+	}
+	if subjectKind, subjectID, ok := core.ParseSubjectID(p.SubjectID); ok {
+		switch subjectKind {
+		case string(KindUser):
+			if p.Identity != nil {
+				if email := strings.ToLower(strings.TrimSpace(p.Identity.Email)); email != "" {
+					return subjectKind, email
+				}
+			}
+			return subjectKind, metricutil.UnknownAttrValue
+		case "service_account", "system":
+			if subjectID != "" {
+				return subjectKind, subjectID
+			}
+		default:
+			if subjectID != "" {
+				return subjectKind, subjectID
+			}
+		}
+	}
+	if p.Kind == KindUser && p.Identity != nil {
+		if email := strings.ToLower(strings.TrimSpace(p.Identity.Email)); email != "" {
+			return string(KindUser), email
+		}
+	}
+	return metricutil.UnknownAttrValue, metricutil.UnknownAttrValue
 }
