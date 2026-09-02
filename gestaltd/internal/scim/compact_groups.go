@@ -294,7 +294,7 @@ func (s *CompactService) mutateGroupLocked(ctx context.Context, cid, id, ifm str
 	if ifm != "" && ifm != "*" && ifm != old.Meta.Version {
 		return nil, &Error{Status: 412, Detail: "SCIM resource version does not match"}
 	}
-	if !sameResourceRecord(txRow, resourceRecord(snapshot)) {
+	if !sameResourceContent(txRow, resourceRecord(snapshot)) {
 		if ifm == "" {
 			return nil, unavailable("SCIM resource changed concurrently; retry the request")
 		}
@@ -394,7 +394,7 @@ func (s *CompactService) DeleteGroup(ctx context.Context, cid, id, ifm string) e
 		}
 		return unavailable("could not revalidate SCIM group")
 	}
-	if !sameResourceRecord(current, resourceRecord(r)) {
+	if !sameResourceContent(current, resourceRecord(r)) {
 		if ifm == "" {
 			return unavailable("SCIM resource changed concurrently; retry the request")
 		}

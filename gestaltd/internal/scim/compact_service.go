@@ -175,14 +175,14 @@ func resourceRecord(x storedResource) idb.Record {
 	return r
 }
 
-func sameResourceRecord(a, b idb.Record) bool {
+// sameResourceContent compares the compact fields represented by SCIM. The
+// weak ETag is content-derived, so timestamp-only touchRows updates must not
+// turn a still-valid conditional request into a snapshot conflict.
+func sameResourceContent(a, b idb.Record) bool {
 	for _, key := range []string{"id", "client_id", "resource_type", "external_id", "core_user_id", "user_name", "display_name"} {
 		if recordString(a, key) != recordString(b, key) {
 			return false
 		}
-	}
-	if !recordTime(a, "created_at").Equal(recordTime(b, "created_at")) || !recordTime(a, "updated_at").Equal(recordTime(b, "updated_at")) {
-		return false
 	}
 	if a["profile"] == nil && b["profile"] == nil {
 		return true
@@ -932,7 +932,7 @@ func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch s
 	if ifMatch != "" && ifMatch != "*" && ifMatch != old.Meta.Version {
 		return nil, &Error{Status: 412, Detail: "SCIM resource version does not match"}
 	}
-	if !sameResourceRecord(txRow, resourceRecord(r)) {
+	if !sameResourceContent(txRow, resourceRecord(r)) {
 		if ifMatch == "" {
 			return nil, unavailable("SCIM resource changed concurrently; retry the request")
 		}
@@ -1052,7 +1052,7 @@ func (s *CompactService) Delete(ctx context.Context, clientID, id, ifMatch strin
 		}
 		return unavailable("could not revalidate SCIM user")
 	}
-	if !sameResourceRecord(current, resourceRecord(r)) {
+	if !sameResourceContent(current, resourceRecord(r)) {
 		if ifMatch == "" {
 			return unavailable("SCIM resource changed concurrently; retry the request")
 		}

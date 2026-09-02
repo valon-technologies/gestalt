@@ -767,6 +767,88 @@ func TestSCIMUserDisplayNameFollowsCoreUser(t *testing.T) {
 	}
 }
 
+func TestSCIMUserIfMatchIgnoresAuthorizationTouch(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil, employeeProjection()),
+	})
+	service, services, handler := newSCIMService(t, nil, authorization, cfg)
+	user, response := createUser(t, handler, testCurrentToken, "touch-user@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
+	}
+	before := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "touch-user@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	authorization.setOnList(func() {
+		_, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: projectedRelationship(coreUser.ID, proto.SourceLayer_SOURCE_LAYER_RUNTIME)})
+		if err != nil {
+			t.Errorf("duplicate authorization add: %v", err)
+		}
+	})
+	put := map[string]any{
+		"schemas": []string{scim.UserSchemaURN}, "userName": "touch-user@valon.com", "active": true, "displayName": "Changed",
+	}
+	updated := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, put, map[string]string{"If-Match": before.Meta.Version})
+	if updated.Code != http.StatusOK {
+		t.Fatalf("PUT after authorization touch = %d %s", updated.Code, updated.Body.String())
+	}
+	got := decodeResponse[scim.User](t, updated)
+	if got.DisplayName != "Changed" {
+		t.Fatalf("PUT after authorization touch displayName = %q", got.DisplayName)
+	}
+}
+
+func TestSCIMGroupIfMatchIgnoresAuthorizationTouch(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	service, services, handler := newSCIMService(t, nil, authorization, cfg)
+	user, response := createUser(t, handler, testCurrentToken, "touch-group-user@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
+	}
+	created := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Touch group", "members": []map[string]any{{"value": user.ID}},
+	})
+	group := decodeResponse[scim.Group](t, created)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create group = %d %s", created.Code, created.Body.String())
+	}
+	before := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "touch-group-user@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	tuple := &proto.RelationshipTuple{
+		Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreUser.ID}}},
+		Relation: "member", Resource: &proto.Resource{Type: "group", Id: group.ID},
+	}
+	authorization.setOnList(func() {
+		_, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: tuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}})
+		if err != nil {
+			t.Errorf("duplicate authorization add: %v", err)
+		}
+	})
+	updated := scimRequest(t, handler, http.MethodPut, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Changed touch group", "members": []map[string]any{{"value": user.ID}},
+	}, map[string]string{"If-Match": before.Meta.Version})
+	if updated.Code != http.StatusOK {
+		t.Fatalf("PUT after authorization touch = %d %s", updated.Code, updated.Body.String())
+	}
+	got := decodeResponse[scim.Group](t, updated)
+	if got.DisplayName != "Changed touch group" {
+		t.Fatalf("PUT after authorization touch displayName = %q", got.DisplayName)
+	}
+}
+
 func TestSCIMRelationshipPaginationCoversAllMembersAndDeletes(t *testing.T) {
 	t.Parallel()
 
@@ -1157,6 +1239,7 @@ type recordingAuthorization struct {
 	pageSize     int32
 	relations    map[string]*proto.Relationship
 	checkCalled  int
+	onList       func()
 }
 
 func newRecordingAuthorization() *recordingAuthorization {
@@ -1183,7 +1266,6 @@ func (a *recordingAuthorization) CheckAccessMany(_ context.Context, req *proto.C
 
 func (a *recordingAuthorization) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.listCalls++
 	filtered := make([]*proto.Relationship, 0, len(a.relations))
 	for _, relationship := range a.relations {
@@ -1200,10 +1282,17 @@ func (a *recordingAuthorization) ListRelationships(_ context.Context, req *proto
 		}
 		filtered = append(filtered, gproto.Clone(relationship).(*proto.Relationship))
 	}
+	onList := a.onList
+	a.onList = nil
+	configuredPageSize := a.pageSize
+	a.mu.Unlock()
+	if onList != nil {
+		onList()
+	}
 	sort.Slice(filtered, func(i, j int) bool { return relationshipKey(filtered[i].Tuple) < relationshipKey(filtered[j].Tuple) })
 	pageSize := int32(len(filtered))
-	if a.pageSize > 0 && (pageSize == 0 || a.pageSize < pageSize) {
-		pageSize = a.pageSize
+	if configuredPageSize > 0 && (pageSize == 0 || configuredPageSize < pageSize) {
+		pageSize = configuredPageSize
 	}
 	offset := 0
 	if req != nil && req.PageToken != "" {
@@ -1297,6 +1386,12 @@ func (a *recordingAuthorization) setPageSize(size int32) {
 func (a *recordingAuthorization) resetListCalls() {
 	a.mu.Lock()
 	a.listCalls = 0
+	a.mu.Unlock()
+}
+
+func (a *recordingAuthorization) setOnList(fn func()) {
+	a.mu.Lock()
+	a.onList = fn
 	a.mu.Unlock()
 }
 
