@@ -853,8 +853,8 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 	end := pageMin(start-1+count, len(matching))
 	page := matching[start-1 : end]
 	out := make([]User, 0, len(page))
-	for _, r := range page {
-		u, e := s.userValue(ctx, r)
+	for i := range page {
+		u, e := s.userValue(ctx, page[i])
 		if e != nil {
 			return listResponse[User]{}, e
 		}

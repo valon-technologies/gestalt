@@ -1216,12 +1216,6 @@ func (a *recordingAuthorization) setRelationship(relationship *proto.Relationshi
 	a.mu.Unlock()
 }
 
-func (a *recordingAuthorization) removeRelationship(tuple *proto.RelationshipTuple) {
-	a.mu.Lock()
-	delete(a.relations, relationshipKey(tuple))
-	a.mu.Unlock()
-}
-
 func (a *recordingAuthorization) relationshipForUser(coreUserID string) *proto.Relationship {
 	a.mu.Lock()
 	defer a.mu.Unlock()

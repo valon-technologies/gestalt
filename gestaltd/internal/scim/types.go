@@ -164,10 +164,6 @@ func noTarget(detail string) *Error {
 	return &Error{Status: http.StatusBadRequest, SCIMType: "noTarget", Detail: detail}
 }
 
-func invalidPath(detail string) *Error {
-	return &Error{Status: http.StatusBadRequest, SCIMType: "invalidPath", Detail: detail}
-}
-
 func notFound() *Error {
 	return &Error{Status: http.StatusNotFound, Detail: "SCIM User was not found"}
 }
