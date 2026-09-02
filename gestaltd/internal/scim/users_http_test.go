@@ -588,6 +588,52 @@ func TestSCIMConcurrentClientsCannotRelinkSharedCoreUser(t *testing.T) {
 	}
 }
 
+func TestSCIMFirstSharedCoreReferenceIsSerialized(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+		"entra":    {Credentials: []config.SCIMCredentialConfig{{ID: "current", BearerToken: "entra-token"}}},
+	})
+	_, services, firstHandler := newSCIMService(t, db, nil, cfg)
+	_, _, secondHandler := newSCIMService(t, db, nil, cfg)
+	start := make(chan struct{})
+	responses := make(chan *httptest.ResponseRecorder, 2)
+	for _, attempt := range []struct {
+		handler            http.Handler
+		token, displayName string
+	}{
+		{firstHandler, testCurrentToken, "Rippling name"},
+		{secondHandler, "entra-token", "Entra name"},
+	} {
+		go func(attempt struct {
+			handler            http.Handler
+			token, displayName string
+		}) {
+			<-start
+			responses <- scimRequest(t, attempt.handler, http.MethodPost, "/scim/v2/Users", attempt.token, map[string]any{
+				"schemas":     []string{scim.UserSchemaURN},
+				"userName":    "first-shared@valon.com",
+				"active":      true,
+				"displayName": attempt.displayName,
+			})
+		}(attempt)
+	}
+	close(start)
+	statuses := []int{(<-responses).Code, (<-responses).Code}
+	if (statuses[0] != http.StatusCreated || statuses[1] != http.StatusConflict) && (statuses[1] != http.StatusCreated || statuses[0] != http.StatusConflict) {
+		t.Fatalf("first shared-core reference statuses = %v, want one 201 and one 409", statuses)
+	}
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "first-shared@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if coreUser.DisplayName != "Rippling name" && coreUser.DisplayName != "Entra name" {
+		t.Fatalf("serialized core display name = %q", coreUser.DisplayName)
+	}
+}
+
 func TestSCIMAuthoritativeDomainGateFollowsCoreEmail(t *testing.T) {
 	t.Parallel()
 
@@ -753,6 +799,44 @@ func TestSCIMRelationshipPaginationCoversAllMembersAndDeletes(t *testing.T) {
 		if len(read.Groups) != 0 {
 			t.Fatalf("User.groups after paged delete = %#v", read.Groups)
 		}
+	}
+}
+
+func TestSCIMUserListHydratesOnlyRequestedPage(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	_, _, handler := newSCIMService(t, nil, authorization, cfg)
+	users := make([]*scim.User, 0, 3)
+	for _, name := range []string{"page-alice@valon.com", "page-bob@valon.com", "page-carol@valon.com"} {
+		user, response := createUser(t, handler, testCurrentToken, name, true, nil)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("create %s = %d %s", name, response.Code, response.Body.String())
+		}
+		users = append(users, user)
+	}
+	members := make([]map[string]any, 0, len(users))
+	for _, user := range users {
+		members = append(members, map[string]any{"value": user.ID})
+	}
+	group := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Page hydration", "members": members,
+	})
+	if group.Code != http.StatusCreated {
+		t.Fatalf("create hydration group = %d %s", group.Code, group.Body.String())
+	}
+	authorization.resetListCalls()
+	page := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users?count=1", testCurrentToken, nil)
+	if page.Code != http.StatusOK {
+		t.Fatalf("paged user list = %d %s", page.Code, page.Body.String())
+	}
+	list := decodeResponse[testListResponse](t, page)
+	if list.TotalResults != len(users) || list.ItemsPerPage != 1 || len(list.Resources) != 1 {
+		t.Fatalf("paged user list = %#v", list)
+	}
+	if calls := authorization.listCallCount(); calls != 1 {
+		t.Fatalf("provider hydration calls = %d, want 1", calls)
 	}
 }
 
@@ -1208,6 +1292,18 @@ func (a *recordingAuthorization) setPageSize(size int32) {
 	a.mu.Lock()
 	a.pageSize = size
 	a.mu.Unlock()
+}
+
+func (a *recordingAuthorization) resetListCalls() {
+	a.mu.Lock()
+	a.listCalls = 0
+	a.mu.Unlock()
+}
+
+func (a *recordingAuthorization) listCallCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.listCalls
 }
 
 func (a *recordingAuthorization) setRelationship(relationship *proto.Relationship) {

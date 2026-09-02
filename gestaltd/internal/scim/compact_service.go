@@ -839,13 +839,16 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 		return listResponse[User]{}, unavailable("could not list SCIM users")
 	}
 	sort.Slice(rs, func(i, j int) bool { return recordString(rs[i], "id") < recordString(rs[j], "id") })
-	matching := make([]storedResource, 0, len(rs))
+	// Filtering only needs the compact, stored attributes. Keep the matching
+	// rows in their stored form and slice the page before userValue performs
+	// provider/core-user hydration (which also walks nested groups).
+	matching := make([]idb.Record, 0, len(rs))
 	for _, rr := range rs {
 		r := stored(rr)
 		if !matchesFilter(persistedUser{ExternalID: r.ExternalID, UserName: r.UserName, Emails: r.Profile.Emails}, clauses) {
 			continue
 		}
-		matching = append(matching, r)
+		matching = append(matching, rr)
 	}
 	if start > len(matching)+1 {
 		start = len(matching) + 1
@@ -854,7 +857,7 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 	page := matching[start-1 : end]
 	out := make([]User, 0, len(page))
 	for i := range page {
-		u, e := s.userValue(ctx, page[i])
+		u, e := s.userValue(ctx, stored(page[i]))
 		if e != nil {
 			return listResponse[User]{}, e
 		}
