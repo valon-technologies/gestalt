@@ -388,6 +388,40 @@ key), `gestalt.action` (currently `list_operations`), and
 credentialed session-catalog path fails, even if `gestaltd` falls back to a
 static catalog and still serves a successful HTTP response.
 
+### Invoke Authorization Metrics
+
+These metrics are recorded at `Broker.evaluateInvokeAuthorization` before
+provider dispatch. They cover v1 HTTP UI/CLI, HTTP bindings, cross-app
+`App.Invoke`, workflow runner invokes, and GraphQL authorization checks.
+Remote-delegated providers and MCP invokes are out of scope for this family.
+
+<Tabs items={['OpenTelemetry', 'Prometheus']}>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `gestaltd.invoke.authorization.count` | Counter | Invoke authorization decisions |
+    | `gestaltd.invoke.authorization.error_count` | Counter | Denied invoke authorization decisions |
+    | `gestaltd.invoke.authorization.duration` | Histogram | Invoke authorization decision duration |
+  </Tabs.Tab>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `gestaltd_invoke_authorization_count_total` | Counter | Invoke authorization decisions |
+    | `gestaltd_invoke_authorization_error_count_total` | Counter | Denied invoke authorization decisions |
+    | `gestaltd_invoke_authorization_duration_seconds` | Histogram | Invoke authorization decision duration |
+  </Tabs.Tab>
+</Tabs>
+
+These metrics carry low-cardinality attributes: `gestalt.provider` (target app),
+`gestalt.operation`, `gestaltd.invocation.surface` (`http`, `http_binding`,
+`workflow`, `cross_app`, or `unknown`), `gestaltd.invoke.authorization.decision`
+(`allow` or `deny`), `gestaltd.invoke.authorization.deny_reason` on denies
+(`relation_denied`, `role_denied`, or `authorization_error`),
+`gestaltd.subject.kind`, and `gestaltd.subject.id` (normalized caller email or
+service-account name when available, otherwise `unknown`). P1 ingress tags such
+as `gestaltd.ingress.kind` and `gestaltd.subject.label` remain HTTP telemetry
+only and are not repurposed for invoke authorization decisions.
+
 ### Agent Metrics
 
 Agent metrics are recorded at the `gestaltd` agent facade and at the configured
@@ -496,7 +530,7 @@ need actor, target, and outcome details.
 | Provider operation invocation | Yes: `gestaltd.operation.*` | Yes | Every guarded HTTP and MCP invocation is audited. |
 | Platform login start and completion | Yes: `gestaltd.auth.*` | Yes | `begin_login` and `complete_login` are both operational and security events. |
 | Platform token validation | Yes: `gestaltd.auth.*` with `action=validate_token` | Partially | Successful per-request validation is metrics-only; shared-middleware denials emit `auth.authenticate`. |
-| Pre-invoker authorization denials | No dedicated semantic metric family | Yes | Denied subject access before guarded invocation dispatch is audited with the attempted operation or `operations.list`. |
+| Pre-invoker authorization denials | Yes: `gestaltd.invoke.authorization.*` | Yes | Denied subject access before guarded invocation dispatch is audited with the attempted operation or `operations.list`. |
 | Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
 | Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh is system maintenance behavior, not a user-facing audit event. |
 | Credentialed HTTP catalog discovery | Yes: `gestaltd.discovery.*` with `action=list_operations` | No | Operation listing stays metrics-only even when it resolves session catalogs. |

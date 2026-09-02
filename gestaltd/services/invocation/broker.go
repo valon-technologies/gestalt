@@ -1006,49 +1006,6 @@ func (b *Broker) providerDelegatesRemoteAuthorization(ctx context.Context, provi
 	return err == nil && providerDelegatesRemoteAuthorization(provider)
 }
 
-func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
-	if b == nil || b.authorization == nil {
-		return nil
-	}
-	decision, err := b.authorizationDecision(ctx, p, providerName, operationID)
-	if err != nil {
-		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
-	}
-	if decision == nil || !decision.GetAllowed() {
-		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
-	}
-	return nil
-}
-
-func (b *Broker) authorizeOperation(
-	ctx context.Context,
-	p *principal.Principal,
-	providerName string,
-	operation catalog.CatalogOperation,
-) (context.Context, error) {
-	if b == nil || b.authorization == nil {
-		return ctx, nil
-	}
-	decision, err := b.authorizationDecision(ctx, p, providerName, operation.ID)
-	if err != nil {
-		return ctx, fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operation.ID, err)
-	}
-	if decision == nil || !decision.GetAllowed() {
-		return ctx, fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
-	}
-	if len(operation.AllowedRoles) == 0 {
-		return ctx, nil
-	}
-	role := matchedAllowedRole(decision.GetMatchedRelations(), operation.AllowedRoles)
-	if role == "" {
-		return ctx, fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
-	}
-	return WithAccessContext(ctx, AccessContext{
-		Policy: b.authorizationPolicy(providerName),
-		Role:   role,
-	}), nil
-}
-
 func (b *Broker) authorizationDecision(
 	ctx context.Context,
 	p *principal.Principal,
@@ -1175,7 +1132,17 @@ func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal
 	if b.providerDelegatesRemoteAuthorization(ctx, providerName) {
 		return nil
 	}
-	return b.checkAuthorizationAccess(ctx, p, providerName, providerName)
+	if b == nil || b.authorization == nil {
+		return nil
+	}
+	decision, err := b.authorizationDecision(ctx, p, providerName, providerName)
+	if err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrAuthorizationDenied, providerName, err)
+	}
+	if decision == nil || !decision.GetAllowed() {
+		return fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
+	}
+	return nil
 }
 
 func accessRequest(p *principal.Principal, subjectID string, resource *proto.Resource, action string) *proto.CheckAccessRequest {

@@ -17,22 +17,27 @@ const tracerName = "gestaltd"
 type tracerProviderContextKey struct{}
 
 var (
-	AttrAgentOperation      = attribute.Key("gestalt.agent.operation")
-	AttrAgentProvider       = attribute.Key("gestalt.agent.provider")
-	AttrAgentRuntimePhase   = attribute.Key("gestalt.agent.runtime.phase")
-	AttrAgentRuntimeReason  = attribute.Key("gestalt.agent.runtime.reason")
-	AttrAgentToolSource     = attribute.Key("gestalt.agent.tool.source")
-	AttrErrorType           = attribute.Key("error.type")
-	AttrGenAIOperationName  = attribute.Key("gen_ai.operation.name")
-	AttrGenAIProviderName   = attribute.Key("gen_ai.provider.name")
-	AttrGenAIAgentName      = attribute.Key("gen_ai.agent.name")
-	AttrGenAIConversationID = attribute.Key("gen_ai.conversation.id")
-	AttrGenAIToolName       = attribute.Key("gen_ai.tool.name")
-	AttrGenAIToolCallID     = attribute.Key("gen_ai.tool.call.id")
-	AttrGenAIToolType       = attribute.Key("gen_ai.tool.type")
-	AttrCredentialProvider  = attribute.Key("gestalt.credential.provider")
-	AttrCredentialOperation = attribute.Key("gestalt.credential.operation")
-	AttrCatalogSource       = attribute.Key("gestalt.catalog.source")
+	AttrAgentOperation                = attribute.Key("gestalt.agent.operation")
+	AttrAgentProvider                 = attribute.Key("gestalt.agent.provider")
+	AttrAgentRuntimePhase             = attribute.Key("gestalt.agent.runtime.phase")
+	AttrAgentRuntimeReason            = attribute.Key("gestalt.agent.runtime.reason")
+	AttrAgentToolSource               = attribute.Key("gestalt.agent.tool.source")
+	AttrErrorType                     = attribute.Key("error.type")
+	AttrGenAIOperationName            = attribute.Key("gen_ai.operation.name")
+	AttrGenAIProviderName             = attribute.Key("gen_ai.provider.name")
+	AttrGenAIAgentName                = attribute.Key("gen_ai.agent.name")
+	AttrGenAIConversationID           = attribute.Key("gen_ai.conversation.id")
+	AttrGenAIToolName                 = attribute.Key("gen_ai.tool.name")
+	AttrGenAIToolCallID               = attribute.Key("gen_ai.tool.call.id")
+	AttrGenAIToolType                 = attribute.Key("gen_ai.tool.type")
+	AttrCredentialProvider            = attribute.Key("gestalt.credential.provider")
+	AttrCredentialOperation           = attribute.Key("gestalt.credential.operation")
+	AttrCatalogSource                 = attribute.Key("gestalt.catalog.source")
+	AttrInvocationSurface             = attribute.Key("gestaltd.invocation.surface")
+	AttrInvokeAuthorizationDecision   = attribute.Key("gestaltd.invoke.authorization.decision")
+	AttrInvokeAuthorizationDenyReason = attribute.Key("gestaltd.invoke.authorization.deny_reason")
+	AttrSubjectKind                   = attribute.Key("gestaltd.subject.kind")
+	AttrSubjectID                     = attribute.Key("gestaltd.subject.id")
 )
 
 type metricSet struct {
@@ -63,6 +68,7 @@ var (
 	genAIClientOperationDurationMetrics metricutil.MeterCache[metric.Float64Histogram]
 	catalogOperationResolveMetrics      metricutil.MeterCache[metricSet]
 	credentialProviderOperationMetrics  metricutil.MeterCache[metricSet]
+	invokeAuthorizationMetrics          metricutil.MeterCache[metricSet]
 )
 
 var genAIClientOperationDurationBuckets = []float64{0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92}
@@ -192,6 +198,10 @@ func RecordCatalogOperationResolve(ctx context.Context, startedAt time.Time, fai
 
 func RecordCredentialProviderOperation(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
 	record(ctx, &credentialProviderOperationMetrics, "gestaltd.credential.provider.operation", "gestaltd credential provider operations", startedAt, failed, attrs...)
+}
+
+func RecordInvokeAuthorization(ctx context.Context, startedAt time.Time, denied bool, attrs ...attribute.KeyValue) {
+	record(ctx, &invokeAuthorizationMetrics, "gestaltd.invoke.authorization", "gestaltd operation invoke authorization decisions", startedAt, denied, attrs...)
 }
 
 func record(ctx context.Context, cache *metricutil.MeterCache[metricSet], prefix, desc string, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {

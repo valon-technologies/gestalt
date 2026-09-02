@@ -117,6 +117,8 @@ type AccessContext struct {
 const (
 	InvocationSurfaceHTTP        InvocationSurface = "http"
 	InvocationSurfaceHTTPBinding InvocationSurface = "http_binding"
+	InvocationSurfaceWorkflow    InvocationSurface = "workflow"
+	InvocationSurfaceCrossApp    InvocationSurface = "cross_app"
 	InvocationSurfaceMCP         InvocationSurface = "mcp"
 )
 
