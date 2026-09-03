@@ -2313,6 +2313,10 @@ func buildAppStaticSpec(name string, entry *config.ProviderEntry, manifest *prov
 		}
 	}
 
+	connectionParams := appservice.ConnectionParamDefsFromManifest(conn.ConnectionParams)
+	if err := core.ValidateConnectionParamDefs(connectionParams); err != nil {
+		return appservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("%s: invalid connection parameters: %w", name, err)
+	}
 	return appservice.StaticProviderSpec{
 		Name:             name,
 		DisplayName:      displayName,
@@ -2321,7 +2325,7 @@ func buildAppStaticSpec(name string, entry *config.ProviderEntry, manifest *prov
 		ConnectionMode:   connMode,
 		Catalog:          staticCatalog,
 		AuthTypes:        staticAuthTypes(conn.Auth.Type),
-		ConnectionParams: appservice.ConnectionParamDefsFromManifest(conn.ConnectionParams),
+		ConnectionParams: connectionParams,
 		CredentialFields: appservice.CredentialFieldsFromManifest(conn.Auth.Credentials),
 		DiscoveryConfig:  appservice.DiscoveryConfigFromManifest(conn.Discovery),
 		StaticHeaders:    maps.Clone(manifest.Spec.Headers),

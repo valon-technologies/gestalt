@@ -55,13 +55,18 @@ type instanceInfo struct {
 	Connection string           `json:"connection,omitempty"`
 	Preferred  bool             `json:"preferred,omitempty"`
 	Identity   *accountIdentity `json:"identity,omitempty"`
-	// AccountKey is an opaque grouping identifier. Clients must not display,
-	// parse, or treat it as a provider account ID.
-	AccountKey string `json:"accountKey,omitempty"`
+	// AccountKey is server-only grouping state. It must never become part of
+	// the public app response contract.
+	AccountKey string `json:"-"`
 
 	credentialInvalid bool
 	credentialID      string
 	credentialCreated time.Time
+}
+
+type matchedCredential struct {
+	credential *core.ExternalCredential
+	connection string
 }
 
 type credentialFieldInfo struct {
@@ -434,10 +439,6 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type matchedCredential struct {
-		credential *core.ExternalCredential
-		connection string
-	}
 	var matched []matchedCredential
 	for _, tok := range tokens {
 		if tok == nil {
@@ -476,30 +477,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A provider account may have more than one stored credential while a
-	// retry-safe reconciliation is catching up. Treat those credentials as one
-	// logical disconnect target before deciding whether the request is
-	// ambiguous. Keyless credentials remain distinct because their identity is
-	// not safe to infer.
-	type logicalCredentialGroup struct {
-		members []matchedCredential
-	}
-	groups := make([]logicalCredentialGroup, 0, len(matched))
-	groupByKey := make(map[string]int, len(matched))
-	for _, candidate := range matched {
-		groupKey := candidate.connection + "\x00" + candidate.credential.Audience + "\x00"
-		if accountKey := core.AccountKeyForCredential(candidate.credential); accountKey != "" {
-			groupKey += "account\x00" + accountKey
-		} else {
-			groupKey += "credential\x00" + candidate.credential.ID
-		}
-		if index, ok := groupByKey[groupKey]; ok {
-			groups[index].members = append(groups[index].members, candidate)
-			continue
-		}
-		groupByKey[groupKey] = len(groups)
-		groups = append(groups, logicalCredentialGroup{members: []matchedCredential{candidate}})
-	}
+	groups := groupMatchedCredentialsByAccount(matched)
 
 	if len(groups) > 1 {
 		auditErr = errors.New("multiple matching connections")
@@ -513,7 +491,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		if requestedInstance != "" {
 			hint = "?" + httpConnectionParam + "=NAME"
 		}
-		writeError(w, http.StatusConflict, fmt.Sprintf("multiple accounts are connected to %q (%v); specify %s to choose one", name, labels, hint))
+		writeError(w, http.StatusConflict, fmt.Sprintf("Multiple connection instances match %q. Choose one with %s. Available instances: %v.", name, hint, labels))
 		return
 	}
 
@@ -527,20 +505,12 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deleteIDs := []string{tokenID}
-	if accountKey := core.AccountKeyForCredential(disconnected.credential); accountKey != "" {
-		seen := map[string]struct{}{tokenID: {}}
-		for _, tok := range tokens {
-			if tok == nil || tok.ID == "" || tok.Subject != subjectID || tok.Audience != disconnected.credential.Audience || core.AccountKeyForCredential(tok) != accountKey {
-				continue
-			}
-			if _, ok := seen[tok.ID]; ok {
-				continue
-			}
-			seen[tok.ID] = struct{}{}
-			deleteIDs = append(deleteIDs, tok.ID)
+	for _, member := range groups[0].members {
+		if member.credential.ID != "" && member.credential.ID != tokenID {
+			deleteIDs = append(deleteIDs, member.credential.ID)
 		}
-		sort.Strings(deleteIDs[1:])
 	}
+	sort.Strings(deleteIDs[1:])
 	for index, id := range deleteIDs {
 		if err := s.externalCredentials.DeleteCredential(r.Context(), id); err != nil {
 			if errors.Is(err, core.ErrNotFound) {
@@ -586,6 +556,52 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
+}
+
+type logicalCredentialGroup struct {
+	members []matchedCredential
+}
+
+// groupMatchedCredentialsByAccount keeps connection scope in the server
+// layer, then delegates account equality (including keyless singleton rules)
+// to the core policy used by status and invocation.
+func groupMatchedCredentialsByAccount(matched []matchedCredential) []logicalCredentialGroup {
+	type scopedGroup struct {
+		members []matchedCredential
+	}
+	scopes := make([]scopedGroup, 0, len(matched))
+	scopeIndexes := make(map[string]int, len(matched))
+	for _, candidate := range matched {
+		key := candidate.connection + "\x00" + candidate.credential.Audience
+		index, ok := scopeIndexes[key]
+		if !ok {
+			scopeIndexes[key] = len(scopes)
+			scopes = append(scopes, scopedGroup{})
+			index = len(scopes) - 1
+		}
+		scopes[index].members = append(scopes[index].members, candidate)
+	}
+
+	groups := make([]logicalCredentialGroup, 0, len(matched))
+	for _, scope := range scopes {
+		candidates := make([]core.CredentialAccountCandidate, len(scope.members))
+		for index, member := range scope.members {
+			candidates[index] = core.CredentialAccountCandidate{
+				AccountKey: core.AccountKeyForCredential(member.credential),
+				ID:         member.credential.ID,
+				Qualifier:  member.credential.Qualifier,
+				CreatedAt:  member.credential.CreatedAt,
+			}
+		}
+		for _, indexes := range core.GroupCredentialAccountCandidateGroups(candidates) {
+			members := make([]matchedCredential, 0, len(indexes))
+			for _, index := range indexes {
+				members = append(members, scope.members[index])
+			}
+			groups = append(groups, logicalCredentialGroup{members: members})
+		}
+	}
+	return groups
 }
 
 func (s *Server) getProvider(ctx context.Context, w http.ResponseWriter, name string) (core.Provider, bool) {

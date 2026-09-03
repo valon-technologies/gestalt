@@ -60,29 +60,42 @@ func GroupCredentialAccountCandidates(candidates []CredentialAccountCandidate, p
 	return accounts
 }
 
+// GroupCredentialAccountCandidateGroups returns all record indexes belonging
+// to each logical account. Keyless records remain singleton groups because
+// their account identity cannot be proven safely.
+func GroupCredentialAccountCandidateGroups(candidates []CredentialAccountCandidate) [][]int {
+	groups := make([][]int, 0, len(candidates))
+	seen := make(map[string]int, len(candidates))
+	for index, candidate := range candidates {
+		key := strings.TrimSpace(candidate.AccountKey)
+		if key == "" {
+			groups = append(groups, []int{index})
+			continue
+		}
+		groupIndex, ok := seen[key]
+		if !ok {
+			seen[key] = len(groups)
+			groups = append(groups, []int{index})
+			continue
+		}
+		groups[groupIndex] = append(groups[groupIndex], index)
+	}
+	return groups
+}
+
 // GroupCredentialAccountCandidateIndices returns the indexes of the canonical
 // candidate for each account. Returning indexes lets presentation layers keep
 // their own data while still using the one account-selection policy.
 func GroupCredentialAccountCandidateIndices(candidates []CredentialAccountCandidate, preferred string) []int {
 	indices := make([]int, 0, len(candidates))
-	seen := make(map[string]int, len(candidates))
-	for index, candidate := range candidates {
-		candidate.AccountKey = strings.TrimSpace(candidate.AccountKey)
-		if candidate.AccountKey == "" {
-			indices = append(indices, index)
-			continue
+	for _, group := range GroupCredentialAccountCandidateGroups(candidates) {
+		best := group[0]
+		for _, index := range group[1:] {
+			if PreferCredentialAccountCandidate(candidates[index], candidates[best], preferred) {
+				best = index
+			}
 		}
-		accountIndex, ok := seen[candidate.AccountKey]
-		if !ok {
-			seen[candidate.AccountKey] = len(indices)
-			indices = append(indices, index)
-			continue
-		}
-		current := candidates[indices[accountIndex]]
-		current.AccountKey = strings.TrimSpace(current.AccountKey)
-		if PreferCredentialAccountCandidate(candidate, current, preferred) {
-			indices[accountIndex] = index
-		}
+		indices = append(indices, best)
 	}
 	return indices
 }

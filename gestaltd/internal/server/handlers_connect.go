@@ -159,9 +159,10 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.runConnectionSetup(r.Context(), prov, tm, discoveryToken)
 	if err != nil {
-		auditErr = errors.New("connection setup failed")
+		status, message := connectionSetupFailure(err)
+		auditErr = errors.New(message)
 		slog.ErrorContext(r.Context(), "connection setup failed", "provider", req.Integration, "error", err)
-		writeError(w, http.StatusBadGateway, "connection setup failed")
+		writeError(w, status, message)
 		return
 	}
 
@@ -552,15 +553,26 @@ func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, exis
 	existingKey := core.AccountKeyForCredential(existing)
 	candidateKey := core.AccountKeyForCredential(candidate)
 	if existingKey != "" && existingKey != candidateKey {
-		return fmt.Errorf("%w: connection instance %q already belongs to another provider account", core.ErrAlreadyExists, candidate.Qualifier)
+		return &core.CredentialInstanceConflictError{Instance: candidate.Qualifier, DifferentAccount: true}
 	}
 	if candidateKey == "" {
-		return fmt.Errorf("%w: connection instance %q already exists", core.ErrAlreadyExists, candidate.Qualifier)
+		return &core.CredentialInstanceConflictError{Instance: candidate.Qualifier}
 	}
 
 	candidate.ID = existing.ID
 	candidate.CreatedAt = existing.CreatedAt
 	return s.externalCredentials.UpsertCredential(ctx, candidate)
+}
+
+func connectionSetupFailure(err error) (int, string) {
+	var conflict *core.CredentialInstanceConflictError
+	if errors.As(err, &conflict) {
+		if conflict.DifferentAccount {
+			return http.StatusConflict, fmt.Sprintf("The instance name %q is already linked to another account. Choose a different instance name and try again.", conflict.Instance)
+		}
+		return http.StatusConflict, fmt.Sprintf("The instance name %q is already in use. Choose a different instance name and try again.", conflict.Instance)
+	}
+	return http.StatusBadGateway, "connection setup failed"
 }
 
 func validateProviderMetadata(source string, metadata map[string]string) error {
@@ -727,10 +739,14 @@ func (s *Server) configuredConnectionInfo(integration, connection string) (confi
 	if !ok {
 		return configuredConnectionInfo{}, fmt.Errorf("connection %q is not configured for integration %q", connection, integration)
 	}
+	paramDefs := connectionParamDefsFromConfig(conn.ConnectionParams)
+	if err := core.ValidateConnectionParamDefs(paramDefs); err != nil {
+		return configuredConnectionInfo{}, fmt.Errorf("invalid connection parameters: %w", err)
+	}
 	return configuredConnectionInfo{
 		Def:       conn,
 		Mode:      config.ConnectionModeForConnection(conn),
-		ParamDefs: connectionParamDefsFromConfig(conn.ConnectionParams),
+		ParamDefs: paramDefs,
 	}, nil
 }
 

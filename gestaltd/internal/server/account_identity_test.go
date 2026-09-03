@@ -11,6 +11,26 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
+func setAccountKey(metadataJSON, key string) (string, error) {
+	m := map[string]string{}
+	if strings.TrimSpace(metadataJSON) != "" {
+		if err := json.Unmarshal([]byte(metadataJSON), &m); err != nil {
+			return "", err
+		}
+	}
+	if strings.TrimSpace(key) == "" {
+		delete(m, core.AccountKeyMetadataKey)
+	} else {
+		m[core.AccountKeyMetadataKey] = strings.TrimSpace(key)
+	}
+	b, err := json.Marshal(m)
+	return string(b), err
+}
+
+func accountKeyStoredInMetadataJSON(metadataJSON string) string {
+	return core.AccountKeyFromMetadataJSON(metadataJSON)
+}
+
 func TestEnrichAccountIdentity_DoesNotInferCanonicalAccountKey(t *testing.T) {
 	t.Parallel()
 	var s Server
@@ -245,15 +265,13 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 	cases := []struct {
 		name      string
 		response  string
-		parse     func(map[string]any) oauthAccountIdentity
-		wantID    string
+		parse     func(map[string]any) oauthIdentityFacts
 		wantFacts map[string]string
 	}{
 		{
 			name:      "google userinfo",
 			response:  `{"sub":"google-account-123","email":"user@example.com","name":"Example User"}`,
 			parse:     googleUserInfoIdentity,
-			wantID:    "google-account-123",
 			wantFacts: map[string]string{"email": "user@example.com", "display_name": "Example User"},
 		},
 		{
@@ -266,7 +284,6 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 			name:      "slack auth test",
 			response:  `{"ok":true,"team_id":"T123","user_id":"U456","team":"Example Workspace","user":"example-user"}`,
 			parse:     slackAuthTestIdentity,
-			wantID:    "T123:U456",
 			wantFacts: map[string]string{"workspace": "Example Workspace", "login": "example-user"},
 		},
 		{
@@ -279,7 +296,6 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 			name:      "github user",
 			response:  `{"id":123456789,"login":"example-user","name":"Example User","email":"user@example.com"}`,
 			parse:     gitHubUserIdentity,
-			wantID:    "123456789",
 			wantFacts: map[string]string{"login": "example-user", "display_name": "Example User", "email": "user@example.com"},
 		},
 		{
@@ -298,9 +314,6 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := tc.parse(response)
-			if got.AccountID != tc.wantID {
-				t.Fatalf("account id = %q, want %q", got.AccountID, tc.wantID)
-			}
 			facts := make(map[string]string, len(got.Facts))
 			for _, fact := range got.Facts {
 				facts[fact.Kind] = fact.Value
@@ -371,7 +384,7 @@ func TestFetchOAuthAccountIdentity_NoProbeForUnknownIntegration(t *testing.T) {
 	t.Parallel()
 
 	// Unknown integrations must not select an outbound OAuth probe.
-	if identity := fetchOAuthAccountIdentity(context.Background(), "jira", "secret-token"); len(identity.Facts) != 0 || identity.AccountID != "" {
+	if identity := fetchOAuthIdentityFacts(context.Background(), "jira", "secret-token"); len(identity.Facts) != 0 {
 		t.Fatalf("identity = %+v", identity)
 	}
 }

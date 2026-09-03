@@ -460,8 +460,9 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if _, err := s.completeConnection(credentialMaterialContext(r.Context(), completionPrincipal, tm), prov, tm); err != nil {
-		auditErr = errors.New("failed to store connection")
-		writeError(w, http.StatusInternalServerError, "connection setup failed")
+		status, message := connectionSetupFailure(err)
+		auditErr = errors.New(message)
+		writeError(w, status, message)
 		return
 	}
 

@@ -106,3 +106,31 @@ func TestGroupCredentialAccountCandidatesNormalizesAndKeepsKeylessRecords(t *tes
 		t.Fatalf("grouped candidates = %+v, want normalized shared account plus keyless record", got)
 	}
 }
+
+func TestValidateConnectionParamDefsRequiresOneTypedTokenIdentity(t *testing.T) {
+	t.Parallel()
+
+	valid := map[string]ConnectionParamDef{
+		"account_id": {From: "token_response", Field: "account.id", AccountIdentity: true},
+	}
+	if err := ValidateConnectionParamDefs(valid); err != nil {
+		t.Fatalf("valid account identity rejected: %v", err)
+	}
+
+	for name, defs := range map[string]map[string]ConnectionParamDef{
+		"discovery identity": {
+			"account_id": {From: "discovery", Field: "id", AccountIdentity: true},
+		},
+		"missing response field": {
+			"account_id": {From: "token_response", AccountIdentity: true},
+		},
+		"multiple identities": {
+			"account_id": {From: "token_response", Field: "account.id", AccountIdentity: true},
+			"tenant_id":  {From: "token_response", Field: "tenant.id", AccountIdentity: true},
+		},
+	} {
+		if err := ValidateConnectionParamDefs(defs); err == nil {
+			t.Errorf("%s: expected validation error", name)
+		}
+	}
+}
