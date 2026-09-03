@@ -1599,6 +1599,19 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	if err != nil {
 		return ctx, ConnectionRuntimeCredential{}, err
 	}
+	credentialConnection := strings.TrimSpace(connection)
+	if credentialConnection == "" {
+		credentialConnection = core.AppConnectionName
+	}
+	// Preserve the resolved instance before the provider call can fail. A
+	// reconnect response may arrive while resolving a stored grant, before the
+	// successful-response path below has a credential to attach to context.
+	ctx = WithCredentialContext(ctx, CredentialContext{
+		Mode:       credentialMode,
+		SubjectID:  credentialSubjectID,
+		Connection: credentialConnection,
+		Instance:   instance,
+	})
 
 	runtimeInfo := ConnectionRuntimeInfo{}
 	if b.connectionRuntime != nil {
@@ -1649,10 +1662,6 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	storedCredential := resp.Credential
 	if storedCredential == nil {
 		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
-	}
-	credentialConnection := strings.TrimSpace(connection)
-	if credentialConnection == "" {
-		credentialConnection = core.AppConnectionName
 	}
 	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, credentialConnection, storedCredential.Qualifier)
 	ctx = WithCredentialContext(ctx, CredentialContext{

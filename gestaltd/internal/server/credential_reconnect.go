@@ -94,34 +94,37 @@ func (s *Server) loadReconnectGrant(ctx context.Context, subjectID, audience, in
 		}
 		return stored
 	}
-	credentials, listErr := s.externalCredentials.ListCredentials(ctx, subjectID, audience)
-	if listErr != nil {
-		slog.WarnContext(ctx, "listing credentials after stored-credential reject", "audience", audience, "error", listErr)
+	credentials, err := s.externalCredentials.ListCredentials(ctx, subjectID, audience)
+	if err != nil {
+		slog.WarnContext(ctx, "listing credentials after stored-credential reject", "audience", audience, "error", err)
 		return nil
 	}
 	preferred := ""
 	if s.connectionInstancePreferences != nil {
 		preferred, _ = s.connectionInstancePreferences.PreferredInstance(ctx, subjectID, audience)
 	}
-	chosen, ok := chosenReconnectInstance(credentials, preferred)
-	if !ok {
-		return nil
-	}
-	stored, err := s.externalCredentials.GetCredential(ctx, subjectID, audience, chosen)
-	if err != nil || stored == nil {
-		return nil
-	}
-	return stored
-}
-
-func chosenReconnectInstance(credentials []*core.ExternalCredential, preferred string) (string, bool) {
-	grantCredentials := make([]*core.ExternalCredential, 0, len(credentials))
-	for _, credential := range credentials {
-		if credential != nil && credential.Grant != nil {
-			grantCredentials = append(grantCredentials, credential)
+	if preferred != "" {
+		for _, credential := range credentials {
+			if credential != nil && credential.Grant != nil && strings.TrimSpace(credential.Qualifier) == preferred {
+				return credential
+			}
 		}
+		return nil
 	}
-	return core.ChooseCredentialInstance(grantCredentials, preferred, time.Now())
+	var sole *core.ExternalCredential
+	for _, credential := range credentials {
+		if credential == nil || credential.Grant == nil {
+			continue
+		}
+		if sole != nil {
+			// The request did not identify the grant and no preference exists;
+			// never guess between credentials, especially after the broker has
+			// already marked the grant it actually resolved.
+			return nil
+		}
+		sole = credential
+	}
+	return sole
 }
 
 func firstNonEmpty(values ...string) string {
