@@ -90,9 +90,6 @@ func NewService(db coredb.IndexedDB, authorization core.AuthorizationProvider, b
 			}
 		}
 	}
-	if err := s.migrateLegacyState(context.Background()); err != nil {
-		return nil, err
-	}
 	return &Service{compact: s}, nil
 }
 func projectionKey(p compactProjection) string {

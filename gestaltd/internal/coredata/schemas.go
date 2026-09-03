@@ -23,11 +23,6 @@ const (
 	StoreConnectionInstancePreferences  = "connection_instance_preferences"
 	StoreAppAccessProfiles              = "app_access_profiles"
 	StoreSCIMResources                  = "scim_resources"
-	// Legacy names are retained only so the one-shot SCIM migration can identify
-	// stores created by older binaries. New installations never create them.
-	StoreSCIMUsers             = "scim_users"
-	StoreSCIMProjectionIntents = "scim_projection_intents"
-	StoreSCIMGroups            = "scim_groups"
 )
 
 var SCIMResourcesSchema = idb.ObjectStoreOptions{

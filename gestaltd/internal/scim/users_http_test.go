@@ -1401,12 +1401,6 @@ func (a *recordingAuthorization) listCallCount() int {
 	return a.listCalls
 }
 
-func (a *recordingAuthorization) setRelationship(relationship *proto.Relationship) {
-	a.mu.Lock()
-	a.relations[relationshipKey(relationship.Tuple)] = gproto.Clone(relationship).(*proto.Relationship)
-	a.mu.Unlock()
-}
-
 func (a *recordingAuthorization) relationshipForUser(coreUserID string) *proto.Relationship {
 	a.mu.Lock()
 	defer a.mu.Unlock()
