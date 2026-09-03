@@ -5,6 +5,24 @@ import (
 	"time"
 )
 
+func TestInvocationRecordStoreZeroValueIsUsable(t *testing.T) {
+	var store InvocationRecordStore
+
+	store.RecordInvocation(InvocationRecord{
+		Provider:  "g-issues",
+		Operation: "list",
+		Outcome:   InvocationPassed,
+	})
+
+	records := store.RecentInvocations("g-issues", 1)
+	if len(records) != 1 {
+		t.Fatalf("records = %#v, want one record", records)
+	}
+	if records[0].ID != 1 || records[0].Provider != "g-issues" || records[0].Operation != "list" {
+		t.Fatalf("record = %#v", records[0])
+	}
+}
+
 func TestInvocationRecordStoreReturnsNewestRecordsPerProvider(t *testing.T) {
 	t.Parallel()
 

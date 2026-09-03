@@ -218,6 +218,28 @@ func (b *Broker) recordCompletedInvocation(
 	b.recordInvocationRecord(startedAt, provider, operation, resultStatus, failed)
 }
 
+// recordInvocationOutcome keeps dispatch-time stream metrics separate from
+// completed invocation records. A stream owns its final record until the
+// observing reader sees the terminal frame or error; every other outcome is
+// finalized here so all non-stream paths share the same recorder wiring.
+func (b *Broker) recordInvocationOutcome(
+	ctx context.Context,
+	startedAt time.Time,
+	provider string,
+	operation string,
+	transport string,
+	connectionMode string,
+	resultStatus int,
+	failed bool,
+	streamPending bool,
+) {
+	if streamPending {
+		recordOperationMetrics(ctx, startedAt, provider, operation, transport, connectionMode, resultStatus, failed)
+		return
+	}
+	b.recordCompletedInvocation(ctx, startedAt, provider, operation, transport, connectionMode, resultStatus, failed)
+}
+
 func (b *Broker) recordInvocationRecord(
 	startedAt time.Time,
 	provider string,
@@ -443,13 +465,11 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 		if !spanOwned {
 			span.End()
 		}
-		// Record dispatch-phase metrics. If the stream was successfully
-		// dispatched (dispatchErr is nil), the final stream status is not
-		// known here — it is observed by observingStreamReader on the first
-		// Recv. Dispatch failures (auth, resolve, token, etc.) are recorded
-		// as failed operations, mirroring unary Invoke.
+		// Record dispatch-phase metrics while a successfully dispatched stream
+		// owns its final outcome. Dispatch failures (auth, resolve, token, etc.)
+		// are completed here, mirroring unary Invoke.
 		resultStatus := operationResultStatus(nil, dispatchErr)
-		recordOperationMetrics(
+		b.recordInvocationOutcome(
 			ctx,
 			startedAt,
 			metricProvider,
@@ -458,6 +478,7 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 			metricConnectionMode,
 			resultStatus,
 			operationResultFailed(resultStatus, dispatchErr),
+			spanOwned && dispatchErr == nil,
 		)
 	}()
 
@@ -634,7 +655,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 			span.End()
 		}
 		resultStatus := operationResultStatus(unaryResult, dispatchErr)
-		recordOperationMetrics(
+		b.recordInvocationOutcome(
 			ctx,
 			startedAt,
 			metricProvider,
@@ -643,6 +664,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 			metricConnectionMode,
 			resultStatus,
 			operationResultFailed(resultStatus, dispatchErr),
+			spanOwned && dispatchErr == nil,
 		)
 	}()
 
@@ -792,8 +814,10 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	return &InvokeOutcome{Unary: result}, nil
 }
 
-// observingStreamReader wraps a StreamReader, inspects the first metadata frame
-// for 5xx status, and records the invocation when the stream terminates.
+// observingStreamReader wraps a StreamReader, inspects metadata frames for 5xx
+// status, and records the invocation when the stream reaches its terminal
+// frame or error. A second metadata frame is the protocol's terminal error
+// frame, so it must finalize the record before the caller returns it.
 type observingStreamReader struct {
 	inner        core.StreamReader
 	broker       *Broker
@@ -804,7 +828,8 @@ type observingStreamReader struct {
 	providerName string
 	operation    string
 	transport    string
-	observed     bool
+	metadataSeen bool
+	frameSeen    bool
 	endOnce      sync.Once
 	resultStatus int
 	resultErr    error
@@ -819,8 +844,14 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 		r.endSpan()
 		return nil, err
 	}
-	if !r.observed && frame != nil && frame.Metadata != nil {
-		r.observed = true
+	if frame == nil {
+		r.endSpan()
+		return nil, nil
+	}
+	r.frameSeen = true
+	if frame.Metadata != nil {
+		terminalMetadata := r.metadataSeen
+		r.metadataSeen = true
 		result := &core.OperationResult{
 			Status:  frame.Metadata.Status,
 			Headers: frame.Metadata.Headers,
@@ -828,24 +859,40 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 		}
 		r.resultStatus = result.Status
 		r.broker.observePlugin5xxResult(r.ctx, r.span, r.principal, r.providerName, r.operation, r.transport, result)
-	}
-	if frame == nil {
-		r.endSpan()
+		if terminalMetadata {
+			r.endSpan()
+		}
 	}
 	return frame, nil
 }
 
-// endSpan ends the tracing span exactly once. It is called on EOF, error, or
-// a nil frame so the span stays open long enough for observePlugin5xxResult
-// to set status and attributes on a streaming 5xx.
+func (r *observingStreamReader) terminalResultStatus() int {
+	if validHTTPStatus(r.resultStatus) {
+		return r.resultStatus
+	}
+	if r.metadataSeen || r.frameSeen {
+		// The HTTP streaming writer commits 200 when a frame has arrived but
+		// carries no explicit status.
+		return http.StatusOK
+	}
+	if r.resultErr != nil {
+		return operationResultStatus(nil, r.resultErr)
+	}
+	return http.StatusInternalServerError
+}
+
+// endSpan ends the tracing span and records the invocation exactly once. It is
+// called on EOF, error, nil frames, and terminal metadata frames so callers
+// that stop after an error frame cannot leave the request unrecorded.
 func (r *observingStreamReader) endSpan() {
 	r.endOnce.Do(func() {
+		resultStatus := r.terminalResultStatus()
 		r.broker.recordInvocationRecord(
 			r.startedAt,
 			r.providerName,
 			r.operation,
-			r.resultStatus,
-			operationResultFailed(r.resultStatus, r.resultErr),
+			resultStatus,
+			operationResultFailed(resultStatus, r.resultErr),
 		)
 		r.span.End()
 	})

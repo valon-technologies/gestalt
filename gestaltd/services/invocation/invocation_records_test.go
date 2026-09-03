@@ -2,7 +2,9 @@ package invocation
 
 import (
 	"context"
+	"errors"
 	"io"
+	"net/http"
 	"testing"
 	"time"
 
@@ -69,6 +71,65 @@ func TestObservingStreamReaderRecordsOnceAtTerminalCompletion(t *testing.T) {
 	}
 	if recorder.records[0].Outcome != observability.InvocationPassed || recorder.records[0].Status != 200 {
 		t.Fatalf("record = %#v", recorder.records[0])
+	}
+}
+
+func TestObservingStreamReaderRecordsTrailingFailureBeforeReturn(t *testing.T) {
+	recorder := &recordingInvocationRecorder{}
+	broker := &Broker{invocationRecorder: recorder}
+	_, span := broker.tracer().Start(context.Background(), "test")
+	reader := &observingStreamReader{
+		inner: core.StreamReaderFunc(streamFrames([]*core.InvokeFrame{
+			{Metadata: &core.InvokeMetadata{Status: http.StatusOK}},
+			{Data: []byte("chunk")},
+			{Metadata: &core.InvokeMetadata{Status: http.StatusBadGateway}, Data: []byte("error")},
+		})),
+		broker:       broker,
+		ctx:          context.Background(),
+		span:         span,
+		startedAt:    time.Now().Add(-time.Millisecond),
+		providerName: "g-issues",
+		operation:    "stream",
+	}
+
+	for i := 0; i < 3; i++ {
+		if _, err := reader.Recv(); err != nil {
+			t.Fatalf("Recv %d: %v", i, err)
+		}
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("got %d records, want exactly 1", len(recorder.records))
+	}
+	if got := recorder.records[0]; got.Outcome != observability.InvocationFailed || got.Status != http.StatusBadGateway {
+		t.Fatalf("record = %#v, want failed 502", got)
+	}
+}
+
+func TestObservingStreamReaderMapsPreMetadataErrorStatus(t *testing.T) {
+	recorder := &recordingInvocationRecorder{}
+	broker := &Broker{invocationRecorder: recorder}
+	_, span := broker.tracer().Start(context.Background(), "test")
+	streamErr := errors.New("upstream stream failed")
+	reader := &observingStreamReader{
+		inner: core.StreamReaderFunc(func() (*core.InvokeFrame, error) {
+			return nil, streamErr
+		}),
+		broker:       broker,
+		ctx:          context.Background(),
+		span:         span,
+		startedAt:    time.Now().Add(-time.Millisecond),
+		providerName: "g-issues",
+		operation:    "stream",
+	}
+
+	if _, err := reader.Recv(); !errors.Is(err, streamErr) {
+		t.Fatalf("Recv error = %v, want %v", err, streamErr)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("got %d records, want exactly 1", len(recorder.records))
+	}
+	if got := recorder.records[0]; got.Outcome != observability.InvocationFailed || got.Status != http.StatusBadGateway {
+		t.Fatalf("record = %#v, want failed 502", got)
 	}
 }
 

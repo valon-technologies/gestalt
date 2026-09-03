@@ -68,10 +68,16 @@ func (s *InvocationRecordStore) RecordInvocation(record InvocationRecord) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.capacity <= 0 {
+		s.capacity = DefaultInvocationRecordCapacity
+	}
+	if s.records == nil {
+		s.records = make(map[string][]InvocationRecord)
+	}
 	s.nextID++
 	record.ID = s.nextID
 	records := s.records[record.Provider]
-	if len(records) == s.capacity {
+	if len(records) >= s.capacity {
 		copy(records, records[1:])
 		records = records[:len(records)-1]
 	}
