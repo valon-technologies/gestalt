@@ -163,6 +163,36 @@ func TestSCIMMigrationPreservesCommittedAndCreateOnlyResources(t *testing.T) {
 	if migratedUser.Name.GivenName != "Migrated" || migratedUser.Name.FamilyName != "User" || len(migratedUser.Emails) != 1 || migratedUser.Emails[0].Value != "migrated@valon.com" {
 		t.Fatalf("migrated User profile = %#v", migratedUser)
 	}
+	rows, err := services.DB.ObjectStore(coredata.StoreSCIMResources).GetAll(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migratedRow idb.Record
+	for _, row := range rows {
+		if row["id"] == "legacy-user" {
+			migratedRow = row
+			break
+		}
+	}
+	if migratedRow == nil {
+		t.Fatal("migrated User row not found")
+	}
+	encoded, err := idb.EncodeIndexedDBRecord(migratedRow)
+	if err != nil {
+		t.Fatalf("migrated User row is not accepted by the IndexedDB wire codec: %v", err)
+	}
+	decoded, err := idb.DecodeIndexedDBRecord(encoded)
+	if err != nil {
+		t.Fatalf("decode migrated User row: %v", err)
+	}
+	profile, ok := decoded["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("decoded migrated profile = %#v", decoded["profile"])
+	}
+	name, ok := profile["name"].(map[string]any)
+	if !ok || name["givenName"] != "Migrated" {
+		t.Fatalf("decoded migrated profile name = %#v", profile["name"])
+	}
 	if response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/legacy-group", testCurrentToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("migrated Group GET = %d %s", response.Code, response.Body.String())
 	}
