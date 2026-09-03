@@ -4858,13 +4858,13 @@ func TestListIntegrations_StaleRefreshFailuresRequireReconnect(t *testing.T) {
 	assertConnection(expiredFailed, testDefaultConnection, "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"reconnect", "disconnect"})
 	assertStatus("expired-untried", "ready", "connected", "not_checked", []string{"disconnect", "add_instance"})
 	assertStatus("unexpired-error", "ready", "connected", "not_checked", []string{"disconnect", "add_instance"})
-	mixed := assertStatus("mixed", "degraded", "invalid", "unhealthy", []string{"select_instance", "disconnect", "add_instance"})
-	assertConnection(mixed, testDefaultConnection, "degraded", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "disconnect", "add_instance"})
-	allInvalid := assertStatus("all-invalid-multi", "needs_user_connection", "invalid", "unhealthy", []string{"select_instance", "disconnect"})
-	assertConnection(allInvalid, testDefaultConnection, "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "disconnect"})
+	mixed := assertStatus("mixed", "degraded", "invalid", "unhealthy", []string{"select_instance", "reconnect", "disconnect", "add_instance"})
+	assertConnection(mixed, testDefaultConnection, "degraded", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "reconnect", "disconnect", "add_instance"})
+	allInvalid := assertStatus("all-invalid-multi", "needs_user_connection", "invalid", "unhealthy", []string{"select_instance", "reconnect", "disconnect"})
+	assertConnection(allInvalid, testDefaultConnection, "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "reconnect", "disconnect"})
 	namedStale := assertStatus("named-stale", "degraded", "invalid", "unhealthy", []string{})
 	assertConnection(namedStale, testDefaultConnection, "ready", "connected", "not_checked", "", []string{"disconnect", "add_instance"})
-	assertConnection(namedStale, "archive", "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"disconnect"})
+	assertConnection(namedStale, "archive", "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"reconnect", "disconnect"})
 }
 
 func TestListIntegrations_AuthTypes(t *testing.T) {

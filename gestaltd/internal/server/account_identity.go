@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -68,18 +67,6 @@ var identityPrimaryKindOrder = []string{
 	"subdomain",
 	"organization",
 	"display_name",
-}
-
-// Only facts that identify an account, rather than describe it, participate
-// in the canonical key. In particular, display names and discovered site
-// labels must never split one account into multiple records.
-var accountKeyFactKinds = map[string]struct{}{
-	"email":        {},
-	"login":        {},
-	"workspace":    {},
-	"host":         {},
-	"subdomain":    {},
-	"organization": {},
 }
 
 func parseMetadataMap(metadataJSON string) (map[string]string, error) {
@@ -154,61 +141,6 @@ func accountKeyFromProviderID(integration, providerID string) string {
 	}
 	digest := sha256.Sum256([]byte(integration + "\x00" + providerID))
 	return "provider:v1:" + hex.EncodeToString(digest[:])
-}
-
-func accountKeyFromIdentity(id *accountIdentity) string {
-	if id == nil || len(id.Facts) == 0 {
-		return ""
-	}
-	factsByKind := make(map[string]string, len(id.Facts))
-	for _, fact := range id.Facts {
-		kind := strings.ToLower(strings.TrimSpace(fact.Kind))
-		value := strings.TrimSpace(fact.Value)
-		if _, ok := accountKeyFactKinds[kind]; !ok || value == "" {
-			continue
-		}
-		if _, ok := factsByKind[kind]; !ok {
-			factsByKind[kind] = canonicalAccountKeyValue(kind, value)
-		}
-	}
-	// Prefer the provider account's user identifier. Workspace/tenant facts
-	// provide the boundary needed when the same login can exist in multiple
-	// workspaces. Extra facts such as a later OAuth email probe must not change
-	// the key for an already-linked account.
-	parts := make([]string, 0, 2)
-	if login := factsByKind["login"]; login != "" {
-		parts = append(parts, "login="+login)
-		if workspace := factsByKind["workspace"]; workspace != "" {
-			parts = append(parts, "workspace="+workspace)
-		}
-	} else if email := factsByKind["email"]; email != "" {
-		parts = append(parts, "email="+email)
-		if tenant := firstAccountTenantFact(factsByKind); tenant != "" {
-			parts = append(parts, tenant)
-		}
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	sort.Strings(parts)
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return "v1:" + hex.EncodeToString(digest[:])
-}
-
-func firstAccountTenantFact(facts map[string]string) string {
-	for _, kind := range []string{"workspace", "organization", "subdomain", "host"} {
-		if value := facts[kind]; value != "" {
-			return kind + "=" + value
-		}
-	}
-	return ""
-}
-
-func canonicalAccountKeyValue(kind, value string) string {
-	if kind == "email" || kind == "host" || kind == "subdomain" {
-		return strings.ToLower(value)
-	}
-	return value
 }
 
 func setAccountKey(metadataJSON, key string) (string, error) {

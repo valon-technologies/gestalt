@@ -306,7 +306,7 @@ func TestStoreCredentialFromMaterial_DoesNotCollapseWithoutProviderKey(t *testin
 	}
 }
 
-func TestStoreCredentialFromMaterial_MigratesMatchingLegacyCredential(t *testing.T) {
+func TestStoreCredentialFromMaterial_RetainsUnprovenLegacyCredentials(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
 	ctx := context.Background()
@@ -321,16 +321,42 @@ func TestStoreCredentialFromMaterial_MigratesMatchingLegacyCredential(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := provider.UpsertCredential(ctx, &core.ExternalCredential{
-		ID:           "legacy-credential",
-		Subject:      "user:1",
-		Audience:     "slack:default",
-		Qualifier:    "legacy-label",
-		MetadataJSON: legacyMetadata,
-		Grant:        &core.ExternalCredentialGrant{AccessToken: "old-token"},
-		CreatedAt:    time.Unix(1, 0),
-	}); err != nil {
+	differentMetadata, err := setAccountKey(legacyMetadata, accountKeyFromProviderID("slack", "T999:U999"))
+	if err != nil {
 		t.Fatal(err)
+	}
+	for _, credential := range []*core.ExternalCredential{
+		{
+			ID:           "legacy-credential-a",
+			Subject:      "user:1",
+			Audience:     "slack:default",
+			Qualifier:    "legacy-label-a",
+			MetadataJSON: legacyMetadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "old-token-a"},
+			CreatedAt:    time.Unix(1, 0),
+		},
+		{
+			ID:           "legacy-credential-b",
+			Subject:      "user:1",
+			Audience:     "slack:default",
+			Qualifier:    "legacy-label-b",
+			MetadataJSON: legacyMetadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "old-token-b"},
+			CreatedAt:    time.Unix(2, 0),
+		},
+		{
+			ID:           "different-account",
+			Subject:      "user:1",
+			Audience:     "slack:default",
+			Qualifier:    "different-label",
+			MetadataJSON: differentMetadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "different-token"},
+			CreatedAt:    time.Unix(3, 0),
+		},
+	} {
+		if err := provider.UpsertCredential(ctx, credential); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(2, 0) }}
@@ -344,15 +370,27 @@ func TestStoreCredentialFromMaterial_MigratesMatchingLegacyCredential(t *testing
 	if err != nil {
 		t.Fatalf("store credential: %v", err)
 	}
-	if stored.ID != "legacy-credential" {
-		t.Fatalf("stored id = %q, want legacy credential upgraded in place", stored.ID)
+	if stored.ID == "legacy-credential-a" || stored.ID == "legacy-credential-b" || stored.ID == "different-account" {
+		t.Fatalf("stored id = %q, must not reuse an unproven credential", stored.ID)
 	}
 	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(credentials) != 1 || credentials[0].MetadataJSON != candidateMetadata || credentials[0].Grant.AccessToken != "new-token" {
-		t.Fatalf("credentials = %+v, want one upgraded legacy credential", credentials)
+	if len(credentials) != 4 {
+		t.Fatalf("credentials = %+v, want new credential plus all unproven records", credentials)
+	}
+	byID := make(map[string]*core.ExternalCredential, len(credentials))
+	for _, credential := range credentials {
+		byID[credential.ID] = credential
+	}
+	if byID[stored.ID] == nil || byID[stored.ID].MetadataJSON != candidateMetadata || byID[stored.ID].Grant.AccessToken != "new-token" {
+		t.Fatalf("stored credentials = %+v, want new explicit-key credential", credentials)
+	}
+	for _, id := range []string{"legacy-credential-a", "legacy-credential-b", "different-account"} {
+		if byID[id] == nil {
+			t.Fatalf("credential %q was removed despite lacking a proven matching account key", id)
+		}
 	}
 }
 

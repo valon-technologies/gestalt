@@ -11,27 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
-func TestAccountKeyFromIdentity_IsStableAndExcludesDisplayFacts(t *testing.T) {
-	t.Parallel()
-	first := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{
-		{Kind: "workspace", Value: "Example Workspace", Primary: true},
-		{Kind: "login", Value: "example-user"},
-		{Kind: "display_name", Value: "Example User"},
-	}})
-	second := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{
-		{Kind: "login", Value: "example-user", Primary: true},
-		{Kind: "workspace", Value: "Example Workspace"},
-		{Kind: "email", Value: "legacy@example.com"},
-		{Kind: "display_name", Value: "Different label"},
-	}})
-	if first == "" || first != second {
-		t.Fatalf("keys = %q and %q, want same stable key", first, second)
-	}
-	if got := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{{Kind: "workspace", Value: "Example Workspace"}}}); got != "" {
-		t.Fatalf("workspace-only identity key = %q, want empty", got)
-	}
-}
-
 func TestEnrichAccountIdentity_DoesNotInferCanonicalAccountKey(t *testing.T) {
 	t.Parallel()
 	var s Server
@@ -55,6 +34,24 @@ func TestEnrichAccountIdentity_UsesProviderAccountID(t *testing.T) {
 	})
 	if gotKey := accountKeyStoredInMetadataJSON(got.MetadataJSON); gotKey != accountKeyFromProviderID("slack", "T123:U456") {
 		t.Fatalf("account key = %q, want provider account key", gotKey)
+	}
+}
+
+func TestAccountKeyFromProviderID_IsStableAndProviderScoped(t *testing.T) {
+	t.Parallel()
+
+	first := accountKeyFromProviderID("slack", "T123:U456")
+	if first == "" || first != accountKeyFromProviderID("slack", " T123:U456 ") {
+		t.Fatalf("provider key = %q, want stable key after trimming", first)
+	}
+	if first == accountKeyFromProviderID("slack", "T999:U999") {
+		t.Fatal("different provider account IDs must not share an account key")
+	}
+	if first == accountKeyFromProviderID("github", "T123:U456") {
+		t.Fatal("different integrations must not share an account key")
+	}
+	if accountKeyFromProviderID("", "T123:U456") != "" || accountKeyFromProviderID("slack", "") != "" {
+		t.Fatal("missing provider key inputs must return empty")
 	}
 }
 
@@ -338,23 +335,41 @@ func TestProviderAccountIDFromTokenResponse_UsesDeclaredNestedID(t *testing.T) {
 	}
 }
 
+func TestBuildConnectionMetadata_RejectsHostOwnedKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		defs      map[string]core.ConnectionParamDef
+		userParam map[string]string
+	}{
+		{
+			name:      "user supplied account key",
+			userParam: map[string]string{accountKeyMetadataKey: "attacker-controlled"},
+		},
+		{
+			name: "token response account identity",
+			defs: map[string]core.ConnectionParamDef{
+				accountIdentityMetadataKey: {From: "token_response", Field: "identity"},
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := buildConnectionMetadata(tc.defs, tc.userParam, nil); err == nil {
+				t.Fatal("buildConnectionMetadata succeeded for host-owned metadata key")
+			}
+		})
+	}
+}
+
 func TestFetchOAuthAccountIdentity_NoProbeForUnknownIntegration(t *testing.T) {
 	t.Parallel()
-	called := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		http.Error(w, "nope", http.StatusUnauthorized)
-	}))
-	t.Cleanup(srv.Close)
 
-	// Unknown integration must not hit any probe URL (we can't redirect hardcoded
-	// URLs here; assert via source gate instead and enrich path).
+	// Unknown integrations must not select an outbound OAuth probe.
 	if identity := fetchOAuthAccountIdentity(context.Background(), "jira", "secret-token"); len(identity.Facts) != 0 || identity.AccountID != "" {
 		t.Fatalf("identity = %+v", identity)
-	}
-	_ = srv
-	if called {
-		t.Fatal("unexpected HTTP call")
 	}
 }
 

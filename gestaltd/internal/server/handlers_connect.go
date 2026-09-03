@@ -262,7 +262,15 @@ func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided 
 
 func buildConnectionMetadata(defs map[string]core.ConnectionParamDef, userParams map[string]string, tokenResp *core.OAuthTokenResponse) (string, error) {
 	metadata := make(map[string]string)
+	for name := range defs {
+		if isHostOwnedMetadataKey(name) {
+			return "", fmt.Errorf("connection parameter %q is reserved for host-owned account metadata", name)
+		}
+	}
 	for k, v := range userParams {
+		if isHostOwnedMetadataKey(k) {
+			return "", fmt.Errorf("connection parameter %q is reserved for host-owned account metadata", k)
+		}
 		metadata[k] = v
 	}
 
@@ -298,6 +306,11 @@ func buildConnectionMetadata(defs map[string]core.ConnectionParamDef, userParams
 		return "", fmt.Errorf("marshal connection metadata: %w", err)
 	}
 	return string(b), nil
+}
+
+func isHostOwnedMetadataKey(key string) bool {
+	key = strings.TrimSpace(key)
+	return key == accountIdentityMetadataKey || key == accountKeyMetadataKey
 }
 
 // providerAccountIDFromTokenResponse extracts the provider-owned identifier
@@ -524,7 +537,6 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 		return nil, false, nil
 	}
 	accountKey := accountKeyStoredInMetadataJSON(candidate.MetadataJSON)
-	legacyCandidateKey := legacyAccountKeyFromMetadataJSON(candidate.MetadataJSON)
 	if accountKey == "" || strings.TrimSpace(candidate.Subject) == "" || strings.TrimSpace(candidate.Audience) == "" {
 		return nil, false, nil
 	}
@@ -538,14 +550,13 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 			continue
 		}
 		credentialKey := credentialCanonicalAccountKey(credential)
-		if credentialKey == accountKey ||
-			(credentialKey == "" && legacyCandidateKey != "" && legacyAccountKeyFromMetadataJSON(credential.MetadataJSON) == legacyCandidateKey) {
+		if credentialKey == accountKey {
 			matches = append(matches, credential)
 		}
 	}
 
 	preferred := s.preferredInstanceForConnection(ctx, candidate.Subject, candidate.Audience)
-	keep := chooseCanonicalCredential(matches, preferred)
+	keep := chooseCanonicalCredential(matches, preferred, s.now())
 	previousID := candidate.ID
 	previousQualifier := candidate.Qualifier
 	previousCreatedAt := candidate.CreatedAt
@@ -584,16 +595,8 @@ func credentialCanonicalAccountKey(credential *core.ExternalCredential) string {
 	return accountKeyStoredInMetadataJSON(credential.MetadataJSON)
 }
 
-func legacyAccountKeyFromMetadataJSON(metadataJSON string) string {
-	identity, err := parseAccountIdentity(metadataJSON)
-	if err != nil {
-		return ""
-	}
-	return accountKeyFromIdentity(identity)
-}
-
-func chooseCanonicalCredential(credentials []*core.ExternalCredential, preferred string) *core.ExternalCredential {
-	return core.ChooseCredential(credentials, preferred, time.Now())
+func chooseCanonicalCredential(credentials []*core.ExternalCredential, preferred string, now time.Time) *core.ExternalCredential {
+	return core.ChooseCredential(credentials, preferred, now)
 }
 
 func validateProviderMetadata(source string, metadata map[string]string) error {
@@ -602,7 +605,7 @@ func validateProviderMetadata(source string, metadata map[string]string) error {
 		source = "provider"
 	}
 	for k, v := range metadata {
-		if k == accountIdentityMetadataKey || k == accountKeyMetadataKey {
+		if isHostOwnedMetadataKey(k) {
 			return fmt.Errorf("%s must not set reserved metadata key %q", source, k)
 		}
 		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
@@ -624,7 +627,7 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 		}
 	}
 	for k, v := range extra {
-		if k == accountIdentityMetadataKey || k == accountKeyMetadataKey {
+		if isHostOwnedMetadataKey(k) {
 			// Host-owned; never accept from provider/discovery overlays.
 			continue
 		}

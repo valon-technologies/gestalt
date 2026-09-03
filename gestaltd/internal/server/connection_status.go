@@ -407,7 +407,7 @@ func reconnectStatusActions(instances []instanceInfo, reconnectable, disconnecta
 	if len(instances) > 1 {
 		actions = append(actions, actionSelectInstance)
 	}
-	if reconnectable && reconnectTargetsDefaultInstance(instances) {
+	if reconnectable && invalidInstanceCount(instances) > 0 {
 		actions = append(actions, actionReconnect)
 	}
 	if disconnectable {
@@ -417,10 +417,6 @@ func reconnectStatusActions(instances []instanceInfo, reconnectable, disconnecta
 		actions = append(actions, actionAddInstance)
 	}
 	return actions
-}
-
-func reconnectTargetsDefaultInstance(instances []instanceInfo) bool {
-	return len(instances) == 1 && instances[0].Name == defaultTokenInstance
 }
 
 func subjectConnectionActions(disconnectable, connectable, selectInstance bool) []string {

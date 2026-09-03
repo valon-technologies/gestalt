@@ -513,7 +513,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		if requestedInstance != "" {
 			hint = "?" + httpConnectionParam + "=NAME"
 		}
-		writeError(w, http.StatusConflict, fmt.Sprintf("multiple connections exist for %q (%v); specify %s", name, labels, hint))
+		writeError(w, http.StatusConflict, fmt.Sprintf("multiple accounts are connected to %q (%v); specify %s to choose one", name, labels, hint))
 		return
 	}
 
