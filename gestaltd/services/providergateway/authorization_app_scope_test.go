@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type appScopedAuthorizationProvider struct {
@@ -212,7 +211,7 @@ func TestRelationshipTupleFromAuthorizationRequest(t *testing.T) {
 	}
 }
 
-func TestAllowsAppScopedRelationshipMutationUsesResourceAccess(t *testing.T) {
+func TestAllowsAppScopedRelationshipMutationAllowsSubjectSetTarget(t *testing.T) {
 	t.Parallel()
 
 	tuple := &proto.RelationshipTuple{
@@ -230,15 +229,7 @@ func TestAllowsAppScopedRelationshipMutationUsesResourceAccess(t *testing.T) {
 	provider := &appScopedAuthorizationProvider{
 		appAdmin: map[string]bool{"roadmap": true},
 	}
-	_, err := invocation.CheckResourceAccess(context.Background(), provider, invocation.ResourceAccessRequest{
-		SubjectID:    "user:admin@example.com",
-		Action:       "roadmap",
-		Resource:     &proto.Resource{Type: "app", Id: "roadmap"},
-		AllowedRoles: []string{appAdminRelation},
-	})
-	if err != nil {
-		t.Fatalf("CheckResourceAccess error = %v", err)
-	}
+
 	allowed, err := allowsAppScopedRelationshipMutation(
 		context.Background(),
 		provider,

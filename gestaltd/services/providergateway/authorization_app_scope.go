@@ -10,10 +10,10 @@ import (
 	gproto "google.golang.org/protobuf/proto"
 )
 
-const appAuthorizationResourceType = "app"
-
-// appAdminRelation grants administration of an app resource.
-const appAdminRelation = "admin"
+const (
+	appAuthorizationResourceType = "app"
+	appAdminRelation               = "admin"
+)
 
 func relationshipTupleFromAuthorizationRequest(fullMethod string, req gproto.Message) (*proto.RelationshipTuple, bool) {
 	if req == nil {
