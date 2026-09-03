@@ -12,6 +12,11 @@ type filterClause struct {
 	value     string
 }
 
+type groupFilterClause struct {
+	attribute string
+	value     string
+}
+
 var filterClausePattern = regexp.MustCompile(`(?i)^\s*(externalId|userName|emails\.value|emails\[\s*type\s+eq\s+"work"\s*\]\.value)\s+eq\s+("(?:\\.|[^"\\])*")\s*$`)
 
 func parseFilter(raw string) ([]filterClause, error) {
@@ -33,7 +38,11 @@ func parseFilter(raw string) ([]filterClause, error) {
 		if err := json.Unmarshal([]byte(matches[2]), &value); err != nil {
 			return nil, fmt.Errorf("invalid filter value: %w", err)
 		}
-		clauses = append(clauses, filterClause{attribute: strings.ToLower(matches[1]), value: normalize(value)})
+		attribute := strings.ToLower(matches[1])
+		if attribute != "externalid" {
+			value = normalize(value)
+		}
+		clauses = append(clauses, filterClause{attribute: attribute, value: value})
 	}
 	return clauses, nil
 }
@@ -88,7 +97,7 @@ func matchesFilter(user persistedUser, clauses []filterClause) bool {
 		matched := false
 		switch clause.attribute {
 		case "externalid":
-			matched = normalize(user.ExternalID) == clause.value
+			matched = user.ExternalID == clause.value
 		case "username":
 			matched = normalize(user.UserName) == clause.value
 		case "emails.value":
@@ -98,6 +107,80 @@ func matchesFilter(user persistedUser, clauses []filterClause) bool {
 		default:
 			for _, email := range user.Emails {
 				matched = matched || strings.EqualFold(strings.TrimSpace(email.Type), "work") && normalize(email.Value) == clause.value
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+var (
+	groupFilterClausePattern = regexp.MustCompile(`(?i)^\s*(displayName|externalId)\s+eq\s+("(?:\\.|[^"\\])*")\s*$`)
+	groupMemberFilterPattern = regexp.MustCompile(`(?i)^\s*members\[\s*value\s+eq\s+("(?:\\.|[^"\\])*")\s*\]\s*$`)
+)
+
+func parseGroupFilter(raw string) ([]groupFilterClause, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parts, err := splitFilterConjunctions(raw)
+	if err != nil {
+		return nil, err
+	}
+	clauses := make([]groupFilterClause, 0, len(parts))
+	for _, part := range parts {
+		matches := groupFilterClausePattern.FindStringSubmatch(part)
+		attribute := ""
+		valueRaw := ""
+		if matches != nil {
+			attribute, valueRaw = strings.ToLower(strings.TrimSpace(matches[1])), matches[2]
+		} else if value, ok := parseGroupMemberFilter(part); ok {
+			clauses = append(clauses, groupFilterClause{attribute: "members.value", value: value})
+			continue
+		} else {
+			return nil, fmt.Errorf("unsupported filter clause %q", strings.TrimSpace(part))
+		}
+		var value string
+		if err := json.Unmarshal([]byte(valueRaw), &value); err != nil {
+			return nil, fmt.Errorf("invalid filter value: %w", err)
+		}
+		if attribute != "externalid" {
+			value = normalize(value)
+		}
+		clauses = append(clauses, groupFilterClause{attribute: attribute, value: value})
+	}
+	return clauses, nil
+}
+
+func parseGroupMemberFilter(raw string) (string, bool) {
+	matches := groupMemberFilterPattern.FindStringSubmatch(raw)
+	if matches == nil {
+		return "", false
+	}
+	var value string
+	if err := json.Unmarshal([]byte(matches[1]), &value); err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(value), true
+}
+
+func matchesGroupFilter(group persistedGroup, clauses []groupFilterClause) bool {
+	for _, clause := range clauses {
+		matched := false
+		switch clause.attribute {
+		case "displayname":
+			matched = normalize(group.DisplayName) == clause.value
+		case "externalid":
+			matched = group.ExternalID == clause.value
+		case "members.value":
+			for _, member := range group.Members {
+				if strings.TrimSpace(member.Value) == clause.value {
+					matched = true
+					break
+				}
 			}
 		}
 		if !matched {

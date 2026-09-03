@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -51,9 +53,7 @@ type testErrorResponse struct {
 
 func testSCIMConfig(clients map[string]config.SCIMClientConfig) config.ServerSCIMConfig {
 	return config.ServerSCIMConfig{
-		Clients:       clients,
-		RetryInterval: "5ms",
-		DriftInterval: "1h",
+		Clients: clients,
 	}
 }
 
@@ -72,7 +72,7 @@ func employeeProjection() config.SCIMRelationshipConfig {
 	}
 }
 
-func newSCIMService(t *testing.T, db coredb.IndexedDB, authorization core.AuthorizationProvider, cfg config.ServerSCIMConfig, opts ...scim.ServiceOptions) (*scim.Service, *coredata.Services, http.Handler) {
+func newSCIMService(t *testing.T, db coredb.IndexedDB, authorization core.AuthorizationProvider, cfg config.ServerSCIMConfig) (*scim.Service, *coredata.Services, http.Handler) {
 	t.Helper()
 	if db == nil {
 		db = &coretesting.StubIndexedDB{}
@@ -81,12 +81,7 @@ func newSCIMService(t *testing.T, db coredb.IndexedDB, authorization core.Author
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
-	var service *scim.Service
-	if len(opts) == 0 {
-		service, err = scim.NewService(services.DB, authorization, testBaseURL, cfg)
-	} else {
-		service, err = scim.NewServiceWithOptions(services.DB, authorization, testBaseURL, cfg, opts[0])
-	}
+	service, err := scim.NewService(services.DB, authorization, testBaseURL, cfg)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -147,23 +142,11 @@ func createUser(t *testing.T, handler http.Handler, token, userName string, acti
 	return &user, recorder
 }
 
-func eventually(t *testing.T, condition func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("condition did not become true")
-}
-
 func TestSCIMUsersHTTPContract(t *testing.T) {
 	t.Parallel()
 
-	_, _, handler := newSCIMService(t, nil, nil, testSCIMConfig(map[string]config.SCIMClientConfig{
-		"rippling": ripplingClient(nil),
+	_, _, handler := newSCIMService(t, nil, newRecordingAuthorization(), testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil, employeeProjection()),
 	}))
 
 	for _, token := range []string{"", "wrong"} {
@@ -179,6 +162,48 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 			t.Fatalf("Schemas with rotating token = %d %s", response.Code, response.Body.String())
 		}
 	}
+	schemaItem := scimRequest(t, handler, http.MethodGet, "/scim/v2/Schemas/"+scim.UserSchemaURN, testCurrentToken, nil)
+	if schemaItem.Code != http.StatusOK || schemaItem.Header().Get("Content-Location") == "" || !strings.HasSuffix(schemaItem.Header().Get("Content-Location"), "/Schemas/"+scim.UserSchemaURN) {
+		t.Fatalf("individual Schema = %d headers=%v body=%s", schemaItem.Code, schemaItem.Header(), schemaItem.Body.String())
+	}
+	var schema struct {
+		ID   string `json:"id"`
+		Meta struct {
+			Location string `json:"location"`
+		} `json:"meta"`
+		Attributes []struct {
+			Name     string `json:"name"`
+			Returned string `json:"returned"`
+		} `json:"attributes"`
+	}
+	if err := json.Unmarshal(schemaItem.Body.Bytes(), &schema); err != nil || schema.ID != scim.UserSchemaURN || schema.Meta.Location != schemaItem.Header().Get("Content-Location") {
+		t.Fatalf("individual Schema metadata = %#v, err=%v", schema, err)
+	}
+	for _, attribute := range schema.Attributes {
+		if attribute.Name == "userName" && attribute.Returned != "default" {
+			t.Fatalf("User.userName returned = %q", attribute.Returned)
+		}
+	}
+	schemaCollection := scimRequest(t, handler, http.MethodGet, "/scim/v2/Schemas", testCurrentToken, nil)
+	if bytes.Contains(schemaCollection.Body.Bytes(), []byte(`"name":"externalId"`)) {
+		t.Fatalf("common externalId unexpectedly advertised as resource-specific schema attribute: %s", schemaCollection.Body.String())
+	}
+	serviceProvider := scimRequest(t, handler, http.MethodGet, "/scim/v2/ServiceProviderConfig", testCurrentToken, nil)
+	if serviceProvider.Code != http.StatusOK || !bytes.Contains(serviceProvider.Body.Bytes(), []byte(`"patch":{"supported":false}`)) {
+		t.Fatalf("ServiceProviderConfig = %d %s", serviceProvider.Code, serviceProvider.Body.String())
+	}
+	resourceTypes := scimRequest(t, handler, http.MethodGet, "/scim/v2/ResourceTypes/User", testCurrentToken, nil)
+	if resourceTypes.Code != http.StatusOK || !bytes.Contains(resourceTypes.Body.Bytes(), []byte(`"endpoint":"/Users"`)) {
+		t.Fatalf("ResourceTypes/User = %d %s", resourceTypes.Code, resourceTypes.Body.String())
+	}
+	missingResourceSchema := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{"userName": "missing-schema@valon.com"})
+	if payload := decodeResponse[testErrorResponse](t, missingResourceSchema); missingResourceSchema.Code != http.StatusBadRequest || payload.SCIMType != "invalidSyntax" {
+		t.Fatalf("missing User schema = %d %#v", missingResourceSchema.Code, payload)
+	}
+	wrongResourceSchema := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{"schemas": []string{scim.GroupSchemaURN}, "userName": "wrong-schema@valon.com"})
+	if payload := decodeResponse[testErrorResponse](t, wrongResourceSchema); wrongResourceSchema.Code != http.StatusBadRequest || payload.SCIMType != "invalidSyntax" {
+		t.Fatalf("wrong User schema = %d %#v", wrongResourceSchema.Code, payload)
+	}
 
 	alicePayload := map[string]any{
 		"schemas":     []string{scim.UserSchemaURN, "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"},
@@ -190,16 +215,40 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 		"emails":      []map[string]any{{"value": "Alice@Valon.com", "type": "work", "primary": true}},
 		"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": map[string]any{"department": "Ignored"},
 	}
-	createdRecorder := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, alicePayload)
+	createdRecorder := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users?attributes=name.givenName", testCurrentToken, alicePayload)
 	created := decodeResponse[scim.User](t, createdRecorder)
-	if createdRecorder.Code != http.StatusCreated || created.ID == "" || created.UserName != "Alice@Valon.com" || !created.Active || created.Meta.Version != `W/"1"` {
+	created.ID = strings.TrimPrefix(createdRecorder.Header().Get("Location"), testBaseURL+"/scim/v2/Users/")
+	created.Meta.Location = createdRecorder.Header().Get("Location")
+	created.Meta.Version = createdRecorder.Header().Get("ETag")
+	if createdRecorder.Code != http.StatusCreated || created.ID == "" || created.UserName != "" || created.Meta.Version == "" || !bytes.Contains(createdRecorder.Body.Bytes(), []byte(`"givenName":"Alice"`)) || bytes.Contains(createdRecorder.Body.Bytes(), []byte(`"active":`)) {
 		t.Fatalf("POST = %d %#v", createdRecorder.Code, created)
 	}
 	if got := createdRecorder.Header().Get("Location"); got != testBaseURL+"/scim/v2/Users/"+created.ID {
 		t.Fatalf("Location = %q", got)
 	}
+	if got := createdRecorder.Header().Get("Content-Location"); got != created.Meta.Location {
+		t.Fatalf("Content-Location = %q", got)
+	}
 	if got := createdRecorder.Header().Get("ETag"); got != created.Meta.Version {
 		t.Fatalf("ETag = %q", got)
+	}
+	if response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+created.ID, testCurrentToken, nil, map[string]string{"If-None-Match": created.Meta.Version}); response.Code != http.StatusNotModified {
+		t.Fatalf("If-None-Match = %d %s", response.Code, response.Body.String())
+	}
+	projected := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+created.ID+"?attributes=name.givenName", testCurrentToken, nil)
+	if projected.Code != http.StatusOK || bytes.Contains(projected.Body.Bytes(), []byte(`"userName"`)) || bytes.Contains(projected.Body.Bytes(), []byte(`"active":`)) || bytes.Contains(projected.Body.Bytes(), []byte(`"familyName"`)) {
+		t.Fatalf("attributes projection = %d %s", projected.Code, projected.Body.String())
+	}
+	qualifiedProjection := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+created.ID+"?attributes="+url.QueryEscape(scim.UserSchemaURN+":name.givenName"), testCurrentToken, nil)
+	if qualifiedProjection.Code != http.StatusOK || !bytes.Contains(qualifiedProjection.Body.Bytes(), []byte(`"givenName":"Alice"`)) || bytes.Contains(qualifiedProjection.Body.Bytes(), []byte(`"familyName"`)) {
+		t.Fatalf("schema-qualified attributes projection = %d %s", qualifiedProjection.Code, qualifiedProjection.Body.String())
+	}
+	excluded := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+created.ID+"?excludedAttributes=name.familyName", testCurrentToken, nil)
+	if excluded.Code != http.StatusOK || bytes.Contains(excluded.Body.Bytes(), []byte(`"familyName"`)) {
+		t.Fatalf("excludedAttributes projection = %d %s", excluded.Code, excluded.Body.String())
+	}
+	if both := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+created.ID+"?attributes=name&excludedAttributes=emails", testCurrentToken, nil); both.Code != http.StatusBadRequest {
+		t.Fatalf("simultaneous projection parameters = %d %s", both.Code, both.Body.String())
 	}
 
 	for _, filter := range []string{
@@ -215,13 +264,21 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 			t.Fatalf("filter %q = %d %#v", filter, response.Code, list)
 		}
 	}
+	caseFoldedExternal := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users?filter="+url.QueryEscape(`externalId eq "EMPLOYEE-123"`), testCurrentToken, nil)
+	if list := decodeResponse[testListResponse](t, caseFoldedExternal); caseFoldedExternal.Code != http.StatusOK || list.TotalResults != 0 {
+		t.Fatalf("case-sensitive externalId filter = %d %#v", caseFoldedExternal.Code, list)
+	}
 	empty := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users?filter="+url.QueryEscape(`userName eq "random-entra-probe@invalid.example"`), testCurrentToken, nil)
 	if list := decodeResponse[testListResponse](t, empty); empty.Code != http.StatusOK || list.TotalResults != 0 || list.Resources == nil {
 		t.Fatalf("empty filter = %d %s", empty.Code, empty.Body.String())
 	}
 	unsupportedFilter := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users?filter="+url.QueryEscape(`active eq "true"`), testCurrentToken, nil)
-	if payload := decodeResponse[testErrorResponse](t, unsupportedFilter); unsupportedFilter.Code != http.StatusBadRequest || payload.Status != "400" || payload.SCIMType != "invalidValue" {
+	if payload := decodeResponse[testErrorResponse](t, unsupportedFilter); unsupportedFilter.Code != http.StatusBadRequest || payload.Status != "400" || payload.SCIMType != "invalidFilter" {
 		t.Fatalf("unsupported filter = %d %#v", unsupportedFilter.Code, payload)
+	}
+	patch := map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"}, "Operations": []map[string]any{{"op": "replace", "path": "active", "value": false}}}
+	if payload := decodeResponse[testErrorResponse](t, scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+created.ID, testCurrentToken, patch)); payload.Status != "501" {
+		t.Fatalf("unsupported PATCH = %#v", payload)
 	}
 	wrongMediaType := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{"userName": "invalid@valon.com"}, map[string]string{"Content-Type": "application/json"})
 	if payload := decodeResponse[testErrorResponse](t, wrongMediaType); wrongMediaType.Code != http.StatusBadRequest || payload.Status != "400" {
@@ -246,50 +303,57 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 		t.Fatalf("negative count = %#v", emptyPage)
 	}
 
-	patch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{
-		{"op": "RePlAcE", "path": "active", "value": false},
-		{"op": "replace", "path": `emails[type eq "work"].value`, "value": "Alice@Valon.com"},
-		{"op": "replace", "value": map[string]any{"displayName": "Alice Updated"}},
-	}}
-	patchedRecorder := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+created.ID, testCurrentToken, patch, map[string]string{"If-Match": created.Meta.Version})
-	patched := decodeResponse[scim.User](t, patchedRecorder)
-	if patchedRecorder.Code != http.StatusOK || patched.Active || patched.DisplayName != "Alice Updated" || patched.Meta.Version != `W/"2"` {
-		t.Fatalf("PATCH = %d %#v", patchedRecorder.Code, patched)
-	}
-	replayed := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+created.ID, testCurrentToken, patch, map[string]string{"If-Match": created.Meta.Version})
-	if replayedUser := decodeResponse[scim.User](t, replayed); replayed.Code != http.StatusOK || replayedUser.Meta.Version != patched.Meta.Version {
-		t.Fatalf("replayed PATCH = %d %#v", replayed.Code, replayedUser)
-	}
-	differentPatch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "displayName", "value": "Different Update"}}}
-	stale := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+created.ID, testCurrentToken, differentPatch, map[string]string{"If-Match": created.Meta.Version})
-	if stale.Code != http.StatusPreconditionFailed {
-		t.Fatalf("different stale PATCH = %d %s", stale.Code, stale.Body.String())
-	}
-
 	put := map[string]any{"schemas": []string{scim.UserSchemaURN}, "externalId": "employee-123", "userName": "Alice@Valon.com", "emails": []map[string]any{{"value": "Alice@Valon.com", "type": "work", "primary": true}}}
 	putRecorder := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+created.ID, testCurrentToken, put, map[string]string{"If-Match": "*"})
 	if putUser := decodeResponse[scim.User](t, putRecorder); putRecorder.Code != http.StatusOK || putUser.Active {
 		t.Fatalf("PUT missing active = %d %#v", putRecorder.Code, putUser)
 	}
-	reactivate := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "active", "value": true}}}
-	reactivatedRecorder := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+created.ID, testCurrentToken, reactivate, map[string]string{"If-Match": "*"})
+	reactivate := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "Alice@Valon.com", "active": true, "emails": []map[string]any{{"value": "Alice@Valon.com", "type": "work", "primary": true}}}
+	reactivatedRecorder := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+created.ID, testCurrentToken, reactivate, map[string]string{"If-Match": "*"})
 	if reactivated := decodeResponse[scim.User](t, reactivatedRecorder); reactivatedRecorder.Code != http.StatusOK || !reactivated.Active || reactivated.ID != created.ID {
 		t.Fatalf("reactivation = %d %#v", reactivatedRecorder.Code, reactivated)
 	}
 
-	conflictingEmail := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "value": map[string]any{"emails": []map[string]any{{"value": "bob@valon.com", "type": "work", "primary": true}}}}}}
-	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+created.ID, testCurrentToken, conflictingEmail); response.Code != http.StatusConflict {
+	conflictingEmail := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "Alice@Valon.com", "emails": []map[string]any{{"value": "bob@valon.com", "type": "work", "primary": true}}}
+	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+created.ID, testCurrentToken, conflictingEmail); response.Code != http.StatusConflict {
 		t.Fatalf("email conflict = %d %s", response.Code, response.Body.String())
 	}
 	if response := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, alicePayload); response.Code != http.StatusConflict {
 		t.Fatalf("duplicate create = %d %s", response.Code, response.Body.String())
+	}
+	_, multiplePrimary := createUser(t, handler, testCurrentToken, "multiple-primary@valon.com", true, map[string]any{"emails": []map[string]any{{"value": "multiple-primary@valon.com", "primary": true}, {"value": "other@valon.com", "primary": true}}})
+	if payload := decodeResponse[testErrorResponse](t, multiplePrimary); multiplePrimary.Code != http.StatusBadRequest || payload.SCIMType != "invalidValue" {
+		t.Fatalf("multiple primary emails = %d %#v", multiplePrimary.Code, payload)
+	}
+	primary, primaryResponse := createUser(t, handler, testCurrentToken, "primary-switch@valon.com", true, map[string]any{"emails": []map[string]any{{"value": "primary-switch@valon.com", "type": "work", "primary": true}, {"value": "home@valon.com", "type": "home"}}})
+	if primaryResponse.Code != http.StatusCreated {
+		t.Fatalf("primary test user = %d %s", primaryResponse.Code, primaryResponse.Body.String())
+	}
+	primaryPut := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "primary-switch@valon.com", "active": true, "emails": []map[string]any{{"value": "primary-switch@valon.com", "type": "work", "primary": false}, {"value": "home@valon.com", "type": "home", "primary": true}}}
+	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+primary.ID, testCurrentToken, primaryPut, map[string]string{"If-Match": primary.Meta.Version}); response.Code != http.StatusOK {
+		t.Fatalf("primary email PUT = %d %s", response.Code, response.Body.String())
+	}
+	primaryRead := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+primary.ID, testCurrentToken, nil))
+	primaryCount := 0
+	for _, email := range primaryRead.Emails {
+		if email.Primary {
+			primaryCount++
+		}
+	}
+	if primaryCount != 1 {
+		t.Fatalf("primary email count after PUT = %d (%#v)", primaryCount, primaryRead.Emails)
+	}
+	beforeNoOp := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+primary.ID, testCurrentToken, nil))
+	noOp := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+primary.ID, testCurrentToken, primaryPut, map[string]string{"If-Match": beforeNoOp.Meta.Version}))
+	if noOp.Meta.Version != beforeNoOp.Meta.Version || !noOp.Meta.LastModified.Equal(beforeNoOp.Meta.LastModified) {
+		t.Fatalf("duplicate email add changed metadata = before %#v after %#v", beforeNoOp.Meta, noOp.Meta)
 	}
 
 	for _, id := range []string{created.ID, bob.ID, carol.ID} {
 		if response := scimRequest(t, handler, http.MethodDelete, "/scim/v2/Users/"+id, testCurrentToken, nil, map[string]string{"If-Match": "*"}); response.Code != http.StatusNoContent {
 			t.Fatalf("DELETE %s = %d %s", id, response.Code, response.Body.String())
 		}
-		if response := scimRequest(t, handler, http.MethodDelete, "/scim/v2/Users/"+id, testCurrentToken, nil, map[string]string{"If-Match": "*"}); response.Code != http.StatusNoContent {
+		if response := scimRequest(t, handler, http.MethodDelete, "/scim/v2/Users/"+id, testCurrentToken, nil, map[string]string{"If-Match": "*"}); response.Code != http.StatusNotFound {
 			t.Fatalf("replayed DELETE %s = %d %s", id, response.Code, response.Body.String())
 		}
 		if response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+id, testCurrentToken, nil); response.Code != http.StatusNotFound {
@@ -303,23 +367,17 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 	}
 }
 
-func TestSCIMCreateSupportsTerminalTransactionalMisses(t *testing.T) {
+func TestSCIMCreateReturns503OnDatabaseFailure(t *testing.T) {
 	t.Parallel()
 
-	db := &transactionFaultDB{IndexedDB: &coretesting.StubIndexedDB{}}
+	db := &coretesting.StubIndexedDB{}
 	_, _, handler := newSCIMService(t, db, nil, testSCIMConfig(map[string]config.SCIMClientConfig{
 		"rippling": ripplingClient(nil),
 	}))
-	db.arm(transactionFaultTerminalMiss)
-
-	_, response := createUser(t, handler, testCurrentToken, "alice@valon.com", true, nil)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("create with empty uniqueness indexes = %d %s", response.Code, response.Body.String())
-	}
-
-	_, response = createUser(t, handler, testCurrentToken, "alice@valon.com", true, map[string]any{"displayName": "Different Alice"})
-	if response.Code != http.StatusConflict {
-		t.Fatalf("duplicate create = %d %s", response.Code, response.Body.String())
+	db.Err = errors.New("database unavailable")
+	response := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "alice@valon.com", "active": true})
+	if payload := decodeResponse[testErrorResponse](t, response); response.Code != http.StatusServiceUnavailable || payload.Status != "503" {
+		t.Fatalf("database failure = %d %#v", response.Code, payload)
 	}
 }
 
@@ -344,7 +402,32 @@ func TestSCIMCredentialRotationAndClientNamespaces(t *testing.T) {
 	}
 }
 
-func TestSCIMProjectionFailureRecoversAfterRestart(t *testing.T) {
+func TestSCIMUserNameUniquenessIsCaseInsensitiveAcrossReplicas(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	_, _, firstHandler := newSCIMService(t, db, nil, cfg)
+	_, _, secondHandler := newSCIMService(t, db, nil, cfg)
+	start := make(chan struct{})
+	responses := make(chan int, 2)
+	for i, handler := range []http.Handler{firstHandler, secondHandler} {
+		go func(handler http.Handler, userName string) {
+			<-start
+			request := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{
+				"schemas": []string{scim.UserSchemaURN}, "userName": userName,
+			})
+			responses <- request.Code
+		}(handler, []string{"Alice@Valon.com", "alice@valon.com"}[i])
+	}
+	close(start)
+	statuses := []int{<-responses, <-responses}
+	if (statuses[0] != http.StatusCreated || statuses[1] != http.StatusConflict) && (statuses[1] != http.StatusCreated || statuses[0] != http.StatusConflict) {
+		t.Fatalf("case-variant create statuses = %v, want one 201 and one 409", statuses)
+	}
+}
+
+func TestSCIMProjectionFailureLeavesLiveStateForClientRetry(t *testing.T) {
 	t.Parallel()
 
 	db := &coretesting.StubIndexedDB{}
@@ -365,135 +448,29 @@ func TestSCIMProjectionFailureRecoversAfterRestart(t *testing.T) {
 	}
 	request := accessRequest(coreUser.ID)
 	if response, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), request); err != nil || response.Allowed {
-		t.Fatalf("pending projection access = %#v, %v", response, err)
+		t.Fatalf("provider gap access = %#v, %v", response, err)
 	}
 
 	authorization.setFailures(false, false)
-	restarted, _, restartedHandler := newSCIMService(t, db, authorization, cfg)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	restarted.Start(ctx)
-	var recovered scim.User
-	eventually(t, func() bool {
-		response := scimRequest(t, restartedHandler, http.MethodGet, "/scim/v2/Users?filter="+url.QueryEscape(`userName eq "alice@valon.com"`), testCurrentToken, nil)
-		if response.Code != http.StatusOK {
-			return false
-		}
-		list := decodeResponse[testListResponse](t, response)
-		if list.TotalResults != 1 {
-			return false
-		}
-		recovered = list.Resources[0]
-		return true
-	})
-	replayed := scimRequest(t, restartedHandler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{
-		"schemas": []string{scim.UserSchemaURN}, "userName": "alice@valon.com", "active": true,
-	})
-	replayedUser := decodeResponse[scim.User](t, replayed)
-	if replayed.Code != http.StatusCreated || replayedUser.ID != recovered.ID || replayedUser.Meta.Version != recovered.Meta.Version {
-		t.Fatalf("replayed recovered create = %d %#v, want id=%q version=%q", replayed.Code, replayedUser, recovered.ID, recovered.Meta.Version)
+	current := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users?filter="+url.QueryEscape(`userName eq "alice@valon.com"`), testCurrentToken, nil)
+	list := decodeResponse[testListResponse](t, current)
+	if current.Code != http.StatusOK || list.TotalResults != 1 || list.Resources[0].Active {
+		t.Fatalf("post-failure live User representation = %d %#v", current.Code, list)
 	}
-	if response, err := scim.WrapAuthorization(authorization, services.Users, restarted).CheckAccess(context.Background(), request); err != nil || !response.Allowed {
-		t.Fatalf("recovered access = %#v, %v", response, err)
+	if response, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), request); err != nil || response.Allowed {
+		t.Fatalf("access remains denied until client retry = %#v, %v", response, err)
 	}
-	if relationship := authorization.relationshipForUser(coreUser.ID); relationship == nil || relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || relationship.GetProperties().AsMap()["managedBy"] != "scim" {
-		t.Fatalf("projected relationship = %#v", relationship)
+	if relationship := authorization.relationshipForUser(coreUser.ID); relationship != nil {
+		t.Fatalf("failed projection unexpectedly created relationship = %#v", relationship)
 	}
-}
-
-func TestSCIMPatchRetryReturnsRecoveredResult(t *testing.T) {
-	t.Parallel()
-
-	for _, testCase := range []struct {
-		name        string
-		withIfMatch bool
-	}{
-		{name: "without If-Match"},
-		{name: "with stale If-Match", withIfMatch: true},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			db := &coretesting.StubIndexedDB{}
-			authorization := newRecordingAuthorization()
-			cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
-				"rippling": ripplingClient([]string{"valon.com"}, employeeProjection()),
-			})
-			service, services, handler := newSCIMService(t, db, authorization, cfg)
-			user, created := createUser(t, handler, testCurrentToken, "alice@valon.com", true, nil)
-			if created.Code != http.StatusCreated {
-				t.Fatalf("create = %d %s", created.Code, created.Body.String())
-			}
-
-			authorization.setFailures(false, true)
-			patch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{
-				{"op": "add", "path": "emails", "value": map[string]any{"value": "alias@valon.com", "type": "other"}},
-				{"op": "replace", "path": "active", "value": false},
-			}}
-			headers := map[string]string{}
-			if testCase.withIfMatch {
-				headers["If-Match"] = user.Meta.Version
-			}
-			failed := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, patch, headers)
-			if failed.Code != http.StatusServiceUnavailable || failed.Header().Get("Retry-After") != "1" {
-				t.Fatalf("failed PATCH = %d %s headers=%v", failed.Code, failed.Body.String(), failed.Header())
-			}
-			coreUser, err := services.Users.FindUserByEmail(context.Background(), "alice@valon.com")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if access, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || access.Allowed {
-				t.Fatalf("pending deactivation access = %#v, %v", access, err)
-			}
-
-			authorization.setFailures(false, false)
-			restarted, _, restartedHandler := newSCIMService(t, db, authorization, cfg)
-			ctx, cancel := context.WithCancel(context.Background())
-			t.Cleanup(cancel)
-			restarted.Start(ctx)
-			eventually(t, func() bool {
-				response := scimRequest(t, restartedHandler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil)
-				return response.Code == http.StatusOK && decodeResponse[scim.User](t, response).Meta.Version == `W/"2"`
-			})
-
-			replayed := scimRequest(t, restartedHandler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, patch, headers)
-			replayedUser := decodeResponse[scim.User](t, replayed)
-			if replayed.Code != http.StatusOK || replayedUser.Meta.Version != `W/"2"` || len(replayedUser.Emails) != 1 || replayedUser.Emails[0].Value != "alias@valon.com" {
-				t.Fatalf("replayed recovered PATCH = %d %#v", replayed.Code, replayedUser)
-			}
-		})
+	// A later explicit lifecycle mutation converges the provider.
+	recoveredID := list.Resources[0].ID
+	activate := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "alice@valon.com", "active": true}
+	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+recoveredID, testCurrentToken, activate); response.Code != http.StatusOK {
+		t.Fatalf("explicit activation = %d %s", response.Code, response.Body.String())
 	}
-}
-
-func TestSCIMEligibilityAllowsSafePendingUpdate(t *testing.T) {
-	t.Parallel()
-
-	authorization := newRecordingAuthorization()
-	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
-		"rippling": ripplingClient([]string{"valon.com"}, employeeProjection()),
-	})
-	service, services, handler := newSCIMService(t, nil, authorization, cfg)
-	user, created := createUser(t, handler, testCurrentToken, "alice@valon.com", true, nil)
-	if created.Code != http.StatusCreated {
-		t.Fatalf("create = %d %s", created.Code, created.Body.String())
-	}
-	coreUser, err := services.Users.FindUserByEmail(context.Background(), "alice@valon.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	projected := authorization.relationshipForUser(coreUser.ID)
-	if projected == nil {
-		t.Fatal("active user has no projected relationship")
-	}
-	authorization.removeRelationship(projected.GetTuple())
-	authorization.setFailures(true, false)
-	patch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "displayName", "value": "Alice Updated"}}}
-	failed := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, patch)
-	if failed.Code != http.StatusServiceUnavailable || failed.Header().Get("Retry-After") != "1" {
-		t.Fatalf("failed safe update = %d %s headers=%v", failed.Code, failed.Body.String(), failed.Header())
-	}
-	if access, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || !access.Allowed {
-		t.Fatalf("safe pending update access = %#v, %v", access, err)
+	if relationship := authorization.relationshipForUser(coreUser.ID); relationship == nil {
+		t.Fatal("explicit reactivation did not project relationship")
 	}
 }
 
@@ -524,35 +501,140 @@ func TestSCIMOmittedActiveIsFailClosed(t *testing.T) {
 	}
 }
 
-func TestSCIMEligibilityIgnoresAnotherClientPendingIntent(t *testing.T) {
+func TestSCIMClientNamespacesDoNotShareEligibility(t *testing.T) {
 	t.Parallel()
 
 	authorization := newRecordingAuthorization()
 	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
-		"rippling": ripplingClient([]string{"valon.com"}),
-		"entra": {
-			Credentials:             []config.SCIMCredentialConfig{{ID: "current", BearerToken: "entra-token"}},
-			ActiveUserRelationships: []config.SCIMRelationshipConfig{employeeProjection()},
-		},
+		"rippling": ripplingClient([]string{"valon.com"}, employeeProjection()),
+		"entra":    {Credentials: []config.SCIMCredentialConfig{{ID: "current", BearerToken: "entra-token"}}},
 	})
 	service, services, handler := newSCIMService(t, nil, authorization, cfg)
 	if _, response := createUser(t, handler, testCurrentToken, "alice@valon.com", true, nil); response.Code != http.StatusCreated {
 		t.Fatalf("authoritative create = %d %s", response.Code, response.Body.String())
 	}
-	authorization.setFailures(true, false)
-	if _, response := createUser(t, handler, "entra-token", "alice@valon.com", true, nil); response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("non-authoritative pending create = %d %s", response.Code, response.Body.String())
+	if _, response := createUser(t, handler, "entra-token", "alice@valon.com", true, nil); response.Code != http.StatusCreated {
+		t.Fatalf("second-client create = %d %s", response.Code, response.Body.String())
 	}
 	coreUser, err := services.Users.FindUserByEmail(context.Background(), "alice@valon.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if response, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || !response.Allowed {
-		t.Fatalf("authoritative access with unrelated intent = %#v, %v", response, err)
+		t.Fatalf("authoritative client projection was affected by other namespace = %#v, %v", response, err)
 	}
 }
 
-func TestSCIMAuthoritativeOwnershipSurvivesEmailDomainChange(t *testing.T) {
+func TestSCIMClientsCannotRelinkSharedCoreUser(t *testing.T) {
+	t.Parallel()
+
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+		"entra":    {Credentials: []config.SCIMCredentialConfig{{ID: "current", BearerToken: "entra-token"}}},
+	})
+	_, _, handler := newSCIMService(t, nil, newRecordingAuthorization(), cfg)
+	first, response := createUser(t, handler, testCurrentToken, "shared@valon.com", true, map[string]any{"displayName": "Shared"})
+	if response.Code != http.StatusCreated {
+		t.Fatalf("first create = %d %s", response.Code, response.Body.String())
+	}
+	if _, response = createUser(t, handler, "entra-token", "shared@valon.com", true, nil); response.Code != http.StatusCreated {
+		t.Fatalf("second create = %d %s", response.Code, response.Body.String())
+	}
+	put := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "moved@valon.com", "active": true, "displayName": "Changed"}
+	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+first.ID, testCurrentToken, put); response.Code != http.StatusConflict {
+		t.Fatalf("shared core relink = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestSCIMConcurrentClientsCannotRelinkSharedCoreUser(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+		"entra":    {Credentials: []config.SCIMCredentialConfig{{ID: "current", BearerToken: "entra-token"}}},
+	})
+	_, services, firstHandler := newSCIMService(t, db, authorization, cfg)
+	if _, response := createUser(t, firstHandler, testCurrentToken, "race-shared@valon.com", true, map[string]any{"displayName": "Shared"}); response.Code != http.StatusCreated {
+		t.Fatalf("first create = %d %s", response.Code, response.Body.String())
+	}
+	_, _, secondHandler := newSCIMService(t, db, authorization, cfg)
+	start := make(chan struct{})
+	responses := make(chan *httptest.ResponseRecorder, 2)
+	for _, attempt := range []struct{ token, displayName string }{{"entra-token", "Changed by Entra"}, {testCurrentToken, "Changed by Rippling"}} {
+		go func(token, displayName string) {
+			<-start
+			responses <- scimRequest(t, secondHandler, http.MethodPost, "/scim/v2/Users", token, map[string]any{
+				"schemas":     []string{scim.UserSchemaURN},
+				"userName":    "race-shared@valon.com",
+				"active":      true,
+				"displayName": displayName,
+			})
+		}(attempt.token, attempt.displayName)
+	}
+	close(start)
+	for range 2 {
+		if response := <-responses; response.Code != http.StatusConflict {
+			t.Fatalf("concurrent shared-core create = %d %s", response.Code, response.Body.String())
+		}
+	}
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "race-shared@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if coreUser.DisplayName != "Shared" {
+		t.Fatalf("shared core display name changed = %q", coreUser.DisplayName)
+	}
+}
+
+func TestSCIMFirstSharedCoreReferenceIsSerialized(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+		"entra":    {Credentials: []config.SCIMCredentialConfig{{ID: "current", BearerToken: "entra-token"}}},
+	})
+	_, services, firstHandler := newSCIMService(t, db, nil, cfg)
+	_, _, secondHandler := newSCIMService(t, db, nil, cfg)
+	start := make(chan struct{})
+	responses := make(chan *httptest.ResponseRecorder, 2)
+	for _, attempt := range []struct {
+		handler            http.Handler
+		token, displayName string
+	}{
+		{firstHandler, testCurrentToken, "Rippling name"},
+		{secondHandler, "entra-token", "Entra name"},
+	} {
+		go func(attempt struct {
+			handler            http.Handler
+			token, displayName string
+		}) {
+			<-start
+			responses <- scimRequest(t, attempt.handler, http.MethodPost, "/scim/v2/Users", attempt.token, map[string]any{
+				"schemas":     []string{scim.UserSchemaURN},
+				"userName":    "first-shared@valon.com",
+				"active":      true,
+				"displayName": attempt.displayName,
+			})
+		}(attempt)
+	}
+	close(start)
+	statuses := []int{(<-responses).Code, (<-responses).Code}
+	if (statuses[0] != http.StatusCreated || statuses[1] != http.StatusConflict) && (statuses[1] != http.StatusCreated || statuses[0] != http.StatusConflict) {
+		t.Fatalf("first shared-core reference statuses = %v, want one 201 and one 409", statuses)
+	}
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "first-shared@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if coreUser.DisplayName != "Rippling name" && coreUser.DisplayName != "Entra name" {
+		t.Fatalf("serialized core display name = %q", coreUser.DisplayName)
+	}
+}
+
+func TestSCIMAuthoritativeDomainGateFollowsCoreEmail(t *testing.T) {
 	t.Parallel()
 
 	authorization := newRecordingAuthorization()
@@ -564,8 +646,8 @@ func TestSCIMAuthoritativeOwnershipSurvivesEmailDomainChange(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", response.Code, response.Body.String())
 	}
-	changeEmail := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "userName", "value": "alice@example.com"}}}
-	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, changeEmail); response.Code != http.StatusOK {
+	changeEmail := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "alice@example.com", "active": true}
+	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, changeEmail); response.Code != http.StatusOK {
 		t.Fatalf("email change = %d %s", response.Code, response.Body.String())
 	}
 	coreUser, err := services.Users.FindUserByEmail(context.Background(), "alice@example.com")
@@ -576,16 +658,16 @@ func TestSCIMAuthoritativeOwnershipSurvivesEmailDomainChange(t *testing.T) {
 	if response, err := gate.CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || !response.Allowed {
 		t.Fatalf("active changed-domain access = %#v, %v", response, err)
 	}
-	deactivate := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "active", "value": false}}}
-	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, deactivate); response.Code != http.StatusOK {
+	deactivate := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "alice@example.com", "active": false}
+	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, deactivate); response.Code != http.StatusOK {
 		t.Fatalf("deactivate = %d %s", response.Code, response.Body.String())
 	}
-	if response, err := gate.CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || response.Allowed {
-		t.Fatalf("inactive changed-domain access = %#v, %v", response, err)
+	if response, err := gate.CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || !response.Allowed {
+		t.Fatalf("non-authoritative changed-domain access = %#v, %v", response, err)
 	}
 }
 
-func TestSCIMProjectionDriftConvergesThroughBackgroundController(t *testing.T) {
+func TestSCIMExternalAuthorizationWritesUpdateSCIMMetadata(t *testing.T) {
 	t.Parallel()
 
 	db := &coretesting.StubIndexedDB{}
@@ -600,69 +682,303 @@ func TestSCIMProjectionDriftConvergesThroughBackgroundController(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	staticRelationship := projectedRelationship(coreUser.ID, proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG)
-	authorization.setRelationship(staticRelationship)
-
-	retryTicks := make(chan time.Time, 1)
-	driftTicks := make(chan time.Time, 2)
 	projectedCfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil, employeeProjection())})
-	projectedCfg.DriftInterval = "1h"
-	service, _, handler := newSCIMService(t, db, authorization, projectedCfg, scim.ServiceOptions{NewTicker: func(interval time.Duration) (<-chan time.Time, func()) {
-		if interval == 5*time.Millisecond {
-			return retryTicks, func() {}
-		}
-		return driftTicks, func() {}
-	}})
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	service.Start(ctx)
-	eventually(t, func() bool { return authorization.listCallCount() > 0 })
-	if authorization.additionCount() != 0 {
-		t.Fatalf("SCIM replaced static relationship with %d additions", authorization.additionCount())
+	service, _, handler := newSCIMService(t, db, authorization, projectedCfg)
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	tuple := projectedRelationship(coreUser.ID, proto.SourceLayer_SOURCE_LAYER_RUNTIME).Tuple
+	before := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	if before.Active {
+		t.Fatal("user unexpectedly active before provider relationship")
 	}
-	get := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil)
-	if stored := decodeResponse[scim.User](t, get); stored.Meta.Version != `W/"1"` {
-		t.Fatalf("drift changed SCIM version: %#v", stored.Meta)
+	if _, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: tuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}}); err != nil {
+		t.Fatal(err)
 	}
-
-	authorization.removeRelationship(staticRelationship.GetTuple())
-	driftTicks <- time.Now()
-	eventually(t, func() bool { return authorization.additionCount() == 1 })
-	deactivate := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "active", "value": false}}}
-	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, deactivate); response.Code != http.StatusOK {
-		t.Fatalf("deactivate = %d %s", response.Code, response.Body.String())
+	afterAdd := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	if !afterAdd.Active || !afterAdd.Meta.LastModified.After(before.Meta.LastModified) || afterAdd.Meta.Version == before.Meta.Version {
+		t.Fatalf("external relationship did not update live User = %#v", afterAdd)
 	}
-	if authorization.deletionCount() != 1 {
-		t.Fatalf("owned projection deletions = %d", authorization.deletionCount())
+	if _, err := gate.DeleteRelationship(context.Background(), &proto.DeleteRelationshipRequest{RelationshipTuple: tuple}); err != nil {
+		t.Fatal(err)
+	}
+	afterDelete := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	if afterDelete.Active || !afterDelete.Meta.LastModified.After(afterAdd.Meta.LastModified) || afterDelete.Meta.Version == afterAdd.Meta.Version {
+		t.Fatalf("external relationship deletion did not update live User = %#v", afterDelete)
 	}
 }
 
-func TestSCIMRetryTicksDoNotRunFullDriftScan(t *testing.T) {
+func TestSCIMExternalNestedDeleteUpdatesAffectedUserMetadata(t *testing.T) {
 	t.Parallel()
 
 	authorization := newRecordingAuthorization()
-	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil, employeeProjection())})
-	retryTicks := make(chan time.Time, 2)
-	driftTicks := make(chan time.Time, 2)
-	service, _, handler := newSCIMService(t, nil, authorization, cfg, scim.ServiceOptions{NewTicker: func(interval time.Duration) (<-chan time.Time, func()) {
-		if interval == 5*time.Millisecond {
-			return retryTicks, func() {}
-		}
-		return driftTicks, func() {}
-	}})
-	if _, response := createUser(t, handler, testCurrentToken, "alice@valon.com", true, nil); response.Code != http.StatusCreated {
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	service, services, handler := newSCIMService(t, nil, authorization, cfg)
+	user, response := createUser(t, handler, testCurrentToken, "nested-external@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
+	}
+	childResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{"schemas": []string{scim.GroupSchemaURN}, "displayName": "External Child", "members": []map[string]any{{"value": user.ID}}})
+	child := decodeResponse[scim.Group](t, childResponse)
+	if childResponse.Code != http.StatusCreated {
+		t.Fatalf("create child = %d %s", childResponse.Code, childResponse.Body.String())
+	}
+	parentResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{"schemas": []string{scim.GroupSchemaURN}, "displayName": "External Parent", "members": []map[string]any{{"value": child.ID, "type": "Group"}}})
+	parent := decodeResponse[scim.Group](t, parentResponse)
+	if parentResponse.Code != http.StatusCreated {
+		t.Fatalf("create parent = %d %s", parentResponse.Code, parentResponse.Body.String())
+	}
+	before := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	if len(before.Groups) != 2 {
+		t.Fatalf("nested groups before external delete = %#v", before.Groups)
+	}
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	nested := &proto.RelationshipTuple{
+		Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &proto.SubjectSet{Resource: &proto.Resource{Type: "group", Id: child.ID}, Relation: "member"}}},
+		Relation: "member", Resource: &proto.Resource{Type: "group", Id: parent.ID},
+	}
+	if _, err := gate.DeleteRelationship(context.Background(), &proto.DeleteRelationshipRequest{RelationshipTuple: nested}); err != nil {
+		t.Fatal(err)
+	}
+	after := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	if len(after.Groups) != 1 || after.Groups[0].Value != child.ID || !after.Meta.LastModified.After(before.Meta.LastModified) || after.Meta.Version == before.Meta.Version {
+		t.Fatalf("nested external delete did not update user metadata: before=%#v after=%#v", before, after)
+	}
+}
+
+func TestSCIMUserDisplayNameFollowsCoreUser(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	_, services, handler := newSCIMService(t, db, nil, cfg)
+	user, response := createUser(t, handler, testCurrentToken, "display@valon.com", true, map[string]any{"displayName": "SCIM Name"})
+	if response.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", response.Code, response.Body.String())
 	}
-	baseline := authorization.listCallCount()
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	service.Start(ctx)
-	eventually(t, func() bool { return authorization.listCallCount() == baseline+1 })
-	retryTicks <- time.Now()
-	driftTicks <- time.Now()
-	eventually(t, func() bool { return authorization.listCallCount() >= baseline+2 })
-	if got := authorization.listCallCount(); got != baseline+2 {
-		t.Fatalf("relationship scans after retry and drift ticks = %d, want %d", got, baseline+2)
+	before := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	if before.DisplayName != "SCIM Name" {
+		t.Fatalf("initial displayName = %q", before.DisplayName)
+	}
+	if _, err := services.Users.FindOrCreateUserWithName(context.Background(), "display@valon.com", "Core Name"); err != nil {
+		t.Fatal(err)
+	}
+	after := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	if after.DisplayName != "Core Name" || after.Meta.Version == before.Meta.Version {
+		t.Fatalf("core displayName update not reflected = before %#v after %#v", before, after)
+	}
+}
+
+func TestSCIMUserIfMatchIgnoresAuthorizationTouch(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil, employeeProjection()),
+	})
+	service, services, handler := newSCIMService(t, nil, authorization, cfg)
+	user, response := createUser(t, handler, testCurrentToken, "touch-user@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
+	}
+	before := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "touch-user@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	authorization.setOnList(func() {
+		_, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: projectedRelationship(coreUser.ID, proto.SourceLayer_SOURCE_LAYER_RUNTIME)})
+		if err != nil {
+			t.Errorf("duplicate authorization add: %v", err)
+		}
+	})
+	put := map[string]any{
+		"schemas": []string{scim.UserSchemaURN}, "userName": "touch-user@valon.com", "active": true, "displayName": "Changed",
+	}
+	updated := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, put, map[string]string{"If-Match": before.Meta.Version})
+	if updated.Code != http.StatusOK {
+		t.Fatalf("PUT after authorization touch = %d %s", updated.Code, updated.Body.String())
+	}
+	got := decodeResponse[scim.User](t, updated)
+	if got.DisplayName != "Changed" {
+		t.Fatalf("PUT after authorization touch displayName = %q", got.DisplayName)
+	}
+}
+
+func TestSCIMGroupIfMatchIgnoresAuthorizationTouch(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	service, services, handler := newSCIMService(t, nil, authorization, cfg)
+	user, response := createUser(t, handler, testCurrentToken, "touch-group-user@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
+	}
+	created := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Touch group", "members": []map[string]any{{"value": user.ID}},
+	})
+	group := decodeResponse[scim.Group](t, created)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create group = %d %s", created.Code, created.Body.String())
+	}
+	before := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "touch-group-user@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	tuple := &proto.RelationshipTuple{
+		Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreUser.ID}}},
+		Relation: "member", Resource: &proto.Resource{Type: "group", Id: group.ID},
+	}
+	authorization.setOnList(func() {
+		_, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: tuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}})
+		if err != nil {
+			t.Errorf("duplicate authorization add: %v", err)
+		}
+	})
+	updated := scimRequest(t, handler, http.MethodPut, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Changed touch group", "members": []map[string]any{{"value": user.ID}},
+	}, map[string]string{"If-Match": before.Meta.Version})
+	if updated.Code != http.StatusOK {
+		t.Fatalf("PUT after authorization touch = %d %s", updated.Code, updated.Body.String())
+	}
+	got := decodeResponse[scim.Group](t, updated)
+	if got.DisplayName != "Changed touch group" {
+		t.Fatalf("PUT after authorization touch displayName = %q", got.DisplayName)
+	}
+}
+
+func TestSCIMRelationshipPaginationCoversAllMembersAndDeletes(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	_, _, handler := newSCIMService(t, nil, authorization, cfg)
+	users := make([]*scim.User, 0, 3)
+	for _, name := range []string{"alice@valon.com", "bob@valon.com", "carol@valon.com"} {
+		user, response := createUser(t, handler, testCurrentToken, name, true, nil)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("create %s = %d %s", name, response.Code, response.Body.String())
+		}
+		users = append(users, user)
+	}
+	authorization.setPageSize(1)
+	members := make([]map[string]any, 0, len(users))
+	for _, user := range users {
+		members = append(members, map[string]any{"value": user.ID})
+	}
+	created := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{"schemas": []string{scim.GroupSchemaURN}, "displayName": "Paged", "members": members})
+	group := decodeResponse[scim.Group](t, created)
+	if created.Code != http.StatusCreated || len(group.Members) != len(users) {
+		t.Fatalf("paged Group create = %d %#v", created.Code, group)
+	}
+	if response := scimRequest(t, handler, http.MethodDelete, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil, map[string]string{"If-Match": "*"}); response.Code != http.StatusNoContent {
+		t.Fatalf("paged Group delete = %d %s", response.Code, response.Body.String())
+	}
+	for _, user := range users {
+		read := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+		if len(read.Groups) != 0 {
+			t.Fatalf("User.groups after paged delete = %#v", read.Groups)
+		}
+	}
+}
+
+func TestSCIMUserListHydratesOnlyRequestedPage(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	_, _, handler := newSCIMService(t, nil, authorization, cfg)
+	users := make([]*scim.User, 0, 3)
+	for _, name := range []string{"page-alice@valon.com", "page-bob@valon.com", "page-carol@valon.com"} {
+		user, response := createUser(t, handler, testCurrentToken, name, true, nil)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("create %s = %d %s", name, response.Code, response.Body.String())
+		}
+		users = append(users, user)
+	}
+	members := make([]map[string]any, 0, len(users))
+	for _, user := range users {
+		members = append(members, map[string]any{"value": user.ID})
+	}
+	group := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Page hydration", "members": members,
+	})
+	if group.Code != http.StatusCreated {
+		t.Fatalf("create hydration group = %d %s", group.Code, group.Body.String())
+	}
+	authorization.resetListCalls()
+	page := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users?count=1", testCurrentToken, nil)
+	if page.Code != http.StatusOK {
+		t.Fatalf("paged user list = %d %s", page.Code, page.Body.String())
+	}
+	list := decodeResponse[testListResponse](t, page)
+	if list.TotalResults != len(users) || list.ItemsPerPage != 1 || len(list.Resources) != 1 {
+		t.Fatalf("paged user list = %#v", list)
+	}
+	if calls := authorization.listCallCount(); calls != 1 {
+		t.Fatalf("provider hydration calls = %d, want 1", calls)
+	}
+}
+
+func TestSCIMActivationRetriesFromActualProviderTuples(t *testing.T) {
+	t.Parallel()
+	projections := []config.SCIMRelationshipConfig{employeeProjection(), {Relation: "member", Resource: config.AuthorizationResourceDef{Type: "group", ID: "engineering"}}}
+	for failAt := 1; failAt <= len(projections); failAt++ {
+		t.Run(fmt.Sprintf("failure-%d", failAt), func(t *testing.T) {
+			authorization := newRecordingAuthorization()
+			cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient([]string{"valon.com"}, projections...)})
+			_, _, handler := newSCIMService(t, nil, authorization, cfg)
+			user, response := createUser(t, handler, testCurrentToken, "activate@valon.com", false, nil)
+			if response.Code != http.StatusCreated {
+				t.Fatalf("create = %d %s", response.Code, response.Body.String())
+			}
+			authorization.setFailureAt(failAt, 0)
+			activate := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "activate@valon.com", "active": true}
+			if failed := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, activate); failed.Code != http.StatusServiceUnavailable {
+				t.Fatalf("partial activation = %d %s", failed.Code, failed.Body.String())
+			}
+			live := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+			if live.Active {
+				t.Fatal("partial activation was reported active")
+			}
+			authorization.setFailures(false, false)
+			retried := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, activate))
+			if retried.Active == false {
+				t.Fatalf("activation retry remained inactive: %#v", retried)
+			}
+		})
+	}
+}
+
+func TestSCIMDeactivationRetriesFromActualProviderTuples(t *testing.T) {
+	t.Parallel()
+	projections := []config.SCIMRelationshipConfig{employeeProjection(), {Relation: "member", Resource: config.AuthorizationResourceDef{Type: "group", ID: "engineering"}}}
+	for failAt := 1; failAt <= len(projections); failAt++ {
+		t.Run(fmt.Sprintf("failure-%d", failAt), func(t *testing.T) {
+			authorization := newRecordingAuthorization()
+			cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient([]string{"valon.com"}, projections...)})
+			_, _, handler := newSCIMService(t, nil, authorization, cfg)
+			user, response := createUser(t, handler, testCurrentToken, "deactivate@valon.com", true, nil)
+			if response.Code != http.StatusCreated {
+				t.Fatalf("create = %d %s", response.Code, response.Body.String())
+			}
+			authorization.setFailureAt(0, failAt)
+			deactivate := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "deactivate@valon.com", "active": false}
+			if failed := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, deactivate); failed.Code != http.StatusServiceUnavailable {
+				t.Fatalf("partial deactivation = %d %s", failed.Code, failed.Body.String())
+			}
+			live := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
+			if (failAt == 1 && !live.Active) || (failAt > 1 && live.Active) {
+				t.Fatalf("partial deactivation live state = %#v", live)
+			}
+			authorization.setFailures(false, false)
+			retried := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, deactivate))
+			if retried.Active {
+				t.Fatalf("deactivation retry remained active: %#v", retried)
+			}
+		})
 	}
 }
 
@@ -670,10 +986,11 @@ func TestSCIMCrossReplicaConditionalMutation(t *testing.T) {
 	t.Parallel()
 
 	db := &coretesting.StubIndexedDB{}
-	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
-	_, _, firstHandler := newSCIMService(t, db, nil, cfg)
-	_, _, secondHandler := newSCIMService(t, db, nil, cfg)
-	user, response := createUser(t, firstHandler, testCurrentToken, "alice@valon.com", true, nil)
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil, employeeProjection())})
+	authorization := newRecordingAuthorization()
+	_, _, firstHandler := newSCIMService(t, db, authorization, cfg)
+	_, _, secondHandler := newSCIMService(t, db, authorization, cfg)
+	user, response := createUser(t, firstHandler, testCurrentToken, "alice@valon.com", false, nil)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", response.Code, response.Body.String())
 	}
@@ -683,8 +1000,8 @@ func TestSCIMCrossReplicaConditionalMutation(t *testing.T) {
 	for i, handler := range []http.Handler{firstHandler, secondHandler} {
 		go func(worker int, handler http.Handler) {
 			<-start
-			patch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "displayName", "value": fmt.Sprintf("worker-%d", worker)}}}
-			statuses <- scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, patch, map[string]string{"If-Match": user.Meta.Version})
+			put := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "alice@valon.com", "active": true}
+			statuses <- scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, put, map[string]string{"If-Match": user.Meta.Version})
 		}(i, handler)
 	}
 	close(start)
@@ -709,12 +1026,12 @@ func TestSCIMCrossReplicaConditionalMutation(t *testing.T) {
 		t.Fatalf("successful concurrent mutations = %d, responses=%d/%d", successes, responses[0].Code, responses[1].Code)
 	}
 	committed := decodeResponse[scim.User](t, scimRequest(t, firstHandler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
-	if committed.Meta.Version != `W/"2"` {
-		t.Fatalf("committed version = %q", committed.Meta.Version)
+	if committed.Meta.Version == "" {
+		t.Fatalf("committed version is empty")
 	}
 }
 
-func TestSCIMIntentCollisionReturnsRetryableUnavailable(t *testing.T) {
+func TestSCIMMutationReturns503OnResourceWriteFailure(t *testing.T) {
 	t.Parallel()
 
 	db := &transactionFaultDB{IndexedDB: &coretesting.StubIndexedDB{}}
@@ -724,15 +1041,32 @@ func TestSCIMIntentCollisionReturnsRetryableUnavailable(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", response.Code, response.Body.String())
 	}
-	db.arm(transactionFaultIntentAdd)
-	patch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "displayName", "value": "Alice Updated"}}}
-	response = scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, patch)
-	if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") != "1" {
-		t.Fatalf("intent collision = %d %s headers=%v", response.Code, response.Body.String(), response.Header())
+	db.arm(transactionFaultSCIMResourcePut)
+	put := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "alice@valon.com", "active": true, "displayName": "Alice Updated"}
+	response = scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, put)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("database failure = %d %s headers=%v", response.Code, response.Body.String(), response.Header())
 	}
 }
 
-func TestSCIMMutationCurrentUserReadFailureReturnsRetryableUnavailable(t *testing.T) {
+func TestSCIMMutationReturns503WhenStoreIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	_, _, handler := newSCIMService(t, db, nil, cfg)
+	user, response := createUser(t, handler, testCurrentToken, "database-failure@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", response.Code, response.Body.String())
+	}
+	db.Err = errors.New("database unavailable")
+	put := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "database-failure@valon.com", "active": true, "displayName": "Updated"}
+	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, put); response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("database failure = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestSCIMMutationReadFailureReturns503(t *testing.T) {
 	t.Parallel()
 
 	db := &transactionFaultDB{IndexedDB: &coretesting.StubIndexedDB{}}
@@ -742,15 +1076,15 @@ func TestSCIMMutationCurrentUserReadFailureReturnsRetryableUnavailable(t *testin
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", response.Code, response.Body.String())
 	}
-	db.arm(transactionFaultSCIMUserGet)
-	patch := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "displayName", "value": "Alice Updated"}}}
-	response = scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, patch)
-	if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") != "1" {
+	db.arm(transactionFaultSCIMResourceGet)
+	put := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "alice@valon.com", "active": true, "displayName": "Alice Updated"}
+	response = scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, put)
+	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("datastore failure = %d %s headers=%v", response.Code, response.Body.String(), response.Header())
 	}
 }
 
-func TestSCIMCreateUserLinkRaceReturnsRetryableUnavailable(t *testing.T) {
+func TestSCIMCreateUserLinkConflictReturnsUnavailable(t *testing.T) {
 	t.Parallel()
 
 	db := &transactionFaultDB{IndexedDB: &coretesting.StubIndexedDB{}}
@@ -820,11 +1154,11 @@ func TestSCIMAuthorizationBoundary(t *testing.T) {
 	}
 	db.Err = nil
 	managed := projectedRelationship(active.ID, proto.SourceLayer_SOURCE_LAYER_RUNTIME)
-	if _, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: managed}); err == nil {
-		t.Fatal("ordinary add to SCIM-managed relationship succeeded")
+	if _, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: managed}); err != nil {
+		t.Fatalf("ordinary add to SCIM-managed relationship: %v", err)
 	}
-	if _, err := gate.DeleteRelationship(context.Background(), &proto.DeleteRelationshipRequest{RelationshipTuple: managed.Tuple}); err == nil {
-		t.Fatal("ordinary delete from SCIM-managed relationship succeeded")
+	if _, err := gate.DeleteRelationship(context.Background(), &proto.DeleteRelationshipRequest{RelationshipTuple: managed.Tuple}); err != nil {
+		t.Fatalf("ordinary delete from SCIM-managed relationship: %v", err)
 	}
 }
 
@@ -868,18 +1202,18 @@ func TestSCIMAuthorizationGateAppliesAtInvocationBroker(t *testing.T) {
 		UserID:    coreUser.ID,
 		Kind:      principal.KindUser,
 	}
-	if _, err := broker.Invoke(context.Background(), identity, "docs", "", "documents.read", nil); err != nil {
-		t.Fatalf("active Invoke: %v", err)
+	if _, err := broker.Invoke(context.Background(), identity, "docs", "", "documents.read", nil); !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("unprojected Invoke error = %v", err)
 	}
-	deactivate := map[string]any{"schemas": []string{scim.PatchSchemaURN}, "Operations": []map[string]any{{"op": "replace", "path": "active", "value": false}}}
-	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Users/"+user.ID, testCurrentToken, deactivate); response.Code != http.StatusOK {
+	deactivate := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "alice@valon.com", "active": false}
+	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, deactivate); response.Code != http.StatusOK {
 		t.Fatalf("deactivate = %d %s", response.Code, response.Body.String())
 	}
 	if _, err := broker.Invoke(context.Background(), identity, "docs", "", "documents.read", nil); !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("inactive Invoke error = %v, want ErrAuthorizationDenied", err)
 	}
-	if executeCalls != 1 {
-		t.Fatalf("provider execute calls = %d, want 1", executeCalls)
+	if executeCalls != 0 {
+		t.Fatalf("provider execute calls = %d, want 0", executeCalls)
 	}
 }
 
@@ -892,14 +1226,20 @@ func accessRequest(coreUserID string) *proto.CheckAccessRequest {
 }
 
 type recordingAuthorization struct {
-	mu          sync.Mutex
-	failAdd     bool
-	failDelete  bool
-	listCalls   int
-	additions   int
-	deletions   int
-	relations   map[string]*proto.Relationship
-	checkCalled int
+	mu           sync.Mutex
+	failAdd      bool
+	failDelete   bool
+	listCalls    int
+	additions    int
+	deletions    int
+	addCalls     int
+	deleteCalls  int
+	failAddAt    int
+	failDeleteAt int
+	pageSize     int32
+	relations    map[string]*proto.Relationship
+	checkCalled  int
+	onList       func()
 }
 
 func newRecordingAuthorization() *recordingAuthorization {
@@ -926,9 +1266,8 @@ func (a *recordingAuthorization) CheckAccessMany(_ context.Context, req *proto.C
 
 func (a *recordingAuthorization) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.listCalls++
-	response := &proto.ListRelationshipsResponse{}
+	filtered := make([]*proto.Relationship, 0, len(a.relations))
 	for _, relationship := range a.relations {
 		if req != nil && req.Filter != nil {
 			if req.Filter.Target != nil && !gproto.Equal(req.Filter.Target, relationship.Tuple.Target) {
@@ -941,7 +1280,34 @@ func (a *recordingAuthorization) ListRelationships(_ context.Context, req *proto
 				continue
 			}
 		}
-		response.Relationships = append(response.Relationships, gproto.Clone(relationship).(*proto.Relationship))
+		filtered = append(filtered, gproto.Clone(relationship).(*proto.Relationship))
+	}
+	onList := a.onList
+	a.onList = nil
+	configuredPageSize := a.pageSize
+	a.mu.Unlock()
+	if onList != nil {
+		onList()
+	}
+	sort.Slice(filtered, func(i, j int) bool { return relationshipKey(filtered[i].Tuple) < relationshipKey(filtered[j].Tuple) })
+	pageSize := int32(len(filtered))
+	if configuredPageSize > 0 && (pageSize == 0 || configuredPageSize < pageSize) {
+		pageSize = configuredPageSize
+	}
+	offset := 0
+	if req != nil && req.PageToken != "" {
+		offset, _ = strconv.Atoi(req.PageToken)
+	}
+	if offset > len(filtered) {
+		offset = len(filtered)
+	}
+	end := offset + int(pageSize)
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	response := &proto.ListRelationshipsResponse{Relationships: filtered[offset:end]}
+	if end < len(filtered) {
+		response.NextPageToken = strconv.Itoa(end)
 	}
 	return response, nil
 }
@@ -949,7 +1315,8 @@ func (a *recordingAuthorization) ListRelationships(_ context.Context, req *proto
 func (a *recordingAuthorization) AddRelationship(_ context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.failAdd {
+	a.addCalls++
+	if a.failAdd || a.failAddAt > 0 && a.addCalls == a.failAddAt {
 		return nil, errors.New("injected add failure")
 	}
 	a.additions++
@@ -960,7 +1327,8 @@ func (a *recordingAuthorization) AddRelationship(_ context.Context, req *proto.A
 func (a *recordingAuthorization) DeleteRelationship(_ context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.failDelete {
+	a.deleteCalls++
+	if a.failDelete || a.failDeleteAt > 0 && a.deleteCalls == a.failDeleteAt {
 		return nil, errors.New("injected delete failure")
 	}
 	a.deletions++
@@ -991,18 +1359,51 @@ func (a *recordingAuthorization) setFailures(add, delete bool) {
 	a.mu.Lock()
 	a.failAdd = add
 	a.failDelete = delete
+	a.failAddAt = 0
+	a.failDeleteAt = 0
+	a.addCalls = 0
+	a.deleteCalls = 0
 	a.mu.Unlock()
+}
+
+func (a *recordingAuthorization) setFailureAt(add, delete int) {
+	a.mu.Lock()
+	a.failAdd = false
+	a.failDelete = false
+	a.failAddAt = add
+	a.failDeleteAt = delete
+	a.addCalls = 0
+	a.deleteCalls = 0
+	a.mu.Unlock()
+}
+
+func (a *recordingAuthorization) setPageSize(size int32) {
+	a.mu.Lock()
+	a.pageSize = size
+	a.mu.Unlock()
+}
+
+func (a *recordingAuthorization) resetListCalls() {
+	a.mu.Lock()
+	a.listCalls = 0
+	a.mu.Unlock()
+}
+
+func (a *recordingAuthorization) setOnList(fn func()) {
+	a.mu.Lock()
+	a.onList = fn
+	a.mu.Unlock()
+}
+
+func (a *recordingAuthorization) listCallCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.listCalls
 }
 
 func (a *recordingAuthorization) setRelationship(relationship *proto.Relationship) {
 	a.mu.Lock()
 	a.relations[relationshipKey(relationship.Tuple)] = gproto.Clone(relationship).(*proto.Relationship)
-	a.mu.Unlock()
-}
-
-func (a *recordingAuthorization) removeRelationship(tuple *proto.RelationshipTuple) {
-	a.mu.Lock()
-	delete(a.relations, relationshipKey(tuple))
 	a.mu.Unlock()
 }
 
@@ -1017,22 +1418,10 @@ func (a *recordingAuthorization) relationshipForUser(coreUserID string) *proto.R
 	return nil
 }
 
-func (a *recordingAuthorization) listCallCount() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.listCalls
-}
-
 func (a *recordingAuthorization) additionCount() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.additions
-}
-
-func (a *recordingAuthorization) deletionCount() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.deletions
 }
 
 func projectedRelationship(coreUserID string, source proto.SourceLayer) *proto.Relationship {
@@ -1047,8 +1436,12 @@ func projectedRelationship(coreUserID string, source proto.SourceLayer) *proto.R
 }
 
 func relationshipKey(tuple *proto.RelationshipTuple) string {
-	subject := tuple.GetTarget().GetSubject()
-	return subject.GetType() + "\x00" + subject.GetId() + "\x00" + tuple.GetRelation() + "\x00" + tuple.GetResource().GetType() + "\x00" + tuple.GetResource().GetId()
+	target := tuple.GetTarget()
+	targetKey := "subject\x00" + target.GetSubject().GetType() + "\x00" + target.GetSubject().GetId()
+	if subjectSet := target.GetSubjectSet(); subjectSet != nil {
+		targetKey = "subject-set\x00" + subjectSet.GetResource().GetType() + "\x00" + subjectSet.GetResource().GetId() + "\x00" + subjectSet.GetRelation()
+	}
+	return targetKey + "\x00" + tuple.GetRelation() + "\x00" + tuple.GetResource().GetType() + "\x00" + tuple.GetResource().GetId()
 }
 
 var _ core.AuthorizationProvider = (*recordingAuthorization)(nil)
@@ -1056,10 +1449,9 @@ var _ core.AuthorizationProvider = (*recordingAuthorization)(nil)
 type transactionFault int
 
 const (
-	transactionFaultIntentAdd transactionFault = iota + 1
-	transactionFaultSCIMUserGet
+	transactionFaultSCIMResourceGet transactionFault = iota + 1
+	transactionFaultSCIMResourcePut
 	transactionFaultCoreUserAdd
-	transactionFaultTerminalMiss
 )
 
 type transactionFaultDB struct {
@@ -1088,10 +1480,21 @@ func (d *transactionFaultDB) trip(fault transactionFault) bool {
 	return true
 }
 
-func (d *transactionFaultDB) active(fault transactionFault) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.armed && d.fault == fault
+func (d *transactionFaultDB) ObjectStore(name string) idb.ObjectStore {
+	return &transactionFaultObjectStore{ObjectStore: d.IndexedDB.ObjectStore(name), db: d, name: name}
+}
+
+type transactionFaultObjectStore struct {
+	idb.ObjectStore
+	db   *transactionFaultDB
+	name string
+}
+
+func (s *transactionFaultObjectStore) Get(ctx context.Context, id string) (idb.Record, error) {
+	if s.name == coredata.StoreSCIMResources && s.db.trip(transactionFaultSCIMResourceGet) {
+		return nil, errors.New("injected datastore failure")
+	}
+	return s.ObjectStore.Get(ctx, id)
 }
 
 func (d *transactionFaultDB) Transaction(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
@@ -1108,57 +1511,30 @@ type transactionFaultTransaction struct {
 }
 
 func (t *transactionFaultTransaction) ObjectStore(name string) idb.TransactionObjectStore {
-	return &transactionFaultStore{TransactionObjectStore: t.Transaction.ObjectStore(name), tx: t.Transaction, db: t.db, name: name}
+	return &transactionFaultStore{TransactionObjectStore: t.Transaction.ObjectStore(name), db: t.db, name: name}
 }
 
 type transactionFaultStore struct {
 	idb.TransactionObjectStore
-	tx   idb.Transaction
 	db   *transactionFaultDB
 	name string
 }
 
-func (s *transactionFaultStore) Index(name string) idb.TransactionIndex {
-	return &transactionFaultIndex{TransactionIndex: s.TransactionObjectStore.Index(name), tx: s.tx, db: s.db}
-}
-
-func (s *transactionFaultStore) Get(ctx context.Context, id string) (idb.Record, error) {
-	if s.name == coredata.StoreSCIMUsers && s.db.trip(transactionFaultSCIMUserGet) {
-		return nil, errors.New("injected datastore failure")
+func (s *transactionFaultStore) Put(ctx context.Context, record idb.Record) error {
+	if s.name == coredata.StoreSCIMResources && s.db.trip(transactionFaultSCIMResourcePut) {
+		return errors.New("injected datastore failure")
 	}
-	record, err := s.TransactionObjectStore.Get(ctx, id)
-	if errors.Is(err, idb.ErrNotFound) && s.db.active(transactionFaultTerminalMiss) {
-		_ = s.tx.Abort(ctx)
-	}
-	return record, err
+	return s.TransactionObjectStore.Put(ctx, record)
 }
 
 func (s *transactionFaultStore) Add(ctx context.Context, record idb.Record) error {
 	switch s.name {
-	case coredata.StoreSCIMProjectionIntents:
-		if s.db.trip(transactionFaultIntentAdd) {
-			return idb.ErrAlreadyExists
-		}
 	case coredata.StoreUsers:
 		if s.db.trip(transactionFaultCoreUserAdd) {
 			return idb.ErrAlreadyExists
 		}
 	}
 	return s.TransactionObjectStore.Add(ctx, record)
-}
-
-type transactionFaultIndex struct {
-	idb.TransactionIndex
-	tx idb.Transaction
-	db *transactionFaultDB
-}
-
-func (i *transactionFaultIndex) Get(ctx context.Context, query any) (idb.Record, error) {
-	record, err := i.TransactionIndex.Get(ctx, query)
-	if errors.Is(err, idb.ErrNotFound) && i.db.active(transactionFaultTerminalMiss) {
-		_ = i.tx.Abort(ctx)
-	}
-	return record, err
 }
 
 var _ coredb.IndexedDB = (*transactionFaultDB)(nil)

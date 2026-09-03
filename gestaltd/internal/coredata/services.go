@@ -95,11 +95,8 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppAccessProfiles, AppAccessProfilesSchema); err != nil {
 			return nil, fmt.Errorf("create app_access_profiles store: %w", err)
 		}
-		if _, err := ds.CreateObjectStore(ctx, StoreSCIMUsers, SCIMUsersSchema); err != nil {
-			return nil, fmt.Errorf("create scim_users store: %w", err)
-		}
-		if _, err := ds.CreateObjectStore(ctx, StoreSCIMProjectionIntents, SCIMProjectionIntentsSchema); err != nil {
-			return nil, fmt.Errorf("create scim_projection_intents store: %w", err)
+		if _, err := ds.CreateObjectStore(ctx, StoreSCIMResources, SCIMResourcesSchema); err != nil {
+			return nil, fmt.Errorf("create scim_resources store: %w", err)
 		}
 	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
 		return nil, err
@@ -141,11 +138,8 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 }
 
 func ensureSCIMStores(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreSCIMUsers, SCIMUsersSchema); err != nil {
-		return fmt.Errorf("ensure scim_users store: %w", err)
-	}
-	if _, err := ds.CreateObjectStore(ctx, StoreSCIMProjectionIntents, SCIMProjectionIntentsSchema); err != nil {
-		return fmt.Errorf("ensure scim_projection_intents store: %w", err)
+	if _, err := ds.CreateObjectStore(ctx, StoreSCIMResources, SCIMResourcesSchema); err != nil {
+		return fmt.Errorf("ensure scim_resources store: %w", err)
 	}
 	return nil
 }

@@ -1923,36 +1923,7 @@ type AuthorizationResourceDef struct {
 // ServerSCIMConfig configures inbound SCIM provisioning clients. Credential
 // IDs are local audit/rotation labels; only BearerToken is sent by clients.
 type ServerSCIMConfig struct {
-	Clients       map[string]SCIMClientConfig `yaml:"clients,omitempty"`
-	RetryInterval string                      `yaml:"retryInterval,omitempty"`
-	DriftInterval string                      `yaml:"driftInterval,omitempty"`
-}
-
-const (
-	DefaultSCIMRetryInterval = time.Second
-	DefaultSCIMDriftInterval = 10 * time.Minute
-)
-
-func (c ServerSCIMConfig) RetryIntervalDuration() (time.Duration, error) {
-	return scimDuration(c.RetryInterval, DefaultSCIMRetryInterval)
-}
-
-func (c ServerSCIMConfig) DriftIntervalDuration() (time.Duration, error) {
-	return scimDuration(c.DriftInterval, DefaultSCIMDriftInterval)
-}
-
-func scimDuration(raw string, defaultValue time.Duration) (time.Duration, error) {
-	if strings.TrimSpace(raw) == "" {
-		return defaultValue, nil
-	}
-	duration, err := ParseDuration(raw)
-	if err != nil {
-		return 0, err
-	}
-	if duration <= 0 {
-		return 0, fmt.Errorf("duration must be positive")
-	}
-	return duration, nil
+	Clients map[string]SCIMClientConfig `yaml:"clients,omitempty"`
 }
 
 type SCIMClientConfig struct {
