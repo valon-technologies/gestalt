@@ -126,6 +126,7 @@ type Server struct {
 	externalCredentials           core.ExternalCredentialProvider
 	connectionInstancePreferences *coredata.ConnectionInstancePreferenceService
 	appAccessProfiles             *coredata.AppAccessProfileService
+	appAllowedOperations          *coredata.AppAllowedOperationsService
 	managedSubjects               *coredata.ManagedSubjectService
 	agent                         bootstrap.AgentControl
 	workflowSchedules             workflowmanager.Service
@@ -470,6 +471,7 @@ func New(cfg Config) (*Server, error) {
 		externalCredentials:           externalCredentials,
 		connectionInstancePreferences: connectionInstancePreferences,
 		appAccessProfiles:             cfg.Services.AppAccessProfiles,
+		appAllowedOperations:          cfg.Services.AppAllowedOperations,
 		managedSubjects:               managedSubjects,
 		agent:                         cfg.Agent,
 		agentRuns:                     cfg.AgentManager,

@@ -22,6 +22,7 @@ const (
 	StoreRemoteProviders                = "remote_providers"
 	StoreConnectionInstancePreferences  = "connection_instance_preferences"
 	StoreAppAccessProfiles              = "app_access_profiles"
+	StoreAppAllowedOperations           = "app_allowed_operations"
 	StoreSCIMResources                  = "scim_resources"
 )
 
@@ -250,6 +251,16 @@ var ConnectionInstancePreferencesSchema = idb.ObjectStoreOptions{
 		{Name: "subject_id", Type: idb.TypeString, NotNull: true},
 		{Name: "connection_id", Type: idb.TypeString, NotNull: true},
 		{Name: "instance", Type: idb.TypeString, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+	},
+}
+
+var AppAllowedOperationsSchema = idb.ObjectStoreOptions{
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "app", Type: idb.TypeString, NotNull: true},
+		{Name: "operations_json", Type: idb.TypeString},
+		{Name: "removed_json", Type: idb.TypeString},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},
 }

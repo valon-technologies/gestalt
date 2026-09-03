@@ -24,6 +24,7 @@ type Services struct {
 	RemoteRegistrations            *RemoteRegistrationService
 	ConnectionInstancePreferences  *ConnectionInstancePreferenceService
 	AppAccessProfiles              *AppAccessProfileService
+	AppAllowedOperations           *AppAllowedOperationsService
 	DB                             indexeddb.IndexedDB
 }
 
@@ -95,6 +96,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppAccessProfiles, AppAccessProfilesSchema); err != nil {
 			return nil, fmt.Errorf("create app_access_profiles store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppAllowedOperations, AppAllowedOperationsSchema); err != nil {
+			return nil, fmt.Errorf("create app_allowed_operations store: %w", err)
+		}
 		if _, err := ds.CreateObjectStore(ctx, StoreSCIMResources, SCIMResourcesSchema); err != nil {
 			return nil, fmt.Errorf("create scim_resources store: %w", err)
 		}
@@ -117,6 +121,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	remoteRegistrations := NewRemoteRegistrationService(ds)
 	connectionInstancePreferences := NewConnectionInstancePreferenceService(ds)
 	appAccessProfiles := NewAppAccessProfileService(ds)
+	appAllowedOperations := NewAppAllowedOperationsService(ds)
 	return &Services{
 		ExternalCredentials:            nil,
 		Users:                          users,
@@ -133,6 +138,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		RemoteRegistrations:            remoteRegistrations,
 		ConnectionInstancePreferences:  connectionInstancePreferences,
 		AppAccessProfiles:              appAccessProfiles,
+		AppAllowedOperations:           appAllowedOperations,
 		DB:                             ds,
 	}, nil
 }
@@ -167,6 +173,16 @@ func ensureDeferredAppRegistryStores(ctx context.Context, ds indexeddb.IndexedDB
 	}
 	if err := ensureAppAccessProfilesStore(ctx, ds); err != nil {
 		return err
+	}
+	if err := ensureAppAllowedOperationsStore(ctx, ds); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureAppAllowedOperationsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
+	if _, err := ds.CreateObjectStore(ctx, StoreAppAllowedOperations, AppAllowedOperationsSchema); err != nil {
+		return fmt.Errorf("ensure app_allowed_operations store: %w", err)
 	}
 	return nil
 }
