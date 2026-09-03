@@ -43,6 +43,19 @@ func TestChooseCredentialInstancePrefersUsableCredential(t *testing.T) {
 	}
 }
 
+func TestChooseCredentialInstanceDoesNotTreatEmptyPreferenceAsSelection(t *testing.T) {
+	t.Parallel()
+
+	credentials := []*ExternalCredential{
+		{ID: "credential-labeled", Qualifier: "labeled", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(1, 0)},
+		{ID: "credential-empty", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(2, 0)},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "", time.Unix(10, 0)); !ok || got != "labeled" {
+		t.Fatalf("chosen instance = %q, ok=%v, want oldest labeled credential", got, ok)
+	}
+}
+
 func TestChooseCredentialInstanceKeepsKeylessCredentialsAmbiguous(t *testing.T) {
 	t.Parallel()
 

@@ -504,8 +504,8 @@ func shouldPreferInstance(candidate, current instanceInfo, preferred string) boo
 	if candidate.credentialInvalid != current.credentialInvalid {
 		return !candidate.credentialInvalid
 	}
-	candidatePreferred := candidate.Name == preferred
-	currentPreferred := current.Name == preferred
+	candidatePreferred := preferred != "" && candidate.Name == preferred
+	currentPreferred := preferred != "" && current.Name == preferred
 	if candidatePreferred != currentPreferred {
 		return candidatePreferred
 	}

@@ -31,8 +31,8 @@ func PreferCredential(candidate, current *ExternalCredential, preferred string, 
 		return !candidateInvalid
 	}
 	preferred = strings.TrimSpace(preferred)
-	candidatePreferred := strings.TrimSpace(candidate.Qualifier) == preferred
-	currentPreferred := strings.TrimSpace(current.Qualifier) == preferred
+	candidatePreferred := preferred != "" && strings.TrimSpace(candidate.Qualifier) == preferred
+	currentPreferred := preferred != "" && strings.TrimSpace(current.Qualifier) == preferred
 	if candidatePreferred != currentPreferred {
 		return candidatePreferred
 	}
