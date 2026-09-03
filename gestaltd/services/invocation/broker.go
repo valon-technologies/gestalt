@@ -619,9 +619,9 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	// *OperationResult, so the observation happens on the first Recv.
 	spanOwned = true
 	return newObservingStreamReader(
+		ctx,
 		reader,
 		b,
-		ctx,
 		span,
 		startedAt,
 		p,
@@ -798,9 +798,9 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 		}
 		spanOwned = true
 		return &InvokeOutcome{Stream: newObservingStreamReader(
+			ctx,
 			reader,
 			b,
-			ctx,
 			span,
 			startedAt,
 			p,
@@ -846,9 +846,9 @@ type observingStreamReader struct {
 }
 
 func newObservingStreamReader(
+	ctx context.Context,
 	inner core.StreamReader,
 	broker *Broker,
-	ctx context.Context,
 	span trace.Span,
 	startedAt time.Time,
 	p *principal.Principal,

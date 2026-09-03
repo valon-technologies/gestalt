@@ -153,9 +153,9 @@ func TestObservingStreamReaderFinalizesOnContextCancellation(t *testing.T) {
 	broker := &Broker{invocationRecorder: recorder}
 	_, span := broker.tracer().Start(ctx, "test")
 	newObservingStreamReader(
+		ctx,
 		core.StreamReaderFunc(func() (*core.InvokeFrame, error) { return nil, io.EOF }),
 		broker,
-		ctx,
 		span,
 		time.Now().Add(-time.Millisecond),
 		nil,
@@ -190,9 +190,9 @@ func TestObservingStreamReaderFinalizesExplicitly(t *testing.T) {
 	ctx := context.Background()
 	_, span := broker.tracer().Start(ctx, "test")
 	reader := newObservingStreamReader(
+		ctx,
 		core.StreamReaderFunc(func() (*core.InvokeFrame, error) { return nil, io.EOF }),
 		broker,
-		ctx,
 		span,
 		time.Now().Add(-time.Millisecond),
 		nil,
