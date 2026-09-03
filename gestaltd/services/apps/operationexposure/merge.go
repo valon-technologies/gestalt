@@ -21,9 +21,6 @@ func MergeAllowedOperationsWithOverlay(
 	for id, override := range operations {
 		merged[id] = cloneOperationOverride(override)
 	}
-	if len(merged) == 0 {
-		return nil
-	}
 	return merged
 }
 

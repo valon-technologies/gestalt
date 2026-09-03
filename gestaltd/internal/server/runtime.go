@@ -83,6 +83,9 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		publicIndexedDB = result.Services.DB
 	}
 	appRuntimeState, _ := result.AppRestarter.(AppRuntimeState)
+	appProviderRestarter, _ := result.AppRestarter.(interface {
+		RestartApp(context.Context, string) error
+	})
 	var reverseRemote *reverseRemoteSetup
 	reverseRemote, err = setupReverseRemoteUpstream(ctx, cfg, result.Services, authorizationProvider)
 	if err != nil {
@@ -160,6 +163,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		GestaltdVersion:         strings.TrimSpace(gestaltdVersion),
 		SourceVersion:           appregistry.ResolveSourceVersion(),
 		AppRuntimeState:         appRuntimeState,
+		AppProviderRestarter:    appProviderRestarter,
 	}
 
 	publishService, err := bootstrapAppRegistryPublish(cfg)
