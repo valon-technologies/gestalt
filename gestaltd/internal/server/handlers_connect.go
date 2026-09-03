@@ -567,6 +567,7 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 	}
 	candidateID := candidate.ID
 	candidateWasStored := false
+	var legacyAtQualifier *core.ExternalCredential
 	matches := []*core.ExternalCredential{candidate}
 	for _, credential := range credentials {
 		if credential == nil {
@@ -577,10 +578,20 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 			continue
 		}
 		credentialKey := credentialCanonicalAccountKey(credential)
-		if strings.TrimSpace(credential.Qualifier) == strings.TrimSpace(candidate.Qualifier) && credentialKey != accountKey {
+		sameQualifier := strings.TrimSpace(credential.Qualifier) == strings.TrimSpace(candidate.Qualifier)
+		if sameQualifier && credentialKey != "" && credentialKey != accountKey {
 			return nil, false, fmt.Errorf("%w: connection instance %q already belongs to another provider account", core.ErrAlreadyExists, candidate.Qualifier)
 		}
+		if sameQualifier && credentialKey == "" {
+			// A keyless credential at the requested instance is the legacy row
+			// being reconnected. It may be upgraded with the provider's explicit
+			// account key, but must retain its storage identity when the new
+			// credential wins selection (for example, if the old grant is stale).
+			legacyAtQualifier = credential
+		}
 		if credentialKey == accountKey {
+			matches = append(matches, credential)
+		} else if sameQualifier && credentialKey == "" {
 			matches = append(matches, credential)
 		}
 	}
@@ -596,6 +607,10 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 	candidate.ID = keep.ID
 	candidate.Qualifier = keep.Qualifier
 	candidate.CreatedAt = keep.CreatedAt
+	if keep == candidate && legacyAtQualifier != nil {
+		candidate.ID = legacyAtQualifier.ID
+		candidate.CreatedAt = legacyAtQualifier.CreatedAt
+	}
 
 	duplicates := make([]string, 0, len(matches)-1)
 	for _, duplicate := range matches {

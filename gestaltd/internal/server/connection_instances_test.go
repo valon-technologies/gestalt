@@ -414,6 +414,56 @@ func TestStoreCredentialFromMaterial_DoesNotOverwriteDifferentAccountWithSameIns
 	}
 }
 
+func TestStoreCredentialFromMaterial_UpgradesKeylessCredentialForSameInstance(t *testing.T) {
+	t.Parallel()
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	legacyMetadata, err := setAccountIdentity("", &accountIdentity{Facts: []identityFact{
+		{Kind: "workspace", Value: "Example Workspace"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateMetadata, err := setAccountKey(legacyMetadata, accountKeyFromProviderID("slack", "T123:U456"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiresAt := time.Unix(1, 0)
+	if err := provider.UpsertCredential(ctx, &core.ExternalCredential{
+		ID:           "legacy-credential",
+		Subject:      "user:1",
+		Audience:     "slack:default",
+		Qualifier:    "shared-label",
+		MetadataJSON: legacyMetadata,
+		Grant:        &core.ExternalCredentialGrant{AccessToken: "expired-token", ExpiresAt: &expiresAt, RefreshErrorCount: 1},
+		CreatedAt:    time.Unix(1, 0),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(2, 0) }}
+	stored, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		Instance:     "shared-label",
+		MetadataJSON: candidateMetadata,
+		AccessToken:  "fresh-token",
+	})
+	if err != nil {
+		t.Fatalf("store credential error = %v, want legacy instance upgrade", err)
+	}
+	if stored.ID != "legacy-credential" {
+		t.Fatalf("stored id = %q, want legacy row retained during upgrade", stored.ID)
+	}
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 1 || credentials[0].ID != "legacy-credential" || credentials[0].MetadataJSON != candidateMetadata || credentials[0].Grant.AccessToken != "fresh-token" {
+		t.Fatalf("credentials = %+v, want upgraded legacy credential", credentials)
+	}
+}
+
 func TestStoreCredentialFromMaterial_RetainsUnprovenLegacyCredentials(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
