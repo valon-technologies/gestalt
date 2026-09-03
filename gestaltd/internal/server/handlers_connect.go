@@ -555,9 +555,6 @@ func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, exis
 	if existingKey != "" && existingKey != candidateKey {
 		return &core.CredentialInstanceConflictError{Instance: candidate.Qualifier, DifferentAccount: true}
 	}
-	if candidateKey == "" {
-		return &core.CredentialInstanceConflictError{Instance: candidate.Qualifier}
-	}
 
 	candidate.ID = existing.ID
 	candidate.CreatedAt = existing.CreatedAt

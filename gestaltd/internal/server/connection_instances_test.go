@@ -410,6 +410,43 @@ func TestStoreCredentialFromMaterial_UpgradesKeylessCredentialForSameInstance(t 
 	}
 }
 
+func TestStoreCredentialFromMaterial_ReplacesKeylessCredentialForSameInstance(t *testing.T) {
+	t.Parallel()
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	if err := provider.UpsertCredential(ctx, &core.ExternalCredential{
+		ID:        "existing-credential",
+		Subject:   "user:1",
+		Audience:  "jira:default",
+		Qualifier: "shared-label",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "old-token"},
+		CreatedAt: time.Unix(1, 0),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(2, 0) }}
+	stored, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "jira:default",
+		Instance:     "shared-label",
+		AccessToken:  "new-token",
+	})
+	if err != nil {
+		t.Fatalf("store credential error: %v", err)
+	}
+	if stored.ID != "existing-credential" {
+		t.Fatalf("stored id = %q, want existing row retained", stored.ID)
+	}
+	credentials, err := provider.ListCredentials(ctx, "user:1", "jira:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 1 || credentials[0].Grant.AccessToken != "new-token" {
+		t.Fatalf("credentials = %+v, want keyless grant replaced in place", credentials)
+	}
+}
+
 func TestStoreCredentialFromMaterial_RetainsUnprovenLegacyCredentials(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
