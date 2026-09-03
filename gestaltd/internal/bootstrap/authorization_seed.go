@@ -13,7 +13,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -44,7 +43,7 @@ func bootstrapAuthorizationSeedIfEmpty(
 	if err != nil {
 		return fmt.Errorf("resolve configured authorization relationships: %w", err)
 	}
-	req.Relationships = append(append([]*proto.Relationship(nil), req.GetRelationships()...), configRelationships...)
+	req.Relationships = append(req.GetRelationships(), configRelationships...)
 	if _, err := authorizationstate.Apply(ctx, provider, req); err != nil {
 		return fmt.Errorf("apply authorization seed %q: %w", seedFile, err)
 	}
@@ -91,5 +90,5 @@ func loadAuthorizationSeedFile(path string) (*proto.SetAuthorizationStateRequest
 	if err := protojson.Unmarshal(data, &req); err != nil {
 		return nil, fmt.Errorf("parse authorization seed file %q: %w", path, err)
 	}
-	return gproto.Clone(&req).(*proto.SetAuthorizationStateRequest), nil
+	return &req, nil
 }

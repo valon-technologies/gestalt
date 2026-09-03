@@ -1861,10 +1861,7 @@ type AuthorizationConfig struct {
 	Models        map[string]AuthorizationModelDef          `yaml:"models,omitempty"`
 	Relationships []AuthorizationRelationshipDef            `yaml:"relationships,omitempty"`
 	ResourceTypes map[string]AuthorizationResourcePolicyDef `yaml:"resourceTypes,omitempty"`
-	// SeedFile points at a SetAuthorizationStateRequest JSON artifact used to
-	// bootstrap an empty authorization store on startup without enabling
-	// authorizationStateApply.
-	SeedFile string `yaml:"seedFile,omitempty"`
+	SeedFile      string                                    `yaml:"seedFile,omitempty"`
 }
 
 type AuthorizationModelDef struct {

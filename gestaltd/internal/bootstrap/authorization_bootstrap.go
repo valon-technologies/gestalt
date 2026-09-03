@@ -78,7 +78,8 @@ func bootstrapAuthorizationProviderState(
 	if provider == nil {
 		return nil
 	}
-	if !resolveAuthorizationStateApply(cfg) {
+	apply := resolveAuthorizationStateApply(cfg)
+	if !apply {
 		if err := bootstrapAuthorizationSeedIfEmpty(ctx, name, provider, cfg.Authorization, users); err != nil {
 			return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 		}
@@ -105,7 +106,6 @@ func bootstrapAuthorizationProviderState(
 	}
 	staticRelationships = append(staticRelationships, runtimeRelationships...)
 	digest := model.GetId()
-	apply := resolveAuthorizationStateApply(cfg)
 	if !apply {
 		slog.InfoContext(ctx, "authorization state plan (no-op): startup will not mutate authorization provider state",
 			"provider", name,
