@@ -63,3 +63,30 @@ func TestApplyAllowedOperationsSkipsRestrictionWhenNoMatches(t *testing.T) {
 		t.Fatalf("catalog operations = %#v, want unrestricted get_item", filtered.Operations)
 	}
 }
+
+func TestApplyAllowedOperationsWrapsEmptyAllowlist(t *testing.T) {
+	t.Parallel()
+
+	prov := &coretesting.StubIntegration{
+		N: "example",
+		CatalogVal: &catalog.Catalog{
+			Name: "example",
+			Operations: []catalog.CatalogOperation{
+				{ID: "get_item"},
+			},
+		},
+	}
+
+	wrapped, err := applyAllowedOperations("example", map[string]*config.OperationOverride{}, prov)
+	if err != nil {
+		t.Fatalf("applyAllowedOperations: %v", err)
+	}
+	if wrapped == prov {
+		t.Fatal("expected provider to be wrapped for explicit empty allowlist")
+	}
+
+	filtered := wrapped.Catalog()
+	if len(filtered.Operations) != 0 {
+		t.Fatalf("catalog operations = %#v, want no operations", filtered.Operations)
+	}
+}

@@ -1115,6 +1115,9 @@ func applyAllowedOperations(name string, allowedOperations map[string]*config.Op
 	if matched == nil {
 		return pluginProv, nil
 	}
+	if len(matched) == 0 {
+		return operationexposure.NewRestricted(pluginProv, map[string]string{}), nil
+	}
 	policy, err := operationexposure.New(matched)
 	if err != nil {
 		return nil, fmt.Errorf("integration %q plugin: %w", name, err)

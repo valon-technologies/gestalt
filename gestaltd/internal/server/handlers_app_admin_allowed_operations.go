@@ -128,9 +128,11 @@ func (s *Server) putAppAdminAllowedOperations(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
 		return
 	}
-	// Rebuild providers so invoke gates and catalogs pick up the merged overlay.
-	if s.activateAppProviders != nil {
-		s.activateAppProviders(r.Context())
+	// Rebuild this app provider so invoke gates and catalogs pick up the merged overlay.
+	if err := s.restartAppProviderForAllowedOperations(r.Context(), appName); err != nil {
+		slog.Error("app admin allowed operations provider restart failed", "app", appName, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "allowed operations were saved but the app provider did not restart")
+		return
 	}
 	rows, err := s.projectAppAdminAllowedOperationRows(r.Context(), appName, entry)
 	if err != nil {
@@ -142,6 +144,13 @@ func (s *Server) putAppAdminAllowedOperations(w http.ResponseWriter, r *http.Req
 		App:        appName,
 		Operations: rows,
 	})
+}
+
+func (s *Server) restartAppProviderForAllowedOperations(ctx context.Context, appName string) error {
+	if s.appProviderRestarter == nil {
+		return errors.New("app provider restarter is unavailable")
+	}
+	return s.appProviderRestarter.RestartApp(ctx, appName)
 }
 
 func (s *Server) projectAppAdminAllowedOperationRows(

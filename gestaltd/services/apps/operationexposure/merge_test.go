@@ -45,6 +45,22 @@ func TestMergeAllowedOperationsWithOverlayReturnsStaticWhenEmptyOverlay(t *testi
 	}
 }
 
+func TestMergeAllowedOperationsWithOverlayPreservesEmptyOverlayResult(t *testing.T) {
+	t.Parallel()
+
+	static := map[string]*OperationOverride{
+		"get_item": {AllowedRoles: []string{"viewer"}},
+	}
+
+	got := MergeAllowedOperationsWithOverlay(static, nil, []string{"get_item"})
+	if got == nil {
+		t.Fatal("got nil, want explicit empty allowlist")
+	}
+	if len(got) != 0 {
+		t.Fatalf("got = %#v, want no allowed operations", got)
+	}
+}
+
 func TestMergeOverlayPatchAppliesDeltaWithoutDroppingExistingOverrides(t *testing.T) {
 	t.Parallel()
 

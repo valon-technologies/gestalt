@@ -1,11 +1,23 @@
 package server
 
 import (
+	"context"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 )
+
+type appAllowedOperationsRestartRecorder struct {
+	app   string
+	calls int
+}
+
+func (r *appAllowedOperationsRestartRecorder) RestartApp(_ context.Context, app string) error {
+	r.app = app
+	r.calls++
+	return nil
+}
 
 func TestAllowedOperationSource(t *testing.T) {
 	t.Parallel()
@@ -50,5 +62,18 @@ func TestNormalizeRemovedOperationIDs(t *testing.T) {
 	got := normalizeRemovedOperationIDs([]string{" delete ", "delete", ""})
 	if len(got) != 1 || got[0] != "delete" {
 		t.Fatalf("normalizeRemovedOperationIDs = %#v", got)
+	}
+}
+
+func TestRestartAppProviderForAllowedOperationsUsesAppRestarter(t *testing.T) {
+	t.Parallel()
+
+	restarter := &appAllowedOperationsRestartRecorder{}
+	server := &Server{appProviderRestarter: restarter}
+	if err := server.restartAppProviderForAllowedOperations(context.Background(), "toolshed"); err != nil {
+		t.Fatalf("restartAppProviderForAllowedOperations: %v", err)
+	}
+	if restarter.calls != 1 || restarter.app != "toolshed" {
+		t.Fatalf("restart calls = %d app = %q, want one toolshed restart", restarter.calls, restarter.app)
 	}
 }
