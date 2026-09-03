@@ -234,8 +234,8 @@ func appManifestOperationIDs(entry *config.ProviderEntry) map[string]struct{} {
 	}
 	if entry.ResolvedCatalog != nil {
 		ids := make(map[string]struct{}, len(entry.ResolvedCatalog.Operations))
-		for _, op := range entry.ResolvedCatalog.Operations {
-			id := strings.TrimSpace(op.ID)
+		for i := range entry.ResolvedCatalog.Operations {
+			id := strings.TrimSpace(entry.ResolvedCatalog.Operations[i].ID)
 			if id != "" {
 				ids[id] = struct{}{}
 			}
