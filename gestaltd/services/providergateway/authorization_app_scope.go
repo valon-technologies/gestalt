@@ -12,7 +12,7 @@ import (
 
 const (
 	appAuthorizationResourceType = "app"
-	appAdminRelation               = "admin"
+	appAdminRelation             = "admin"
 )
 
 func relationshipTupleFromAuthorizationRequest(fullMethod string, req gproto.Message) (*proto.RelationshipTuple, bool) {
