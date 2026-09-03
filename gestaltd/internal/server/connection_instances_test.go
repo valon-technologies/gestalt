@@ -265,6 +265,70 @@ func TestStoreCredentialFromMaterial_RetainsPreferredCanonicalDuplicate(t *testi
 	}
 }
 
+func TestReconcileCanonicalAccountCredentialDeletesPersistedCandidateWhenCanonicalChanges(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	provider := coretesting.NewStubExternalCredentialProvider()
+	metadata, err := setAccountKey("", accountKeyFromProviderID("slack", "T123:U456"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, credential := range []*core.ExternalCredential{
+		{
+			ID:           "credential-old",
+			Subject:      "user:1",
+			Audience:     "slack:default",
+			Qualifier:    "old-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "old-token"},
+			CreatedAt:    time.Unix(1, 0),
+		},
+		{
+			ID:           "credential-new",
+			Subject:      "user:1",
+			Audience:     "slack:default",
+			Qualifier:    "new-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "new-token"},
+			CreatedAt:    time.Unix(2, 0),
+		},
+	} {
+		if err := provider.UpsertCredential(ctx, credential); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	candidate := &core.ExternalCredential{
+		ID:           "credential-new",
+		Subject:      "user:1",
+		Audience:     "slack:default",
+		Qualifier:    "new-label",
+		MetadataJSON: metadata,
+		Grant:        &core.ExternalCredentialGrant{AccessToken: "new-token"},
+		CreatedAt:    time.Unix(2, 0),
+	}
+	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
+	duplicates, changed, err := s.reconcileCanonicalAccountCredential(ctx, candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || candidate.ID != "credential-old" {
+		t.Fatalf("candidate = %+v, changed=%v, want old canonical credential", candidate, changed)
+	}
+	if len(duplicates) != 1 || duplicates[0] != "credential-new" {
+		t.Fatalf("duplicates = %v, want persisted candidate ID", duplicates)
+	}
+	s.deleteCanonicalDuplicates(ctx, candidate, duplicates)
+
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 1 || credentials[0].ID != "credential-old" {
+		t.Fatalf("credentials = %+v, want only canonical credential", credentials)
+	}
+}
+
 func TestStoreCredentialFromMaterial_DoesNotCollapseWithoutProviderKey(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()

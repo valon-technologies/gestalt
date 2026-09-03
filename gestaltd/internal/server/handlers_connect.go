@@ -544,9 +544,15 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 	if err != nil {
 		return nil, false, fmt.Errorf("list credentials for canonical account merge: %w", err)
 	}
+	candidateID := candidate.ID
+	candidateWasStored := false
 	matches := []*core.ExternalCredential{candidate}
 	for _, credential := range credentials {
-		if credential == nil || credential.ID == candidate.ID {
+		if credential == nil {
+			continue
+		}
+		if credential.ID == candidateID {
+			candidateWasStored = true
 			continue
 		}
 		credentialKey := credentialCanonicalAccountKey(credential)
@@ -557,7 +563,7 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 
 	preferred := s.preferredInstanceForConnection(ctx, candidate.Subject, candidate.Audience)
 	keep := chooseCanonicalCredential(matches, preferred, s.now())
-	previousID := candidate.ID
+	previousID := candidateID
 	previousQualifier := candidate.Qualifier
 	previousCreatedAt := candidate.CreatedAt
 	if keep == nil {
@@ -569,10 +575,16 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 
 	duplicates := make([]string, 0, len(matches)-1)
 	for _, duplicate := range matches {
+		if duplicate == candidate {
+			continue
+		}
 		if duplicate.ID == keep.ID || strings.TrimSpace(duplicate.ID) == "" {
 			continue
 		}
 		duplicates = append(duplicates, duplicate.ID)
+	}
+	if candidateWasStored && candidateID != keep.ID && strings.TrimSpace(candidateID) != "" {
+		duplicates = append(duplicates, candidateID)
 	}
 	return duplicates, previousID != candidate.ID || previousQualifier != candidate.Qualifier || !previousCreatedAt.Equal(candidate.CreatedAt), nil
 }

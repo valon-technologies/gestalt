@@ -43,6 +43,30 @@ func TestChooseCredentialInstancePrefersUsableCredential(t *testing.T) {
 	}
 }
 
+func TestChooseCredentialInstanceSkipsInvalidSiblingWhenOneUsableAccountRemains(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(10, 0)
+	expires := time.Unix(9, 0)
+	credentials := []*ExternalCredential{
+		{
+			ID:           "credential-invalid",
+			Qualifier:    "dead-label",
+			MetadataJSON: `{"account_key":"provider:v1:dead"}`,
+			Grant:        &ExternalCredentialGrant{ExpiresAt: &expires, RefreshErrorCount: 1},
+		},
+		{
+			ID:           "credential-usable",
+			Qualifier:    "healthy-label",
+			MetadataJSON: `{"account_key":"provider:v1:healthy"}`,
+		},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "dead-label", now); !ok || got != "healthy-label" {
+		t.Fatalf("chosen instance = %q, ok=%v, want sole usable account", got, ok)
+	}
+}
+
 func TestChooseCredentialInstanceDoesNotTreatEmptyPreferenceAsSelection(t *testing.T) {
 	t.Parallel()
 

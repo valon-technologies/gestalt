@@ -89,8 +89,10 @@ func GroupCredentialAccounts(credentials []*ExternalCredential, preferred string
 }
 
 // ChooseCredentialInstance resolves the stored instance for a connection.
-// A valid preferred instance wins; otherwise a sole logical account is
-// selected. Empty or duplicate keyless credentials remain ambiguous.
+// A valid preferred instance wins; otherwise a sole usable logical account is
+// selected, even when invalid sibling accounts remain. If no usable account
+// exists, a sole logical account is returned so callers can surface its
+// reconnect error. Empty or duplicate keyless credentials remain ambiguous.
 func ChooseCredentialInstance(credentials []*ExternalCredential, preferred string, now time.Time) (string, bool) {
 	accounts := GroupCredentialAccounts(credentials, preferred, now)
 	preferred = strings.TrimSpace(preferred)
@@ -101,7 +103,16 @@ func ChooseCredentialInstance(credentials []*ExternalCredential, preferred strin
 			}
 		}
 	}
-	if len(accounts) != 1 {
+	usable := make([]*ExternalCredential, 0, len(accounts))
+	for _, credential := range accounts {
+		if !CredentialNeedsReconnect(credential, now) {
+			usable = append(usable, credential)
+		}
+	}
+	if len(usable) == 1 {
+		return strings.TrimSpace(usable[0].Qualifier), true
+	}
+	if len(usable) > 1 || len(accounts) != 1 {
 		return "", false
 	}
 	return strings.TrimSpace(accounts[0].Qualifier), true
