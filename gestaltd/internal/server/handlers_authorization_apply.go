@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+// applyAuthorizationStateFullMethod reuses SetAuthorizationState policy until generated bindings include ApplyAuthorizationState.
 const applyAuthorizationStateFullMethod = proto.Authorization_SetAuthorizationState_FullMethodName
 
 func handleRESTApplyAuthorizationState(
