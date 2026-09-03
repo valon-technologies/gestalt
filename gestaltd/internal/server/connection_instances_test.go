@@ -370,6 +370,50 @@ func TestStoreCredentialFromMaterial_DoesNotCollapseWithoutProviderKey(t *testin
 	}
 }
 
+func TestStoreCredentialFromMaterial_DoesNotOverwriteDifferentAccountWithSameInstance(t *testing.T) {
+	t.Parallel()
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	existingMetadata, err := setAccountKey("", accountKeyFromProviderID("slack", "T123:U123"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateMetadata, err := setAccountKey("", accountKeyFromProviderID("slack", "T456:U456"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.UpsertCredential(ctx, &core.ExternalCredential{
+		ID:           "existing-account",
+		Subject:      "user:1",
+		Audience:     "slack:default",
+		Qualifier:    "shared-label",
+		MetadataJSON: existingMetadata,
+		Grant:        &core.ExternalCredentialGrant{AccessToken: "existing-token"},
+		CreatedAt:    time.Unix(1, 0),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(2, 0) }}
+	if _, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		Instance:     "shared-label",
+		MetadataJSON: candidateMetadata,
+		AccessToken:  "candidate-token",
+	}); !errors.Is(err, core.ErrAlreadyExists) {
+		t.Fatalf("store credential error = %v, want account-instance conflict", err)
+	}
+
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 1 || credentials[0].ID != "existing-account" || credentials[0].Grant.AccessToken != "existing-token" {
+		t.Fatalf("credentials = %+v, want existing account preserved", credentials)
+	}
+}
+
 func TestStoreCredentialFromMaterial_RetainsUnprovenLegacyCredentials(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()

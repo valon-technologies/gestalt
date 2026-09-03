@@ -498,15 +498,36 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 		}
 	}
 	accountKey := accountKeyStoredInMetadataJSON(tok.MetadataJSON)
+	unlockQualifier := processCredentialReconciliation.lock(strings.Join([]string{"qualifier", tok.Subject, tok.Audience, tok.Qualifier}, "\x00"))
+	defer unlockQualifier()
 	if accountKey != "" {
-		unlock := processCredentialReconciliation.lock(strings.Join([]string{tok.Subject, tok.Audience, accountKey}, "\x00"))
+		unlock := processCredentialReconciliation.lock(strings.Join([]string{"account", tok.Subject, tok.Audience, accountKey}, "\x00"))
 		defer unlock()
 	}
-	duplicates, _, err := s.reconcileCanonicalAccountCredential(ctx, tok)
+	duplicates, changed, err := s.reconcileCanonicalAccountCredential(ctx, tok)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
+	if accountKey != "" && !changed {
+		if err := s.externalCredentials.CreateCredential(ctx, tok); err != nil {
+			if !errors.Is(err, core.ErrAlreadyExists) {
+				return nil, err
+			}
+			// Another writer may have inserted this account after the first
+			// read. Reconcile again before deciding whether the occupied
+			// instance belongs to the same account or must remain untouched.
+			duplicates, changed, err = s.reconcileCanonicalAccountCredential(ctx, tok)
+			if err != nil {
+				return nil, err
+			}
+			if !changed {
+				return nil, fmt.Errorf("%w: connection instance %q already belongs to another provider account", core.ErrAlreadyExists, tok.Qualifier)
+			}
+			if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
+				return nil, err
+			}
+		}
+	} else if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
 		return nil, err
 	}
 	s.deleteCanonicalDuplicates(ctx, tok, duplicates)
@@ -556,6 +577,9 @@ func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candid
 			continue
 		}
 		credentialKey := credentialCanonicalAccountKey(credential)
+		if strings.TrimSpace(credential.Qualifier) == strings.TrimSpace(candidate.Qualifier) && credentialKey != accountKey {
+			return nil, false, fmt.Errorf("%w: connection instance %q already belongs to another provider account", core.ErrAlreadyExists, candidate.Qualifier)
+		}
 		if credentialKey == accountKey {
 			matches = append(matches, credential)
 		}

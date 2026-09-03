@@ -9772,7 +9772,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if stored.Grant == nil || stored.Grant.AccessToken != "oauth-token" {
 			t.Fatalf("stored grant = %+v, want access token %q", stored.Grant, "oauth-token")
 		}
-		if recordingCreds.upsertCredentialCalls.Load() == 0 {
+		if recordingCreds.createCredentialCalls.Load()+recordingCreds.upsertCredentialCalls.Load() == 0 {
 			t.Fatal("expected oauth callback to store credentials through ExternalCredentialProvider")
 		}
 		var metadata map[string]string
