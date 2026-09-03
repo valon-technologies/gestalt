@@ -246,6 +246,31 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	return nil
 }
 
+func (r *AppProviderRestarter) RestartApp(ctx context.Context, app string) error {
+	if r == nil {
+		return fmt.Errorf("restart app provider: restarter is not configured")
+	}
+	app = strings.TrimSpace(app)
+	if app == "" {
+		return fmt.Errorf("restart app provider: app is required")
+	}
+	entry, err := r.appEntry(app)
+	if err != nil {
+		return err
+	}
+	version := ""
+	if entry.Source.IsRegistry() {
+		var ok bool
+		if version, ok = r.RunningVersion(app); !ok {
+			return fmt.Errorf("restart app provider: %q has no running registry version", app)
+		}
+	}
+	if err := r.StopApp(ctx, app); err != nil {
+		return err
+	}
+	return r.StartApp(ctx, app, version)
+}
+
 func (r *AppProviderRestarter) RunningVersion(app string) (string, bool) {
 	if r == nil {
 		return "", false

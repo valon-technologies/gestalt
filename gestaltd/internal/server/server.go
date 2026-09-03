@@ -204,6 +204,9 @@ type Server struct {
 	appRuntimeState               AppRuntimeState
 	routeProfile                  RouteProfile
 	activateAppProviders          func(context.Context)
+	appProviderRestarter          interface {
+		RestartApp(context.Context, string) error
+	}
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -278,11 +281,14 @@ type Config struct {
 	MeterProvider                 metric.MeterProvider
 	TracerProvider                trace.TracerProvider
 	ActivateAppProviders          func(context.Context)
-	IndexedDB                     indexeddb.IndexedDB
-	RemoteManagement              proto.RemoteManagementServer
-	FrpsHandler                   http.Handler
-	FrpsConnectHandler            http.Handler
-	TunnelResolver                TunnelResolverConfig
+	AppProviderRestarter          interface {
+		RestartApp(context.Context, string) error
+	}
+	IndexedDB          indexeddb.IndexedDB
+	RemoteManagement   proto.RemoteManagementServer
+	FrpsHandler        http.Handler
+	FrpsConnectHandler http.Handler
+	TunnelResolver     TunnelResolverConfig
 	// AppAutoDeployNotify requests prompt auto-deploy reconciliation for an app.
 	AppAutoDeployNotify func(app string)
 	// AppRegistryReconcileNotify requests prompt local runtime reconciliation.
@@ -536,6 +542,7 @@ func New(cfg Config) (*Server, error) {
 		appRuntimeState:               cfg.AppRuntimeState,
 		routeProfile:                  cfg.RouteProfile,
 		activateAppProviders:          cfg.ActivateAppProviders,
+		appProviderRestarter:          cfg.AppProviderRestarter,
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,
