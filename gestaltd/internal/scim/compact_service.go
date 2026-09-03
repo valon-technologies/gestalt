@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 type compactProjection struct{ relation, resourceType, resourceID string }
@@ -53,13 +55,14 @@ type userProfile struct {
 }
 
 type CompactService struct {
-	db            coredb.IndexedDB
-	authorization core.AuthorizationProvider
-	baseURL       string
-	clients       map[string]*compactClient
-	credentials   []compactCredential
-	domainOwners  map[string]string
-	now           func() time.Time
+	db                coredb.IndexedDB
+	authorization     core.AuthorizationProvider
+	baseURL           string
+	clients           map[string]*compactClient
+	credentials       []compactCredential
+	domainOwners      map[string]string
+	now               func() time.Time
+	writerUnsupported atomic.Bool
 }
 
 func NewService(db coredb.IndexedDB, authorization core.AuthorizationProvider, baseURL string, cfg config.ServerSCIMConfig) (*Service, error) {
@@ -125,6 +128,13 @@ func (s *CompactService) get(ctx context.Context, clientID, id, typ string) (idb
 }
 func (s *CompactService) listRecords(ctx context.Context, clientID, typ string) ([]idb.Record, error) {
 	return s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_type").GetAll(ctx, []any{clientID, typ})
+}
+
+func (s *CompactService) listUserRecords(ctx context.Context, clientID string, clauses []filterClause) ([]idb.Record, error) {
+	if username, ok := usernameFilterValue(clauses); ok {
+		return s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_user_name").GetAll(ctx, []any{clientID, "User", username})
+	}
+	return s.listRecords(ctx, clientID, "User")
 }
 
 type recordStore interface {
@@ -244,6 +254,73 @@ func (s *CompactService) emailFor(u persistedUser) (string, error) {
 	return "", invalid("user must include an email address")
 }
 func (s *CompactService) userValue(ctx context.Context, r storedResource) (User, error) {
+	hydration, err := s.newHydration(ctx, r.ClientID)
+	if err != nil {
+		return User{}, unavailable("could not load SCIM group map")
+	}
+	return s.userValueWithHydration(ctx, r, hydration)
+}
+
+type scimHydration struct {
+	service    *CompactService
+	groups     map[string]storedResource
+	parentRels map[string][]*proto.Relationship
+}
+
+func (s *CompactService) newHydration(ctx context.Context, clientID string) (*scimHydration, error) {
+	rows, err := s.listRecords(ctx, clientID, "Group")
+	if err != nil {
+		return nil, err
+	}
+	groups := make(map[string]storedResource, len(rows))
+	for _, row := range rows {
+		group := stored(row)
+		groups[group.ID] = group
+	}
+	return &scimHydration{service: s, groups: groups, parentRels: map[string][]*proto.Relationship{}}, nil
+}
+
+func (h *scimHydration) userRelationships(ctx context.Context, coreID string) ([]*proto.Relationship, error) {
+	target := &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreID}}}
+	relationships, err := h.service.listRelationships(ctx, &proto.RelationshipFilter{Target: target, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]*proto.Relationship, 0, len(relationships))
+	for _, relationship := range relationships {
+		if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || !sameRelationshipTarget(relationship.GetTuple().GetTarget(), target) {
+			continue
+		}
+		filtered = append(filtered, relationship)
+	}
+	return filtered, nil
+}
+
+func (h *scimHydration) parentRelationships(ctx context.Context, groupID string) ([]*proto.Relationship, error) {
+	if relationships, ok := h.parentRels[groupID]; ok {
+		return relationships, nil
+	}
+	target := &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &proto.SubjectSet{Resource: &proto.Resource{Type: "group", Id: groupID}, Relation: "member"}}}
+	relationships, err := h.service.listRelationships(ctx, &proto.RelationshipFilter{Target: target, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]*proto.Relationship, 0, len(relationships))
+	for _, relationship := range relationships {
+		if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || relationship.GetTuple().GetRelation() != "member" || !sameRelationshipTarget(relationship.GetTuple().GetTarget(), target) {
+			continue
+		}
+		filtered = append(filtered, relationship)
+	}
+	h.parentRels[groupID] = filtered
+	return filtered, nil
+}
+
+func sameRelationshipTarget(a, b *proto.RelationshipTarget) bool {
+	return relationshipTargetKey(a) == relationshipTargetKey(b)
+}
+
+func (s *CompactService) userValueWithHydration(ctx context.Context, r storedResource, hydration *scimHydration) (User, error) {
 	cu, e := coredata.NewUserService(s.db).GetUser(ctx, r.CoreUserID)
 	if e != nil {
 		return User{}, unavailable("could not load linked user")
@@ -253,11 +330,16 @@ func (s *CompactService) userValue(ctx context.Context, r storedResource) (User,
 		lastModified = cu.UpdatedAt
 	}
 	u := User{Schemas: []string{UserSchemaURN}, ID: r.ID, ExternalID: r.ExternalID, UserName: r.UserName, DisplayName: cu.DisplayName, Name: r.Profile.Name, Emails: r.Profile.Emails, Meta: Meta{ResourceType: "User", Created: r.CreatedAt, LastModified: lastModified, Location: s.baseURL + "/scim/v2/Users/" + r.ID}}
-	u.Active, e = s.userActive(ctx, r)
-	if e != nil {
-		return User{}, unavailable("could not read authorization state")
+	var relationships []*proto.Relationship
+	client := s.clients[r.ClientID]
+	if (client != nil && len(client.projections) > 0) || len(hydration.groups) > 0 {
+		relationships, e = hydration.userRelationships(ctx, r.CoreUserID)
+		if e != nil {
+			return User{}, unavailable("could not read authorization state")
+		}
 	}
-	u.Groups, e = s.userGroupsNested(ctx, r.ClientID, r.CoreUserID)
+	u.Active = activeFromRelationships(r.CoreUserID, relationships, client)
+	u.Groups, e = s.userGroupsNestedWithHydration(ctx, r.ClientID, r.CoreUserID, hydration, relationships)
 	if e != nil {
 		return User{}, unavailable("could not read group membership")
 	}
@@ -275,34 +357,27 @@ func (s *CompactService) userValue(ctx context.Context, r storedResource) (User,
 	u.Meta.Version = etag(canon)
 	return u, nil
 }
-func (s *CompactService) userActive(ctx context.Context, r storedResource) (bool, error) {
-	if r.CoreUserID == "" {
-		return false, nil
+
+func activeFromRelationships(coreUserID string, relationships []*proto.Relationship, client *compactClient) bool {
+	if coreUserID == "" || client == nil || len(client.projections) == 0 {
+		return false
 	}
-	c := s.clients[r.ClientID]
-	if c == nil {
-		return false, nil
-	}
-	for _, p := range c.projections {
-		ok, e := s.hasTuple(ctx, userTuple(r.CoreUserID, p))
-		if e != nil {
-			return false, e
+	present := make(map[string]struct{}, len(relationships))
+	for _, relationship := range relationships {
+		if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
+			continue
 		}
-		if !ok {
-			return false, nil
+		present[tupleKey(relationship.GetTuple())] = struct{}{}
+	}
+	for _, projection := range client.projections {
+		if _, ok := present[tupleKey(userTuple(coreUserID, projection))]; !ok {
+			return false
 		}
 	}
-	return len(c.projections) > 0, nil
+	return true
 }
 func userTuple(uid string, p compactProjection) *proto.RelationshipTuple {
 	return &proto.RelationshipTuple{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + uid}}}, Relation: p.relation, Resource: &proto.Resource{Type: p.resourceType, Id: p.resourceID}}
-}
-func (s *CompactService) hasTuple(ctx context.Context, t *proto.RelationshipTuple) (bool, error) {
-	r, e := s.listRelationships(ctx, &proto.RelationshipFilter{Target: t.Target, Relation: t.Relation, Resource: t.Resource, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 2)
-	if e != nil {
-		return false, e
-	}
-	return len(r) > 0, nil
 }
 
 func (s *CompactService) listRelationships(ctx context.Context, filter *proto.RelationshipFilter, pageSize int32) ([]*proto.Relationship, error) {
@@ -345,57 +420,62 @@ func (s *CompactService) relationshipPresent(ctx context.Context, tuple *proto.R
 // affected by a successful shared authorization write. The provider remains
 // canonical; this timestamp is informational and is never used for ETags.
 func (s *CompactService) touchRelationship(ctx context.Context, tuple *proto.RelationshipTuple) error {
-	if tuple == nil || tuple.GetTarget() == nil {
-		return nil
-	}
-	rows, err := s.db.ObjectStore(coredata.StoreSCIMResources).GetAll(ctx, nil)
+	touch, err := s.relationshipTouchIDs(ctx, tuple)
 	if err != nil {
 		return err
 	}
+	return s.touchRows(ctx, touch)
+}
+
+func (s *CompactService) relationshipTouchIDs(ctx context.Context, tuple *proto.RelationshipTuple) (map[string]struct{}, error) {
 	touch := map[string]struct{}{}
-	for _, row := range rows {
-		if recordString(row, "resource_type") != "User" || recordString(row, "core_user_id") == "" {
-			continue
-		}
-		clientID := recordString(row, "client_id")
-		if subject := tuple.GetTarget().GetSubject(); subject != nil && subject.GetId() == "user:"+recordString(row, "core_user_id") {
+	if tuple == nil || tuple.GetTarget() == nil {
+		return touch, nil
+	}
+	if subject := tuple.GetTarget().GetSubject(); subject != nil && strings.HasPrefix(subject.GetId(), "user:") {
+		coreID := strings.TrimPrefix(subject.GetId(), "user:")
+		for clientID := range s.clients {
+			rows, err := s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_core_user").GetAll(ctx, []any{clientID, "User", coreID})
+			if err != nil {
+				return nil, err
+			}
 			inGroup, err := s.clientHasGroup(ctx, clientID, tuple.GetResource().GetType(), tuple.GetResource().GetId())
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if s.isConfiguredProjection(clientID, tuple) || inGroup {
-				touch[recordString(row, "id")] = struct{}{}
-			}
-		}
-	}
-	if tuple.GetResource().GetType() == "group" && tuple.GetRelation() == "member" {
-		for _, row := range rows {
-			if recordString(row, "resource_type") == "Group" && recordString(row, "id") == tuple.GetResource().GetId() {
-				touch[recordString(row, "id")] = struct{}{}
-			}
-		}
-		for _, row := range rows {
-			if recordString(row, "resource_type") != "Group" || recordString(row, "id") != tuple.GetResource().GetId() {
-				continue
-			}
-			clientID := recordString(row, "client_id")
-			memberUsers, err := s.affectedGroupMemberUsers(ctx, clientID, tuple)
-			if err != nil {
-				return err
-			}
-			for _, coreID := range memberUsers {
-				for _, userRow := range rows {
-					if recordString(userRow, "resource_type") == "User" && recordString(userRow, "client_id") == clientID && recordString(userRow, "core_user_id") == coreID {
-						touch[recordString(userRow, "id")] = struct{}{}
-					}
+				for _, row := range rows {
+					touch[recordString(row, "id")] = struct{}{}
 				}
 			}
 		}
 	}
-	if len(touch) == 0 {
-		return nil
+	if tuple.GetResource().GetType() == "group" && tuple.GetRelation() == "member" {
+		for clientID := range s.clients {
+			group, err := s.findGroup(ctx, clientID, tuple.GetResource().GetId())
+			if errors.Is(err, idb.ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			touch[group.ID] = struct{}{}
+			memberUsers, err := s.affectedGroupMemberUsers(ctx, tuple)
+			if err != nil {
+				return nil, err
+			}
+			for _, coreID := range memberUsers {
+				userRows, err := s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_core_user").GetAll(ctx, []any{clientID, "User", coreID})
+				if err != nil {
+					return nil, err
+				}
+				for _, userRow := range userRows {
+					touch[recordString(userRow, "id")] = struct{}{}
+				}
+			}
+		}
 	}
-	return s.touchRows(ctx, touch)
+	return touch, nil
 }
 
 // touchRows performs read-modify-write in one transaction so an external
@@ -457,19 +537,14 @@ func (s *CompactService) clientHasGroup(ctx context.Context, clientID, resourceT
 	if resourceType != "group" {
 		return false, nil
 	}
-	rows, err := s.listRecords(ctx, clientID, "Group")
-	if err != nil {
-		return false, err
+	_, err := s.findGroup(ctx, clientID, resourceID)
+	if errors.Is(err, idb.ErrNotFound) {
+		return false, nil
 	}
-	for _, row := range rows {
-		if recordString(row, "id") == resourceID {
-			return true, nil
-		}
-	}
-	return false, nil
+	return err == nil, err
 }
 
-func (s *CompactService) affectedGroupMemberUsers(ctx context.Context, clientID string, tuple *proto.RelationshipTuple) ([]string, error) {
+func (s *CompactService) affectedGroupMemberUsers(ctx context.Context, tuple *proto.RelationshipTuple) ([]string, error) {
 	groupTarget := tuple.GetTarget().GetSubjectSet()
 	if groupTarget == nil || groupTarget.GetResource().GetType() != "group" {
 		if subject := tuple.GetTarget().GetSubject(); subject != nil && strings.HasPrefix(subject.GetId(), "user:") {
@@ -510,81 +585,196 @@ func (s *CompactService) affectedGroupMemberUsers(ctx context.Context, clientID 
 	return out, nil
 }
 func (s *CompactService) apply(ctx context.Context, from, to []*proto.RelationshipTuple) error {
-	// AuthorizationProvider exposes only one-tuple Add/Delete operations. A
-	// remote provider therefore cannot make this multi-tuple diff atomic. We
-	// apply it deterministically and return an error at the first failure; the
-	// SCIM caller sees 503 and retries against the provider's live state. This
-	// is an explicit RFC 7644 §3.5.2 compliance limitation until the provider
-	// API offers a transactional multi-relationship primitive.
-	fm := map[string]*proto.RelationshipTuple{}
-	tm := map[string]*proto.RelationshipTuple{}
+	fromByLogical := map[string][]*proto.RelationshipTuple{}
+	toByLogical := map[string]*proto.RelationshipTuple{}
 	for _, t := range from {
-		fm[tupleKey(t)] = t
+		fromByLogical[tupleKey(t)] = append(fromByLogical[tupleKey(t)], t)
 	}
 	for _, t := range to {
-		tm[tupleKey(t)] = t
-	}
-	keys := []string{}
-	for k := range fm {
-		if _, ok := tm[k]; !ok {
-			keys = append(keys, k)
+		if _, exists := toByLogical[tupleKey(t)]; !exists {
+			toByLogical[tupleKey(t)] = t
 		}
 	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		if e := s.deleteRelationship(ctx, fm[k]); e != nil {
-			return e
+	type tupleChange struct {
+		logicalKey  string
+		physicalKey string
+		tuple       *proto.RelationshipTuple
+	}
+	deletes := []tupleChange{}
+	for logicalKey, tuples := range fromByLogical {
+		if _, retained := toByLogical[logicalKey]; retained {
+			continue
+		}
+		for _, tuple := range tuples {
+			deletes = append(deletes, tupleChange{logicalKey: logicalKey, physicalKey: physicalTupleKey(tuple), tuple: tuple})
 		}
 	}
-	keys = nil
-	for k := range tm {
-		if _, ok := fm[k]; !ok {
-			keys = append(keys, k)
+	adds := make([]tupleChange, 0, len(toByLogical))
+	for logicalKey, tuple := range toByLogical {
+		if _, present := fromByLogical[logicalKey]; !present {
+			adds = append(adds, tupleChange{logicalKey: logicalKey, tuple: tuple})
 		}
 	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		if e := s.addRelationship(ctx, tm[k]); e != nil {
-			return e
+	sort.Slice(deletes, func(i, j int) bool {
+		if deletes[i].logicalKey != deletes[j].logicalKey {
+			return deletes[i].logicalKey < deletes[j].logicalKey
 		}
+		return deletes[i].physicalKey < deletes[j].physicalKey
+	})
+	sort.Slice(adds, func(i, j int) bool { return adds[i].logicalKey < adds[j].logicalKey })
+	if len(deletes) == 0 && len(adds) == 0 {
+		return nil
 	}
-	return nil
-}
 
-func (s *CompactService) addRelationship(ctx context.Context, tuple *proto.RelationshipTuple) error {
-	_, err := s.authorization.AddRelationship(ctx, &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: tuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}})
-	if isAlreadyExistsError(err) {
-		return s.touchRelationship(ctx, tuple)
+	updates := make([]*proto.RelationshipUpdate, 0, len(deletes)+len(adds))
+	for _, change := range deletes {
+		updates = append(updates, &proto.RelationshipUpdate{
+			Operation: proto.RelationshipUpdate_OPERATION_DELETE,
+			Relationship: &proto.Relationship{
+				Tuple:       change.tuple,
+				SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
+			},
+		})
 	}
-	if err != nil {
-		return err
+	for _, change := range adds {
+		updates = append(updates, &proto.RelationshipUpdate{
+			Operation: proto.RelationshipUpdate_OPERATION_TOUCH,
+			Relationship: &proto.Relationship{
+				Tuple:       change.tuple,
+				SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
+			},
+		})
 	}
-	return s.touchRelationship(ctx, tuple)
-}
-
-func (s *CompactService) deleteRelationship(ctx context.Context, tuple *proto.RelationshipTuple) error {
-	var affected []string
-	if tuple != nil && tuple.GetTarget().GetSubjectSet() != nil {
-		var err error
-		affected, err = s.affectedGroupMemberUsers(ctx, "", tuple)
+	affected := map[string]struct{}{}
+	affectedByLogical := map[string]map[string]struct{}{}
+	captured := map[string]struct{}{}
+	for _, change := range deletes {
+		if _, alreadyCaptured := captured[change.logicalKey]; alreadyCaptured {
+			continue
+		}
+		tuple := change.tuple
+		if tuple == nil || tuple.GetTarget().GetSubjectSet() == nil {
+			continue
+		}
+		captured[change.logicalKey] = struct{}{}
+		users, err := s.affectedGroupMemberUsers(ctx, tuple)
 		if err != nil {
 			return err
 		}
+		capturedUsers := map[string]struct{}{}
+		for _, user := range users {
+			affected[user] = struct{}{}
+			capturedUsers[user] = struct{}{}
+		}
+		affectedByLogical[change.logicalKey] = capturedUsers
 	}
-	_, err := s.authorization.DeleteRelationship(ctx, &proto.DeleteRelationshipRequest{RelationshipTuple: tuple})
-	if isNotFoundError(err) {
-		if err := s.touchRelationship(ctx, tuple); err != nil {
+
+	applied, err := s.applyBatch(ctx, updates)
+	if err != nil {
+		if applied > 0 {
+			prefixAffected := map[string]struct{}{}
+			for _, update := range updates[:applied] {
+				for user := range affectedByLogical[tupleKey(update.GetRelationship().GetTuple())] {
+					prefixAffected[user] = struct{}{}
+				}
+			}
+			_ = s.touchAppliedRelationships(ctx, updates[:applied], prefixAffected)
+		}
+		return err
+	}
+	return s.touchAppliedRelationships(ctx, updates, affected)
+}
+
+func (s *CompactService) applyBatch(ctx context.Context, updates []*proto.RelationshipUpdate) (int, error) {
+	if s.writerUnsupported.Load() {
+		return s.applyLegacy(ctx, updates)
+	}
+	writer, ok := s.authorization.(core.AuthorizationRelationshipWriter)
+	if !ok {
+		s.writerUnsupported.Store(true)
+		return s.applyLegacy(ctx, updates)
+	}
+	_, err := writer.WriteRelationships(ctx, &proto.WriteRelationshipsRequest{Updates: updates})
+	if err == nil {
+		return len(updates), nil
+	}
+	if status.Code(err) == codes.Unimplemented {
+		s.writerUnsupported.Store(true)
+		return s.applyLegacy(ctx, updates)
+	}
+	return 0, err
+}
+
+func (s *CompactService) applyLegacy(ctx context.Context, updates []*proto.RelationshipUpdate) (int, error) {
+	for i, update := range updates {
+		if update == nil || update.Relationship == nil {
+			return i, status.Error(codes.InvalidArgument, "invalid relationship update")
+		}
+		switch update.Operation {
+		case proto.RelationshipUpdate_OPERATION_DELETE:
+			_, err := s.authorization.DeleteRelationship(ctx, &proto.DeleteRelationshipRequest{RelationshipTuple: update.Relationship.Tuple})
+			if err != nil && !isNotFoundError(err) {
+				return i, err
+			}
+		case proto.RelationshipUpdate_OPERATION_TOUCH:
+			_, err := s.authorization.AddRelationship(ctx, &proto.AddRelationshipRequest{Relationship: &proto.Relationship{
+				Tuple: update.Relationship.Tuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
+			}})
+			if err != nil && !isAlreadyExistsError(err) {
+				return i, err
+			}
+		default:
+			return i, status.Error(codes.InvalidArgument, "SCIM relationship updates must be TOUCH or DELETE")
+		}
+	}
+	return len(updates), nil
+}
+
+func (s *CompactService) touchAppliedRelationships(ctx context.Context, updates []*proto.RelationshipUpdate, affected map[string]struct{}) error {
+	ids := map[string]struct{}{}
+	seen := map[string]struct{}{}
+	for _, update := range updates {
+		tuple := update.GetRelationship().GetTuple()
+		key := tupleKey(tuple)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		touch, err := s.relationshipTouchIDs(ctx, tuple)
+		if err != nil {
 			return err
 		}
-		return s.touchCoreUsers(ctx, affected)
+		for id := range touch {
+			ids[id] = struct{}{}
+		}
 	}
-	if err != nil {
+	if err := s.collectCoreUserTouchIDs(ctx, affected, ids); err != nil {
 		return err
 	}
-	if err := s.touchRelationship(ctx, tuple); err != nil {
-		return err
+	return s.touchRows(ctx, ids)
+}
+
+func (s *CompactService) collectCoreUserTouchIDs(ctx context.Context, coreIDs map[string]struct{}, ids map[string]struct{}) error {
+	affected := make(map[string]map[string]struct{}, len(s.clients))
+	for clientID := range s.clients {
+		affected[clientID] = coreIDs
 	}
-	return s.touchCoreUsers(ctx, affected)
+	return s.collectClientCoreUserTouchIDs(ctx, affected, ids)
+}
+
+func (s *CompactService) collectClientCoreUserTouchIDs(ctx context.Context, affected map[string]map[string]struct{}, ids map[string]struct{}) error {
+	for clientID, coreIDs := range affected {
+		for coreID := range coreIDs {
+			rows, err := s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_core_user").GetAll(ctx, []any{clientID, "User", coreID})
+			if err != nil {
+				return err
+			}
+			for _, row := range rows {
+				ids[recordString(row, "id")] = struct{}{}
+			}
+		}
+	}
+	return nil
 }
 
 func isAlreadyExistsError(err error) bool {
@@ -595,52 +785,6 @@ func isNotFoundError(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || errors.Is(err, idb.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func (s *CompactService) touchCoreUsers(ctx context.Context, coreIDs []string) error {
-	if len(coreIDs) == 0 {
-		return nil
-	}
-	wanted := make(map[string]struct{}, len(coreIDs))
-	for _, id := range coreIDs {
-		wanted[id] = struct{}{}
-	}
-	rows, err := s.db.ObjectStore(coredata.StoreSCIMResources).GetAll(ctx, nil)
-	if err != nil {
-		return err
-	}
-	ids := make(map[string]struct{})
-	for _, row := range rows {
-		if recordString(row, "resource_type") == "User" {
-			if _, ok := wanted[recordString(row, "core_user_id")]; ok {
-				ids[recordString(row, "id")] = struct{}{}
-			}
-		}
-	}
-	return s.touchRows(ctx, ids)
-}
-
-// touchCoreUsersByClient limits relationship-driven timestamp updates to the
-// SCIM namespaces whose public representation can actually change.
-func (s *CompactService) touchCoreUsersByClient(ctx context.Context, affected map[string]map[string]struct{}) error {
-	if len(affected) == 0 {
-		return nil
-	}
-	rows, err := s.db.ObjectStore(coredata.StoreSCIMResources).GetAll(ctx, nil)
-	if err != nil {
-		return err
-	}
-	ids := make(map[string]struct{})
-	for _, row := range rows {
-		if recordString(row, "resource_type") != "User" {
-			continue
-		}
-		clientUsers := affected[recordString(row, "client_id")]
-		if _, ok := clientUsers[recordString(row, "core_user_id")]; ok {
-			ids[recordString(row, "id")] = struct{}{}
-		}
-	}
-	return s.touchRows(ctx, ids)
-}
-
 // captureRelationshipAffectedUsers records the users whose SCIM groups or
 // active projection may be changed by tuple before that tuple is deleted or a
 // provider state replacement runs. The provider is canonical, so this is
@@ -648,10 +792,6 @@ func (s *CompactService) touchCoreUsersByClient(ctx context.Context, affected ma
 func (s *CompactService) captureRelationshipAffectedUsers(ctx context.Context, tuple *proto.RelationshipTuple, affected map[string]map[string]struct{}) error {
 	if tuple == nil || tuple.GetTarget() == nil || tuple.GetResource() == nil {
 		return nil
-	}
-	rows, err := s.db.ObjectStore(coredata.StoreSCIMResources).GetAll(ctx, nil)
-	if err != nil {
-		return err
 	}
 	mark := func(clientID, coreID string) {
 		if affected[clientID] == nil {
@@ -661,22 +801,24 @@ func (s *CompactService) captureRelationshipAffectedUsers(ctx context.Context, t
 	}
 	if subject := tuple.GetTarget().GetSubject(); subject != nil && strings.HasPrefix(subject.GetId(), "user:") {
 		coreID := strings.TrimPrefix(subject.GetId(), "user:")
-		for _, row := range rows {
-			if recordString(row, "resource_type") != "User" || recordString(row, "core_user_id") != coreID {
-				continue
-			}
-			clientID := recordString(row, "client_id")
+		for clientID := range s.clients {
 			relevant := s.isConfiguredProjection(clientID, tuple)
 			if !relevant && tuple.GetResource().GetType() == "group" && tuple.GetRelation() == "member" {
-				for _, group := range rows {
-					if recordString(group, "resource_type") == "Group" && recordString(group, "client_id") == clientID && recordString(group, "id") == tuple.GetResource().GetId() {
-						relevant = true
-						break
-					}
+				_, err := s.findGroup(ctx, clientID, tuple.GetResource().GetId())
+				if err == nil {
+					relevant = true
+				} else if !errors.Is(err, idb.ErrNotFound) {
+					return err
 				}
 			}
 			if relevant {
-				mark(clientID, coreID)
+				rows, err := s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_core_user").GetAll(ctx, []any{clientID, "User", coreID})
+				if err != nil {
+					return err
+				}
+				if len(rows) > 0 {
+					mark(clientID, coreID)
+				}
 			}
 		}
 		return nil
@@ -684,23 +826,51 @@ func (s *CompactService) captureRelationshipAffectedUsers(ctx context.Context, t
 	if subjectSet := tuple.GetTarget().GetSubjectSet(); subjectSet == nil || subjectSet.GetResource() == nil || subjectSet.GetResource().GetType() != "group" {
 		return nil
 	}
-	coreIDs, err := s.affectedGroupMemberUsers(ctx, "", tuple)
+	coreIDs, err := s.affectedGroupMemberUsers(ctx, tuple)
 	if err != nil {
 		return err
 	}
-	for _, row := range rows {
-		if recordString(row, "resource_type") != "Group" || recordString(row, "id") != tuple.GetResource().GetId() {
-			continue
+	for clientID := range s.clients {
+		if _, err := s.findGroup(ctx, clientID, tuple.GetResource().GetId()); err != nil {
+			if errors.Is(err, idb.ErrNotFound) {
+				continue
+			}
+			return err
 		}
 		for _, coreID := range coreIDs {
-			mark(recordString(row, "client_id"), coreID)
+			mark(clientID, coreID)
 		}
 	}
 	return nil
 }
 
 func tupleKey(t *proto.RelationshipTuple) string {
-	return t.GetRelation() + "\x00" + t.GetResource().GetType() + "\x00" + t.GetResource().GetId() + "\x00" + t.GetTarget().String()
+	return t.GetRelation() + "\x00" + t.GetResource().GetType() + "\x00" + t.GetResource().GetId() + "\x00" + relationshipTargetKey(t.GetTarget())
+}
+
+func physicalTupleKey(t *proto.RelationshipTuple) string {
+	data, err := (gproto.MarshalOptions{Deterministic: true}).Marshal(t)
+	if err != nil {
+		return tupleKey(t)
+	}
+	return string(data)
+}
+
+func relationshipTargetKey(target *proto.RelationshipTarget) string {
+	if target == nil {
+		return "nil"
+	}
+	if subject := target.GetSubject(); subject != nil {
+		return "subject\x00" + subject.GetType() + "\x00" + subject.GetId()
+	}
+	if resource := target.GetResource(); resource != nil {
+		return "resource\x00" + resource.GetType() + "\x00" + resource.GetId()
+	}
+	if subjectSet := target.GetSubjectSet(); subjectSet != nil {
+		resource := subjectSet.GetResource()
+		return "subject-set\x00" + resource.GetType() + "\x00" + resource.GetId() + "\x00" + subjectSet.GetRelation()
+	}
+	return "empty"
 }
 func (s *CompactService) desiredUser(r storedResource, active bool) []*proto.RelationshipTuple {
 	if !active || r.CoreUserID == "" {
@@ -845,7 +1015,7 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 	if e != nil {
 		return listResponse[User]{}, invalidFilter(e.Error())
 	}
-	rs, e := s.listRecords(ctx, clientID, "User")
+	rs, e := s.listUserRecords(ctx, clientID, clauses)
 	if e != nil {
 		return listResponse[User]{}, unavailable("could not list SCIM users")
 	}
@@ -866,9 +1036,16 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 	}
 	end := pageMin(start-1+count, len(matching))
 	page := matching[start-1 : end]
+	var hydration *scimHydration
+	if len(page) > 0 {
+		hydration, e = s.newHydration(ctx, clientID)
+		if e != nil {
+			return listResponse[User]{}, unavailable("could not load SCIM group map")
+		}
+	}
 	out := make([]User, 0, len(page))
 	for i := range page {
-		u, e := s.userValue(ctx, stored(page[i]))
+		u, e := s.userValueWithHydration(ctx, stored(page[i]), hydration)
 		if e != nil {
 			return listResponse[User]{}, e
 		}
@@ -1046,7 +1223,7 @@ func (s *CompactService) Delete(ctx context.Context, clientID, id, ifMatch strin
 	if e != nil {
 		return e
 	}
-	actual, e := s.actualUserTuples(ctx, r)
+	actual, e := s.userDeleteTuples(ctx, clientID, r.CoreUserID)
 	if e != nil {
 		return unavailable("could not read authorization state")
 	}
@@ -1090,9 +1267,6 @@ func (s *CompactService) Delete(ctx context.Context, clientID, id, ifMatch strin
 	if e = s.apply(ctx, actual, nil); e != nil {
 		return unavailable("could not remove authorization relationships")
 	}
-	if e = s.removeUserFromClientGroups(ctx, clientID, r.CoreUserID); e != nil {
-		return unavailable("could not remove authorization relationships")
-	}
 	if e = s.db.ObjectStore(coredata.StoreSCIMResources).Delete(ctx, id); e != nil {
 		return unavailable("could not delete SCIM user")
 	}
@@ -1100,46 +1274,66 @@ func (s *CompactService) Delete(ctx context.Context, clientID, id, ifMatch strin
 }
 func (s *CompactService) actualUserTuples(ctx context.Context, r storedResource) ([]*proto.RelationshipTuple, error) {
 	desired := s.desiredUser(r, true)
-	actual := make([]*proto.RelationshipTuple, 0, len(desired))
+	target := &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + r.CoreUserID}}}
+	relationships, err := s.listRelationships(ctx, &proto.RelationshipFilter{Target: target, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+	if err != nil {
+		return nil, err
+	}
+	present := make(map[string][]*proto.RelationshipTuple, len(relationships))
+	for _, relationship := range relationships {
+		if relationship.GetSourceLayer() == proto.SourceLayer_SOURCE_LAYER_RUNTIME && sameRelationshipTarget(relationship.GetTuple().GetTarget(), target) {
+			key := tupleKey(relationship.GetTuple())
+			present[key] = append(present[key], relationship.GetTuple())
+		}
+	}
+	actual := make([]*proto.RelationshipTuple, 0, len(relationships))
 	for _, tuple := range desired {
-		present, err := s.hasTuple(ctx, tuple)
-		if err != nil {
-			return nil, err
-		}
-		if present {
-			actual = append(actual, tuple)
-		}
+		actual = append(actual, present[tupleKey(tuple)]...)
 	}
 	return actual, nil
 }
 
-// removeUserFromClientGroups cleans references only from SCIM groups in the
-// same client namespace. Runtime relationships for unrelated authorization
-// resources are left untouched.
-func (s *CompactService) removeUserFromClientGroups(ctx context.Context, clientID, coreID string) error {
+func (s *CompactService) userDeleteTuples(ctx context.Context, clientID, coreID string) ([]*proto.RelationshipTuple, error) {
 	groups, err := s.listRecords(ctx, clientID, "Group")
 	if err != nil {
-		return err
+		return nil, err
 	}
+	groupIDs := make(map[string]struct{}, len(groups))
 	for _, row := range groups {
-		groupID := recordString(row, "id")
-		relationships, err := s.listRelationships(ctx, &proto.RelationshipFilter{Resource: &proto.Resource{Type: "group", Id: groupID}, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
-		if err != nil {
-			return err
+		groupIDs[recordString(row, "id")] = struct{}{}
+	}
+	target := &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreID}}}
+	relationships, err := s.listRelationships(ctx, &proto.RelationshipFilter{Target: target, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string][]*proto.RelationshipTuple{}
+	for _, relationship := range relationships {
+		if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || !sameRelationshipTarget(relationship.GetTuple().GetTarget(), target) {
+			continue
 		}
-		for _, relationship := range relationships {
-			tuple := relationship.GetTuple()
-			subject := tuple.GetTarget().GetSubject()
-			if subject == nil || subject.GetId() != "user:"+coreID {
-				continue
-			}
-			if err := s.deleteRelationship(ctx, tuple); err != nil {
-				return err
-			}
+		tuple := relationship.GetTuple()
+		resource := tuple.GetResource()
+		_, isKnownGroup := groupIDs[resource.GetId()]
+		if s.isConfiguredProjection(clientID, tuple) || (tuple.GetRelation() == "member" && resource.GetType() == "group" && isKnownGroup) {
+			key := tupleKey(tuple)
+			seen[key] = append(seen[key], tuple)
 		}
 	}
-	return nil
+	keys := make([]string, 0, len(seen))
+	for key := range seen {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]*proto.RelationshipTuple, 0, len(relationships))
+	for _, key := range keys {
+		tuples := seen[key]
+		sort.SliceStable(tuples, func(i, j int) bool { return physicalTupleKey(tuples[i]) < physicalTupleKey(tuples[j]) })
+		result = append(result, tuples...)
+	}
+	return result, nil
 }
+
 func (s *CompactService) IsEligible(ctx context.Context, coreID, email string) (bool, error) {
 	owner := s.domainOwners[domain(email)]
 	if owner == "" {
@@ -1152,7 +1346,13 @@ func (s *CompactService) IsEligible(ctx context.Context, coreID, email string) (
 	if len(rs) != 1 {
 		return false, nil
 	}
-	return s.userActive(ctx, stored(rs[0]))
+	r := stored(rs[0])
+	target := &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreID}}}
+	relationships, err := s.listRelationships(ctx, &proto.RelationshipFilter{Target: target, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+	if err != nil {
+		return false, err
+	}
+	return activeFromRelationships(r.CoreUserID, relationships, s.clients[owner]), nil
 }
 func domain(email string) string {
 	p := strings.LastIndex(normalize(email), "@")
@@ -1162,76 +1362,76 @@ func domain(email string) string {
 	return normalize(email[p+1:])
 }
 
-func (s *CompactService) userGroupsNested(ctx context.Context, cid, coreID string) ([]GroupRef, error) {
-	rows, e := s.listRecords(ctx, cid, "Group")
-	if e != nil {
-		return nil, e
-	}
-	type node struct {
-		members []Member
-	}
-	nodes := map[string]node{}
-	for _, rr := range rows {
-		g := stored(rr)
-		m, e := s.liveMembers(ctx, cid, g.ID)
-		if e != nil {
-			return nil, e
+func (s *CompactService) userGroupsNestedWithHydration(ctx context.Context, cid, coreID string, hydration *scimHydration, relationships []*proto.Relationship) ([]GroupRef, error) {
+	if hydration == nil {
+		var err error
+		hydration, err = s.newHydration(ctx, cid)
+		if err != nil {
+			return nil, err
 		}
-		nodes[g.ID] = node{members: m}
 	}
-	refs := []GroupRef{}
-	for gid := range nodes {
-		queue := []struct {
-			id       string
-			indirect bool
-		}{{gid, false}}
-		seen := map[string]bool{}
-		for len(queue) > 0 {
-			q := queue[0]
-			queue = queue[1:]
-			if seen[q.id] {
+	refs := make(map[string]GroupRef)
+	queue := make([]string, 0)
+	for _, relationship := range relationships {
+		tuple := relationship.GetTuple()
+		if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || tuple.GetRelation() != "member" || tuple.GetResource().GetType() != "group" {
+			continue
+		}
+		target := tuple.GetTarget().GetSubject()
+		if target == nil || target.GetId() != "user:"+coreID {
+			continue
+		}
+		groupID := tuple.GetResource().GetId()
+		if _, ok := hydration.groups[groupID]; !ok {
+			continue
+		}
+		if _, ok := refs[groupID]; !ok {
+			refs[groupID] = GroupRef{Value: groupID, Ref: s.baseURL + "/scim/v2/Groups/" + groupID, Type: "direct"}
+			queue = append(queue, groupID)
+		}
+	}
+	// A parent must itself be a SCIM group in this client. With one group in
+	// the namespace there cannot be a valid parent, so avoid an unnecessary
+	// provider lookup while preserving nested-group expansion for larger maps.
+	if len(hydration.groups) <= 1 {
+		return sortedGroupRefs(refs), nil
+	}
+	visited := map[string]struct{}{}
+	for len(queue) > 0 {
+		groupID := queue[0]
+		queue = queue[1:]
+		if _, ok := visited[groupID]; ok {
+			continue
+		}
+		visited[groupID] = struct{}{}
+		parents, err := hydration.parentRelationships(ctx, groupID)
+		if err != nil {
+			return nil, err
+		}
+		for _, relationship := range parents {
+			parentID := relationship.GetTuple().GetResource().GetId()
+			if relationship.GetTuple().GetResource().GetType() != "group" {
 				continue
 			}
-			seen[q.id] = true
-			cur, ok := nodes[q.id]
-			if !ok {
+			if _, ok := hydration.groups[parentID]; !ok {
 				continue
 			}
-			for _, m := range cur.members {
-				switch m.Type {
-				case "User":
-					u, e := s.findUser(ctx, cid, m.Value)
-					if e != nil && !errors.Is(e, idb.ErrNotFound) {
-						return nil, e
-					}
-					if e == nil && u.CoreUserID == coreID {
-						typ := "direct"
-						if q.indirect {
-							typ = "indirect"
-						}
-						refs = append(refs, GroupRef{Value: gid, Ref: s.baseURL + "/scim/v2/Groups/" + gid, Type: typ})
-					}
-				case "Group":
-					queue = append(queue, struct {
-						id       string
-						indirect bool
-					}{m.Value, true})
-				}
+			if existing, ok := refs[parentID]; !ok || existing.Type == "indirect" {
+				refs[parentID] = GroupRef{Value: parentID, Ref: s.baseURL + "/scim/v2/Groups/" + parentID, Type: "indirect"}
 			}
+			queue = append(queue, parentID)
 		}
 	}
-	uniq := map[string]GroupRef{}
-	for _, r := range refs {
-		if old, ok := uniq[r.Value]; !ok || old.Type == "indirect" {
-			uniq[r.Value] = r
-		}
+	return sortedGroupRefs(refs), nil
+}
+
+func sortedGroupRefs(refs map[string]GroupRef) []GroupRef {
+	out := make([]GroupRef, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, ref)
 	}
-	refs = refs[:0]
-	for _, r := range uniq {
-		refs = append(refs, r)
-	}
-	sort.Slice(refs, func(i, j int) bool { return refs[i].Value < refs[j].Value })
-	return refs, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Value < out[j].Value })
+	return out
 }
 
 // Group operations live in compact_groups.go.

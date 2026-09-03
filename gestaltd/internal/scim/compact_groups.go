@@ -55,23 +55,29 @@ func (s *CompactService) liveMembers(ctx context.Context, cid, gid string) ([]Me
 	if e != nil {
 		return nil, e
 	}
-	users, err := s.listRecords(ctx, cid, "User")
-	if err != nil {
-		return nil, err
-	}
-	byCore := map[string]idb.Record{}
-	for _, u := range users {
-		byCore[recordString(u, "core_user_id")] = u
-	}
 	out := []Member{}
+	seen := map[string]struct{}{}
 	for _, x := range rs {
+		if x.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
+			continue
+		}
 		t := x.GetTuple().GetTarget()
 		if sub := t.GetSubject(); sub != nil && strings.HasPrefix(sub.Id, "user:") {
-			u, ok := byCore[strings.TrimPrefix(sub.Id, "user:")]
-			if !ok {
+			users, err := s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_core_user").GetAll(ctx, []any{cid, "User", strings.TrimPrefix(sub.Id, "user:")})
+			if err != nil {
+				return nil, err
+			}
+			if len(users) != 1 {
 				continue
 			}
-			out = append(out, Member{Value: recordString(u, "id"), Ref: s.baseURL + "/scim/v2/Users/" + recordString(u, "id"), Type: "User"})
+			u := users[0]
+			member := Member{Value: recordString(u, "id"), Ref: s.baseURL + "/scim/v2/Users/" + recordString(u, "id"), Type: "User"}
+			key := member.Type + "\x00" + member.Value
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, member)
 		} else if ss := t.GetSubjectSet(); ss != nil && ss.Resource != nil {
 			gr, e := s.findGroup(ctx, cid, ss.Resource.Id)
 			if e != nil {
@@ -80,7 +86,13 @@ func (s *CompactService) liveMembers(ctx context.Context, cid, gid string) ([]Me
 				}
 				continue
 			}
-			out = append(out, Member{Value: gr.ID, Ref: s.baseURL + "/scim/v2/Groups/" + gr.ID, Type: "Group"})
+			member := Member{Value: gr.ID, Ref: s.baseURL + "/scim/v2/Groups/" + gr.ID, Type: "Group"}
+			key := member.Type + "\x00" + member.Value
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, member)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Value < out[j].Value })
@@ -134,6 +146,35 @@ func (s *CompactService) tuplesForMembers(ctx context.Context, cid, gid string, 
 	sort.Slice(out, func(i, j int) bool { return tupleKey(out[i]) < tupleKey(out[j]) })
 	return out, nil
 }
+
+func (s *CompactService) actualGroupTuples(ctx context.Context, cid, gid string, members []Member) ([]*proto.RelationshipTuple, error) {
+	desired, err := s.tuplesForMembers(ctx, cid, gid, members)
+	if err != nil {
+		return nil, err
+	}
+	logical := make(map[string]struct{}, len(desired))
+	for _, tuple := range desired {
+		logical[tupleKey(tuple)] = struct{}{}
+	}
+	relationships, err := s.listRelationships(ctx, &proto.RelationshipFilter{
+		Resource: &proto.Resource{Type: "group", Id: gid}, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
+	}, 100)
+	if err != nil {
+		return nil, err
+	}
+	actual := make([]*proto.RelationshipTuple, 0, len(relationships))
+	for _, relationship := range relationships {
+		if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
+			continue
+		}
+		if _, ok := logical[tupleKey(relationship.GetTuple())]; ok {
+			actual = append(actual, relationship.GetTuple())
+		}
+	}
+	sort.SliceStable(actual, func(i, j int) bool { return physicalTupleKey(actual[i]) < physicalTupleKey(actual[j]) })
+	return actual, nil
+}
+
 func (s *CompactService) CreateGroup(ctx context.Context, cid string, in groupInput) (*Group, error) {
 	if err := validateResourceSchemas(in.Schemas, GroupSchemaURN); err != nil {
 		return nil, err
@@ -201,29 +242,116 @@ func (s *CompactService) listGroups(ctx context.Context, cid, raw string, start,
 		return listResponse[Group]{}, unavailable("could not list SCIM groups")
 	}
 	sort.Slice(rs, func(i, j int) bool { return recordString(rs[i], "id") < recordString(rs[j], "id") })
-	all := []Group{}
+	storedClauses := make([]groupFilterClause, 0, len(clauses))
+	memberClauses := make([]groupFilterClause, 0, len(clauses))
+	for _, clause := range clauses {
+		if clause.attribute == "members.value" {
+			memberClauses = append(memberClauses, clause)
+		} else {
+			storedClauses = append(storedClauses, clause)
+		}
+	}
+	knownGroupIDs := make(map[string]struct{}, len(rs))
+	for _, row := range rs {
+		knownGroupIDs[recordString(row, "id")] = struct{}{}
+	}
+	allowedGroups := map[string]struct{}{}
+	if len(memberClauses) > 0 {
+		for i, clause := range memberClauses {
+			target, ok, err := s.groupMemberTarget(ctx, cid, clause.value)
+			if err != nil {
+				return listResponse[Group]{}, unavailable("could not validate group member")
+			}
+			if !ok {
+				return listResponse[Group]{Schemas: []string{ListSchemaURN}, TotalResults: 0, StartIndex: 1, ItemsPerPage: 0, Resources: []Group{}}, nil
+			}
+			relations, err := s.listRelationships(ctx, &proto.RelationshipFilter{Target: target, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+			if err != nil {
+				return listResponse[Group]{}, unavailable("could not read group membership")
+			}
+			current := map[string]struct{}{}
+			for _, relationship := range relations {
+				if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || !sameRelationshipTarget(relationship.GetTuple().GetTarget(), target) {
+					continue
+				}
+				resource := relationship.GetTuple().GetResource()
+				if resource.GetType() == "group" {
+					if _, exists := knownGroupIDs[resource.GetId()]; exists {
+						current[resource.GetId()] = struct{}{}
+					}
+				}
+			}
+			if i == 0 {
+				allowedGroups = current
+			} else {
+				for groupID := range allowedGroups {
+					if _, exists := current[groupID]; !exists {
+						delete(allowedGroups, groupID)
+					}
+				}
+			}
+		}
+	}
+	matching := make([]idb.Record, 0, len(rs))
 	for _, rr := range rs {
 		g := stored(rr)
-		v, e := s.groupValue(ctx, g)
-		if e != nil {
-			return listResponse[Group]{}, e
+		if !matchesStoredGroupFilter(persistedGroup{ExternalID: g.ExternalID, DisplayName: g.DisplayName}, storedClauses) {
+			continue
 		}
-		if matchesGroupFilter(persistedGroup{ExternalID: g.ExternalID, DisplayName: g.DisplayName, Members: v.Members}, clauses) {
-			all = append(all, v)
+		if len(memberClauses) > 0 {
+			if _, ok := allowedGroups[g.ID]; !ok {
+				continue
+			}
 		}
+		matching = append(matching, rr)
 	}
-	if start > len(all)+1 {
-		start = len(all) + 1
+	if start > len(matching)+1 {
+		start = len(matching) + 1
 	}
-	end := pageMin(start-1+count, len(all))
+	end := pageMin(start-1+count, len(matching))
 	if end < start-1 {
 		end = start - 1
 	}
-	n := end - start + 1
-	if n < 0 {
-		n = 0
+	page := matching[start-1 : end]
+	all := make([]Group, 0, len(page))
+	for _, rr := range page {
+		v, err := s.groupValue(ctx, stored(rr))
+		if err != nil {
+			return listResponse[Group]{}, err
+		}
+		all = append(all, v)
 	}
-	return listResponse[Group]{Schemas: []string{ListSchemaURN}, TotalResults: len(all), StartIndex: start, ItemsPerPage: n, Resources: all[start-1 : end]}, nil
+	return listResponse[Group]{Schemas: []string{ListSchemaURN}, TotalResults: len(matching), StartIndex: start, ItemsPerPage: len(all), Resources: all}, nil
+}
+
+func matchesStoredGroupFilter(group persistedGroup, clauses []groupFilterClause) bool {
+	for _, clause := range clauses {
+		switch clause.attribute {
+		case "displayname":
+			if normalize(group.DisplayName) != clause.value {
+				return false
+			}
+		case "externalid":
+			if group.ExternalID != clause.value {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (s *CompactService) groupMemberTarget(ctx context.Context, cid, value string) (*proto.RelationshipTarget, bool, error) {
+	if user, err := s.findUser(ctx, cid, value); err == nil {
+		return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + user.CoreUserID}}}, true, nil
+	} else if !errors.Is(err, idb.ErrNotFound) {
+		return nil, false, err
+	}
+	if group, err := s.findGroup(ctx, cid, value); err == nil {
+		return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &proto.SubjectSet{Resource: &proto.Resource{Type: "group", Id: group.ID}, Relation: "member"}}}, true, nil
+	} else if !errors.Is(err, idb.ErrNotFound) {
+		return nil, false, err
+	}
+	return nil, false, nil
 }
 func (s *CompactService) mutateGroup(ctx context.Context, cid, id, ifm string, in groupInput) (*Group, error) {
 	unlock := s.lock(id)
@@ -262,7 +390,7 @@ func (s *CompactService) mutateGroupLocked(ctx context.Context, cid, id, ifm str
 	if e := validateRetainedMemberAttributes(old.Members, next.Members); e != nil {
 		return nil, e
 	}
-	from, e := s.tuplesForMembers(ctx, cid, id, old.Members)
+	from, e := s.actualGroupTuples(ctx, cid, id, old.Members)
 	if e != nil {
 		return nil, e
 	}
@@ -338,15 +466,19 @@ func (s *CompactService) mutateGroupLocked(ctx context.Context, cid, id, ifm str
 }
 
 func sameTuples(a, b []*proto.RelationshipTuple) bool {
-	if len(a) != len(b) {
+	left := make(map[string]struct{}, len(a))
+	for _, tuple := range a {
+		left[tupleKey(tuple)] = struct{}{}
+	}
+	right := make(map[string]struct{}, len(b))
+	for _, tuple := range b {
+		right[tupleKey(tuple)] = struct{}{}
+	}
+	if len(left) != len(right) {
 		return false
 	}
-	seen := make(map[string]struct{}, len(a))
-	for _, tuple := range a {
-		seen[tupleKey(tuple)] = struct{}{}
-	}
-	for _, tuple := range b {
-		if _, ok := seen[tupleKey(tuple)]; !ok {
+	for key := range left {
+		if _, ok := right[key]; !ok {
 			return false
 		}
 	}
@@ -433,19 +565,6 @@ func (s *CompactService) DeleteGroup(ctx context.Context, cid, id, ifm string) e
 // references for exactly the group being deleted. Deleting the group makes
 // both kinds of references invalid; unrelated resources are not inspected.
 func (s *CompactService) removeGroupRelationships(ctx context.Context, clientID, groupID string) error {
-	outgoing, err := s.listRelationships(ctx, &proto.RelationshipFilter{Resource: &proto.Resource{Type: "group", Id: groupID}, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
-	if err != nil {
-		return err
-	}
-	for _, relationship := range outgoing {
-		if err := s.deleteRelationship(ctx, relationship.GetTuple()); err != nil {
-			return err
-		}
-	}
-	incoming, err := s.listRelationships(ctx, &proto.RelationshipFilter{Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
-	if err != nil {
-		return err
-	}
 	groups, err := s.listRecords(ctx, clientID, "Group")
 	if err != nil {
 		return err
@@ -454,18 +573,39 @@ func (s *CompactService) removeGroupRelationships(ctx context.Context, clientID,
 	for _, row := range groups {
 		knownGroups[recordString(row, "id")] = struct{}{}
 	}
+	outgoing, err := s.listRelationships(ctx, &proto.RelationshipFilter{Resource: &proto.Resource{Type: "group", Id: groupID}, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+	if err != nil {
+		return err
+	}
+	target := &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &proto.SubjectSet{Resource: &proto.Resource{Type: "group", Id: groupID}, Relation: "member"}}}
+	incoming, err := s.listRelationships(ctx, &proto.RelationshipFilter{Target: target, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+	if err != nil {
+		return err
+	}
+	seen := map[string]*proto.RelationshipTuple{}
+	for _, relationship := range outgoing {
+		if relationship.GetSourceLayer() == proto.SourceLayer_SOURCE_LAYER_RUNTIME && relationship.GetTuple().GetResource().GetType() == "group" && relationship.GetTuple().GetResource().GetId() == groupID {
+			seen[physicalTupleKey(relationship.GetTuple())] = relationship.GetTuple()
+		}
+	}
 	for _, relationship := range incoming {
+		if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || !sameRelationshipTarget(relationship.GetTuple().GetTarget(), target) {
+			continue
+		}
 		tuple := relationship.GetTuple()
 		if _, ok := knownGroups[tuple.GetResource().GetId()]; !ok {
 			continue
 		}
-		set := tuple.GetTarget().GetSubjectSet()
-		if set == nil || set.GetResource().GetType() != "group" || set.GetResource().GetId() != groupID || set.GetRelation() != "member" {
-			continue
-		}
-		if err := s.deleteRelationship(ctx, tuple); err != nil {
-			return err
-		}
+		seen[physicalTupleKey(tuple)] = tuple
 	}
-	return nil
+	keys := make([]string, 0, len(seen))
+	for key := range seen {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	tuples := make([]*proto.RelationshipTuple, 0, len(keys))
+	for _, key := range keys {
+		tuples = append(tuples, seen[key])
+	}
+	return s.apply(ctx, tuples, nil)
 }

@@ -948,6 +948,14 @@ func TestSCIMUserListHydratesOnlyRequestedPage(t *testing.T) {
 	if calls := authorization.listCallCount(); calls != 1 {
 		t.Fatalf("provider hydration calls = %d, want 1", calls)
 	}
+	authorization.resetListCalls()
+	emptyPage := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users?startIndex=100&count=1", testCurrentToken, nil)
+	if emptyPage.Code != http.StatusOK {
+		t.Fatalf("empty user page = %d %s", emptyPage.Code, emptyPage.Body.String())
+	}
+	if calls := authorization.listCallCount(); calls != 0 {
+		t.Fatalf("empty-page provider hydration calls = %d, want 0", calls)
+	}
 }
 
 func TestSCIMActivationRetriesFromActualProviderTuples(t *testing.T) {
@@ -1298,13 +1306,16 @@ func (a *recordingAuthorization) ListRelationships(_ context.Context, req *proto
 	filtered := make([]*proto.Relationship, 0, len(a.relations))
 	for _, relationship := range a.relations {
 		if req != nil && req.Filter != nil {
-			if req.Filter.Target != nil && !gproto.Equal(req.Filter.Target, relationship.Tuple.Target) {
+			if req.Filter.Target != nil && relationshipTargetTestKey(req.Filter.Target) != relationshipTargetTestKey(relationship.Tuple.Target) {
 				continue
 			}
 			if req.Filter.Relation != "" && req.Filter.Relation != relationship.Tuple.Relation {
 				continue
 			}
-			if req.Filter.Resource != nil && !gproto.Equal(req.Filter.Resource, relationship.Tuple.Resource) {
+			if req.Filter.Resource != nil && (req.Filter.Resource.GetType() != relationship.Tuple.GetResource().GetType() || req.Filter.Resource.GetId() != relationship.Tuple.GetResource().GetId()) {
+				continue
+			}
+			if req.Filter.SourceLayer != proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED && req.Filter.SourceLayer != relationship.SourceLayer {
 				continue
 			}
 		}
@@ -1440,6 +1451,23 @@ func (a *recordingAuthorization) relationshipForUser(coreUserID string) *proto.R
 	return nil
 }
 
+func (a *recordingAuthorization) relationshipForGroupUser(coreUserID, groupID string) *proto.Relationship {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, relationship := range a.relations {
+		tuple := relationship.GetTuple()
+		if tuple.GetRelation() == "member" && tuple.GetResource().GetType() == "group" && tuple.GetResource().GetId() == groupID && tuple.GetTarget().GetSubject().GetId() == "user:"+coreUserID {
+			return gproto.Clone(relationship).(*proto.Relationship)
+		}
+	}
+	return nil
+}
+
+func (a *recordingAuthorization) additionCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.additions
+}
 func projectedRelationship(coreUserID string, source proto.SourceLayer) *proto.Relationship {
 	return &proto.Relationship{
 		Tuple: &proto.RelationshipTuple{
@@ -1452,12 +1480,31 @@ func projectedRelationship(coreUserID string, source proto.SourceLayer) *proto.R
 }
 
 func relationshipKey(tuple *proto.RelationshipTuple) string {
+	if data, err := (gproto.MarshalOptions{Deterministic: true}).Marshal(tuple); err == nil {
+		return string(data)
+	}
 	target := tuple.GetTarget()
 	targetKey := "subject\x00" + target.GetSubject().GetType() + "\x00" + target.GetSubject().GetId()
 	if subjectSet := target.GetSubjectSet(); subjectSet != nil {
 		targetKey = "subject-set\x00" + subjectSet.GetResource().GetType() + "\x00" + subjectSet.GetResource().GetId() + "\x00" + subjectSet.GetRelation()
 	}
 	return targetKey + "\x00" + tuple.GetRelation() + "\x00" + tuple.GetResource().GetType() + "\x00" + tuple.GetResource().GetId()
+}
+
+func relationshipTargetTestKey(target *proto.RelationshipTarget) string {
+	if target == nil {
+		return "nil"
+	}
+	if subject := target.GetSubject(); subject != nil {
+		return "subject\x00" + subject.GetType() + "\x00" + subject.GetId()
+	}
+	if resource := target.GetResource(); resource != nil {
+		return "resource\x00" + resource.GetType() + "\x00" + resource.GetId()
+	}
+	if subjectSet := target.GetSubjectSet(); subjectSet != nil {
+		return "subject-set\x00" + subjectSet.GetResource().GetType() + "\x00" + subjectSet.GetResource().GetId() + "\x00" + subjectSet.GetRelation()
+	}
+	return "empty"
 }
 
 var _ core.AuthorizationProvider = (*recordingAuthorization)(nil)

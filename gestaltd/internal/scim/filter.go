@@ -12,6 +12,15 @@ type filterClause struct {
 	value     string
 }
 
+func usernameFilterValue(clauses []filterClause) (string, bool) {
+	for _, clause := range clauses {
+		if clause.attribute == "username" {
+			return clause.value, true
+		}
+	}
+	return "", false
+}
+
 type groupFilterClause struct {
 	attribute string
 	value     string
@@ -165,27 +174,4 @@ func parseGroupMemberFilter(raw string) (string, bool) {
 		return "", false
 	}
 	return strings.TrimSpace(value), true
-}
-
-func matchesGroupFilter(group persistedGroup, clauses []groupFilterClause) bool {
-	for _, clause := range clauses {
-		matched := false
-		switch clause.attribute {
-		case "displayname":
-			matched = normalize(group.DisplayName) == clause.value
-		case "externalid":
-			matched = group.ExternalID == clause.value
-		case "members.value":
-			for _, member := range group.Members {
-				if strings.TrimSpace(member.Value) == clause.value {
-					matched = true
-					break
-				}
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-	return true
 }
