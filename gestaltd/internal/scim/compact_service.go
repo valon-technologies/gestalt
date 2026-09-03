@@ -152,15 +152,25 @@ func stored(r idb.Record) storedResource {
 	_ = decodeJSONValue(r["profile"], &p)
 	return storedResource{ID: recordString(r, "id"), ClientID: recordString(r, "client_id"), ResourceType: recordString(r, "resource_type"), ExternalID: recordString(r, "external_id"), CoreUserID: recordString(r, "core_user_id"), UserName: recordString(r, "user_name"), Profile: p, DisplayName: recordString(r, "display_name"), CreatedAt: recordTime(r, "created_at"), UpdatedAt: recordTime(r, "updated_at")}
 }
-func resourceRecord(x storedResource) idb.Record {
+func resourceRecord(x storedResource) (idb.Record, error) {
 	r := idb.Record{"id": x.ID, "client_id": x.ClientID, "resource_type": x.ResourceType, "created_at": x.CreatedAt, "updated_at": x.UpdatedAt}
 	if x.ExternalID != "" {
 		r["external_id"] = x.ExternalID
 	}
 	if x.ResourceType == "User" {
 		if x.Profile.Name != (Name{}) || len(x.Profile.Emails) > 0 {
-			p, _ := json.Marshal(x.Profile)
-			r["profile"] = json.RawMessage(p)
+			// IndexedDB's wire codec accepts JSON-native maps/slices, not
+			// json.RawMessage. Round-trip the profile through JSON so the
+			// stored value has the same shape while remaining codec-compatible.
+			p, err := json.Marshal(x.Profile)
+			if err != nil {
+				return nil, fmt.Errorf("marshal profile: %w", err)
+			}
+			var native any
+			if err := json.Unmarshal(p, &native); err != nil {
+				return nil, fmt.Errorf("normalize profile: %w", err)
+			}
+			r["profile"] = native
 		}
 	}
 	if x.ResourceType == "Group" {
@@ -172,7 +182,7 @@ func resourceRecord(x storedResource) idb.Record {
 	if x.UserName != "" {
 		r["user_name"] = x.UserName
 	}
-	return r
+	return r, nil
 }
 
 // sameResourceContent compares the compact fields represented by SCIM. The
@@ -791,7 +801,11 @@ func (s *CompactService) Create(ctx context.Context, clientID string, input user
 		return nil, unavailable("could not link core user")
 	}
 	row := storedResource{ID: id, ClientID: clientID, ResourceType: "User", ExternalID: u.ExternalID, CoreUserID: cu.ID, UserName: normalize(u.UserName), Profile: userProfile{Name: u.Name, Emails: u.Emails}, CreatedAt: now, UpdatedAt: now}
-	if e = tx.ObjectStore(coredata.StoreSCIMResources).Add(ctx, resourceRecord(row)); e != nil {
+	record, e := resourceRecord(row)
+	if e != nil {
+		return nil, unavailable("could not encode SCIM user")
+	}
+	if e = tx.ObjectStore(coredata.StoreSCIMResources).Add(ctx, record); e != nil {
 		_ = tx.Abort(ctx)
 		if errors.Is(e, idb.ErrAlreadyExists) {
 			return nil, conflict("SCIM user already exists")
@@ -932,7 +946,11 @@ func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch s
 	if ifMatch != "" && ifMatch != "*" && ifMatch != old.Meta.Version {
 		return nil, &Error{Status: 412, Detail: "SCIM resource version does not match"}
 	}
-	if !sameResourceContent(txRow, resourceRecord(r)) {
+	snapshotRecord, e := resourceRecord(r)
+	if e != nil {
+		return nil, unavailable("could not encode SCIM user")
+	}
+	if !sameResourceContent(txRow, snapshotRecord) {
 		if ifMatch == "" {
 			return nil, unavailable("SCIM resource changed concurrently; retry the request")
 		}
@@ -958,7 +976,11 @@ func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch s
 	r.UserName = normalize(u.UserName)
 	r.Profile = userProfile{Name: u.Name, Emails: u.Emails}
 	r.UpdatedAt = now
-	if e = tx.ObjectStore(coredata.StoreSCIMResources).Put(ctx, resourceRecord(r)); e != nil {
+	record, e := resourceRecord(r)
+	if e != nil {
+		return nil, unavailable("could not encode SCIM user")
+	}
+	if e = tx.ObjectStore(coredata.StoreSCIMResources).Put(ctx, record); e != nil {
 		if errors.Is(e, idb.ErrAlreadyExists) {
 			return nil, conflict("userName must be unique")
 		}
@@ -1052,7 +1074,11 @@ func (s *CompactService) Delete(ctx context.Context, clientID, id, ifMatch strin
 		}
 		return unavailable("could not revalidate SCIM user")
 	}
-	if !sameResourceContent(current, resourceRecord(r)) {
+	snapshotRecord, e := resourceRecord(r)
+	if e != nil {
+		return unavailable("could not encode SCIM user")
+	}
+	if !sameResourceContent(current, snapshotRecord) {
 		if ifMatch == "" {
 			return unavailable("SCIM resource changed concurrently; retry the request")
 		}

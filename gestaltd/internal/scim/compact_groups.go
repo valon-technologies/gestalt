@@ -154,7 +154,11 @@ func (s *CompactService) CreateGroup(ctx context.Context, cid string, in groupIn
 	if e != nil {
 		return nil, e
 	}
-	if e = s.db.ObjectStore("scim_resources").Add(ctx, resourceRecord(g)); e != nil {
+	record, e := resourceRecord(g)
+	if e != nil {
+		return nil, unavailable("could not encode SCIM group")
+	}
+	if e = s.db.ObjectStore("scim_resources").Add(ctx, record); e != nil {
 		if errors.Is(e, idb.ErrAlreadyExists) {
 			return nil, conflict("SCIM group already exists")
 		}
@@ -294,7 +298,11 @@ func (s *CompactService) mutateGroupLocked(ctx context.Context, cid, id, ifm str
 	if ifm != "" && ifm != "*" && ifm != old.Meta.Version {
 		return nil, &Error{Status: 412, Detail: "SCIM resource version does not match"}
 	}
-	if !sameResourceContent(txRow, resourceRecord(snapshot)) {
+	snapshotRecord, e := resourceRecord(snapshot)
+	if e != nil {
+		return nil, unavailable("could not encode SCIM group")
+	}
+	if !sameResourceContent(txRow, snapshotRecord) {
 		if ifm == "" {
 			return nil, unavailable("SCIM resource changed concurrently; retry the request")
 		}
@@ -304,7 +312,11 @@ func (s *CompactService) mutateGroupLocked(ctx context.Context, cid, id, ifm str
 		return &old, nil
 	}
 	r.ExternalID, r.DisplayName, r.UpdatedAt = next.ExternalID, next.DisplayName, s.nowUTC()
-	if e = tx.ObjectStore(coredata.StoreSCIMResources).Put(ctx, resourceRecord(r)); e != nil {
+	record, e := resourceRecord(r)
+	if e != nil {
+		return nil, unavailable("could not encode SCIM group")
+	}
+	if e = tx.ObjectStore(coredata.StoreSCIMResources).Put(ctx, record); e != nil {
 		return nil, unavailable("could not persist SCIM group")
 	}
 	if e = tx.Commit(ctx); e != nil {
@@ -394,7 +406,11 @@ func (s *CompactService) DeleteGroup(ctx context.Context, cid, id, ifm string) e
 		}
 		return unavailable("could not revalidate SCIM group")
 	}
-	if !sameResourceContent(current, resourceRecord(r)) {
+	snapshotRecord, e := resourceRecord(r)
+	if e != nil {
+		return unavailable("could not encode SCIM group")
+	}
+	if !sameResourceContent(current, snapshotRecord) {
 		if ifm == "" {
 			return unavailable("SCIM resource changed concurrently; retry the request")
 		}

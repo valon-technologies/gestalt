@@ -105,7 +105,21 @@ func TestSCIMMigrationPreservesCommittedAndCreateOnlyResources(t *testing.T) {
 		}
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	resource, _ := json.Marshal(map[string]any{"userName": "Migrated@Valon.com", "active": true})
+	resource, _ := json.Marshal(map[string]any{
+		"userName": "Migrated@Valon.com",
+		"active":   true,
+		"name":     map[string]any{"givenName": "Migrated", "familyName": "User"},
+		"emails":   []map[string]any{{"value": "migrated@valon.com", "type": "work", "primary": true}},
+	})
+	// Simulate a crash after the compact row was created but before the legacy
+	// migration completed. The rerunnable migration must replace this partial
+	// row with the complete legacy representation.
+	if err := db.ObjectStore(coredata.StoreSCIMResources).Put(context.Background(), idb.Record{
+		"id": "legacy-user", "client_id": "rippling", "resource_type": "User", "core_user_id": coreUser.ID,
+		"user_name": "partial@valon.com", "created_at": now, "updated_at": now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.ObjectStore(coredata.StoreSCIMUsers).Add(context.Background(), idb.Record{
 		"id": "legacy-user", "client_id": "rippling", "core_user_id": coreUser.ID, "version": int64(1), "deleted": false,
 		"resource": json.RawMessage(resource), "created_at": now, "updated_at": now,
@@ -138,8 +152,46 @@ func TestSCIMMigrationPreservesCommittedAndCreateOnlyResources(t *testing.T) {
 	authorization.setRelationship(&proto.Relationship{Tuple: legacyTuple, Properties: props, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME})
 	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
 	_, _, handler := newSCIMService(t, db, authorization, cfg)
-	if response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/legacy-user", testCurrentToken, nil); response.Code != http.StatusOK {
+	response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/legacy-user", testCurrentToken, nil)
+	if response.Code != http.StatusOK {
 		t.Fatalf("migrated User GET = %d %s", response.Code, response.Body.String())
+	}
+	var migratedUser scim.User
+	if err := json.Unmarshal(response.Body.Bytes(), &migratedUser); err != nil {
+		t.Fatalf("decode migrated User: %v", err)
+	}
+	if migratedUser.Name.GivenName != "Migrated" || migratedUser.Name.FamilyName != "User" || len(migratedUser.Emails) != 1 || migratedUser.Emails[0].Value != "migrated@valon.com" {
+		t.Fatalf("migrated User profile = %#v", migratedUser)
+	}
+	rows, err := services.DB.ObjectStore(coredata.StoreSCIMResources).GetAll(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migratedRow idb.Record
+	for _, row := range rows {
+		if row["id"] == "legacy-user" {
+			migratedRow = row
+			break
+		}
+	}
+	if migratedRow == nil {
+		t.Fatal("migrated User row not found")
+	}
+	encoded, err := idb.EncodeIndexedDBRecord(migratedRow)
+	if err != nil {
+		t.Fatalf("migrated User row is not accepted by the IndexedDB wire codec: %v", err)
+	}
+	decoded, err := idb.DecodeIndexedDBRecord(encoded)
+	if err != nil {
+		t.Fatalf("decode migrated User row: %v", err)
+	}
+	profile, ok := decoded["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("decoded migrated profile = %#v", decoded["profile"])
+	}
+	name, ok := profile["name"].(map[string]any)
+	if !ok || name["givenName"] != "Migrated" {
+		t.Fatalf("decoded migrated profile name = %#v", profile["name"])
 	}
 	if response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/legacy-group", testCurrentToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("migrated Group GET = %d %s", response.Code, response.Body.String())
@@ -154,6 +206,9 @@ func TestSCIMMigrationPreservesCommittedAndCreateOnlyResources(t *testing.T) {
 		if db.HasObjectStore(name) {
 			t.Fatalf("legacy store %q remains", name)
 		}
+	}
+	if _, err := scim.NewService(services.DB, authorization, "https://gestalt.example", cfg); err != nil {
+		t.Fatalf("rerunning completed migration: %v", err)
 	}
 }
 

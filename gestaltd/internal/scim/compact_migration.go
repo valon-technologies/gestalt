@@ -130,7 +130,11 @@ func (s *CompactService) putMigratedUser(ctx context.Context, row idb.Record, u 
 		updated = created
 	}
 	r := storedResource{ID: id, ClientID: cid, ResourceType: "User", ExternalID: u.ExternalID, CoreUserID: coreID, UserName: normalize(u.UserName), Profile: userProfile{Name: u.Name, Emails: u.Emails}, CreatedAt: created, UpdatedAt: updated}
-	return s.db.ObjectStore(coredata.StoreSCIMResources).Put(ctx, resourceRecord(r))
+	record, err := resourceRecord(r)
+	if err != nil {
+		return fmt.Errorf("encode migrated User: %w", err)
+	}
+	return s.db.ObjectStore(coredata.StoreSCIMResources).Put(ctx, record)
 }
 func (s *CompactService) migrateLegacyGroups(ctx context.Context) error {
 	rows, err := s.db.ObjectStore(coredata.StoreSCIMGroups).GetAll(ctx, nil)
@@ -171,7 +175,11 @@ func (s *CompactService) migrateLegacyGroups(ctx context.Context) error {
 			updated = created
 		}
 		r := storedResource{ID: id, ClientID: cid, ResourceType: "Group", ExternalID: g.ExternalID, DisplayName: g.DisplayName, CreatedAt: created, UpdatedAt: updated}
-		if err := s.db.ObjectStore(coredata.StoreSCIMResources).Put(ctx, resourceRecord(r)); err != nil {
+		record, err := resourceRecord(r)
+		if err != nil {
+			return fmt.Errorf("encode migrated Group: %w", err)
+		}
+		if err := s.db.ObjectStore(coredata.StoreSCIMResources).Put(ctx, record); err != nil {
 			return err
 		}
 	}
