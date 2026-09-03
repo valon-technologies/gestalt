@@ -10,6 +10,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -37,6 +38,12 @@ func handleRESTApplyAuthorizationState(
 	}
 
 	ctx := publicrpc.WithPublicOrigin(r.Context(), applyAuthorizationStateFullMethod)
+	existingMD, _ := metadata.FromIncomingContext(r.Context())
+	ctx = metadata.NewIncomingContext(ctx, metadata.Join(
+		existingMD,
+		httpHeadersToGRPCMetadata(r.Header),
+	))
+	ctx = stripInternalIdentityMetadata(ctx)
 	if _, _, err := transport.PreparePublicRequest(ctx, applyAuthorizationStateFullMethod, &protoReq); err != nil {
 		publicRESTErrorHandler(ctx, nil, nil, w, r, err)
 		return

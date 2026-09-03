@@ -6,6 +6,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type recordingProvider struct {
@@ -71,6 +73,35 @@ func (p *recordingProvider) Ping(context.Context) error { return nil }
 func (p *recordingProvider) Close() error               { return nil }
 
 var _ core.AuthorizationProvider = (*recordingProvider)(nil)
+
+type notFoundResourceTypesProvider struct {
+	recordingProvider
+}
+
+func (p *notFoundResourceTypesProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	return nil, status.Error(codes.NotFound, "no active model")
+}
+
+func TestApplySeedsStateWhenRuntimeModelResourceTypesAreMissing(t *testing.T) {
+	t.Parallel()
+
+	provider := &notFoundResourceTypesProvider{}
+	req := &proto.SetAuthorizationStateRequest{
+		Model: &proto.AuthorizationModel{
+			ResourceTypes: []*proto.AuthorizationModelResourceType{{
+				Name:        "app",
+				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
+			}},
+		},
+	}
+
+	if _, err := Apply(context.Background(), provider, req); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if provider.setModelCalls != 1 {
+		t.Fatalf("set model calls = %d, want 1", provider.setModelCalls)
+	}
+}
 
 func TestApplyIsIdempotentForExistingRelationships(t *testing.T) {
 	t.Parallel()

@@ -12,6 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Apply merges the requested model and relationships into the active runtime
@@ -114,6 +116,9 @@ func listRuntimeModelResourceTypes(ctx context.Context, provider core.Authorizat
 			PageToken: pageToken,
 		})
 		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return out, nil
+			}
 			return nil, fmt.Errorf("list runtime model resource types: %w", err)
 		}
 		for _, resourceType := range resp.GetResourceTypes() {
