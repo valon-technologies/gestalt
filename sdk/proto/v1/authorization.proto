@@ -278,6 +278,17 @@ service Authorization {
     option (signature) = "relationships";
     option (signature) = "model";
   }
+  rpc ApplyAuthorizationState(SetAuthorizationStateRequest) returns (SetAuthorizationStateResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/authorization/state:apply"
+      body: "*"
+    };
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (signature) = "relationships";
+    option (signature) = "model";
+  }
 
   rpc GetActiveModelRef(google.protobuf.Empty) returns (GetActiveModelRefResponse) {
     option (google.api.http) = {get: "/api/v2/authorization/models/active"};

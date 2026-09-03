@@ -64,6 +64,12 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 		conn.Close()
 		return nil, nil, err
 	}
+	if err := mux.HandlePath(http.MethodPost, "/api/v2/authorization/state:apply", func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+		handleRESTApplyAuthorizationState(w, r, cfg.Transport, cfg.Authorization)
+	}); err != nil {
+		conn.Close()
+		return nil, nil, err
+	}
 	return conn, subjectLabelRecorderMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, err := requestBearerTokenPreferringHeader(r)
 		if err == nil && token != "" {
