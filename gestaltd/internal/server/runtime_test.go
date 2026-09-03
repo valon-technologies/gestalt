@@ -176,6 +176,44 @@ func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
 	<-serveDone
 }
 
+func TestServeRuntimeReadyBeforeRegistryAppsStart(t *testing.T) {
+	t.Parallel()
+
+	registryStarted := make(chan struct{})
+	result := &bootstrap.Result{
+		Invoker: invocation.NewBroker(nil, nil, nil),
+		RegistryAppStartup: func(ctx context.Context) {
+			close(registryStarted)
+			<-ctx.Done()
+		},
+	}
+	workflowProvidersReady := make(chan struct{})
+	ready := runtimeReadinessStatus(workflowProvidersReady, fakeIndexedDBPinger{})
+	servers := []namedHTTPServer{{
+		name:   "public",
+		server: newHTTPServer("127.0.0.1:0", http.NewServeMux()),
+	}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	serveDone := make(chan struct{})
+	go func() {
+		defer close(serveDone)
+		_ = serveRuntime(ctx, &config.Config{}, bootstrap.ConnectionMaps{}, result, nil, servers, &switchableHandler{}, workflowProvidersReady, nil, nil, nil)
+	}()
+
+	select {
+	case <-registryStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("registry app startup was never invoked")
+	}
+	if got := ready(); got != "" {
+		t.Fatalf("readiness while registry apps start = %q, want ready", got)
+	}
+
+	cancel()
+	<-serveDone
+}
+
 type runtimeTestCacheServer struct {
 	proto.UnimplementedCacheServer
 

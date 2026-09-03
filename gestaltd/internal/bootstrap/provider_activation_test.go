@@ -11,7 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
-func TestResultStartAppProvidersReconcilesAfterProvidersReady(t *testing.T) {
+func TestResultStartRegistryAppsReconcilesAfterProvidersReady(t *testing.T) {
 	t.Parallel()
 
 	startup := newDeferredProviders()
@@ -33,8 +33,10 @@ func TestResultStartAppProvidersReconcilesAfterProvidersReady(t *testing.T) {
 			}()
 		},
 		startupWorkflowConfigReconcile: func(context.Context) error {
-			reconciled.Add(1)
-			return wantErr
+			if reconciled.Add(1) == 1 {
+				return wantErr
+			}
+			return nil
 		},
 	}
 
@@ -53,34 +55,37 @@ func TestResultStartAppProvidersReconcilesAfterProvidersReady(t *testing.T) {
 	close(release)
 	select {
 	case err := <-done:
-		if !errors.Is(err, wantErr) {
-			t.Fatalf("StartAppProviders error = %v, want %v", err, wantErr)
+		if err != nil {
+			t.Fatalf("StartAppProviders error = %v", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("StartAppProviders did not finish after providers became ready")
 	}
-	if got := reconciled.Load(); got != 1 {
-		t.Fatalf("workflow reconciliations = %d, want 1", got)
+	if err := result.StartRegistryApps(context.Background()); !errors.Is(err, wantErr) {
+		t.Fatalf("StartRegistryApps error = %v, want %v", err, wantErr)
 	}
-	if err := result.StartAppProviders(context.Background()); !errors.Is(err, wantErr) {
-		t.Fatalf("second StartAppProviders error = %v, want %v", err, wantErr)
+	deadline := time.After(5 * time.Second)
+	for reconciled.Load() != 2 {
+		select {
+		case <-deadline:
+			t.Fatal("failed registry workflow reconciliation was not retried")
+		case <-time.After(time.Millisecond):
+		}
 	}
-	if got := reconciled.Load(); got != 1 {
-		t.Fatalf("workflow reconciliations after second start = %d, want 1", got)
+	if err := result.StartRegistryApps(context.Background()); !errors.Is(err, wantErr) {
+		t.Fatalf("second StartRegistryApps error = %v, want %v", err, wantErr)
+	}
+	if got := reconciled.Load(); got != 2 {
+		t.Fatalf("workflow reconciliations after second start = %d, want 2", got)
 	}
 }
 
-func TestResultStartupOperationsWaitForWorkflowReconcile(t *testing.T) {
+func TestResultStartupOperationsWaitForRegistryWorkflowReconcile(t *testing.T) {
 	t.Parallel()
 
-	startup := newDeferredProviders()
-	startup.finish()
 	reconcileStarted := make(chan struct{})
 	reconcileRelease := make(chan struct{})
 	result := &Result{
-		StartupProvidersReady: startup.ready(),
-		startup:               startup,
-		startAppProviders:     func() {},
 		startupWorkflowConfigReconcile: func(context.Context) error {
 			close(reconcileStarted)
 			<-reconcileRelease
@@ -89,7 +94,7 @@ func TestResultStartupOperationsWaitForWorkflowReconcile(t *testing.T) {
 	}
 
 	startDone := make(chan error, 1)
-	go func() { startDone <- result.StartAppProviders(context.Background()) }()
+	go func() { startDone <- result.StartRegistryApps(context.Background()) }()
 	select {
 	case <-reconcileStarted:
 	case <-time.After(5 * time.Second):
@@ -111,10 +116,10 @@ func TestResultStartupOperationsWaitForWorkflowReconcile(t *testing.T) {
 	select {
 	case err := <-startDone:
 		if err != nil {
-			t.Fatalf("StartAppProviders: %v", err)
+			t.Fatalf("StartRegistryApps: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("StartAppProviders did not finish")
+		t.Fatal("StartRegistryApps did not finish")
 	}
 	select {
 	case <-waitDone:

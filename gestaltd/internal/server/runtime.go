@@ -415,8 +415,6 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 			return
 		}
 		close(workflowProvidersReady)
-
-		result.StartWorkflowConfigReconciliation(ctx)
 		slog.Debug("workflow providers ready", "count", len(result.ExtraWorkflows))
 
 		mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)
@@ -426,6 +424,11 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		}
 		mcpSlot.Set(mcpHandler)
 		slog.Debug("MCP endpoint enabled", "path", "/mcp")
+
+		if err := result.StartRegistryApps(ctx); err != nil && ctx.Err() == nil {
+			slog.WarnContext(ctx, "registry app workflow reconciliation failed; continuing", "error", err)
+		}
+		result.StartWorkflowConfigReconciliation(ctx)
 
 		select {
 		case <-result.ProvidersReady:
