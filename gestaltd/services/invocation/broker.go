@@ -885,8 +885,8 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 		return nil, nil
 	}
 	r.mu.Lock()
+	terminalMetadata := frame.Metadata != nil && r.frameSeen
 	r.frameSeen = true
-	terminalMetadata := frame.Metadata != nil && r.metadataSeen
 	if frame.Metadata != nil {
 		r.metadataSeen = true
 		result := &core.OperationResult{

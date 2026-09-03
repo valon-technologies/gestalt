@@ -80,6 +80,39 @@ func TestObservingStreamReaderRecordsOnceAtTerminalCompletion(t *testing.T) {
 	}
 }
 
+func TestObservingStreamReaderRecordsMetadataAfterData(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingInvocationRecorder{}
+	broker := &Broker{invocationRecorder: recorder}
+	_, span := broker.tracer().Start(context.Background(), "test")
+	reader := &observingStreamReader{
+		inner: core.StreamReaderFunc(streamFrames([]*core.InvokeFrame{
+			{Data: []byte("chunk")},
+			{Metadata: &core.InvokeMetadata{Status: http.StatusOK}},
+		})),
+		broker:       broker,
+		ctx:          context.Background(),
+		span:         span,
+		startedAt:    time.Now().Add(-time.Millisecond),
+		providerName: "g-issues",
+		operation:    "stream",
+	}
+
+	if _, err := reader.Recv(); err != nil {
+		t.Fatalf("Recv data: %v", err)
+	}
+	if _, err := reader.Recv(); err != nil {
+		t.Fatalf("Recv terminal metadata: %v", err)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("got %d records, want exactly 1", len(recorder.records))
+	}
+	if got := recorder.records[0]; got.Outcome != observability.InvocationPassed || got.Status != http.StatusOK {
+		t.Fatalf("record = %#v, want passed 200", got)
+	}
+}
+
 func TestObservingStreamReaderRecordsTrailingFailureBeforeReturn(t *testing.T) {
 	t.Parallel()
 

@@ -125,6 +125,7 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 					_, _ = w.Write(frame.Data)
 					flusher.Flush()
 				}
+				finalizeStreamReader(reader, nil)
 				return
 			}
 			continue
