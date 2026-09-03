@@ -107,12 +107,13 @@ type credentialReconciliationEntry struct {
 
 // credentialReconciliationLocker coordinates keyed read/modify/write
 // sequences without blocking unrelated provider accounts. The provider still
-// owns durable uniqueness; this lock is the local coordination layer used by
-// a Server instance.
+// owns durable uniqueness; this lock covers every Server in this process.
 type credentialReconciliationLocker struct {
 	mu      sync.Mutex
 	entries map[string]*credentialReconciliationEntry
 }
+
+var processCredentialReconciliation credentialReconciliationLocker
 
 func (l *credentialReconciliationLocker) lock(key string) func() {
 	l.mu.Lock()

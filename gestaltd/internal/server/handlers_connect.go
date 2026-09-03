@@ -486,7 +486,7 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 	}
 	accountKey := accountKeyStoredInMetadataJSON(tok.MetadataJSON)
 	if accountKey != "" {
-		unlock := s.credentialReconciliation.lock(strings.Join([]string{tok.Subject, tok.Audience, accountKey}, "\x00"))
+		unlock := processCredentialReconciliation.lock(strings.Join([]string{tok.Subject, tok.Audience, accountKey}, "\x00"))
 		defer unlock()
 	}
 	duplicates, _, err := s.reconcileCanonicalAccountCredential(ctx, tok)
@@ -593,18 +593,7 @@ func legacyAccountKeyFromMetadataJSON(metadataJSON string) string {
 }
 
 func chooseCanonicalCredential(credentials []*core.ExternalCredential, preferred string) *core.ExternalCredential {
-	var keep *core.ExternalCredential
-	for _, credential := range credentials {
-		if credential == nil {
-			continue
-		}
-		if keep == nil || credential.Qualifier == preferred ||
-			(keep.Qualifier != preferred && credential.CreatedAt.Before(keep.CreatedAt)) ||
-			(keep.Qualifier != preferred && credential.CreatedAt.Equal(keep.CreatedAt) && credential.ID < keep.ID) {
-			keep = credential
-		}
-	}
-	return keep
+	return core.ChooseCredential(credentials, preferred, time.Now())
 }
 
 func validateProviderMetadata(source string, metadata map[string]string) error {

@@ -347,6 +347,19 @@ type recordingExternalCredentialProvider struct {
 	exchangeCredentialCalls atomic.Int64
 }
 
+type flakyDeleteExternalCredentialProvider struct {
+	core.ExternalCredentialProvider
+	failID     string
+	failDelete bool
+}
+
+func (p *flakyDeleteExternalCredentialProvider) DeleteCredential(ctx context.Context, id string) error {
+	if p.failDelete && id == p.failID {
+		return fmt.Errorf("temporary delete failure for %s", id)
+	}
+	return p.ExternalCredentialProvider.DeleteCredential(ctx, id)
+}
+
 func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	t.Parallel()
 
@@ -6100,7 +6113,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc?_connection=workspace&_instance=visible-label", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -6116,6 +6129,79 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		if len(credentials) != 0 {
 			t.Fatalf("credentials = %+v, want all duplicate account credentials removed", credentials)
+		}
+	})
+
+	t.Run("disconnect succeeds when duplicate cleanup is temporarily unavailable", func(t *testing.T) {
+		t.Parallel()
+
+		svc := testutil.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		metadata := `{"account_key":"provider:v1:shared"}`
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-visible",
+			Subject:      principal.UserSubjectID(u.ID),
+			Audience:     "app-svc:workspace",
+			Qualifier:    "visible-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "visible-token"},
+		})
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-hidden",
+			Subject:      principal.UserSubjectID(u.ID),
+			Audience:     "app-svc:workspace",
+			Qualifier:    "hidden-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "hidden-token"},
+		})
+		flaky := &flakyDeleteExternalCredentialProvider{
+			ExternalCredentialProvider: svc.ExternalCredentials,
+			failID:                     "tok-hidden",
+			failDelete:                 true,
+		}
+		svc.ExternalCredentials = flaky
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "workspace")
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc?_connection=workspace&_instance=visible-label", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 after selected credential deletion, got %d", resp.StatusCode)
+		}
+
+		credentials, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "app-svc")
+		if err != nil {
+			t.Fatalf("ListCredentialsForProvider: %v", err)
+		}
+		if len(credentials) != 1 || credentials[0].ID != "tok-hidden" {
+			t.Fatalf("credentials = %+v, want deferred duplicate retained", credentials)
+		}
+
+		flaky.failDelete = false
+		retry, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc", nil)
+		retryResp, err := http.DefaultClient.Do(retry)
+		if err != nil {
+			t.Fatalf("retry request: %v", err)
+		}
+		_ = retryResp.Body.Close()
+		if retryResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected retry 200, got %d", retryResp.StatusCode)
+		}
+		credentials, err = listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "app-svc")
+		if err != nil {
+			t.Fatalf("ListCredentialsForProvider after retry: %v", err)
+		}
+		if len(credentials) != 0 {
+			t.Fatalf("credentials = %+v, want deferred duplicate removed on retry", credentials)
 		}
 	})
 

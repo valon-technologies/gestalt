@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,23 +11,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
-
-type firstListsBarrierProvider struct {
-	core.ExternalCredentialProvider
-	ready   chan struct{}
-	release chan struct{}
-	calls   atomic.Int32
-}
-
-func (p *firstListsBarrierProvider) ListCredentials(ctx context.Context, subject, audience string) ([]*core.ExternalCredential, error) {
-	if p.calls.Add(1) <= 2 {
-		credentials, err := p.ExternalCredentialProvider.ListCredentials(ctx, subject, audience)
-		p.ready <- struct{}{}
-		<-p.release
-		return credentials, err
-	}
-	return p.ExternalCredentialProvider.ListCredentials(ctx, subject, audience)
-}
 
 func TestDedupeInstancesByAccount_PreservesDistinctAccounts(t *testing.T) {
 	t.Parallel()
@@ -122,11 +104,7 @@ func TestStoreCredentialFromMaterial_SerializesCanonicalReconciliation(t *testin
 func TestStoreCredentialFromMaterial_ConvergesAcrossServerInstances(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	provider := &firstListsBarrierProvider{
-		ExternalCredentialProvider: coretesting.NewStubExternalCredentialProvider(),
-		ready:                      make(chan struct{}, 2),
-		release:                    make(chan struct{}),
-	}
+	provider := coretesting.NewStubExternalCredentialProvider()
 	metadata, err := setAccountKey(`{"account_identity":"{\"facts\":[{\"kind\":\"login\",\"value\":\"example-user\"}]}"}`, accountKeyFromProviderID("slack", "T123:U456"))
 	if err != nil {
 		t.Fatal(err)
@@ -151,9 +129,6 @@ func TestStoreCredentialFromMaterial_ConvergesAcrossServerInstances(t *testing.T
 			errs <- err
 		}(i, s)
 	}
-	<-provider.ready
-	<-provider.ready
-	close(provider.release)
 	wg.Wait()
 	close(errs)
 	for err := range errs {

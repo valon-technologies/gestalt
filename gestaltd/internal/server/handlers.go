@@ -55,7 +55,9 @@ type instanceInfo struct {
 	Connection string           `json:"connection,omitempty"`
 	Preferred  bool             `json:"preferred,omitempty"`
 	Identity   *accountIdentity `json:"identity,omitempty"`
-	AccountKey string           `json:"accountKey,omitempty"`
+	// AccountKey is an opaque grouping identifier. Clients must not display,
+	// parse, or treat it as a provider account ID.
+	AccountKey string `json:"accountKey,omitempty"`
 
 	credentialInvalid bool
 	credentialID      string
@@ -313,10 +315,7 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 }
 
 func credentialNeedsReconnect(credential *core.ExternalCredential, now time.Time) bool {
-	if credential == nil || credential.Grant == nil || credential.Grant.ExpiresAt == nil || credential.Grant.RefreshErrorCount <= 0 {
-		return false
-	}
-	return !credential.Grant.ExpiresAt.After(now)
+	return core.CredentialNeedsReconnect(credential, now)
 }
 
 type pluginConnectionBinding struct {
@@ -476,12 +475,40 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
 		return
 	}
-	if len(matched) > 1 {
+
+	// A provider account may have more than one stored credential while a
+	// retry-safe reconciliation is catching up. Treat those credentials as one
+	// logical disconnect target before deciding whether the request is
+	// ambiguous. Keyless credentials remain distinct because their identity is
+	// not safe to infer.
+	type logicalCredentialGroup struct {
+		members []matchedCredential
+	}
+	groups := make([]logicalCredentialGroup, 0, len(matched))
+	groupByKey := make(map[string]int, len(matched))
+	for _, candidate := range matched {
+		groupKey := candidate.connection + "\x00" + candidate.credential.Audience + "\x00"
+		if accountKey := accountKeyStoredInMetadataJSON(candidate.credential.MetadataJSON); accountKey != "" {
+			groupKey += "account\x00" + accountKey
+		} else {
+			groupKey += "credential\x00" + candidate.credential.ID
+		}
+		if index, ok := groupByKey[groupKey]; ok {
+			groups[index].members = append(groups[index].members, candidate)
+			continue
+		}
+		groupByKey[groupKey] = len(groups)
+		groups = append(groups, logicalCredentialGroup{members: []matchedCredential{candidate}})
+	}
+
+	if len(groups) > 1 {
 		auditErr = errors.New("multiple matching connections")
-		labels := make([]string, len(matched))
-		for i, t := range matched {
+		labels := make([]string, len(groups))
+		for i, group := range groups {
+			t := group.members[0]
 			labels[i] = fmt.Sprintf("%s/%s", t.connection, t.credential.Qualifier)
 		}
+		sort.Strings(labels)
 		hint := "?" + httpInstanceParam + "=NAME"
 		if requestedInstance != "" {
 			hint = "?" + httpConnectionParam + "=NAME"
@@ -490,8 +517,9 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenID := matched[0].credential.ID
-	auditTarget = connectionAuditTarget(name, matched[0].connection, matched[0].credential.Qualifier)
+	disconnected := groups[0].members[0]
+	tokenID := disconnected.credential.ID
+	auditTarget = connectionAuditTarget(name, disconnected.connection, disconnected.credential.Qualifier)
 	if tokenID == "" {
 		auditErr = errors.New("connection credential is missing an ID")
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
@@ -499,10 +527,10 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deleteIDs := []string{tokenID}
-	if accountKey := accountKeyStoredInMetadataJSON(matched[0].credential.MetadataJSON); accountKey != "" {
+	if accountKey := accountKeyStoredInMetadataJSON(disconnected.credential.MetadataJSON); accountKey != "" {
 		seen := map[string]struct{}{tokenID: {}}
 		for _, tok := range tokens {
-			if tok == nil || tok.ID == "" || tok.Subject != subjectID || tok.Audience != matched[0].credential.Audience || accountKeyStoredInMetadataJSON(tok.MetadataJSON) != accountKey {
+			if tok == nil || tok.ID == "" || tok.Subject != subjectID || tok.Audience != disconnected.credential.Audience || accountKeyStoredInMetadataJSON(tok.MetadataJSON) != accountKey {
 				continue
 			}
 			if _, ok := seen[tok.ID]; ok {
@@ -511,17 +539,25 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 			seen[tok.ID] = struct{}{}
 			deleteIDs = append(deleteIDs, tok.ID)
 		}
-		sort.Strings(deleteIDs)
+		sort.Strings(deleteIDs[1:])
 	}
-	for _, id := range deleteIDs {
+	for index, id := range deleteIDs {
 		if err := s.externalCredentials.DeleteCredential(r.Context(), id); err != nil {
-			auditErr = errors.New("failed to disconnect integration")
-			writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
-			return
+			if errors.Is(err, core.ErrNotFound) {
+				continue
+			}
+			if index == 0 {
+				auditErr = errors.New("failed to disconnect integration")
+				writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
+				return
+			}
+			// The requested credential is already gone. Cleanup of a stale
+			// duplicate is best effort so a transient provider error does not
+			// turn a successful disconnect into a retry-hostile failure.
+			slog.WarnContext(r.Context(), "failed to remove duplicate credential after disconnect", "credential_id", id, "integration", name, "error", err)
 		}
 	}
 
-	disconnected := matched[0]
 	if s.connectionInstancePreferences != nil {
 		connectionID := serverCredentialConnectionID(name, disconnected.connection, s.effectiveConnectionDefOrEmpty(name, disconnected.connection))
 		if pref, err := s.connectionInstancePreferences.Get(r.Context(), subjectID, connectionID); err == nil && pref != nil && pref.Instance == disconnected.credential.Qualifier {

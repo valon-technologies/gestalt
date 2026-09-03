@@ -115,25 +115,13 @@ func (s *Server) loadReconnectGrant(ctx context.Context, subjectID, audience, in
 }
 
 func chosenReconnectInstance(credentials []*core.ExternalCredential, preferred string) (string, bool) {
-	matches := make([]*core.ExternalCredential, 0, len(credentials))
+	grantCredentials := make([]*core.ExternalCredential, 0, len(credentials))
 	for _, credential := range credentials {
-		if credential == nil || credential.Grant == nil {
-			continue
-		}
-		matches = append(matches, credential)
-	}
-	preferred = strings.TrimSpace(preferred)
-	if preferred != "" {
-		for _, credential := range matches {
-			if strings.TrimSpace(credential.Qualifier) == preferred {
-				return preferred, true
-			}
+		if credential != nil && credential.Grant != nil {
+			grantCredentials = append(grantCredentials, credential)
 		}
 	}
-	if len(matches) == 1 {
-		return strings.TrimSpace(matches[0].Qualifier), true
-	}
-	return "", false
+	return core.ChooseCredentialInstance(grantCredentials, preferred, time.Now())
 }
 
 func firstNonEmpty(values ...string) string {

@@ -1,0 +1,51 @@
+package core
+
+import (
+	"testing"
+	"time"
+)
+
+func TestChooseCredentialInstanceGroupsExplicitAccountDuplicates(t *testing.T) {
+	now := time.Unix(10, 0)
+	credentials := []*ExternalCredential{
+		{ID: "credential-new", Qualifier: "new-label", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(2, 0)},
+		{ID: "credential-old", Qualifier: "old-label", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(1, 0)},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "", now); !ok || got != "old-label" {
+		t.Fatalf("chosen instance = %q, ok=%v, want oldest duplicate account", got, ok)
+	}
+}
+
+func TestChooseCredentialInstancePrefersUsableCredential(t *testing.T) {
+	now := time.Unix(10, 0)
+	expires := time.Unix(9, 0)
+	credentials := []*ExternalCredential{
+		{
+			ID:           "credential-preferred",
+			Qualifier:    "preferred-label",
+			MetadataJSON: `{"account_key":"provider:v1:shared"}`,
+			Grant:        &ExternalCredentialGrant{ExpiresAt: &expires, RefreshErrorCount: 1},
+		},
+		{
+			ID:           "credential-usable",
+			Qualifier:    "usable-label",
+			MetadataJSON: `{"account_key":"provider:v1:shared"}`,
+		},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "preferred-label", now); !ok || got != "usable-label" {
+		t.Fatalf("chosen instance = %q, ok=%v, want usable duplicate account", got, ok)
+	}
+}
+
+func TestChooseCredentialInstanceKeepsKeylessCredentialsAmbiguous(t *testing.T) {
+	credentials := []*ExternalCredential{
+		{ID: "credential-a", Qualifier: "first-label"},
+		{ID: "credential-b", Qualifier: "second-label"},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "", time.Now()); ok || got != "" {
+		t.Fatalf("chosen instance = %q, ok=%v, want ambiguous keyless credentials", got, ok)
+	}
+}
