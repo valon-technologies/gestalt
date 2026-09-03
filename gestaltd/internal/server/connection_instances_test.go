@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +41,63 @@ func TestDedupeInstancesByAccount_PreservesKeylessAccountsWithSameName(t *testin
 	got := dedupeInstancesByAccount(instances, "")
 	if len(got) != len(instances) {
 		t.Fatalf("instances = %+v, want both keyless accounts retained", got)
+	}
+}
+
+func TestDedupeInstancesByAccount_PrefersUsableCredentialOverInvalidPreference(t *testing.T) {
+	t.Parallel()
+	instances := []instanceInfo{
+		{Name: "Preferred label", AccountKey: "v1:shared", credentialInvalid: true},
+		{Name: "Usable label", AccountKey: "v1:shared"},
+	}
+
+	got := dedupeInstancesByAccount(instances, "Preferred label")
+	if len(got) != 1 || got[0].Name != "Usable label" {
+		t.Fatalf("instances = %+v, want usable duplicate retained", got)
+	}
+}
+
+func TestStoreCredentialFromMaterial_SerializesCanonicalReconciliation(t *testing.T) {
+	t.Parallel()
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	metadata, err := setAccountKey(`{"account_identity":"{\"facts\":[{\"kind\":\"login\",\"value\":\"example-user\"}]}"}`, accountKeyFromProviderID("slack", "T123:U456"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{
+		externalCredentials: provider,
+		now:                 func() time.Time { return time.Unix(3, 0) },
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for _, token := range []string{"token-a", "token-b"} {
+		wg.Add(1)
+		go func(token string) {
+			defer wg.Done()
+			_, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+				SubjectID:    "user:1",
+				ConnectionID: "slack:default",
+				Instance:     token,
+				MetadataJSON: metadata,
+				AccessToken:  token,
+			})
+			errs <- err
+		}(token)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("store credential: %v", err)
+		}
+	}
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 1 {
+		t.Fatalf("credentials = %+v, want one credential after concurrent reconnects", credentials)
 	}
 }
 
@@ -250,5 +309,62 @@ func TestStoreCredentialFromMaterial_MigratesMatchingLegacyCredential(t *testing
 	}
 	if len(credentials) != 1 || credentials[0].MetadataJSON != candidateMetadata || credentials[0].Grant.AccessToken != "new-token" {
 		t.Fatalf("credentials = %+v, want one upgraded legacy credential", credentials)
+	}
+}
+
+func TestStoreCredentialFromMaterial_ReportsSuccessWhenDuplicateCleanupFails(t *testing.T) {
+	t.Parallel()
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	metadata, err := setAccountKey(`{"account_identity":"{\"facts\":[{\"kind\":\"login\",\"value\":\"example-user\"}]}"}`, accountKeyFromProviderID("slack", "T123:U456"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, credential := range []*core.ExternalCredential{
+		{
+			ID:           "credential-1",
+			Subject:      "user:1",
+			Audience:     "slack:default",
+			Qualifier:    "first",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "old-token"},
+			CreatedAt:    time.Unix(1, 0),
+		},
+		{
+			ID:           "credential-2",
+			Subject:      "user:1",
+			Audience:     "slack:default",
+			Qualifier:    "second",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "duplicate-token"},
+			CreatedAt:    time.Unix(2, 0),
+		},
+	} {
+		if err := provider.UpsertCredential(ctx, credential); err != nil {
+			t.Fatal(err)
+		}
+	}
+	provider.DeleteErr = errors.New("cleanup unavailable")
+
+	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
+	if _, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		Instance:     "new-label",
+		MetadataJSON: metadata,
+		AccessToken:  "fresh-token",
+	}); err != nil {
+		t.Fatalf("store credential = %v, want successful save despite deferred cleanup", err)
+	}
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := make(map[string]*core.ExternalCredential, len(credentials))
+	for _, credential := range credentials {
+		byID[credential.ID] = credential
+	}
+	if len(credentials) != 2 || byID["credential-1"] == nil || byID["credential-1"].Grant == nil || byID["credential-1"].Grant.AccessToken != "fresh-token" || byID["credential-2"] == nil {
+		t.Fatalf("credentials = %+v, want refreshed credential plus retained duplicate until cleanup retry", credentials)
 	}
 }

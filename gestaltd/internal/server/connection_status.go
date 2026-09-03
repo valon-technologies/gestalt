@@ -501,6 +501,9 @@ func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []inst
 }
 
 func shouldPreferInstance(candidate, current instanceInfo, preferred string) bool {
+	if candidate.credentialInvalid != current.credentialInvalid {
+		return !candidate.credentialInvalid
+	}
 	candidatePreferred := candidate.Name == preferred
 	currentPreferred := current.Name == preferred
 	if candidatePreferred != currentPreferred {

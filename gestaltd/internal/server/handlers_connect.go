@@ -443,6 +443,10 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 			LastRefreshedAt: &now,
 		}
 	}
+	if accountKeyStoredInMetadataJSON(tok.MetadataJSON) != "" {
+		s.credentialReconciliationMu.Lock()
+		defer s.credentialReconciliationMu.Unlock()
+	}
 	duplicates, err := s.reuseCanonicalAccountCredential(ctx, tok)
 	if err != nil {
 		return nil, err
@@ -452,7 +456,7 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 	}
 	for _, duplicateID := range duplicates {
 		if err := s.externalCredentials.DeleteCredential(ctx, duplicateID); err != nil {
-			return nil, fmt.Errorf("delete duplicate canonical account credential %q: %w", duplicateID, err)
+			slog.WarnContext(ctx, "canonical duplicate cleanup deferred", "credential_id", duplicateID, "subject", tok.Subject, "audience", tok.Audience, "error", err)
 		}
 	}
 	return tok, nil
