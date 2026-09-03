@@ -482,10 +482,11 @@ func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []inst
 	seen := make(map[string]int, len(instances))
 	out := make([]instanceInfo, 0, len(instances))
 	for _, instance := range instances {
-		key := instance.AccountKey
-		if key == "" {
-			key = "name:" + instance.Name
+		if instance.AccountKey == "" {
+			out = append(out, instance)
+			continue
 		}
+		key := instance.AccountKey
 		idx, ok := seen[key]
 		if !ok {
 			seen[key] = len(out)

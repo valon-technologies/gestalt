@@ -462,9 +462,9 @@ func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate 
 	if s == nil || candidate == nil {
 		return nil, nil
 	}
-	accountKey := accountKeyFromMetadataJSON(candidate.MetadataJSON)
+	accountKey := accountKeyStoredInMetadataJSON(candidate.MetadataJSON)
 	legacyCandidateKey := legacyAccountKeyFromMetadataJSON(candidate.MetadataJSON)
-	if accountKey == "" && legacyCandidateKey == "" || strings.TrimSpace(candidate.Subject) == "" || strings.TrimSpace(candidate.Audience) == "" {
+	if accountKey == "" || strings.TrimSpace(candidate.Subject) == "" || strings.TrimSpace(candidate.Audience) == "" {
 		return nil, nil
 	}
 	credentials, err := s.externalCredentials.ListCredentials(ctx, candidate.Subject, candidate.Audience)
@@ -476,8 +476,9 @@ func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate 
 		if credential == nil || credential.ID == candidate.ID {
 			continue
 		}
-		if accountKey != "" && credentialAccountKey(credential) == accountKey ||
-			(legacyCandidateKey != "" && legacyAccountKeyFromMetadataJSON(credential.MetadataJSON) == legacyCandidateKey) {
+		credentialKey := credentialCanonicalAccountKey(credential)
+		if credentialKey == accountKey ||
+			(credentialKey == "" && legacyCandidateKey != "" && legacyAccountKeyFromMetadataJSON(credential.MetadataJSON) == legacyCandidateKey) {
 			matches = append(matches, credential)
 		}
 	}
@@ -501,11 +502,11 @@ func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate 
 	return duplicates, nil
 }
 
-func credentialAccountKey(credential *core.ExternalCredential) string {
+func credentialCanonicalAccountKey(credential *core.ExternalCredential) string {
 	if credential == nil {
 		return ""
 	}
-	return accountKeyFromMetadataJSON(credential.MetadataJSON)
+	return accountKeyStoredInMetadataJSON(credential.MetadataJSON)
 }
 
 func legacyAccountKeyFromMetadataJSON(metadataJSON string) string {
@@ -616,7 +617,6 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 
 	return s.completeConnection(ctx, prov, tm)
 }
-
 
 func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
 	enriched := s.enrichAccountIdentity(ctx, tm)

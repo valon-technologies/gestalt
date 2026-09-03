@@ -482,10 +482,6 @@ func fetchOAuthAccountIdentity(ctx context.Context, integration, accessToken str
 	}
 }
 
-func fetchOAuthAccountIdentityFacts(ctx context.Context, integration, accessToken string) []identityFact {
-	return fetchOAuthAccountIdentity(ctx, integration, accessToken).Facts
-}
-
 func fetchJSONObject(ctx context.Context, client *http.Client, method, url, accessToken string) (map[string]any, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
@@ -526,15 +522,15 @@ func stringField(obj map[string]any, keys ...string) string {
 	return ""
 }
 
-func fetchGoogleUserInfoFacts(ctx context.Context, client *http.Client, accessToken string) []identityFact {
-	return fetchGoogleUserInfoIdentity(ctx, client, accessToken).Facts
-}
-
 func fetchGoogleUserInfoIdentity(ctx context.Context, client *http.Client, accessToken string) oauthAccountIdentity {
 	obj, err := fetchJSONObject(ctx, client, http.MethodGet, "https://openidconnect.googleapis.com/userinfo", accessToken)
 	if err != nil {
 		return oauthAccountIdentity{}
 	}
+	return googleUserInfoIdentity(obj)
+}
+
+func googleUserInfoIdentity(obj map[string]any) oauthAccountIdentity {
 	var facts []identityFact
 	accountID := stringField(obj, "sub")
 	if email := stringField(obj, "email"); email != "" {
@@ -557,15 +553,15 @@ func fetchGmailProfileFacts(ctx context.Context, client *http.Client, accessToke
 	return nil
 }
 
-func fetchSlackAuthTestFacts(ctx context.Context, client *http.Client, accessToken string) []identityFact {
-	return fetchSlackAuthTestIdentity(ctx, client, accessToken).Facts
-}
-
 func fetchSlackAuthTestIdentity(ctx context.Context, client *http.Client, accessToken string) oauthAccountIdentity {
 	obj, err := fetchJSONObject(ctx, client, http.MethodPost, "https://slack.com/api/auth.test", accessToken)
 	if err != nil {
 		return oauthAccountIdentity{}
 	}
+	return slackAuthTestIdentity(obj)
+}
+
+func slackAuthTestIdentity(obj map[string]any) oauthAccountIdentity {
 	if ok, _ := obj["ok"].(bool); !ok {
 		return oauthAccountIdentity{}
 	}
@@ -585,15 +581,15 @@ func fetchSlackAuthTestIdentity(ctx context.Context, client *http.Client, access
 	return oauthAccountIdentity{AccountID: accountID, Facts: facts}
 }
 
-func fetchGitHubUserFacts(ctx context.Context, client *http.Client, accessToken string) []identityFact {
-	return fetchGitHubUserIdentity(ctx, client, accessToken).Facts
-}
-
 func fetchGitHubUserIdentity(ctx context.Context, client *http.Client, accessToken string) oauthAccountIdentity {
 	obj, err := fetchJSONObject(ctx, client, http.MethodGet, "https://api.github.com/user", accessToken)
 	if err != nil {
 		return oauthAccountIdentity{}
 	}
+	return gitHubUserIdentity(obj)
+}
+
+func gitHubUserIdentity(obj map[string]any) oauthAccountIdentity {
 	var facts []identityFact
 	accountID := jsonScalarField(obj, "id", "node_id")
 	if login := stringField(obj, "login"); login != "" {

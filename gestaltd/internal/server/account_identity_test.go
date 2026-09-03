@@ -15,13 +15,13 @@ func TestAccountKeyFromIdentity_IsStableAndExcludesDisplayFacts(t *testing.T) {
 	t.Parallel()
 	first := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{
 		{Kind: "workspace", Value: "Valon", Primary: true},
-		{Kind: "login", Value: "giovannivocale"},
-		{Kind: "display_name", Value: "Giovanni Vocale"},
+		{Kind: "login", Value: "example-user"},
+		{Kind: "display_name", Value: "Example User"},
 	}})
 	second := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{
-		{Kind: "login", Value: "giovannivocale", Primary: true},
+		{Kind: "login", Value: "example-user", Primary: true},
 		{Kind: "workspace", Value: "Valon"},
-		{Kind: "email", Value: "gio@example.com"},
+		{Kind: "email", Value: "legacy@example.com"},
 		{Kind: "display_name", Value: "Different label"},
 	}})
 	if first == "" || first != second {
@@ -51,7 +51,7 @@ func TestEnrichAccountIdentity_UsesProviderAccountID(t *testing.T) {
 	got := s.enrichAccountIdentity(context.Background(), credentialMaterial{
 		Integration:       "slack",
 		ProviderAccountID: "T123:U456",
-		MetadataJSON:      `{"workspace":"Valon","login":"giovannivocale"}`,
+		MetadataJSON:      `{"workspace":"Valon","login":"example-user"}`,
 	})
 	if gotKey := accountKeyFromMetadataJSON(got.MetadataJSON); gotKey != accountKeyFromProviderID("slack", "T123:U456") {
 		t.Fatalf("account key = %q, want provider account key", gotKey)
@@ -240,7 +240,82 @@ func TestOAuthIdentitySource(t *testing.T) {
 	}
 }
 
-func TestFetchOAuthAccountIdentityFacts_NoProbeForUnknownIntegration(t *testing.T) {
+func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name      string
+		response  string
+		parse     func(map[string]any) oauthAccountIdentity
+		wantID    string
+		wantFacts map[string]string
+	}{
+		{
+			name:      "google userinfo",
+			response:  `{"sub":"google-account-123","email":"ada@example.com","name":"Ada"}`,
+			parse:     googleUserInfoIdentity,
+			wantID:    "google-account-123",
+			wantFacts: map[string]string{"email": "ada@example.com", "display_name": "Ada"},
+		},
+		{
+			name:      "google missing subject",
+			response:  `{"email":"ada@example.com"}`,
+			parse:     googleUserInfoIdentity,
+			wantFacts: map[string]string{"email": "ada@example.com"},
+		},
+		{
+			name:      "slack auth test",
+			response:  `{"ok":true,"team_id":"T123","user_id":"U456","team":"Example Workspace","user":"example-user"}`,
+			parse:     slackAuthTestIdentity,
+			wantID:    "T123:U456",
+			wantFacts: map[string]string{"workspace": "Example Workspace", "login": "example-user"},
+		},
+		{
+			name:      "slack missing user id",
+			response:  `{"ok":true,"team_id":"T123","team":"Example Workspace","user":"example-user"}`,
+			parse:     slackAuthTestIdentity,
+			wantFacts: map[string]string{"workspace": "Example Workspace", "login": "example-user"},
+		},
+		{
+			name:      "github user",
+			response:  `{"id":123456789,"login":"example-user","name":"Example User","email":"ada@example.com"}`,
+			parse:     gitHubUserIdentity,
+			wantID:    "123456789",
+			wantFacts: map[string]string{"login": "example-user", "display_name": "Example User", "email": "ada@example.com"},
+		},
+		{
+			name:      "github malformed id",
+			response:  `{"id":{"unexpected":"value"},"login":"example-user"}`,
+			parse:     gitHubUserIdentity,
+			wantFacts: map[string]string{"login": "example-user"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var response map[string]any
+			if err := json.Unmarshal([]byte(tc.response), &response); err != nil {
+				t.Fatal(err)
+			}
+			got := tc.parse(response)
+			if got.AccountID != tc.wantID {
+				t.Fatalf("account id = %q, want %q", got.AccountID, tc.wantID)
+			}
+			facts := make(map[string]string, len(got.Facts))
+			for _, fact := range got.Facts {
+				facts[fact.Kind] = fact.Value
+			}
+			if len(facts) != len(tc.wantFacts) {
+				t.Fatalf("facts = %+v, want %+v", facts, tc.wantFacts)
+			}
+			for kind, want := range tc.wantFacts {
+				if facts[kind] != want {
+					t.Fatalf("fact %s = %q, want %q", kind, facts[kind], want)
+				}
+			}
+		})
+	}
+}
+
+func TestFetchOAuthAccountIdentity_NoProbeForUnknownIntegration(t *testing.T) {
 	t.Parallel()
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -251,8 +326,8 @@ func TestFetchOAuthAccountIdentityFacts_NoProbeForUnknownIntegration(t *testing.
 
 	// Unknown integration must not hit any probe URL (we can't redirect hardcoded
 	// URLs here; assert via source gate instead and enrich path).
-	if facts := fetchOAuthAccountIdentityFacts(context.Background(), "jira", "secret-token"); len(facts) != 0 {
-		t.Fatalf("facts = %+v", facts)
+	if identity := fetchOAuthAccountIdentity(context.Background(), "jira", "secret-token"); len(identity.Facts) != 0 || identity.AccountID != "" {
+		t.Fatalf("identity = %+v", identity)
 	}
 	_ = srv
 	if called {
@@ -339,7 +414,7 @@ func TestEnrichAccountIdentity_GmailProbeScoped(t *testing.T) {
 	userinfoHits, profileHits := 0, 0
 	mux := http.NewServeMux()
 	// We can't remint hardcoded Google URLs; instead verify oauthIdentitySource
-	// and that fetchOAuthAccountIdentityFacts for gmail eventually returns from
+	// and that fetchOAuthAccountIdentity for gmail eventually returns from
 	// a successful local userinfo-shaped response via direct helper.
 	_ = mux
 	_ = userinfoHits
