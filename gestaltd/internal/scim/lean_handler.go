@@ -53,8 +53,8 @@ func (h *leanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *leanHandler) serviceProviderConfig(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schemas": []string{ServiceProviderConfigSchemaURN},
-		// PATCH returns 501 until AuthorizationProvider gains a multi-tuple
-		// transaction primitive that can satisfy RFC 7644 atomicity.
+		// PATCH is deliberately not advertised service-wide: this release only
+		// accepts the narrow atomic Group-membership subset used by Rippling.
 		"patch": map[string]any{"supported": false},
 		"bulk":  map[string]any{"supported": false},
 		// The endpoint accepts the documented equality/conjunction subset; it is
@@ -299,7 +299,22 @@ func (h *leanHandler) group(w http.ResponseWriter, r *http.Request, c, id string
 		}
 		writeResourceForRequest(w, r, 200, g)
 	case http.MethodPatch:
-		writeError(w, &Error{Status: http.StatusNotImplemented, Detail: "SCIM PATCH requires an atomic authorization-provider mutation primitive"})
+		var raw json.RawMessage
+		if e := decodeBody(r, &raw); e != nil {
+			writeError(w, e)
+			return
+		}
+		patch, e := parseGroupPatchRequest(raw)
+		if e != nil {
+			writeError(w, e)
+			return
+		}
+		g, e := h.s.PatchGroup(r.Context(), c, id, strings.TrimSpace(r.Header.Get("If-Match")), patch)
+		if e != nil {
+			writeError(w, e)
+			return
+		}
+		writeResourceForRequest(w, r, http.StatusOK, g)
 	case http.MethodDelete:
 		if e := h.s.DeleteGroup(r.Context(), c, id, strings.TrimSpace(r.Header.Get("If-Match"))); e != nil {
 			writeError(w, e)

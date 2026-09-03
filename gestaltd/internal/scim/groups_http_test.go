@@ -105,9 +105,9 @@ func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
 	if groupProjection.Code != http.StatusOK || bytes.Contains(groupProjection.Body.Bytes(), []byte(`"displayName"`)) || !bytes.Contains(groupProjection.Body.Bytes(), []byte(`"schemas"`)) || !bytes.Contains(groupProjection.Body.Bytes(), []byte(`"id"`)) {
 		t.Fatalf("Group excludedAttributes projection = %d %s", groupProjection.Code, groupProjection.Body.String())
 	}
-	unsupportedPatch := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"}, "Operations": []map[string]any{}})
-	if payload := decodeResponse[testErrorResponse](t, unsupportedPatch); unsupportedPatch.Code != http.StatusNotImplemented || payload.Status != "501" {
-		t.Fatalf("unsupported Group PATCH = %d %#v", unsupportedPatch.Code, payload)
+	invalidPatch := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+created.ID, testCurrentToken, map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"}, "Operations": []map[string]any{}})
+	if payload := decodeResponse[testErrorResponse](t, invalidPatch); invalidPatch.Code != http.StatusBadRequest || payload.SCIMType != "invalidSyntax" {
+		t.Fatalf("invalid Group PATCH = %d %#v", invalidPatch.Code, payload)
 	}
 	coreAlice, err := services.Users.FindUserByEmail(context.Background(), "alice@valon.com")
 	if err != nil {

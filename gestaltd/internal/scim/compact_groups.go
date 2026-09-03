@@ -14,21 +14,19 @@ import (
 )
 
 func (s *CompactService) groupValue(ctx context.Context, r storedResource) (Group, error) {
+	g, _, err := s.groupValueAndTuples(ctx, r)
+	return g, err
+}
+
+func (s *CompactService) groupValueAndTuples(ctx context.Context, r storedResource) (Group, []*proto.RelationshipTuple, error) {
 	g := Group{Schemas: []string{GroupSchemaURN}, ID: r.ID, ExternalID: r.ExternalID, DisplayName: r.DisplayName, Meta: Meta{ResourceType: "Group", Created: r.CreatedAt, LastModified: r.UpdatedAt, Location: s.baseURL + "/scim/v2/Groups/" + r.ID}}
-	m, e := s.liveMembers(ctx, r.ClientID, r.ID)
-	if e != nil {
-		return Group{}, unavailable("could not read group membership")
+	m, tuples, err := s.liveMembersAndTuples(ctx, r.ClientID, r.ID)
+	if err != nil {
+		return Group{}, nil, unavailable("could not read group membership")
 	}
 	g.Members = m
-	canon := struct {
-		Schemas     []string `json:"schemas"`
-		ID          string   `json:"id"`
-		ExternalID  string   `json:"externalId,omitempty"`
-		DisplayName string   `json:"displayName"`
-		Members     []Member `json:"members,omitempty"`
-	}{g.Schemas, g.ID, g.ExternalID, g.DisplayName, g.Members}
-	g.Meta.Version = etag(canon)
-	return g, nil
+	g.Meta.Version = groupContentETag(g)
+	return g, tuples, nil
 }
 
 func validateRetainedMemberAttributes(previous, next []Member) error {
@@ -50,12 +48,13 @@ func validateRetainedMemberAttributes(previous, next []Member) error {
 	return nil
 }
 
-func (s *CompactService) liveMembers(ctx context.Context, cid, gid string) ([]Member, error) {
+func (s *CompactService) liveMembersAndTuples(ctx context.Context, cid, gid string) ([]Member, []*proto.RelationshipTuple, error) {
 	rs, e := s.listRelationships(ctx, &proto.RelationshipFilter{Resource: &proto.Resource{Type: "group", Id: gid}, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
 	if e != nil {
-		return nil, e
+		return nil, nil, e
 	}
 	out := []Member{}
+	physical := []*proto.RelationshipTuple{}
 	seen := map[string]struct{}{}
 	for _, x := range rs {
 		if x.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
@@ -65,11 +64,12 @@ func (s *CompactService) liveMembers(ctx context.Context, cid, gid string) ([]Me
 		if sub := t.GetSubject(); sub != nil && strings.HasPrefix(sub.Id, "user:") {
 			users, err := s.db.ObjectStore(coredata.StoreSCIMResources).Index("by_client_core_user").GetAll(ctx, []any{cid, "User", strings.TrimPrefix(sub.Id, "user:")})
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if len(users) != 1 {
 				continue
 			}
+			physical = append(physical, x.GetTuple())
 			u := users[0]
 			member := Member{Value: recordString(u, "id"), Ref: s.baseURL + "/scim/v2/Users/" + recordString(u, "id"), Type: "User"}
 			key := member.Type + "\x00" + member.Value
@@ -82,10 +82,11 @@ func (s *CompactService) liveMembers(ctx context.Context, cid, gid string) ([]Me
 			gr, e := s.findGroup(ctx, cid, ss.Resource.Id)
 			if e != nil {
 				if !errors.Is(e, idb.ErrNotFound) {
-					return nil, e
+					return nil, nil, e
 				}
 				continue
 			}
+			physical = append(physical, x.GetTuple())
 			member := Member{Value: gr.ID, Ref: s.baseURL + "/scim/v2/Groups/" + gr.ID, Type: "Group"}
 			key := member.Type + "\x00" + member.Value
 			if _, exists := seen[key]; exists {
@@ -95,8 +96,18 @@ func (s *CompactService) liveMembers(ctx context.Context, cid, gid string) ([]Me
 			out = append(out, member)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Value < out[j].Value })
-	return out, nil
+	sortMembers(out)
+	sort.SliceStable(physical, func(i, j int) bool { return physicalTupleKey(physical[i]) < physicalTupleKey(physical[j]) })
+	return out, physical, nil
+}
+
+func sortMembers(members []Member) {
+	sort.Slice(members, func(i, j int) bool {
+		if members[i].Value != members[j].Value {
+			return members[i].Value < members[j].Value
+		}
+		return members[i].Type < members[j].Type
+	})
 }
 func (s *CompactService) groupTuple(ctx context.Context, cid, gid string, m Member) (*proto.RelationshipTuple, error) {
 	if strings.TrimSpace(m.Value) == "" {
