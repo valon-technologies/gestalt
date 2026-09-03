@@ -16,6 +16,12 @@ type recordingInvocationRecorder struct {
 	records []observability.InvocationRecord
 }
 
+type invocationRecordChannel chan observability.InvocationRecord
+
+func (r invocationRecordChannel) RecordInvocation(record observability.InvocationRecord) {
+	r <- record
+}
+
 func (r *recordingInvocationRecorder) RecordInvocation(record observability.InvocationRecord) {
 	r.records = append(r.records, record)
 }
@@ -75,6 +81,8 @@ func TestObservingStreamReaderRecordsOnceAtTerminalCompletion(t *testing.T) {
 }
 
 func TestObservingStreamReaderRecordsTrailingFailureBeforeReturn(t *testing.T) {
+	t.Parallel()
+
 	recorder := &recordingInvocationRecorder{}
 	broker := &Broker{invocationRecorder: recorder}
 	_, span := broker.tracer().Start(context.Background(), "test")
@@ -106,6 +114,8 @@ func TestObservingStreamReaderRecordsTrailingFailureBeforeReturn(t *testing.T) {
 }
 
 func TestObservingStreamReaderMapsPreMetadataErrorStatus(t *testing.T) {
+	t.Parallel()
+
 	recorder := &recordingInvocationRecorder{}
 	broker := &Broker{invocationRecorder: recorder}
 	_, span := broker.tracer().Start(context.Background(), "test")
@@ -130,6 +140,75 @@ func TestObservingStreamReaderMapsPreMetadataErrorStatus(t *testing.T) {
 	}
 	if got := recorder.records[0]; got.Outcome != observability.InvocationFailed || got.Status != http.StatusBadGateway {
 		t.Fatalf("record = %#v, want failed 502", got)
+	}
+}
+
+func TestObservingStreamReaderFinalizesOnContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	records := make(chan observability.InvocationRecord, 1)
+	recorder := invocationRecordChannel(records)
+	broker := &Broker{invocationRecorder: recorder}
+	_, span := broker.tracer().Start(ctx, "test")
+	newObservingStreamReader(
+		core.StreamReaderFunc(func() (*core.InvokeFrame, error) { return nil, io.EOF }),
+		broker,
+		ctx,
+		span,
+		time.Now().Add(-time.Millisecond),
+		nil,
+		"g-issues",
+		"stream",
+		"http",
+	)
+
+	cancel()
+	select {
+	case got := <-records:
+		if got.Outcome != observability.InvocationFailed || got.Status != http.StatusBadGateway {
+			t.Fatalf("record = %#v, want failed 502", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("context cancellation did not finalize the stream")
+	}
+
+	select {
+	case got := <-records:
+		t.Fatalf("got duplicate record: %#v", got)
+	default:
+	}
+}
+
+func TestObservingStreamReaderFinalizesExplicitly(t *testing.T) {
+	t.Parallel()
+
+	records := make(chan observability.InvocationRecord, 1)
+	recorder := invocationRecordChannel(records)
+	broker := &Broker{invocationRecorder: recorder}
+	ctx := context.Background()
+	_, span := broker.tracer().Start(ctx, "test")
+	reader := newObservingStreamReader(
+		core.StreamReaderFunc(func() (*core.InvokeFrame, error) { return nil, io.EOF }),
+		broker,
+		ctx,
+		span,
+		time.Now().Add(-time.Millisecond),
+		nil,
+		"g-issues",
+		"stream",
+		"grpc",
+	)
+
+	reader.FinalizeStream(errors.New("client send failed"))
+	select {
+	case got := <-records:
+		if got.Outcome != observability.InvocationFailed || got.Status != http.StatusBadGateway {
+			t.Fatalf("record = %#v, want failed 502", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("explicit finalization did not record the stream")
 	}
 }
 

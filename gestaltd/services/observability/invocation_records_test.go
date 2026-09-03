@@ -6,6 +6,8 @@ import (
 )
 
 func TestInvocationRecordStoreZeroValueIsUsable(t *testing.T) {
+	t.Parallel()
+
 	var store InvocationRecordStore
 
 	store.RecordInvocation(InvocationRecord{

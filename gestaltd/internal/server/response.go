@@ -57,6 +57,7 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		finalizeStreamReader(reader, errors.New("streaming is not supported"))
 		writeError(w, http.StatusInternalServerError, "streaming is not supported")
 		return
 	}
@@ -87,11 +88,13 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 	for {
 		select {
 		case <-ctx.Done():
+			finalizeStreamReader(reader, ctx.Err())
 			return
 		default:
 		}
 		frame, err := reader.Recv()
 		if err != nil {
+			finalizeStreamReader(reader, err)
 			if errors.Is(err, io.EOF) {
 				if !headersWritten {
 					writeError(w, http.StatusInternalServerError, "internal error")
@@ -104,6 +107,7 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 			return
 		}
 		if frame == nil {
+			finalizeStreamReader(reader, nil)
 			if !headersWritten {
 				writeError(w, http.StatusInternalServerError, "internal error")
 			}
@@ -132,6 +136,12 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 			_, _ = w.Write(frame.Data)
 			flusher.Flush()
 		}
+	}
+}
+
+func finalizeStreamReader(reader core.StreamReader, err error) {
+	if finalizer, ok := reader.(invocation.StreamFinalizer); ok {
+		finalizer.FinalizeStream(err)
 	}
 }
 

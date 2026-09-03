@@ -86,6 +86,12 @@ type StreamingInvoker interface {
 	InvokeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error)
 }
 
+// StreamFinalizer lets a transport report that it stopped consuming a stream
+// before the reader could observe its terminal frame or error.
+type StreamFinalizer interface {
+	FinalizeStream(error)
+}
+
 // MaybeStreamingInvoker is implemented by invokers that resolve unary-vs-stream
 // in a single catalog lookup.
 type MaybeStreamingInvoker interface {
@@ -612,17 +618,17 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	// arrives as a metadata frame with status >= 500, not a terminal
 	// *OperationResult, so the observation happens on the first Recv.
 	spanOwned = true
-	return &observingStreamReader{
-		inner:        reader,
-		broker:       b,
-		ctx:          ctx,
-		span:         span,
-		startedAt:    startedAt,
-		principal:    p,
-		providerName: providerName,
-		operation:    opMeta.ID,
-		transport:    metricutil.AttrValue(transport),
-	}, nil
+	return newObservingStreamReader(
+		reader,
+		b,
+		ctx,
+		span,
+		startedAt,
+		p,
+		providerName,
+		opMeta.ID,
+		metricutil.AttrValue(transport),
+	), nil
 }
 
 // InvokeOutcome is the discriminated result of InvokeMaybeStream. Exactly one
@@ -791,17 +797,17 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 			return fail(err)
 		}
 		spanOwned = true
-		return &InvokeOutcome{Stream: &observingStreamReader{
-			inner:        reader,
-			broker:       b,
-			ctx:          ctx,
-			span:         span,
-			startedAt:    startedAt,
-			principal:    p,
-			providerName: providerName,
-			operation:    opMeta.ID,
-			transport:    metricutil.AttrValue(transport),
-		}}, nil
+		return &InvokeOutcome{Stream: newObservingStreamReader(
+			reader,
+			b,
+			ctx,
+			span,
+			startedAt,
+			p,
+			providerName,
+			opMeta.ID,
+			metricutil.AttrValue(transport),
+		)}, nil
 	}
 
 	result, err := prov.Execute(ctx, operation, params, accessToken)
@@ -817,7 +823,9 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 // observingStreamReader wraps a StreamReader, inspects metadata frames for 5xx
 // status, and records the invocation when the stream reaches its terminal
 // frame or error. A second metadata frame is the protocol's terminal error
-// frame, so it must finalize the record before the caller returns it.
+// frame, so it must finalize the record before the caller returns it. The
+// context watcher and StreamFinalizer hook cover consumers that stop reading
+// because the client disconnected or the transport failed to send a frame.
 type observingStreamReader struct {
 	inner        core.StreamReader
 	broker       *Broker
@@ -828,18 +836,50 @@ type observingStreamReader struct {
 	providerName string
 	operation    string
 	transport    string
+	mu           sync.Mutex
 	metadataSeen bool
 	frameSeen    bool
 	endOnce      sync.Once
+	stopWatch    func() bool
 	resultStatus int
 	resultErr    error
+}
+
+func newObservingStreamReader(
+	inner core.StreamReader,
+	broker *Broker,
+	ctx context.Context,
+	span trace.Span,
+	startedAt time.Time,
+	p *principal.Principal,
+	providerName, operation, transport string,
+) *observingStreamReader {
+	reader := &observingStreamReader{
+		inner:        inner,
+		broker:       broker,
+		ctx:          ctx,
+		span:         span,
+		startedAt:    startedAt,
+		principal:    p,
+		providerName: providerName,
+		operation:    operation,
+		transport:    transport,
+	}
+	reader.stopWatch = context.AfterFunc(ctx, func() {
+		reader.FinalizeStream(ctx.Err())
+	})
+	return reader
 }
 
 func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 	frame, err := r.inner.Recv()
 	if err != nil {
 		if !errors.Is(err, io.EOF) {
-			r.resultErr = err
+			r.mu.Lock()
+			if r.resultErr == nil {
+				r.resultErr = err
+			}
+			r.mu.Unlock()
 		}
 		r.endSpan()
 		return nil, err
@@ -848,9 +888,10 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 		r.endSpan()
 		return nil, nil
 	}
+	r.mu.Lock()
 	r.frameSeen = true
+	terminalMetadata := frame.Metadata != nil && r.metadataSeen
 	if frame.Metadata != nil {
-		terminalMetadata := r.metadataSeen
 		r.metadataSeen = true
 		result := &core.OperationResult{
 			Status:  frame.Metadata.Status,
@@ -858,15 +899,32 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 			Body:    frame.Data,
 		}
 		r.resultStatus = result.Status
+		r.mu.Unlock()
 		r.broker.observePlugin5xxResult(r.ctx, r.span, r.principal, r.providerName, r.operation, r.transport, result)
 		if terminalMetadata {
 			r.endSpan()
 		}
+		return frame, nil
 	}
+	r.mu.Unlock()
 	return frame, nil
 }
 
-func (r *observingStreamReader) terminalResultStatus() int {
+// FinalizeStream records an invocation when its transport stops consuming the
+// reader before Recv can observe a terminal frame. It is safe to call more
+// than once; only the first completion records the request.
+func (r *observingStreamReader) FinalizeStream(err error) {
+	if err != nil && !errors.Is(err, io.EOF) {
+		r.mu.Lock()
+		if r.resultErr == nil {
+			r.resultErr = err
+		}
+		r.mu.Unlock()
+	}
+	r.endSpan()
+}
+
+func (r *observingStreamReader) terminalResultStatusLocked() int {
 	if validHTTPStatus(r.resultStatus) {
 		return r.resultStatus
 	}
@@ -886,13 +944,19 @@ func (r *observingStreamReader) terminalResultStatus() int {
 // that stop after an error frame cannot leave the request unrecorded.
 func (r *observingStreamReader) endSpan() {
 	r.endOnce.Do(func() {
-		resultStatus := r.terminalResultStatus()
+		if r.stopWatch != nil {
+			r.stopWatch()
+		}
+		r.mu.Lock()
+		resultStatus := r.terminalResultStatusLocked()
+		resultErr := r.resultErr
+		r.mu.Unlock()
 		r.broker.recordInvocationRecord(
 			r.startedAt,
 			r.providerName,
 			r.operation,
 			resultStatus,
-			operationResultFailed(resultStatus, r.resultErr),
+			operationResultFailed(resultStatus, resultErr),
 		)
 		r.span.End()
 	})
