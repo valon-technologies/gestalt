@@ -55,8 +55,11 @@ type instanceInfo struct {
 	Connection string           `json:"connection,omitempty"`
 	Preferred  bool             `json:"preferred,omitempty"`
 	Identity   *accountIdentity `json:"identity,omitempty"`
+	AccountKey string           `json:"accountKey,omitempty"`
 
 	credentialInvalid bool
+	credentialID      string
+	credentialCreated time.Time
 }
 
 type credentialFieldInfo struct {
@@ -299,7 +302,10 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 				Name:              tok.Qualifier,
 				Connection:        userFacingConnectionName(binding.Connection),
 				Identity:          identityFromMetadataJSON(tok.MetadataJSON),
+				AccountKey:        accountKeyFromMetadataJSON(tok.MetadataJSON),
 				credentialInvalid: credentialInvalid,
+				credentialID:      tok.ID,
+				credentialCreated: tok.CreatedAt,
 			})
 		}
 	}

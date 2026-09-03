@@ -460,14 +460,66 @@ func ownerKindForPrincipal(p *principal.Principal) string {
 	}
 }
 
-func groupInstancesForConnection(instances []instanceInfo, connection string) []instanceInfo {
+func groupInstancesForConnection(instances []instanceInfo, connection string, preferred ...string) []instanceInfo {
 	connection = userFacingConnectionName(config.ResolveConnectionAlias(connection))
-	out := make([]instanceInfo, 0, len(instances))
+	filtered := make([]instanceInfo, 0, len(instances))
 	for _, instance := range instances {
 		if connection != "" && config.ResolveConnectionAlias(instance.Connection) != config.ResolveConnectionAlias(connection) {
 			continue
 		}
-		out = append(out, instance)
+		filtered = append(filtered, instance)
+	}
+	return dedupeInstancesByAccount(filtered, firstString(preferred))
+}
+
+func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []instanceInfo {
+	if len(instances) < 2 {
+		return instances
+	}
+	// Keep records without a canonical key distinct. They are legacy or
+	// provider credentials that cannot safely be proven to represent the same
+	// account.
+	seen := make(map[string]int, len(instances))
+	out := make([]instanceInfo, 0, len(instances))
+	for _, instance := range instances {
+		key := instance.AccountKey
+		if key == "" {
+			key = "name:" + instance.Name
+		}
+		idx, ok := seen[key]
+		if !ok {
+			seen[key] = len(out)
+			out = append(out, instance)
+			continue
+		}
+		if shouldPreferInstance(instance, out[idx], preferred) {
+			out[idx] = instance
+		}
 	}
 	return out
+}
+
+func shouldPreferInstance(candidate, current instanceInfo, preferred string) bool {
+	candidatePreferred := candidate.Name == preferred
+	currentPreferred := current.Name == preferred
+	if candidatePreferred != currentPreferred {
+		return candidatePreferred
+	}
+	if candidate.credentialCreated.IsZero() != current.credentialCreated.IsZero() {
+		return !candidate.credentialCreated.IsZero()
+	}
+	if !candidate.credentialCreated.Equal(current.credentialCreated) {
+		return candidate.credentialCreated.Before(current.credentialCreated)
+	}
+	if candidate.credentialID != current.credentialID {
+		return candidate.credentialID < current.credentialID
+	}
+	return candidate.Name < current.Name
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(values[0])
 }

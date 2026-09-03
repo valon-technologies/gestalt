@@ -442,10 +442,82 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 			LastRefreshedAt: &now,
 		}
 	}
+	duplicates, err := s.reuseCanonicalAccountCredential(ctx, tok)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
 		return nil, err
 	}
+	for _, duplicateID := range duplicates {
+		if err := s.externalCredentials.DeleteCredential(ctx, duplicateID); err != nil {
+			return nil, fmt.Errorf("delete duplicate canonical account credential %q: %w", duplicateID, err)
+		}
+	}
 	return tok, nil
+}
+
+func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate *core.ExternalCredential) ([]string, error) {
+	if s == nil || candidate == nil {
+		return nil, nil
+	}
+	accountKey := accountKeyFromMetadataJSON(candidate.MetadataJSON)
+	if accountKey == "" || strings.TrimSpace(candidate.Subject) == "" || strings.TrimSpace(candidate.Audience) == "" {
+		return nil, nil
+	}
+	credentials, err := s.externalCredentials.ListCredentials(ctx, candidate.Subject, candidate.Audience)
+	if err != nil {
+		return nil, fmt.Errorf("list credentials for canonical account merge: %w", err)
+	}
+	var matches []*core.ExternalCredential
+	for _, credential := range credentials {
+		if credential == nil || credential.ID == candidate.ID {
+			continue
+		}
+		if credentialAccountKey(credential) == accountKey {
+			matches = append(matches, credential)
+		}
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+
+	preferred := s.preferredInstanceForConnection(ctx, candidate.Subject, candidate.Audience)
+	keep := chooseCanonicalCredential(matches, preferred)
+	candidate.ID = keep.ID
+	candidate.Qualifier = keep.Qualifier
+	candidate.CreatedAt = keep.CreatedAt
+
+	duplicates := make([]string, 0, len(matches)-1)
+	for _, duplicate := range matches {
+		if duplicate.ID == keep.ID || strings.TrimSpace(duplicate.ID) == "" {
+			continue
+		}
+		duplicates = append(duplicates, duplicate.ID)
+	}
+	return duplicates, nil
+}
+
+func credentialAccountKey(credential *core.ExternalCredential) string {
+	if credential == nil {
+		return ""
+	}
+	return accountKeyFromMetadataJSON(credential.MetadataJSON)
+}
+
+func chooseCanonicalCredential(credentials []*core.ExternalCredential, preferred string) *core.ExternalCredential {
+	var keep *core.ExternalCredential
+	for _, credential := range credentials {
+		if credential == nil {
+			continue
+		}
+		if keep == nil || credential.Qualifier == preferred ||
+			(keep.Qualifier != preferred && credential.CreatedAt.Before(keep.CreatedAt)) ||
+			(keep.Qualifier != preferred && credential.CreatedAt.Equal(keep.CreatedAt) && credential.ID < keep.ID) {
+			keep = credential
+		}
+	}
+	return keep
 }
 
 func validateProviderMetadata(source string, metadata map[string]string) error {
@@ -454,7 +526,7 @@ func validateProviderMetadata(source string, metadata map[string]string) error {
 		source = "provider"
 	}
 	for k, v := range metadata {
-		if k == accountIdentityMetadataKey {
+		if k == accountIdentityMetadataKey || k == accountKeyMetadataKey {
 			return fmt.Errorf("%s must not set reserved metadata key %q", source, k)
 		}
 		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
@@ -476,7 +548,7 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 		}
 	}
 	for k, v := range extra {
-		if k == accountIdentityMetadataKey {
+		if k == accountIdentityMetadataKey || k == accountKeyMetadataKey {
 			// Host-owned; never accept from provider/discovery overlays.
 			continue
 		}
@@ -534,15 +606,17 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 	return s.completeConnection(ctx, prov, tm)
 }
 
+
 func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
 	enriched := s.enrichAccountIdentity(ctx, tm)
 	if err := s.ensureAppAccessDefaults(ctx, enriched, prov); err != nil {
 		return nil, err
 	}
-	if _, err := s.storeCredentialFromMaterial(ctx, enriched); err != nil {
+	stored, err := s.storeCredentialFromMaterial(ctx, enriched)
+	if err != nil {
 		return nil, err
 	}
-	s.maybeSetDefaultInstancePreference(ctx, enriched.SubjectID, enriched.Integration, enriched.Connection, enriched.Instance)
+	s.maybeSetDefaultInstancePreference(ctx, enriched.SubjectID, enriched.Integration, enriched.Connection, stored.Qualifier)
 	return &connectionSetupResult{Status: "connected", Integration: enriched.Integration}, nil
 }
 

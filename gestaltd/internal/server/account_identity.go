@@ -2,11 +2,14 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,6 +21,7 @@ import (
 // provider/discovery metadata must not set it. Runtime connection-param
 // surfaces must strip it via core.ConnectionParamsFromMetadataJSON.
 const accountIdentityMetadataKey = core.AccountIdentityMetadataKey
+const accountKeyMetadataKey = core.AccountKeyMetadataKey
 
 const oauthIdentityProbeTimeout = 3 * time.Second
 
@@ -59,6 +63,18 @@ var identityPrimaryKindOrder = []string{
 	"subdomain",
 	"organization",
 	"display_name",
+}
+
+// Only facts that identify an account, rather than describe it, participate
+// in the canonical key. In particular, display names and discovered site
+// labels must never split one account into multiple records.
+var accountKeyFactKinds = map[string]struct{}{
+	"email":        {},
+	"login":        {},
+	"workspace":    {},
+	"host":         {},
+	"subdomain":    {},
+	"organization": {},
 }
 
 func parseMetadataMap(metadataJSON string) (map[string]string, error) {
@@ -122,6 +138,90 @@ func setAccountIdentity(metadataJSON string, id *accountIdentity) (string, error
 		return "", fmt.Errorf("marshal account_identity: %w", err)
 	}
 	m[accountIdentityMetadataKey] = string(b)
+	return marshalMetadataMap(m)
+}
+
+func accountKeyFromMetadataJSON(metadataJSON string) string {
+	m, err := parseMetadataMap(metadataJSON)
+	if err != nil {
+		return ""
+	}
+	if key := strings.TrimSpace(m[accountKeyMetadataKey]); key != "" {
+		return key
+	}
+	id, err := parseAccountIdentity(metadataJSON)
+	if err != nil {
+		return ""
+	}
+	return accountKeyFromIdentity(id)
+}
+
+func accountKeyFromIdentity(id *accountIdentity) string {
+	if id == nil || len(id.Facts) == 0 {
+		return ""
+	}
+	factsByKind := make(map[string]string, len(id.Facts))
+	for _, fact := range id.Facts {
+		kind := strings.ToLower(strings.TrimSpace(fact.Kind))
+		value := strings.TrimSpace(fact.Value)
+		if _, ok := accountKeyFactKinds[kind]; !ok || value == "" {
+			continue
+		}
+		if _, ok := factsByKind[kind]; !ok {
+			factsByKind[kind] = canonicalAccountKeyValue(kind, value)
+		}
+	}
+	// Prefer the provider account's user identifier. Workspace/tenant facts
+	// provide the boundary needed when the same login can exist in multiple
+	// workspaces. Extra facts such as a later OAuth email probe must not change
+	// the key for an already-linked account.
+	parts := make([]string, 0, 2)
+	if login := factsByKind["login"]; login != "" {
+		parts = append(parts, "login="+login)
+		if workspace := factsByKind["workspace"]; workspace != "" {
+			parts = append(parts, "workspace="+workspace)
+		}
+	} else if email := factsByKind["email"]; email != "" {
+		parts = append(parts, "email="+email)
+		if tenant := firstAccountTenantFact(factsByKind); tenant != "" {
+			parts = append(parts, tenant)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	sort.Strings(parts)
+	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return "v1:" + hex.EncodeToString(digest[:])
+}
+
+func firstAccountTenantFact(facts map[string]string) string {
+	for _, kind := range []string{"workspace", "organization", "subdomain", "host"} {
+		if value := facts[kind]; value != "" {
+			return kind + "=" + value
+		}
+	}
+	return ""
+}
+
+func canonicalAccountKeyValue(kind, value string) string {
+	if kind == "email" || kind == "host" || kind == "subdomain" {
+		return strings.ToLower(value)
+	}
+	return value
+}
+
+func setAccountKey(metadataJSON, key string) (string, error) {
+	m, err := parseMetadataMap(metadataJSON)
+	if err != nil {
+		return "", err
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		delete(m, accountKeyMetadataKey)
+	} else {
+		m[accountKeyMetadataKey] = key
+	}
 	return marshalMetadataMap(m)
 }
 
@@ -259,6 +359,7 @@ func mergeIdentityFacts(base []identityFact, extra ...identityFact) []identityFa
 }
 
 func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMaterial) credentialMaterial {
+	storedAccountKey := accountKeyStoredInMetadataJSON(tm.MetadataJSON)
 	existing, err := parseAccountIdentity(tm.MetadataJSON)
 	if err != nil {
 		// Corrupt identity blob: drop it and rebuild from known sources.
@@ -286,16 +387,36 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 		}
 	}
 
-	if len(facts) == 0 {
-		return tm
+	if len(facts) > 0 {
+		merged, err := setAccountIdentity(tm.MetadataJSON, &accountIdentity{Facts: facts})
+		if err != nil {
+			slog.WarnContext(ctx, "account identity enrichment skipped", "integration", tm.Integration, "error", err)
+			return tm
+		}
+		tm.MetadataJSON = merged
 	}
-	merged, err := setAccountIdentity(tm.MetadataJSON, &accountIdentity{Facts: facts})
-	if err != nil {
-		slog.WarnContext(ctx, "account identity enrichment skipped", "integration", tm.Integration, "error", err)
-		return tm
+
+	// Preserve an existing key when a provider later returns a richer set of
+	// facts. This makes the identity stable across reconnects and leaves the
+	// display projection free to evolve.
+	if storedAccountKey == "" {
+		if key := accountKeyFromIdentity(&accountIdentity{Facts: facts}); key != "" {
+			if merged, err := setAccountKey(tm.MetadataJSON, key); err == nil {
+				tm.MetadataJSON = merged
+			} else {
+				slog.WarnContext(ctx, "account key enrichment skipped", "integration", tm.Integration, "error", err)
+			}
+		}
 	}
-	tm.MetadataJSON = merged
 	return tm
+}
+
+func accountKeyStoredInMetadataJSON(metadataJSON string) string {
+	m, err := parseMetadataMap(metadataJSON)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(m[accountKeyMetadataKey])
 }
 
 // oauthIdentitySource selects the single identity probe family for an

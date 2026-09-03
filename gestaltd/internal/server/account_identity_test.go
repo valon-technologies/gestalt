@@ -7,7 +7,46 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/core"
 )
+
+func TestAccountKeyFromIdentity_IsStableAndExcludesDisplayFacts(t *testing.T) {
+	t.Parallel()
+	first := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{
+		{Kind: "workspace", Value: "Valon", Primary: true},
+		{Kind: "login", Value: "giovannivocale"},
+		{Kind: "display_name", Value: "Giovanni Vocale"},
+	}})
+	second := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{
+		{Kind: "login", Value: "giovannivocale", Primary: true},
+		{Kind: "workspace", Value: "Valon"},
+		{Kind: "email", Value: "gio@example.com"},
+		{Kind: "display_name", Value: "Different label"},
+	}})
+	if first == "" || first != second {
+		t.Fatalf("keys = %q and %q, want same stable key", first, second)
+	}
+	if got := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{{Kind: "workspace", Value: "Valon"}}}); got != "" {
+		t.Fatalf("workspace-only identity key = %q, want empty", got)
+	}
+}
+
+func TestEnrichAccountIdentity_PersistsCanonicalAccountKey(t *testing.T) {
+	t.Parallel()
+	var s Server
+	got := s.enrichAccountIdentity(context.Background(), credentialMaterial{
+		Integration:  "slack",
+		Fields:       map[string]string{"email": "User@Example.com"},
+		MetadataJSON: `{"workspace":"Valon"}`,
+	})
+	if key := accountKeyStoredInMetadataJSON(got.MetadataJSON); key == "" {
+		t.Fatalf("metadata = %q, want persisted account key", got.MetadataJSON)
+	}
+	if gotKey := accountKeyFromMetadataJSON(got.MetadataJSON); gotKey == "" {
+		t.Fatalf("metadata = %q, want readable account key", got.MetadataJSON)
+	}
+}
 
 func TestNormalizeIdentityFacts_AssignsSinglePrimary(t *testing.T) {
 	t.Parallel()
@@ -130,6 +169,16 @@ func TestValidateProviderMetadataRejectsAccountIdentity(t *testing.T) {
 	}
 }
 
+func TestValidateProviderMetadataRejectsAccountKey(t *testing.T) {
+	t.Parallel()
+	err := validateProviderMetadata("discovery", map[string]string{
+		accountKeyMetadataKey: "provider-controlled",
+	})
+	if err == nil || !strings.Contains(err.Error(), accountKeyMetadataKey) {
+		t.Fatalf("error = %v, want reserved key rejection", err)
+	}
+}
+
 func TestMergeMetadataJSONStripsAccountIdentity(t *testing.T) {
 	t.Parallel()
 	merged, err := mergeMetadataJSON(`{"cloud_id":"1"}`, map[string]string{
@@ -148,6 +197,17 @@ func TestMergeMetadataJSONStripsAccountIdentity(t *testing.T) {
 	}
 	if _, ok := raw[accountIdentityMetadataKey]; ok {
 		t.Fatal("account_identity must not merge from provider overlay")
+	}
+}
+
+func TestConnectionParamsFromMetadataJSONStripsAccountKey(t *testing.T) {
+	t.Parallel()
+	params, err := core.ConnectionParamsFromMetadataJSON(`{"workspace":"Valon","account_key":"v1:secret"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := params[core.AccountKeyMetadataKey]; ok {
+		t.Fatalf("params = %+v, account key must not be runtime metadata", params)
 	}
 }
 
