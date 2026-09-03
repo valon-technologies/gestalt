@@ -560,9 +560,25 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 
 	if s.connectionInstancePreferences != nil {
 		connectionID := serverCredentialConnectionID(name, disconnected.connection, s.effectiveConnectionDefOrEmpty(name, disconnected.connection))
-		if pref, err := s.connectionInstancePreferences.Get(r.Context(), subjectID, connectionID); err == nil && pref != nil && pref.Instance == disconnected.credential.Qualifier {
-			if err := s.connectionInstancePreferences.Delete(r.Context(), subjectID, connectionID); err != nil {
-				slog.WarnContext(r.Context(), "failed to clear preferred instance after disconnect", "integration", name, "connection", disconnected.connection, "error", err)
+		if pref, err := s.connectionInstancePreferences.Get(r.Context(), subjectID, connectionID); err == nil && pref != nil {
+			deletedIDs := make(map[string]struct{}, len(deleteIDs))
+			for _, id := range deleteIDs {
+				deletedIDs[id] = struct{}{}
+			}
+			preferenceDeleted := false
+			for _, tok := range tokens {
+				if tok == nil || tok.Qualifier != pref.Instance {
+					continue
+				}
+				if _, ok := deletedIDs[tok.ID]; ok {
+					preferenceDeleted = true
+					break
+				}
+			}
+			if preferenceDeleted {
+				if err := s.connectionInstancePreferences.Delete(r.Context(), subjectID, connectionID); err != nil {
+					slog.WarnContext(r.Context(), "failed to clear preferred instance after disconnect", "integration", name, "connection", disconnected.connection, "error", err)
+				}
 			}
 		}
 	}
