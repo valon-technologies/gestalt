@@ -7,6 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 const (
@@ -38,6 +39,7 @@ func authorizationMethodAccessClass(fullMethod string) (read bool, write bool, o
 func (t *ProviderGatewayTransport) enforceAuthorizationPublicAccess(
 	ctx context.Context,
 	subjectID, fullMethod string,
+	req gproto.Message,
 ) error {
 	read, write, ok := authorizationMethodAccessClass(fullMethod)
 	if !ok {
@@ -47,13 +49,24 @@ func (t *ProviderGatewayTransport) enforceAuthorizationPublicAccess(
 	resource := &proto.Resource{Type: authorizationResourceType, Id: authorizationResourceID}
 	actions := authorizationPublicActions(read, write)
 	for _, action := range actions {
-		req := invocation.SubjectAccessRequest(subjectID, action, resource)
-		allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, req)
+		checkReq := invocation.SubjectAccessRequest(subjectID, action, resource)
+		allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, checkReq)
 		if err != nil {
 			return status.Error(codes.Unavailable, "authorization provider unavailable")
 		}
 		if allowed {
 			return nil
+		}
+	}
+	if write {
+		if tuple, ok := relationshipTupleFromAuthorizationRequest(fullMethod, req); ok {
+			allowed, err := allowsAppScopedRelationshipMutation(ctx, t.authorization, subjectID, tuple)
+			if err != nil {
+				return status.Error(codes.Unavailable, "authorization provider unavailable")
+			}
+			if allowed {
+				return nil
+			}
 		}
 	}
 	return status.Error(codes.PermissionDenied, "access denied")

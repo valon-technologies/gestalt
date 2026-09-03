@@ -79,7 +79,7 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := t.enforcePublicAuthorization(ctx, p, resourceID, fullMethod); err != nil {
+	if err := t.enforcePublicAuthorization(ctx, p, resourceID, fullMethod, req); err != nil {
 		return nil, nil, err
 	}
 	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, t.users, p, req, policy, fullMethod)
@@ -104,6 +104,7 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	ctx context.Context,
 	p *principal.Principal,
 	providerID, fullMethod string,
+	req gproto.Message,
 ) error {
 	service, _ := splitFullMethod(fullMethod)
 	if service == proto.App_ServiceDesc.ServiceName || service == proto.Identity_ServiceDesc.ServiceName || service == proto.RemoteManagement_ServiceDesc.ServiceName {
@@ -117,13 +118,13 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 		return status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
 	if isAuthorizationServiceMethod(fullMethod) {
-		return t.enforceAuthorizationPublicAccess(ctx, subjectID, fullMethod)
+		return t.enforceAuthorizationPublicAccess(ctx, subjectID, fullMethod, req)
 	}
 	target := ProviderTarget{Kind: providerKindFromFullMethod(fullMethod), Name: providerID}
 	resource := &proto.Resource{Type: string(target.Kind), Id: strings.TrimSpace(target.Name)}
 	action := &proto.Action{Name: strings.TrimSpace(target.Name)}
-	req := invocation.SubjectAccessRequest(subjectID, action.GetName(), resource)
-	allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, req)
+	checkReq := invocation.SubjectAccessRequest(subjectID, action.GetName(), resource)
+	allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, checkReq)
 	if err != nil {
 		return status.Error(codes.Unavailable, "authorization provider unavailable")
 	}
