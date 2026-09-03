@@ -63,6 +63,7 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 	}
 
 	headersWritten := false
+	terminalMetadataSeen := false
 	writeHeaders := func(meta *core.InvokeMetadata) {
 		mediaType := strings.TrimSpace(meta.MediaType)
 		if mediaType == "" {
@@ -125,8 +126,8 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 					_, _ = w.Write(frame.Data)
 					flusher.Flush()
 				}
-				finalizeStreamReader(reader, nil)
-				return
+				terminalMetadataSeen = true
+				continue
 			}
 			continue
 		}
@@ -136,6 +137,10 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 		if len(frame.Data) > 0 {
 			_, _ = w.Write(frame.Data)
 			flusher.Flush()
+		}
+		if terminalMetadataSeen {
+			finalizeStreamReader(reader, nil)
+			return
 		}
 	}
 }
