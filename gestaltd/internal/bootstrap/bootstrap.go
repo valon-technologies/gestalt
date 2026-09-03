@@ -265,6 +265,7 @@ type Result struct {
 	ManualConnectionAuth    func() map[string]map[string]ManualTokenExchanger
 	Invoker                 invocation.Invoker
 	AppInvocation           invocation.Invoker
+	InvocationRecords       observability.InvocationRecordReader
 	CapabilityLister        invocation.CapabilityLister
 	AuditSink               core.AuditSink
 	SecretManager           core.SecretManager
@@ -1336,6 +1337,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	}
 	kinds := ProviderAuthorizationKinds(cfg)
 	authorizationPolicies := ProviderAuthorizationPolicies(cfg)
+	invocationRecords := observability.NewInvocationRecordStore(observability.DefaultInvocationRecordCapacity)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
@@ -1345,6 +1347,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		invocation.WithAuthorizationProvider(authorizationProvider),
 		invocation.WithProviderKinds(kinds),
 		invocation.WithAuthorizationPolicies(authorizationPolicies),
+		invocation.WithInvocationRecorder(invocationRecords),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
@@ -1588,6 +1591,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		ManualConnectionAuth:           manualConnAuthResolver,
 		Invoker:                        sharedInvoker,
 		AppInvocation:                  pluginInvoker,
+		InvocationRecords:              invocationRecords,
 		CapabilityLister:               sharedInvoker,
 		AuditSink:                      audit,
 		SecretManager:                  prepared.SecretManager,

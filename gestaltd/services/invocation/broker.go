@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -14,6 +16,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -127,6 +130,7 @@ type Broker struct {
 	providers                     *registry.ProviderMap[core.Provider]
 	users                         UserStore
 	externalCreds                 core.ExternalCredentialProvider
+	invocationRecorder            observability.InvocationRecordRecorder
 	connectionInstancePreferences ConnectionInstancePreferenceStore
 	connMapper                    ConnectionMapper
 	mcpMapper                     ConnectionMapper
@@ -188,12 +192,54 @@ func WithTracerProvider(provider trace.TracerProvider) BrokerOption {
 	return func(b *Broker) { b.tracerProvider = provider }
 }
 
+func WithInvocationRecorder(recorder observability.InvocationRecordRecorder) BrokerOption {
+	return func(b *Broker) { b.invocationRecorder = recorder }
+}
+
 func NewBroker(providers *registry.ProviderMap[core.Provider], users UserStore, externalCreds core.ExternalCredentialProvider, opts ...BrokerOption) *Broker {
 	b := &Broker{providers: providers, users: users, externalCreds: externalCreds}
 	for _, o := range opts {
 		o(b)
 	}
 	return b
+}
+
+func (b *Broker) recordCompletedInvocation(
+	ctx context.Context,
+	startedAt time.Time,
+	provider string,
+	operation string,
+	transport string,
+	connectionMode string,
+	resultStatus int,
+	failed bool,
+) {
+	recordOperationMetrics(ctx, startedAt, provider, operation, transport, connectionMode, resultStatus, failed)
+	b.recordInvocationRecord(startedAt, provider, operation, resultStatus, failed)
+}
+
+func (b *Broker) recordInvocationRecord(
+	startedAt time.Time,
+	provider string,
+	operation string,
+	resultStatus int,
+	failed bool,
+) {
+	if b == nil || b.invocationRecorder == nil {
+		return
+	}
+	outcome := observability.InvocationPassed
+	if failed {
+		outcome = observability.InvocationFailed
+	}
+	b.invocationRecorder.RecordInvocation(observability.InvocationRecord{
+		Provider:  provider,
+		Operation: operation,
+		Outcome:   outcome,
+		Status:    resultStatus,
+		Duration:  time.Since(startedAt),
+		Timestamp: startedAt.UTC(),
+	})
 }
 
 func (b *Broker) log() *slog.Logger {
@@ -243,7 +289,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	defer span.End()
 	defer func() {
 		resultStatus := operationResultStatus(result, err)
-		recordOperationMetrics(
+		b.recordCompletedInvocation(
 			ctx,
 			startedAt,
 			metricProvider,
@@ -550,6 +596,7 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 		broker:       b,
 		ctx:          ctx,
 		span:         span,
+		startedAt:    startedAt,
 		principal:    p,
 		providerName: providerName,
 		operation:    opMeta.ID,
@@ -727,6 +774,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 			broker:       b,
 			ctx:          ctx,
 			span:         span,
+			startedAt:    startedAt,
 			principal:    p,
 			providerName: providerName,
 			operation:    opMeta.ID,
@@ -744,25 +792,30 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	return &InvokeOutcome{Unary: result}, nil
 }
 
-// observingStreamReader wraps a StreamReader and inspects the first metadata
-// frame for 5xx status, calling observePlugin5xxResult for telemetry parity
-// with the unary Invoke path.
+// observingStreamReader wraps a StreamReader, inspects the first metadata frame
+// for 5xx status, and records the invocation when the stream terminates.
 type observingStreamReader struct {
 	inner        core.StreamReader
 	broker       *Broker
 	ctx          context.Context
 	span         trace.Span
+	startedAt    time.Time
 	principal    *principal.Principal
 	providerName string
 	operation    string
 	transport    string
 	observed     bool
-	ended        bool
+	endOnce      sync.Once
+	resultStatus int
+	resultErr    error
 }
 
 func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 	frame, err := r.inner.Recv()
 	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			r.resultErr = err
+		}
 		r.endSpan()
 		return nil, err
 	}
@@ -773,6 +826,7 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 			Headers: frame.Metadata.Headers,
 			Body:    frame.Data,
 		}
+		r.resultStatus = result.Status
 		r.broker.observePlugin5xxResult(r.ctx, r.span, r.principal, r.providerName, r.operation, r.transport, result)
 	}
 	if frame == nil {
@@ -785,10 +839,16 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 // a nil frame so the span stays open long enough for observePlugin5xxResult
 // to set status and attributes on a streaming 5xx.
 func (r *observingStreamReader) endSpan() {
-	if !r.ended {
-		r.ended = true
+	r.endOnce.Do(func() {
+		r.broker.recordInvocationRecord(
+			r.startedAt,
+			r.providerName,
+			r.operation,
+			r.resultStatus,
+			operationResultFailed(r.resultStatus, r.resultErr),
+		)
 		r.span.End()
-	}
+	})
 }
 
 func (b *Broker) observePlugin5xxResult(ctx context.Context, span trace.Span, p *principal.Principal, providerName, operation, transport string, result *core.OperationResult) {
@@ -852,7 +912,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	defer span.End()
 	defer func() {
 		resultStatus := operationResultStatus(result, err)
-		recordOperationMetrics(
+		b.recordCompletedInvocation(
 			ctx,
 			startedAt,
 			metricProvider,

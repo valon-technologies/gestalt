@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -106,5 +107,18 @@ func (s *Server) getAppAdminMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	samples := samplesForProvider(parsed, appName)
-	writeJSON(w, http.StatusOK, summarizeAppMetrics(appName, samples))
+	response := summarizeAppMetrics(appName, samples)
+	if s.invocationRecords != nil {
+		for _, record := range s.invocationRecords.RecentInvocations(appName, 32) {
+			response.RecentRequests = append(response.RecentRequests, appAdminRequestSample{
+				ID:         record.ID,
+				Operation:  record.Operation,
+				Outcome:    record.Outcome,
+				Status:     record.Status,
+				DurationMs: float64(record.Duration) / float64(time.Millisecond),
+				Timestamp:  record.Timestamp,
+			})
+		}
+	}
+	writeJSON(w, http.StatusOK, response)
 }

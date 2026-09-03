@@ -141,6 +141,7 @@ type Server struct {
 	authResolvers                 map[string]*principal.Resolver
 	invoker                       invocation.Invoker
 	pluginInvoker                 invocation.Invoker
+	invocationRecords             observability.InvocationRecordReader
 	appPrompts                    map[string][]appPromptInfo
 	apiRouteTimeout               time.Duration
 	defaultConnection             map[string]string
@@ -238,6 +239,7 @@ type Config struct {
 	Runtimes                      bootstrap.RuntimeInspector
 	Invoker                       invocation.Invoker
 	AppInvocation                 invocation.Invoker
+	InvocationRecords             observability.InvocationRecordReader
 	DefaultConnection             map[string]string
 	CatalogConnection             map[string]string
 	MCPConnection                 map[string]string
@@ -480,6 +482,7 @@ func New(cfg Config) (*Server, error) {
 		authResolvers:                 authResolvers,
 		invoker:                       cfg.Invoker,
 		pluginInvoker:                 pluginInvoker,
+		invocationRecords:             cfg.InvocationRecords,
 		appPrompts:                    appPrompts,
 		apiRouteTimeout:               apiRouteTimeout,
 		defaultConnection:             cfg.DefaultConnection,
