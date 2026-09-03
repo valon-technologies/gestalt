@@ -17,10 +17,10 @@ use gestalt_sdk::authorization::source_layer::{
     SOURCE_LAYER_RUNTIME, SOURCE_LAYER_STATIC_CONFIG, SOURCE_LAYER_UNSPECIFIED,
 };
 use gestalt_sdk::authorization::{
-    Action, AddRelationshipRequest, AuthorizationModelResourceTypeFilter,
-    CheckAccessRequest, DeleteRelationshipRequest, ListActiveModelResourceTypesRequest,
-    ListRelationshipsRequest, Relationship, RelationshipFilter, RelationshipTarget,
-    RelationshipTargetKind, Resource, Subject,
+    Action, AddRelationshipRequest, AuthorizationModelResourceTypeFilter, CheckAccessRequest,
+    DeleteRelationshipRequest, ListActiveModelResourceTypesRequest, ListRelationshipsRequest,
+    Relationship, RelationshipFilter, RelationshipTarget, RelationshipTargetKind, Resource,
+    Subject,
 };
 use gestalt_sdk::public::generated::app_client::AuthorizationClient;
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
@@ -136,10 +136,14 @@ pub fn dispatch(
     }
 }
 
-fn apply_state(api: &ApiClient, args: &crate::cli::AuthorizationStateApplyArgs, format: Format) -> Result<()> {
+fn apply_state(
+    api: &ApiClient,
+    args: &crate::cli::AuthorizationStateApplyArgs,
+    format: Format,
+) -> Result<()> {
     let path = Path::new(args.input_file.trim());
-    let body = fs::read_to_string(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let body =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let payload: Value = serde_json::from_str(&body)
         .with_context(|| format!("failed to parse JSON from {}", path.display()))?;
     let resp = api
