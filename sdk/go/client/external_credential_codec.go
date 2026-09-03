@@ -114,6 +114,7 @@ func ToWireExternalCredential(value *ExternalCredential) *proto.ExternalCredenti
 		MetadataJson: value.MetadataJson,
 		CreatedAt:    ToWireTimestamp(value.CreatedAt),
 		UpdatedAt:    ToWireTimestamp(value.UpdatedAt),
+		AccountKey:   value.AccountKey,
 	}
 	switch variant := value.Credential.(type) {
 	case *ExternalCredentialCredentialGrant:
@@ -138,6 +139,7 @@ func FromWireExternalCredential(value *proto.ExternalCredential) *ExternalCreden
 		MetadataJson: value.MetadataJson,
 		CreatedAt:    FromWireTimestamp(value.CreatedAt),
 		UpdatedAt:    FromWireTimestamp(value.UpdatedAt),
+		AccountKey:   value.AccountKey,
 	}
 	switch variant := value.Credential.(type) {
 	case *proto.ExternalCredential_Grant:

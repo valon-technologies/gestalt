@@ -9779,16 +9779,14 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if err := json.Unmarshal([]byte(stored.MetadataJSON), &metadata); err != nil {
 			t.Fatalf("unmarshal metadata: %v", err)
 		}
-		accountKey := metadata[core.AccountKeyMetadataKey]
-		delete(metadata, core.AccountKeyMetadataKey)
 		if !reflect.DeepEqual(metadata, map[string]string{
 			"tenant_id":  "tenant-123",
 			"account_id": "account-456",
 		}) {
 			t.Fatalf("stored metadata = %+v", metadata)
 		}
-		if !strings.HasPrefix(accountKey, "provider:v1:") {
-			t.Fatalf("account key = %q, want provider-owned key", accountKey)
+		if !strings.HasPrefix(stored.AccountKey, "provider:v1:") {
+			t.Fatalf("account key = %q, want provider-owned key", stored.AccountKey)
 		}
 
 		lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
@@ -9992,8 +9990,6 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		identityRaw := metadata["account_identity"]
 		delete(metadata, "account_identity")
-		accountKey := metadata[core.AccountKeyMetadataKey]
-		delete(metadata, core.AccountKeyMetadataKey)
 		if !reflect.DeepEqual(metadata, map[string]string{
 			"tenant_id":  "tenant-123",
 			"account_id": "account-456",
@@ -10001,8 +9997,8 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}) {
 			t.Fatalf("stored connection metadata = %+v", metadata)
 		}
-		if !strings.HasPrefix(accountKey, "provider:v1:") {
-			t.Fatalf("account key = %q, want provider-owned key", accountKey)
+		if !strings.HasPrefix(stored.AccountKey, "provider:v1:") {
+			t.Fatalf("account key = %q, want provider-owned key", stored.AccountKey)
 		}
 		if !strings.Contains(identityRaw, `"kind":"site"`) || !strings.Contains(identityRaw, "Site B") {
 			t.Fatalf("stored account_identity = %q, want site fact for Site B", identityRaw)

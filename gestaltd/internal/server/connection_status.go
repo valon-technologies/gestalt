@@ -472,47 +472,20 @@ func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []inst
 	if len(instances) < 2 {
 		return instances
 	}
-	// Keep records without a canonical key distinct. They are legacy or
-	// provider credentials that cannot safely be proven to represent the same
-	// account.
-	seen := make(map[string]int, len(instances))
-	out := make([]instanceInfo, 0, len(instances))
-	for _, instance := range instances {
-		if instance.AccountKey == "" {
-			out = append(out, instance)
-			continue
+	candidates := make([]core.CredentialAccountCandidate, len(instances))
+	for i, instance := range instances {
+		candidates[i] = core.CredentialAccountCandidate{
+			AccountKey:     instance.AccountKey,
+			ID:             instance.credentialID,
+			Qualifier:      instance.Name,
+			CreatedAt:      instance.credentialCreated,
+			NeedsReconnect: instance.credentialInvalid,
 		}
-		key := instance.AccountKey
-		idx, ok := seen[key]
-		if !ok {
-			seen[key] = len(out)
-			out = append(out, instance)
-			continue
-		}
-		if shouldPreferInstance(instance, out[idx], preferred) {
-			out[idx] = instance
-		}
+	}
+	indices := core.GroupCredentialAccountCandidateIndices(candidates, preferred)
+	out := make([]instanceInfo, 0, len(indices))
+	for _, index := range indices {
+		out = append(out, instances[index])
 	}
 	return out
-}
-
-func shouldPreferInstance(candidate, current instanceInfo, preferred string) bool {
-	if candidate.credentialInvalid != current.credentialInvalid {
-		return !candidate.credentialInvalid
-	}
-	candidatePreferred := preferred != "" && candidate.Name == preferred
-	currentPreferred := preferred != "" && current.Name == preferred
-	if candidatePreferred != currentPreferred {
-		return candidatePreferred
-	}
-	if candidate.credentialCreated.IsZero() != current.credentialCreated.IsZero() {
-		return !candidate.credentialCreated.IsZero()
-	}
-	if !candidate.credentialCreated.Equal(current.credentialCreated) {
-		return candidate.credentialCreated.Before(current.credentialCreated)
-	}
-	if candidate.credentialID != current.credentialID {
-		return candidate.credentialID < current.credentialID
-	}
-	return candidate.Name < current.Name
 }

@@ -100,46 +100,6 @@ type userStore interface {
 	GetUser(ctx context.Context, id string) (*core.User, error)
 }
 
-type credentialReconciliationEntry struct {
-	mu   sync.Mutex
-	refs int
-}
-
-// credentialReconciliationLocker coordinates keyed read/modify/write
-// sequences without blocking unrelated provider accounts. The provider still
-// owns durable uniqueness; this lock covers every Server in this process.
-type credentialReconciliationLocker struct {
-	mu      sync.Mutex
-	entries map[string]*credentialReconciliationEntry
-}
-
-var processCredentialReconciliation credentialReconciliationLocker
-
-func (l *credentialReconciliationLocker) lock(key string) func() {
-	l.mu.Lock()
-	if l.entries == nil {
-		l.entries = make(map[string]*credentialReconciliationEntry)
-	}
-	entry := l.entries[key]
-	if entry == nil {
-		entry = &credentialReconciliationEntry{}
-		l.entries[key] = entry
-	}
-	entry.refs++
-	l.mu.Unlock()
-
-	entry.mu.Lock()
-	return func() {
-		entry.mu.Unlock()
-		l.mu.Lock()
-		entry.refs--
-		if entry.refs == 0 {
-			delete(l.entries, key)
-		}
-		l.mu.Unlock()
-	}
-}
-
 // credentialUserResolver returns the user store used to canonicalize human
 // subjects, or nil when no user store is configured so that resolution fails
 // closed instead of panicking on a nil store.

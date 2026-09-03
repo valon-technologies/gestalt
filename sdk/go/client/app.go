@@ -143,6 +143,8 @@ type ConnectionParamDef struct {
 	DefaultValue string
 	From         string
 	Field        string
+	// Marks a token-response parameter as the provider's stable account ID.
+	AccountIdentity bool
 }
 
 // CredentialContext is the native message type for gestalt.provider.v1.CredentialContext.

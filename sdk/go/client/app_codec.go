@@ -275,11 +275,12 @@ func ToWireConnectionParamDef(value *ConnectionParamDef) *proto.ConnectionParamD
 		return nil
 	}
 	out := &proto.ConnectionParamDef{
-		Required:     value.Required,
-		Description:  value.Description,
-		DefaultValue: value.DefaultValue,
-		From:         value.From,
-		Field:        value.Field,
+		Required:        value.Required,
+		Description:     value.Description,
+		DefaultValue:    value.DefaultValue,
+		From:            value.From,
+		Field:           value.Field,
+		AccountIdentity: value.AccountIdentity,
 	}
 	return out
 }
@@ -289,11 +290,12 @@ func FromWireConnectionParamDef(value *proto.ConnectionParamDef) *ConnectionPara
 		return nil
 	}
 	out := &ConnectionParamDef{
-		Required:     value.Required,
-		Description:  value.Description,
-		DefaultValue: value.DefaultValue,
-		From:         value.From,
-		Field:        value.Field,
+		Required:        value.Required,
+		Description:     value.Description,
+		DefaultValue:    value.DefaultValue,
+		From:            value.From,
+		Field:           value.Field,
+		AccountIdentity: value.AccountIdentity,
 	}
 	return out
 }

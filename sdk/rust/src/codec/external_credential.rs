@@ -69,6 +69,7 @@ pub(crate) fn to_wire_external_credential(value: ExternalCredential) -> v1::Exte
         metadata_json: value.metadata_json,
         created_at: value.created_at.map(to_wire_timestamp),
         updated_at: value.updated_at.map(to_wire_timestamp),
+        account_key: value.account_key,
         credential: value.credential.map(to_wire_external_credential_credential),
     }
 }
@@ -83,6 +84,7 @@ pub(crate) fn from_wire_external_credential(value: v1::ExternalCredential) -> Ex
         metadata_json: value.metadata_json,
         created_at: value.created_at.map(from_wire_timestamp),
         updated_at: value.updated_at.map(from_wire_timestamp),
+        account_key: value.account_key,
         credential: value
             .credential
             .map(from_wire_external_credential_credential),

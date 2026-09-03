@@ -228,6 +228,10 @@ pub struct ConnectionParamDef {
     pub from: String,
     /// The `field` field.
     pub field: String,
+    /// Marks a token-response parameter as the provider's stable account ID.
+    ///
+    /// The `account_identity` field.
+    pub account_identity: bool,
 }
 
 /// CredentialContext describes the resolved credential used for an operation.

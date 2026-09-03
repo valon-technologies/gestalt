@@ -238,6 +238,7 @@ def to_wire_connection_param_def(value: native.ConnectionParamDef) -> Any:
         default_value=value.default_value,
         **{"from": value.from_},
         field=value.field,
+        account_identity=value.account_identity,
     )
 
 
@@ -248,6 +249,7 @@ def from_wire_connection_param_def(value: Any) -> native.ConnectionParamDef:
         default_value=value.default_value,
         from_=getattr(value, "from"),
         field=value.field,
+        account_identity=value.account_identity,
     )
 
 

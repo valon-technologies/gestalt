@@ -31,6 +31,20 @@ func AccountKeyFromMetadataJSON(metadataJSON string) string {
 	return strings.TrimSpace(metadata[AccountKeyMetadataKey])
 }
 
+// AccountKeyForCredential returns the canonical account grouping key. The
+// typed field is authoritative; the metadata fallback is a read-only bridge
+// for credentials written before AccountKey became part of the credential
+// contract.
+func AccountKeyForCredential(credential *ExternalCredential) string {
+	if credential == nil {
+		return ""
+	}
+	if key := strings.TrimSpace(credential.AccountKey); key != "" {
+		return key
+	}
+	return AccountKeyFromMetadataJSON(credential.MetadataJSON)
+}
+
 // ConnectionParamsFromMetadataJSON unmarshals credential MetadataJSON into
 // connection params for runtime use, stripping host-owned reserved keys.
 func ConnectionParamsFromMetadataJSON(metadataJSON string) (map[string]string, error) {

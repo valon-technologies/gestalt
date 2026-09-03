@@ -304,7 +304,7 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 				Name:              tok.Qualifier,
 				Connection:        userFacingConnectionName(binding.Connection),
 				Identity:          identityFromMetadataJSON(tok.MetadataJSON),
-				AccountKey:        accountKeyStoredInMetadataJSON(tok.MetadataJSON),
+				AccountKey:        core.AccountKeyForCredential(tok),
 				credentialInvalid: credentialInvalid,
 				credentialID:      tok.ID,
 				credentialCreated: tok.CreatedAt,
@@ -488,7 +488,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	groupByKey := make(map[string]int, len(matched))
 	for _, candidate := range matched {
 		groupKey := candidate.connection + "\x00" + candidate.credential.Audience + "\x00"
-		if accountKey := accountKeyStoredInMetadataJSON(candidate.credential.MetadataJSON); accountKey != "" {
+		if accountKey := core.AccountKeyForCredential(candidate.credential); accountKey != "" {
 			groupKey += "account\x00" + accountKey
 		} else {
 			groupKey += "credential\x00" + candidate.credential.ID
@@ -527,10 +527,10 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deleteIDs := []string{tokenID}
-	if accountKey := accountKeyStoredInMetadataJSON(disconnected.credential.MetadataJSON); accountKey != "" {
+	if accountKey := core.AccountKeyForCredential(disconnected.credential); accountKey != "" {
 		seen := map[string]struct{}{tokenID: {}}
 		for _, tok := range tokens {
-			if tok == nil || tok.ID == "" || tok.Subject != subjectID || tok.Audience != disconnected.credential.Audience || accountKeyStoredInMetadataJSON(tok.MetadataJSON) != accountKey {
+			if tok == nil || tok.ID == "" || tok.Subject != subjectID || tok.Audience != disconnected.credential.Audience || core.AccountKeyForCredential(tok) != accountKey {
 				continue
 			}
 			if _, ok := seen[tok.ID]; ok {

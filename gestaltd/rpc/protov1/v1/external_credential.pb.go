@@ -223,10 +223,13 @@ type ExternalCredential struct {
 	//	*ExternalCredential_Grant
 	//	*ExternalCredential_Client
 	//	*ExternalCredential_Opaque
-	Credential    isExternalCredential_Credential `protobuf_oneof:"credential"`
-	MetadataJson  string                          `protobuf:"bytes,8,opt,name=metadata_json,json=metadataJson,proto3" json:"metadata_json,omitempty"`
-	CreatedAt     *timestamppb.Timestamp          `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp          `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Credential   isExternalCredential_Credential `protobuf_oneof:"credential"`
+	MetadataJson string                          `protobuf:"bytes,8,opt,name=metadata_json,json=metadataJson,proto3" json:"metadata_json,omitempty"`
+	CreatedAt    *timestamppb.Timestamp          `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt    *timestamppb.Timestamp          `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Opaque, host-owned grouping key for the linked provider account. Providers
+	// must persist it unchanged and must not expose it as a connection param.
+	AccountKey    string `protobuf:"bytes,11,opt,name=account_key,json=accountKey,proto3" json:"account_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -342,6 +345,13 @@ func (x *ExternalCredential) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *ExternalCredential) GetAccountKey() string {
+	if x != nil {
+		return x.AccountKey
+	}
+	return ""
 }
 
 type isExternalCredential_Credential interface {
@@ -1443,7 +1453,7 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x06fields\x18\x01 \x03(\v29.gestalt.provider.v1.ExternalCredentialOpaque.FieldsEntryR\x06fields\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xfd\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9e\x04\n" +
 	"\x12ExternalCredential\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x1a\n" +
@@ -1457,7 +1467,9 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\f\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1f\n" +
+	"\vaccount_key\x18\v \x01(\tR\n" +
+	"accountKeyB\f\n" +
 	"\n" +
 	"credential\"j\n" +
 	"\x1fCreateExternalCredentialRequest\x12G\n" +

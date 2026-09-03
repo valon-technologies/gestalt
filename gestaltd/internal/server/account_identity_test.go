@@ -32,8 +32,11 @@ func TestEnrichAccountIdentity_UsesProviderAccountID(t *testing.T) {
 		ProviderAccountID: "T123:U456",
 		MetadataJSON:      `{"workspace":"Example Workspace","login":"example-user"}`,
 	})
-	if gotKey := accountKeyStoredInMetadataJSON(got.MetadataJSON); gotKey != accountKeyFromProviderID("slack", "T123:U456") {
-		t.Fatalf("account key = %q, want provider account key", gotKey)
+	if got.AccountKey != accountKeyFromProviderID("slack", "T123:U456") {
+		t.Fatalf("account key = %q, want provider account key", got.AccountKey)
+	}
+	if key := accountKeyStoredInMetadataJSON(got.MetadataJSON); key != "" {
+		t.Fatalf("metadata = %q, account key must not be persisted as an untyped fact", got.MetadataJSON)
 	}
 }
 

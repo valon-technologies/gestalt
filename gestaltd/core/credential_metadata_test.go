@@ -39,3 +39,24 @@ func TestAccountKeyFromMetadataJSON_UsesOnlyExplicitKey(t *testing.T) {
 		t.Fatalf("account key = %q, want empty for malformed metadata", got)
 	}
 }
+
+func TestAccountKeyForCredential_PrefersTypedIdentity(t *testing.T) {
+	t.Parallel()
+
+	credential := &ExternalCredential{
+		AccountKey:   "provider:v1:typed",
+		MetadataJSON: `{"account_key":"provider:v1:legacy"}`,
+	}
+	if got := AccountKeyForCredential(credential); got != "provider:v1:typed" {
+		t.Fatalf("account key = %q, want typed account key", got)
+	}
+}
+
+func TestAccountKeyForCredential_ReadsLegacyIdentity(t *testing.T) {
+	t.Parallel()
+
+	credential := &ExternalCredential{MetadataJSON: `{"account_key":"provider:v1:legacy"}`}
+	if got := AccountKeyForCredential(credential); got != "provider:v1:legacy" {
+		t.Fatalf("account key = %q, want legacy account key during migration", got)
+	}
+}

@@ -57,7 +57,7 @@ func TestDedupeInstancesByAccount_PrefersUsableCredentialOverInvalidPreference(t
 	}
 }
 
-func TestStoreCredentialFromMaterial_SerializesCanonicalReconciliation(t *testing.T) {
+func TestStoreCredentialFromMaterial_UsesProviderUniquenessForConcurrentReconnects(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
 	ctx := context.Background()
@@ -96,12 +96,15 @@ func TestStoreCredentialFromMaterial_SerializesCanonicalReconciliation(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(credentials) != 1 {
-		t.Fatalf("credentials = %+v, want one credential after concurrent reconnects", credentials)
+	if len(credentials) != 2 {
+		t.Fatalf("credentials = %+v, want one record per instance", credentials)
+	}
+	if accounts := core.GroupCredentialAccounts(credentials, "", time.Unix(3, 0)); len(accounts) != 1 {
+		t.Fatalf("logical accounts = %+v, want one account projection", accounts)
 	}
 }
 
-func TestStoreCredentialFromMaterial_ConvergesAcrossServerInstances(t *testing.T) {
+func TestStoreCredentialFromMaterial_IsSafeAcrossServerInstances(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	provider := coretesting.NewStubExternalCredentialProvider()
@@ -140,12 +143,12 @@ func TestStoreCredentialFromMaterial_ConvergesAcrossServerInstances(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(credentials) != 1 {
-		t.Fatalf("credentials = %+v, want one credential after cross-server reconciliation", credentials)
+	if len(credentials) != 2 {
+		t.Fatalf("credentials = %+v, want both provider-owned instance records", credentials)
 	}
 }
 
-func TestStoreCredentialFromMaterial_CollapsesCanonicalDuplicates(t *testing.T) {
+func TestStoreCredentialFromMaterial_PreservesAccountInstances(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
 	ctx := context.Background()
@@ -189,19 +192,22 @@ func TestStoreCredentialFromMaterial_CollapsesCanonicalDuplicates(t *testing.T) 
 	if err != nil {
 		t.Fatalf("store credential: %v", err)
 	}
-	if stored.ID != "credential-1" || stored.Qualifier != "Example Workspace" {
-		t.Fatalf("stored = %+v, want oldest canonical credential retained", stored)
+	if stored.Qualifier != "new-label" || stored.ID == "credential-1" || stored.ID == "credential-2" {
+		t.Fatalf("stored = %+v, want a new record for the new instance", stored)
 	}
 	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(credentials) != 1 || credentials[0].ID != "credential-1" || credentials[0].Grant.AccessToken != "fresh-token" {
-		t.Fatalf("credentials = %+v, want one refreshed canonical credential", credentials)
+	if len(credentials) != 3 {
+		t.Fatalf("credentials = %+v, want all account instances retained", credentials)
+	}
+	if accounts := core.GroupCredentialAccounts(credentials, "", time.Unix(3, 0)); len(accounts) != 1 {
+		t.Fatalf("logical accounts = %+v, want one account projection", accounts)
 	}
 }
 
-func TestStoreCredentialFromMaterial_RetainsPreferredCanonicalDuplicate(t *testing.T) {
+func TestStoreCredentialFromMaterial_PreferenceSelectsProjectionOnly(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
 	services := testutil.NewStubServices(t)
@@ -253,79 +259,19 @@ func TestStoreCredentialFromMaterial_RetainsPreferredCanonicalDuplicate(t *testi
 	if err != nil {
 		t.Fatalf("store credential: %v", err)
 	}
-	if stored.ID != "credential-2" || stored.Qualifier != "Preferred label" {
-		t.Fatalf("stored = %+v, want preferred canonical credential retained", stored)
+	if stored.Qualifier != "new-label" || stored.ID == "credential-1" || stored.ID == "credential-2" {
+		t.Fatalf("stored = %+v, want a new record for the new instance", stored)
 	}
 	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(credentials) != 1 || credentials[0].ID != "credential-2" || credentials[0].Grant.AccessToken != "fresh-token" {
-		t.Fatalf("credentials = %+v, want preferred credential refreshed and old duplicate removed", credentials)
+	if len(credentials) != 3 {
+		t.Fatalf("credentials = %+v, want all account instances retained", credentials)
 	}
-}
-
-func TestReconcileCanonicalAccountCredentialDeletesPersistedCandidateWhenCanonicalChanges(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	provider := coretesting.NewStubExternalCredentialProvider()
-	metadata, err := setAccountKey("", accountKeyFromProviderID("slack", "T123:U456"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, credential := range []*core.ExternalCredential{
-		{
-			ID:           "credential-old",
-			Subject:      "user:1",
-			Audience:     "slack:default",
-			Qualifier:    "old-label",
-			MetadataJSON: metadata,
-			Grant:        &core.ExternalCredentialGrant{AccessToken: "old-token"},
-			CreatedAt:    time.Unix(1, 0),
-		},
-		{
-			ID:           "credential-new",
-			Subject:      "user:1",
-			Audience:     "slack:default",
-			Qualifier:    "new-label",
-			MetadataJSON: metadata,
-			Grant:        &core.ExternalCredentialGrant{AccessToken: "new-token"},
-			CreatedAt:    time.Unix(2, 0),
-		},
-	} {
-		if err := provider.UpsertCredential(ctx, credential); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	candidate := &core.ExternalCredential{
-		ID:           "credential-new",
-		Subject:      "user:1",
-		Audience:     "slack:default",
-		Qualifier:    "new-label",
-		MetadataJSON: metadata,
-		Grant:        &core.ExternalCredentialGrant{AccessToken: "new-token"},
-		CreatedAt:    time.Unix(2, 0),
-	}
-	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
-	duplicates, changed, err := s.reconcileCanonicalAccountCredential(ctx, candidate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !changed || candidate.ID != "credential-old" {
-		t.Fatalf("candidate = %+v, changed=%v, want old canonical credential", candidate, changed)
-	}
-	if len(duplicates) != 1 || duplicates[0] != "credential-new" {
-		t.Fatalf("duplicates = %v, want persisted candidate ID", duplicates)
-	}
-	s.deleteCanonicalDuplicates(ctx, candidate, duplicates)
-
-	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(credentials) != 1 || credentials[0].ID != "credential-old" {
-		t.Fatalf("credentials = %+v, want only canonical credential", credentials)
+	accounts := core.GroupCredentialAccounts(credentials, "Preferred label", time.Unix(3, 0))
+	if len(accounts) != 1 || accounts[0].ID != "credential-2" {
+		t.Fatalf("logical accounts = %+v, want preferred instance selected in projection", accounts)
 	}
 }
 
@@ -459,7 +405,7 @@ func TestStoreCredentialFromMaterial_UpgradesKeylessCredentialForSameInstance(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(credentials) != 1 || credentials[0].ID != "legacy-credential" || credentials[0].MetadataJSON != candidateMetadata || credentials[0].Grant.AccessToken != "fresh-token" {
+	if len(credentials) != 1 || credentials[0].ID != "legacy-credential" || credentials[0].AccountKey != accountKeyFromProviderID("slack", "T123:U456") || accountKeyStoredInMetadataJSON(credentials[0].MetadataJSON) != "" || credentials[0].Grant.AccessToken != "fresh-token" {
 		t.Fatalf("credentials = %+v, want upgraded legacy credential", credentials)
 	}
 }
@@ -542,7 +488,7 @@ func TestStoreCredentialFromMaterial_RetainsUnprovenLegacyCredentials(t *testing
 	for _, credential := range credentials {
 		byID[credential.ID] = credential
 	}
-	if byID[stored.ID] == nil || byID[stored.ID].MetadataJSON != candidateMetadata || byID[stored.ID].Grant.AccessToken != "new-token" {
+	if byID[stored.ID] == nil || byID[stored.ID].AccountKey != accountKeyFromProviderID("slack", "T123:U456") || accountKeyStoredInMetadataJSON(byID[stored.ID].MetadataJSON) != "" || byID[stored.ID].Grant.AccessToken != "new-token" {
 		t.Fatalf("stored credentials = %+v, want new explicit-key credential", credentials)
 	}
 	for _, id := range []string{"legacy-credential-a", "legacy-credential-b", "different-account"} {
@@ -552,7 +498,7 @@ func TestStoreCredentialFromMaterial_RetainsUnprovenLegacyCredentials(t *testing
 	}
 }
 
-func TestStoreCredentialFromMaterial_ReportsSuccessWhenDuplicateCleanupFails(t *testing.T) {
+func TestStoreCredentialFromMaterial_DoesNotNeedDuplicateCleanup(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
 	ctx := context.Background()
@@ -584,8 +530,6 @@ func TestStoreCredentialFromMaterial_ReportsSuccessWhenDuplicateCleanupFails(t *
 			t.Fatal(err)
 		}
 	}
-	provider.DeleteErr = errors.New("cleanup unavailable")
-
 	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
 	if _, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
 		SubjectID:    "user:1",
@@ -600,11 +544,10 @@ func TestStoreCredentialFromMaterial_ReportsSuccessWhenDuplicateCleanupFails(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	byID := make(map[string]*core.ExternalCredential, len(credentials))
-	for _, credential := range credentials {
-		byID[credential.ID] = credential
+	if len(credentials) != 3 {
+		t.Fatalf("credentials = %+v, want all account instances retained", credentials)
 	}
-	if len(credentials) != 2 || byID["credential-1"] == nil || byID["credential-1"].Grant == nil || byID["credential-1"].Grant.AccessToken != "fresh-token" || byID["credential-2"] == nil {
-		t.Fatalf("credentials = %+v, want refreshed credential plus retained duplicate until cleanup retry", credentials)
+	if accounts := core.GroupCredentialAccounts(credentials, "", time.Unix(3, 0)); len(accounts) != 1 {
+		t.Fatalf("logical accounts = %+v, want one account projection", accounts)
 	}
 }

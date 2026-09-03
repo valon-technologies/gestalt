@@ -5,6 +5,88 @@ import (
 	"time"
 )
 
+// CredentialAccountCandidate is the presentation-independent portion of a
+// stored credential needed to choose one credential for one logical account.
+// Status, disconnect, and invocation code all use this same policy.
+type CredentialAccountCandidate struct {
+	AccountKey     string
+	ID             string
+	Qualifier      string
+	CreatedAt      time.Time
+	NeedsReconnect bool
+}
+
+// PreferCredentialAccountCandidate applies the canonical ordering for one
+// logical account. A usable credential wins over one needing reconnect, then
+// the preferred instance, then the oldest stored credential, and finally
+// stable IDs and qualifiers.
+func PreferCredentialAccountCandidate(candidate, current CredentialAccountCandidate, preferred string) bool {
+	candidateInvalid := candidate.NeedsReconnect
+	currentInvalid := current.NeedsReconnect
+	if candidateInvalid != currentInvalid {
+		return !candidateInvalid
+	}
+	preferred = strings.TrimSpace(preferred)
+	candidatePreferred := preferred != "" && strings.TrimSpace(candidate.Qualifier) == preferred
+	currentPreferred := preferred != "" && strings.TrimSpace(current.Qualifier) == preferred
+	if candidatePreferred != currentPreferred {
+		return candidatePreferred
+	}
+	if candidate.CreatedAt.IsZero() != current.CreatedAt.IsZero() {
+		return !candidate.CreatedAt.IsZero()
+	}
+	if !candidate.CreatedAt.Equal(current.CreatedAt) {
+		return candidate.CreatedAt.Before(current.CreatedAt)
+	}
+	if candidate.ID != current.ID {
+		return candidate.ID < current.ID
+	}
+	return candidate.Qualifier < current.Qualifier
+}
+
+// GroupCredentialAccountCandidates returns one canonical candidate per
+// explicit account key. Keyless candidates remain distinct because their
+// account identity cannot be proven safely.
+func GroupCredentialAccountCandidates(candidates []CredentialAccountCandidate, preferred string) []CredentialAccountCandidate {
+	normalized := append([]CredentialAccountCandidate(nil), candidates...)
+	for index := range normalized {
+		normalized[index].AccountKey = strings.TrimSpace(normalized[index].AccountKey)
+	}
+	indices := GroupCredentialAccountCandidateIndices(normalized, preferred)
+	accounts := make([]CredentialAccountCandidate, 0, len(indices))
+	for _, index := range indices {
+		accounts = append(accounts, normalized[index])
+	}
+	return accounts
+}
+
+// GroupCredentialAccountCandidateIndices returns the indexes of the canonical
+// candidate for each account. Returning indexes lets presentation layers keep
+// their own data while still using the one account-selection policy.
+func GroupCredentialAccountCandidateIndices(candidates []CredentialAccountCandidate, preferred string) []int {
+	indices := make([]int, 0, len(candidates))
+	seen := make(map[string]int, len(candidates))
+	for index, candidate := range candidates {
+		candidate.AccountKey = strings.TrimSpace(candidate.AccountKey)
+		if candidate.AccountKey == "" {
+			indices = append(indices, index)
+			continue
+		}
+		accountIndex, ok := seen[candidate.AccountKey]
+		if !ok {
+			seen[candidate.AccountKey] = len(indices)
+			indices = append(indices, index)
+			continue
+		}
+		current := candidates[indices[accountIndex]]
+		current.AccountKey = strings.TrimSpace(current.AccountKey)
+		if PreferCredentialAccountCandidate(candidate, current, preferred) {
+			indices[accountIndex] = index
+		}
+	}
+	return indices
+}
+
 // CredentialNeedsReconnect reports whether a credential's expired grant has
 // already failed refresh and therefore cannot be selected as a usable account.
 func CredentialNeedsReconnect(credential *ExternalCredential, now time.Time) bool {
@@ -25,27 +107,7 @@ func PreferCredential(candidate, current *ExternalCredential, preferred string, 
 	if current == nil {
 		return true
 	}
-	candidateInvalid := CredentialNeedsReconnect(candidate, now)
-	currentInvalid := CredentialNeedsReconnect(current, now)
-	if candidateInvalid != currentInvalid {
-		return !candidateInvalid
-	}
-	preferred = strings.TrimSpace(preferred)
-	candidatePreferred := preferred != "" && strings.TrimSpace(candidate.Qualifier) == preferred
-	currentPreferred := preferred != "" && strings.TrimSpace(current.Qualifier) == preferred
-	if candidatePreferred != currentPreferred {
-		return candidatePreferred
-	}
-	if candidate.CreatedAt.IsZero() != current.CreatedAt.IsZero() {
-		return !candidate.CreatedAt.IsZero()
-	}
-	if !candidate.CreatedAt.Equal(current.CreatedAt) {
-		return candidate.CreatedAt.Before(current.CreatedAt)
-	}
-	if candidate.ID != current.ID {
-		return candidate.ID < current.ID
-	}
-	return candidate.Qualifier < current.Qualifier
+	return PreferCredentialAccountCandidate(credentialAccountCandidate(candidate, now), credentialAccountCandidate(current, now), preferred)
 }
 
 // ChooseCredential selects the canonical credential from a set already known
@@ -70,7 +132,7 @@ func GroupCredentialAccounts(credentials []*ExternalCredential, preferred string
 		if credential == nil {
 			continue
 		}
-		key := AccountKeyFromMetadataJSON(credential.MetadataJSON)
+		key := AccountKeyForCredential(credential)
 		if key == "" {
 			accounts = append(accounts, credential)
 			continue
@@ -86,6 +148,19 @@ func GroupCredentialAccounts(credentials []*ExternalCredential, preferred string
 		}
 	}
 	return accounts
+}
+
+func credentialAccountCandidate(credential *ExternalCredential, now time.Time) CredentialAccountCandidate {
+	if credential == nil {
+		return CredentialAccountCandidate{}
+	}
+	return CredentialAccountCandidate{
+		AccountKey:     AccountKeyForCredential(credential),
+		ID:             credential.ID,
+		Qualifier:      credential.Qualifier,
+		CreatedAt:      credential.CreatedAt,
+		NeedsReconnect: CredentialNeedsReconnect(credential, now),
+	}
 }
 
 // ChooseCredentialInstance resolves the stored instance for a connection.

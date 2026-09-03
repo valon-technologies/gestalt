@@ -291,7 +291,10 @@ func mergeIdentityFacts(base []identityFact, extra ...identityFact) []identityFa
 }
 
 func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMaterial) credentialMaterial {
-	storedAccountKey := accountKeyStoredInMetadataJSON(tm.MetadataJSON)
+	storedAccountKey := strings.TrimSpace(tm.AccountKey)
+	if storedAccountKey == "" {
+		storedAccountKey = core.AccountKeyFromMetadataJSON(tm.MetadataJSON)
+	}
 	existing, err := parseAccountIdentity(tm.MetadataJSON)
 	if err != nil {
 		// Corrupt identity blob: drop it and rebuild from known sources.
@@ -338,11 +341,15 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 	if storedAccountKey == "" {
 		key := accountKeyFromProviderID(tm.Integration, tm.ProviderAccountID)
 		if key != "" {
-			if merged, err := setAccountKey(tm.MetadataJSON, key); err == nil {
-				tm.MetadataJSON = merged
-			} else {
-				slog.WarnContext(ctx, "account key enrichment skipped", "integration", tm.Integration, "error", err)
-			}
+			storedAccountKey = key
+		}
+	}
+	tm.AccountKey = storedAccountKey
+	if tm.AccountKey != "" {
+		if cleaned, err := removeAccountKeyMetadata(tm.MetadataJSON); err == nil {
+			tm.MetadataJSON = cleaned
+		} else {
+			slog.WarnContext(ctx, "account key metadata cleanup skipped", "integration", tm.Integration, "error", err)
 		}
 	}
 	return tm
@@ -350,6 +357,15 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 
 func accountKeyStoredInMetadataJSON(metadataJSON string) string {
 	return core.AccountKeyFromMetadataJSON(metadataJSON)
+}
+
+func removeAccountKeyMetadata(metadataJSON string) (string, error) {
+	m, err := parseMetadataMap(metadataJSON)
+	if err != nil {
+		return "", err
+	}
+	delete(m, accountKeyMetadataKey)
+	return marshalMetadataMap(m)
 }
 
 // oauthIdentitySource selects the single identity probe family for an

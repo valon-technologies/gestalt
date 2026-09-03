@@ -314,18 +314,27 @@ func isHostOwnedMetadataKey(key string) bool {
 }
 
 // providerAccountIDFromTokenResponse extracts the provider-owned identifier
-// when a registry connection declares the conventional account_id metadata
-// parameter. The parameter may map to a nested token-response field such as
-// account.id. Unmarked connection parameters remain runtime-only metadata and
-// are never treated as account identity.
+// from a connection parameter explicitly marked accountIdentity. The field
+// may map to a nested token-response value such as account.id. The name-based
+// fallback exists only for manifests written before accountIdentity was added.
 func providerAccountIDFromTokenResponse(defs map[string]core.ConnectionParamDef, tokenResp *core.OAuthTokenResponse) string {
 	if tokenResp == nil || len(tokenResp.Extra) == 0 {
 		return ""
 	}
 	var names []string
 	for name, def := range defs {
-		if def.From == "token_response" && isProviderAccountIDParam(name) {
+		if def.From == "token_response" && def.AccountIdentity {
 			names = append(names, name)
+		}
+	}
+	// Keep existing manifests working while they migrate to the explicit
+	// accountIdentity declaration. New manifests must declare the role rather
+	// than relying on a parameter name.
+	if len(names) == 0 {
+		for name, def := range defs {
+			if def.From == "token_response" && isProviderAccountIDParam(name) {
+				names = append(names, name)
+			}
 		}
 	}
 	sort.Strings(names)
@@ -379,6 +388,7 @@ type credentialMaterial struct {
 	RefreshToken      string
 	TokenExpiresAt    *time.Time
 	MetadataJSON      string
+	AccountKey        string
 	ProviderAccountID string
 	ActorSubjectID    string
 	ActorUserID       string
@@ -483,6 +493,7 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 		Subject:      tm.SubjectID,
 		Audience:     audience,
 		Qualifier:    tm.Instance,
+		AccountKey:   strings.TrimSpace(tm.AccountKey),
 		MetadataJSON: tm.MetadataJSON,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -497,157 +508,59 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 			LastRefreshedAt: &now,
 		}
 	}
-	accountKey := accountKeyStoredInMetadataJSON(tok.MetadataJSON)
-	unlockQualifier := processCredentialReconciliation.lock(strings.Join([]string{"qualifier", tok.Subject, tok.Audience, tok.Qualifier}, "\x00"))
-	defer unlockQualifier()
+	accountKey := core.AccountKeyForCredential(tok)
+	tok.AccountKey = accountKey
 	if accountKey != "" {
-		unlock := processCredentialReconciliation.lock(strings.Join([]string{"account", tok.Subject, tok.Audience, accountKey}, "\x00"))
-		defer unlock()
+		if cleaned, cleanupErr := removeAccountKeyMetadata(tok.MetadataJSON); cleanupErr == nil {
+			tok.MetadataJSON = cleaned
+		}
 	}
-	duplicates, changed, err := s.reconcileCanonicalAccountCredential(ctx, tok)
-	if err != nil {
+	if err := s.storeCredentialAtInstance(ctx, tok); err != nil {
 		return nil, err
-	}
-	if accountKey != "" && !changed {
-		if err := s.externalCredentials.CreateCredential(ctx, tok); err != nil {
-			if !errors.Is(err, core.ErrAlreadyExists) {
-				return nil, err
-			}
-			// Another writer may have inserted this account after the first
-			// read. Reconcile again before deciding whether the occupied
-			// instance belongs to the same account or must remain untouched.
-			duplicates, changed, err = s.reconcileCanonicalAccountCredential(ctx, tok)
-			if err != nil {
-				return nil, err
-			}
-			if !changed {
-				return nil, fmt.Errorf("%w: connection instance %q already belongs to another provider account", core.ErrAlreadyExists, tok.Qualifier)
-			}
-			if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
-				return nil, err
-			}
-		}
-	} else if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
-		return nil, err
-	}
-	s.deleteCanonicalDuplicates(ctx, tok, duplicates)
-
-	// A second read closes the race with another server instance that may have
-	// inserted a duplicate between the initial read and upsert. The provider
-	// contract does not offer compare-and-swap, so cleanup is deliberately
-	// retry-safe rather than reported as a failed save.
-	if accountKey != "" {
-		postDuplicates, changed, reconcileErr := s.reconcileCanonicalAccountCredential(ctx, tok)
-		if reconcileErr != nil {
-			slog.WarnContext(ctx, "canonical duplicate cleanup deferred", "subject", tok.Subject, "audience", tok.Audience, "error", reconcileErr)
-			return tok, nil
-		}
-		if changed {
-			if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
-				slog.WarnContext(ctx, "canonical duplicate reconciliation deferred", "subject", tok.Subject, "audience", tok.Audience, "error", err)
-				return tok, nil
-			}
-		}
-		s.deleteCanonicalDuplicates(ctx, tok, postDuplicates)
 	}
 	return tok, nil
 }
 
-func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candidate *core.ExternalCredential) ([]string, bool, error) {
-	if s == nil || candidate == nil {
-		return nil, false, nil
+// storeCredentialAtInstance makes the exact (subject, audience, qualifier)
+// record the provider's concurrency boundary. AccountKey is only used to
+// validate an existing record or upgrade a legacy keyless record; it never
+// triggers a list-and-delete operation across other qualifiers.
+func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.ExternalCredential) error {
+	existing, err := s.externalCredentials.GetCredential(ctx, candidate.Subject, candidate.Audience, candidate.Qualifier)
+	if err == nil {
+		return s.upsertCredentialAtInstance(ctx, candidate, existing)
 	}
-	accountKey := accountKeyStoredInMetadataJSON(candidate.MetadataJSON)
-	if accountKey == "" || strings.TrimSpace(candidate.Subject) == "" || strings.TrimSpace(candidate.Audience) == "" {
-		return nil, false, nil
+	if !errors.Is(err, core.ErrNotFound) {
+		return fmt.Errorf("get credential at instance %q: %w", candidate.Qualifier, err)
 	}
-	credentials, err := s.externalCredentials.ListCredentials(ctx, candidate.Subject, candidate.Audience)
+	if err := s.externalCredentials.CreateCredential(ctx, candidate); err == nil {
+		return nil
+	} else if !errors.Is(err, core.ErrAlreadyExists) {
+		return err
+	}
+
+	// A different server won the insert between Get and Create. Read the
+	// provider-owned record and apply the same account-ownership rule.
+	existing, err = s.externalCredentials.GetCredential(ctx, candidate.Subject, candidate.Audience, candidate.Qualifier)
 	if err != nil {
-		return nil, false, fmt.Errorf("list credentials for canonical account merge: %w", err)
+		return fmt.Errorf("read credential after instance conflict: %w", err)
 	}
-	candidateID := candidate.ID
-	candidateWasStored := false
-	var legacyAtQualifier *core.ExternalCredential
-	matches := []*core.ExternalCredential{candidate}
-	for _, credential := range credentials {
-		if credential == nil {
-			continue
-		}
-		if credential.ID == candidateID {
-			candidateWasStored = true
-			continue
-		}
-		credentialKey := credentialCanonicalAccountKey(credential)
-		sameQualifier := strings.TrimSpace(credential.Qualifier) == strings.TrimSpace(candidate.Qualifier)
-		if sameQualifier && credentialKey != "" && credentialKey != accountKey {
-			return nil, false, fmt.Errorf("%w: connection instance %q already belongs to another provider account", core.ErrAlreadyExists, candidate.Qualifier)
-		}
-		if sameQualifier && credentialKey == "" {
-			// A keyless credential at the requested instance is the legacy row
-			// being reconnected. It may be upgraded with the provider's explicit
-			// account key, but must retain its storage identity when the new
-			// credential wins selection (for example, if the old grant is stale).
-			legacyAtQualifier = credential
-		}
-		if credentialKey == accountKey {
-			matches = append(matches, credential)
-		} else if sameQualifier && credentialKey == "" {
-			matches = append(matches, credential)
-		}
-	}
-
-	preferred := s.preferredInstanceForConnection(ctx, candidate.Subject, candidate.Audience)
-	keep := chooseCanonicalCredential(matches, preferred, s.now())
-	previousID := candidateID
-	previousQualifier := candidate.Qualifier
-	previousCreatedAt := candidate.CreatedAt
-	if keep == nil {
-		return nil, false, nil
-	}
-	candidate.ID = keep.ID
-	candidate.Qualifier = keep.Qualifier
-	candidate.CreatedAt = keep.CreatedAt
-	if keep == candidate && legacyAtQualifier != nil {
-		candidate.ID = legacyAtQualifier.ID
-		candidate.CreatedAt = legacyAtQualifier.CreatedAt
-	}
-
-	duplicates := make([]string, 0, len(matches)-1)
-	for _, duplicate := range matches {
-		if duplicate == candidate {
-			continue
-		}
-		if duplicate.ID == keep.ID || strings.TrimSpace(duplicate.ID) == "" {
-			continue
-		}
-		duplicates = append(duplicates, duplicate.ID)
-	}
-	if candidateWasStored && candidateID != keep.ID && strings.TrimSpace(candidateID) != "" {
-		duplicates = append(duplicates, candidateID)
-	}
-	return duplicates, previousID != candidate.ID || previousQualifier != candidate.Qualifier || !previousCreatedAt.Equal(candidate.CreatedAt), nil
+	return s.upsertCredentialAtInstance(ctx, candidate, existing)
 }
 
-func (s *Server) deleteCanonicalDuplicates(ctx context.Context, candidate *core.ExternalCredential, duplicateIDs []string) {
-	if s == nil || candidate == nil {
-		return
+func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, existing *core.ExternalCredential) error {
+	existingKey := core.AccountKeyForCredential(existing)
+	candidateKey := core.AccountKeyForCredential(candidate)
+	if existingKey != "" && existingKey != candidateKey {
+		return fmt.Errorf("%w: connection instance %q already belongs to another provider account", core.ErrAlreadyExists, candidate.Qualifier)
 	}
-	for _, duplicateID := range duplicateIDs {
-		if err := s.externalCredentials.DeleteCredential(ctx, duplicateID); err != nil {
-			slog.WarnContext(ctx, "canonical duplicate cleanup deferred", "credential_id", duplicateID, "subject", candidate.Subject, "audience", candidate.Audience, "error", err)
-		}
+	if candidateKey == "" {
+		return fmt.Errorf("%w: connection instance %q already exists", core.ErrAlreadyExists, candidate.Qualifier)
 	}
-}
 
-func credentialCanonicalAccountKey(credential *core.ExternalCredential) string {
-	if credential == nil {
-		return ""
-	}
-	return accountKeyStoredInMetadataJSON(credential.MetadataJSON)
-}
-
-func chooseCanonicalCredential(credentials []*core.ExternalCredential, preferred string, now time.Time) *core.ExternalCredential {
-	return core.ChooseCredential(credentials, preferred, now)
+	candidate.ID = existing.ID
+	candidate.CreatedAt = existing.CreatedAt
+	return s.externalCredentials.UpsertCredential(ctx, candidate)
 }
 
 func validateProviderMetadata(source string, metadata map[string]string) error {
@@ -828,11 +741,12 @@ func connectionParamDefsFromConfig(defs map[string]config.ConnectionParamDef) ma
 	out := make(map[string]core.ConnectionParamDef, len(defs))
 	for name, def := range defs {
 		out[name] = core.ConnectionParamDef{
-			Required:    def.Required,
-			Description: def.Description,
-			Default:     def.Default,
-			From:        def.From,
-			Field:       def.Field,
+			Required:        def.Required,
+			Description:     def.Description,
+			Default:         def.Default,
+			From:            def.From,
+			Field:           def.Field,
+			AccountIdentity: def.AccountIdentity,
 		}
 	}
 	return out

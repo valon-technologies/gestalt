@@ -92,3 +92,17 @@ func TestChooseCredentialInstanceKeepsKeylessCredentialsAmbiguous(t *testing.T) 
 		t.Fatalf("chosen instance = %q, ok=%v, want ambiguous keyless credentials", got, ok)
 	}
 }
+
+func TestGroupCredentialAccountCandidatesNormalizesAndKeepsKeylessRecords(t *testing.T) {
+	t.Parallel()
+
+	candidates := []CredentialAccountCandidate{
+		{ID: "shared-old", AccountKey: " provider:v1:shared ", Qualifier: "old", CreatedAt: time.Unix(1, 0)},
+		{ID: "shared-new", AccountKey: "provider:v1:shared", Qualifier: "new", CreatedAt: time.Unix(2, 0)},
+		{ID: "legacy", Qualifier: "legacy"},
+	}
+	got := GroupCredentialAccountCandidates(candidates, "")
+	if len(got) != 2 || got[0].ID != "shared-old" || got[0].AccountKey != "provider:v1:shared" || got[1].ID != "legacy" {
+		t.Fatalf("grouped candidates = %+v, want normalized shared account plus keyless record", got)
+	}
+}
