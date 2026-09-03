@@ -351,12 +351,12 @@ func (s *CompactService) PatchGroup(ctx context.Context, cid, id, ifMatch string
 		}
 		return nil, unavailable("could not load SCIM group")
 	}
+	if ifMatch != "" {
+		return nil, notImplementedPatch("conditional Group PATCH is not supported")
+	}
 	old, initialTuples, err := s.groupValueAndTuples(ctx, storedGroup)
 	if err != nil {
 		return nil, err
-	}
-	if ifMatch != "" && ifMatch != "*" && ifMatch != old.Meta.Version {
-		return nil, &Error{Status: 412, Detail: "SCIM resource version does not match"}
 	}
 	state := make(map[string]patchMemberState, len(old.Members))
 	for _, member := range old.Members {
