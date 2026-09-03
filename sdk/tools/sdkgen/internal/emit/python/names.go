@@ -51,6 +51,13 @@ func localName(fullName string) string {
 	return fullName
 }
 
+func enumName(e *model.Enum) string {
+	if e.GeneratedName != "" {
+		return e.GeneratedName
+	}
+	return localName(e.FullName)
+}
+
 // generatedFileBase derives the generated module base from a proto file path:
 // sdk/proto/v1/indexeddb.proto becomes "indexeddb".
 func generatedFileBase(protoFile string) string {
@@ -210,8 +217,8 @@ func (r *renderer) oneofQualified(m *model.Message, o *model.Oneof) bool {
 	return false
 }
 
-func enumValuesClassName(fullName string) string {
-	return localName(fullName) + "Values"
+func enumValuesClassName(e *model.Enum) string {
+	return enumName(e) + "Values"
 }
 
 // Converter functions live in the generated _codec package, which is already

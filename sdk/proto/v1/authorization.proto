@@ -69,6 +69,46 @@ message ListRelationshipsResponse {
   string next_page_token = 2;
 }
 
+// RelationshipUpdate changes one relationship in an atomic write request.
+// CREATE fails if the relationship is already present, TOUCH upserts it, and
+// DELETE is idempotent and protects the stored source layer when one is
+// specified.
+message RelationshipUpdate {
+  enum Operation {
+    OPERATION_UNSPECIFIED = 0;
+    OPERATION_CREATE = 1;
+    OPERATION_TOUCH = 2;
+    OPERATION_DELETE = 3;
+  }
+
+  Operation operation = 1;
+  Relationship relationship = 2;
+}
+
+// Precondition is evaluated against the relationship snapshot captured before
+// any update in the request is applied.
+message Precondition {
+  enum Operation {
+    OPERATION_UNSPECIFIED = 0;
+    OPERATION_MUST_NOT_MATCH = 1;
+    OPERATION_MUST_MATCH = 2;
+  }
+
+  Operation operation = 1;
+  RelationshipFilter filter = 2;
+}
+
+// WriteRelationshipsRequest evaluates all preconditions against the initial
+// relationship snapshot, then applies all updates atomically or applies none.
+// The response is intentionally empty because Gestalt does not expose a
+// revision or ZedToken for relationship writes.
+message WriteRelationshipsRequest {
+  repeated RelationshipUpdate updates = 1;
+  repeated Precondition optional_preconditions = 2;
+}
+
+message WriteRelationshipsResponse {}
+
 message AddRelationshipRequest {
   Relationship relationship = 1;
 }
@@ -246,6 +286,18 @@ service Authorization {
     option (signature) = "page_size";
     option (signature) = "page_token";
     option (signature) = "filter";
+  }
+  rpc WriteRelationships(WriteRelationshipsRequest)
+      returns (WriteRelationshipsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/authorization/relationships:write"
+      body: "*"
+    };
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (signature) = "updates";
+    option (signature) = "optional_preconditions";
   }
   rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse) {
     option (google.api.http) = {

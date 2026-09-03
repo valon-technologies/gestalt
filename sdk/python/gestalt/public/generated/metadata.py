@@ -278,6 +278,19 @@ METHOD_AUTHORIZATION_LIST_RELATIONSHIPS = Method(
     reject=(),
 )
 
+METHOD_AUTHORIZATION_WRITE_RELATIONSHIPS = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="WriteRelationships",
+    full_method="/gestalt.provider.v1.Authorization/WriteRelationships",
+    http_verb="POST",
+    http_path="/api/v2/authorization/relationships:write",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+)
+
 METHOD_AUTHORIZATION_ADD_RELATIONSHIP = Method(
     service="gestalt.provider.v1.Authorization",
     name="AddRelationship",

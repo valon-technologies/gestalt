@@ -94,6 +94,51 @@ type ListRelationshipsResponse struct {
 	NextPageToken string
 }
 
+// RelationshipUpdateOperation is the operation applied by a relationship
+// update. It is open: unknown numeric values are preserved.
+type RelationshipUpdateOperation int32
+
+// RelationshipUpdateOperation values supported by WriteRelationships.
+const (
+	RelationshipUpdateOperationUnspecified RelationshipUpdateOperation = 0
+	RelationshipUpdateOperationCreate      RelationshipUpdateOperation = 1
+	RelationshipUpdateOperationTouch       RelationshipUpdateOperation = 2
+	RelationshipUpdateOperationDelete      RelationshipUpdateOperation = 3
+)
+
+// PreconditionOperation controls how a relationship precondition is evaluated.
+// It is open: unknown numeric values are preserved.
+type PreconditionOperation int32
+
+// PreconditionOperation values supported by WriteRelationships.
+const (
+	PreconditionOperationUnspecified  PreconditionOperation = 0
+	PreconditionOperationMustNotMatch PreconditionOperation = 1
+	PreconditionOperationMustMatch    PreconditionOperation = 2
+)
+
+// RelationshipUpdate describes one atomic relationship mutation.
+type RelationshipUpdate struct {
+	Operation    RelationshipUpdateOperation
+	Relationship *Relationship
+}
+
+// Precondition is evaluated against the transaction's initial snapshot.
+type Precondition struct {
+	Operation PreconditionOperation
+	Filter    *RelationshipFilter
+}
+
+// WriteRelationshipsRequest is an atomic relationship mutation request.
+type WriteRelationshipsRequest struct {
+	Updates               []*RelationshipUpdate
+	OptionalPreconditions []*Precondition
+}
+
+// WriteRelationshipsResponse is intentionally empty because the provider has
+// no MVCC revision token to return.
+type WriteRelationshipsResponse struct{}
+
 // AddRelationshipRequest is the native message type for gestalt.provider.v1.AddRelationshipRequest.
 type AddRelationshipRequest struct {
 	Relationship *Relationship
@@ -246,4 +291,10 @@ type AuthorizationProvider interface {
 	GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error)
 	SetActiveModel(ctx context.Context, req *SetActiveModelRequest) (*SetActiveModelResponse, error)
 	ListActiveModelResourceTypes(ctx context.Context, req *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error)
+}
+
+// AuthorizationRelationshipWriter is an optional capability implemented by
+// providers that support atomic relationship writes.
+type AuthorizationRelationshipWriter interface {
+	WriteRelationships(context.Context, *WriteRelationshipsRequest) (*WriteRelationshipsResponse, error)
 }

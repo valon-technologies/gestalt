@@ -231,6 +231,9 @@ type Enum struct {
 	Doc       string
 	FullName  string
 	Name      string
+	// GeneratedName is a package-level name for the enum. Nested protobuf
+	// enums include their containing message names to avoid SDK collisions.
+	GeneratedName string
 	ProtoFile string
 	Values    []EnumValue
 }

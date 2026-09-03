@@ -41,6 +41,17 @@ func (s *providerServer) ListRelationships(ctx context.Context, req *proto.ListR
 	return s.provider.ListRelationships(s.gatewayContext(ctx), req)
 }
 
+func (s *providerServer) WriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	if err := s.requireProvider(); err != nil {
+		return nil, err
+	}
+	writer, ok := s.provider.(core.AuthorizationRelationshipWriter)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "authorization relationship writes are not implemented")
+	}
+	return writer.WriteRelationships(s.gatewayContext(ctx), req)
+}
+
 func (s *providerServer) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err

@@ -23,6 +23,7 @@ const (
 	Authorization_CheckAccess_FullMethodName                  = "/gestalt.provider.v1.Authorization/CheckAccess"
 	Authorization_CheckAccessMany_FullMethodName              = "/gestalt.provider.v1.Authorization/CheckAccessMany"
 	Authorization_ListRelationships_FullMethodName            = "/gestalt.provider.v1.Authorization/ListRelationships"
+	Authorization_WriteRelationships_FullMethodName           = "/gestalt.provider.v1.Authorization/WriteRelationships"
 	Authorization_AddRelationship_FullMethodName              = "/gestalt.provider.v1.Authorization/AddRelationship"
 	Authorization_DeleteRelationship_FullMethodName           = "/gestalt.provider.v1.Authorization/DeleteRelationship"
 	Authorization_SetAuthorizationState_FullMethodName        = "/gestalt.provider.v1.Authorization/SetAuthorizationState"
@@ -38,6 +39,7 @@ type AuthorizationClient interface {
 	CheckAccess(ctx context.Context, in *CheckAccessRequest, opts ...grpc.CallOption) (*CheckAccessResponse, error)
 	CheckAccessMany(ctx context.Context, in *CheckAccessManyRequest, opts ...grpc.CallOption) (*CheckAccessManyResponse, error)
 	ListRelationships(ctx context.Context, in *ListRelationshipsRequest, opts ...grpc.CallOption) (*ListRelationshipsResponse, error)
+	WriteRelationships(ctx context.Context, in *WriteRelationshipsRequest, opts ...grpc.CallOption) (*WriteRelationshipsResponse, error)
 	AddRelationship(ctx context.Context, in *AddRelationshipRequest, opts ...grpc.CallOption) (*AddRelationshipResponse, error)
 	DeleteRelationship(ctx context.Context, in *DeleteRelationshipRequest, opts ...grpc.CallOption) (*DeleteRelationshipResponse, error)
 	SetAuthorizationState(ctx context.Context, in *SetAuthorizationStateRequest, opts ...grpc.CallOption) (*SetAuthorizationStateResponse, error)
@@ -78,6 +80,16 @@ func (c *authorizationClient) ListRelationships(ctx context.Context, in *ListRel
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListRelationshipsResponse)
 	err := c.cc.Invoke(ctx, Authorization_ListRelationships_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationClient) WriteRelationships(ctx context.Context, in *WriteRelationshipsRequest, opts ...grpc.CallOption) (*WriteRelationshipsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WriteRelationshipsResponse)
+	err := c.cc.Invoke(ctx, Authorization_WriteRelationships_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +163,7 @@ type AuthorizationServer interface {
 	CheckAccess(context.Context, *CheckAccessRequest) (*CheckAccessResponse, error)
 	CheckAccessMany(context.Context, *CheckAccessManyRequest) (*CheckAccessManyResponse, error)
 	ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
+	WriteRelationships(context.Context, *WriteRelationshipsRequest) (*WriteRelationshipsResponse, error)
 	AddRelationship(context.Context, *AddRelationshipRequest) (*AddRelationshipResponse, error)
 	DeleteRelationship(context.Context, *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error)
 	SetAuthorizationState(context.Context, *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error)
@@ -175,6 +188,9 @@ func (UnimplementedAuthorizationServer) CheckAccessMany(context.Context, *CheckA
 }
 func (UnimplementedAuthorizationServer) ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRelationships not implemented")
+}
+func (UnimplementedAuthorizationServer) WriteRelationships(context.Context, *WriteRelationshipsRequest) (*WriteRelationshipsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WriteRelationships not implemented")
 }
 func (UnimplementedAuthorizationServer) AddRelationship(context.Context, *AddRelationshipRequest) (*AddRelationshipResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddRelationship not implemented")
@@ -265,6 +281,24 @@ func _Authorization_ListRelationships_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthorizationServer).ListRelationships(ctx, req.(*ListRelationshipsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Authorization_WriteRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WriteRelationshipsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationServer).WriteRelationships(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Authorization_WriteRelationships_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationServer).WriteRelationships(ctx, req.(*WriteRelationshipsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -395,6 +429,10 @@ var Authorization_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListRelationships",
 			Handler:    _Authorization_ListRelationships_Handler,
+		},
+		{
+			MethodName: "WriteRelationships",
+			Handler:    _Authorization_WriteRelationships_Handler,
 		},
 		{
 			MethodName: "AddRelationship",

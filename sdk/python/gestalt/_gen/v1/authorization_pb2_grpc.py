@@ -50,6 +50,11 @@ class AuthorizationStub(object):
                 request_serializer=v1_dot_authorization__pb2.ListRelationshipsRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.ListRelationshipsResponse.FromString,
                 _registered_method=True)
+        self.WriteRelationships = channel.unary_unary(
+                '/gestalt.provider.v1.Authorization/WriteRelationships',
+                request_serializer=v1_dot_authorization__pb2.WriteRelationshipsRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.WriteRelationshipsResponse.FromString,
+                _registered_method=True)
         self.AddRelationship = channel.unary_unary(
                 '/gestalt.provider.v1.Authorization/AddRelationship',
                 request_serializer=v1_dot_authorization__pb2.AddRelationshipRequest.SerializeToString,
@@ -98,6 +103,12 @@ class AuthorizationServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def ListRelationships(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def WriteRelationships(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -156,6 +167,11 @@ def add_AuthorizationServicer_to_server(servicer, server):
                     servicer.ListRelationships,
                     request_deserializer=v1_dot_authorization__pb2.ListRelationshipsRequest.FromString,
                     response_serializer=v1_dot_authorization__pb2.ListRelationshipsResponse.SerializeToString,
+            ),
+            'WriteRelationships': grpc.unary_unary_rpc_method_handler(
+                    servicer.WriteRelationships,
+                    request_deserializer=v1_dot_authorization__pb2.WriteRelationshipsRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.WriteRelationshipsResponse.SerializeToString,
             ),
             'AddRelationship': grpc.unary_unary_rpc_method_handler(
                     servicer.AddRelationship,
@@ -269,6 +285,33 @@ class Authorization(object):
             '/gestalt.provider.v1.Authorization/ListRelationships',
             v1_dot_authorization__pb2.ListRelationshipsRequest.SerializeToString,
             v1_dot_authorization__pb2.ListRelationshipsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def WriteRelationships(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.Authorization/WriteRelationships',
+            v1_dot_authorization__pb2.WriteRelationshipsRequest.SerializeToString,
+            v1_dot_authorization__pb2.WriteRelationshipsResponse.FromString,
             options,
             channel_credentials,
             insecure,

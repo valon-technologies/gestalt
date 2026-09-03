@@ -132,8 +132,8 @@ func takenNames(messages []*model.Message, enums []*model.Enum) map[string]bool 
 		}
 	}
 	for _, e := range enums {
-		taken[localName(e.FullName)] = true
-		taken[enumValuesClassName(e.FullName)] = true
+		taken[enumName(e)] = true
+		taken[enumValuesClassName(e)] = true
 	}
 	return taken
 }

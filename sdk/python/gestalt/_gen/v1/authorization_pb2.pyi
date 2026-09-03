@@ -131,6 +131,52 @@ class ListRelationshipsResponse(_message.Message):
     next_page_token: str
     def __init__(self, relationships: _Optional[_Iterable[_Union[Relationship, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
+class RelationshipUpdate(_message.Message):
+    __slots__ = ()
+    class Operation(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        OPERATION_UNSPECIFIED: _ClassVar[RelationshipUpdate.Operation]
+        OPERATION_CREATE: _ClassVar[RelationshipUpdate.Operation]
+        OPERATION_TOUCH: _ClassVar[RelationshipUpdate.Operation]
+        OPERATION_DELETE: _ClassVar[RelationshipUpdate.Operation]
+    OPERATION_UNSPECIFIED: RelationshipUpdate.Operation
+    OPERATION_CREATE: RelationshipUpdate.Operation
+    OPERATION_TOUCH: RelationshipUpdate.Operation
+    OPERATION_DELETE: RelationshipUpdate.Operation
+    OPERATION_FIELD_NUMBER: _ClassVar[int]
+    RELATIONSHIP_FIELD_NUMBER: _ClassVar[int]
+    operation: RelationshipUpdate.Operation
+    relationship: Relationship
+    def __init__(self, operation: _Optional[_Union[RelationshipUpdate.Operation, str]] = ..., relationship: _Optional[_Union[Relationship, _Mapping]] = ...) -> None: ...
+
+class Precondition(_message.Message):
+    __slots__ = ()
+    class Operation(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        OPERATION_UNSPECIFIED: _ClassVar[Precondition.Operation]
+        OPERATION_MUST_NOT_MATCH: _ClassVar[Precondition.Operation]
+        OPERATION_MUST_MATCH: _ClassVar[Precondition.Operation]
+    OPERATION_UNSPECIFIED: Precondition.Operation
+    OPERATION_MUST_NOT_MATCH: Precondition.Operation
+    OPERATION_MUST_MATCH: Precondition.Operation
+    OPERATION_FIELD_NUMBER: _ClassVar[int]
+    FILTER_FIELD_NUMBER: _ClassVar[int]
+    operation: Precondition.Operation
+    filter: RelationshipFilter
+    def __init__(self, operation: _Optional[_Union[Precondition.Operation, str]] = ..., filter: _Optional[_Union[RelationshipFilter, _Mapping]] = ...) -> None: ...
+
+class WriteRelationshipsRequest(_message.Message):
+    __slots__ = ()
+    UPDATES_FIELD_NUMBER: _ClassVar[int]
+    OPTIONAL_PRECONDITIONS_FIELD_NUMBER: _ClassVar[int]
+    updates: _containers.RepeatedCompositeFieldContainer[RelationshipUpdate]
+    optional_preconditions: _containers.RepeatedCompositeFieldContainer[Precondition]
+    def __init__(self, updates: _Optional[_Iterable[_Union[RelationshipUpdate, _Mapping]]] = ..., optional_preconditions: _Optional[_Iterable[_Union[Precondition, _Mapping]]] = ...) -> None: ...
+
+class WriteRelationshipsResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
 class AddRelationshipRequest(_message.Message):
     __slots__ = ()
     RELATIONSHIP_FIELD_NUMBER: _ClassVar[int]

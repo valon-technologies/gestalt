@@ -121,9 +121,9 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		sharedCodecFn[toWireFunc(fullName)] = true
 		sharedCodecFn[fromWireFunc(fullName)] = true
 	}
- 	for _, e := range plan.ReachableEnums {
- 		sharedLocal[localName(e.FullName)] = true
- 	}
+	for _, e := range plan.ReachableEnums {
+		sharedLocal[enumName(e)] = true
+	}
 
 	markConversionNeeds(idx, plan.Filtered.Services)
 	reachableMessages := plan.ReachableMessages

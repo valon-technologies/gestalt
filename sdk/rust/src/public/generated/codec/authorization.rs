@@ -1655,6 +1655,156 @@ pub(crate) fn decode_wire_list_relationships_response_json(
     })
 }
 
+/// Encodes a wire `Precondition` as protobuf JSON.
+pub(crate) fn encode_wire_precondition_json(value: &v1::Precondition) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if value.operation != 0 {
+        object.insert("operation".into(), {
+            let v = value.operation;
+            if let Some(name) = match value.operation {
+                0 => Some("OPERATION_UNSPECIFIED"),
+                1 => Some("OPERATION_MUST_NOT_MATCH"),
+                2 => Some("OPERATION_MUST_MATCH"),
+                _ => None,
+            } {
+                serde_json::Value::String(name.to_string())
+            } else {
+                serde_json::json!(v)
+            }
+        });
+    }
+    if let Some(inner) = &value.filter {
+        object.insert("filter".into(), encode_wire_relationship_filter_json(inner));
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `Precondition`.
+pub(crate) fn decode_wire_precondition_json(
+    value: &serde_json::Value,
+) -> Result<v1::Precondition, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::Precondition {
+        operation: object
+            .get("operation")
+            .map(|value| match value {
+                serde_json::Value::String(text) => match text.as_str() {
+                    "OPERATION_UNSPECIFIED" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(0)
+                    }
+                    "OPERATION_MUST_NOT_MATCH" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(1)
+                    }
+                    "OPERATION_MUST_MATCH" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(2)
+                    }
+                    _ => Err(crate::public::proto_json::invalid_proto_json(
+                        "unknown enum value",
+                    )),
+                },
+                serde_json::Value::Number(number) => number
+                    .as_i64()
+                    .and_then(|v| i32::try_from(v).ok())
+                    .ok_or_else(|| {
+                        crate::public::proto_json::invalid_proto_json("enum number out of range")
+                    }),
+                _ => Err(crate::public::proto_json::invalid_proto_json(
+                    "expected enum value",
+                )),
+            })
+            .transpose()?
+            .unwrap_or(0),
+        filter: object
+            .get("filter")
+            .map(|value| decode_wire_relationship_filter_json(value))
+            .transpose()?,
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `RelationshipUpdate` as protobuf JSON.
+pub(crate) fn encode_wire_relationship_update_json(
+    value: &v1::RelationshipUpdate,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if value.operation != 0 {
+        object.insert("operation".into(), {
+            let v = value.operation;
+            if let Some(name) = match value.operation {
+                0 => Some("OPERATION_UNSPECIFIED"),
+                1 => Some("OPERATION_CREATE"),
+                2 => Some("OPERATION_TOUCH"),
+                3 => Some("OPERATION_DELETE"),
+                _ => None,
+            } {
+                serde_json::Value::String(name.to_string())
+            } else {
+                serde_json::json!(v)
+            }
+        });
+    }
+    if let Some(inner) = &value.relationship {
+        object.insert("relationship".into(), encode_wire_relationship_json(inner));
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `RelationshipUpdate`.
+pub(crate) fn decode_wire_relationship_update_json(
+    value: &serde_json::Value,
+) -> Result<v1::RelationshipUpdate, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::RelationshipUpdate {
+        operation: object
+            .get("operation")
+            .map(|value| match value {
+                serde_json::Value::String(text) => match text.as_str() {
+                    "OPERATION_UNSPECIFIED" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(0)
+                    }
+                    "OPERATION_CREATE" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(1)
+                    }
+                    "OPERATION_TOUCH" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(2)
+                    }
+                    "OPERATION_DELETE" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(3)
+                    }
+                    _ => Err(crate::public::proto_json::invalid_proto_json(
+                        "unknown enum value",
+                    )),
+                },
+                serde_json::Value::Number(number) => number
+                    .as_i64()
+                    .and_then(|v| i32::try_from(v).ok())
+                    .ok_or_else(|| {
+                        crate::public::proto_json::invalid_proto_json("enum number out of range")
+                    }),
+                _ => Err(crate::public::proto_json::invalid_proto_json(
+                    "expected enum value",
+                )),
+            })
+            .transpose()?
+            .unwrap_or(0),
+        relationship: object
+            .get("relationship")
+            .map(|value| decode_wire_relationship_json(value))
+            .transpose()?,
+        ..Default::default()
+    })
+}
+
 /// Encodes a wire `SetActiveModelRequest` as protobuf JSON.
 pub(crate) fn encode_wire_set_active_model_request_json(
     value: &v1::SetActiveModelRequest,
@@ -1803,6 +1953,100 @@ pub(crate) fn decode_wire_set_authorization_state_response_json(
             .get("activeModel")
             .map(|value| decode_wire_authorization_model_ref_json(value))
             .transpose()?,
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `WriteRelationshipsRequest` as protobuf JSON.
+pub(crate) fn encode_wire_write_relationships_request_json(
+    value: &v1::WriteRelationshipsRequest,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.updates.is_empty() {
+        object.insert(
+            "updates".into(),
+            serde_json::Value::Array(
+                value
+                    .updates
+                    .iter()
+                    .map(|item| encode_wire_relationship_update_json(item))
+                    .collect(),
+            ),
+        );
+    }
+    if !value.optional_preconditions.is_empty() {
+        object.insert(
+            "optionalPreconditions".into(),
+            serde_json::Value::Array(
+                value
+                    .optional_preconditions
+                    .iter()
+                    .map(|item| encode_wire_precondition_json(item))
+                    .collect(),
+            ),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `WriteRelationshipsRequest`.
+pub(crate) fn decode_wire_write_relationships_request_json(
+    value: &serde_json::Value,
+) -> Result<v1::WriteRelationshipsRequest, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::WriteRelationshipsRequest {
+        updates: match object.get("updates") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for updates")
+                })?
+                .iter()
+                .map(|item| decode_wire_relationship_update_json(item))
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        optional_preconditions: match object.get("optionalPreconditions") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json(
+                        "expected array for optionalPreconditions",
+                    )
+                })?
+                .iter()
+                .map(|item| decode_wire_precondition_json(item))
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `WriteRelationshipsResponse` as protobuf JSON.
+pub(crate) fn encode_wire_write_relationships_response_json(
+    value: &v1::WriteRelationshipsResponse,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `WriteRelationshipsResponse`.
+pub(crate) fn decode_wire_write_relationships_response_json(
+    value: &serde_json::Value,
+) -> Result<v1::WriteRelationshipsResponse, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::WriteRelationshipsResponse {
         ..Default::default()
     })
 }

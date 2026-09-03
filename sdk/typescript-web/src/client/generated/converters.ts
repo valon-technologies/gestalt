@@ -32,6 +32,7 @@ import {
   toWireListRelationshipsRequest as codecToWireListRelationshipsRequest,
   toWireSetActiveModelRequest as codecToWireSetActiveModelRequest,
   toWireSetAuthorizationStateRequest as codecToWireSetAuthorizationStateRequest,
+  toWireWriteRelationshipsRequest as codecToWireWriteRelationshipsRequest,
 } from "../runtime/internal/codec/authorization.ts";
 import {
   toWireAuthorizeRequest as codecToWireAuthorizeRequest,
@@ -89,6 +90,7 @@ import type {
   ListRelationshipsRequest as NativeListRelationshipsRequest,
   SetActiveModelRequest as NativeSetActiveModelRequest,
   SetAuthorizationStateRequest as NativeSetAuthorizationStateRequest,
+  WriteRelationshipsRequest as NativeWriteRelationshipsRequest,
 } from "../runtime/native-types.ts";
 import type {
   AuthorizeRequest as NativeAuthorizeRequest,
@@ -146,6 +148,7 @@ import type {
   ListRelationshipsRequest,
   SetActiveModelRequest,
   SetAuthorizationStateRequest,
+  WriteRelationshipsRequest,
 } from "../runtime/internal/gen/v1/authorization_pb.ts";
 import type {
   AuthorizeRequest,
@@ -201,6 +204,7 @@ import type {
   PublicAuthorizationListRelationshipsRequest,
   PublicAuthorizationSetActiveModelRequest,
   PublicAuthorizationSetAuthorizationStateRequest,
+  PublicAuthorizationWriteRelationshipsRequest,
   PublicIdentityAuthorizeRequest,
   PublicIdentityGetGrantRequest,
   PublicIdentityIntrospectRequest,
@@ -571,4 +575,12 @@ export function toWireUserInfoRequest(
   request: PublicIdentityUserInfoRequest,
 ): UserInfoRequest {
   return codecToWireUserInfoRequest(request as Init<NativeUserInfoRequest>);
+}
+
+export function toWireWriteRelationshipsRequest(
+  request: PublicAuthorizationWriteRelationshipsRequest,
+): WriteRelationshipsRequest {
+  return codecToWireWriteRelationshipsRequest(
+    request as Init<NativeWriteRelationshipsRequest>,
+  );
 }

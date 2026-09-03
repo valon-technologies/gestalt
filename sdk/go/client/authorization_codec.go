@@ -508,6 +508,28 @@ func FromWireModelRelation(value *proto.ModelRelation) *ModelRelation {
 	return out
 }
 
+func ToWirePrecondition(value *Precondition) *proto.Precondition {
+	if value == nil {
+		return nil
+	}
+	out := &proto.Precondition{
+		Operation: proto.Precondition_Operation(value.Operation),
+		Filter:    ToWireRelationshipFilter(value.Filter),
+	}
+	return out
+}
+
+func FromWirePrecondition(value *proto.Precondition) *Precondition {
+	if value == nil {
+		return nil
+	}
+	out := &Precondition{
+		Operation: PreconditionOperation(value.Operation),
+		Filter:    FromWireRelationshipFilter(value.Filter),
+	}
+	return out
+}
+
 func ToWireRelationship(value *Relationship) *proto.Relationship {
 	if value == nil {
 		return nil
@@ -616,6 +638,28 @@ func FromWireRelationshipTuple(value *proto.RelationshipTuple) *RelationshipTupl
 		Target:   FromWireRelationshipTarget(value.Target),
 		Relation: value.Relation,
 		Resource: FromWireResource(value.Resource),
+	}
+	return out
+}
+
+func ToWireRelationshipUpdate(value *RelationshipUpdate) *proto.RelationshipUpdate {
+	if value == nil {
+		return nil
+	}
+	out := &proto.RelationshipUpdate{
+		Operation:    proto.RelationshipUpdate_Operation(value.Operation),
+		Relationship: ToWireRelationship(value.Relationship),
+	}
+	return out
+}
+
+func FromWireRelationshipUpdate(value *proto.RelationshipUpdate) *RelationshipUpdate {
+	if value == nil {
+		return nil
+	}
+	out := &RelationshipUpdate{
+		Operation:    RelationshipUpdateOperation(value.Operation),
+		Relationship: FromWireRelationship(value.Relationship),
 	}
 	return out
 }
@@ -795,5 +839,49 @@ func FromWireSubjectSetType(value *proto.SubjectSetType) *SubjectSetType {
 		ResourceType: value.ResourceType,
 		Relation:     value.Relation,
 	}
+	return out
+}
+
+func ToWireWriteRelationshipsRequest(value *WriteRelationshipsRequest) *proto.WriteRelationshipsRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.WriteRelationshipsRequest{}
+	for _, item := range value.Updates {
+		out.Updates = append(out.Updates, ToWireRelationshipUpdate(item))
+	}
+	for _, item := range value.OptionalPreconditions {
+		out.OptionalPreconditions = append(out.OptionalPreconditions, ToWirePrecondition(item))
+	}
+	return out
+}
+
+func FromWireWriteRelationshipsRequest(value *proto.WriteRelationshipsRequest) *WriteRelationshipsRequest {
+	if value == nil {
+		return nil
+	}
+	out := &WriteRelationshipsRequest{}
+	for _, item := range value.Updates {
+		out.Updates = append(out.Updates, FromWireRelationshipUpdate(item))
+	}
+	for _, item := range value.OptionalPreconditions {
+		out.OptionalPreconditions = append(out.OptionalPreconditions, FromWirePrecondition(item))
+	}
+	return out
+}
+
+func ToWireWriteRelationshipsResponse(value *WriteRelationshipsResponse) *proto.WriteRelationshipsResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.WriteRelationshipsResponse{}
+	return out
+}
+
+func FromWireWriteRelationshipsResponse(value *proto.WriteRelationshipsResponse) *WriteRelationshipsResponse {
+	if value == nil {
+		return nil
+	}
+	out := &WriteRelationshipsResponse{}
 	return out
 }

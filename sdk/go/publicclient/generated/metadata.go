@@ -258,6 +258,20 @@ var MethodAuthorizationListRelationships = Method{
 	Reject:          nil,
 }
 
+var MethodAuthorizationWriteRelationships = Method{
+	Service:         "gestalt.provider.v1.Authorization",
+	Name:            "WriteRelationships",
+	FullMethod:      "/gestalt.provider.v1.Authorization/WriteRelationships",
+	HTTPVerb:        "POST",
+	HTTPPath:        "/api/v2/authorization/relationships:write",
+	HTTPBody:        "*",
+	HTTPPathFields:  nil,
+	HTTPQueryFields: nil,
+	Stream:          false,
+	Fill:            nil,
+	Reject:          nil,
+}
+
 var MethodAuthorizationAddRelationship = Method{
 	Service:         "gestalt.provider.v1.Authorization",
 	Name:            "AddRelationship",

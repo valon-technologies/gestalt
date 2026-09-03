@@ -5,8 +5,8 @@
     "rust",
     "typescript"
   ],
-  "grpcMethodCount": 75,
-  "restMethodCount": 46,
+  "grpcMethodCount": 76,
+  "restMethodCount": 47,
   "methods": [
     {
       "service": "Agent",
@@ -866,6 +866,33 @@
         "typescript": {
           "service": "AuthorizationClient",
           "method": "setAuthorizationState"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "WriteRelationships",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/authorization/relationships:write",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Authorization/WriteRelationships",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "WriteRelationships"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "write_relationships"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "write_relationships"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "writeRelationships"
         }
       }
     },

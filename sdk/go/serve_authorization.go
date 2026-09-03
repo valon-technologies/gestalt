@@ -39,6 +39,15 @@ func (s authorizationProviderServer) ListRelationships(ctx context.Context, req 
 	return authorizationProtoResponseErr(resp, protoListRelationshipsResponse, "authorization list relationships", err)
 }
 
+func (s authorizationProviderServer) WriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	writer, ok := s.provider.(AuthorizationRelationshipWriter)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "authorization relationship writes are not implemented")
+	}
+	resp, err := writer.WriteRelationships(ctx, writeRelationshipsRequestFromProto(req))
+	return authorizationProtoResponse(resp, protoWriteRelationshipsResponse, "authorization write relationships", err)
+}
+
 func (s authorizationProviderServer) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	resp, err := s.provider.AddRelationship(ctx, addRelationshipRequestFromProto(req))
 	return authorizationProtoResponseErr(resp, protoAddRelationshipResponse, "authorization add relationship", err)

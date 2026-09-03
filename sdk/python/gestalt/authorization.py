@@ -26,6 +26,18 @@ _empty: Any = _empty_pb2
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
+PreconditionOperation = int
+
+
+class PreconditionOperationValues:
+    """Named values for the open PreconditionOperation enum."""
+
+    UNSPECIFIED: PreconditionOperation = 0
+    MUST_NOT_MATCH: PreconditionOperation = 1
+    MUST_MATCH: PreconditionOperation = 2
+
+
+# Open enum: unknown numeric values are preserved, so the type is int.
 RelationshipTargetType = int
 
 
@@ -36,6 +48,19 @@ class RelationshipTargetTypeValues:
     SUBJECT: RelationshipTargetType = 1
     RESOURCE: RelationshipTargetType = 2
     SUBJECT_SET: RelationshipTargetType = 3
+
+
+# Open enum: unknown numeric values are preserved, so the type is int.
+RelationshipUpdateOperation = int
+
+
+class RelationshipUpdateOperationValues:
+    """Named values for the open RelationshipUpdateOperation enum."""
+
+    UNSPECIFIED: RelationshipUpdateOperation = 0
+    CREATE: RelationshipUpdateOperation = 1
+    TOUCH: RelationshipUpdateOperation = 2
+    DELETE: RelationshipUpdateOperation = 3
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
@@ -204,6 +229,16 @@ class ModelRelation:
 
 
 @dataclass(frozen=True, slots=True)
+class Precondition:
+    """Precondition is evaluated against the relationship snapshot captured before
+    any update in the request is applied.
+    """
+
+    operation: PreconditionOperation = 0
+    filter: RelationshipFilter | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Relationship:
     tuple: RelationshipTuple | None = None
     properties: dict[str, JsonValue] | None = None
@@ -257,6 +292,18 @@ class RelationshipTuple:
 
 
 @dataclass(frozen=True, slots=True)
+class RelationshipUpdate:
+    """RelationshipUpdate changes one relationship in an atomic write request.
+    CREATE fails if the relationship is already present, TOUCH upserts it, and
+    DELETE is idempotent and protects the stored source layer when one is
+    specified.
+    """
+
+    operation: RelationshipUpdateOperation = 0
+    relationship: Relationship | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Resource:
     type: str = ""
     id: str = ""
@@ -301,6 +348,23 @@ class SubjectSet:
 class SubjectSetType:
     resource_type: str = ""
     relation: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class WriteRelationshipsRequest:
+    """WriteRelationshipsRequest evaluates all preconditions against the initial
+    relationship snapshot, then applies all updates atomically or applies none.
+    The response is intentionally empty because Gestalt does not expose a
+    revision or ZedToken for relationship writes.
+    """
+
+    updates: list[RelationshipUpdate] = field(default_factory=list)
+    optional_preconditions: list[Precondition] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class WriteRelationshipsResponse:
+    pass
 
 
 class Authorization:
@@ -437,6 +501,43 @@ class Authorization:
             )
         )
         return _codec.from_wire_list_relationships_response(response)
+
+    @overload
+    def write_relationships(
+        self, request: WriteRelationshipsRequest
+    ) -> WriteRelationshipsResponse: ...
+
+    @overload
+    def write_relationships(
+        self,
+        *,
+        updates: list[RelationshipUpdate] = ...,
+        optional_preconditions: list[Precondition] = ...,
+    ) -> WriteRelationshipsResponse: ...
+
+    def write_relationships(
+        self,
+        request: WriteRelationshipsRequest | None = None,
+        *,
+        updates: list[RelationshipUpdate] | None = None,
+        optional_preconditions: list[Precondition] | None = None,
+    ) -> WriteRelationshipsResponse:
+        if request is None:
+            request = WriteRelationshipsRequest(
+                updates=updates if updates is not None else [],
+                optional_preconditions=optional_preconditions
+                if optional_preconditions is not None
+                else [],
+            )
+        elif updates is not None or optional_preconditions is not None:
+            raise ValueError("pass either request or keyword arguments, not both")
+        response = _support.call_unary(
+            lambda: self._stub.WriteRelationships(
+                _codec.to_wire_write_relationships_request(request),
+                timeout=self._timeout,
+            )
+        )
+        return _codec.from_wire_write_relationships_response(response)
 
     @overload
     def add_relationship(

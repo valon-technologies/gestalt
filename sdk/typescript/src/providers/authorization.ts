@@ -20,6 +20,8 @@ import {
   ModelAllowedTargetSchema,
   ModelRelationSchema,
   RelationshipSchema,
+  Precondition_Operation as ProtoPreconditionOperation,
+  RelationshipUpdate_Operation as ProtoRelationshipUpdateOperation,
   RelationshipTargetSchema,
   RelationshipTargetType as ProtoRelationshipTargetType,
   RelationshipTupleSchema,
@@ -30,6 +32,7 @@ import {
   SubjectSchema,
   SubjectSetSchema,
   SubjectSetTypeSchema,
+  WriteRelationshipsResponseSchema,
   Authorization as AuthorizationProviderService,
   type AddRelationshipRequest as ProtoAddRelationshipRequest,
   type AuthorizationModel as ProtoAuthorizationModel,
@@ -39,6 +42,8 @@ import {
   type DeleteRelationshipRequest as ProtoDeleteRelationshipRequest,
   type ListActiveModelResourceTypesRequest as ProtoListActiveModelResourceTypesRequest,
   type ListRelationshipsRequest as ProtoListRelationshipsRequest,
+  type Precondition as ProtoPrecondition,
+  type RelationshipUpdate as ProtoRelationshipUpdate,
   type ModelAllowedTarget as ProtoModelAllowedTarget,
   type Relationship as ProtoRelationship,
   type RelationshipFilter as ProtoRelationshipFilter,
@@ -47,6 +52,7 @@ import {
   type SetActiveModelRequest as ProtoSetActiveModelRequest,
   type SetAuthorizationStateRequest as ProtoSetAuthorizationStateRequest,
   type SubjectSet as ProtoSubjectSet,
+  type WriteRelationshipsRequest as ProtoWriteRelationshipsRequest,
 } from "../internal/gen/v1/authorization_pb.ts";
 import { errorMessage, type MaybePromise } from "../api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "../provider.ts";
@@ -72,6 +78,23 @@ export const SourceLayer = {
   RUNTIME: ProtoSourceLayer.RUNTIME,
 } as const;
 export type SourceLayer = (typeof SourceLayer)[keyof typeof SourceLayer];
+
+export const RelationshipUpdateOperation = {
+  UNSPECIFIED: ProtoRelationshipUpdateOperation.UNSPECIFIED,
+  CREATE: ProtoRelationshipUpdateOperation.CREATE,
+  TOUCH: ProtoRelationshipUpdateOperation.TOUCH,
+  DELETE: ProtoRelationshipUpdateOperation.DELETE,
+} as const;
+export type RelationshipUpdateOperation =
+  (typeof RelationshipUpdateOperation)[keyof typeof RelationshipUpdateOperation];
+
+export const PreconditionOperation = {
+  UNSPECIFIED: ProtoPreconditionOperation.UNSPECIFIED,
+  MUST_NOT_MATCH: ProtoPreconditionOperation.MUST_NOT_MATCH,
+  MUST_MATCH: ProtoPreconditionOperation.MUST_MATCH,
+} as const;
+export type PreconditionOperation =
+  (typeof PreconditionOperation)[keyof typeof PreconditionOperation];
 
 export interface AuthorizationSubject {
   type?: string | undefined;
@@ -130,6 +153,23 @@ export interface ListRelationshipsResponse {
   relationships?: readonly Relationship[] | undefined;
   nextPageToken?: string | undefined;
 }
+
+export interface RelationshipUpdate {
+  operation?: RelationshipUpdateOperation | undefined;
+  relationship?: Relationship | undefined;
+}
+
+export interface Precondition {
+  operation?: PreconditionOperation | undefined;
+  filter?: RelationshipFilter | undefined;
+}
+
+export interface WriteRelationshipsRequest {
+  updates?: readonly RelationshipUpdate[] | undefined;
+  optionalPreconditions?: readonly Precondition[] | undefined;
+}
+
+export interface WriteRelationshipsResponse {}
 
 export interface AddRelationshipRequest {
   relationship?: Relationship | undefined;
@@ -255,6 +295,9 @@ export interface AuthorizationProviderOptions extends ProviderBaseOptions {
   listRelationships: (
     request: ListRelationshipsRequest,
   ) => MaybePromise<ListRelationshipsResponse>;
+  writeRelationships?: (
+    request: WriteRelationshipsRequest,
+  ) => MaybePromise<WriteRelationshipsResponse>;
   addRelationship: (
     request: AddRelationshipRequest,
   ) => MaybePromise<AddRelationshipResponse>;
@@ -297,6 +340,22 @@ export class AuthorizationProvider extends ProviderBase {
     request: ListRelationshipsRequest,
   ): Promise<ListRelationshipsResponse> {
     return Promise.resolve(this.handlers.listRelationships(request));
+  }
+
+  writeRelationships(
+    request: WriteRelationshipsRequest,
+  ): Promise<WriteRelationshipsResponse> {
+    if (!this.handlers.writeRelationships) {
+      throw new ConnectError(
+        "authorization relationship writes are not implemented",
+        Code.Unimplemented,
+      );
+    }
+    return Promise.resolve(this.handlers.writeRelationships(request));
+  }
+
+  hasWriteRelationships(): boolean {
+    return this.handlers.writeRelationships !== undefined;
   }
 
   addRelationship(
@@ -364,7 +423,7 @@ export function isAuthorizationProvider(
 export function createAuthorizationProviderService(
   provider: AuthorizationProvider,
 ): Partial<ServiceImpl<typeof AuthorizationProviderService>> {
-  return {
+  const service: Partial<ServiceImpl<typeof AuthorizationProviderService>> = {
     async checkAccess(request) {
       try {
         return checkAccessResponseToProto(
@@ -448,6 +507,28 @@ export function createAuthorizationProviderService(
       }
     },
   };
+  const capability = provider as unknown as {
+    hasWriteRelationships?: () => boolean;
+    writeRelationships?: unknown;
+  };
+  const hasWriteRelationships =
+    typeof capability.hasWriteRelationships === "function"
+      ? capability.hasWriteRelationships()
+      : typeof capability.writeRelationships === "function";
+  if (hasWriteRelationships) {
+    service.writeRelationships = async (request) => {
+      try {
+        return writeRelationshipsResponseToProto(
+          await provider.writeRelationships(
+            writeRelationshipsRequestFromProto(request),
+          ),
+        );
+      } catch (error) {
+        throw authorizationRuntimeError("write relationships", error);
+      }
+    };
+  }
+  return service;
 }
 
 function checkAccessRequestFromProto(
@@ -524,6 +605,43 @@ function listRelationshipsResponseToProto(
     relationships: (value.relationships ?? []).map(relationshipToProtoRequired),
     nextPageToken: value.nextPageToken ?? "",
   });
+}
+
+function writeRelationshipsRequestFromProto(
+  value: ProtoWriteRelationshipsRequest,
+): WriteRelationshipsRequest {
+  return {
+    updates: value.updates.map(relationshipUpdateFromProto),
+    optionalPreconditions: value.optionalPreconditions.map(preconditionFromProto),
+  };
+}
+
+function writeRelationshipsResponseToProto(
+  value: WriteRelationshipsResponse | undefined,
+) {
+  if (!value) {
+    throw new ConnectError(
+      "authorization provider returned nil response",
+      Code.Internal,
+    );
+  }
+  return create(WriteRelationshipsResponseSchema);
+}
+
+function relationshipUpdateFromProto(
+  value: ProtoRelationshipUpdate,
+): RelationshipUpdate {
+  return {
+    operation: value.operation,
+    relationship: relationshipFromProto(value.relationship),
+  };
+}
+
+function preconditionFromProto(value: ProtoPrecondition): Precondition {
+  return {
+    operation: value.operation,
+    filter: relationshipFilterFromProto(value.filter),
+  };
 }
 
 function addRelationshipRequestFromProto(

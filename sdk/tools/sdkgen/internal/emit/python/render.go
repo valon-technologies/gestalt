@@ -209,7 +209,7 @@ func (r *renderer) messageType(fullName string) string {
 }
 
 func (r *renderer) enumType(fullName string) string {
-	return r.crossRef(r.idx.enums[fullName].ProtoFile, localName(fullName))
+	return r.crossRef(r.idx.enums[fullName].ProtoFile, enumName(r.idx.enums[fullName]))
 }
 
 // toWireExpr renders the wire-bound conversion of a singular value.
@@ -393,7 +393,7 @@ func enumMemberNames(e *model.Enum) []string {
 	for i, v := range e.Values {
 		names[i] = v.Name
 	}
-	prefix := strings.ToUpper(snakeCase(localName(e.FullName))) + "_"
+	prefix := strings.ToUpper(snakeCase(e.Name)) + "_"
 	stripped := make([]string, len(e.Values))
 	for i, v := range e.Values {
 		s := strings.TrimPrefix(v.Name, prefix)
@@ -406,10 +406,10 @@ func enumMemberNames(e *model.Enum) []string {
 }
 
 func (r *renderer) renderEnum(e *model.Enum) {
-	name := localName(e.FullName)
+	name := enumName(e)
 	r.body.WriteString("# Open enum: unknown numeric values are preserved, so the type is int.\n")
 	fmt.Fprintf(&r.body, "%s = int\n\n\n", name)
-	fmt.Fprintf(&r.body, "class %s:\n", enumValuesClassName(e.FullName))
+	fmt.Fprintf(&r.body, "class %s:\n", enumValuesClassName(e))
 	doc := fmt.Sprintf("Named values for the open %s enum.", name)
 	if e.Doc != "" {
 		doc = e.Doc + "\n\n" + doc

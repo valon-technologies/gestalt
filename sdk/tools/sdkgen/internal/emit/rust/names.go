@@ -18,6 +18,13 @@ func localName(fullName string) string {
 	return fullName
 }
 
+func enumName(e *model.Enum) string {
+	if e.GeneratedName != "" {
+		return e.GeneratedName
+	}
+	return localName(e.FullName)
+}
+
 // generatedFileBase derives the generated module base from a proto file path:
 // sdk/proto/v1/indexeddb.proto becomes "indexeddb".
 func generatedFileBase(protoFile string) string {

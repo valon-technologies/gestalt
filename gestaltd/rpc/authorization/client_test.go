@@ -33,10 +33,27 @@ func TestClientCheckAccessCallsGRPCDirectly(t *testing.T) {
 	}
 }
 
+func TestClientWriteRelationshipsForwardsExactRequest(t *testing.T) {
+	t.Parallel()
+
+	grpcClient := &recordingAuthorizationClient{writeRelationshipsResponse: &proto.WriteRelationshipsResponse{}}
+	client := NewClient(grpcClient, Options{})
+	want := &proto.WriteRelationshipsRequest{}
+	got, err := client.WriteRelationships(context.Background(), want)
+	if err != nil {
+		t.Fatalf("WriteRelationships: %v", err)
+	}
+	if got == nil || grpcClient.writeRelationshipsRequest != want {
+		t.Fatalf("forwarded request = %p, want exact request %p", grpcClient.writeRelationshipsRequest, want)
+	}
+}
+
 type recordingAuthorizationClient struct {
 	proto.AuthorizationClient
-	checkAccessRequest  *proto.CheckAccessRequest
-	checkAccessResponse *proto.CheckAccessResponse
+	checkAccessRequest         *proto.CheckAccessRequest
+	checkAccessResponse        *proto.CheckAccessResponse
+	writeRelationshipsRequest  *proto.WriteRelationshipsRequest
+	writeRelationshipsResponse *proto.WriteRelationshipsResponse
 }
 
 func (c *recordingAuthorizationClient) CheckAccess(ctx context.Context, in *proto.CheckAccessRequest, opts ...grpc.CallOption) (*proto.CheckAccessResponse, error) {
@@ -50,6 +67,11 @@ func (c *recordingAuthorizationClient) CheckAccessMany(context.Context, *proto.C
 
 func (c *recordingAuthorizationClient) ListRelationships(context.Context, *proto.ListRelationshipsRequest, ...grpc.CallOption) (*proto.ListRelationshipsResponse, error) {
 	return &proto.ListRelationshipsResponse{}, nil
+}
+
+func (c *recordingAuthorizationClient) WriteRelationships(_ context.Context, request *proto.WriteRelationshipsRequest, _ ...grpc.CallOption) (*proto.WriteRelationshipsResponse, error) {
+	c.writeRelationshipsRequest = request
+	return c.writeRelationshipsResponse, nil
 }
 
 func (c *recordingAuthorizationClient) AddRelationship(context.Context, *proto.AddRelationshipRequest, ...grpc.CallOption) (*proto.AddRelationshipResponse, error) {

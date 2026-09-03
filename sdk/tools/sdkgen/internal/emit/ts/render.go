@@ -133,7 +133,7 @@ func (r *renderer) messageType(fullName string) string {
 
 func (r *renderer) enumType(fullName string) string {
 	// Enum constants are value references (and types via the same name).
-	return r.typeRef(r.idx.enums[fullName].ProtoFile, localName(fullName), false)
+	return r.typeRef(r.idx.enums[fullName].ProtoFile, enumName(r.idx.enums[fullName]), false)
 }
 
 // fnToWire returns the converter function for reference kinds converted by a
@@ -218,12 +218,35 @@ func (r *renderer) fromWireExpr(ref *model.TypeRef, expr string) string {
 	}
 }
 
-// wireEnum returns the enum name in the wire module. Enums referenced across
-// generated files still live in the current file's wire module only when
-// declared in the same proto file; cross-file enums resolve through their own
-// wire module, which the spike protos do not require.
+// wireEnum returns the enum name in the wire module. Protobuf-es qualifies
+// nested enums with their containing message names, while top-level enums use
+// their own name.
 func (r *renderer) wireEnum(fullName string) string {
-	return localName(fullName)
+	e := r.idx.enums[fullName]
+	if e == nil {
+		return localName(fullName)
+	}
+	parentFullName := fullName[:strings.LastIndex(fullName, ".")]
+	if _, ok := r.idx.messages[parentFullName]; !ok {
+		return e.Name
+	}
+	parents := []string{e.Name}
+	for parent := parentFullName; ; {
+		messageName := localName(parent)
+		parents = append(parents, messageName)
+		parentIndex := strings.LastIndex(parent, ".")
+		if parentIndex < 0 {
+			break
+		}
+		parent = parent[:parentIndex]
+		if _, ok := r.idx.messages[parent]; !ok {
+			break
+		}
+	}
+	for left, right := 0, len(parents)-1; left < right; left, right = left+1, right-1 {
+		parents[left], parents[right] = parents[right], parents[left]
+	}
+	return strings.Join(parents, "_")
 }
 
 // identityToWire covers scalars and bytes. google.protobuf.Struct values are
@@ -334,7 +357,7 @@ func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
 }
 
 func (r *renderer) renderEnum(e *model.Enum) {
-	name := localName(e.FullName)
+	name := enumName(e)
 	members := enumMemberNames(e)
 	r.writeDoc(e.Doc, "")
 	fmt.Fprintf(&r.body, "export const %s = {\n", name)

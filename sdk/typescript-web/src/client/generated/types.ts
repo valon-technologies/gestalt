@@ -32,6 +32,7 @@ import type {
   ListRelationshipsRequest,
   SetActiveModelRequest,
   SetAuthorizationStateRequest,
+  WriteRelationshipsRequest,
 } from "../runtime/native-types.ts";
 import type {
   AuthorizeRequest,
@@ -128,6 +129,9 @@ export type PublicAuthorizationCheckAccessManyRequest =
 
 export type PublicAuthorizationListRelationshipsRequest =
   Init<ListRelationshipsRequest>;
+
+export type PublicAuthorizationWriteRelationshipsRequest =
+  Init<WriteRelationshipsRequest>;
 
 export type PublicAuthorizationAddRelationshipRequest =
   Init<AddRelationshipRequest>;

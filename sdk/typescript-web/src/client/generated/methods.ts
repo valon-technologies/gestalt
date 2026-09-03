@@ -409,6 +409,21 @@ export const PUBLIC_METHODS = {
         queryFields: [],
       },
     },
+    writeRelationships: {
+      service: "Authorization",
+      method: "WriteRelationships",
+      grpcPath: "/gestalt.provider.v1.Authorization/WriteRelationships",
+      fill: [],
+      reject: [],
+      stream: false,
+      http: {
+        verb: "POST",
+        path: "/api/v2/authorization/relationships:write",
+        body: "*",
+        pathFields: [],
+        queryFields: [],
+      },
+    },
   },
   identity: {
     authorize: {

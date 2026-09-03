@@ -1469,6 +1469,106 @@ pub struct ListRelationshipsResponse {
     #[prost(string, tag = "2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
+/// RelationshipUpdate changes one relationship in an atomic write request.
+/// CREATE fails if the relationship is already present, TOUCH upserts it, and
+/// DELETE is idempotent and protects the stored source layer when one is
+/// specified.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RelationshipUpdate {
+    #[prost(enumeration = "relationship_update::Operation", tag = "1")]
+    pub operation: i32,
+    #[prost(message, optional, tag = "2")]
+    pub relationship: ::core::option::Option<Relationship>,
+}
+/// Nested message and enum types in `RelationshipUpdate`.
+pub mod relationship_update {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum Operation {
+        Unspecified = 0,
+        Create = 1,
+        Touch = 2,
+        Delete = 3,
+    }
+    impl Operation {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Unspecified => "OPERATION_UNSPECIFIED",
+                Self::Create => "OPERATION_CREATE",
+                Self::Touch => "OPERATION_TOUCH",
+                Self::Delete => "OPERATION_DELETE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "OPERATION_UNSPECIFIED" => Some(Self::Unspecified),
+                "OPERATION_CREATE" => Some(Self::Create),
+                "OPERATION_TOUCH" => Some(Self::Touch),
+                "OPERATION_DELETE" => Some(Self::Delete),
+                _ => None,
+            }
+        }
+    }
+}
+/// Precondition is evaluated against the relationship snapshot captured before
+/// any update in the request is applied.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Precondition {
+    #[prost(enumeration = "precondition::Operation", tag = "1")]
+    pub operation: i32,
+    #[prost(message, optional, tag = "2")]
+    pub filter: ::core::option::Option<RelationshipFilter>,
+}
+/// Nested message and enum types in `Precondition`.
+pub mod precondition {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum Operation {
+        Unspecified = 0,
+        MustNotMatch = 1,
+        MustMatch = 2,
+    }
+    impl Operation {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Unspecified => "OPERATION_UNSPECIFIED",
+                Self::MustNotMatch => "OPERATION_MUST_NOT_MATCH",
+                Self::MustMatch => "OPERATION_MUST_MATCH",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "OPERATION_UNSPECIFIED" => Some(Self::Unspecified),
+                "OPERATION_MUST_NOT_MATCH" => Some(Self::MustNotMatch),
+                "OPERATION_MUST_MATCH" => Some(Self::MustMatch),
+                _ => None,
+            }
+        }
+    }
+}
+/// WriteRelationshipsRequest evaluates all preconditions against the initial
+/// relationship snapshot, then applies all updates atomically or applies none.
+/// The response is intentionally empty because Gestalt does not expose a
+/// revision or ZedToken for relationship writes.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WriteRelationshipsRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub updates: ::prost::alloc::vec::Vec<RelationshipUpdate>,
+    #[prost(message, repeated, tag = "2")]
+    pub optional_preconditions: ::prost::alloc::vec::Vec<Precondition>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WriteRelationshipsResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AddRelationshipRequest {
     #[prost(message, optional, tag = "1")]

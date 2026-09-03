@@ -262,6 +262,7 @@ func (b *builder) enum(ed protoreflect.EnumDescriptor) *model.Enum {
 		Doc:       docFor(ed),
 		FullName:  string(ed.FullName()),
 		Name:      string(ed.Name()),
+		GeneratedName: generatedEnumName(ed),
 		ProtoFile: b.pathPrefix + ed.ParentFile().Path(),
 	}
 	values := ed.Values()
@@ -271,6 +272,22 @@ func (b *builder) enum(ed protoreflect.EnumDescriptor) *model.Enum {
 	}
 	b.enums[ed.FullName()] = e
 	return e
+}
+
+// generatedEnumName gives native SDKs a package-level identifier for an enum.
+// Protobuf permits nested enums with the same short name, while the generated
+// SDK modules flatten package and message nesting. Include all containing
+// message names to keep those declarations distinct.
+func generatedEnumName(ed protoreflect.EnumDescriptor) string {
+	parts := []string{string(ed.Name())}
+	for parent, ok := ed.Parent().(protoreflect.MessageDescriptor); ok; {
+		parts = append(parts, string(parent.Name()))
+		parent, ok = parent.Parent().(protoreflect.MessageDescriptor)
+	}
+	for left, right := 0, len(parts)-1; left < right; left, right = left+1, right-1 {
+		parts[left], parts[right] = parts[right], parts[left]
+	}
+	return strings.Join(parts, "")
 }
 
 // docFor returns the normalized leading proto comment for a descriptor: each

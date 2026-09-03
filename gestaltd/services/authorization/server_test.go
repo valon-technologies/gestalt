@@ -7,6 +7,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestProviderServerStampsGRPCEntry(t *testing.T) {
@@ -24,9 +26,48 @@ func TestProviderServerStampsGRPCEntry(t *testing.T) {
 	}
 }
 
+func TestProviderServerWriteRelationshipsRequiresOptionalCapability(t *testing.T) {
+	t.Parallel()
+
+	server := NewProviderServer(&entryRecordingAuthorizationProvider{})
+	_, err := server.WriteRelationships(context.Background(), &proto.WriteRelationshipsRequest{})
+	if status.Code(err) != codes.Unimplemented {
+		t.Fatalf("WriteRelationships() code = %v, want Unimplemented", status.Code(err))
+	}
+}
+
+func TestProviderServerDispatchesWriteRelationshipsCapability(t *testing.T) {
+	t.Parallel()
+
+	provider := &entryRecordingAuthorizationWriter{}
+	server := NewProviderServer(provider)
+	want := &proto.WriteRelationshipsRequest{}
+	got, err := server.WriteRelationships(context.Background(), want)
+	if err != nil {
+		t.Fatalf("WriteRelationships: %v", err)
+	}
+	if got == nil || provider.request != want {
+		t.Fatalf("forwarded request = %p, want exact request %p", provider.request, want)
+	}
+	if provider.entry != invocation.EntryGRPC {
+		t.Fatalf("entry = %q, want %q", provider.entry, invocation.EntryGRPC)
+	}
+}
+
 type entryRecordingAuthorizationProvider struct {
 	core.AuthorizationProvider
 	entry invocation.Entry
+}
+
+type entryRecordingAuthorizationWriter struct {
+	entryRecordingAuthorizationProvider
+	request *proto.WriteRelationshipsRequest
+}
+
+func (p *entryRecordingAuthorizationWriter) WriteRelationships(ctx context.Context, request *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	p.entry = invocation.EntryFromContext(ctx)
+	p.request = request
+	return &proto.WriteRelationshipsResponse{}, nil
 }
 
 func (p *entryRecordingAuthorizationProvider) CheckAccess(ctx context.Context, _ *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
