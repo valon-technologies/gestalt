@@ -290,14 +290,13 @@ type Result struct {
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
 	workflowConfigReconcileTasksStarted bool
 	startupWorkflowConfigReconcile      func(context.Context) error
-	startupWorkflowConfigReconcileOnce  sync.Once
-	startupWorkflowConfigReconcileErr   error
+	registryAppStartupOnce              sync.Once
+	registryAppStartupErr               error
 	startupOperations                   sync.WaitGroup
 	auditClose                          func(context.Context) error
 	appHostServiceCleanup               func()
 	startAppProviders                   func()
 	appProvidersInitialized             chan struct{}
-	appProvidersInitializedOnce         sync.Once
 	activateAppProviders                func(context.Context)
 	startup                             *deferredProviders
 	deferred                            *deferredProviders
@@ -307,10 +306,9 @@ type Result struct {
 	scimStart                           sync.Once
 }
 
-// StartAppProviders starts app providers that are required during normal
-// server startup. Daemons may defer this until after their public listener is
-// bound so hosted apps can call back through the public host-service relay
-// while they configure.
+// StartAppProviders starts configured app providers and waits for them to be
+// ready. Daemons defer this until after their public listener is bound so
+// hosted apps can call back through the public host-service relay.
 func (r *Result) StartAppProviders(ctx context.Context) error {
 	if r == nil || r.startAppProviders == nil {
 		return nil
@@ -335,20 +333,43 @@ func (r *Result) StartAppProviders(ctx context.Context) error {
 			return fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
 		}
 	}
-	if r.RegistryAppStartup != nil {
-		r.RegistryAppStartup(ctx)
+	return nil
+}
+
+// StartRegistryApps restores registry-backed apps and reconciles their
+// workflow declarations. It must run only after the server is ready to serve
+// public host-service callbacks.
+func (r *Result) StartRegistryApps(ctx context.Context) error {
+	if r == nil {
+		return nil
 	}
-	r.appProvidersInitializedOnce.Do(func() {
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return fmt.Errorf("bootstrap result already closed")
+	}
+	r.startupOperations.Add(1)
+	r.mu.Unlock()
+	defer r.startupOperations.Done()
+
+	r.registryAppStartupOnce.Do(func() {
+		if r.RegistryAppStartup != nil {
+			r.RegistryAppStartup(ctx)
+		}
 		if r.appProvidersInitialized != nil {
 			close(r.appProvidersInitialized)
 		}
-	})
-	r.startupWorkflowConfigReconcileOnce.Do(func() {
 		if r.startupWorkflowConfigReconcile != nil {
-			r.startupWorkflowConfigReconcileErr = r.startupWorkflowConfigReconcile(ctx)
+			r.registryAppStartupErr = r.startupWorkflowConfigReconcile(ctx)
+			if r.registryAppStartupErr != nil && ctx.Err() == nil {
+				go runWorkflowConfigReconcileTask(ctx, workflowConfigReconcileTask{
+					name:      "workflow definitions after registry app startup",
+					reconcile: r.startupWorkflowConfigReconcile,
+				})
+			}
 		}
 	})
-	return r.startupWorkflowConfigReconcileErr
+	return r.registryAppStartupErr
 }
 
 func (r *Result) ActivateAppProviders(ctx context.Context) {
@@ -474,9 +495,7 @@ func (r *Result) Close(ctx context.Context) error {
 	if r.closed {
 		return nil
 	}
-	// StartAppProviders continues past provider readiness to reconcile workflow
-	// declarations. Wait for that entire operation before closing its runtime
-	// dependencies.
+	// App and registry startup may still be using runtime dependencies.
 	r.startupOperations.Wait()
 	if r.startup != nil {
 		r.startup.waitReady()
