@@ -106,6 +106,15 @@ func TestSCIMMigrationPreservesCommittedAndCreateOnlyResources(t *testing.T) {
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	resource, _ := json.Marshal(map[string]any{"userName": "Migrated@Valon.com", "active": true})
+	// Simulate a crash after the compact row was created but before the legacy
+	// migration completed. The rerunnable migration must replace this partial
+	// row with the complete legacy representation.
+	if err := db.ObjectStore(coredata.StoreSCIMResources).Put(context.Background(), idb.Record{
+		"id": "legacy-user", "client_id": "rippling", "resource_type": "User", "core_user_id": coreUser.ID,
+		"user_name": "partial@valon.com", "created_at": now, "updated_at": now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.ObjectStore(coredata.StoreSCIMUsers).Add(context.Background(), idb.Record{
 		"id": "legacy-user", "client_id": "rippling", "core_user_id": coreUser.ID, "version": int64(1), "deleted": false,
 		"resource": json.RawMessage(resource), "created_at": now, "updated_at": now,
@@ -154,6 +163,9 @@ func TestSCIMMigrationPreservesCommittedAndCreateOnlyResources(t *testing.T) {
 		if db.HasObjectStore(name) {
 			t.Fatalf("legacy store %q remains", name)
 		}
+	}
+	if _, err := scim.NewService(services.DB, authorization, "https://gestalt.example", cfg); err != nil {
+		t.Fatalf("rerunning completed migration: %v", err)
 	}
 }
 

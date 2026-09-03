@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	sdkidb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -193,6 +194,47 @@ func TestSCIMResourcesStoreDoesNotDuplicateLiveAuthorizationState(t *testing.T) 
 				t.Fatalf("SCIM metadata row stores live state %q: %#v", forbidden, row)
 			}
 		}
+	}
+}
+
+func TestSCIMUserProfileUsesIndexedDBWireCodec(t *testing.T) {
+	t.Parallel()
+	h, _, services := setup(t)
+	response := req(t, h, "POST", "/scim/v2/Users", map[string]any{
+		"schemas":  []string{scim.UserSchemaURN},
+		"userName": "codec@valon.com",
+		"active":   true,
+		"name":     map[string]any{"givenName": "Codec", "familyName": "User"},
+		"emails":   []map[string]any{{"value": "codec@valon.com", "type": "work", "primary": true}},
+	})
+	if response.Code != http.StatusCreated {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	rows, err := services.DB.ObjectStore(coredata.StoreSCIMResources).GetAll(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var userRow map[string]any
+	for _, row := range rows {
+		if row["resource_type"] == "User" {
+			userRow = row
+			break
+		}
+	}
+	if userRow == nil {
+		t.Fatal("created User row not found")
+	}
+	encoded, err := sdkidb.EncodeIndexedDBRecord(userRow)
+	if err != nil {
+		t.Fatalf("SCIM User row is not accepted by the IndexedDB wire codec: %v", err)
+	}
+	decoded, err := sdkidb.DecodeIndexedDBRecord(encoded)
+	if err != nil {
+		t.Fatalf("decode encoded SCIM User row: %v", err)
+	}
+	profile, ok := decoded["profile"].(map[string]any)
+	if !ok || profile["name"].(map[string]any)["givenName"] != "Codec" {
+		t.Fatalf("decoded profile = %#v", decoded["profile"])
 	}
 }
 
