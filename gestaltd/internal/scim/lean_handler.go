@@ -309,7 +309,7 @@ func (h *leanHandler) group(w http.ResponseWriter, r *http.Request, c, id string
 			writeError(w, e)
 			return
 		}
-		g, e := h.s.PatchGroup(r.Context(), c, id, strings.TrimSpace(r.Header.Get("If-Match")), patch)
+		g, e := h.s.PatchGroup(r.Context(), c, id, firstNonEmptyHeaderValue(r.Header.Values("If-Match")), patch)
 		if e != nil {
 			writeError(w, e)
 			return
@@ -325,6 +325,16 @@ func (h *leanHandler) group(w http.ResponseWriter, r *http.Request, c, id string
 		writeError(w, notFoundResource("SCIM Group"))
 	}
 }
+
+func firstNonEmptyHeaderValue(values []string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 func writeResourceForRequest(w http.ResponseWriter, r *http.Request, status int, v any) {
 	location, version := resourceLocation(v), resourceVersion(v)
 	w.Header().Set("Location", location)

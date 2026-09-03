@@ -1,8 +1,11 @@
 package scim_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -53,7 +56,7 @@ func TestSCIMGroupPatchMembershipOperations(t *testing.T) {
 	add := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID+"?attributes=members", testCurrentToken, map[string]any{
 		"schemas":    []string{scim.PatchOpSchemaURN},
 		"Operations": []map[string]any{{"op": "ADD", "path": " members ", "value": []map[string]any{{"value": alice.ID, "type": "User", "display": "ignored"}, {"value": bob.ID}}}},
-	}, map[string]string{"If-Match": group.Meta.Version})
+	})
 	if add.Code != http.StatusOK {
 		t.Fatalf("add members = %d %s", add.Code, add.Body.String())
 	}
@@ -79,7 +82,7 @@ func TestSCIMGroupPatchMembershipOperations(t *testing.T) {
 
 	duplicate := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": alice.ID}}},
-	}, map[string]string{"If-Match": group.Meta.Version})
+	})
 	duplicateGroup := decodeResponse[scim.Group](t, duplicate)
 	if duplicate.Code != http.StatusOK || duplicateGroup.Meta.Version != group.Meta.Version || !duplicateGroup.Meta.LastModified.Equal(group.Meta.LastModified) {
 		t.Fatalf("duplicate add changed representation = %d %#v (before %#v)", duplicate.Code, duplicateGroup, group)
@@ -93,7 +96,7 @@ func TestSCIMGroupPatchMembershipOperations(t *testing.T) {
 
 	qualifiedRemove := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": " ReMoVe ", "path": "  " + scim.GroupSchemaURN + ":members [ value EQ \"" + strings.ReplaceAll(alice.ID, "-", "\\u002d") + "\" ] "}},
-	}, map[string]string{"If-Match": group.Meta.Version})
+	})
 	if qualifiedRemove.Code != http.StatusOK {
 		t.Fatalf("qualified filtered remove = %d %s", qualifiedRemove.Code, qualifiedRemove.Body.String())
 	}
@@ -106,7 +109,7 @@ func TestSCIMGroupPatchMembershipOperations(t *testing.T) {
 	authorization.mu.Unlock()
 	absentRemove := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "remove", "path": "members[value eq \"" + alice.ID + "\"]"}},
-	}, map[string]string{"If-Match": group.Meta.Version})
+	})
 	absentGroup := decodeResponse[scim.Group](t, absentRemove)
 	if absentRemove.Code != http.StatusOK || absentGroup.Meta.Version != group.Meta.Version || !absentGroup.Meta.LastModified.Equal(group.Meta.LastModified) {
 		t.Fatalf("already-absent removal = %d %#v (before %#v)", absentRemove.Code, absentGroup, group)
@@ -120,7 +123,7 @@ func TestSCIMGroupPatchMembershipOperations(t *testing.T) {
 
 	pathlessAdd := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
 		"SCHEMAS": []string{scim.PatchOpSchemaURN}, "OPERATIONS": []map[string]any{{"OP": "add", "VALUE": map[string]any{"MEMBERS": map[string]any{"VALUE": alice.ID}}}},
-	}, map[string]string{"If-Match": group.Meta.Version})
+	})
 	if pathlessAdd.Code != http.StatusOK || len(decodeResponse[scim.Group](t, pathlessAdd).Members) != 2 {
 		t.Fatalf("pathless add = %d %s", pathlessAdd.Code, pathlessAdd.Body.String())
 	}
@@ -135,7 +138,7 @@ func TestSCIMGroupPatchMembershipOperations(t *testing.T) {
 			{"op": "remove", "path": "members[value eq \"" + bob.ID + "\"]"},
 			{"op": "add", "path": "members", "value": map[string]any{"value": charlie.ID}},
 		},
-	}, map[string]string{"If-Match": group.Meta.Version})
+	})
 	ordered := decodeResponse[scim.Group](t, ordering)
 	if ordering.Code != http.StatusOK || ordered.Meta.Version == group.Meta.Version || len(ordered.Members) != 2 {
 		t.Fatalf("remove/add ordering = %d %#v", ordering.Code, ordered)
@@ -146,11 +149,74 @@ func TestSCIMGroupPatchMembershipOperations(t *testing.T) {
 		t.Fatalf("PATCH used unexpected relationship calls: writes=%d adds=%d deletes=%d", len(authorization.writes), authorization.addCalls, authorization.deleteCalls)
 	}
 	authorization.mu.Unlock()
-	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
-		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "remove", "path": "members[value eq \"" + bob.ID + "\"]"}},
-	}, map[string]string{"If-Match": "W/\"stale\""}); response.Code != http.StatusPreconditionFailed || decodeResponse[testErrorResponse](t, response).Status != "412" {
-		t.Fatalf("stale If-Match = %d %s", response.Code, response.Body.String())
+	beforeConditional := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
+	authorization.mu.Lock()
+	writesBeforeConditional := len(authorization.writes)
+	addCallsBeforeConditional, deleteCallsBeforeConditional := authorization.addCalls, authorization.deleteCalls
+	authorization.mu.Unlock()
+	assertConditionalUnsupported := func(label string, response *httptest.ResponseRecorder) {
+		t.Helper()
+		payload := decodeResponse[testErrorResponse](t, response)
+		if response.Code != http.StatusNotImplemented || payload.Status != "501" || payload.Detail != "conditional Group PATCH is not supported" || payload.SCIMType != "" || len(payload.Schemas) != 1 || payload.Schemas[0] != scim.ErrorSchemaURN || response.Header().Get("Content-Type") != "application/scim+json" {
+			t.Fatalf("conditional Group PATCH (%s) = %d %s", label, response.Code, response.Body.String())
+		}
 	}
+	for _, ifMatch := range []string{`W/"current"`, `*`} {
+		response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
+			"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": bob.ID}}},
+		}, map[string]string{"If-Match": ifMatch})
+		assertConditionalUnsupported(ifMatch, response)
+	}
+	repeatedBody, err := json.Marshal(map[string]any{
+		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": bob.ID}}},
+	})
+	if err != nil {
+		t.Fatalf("marshal repeated If-Match body: %v", err)
+	}
+	repeatedRequest := httptest.NewRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, bytes.NewReader(repeatedBody))
+	repeatedRequest.Header.Set("Authorization", "Bearer "+testCurrentToken)
+	repeatedRequest.Header.Set("Content-Type", "application/scim+json")
+	repeatedRequest.Header.Add("If-Match", " \t")
+	repeatedRequest.Header.Add("If-Match", `W/"current"`)
+	repeatedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(repeatedResponse, repeatedRequest)
+	assertConditionalUnsupported("repeated fields", repeatedResponse)
+	if len(repeatedResponse.Header().Values("ETag")) != 0 {
+		t.Fatalf("conditional Group PATCH emitted ETag: %v", repeatedResponse.Header().Values("ETag"))
+	}
+	emptyBody, err := json.Marshal(map[string]any{
+		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": alice.ID}}},
+	})
+	if err != nil {
+		t.Fatalf("marshal empty If-Match body: %v", err)
+	}
+	emptyRequest := httptest.NewRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, bytes.NewReader(emptyBody))
+	emptyRequest.Header.Set("Authorization", "Bearer "+testCurrentToken)
+	emptyRequest.Header.Set("Content-Type", "application/scim+json")
+	emptyRequest.Header.Add("If-Match", " ")
+	emptyRequest.Header.Add("If-Match", "\t")
+	emptyResponse := httptest.NewRecorder()
+	handler.ServeHTTP(emptyResponse, emptyRequest)
+	emptyGroup := decodeResponse[scim.Group](t, emptyResponse)
+	if emptyResponse.Code != http.StatusOK || emptyGroup.Meta.Version != beforeConditional.Meta.Version || !emptyGroup.Meta.LastModified.Equal(beforeConditional.Meta.LastModified) {
+		t.Fatalf("all-empty repeated If-Match was not an unconditional no-op: %d %#v", emptyResponse.Code, emptyGroup)
+	}
+	authorization.mu.Lock()
+	if len(authorization.writes) != writesBeforeConditional || authorization.addCalls != addCallsBeforeConditional || authorization.deleteCalls != deleteCallsBeforeConditional {
+		authorization.mu.Unlock()
+		t.Fatal("all-empty repeated If-Match issued a provider write")
+	}
+	authorization.mu.Unlock()
+	afterConditional := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
+	if afterConditional.Meta.Version != beforeConditional.Meta.Version || !afterConditional.Meta.LastModified.Equal(beforeConditional.Meta.LastModified) || len(afterConditional.Members) != len(beforeConditional.Members) {
+		t.Fatalf("conditional Group PATCH changed membership/metadata: before=%#v after=%#v", beforeConditional, afterConditional)
+	}
+	authorization.mu.Lock()
+	if len(authorization.writes) != writesBeforeConditional || authorization.addCalls != addCallsBeforeConditional || authorization.deleteCalls != deleteCallsBeforeConditional {
+		authorization.mu.Unlock()
+		t.Fatal("conditional Group PATCH issued a provider write")
+	}
+	authorization.mu.Unlock()
 	if response := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": foreign.ID}}},
 	}); response.Code != http.StatusBadRequest || decodeResponse[testErrorResponse](t, response).SCIMType != "noTarget" {
@@ -168,15 +234,22 @@ func TestSCIMGroupPatchMembershipOperations(t *testing.T) {
 	}
 	foreignRead := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+foreignGroup.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": bob.ID}}},
-	})
+	}, map[string]string{"If-Match": "*"})
 	if foreignRead.Code != http.StatusNotFound || decodeResponse[testErrorResponse](t, foreignRead).Status != "404" {
 		t.Fatalf("foreign Group PATCH = %d %s", foreignRead.Code, foreignRead.Body.String())
 	}
 	missingRead := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/missing-group", testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": bob.ID}}},
-	})
+	}, map[string]string{"If-Match": `W/"missing"`})
 	if missingRead.Code != http.StatusNotFound || decodeResponse[testErrorResponse](t, missingRead).Status != "404" {
 		t.Fatalf("missing Group PATCH = %d %s", missingRead.Code, missingRead.Body.String())
+	}
+	malformed := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
+		"schemas": "not-an-array", "Operations": []map[string]any{},
+	}, map[string]string{"If-Match": "*"})
+	malformedPayload := decodeResponse[testErrorResponse](t, malformed)
+	if malformed.Code != http.StatusBadRequest || malformedPayload.SCIMType != "invalidSyntax" {
+		t.Fatalf("malformed conditional Group PATCH = %d %s", malformed.Code, malformed.Body.String())
 	}
 	authorization.mu.Lock()
 	if _, ok := authorization.relations[relationshipKey(unrelated.Tuple)]; !ok {
@@ -321,20 +394,20 @@ func TestSCIMGroupPatchNestedGroupMembers(t *testing.T) {
 	}
 	added := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+parent.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": child.ID, "type": "Group"}}},
-	}, map[string]string{"If-Match": parent.Meta.Version})
+	})
 	parent = decodeResponse[scim.Group](t, added)
 	if added.Code != http.StatusOK || len(parent.Members) != 1 || parent.Members[0].Value != child.ID || parent.Members[0].Type != "Group" {
 		t.Fatalf("nested Group add = %d %#v", added.Code, parent)
 	}
 	child = decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+child.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": user.ID}}},
-	}, map[string]string{"If-Match": child.Meta.Version}))
+	}))
 	if len(child.Members) != 1 || child.Members[0].Value != user.ID {
 		t.Fatalf("nested child member = %#v", child.Members)
 	}
 	removed := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+parent.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "remove", "path": "members[value eq \"" + child.ID + "\"]"}},
-	}, map[string]string{"If-Match": parent.Meta.Version})
+	})
 	if removed.Code != http.StatusOK || len(decodeResponse[scim.Group](t, removed).Members) != 0 {
 		t.Fatalf("nested Group remove = %d %s", removed.Code, removed.Body.String())
 	}
@@ -383,7 +456,7 @@ func TestSCIMGroupPatchRemovesAllPhysicalMemberVariants(t *testing.T) {
 	authorization.mu.Unlock()
 	removed := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "remove", "path": "members[value eq \"" + user.ID + "\"]"}},
-	}, map[string]string{"If-Match": read.Meta.Version})
+	})
 	if removed.Code != http.StatusOK {
 		t.Fatalf("remove physical variants = %d %s", removed.Code, removed.Body.String())
 	}
