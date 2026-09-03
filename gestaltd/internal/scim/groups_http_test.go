@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"testing"
 
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/scim"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
@@ -123,7 +127,7 @@ func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
 	}
 	groupBeforeExternal := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+created.ID, testCurrentToken, nil))
 	bobBeforeExternal := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+bob.ID, testCurrentToken, nil))
-	external := &proto.Relationship{Tuple: &proto.RelationshipTuple{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreBob.ID}}}, Relation: "member", Resource: &proto.Resource{Type: "group", Id: created.ID}}}
+	external := &proto.Relationship{Tuple: &proto.RelationshipTuple{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreBob.ID}}}, Relation: "member", Resource: &proto.Resource{Type: "group", Id: created.ID}}, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}
 	if _, err := scim.WrapAuthorization(authorization, services.Users, secondService).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: external}); err != nil {
 		t.Fatalf("ordinary add to SCIM Group: %v", err)
 	}
@@ -295,6 +299,80 @@ func TestSCIMUserDeleteRemovesGroupMembership(t *testing.T) {
 	}
 }
 
+func TestSCIMGroupsExposeOnlyRuntimeMembership(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	service, services, handler := newSCIMService(t, nil, authorization, testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+	}))
+	user, response := createUser(t, handler, testCurrentToken, "runtime-membership@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
+	}
+	groupResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Runtime membership",
+	})
+	group := decodeResponse[scim.Group](t, groupResponse)
+	if groupResponse.Code != http.StatusCreated {
+		t.Fatalf("create group = %d %s", groupResponse.Code, groupResponse.Body.String())
+	}
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "runtime-membership@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	staticRelationship := runtimeGroupMember(coreUser.ID, group.ID)
+	staticRelationship.SourceLayer = proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	if _, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: staticRelationship}); err != nil {
+		t.Fatalf("add static relationship = %v", err)
+	}
+	staticRead := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
+	if len(staticRead.Members) != 0 {
+		t.Fatalf("static relationship exposed as members = %#v", staticRead.Members)
+	}
+	if staticRead.Meta.Version != group.Meta.Version || !staticRead.Meta.LastModified.Equal(group.Meta.LastModified) {
+		t.Fatalf("static relationship changed SCIM metadata: before=%#v after=%#v", group.Meta, staticRead.Meta)
+	}
+	if _, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: runtimeGroupMember(coreUser.ID, group.ID)}); err != nil {
+		t.Fatalf("add runtime relationship = %v", err)
+	}
+	runtimeRead := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
+	if len(runtimeRead.Members) != 1 || runtimeRead.Members[0].Value != user.ID {
+		t.Fatalf("runtime relationship not exposed as member = %#v", runtimeRead.Members)
+	}
+}
+
+func TestSCIMGroupMemberFilterDistinguishesNotFoundAndDatastoreError(t *testing.T) {
+	t.Parallel()
+
+	filter := url.QueryEscape(`members[value eq "missing-user"]`)
+	_, _, healthyHandler := newSCIMService(t, nil, newRecordingAuthorization(), testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+	}))
+	missing := scimRequest(t, healthyHandler, http.MethodGet, "/scim/v2/Groups?startIndex=10&filter="+filter, testCurrentToken, nil)
+	if missing.Code != http.StatusOK {
+		t.Fatalf("missing member filter = %d %s", missing.Code, missing.Body.String())
+	}
+	missingList := decodeResponse[struct {
+		TotalResults int          `json:"totalResults"`
+		StartIndex   int          `json:"startIndex"`
+		Resources    []scim.Group `json:"Resources"`
+	}](t, missing)
+	if missingList.TotalResults != 0 || missingList.StartIndex != 1 || missingList.Resources == nil {
+		t.Fatalf("missing member filter result = %#v", missingList)
+	}
+
+	db := &coretesting.StubIndexedDB{Err: errors.New("member lookup datastore unavailable")}
+	_, _, failingHandler := newSCIMService(t, db, newRecordingAuthorization(), testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+	}))
+	failure := scimRequest(t, failingHandler, http.MethodGet, "/scim/v2/Groups?filter="+filter, testCurrentToken, nil)
+	if failure.Code != http.StatusServiceUnavailable {
+		t.Fatalf("member lookup datastore error = %d %s", failure.Code, failure.Body.String())
+	}
+}
+
 func TestSCIMUserDeleteRemovesConfiguredTuplesAndGroupReferences(t *testing.T) {
 	t.Parallel()
 	authorization := newRecordingAuthorization()
@@ -323,5 +401,73 @@ func TestSCIMUserDeleteRemovesConfiguredTuplesAndGroupReferences(t *testing.T) {
 	updated := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
 	if len(updated.Members) != 0 || authorization.relationshipForUser(coreUser.ID) != nil {
 		t.Fatalf("group references after user deletion = %#v", updated.Members)
+	}
+}
+
+func TestSCIMRelationshipPropertiesDoNotCauseMemberDiff(t *testing.T) {
+	t.Parallel()
+
+	authorization := newRecordingAuthorization()
+	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
+	_, services, handler := newSCIMService(t, nil, authorization, cfg)
+	user, response := createUser(t, handler, testCurrentToken, "physical-variants@valon.com", true, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
+	}
+	groupResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Physical variants", "members": []map[string]any{{"value": user.ID}},
+	})
+	group := decodeResponse[scim.Group](t, groupResponse)
+	if groupResponse.Code != http.StatusCreated {
+		t.Fatalf("create group = %d %s", groupResponse.Code, groupResponse.Body.String())
+	}
+	coreUser, err := services.Users.FindUserByEmail(context.Background(), "physical-variants@valon.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := authorization.relationshipForGroupUser(coreUser.ID, group.ID)
+	if base == nil {
+		t.Fatal("created relationship is missing")
+	}
+	for _, property := range []string{"one", "two"} {
+		variant := gproto.Clone(base).(*proto.Relationship)
+		variant.Tuple.Target.GetSubject().Properties, err = structpb.NewStruct(map[string]any{"variant": property})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := authorization.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: variant}); err != nil {
+			t.Fatalf("add %s relationship variant = %v", property, err)
+		}
+	}
+	read := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
+	if len(read.Members) != 1 {
+		t.Fatalf("physical variants projected members = %#v", read.Members)
+	}
+	if response = scimRequest(t, handler, http.MethodPut, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": read.DisplayName, "members": []map[string]any{{"value": user.ID}},
+	}, map[string]string{"If-Match": read.Meta.Version}); response.Code != http.StatusOK {
+		t.Fatalf("physical-variant no-op replacement = %d %s", response.Code, response.Body.String())
+	}
+	noop := decodeResponse[scim.Group](t, response)
+	if noop.Meta.Version != read.Meta.Version {
+		t.Fatalf("property-only no-op changed version from %q to %q", read.Meta.Version, noop.Meta.Version)
+	}
+	if response = scimRequest(t, handler, http.MethodPut, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": read.DisplayName, "members": []map[string]any{},
+	}, map[string]string{"If-Match": noop.Meta.Version}); response.Code != http.StatusOK {
+		t.Fatalf("remove physical-variant member = %d %s", response.Code, response.Body.String())
+	}
+	removed := decodeResponse[scim.Group](t, response)
+	if len(removed.Members) != 0 {
+		t.Fatalf("removed physical variants still projected members = %#v", removed.Members)
+	}
+	remaining, err := authorization.ListRelationships(context.Background(), &proto.ListRelationshipsRequest{Filter: &proto.RelationshipFilter{
+		Resource: &proto.Resource{Type: "group", Id: group.ID}, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining.Relationships) != 0 {
+		t.Fatalf("physical variants remaining after HTTP removal = %#v", remaining.Relationships)
 	}
 }

@@ -10,6 +10,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type authorizationGate struct {
@@ -97,8 +99,77 @@ func (g *authorizationGate) ListRelationships(ctx context.Context, req *proto.Li
 	return g.underlying.ListRelationships(ctx, req)
 }
 
+func (g *authorizationGate) WriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	writer, ok := g.underlying.(core.AuthorizationRelationshipWriter)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "authorization relationship writes are not implemented")
+	}
+	if req == nil {
+		return writer.WriteRelationships(ctx, req)
+	}
+	affected := map[string]map[string]struct{}{}
+	runtimeChanges := map[string]struct{}{}
+	for _, update := range req.Updates {
+		if update == nil || update.Relationship == nil {
+			continue
+		}
+		relationship := update.Relationship
+		affectsRuntime := relationship.GetSourceLayer() == proto.SourceLayer_SOURCE_LAYER_RUNTIME
+		if update.Operation == proto.RelationshipUpdate_OPERATION_DELETE && relationship.GetSourceLayer() == proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED {
+			var err error
+			affectsRuntime, err = g.scim.compact.relationshipPresent(ctx, relationship.GetTuple())
+			if err != nil {
+				return nil, err
+			}
+		}
+		if !affectsRuntime {
+			continue
+		}
+		runtimeChanges[tupleKey(relationship.GetTuple())] = struct{}{}
+		if update.Operation == proto.RelationshipUpdate_OPERATION_DELETE {
+			if err := g.scim.compact.captureRelationshipAffectedUsers(ctx, relationship.GetTuple(), affected); err != nil {
+				return nil, err
+			}
+		}
+	}
+	response, err := writer.WriteRelationships(ctx, req)
+	if err != nil {
+		return response, err
+	}
+	ids := map[string]struct{}{}
+	seen := map[string]struct{}{}
+	for _, update := range req.Updates {
+		if update == nil || update.Relationship == nil {
+			continue
+		}
+		tuple := update.Relationship.GetTuple()
+		key := tupleKey(tuple)
+		if _, affectsRuntime := runtimeChanges[key]; !affectsRuntime {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		touch, err := g.scim.compact.relationshipTouchIDs(ctx, tuple)
+		if err != nil {
+			return response, err
+		}
+		for id := range touch {
+			ids[id] = struct{}{}
+		}
+	}
+	if err := g.scim.compact.collectClientCoreUserTouchIDs(ctx, affected, ids); err != nil {
+		return response, err
+	}
+	if err := g.scim.compact.touchRows(ctx, ids); err != nil {
+		return response, err
+	}
+	return response, nil
+}
+
 func (g *authorizationGate) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
-	if req == nil || req.Relationship == nil || req.Relationship.Tuple == nil {
+	if req == nil || req.Relationship == nil || req.Relationship.Tuple == nil || req.Relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
 		return g.underlying.AddRelationship(ctx, req)
 	}
 	before, beforeErr := g.scim.compact.relationshipPresent(ctx, req.Relationship.Tuple)
@@ -133,12 +204,20 @@ func (g *authorizationGate) DeleteRelationship(ctx context.Context, req *proto.D
 		return response, err
 	}
 	after, afterErr := g.scim.compact.relationshipPresent(ctx, req.RelationshipTuple)
+	ids := map[string]struct{}{}
 	if idempotent || beforeErr != nil || afterErr != nil || before != after {
-		if touchErr := g.scim.compact.touchRelationship(ctx, req.RelationshipTuple); touchErr != nil {
+		touch, touchErr := g.scim.compact.relationshipTouchIDs(ctx, req.RelationshipTuple)
+		if touchErr != nil {
 			return response, touchErr
 		}
+		for id := range touch {
+			ids[id] = struct{}{}
+		}
 	}
-	if err := g.scim.compact.touchCoreUsersByClient(ctx, affected); err != nil {
+	if err := g.scim.compact.collectClientCoreUserTouchIDs(ctx, affected, ids); err != nil {
+		return response, err
+	}
+	if err := g.scim.compact.touchRows(ctx, ids); err != nil {
 		return response, err
 	}
 	return response, nil
@@ -167,17 +246,29 @@ func (g *authorizationGate) SetAuthorizationState(ctx context.Context, req *prot
 		return response, err
 	}
 	if g.scim != nil && g.scim.compact != nil {
+		ids := map[string]struct{}{}
 		for _, relationship := range changed.added {
-			if touchErr := g.scim.compact.touchRelationship(ctx, relationship.GetTuple()); touchErr != nil {
+			touch, touchErr := g.scim.compact.relationshipTouchIDs(ctx, relationship.GetTuple())
+			if touchErr != nil {
 				return response, touchErr
+			}
+			for id := range touch {
+				ids[id] = struct{}{}
 			}
 		}
 		for _, relationship := range changed.removed {
-			if touchErr := g.scim.compact.touchRelationship(ctx, relationship.GetTuple()); touchErr != nil {
+			touch, touchErr := g.scim.compact.relationshipTouchIDs(ctx, relationship.GetTuple())
+			if touchErr != nil {
 				return response, touchErr
 			}
+			for id := range touch {
+				ids[id] = struct{}{}
+			}
 		}
-		if touchErr := g.scim.compact.touchCoreUsersByClient(ctx, affected); touchErr != nil {
+		if touchErr := g.scim.compact.collectClientCoreUserTouchIDs(ctx, affected, ids); touchErr != nil {
+			return response, touchErr
+		}
+		if touchErr := g.scim.compact.touchRows(ctx, ids); touchErr != nil {
 			return response, touchErr
 		}
 	}
