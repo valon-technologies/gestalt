@@ -256,6 +256,7 @@ func TestNew(t *testing.T) {
 			coredata.StoreRemoteProviders,
 			coredata.StoreConnectionInstancePreferences,
 			coredata.StoreAppAccessProfiles,
+			coredata.StoreAppAllowedOperations,
 			coredata.StoreSCIMResources,
 		} {
 			if _, ok := contexts[store]; !ok {
@@ -286,6 +287,7 @@ func TestNew(t *testing.T) {
 			coredata.StoreGestaltdInstanceHeartbeats,
 			coredata.StoreAppVersionRecoveryObservations,
 			coredata.StoreAppAccessProfiles,
+			coredata.StoreAppAllowedOperations,
 			coredata.StoreSCIMResources,
 		} {
 			if _, ok := contexts[store]; !ok {
