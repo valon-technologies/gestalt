@@ -1630,6 +1630,9 @@ func TestBootstrap(t *testing.T) {
 	if result.Invoker == nil {
 		t.Fatal("Invoker is nil")
 	}
+	if result.InvocationRecords == nil {
+		t.Fatal("InvocationRecords is nil")
+	}
 	if result.CapabilityLister == nil {
 		t.Fatal("CapabilityLister is nil")
 	}

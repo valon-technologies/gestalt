@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 )
 
 func TestBrokerResolveToken_ConnectionModeNoneDoesNotCanonicalizeUserSubject(t *testing.T) {
@@ -683,6 +684,7 @@ func TestBrokerInvokeStreamDispatchesToStreamingExecutor(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
+	recorder := &recordingInvocationRecorder{}
 	cat := &catalog.Catalog{
 		Name: "events",
 		Operations: []catalog.CatalogOperation{{
@@ -725,6 +727,7 @@ func TestBrokerInvokeStreamDispatchesToStreamingExecutor(t *testing.T) {
 			matchedRelations: []string{"admin"},
 		}),
 		WithProviderKinds(map[string]ProviderKind{"events": ProviderKindApp}),
+		WithInvocationRecorder(recorder),
 	)
 
 	reader, err := broker.InvokeStream(
@@ -765,12 +768,19 @@ func TestBrokerInvokeStreamDispatchesToStreamingExecutor(t *testing.T) {
 	if _, err := reader.Recv(); err != io.EOF {
 		t.Fatalf("Recv after end = %v, want io.EOF", err)
 	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("got %d invocation records, want one", len(recorder.records))
+	}
+	if got := recorder.records[0]; got.Provider != "events" || got.Operation != "events.watch" || got.Outcome != observability.InvocationPassed || got.Status != http.StatusOK {
+		t.Fatalf("record = %#v", got)
+	}
 }
 
 func TestBrokerInvokeStreamRejectsNonStreamingProvider(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
+	recorder := &recordingInvocationRecorder{}
 	cat := &catalog.Catalog{
 		Name: "plain",
 		Operations: []catalog.CatalogOperation{{
@@ -790,6 +800,7 @@ func TestBrokerInvokeStreamRejectsNonStreamingProvider(t *testing.T) {
 		testutil.NewProviderRegistry(t, provider),
 		svc.Users,
 		svc.ExternalCredentials,
+		WithInvocationRecorder(recorder),
 	)
 
 	_, err := broker.InvokeStream(
@@ -805,6 +816,12 @@ func TestBrokerInvokeStreamRejectsNonStreamingProvider(t *testing.T) {
 	}
 	if !errors.Is(err, ErrStreamingUnsupported) {
 		t.Fatalf("InvokeStream error = %v, want ErrStreamingUnsupported", err)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("got %d invocation records, want one", len(recorder.records))
+	}
+	if got := recorder.records[0]; got.Provider != "plain" || got.Operation != "plain.op" || got.Outcome != observability.InvocationFailed {
+		t.Fatalf("record = %#v, want failed dispatch record", got)
 	}
 }
 
@@ -838,6 +855,7 @@ func TestBrokerInvokeMaybeStreamDispatchesStreaming(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
+	recorder := &recordingInvocationRecorder{}
 	cat := &catalog.Catalog{
 		Name: "events",
 		Operations: []catalog.CatalogOperation{{
@@ -876,6 +894,7 @@ func TestBrokerInvokeMaybeStreamDispatchesStreaming(t *testing.T) {
 			matchedRelations: []string{"admin"},
 		}),
 		WithProviderKinds(map[string]ProviderKind{"events": ProviderKindApp}),
+		WithInvocationRecorder(recorder),
 	)
 
 	outcome, err := broker.InvokeMaybeStream(
@@ -909,12 +928,22 @@ func TestBrokerInvokeMaybeStreamDispatchesStreaming(t *testing.T) {
 	if string(data.Data) != `{"event":"start"}`+"\n" {
 		t.Fatalf("data = %q", string(data.Data))
 	}
+	if _, err := outcome.Stream.Recv(); err != io.EOF {
+		t.Fatalf("Recv EOF error = %v, want EOF", err)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("got %d invocation records, want one", len(recorder.records))
+	}
+	if got := recorder.records[0]; got.Provider != "events" || got.Operation != "events.watch" || got.Outcome != observability.InvocationPassed || got.Status != http.StatusOK {
+		t.Fatalf("record = %#v", got)
+	}
 }
 
 func TestBrokerInvokeMaybeStreamDispatchesUnary(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
+	recorder := &recordingInvocationRecorder{}
 	cat := &catalog.Catalog{
 		Name: "sync",
 		Operations: []catalog.CatalogOperation{{
@@ -937,6 +966,7 @@ func TestBrokerInvokeMaybeStreamDispatchesUnary(t *testing.T) {
 		testutil.NewProviderRegistry(t, provider),
 		svc.Users,
 		svc.ExternalCredentials,
+		WithInvocationRecorder(recorder),
 	)
 
 	outcome, err := broker.InvokeMaybeStream(
@@ -959,12 +989,19 @@ func TestBrokerInvokeMaybeStreamDispatchesUnary(t *testing.T) {
 	if string(outcome.Unary.Body) != `{"ok":true}` {
 		t.Fatalf("unary body = %q, want %q", string(outcome.Unary.Body), `{"ok":true}`)
 	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("got %d invocation records, want one", len(recorder.records))
+	}
+	if got := recorder.records[0]; got.Provider != "sync" || got.Operation != "sync.op" || got.Outcome != observability.InvocationPassed || got.Status != http.StatusOK {
+		t.Fatalf("record = %#v", got)
+	}
 }
 
 func TestBrokerInvokeMaybeStreamRejectsNonStreamingProvider(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
+	recorder := &recordingInvocationRecorder{}
 	cat := &catalog.Catalog{
 		Name: "broken-stream",
 		Operations: []catalog.CatalogOperation{{
@@ -985,6 +1022,7 @@ func TestBrokerInvokeMaybeStreamRejectsNonStreamingProvider(t *testing.T) {
 		testutil.NewProviderRegistry(t, provider),
 		svc.Users,
 		svc.ExternalCredentials,
+		WithInvocationRecorder(recorder),
 	)
 
 	_, err := broker.InvokeMaybeStream(
@@ -1000,6 +1038,12 @@ func TestBrokerInvokeMaybeStreamRejectsNonStreamingProvider(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "streaming unsupported") && !errors.Is(err, ErrStreamingUnsupported) {
 		t.Fatalf("error = %v, want streaming unsupported", err)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("got %d invocation records, want one", len(recorder.records))
+	}
+	if got := recorder.records[0]; got.Provider != "broken-stream" || got.Operation != "events.watch" || got.Outcome != observability.InvocationFailed {
+		t.Fatalf("record = %#v, want failed dispatch record", got)
 	}
 }
 

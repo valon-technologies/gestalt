@@ -110,6 +110,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		Runtimes:              result.Runtimes,
 		Invoker:               httpInvoker,
 		AppInvocation:         result.AppInvocation,
+		InvocationRecords:     result.InvocationRecords,
 		DefaultConnection:     connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations via the API surface catalog map.
 		// Dynamic session/MCP operation resolution uses MCPConnection below.

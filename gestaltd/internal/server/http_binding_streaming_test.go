@@ -129,6 +129,40 @@ func TestHTTPBindingStreaming(t *testing.T) {
 		}
 	})
 
+	t.Run("preserves trailing error body", func(t *testing.T) {
+		t.Parallel()
+
+		provider := streamingProvider(func(_ context.Context, _ string, _ map[string]any, _ string) (core.StreamReader, error) {
+			return frameReader(
+				&core.InvokeFrame{Metadata: &core.InvokeMetadata{Status: http.StatusOK, MediaType: "text/event-stream"}},
+				&core.InvokeFrame{Data: []byte("data: before\n\n")},
+				&core.InvokeFrame{Metadata: &core.InvokeMetadata{Status: http.StatusBadGateway}},
+				&core.InvokeFrame{Data: []byte(`{"error":"boom"}`)},
+			), nil
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, provider)
+			cfg.AppDefs = map[string]*config.ProviderEntry{"streamer": streamingAppEntry(provider)}
+		})
+
+		resp, err := http.Post(ts.URL+"/api/v1/streamer/webhooks/hooks/echo", "application/json", bytes.NewReader([]byte(`{}`)))
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200 after headers commit; body=%s", resp.StatusCode, string(body))
+		}
+		if !bytes.Contains(body, []byte(`{"error":"boom"}`)) {
+			t.Fatalf("body = %q, want trailing error body", string(body))
+		}
+	})
+
 	// Non-streaming bindings still take the unary path and return a buffered result.
 	t.Run("unary binding unchanged", func(t *testing.T) {
 		t.Parallel()

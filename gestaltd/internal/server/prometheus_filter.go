@@ -5,10 +5,12 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 )
 
 const (
@@ -43,6 +45,16 @@ type appAdminMetricsResponse struct {
 	DurationSecondsSum   float64                   `json:"durationSecondsSum"`
 	DurationSecondsCount float64                   `json:"durationSecondsCount"`
 	Operations           []appAdminOperationMetric `json:"operations"`
+	RecentRequests       []appAdminRequestSample   `json:"recentRequests"`
+}
+
+type appAdminRequestSample struct {
+	ID         uint64                          `json:"id"`
+	Operation  string                          `json:"operation"`
+	Outcome    observability.InvocationOutcome `json:"outcome"`
+	Status     int                             `json:"status"`
+	DurationMs float64                         `json:"durationMs"`
+	Timestamp  time.Time                       `json:"timestamp"`
 }
 
 func parsePrometheus(text string) ([]prometheusSample, error) {
@@ -154,8 +166,9 @@ func samplesForProvider(samples []prometheusSample, provider string) []prometheu
 func summarizeAppMetrics(app string, samples []prometheusSample) appAdminMetricsResponse {
 	byOp := map[string]*appAdminOperationMetric{}
 	response := appAdminMetricsResponse{
-		App:       app,
-		Available: true,
+		App:            app,
+		Available:      true,
+		RecentRequests: make([]appAdminRequestSample, 0),
 	}
 	for _, sample := range samples {
 		if math.IsNaN(sample.value) || !isAppOperationMetric(sample.name) {
