@@ -290,7 +290,9 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var response map[string]any
 			if err := json.Unmarshal([]byte(tc.response), &response); err != nil {
 				t.Fatal(err)

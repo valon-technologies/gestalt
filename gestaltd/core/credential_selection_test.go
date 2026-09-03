@@ -6,6 +6,8 @@ import (
 )
 
 func TestChooseCredentialInstanceGroupsExplicitAccountDuplicates(t *testing.T) {
+	t.Parallel()
+
 	now := time.Unix(10, 0)
 	credentials := []*ExternalCredential{
 		{ID: "credential-new", Qualifier: "new-label", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(2, 0)},
@@ -18,6 +20,8 @@ func TestChooseCredentialInstanceGroupsExplicitAccountDuplicates(t *testing.T) {
 }
 
 func TestChooseCredentialInstancePrefersUsableCredential(t *testing.T) {
+	t.Parallel()
+
 	now := time.Unix(10, 0)
 	expires := time.Unix(9, 0)
 	credentials := []*ExternalCredential{
@@ -40,6 +44,8 @@ func TestChooseCredentialInstancePrefersUsableCredential(t *testing.T) {
 }
 
 func TestChooseCredentialInstanceKeepsKeylessCredentialsAmbiguous(t *testing.T) {
+	t.Parallel()
+
 	credentials := []*ExternalCredential{
 		{ID: "credential-a", Qualifier: "first-label"},
 		{ID: "credential-b", Qualifier: "second-label"},
