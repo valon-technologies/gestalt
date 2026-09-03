@@ -141,6 +141,10 @@ func (p *authorizationCheckTestProvider) ListRelationships(context.Context, *pro
 	return &proto.ListRelationshipsResponse{}, nil
 }
 
+func (p *authorizationCheckTestProvider) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
+}
+
 func (p *authorizationCheckTestProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	return &proto.AddRelationshipResponse{}, nil
 }

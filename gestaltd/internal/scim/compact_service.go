@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,8 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 )
 
@@ -55,14 +52,13 @@ type userProfile struct {
 }
 
 type CompactService struct {
-	db                coredb.IndexedDB
-	authorization     core.AuthorizationProvider
-	baseURL           string
-	clients           map[string]*compactClient
-	credentials       []compactCredential
-	domainOwners      map[string]string
-	now               func() time.Time
-	writerUnsupported atomic.Bool
+	db            coredb.IndexedDB
+	authorization core.AuthorizationProvider
+	baseURL       string
+	clients       map[string]*compactClient
+	credentials   []compactCredential
+	domainOwners  map[string]string
+	now           func() time.Time
 }
 
 func NewService(db coredb.IndexedDB, authorization core.AuthorizationProvider, baseURL string, cfg config.ServerSCIMConfig) (*Service, error) {
@@ -416,17 +412,6 @@ func (s *CompactService) relationshipPresent(ctx context.Context, tuple *proto.R
 	return len(relationships) > 0, err
 }
 
-// touchRelationship updates only metadata whose public representation can be
-// affected by a successful shared authorization write. The provider remains
-// canonical; this timestamp is informational and is never used for ETags.
-func (s *CompactService) touchRelationship(ctx context.Context, tuple *proto.RelationshipTuple) error {
-	touch, err := s.relationshipTouchIDs(ctx, tuple)
-	if err != nil {
-		return err
-	}
-	return s.touchRows(ctx, touch)
-}
-
 func (s *CompactService) relationshipTouchIDs(ctx context.Context, tuple *proto.RelationshipTuple) (map[string]struct{}, error) {
 	touch := map[string]struct{}{}
 	if tuple == nil || tuple.GetTarget() == nil {
@@ -646,7 +631,6 @@ func (s *CompactService) apply(ctx context.Context, from, to []*proto.Relationsh
 		})
 	}
 	affected := map[string]struct{}{}
-	affectedByLogical := map[string]map[string]struct{}{}
 	captured := map[string]struct{}{}
 	for _, change := range deletes {
 		if _, alreadyCaptured := captured[change.logicalKey]; alreadyCaptured {
@@ -661,73 +645,15 @@ func (s *CompactService) apply(ctx context.Context, from, to []*proto.Relationsh
 		if err != nil {
 			return err
 		}
-		capturedUsers := map[string]struct{}{}
 		for _, user := range users {
 			affected[user] = struct{}{}
-			capturedUsers[user] = struct{}{}
 		}
-		affectedByLogical[change.logicalKey] = capturedUsers
 	}
 
-	applied, err := s.applyBatch(ctx, updates)
-	if err != nil {
-		if applied > 0 {
-			prefixAffected := map[string]struct{}{}
-			for _, update := range updates[:applied] {
-				for user := range affectedByLogical[tupleKey(update.GetRelationship().GetTuple())] {
-					prefixAffected[user] = struct{}{}
-				}
-			}
-			_ = s.touchAppliedRelationships(ctx, updates[:applied], prefixAffected)
-		}
+	if _, err := s.authorization.WriteRelationships(ctx, &proto.WriteRelationshipsRequest{Updates: updates}); err != nil {
 		return err
 	}
 	return s.touchAppliedRelationships(ctx, updates, affected)
-}
-
-func (s *CompactService) applyBatch(ctx context.Context, updates []*proto.RelationshipUpdate) (int, error) {
-	if s.writerUnsupported.Load() {
-		return s.applyLegacy(ctx, updates)
-	}
-	writer, ok := s.authorization.(core.AuthorizationRelationshipWriter)
-	if !ok {
-		s.writerUnsupported.Store(true)
-		return s.applyLegacy(ctx, updates)
-	}
-	_, err := writer.WriteRelationships(ctx, &proto.WriteRelationshipsRequest{Updates: updates})
-	if err == nil {
-		return len(updates), nil
-	}
-	if status.Code(err) == codes.Unimplemented {
-		s.writerUnsupported.Store(true)
-		return s.applyLegacy(ctx, updates)
-	}
-	return 0, err
-}
-
-func (s *CompactService) applyLegacy(ctx context.Context, updates []*proto.RelationshipUpdate) (int, error) {
-	for i, update := range updates {
-		if update == nil || update.Relationship == nil {
-			return i, status.Error(codes.InvalidArgument, "invalid relationship update")
-		}
-		switch update.Operation {
-		case proto.RelationshipUpdate_OPERATION_DELETE:
-			_, err := s.authorization.DeleteRelationship(ctx, &proto.DeleteRelationshipRequest{RelationshipTuple: update.Relationship.Tuple})
-			if err != nil && !isNotFoundError(err) {
-				return i, err
-			}
-		case proto.RelationshipUpdate_OPERATION_TOUCH:
-			_, err := s.authorization.AddRelationship(ctx, &proto.AddRelationshipRequest{Relationship: &proto.Relationship{
-				Tuple: update.Relationship.Tuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
-			}})
-			if err != nil && !isAlreadyExistsError(err) {
-				return i, err
-			}
-		default:
-			return i, status.Error(codes.InvalidArgument, "SCIM relationship updates must be TOUCH or DELETE")
-		}
-	}
-	return len(updates), nil
 }
 
 func (s *CompactService) touchAppliedRelationships(ctx context.Context, updates []*proto.RelationshipUpdate, affected map[string]struct{}) error {
@@ -775,14 +701,6 @@ func (s *CompactService) collectClientCoreUserTouchIDs(ctx context.Context, affe
 		}
 	}
 	return nil
-}
-
-func isAlreadyExistsError(err error) bool {
-	return errors.Is(err, core.ErrAlreadyExists) || errors.Is(err, idb.ErrAlreadyExists) || status.Code(err) == codes.AlreadyExists
-}
-
-func isNotFoundError(err error) bool {
-	return errors.Is(err, core.ErrNotFound) || errors.Is(err, idb.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
 // captureRelationshipAffectedUsers records the users whose SCIM groups or

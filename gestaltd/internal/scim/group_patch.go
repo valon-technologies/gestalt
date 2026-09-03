@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,10 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const PatchOpSchemaURN = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
@@ -346,7 +345,7 @@ func (s *CompactService) PatchGroup(ctx context.Context, cid, id, ifMatch string
 	defer unlock()
 	storedGroup, err := s.findGroup(ctx, cid, id)
 	if err != nil {
-		if isNotFoundError(err) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, notFoundResource("SCIM Group")
 		}
 		return nil, unavailable("could not load SCIM group")
@@ -411,14 +410,7 @@ func (s *CompactService) PatchGroup(ctx context.Context, cid, id, ifMatch string
 	if len(updates) == 0 {
 		return &old, nil
 	}
-	writer, ok := s.authorization.(core.AuthorizationRelationshipWriter)
-	if !ok {
-		return nil, notImplementedPatch("atomic authorization relationship writes are not available")
-	}
-	if _, err := writer.WriteRelationships(ctx, &proto.WriteRelationshipsRequest{Updates: updates}); err != nil {
-		if status.Code(err) == codes.Unimplemented {
-			return nil, notImplementedPatch("atomic authorization relationship writes are not available")
-		}
+	if _, err := s.authorization.WriteRelationships(ctx, &proto.WriteRelationshipsRequest{Updates: updates}); err != nil {
 		return nil, unavailable("could not apply group membership atomically")
 	}
 	// Membership is canonical in the provider. Timestamp maintenance is only
@@ -456,12 +448,12 @@ func (s *CompactService) resolvePatchMember(ctx context.Context, cid, gid string
 func (s *CompactService) resolvePatchMemberID(ctx context.Context, cid, gid, id string) (patchMemberState, error) {
 	if user, err := s.findUser(ctx, cid, id); err == nil {
 		return s.resolvePatchMember(ctx, cid, gid, Member{Value: user.ID, Type: "User", Ref: s.baseURL + "/scim/v2/Users/" + user.ID})
-	} else if !isNotFoundError(err) {
+	} else if !errors.Is(err, idb.ErrNotFound) {
 		return patchMemberState{}, unavailable("could not validate group member")
 	}
 	if group, err := s.findGroup(ctx, cid, id); err == nil {
 		return s.resolvePatchMember(ctx, cid, gid, Member{Value: group.ID, Type: "Group", Ref: s.baseURL + "/scim/v2/Groups/" + group.ID})
-	} else if !isNotFoundError(err) {
+	} else if !errors.Is(err, idb.ErrNotFound) {
 		return patchMemberState{}, unavailable("could not validate group member")
 	}
 	return patchMemberState{}, noTarget("group member must reference a User or Group in this SCIM client")

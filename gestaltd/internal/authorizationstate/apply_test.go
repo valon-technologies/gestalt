@@ -33,6 +33,10 @@ func (p *recordingProvider) ListRelationships(_ context.Context, req *proto.List
 	return &proto.ListRelationshipsResponse{Relationships: append([]*proto.Relationship(nil), p.relationships...)}, nil
 }
 
+func (p *recordingProvider) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
+}
+
 func (p *recordingProvider) AddRelationship(_ context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	p.addCalls++
 	p.relationships = append(p.relationships, req.GetRelationship())

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -332,7 +333,7 @@ func TestSCIMGroupPatchValidationAndAtomicFailures(t *testing.T) {
 	authorization.mu.Unlock()
 	authorization.mu.Lock()
 	writesBeforeFailure := len(authorization.writes)
-	authorization.mode = relationshipWriterFails
+	authorization.writeErr = errors.New("injected writer failure")
 	authorization.mu.Unlock()
 	failed := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
 		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": user.ID}}},
@@ -348,32 +349,7 @@ func TestSCIMGroupPatchValidationAndAtomicFailures(t *testing.T) {
 	if len(authorization.writes) != writesBeforeFailure+1 {
 		t.Fatalf("writer calls after transient failure = %d, want %d", len(authorization.writes), writesBeforeFailure+1)
 	}
-	authorization.mode = relationshipWriterUnimplemented
 	authorization.mu.Unlock()
-	unimplemented := scimRequest(t, handler, http.MethodPatch, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
-		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": user.ID}}},
-	})
-	unimplementedPayload := decodeResponse[testErrorResponse](t, unimplemented)
-	if unimplemented.Code != http.StatusNotImplemented || unimplementedPayload.Status != "501" || len(unimplementedPayload.Schemas) != 1 || unimplementedPayload.Schemas[0] != scim.ErrorSchemaURN {
-		t.Fatalf("unimplemented writer = %d %s", unimplemented.Code, unimplemented.Body.String())
-	}
-	noWriter := newRecordingAuthorization()
-	_, _, noWriterHandler := newSCIMService(t, nil, noWriter, testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)}))
-	noWriterUser, response := createUser(t, noWriterHandler, testCurrentToken, "patch-no-writer@valon.com", true, nil)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("create no-writer user = %d %s", response.Code, response.Body.String())
-	}
-	noWriterGroupResponse := scimRequest(t, noWriterHandler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{"schemas": []string{scim.GroupSchemaURN}, "displayName": "No writer"})
-	noWriterGroup := decodeResponse[scim.Group](t, noWriterGroupResponse)
-	noWriterPatch := scimRequest(t, noWriterHandler, http.MethodPatch, "/scim/v2/Groups/"+noWriterGroup.ID, testCurrentToken, map[string]any{
-		"schemas": []string{scim.PatchOpSchemaURN}, "Operations": []map[string]any{{"op": "add", "path": "members", "value": map[string]any{"value": noWriterUser.ID}}},
-	})
-	if noWriterPatch.Code != http.StatusNotImplemented || decodeResponse[testErrorResponse](t, noWriterPatch).Status != "501" {
-		t.Fatalf("missing atomic writer = %d %s", noWriterPatch.Code, noWriterPatch.Body.String())
-	}
-	if noWriter.additionCount() != 0 {
-		t.Fatalf("missing atomic writer fell back to AddRelationship: %d", noWriter.additionCount())
-	}
 }
 
 func TestSCIMGroupPatchNestedGroupMembers(t *testing.T) {

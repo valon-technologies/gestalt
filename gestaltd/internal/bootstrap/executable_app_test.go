@@ -126,6 +126,9 @@ func (p *allowAllAuthorizationProvider) CheckAccessMany(ctx context.Context, req
 func (p *allowAllAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
 	return &proto.ListRelationshipsResponse{}, nil
 }
+func (p *allowAllAuthorizationProvider) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
+}
 func (p *allowAllAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	return &proto.AddRelationshipResponse{}, nil
 }

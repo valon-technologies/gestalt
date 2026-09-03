@@ -55,6 +55,18 @@ func (a *authz) ListRelationships(_ context.Context, r *proto.ListRelationshipsR
 	return o, nil
 }
 func key(t *proto.RelationshipTuple) string { return t.String() }
+func (a *authz) WriteRelationships(_ context.Context, r *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, update := range r.GetUpdates() {
+		if update.GetOperation() == proto.RelationshipUpdate_OPERATION_DELETE {
+			delete(a.rel, key(update.GetRelationship().GetTuple()))
+			continue
+		}
+		a.rel[key(update.GetRelationship().GetTuple())] = gproto.Clone(update.GetRelationship()).(*proto.Relationship)
+	}
+	return &proto.WriteRelationshipsResponse{}, nil
+}
 func (a *authz) AddRelationship(_ context.Context, r *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

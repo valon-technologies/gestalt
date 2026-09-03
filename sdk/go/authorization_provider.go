@@ -285,16 +285,11 @@ type AuthorizationProvider interface {
 	CheckAccess(ctx context.Context, req *CheckAccessRequest) (*CheckAccessResponse, error)
 	CheckAccessMany(ctx context.Context, req *CheckAccessManyRequest) (*CheckAccessManyResponse, error)
 	ListRelationships(ctx context.Context, req *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
+	WriteRelationships(ctx context.Context, req *WriteRelationshipsRequest) (*WriteRelationshipsResponse, error)
 	AddRelationship(ctx context.Context, req *AddRelationshipRequest) (*AddRelationshipResponse, error)
 	DeleteRelationship(ctx context.Context, req *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error)
 	SetAuthorizationState(ctx context.Context, req *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error)
 	GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error)
 	SetActiveModel(ctx context.Context, req *SetActiveModelRequest) (*SetActiveModelResponse, error)
 	ListActiveModelResourceTypes(ctx context.Context, req *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error)
-}
-
-// AuthorizationRelationshipWriter is an optional capability implemented by
-// providers that support atomic relationship writes.
-type AuthorizationRelationshipWriter interface {
-	WriteRelationships(context.Context, *WriteRelationshipsRequest) (*WriteRelationshipsResponse, error)
 }

@@ -424,6 +424,9 @@ func (s *stubAuthz) CheckAccessMany(context.Context, *proto.CheckAccessManyReque
 func (s *stubAuthz) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
+func (s *stubAuthz) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
 func (s *stubAuthz) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }

@@ -988,7 +988,7 @@ func TestSCIMActivationRetriesFromActualProviderTuples(t *testing.T) {
 	}
 }
 
-func TestSCIMDeactivationRetriesFromActualProviderTuples(t *testing.T) {
+func TestSCIMDeactivationBatchFailureIsAtomicAndRetryable(t *testing.T) {
 	t.Parallel()
 	projections := []config.SCIMRelationshipConfig{employeeProjection(), {Relation: "member", Resource: config.AuthorizationResourceDef{Type: "group", ID: "engineering"}}}
 	for failAt := 1; failAt <= len(projections); failAt++ {
@@ -1006,8 +1006,8 @@ func TestSCIMDeactivationRetriesFromActualProviderTuples(t *testing.T) {
 				t.Fatalf("partial deactivation = %d %s", failed.Code, failed.Body.String())
 			}
 			live := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
-			if (failAt == 1 && !live.Active) || (failAt > 1 && live.Active) {
-				t.Fatalf("partial deactivation live state = %#v", live)
+			if !live.Active {
+				t.Fatalf("failed atomic deactivation was partially applied = %#v", live)
 			}
 			authorization.setFailures(false, false)
 			retried := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+user.ID, testCurrentToken, deactivate))
@@ -1349,6 +1349,44 @@ func (a *recordingAuthorization) ListRelationships(_ context.Context, req *proto
 		response.NextPageToken = strconv.Itoa(end)
 	}
 	return response, nil
+}
+
+func (a *recordingAuthorization) WriteRelationships(_ context.Context, req *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	addCalls := a.addCalls
+	deleteCalls := a.deleteCalls
+	for _, update := range req.GetUpdates() {
+		switch update.GetOperation() {
+		case proto.RelationshipUpdate_OPERATION_CREATE, proto.RelationshipUpdate_OPERATION_TOUCH:
+			addCalls++
+			if a.failAdd || a.failAddAt > 0 && addCalls == a.failAddAt {
+				a.addCalls = addCalls
+				return nil, errors.New("injected add failure")
+			}
+		case proto.RelationshipUpdate_OPERATION_DELETE:
+			deleteCalls++
+			if a.failDelete || a.failDeleteAt > 0 && deleteCalls == a.failDeleteAt {
+				a.deleteCalls = deleteCalls
+				return nil, errors.New("injected delete failure")
+			}
+		default:
+			return nil, errors.New("invalid relationship update")
+		}
+	}
+	a.addCalls = addCalls
+	a.deleteCalls = deleteCalls
+	for _, update := range req.GetUpdates() {
+		relationship := update.GetRelationship()
+		if update.GetOperation() == proto.RelationshipUpdate_OPERATION_DELETE {
+			a.deletions++
+			delete(a.relations, relationshipKey(relationship.GetTuple()))
+			continue
+		}
+		a.additions++
+		a.relations[relationshipKey(relationship.GetTuple())] = gproto.Clone(relationship).(*proto.Relationship)
+	}
+	return &proto.WriteRelationshipsResponse{}, nil
 }
 
 func (a *recordingAuthorization) AddRelationship(_ context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
