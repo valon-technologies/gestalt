@@ -105,7 +105,12 @@ func TestSCIMMigrationPreservesCommittedAndCreateOnlyResources(t *testing.T) {
 		}
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	resource, _ := json.Marshal(map[string]any{"userName": "Migrated@Valon.com", "active": true})
+	resource, _ := json.Marshal(map[string]any{
+		"userName": "Migrated@Valon.com",
+		"active":   true,
+		"name":     map[string]any{"givenName": "Migrated", "familyName": "User"},
+		"emails":   []map[string]any{{"value": "migrated@valon.com", "type": "work", "primary": true}},
+	})
 	// Simulate a crash after the compact row was created but before the legacy
 	// migration completed. The rerunnable migration must replace this partial
 	// row with the complete legacy representation.
@@ -147,8 +152,16 @@ func TestSCIMMigrationPreservesCommittedAndCreateOnlyResources(t *testing.T) {
 	authorization.setRelationship(&proto.Relationship{Tuple: legacyTuple, Properties: props, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME})
 	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
 	_, _, handler := newSCIMService(t, db, authorization, cfg)
-	if response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/legacy-user", testCurrentToken, nil); response.Code != http.StatusOK {
+	response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/legacy-user", testCurrentToken, nil)
+	if response.Code != http.StatusOK {
 		t.Fatalf("migrated User GET = %d %s", response.Code, response.Body.String())
+	}
+	var migratedUser scim.User
+	if err := json.Unmarshal(response.Body.Bytes(), &migratedUser); err != nil {
+		t.Fatalf("decode migrated User: %v", err)
+	}
+	if migratedUser.Name.GivenName != "Migrated" || migratedUser.Name.FamilyName != "User" || len(migratedUser.Emails) != 1 || migratedUser.Emails[0].Value != "migrated@valon.com" {
+		t.Fatalf("migrated User profile = %#v", migratedUser)
 	}
 	if response := scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/legacy-group", testCurrentToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("migrated Group GET = %d %s", response.Code, response.Body.String())
