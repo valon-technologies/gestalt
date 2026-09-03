@@ -128,7 +128,7 @@ func (s *Server) implicitIntegrationStatus(integration string, prov core.Provide
 			Connected:       false,
 		}
 	default:
-		return subjectConnectionStatus(groupInstancesForConnection(instances, ""), len(authTypes) > 0, ownerKindForPrincipal(p), "")
+		return subjectConnectionStatus(groupInstancesForConnection(instances, "", ""), len(authTypes) > 0, ownerKindForPrincipal(p), "")
 	}
 }
 
@@ -460,7 +460,7 @@ func ownerKindForPrincipal(p *principal.Principal) string {
 	}
 }
 
-func groupInstancesForConnection(instances []instanceInfo, connection string, preferred ...string) []instanceInfo {
+func groupInstancesForConnection(instances []instanceInfo, connection, preferred string) []instanceInfo {
 	connection = userFacingConnectionName(config.ResolveConnectionAlias(connection))
 	filtered := make([]instanceInfo, 0, len(instances))
 	for _, instance := range instances {
@@ -469,7 +469,7 @@ func groupInstancesForConnection(instances []instanceInfo, connection string, pr
 		}
 		filtered = append(filtered, instance)
 	}
-	return dedupeInstancesByAccount(filtered, firstString(preferred))
+	return dedupeInstancesByAccount(filtered, strings.TrimSpace(preferred))
 }
 
 func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []instanceInfo {
@@ -519,11 +519,4 @@ func shouldPreferInstance(candidate, current instanceInfo, preferred string) boo
 		return candidate.credentialID < current.credentialID
 	}
 	return candidate.Name < current.Name
-}
-
-func firstString(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(values[0])
 }

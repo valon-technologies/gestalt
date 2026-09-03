@@ -302,7 +302,7 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 				Name:              tok.Qualifier,
 				Connection:        userFacingConnectionName(binding.Connection),
 				Identity:          identityFromMetadataJSON(tok.MetadataJSON),
-				AccountKey:        accountKeyFromMetadataJSON(tok.MetadataJSON),
+				AccountKey:        accountKeyStoredInMetadataJSON(tok.MetadataJSON),
 				credentialInvalid: credentialInvalid,
 				credentialID:      tok.ID,
 				credentialCreated: tok.CreatedAt,
@@ -498,10 +498,27 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.externalCredentials.DeleteCredential(r.Context(), tokenID); err != nil {
-		auditErr = errors.New("failed to disconnect integration")
-		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
-		return
+	deleteIDs := []string{tokenID}
+	if accountKey := accountKeyStoredInMetadataJSON(matched[0].credential.MetadataJSON); accountKey != "" {
+		seen := map[string]struct{}{tokenID: {}}
+		for _, tok := range tokens {
+			if tok == nil || tok.ID == "" || tok.Subject != subjectID || tok.Audience != matched[0].credential.Audience || accountKeyStoredInMetadataJSON(tok.MetadataJSON) != accountKey {
+				continue
+			}
+			if _, ok := seen[tok.ID]; ok {
+				continue
+			}
+			seen[tok.ID] = struct{}{}
+			deleteIDs = append(deleteIDs, tok.ID)
+		}
+		sort.Strings(deleteIDs)
+	}
+	for _, id := range deleteIDs {
+		if err := s.externalCredentials.DeleteCredential(r.Context(), id); err != nil {
+			auditErr = errors.New("failed to disconnect integration")
+			writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
+			return
+		}
 	}
 
 	disconnected := matched[0]

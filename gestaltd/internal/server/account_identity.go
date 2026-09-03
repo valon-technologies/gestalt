@@ -146,21 +146,6 @@ func setAccountIdentity(metadataJSON string, id *accountIdentity) (string, error
 	return marshalMetadataMap(m)
 }
 
-func accountKeyFromMetadataJSON(metadataJSON string) string {
-	m, err := parseMetadataMap(metadataJSON)
-	if err != nil {
-		return ""
-	}
-	if key := strings.TrimSpace(m[accountKeyMetadataKey]); key != "" {
-		return key
-	}
-	id, err := parseAccountIdentity(metadataJSON)
-	if err != nil {
-		return ""
-	}
-	return accountKeyFromIdentity(id)
-}
-
 func accountKeyFromProviderID(integration, providerID string) string {
 	integration = strings.TrimSpace(integration)
 	providerID = strings.TrimSpace(providerID)
@@ -432,11 +417,7 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 }
 
 func accountKeyStoredInMetadataJSON(metadataJSON string) string {
-	m, err := parseMetadataMap(metadataJSON)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(m[accountKeyMetadataKey])
+	return core.AccountKeyFromMetadataJSON(metadataJSON)
 }
 
 // oauthIdentitySource selects the single identity probe family for an

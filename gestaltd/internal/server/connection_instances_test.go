@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,10 +13,27 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
+type firstListsBarrierProvider struct {
+	core.ExternalCredentialProvider
+	ready   chan struct{}
+	release chan struct{}
+	calls   atomic.Int32
+}
+
+func (p *firstListsBarrierProvider) ListCredentials(ctx context.Context, subject, audience string) ([]*core.ExternalCredential, error) {
+	if p.calls.Add(1) <= 2 {
+		credentials, err := p.ExternalCredentialProvider.ListCredentials(ctx, subject, audience)
+		p.ready <- struct{}{}
+		<-p.release
+		return credentials, err
+	}
+	return p.ExternalCredentialProvider.ListCredentials(ctx, subject, audience)
+}
+
 func TestDedupeInstancesByAccount_PreservesDistinctAccounts(t *testing.T) {
 	t.Parallel()
 	instances := []instanceInfo{
-		{Name: "Valon", AccountKey: "v1:shared", credentialCreated: time.Unix(1, 0)},
+		{Name: "Example Workspace", AccountKey: "v1:shared", credentialCreated: time.Unix(1, 0)},
 		{Name: "Personal", AccountKey: "v1:shared", credentialCreated: time.Unix(2, 0)},
 		{Name: "Other", AccountKey: "v1:other", credentialCreated: time.Unix(3, 0)},
 		{Name: "Legacy A", credentialCreated: time.Unix(4, 0)},
@@ -101,12 +119,63 @@ func TestStoreCredentialFromMaterial_SerializesCanonicalReconciliation(t *testin
 	}
 }
 
+func TestStoreCredentialFromMaterial_ConvergesAcrossServerInstances(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	provider := &firstListsBarrierProvider{
+		ExternalCredentialProvider: coretesting.NewStubExternalCredentialProvider(),
+		ready:                      make(chan struct{}, 2),
+		release:                    make(chan struct{}),
+	}
+	metadata, err := setAccountKey(`{"account_identity":"{\"facts\":[{\"kind\":\"login\",\"value\":\"example-user\"}]}"}`, accountKeyFromProviderID("slack", "T123:U456"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	servers := []*Server{
+		{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }},
+		{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }},
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, len(servers))
+	for i, s := range servers {
+		wg.Add(1)
+		go func(i int, s *Server) {
+			defer wg.Done()
+			_, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+				SubjectID:    "user:1",
+				ConnectionID: "slack:default",
+				Instance:     []string{"label-a", "label-b"}[i],
+				MetadataJSON: metadata,
+				AccessToken:  []string{"token-a", "token-b"}[i],
+			})
+			errs <- err
+		}(i, s)
+	}
+	<-provider.ready
+	<-provider.ready
+	close(provider.release)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("store credential: %v", err)
+		}
+	}
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 1 {
+		t.Fatalf("credentials = %+v, want one credential after cross-server reconciliation", credentials)
+	}
+}
+
 func TestStoreCredentialFromMaterial_CollapsesCanonicalDuplicates(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
 	ctx := context.Background()
 	identity := &accountIdentity{Facts: []identityFact{
-		{Kind: "workspace", Value: "Valon"},
+		{Kind: "workspace", Value: "Example Workspace"},
 		{Kind: "login", Value: "example-user"},
 	}}
 	metadata, err := setAccountIdentity("", identity)
@@ -131,7 +200,7 @@ func TestStoreCredentialFromMaterial_CollapsesCanonicalDuplicates(t *testing.T) 
 			t.Fatal(err)
 		}
 	}
-	seed("credential-1", "Valon", time.Unix(1, 0))
+	seed("credential-1", "Example Workspace", time.Unix(1, 0))
 	seed("credential-2", "Personal", time.Unix(2, 0))
 
 	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
@@ -145,7 +214,7 @@ func TestStoreCredentialFromMaterial_CollapsesCanonicalDuplicates(t *testing.T) 
 	if err != nil {
 		t.Fatalf("store credential: %v", err)
 	}
-	if stored.ID != "credential-1" || stored.Qualifier != "Valon" {
+	if stored.ID != "credential-1" || stored.Qualifier != "Example Workspace" {
 		t.Fatalf("stored = %+v, want oldest canonical credential retained", stored)
 	}
 	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")

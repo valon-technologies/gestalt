@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -136,15 +137,16 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		authSource = p.AuthSource()
 	}
 	tm := credentialMaterial{
-		SubjectID:    subjectID,
-		AuthSource:   authSource,
-		ConnectionID: conn.ConnectionID,
-		Integration:  req.Integration,
-		Connection:   manualConnection,
-		Instance:     manualInstance,
-		Fields:       fields,
-		AccessToken:  rawCredential,
-		MetadataJSON: manualMeta,
+		SubjectID:         subjectID,
+		AuthSource:        authSource,
+		ConnectionID:      conn.ConnectionID,
+		Integration:       req.Integration,
+		Connection:        manualConnection,
+		Instance:          manualInstance,
+		Fields:            fields,
+		AccessToken:       rawCredential,
+		MetadataJSON:      manualMeta,
+		ProviderAccountID: providerAccountIDFromTokenResponse(selected.ParamDefs, tokenResp),
 	}
 	credentialActorFromPrincipal(p, subjectID).applyTo(&tm)
 
@@ -298,6 +300,45 @@ func buildConnectionMetadata(defs map[string]core.ConnectionParamDef, userParams
 	return string(b), nil
 }
 
+// providerAccountIDFromTokenResponse extracts the provider-owned identifier
+// when a registry connection declares the conventional account_id metadata
+// parameter. The parameter may map to a nested token-response field such as
+// account.id. Unmarked connection parameters remain runtime-only metadata and
+// are never treated as account identity.
+func providerAccountIDFromTokenResponse(defs map[string]core.ConnectionParamDef, tokenResp *core.OAuthTokenResponse) string {
+	if tokenResp == nil || len(tokenResp.Extra) == 0 {
+		return ""
+	}
+	var names []string
+	for name, def := range defs {
+		if def.From == "token_response" && isProviderAccountIDParam(name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		def := defs[name]
+		field := strings.TrimSpace(def.Field)
+		if field == "" {
+			field = name
+		}
+		value, ok := apiexec.ExtractJSONPath(tokenResp.Extra, field)
+		if !ok {
+			continue
+		}
+		candidate := fmt.Sprintf("%v", value)
+		if safeTokenResponseValue.MatchString(candidate) {
+			return strings.TrimSpace(candidate)
+		}
+	}
+	return ""
+}
+
+func isProviderAccountIDParam(name string) bool {
+	name = strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(strings.TrimSpace(name)))
+	return name == "accountid" || name == "provideraccountid"
+}
+
 type bearerTransport struct {
 	token string
 	base  http.RoundTripper
@@ -443,39 +484,55 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 			LastRefreshedAt: &now,
 		}
 	}
-	if accountKeyStoredInMetadataJSON(tok.MetadataJSON) != "" {
-		s.credentialReconciliationMu.Lock()
-		defer s.credentialReconciliationMu.Unlock()
+	accountKey := accountKeyStoredInMetadataJSON(tok.MetadataJSON)
+	if accountKey != "" {
+		unlock := s.credentialReconciliation.lock(strings.Join([]string{tok.Subject, tok.Audience, accountKey}, "\x00"))
+		defer unlock()
 	}
-	duplicates, err := s.reuseCanonicalAccountCredential(ctx, tok)
+	duplicates, _, err := s.reconcileCanonicalAccountCredential(ctx, tok)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
 		return nil, err
 	}
-	for _, duplicateID := range duplicates {
-		if err := s.externalCredentials.DeleteCredential(ctx, duplicateID); err != nil {
-			slog.WarnContext(ctx, "canonical duplicate cleanup deferred", "credential_id", duplicateID, "subject", tok.Subject, "audience", tok.Audience, "error", err)
+	s.deleteCanonicalDuplicates(ctx, tok, duplicates)
+
+	// A second read closes the race with another server instance that may have
+	// inserted a duplicate between the initial read and upsert. The provider
+	// contract does not offer compare-and-swap, so cleanup is deliberately
+	// retry-safe rather than reported as a failed save.
+	if accountKey != "" {
+		postDuplicates, changed, reconcileErr := s.reconcileCanonicalAccountCredential(ctx, tok)
+		if reconcileErr != nil {
+			slog.WarnContext(ctx, "canonical duplicate cleanup deferred", "subject", tok.Subject, "audience", tok.Audience, "error", reconcileErr)
+			return tok, nil
 		}
+		if changed {
+			if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
+				slog.WarnContext(ctx, "canonical duplicate reconciliation deferred", "subject", tok.Subject, "audience", tok.Audience, "error", err)
+				return tok, nil
+			}
+		}
+		s.deleteCanonicalDuplicates(ctx, tok, postDuplicates)
 	}
 	return tok, nil
 }
 
-func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate *core.ExternalCredential) ([]string, error) {
+func (s *Server) reconcileCanonicalAccountCredential(ctx context.Context, candidate *core.ExternalCredential) ([]string, bool, error) {
 	if s == nil || candidate == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	accountKey := accountKeyStoredInMetadataJSON(candidate.MetadataJSON)
 	legacyCandidateKey := legacyAccountKeyFromMetadataJSON(candidate.MetadataJSON)
 	if accountKey == "" || strings.TrimSpace(candidate.Subject) == "" || strings.TrimSpace(candidate.Audience) == "" {
-		return nil, nil
+		return nil, false, nil
 	}
 	credentials, err := s.externalCredentials.ListCredentials(ctx, candidate.Subject, candidate.Audience)
 	if err != nil {
-		return nil, fmt.Errorf("list credentials for canonical account merge: %w", err)
+		return nil, false, fmt.Errorf("list credentials for canonical account merge: %w", err)
 	}
-	var matches []*core.ExternalCredential
+	matches := []*core.ExternalCredential{candidate}
 	for _, credential := range credentials {
 		if credential == nil || credential.ID == candidate.ID {
 			continue
@@ -486,12 +543,15 @@ func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate 
 			matches = append(matches, credential)
 		}
 	}
-	if len(matches) == 0 {
-		return nil, nil
-	}
 
 	preferred := s.preferredInstanceForConnection(ctx, candidate.Subject, candidate.Audience)
 	keep := chooseCanonicalCredential(matches, preferred)
+	previousID := candidate.ID
+	previousQualifier := candidate.Qualifier
+	previousCreatedAt := candidate.CreatedAt
+	if keep == nil {
+		return nil, false, nil
+	}
 	candidate.ID = keep.ID
 	candidate.Qualifier = keep.Qualifier
 	candidate.CreatedAt = keep.CreatedAt
@@ -503,7 +563,18 @@ func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate 
 		}
 		duplicates = append(duplicates, duplicate.ID)
 	}
-	return duplicates, nil
+	return duplicates, previousID != candidate.ID || previousQualifier != candidate.Qualifier || !previousCreatedAt.Equal(candidate.CreatedAt), nil
+}
+
+func (s *Server) deleteCanonicalDuplicates(ctx context.Context, candidate *core.ExternalCredential, duplicateIDs []string) {
+	if s == nil || candidate == nil {
+		return
+	}
+	for _, duplicateID := range duplicateIDs {
+		if err := s.externalCredentials.DeleteCredential(ctx, duplicateID); err != nil {
+			slog.WarnContext(ctx, "canonical duplicate cleanup deferred", "credential_id", duplicateID, "subject", candidate.Subject, "audience", candidate.Audience, "error", err)
+		}
+	}
 }
 
 func credentialCanonicalAccountKey(credential *core.ExternalCredential) string {

@@ -279,15 +279,16 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	tm := credentialMaterial{
-		SubjectID:      state.SubjectID,
-		AuthSource:     state.AuthSource,
-		Integration:    providerName,
-		Connection:     state.Connection,
-		Instance:       callbackInstance,
-		AccessToken:    tokenResp.AccessToken,
-		RefreshToken:   tokenResp.RefreshToken,
-		TokenExpiresAt: tokenExpiresAt,
-		MetadataJSON:   metadata,
+		SubjectID:         state.SubjectID,
+		AuthSource:        state.AuthSource,
+		Integration:       providerName,
+		Connection:        state.Connection,
+		Instance:          callbackInstance,
+		AccessToken:       tokenResp.AccessToken,
+		RefreshToken:      tokenResp.RefreshToken,
+		TokenExpiresAt:    tokenExpiresAt,
+		MetadataJSON:      metadata,
+		ProviderAccountID: providerAccountIDFromTokenResponse(selected.ParamDefs, tokenResp),
 	}
 	tm.ConnectionID = selected.Def.ConnectionID
 	tm.ActorSubjectID = state.ActorSubjectID

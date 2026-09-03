@@ -14,20 +14,20 @@ import (
 func TestAccountKeyFromIdentity_IsStableAndExcludesDisplayFacts(t *testing.T) {
 	t.Parallel()
 	first := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{
-		{Kind: "workspace", Value: "Valon", Primary: true},
+		{Kind: "workspace", Value: "Example Workspace", Primary: true},
 		{Kind: "login", Value: "example-user"},
 		{Kind: "display_name", Value: "Example User"},
 	}})
 	second := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{
 		{Kind: "login", Value: "example-user", Primary: true},
-		{Kind: "workspace", Value: "Valon"},
+		{Kind: "workspace", Value: "Example Workspace"},
 		{Kind: "email", Value: "legacy@example.com"},
 		{Kind: "display_name", Value: "Different label"},
 	}})
 	if first == "" || first != second {
 		t.Fatalf("keys = %q and %q, want same stable key", first, second)
 	}
-	if got := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{{Kind: "workspace", Value: "Valon"}}}); got != "" {
+	if got := accountKeyFromIdentity(&accountIdentity{Facts: []identityFact{{Kind: "workspace", Value: "Example Workspace"}}}); got != "" {
 		t.Fatalf("workspace-only identity key = %q, want empty", got)
 	}
 }
@@ -38,7 +38,7 @@ func TestEnrichAccountIdentity_DoesNotInferCanonicalAccountKey(t *testing.T) {
 	got := s.enrichAccountIdentity(context.Background(), credentialMaterial{
 		Integration:  "slack",
 		Fields:       map[string]string{"email": "User@Example.com"},
-		MetadataJSON: `{"workspace":"Valon"}`,
+		MetadataJSON: `{"workspace":"Example Workspace"}`,
 	})
 	if key := accountKeyStoredInMetadataJSON(got.MetadataJSON); key != "" {
 		t.Fatalf("metadata = %q, did not expect inferred account key", got.MetadataJSON)
@@ -51,9 +51,9 @@ func TestEnrichAccountIdentity_UsesProviderAccountID(t *testing.T) {
 	got := s.enrichAccountIdentity(context.Background(), credentialMaterial{
 		Integration:       "slack",
 		ProviderAccountID: "T123:U456",
-		MetadataJSON:      `{"workspace":"Valon","login":"example-user"}`,
+		MetadataJSON:      `{"workspace":"Example Workspace","login":"example-user"}`,
 	})
-	if gotKey := accountKeyFromMetadataJSON(got.MetadataJSON); gotKey != accountKeyFromProviderID("slack", "T123:U456") {
+	if gotKey := accountKeyStoredInMetadataJSON(got.MetadataJSON); gotKey != accountKeyFromProviderID("slack", "T123:U456") {
 		t.Fatalf("account key = %q, want provider account key", gotKey)
 	}
 }
@@ -61,9 +61,9 @@ func TestEnrichAccountIdentity_UsesProviderAccountID(t *testing.T) {
 func TestNormalizeIdentityFacts_AssignsSinglePrimary(t *testing.T) {
 	t.Parallel()
 	facts := normalizeIdentityFacts([]identityFact{
-		{Kind: "display_name", Value: "Ada"},
-		{Kind: "email", Value: "ada@example.com"},
-		{Kind: "email", Value: "ada@example.com"}, // duplicate
+		{Kind: "display_name", Value: "Example User"},
+		{Kind: "email", Value: "user@example.com"},
+		{Kind: "email", Value: "user@example.com"}, // duplicate
 	})
 	if len(facts) != 2 {
 		t.Fatalf("facts = %d, want 2", len(facts))
@@ -212,7 +212,7 @@ func TestMergeMetadataJSONStripsAccountIdentity(t *testing.T) {
 
 func TestConnectionParamsFromMetadataJSONStripsAccountKey(t *testing.T) {
 	t.Parallel()
-	params, err := core.ConnectionParamsFromMetadataJSON(`{"workspace":"Valon","account_key":"v1:secret"}`)
+	params, err := core.ConnectionParamsFromMetadataJSON(`{"workspace":"Example Workspace","account_key":"v1:secret"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,16 +251,16 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 	}{
 		{
 			name:      "google userinfo",
-			response:  `{"sub":"google-account-123","email":"ada@example.com","name":"Ada"}`,
+			response:  `{"sub":"google-account-123","email":"user@example.com","name":"Example User"}`,
 			parse:     googleUserInfoIdentity,
 			wantID:    "google-account-123",
-			wantFacts: map[string]string{"email": "ada@example.com", "display_name": "Ada"},
+			wantFacts: map[string]string{"email": "user@example.com", "display_name": "Example User"},
 		},
 		{
 			name:      "google missing subject",
-			response:  `{"email":"ada@example.com"}`,
+			response:  `{"email":"user@example.com"}`,
 			parse:     googleUserInfoIdentity,
-			wantFacts: map[string]string{"email": "ada@example.com"},
+			wantFacts: map[string]string{"email": "user@example.com"},
 		},
 		{
 			name:      "slack auth test",
@@ -277,10 +277,10 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 		},
 		{
 			name:      "github user",
-			response:  `{"id":123456789,"login":"example-user","name":"Example User","email":"ada@example.com"}`,
+			response:  `{"id":123456789,"login":"example-user","name":"Example User","email":"user@example.com"}`,
 			parse:     gitHubUserIdentity,
 			wantID:    "123456789",
-			wantFacts: map[string]string{"login": "example-user", "display_name": "Example User", "email": "ada@example.com"},
+			wantFacts: map[string]string{"login": "example-user", "display_name": "Example User", "email": "user@example.com"},
 		},
 		{
 			name:      "github malformed id",
@@ -312,6 +312,27 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestProviderAccountIDFromTokenResponse_UsesDeclaredNestedID(t *testing.T) {
+	t.Parallel()
+
+	defs := map[string]core.ConnectionParamDef{
+		"account_id": {From: "token_response", Field: "account.id"},
+		"tenant_id":  {From: "token_response", Field: "tenant.id"},
+	}
+	resp := &core.OAuthTokenResponse{Extra: map[string]any{
+		"account": map[string]any{"id": "account-123"},
+		"tenant":  map[string]any{"id": "tenant-456"},
+	}}
+	if got := providerAccountIDFromTokenResponse(defs, resp); got != "account-123" {
+		t.Fatalf("provider account id = %q, want nested account.id", got)
+	}
+	if got := providerAccountIDFromTokenResponse(map[string]core.ConnectionParamDef{
+		"tenant_id": {From: "token_response", Field: "tenant.id"},
+	}, resp); got != "" {
+		t.Fatalf("provider account id = %q, want empty without declared account_id", got)
 	}
 }
 
@@ -409,40 +430,28 @@ func TestMergeIdentityFacts_DoesNotAutoAssignPrimary(t *testing.T) {
 	}
 }
 
-func TestEnrichAccountIdentity_GmailProbeScoped(t *testing.T) {
+func TestFetchJSONObject_SetsRequestHeaders(t *testing.T) {
 	t.Parallel()
-	userinfoHits, profileHits := 0, 0
-	mux := http.NewServeMux()
-	// We can't remint hardcoded Google URLs; instead verify oauthIdentitySource
-	// and that fetchOAuthAccountIdentity for gmail eventually returns from
-	// a successful local userinfo-shaped response via direct helper.
-	_ = mux
-	_ = userinfoHits
-	_ = profileHits
+	var gotMethod, gotAuthorization string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotAuthorization = r.Header.Get("Authorization")
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"email": "ada@example.com",
-			"name":  "Ada",
+			"email": "user@example.com",
+			"name":  "Example User",
 		})
 	}))
 	t.Cleanup(srv.Close)
 
-	obj, err := fetchJSONObject(context.Background(), srv.Client(), http.MethodGet, srv.URL, "tok")
+	obj, err := fetchJSONObject(context.Background(), srv.Client(), http.MethodPost, srv.URL, "tok")
 	if err != nil {
 		t.Fatal(err)
 	}
-	facts := normalizeIdentityFacts([]identityFact{
-		{Kind: "email", Value: stringField(obj, "email"), Primary: true},
-		{Kind: "display_name", Value: stringField(obj, "name")},
-	})
-	if len(facts) != 2 || facts[0].Value != "ada@example.com" {
-		t.Fatalf("facts = %+v", facts)
+	if gotMethod != http.MethodPost || gotAuthorization != "Bearer tok" {
+		t.Fatalf("request = {method:%q authorization:%q}, want POST with bearer token", gotMethod, gotAuthorization)
 	}
-	if oauthIdentitySource("gmail") != "gmail" {
-		t.Fatal("gmail should use gmail probe family")
-	}
-	if oauthIdentitySource("jira") != "" {
-		t.Fatal("jira must not oauth-probe")
+	if stringField(obj, "email") != "user@example.com" || stringField(obj, "name") != "Example User" {
+		t.Fatalf("response = %+v", obj)
 	}
 }

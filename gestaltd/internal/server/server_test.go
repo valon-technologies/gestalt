@@ -6070,6 +6070,55 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("disconnects hidden duplicate credentials for one account", func(t *testing.T) {
+		t.Parallel()
+
+		svc := testutil.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		metadata := `{"account_key":"provider:v1:shared"}`
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-visible",
+			Subject:      principal.UserSubjectID(u.ID),
+			Audience:     "app-svc:workspace",
+			Qualifier:    "visible-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "visible-token"},
+		})
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-hidden",
+			Subject:      principal.UserSubjectID(u.ID),
+			Audience:     "app-svc:workspace",
+			Qualifier:    "hidden-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "hidden-token"},
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "workspace")
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc?_connection=workspace&_instance=visible-label", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		credentials, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "app-svc")
+		if err != nil {
+			t.Fatalf("ListCredentialsForProvider: %v", err)
+		}
+		if len(credentials) != 0 {
+			t.Fatalf("credentials = %+v, want all duplicate account credentials removed", credentials)
+		}
+	})
+
 	t.Run("shared connection remains while another token still exists", func(t *testing.T) {
 		t.Parallel()
 
@@ -9553,11 +9602,16 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if err := json.Unmarshal([]byte(stored.MetadataJSON), &metadata); err != nil {
 			t.Fatalf("unmarshal metadata: %v", err)
 		}
+		accountKey := metadata[core.AccountKeyMetadataKey]
+		delete(metadata, core.AccountKeyMetadataKey)
 		if !reflect.DeepEqual(metadata, map[string]string{
 			"tenant_id":  "tenant-123",
 			"account_id": "account-456",
 		}) {
 			t.Fatalf("stored metadata = %+v", metadata)
+		}
+		if !strings.HasPrefix(accountKey, "provider:v1:") {
+			t.Fatalf("account key = %q, want provider-owned key", accountKey)
 		}
 
 		lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
@@ -9761,12 +9815,17 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		identityRaw := metadata["account_identity"]
 		delete(metadata, "account_identity")
+		accountKey := metadata[core.AccountKeyMetadataKey]
+		delete(metadata, core.AccountKeyMetadataKey)
 		if !reflect.DeepEqual(metadata, map[string]string{
 			"tenant_id":  "tenant-123",
 			"account_id": "account-456",
 			"workspace":  "beta",
 		}) {
 			t.Fatalf("stored connection metadata = %+v", metadata)
+		}
+		if !strings.HasPrefix(accountKey, "provider:v1:") {
+			t.Fatalf("account key = %q, want provider-owned key", accountKey)
 		}
 		if !strings.Contains(identityRaw, `"kind":"site"`) || !strings.Contains(identityRaw, "Site B") {
 			t.Fatalf("stored account_identity = %q, want site fact for Site B", identityRaw)

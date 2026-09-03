@@ -1382,24 +1382,78 @@ func (b *Broker) connectionID(providerName, connection string) string {
 }
 
 // chosenCredentialInstance returns the account the subject has chosen for this
-// connection and whether a choice exists. Preferred wins only when that
-// qualifier still exists among credentials; otherwise a sole credential is
-// implicitly chosen (including empty qualifier). ok=false means zero or
+// connection and whether a choice exists. Credentials with the same explicit
+// provider account key count as one account, while keyless credentials remain
+// distinct. Preferred wins among usable credentials; otherwise a sole account
+// is implicitly chosen (including empty qualifier). ok=false means zero or
 // ambiguous accounts — the connection is not connected.
 func chosenCredentialInstance(credentials []*core.ExternalCredential, preferred string) (instance string, ok bool) {
 	creds := nonNilCredentials(credentials)
 	preferred = strings.TrimSpace(preferred)
+	now := time.Now()
 	if preferred != "" {
 		for _, credential := range creds {
-			if strings.TrimSpace(credential.Qualifier) == preferred {
+			if strings.TrimSpace(credential.Qualifier) == preferred && !credentialNeedsReconnectForSelection(credential, now) {
 				return preferred, true
 			}
 		}
 	}
-	if len(creds) == 1 {
-		return strings.TrimSpace(creds[0].Qualifier), true
+	if len(creds) == 0 {
+		return "", false
+	}
+
+	accounts := make([]*core.ExternalCredential, 0, len(creds))
+	seen := make(map[string]int, len(creds))
+	for _, credential := range creds {
+		key := core.AccountKeyFromMetadataJSON(credential.MetadataJSON)
+		if key == "" {
+			accounts = append(accounts, credential)
+			continue
+		}
+		idx, ok := seen[key]
+		if !ok {
+			seen[key] = len(accounts)
+			accounts = append(accounts, credential)
+			continue
+		}
+		if preferredCredentialForSelection(credential, accounts[idx], preferred, now) {
+			accounts[idx] = credential
+		}
+	}
+	if len(accounts) == 1 {
+		return strings.TrimSpace(accounts[0].Qualifier), true
 	}
 	return "", false
+}
+
+func preferredCredentialForSelection(candidate, current *core.ExternalCredential, preferred string, now time.Time) bool {
+	candidateInvalid := credentialNeedsReconnectForSelection(candidate, now)
+	currentInvalid := credentialNeedsReconnectForSelection(current, now)
+	if candidateInvalid != currentInvalid {
+		return !candidateInvalid
+	}
+	candidatePreferred := strings.TrimSpace(candidate.Qualifier) == preferred
+	currentPreferred := strings.TrimSpace(current.Qualifier) == preferred
+	if candidatePreferred != currentPreferred {
+		return candidatePreferred
+	}
+	if candidate.CreatedAt.IsZero() != current.CreatedAt.IsZero() {
+		return !candidate.CreatedAt.IsZero()
+	}
+	if !candidate.CreatedAt.Equal(current.CreatedAt) {
+		return candidate.CreatedAt.Before(current.CreatedAt)
+	}
+	if candidate.ID != current.ID {
+		return candidate.ID < current.ID
+	}
+	return candidate.Qualifier < current.Qualifier
+}
+
+func credentialNeedsReconnectForSelection(credential *core.ExternalCredential, now time.Time) bool {
+	if credential == nil || credential.Grant == nil || credential.Grant.ExpiresAt == nil || credential.Grant.RefreshErrorCount <= 0 {
+		return false
+	}
+	return !credential.Grant.ExpiresAt.After(now)
 }
 
 func nonNilCredentials(credentials []*core.ExternalCredential) []*core.ExternalCredential {
