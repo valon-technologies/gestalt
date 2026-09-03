@@ -16,12 +16,11 @@ func TestAllowedOperationSource(t *testing.T) {
 	runtime := map[string]*operationexposure.OperationOverride{
 		"create": {AllowedRoles: []string{"admin"}},
 	}
-	removed := map[string]struct{}{"delete": {}}
 
-	if got := allowedOperationSource("get_item", static, runtime, removed); got != "config" {
+	if got := allowedOperationSource("get_item", static, runtime); got != "config" {
 		t.Fatalf("get_item source = %q, want config", got)
 	}
-	if got := allowedOperationSource("create", static, runtime, removed); got != "runtime" {
+	if got := allowedOperationSource("create", static, runtime); got != "runtime" {
 		t.Fatalf("create source = %q, want runtime", got)
 	}
 }

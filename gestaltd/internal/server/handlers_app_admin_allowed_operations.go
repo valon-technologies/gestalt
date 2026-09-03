@@ -24,12 +24,11 @@ type appAdminAllowedOperationRow struct {
 	ID           string   `json:"id"`
 	AllowedRoles []string `json:"allowedRoles,omitempty"`
 	Source       string   `json:"source"`
-	Mutable      bool     `json:"mutable"`
 }
 
 type appAdminAllowedOperationsResponse struct {
-	App        string                          `json:"app"`
-	Operations []appAdminAllowedOperationRow   `json:"operations"`
+	App        string                        `json:"app"`
+	Operations []appAdminAllowedOperationRow `json:"operations"`
 }
 
 type appAdminAllowedOperationsUpdateRequest struct {
@@ -106,12 +105,19 @@ func (s *Server) putAppAdminAllowedOperations(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
 		return
 	}
-	overlay := &coredata.AppAllowedOperationsOverlay{
-		App:        appName,
-		Operations: request.Operations,
-		Removed:    normalizeRemovedOperationIDs(request.Removed),
+	current, err := s.appAllowedOperations.GetOverlay(r.Context(), appName)
+	if err != nil && !errors.Is(err, core.ErrNotFound) {
+		slog.Error("app admin allowed operations load failed", "app", appName, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
+		return
 	}
-	if len(overlay.Operations) == 0 && len(overlay.Removed) == 0 {
+	overlay := coredata.MergeOverlayPatch(
+		current,
+		appName,
+		request.Operations,
+		normalizeRemovedOperationIDs(request.Removed),
+	)
+	if overlay == nil {
 		if err := s.appAllowedOperations.DeleteOverlay(r.Context(), appName); err != nil {
 			slog.Error("app admin allowed operations delete failed", "app", appName, "error", err)
 			writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
@@ -122,6 +128,7 @@ func (s *Server) putAppAdminAllowedOperations(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
 		return
 	}
+	// Rebuild providers so invoke gates and catalogs pick up the merged overlay.
 	if s.activateAppProviders != nil {
 		s.activateAppProviders(r.Context())
 	}
@@ -155,18 +162,13 @@ func (s *Server) projectAppAdminAllowedOperationRows(
 		}
 	}
 	effective := operationexposure.MergeAllowedOperationsWithOverlay(static, runtimeOps, removed)
-	removedSet := make(map[string]struct{}, len(removed))
-	for _, id := range removed {
-		removedSet[id] = struct{}{}
-	}
 	ids := slices.Sorted(maps.Keys(effective))
 	rows := make([]appAdminAllowedOperationRow, 0, len(ids))
 	for _, id := range ids {
 		override := effective[id]
 		row := appAdminAllowedOperationRow{
 			ID:     id,
-			Source: allowedOperationSource(id, static, runtimeOps, removedSet),
-			Mutable: true,
+			Source: allowedOperationSource(id, static, runtimeOps),
 		}
 		if override != nil && len(override.AllowedRoles) > 0 {
 			row.AllowedRoles = append([]string(nil), override.AllowedRoles...)
@@ -180,21 +182,14 @@ func allowedOperationSource(
 	id string,
 	static map[string]*operationexposure.OperationOverride,
 	runtimeOps map[string]*operationexposure.OperationOverride,
-	removedSet map[string]struct{},
 ) string {
-	if _, ok := removedSet[id]; ok {
+	if runtimeOps[id] != nil {
 		return "runtime"
 	}
-	_, inRuntime := runtimeOps[id]
-	_, inStatic := static[id]
-	switch {
-	case inRuntime:
-		return "runtime"
-	case inStatic:
+	if static[id] != nil {
 		return "config"
-	default:
-		return "runtime"
 	}
+	return "runtime"
 }
 
 func (s *Server) validateAppAdminAllowedOperationsUpdate(
@@ -207,6 +202,11 @@ func (s *Server) validateAppAdminAllowedOperationsUpdate(
 		if id == "" {
 			return errors.New("removed operation id is required")
 		}
+		if len(known) > 0 {
+			if _, ok := known[id]; !ok {
+				return errors.New("operation " + id + " is not in the app catalog")
+			}
+		}
 	}
 	for id, override := range request.Operations {
 		id = strings.TrimSpace(id)
@@ -218,10 +218,11 @@ func (s *Server) validateAppAdminAllowedOperationsUpdate(
 				return errors.New("operation " + id + " is not in the app catalog")
 			}
 		}
-		if override != nil && len(override.AllowedRoles) > 0 {
-			if _, err := packageio.NormalizeUIAllowedRoles("allowedRoles", override.AllowedRoles); err != nil {
-				return err
-			}
+		if override == nil || len(override.AllowedRoles) == 0 {
+			return errors.New("allowedRoles is required for operation " + id)
+		}
+		if _, err := packageio.NormalizeUIAllowedRoles("allowedRoles", override.AllowedRoles); err != nil {
+			return err
 		}
 	}
 	return nil

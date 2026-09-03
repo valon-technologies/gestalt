@@ -15,8 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 )
 
-// AppAllowedOperationsOverlay is the runtime delta app administrators manage
-// without a deploy PR.
+// AppAllowedOperationsOverlay is the runtime delta app administrators manage without a deploy PR.
 type AppAllowedOperationsOverlay struct {
 	App        string
 	Operations map[string]*operationexposure.OperationOverride
@@ -76,7 +75,11 @@ func (s *AppAllowedOperationsService) SetOverlay(ctx context.Context, overlay *A
 		return err
 	}
 	overlay.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	if err := s.store.Put(ctx, appAllowedOperationsRecord(overlay)); err != nil {
+	record, err := appAllowedOperationsRecord(overlay)
+	if err != nil {
+		return fmt.Errorf("set app allowed operations overlay: encode: %w", err)
+	}
+	if err := s.store.Put(ctx, record); err != nil {
 		return fmt.Errorf("set app allowed operations overlay: write: %w", err)
 	}
 	return nil
@@ -99,16 +102,45 @@ func (s *AppAllowedOperationsService) DeleteOverlay(ctx context.Context, app str
 	return nil
 }
 
-func appAllowedOperationsRecord(overlay *AppAllowedOperationsOverlay) idb.Record {
-	operationsJSON, _ := json.Marshal(overlay.Operations)
-	removedJSON, _ := json.Marshal(overlay.Removed)
+func MergeOverlayPatch(
+	current *AppAllowedOperationsOverlay,
+	app string,
+	operations map[string]*operationexposure.OperationOverride,
+	removed []string,
+) *AppAllowedOperationsOverlay {
+	var currentOps map[string]*operationexposure.OperationOverride
+	var currentRemoved []string
+	if current != nil {
+		currentOps = current.Operations
+		currentRemoved = current.Removed
+	}
+	ops, mergedRemoved := operationexposure.MergeOverlayPatch(currentOps, currentRemoved, operations, removed)
+	if ops == nil && mergedRemoved == nil {
+		return nil
+	}
+	return &AppAllowedOperationsOverlay{
+		App:        app,
+		Operations: ops,
+		Removed:    mergedRemoved,
+	}
+}
+
+func appAllowedOperationsRecord(overlay *AppAllowedOperationsOverlay) (idb.Record, error) {
+	operationsJSON, err := json.Marshal(overlay.Operations)
+	if err != nil {
+		return nil, fmt.Errorf("encode operations_json: %w", err)
+	}
+	removedJSON, err := json.Marshal(overlay.Removed)
+	if err != nil {
+		return nil, fmt.Errorf("encode removed_json: %w", err)
+	}
 	return idb.Record{
 		"id":              overlay.App,
 		"app":             overlay.App,
 		"operations_json": string(operationsJSON),
 		"removed_json":    string(removedJSON),
 		"updated_at":      overlay.UpdatedAt,
-	}
+	}, nil
 }
 
 func recordToAppAllowedOperationsOverlay(rec idb.Record) (*AppAllowedOperationsOverlay, error) {

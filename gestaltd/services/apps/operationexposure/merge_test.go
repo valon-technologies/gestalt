@@ -35,7 +35,29 @@ func TestMergeAllowedOperationsWithOverlayReturnsStaticWhenEmptyOverlay(t *testi
 	static := map[string]*OperationOverride{
 		"get_item": {AllowedRoles: []string{"viewer"}},
 	}
-	if got := MergeAllowedOperationsWithOverlay(static, nil, nil); got == nil || len(got) != 1 {
-		t.Fatalf("got = %#v, want static baseline preserved", got)
+	got := MergeAllowedOperationsWithOverlay(static, nil, nil)
+	if len(got) != 1 || got["get_item"].AllowedRoles[0] != "viewer" {
+		t.Fatalf("got = %#v, want cloned static baseline", got)
+	}
+	got["get_item"].AllowedRoles[0] = "admin"
+	if static["get_item"].AllowedRoles[0] != "viewer" {
+		t.Fatal("expected static baseline to remain unchanged")
+	}
+}
+
+func TestMergeOverlayPatchAppliesDeltaWithoutDroppingExistingOverrides(t *testing.T) {
+	t.Parallel()
+
+	current := map[string]*OperationOverride{
+		"create": {AllowedRoles: []string{"admin"}},
+	}
+	ops, removed := MergeOverlayPatch(current, nil, map[string]*OperationOverride{
+		"get_item": {AllowedRoles: []string{"viewer"}},
+	}, []string{"delete"})
+	if len(ops) != 2 || ops["create"] == nil || ops["get_item"] == nil {
+		t.Fatalf("ops = %#v, want create and get_item", ops)
+	}
+	if len(removed) != 1 || removed[0] != "delete" {
+		t.Fatalf("removed = %#v, want [delete]", removed)
 	}
 }

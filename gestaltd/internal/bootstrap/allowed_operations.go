@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -15,10 +16,11 @@ func buildAllowedOperations(ctx context.Context, app string, entry *config.Provi
 		return static
 	}
 	overlay, err := deps.Services.AppAllowedOperations.GetOverlay(ctx, app)
+	if errors.Is(err, core.ErrNotFound) {
+		return static
+	}
 	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return static
-		}
+		slog.ErrorContext(ctx, "allowed operations overlay unavailable; using deploy config baseline", "app", app, "error", err)
 		return static
 	}
 	return operationexposure.MergeAllowedOperationsWithOverlay(static, overlay.Operations, overlay.Removed)
