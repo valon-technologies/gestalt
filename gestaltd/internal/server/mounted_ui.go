@@ -113,9 +113,9 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 		inner = s.tunnelUIProxyHandler(mounted.AppName, mounted.Path, inner)
 	}
 	if mounted.IsDev {
-		if mounted.ThemeStylesheet != "" || mounted.ThemeAssetsDir != "" {
-			inner = mountedUIThemeHandlerFullPath(mounted, inner)
-		}
+		// Always wrap so /brand.json (and theme endpoints) are served from
+		// deployment assets instead of being forwarded to the Vite process.
+		inner = mountedUIThemeHandlerFullPath(mounted, inner)
 		inner = mountedUITelemetryHandler(mounted, inner)
 		return withDevContentSecurityPolicy(s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 	}
