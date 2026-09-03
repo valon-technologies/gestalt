@@ -41,26 +41,6 @@ func recordString(record idb.Record, key string) string {
 	}
 }
 
-func recordBool(record idb.Record, key string) bool {
-	value, _ := record[key].(bool)
-	return value
-}
-
-func recordInt(record idb.Record, key string) int64 {
-	switch value := record[key].(type) {
-	case int:
-		return int64(value)
-	case int64:
-		return value
-	case int32:
-		return int64(value)
-	case float64:
-		return int64(value)
-	default:
-		return 0
-	}
-}
-
 func recordTime(record idb.Record, key string) time.Time {
 	switch value := record[key].(type) {
 	case time.Time:
