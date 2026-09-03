@@ -303,10 +303,20 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 		t.Fatalf("negative count = %#v", emptyPage)
 	}
 
-	put := map[string]any{"schemas": []string{scim.UserSchemaURN}, "externalId": "employee-123", "userName": "Alice@Valon.com", "emails": []map[string]any{{"value": "Alice@Valon.com", "type": "work", "primary": true}}}
+	put := map[string]any{"schemas": []string{scim.UserSchemaURN}, "externalId": "employee-123", "userName": "Alice@Valon.com", "displayName": "Alice Omitted Active Update", "emails": []map[string]any{{"value": "Alice@Valon.com", "type": "work", "primary": true}}}
 	putRecorder := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+created.ID, testCurrentToken, put, map[string]string{"If-Match": "*"})
-	if putUser := decodeResponse[scim.User](t, putRecorder); putRecorder.Code != http.StatusOK || putUser.Active {
-		t.Fatalf("PUT missing active = %d %#v", putRecorder.Code, putUser)
+	if putUser := decodeResponse[scim.User](t, putRecorder); putRecorder.Code != http.StatusOK || !putUser.Active || putUser.DisplayName != "Alice Omitted Active Update" {
+		t.Fatalf("PUT omitted active = %d %#v", putRecorder.Code, putUser)
+	}
+	deactivate := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "Alice@Valon.com", "active": false, "displayName": "Alice Deactivated"}
+	deactivatedRecorder := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+created.ID, testCurrentToken, deactivate, map[string]string{"If-Match": "*"})
+	if deactivated := decodeResponse[scim.User](t, deactivatedRecorder); deactivatedRecorder.Code != http.StatusOK || deactivated.Active || deactivated.DisplayName != "Alice Deactivated" {
+		t.Fatalf("deactivation = %d %#v", deactivatedRecorder.Code, deactivated)
+	}
+	omittedInactive := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "Alice@Valon.com", "displayName": "Alice Inactive Profile Update", "emails": []map[string]any{{"value": "Alice@Valon.com", "type": "work", "primary": true}}}
+	omittedInactiveRecorder := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+created.ID, testCurrentToken, omittedInactive, map[string]string{"If-Match": "*"})
+	if omittedInactiveUser := decodeResponse[scim.User](t, omittedInactiveRecorder); omittedInactiveRecorder.Code != http.StatusOK || omittedInactiveUser.Active || omittedInactiveUser.DisplayName != "Alice Inactive Profile Update" {
+		t.Fatalf("PUT omitted active while inactive = %d %#v", omittedInactiveRecorder.Code, omittedInactiveUser)
 	}
 	reactivate := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "Alice@Valon.com", "active": true, "emails": []map[string]any{{"value": "Alice@Valon.com", "type": "work", "primary": true}}}
 	reactivatedRecorder := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+created.ID, testCurrentToken, reactivate, map[string]string{"If-Match": "*"})
@@ -329,9 +339,11 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 	if primaryResponse.Code != http.StatusCreated {
 		t.Fatalf("primary test user = %d %s", primaryResponse.Code, primaryResponse.Body.String())
 	}
-	primaryPut := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "primary-switch@valon.com", "active": true, "emails": []map[string]any{{"value": "primary-switch@valon.com", "type": "work", "primary": false}, {"value": "home@valon.com", "type": "home", "primary": true}}}
-	if response := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+primary.ID, testCurrentToken, primaryPut, map[string]string{"If-Match": primary.Meta.Version}); response.Code != http.StatusOK {
-		t.Fatalf("primary email PUT = %d %s", response.Code, response.Body.String())
+	primaryPut := map[string]any{"schemas": []string{scim.UserSchemaURN}, "userName": "primary-switch@valon.com", "emails": []map[string]any{{"value": "primary-switch@valon.com", "type": "work", "primary": false}, {"value": "home@valon.com", "type": "home", "primary": true}}}
+	primaryPutResponse := scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+primary.ID, testCurrentToken, primaryPut, map[string]string{"If-Match": primary.Meta.Version})
+	primaryPutUser := decodeResponse[scim.User](t, primaryPutResponse)
+	if primaryPutResponse.Code != http.StatusOK || !primaryPutUser.Active {
+		t.Fatalf("primary email PUT = %d %#v", primaryPutResponse.Code, primaryPutUser)
 	}
 	primaryRead := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+primary.ID, testCurrentToken, nil))
 	primaryCount := 0
@@ -345,7 +357,7 @@ func TestSCIMUsersHTTPContract(t *testing.T) {
 	}
 	beforeNoOp := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+primary.ID, testCurrentToken, nil))
 	noOp := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodPut, "/scim/v2/Users/"+primary.ID, testCurrentToken, primaryPut, map[string]string{"If-Match": beforeNoOp.Meta.Version}))
-	if noOp.Meta.Version != beforeNoOp.Meta.Version || !noOp.Meta.LastModified.Equal(beforeNoOp.Meta.LastModified) {
+	if !noOp.Active || noOp.Meta.Version != beforeNoOp.Meta.Version || !noOp.Meta.LastModified.Equal(beforeNoOp.Meta.LastModified) {
 		t.Fatalf("duplicate email add changed metadata = before %#v after %#v", beforeNoOp.Meta, noOp.Meta)
 	}
 
@@ -474,7 +486,7 @@ func TestSCIMProjectionFailureLeavesLiveStateForClientRetry(t *testing.T) {
 	}
 }
 
-func TestSCIMOmittedActiveIsFailClosed(t *testing.T) {
+func TestSCIMCreateActiveSemantics(t *testing.T) {
 	t.Parallel()
 
 	authorization := newRecordingAuthorization()
@@ -482,22 +494,38 @@ func TestSCIMOmittedActiveIsFailClosed(t *testing.T) {
 		"rippling": ripplingClient([]string{"valon.com"}, employeeProjection()),
 	})
 	service, services, handler := newSCIMService(t, nil, authorization, cfg)
-	response := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{
-		"schemas": []string{scim.UserSchemaURN}, "userName": "inactive@valon.com",
+	authorizationGate := scim.WrapAuthorization(authorization, services.Users, service)
+	omittedResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{
+		"schemas": []string{scim.UserSchemaURN}, "userName": "omitted-active@valon.com",
 	})
-	user := decodeResponse[scim.User](t, response)
-	if response.Code != http.StatusCreated || user.Active {
-		t.Fatalf("create without active = %d %#v", response.Code, user)
+	omittedUser := decodeResponse[scim.User](t, omittedResponse)
+	if omittedResponse.Code != http.StatusCreated || !omittedUser.Active {
+		t.Fatalf("create with omitted active = %d %#v", omittedResponse.Code, omittedUser)
 	}
-	coreUser, err := services.Users.FindUserByEmail(context.Background(), "inactive@valon.com")
+	omittedCoreUser, err := services.Users.FindUserByEmail(context.Background(), "omitted-active@valon.com")
 	if err != nil {
 		t.Fatalf("FindUserByEmail: %v", err)
 	}
-	if authorization.additionCount() != 0 {
-		t.Fatalf("inactive projection additions = %d", authorization.additionCount())
+	if relationship := authorization.relationshipForUser(omittedCoreUser.ID); relationship == nil {
+		t.Fatal("omitted-active projection missing relationship")
 	}
-	if access, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || access.Allowed {
+	if access, err := authorizationGate.CheckAccess(context.Background(), accessRequest(omittedCoreUser.ID)); err != nil || !access.Allowed {
 		t.Fatalf("omitted-active access = %#v, %v", access, err)
+	}
+
+	falseUser, falseResponse := createUser(t, handler, testCurrentToken, "explicit-inactive@valon.com", false, nil)
+	if falseResponse.Code != http.StatusCreated || falseUser.Active {
+		t.Fatalf("create with explicit false = %d %#v", falseResponse.Code, falseUser)
+	}
+	falseCoreUser, err := services.Users.FindUserByEmail(context.Background(), "explicit-inactive@valon.com")
+	if err != nil {
+		t.Fatalf("FindUserByEmail explicit false: %v", err)
+	}
+	if relationship := authorization.relationshipForUser(falseCoreUser.ID); relationship != nil {
+		t.Fatalf("explicit-false projection unexpectedly created relationship = %#v", relationship)
+	}
+	if access, err := authorizationGate.CheckAccess(context.Background(), accessRequest(falseCoreUser.ID)); err != nil || access.Allowed {
+		t.Fatalf("explicit-false access = %#v, %v", access, err)
 	}
 }
 
@@ -1410,12 +1438,6 @@ func (a *recordingAuthorization) relationshipForUser(coreUserID string) *proto.R
 		}
 	}
 	return nil
-}
-
-func (a *recordingAuthorization) additionCount() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.additions
 }
 
 func projectedRelationship(coreUserID string, source proto.SourceLayer) *proto.Relationship {

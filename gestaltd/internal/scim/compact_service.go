@@ -723,7 +723,7 @@ func (s *CompactService) Create(ctx context.Context, clientID string, input user
 	if input.UserName == nil || strings.TrimSpace(*input.UserName) == "" {
 		return nil, invalid("userName is required")
 	}
-	u := persistedUser{UserName: *input.UserName}
+	u := persistedUser{UserName: *input.UserName, Active: true}
 	if input.ExternalID != nil {
 		u.ExternalID = *input.ExternalID
 	}
@@ -882,7 +882,7 @@ func pageMin(a, b int) int {
 	}
 	return b
 }
-func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch string, u persistedUser) (*User, error) {
+func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch string, requestedActive *bool, u persistedUser) (*User, error) {
 	unlock := s.lock(id)
 	defer unlock()
 	r, e := s.findUser(ctx, clientID, id)
@@ -895,6 +895,11 @@ func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch s
 	old, e := s.userValue(ctx, r)
 	if e != nil {
 		return nil, e
+	}
+	if requestedActive == nil {
+		u.Active = old.Active
+	} else {
+		u.Active = *requestedActive
 	}
 	actual, e := s.actualUserTuples(ctx, r)
 	if e != nil {
@@ -1012,9 +1017,6 @@ func (s *CompactService) Replace(ctx context.Context, clientID, id, ifMatch stri
 	if in.ExternalID != nil {
 		u.ExternalID = *in.ExternalID
 	}
-	if in.Active != nil {
-		u.Active = *in.Active
-	}
 	if in.DisplayName != nil {
 		u.DisplayName = *in.DisplayName
 		u.DisplayNameSet = true
@@ -1028,7 +1030,7 @@ func (s *CompactService) Replace(ctx context.Context, clientID, id, ifMatch stri
 			return nil, err
 		}
 	}
-	return s.mutateUser(ctx, clientID, id, ifMatch, u)
+	return s.mutateUser(ctx, clientID, id, ifMatch, in.Active, u)
 }
 func (s *CompactService) Delete(ctx context.Context, clientID, id, ifMatch string) error {
 	unlock := s.lock(id)
