@@ -1329,6 +1329,10 @@ func (p *bootstrapTransportRecordingAuthorizationProvider) ListRelationships(con
 	return &proto.ListRelationshipsResponse{}, nil
 }
 
+func (p *bootstrapTransportRecordingAuthorizationProvider) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
+}
+
 func (p *bootstrapTransportRecordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	return &proto.AddRelationshipResponse{}, nil
 }

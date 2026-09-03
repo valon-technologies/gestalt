@@ -66,6 +66,10 @@ func (p *stubAuthorizationProvider) ListRelationships(context.Context, *proto.Li
 	return &proto.ListRelationshipsResponse{}, nil
 }
 
+func (p *stubAuthorizationProvider) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
+}
+
 func (p *stubAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	return &proto.AddRelationshipResponse{}, nil
 }

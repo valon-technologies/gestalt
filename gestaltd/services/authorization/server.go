@@ -45,11 +45,7 @@ func (s *providerServer) WriteRelationships(ctx context.Context, req *proto.Writ
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	writer, ok := s.provider.(core.AuthorizationRelationshipWriter)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "authorization relationship writes are not implemented")
-	}
-	return writer.WriteRelationships(s.gatewayContext(ctx), req)
+	return s.provider.WriteRelationships(s.gatewayContext(ctx), req)
 }
 
 func (s *providerServer) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {

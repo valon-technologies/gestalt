@@ -379,6 +379,10 @@ func (p *recordingAuthorizationProvider) ListRelationships(_ context.Context, re
 	return gproto.Clone(resp).(*proto.ListRelationshipsResponse), nil
 }
 
+func (p *recordingAuthorizationProvider) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
+}
+
 func (p *recordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	return &proto.AddRelationshipResponse{}, nil
 }
@@ -494,6 +498,10 @@ func (p *statefulAuthorizationProvider) CheckAccessMany(context.Context, *proto.
 
 func (p *statefulAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
 	return &proto.ListRelationshipsResponse{}, nil
+}
+
+func (p *statefulAuthorizationProvider) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
 }
 
 func (p *statefulAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {

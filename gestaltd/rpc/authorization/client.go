@@ -9,7 +9,6 @@ import (
 )
 
 var _ core.AuthorizationProvider = (*Client)(nil)
-var _ core.AuthorizationRelationshipWriter = (*Client)(nil)
 
 type Client struct {
 	grpc proto.AuthorizationClient

@@ -6,27 +6,16 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/scim"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
-)
-
-type relationshipWriterMode int
-
-const (
-	relationshipWriterWorks relationshipWriterMode = iota
-	relationshipWriterUnimplemented
-	relationshipWriterFails
 )
 
 type batchRecordingAuthorization struct {
 	*recordingAuthorization
-	mode   relationshipWriterMode
-	writes [][]*proto.RelationshipUpdate
+	writeErr error
+	writes   [][]*proto.RelationshipUpdate
 }
 
 func (a *batchRecordingAuthorization) WriteRelationships(_ context.Context, req *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
@@ -36,13 +25,10 @@ func (a *batchRecordingAuthorization) WriteRelationships(_ context.Context, req 
 		updates = append(updates, gproto.Clone(update).(*proto.RelationshipUpdate))
 	}
 	a.writes = append(a.writes, updates)
-	mode := a.mode
+	writeErr := a.writeErr
 	a.mu.Unlock()
-	if mode == relationshipWriterUnimplemented {
-		return nil, status.Error(codes.Unimplemented, "writer unavailable")
-	}
-	if mode == relationshipWriterFails {
-		return nil, errors.New("injected writer failure")
+	if writeErr != nil {
+		return nil, writeErr
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -146,148 +132,33 @@ func TestSCIMRelationshipBatchOrderAndEmptyDiff(t *testing.T) {
 	}
 }
 
-func TestSCIMRelationshipWriterFallsBackOnlyForUnimplemented(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		mode       relationshipWriterMode
-		wantStatus int
-		wantAdds   int
-	}{
-		{name: "supported", mode: relationshipWriterWorks, wantStatus: http.StatusCreated},
-		{name: "unimplemented", mode: relationshipWriterUnimplemented, wantStatus: http.StatusCreated, wantAdds: 1},
-		{name: "other error", mode: relationshipWriterFails, wantStatus: http.StatusServiceUnavailable},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			authorization := &batchRecordingAuthorization{recordingAuthorization: newRecordingAuthorization(), mode: test.mode}
-			cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
-			_, _, handler := newSCIMService(t, nil, authorization, cfg)
-			user, response := createUser(t, handler, testCurrentToken, "fallback-"+test.name+"@valon.com", true, nil)
-			if response.Code != http.StatusCreated {
-				t.Fatalf("create user = %d %s", response.Code, response.Body.String())
-			}
-			groupResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
-				"schemas": []string{scim.GroupSchemaURN}, "displayName": "Fallback " + test.name, "members": []map[string]any{{"value": user.ID}},
-			})
-			if groupResponse.Code != test.wantStatus {
-				t.Fatalf("create group = %d %s, want %d", groupResponse.Code, groupResponse.Body.String(), test.wantStatus)
-			}
-			authorization.mu.Lock()
-			writeCalls := len(authorization.writes)
-			authorization.mu.Unlock()
-			if writeCalls != 1 {
-				t.Fatalf("writer calls = %d, want 1", writeCalls)
-			}
-			if got := authorization.additionCount(); got != test.wantAdds {
-				t.Fatalf("legacy additions = %d, want %d", got, test.wantAdds)
-			}
-		})
-	}
-}
-
-func TestSCIMLegacyFallbackTouchesSuccessfulPrefixOnFailure(t *testing.T) {
+func TestSCIMRelationshipWriterFailureDoesNotFallBack(t *testing.T) {
 	t.Parallel()
 
 	authorization := &batchRecordingAuthorization{
 		recordingAuthorization: newRecordingAuthorization(),
-		mode:                   relationshipWriterUnimplemented,
+		writeErr:               errors.New("injected writer failure"),
 	}
 	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
 	_, _, handler := newSCIMService(t, nil, authorization, cfg)
-	alice, response := createUser(t, handler, testCurrentToken, "prefix-alice@valon.com", true, nil)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("create Alice = %d %s", response.Code, response.Body.String())
-	}
-	bob, response := createUser(t, handler, testCurrentToken, "prefix-bob@valon.com", true, nil)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("create Bob = %d %s", response.Code, response.Body.String())
-	}
-	groupResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
-		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Fallback prefix",
-	})
-	group := decodeResponse[scim.Group](t, groupResponse)
-	if groupResponse.Code != http.StatusCreated {
-		t.Fatalf("create empty group = %d %s", groupResponse.Code, groupResponse.Body.String())
-	}
-	before := map[string]scim.Meta{}
-	for _, user := range []*scim.User{alice, bob} {
-		read := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
-		before[user.ID] = read.Meta
-	}
-	authorization.setFailureAt(2, 0)
-	authorization.mu.Lock()
-	writesBefore := len(authorization.writes)
-	authorization.mu.Unlock()
-
-	replacement := scimRequest(t, handler, http.MethodPut, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
-		"schemas": []string{scim.GroupSchemaURN}, "displayName": group.DisplayName, "members": []map[string]any{{"value": alice.ID}, {"value": bob.ID}},
-	}, map[string]string{"If-Match": group.Meta.Version})
-	if replacement.Code != http.StatusServiceUnavailable {
-		t.Fatalf("partial fallback group replacement = %d %s, want 503", replacement.Code, replacement.Body.String())
-	}
-	authorization.mu.Lock()
-	writeCalls := len(authorization.writes) - writesBefore
-	authorization.mu.Unlock()
-	if writeCalls != 1 {
-		t.Fatalf("fallback writer calls = %d, want 1", writeCalls)
-	}
-	groupAfter := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+group.ID, testCurrentToken, nil))
-	if groupAfter.Meta.Version == group.Meta.Version || len(groupAfter.Members) != 1 {
-		t.Fatalf("successful legacy prefix group projection = %#v", groupAfter)
-	}
-	memberID := groupAfter.Members[0].Value
-	memberAfter := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+memberID, testCurrentToken, nil))
-	if !memberAfter.Meta.LastModified.After(before[memberID].LastModified) {
-		t.Fatalf("successful legacy prefix did not advance affected user metadata = before %#v after %#v", before[memberID], memberAfter.Meta)
-	}
-	if len(memberAfter.Groups) != 1 || memberAfter.Groups[0].Value != group.ID {
-		t.Fatalf("successful legacy prefix was not visible through the affected user = %#v", memberAfter.Groups)
-	}
-}
-
-func TestSCIMSupportedRelationshipWriterDowngradesAfterUnimplemented(t *testing.T) {
-	t.Parallel()
-
-	authorization := &batchRecordingAuthorization{recordingAuthorization: newRecordingAuthorization(), mode: relationshipWriterWorks}
-	cfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil)})
-	_, _, handler := newSCIMService(t, nil, authorization, cfg)
-	user, response := createUser(t, handler, testCurrentToken, "downgrade@valon.com", true, nil)
+	user, response := createUser(t, handler, testCurrentToken, "write-failure@valon.com", true, nil)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create user = %d %s", response.Code, response.Body.String())
 	}
-	createGroup := func(name string) {
-		t.Helper()
-		response := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
-			"schemas": []string{scim.GroupSchemaURN}, "displayName": name, "members": []map[string]any{{"value": user.ID}},
-		})
-		if response.Code != http.StatusCreated {
-			t.Fatalf("create %s = %d %s", name, response.Code, response.Body.String())
-		}
+	groupResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
+		"schemas": []string{scim.GroupSchemaURN}, "displayName": "Write failure", "members": []map[string]any{{"value": user.ID}},
+	})
+	if groupResponse.Code != http.StatusServiceUnavailable {
+		t.Fatalf("create group = %d %s, want %d", groupResponse.Code, groupResponse.Body.String(), http.StatusServiceUnavailable)
 	}
-	createGroup("Supported")
 	authorization.mu.Lock()
-	authorization.mode = relationshipWriterUnimplemented
+	writeCalls := len(authorization.writes)
 	authorization.mu.Unlock()
-	createGroup("Downgrade")
-	authorization.mu.Lock()
-	writerCalls := len(authorization.writes)
-	authorization.mu.Unlock()
-	if writerCalls != 2 {
-		t.Fatalf("writer calls after downgrade = %d, want 2", writerCalls)
+	if writeCalls != 1 {
+		t.Fatalf("writer calls = %d, want 1", writeCalls)
 	}
-	createGroup("Cached fallback")
-	authorization.mu.Lock()
-	writerCalls = len(authorization.writes)
-	authorization.mu.Unlock()
-	if writerCalls != 2 {
-		t.Fatalf("cached unsupported writer calls = %d, want 2", writerCalls)
-	}
-	if got := authorization.additionCount(); got != 2 {
-		t.Fatalf("legacy additions after downgrade = %d, want 2", got)
+	if got := authorization.additionCount(); got != 0 {
+		t.Fatalf("single-relationship add calls = %d, want none", got)
 	}
 }
 
@@ -330,10 +201,7 @@ func TestSCIMExternalRelationshipBatchUsesOneWriterAndUpdatesSCIMResources(t *te
 	authorization.mu.Lock()
 	writesBefore := len(authorization.writes)
 	authorization.mu.Unlock()
-	gate, ok := scim.WrapAuthorization(authorization, services.Users, service).(core.AuthorizationRelationshipWriter)
-	if !ok {
-		t.Fatal("wrapped authorization does not implement relationship writer")
-	}
+	gate := scim.WrapAuthorization(authorization, services.Users, service)
 	if _, err := gate.WriteRelationships(context.Background(), &proto.WriteRelationshipsRequest{Updates: updates}); err != nil {
 		t.Fatalf("external WriteRelationships = %v", err)
 	}

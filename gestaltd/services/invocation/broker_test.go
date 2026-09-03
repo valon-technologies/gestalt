@@ -627,6 +627,10 @@ func (p *recordingAuthorizationProvider) ListRelationships(context.Context, *pro
 	return &proto.ListRelationshipsResponse{}, nil
 }
 
+func (p *recordingAuthorizationProvider) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
+}
+
 func (p *recordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	return &proto.AddRelationshipResponse{}, nil
 }

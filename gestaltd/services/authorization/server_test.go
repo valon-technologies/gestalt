@@ -7,8 +7,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func TestProviderServerStampsGRPCEntry(t *testing.T) {
@@ -26,20 +24,10 @@ func TestProviderServerStampsGRPCEntry(t *testing.T) {
 	}
 }
 
-func TestProviderServerWriteRelationshipsRequiresOptionalCapability(t *testing.T) {
+func TestProviderServerDispatchesWriteRelationships(t *testing.T) {
 	t.Parallel()
 
-	server := NewProviderServer(&entryRecordingAuthorizationProvider{})
-	_, err := server.WriteRelationships(context.Background(), &proto.WriteRelationshipsRequest{})
-	if status.Code(err) != codes.Unimplemented {
-		t.Fatalf("WriteRelationships() code = %v, want Unimplemented", status.Code(err))
-	}
-}
-
-func TestProviderServerDispatchesWriteRelationshipsCapability(t *testing.T) {
-	t.Parallel()
-
-	provider := &entryRecordingAuthorizationWriter{}
+	provider := &entryRecordingAuthorizationProvider{}
 	server := NewProviderServer(provider)
 	want := &proto.WriteRelationshipsRequest{}
 	got, err := server.WriteRelationships(context.Background(), want)
@@ -56,15 +44,11 @@ func TestProviderServerDispatchesWriteRelationshipsCapability(t *testing.T) {
 
 type entryRecordingAuthorizationProvider struct {
 	core.AuthorizationProvider
-	entry invocation.Entry
-}
-
-type entryRecordingAuthorizationWriter struct {
-	entryRecordingAuthorizationProvider
+	entry   invocation.Entry
 	request *proto.WriteRelationshipsRequest
 }
 
-func (p *entryRecordingAuthorizationWriter) WriteRelationships(ctx context.Context, request *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+func (p *entryRecordingAuthorizationProvider) WriteRelationships(ctx context.Context, request *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
 	p.entry = invocation.EntryFromContext(ctx)
 	p.request = request
 	return &proto.WriteRelationshipsResponse{}, nil
