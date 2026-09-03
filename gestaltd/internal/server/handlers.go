@@ -461,23 +461,15 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if requestedInstance != "" {
-		var instanceMatched []matchedCredential
-		for _, tok := range matched {
-			if tok.credential.Qualifier == requestedInstance {
-				instanceMatched = append(instanceMatched, tok)
-			}
-		}
-		matched = instanceMatched
-	}
-
-	if len(matched) == 0 {
-		auditErr = errors.New("connection instance not found")
-		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
-		return
-	}
-
 	groups := groupMatchedCredentialsByAccount(matched)
+	if requestedInstance != "" {
+		groups = selectCredentialGroupsForInstance(groups, requestedInstance)
+		if len(groups) == 0 {
+			auditErr = errors.New("connection instance not found")
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
+			return
+		}
+	}
 
 	if len(groups) > 1 {
 		auditErr = errors.New("multiple matching connections")
@@ -602,6 +594,19 @@ func groupMatchedCredentialsByAccount(matched []matchedCredential) []logicalCred
 		}
 	}
 	return groups
+}
+
+func selectCredentialGroupsForInstance(groups []logicalCredentialGroup, instance string) []logicalCredentialGroup {
+	selected := make([]logicalCredentialGroup, 0, len(groups))
+	for _, group := range groups {
+		for _, member := range group.members {
+			if member.credential.Qualifier == instance {
+				selected = append(selected, group)
+				break
+			}
+		}
+	}
+	return selected
 }
 
 func (s *Server) getProvider(ctx context.Context, w http.ResponseWriter, name string) (core.Provider, bool) {

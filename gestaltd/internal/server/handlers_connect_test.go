@@ -39,6 +39,19 @@ func TestInstanceInfoDoesNotExposeInternalAccountKey(t *testing.T) {
 	}
 }
 
+func TestSelectCredentialGroupsForInstanceRetainsSameAccountDuplicates(t *testing.T) {
+	t.Parallel()
+
+	groups := []logicalCredentialGroup{{members: []matchedCredential{
+		{credential: &core.ExternalCredential{AccountKey: "shared", Qualifier: "visible"}},
+		{credential: &core.ExternalCredential{AccountKey: "shared", Qualifier: "hidden"}},
+	}}}
+	selected := selectCredentialGroupsForInstance(groups, "visible")
+	if len(selected) != 1 || len(selected[0].members) != 2 {
+		t.Fatalf("selected groups = %+v, want both same-account instances", selected)
+	}
+}
+
 func TestCredentialMaterialContextUsesCredentialSubjectWithoutActorMetadata(t *testing.T) {
 	t.Parallel()
 
