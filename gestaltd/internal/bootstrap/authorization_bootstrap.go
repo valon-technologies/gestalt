@@ -78,6 +78,11 @@ func bootstrapAuthorizationProviderState(
 	if provider == nil {
 		return nil
 	}
+	if !resolveAuthorizationStateApply(cfg) {
+		if err := bootstrapAuthorizationSeedIfEmpty(ctx, name, provider, cfg.Authorization, users); err != nil {
+			return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
+		}
+	}
 	model, err := staticAuthorizationModel(cfg)
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
