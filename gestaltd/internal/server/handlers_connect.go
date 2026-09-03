@@ -320,14 +320,15 @@ type credentialMaterial struct {
 	Instance     string
 	// Fields holds named manual credentials, stored as an Opaque credential.
 	// When empty, the token fields below are stored as a Grant.
-	Fields          map[string]string
-	AccessToken     string
-	RefreshToken    string
-	TokenExpiresAt  *time.Time
-	MetadataJSON    string
-	ActorSubjectID  string
-	ActorUserID     string
-	ActorAuthSource string
+	Fields            map[string]string
+	AccessToken       string
+	RefreshToken      string
+	TokenExpiresAt    *time.Time
+	MetadataJSON      string
+	ProviderAccountID string
+	ActorSubjectID    string
+	ActorUserID       string
+	ActorAuthSource   string
 }
 
 type credentialActor struct {
@@ -462,7 +463,8 @@ func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate 
 		return nil, nil
 	}
 	accountKey := accountKeyFromMetadataJSON(candidate.MetadataJSON)
-	if accountKey == "" || strings.TrimSpace(candidate.Subject) == "" || strings.TrimSpace(candidate.Audience) == "" {
+	legacyCandidateKey := legacyAccountKeyFromMetadataJSON(candidate.MetadataJSON)
+	if accountKey == "" && legacyCandidateKey == "" || strings.TrimSpace(candidate.Subject) == "" || strings.TrimSpace(candidate.Audience) == "" {
 		return nil, nil
 	}
 	credentials, err := s.externalCredentials.ListCredentials(ctx, candidate.Subject, candidate.Audience)
@@ -474,7 +476,8 @@ func (s *Server) reuseCanonicalAccountCredential(ctx context.Context, candidate 
 		if credential == nil || credential.ID == candidate.ID {
 			continue
 		}
-		if credentialAccountKey(credential) == accountKey {
+		if accountKey != "" && credentialAccountKey(credential) == accountKey ||
+			(legacyCandidateKey != "" && legacyAccountKeyFromMetadataJSON(credential.MetadataJSON) == legacyCandidateKey) {
 			matches = append(matches, credential)
 		}
 	}
@@ -503,6 +506,14 @@ func credentialAccountKey(credential *core.ExternalCredential) string {
 		return ""
 	}
 	return accountKeyFromMetadataJSON(credential.MetadataJSON)
+}
+
+func legacyAccountKeyFromMetadataJSON(metadataJSON string) string {
+	identity, err := parseAccountIdentity(metadataJSON)
+	if err != nil {
+		return ""
+	}
+	return accountKeyFromIdentity(identity)
 }
 
 func chooseCanonicalCredential(credentials []*core.ExternalCredential, preferred string) *core.ExternalCredential {

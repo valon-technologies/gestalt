@@ -32,7 +32,7 @@ func TestAccountKeyFromIdentity_IsStableAndExcludesDisplayFacts(t *testing.T) {
 	}
 }
 
-func TestEnrichAccountIdentity_PersistsCanonicalAccountKey(t *testing.T) {
+func TestEnrichAccountIdentity_DoesNotInferCanonicalAccountKey(t *testing.T) {
 	t.Parallel()
 	var s Server
 	got := s.enrichAccountIdentity(context.Background(), credentialMaterial{
@@ -40,11 +40,21 @@ func TestEnrichAccountIdentity_PersistsCanonicalAccountKey(t *testing.T) {
 		Fields:       map[string]string{"email": "User@Example.com"},
 		MetadataJSON: `{"workspace":"Valon"}`,
 	})
-	if key := accountKeyStoredInMetadataJSON(got.MetadataJSON); key == "" {
-		t.Fatalf("metadata = %q, want persisted account key", got.MetadataJSON)
+	if key := accountKeyStoredInMetadataJSON(got.MetadataJSON); key != "" {
+		t.Fatalf("metadata = %q, did not expect inferred account key", got.MetadataJSON)
 	}
-	if gotKey := accountKeyFromMetadataJSON(got.MetadataJSON); gotKey == "" {
-		t.Fatalf("metadata = %q, want readable account key", got.MetadataJSON)
+}
+
+func TestEnrichAccountIdentity_UsesProviderAccountID(t *testing.T) {
+	t.Parallel()
+	var s Server
+	got := s.enrichAccountIdentity(context.Background(), credentialMaterial{
+		Integration:       "slack",
+		ProviderAccountID: "T123:U456",
+		MetadataJSON:      `{"workspace":"Valon","login":"giovannivocale"}`,
+	})
+	if gotKey := accountKeyFromMetadataJSON(got.MetadataJSON); gotKey != accountKeyFromProviderID("slack", "T123:U456") {
+		t.Fatalf("account key = %q, want provider account key", gotKey)
 	}
 }
 
