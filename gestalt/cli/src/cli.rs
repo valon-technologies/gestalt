@@ -228,11 +228,29 @@ pub enum AuthorizationCommands {
         #[command(subcommand)]
         command: AuthorizationModelCommands,
     },
+    /// Manage authorization state snapshots
+    State {
+        #[command(subcommand)]
+        command: AuthorizationStateCommands,
+    },
     /// Manage service-account subjects
     Subjects {
         #[command(subcommand)]
         command: AuthorizationSubjectCommands,
     },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationStateCommands {
+    /// Idempotently apply a model and relationship snapshot
+    Apply(AuthorizationStateApplyArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationStateApplyArgs {
+    /// JSON file containing model and relationships in SetAuthorizationStateRequest shape
+    #[arg(long = "input-file")]
+    pub input_file: String,
 }
 
 #[derive(Args)]
@@ -258,6 +276,29 @@ pub struct AuthorizationCheckAccessArgs {
 pub enum AuthorizationRelationshipCommands {
     /// List relationships
     List(AuthorizationRelationshipListArgs),
+    /// Add a relationship tuple
+    Add(AuthorizationRelationshipMutationArgs),
+    /// Delete a relationship tuple
+    Delete(AuthorizationRelationshipMutationArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationRelationshipMutationArgs {
+    /// Resource type on the relationship tuple
+    #[arg(long = "resource-type")]
+    pub resource_type: String,
+    /// Resource id on the relationship tuple
+    #[arg(long = "resource-id")]
+    pub resource_id: String,
+    /// Relationship relation, such as admin or viewer
+    #[arg(long)]
+    pub relation: String,
+    /// Direct subject id target, such as user:abc
+    #[arg(long = "subject-id", conflicts_with_all = ["subject_set"])]
+    pub subject_id: Option<String>,
+    /// Subject set target, such as group:valon-employees#member
+    #[arg(long = "subject-set", conflicts_with = "subject_id")]
+    pub subject_set: Option<String>,
 }
 
 #[derive(Args)]

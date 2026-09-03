@@ -1,9 +1,12 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde_json::Value;
+use std::fs;
+use std::path::Path;
 
 use crate::cli::{
     AuthorizationActiveModelCommands, AuthorizationActiveModelResourceTypeCommands,
     AuthorizationCommands, AuthorizationModelCommands, AuthorizationRelationshipCommands,
+    AuthorizationStateCommands,
 };
 use crate::output::{self, Format};
 
@@ -14,9 +17,10 @@ use gestalt_sdk::authorization::source_layer::{
     SOURCE_LAYER_RUNTIME, SOURCE_LAYER_STATIC_CONFIG, SOURCE_LAYER_UNSPECIFIED,
 };
 use gestalt_sdk::authorization::{
-    Action, AuthorizationModelResourceTypeFilter, CheckAccessRequest,
-    ListActiveModelResourceTypesRequest, ListRelationshipsRequest, RelationshipFilter,
-    RelationshipTarget, RelationshipTargetKind, Resource, Subject,
+    Action, AddRelationshipRequest, AuthorizationModelResourceTypeFilter, CheckAccessRequest,
+    DeleteRelationshipRequest, ListActiveModelResourceTypesRequest, ListRelationshipsRequest,
+    Relationship, RelationshipFilter, RelationshipTarget, RelationshipTargetKind, Resource,
+    Subject,
 };
 use gestalt_sdk::public::generated::app_client::AuthorizationClient;
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
@@ -60,6 +64,35 @@ pub fn dispatch(
                 print_value(&serde_json::to_value(&resp)?, format);
                 Ok(())
             }
+            AuthorizationRelationshipCommands::Add(args) => {
+                let relationship = build_relationship_from_args(&args)?;
+                let resp = authz
+                    .add_relationship_sync(AddRelationshipRequest {
+                        relationship: Some(relationship),
+                    })
+                    .context("failed to add authorization relationship")?;
+                print_value(&serde_json::to_value(&resp)?, format);
+                Ok(())
+            }
+            AuthorizationRelationshipCommands::Delete(args) => {
+                let tuple = relationship_tuple_from_parts(
+                    &args.resource_type,
+                    &args.resource_id,
+                    &args.relation,
+                    args.subject_id.as_deref(),
+                    args.subject_set.as_deref(),
+                )?;
+                authz
+                    .delete_relationship_sync(DeleteRelationshipRequest {
+                        relationship_tuple: Some(tuple),
+                    })
+                    .context("failed to delete authorization relationship")?;
+                match format {
+                    Format::Json => output::print_json(&serde_json::json!({})),
+                    Format::Table => output::print_success("Deleted authorization relationship."),
+                }
+                Ok(())
+            }
         },
         AuthorizationCommands::Models { command } => match command {
             AuthorizationModelCommands::Active { command } => match command {
@@ -97,7 +130,115 @@ pub fn dispatch(
         AuthorizationCommands::Subjects { command } => {
             authorization_subjects::dispatch(api, command, format)
         }
+        AuthorizationCommands::State { command } => match command {
+            AuthorizationStateCommands::Apply(args) => apply_state(api, &args, format),
+        },
     }
+}
+
+fn apply_state(
+    api: &ApiClient,
+    args: &crate::cli::AuthorizationStateApplyArgs,
+    format: Format,
+) -> Result<()> {
+    let path = Path::new(args.input_file.trim());
+    let body =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let payload: Value = serde_json::from_str(&body)
+        .with_context(|| format!("failed to parse JSON from {}", path.display()))?;
+    let resp = api
+        .post("/api/v2/authorization/state:apply", &payload)
+        .context("failed to apply authorization state")?;
+    match format {
+        Format::Json => output::print_json(&resp),
+        Format::Table => output::print_success("Applied authorization state."),
+    }
+    Ok(())
+}
+
+fn build_relationship_from_args(
+    args: &crate::cli::AuthorizationRelationshipMutationArgs,
+) -> Result<Relationship> {
+    Ok(Relationship {
+        tuple: Some(relationship_tuple_from_parts(
+            &args.resource_type,
+            &args.resource_id,
+            &args.relation,
+            args.subject_id.as_deref(),
+            args.subject_set.as_deref(),
+        )?),
+        properties: None,
+        source_layer: SOURCE_LAYER_RUNTIME,
+    })
+}
+
+fn relationship_tuple_from_parts(
+    resource_type: &str,
+    resource_id: &str,
+    relation: &str,
+    subject_id: Option<&str>,
+    subject_set: Option<&str>,
+) -> Result<gestalt_sdk::authorization::RelationshipTuple> {
+    let target = build_relationship_target(subject_id, subject_set)?;
+    Ok(gestalt_sdk::authorization::RelationshipTuple {
+        resource: Some(Resource {
+            r#type: resource_type.trim().to_string(),
+            id: resource_id.trim().to_string(),
+            properties: None,
+        }),
+        relation: relation.trim().to_string(),
+        target: Some(target),
+    })
+}
+
+fn build_relationship_target(
+    subject_id: Option<&str>,
+    subject_set: Option<&str>,
+) -> Result<RelationshipTarget> {
+    if let Some(subject_id) = subject_id.map(str::trim).filter(|value| !value.is_empty()) {
+        return Ok(RelationshipTarget {
+            kind: Some(RelationshipTargetKind::Subject(Subject {
+                r#type: "subject".to_string(),
+                id: subject_id.to_string(),
+                properties: None,
+            })),
+        });
+    }
+    if let Some(subject_set) = subject_set.map(str::trim).filter(|value| !value.is_empty()) {
+        let (resource, relation) = parse_subject_set(subject_set)?;
+        return Ok(RelationshipTarget {
+            kind: Some(RelationshipTargetKind::SubjectSet(
+                gestalt_sdk::authorization::SubjectSet {
+                    resource: Some(resource),
+                    relation,
+                },
+            )),
+        });
+    }
+    bail!("either --subject-id or --subject-set is required")
+}
+
+fn parse_subject_set(value: &str) -> Result<(Resource, String)> {
+    let (head, relation) = value
+        .split_once('#')
+        .map(|(head, relation)| (head, relation.trim().to_string()))
+        .unwrap_or((value, String::new()));
+    let (resource_type, resource_id) = head
+        .split_once(':')
+        .context("subject set must look like group:valon-employees#member")?;
+    let resource_type = resource_type.trim();
+    let resource_id = resource_id.trim();
+    if resource_type.is_empty() || resource_id.is_empty() {
+        bail!("subject set must look like group:valon-employees#member");
+    }
+    Ok((
+        Resource {
+            r#type: resource_type.to_string(),
+            id: resource_id.to_string(),
+            properties: None,
+        },
+        relation,
+    ))
 }
 
 fn build_list_relationships_request(
