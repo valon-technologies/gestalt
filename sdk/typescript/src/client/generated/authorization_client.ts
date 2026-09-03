@@ -18,6 +18,7 @@ import type {
   ListRelationshipsResponse,
   SetActiveModelResponse,
   SetAuthorizationStateResponse,
+  WriteRelationshipsResponse,
 } from "../../authorization.ts";
 import {
   fromWireAddRelationshipResponse,
@@ -29,6 +30,7 @@ import {
   fromWireListRelationshipsResponse,
   fromWireSetActiveModelResponse,
   fromWireSetAuthorizationStateResponse,
+  fromWireWriteRelationshipsResponse,
 } from "../../internal/codec/authorization.ts";
 import {
   AddRelationshipRequestSchema,
@@ -48,6 +50,8 @@ import {
   SetActiveModelResponseSchema,
   SetAuthorizationStateRequestSchema,
   SetAuthorizationStateResponseSchema,
+  WriteRelationshipsRequestSchema,
+  WriteRelationshipsResponseSchema,
 } from "../../internal/gen/v1/authorization_pb.ts";
 import {
   toWireAddRelationshipRequest,
@@ -58,12 +62,14 @@ import {
   toWireListRelationshipsRequest,
   toWireSetActiveModelRequest,
   toWireSetAuthorizationStateRequest,
+  toWireWriteRelationshipsRequest,
 } from "./converters.ts";
 import { PUBLIC_METHODS } from "./methods.ts";
 import type {
   PublicAuthorizationCheckAccessRequest,
   PublicAuthorizationCheckAccessManyRequest,
   PublicAuthorizationListRelationshipsRequest,
+  PublicAuthorizationWriteRelationshipsRequest,
   PublicAuthorizationAddRelationshipRequest,
   PublicAuthorizationDeleteRelationshipRequest,
   PublicAuthorizationSetAuthorizationStateRequest,
@@ -115,6 +121,21 @@ export class AuthorizationClient {
         toWireListRelationshipsRequest(request),
         ListRelationshipsRequestSchema,
         ListRelationshipsResponseSchema,
+        callOptions,
+      ),
+    );
+  }
+
+  async writeRelationships(
+    request: PublicAuthorizationWriteRelationshipsRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<WriteRelationshipsResponse> {
+    return fromWireWriteRelationshipsResponse(
+      await this.transport.unary(
+        PUBLIC_METHODS.authorization.writeRelationships,
+        toWireWriteRelationshipsRequest(request),
+        WriteRelationshipsRequestSchema,
+        WriteRelationshipsResponseSchema,
         callOptions,
       ),
     );
@@ -223,6 +244,10 @@ export interface AuthorizationClientREST {
     request: PublicAuthorizationListRelationshipsRequest,
     callOptions?: PublicUnaryCallOptions,
   ): Promise<ListRelationshipsResponse>;
+  writeRelationships(
+    request: PublicAuthorizationWriteRelationshipsRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<WriteRelationshipsResponse>;
   addRelationship(
     request: PublicAuthorizationAddRelationshipRequest,
     callOptions?: PublicUnaryCallOptions,

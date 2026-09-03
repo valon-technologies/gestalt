@@ -31,6 +31,13 @@ func localName(fullName string) string {
 	return fullName
 }
 
+func enumName(e *model.Enum) string {
+	if e.GeneratedName != "" {
+		return e.GeneratedName
+	}
+	return localName(e.FullName)
+}
+
 // generatedFileBase derives the generated module base from a proto file path:
 // sdk/proto/v1/indexeddb.proto becomes "indexeddb".
 func generatedFileBase(protoFile string) string {
@@ -94,7 +101,7 @@ func enumMemberNames(e *model.Enum) []string {
 	for i, v := range e.Values {
 		verbatim[i] = v.Name
 	}
-	prefix := screamingSnake(localName(e.FullName)) + "_"
+	prefix := screamingSnake(e.Name) + "_"
 	stripped := make([]string, len(e.Values))
 	for i, name := range verbatim {
 		s, ok := strings.CutPrefix(name, prefix)

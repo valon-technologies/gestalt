@@ -122,7 +122,9 @@ export {
 } from "./authorization.ts";
 export {
   AuthorizationProvider,
+  PreconditionOperation,
   RelationshipTargetType,
+  RelationshipUpdateOperation,
   SourceLayer,
   createAuthorizationProviderService,
   defineAuthorizationProvider,
@@ -151,16 +153,20 @@ export {
   type ModelAction,
   type ModelAllowedTarget,
   type ModelRelation,
+  type Precondition,
   type Relationship,
   type RelationshipFilter,
   type RelationshipTarget,
   type RelationshipTuple,
+  type RelationshipUpdate,
   type SetActiveModelRequest,
   type SetActiveModelResponse,
   type SetAuthorizationStateRequest,
   type SetAuthorizationStateResponse,
   type SubjectSet,
   type SubjectSetType,
+  type WriteRelationshipsRequest,
+  type WriteRelationshipsResponse,
 } from "./providers/authorization.ts";
 export {
   IdentityProvider,

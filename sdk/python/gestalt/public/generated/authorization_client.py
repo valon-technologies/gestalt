@@ -27,6 +27,8 @@ from gestalt.authorization import (
     SetActiveModelResponse,
     SetAuthorizationStateRequest,
     SetAuthorizationStateResponse,
+    WriteRelationshipsRequest,
+    WriteRelationshipsResponse,
 )
 
 from ..._gen.v1 import authorization_pb2 as _authorization_pb2
@@ -40,6 +42,7 @@ from .metadata import (
     METHOD_AUTHORIZATION_LIST_RELATIONSHIPS,
     METHOD_AUTHORIZATION_SET_ACTIVE_MODEL,
     METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE,
+    METHOD_AUTHORIZATION_WRITE_RELATIONSHIPS,
 )
 from .unary_transport import AsyncUnaryTransport, UnaryTransport
 
@@ -86,6 +89,21 @@ class AuthorizationClient:
             _authorization_pb2.ListRelationshipsResponse,
         )
         return _authorization_provider_codec.from_wire_list_relationships_response(
+            wire_response
+        )
+
+    def write_relationships(
+        self, request: WriteRelationshipsRequest
+    ) -> WriteRelationshipsResponse:
+        wire = _authorization_provider_codec.to_wire_write_relationships_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_WRITE_RELATIONSHIPS,
+            wire,
+            _authorization_pb2.WriteRelationshipsResponse,
+        )
+        return _authorization_provider_codec.from_wire_write_relationships_response(
             wire_response
         )
 
@@ -182,6 +200,9 @@ class AuthorizationClientREST(Protocol):
     def list_relationships(
         self, request: ListRelationshipsRequest
     ) -> ListRelationshipsResponse: ...
+    def write_relationships(
+        self, request: WriteRelationshipsRequest
+    ) -> WriteRelationshipsResponse: ...
     def add_relationship(
         self, request: AddRelationshipRequest
     ) -> AddRelationshipResponse: ...
@@ -240,6 +261,21 @@ class AsyncAuthorizationClient:
             _authorization_pb2.ListRelationshipsResponse,
         )
         return _authorization_provider_codec.from_wire_list_relationships_response(
+            wire_response
+        )
+
+    async def write_relationships(
+        self, request: WriteRelationshipsRequest
+    ) -> WriteRelationshipsResponse:
+        wire = _authorization_provider_codec.to_wire_write_relationships_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_AUTHORIZATION_WRITE_RELATIONSHIPS,
+            wire,
+            _authorization_pb2.WriteRelationshipsResponse,
+        )
+        return _authorization_provider_codec.from_wire_write_relationships_response(
             wire_response
         )
 
@@ -338,6 +374,9 @@ class AsyncAuthorizationClientREST(Protocol):
     async def list_relationships(
         self, request: ListRelationshipsRequest
     ) -> ListRelationshipsResponse: ...
+    async def write_relationships(
+        self, request: WriteRelationshipsRequest
+    ) -> WriteRelationshipsResponse: ...
     async def add_relationship(
         self, request: AddRelationshipRequest
     ) -> AddRelationshipResponse: ...

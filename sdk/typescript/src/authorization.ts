@@ -27,6 +27,7 @@ import {
   fromWireListRelationshipsResponse,
   fromWireSetActiveModelResponse,
   fromWireSetAuthorizationStateResponse,
+  fromWireWriteRelationshipsResponse,
   toWireAddRelationshipRequest,
   toWireCheckAccessManyRequest,
   toWireCheckAccessRequest,
@@ -35,9 +36,18 @@ import {
   toWireListRelationshipsRequest,
   toWireSetActiveModelRequest,
   toWireSetAuthorizationStateRequest,
+  toWireWriteRelationshipsRequest,
 } from "./internal/codec/authorization.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
 import type { Init, JsonObjectInput } from "./rpc_support.ts";
+
+export const PreconditionOperation = {
+  UNSPECIFIED: 0,
+  MUST_NOT_MATCH: 1,
+  MUST_MATCH: 2,
+} as const;
+
+export type PreconditionOperation = number;
 
 export const RelationshipTargetType = {
   UNSPECIFIED: 0,
@@ -47,6 +57,15 @@ export const RelationshipTargetType = {
 } as const;
 
 export type RelationshipTargetType = number;
+
+export const RelationshipUpdateOperation = {
+  UNSPECIFIED: 0,
+  CREATE: 1,
+  TOUCH: 2,
+  DELETE: 3,
+} as const;
+
+export type RelationshipUpdateOperation = number;
 
 export const SourceLayer = {
   UNSPECIFIED: 0,
@@ -189,6 +208,15 @@ export interface ModelRelation {
   allowedTargets: ModelAllowedTarget[];
 }
 
+/**
+ * Precondition is evaluated against the relationship snapshot captured before
+ * any update in the request is applied.
+ */
+export interface Precondition {
+  operation: PreconditionOperation;
+  filter?: RelationshipFilter;
+}
+
 export interface Relationship {
   tuple?: RelationshipTuple;
   properties?: JsonObjectInput;
@@ -239,6 +267,17 @@ export interface RelationshipTuple {
   resource?: Resource;
 }
 
+/**
+ * RelationshipUpdate changes one relationship in an atomic write request.
+ * CREATE fails if the relationship is already present, TOUCH upserts it, and
+ * DELETE is idempotent and protects the stored source layer when one is
+ * specified.
+ */
+export interface RelationshipUpdate {
+  operation: RelationshipUpdateOperation;
+  relationship?: Relationship;
+}
+
 export interface Resource {
   type: string;
   id: string;
@@ -277,6 +316,19 @@ export interface SubjectSetType {
   resourceType: string;
   relation: string;
 }
+
+/**
+ * WriteRelationshipsRequest evaluates all preconditions against the initial
+ * relationship snapshot, then applies all updates atomically or applies none.
+ * The response is intentionally empty because Gestalt does not expose a
+ * revision or ZedToken for relationship writes.
+ */
+export interface WriteRelationshipsRequest {
+  updates: RelationshipUpdate[];
+  optionalPreconditions: Precondition[];
+}
+
+export interface WriteRelationshipsResponse {}
 
 export class Authorization {
   private readonly client: Client<typeof wire.Authorization>;
@@ -385,6 +437,35 @@ export class Authorization {
       ),
     );
     return fromWireListRelationshipsResponse(response);
+  }
+
+  async writeRelationships(
+    updates: Init<RelationshipUpdate>[],
+    optionalPreconditions: Init<Precondition>[],
+  ): Promise<WriteRelationshipsResponse> {
+    const request = {
+      updates,
+      optionalPreconditions,
+    } satisfies Init<WriteRelationshipsRequest>;
+    const response = await callUnary(() =>
+      this.client.writeRelationships(
+        toWireWriteRelationshipsRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireWriteRelationshipsResponse(response);
+  }
+
+  async writeRelationshipsRaw(
+    request: Init<WriteRelationshipsRequest>,
+  ): Promise<WriteRelationshipsResponse> {
+    const response = await callUnary(() =>
+      this.client.writeRelationships(
+        toWireWriteRelationshipsRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireWriteRelationshipsResponse(response);
   }
 
   async addRelationship(

@@ -26,11 +26,13 @@ import type {
   ModelAllowedTarget,
   ModelAllowedTargetKind,
   ModelRelation,
+  Precondition,
   Relationship,
   RelationshipFilter,
   RelationshipTarget,
   RelationshipTargetKind,
   RelationshipTuple,
+  RelationshipUpdate,
   Resource,
   SetActiveModelRequest,
   SetActiveModelResponse,
@@ -39,6 +41,8 @@ import type {
   Subject,
   SubjectSet,
   SubjectSetType,
+  WriteRelationshipsRequest,
+  WriteRelationshipsResponse,
 } from "../../authorization.ts";
 import {
   fromWireTimestamp,
@@ -505,6 +509,26 @@ export function fromWireModelRelation(
   };
 }
 
+export function toWirePrecondition(
+  value: Init<Precondition>,
+): wire.Precondition {
+  return create(wire.PreconditionSchema, {
+    operation: (value.operation ?? 0) as wire.Precondition_Operation,
+    ...(value.filter !== undefined
+      ? { filter: toWireRelationshipFilter(value.filter) }
+      : {}),
+  });
+}
+
+export function fromWirePrecondition(value: wire.Precondition): Precondition {
+  return {
+    operation: value.operation,
+    ...(value.filter !== undefined
+      ? { filter: fromWireRelationshipFilter(value.filter) }
+      : {}),
+  };
+}
+
 export function toWireRelationship(
   value: Init<Relationship>,
 ): wire.Relationship {
@@ -635,6 +659,28 @@ export function fromWireRelationshipTuple(
     relation: value.relation,
     ...(value.resource !== undefined
       ? { resource: fromWireResource(value.resource) }
+      : {}),
+  };
+}
+
+export function toWireRelationshipUpdate(
+  value: Init<RelationshipUpdate>,
+): wire.RelationshipUpdate {
+  return create(wire.RelationshipUpdateSchema, {
+    operation: (value.operation ?? 0) as wire.RelationshipUpdate_Operation,
+    ...(value.relationship !== undefined
+      ? { relationship: toWireRelationship(value.relationship) }
+      : {}),
+  });
+}
+
+export function fromWireRelationshipUpdate(
+  value: wire.RelationshipUpdate,
+): RelationshipUpdate {
+  return {
+    operation: value.operation,
+    ...(value.relationship !== undefined
+      ? { relationship: fromWireRelationship(value.relationship) }
       : {}),
   };
 }
@@ -791,4 +837,37 @@ export function fromWireSubjectSetType(
     resourceType: value.resourceType,
     relation: value.relation,
   };
+}
+
+export function toWireWriteRelationshipsRequest(
+  value: Init<WriteRelationshipsRequest>,
+): wire.WriteRelationshipsRequest {
+  return create(wire.WriteRelationshipsRequestSchema, {
+    updates: (value.updates ?? []).map(toWireRelationshipUpdate),
+    optionalPreconditions: (value.optionalPreconditions ?? []).map(
+      toWirePrecondition,
+    ),
+  });
+}
+
+export function fromWireWriteRelationshipsRequest(
+  value: wire.WriteRelationshipsRequest,
+): WriteRelationshipsRequest {
+  return {
+    updates: value.updates.map(fromWireRelationshipUpdate),
+    optionalPreconditions:
+      value.optionalPreconditions.map(fromWirePrecondition),
+  };
+}
+
+export function toWireWriteRelationshipsResponse(
+  value: Init<WriteRelationshipsResponse>,
+): wire.WriteRelationshipsResponse {
+  return create(wire.WriteRelationshipsResponseSchema, {});
+}
+
+export function fromWireWriteRelationshipsResponse(
+  value: wire.WriteRelationshipsResponse,
+): WriteRelationshipsResponse {
+  return {};
 }

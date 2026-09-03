@@ -29,6 +29,7 @@ import type {
   ListRelationshipsRequest,
   SetActiveModelRequest,
   SetAuthorizationStateRequest,
+  WriteRelationshipsRequest,
 } from "../../authorization.ts";
 import type {
   CreateExternalCredentialRequest,
@@ -158,6 +159,9 @@ export type PublicAuthorizationCheckAccessManyRequest = CheckAccessManyRequest;
 
 export type PublicAuthorizationListRelationshipsRequest =
   ListRelationshipsRequest;
+
+export type PublicAuthorizationWriteRelationshipsRequest =
+  WriteRelationshipsRequest;
 
 export type PublicAuthorizationAddRelationshipRequest = AddRelationshipRequest;
 

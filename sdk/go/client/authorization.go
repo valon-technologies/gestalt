@@ -12,6 +12,19 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+// PreconditionOperation is the gestalt.provider.v1.Precondition.Operation enum. It is open:
+// numeric values outside the named constants are preserved.
+type PreconditionOperation int32
+
+const (
+	// PreconditionOperationUnspecified is the OPERATION_UNSPECIFIED value of PreconditionOperation.
+	PreconditionOperationUnspecified PreconditionOperation = 0
+	// PreconditionOperationMustNotMatch is the OPERATION_MUST_NOT_MATCH value of PreconditionOperation.
+	PreconditionOperationMustNotMatch PreconditionOperation = 1
+	// PreconditionOperationMustMatch is the OPERATION_MUST_MATCH value of PreconditionOperation.
+	PreconditionOperationMustMatch PreconditionOperation = 2
+)
+
 // RelationshipTargetType is the gestalt.provider.v1.RelationshipTargetType enum. It is open:
 // numeric values outside the named constants are preserved.
 type RelationshipTargetType int32
@@ -25,6 +38,21 @@ const (
 	RelationshipTargetTypeResource RelationshipTargetType = 2
 	// RelationshipTargetTypeSubjectSet is the RELATIONSHIP_TARGET_TYPE_SUBJECT_SET value of RelationshipTargetType.
 	RelationshipTargetTypeSubjectSet RelationshipTargetType = 3
+)
+
+// RelationshipUpdateOperation is the gestalt.provider.v1.RelationshipUpdate.Operation enum. It is open:
+// numeric values outside the named constants are preserved.
+type RelationshipUpdateOperation int32
+
+const (
+	// RelationshipUpdateOperationUnspecified is the OPERATION_UNSPECIFIED value of RelationshipUpdateOperation.
+	RelationshipUpdateOperationUnspecified RelationshipUpdateOperation = 0
+	// RelationshipUpdateOperationCreate is the OPERATION_CREATE value of RelationshipUpdateOperation.
+	RelationshipUpdateOperationCreate RelationshipUpdateOperation = 1
+	// RelationshipUpdateOperationTouch is the OPERATION_TOUCH value of RelationshipUpdateOperation.
+	RelationshipUpdateOperationTouch RelationshipUpdateOperation = 2
+	// RelationshipUpdateOperationDelete is the OPERATION_DELETE value of RelationshipUpdateOperation.
+	RelationshipUpdateOperationDelete RelationshipUpdateOperation = 3
 )
 
 // SourceLayer is the gestalt.provider.v1.SourceLayer enum. It is open:
@@ -195,6 +223,15 @@ type ModelRelation struct {
 	AllowedTargets []*ModelAllowedTarget
 }
 
+// Precondition is the native message type for gestalt.provider.v1.Precondition.
+//
+// Precondition is evaluated against the relationship snapshot captured before
+// any update in the request is applied.
+type Precondition struct {
+	Operation PreconditionOperation
+	Filter    *RelationshipFilter
+}
+
 // Relationship is the native message type for gestalt.provider.v1.Relationship.
 type Relationship struct {
 	Tuple       *RelationshipTuple
@@ -252,6 +289,17 @@ type RelationshipTuple struct {
 	Resource *Resource
 }
 
+// RelationshipUpdate is the native message type for gestalt.provider.v1.RelationshipUpdate.
+//
+// RelationshipUpdate changes one relationship in an atomic write request.
+// CREATE fails if the relationship is already present, TOUCH upserts it, and
+// DELETE is idempotent and protects the stored source layer when one is
+// specified.
+type RelationshipUpdate struct {
+	Operation    RelationshipUpdateOperation
+	Relationship *Relationship
+}
+
 // Resource is the native message type for gestalt.provider.v1.Resource.
 type Resource struct {
 	Type       string
@@ -298,6 +346,20 @@ type SubjectSetType struct {
 	ResourceType string
 	Relation     string
 }
+
+// WriteRelationshipsRequest is the native message type for gestalt.provider.v1.WriteRelationshipsRequest.
+//
+// WriteRelationshipsRequest evaluates all preconditions against the initial
+// relationship snapshot, then applies all updates atomically or applies none.
+// The response is intentionally empty because Gestalt does not expose a
+// revision or ZedToken for relationship writes.
+type WriteRelationshipsRequest struct {
+	Updates               []*RelationshipUpdate
+	OptionalPreconditions []*Precondition
+}
+
+// WriteRelationshipsResponse is the native message type for gestalt.provider.v1.WriteRelationshipsResponse.
+type WriteRelationshipsResponse struct{}
 
 // Authorization is the generated client for gestalt.provider.v1.Authorization.
 // Every transport error is converted to *GestaltError.
@@ -385,6 +447,25 @@ func (c *Authorization) ListRelationshipsRaw(ctx context.Context, request *ListR
 		return nil, toGestaltError(err)
 	}
 	return FromWireListRelationshipsResponse(response), nil
+}
+
+// WriteRelationships is the ergonomic form of [Authorization.WriteRelationshipsRaw].
+func (c *Authorization) WriteRelationships(ctx context.Context, updates []*RelationshipUpdate, optionalPreconditions []*Precondition) (*WriteRelationshipsResponse, error) {
+	request := &WriteRelationshipsRequest{Updates: updates, OptionalPreconditions: optionalPreconditions}
+	response, err := c.client.WriteRelationships(ctx, ToWireWriteRelationshipsRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWireWriteRelationshipsResponse(response), nil
+}
+
+// WriteRelationshipsRaw is the faithful form of [Authorization.WriteRelationships].
+func (c *Authorization) WriteRelationshipsRaw(ctx context.Context, request *WriteRelationshipsRequest) (*WriteRelationshipsResponse, error) {
+	response, err := c.client.WriteRelationships(ctx, ToWireWriteRelationshipsRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWireWriteRelationshipsResponse(response), nil
 }
 
 // AddRelationship is the ergonomic form of [Authorization.AddRelationshipRaw].

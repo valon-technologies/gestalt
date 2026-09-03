@@ -9,10 +9,11 @@ use crate::authorization::{
     DeleteRelationshipRequest, DeleteRelationshipResponse, GetActiveModelRefResponse,
     ListActiveModelResourceTypesRequest, ListActiveModelResourceTypesResponse,
     ListRelationshipsRequest, ListRelationshipsResponse, ModelAction, ModelAllowedTarget,
-    ModelAllowedTargetKind, ModelRelation, Relationship, RelationshipFilter, RelationshipTarget,
-    RelationshipTargetKind, RelationshipTuple, Resource, SetActiveModelRequest,
-    SetActiveModelResponse, SetAuthorizationStateRequest, SetAuthorizationStateResponse, Subject,
-    SubjectSet, SubjectSetType,
+    ModelAllowedTargetKind, ModelRelation, Precondition, Relationship, RelationshipFilter,
+    RelationshipTarget, RelationshipTargetKind, RelationshipTuple, RelationshipUpdate, Resource,
+    SetActiveModelRequest, SetActiveModelResponse, SetAuthorizationStateRequest,
+    SetAuthorizationStateResponse, Subject, SubjectSet, SubjectSetType, WriteRelationshipsRequest,
+    WriteRelationshipsResponse,
 };
 use crate::codec::support::{from_wire_struct, from_wire_timestamp, to_wire_struct};
 use crate::generated::v1;
@@ -329,6 +330,14 @@ pub(crate) fn from_wire_model_relation(value: v1::ModelRelation) -> ModelRelatio
     }
 }
 
+/// Converts a native `Precondition` to its wire message.
+pub(crate) fn to_wire_precondition(value: Precondition) -> v1::Precondition {
+    v1::Precondition {
+        operation: value.operation,
+        filter: value.filter.map(to_wire_relationship_filter),
+    }
+}
+
 /// Converts a native `Relationship` to its wire message.
 pub(crate) fn to_wire_relationship(value: Relationship) -> v1::Relationship {
     v1::Relationship {
@@ -421,6 +430,14 @@ pub(crate) fn from_wire_relationship_tuple(value: v1::RelationshipTuple) -> Rela
         target: value.target.map(from_wire_relationship_target),
         relation: value.relation,
         resource: value.resource.map(from_wire_resource),
+    }
+}
+
+/// Converts a native `RelationshipUpdate` to its wire message.
+pub(crate) fn to_wire_relationship_update(value: RelationshipUpdate) -> v1::RelationshipUpdate {
+    v1::RelationshipUpdate {
+        operation: value.operation,
+        relationship: value.relationship.map(to_wire_relationship),
     }
 }
 
@@ -531,4 +548,29 @@ pub(crate) fn from_wire_subject_set_type(value: v1::SubjectSetType) -> SubjectSe
         resource_type: value.resource_type,
         relation: value.relation,
     }
+}
+
+/// Converts a native `WriteRelationshipsRequest` to its wire message.
+pub(crate) fn to_wire_write_relationships_request(
+    value: WriteRelationshipsRequest,
+) -> v1::WriteRelationshipsRequest {
+    v1::WriteRelationshipsRequest {
+        updates: value
+            .updates
+            .into_iter()
+            .map(to_wire_relationship_update)
+            .collect(),
+        optional_preconditions: value
+            .optional_preconditions
+            .into_iter()
+            .map(to_wire_precondition)
+            .collect(),
+    }
+}
+
+/// Converts a wire `WriteRelationshipsResponse` to its native message.
+pub(crate) fn from_wire_write_relationships_response(
+    _value: v1::WriteRelationshipsResponse,
+) -> WriteRelationshipsResponse {
+    WriteRelationshipsResponse {}
 }

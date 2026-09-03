@@ -14,7 +14,7 @@ use crate::authorization::{
     DeleteRelationshipResponse, GetActiveModelRefResponse, ListActiveModelResourceTypesRequest,
     ListActiveModelResourceTypesResponse, ListRelationshipsRequest, ListRelationshipsResponse,
     SetActiveModelRequest, SetActiveModelResponse, SetAuthorizationStateRequest,
-    SetAuthorizationStateResponse,
+    SetAuthorizationStateResponse, WriteRelationshipsRequest, WriteRelationshipsResponse,
 };
 use crate::codec::agent::{
     from_wire_agent_interaction, from_wire_agent_session, from_wire_agent_turn,
@@ -29,11 +29,12 @@ use crate::codec::authorization::{
     from_wire_check_access_response, from_wire_delete_relationship_response,
     from_wire_get_active_model_ref_response, from_wire_list_active_model_resource_types_response,
     from_wire_list_relationships_response, from_wire_set_active_model_response,
-    from_wire_set_authorization_state_response, to_wire_add_relationship_request,
-    to_wire_check_access_many_request, to_wire_check_access_request,
-    to_wire_delete_relationship_request, to_wire_list_active_model_resource_types_request,
-    to_wire_list_relationships_request, to_wire_set_active_model_request,
-    to_wire_set_authorization_state_request,
+    from_wire_set_authorization_state_response, from_wire_write_relationships_response,
+    to_wire_add_relationship_request, to_wire_check_access_many_request,
+    to_wire_check_access_request, to_wire_delete_relationship_request,
+    to_wire_list_active_model_resource_types_request, to_wire_list_relationships_request,
+    to_wire_set_active_model_request, to_wire_set_authorization_state_request,
+    to_wire_write_relationships_request,
 };
 use crate::codec::external_credential::{
     from_wire_exchange_external_credential_response, from_wire_external_credential,
@@ -660,6 +661,22 @@ impl<T: UnaryTransport> AuthorizationClient<T> {
         Ok(from_wire_list_relationships_response(wire_response))
     }
 
+    pub async fn write_relationships(
+        &self,
+        request: WriteRelationshipsRequest,
+    ) -> Result<WriteRelationshipsResponse, GestaltError> {
+        let wire = to_wire_write_relationships_request(request);
+        let mut wire_response = crate::generated::v1::WriteRelationshipsResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_WRITE_RELATIONSHIPS,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_write_relationships_response(wire_response))
+    }
+
     pub async fn add_relationship(
         &self,
         request: AddRelationshipRequest,
@@ -798,6 +815,20 @@ impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> Authoriza
             &mut wire_response,
         )?;
         Ok(from_wire_list_relationships_response(wire_response))
+    }
+
+    pub fn write_relationships_sync(
+        &self,
+        request: WriteRelationshipsRequest,
+    ) -> Result<WriteRelationshipsResponse, GestaltError> {
+        let wire = to_wire_write_relationships_request(request);
+        let mut wire_response = crate::generated::v1::WriteRelationshipsResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_WRITE_RELATIONSHIPS,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_write_relationships_response(wire_response))
     }
 
     pub fn add_relationship_sync(

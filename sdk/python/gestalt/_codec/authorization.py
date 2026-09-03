@@ -414,6 +414,24 @@ def from_wire_model_relation(value: Any) -> native.ModelRelation:
     )
 
 
+def to_wire_precondition(value: native.Precondition) -> Any:
+    return _authorization_pb2.Precondition(
+        operation=to_wire_enum(value.operation),
+        filter=None
+        if value.filter is None
+        else to_wire_relationship_filter(value.filter),
+    )
+
+
+def from_wire_precondition(value: Any) -> native.Precondition:
+    return native.Precondition(
+        operation=value.operation,
+        filter=from_wire_relationship_filter(value.filter)
+        if value.HasField("filter")
+        else None,
+    )
+
+
 def to_wire_relationship(value: native.Relationship) -> Any:
     return _authorization_pb2.Relationship(
         tuple=None if value.tuple is None else to_wire_relationship_tuple(value.tuple),
@@ -523,6 +541,24 @@ def from_wire_relationship_tuple(value: Any) -> native.RelationshipTuple:
         relation=value.relation,
         resource=from_wire_resource(value.resource)
         if value.HasField("resource")
+        else None,
+    )
+
+
+def to_wire_relationship_update(value: native.RelationshipUpdate) -> Any:
+    return _authorization_pb2.RelationshipUpdate(
+        operation=to_wire_enum(value.operation),
+        relationship=None
+        if value.relationship is None
+        else to_wire_relationship(value.relationship),
+    )
+
+
+def from_wire_relationship_update(value: Any) -> native.RelationshipUpdate:
+    return native.RelationshipUpdate(
+        operation=value.operation,
+        relationship=from_wire_relationship(value.relationship)
+        if value.HasField("relationship")
         else None,
     )
 
@@ -665,3 +701,35 @@ def from_wire_subject_set_type(value: Any) -> native.SubjectSetType:
         resource_type=value.resource_type,
         relation=value.relation,
     )
+
+
+def to_wire_write_relationships_request(value: native.WriteRelationshipsRequest) -> Any:
+    return _authorization_pb2.WriteRelationshipsRequest(
+        updates=[to_wire_relationship_update(item) for item in value.updates],
+        optional_preconditions=[
+            to_wire_precondition(item) for item in value.optional_preconditions
+        ],
+    )
+
+
+def from_wire_write_relationships_request(
+    value: Any,
+) -> native.WriteRelationshipsRequest:
+    return native.WriteRelationshipsRequest(
+        updates=[from_wire_relationship_update(item) for item in value.updates],
+        optional_preconditions=[
+            from_wire_precondition(item) for item in value.optional_preconditions
+        ],
+    )
+
+
+def to_wire_write_relationships_response(
+    _value: native.WriteRelationshipsResponse,
+) -> Any:
+    return _authorization_pb2.WriteRelationshipsResponse()
+
+
+def from_wire_write_relationships_response(
+    _value: Any,
+) -> native.WriteRelationshipsResponse:
+    return native.WriteRelationshipsResponse()

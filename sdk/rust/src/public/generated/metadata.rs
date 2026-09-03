@@ -40,12 +40,13 @@ use crate::public::generated::codec::authorization::{
     decode_wire_get_active_model_ref_response_json,
     decode_wire_list_active_model_resource_types_response_json,
     decode_wire_list_relationships_response_json, decode_wire_set_active_model_response_json,
-    decode_wire_set_authorization_state_response_json, encode_wire_add_relationship_request_json,
+    decode_wire_set_authorization_state_response_json,
+    decode_wire_write_relationships_response_json, encode_wire_add_relationship_request_json,
     encode_wire_check_access_many_request_json, encode_wire_check_access_request_json,
     encode_wire_delete_relationship_request_json,
     encode_wire_list_active_model_resource_types_request_json,
     encode_wire_list_relationships_request_json, encode_wire_set_active_model_request_json,
-    encode_wire_set_authorization_state_request_json,
+    encode_wire_set_authorization_state_request_json, encode_wire_write_relationships_request_json,
 };
 use crate::public::generated::codec::external_credential::{
     decode_wire_exchange_external_credential_response_json, decode_wire_external_credential_json,
@@ -329,6 +330,17 @@ fn encode_list_relationships_request_json(bytes: &[u8]) -> Result<Value, Gestalt
 
 fn decode_list_relationships_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
     let wire = decode_wire_list_relationships_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_write_relationships_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::WriteRelationshipsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_write_relationships_request_json(&wire))
+}
+
+fn decode_write_relationships_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_write_relationships_response_json(value)?;
     Ok(wire.encode_to_vec())
 }
 
@@ -1367,6 +1379,21 @@ pub const METHOD_AUTHORIZATION_LIST_RELATIONSHIPS: Method = Method {
     reject: &[],
     encode_request_json: Some(encode_list_relationships_request_json),
     decode_response_json: Some(decode_list_relationships_response_json),
+};
+
+pub const METHOD_AUTHORIZATION_WRITE_RELATIONSHIPS: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "WriteRelationships",
+    full_method: "/gestalt.provider.v1.Authorization/WriteRelationships",
+    http_verb: "POST",
+    http_path: "/api/v2/authorization/relationships:write",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_write_relationships_request_json),
+    decode_response_json: Some(decode_write_relationships_response_json),
 };
 
 pub const METHOD_AUTHORIZATION_ADD_RELATIONSHIP: Method = Method {

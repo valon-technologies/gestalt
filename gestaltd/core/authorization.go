@@ -19,3 +19,9 @@ type AuthorizationProvider interface {
 	Ping(ctx context.Context) error
 	Close() error
 }
+
+// AuthorizationRelationshipWriter is an optional authorization provider
+// capability for atomic relationship mutations.
+type AuthorizationRelationshipWriter interface {
+	WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error)
+}

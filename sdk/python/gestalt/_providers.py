@@ -104,6 +104,8 @@ if TYPE_CHECKING:
         SetActiveModelResponse,
         SetAuthorizationStateRequest,
         SetAuthorizationStateResponse,
+        WriteRelationshipsRequest,
+        WriteRelationshipsResponse,
     )
     from .cache import CacheSetEntry
     from .identity import (
@@ -390,6 +392,13 @@ class AuthorizationProvider(AppProvider):
         """List relationships matching the supplied filter."""
 
         raise NotImplementedError
+
+    def write_relationships(
+        self, request: WriteRelationshipsRequest
+    ) -> WriteRelationshipsResponse:
+        """Apply relationship updates atomically when supported."""
+
+        self._unimplemented("write_relationships")
 
     def add_relationship(
         self, request: AddRelationshipRequest

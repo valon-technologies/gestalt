@@ -235,11 +235,36 @@ func TestPreparePublicRequest(t *testing.T) {
 			},
 		},
 		{
+			name:       "authorization relationship write requires admin",
+			fullMethod: proto.Authorization_WriteRelationships_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req:        &proto.WriteRelationshipsRequest{Updates: []*proto.RelationshipUpdate{{Operation: proto.RelationshipUpdate_OPERATION_TOUCH}}},
+			wantCode:   codes.PermissionDenied,
+			setup: func(transport *ProviderGatewayTransport) {
+				transport.SetAuthorizationProvider(&stubAuthorizationProvider{
+					allowedActions: map[string]bool{"viewer": true},
+				})
+			},
+		},
+		{
 			name:       "authorization write allows admin",
 			fullMethod: proto.Authorization_SetActiveModel_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
 			req:        &proto.SetActiveModelRequest{},
+			setup: func(transport *ProviderGatewayTransport) {
+				transport.SetAuthorizationProvider(&stubAuthorizationProvider{
+					allowedActions: map[string]bool{"admin": true},
+				})
+			},
+		},
+		{
+			name:       "authorization relationship write allows admin",
+			fullMethod: proto.Authorization_WriteRelationships_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req:        &proto.WriteRelationshipsRequest{Updates: []*proto.RelationshipUpdate{{Operation: proto.RelationshipUpdate_OPERATION_TOUCH}}},
 			setup: func(transport *ProviderGatewayTransport) {
 				transport.SetAuthorizationProvider(&stubAuthorizationProvider{
 					allowedActions: map[string]bool{"admin": true},

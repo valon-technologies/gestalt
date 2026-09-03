@@ -60,9 +60,9 @@ func (r *renderer) messageType(fullName string) string {
 func (r *renderer) enumType(fullName string) string {
  	if r.publicClient {
  		r.features.gestaltclient = true
-		return gestaltClientAlias + localName(fullName)
+		return gestaltClientAlias + enumName(r.idx.enums[fullName])
 	}
-	return goTypeName(fullName, r.idx.enums[fullName].ProtoFile)
+	return enumName(r.idx.enums[fullName])
 }
 
 // wireMessage renders the wire-stub type name for a message; renames never
@@ -71,8 +71,16 @@ func wireMessage(fullName string) string {
 	return "proto." + localName(fullName)
 }
 
-func wireEnum(fullName string) string {
-	return "proto." + localName(fullName)
+func (r *renderer) wireEnum(fullName string) string {
+	e := r.idx.enums[fullName]
+	if e == nil {
+		return "proto." + localName(fullName)
+	}
+	parent := fullName[:strings.LastIndex(fullName, ".")]
+	if _, ok := r.idx.messages[parent]; ok {
+		return "proto." + localName(parent) + "_" + e.Name
+	}
+	return "proto." + enumName(e)
 }
 
 func (r *renderer) toWireFuncName(fullName string) string {
@@ -178,7 +186,7 @@ func (r *renderer) wireValueType(ref *model.TypeRef) string {
 	case model.KindBytes:
 		return "[]byte"
 	case model.KindEnum:
-		return wireEnum(ref.Enum)
+		return r.wireEnum(ref.Enum)
 	case model.KindMessage:
 		return "*" + wireMessage(ref.Message)
 	case model.KindTimestamp:
@@ -207,7 +215,7 @@ func (r *renderer) valueToWire(ref *model.TypeRef, expr string) string {
 	case model.KindScalar, model.KindBytes:
 		return expr
 	case model.KindEnum:
-		return wireEnum(ref.Enum) + "(" + expr + ")"
+		return r.wireEnum(ref.Enum) + "(" + expr + ")"
 	case model.KindMessage:
  		return r.toWireFuncName(ref.Message) + "(" + expr + ")"
 	case model.KindTimestamp:
@@ -464,12 +472,12 @@ func (r *renderer) fieldToWire(f *model.Field) conversionParts {
 		if f.Presence == model.ExplicitPresence {
 			return conversionParts{post: []string{
 				"if " + expr + " != nil {",
-				"\twireValue := " + wireEnum(f.Enum) + "(*" + expr + ")",
+				"\twireValue := " + r.wireEnum(f.Enum) + "(*" + expr + ")",
 				"\tout." + name + " = &wireValue",
 				"}",
 			}}
 		}
-		return conversionParts{entry: name + ": " + wireEnum(f.Enum) + "(" + expr + ")"}
+		return conversionParts{entry: name + ": " + r.wireEnum(f.Enum) + "(" + expr + ")"}
 	case model.KindMessage, model.KindTimestamp, model.KindDuration, model.KindJSONStruct, model.KindJSONValue, model.KindRPCStatus:
 		// The rpc_support converters and generated message converters are
 		// nil-safe, so absence flows through unconditionally.

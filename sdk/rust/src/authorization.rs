@@ -7,15 +7,29 @@ use crate::codec::authorization::{
     from_wire_check_access_response, from_wire_delete_relationship_response,
     from_wire_get_active_model_ref_response, from_wire_list_active_model_resource_types_response,
     from_wire_list_relationships_response, from_wire_set_active_model_response,
-    from_wire_set_authorization_state_response, to_wire_add_relationship_request,
-    to_wire_check_access_many_request, to_wire_check_access_request,
-    to_wire_delete_relationship_request, to_wire_list_active_model_resource_types_request,
-    to_wire_list_relationships_request, to_wire_set_active_model_request,
-    to_wire_set_authorization_state_request,
+    from_wire_set_authorization_state_response, from_wire_write_relationships_response,
+    to_wire_add_relationship_request, to_wire_check_access_many_request,
+    to_wire_check_access_request, to_wire_delete_relationship_request,
+    to_wire_list_active_model_resource_types_request, to_wire_list_relationships_request,
+    to_wire_set_active_model_request, to_wire_set_authorization_state_request,
+    to_wire_write_relationships_request,
 };
 use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
 use crate::generated::v1;
 use crate::rpc_support::GestaltError;
+
+/// Open enum for `gestalt.provider.v1.Precondition.Operation`; unknown numeric values are preserved.
+pub type PreconditionOperation = i32;
+
+/// Named values of `PreconditionOperation`.
+pub mod precondition_operation {
+    /// OPERATION_UNSPECIFIED.
+    pub const OPERATION_UNSPECIFIED: i32 = 0;
+    /// OPERATION_MUST_NOT_MATCH.
+    pub const OPERATION_MUST_NOT_MATCH: i32 = 1;
+    /// OPERATION_MUST_MATCH.
+    pub const OPERATION_MUST_MATCH: i32 = 2;
+}
 
 /// Open enum for `gestalt.provider.v1.RelationshipTargetType`; unknown numeric values are preserved.
 pub type RelationshipTargetType = i32;
@@ -30,6 +44,21 @@ pub mod relationship_target_type {
     pub const RELATIONSHIP_TARGET_TYPE_RESOURCE: i32 = 2;
     /// RELATIONSHIP_TARGET_TYPE_SUBJECT_SET.
     pub const RELATIONSHIP_TARGET_TYPE_SUBJECT_SET: i32 = 3;
+}
+
+/// Open enum for `gestalt.provider.v1.RelationshipUpdate.Operation`; unknown numeric values are preserved.
+pub type RelationshipUpdateOperation = i32;
+
+/// Named values of `RelationshipUpdateOperation`.
+pub mod relationship_update_operation {
+    /// OPERATION_UNSPECIFIED.
+    pub const OPERATION_UNSPECIFIED: i32 = 0;
+    /// OPERATION_CREATE.
+    pub const OPERATION_CREATE: i32 = 1;
+    /// OPERATION_TOUCH.
+    pub const OPERATION_TOUCH: i32 = 2;
+    /// OPERATION_DELETE.
+    pub const OPERATION_DELETE: i32 = 3;
 }
 
 /// Open enum for `gestalt.provider.v1.SourceLayer`; unknown numeric values are preserved.
@@ -272,6 +301,19 @@ pub struct ModelRelation {
     pub allowed_targets: Vec<ModelAllowedTarget>,
 }
 
+/// Precondition is evaluated against the relationship snapshot captured before
+/// any update in the request is applied.
+///
+/// Native message type for `gestalt.provider.v1.Precondition`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Precondition {
+    /// The `operation` field.
+    pub operation: PreconditionOperation,
+    /// The `filter` field; None when unset.
+    pub filter: Option<RelationshipFilter>,
+}
+
 /// Native message type for `gestalt.provider.v1.Relationship`.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -334,6 +376,21 @@ pub struct RelationshipTuple {
     pub relation: String,
     /// The `resource` field; None when unset.
     pub resource: Option<Resource>,
+}
+
+/// RelationshipUpdate changes one relationship in an atomic write request.
+/// CREATE fails if the relationship is already present, TOUCH upserts it, and
+/// DELETE is idempotent and protects the stored source layer when one is
+/// specified.
+///
+/// Native message type for `gestalt.provider.v1.RelationshipUpdate`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelationshipUpdate {
+    /// The `operation` field.
+    pub operation: RelationshipUpdateOperation,
+    /// The `relationship` field; None when unset.
+    pub relationship: Option<Relationship>,
 }
 
 /// Native message type for `gestalt.provider.v1.Resource`.
@@ -413,6 +470,26 @@ pub struct SubjectSetType {
     /// The `relation` field.
     pub relation: String,
 }
+
+/// WriteRelationshipsRequest evaluates all preconditions against the initial
+/// relationship snapshot, then applies all updates atomically or applies none.
+/// The response is intentionally empty because Gestalt does not expose a
+/// revision or ZedToken for relationship writes.
+///
+/// Native message type for `gestalt.provider.v1.WriteRelationshipsRequest`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteRelationshipsRequest {
+    /// The `updates` field.
+    pub updates: Vec<RelationshipUpdate>,
+    /// The `optional_preconditions` field.
+    pub optional_preconditions: Vec<Precondition>,
+}
+
+/// Native message type for `gestalt.provider.v1.WriteRelationshipsResponse`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteRelationshipsResponse {}
 
 /// Client for the `gestalt.provider.v1.Authorization` service.
 pub struct Authorization {
@@ -541,6 +618,41 @@ impl Authorization {
         }
         let response = self.inner.list_relationships(tonic_request).await?;
         Ok(from_wire_list_relationships_response(response.into_inner()))
+    }
+
+    /// Calls `gestalt.provider.v1.Authorization.WriteRelationships`.
+    pub async fn write_relationships(
+        &mut self,
+        updates: Vec<RelationshipUpdate>,
+        optional_preconditions: Vec<Precondition>,
+    ) -> Result<WriteRelationshipsResponse, GestaltError> {
+        let request = WriteRelationshipsRequest {
+            updates,
+            optional_preconditions,
+        };
+        let mut tonic_request = tonic::Request::new(to_wire_write_relationships_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.write_relationships(tonic_request).await?;
+        Ok(from_wire_write_relationships_response(
+            response.into_inner(),
+        ))
+    }
+
+    /// Calls `gestalt.provider.v1.Authorization.WriteRelationships` with the full request and response messages.
+    pub async fn write_relationships_raw(
+        &mut self,
+        request: WriteRelationshipsRequest,
+    ) -> Result<WriteRelationshipsResponse, GestaltError> {
+        let mut tonic_request = tonic::Request::new(to_wire_write_relationships_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.write_relationships(tonic_request).await?;
+        Ok(from_wire_write_relationships_response(
+            response.into_inner(),
+        ))
     }
 
     /// Calls `gestalt.provider.v1.Authorization.AddRelationship`.

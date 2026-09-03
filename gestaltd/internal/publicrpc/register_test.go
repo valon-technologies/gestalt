@@ -44,11 +44,26 @@ func TestRESTGatewayServicesMatchRegistrations(t *testing.T) {
 func TestRegisterRESTGatewayRegistersAppRoute(t *testing.T) {
 	t.Parallel()
 
-	const invokePath = "/api/v2/app/example/operations/sync"
+	app := &stubAppServer{}
+	testRESTGatewayRoute(t, "/api/v2/app/example/operations/sync", Servers{App: app}, func(server *grpc.Server) {
+		proto.RegisterAppServer(server, app)
+	})
+}
 
+func TestRegisterRESTGatewayRegistersAuthorizationWriteRoute(t *testing.T) {
+	t.Parallel()
+
+	authorization := &stubAuthorizationServer{}
+	testRESTGatewayRoute(t, "/api/v2/authorization/relationships:write", Servers{Authorization: authorization}, func(server *grpc.Server) {
+		proto.RegisterAuthorizationServer(server, authorization)
+	})
+}
+
+func testRESTGatewayRoute(t *testing.T, path string, servers Servers, register func(*grpc.Server)) {
+	t.Helper()
 	lis := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
-	proto.RegisterAppServer(grpcServer, &stubAppServer{})
+	register(grpcServer)
 	go func() { _ = grpcServer.Serve(lis) }()
 	t.Cleanup(grpcServer.Stop)
 
@@ -65,16 +80,14 @@ func TestRegisterRESTGatewayRegistersAppRoute(t *testing.T) {
 	t.Cleanup(func() { _ = conn.Close() })
 
 	mux := runtime.NewServeMux()
-	if err := RegisterRESTGateway(context.Background(), mux, conn, Servers{
-		App: &stubAppServer{},
-	}); err != nil {
+	if err := RegisterRESTGateway(context.Background(), mux, conn, servers); err != nil {
 		t.Fatalf("RegisterRESTGateway: %v", err)
 	}
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	resp, err := http.Post(server.URL+invokePath, "application/json", http.NoBody)
+	resp, err := http.Post(server.URL+path, "application/json", http.NoBody)
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
@@ -98,4 +111,12 @@ type stubAppServer struct {
 
 func (stubAppServer) Invoke(context.Context, *proto.AppInvokeRequest) (*proto.OperationResult, error) {
 	return &proto.OperationResult{Status: 200}, nil
+}
+
+type stubAuthorizationServer struct {
+	proto.UnimplementedAuthorizationServer
+}
+
+func (stubAuthorizationServer) WriteRelationships(context.Context, *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	return &proto.WriteRelationshipsResponse{}, nil
 }

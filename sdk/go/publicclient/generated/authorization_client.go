@@ -47,6 +47,15 @@ func (c *AuthorizationClient) ListRelationships(ctx context.Context, request *ge
 	return gestaltclient.FromWireListRelationshipsResponse(out), nil
 }
 
+func (c *AuthorizationClient) WriteRelationships(ctx context.Context, request *gestaltclient.WriteRelationshipsRequest) (*gestaltclient.WriteRelationshipsResponse, error) {
+	wire := gestaltclient.ToWireWriteRelationshipsRequest(request)
+	out := &proto.WriteRelationshipsResponse{}
+	if err := c.transport.Unary(ctx, MethodAuthorizationWriteRelationships, wire, out); err != nil {
+		return nil, toGestaltError(err)
+	}
+	return gestaltclient.FromWireWriteRelationshipsResponse(out), nil
+}
+
 func (c *AuthorizationClient) AddRelationship(ctx context.Context, request *gestaltclient.AddRelationshipRequest) (*gestaltclient.AddRelationshipResponse, error) {
 	wire := gestaltclient.ToWireAddRelationshipRequest(request)
 	out := &proto.AddRelationshipResponse{}
@@ -106,6 +115,7 @@ type AuthorizationClientREST interface {
 	CheckAccess(ctx context.Context, request *gestaltclient.CheckAccessRequest) (*gestaltclient.CheckAccessResponse, error)
 	CheckAccessMany(ctx context.Context, request *gestaltclient.CheckAccessManyRequest) (*gestaltclient.CheckAccessManyResponse, error)
 	ListRelationships(ctx context.Context, request *gestaltclient.ListRelationshipsRequest) (*gestaltclient.ListRelationshipsResponse, error)
+	WriteRelationships(ctx context.Context, request *gestaltclient.WriteRelationshipsRequest) (*gestaltclient.WriteRelationshipsResponse, error)
 	AddRelationship(ctx context.Context, request *gestaltclient.AddRelationshipRequest) (*gestaltclient.AddRelationshipResponse, error)
 	DeleteRelationship(ctx context.Context, request *gestaltclient.DeleteRelationshipRequest) (*gestaltclient.DeleteRelationshipResponse, error)
 	SetAuthorizationState(ctx context.Context, request *gestaltclient.SetAuthorizationStateRequest) (*gestaltclient.SetAuthorizationStateResponse, error)

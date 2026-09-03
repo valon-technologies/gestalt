@@ -15,7 +15,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file v1/authorization.proto.
  */
 export const file_v1_authorization: GenFile = /*@__PURE__*/
-  fileDesc("ChZ2MS9hdXRob3JpemF0aW9uLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIlAKB1N1YmplY3QSDAoEdHlwZRgBIAEoCRIKCgJpZBgCIAEoCRIrCgpwcm9wZXJ0aWVzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJDCgZBY3Rpb24SDAoEbmFtZRgBIAEoCRIrCgpwcm9wZXJ0aWVzGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJRCghSZXNvdXJjZRIMCgR0eXBlGAEgASgJEgoKAmlkGAIgASgJEisKCnByb3BlcnRpZXMYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IqEBChJDaGVja0FjY2Vzc1JlcXVlc3QSLQoHc3ViamVjdBgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdBIrCgZhY3Rpb24YAiABKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjdGlvbhIvCghyZXNvdXJjZRgDIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2UiUwoTQ2hlY2tBY2Nlc3NSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhAKCG1vZGVsX2lkGAIgASgJEhkKEW1hdGNoZWRfcmVsYXRpb25zGAMgAygJIlMKFkNoZWNrQWNjZXNzTWFueVJlcXVlc3QSOQoIcmVxdWVzdHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVxdWVzdCJWChdDaGVja0FjY2Vzc01hbnlSZXNwb25zZRI7CglkZWNpc2lvbnMYASADKAsyKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVzcG9uc2UiegoYTGlzdFJlbGF0aW9uc2hpcHNSZXF1ZXN0EjcKBmZpbHRlchgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwRmlsdGVyEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIr0CChJSZWxhdGlvbnNoaXBGaWx0ZXISNwoGdGFyZ2V0GAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBUYXJnZXQSEAoIcmVsYXRpb24YAiABKAkSLwoIcmVzb3VyY2UYAyABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlEkAKC3RhcmdldF90eXBlGAQgASgOMisuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBUYXJnZXRUeXBlEhoKEnRhcmdldF9lbnRpdHlfdHlwZRgFIAEoCRIVCg1yZXNvdXJjZV90eXBlGAYgASgJEjYKDHNvdXJjZV9sYXllchgHIAEoDjIgLmdlc3RhbHQucHJvdmlkZXIudjEuU291cmNlTGF5ZXIibgoZTGlzdFJlbGF0aW9uc2hpcHNSZXNwb25zZRI4Cg1yZWxhdGlvbnNoaXBzGAEgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXASFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIlEKFkFkZFJlbGF0aW9uc2hpcFJlcXVlc3QSNwoMcmVsYXRpb25zaGlwGAEgASgLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXAiZAoXQWRkUmVsYXRpb25zaGlwUmVzcG9uc2USNwoMcmVsYXRpb25zaGlwGAEgASgLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXA6EJq1GAxyZWxhdGlvbnNoaXAiXwoZRGVsZXRlUmVsYXRpb25zaGlwUmVxdWVzdBJCChJyZWxhdGlvbnNoaXBfdHVwbGUYASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcFR1cGxlIhwKGkRlbGV0ZVJlbGF0aW9uc2hpcFJlc3BvbnNlIpABChxTZXRBdXRob3JpemF0aW9uU3RhdGVSZXF1ZXN0EjYKBW1vZGVsGAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWwSOAoNcmVsYXRpb25zaGlwcxgCIAMoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwInMKHVNldEF1dGhvcml6YXRpb25TdGF0ZVJlc3BvbnNlEkAKDGFjdGl2ZV9tb2RlbBgBIAEoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVmOhCatRgMYWN0aXZlX21vZGVsIqoBCgxSZWxhdGlvbnNoaXASNQoFdHVwbGUYASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcFR1cGxlEisKCnByb3BlcnRpZXMYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjYKDHNvdXJjZV9sYXllchgDIAEoDjIgLmdlc3RhbHQucHJvdmlkZXIudjEuU291cmNlTGF5ZXIijwEKEVJlbGF0aW9uc2hpcFR1cGxlEjcKBnRhcmdldBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwVGFyZ2V0EhAKCHJlbGF0aW9uGAIgASgJEi8KCHJlc291cmNlGAMgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvdXJjZSK4AQoSUmVsYXRpb25zaGlwVGFyZ2V0Ei8KB3N1YmplY3QYASABKAsyHC5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3RIABIxCghyZXNvdXJjZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2VIABI2CgtzdWJqZWN0X3NldBgDIAEoCzIfLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdFNldEgAQgYKBGtpbmQiTwoKU3ViamVjdFNldBIvCghyZXNvdXJjZRgBIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2USEAoIcmVsYXRpb24YAiABKAkifgoSQXV0aG9yaXphdGlvbk1vZGVsEgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSSwoOcmVzb3VyY2VfdHlwZXMYAyADKAsyMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlc291cmNlVHlwZSKDAgoeQXV0aG9yaXphdGlvbk1vZGVsUmVzb3VyY2VUeXBlEgwKBG5hbWUYASABKAkSNQoJcmVsYXRpb25zGAIgAygLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5Nb2RlbFJlbGF0aW9uEjEKB2FjdGlvbnMYAyADKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLk1vZGVsQWN0aW9uEjYKDHNvdXJjZV9sYXllchgEIAEoDjIgLmdlc3RhbHQucHJvdmlkZXIudjEuU291cmNlTGF5ZXISFAoMZGVmYXVsdF9yb2xlGAYgASgJSgQIBRAGUhVkZWZhdWx0X2FjY2Vzc19wb2xpY3kiXwoNTW9kZWxSZWxhdGlvbhIMCgRuYW1lGAEgASgJEkAKD2FsbG93ZWRfdGFyZ2V0cxgCIAMoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuTW9kZWxBbGxvd2VkVGFyZ2V0Ii4KC01vZGVsQWN0aW9uEgwKBG5hbWUYASABKAkSEQoJcmVsYXRpb25zGAIgAygJIo4BChJNb2RlbEFsbG93ZWRUYXJnZXQSFgoMc3ViamVjdF90eXBlGAEgASgJSAASFwoNcmVzb3VyY2VfdHlwZRgCIAEoCUgAEj8KEHN1YmplY3Rfc2V0X3R5cGUYAyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3RTZXRUeXBlSABCBgoEa2luZCI5Cg5TdWJqZWN0U2V0VHlwZRIVCg1yZXNvdXJjZV90eXBlGAEgASgJEhAKCHJlbGF0aW9uGAIgASgJImQKFUF1dGhvcml6YXRpb25Nb2RlbFJlZhIKCgJpZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJEi4KCmNyZWF0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wImEKGUdldEFjdGl2ZU1vZGVsUmVmUmVzcG9uc2USOQoFbW9kZWwYASABKAsyKi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlZjoJmrUYBW1vZGVsIk8KFVNldEFjdGl2ZU1vZGVsUmVxdWVzdBI2CgVtb2RlbBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsIl4KFlNldEFjdGl2ZU1vZGVsUmVzcG9uc2USOQoFbW9kZWwYASABKAsyKi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlZjoJmrUYBW1vZGVsIpcBCiNMaXN0QWN0aXZlTW9kZWxSZXNvdXJjZVR5cGVzUmVxdWVzdBJJCgZmaWx0ZXIYASABKAsyOS5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlc291cmNlVHlwZUZpbHRlchIRCglwYWdlX3NpemUYAiABKAUSEgoKcGFnZV90b2tlbhgDIAEoCSJsCiRBdXRob3JpemF0aW9uTW9kZWxSZXNvdXJjZVR5cGVGaWx0ZXISDAoEbmFtZRgBIAEoCRI2Cgxzb3VyY2VfbGF5ZXIYAiABKA4yIC5nZXN0YWx0LnByb3ZpZGVyLnYxLlNvdXJjZUxheWVyIp4BCiRMaXN0QWN0aXZlTW9kZWxSZXNvdXJjZVR5cGVzUmVzcG9uc2USSwoOcmVzb3VyY2VfdHlwZXMYASADKAsyMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlc291cmNlVHlwZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSEAoIbW9kZWxfaWQYAyABKAkquQEKFlJlbGF0aW9uc2hpcFRhcmdldFR5cGUSKAokUkVMQVRJT05TSElQX1RBUkdFVF9UWVBFX1VOU1BFQ0lGSUVEEAASJAogUkVMQVRJT05TSElQX1RBUkdFVF9UWVBFX1NVQkpFQ1QQARIlCiFSRUxBVElPTlNISVBfVEFSR0VUX1RZUEVfUkVTT1VSQ0UQAhIoCiRSRUxBVElPTlNISVBfVEFSR0VUX1RZUEVfU1VCSkVDVF9TRVQQAyplCgtTb3VyY2VMYXllchIcChhTT1VSQ0VfTEFZRVJfVU5TUEVDSUZJRUQQABIeChpTT1VSQ0VfTEFZRVJfU1RBVElDX0NPTkZJRxABEhgKFFNPVVJDRV9MQVlFUl9SVU5USU1FEAIymw4KDUF1dGhvcml6YXRpb24SswEKC0NoZWNrQWNjZXNzEicuZ2VzdGFsdC5wcm92aWRlci52MS5DaGVja0FjY2Vzc1JlcXVlc3QaKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVzcG9uc2UiUYq1GAZhY3Rpb26KtRgIcmVzb3VyY2X60uSTAggSBlBVQkxJQ4LT5JMCJzoBKiIiL2FwaS92Mi9hdXRob3JpemF0aW9uL2FjY2VzczpjaGVjaxK5AQoPQ2hlY2tBY2Nlc3NNYW55EisuZ2VzdGFsdC5wcm92aWRlci52MS5DaGVja0FjY2Vzc01hbnlSZXF1ZXN0GiwuZ2VzdGFsdC5wcm92aWRlci52MS5DaGVja0FjY2Vzc01hbnlSZXNwb25zZSJLirUYCHJlcXVlc3Rz+tLkkwIIEgZQVUJMSUOC0+STAis6ASoiJi9hcGkvdjIvYXV0aG9yaXphdGlvbi9hY2Nlc3M6Y2hlY2tNYW55EtIBChFMaXN0UmVsYXRpb25zaGlwcxItLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdFJlbGF0aW9uc2hpcHNSZXF1ZXN0Gi4uZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0UmVsYXRpb25zaGlwc1Jlc3BvbnNlIl6KtRgJcGFnZV9zaXplirUYCnBhZ2VfdG9rZW6KtRgGZmlsdGVy+tLkkwIIEgZQVUJMSUOC0+STAiUSIy9hcGkvdjIvYXV0aG9yaXphdGlvbi9yZWxhdGlvbnNoaXBzEroBCg9BZGRSZWxhdGlvbnNoaXASKy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFkZFJlbGF0aW9uc2hpcFJlcXVlc3QaLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkFkZFJlbGF0aW9uc2hpcFJlc3BvbnNlIkyKtRgMcmVsYXRpb25zaGlw+tLkkwIIEgZQVUJMSUOC0+STAig6ASoiIy9hcGkvdjIvYXV0aG9yaXphdGlvbi9yZWxhdGlvbnNoaXBzEtABChJEZWxldGVSZWxhdGlvbnNoaXASLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZVJlbGF0aW9uc2hpcFJlcXVlc3QaLy5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZVJlbGF0aW9uc2hpcFJlc3BvbnNlIlmKtRgScmVsYXRpb25zaGlwX3R1cGxl+tLkkwIIEgZQVUJMSUOC0+STAi86ASoiKi9hcGkvdjIvYXV0aG9yaXphdGlvbi9yZWxhdGlvbnNoaXBzOmRlbGV0ZRLOAQoVU2V0QXV0aG9yaXphdGlvblN0YXRlEjEuZ2VzdGFsdC5wcm92aWRlci52MS5TZXRBdXRob3JpemF0aW9uU3RhdGVSZXF1ZXN0GjIuZ2VzdGFsdC5wcm92aWRlci52MS5TZXRBdXRob3JpemF0aW9uU3RhdGVSZXNwb25zZSJOirUYDXJlbGF0aW9uc2hpcHOKtRgFbW9kZWz60uSTAggSBlBVQkxJQ4LT5JMCIDoBKhobL2FwaS92Mi9hdXRob3JpemF0aW9uL3N0YXRlEpYBChFHZXRBY3RpdmVNb2RlbFJlZhIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRouLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0QWN0aXZlTW9kZWxSZWZSZXNwb25zZSI5+tLkkwIIEgZQVUJMSUOC0+STAiUSIy9hcGkvdjIvYXV0aG9yaXphdGlvbi9tb2RlbHMvYWN0aXZlErABCg5TZXRBY3RpdmVNb2RlbBIqLmdlc3RhbHQucHJvdmlkZXIudjEuU2V0QWN0aXZlTW9kZWxSZXF1ZXN0GisuZ2VzdGFsdC5wcm92aWRlci52MS5TZXRBY3RpdmVNb2RlbFJlc3BvbnNlIkWKtRgFbW9kZWz60uSTAggSBlBVQkxJQ4LT5JMCKDoBKhojL2FwaS92Mi9hdXRob3JpemF0aW9uL21vZGVscy9hY3RpdmUSggIKHExpc3RBY3RpdmVNb2RlbFJlc291cmNlVHlwZXMSOC5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RBY3RpdmVNb2RlbFJlc291cmNlVHlwZXNSZXF1ZXN0GjkuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0QWN0aXZlTW9kZWxSZXNvdXJjZVR5cGVzUmVzcG9uc2UibYq1GAlwYWdlX3NpemWKtRgKcGFnZV90b2tlboq1GAZmaWx0ZXL60uSTAggSBlBVQkxJQ4LT5JMCNBIyL2FwaS92Mi9hdXRob3JpemF0aW9uL21vZGVscy9hY3RpdmUvcmVzb3VyY2UtdHlwZXMaEYq1GA1hdXRob3JpemF0aW9uYgZwcm90bzM", [file_google_api_annotations, file_google_api_visibility, file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp, file_v1_annotations]);
+  fileDesc("ChZ2MS9hdXRob3JpemF0aW9uLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIlAKB1N1YmplY3QSDAoEdHlwZRgBIAEoCRIKCgJpZBgCIAEoCRIrCgpwcm9wZXJ0aWVzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJDCgZBY3Rpb24SDAoEbmFtZRgBIAEoCRIrCgpwcm9wZXJ0aWVzGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJRCghSZXNvdXJjZRIMCgR0eXBlGAEgASgJEgoKAmlkGAIgASgJEisKCnByb3BlcnRpZXMYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IqEBChJDaGVja0FjY2Vzc1JlcXVlc3QSLQoHc3ViamVjdBgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdBIrCgZhY3Rpb24YAiABKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjdGlvbhIvCghyZXNvdXJjZRgDIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2UiUwoTQ2hlY2tBY2Nlc3NSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhAKCG1vZGVsX2lkGAIgASgJEhkKEW1hdGNoZWRfcmVsYXRpb25zGAMgAygJIlMKFkNoZWNrQWNjZXNzTWFueVJlcXVlc3QSOQoIcmVxdWVzdHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVxdWVzdCJWChdDaGVja0FjY2Vzc01hbnlSZXNwb25zZRI7CglkZWNpc2lvbnMYASADKAsyKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVzcG9uc2UiegoYTGlzdFJlbGF0aW9uc2hpcHNSZXF1ZXN0EjcKBmZpbHRlchgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwRmlsdGVyEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIr0CChJSZWxhdGlvbnNoaXBGaWx0ZXISNwoGdGFyZ2V0GAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBUYXJnZXQSEAoIcmVsYXRpb24YAiABKAkSLwoIcmVzb3VyY2UYAyABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlEkAKC3RhcmdldF90eXBlGAQgASgOMisuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBUYXJnZXRUeXBlEhoKEnRhcmdldF9lbnRpdHlfdHlwZRgFIAEoCRIVCg1yZXNvdXJjZV90eXBlGAYgASgJEjYKDHNvdXJjZV9sYXllchgHIAEoDjIgLmdlc3RhbHQucHJvdmlkZXIudjEuU291cmNlTGF5ZXIibgoZTGlzdFJlbGF0aW9uc2hpcHNSZXNwb25zZRI4Cg1yZWxhdGlvbnNoaXBzGAEgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXASFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIvwBChJSZWxhdGlvbnNoaXBVcGRhdGUSRAoJb3BlcmF0aW9uGAEgASgOMjEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBVcGRhdGUuT3BlcmF0aW9uEjcKDHJlbGF0aW9uc2hpcBgCIAEoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwImcKCU9wZXJhdGlvbhIZChVPUEVSQVRJT05fVU5TUEVDSUZJRUQQABIUChBPUEVSQVRJT05fQ1JFQVRFEAESEwoPT1BFUkFUSU9OX1RPVUNIEAISFAoQT1BFUkFUSU9OX0RFTEVURRADIucBCgxQcmVjb25kaXRpb24SPgoJb3BlcmF0aW9uGAEgASgOMisuZ2VzdGFsdC5wcm92aWRlci52MS5QcmVjb25kaXRpb24uT3BlcmF0aW9uEjcKBmZpbHRlchgCIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwRmlsdGVyIl4KCU9wZXJhdGlvbhIZChVPUEVSQVRJT05fVU5TUEVDSUZJRUQQABIcChhPUEVSQVRJT05fTVVTVF9OT1RfTUFUQ0gQARIYChRPUEVSQVRJT05fTVVTVF9NQVRDSBACIpgBChlXcml0ZVJlbGF0aW9uc2hpcHNSZXF1ZXN0EjgKB3VwZGF0ZXMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcFVwZGF0ZRJBChZvcHRpb25hbF9wcmVjb25kaXRpb25zGAIgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5QcmVjb25kaXRpb24iHAoaV3JpdGVSZWxhdGlvbnNoaXBzUmVzcG9uc2UiUQoWQWRkUmVsYXRpb25zaGlwUmVxdWVzdBI3CgxyZWxhdGlvbnNoaXAYASABKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcCJkChdBZGRSZWxhdGlvbnNoaXBSZXNwb25zZRI3CgxyZWxhdGlvbnNoaXAYASABKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcDoQmrUYDHJlbGF0aW9uc2hpcCJfChlEZWxldGVSZWxhdGlvbnNoaXBSZXF1ZXN0EkIKEnJlbGF0aW9uc2hpcF90dXBsZRgBIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwVHVwbGUiHAoaRGVsZXRlUmVsYXRpb25zaGlwUmVzcG9uc2UikAEKHFNldEF1dGhvcml6YXRpb25TdGF0ZVJlcXVlc3QSNgoFbW9kZWwYASABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbBI4Cg1yZWxhdGlvbnNoaXBzGAIgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXAicwodU2V0QXV0aG9yaXphdGlvblN0YXRlUmVzcG9uc2USQAoMYWN0aXZlX21vZGVsGAEgASgLMiouZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWxSZWY6EJq1GAxhY3RpdmVfbW9kZWwiqgEKDFJlbGF0aW9uc2hpcBI1CgV0dXBsZRgBIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwVHVwbGUSKwoKcHJvcGVydGllcxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSNgoMc291cmNlX2xheWVyGAMgASgOMiAuZ2VzdGFsdC5wcm92aWRlci52MS5Tb3VyY2VMYXllciKPAQoRUmVsYXRpb25zaGlwVHVwbGUSNwoGdGFyZ2V0GAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBUYXJnZXQSEAoIcmVsYXRpb24YAiABKAkSLwoIcmVzb3VyY2UYAyABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlIrgBChJSZWxhdGlvbnNoaXBUYXJnZXQSLwoHc3ViamVjdBgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdEgAEjEKCHJlc291cmNlGAIgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvdXJjZUgAEjYKC3N1YmplY3Rfc2V0GAMgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0U2V0SABCBgoEa2luZCJPCgpTdWJqZWN0U2V0Ei8KCHJlc291cmNlGAEgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvdXJjZRIQCghyZWxhdGlvbhgCIAEoCSJ+ChJBdXRob3JpemF0aW9uTW9kZWwSCgoCaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRJLCg5yZXNvdXJjZV90eXBlcxgDIAMoCzIzLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVzb3VyY2VUeXBlIoMCCh5BdXRob3JpemF0aW9uTW9kZWxSZXNvdXJjZVR5cGUSDAoEbmFtZRgBIAEoCRI1CglyZWxhdGlvbnMYAiADKAsyIi5nZXN0YWx0LnByb3ZpZGVyLnYxLk1vZGVsUmVsYXRpb24SMQoHYWN0aW9ucxgDIAMoCzIgLmdlc3RhbHQucHJvdmlkZXIudjEuTW9kZWxBY3Rpb24SNgoMc291cmNlX2xheWVyGAQgASgOMiAuZ2VzdGFsdC5wcm92aWRlci52MS5Tb3VyY2VMYXllchIUCgxkZWZhdWx0X3JvbGUYBiABKAlKBAgFEAZSFWRlZmF1bHRfYWNjZXNzX3BvbGljeSJfCg1Nb2RlbFJlbGF0aW9uEgwKBG5hbWUYASABKAkSQAoPYWxsb3dlZF90YXJnZXRzGAIgAygLMicuZ2VzdGFsdC5wcm92aWRlci52MS5Nb2RlbEFsbG93ZWRUYXJnZXQiLgoLTW9kZWxBY3Rpb24SDAoEbmFtZRgBIAEoCRIRCglyZWxhdGlvbnMYAiADKAkijgEKEk1vZGVsQWxsb3dlZFRhcmdldBIWCgxzdWJqZWN0X3R5cGUYASABKAlIABIXCg1yZXNvdXJjZV90eXBlGAIgASgJSAASPwoQc3ViamVjdF9zZXRfdHlwZRgDIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdFNldFR5cGVIAEIGCgRraW5kIjkKDlN1YmplY3RTZXRUeXBlEhUKDXJlc291cmNlX3R5cGUYASABKAkSEAoIcmVsYXRpb24YAiABKAkiZAoVQXV0aG9yaXphdGlvbk1vZGVsUmVmEgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSLgoKY3JlYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiYQoZR2V0QWN0aXZlTW9kZWxSZWZSZXNwb25zZRI5CgVtb2RlbBgBIAEoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVmOgmatRgFbW9kZWwiTwoVU2V0QWN0aXZlTW9kZWxSZXF1ZXN0EjYKBW1vZGVsGAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWwiXgoWU2V0QWN0aXZlTW9kZWxSZXNwb25zZRI5CgVtb2RlbBgBIAEoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVmOgmatRgFbW9kZWwilwEKI0xpc3RBY3RpdmVNb2RlbFJlc291cmNlVHlwZXNSZXF1ZXN0EkkKBmZpbHRlchgBIAEoCzI5Lmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVzb3VyY2VUeXBlRmlsdGVyEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJImwKJEF1dGhvcml6YXRpb25Nb2RlbFJlc291cmNlVHlwZUZpbHRlchIMCgRuYW1lGAEgASgJEjYKDHNvdXJjZV9sYXllchgCIAEoDjIgLmdlc3RhbHQucHJvdmlkZXIudjEuU291cmNlTGF5ZXIingEKJExpc3RBY3RpdmVNb2RlbFJlc291cmNlVHlwZXNSZXNwb25zZRJLCg5yZXNvdXJjZV90eXBlcxgBIAMoCzIzLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVzb3VyY2VUeXBlEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIQCghtb2RlbF9pZBgDIAEoCSq5AQoWUmVsYXRpb25zaGlwVGFyZ2V0VHlwZRIoCiRSRUxBVElPTlNISVBfVEFSR0VUX1RZUEVfVU5TUEVDSUZJRUQQABIkCiBSRUxBVElPTlNISVBfVEFSR0VUX1RZUEVfU1VCSkVDVBABEiUKIVJFTEFUSU9OU0hJUF9UQVJHRVRfVFlQRV9SRVNPVVJDRRACEigKJFJFTEFUSU9OU0hJUF9UQVJHRVRfVFlQRV9TVUJKRUNUX1NFVBADKmUKC1NvdXJjZUxheWVyEhwKGFNPVVJDRV9MQVlFUl9VTlNQRUNJRklFRBAAEh4KGlNPVVJDRV9MQVlFUl9TVEFUSUNfQ09ORklHEAESGAoUU09VUkNFX0xBWUVSX1JVTlRJTUUQAjL8DwoNQXV0aG9yaXphdGlvbhKzAQoLQ2hlY2tBY2Nlc3MSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVxdWVzdBooLmdlc3RhbHQucHJvdmlkZXIudjEuQ2hlY2tBY2Nlc3NSZXNwb25zZSJRirUYBmFjdGlvboq1GAhyZXNvdXJjZfrS5JMCCBIGUFVCTElDgtPkkwInOgEqIiIvYXBpL3YyL2F1dGhvcml6YXRpb24vYWNjZXNzOmNoZWNrErkBCg9DaGVja0FjY2Vzc01hbnkSKy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzTWFueVJlcXVlc3QaLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzTWFueVJlc3BvbnNlIkuKtRgIcmVxdWVzdHP60uSTAggSBlBVQkxJQ4LT5JMCKzoBKiImL2FwaS92Mi9hdXRob3JpemF0aW9uL2FjY2VzczpjaGVja01hbnkS0gEKEUxpc3RSZWxhdGlvbnNoaXBzEi0uZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0UmVsYXRpb25zaGlwc1JlcXVlc3QaLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RSZWxhdGlvbnNoaXBzUmVzcG9uc2UiXoq1GAlwYWdlX3NpemWKtRgKcGFnZV90b2tlboq1GAZmaWx0ZXL60uSTAggSBlBVQkxJQ4LT5JMCJRIjL2FwaS92Mi9hdXRob3JpemF0aW9uL3JlbGF0aW9uc2hpcHMS3gEKEldyaXRlUmVsYXRpb25zaGlwcxIuLmdlc3RhbHQucHJvdmlkZXIudjEuV3JpdGVSZWxhdGlvbnNoaXBzUmVxdWVzdBovLmdlc3RhbHQucHJvdmlkZXIudjEuV3JpdGVSZWxhdGlvbnNoaXBzUmVzcG9uc2UiZ4q1GAd1cGRhdGVzirUYFm9wdGlvbmFsX3ByZWNvbmRpdGlvbnP60uSTAggSBlBVQkxJQ4LT5JMCLjoBKiIpL2FwaS92Mi9hdXRob3JpemF0aW9uL3JlbGF0aW9uc2hpcHM6d3JpdGUSugEKD0FkZFJlbGF0aW9uc2hpcBIrLmdlc3RhbHQucHJvdmlkZXIudjEuQWRkUmVsYXRpb25zaGlwUmVxdWVzdBosLmdlc3RhbHQucHJvdmlkZXIudjEuQWRkUmVsYXRpb25zaGlwUmVzcG9uc2UiTIq1GAxyZWxhdGlvbnNoaXD60uSTAggSBlBVQkxJQ4LT5JMCKDoBKiIjL2FwaS92Mi9hdXRob3JpemF0aW9uL3JlbGF0aW9uc2hpcHMS0AEKEkRlbGV0ZVJlbGF0aW9uc2hpcBIuLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlUmVsYXRpb25zaGlwUmVxdWVzdBovLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlUmVsYXRpb25zaGlwUmVzcG9uc2UiWYq1GBJyZWxhdGlvbnNoaXBfdHVwbGX60uSTAggSBlBVQkxJQ4LT5JMCLzoBKiIqL2FwaS92Mi9hdXRob3JpemF0aW9uL3JlbGF0aW9uc2hpcHM6ZGVsZXRlEs4BChVTZXRBdXRob3JpemF0aW9uU3RhdGUSMS5nZXN0YWx0LnByb3ZpZGVyLnYxLlNldEF1dGhvcml6YXRpb25TdGF0ZVJlcXVlc3QaMi5nZXN0YWx0LnByb3ZpZGVyLnYxLlNldEF1dGhvcml6YXRpb25TdGF0ZVJlc3BvbnNlIk6KtRgNcmVsYXRpb25zaGlwc4q1GAVtb2RlbPrS5JMCCBIGUFVCTElDgtPkkwIgOgEqGhsvYXBpL3YyL2F1dGhvcml6YXRpb24vc3RhdGUSlgEKEUdldEFjdGl2ZU1vZGVsUmVmEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5Gi4uZ2VzdGFsdC5wcm92aWRlci52MS5HZXRBY3RpdmVNb2RlbFJlZlJlc3BvbnNlIjn60uSTAggSBlBVQkxJQ4LT5JMCJRIjL2FwaS92Mi9hdXRob3JpemF0aW9uL21vZGVscy9hY3RpdmUSsAEKDlNldEFjdGl2ZU1vZGVsEiouZ2VzdGFsdC5wcm92aWRlci52MS5TZXRBY3RpdmVNb2RlbFJlcXVlc3QaKy5nZXN0YWx0LnByb3ZpZGVyLnYxLlNldEFjdGl2ZU1vZGVsUmVzcG9uc2UiRYq1GAVtb2RlbPrS5JMCCBIGUFVCTElDgtPkkwIoOgEqGiMvYXBpL3YyL2F1dGhvcml6YXRpb24vbW9kZWxzL2FjdGl2ZRKCAgocTGlzdEFjdGl2ZU1vZGVsUmVzb3VyY2VUeXBlcxI4Lmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEFjdGl2ZU1vZGVsUmVzb3VyY2VUeXBlc1JlcXVlc3QaOS5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RBY3RpdmVNb2RlbFJlc291cmNlVHlwZXNSZXNwb25zZSJtirUYCXBhZ2Vfc2l6ZYq1GApwYWdlX3Rva2VuirUYBmZpbHRlcvrS5JMCCBIGUFVCTElDgtPkkwI0EjIvYXBpL3YyL2F1dGhvcml6YXRpb24vbW9kZWxzL2FjdGl2ZS9yZXNvdXJjZS10eXBlcxoRirUYDWF1dGhvcml6YXRpb25iBnByb3RvMw", [file_google_api_annotations, file_google_api_visibility, file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp, file_v1_annotations]);
 
 /**
  * @generated from message gestalt.provider.v1.Subject
@@ -281,6 +281,155 @@ export const ListRelationshipsResponseSchema: GenMessage<ListRelationshipsRespon
   messageDesc(file_v1_authorization, 9);
 
 /**
+ * RelationshipUpdate changes one relationship in an atomic write request.
+ * CREATE fails if the relationship is already present, TOUCH upserts it, and
+ * DELETE is idempotent and protects the stored source layer when one is
+ * specified.
+ *
+ * @generated from message gestalt.provider.v1.RelationshipUpdate
+ */
+export type RelationshipUpdate = Message<"gestalt.provider.v1.RelationshipUpdate"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.RelationshipUpdate.Operation operation = 1;
+   */
+  operation: RelationshipUpdate_Operation;
+
+  /**
+   * @generated from field: gestalt.provider.v1.Relationship relationship = 2;
+   */
+  relationship?: Relationship | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.RelationshipUpdate.
+ * Use `create(RelationshipUpdateSchema)` to create a new message.
+ */
+export const RelationshipUpdateSchema: GenMessage<RelationshipUpdate> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 10);
+
+/**
+ * @generated from enum gestalt.provider.v1.RelationshipUpdate.Operation
+ */
+export enum RelationshipUpdate_Operation {
+  /**
+   * @generated from enum value: OPERATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: OPERATION_CREATE = 1;
+   */
+  CREATE = 1,
+
+  /**
+   * @generated from enum value: OPERATION_TOUCH = 2;
+   */
+  TOUCH = 2,
+
+  /**
+   * @generated from enum value: OPERATION_DELETE = 3;
+   */
+  DELETE = 3,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.RelationshipUpdate.Operation.
+ */
+export const RelationshipUpdate_OperationSchema: GenEnum<RelationshipUpdate_Operation> = /*@__PURE__*/
+  enumDesc(file_v1_authorization, 10, 0);
+
+/**
+ * Precondition is evaluated against the relationship snapshot captured before
+ * any update in the request is applied.
+ *
+ * @generated from message gestalt.provider.v1.Precondition
+ */
+export type Precondition = Message<"gestalt.provider.v1.Precondition"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.Precondition.Operation operation = 1;
+   */
+  operation: Precondition_Operation;
+
+  /**
+   * @generated from field: gestalt.provider.v1.RelationshipFilter filter = 2;
+   */
+  filter?: RelationshipFilter | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.Precondition.
+ * Use `create(PreconditionSchema)` to create a new message.
+ */
+export const PreconditionSchema: GenMessage<Precondition> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 11);
+
+/**
+ * @generated from enum gestalt.provider.v1.Precondition.Operation
+ */
+export enum Precondition_Operation {
+  /**
+   * @generated from enum value: OPERATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: OPERATION_MUST_NOT_MATCH = 1;
+   */
+  MUST_NOT_MATCH = 1,
+
+  /**
+   * @generated from enum value: OPERATION_MUST_MATCH = 2;
+   */
+  MUST_MATCH = 2,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.Precondition.Operation.
+ */
+export const Precondition_OperationSchema: GenEnum<Precondition_Operation> = /*@__PURE__*/
+  enumDesc(file_v1_authorization, 11, 0);
+
+/**
+ * WriteRelationshipsRequest evaluates all preconditions against the initial
+ * relationship snapshot, then applies all updates atomically or applies none.
+ * The response is intentionally empty because Gestalt does not expose a
+ * revision or ZedToken for relationship writes.
+ *
+ * @generated from message gestalt.provider.v1.WriteRelationshipsRequest
+ */
+export type WriteRelationshipsRequest = Message<"gestalt.provider.v1.WriteRelationshipsRequest"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.RelationshipUpdate updates = 1;
+   */
+  updates: RelationshipUpdate[];
+
+  /**
+   * @generated from field: repeated gestalt.provider.v1.Precondition optional_preconditions = 2;
+   */
+  optionalPreconditions: Precondition[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.WriteRelationshipsRequest.
+ * Use `create(WriteRelationshipsRequestSchema)` to create a new message.
+ */
+export const WriteRelationshipsRequestSchema: GenMessage<WriteRelationshipsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 12);
+
+/**
+ * @generated from message gestalt.provider.v1.WriteRelationshipsResponse
+ */
+export type WriteRelationshipsResponse = Message<"gestalt.provider.v1.WriteRelationshipsResponse"> & {
+};
+
+/**
+ * Describes the message gestalt.provider.v1.WriteRelationshipsResponse.
+ * Use `create(WriteRelationshipsResponseSchema)` to create a new message.
+ */
+export const WriteRelationshipsResponseSchema: GenMessage<WriteRelationshipsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 13);
+
+/**
  * @generated from message gestalt.provider.v1.AddRelationshipRequest
  */
 export type AddRelationshipRequest = Message<"gestalt.provider.v1.AddRelationshipRequest"> & {
@@ -295,7 +444,7 @@ export type AddRelationshipRequest = Message<"gestalt.provider.v1.AddRelationshi
  * Use `create(AddRelationshipRequestSchema)` to create a new message.
  */
 export const AddRelationshipRequestSchema: GenMessage<AddRelationshipRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 10);
+  messageDesc(file_v1_authorization, 14);
 
 /**
  * @generated from message gestalt.provider.v1.AddRelationshipResponse
@@ -312,7 +461,7 @@ export type AddRelationshipResponse = Message<"gestalt.provider.v1.AddRelationsh
  * Use `create(AddRelationshipResponseSchema)` to create a new message.
  */
 export const AddRelationshipResponseSchema: GenMessage<AddRelationshipResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 11);
+  messageDesc(file_v1_authorization, 15);
 
 /**
  * @generated from message gestalt.provider.v1.DeleteRelationshipRequest
@@ -329,7 +478,7 @@ export type DeleteRelationshipRequest = Message<"gestalt.provider.v1.DeleteRelat
  * Use `create(DeleteRelationshipRequestSchema)` to create a new message.
  */
 export const DeleteRelationshipRequestSchema: GenMessage<DeleteRelationshipRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 12);
+  messageDesc(file_v1_authorization, 16);
 
 /**
  * @generated from message gestalt.provider.v1.DeleteRelationshipResponse
@@ -342,7 +491,7 @@ export type DeleteRelationshipResponse = Message<"gestalt.provider.v1.DeleteRela
  * Use `create(DeleteRelationshipResponseSchema)` to create a new message.
  */
 export const DeleteRelationshipResponseSchema: GenMessage<DeleteRelationshipResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 13);
+  messageDesc(file_v1_authorization, 17);
 
 /**
  * @generated from message gestalt.provider.v1.SetAuthorizationStateRequest
@@ -364,7 +513,7 @@ export type SetAuthorizationStateRequest = Message<"gestalt.provider.v1.SetAutho
  * Use `create(SetAuthorizationStateRequestSchema)` to create a new message.
  */
 export const SetAuthorizationStateRequestSchema: GenMessage<SetAuthorizationStateRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 14);
+  messageDesc(file_v1_authorization, 18);
 
 /**
  * @generated from message gestalt.provider.v1.SetAuthorizationStateResponse
@@ -381,7 +530,7 @@ export type SetAuthorizationStateResponse = Message<"gestalt.provider.v1.SetAuth
  * Use `create(SetAuthorizationStateResponseSchema)` to create a new message.
  */
 export const SetAuthorizationStateResponseSchema: GenMessage<SetAuthorizationStateResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 15);
+  messageDesc(file_v1_authorization, 19);
 
 /**
  * @generated from message gestalt.provider.v1.Relationship
@@ -408,7 +557,7 @@ export type Relationship = Message<"gestalt.provider.v1.Relationship"> & {
  * Use `create(RelationshipSchema)` to create a new message.
  */
 export const RelationshipSchema: GenMessage<Relationship> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 16);
+  messageDesc(file_v1_authorization, 20);
 
 /**
  * @generated from message gestalt.provider.v1.RelationshipTuple
@@ -435,7 +584,7 @@ export type RelationshipTuple = Message<"gestalt.provider.v1.RelationshipTuple">
  * Use `create(RelationshipTupleSchema)` to create a new message.
  */
 export const RelationshipTupleSchema: GenMessage<RelationshipTuple> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 17);
+  messageDesc(file_v1_authorization, 21);
 
 /**
  * @generated from message gestalt.provider.v1.RelationshipTarget
@@ -470,7 +619,7 @@ export type RelationshipTarget = Message<"gestalt.provider.v1.RelationshipTarget
  * Use `create(RelationshipTargetSchema)` to create a new message.
  */
 export const RelationshipTargetSchema: GenMessage<RelationshipTarget> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 18);
+  messageDesc(file_v1_authorization, 22);
 
 /**
  * @generated from message gestalt.provider.v1.SubjectSet
@@ -492,7 +641,7 @@ export type SubjectSet = Message<"gestalt.provider.v1.SubjectSet"> & {
  * Use `create(SubjectSetSchema)` to create a new message.
  */
 export const SubjectSetSchema: GenMessage<SubjectSet> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 19);
+  messageDesc(file_v1_authorization, 23);
 
 /**
  * @generated from message gestalt.provider.v1.AuthorizationModel
@@ -519,7 +668,7 @@ export type AuthorizationModel = Message<"gestalt.provider.v1.AuthorizationModel
  * Use `create(AuthorizationModelSchema)` to create a new message.
  */
 export const AuthorizationModelSchema: GenMessage<AuthorizationModel> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 20);
+  messageDesc(file_v1_authorization, 24);
 
 /**
  * @generated from message gestalt.provider.v1.AuthorizationModelResourceType
@@ -556,7 +705,7 @@ export type AuthorizationModelResourceType = Message<"gestalt.provider.v1.Author
  * Use `create(AuthorizationModelResourceTypeSchema)` to create a new message.
  */
 export const AuthorizationModelResourceTypeSchema: GenMessage<AuthorizationModelResourceType> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 21);
+  messageDesc(file_v1_authorization, 25);
 
 /**
  * @generated from message gestalt.provider.v1.ModelRelation
@@ -578,7 +727,7 @@ export type ModelRelation = Message<"gestalt.provider.v1.ModelRelation"> & {
  * Use `create(ModelRelationSchema)` to create a new message.
  */
 export const ModelRelationSchema: GenMessage<ModelRelation> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 22);
+  messageDesc(file_v1_authorization, 26);
 
 /**
  * @generated from message gestalt.provider.v1.ModelAction
@@ -600,7 +749,7 @@ export type ModelAction = Message<"gestalt.provider.v1.ModelAction"> & {
  * Use `create(ModelActionSchema)` to create a new message.
  */
 export const ModelActionSchema: GenMessage<ModelAction> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 23);
+  messageDesc(file_v1_authorization, 27);
 
 /**
  * @generated from message gestalt.provider.v1.ModelAllowedTarget
@@ -635,7 +784,7 @@ export type ModelAllowedTarget = Message<"gestalt.provider.v1.ModelAllowedTarget
  * Use `create(ModelAllowedTargetSchema)` to create a new message.
  */
 export const ModelAllowedTargetSchema: GenMessage<ModelAllowedTarget> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 24);
+  messageDesc(file_v1_authorization, 28);
 
 /**
  * @generated from message gestalt.provider.v1.SubjectSetType
@@ -657,7 +806,7 @@ export type SubjectSetType = Message<"gestalt.provider.v1.SubjectSetType"> & {
  * Use `create(SubjectSetTypeSchema)` to create a new message.
  */
 export const SubjectSetTypeSchema: GenMessage<SubjectSetType> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 25);
+  messageDesc(file_v1_authorization, 29);
 
 /**
  * @generated from message gestalt.provider.v1.AuthorizationModelRef
@@ -684,7 +833,7 @@ export type AuthorizationModelRef = Message<"gestalt.provider.v1.AuthorizationMo
  * Use `create(AuthorizationModelRefSchema)` to create a new message.
  */
 export const AuthorizationModelRefSchema: GenMessage<AuthorizationModelRef> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 26);
+  messageDesc(file_v1_authorization, 30);
 
 /**
  * @generated from message gestalt.provider.v1.GetActiveModelRefResponse
@@ -701,7 +850,7 @@ export type GetActiveModelRefResponse = Message<"gestalt.provider.v1.GetActiveMo
  * Use `create(GetActiveModelRefResponseSchema)` to create a new message.
  */
 export const GetActiveModelRefResponseSchema: GenMessage<GetActiveModelRefResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 27);
+  messageDesc(file_v1_authorization, 31);
 
 /**
  * @generated from message gestalt.provider.v1.SetActiveModelRequest
@@ -718,7 +867,7 @@ export type SetActiveModelRequest = Message<"gestalt.provider.v1.SetActiveModelR
  * Use `create(SetActiveModelRequestSchema)` to create a new message.
  */
 export const SetActiveModelRequestSchema: GenMessage<SetActiveModelRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 28);
+  messageDesc(file_v1_authorization, 32);
 
 /**
  * @generated from message gestalt.provider.v1.SetActiveModelResponse
@@ -735,7 +884,7 @@ export type SetActiveModelResponse = Message<"gestalt.provider.v1.SetActiveModel
  * Use `create(SetActiveModelResponseSchema)` to create a new message.
  */
 export const SetActiveModelResponseSchema: GenMessage<SetActiveModelResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 29);
+  messageDesc(file_v1_authorization, 33);
 
 /**
  * @generated from message gestalt.provider.v1.ListActiveModelResourceTypesRequest
@@ -762,7 +911,7 @@ export type ListActiveModelResourceTypesRequest = Message<"gestalt.provider.v1.L
  * Use `create(ListActiveModelResourceTypesRequestSchema)` to create a new message.
  */
 export const ListActiveModelResourceTypesRequestSchema: GenMessage<ListActiveModelResourceTypesRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 30);
+  messageDesc(file_v1_authorization, 34);
 
 /**
  * @generated from message gestalt.provider.v1.AuthorizationModelResourceTypeFilter
@@ -784,7 +933,7 @@ export type AuthorizationModelResourceTypeFilter = Message<"gestalt.provider.v1.
  * Use `create(AuthorizationModelResourceTypeFilterSchema)` to create a new message.
  */
 export const AuthorizationModelResourceTypeFilterSchema: GenMessage<AuthorizationModelResourceTypeFilter> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 31);
+  messageDesc(file_v1_authorization, 35);
 
 /**
  * @generated from message gestalt.provider.v1.ListActiveModelResourceTypesResponse
@@ -811,7 +960,7 @@ export type ListActiveModelResourceTypesResponse = Message<"gestalt.provider.v1.
  * Use `create(ListActiveModelResourceTypesResponseSchema)` to create a new message.
  */
 export const ListActiveModelResourceTypesResponseSchema: GenMessage<ListActiveModelResourceTypesResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 32);
+  messageDesc(file_v1_authorization, 36);
 
 /**
  * @generated from enum gestalt.provider.v1.RelationshipTargetType
@@ -897,6 +1046,14 @@ export const Authorization: GenService<{
     methodKind: "unary";
     input: typeof ListRelationshipsRequestSchema;
     output: typeof ListRelationshipsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.Authorization.WriteRelationships
+   */
+  writeRelationships: {
+    methodKind: "unary";
+    input: typeof WriteRelationshipsRequestSchema;
+    output: typeof WriteRelationshipsResponseSchema;
   },
   /**
    * @generated from rpc gestalt.provider.v1.Authorization.AddRelationship

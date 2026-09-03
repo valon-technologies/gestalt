@@ -1718,6 +1718,24 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
                 )
             return _authorization_codec.to_wire_list_relationships_response(response)
 
+        @_grpc_handler("authorization write relationships")
+        def WriteRelationships(self, request: Any, context: Any) -> Any:
+            response = _call_native_provider_handler(
+                authorization_provider,
+                AuthorizationProvider,
+                "write_relationships",
+                "WriteRelationships",
+                _authorization_codec.from_wire_write_relationships_request(request),
+                request,
+                context,
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return _authorization_codec.to_wire_write_relationships_response(response)
+
         @_grpc_handler("authorization add relationship")
         def AddRelationship(self, request: Any, context: Any) -> Any:
             response = authorization_provider.add_relationship(

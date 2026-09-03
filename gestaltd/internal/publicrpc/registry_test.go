@@ -87,6 +87,7 @@ POST /api/v2/workflow/runs/{run_id}:signal /gestalt.provider.v1.Workflow/SignalR
 POST /api/v2/authorization/access:check /gestalt.provider.v1.Authorization/CheckAccess
 POST /api/v2/authorization/access:checkMany /gestalt.provider.v1.Authorization/CheckAccessMany
 GET /api/v2/authorization/relationships /gestalt.provider.v1.Authorization/ListRelationships
+POST /api/v2/authorization/relationships:write /gestalt.provider.v1.Authorization/WriteRelationships
 POST /api/v2/authorization/relationships /gestalt.provider.v1.Authorization/AddRelationship
 POST /api/v2/authorization/relationships:delete /gestalt.provider.v1.Authorization/DeleteRelationship
 PUT /api/v2/authorization/state /gestalt.provider.v1.Authorization/SetAuthorizationState

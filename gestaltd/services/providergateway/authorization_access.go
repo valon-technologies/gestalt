@@ -27,7 +27,8 @@ func authorizationMethodAccessClass(fullMethod string) (read bool, write bool, o
 	case "SetActiveModel",
 		"SetAuthorizationState",
 		"AddRelationship",
-		"DeleteRelationship":
+		"DeleteRelationship",
+		"WriteRelationships":
 		return false, true, true
 	default:
 		return false, false, false

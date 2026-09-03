@@ -9,6 +9,7 @@ import (
 )
 
 var _ core.AuthorizationProvider = (*Client)(nil)
+var _ core.AuthorizationRelationshipWriter = (*Client)(nil)
 
 type Client struct {
 	grpc proto.AuthorizationClient
@@ -31,6 +32,12 @@ func (c *Client) ListRelationships(ctx context.Context, req *proto.ListRelations
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
 	return c.grpc.ListRelationships(ctx, req)
+}
+
+func (c *Client) WriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
+	ctx, cancel := c.callCtx(ctx)
+	defer cancel()
+	return c.grpc.WriteRelationships(ctx, req)
 }
 
 func (c *Client) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {

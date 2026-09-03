@@ -164,7 +164,7 @@ func (r *renderer) messageType(fullName string) string {
 }
 
 func (r *renderer) enumType(fullName string) string {
-	return r.typeRef(r.idx.enums[fullName].ProtoFile, localName(fullName))
+	return r.typeRef(r.idx.enums[fullName].ProtoFile, enumName(r.idx.enums[fullName]))
 }
 
 // fnToWire returns the converter function for reference kinds converted by a
@@ -377,7 +377,7 @@ func isUnitVariant(f *model.Field) bool {
 }
 
 func (r *renderer) renderEnum(e *model.Enum) {
-	name := localName(e.FullName)
+	name := enumName(e)
 	// Open enum: unknown numeric values are preserved, so the type is i32.
 	fmt.Fprintf(&r.body, "/// Open enum for `%s`; unknown numeric values are preserved.\n", e.FullName)
 	fmt.Fprintf(&r.body, "pub type %s = i32;\n\n", name)

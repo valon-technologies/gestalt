@@ -32,6 +32,7 @@ import {
   toWireListRelationshipsRequest as codecToWireListRelationshipsRequest,
   toWireSetActiveModelRequest as codecToWireSetActiveModelRequest,
   toWireSetAuthorizationStateRequest as codecToWireSetAuthorizationStateRequest,
+  toWireWriteRelationshipsRequest as codecToWireWriteRelationshipsRequest,
 } from "../../internal/codec/authorization.ts";
 import {
   toWireCreateExternalCredentialRequest as codecToWireCreateExternalCredentialRequest,
@@ -110,6 +111,7 @@ import type {
   ListRelationshipsRequest as NativeListRelationshipsRequest,
   SetActiveModelRequest as NativeSetActiveModelRequest,
   SetAuthorizationStateRequest as NativeSetAuthorizationStateRequest,
+  WriteRelationshipsRequest as NativeWriteRelationshipsRequest,
 } from "../../authorization.ts";
 import type {
   CreateExternalCredentialRequest as NativeCreateExternalCredentialRequest,
@@ -188,6 +190,7 @@ import type {
   ListRelationshipsRequest,
   SetActiveModelRequest,
   SetAuthorizationStateRequest,
+  WriteRelationshipsRequest,
 } from "../../internal/gen/v1/authorization_pb.ts";
 import type {
   CreateExternalCredentialRequest,
@@ -264,6 +267,7 @@ import type {
   PublicAuthorizationListRelationshipsRequest,
   PublicAuthorizationSetActiveModelRequest,
   PublicAuthorizationSetAuthorizationStateRequest,
+  PublicAuthorizationWriteRelationshipsRequest,
   PublicExternalCredentialsCreateCredentialRequest,
   PublicExternalCredentialsDeleteCredentialRequest,
   PublicExternalCredentialsExchangeCredentialRequest,
@@ -806,5 +810,13 @@ export function toWireValidateExternalCredentialConfigRequest(
 ): ValidateExternalCredentialConfigRequest {
   return codecToWireValidateExternalCredentialConfigRequest(
     request as Init<NativeValidateExternalCredentialConfigRequest>,
+  );
+}
+
+export function toWireWriteRelationshipsRequest(
+  request: PublicAuthorizationWriteRelationshipsRequest,
+): WriteRelationshipsRequest {
+  return codecToWireWriteRelationshipsRequest(
+    request as Init<NativeWriteRelationshipsRequest>,
   );
 }

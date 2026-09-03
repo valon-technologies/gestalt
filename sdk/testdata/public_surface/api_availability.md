@@ -1,6 +1,6 @@
 # Public API availability
 
-Generated from the public surface manifest (75 gRPC methods, 46 REST methods).
+Generated from the public surface manifest (76 gRPC methods, 47 REST methods).
 
 | Service | Method | REST | Go | Python | Rust | TypeScript |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -27,6 +27,7 @@ Generated from the public surface manifest (75 gRPC methods, 46 REST methods).
 | Authorization | ListRelationships | GET /api/v2/authorization/relationships | AuthorizationClient.ListRelationships | AuthorizationClient.list_relationships | AuthorizationClient.list_relationships | AuthorizationClient.listRelationships |
 | Authorization | SetActiveModel | PUT /api/v2/authorization/models/active | AuthorizationClient.SetActiveModel | AuthorizationClient.set_active_model | AuthorizationClient.set_active_model | AuthorizationClient.setActiveModel |
 | Authorization | SetAuthorizationState | PUT /api/v2/authorization/state | AuthorizationClient.SetAuthorizationState | AuthorizationClient.set_authorization_state | AuthorizationClient.set_authorization_state | AuthorizationClient.setAuthorizationState |
+| Authorization | WriteRelationships | POST /api/v2/authorization/relationships:write | AuthorizationClient.WriteRelationships | AuthorizationClient.write_relationships | AuthorizationClient.write_relationships | AuthorizationClient.writeRelationships |
 | ExternalCredentials | CreateCredential | gRPC only | ExternalCredentialsClient.CreateCredential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.createCredential |
 | ExternalCredentials | DeleteCredential | gRPC only | ExternalCredentialsClient.DeleteCredential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.deleteCredential |
 | ExternalCredentials | ExchangeCredential | gRPC only | ExternalCredentialsClient.ExchangeCredential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchangeCredential |

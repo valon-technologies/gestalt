@@ -182,11 +182,15 @@ _AUTHORIZATION_AUTHORED_EXPORTS = (
     "ListActiveModelResourceTypesResponse",
     "ListRelationshipsRequest",
     "ListRelationshipsResponse",
+    "Precondition",
+    "PreconditionOperationValues",
     "ModelAction",
     "ModelAllowedTarget",
     "ModelRelation",
     "Relationship",
     "RelationshipFilter",
+    "RelationshipUpdate",
+    "RelationshipUpdateOperationValues",
     "RelationshipTarget",
     "RelationshipTargetTypeValues",
     "RelationshipTuple",
@@ -197,6 +201,8 @@ _AUTHORIZATION_AUTHORED_EXPORTS = (
     "SourceLayerValues",
     "SubjectSet",
     "SubjectSetType",
+    "WriteRelationshipsRequest",
+    "WriteRelationshipsResponse",
 )
 
 _PROTOCOL_TYPE_EXPORTS = (

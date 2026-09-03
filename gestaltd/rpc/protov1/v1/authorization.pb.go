@@ -127,6 +127,107 @@ func (SourceLayer) EnumDescriptor() ([]byte, []int) {
 	return file_v1_authorization_proto_rawDescGZIP(), []int{1}
 }
 
+type RelationshipUpdate_Operation int32
+
+const (
+	RelationshipUpdate_OPERATION_UNSPECIFIED RelationshipUpdate_Operation = 0
+	RelationshipUpdate_OPERATION_CREATE      RelationshipUpdate_Operation = 1
+	RelationshipUpdate_OPERATION_TOUCH       RelationshipUpdate_Operation = 2
+	RelationshipUpdate_OPERATION_DELETE      RelationshipUpdate_Operation = 3
+)
+
+// Enum value maps for RelationshipUpdate_Operation.
+var (
+	RelationshipUpdate_Operation_name = map[int32]string{
+		0: "OPERATION_UNSPECIFIED",
+		1: "OPERATION_CREATE",
+		2: "OPERATION_TOUCH",
+		3: "OPERATION_DELETE",
+	}
+	RelationshipUpdate_Operation_value = map[string]int32{
+		"OPERATION_UNSPECIFIED": 0,
+		"OPERATION_CREATE":      1,
+		"OPERATION_TOUCH":       2,
+		"OPERATION_DELETE":      3,
+	}
+)
+
+func (x RelationshipUpdate_Operation) Enum() *RelationshipUpdate_Operation {
+	p := new(RelationshipUpdate_Operation)
+	*p = x
+	return p
+}
+
+func (x RelationshipUpdate_Operation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RelationshipUpdate_Operation) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_authorization_proto_enumTypes[2].Descriptor()
+}
+
+func (RelationshipUpdate_Operation) Type() protoreflect.EnumType {
+	return &file_v1_authorization_proto_enumTypes[2]
+}
+
+func (x RelationshipUpdate_Operation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RelationshipUpdate_Operation.Descriptor instead.
+func (RelationshipUpdate_Operation) EnumDescriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{10, 0}
+}
+
+type Precondition_Operation int32
+
+const (
+	Precondition_OPERATION_UNSPECIFIED    Precondition_Operation = 0
+	Precondition_OPERATION_MUST_NOT_MATCH Precondition_Operation = 1
+	Precondition_OPERATION_MUST_MATCH     Precondition_Operation = 2
+)
+
+// Enum value maps for Precondition_Operation.
+var (
+	Precondition_Operation_name = map[int32]string{
+		0: "OPERATION_UNSPECIFIED",
+		1: "OPERATION_MUST_NOT_MATCH",
+		2: "OPERATION_MUST_MATCH",
+	}
+	Precondition_Operation_value = map[string]int32{
+		"OPERATION_UNSPECIFIED":    0,
+		"OPERATION_MUST_NOT_MATCH": 1,
+		"OPERATION_MUST_MATCH":     2,
+	}
+)
+
+func (x Precondition_Operation) Enum() *Precondition_Operation {
+	p := new(Precondition_Operation)
+	*p = x
+	return p
+}
+
+func (x Precondition_Operation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Precondition_Operation) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_authorization_proto_enumTypes[3].Descriptor()
+}
+
+func (Precondition_Operation) Type() protoreflect.EnumType {
+	return &file_v1_authorization_proto_enumTypes[3]
+}
+
+func (x Precondition_Operation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Precondition_Operation.Descriptor instead.
+func (Precondition_Operation) EnumDescriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{11, 0}
+}
+
 type Subject struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
@@ -713,6 +814,208 @@ func (x *ListRelationshipsResponse) GetNextPageToken() string {
 	return ""
 }
 
+// RelationshipUpdate changes one relationship in an atomic write request.
+// CREATE fails if the relationship is already present, TOUCH upserts it, and
+// DELETE is idempotent and protects the stored source layer when one is
+// specified.
+type RelationshipUpdate struct {
+	state         protoimpl.MessageState       `protogen:"open.v1"`
+	Operation     RelationshipUpdate_Operation `protobuf:"varint,1,opt,name=operation,proto3,enum=gestalt.provider.v1.RelationshipUpdate_Operation" json:"operation,omitempty"`
+	Relationship  *Relationship                `protobuf:"bytes,2,opt,name=relationship,proto3" json:"relationship,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RelationshipUpdate) Reset() {
+	*x = RelationshipUpdate{}
+	mi := &file_v1_authorization_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelationshipUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelationshipUpdate) ProtoMessage() {}
+
+func (x *RelationshipUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelationshipUpdate.ProtoReflect.Descriptor instead.
+func (*RelationshipUpdate) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RelationshipUpdate) GetOperation() RelationshipUpdate_Operation {
+	if x != nil {
+		return x.Operation
+	}
+	return RelationshipUpdate_OPERATION_UNSPECIFIED
+}
+
+func (x *RelationshipUpdate) GetRelationship() *Relationship {
+	if x != nil {
+		return x.Relationship
+	}
+	return nil
+}
+
+// Precondition is evaluated against the relationship snapshot captured before
+// any update in the request is applied.
+type Precondition struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Operation     Precondition_Operation `protobuf:"varint,1,opt,name=operation,proto3,enum=gestalt.provider.v1.Precondition_Operation" json:"operation,omitempty"`
+	Filter        *RelationshipFilter    `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Precondition) Reset() {
+	*x = Precondition{}
+	mi := &file_v1_authorization_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Precondition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Precondition) ProtoMessage() {}
+
+func (x *Precondition) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Precondition.ProtoReflect.Descriptor instead.
+func (*Precondition) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *Precondition) GetOperation() Precondition_Operation {
+	if x != nil {
+		return x.Operation
+	}
+	return Precondition_OPERATION_UNSPECIFIED
+}
+
+func (x *Precondition) GetFilter() *RelationshipFilter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+// WriteRelationshipsRequest evaluates all preconditions against the initial
+// relationship snapshot, then applies all updates atomically or applies none.
+// The response is intentionally empty because Gestalt does not expose a
+// revision or ZedToken for relationship writes.
+type WriteRelationshipsRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Updates               []*RelationshipUpdate  `protobuf:"bytes,1,rep,name=updates,proto3" json:"updates,omitempty"`
+	OptionalPreconditions []*Precondition        `protobuf:"bytes,2,rep,name=optional_preconditions,json=optionalPreconditions,proto3" json:"optional_preconditions,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *WriteRelationshipsRequest) Reset() {
+	*x = WriteRelationshipsRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WriteRelationshipsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WriteRelationshipsRequest) ProtoMessage() {}
+
+func (x *WriteRelationshipsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WriteRelationshipsRequest.ProtoReflect.Descriptor instead.
+func (*WriteRelationshipsRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *WriteRelationshipsRequest) GetUpdates() []*RelationshipUpdate {
+	if x != nil {
+		return x.Updates
+	}
+	return nil
+}
+
+func (x *WriteRelationshipsRequest) GetOptionalPreconditions() []*Precondition {
+	if x != nil {
+		return x.OptionalPreconditions
+	}
+	return nil
+}
+
+type WriteRelationshipsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WriteRelationshipsResponse) Reset() {
+	*x = WriteRelationshipsResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WriteRelationshipsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WriteRelationshipsResponse) ProtoMessage() {}
+
+func (x *WriteRelationshipsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WriteRelationshipsResponse.ProtoReflect.Descriptor instead.
+func (*WriteRelationshipsResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{13}
+}
+
 type AddRelationshipRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Relationship  *Relationship          `protobuf:"bytes,1,opt,name=relationship,proto3" json:"relationship,omitempty"`
@@ -722,7 +1025,7 @@ type AddRelationshipRequest struct {
 
 func (x *AddRelationshipRequest) Reset() {
 	*x = AddRelationshipRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[10]
+	mi := &file_v1_authorization_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -734,7 +1037,7 @@ func (x *AddRelationshipRequest) String() string {
 func (*AddRelationshipRequest) ProtoMessage() {}
 
 func (x *AddRelationshipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[10]
+	mi := &file_v1_authorization_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -747,7 +1050,7 @@ func (x *AddRelationshipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddRelationshipRequest.ProtoReflect.Descriptor instead.
 func (*AddRelationshipRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{10}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AddRelationshipRequest) GetRelationship() *Relationship {
@@ -766,7 +1069,7 @@ type AddRelationshipResponse struct {
 
 func (x *AddRelationshipResponse) Reset() {
 	*x = AddRelationshipResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[11]
+	mi := &file_v1_authorization_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -778,7 +1081,7 @@ func (x *AddRelationshipResponse) String() string {
 func (*AddRelationshipResponse) ProtoMessage() {}
 
 func (x *AddRelationshipResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[11]
+	mi := &file_v1_authorization_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -791,7 +1094,7 @@ func (x *AddRelationshipResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddRelationshipResponse.ProtoReflect.Descriptor instead.
 func (*AddRelationshipResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{11}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AddRelationshipResponse) GetRelationship() *Relationship {
@@ -810,7 +1113,7 @@ type DeleteRelationshipRequest struct {
 
 func (x *DeleteRelationshipRequest) Reset() {
 	*x = DeleteRelationshipRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[12]
+	mi := &file_v1_authorization_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -822,7 +1125,7 @@ func (x *DeleteRelationshipRequest) String() string {
 func (*DeleteRelationshipRequest) ProtoMessage() {}
 
 func (x *DeleteRelationshipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[12]
+	mi := &file_v1_authorization_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -835,7 +1138,7 @@ func (x *DeleteRelationshipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRelationshipRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRelationshipRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{12}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DeleteRelationshipRequest) GetRelationshipTuple() *RelationshipTuple {
@@ -853,7 +1156,7 @@ type DeleteRelationshipResponse struct {
 
 func (x *DeleteRelationshipResponse) Reset() {
 	*x = DeleteRelationshipResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[13]
+	mi := &file_v1_authorization_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -865,7 +1168,7 @@ func (x *DeleteRelationshipResponse) String() string {
 func (*DeleteRelationshipResponse) ProtoMessage() {}
 
 func (x *DeleteRelationshipResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[13]
+	mi := &file_v1_authorization_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -878,7 +1181,7 @@ func (x *DeleteRelationshipResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRelationshipResponse.ProtoReflect.Descriptor instead.
 func (*DeleteRelationshipResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{13}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{17}
 }
 
 type SetAuthorizationStateRequest struct {
@@ -891,7 +1194,7 @@ type SetAuthorizationStateRequest struct {
 
 func (x *SetAuthorizationStateRequest) Reset() {
 	*x = SetAuthorizationStateRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[14]
+	mi := &file_v1_authorization_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -903,7 +1206,7 @@ func (x *SetAuthorizationStateRequest) String() string {
 func (*SetAuthorizationStateRequest) ProtoMessage() {}
 
 func (x *SetAuthorizationStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[14]
+	mi := &file_v1_authorization_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -916,7 +1219,7 @@ func (x *SetAuthorizationStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAuthorizationStateRequest.ProtoReflect.Descriptor instead.
 func (*SetAuthorizationStateRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{14}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SetAuthorizationStateRequest) GetModel() *AuthorizationModel {
@@ -942,7 +1245,7 @@ type SetAuthorizationStateResponse struct {
 
 func (x *SetAuthorizationStateResponse) Reset() {
 	*x = SetAuthorizationStateResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[15]
+	mi := &file_v1_authorization_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +1257,7 @@ func (x *SetAuthorizationStateResponse) String() string {
 func (*SetAuthorizationStateResponse) ProtoMessage() {}
 
 func (x *SetAuthorizationStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[15]
+	mi := &file_v1_authorization_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +1270,7 @@ func (x *SetAuthorizationStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAuthorizationStateResponse.ProtoReflect.Descriptor instead.
 func (*SetAuthorizationStateResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{15}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SetAuthorizationStateResponse) GetActiveModel() *AuthorizationModelRef {
@@ -988,7 +1291,7 @@ type Relationship struct {
 
 func (x *Relationship) Reset() {
 	*x = Relationship{}
-	mi := &file_v1_authorization_proto_msgTypes[16]
+	mi := &file_v1_authorization_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1000,7 +1303,7 @@ func (x *Relationship) String() string {
 func (*Relationship) ProtoMessage() {}
 
 func (x *Relationship) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[16]
+	mi := &file_v1_authorization_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1013,7 +1316,7 @@ func (x *Relationship) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relationship.ProtoReflect.Descriptor instead.
 func (*Relationship) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{16}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Relationship) GetTuple() *RelationshipTuple {
@@ -1048,7 +1351,7 @@ type RelationshipTuple struct {
 
 func (x *RelationshipTuple) Reset() {
 	*x = RelationshipTuple{}
-	mi := &file_v1_authorization_proto_msgTypes[17]
+	mi := &file_v1_authorization_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1060,7 +1363,7 @@ func (x *RelationshipTuple) String() string {
 func (*RelationshipTuple) ProtoMessage() {}
 
 func (x *RelationshipTuple) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[17]
+	mi := &file_v1_authorization_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1073,7 +1376,7 @@ func (x *RelationshipTuple) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelationshipTuple.ProtoReflect.Descriptor instead.
 func (*RelationshipTuple) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{17}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RelationshipTuple) GetTarget() *RelationshipTarget {
@@ -1111,7 +1414,7 @@ type RelationshipTarget struct {
 
 func (x *RelationshipTarget) Reset() {
 	*x = RelationshipTarget{}
-	mi := &file_v1_authorization_proto_msgTypes[18]
+	mi := &file_v1_authorization_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1123,7 +1426,7 @@ func (x *RelationshipTarget) String() string {
 func (*RelationshipTarget) ProtoMessage() {}
 
 func (x *RelationshipTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[18]
+	mi := &file_v1_authorization_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1136,7 +1439,7 @@ func (x *RelationshipTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelationshipTarget.ProtoReflect.Descriptor instead.
 func (*RelationshipTarget) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{18}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RelationshipTarget) GetKind() isRelationshipTarget_Kind {
@@ -1205,7 +1508,7 @@ type SubjectSet struct {
 
 func (x *SubjectSet) Reset() {
 	*x = SubjectSet{}
-	mi := &file_v1_authorization_proto_msgTypes[19]
+	mi := &file_v1_authorization_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1217,7 +1520,7 @@ func (x *SubjectSet) String() string {
 func (*SubjectSet) ProtoMessage() {}
 
 func (x *SubjectSet) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[19]
+	mi := &file_v1_authorization_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1230,7 +1533,7 @@ func (x *SubjectSet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubjectSet.ProtoReflect.Descriptor instead.
 func (*SubjectSet) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{19}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SubjectSet) GetResource() *Resource {
@@ -1258,7 +1561,7 @@ type AuthorizationModel struct {
 
 func (x *AuthorizationModel) Reset() {
 	*x = AuthorizationModel{}
-	mi := &file_v1_authorization_proto_msgTypes[20]
+	mi := &file_v1_authorization_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1270,7 +1573,7 @@ func (x *AuthorizationModel) String() string {
 func (*AuthorizationModel) ProtoMessage() {}
 
 func (x *AuthorizationModel) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[20]
+	mi := &file_v1_authorization_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1283,7 +1586,7 @@ func (x *AuthorizationModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationModel.ProtoReflect.Descriptor instead.
 func (*AuthorizationModel) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{20}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *AuthorizationModel) GetId() string {
@@ -1320,7 +1623,7 @@ type AuthorizationModelResourceType struct {
 
 func (x *AuthorizationModelResourceType) Reset() {
 	*x = AuthorizationModelResourceType{}
-	mi := &file_v1_authorization_proto_msgTypes[21]
+	mi := &file_v1_authorization_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1332,7 +1635,7 @@ func (x *AuthorizationModelResourceType) String() string {
 func (*AuthorizationModelResourceType) ProtoMessage() {}
 
 func (x *AuthorizationModelResourceType) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[21]
+	mi := &file_v1_authorization_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1345,7 +1648,7 @@ func (x *AuthorizationModelResourceType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationModelResourceType.ProtoReflect.Descriptor instead.
 func (*AuthorizationModelResourceType) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{21}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *AuthorizationModelResourceType) GetName() string {
@@ -1393,7 +1696,7 @@ type ModelRelation struct {
 
 func (x *ModelRelation) Reset() {
 	*x = ModelRelation{}
-	mi := &file_v1_authorization_proto_msgTypes[22]
+	mi := &file_v1_authorization_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1405,7 +1708,7 @@ func (x *ModelRelation) String() string {
 func (*ModelRelation) ProtoMessage() {}
 
 func (x *ModelRelation) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[22]
+	mi := &file_v1_authorization_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1418,7 +1721,7 @@ func (x *ModelRelation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelRelation.ProtoReflect.Descriptor instead.
 func (*ModelRelation) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{22}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ModelRelation) GetName() string {
@@ -1445,7 +1748,7 @@ type ModelAction struct {
 
 func (x *ModelAction) Reset() {
 	*x = ModelAction{}
-	mi := &file_v1_authorization_proto_msgTypes[23]
+	mi := &file_v1_authorization_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1457,7 +1760,7 @@ func (x *ModelAction) String() string {
 func (*ModelAction) ProtoMessage() {}
 
 func (x *ModelAction) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[23]
+	mi := &file_v1_authorization_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1470,7 +1773,7 @@ func (x *ModelAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelAction.ProtoReflect.Descriptor instead.
 func (*ModelAction) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{23}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ModelAction) GetName() string {
@@ -1501,7 +1804,7 @@ type ModelAllowedTarget struct {
 
 func (x *ModelAllowedTarget) Reset() {
 	*x = ModelAllowedTarget{}
-	mi := &file_v1_authorization_proto_msgTypes[24]
+	mi := &file_v1_authorization_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1513,7 +1816,7 @@ func (x *ModelAllowedTarget) String() string {
 func (*ModelAllowedTarget) ProtoMessage() {}
 
 func (x *ModelAllowedTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[24]
+	mi := &file_v1_authorization_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1526,7 +1829,7 @@ func (x *ModelAllowedTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelAllowedTarget.ProtoReflect.Descriptor instead.
 func (*ModelAllowedTarget) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{24}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ModelAllowedTarget) GetKind() isModelAllowedTarget_Kind {
@@ -1595,7 +1898,7 @@ type SubjectSetType struct {
 
 func (x *SubjectSetType) Reset() {
 	*x = SubjectSetType{}
-	mi := &file_v1_authorization_proto_msgTypes[25]
+	mi := &file_v1_authorization_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1607,7 +1910,7 @@ func (x *SubjectSetType) String() string {
 func (*SubjectSetType) ProtoMessage() {}
 
 func (x *SubjectSetType) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[25]
+	mi := &file_v1_authorization_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1620,7 +1923,7 @@ func (x *SubjectSetType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubjectSetType.ProtoReflect.Descriptor instead.
 func (*SubjectSetType) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{25}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SubjectSetType) GetResourceType() string {
@@ -1648,7 +1951,7 @@ type AuthorizationModelRef struct {
 
 func (x *AuthorizationModelRef) Reset() {
 	*x = AuthorizationModelRef{}
-	mi := &file_v1_authorization_proto_msgTypes[26]
+	mi := &file_v1_authorization_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1660,7 +1963,7 @@ func (x *AuthorizationModelRef) String() string {
 func (*AuthorizationModelRef) ProtoMessage() {}
 
 func (x *AuthorizationModelRef) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[26]
+	mi := &file_v1_authorization_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1673,7 +1976,7 @@ func (x *AuthorizationModelRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationModelRef.ProtoReflect.Descriptor instead.
 func (*AuthorizationModelRef) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{26}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *AuthorizationModelRef) GetId() string {
@@ -1706,7 +2009,7 @@ type GetActiveModelRefResponse struct {
 
 func (x *GetActiveModelRefResponse) Reset() {
 	*x = GetActiveModelRefResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[27]
+	mi := &file_v1_authorization_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1718,7 +2021,7 @@ func (x *GetActiveModelRefResponse) String() string {
 func (*GetActiveModelRefResponse) ProtoMessage() {}
 
 func (x *GetActiveModelRefResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[27]
+	mi := &file_v1_authorization_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1731,7 +2034,7 @@ func (x *GetActiveModelRefResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetActiveModelRefResponse.ProtoReflect.Descriptor instead.
 func (*GetActiveModelRefResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{27}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetActiveModelRefResponse) GetModel() *AuthorizationModelRef {
@@ -1750,7 +2053,7 @@ type SetActiveModelRequest struct {
 
 func (x *SetActiveModelRequest) Reset() {
 	*x = SetActiveModelRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[28]
+	mi := &file_v1_authorization_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1762,7 +2065,7 @@ func (x *SetActiveModelRequest) String() string {
 func (*SetActiveModelRequest) ProtoMessage() {}
 
 func (x *SetActiveModelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[28]
+	mi := &file_v1_authorization_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1775,7 +2078,7 @@ func (x *SetActiveModelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetActiveModelRequest.ProtoReflect.Descriptor instead.
 func (*SetActiveModelRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{28}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetActiveModelRequest) GetModel() *AuthorizationModel {
@@ -1794,7 +2097,7 @@ type SetActiveModelResponse struct {
 
 func (x *SetActiveModelResponse) Reset() {
 	*x = SetActiveModelResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[29]
+	mi := &file_v1_authorization_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1806,7 +2109,7 @@ func (x *SetActiveModelResponse) String() string {
 func (*SetActiveModelResponse) ProtoMessage() {}
 
 func (x *SetActiveModelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[29]
+	mi := &file_v1_authorization_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1819,7 +2122,7 @@ func (x *SetActiveModelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetActiveModelResponse.ProtoReflect.Descriptor instead.
 func (*SetActiveModelResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{29}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SetActiveModelResponse) GetModel() *AuthorizationModelRef {
@@ -1840,7 +2143,7 @@ type ListActiveModelResourceTypesRequest struct {
 
 func (x *ListActiveModelResourceTypesRequest) Reset() {
 	*x = ListActiveModelResourceTypesRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[30]
+	mi := &file_v1_authorization_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1852,7 +2155,7 @@ func (x *ListActiveModelResourceTypesRequest) String() string {
 func (*ListActiveModelResourceTypesRequest) ProtoMessage() {}
 
 func (x *ListActiveModelResourceTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[30]
+	mi := &file_v1_authorization_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1865,7 +2168,7 @@ func (x *ListActiveModelResourceTypesRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ListActiveModelResourceTypesRequest.ProtoReflect.Descriptor instead.
 func (*ListActiveModelResourceTypesRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{30}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListActiveModelResourceTypesRequest) GetFilter() *AuthorizationModelResourceTypeFilter {
@@ -1899,7 +2202,7 @@ type AuthorizationModelResourceTypeFilter struct {
 
 func (x *AuthorizationModelResourceTypeFilter) Reset() {
 	*x = AuthorizationModelResourceTypeFilter{}
-	mi := &file_v1_authorization_proto_msgTypes[31]
+	mi := &file_v1_authorization_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1911,7 +2214,7 @@ func (x *AuthorizationModelResourceTypeFilter) String() string {
 func (*AuthorizationModelResourceTypeFilter) ProtoMessage() {}
 
 func (x *AuthorizationModelResourceTypeFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[31]
+	mi := &file_v1_authorization_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1924,7 +2227,7 @@ func (x *AuthorizationModelResourceTypeFilter) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use AuthorizationModelResourceTypeFilter.ProtoReflect.Descriptor instead.
 func (*AuthorizationModelResourceTypeFilter) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{31}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *AuthorizationModelResourceTypeFilter) GetName() string {
@@ -1952,7 +2255,7 @@ type ListActiveModelResourceTypesResponse struct {
 
 func (x *ListActiveModelResourceTypesResponse) Reset() {
 	*x = ListActiveModelResourceTypesResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[32]
+	mi := &file_v1_authorization_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1964,7 +2267,7 @@ func (x *ListActiveModelResourceTypesResponse) String() string {
 func (*ListActiveModelResourceTypesResponse) ProtoMessage() {}
 
 func (x *ListActiveModelResourceTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[32]
+	mi := &file_v1_authorization_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1977,7 +2280,7 @@ func (x *ListActiveModelResourceTypesResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ListActiveModelResourceTypesResponse.ProtoReflect.Descriptor instead.
 func (*ListActiveModelResourceTypesResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{32}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListActiveModelResourceTypesResponse) GetResourceTypes() []*AuthorizationModelResourceType {
@@ -2051,7 +2354,26 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\fsource_layer\x18\a \x01(\x0e2 .gestalt.provider.v1.SourceLayerR\vsourceLayer\"\x8c\x01\n" +
 	"\x19ListRelationshipsResponse\x12G\n" +
 	"\rrelationships\x18\x01 \x03(\v2!.gestalt.provider.v1.RelationshipR\rrelationships\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"_\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x95\x02\n" +
+	"\x12RelationshipUpdate\x12O\n" +
+	"\toperation\x18\x01 \x01(\x0e21.gestalt.provider.v1.RelationshipUpdate.OperationR\toperation\x12E\n" +
+	"\frelationship\x18\x02 \x01(\v2!.gestalt.provider.v1.RelationshipR\frelationship\"g\n" +
+	"\tOperation\x12\x19\n" +
+	"\x15OPERATION_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10OPERATION_CREATE\x10\x01\x12\x13\n" +
+	"\x0fOPERATION_TOUCH\x10\x02\x12\x14\n" +
+	"\x10OPERATION_DELETE\x10\x03\"\xfa\x01\n" +
+	"\fPrecondition\x12I\n" +
+	"\toperation\x18\x01 \x01(\x0e2+.gestalt.provider.v1.Precondition.OperationR\toperation\x12?\n" +
+	"\x06filter\x18\x02 \x01(\v2'.gestalt.provider.v1.RelationshipFilterR\x06filter\"^\n" +
+	"\tOperation\x12\x19\n" +
+	"\x15OPERATION_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18OPERATION_MUST_NOT_MATCH\x10\x01\x12\x18\n" +
+	"\x14OPERATION_MUST_MATCH\x10\x02\"\xb8\x01\n" +
+	"\x19WriteRelationshipsRequest\x12A\n" +
+	"\aupdates\x18\x01 \x03(\v2'.gestalt.provider.v1.RelationshipUpdateR\aupdates\x12X\n" +
+	"\x16optional_preconditions\x18\x02 \x03(\v2!.gestalt.provider.v1.PreconditionR\x15optionalPreconditions\"\x1c\n" +
+	"\x1aWriteRelationshipsResponse\"_\n" +
 	"\x16AddRelationshipRequest\x12E\n" +
 	"\frelationship\x18\x01 \x01(\v2!.gestalt.provider.v1.RelationshipR\frelationship\"r\n" +
 	"\x17AddRelationshipResponse\x12E\n" +
@@ -2139,12 +2461,13 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\vSourceLayer\x12\x1c\n" +
 	"\x18SOURCE_LAYER_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aSOURCE_LAYER_STATIC_CONFIG\x10\x01\x12\x18\n" +
-	"\x14SOURCE_LAYER_RUNTIME\x10\x022\x9b\x0e\n" +
+	"\x14SOURCE_LAYER_RUNTIME\x10\x022\xfc\x0f\n" +
 	"\rAuthorization\x12\xb3\x01\n" +
 	"\vCheckAccess\x12'.gestalt.provider.v1.CheckAccessRequest\x1a(.gestalt.provider.v1.CheckAccessResponse\"Q\x8a\xb5\x18\x06action\x8a\xb5\x18\bresource\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02':\x01*\"\"/api/v2/authorization/access:check\x12\xb9\x01\n" +
 	"\x0fCheckAccessMany\x12+.gestalt.provider.v1.CheckAccessManyRequest\x1a,.gestalt.provider.v1.CheckAccessManyResponse\"K\x8a\xb5\x18\brequests\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02+:\x01*\"&/api/v2/authorization/access:checkMany\x12\xd2\x01\n" +
 	"\x11ListRelationships\x12-.gestalt.provider.v1.ListRelationshipsRequest\x1a..gestalt.provider.v1.ListRelationshipsResponse\"^\x8a\xb5\x18\tpage_size\x8a\xb5\x18\n" +
-	"page_token\x8a\xb5\x18\x06filter\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02%\x12#/api/v2/authorization/relationships\x12\xba\x01\n" +
+	"page_token\x8a\xb5\x18\x06filter\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02%\x12#/api/v2/authorization/relationships\x12\xde\x01\n" +
+	"\x12WriteRelationships\x12..gestalt.provider.v1.WriteRelationshipsRequest\x1a/.gestalt.provider.v1.WriteRelationshipsResponse\"g\x8a\xb5\x18\aupdates\x8a\xb5\x18\x16optional_preconditions\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02.:\x01*\")/api/v2/authorization/relationships:write\x12\xba\x01\n" +
 	"\x0fAddRelationship\x12+.gestalt.provider.v1.AddRelationshipRequest\x1a,.gestalt.provider.v1.AddRelationshipResponse\"L\x8a\xb5\x18\frelationship\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02(:\x01*\"#/api/v2/authorization/relationships\x12\xd0\x01\n" +
 	"\x12DeleteRelationship\x12..gestalt.provider.v1.DeleteRelationshipRequest\x1a/.gestalt.provider.v1.DeleteRelationshipResponse\"Y\x8a\xb5\x18\x12relationship_tuple\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02/:\x01*\"*/api/v2/authorization/relationships:delete\x12\xce\x01\n" +
 	"\x15SetAuthorizationState\x121.gestalt.provider.v1.SetAuthorizationStateRequest\x1a2.gestalt.provider.v1.SetAuthorizationStateResponse\"N\x8a\xb5\x18\rrelationships\x8a\xb5\x18\x05model\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02 :\x01*\x1a\x1b/api/v2/authorization/state\x12\x96\x01\n" +
@@ -2166,114 +2489,128 @@ func file_v1_authorization_proto_rawDescGZIP() []byte {
 	return file_v1_authorization_proto_rawDescData
 }
 
-var file_v1_authorization_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_authorization_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_v1_authorization_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_v1_authorization_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_v1_authorization_proto_goTypes = []any{
 	(RelationshipTargetType)(0),                  // 0: gestalt.provider.v1.RelationshipTargetType
 	(SourceLayer)(0),                             // 1: gestalt.provider.v1.SourceLayer
-	(*Subject)(nil),                              // 2: gestalt.provider.v1.Subject
-	(*Action)(nil),                               // 3: gestalt.provider.v1.Action
-	(*Resource)(nil),                             // 4: gestalt.provider.v1.Resource
-	(*CheckAccessRequest)(nil),                   // 5: gestalt.provider.v1.CheckAccessRequest
-	(*CheckAccessResponse)(nil),                  // 6: gestalt.provider.v1.CheckAccessResponse
-	(*CheckAccessManyRequest)(nil),               // 7: gestalt.provider.v1.CheckAccessManyRequest
-	(*CheckAccessManyResponse)(nil),              // 8: gestalt.provider.v1.CheckAccessManyResponse
-	(*ListRelationshipsRequest)(nil),             // 9: gestalt.provider.v1.ListRelationshipsRequest
-	(*RelationshipFilter)(nil),                   // 10: gestalt.provider.v1.RelationshipFilter
-	(*ListRelationshipsResponse)(nil),            // 11: gestalt.provider.v1.ListRelationshipsResponse
-	(*AddRelationshipRequest)(nil),               // 12: gestalt.provider.v1.AddRelationshipRequest
-	(*AddRelationshipResponse)(nil),              // 13: gestalt.provider.v1.AddRelationshipResponse
-	(*DeleteRelationshipRequest)(nil),            // 14: gestalt.provider.v1.DeleteRelationshipRequest
-	(*DeleteRelationshipResponse)(nil),           // 15: gestalt.provider.v1.DeleteRelationshipResponse
-	(*SetAuthorizationStateRequest)(nil),         // 16: gestalt.provider.v1.SetAuthorizationStateRequest
-	(*SetAuthorizationStateResponse)(nil),        // 17: gestalt.provider.v1.SetAuthorizationStateResponse
-	(*Relationship)(nil),                         // 18: gestalt.provider.v1.Relationship
-	(*RelationshipTuple)(nil),                    // 19: gestalt.provider.v1.RelationshipTuple
-	(*RelationshipTarget)(nil),                   // 20: gestalt.provider.v1.RelationshipTarget
-	(*SubjectSet)(nil),                           // 21: gestalt.provider.v1.SubjectSet
-	(*AuthorizationModel)(nil),                   // 22: gestalt.provider.v1.AuthorizationModel
-	(*AuthorizationModelResourceType)(nil),       // 23: gestalt.provider.v1.AuthorizationModelResourceType
-	(*ModelRelation)(nil),                        // 24: gestalt.provider.v1.ModelRelation
-	(*ModelAction)(nil),                          // 25: gestalt.provider.v1.ModelAction
-	(*ModelAllowedTarget)(nil),                   // 26: gestalt.provider.v1.ModelAllowedTarget
-	(*SubjectSetType)(nil),                       // 27: gestalt.provider.v1.SubjectSetType
-	(*AuthorizationModelRef)(nil),                // 28: gestalt.provider.v1.AuthorizationModelRef
-	(*GetActiveModelRefResponse)(nil),            // 29: gestalt.provider.v1.GetActiveModelRefResponse
-	(*SetActiveModelRequest)(nil),                // 30: gestalt.provider.v1.SetActiveModelRequest
-	(*SetActiveModelResponse)(nil),               // 31: gestalt.provider.v1.SetActiveModelResponse
-	(*ListActiveModelResourceTypesRequest)(nil),  // 32: gestalt.provider.v1.ListActiveModelResourceTypesRequest
-	(*AuthorizationModelResourceTypeFilter)(nil), // 33: gestalt.provider.v1.AuthorizationModelResourceTypeFilter
-	(*ListActiveModelResourceTypesResponse)(nil), // 34: gestalt.provider.v1.ListActiveModelResourceTypesResponse
-	(*structpb.Struct)(nil),                      // 35: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),                // 36: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                        // 37: google.protobuf.Empty
+	(RelationshipUpdate_Operation)(0),            // 2: gestalt.provider.v1.RelationshipUpdate.Operation
+	(Precondition_Operation)(0),                  // 3: gestalt.provider.v1.Precondition.Operation
+	(*Subject)(nil),                              // 4: gestalt.provider.v1.Subject
+	(*Action)(nil),                               // 5: gestalt.provider.v1.Action
+	(*Resource)(nil),                             // 6: gestalt.provider.v1.Resource
+	(*CheckAccessRequest)(nil),                   // 7: gestalt.provider.v1.CheckAccessRequest
+	(*CheckAccessResponse)(nil),                  // 8: gestalt.provider.v1.CheckAccessResponse
+	(*CheckAccessManyRequest)(nil),               // 9: gestalt.provider.v1.CheckAccessManyRequest
+	(*CheckAccessManyResponse)(nil),              // 10: gestalt.provider.v1.CheckAccessManyResponse
+	(*ListRelationshipsRequest)(nil),             // 11: gestalt.provider.v1.ListRelationshipsRequest
+	(*RelationshipFilter)(nil),                   // 12: gestalt.provider.v1.RelationshipFilter
+	(*ListRelationshipsResponse)(nil),            // 13: gestalt.provider.v1.ListRelationshipsResponse
+	(*RelationshipUpdate)(nil),                   // 14: gestalt.provider.v1.RelationshipUpdate
+	(*Precondition)(nil),                         // 15: gestalt.provider.v1.Precondition
+	(*WriteRelationshipsRequest)(nil),            // 16: gestalt.provider.v1.WriteRelationshipsRequest
+	(*WriteRelationshipsResponse)(nil),           // 17: gestalt.provider.v1.WriteRelationshipsResponse
+	(*AddRelationshipRequest)(nil),               // 18: gestalt.provider.v1.AddRelationshipRequest
+	(*AddRelationshipResponse)(nil),              // 19: gestalt.provider.v1.AddRelationshipResponse
+	(*DeleteRelationshipRequest)(nil),            // 20: gestalt.provider.v1.DeleteRelationshipRequest
+	(*DeleteRelationshipResponse)(nil),           // 21: gestalt.provider.v1.DeleteRelationshipResponse
+	(*SetAuthorizationStateRequest)(nil),         // 22: gestalt.provider.v1.SetAuthorizationStateRequest
+	(*SetAuthorizationStateResponse)(nil),        // 23: gestalt.provider.v1.SetAuthorizationStateResponse
+	(*Relationship)(nil),                         // 24: gestalt.provider.v1.Relationship
+	(*RelationshipTuple)(nil),                    // 25: gestalt.provider.v1.RelationshipTuple
+	(*RelationshipTarget)(nil),                   // 26: gestalt.provider.v1.RelationshipTarget
+	(*SubjectSet)(nil),                           // 27: gestalt.provider.v1.SubjectSet
+	(*AuthorizationModel)(nil),                   // 28: gestalt.provider.v1.AuthorizationModel
+	(*AuthorizationModelResourceType)(nil),       // 29: gestalt.provider.v1.AuthorizationModelResourceType
+	(*ModelRelation)(nil),                        // 30: gestalt.provider.v1.ModelRelation
+	(*ModelAction)(nil),                          // 31: gestalt.provider.v1.ModelAction
+	(*ModelAllowedTarget)(nil),                   // 32: gestalt.provider.v1.ModelAllowedTarget
+	(*SubjectSetType)(nil),                       // 33: gestalt.provider.v1.SubjectSetType
+	(*AuthorizationModelRef)(nil),                // 34: gestalt.provider.v1.AuthorizationModelRef
+	(*GetActiveModelRefResponse)(nil),            // 35: gestalt.provider.v1.GetActiveModelRefResponse
+	(*SetActiveModelRequest)(nil),                // 36: gestalt.provider.v1.SetActiveModelRequest
+	(*SetActiveModelResponse)(nil),               // 37: gestalt.provider.v1.SetActiveModelResponse
+	(*ListActiveModelResourceTypesRequest)(nil),  // 38: gestalt.provider.v1.ListActiveModelResourceTypesRequest
+	(*AuthorizationModelResourceTypeFilter)(nil), // 39: gestalt.provider.v1.AuthorizationModelResourceTypeFilter
+	(*ListActiveModelResourceTypesResponse)(nil), // 40: gestalt.provider.v1.ListActiveModelResourceTypesResponse
+	(*structpb.Struct)(nil),                      // 41: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),                // 42: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                        // 43: google.protobuf.Empty
 }
 var file_v1_authorization_proto_depIdxs = []int32{
-	35, // 0: gestalt.provider.v1.Subject.properties:type_name -> google.protobuf.Struct
-	35, // 1: gestalt.provider.v1.Action.properties:type_name -> google.protobuf.Struct
-	35, // 2: gestalt.provider.v1.Resource.properties:type_name -> google.protobuf.Struct
-	2,  // 3: gestalt.provider.v1.CheckAccessRequest.subject:type_name -> gestalt.provider.v1.Subject
-	3,  // 4: gestalt.provider.v1.CheckAccessRequest.action:type_name -> gestalt.provider.v1.Action
-	4,  // 5: gestalt.provider.v1.CheckAccessRequest.resource:type_name -> gestalt.provider.v1.Resource
-	5,  // 6: gestalt.provider.v1.CheckAccessManyRequest.requests:type_name -> gestalt.provider.v1.CheckAccessRequest
-	6,  // 7: gestalt.provider.v1.CheckAccessManyResponse.decisions:type_name -> gestalt.provider.v1.CheckAccessResponse
-	10, // 8: gestalt.provider.v1.ListRelationshipsRequest.filter:type_name -> gestalt.provider.v1.RelationshipFilter
-	20, // 9: gestalt.provider.v1.RelationshipFilter.target:type_name -> gestalt.provider.v1.RelationshipTarget
-	4,  // 10: gestalt.provider.v1.RelationshipFilter.resource:type_name -> gestalt.provider.v1.Resource
+	41, // 0: gestalt.provider.v1.Subject.properties:type_name -> google.protobuf.Struct
+	41, // 1: gestalt.provider.v1.Action.properties:type_name -> google.protobuf.Struct
+	41, // 2: gestalt.provider.v1.Resource.properties:type_name -> google.protobuf.Struct
+	4,  // 3: gestalt.provider.v1.CheckAccessRequest.subject:type_name -> gestalt.provider.v1.Subject
+	5,  // 4: gestalt.provider.v1.CheckAccessRequest.action:type_name -> gestalt.provider.v1.Action
+	6,  // 5: gestalt.provider.v1.CheckAccessRequest.resource:type_name -> gestalt.provider.v1.Resource
+	7,  // 6: gestalt.provider.v1.CheckAccessManyRequest.requests:type_name -> gestalt.provider.v1.CheckAccessRequest
+	8,  // 7: gestalt.provider.v1.CheckAccessManyResponse.decisions:type_name -> gestalt.provider.v1.CheckAccessResponse
+	12, // 8: gestalt.provider.v1.ListRelationshipsRequest.filter:type_name -> gestalt.provider.v1.RelationshipFilter
+	26, // 9: gestalt.provider.v1.RelationshipFilter.target:type_name -> gestalt.provider.v1.RelationshipTarget
+	6,  // 10: gestalt.provider.v1.RelationshipFilter.resource:type_name -> gestalt.provider.v1.Resource
 	0,  // 11: gestalt.provider.v1.RelationshipFilter.target_type:type_name -> gestalt.provider.v1.RelationshipTargetType
 	1,  // 12: gestalt.provider.v1.RelationshipFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
-	18, // 13: gestalt.provider.v1.ListRelationshipsResponse.relationships:type_name -> gestalt.provider.v1.Relationship
-	18, // 14: gestalt.provider.v1.AddRelationshipRequest.relationship:type_name -> gestalt.provider.v1.Relationship
-	18, // 15: gestalt.provider.v1.AddRelationshipResponse.relationship:type_name -> gestalt.provider.v1.Relationship
-	19, // 16: gestalt.provider.v1.DeleteRelationshipRequest.relationship_tuple:type_name -> gestalt.provider.v1.RelationshipTuple
-	22, // 17: gestalt.provider.v1.SetAuthorizationStateRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
-	18, // 18: gestalt.provider.v1.SetAuthorizationStateRequest.relationships:type_name -> gestalt.provider.v1.Relationship
-	28, // 19: gestalt.provider.v1.SetAuthorizationStateResponse.active_model:type_name -> gestalt.provider.v1.AuthorizationModelRef
-	19, // 20: gestalt.provider.v1.Relationship.tuple:type_name -> gestalt.provider.v1.RelationshipTuple
-	35, // 21: gestalt.provider.v1.Relationship.properties:type_name -> google.protobuf.Struct
-	1,  // 22: gestalt.provider.v1.Relationship.source_layer:type_name -> gestalt.provider.v1.SourceLayer
-	20, // 23: gestalt.provider.v1.RelationshipTuple.target:type_name -> gestalt.provider.v1.RelationshipTarget
-	4,  // 24: gestalt.provider.v1.RelationshipTuple.resource:type_name -> gestalt.provider.v1.Resource
-	2,  // 25: gestalt.provider.v1.RelationshipTarget.subject:type_name -> gestalt.provider.v1.Subject
-	4,  // 26: gestalt.provider.v1.RelationshipTarget.resource:type_name -> gestalt.provider.v1.Resource
-	21, // 27: gestalt.provider.v1.RelationshipTarget.subject_set:type_name -> gestalt.provider.v1.SubjectSet
-	4,  // 28: gestalt.provider.v1.SubjectSet.resource:type_name -> gestalt.provider.v1.Resource
-	23, // 29: gestalt.provider.v1.AuthorizationModel.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
-	24, // 30: gestalt.provider.v1.AuthorizationModelResourceType.relations:type_name -> gestalt.provider.v1.ModelRelation
-	25, // 31: gestalt.provider.v1.AuthorizationModelResourceType.actions:type_name -> gestalt.provider.v1.ModelAction
-	1,  // 32: gestalt.provider.v1.AuthorizationModelResourceType.source_layer:type_name -> gestalt.provider.v1.SourceLayer
-	26, // 33: gestalt.provider.v1.ModelRelation.allowed_targets:type_name -> gestalt.provider.v1.ModelAllowedTarget
-	27, // 34: gestalt.provider.v1.ModelAllowedTarget.subject_set_type:type_name -> gestalt.provider.v1.SubjectSetType
-	36, // 35: gestalt.provider.v1.AuthorizationModelRef.created_at:type_name -> google.protobuf.Timestamp
-	28, // 36: gestalt.provider.v1.GetActiveModelRefResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
-	22, // 37: gestalt.provider.v1.SetActiveModelRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
-	28, // 38: gestalt.provider.v1.SetActiveModelResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
-	33, // 39: gestalt.provider.v1.ListActiveModelResourceTypesRequest.filter:type_name -> gestalt.provider.v1.AuthorizationModelResourceTypeFilter
-	1,  // 40: gestalt.provider.v1.AuthorizationModelResourceTypeFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
-	23, // 41: gestalt.provider.v1.ListActiveModelResourceTypesResponse.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
-	5,  // 42: gestalt.provider.v1.Authorization.CheckAccess:input_type -> gestalt.provider.v1.CheckAccessRequest
-	7,  // 43: gestalt.provider.v1.Authorization.CheckAccessMany:input_type -> gestalt.provider.v1.CheckAccessManyRequest
-	9,  // 44: gestalt.provider.v1.Authorization.ListRelationships:input_type -> gestalt.provider.v1.ListRelationshipsRequest
-	12, // 45: gestalt.provider.v1.Authorization.AddRelationship:input_type -> gestalt.provider.v1.AddRelationshipRequest
-	14, // 46: gestalt.provider.v1.Authorization.DeleteRelationship:input_type -> gestalt.provider.v1.DeleteRelationshipRequest
-	16, // 47: gestalt.provider.v1.Authorization.SetAuthorizationState:input_type -> gestalt.provider.v1.SetAuthorizationStateRequest
-	37, // 48: gestalt.provider.v1.Authorization.GetActiveModelRef:input_type -> google.protobuf.Empty
-	30, // 49: gestalt.provider.v1.Authorization.SetActiveModel:input_type -> gestalt.provider.v1.SetActiveModelRequest
-	32, // 50: gestalt.provider.v1.Authorization.ListActiveModelResourceTypes:input_type -> gestalt.provider.v1.ListActiveModelResourceTypesRequest
-	6,  // 51: gestalt.provider.v1.Authorization.CheckAccess:output_type -> gestalt.provider.v1.CheckAccessResponse
-	8,  // 52: gestalt.provider.v1.Authorization.CheckAccessMany:output_type -> gestalt.provider.v1.CheckAccessManyResponse
-	11, // 53: gestalt.provider.v1.Authorization.ListRelationships:output_type -> gestalt.provider.v1.ListRelationshipsResponse
-	13, // 54: gestalt.provider.v1.Authorization.AddRelationship:output_type -> gestalt.provider.v1.AddRelationshipResponse
-	15, // 55: gestalt.provider.v1.Authorization.DeleteRelationship:output_type -> gestalt.provider.v1.DeleteRelationshipResponse
-	17, // 56: gestalt.provider.v1.Authorization.SetAuthorizationState:output_type -> gestalt.provider.v1.SetAuthorizationStateResponse
-	29, // 57: gestalt.provider.v1.Authorization.GetActiveModelRef:output_type -> gestalt.provider.v1.GetActiveModelRefResponse
-	31, // 58: gestalt.provider.v1.Authorization.SetActiveModel:output_type -> gestalt.provider.v1.SetActiveModelResponse
-	34, // 59: gestalt.provider.v1.Authorization.ListActiveModelResourceTypes:output_type -> gestalt.provider.v1.ListActiveModelResourceTypesResponse
-	51, // [51:60] is the sub-list for method output_type
-	42, // [42:51] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	24, // 13: gestalt.provider.v1.ListRelationshipsResponse.relationships:type_name -> gestalt.provider.v1.Relationship
+	2,  // 14: gestalt.provider.v1.RelationshipUpdate.operation:type_name -> gestalt.provider.v1.RelationshipUpdate.Operation
+	24, // 15: gestalt.provider.v1.RelationshipUpdate.relationship:type_name -> gestalt.provider.v1.Relationship
+	3,  // 16: gestalt.provider.v1.Precondition.operation:type_name -> gestalt.provider.v1.Precondition.Operation
+	12, // 17: gestalt.provider.v1.Precondition.filter:type_name -> gestalt.provider.v1.RelationshipFilter
+	14, // 18: gestalt.provider.v1.WriteRelationshipsRequest.updates:type_name -> gestalt.provider.v1.RelationshipUpdate
+	15, // 19: gestalt.provider.v1.WriteRelationshipsRequest.optional_preconditions:type_name -> gestalt.provider.v1.Precondition
+	24, // 20: gestalt.provider.v1.AddRelationshipRequest.relationship:type_name -> gestalt.provider.v1.Relationship
+	24, // 21: gestalt.provider.v1.AddRelationshipResponse.relationship:type_name -> gestalt.provider.v1.Relationship
+	25, // 22: gestalt.provider.v1.DeleteRelationshipRequest.relationship_tuple:type_name -> gestalt.provider.v1.RelationshipTuple
+	28, // 23: gestalt.provider.v1.SetAuthorizationStateRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
+	24, // 24: gestalt.provider.v1.SetAuthorizationStateRequest.relationships:type_name -> gestalt.provider.v1.Relationship
+	34, // 25: gestalt.provider.v1.SetAuthorizationStateResponse.active_model:type_name -> gestalt.provider.v1.AuthorizationModelRef
+	25, // 26: gestalt.provider.v1.Relationship.tuple:type_name -> gestalt.provider.v1.RelationshipTuple
+	41, // 27: gestalt.provider.v1.Relationship.properties:type_name -> google.protobuf.Struct
+	1,  // 28: gestalt.provider.v1.Relationship.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	26, // 29: gestalt.provider.v1.RelationshipTuple.target:type_name -> gestalt.provider.v1.RelationshipTarget
+	6,  // 30: gestalt.provider.v1.RelationshipTuple.resource:type_name -> gestalt.provider.v1.Resource
+	4,  // 31: gestalt.provider.v1.RelationshipTarget.subject:type_name -> gestalt.provider.v1.Subject
+	6,  // 32: gestalt.provider.v1.RelationshipTarget.resource:type_name -> gestalt.provider.v1.Resource
+	27, // 33: gestalt.provider.v1.RelationshipTarget.subject_set:type_name -> gestalt.provider.v1.SubjectSet
+	6,  // 34: gestalt.provider.v1.SubjectSet.resource:type_name -> gestalt.provider.v1.Resource
+	29, // 35: gestalt.provider.v1.AuthorizationModel.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
+	30, // 36: gestalt.provider.v1.AuthorizationModelResourceType.relations:type_name -> gestalt.provider.v1.ModelRelation
+	31, // 37: gestalt.provider.v1.AuthorizationModelResourceType.actions:type_name -> gestalt.provider.v1.ModelAction
+	1,  // 38: gestalt.provider.v1.AuthorizationModelResourceType.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	32, // 39: gestalt.provider.v1.ModelRelation.allowed_targets:type_name -> gestalt.provider.v1.ModelAllowedTarget
+	33, // 40: gestalt.provider.v1.ModelAllowedTarget.subject_set_type:type_name -> gestalt.provider.v1.SubjectSetType
+	42, // 41: gestalt.provider.v1.AuthorizationModelRef.created_at:type_name -> google.protobuf.Timestamp
+	34, // 42: gestalt.provider.v1.GetActiveModelRefResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
+	28, // 43: gestalt.provider.v1.SetActiveModelRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
+	34, // 44: gestalt.provider.v1.SetActiveModelResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
+	39, // 45: gestalt.provider.v1.ListActiveModelResourceTypesRequest.filter:type_name -> gestalt.provider.v1.AuthorizationModelResourceTypeFilter
+	1,  // 46: gestalt.provider.v1.AuthorizationModelResourceTypeFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	29, // 47: gestalt.provider.v1.ListActiveModelResourceTypesResponse.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
+	7,  // 48: gestalt.provider.v1.Authorization.CheckAccess:input_type -> gestalt.provider.v1.CheckAccessRequest
+	9,  // 49: gestalt.provider.v1.Authorization.CheckAccessMany:input_type -> gestalt.provider.v1.CheckAccessManyRequest
+	11, // 50: gestalt.provider.v1.Authorization.ListRelationships:input_type -> gestalt.provider.v1.ListRelationshipsRequest
+	16, // 51: gestalt.provider.v1.Authorization.WriteRelationships:input_type -> gestalt.provider.v1.WriteRelationshipsRequest
+	18, // 52: gestalt.provider.v1.Authorization.AddRelationship:input_type -> gestalt.provider.v1.AddRelationshipRequest
+	20, // 53: gestalt.provider.v1.Authorization.DeleteRelationship:input_type -> gestalt.provider.v1.DeleteRelationshipRequest
+	22, // 54: gestalt.provider.v1.Authorization.SetAuthorizationState:input_type -> gestalt.provider.v1.SetAuthorizationStateRequest
+	43, // 55: gestalt.provider.v1.Authorization.GetActiveModelRef:input_type -> google.protobuf.Empty
+	36, // 56: gestalt.provider.v1.Authorization.SetActiveModel:input_type -> gestalt.provider.v1.SetActiveModelRequest
+	38, // 57: gestalt.provider.v1.Authorization.ListActiveModelResourceTypes:input_type -> gestalt.provider.v1.ListActiveModelResourceTypesRequest
+	8,  // 58: gestalt.provider.v1.Authorization.CheckAccess:output_type -> gestalt.provider.v1.CheckAccessResponse
+	10, // 59: gestalt.provider.v1.Authorization.CheckAccessMany:output_type -> gestalt.provider.v1.CheckAccessManyResponse
+	13, // 60: gestalt.provider.v1.Authorization.ListRelationships:output_type -> gestalt.provider.v1.ListRelationshipsResponse
+	17, // 61: gestalt.provider.v1.Authorization.WriteRelationships:output_type -> gestalt.provider.v1.WriteRelationshipsResponse
+	19, // 62: gestalt.provider.v1.Authorization.AddRelationship:output_type -> gestalt.provider.v1.AddRelationshipResponse
+	21, // 63: gestalt.provider.v1.Authorization.DeleteRelationship:output_type -> gestalt.provider.v1.DeleteRelationshipResponse
+	23, // 64: gestalt.provider.v1.Authorization.SetAuthorizationState:output_type -> gestalt.provider.v1.SetAuthorizationStateResponse
+	35, // 65: gestalt.provider.v1.Authorization.GetActiveModelRef:output_type -> gestalt.provider.v1.GetActiveModelRefResponse
+	37, // 66: gestalt.provider.v1.Authorization.SetActiveModel:output_type -> gestalt.provider.v1.SetActiveModelResponse
+	40, // 67: gestalt.provider.v1.Authorization.ListActiveModelResourceTypes:output_type -> gestalt.provider.v1.ListActiveModelResourceTypesResponse
+	58, // [58:68] is the sub-list for method output_type
+	48, // [48:58] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_v1_authorization_proto_init() }
@@ -2282,12 +2619,12 @@ func file_v1_authorization_proto_init() {
 		return
 	}
 	file_v1_annotations_proto_init()
-	file_v1_authorization_proto_msgTypes[18].OneofWrappers = []any{
+	file_v1_authorization_proto_msgTypes[22].OneofWrappers = []any{
 		(*RelationshipTarget_Subject)(nil),
 		(*RelationshipTarget_Resource)(nil),
 		(*RelationshipTarget_SubjectSet)(nil),
 	}
-	file_v1_authorization_proto_msgTypes[24].OneofWrappers = []any{
+	file_v1_authorization_proto_msgTypes[28].OneofWrappers = []any{
 		(*ModelAllowedTarget_SubjectType)(nil),
 		(*ModelAllowedTarget_ResourceType)(nil),
 		(*ModelAllowedTarget_SubjectSetType)(nil),
@@ -2297,8 +2634,8 @@ func file_v1_authorization_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_authorization_proto_rawDesc), len(file_v1_authorization_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   33,
+			NumEnums:      4,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

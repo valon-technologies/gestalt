@@ -499,6 +499,14 @@ export interface SubjectPermissionContext {
   allOperations: boolean;
 }
 
+export const PreconditionOperation = {
+  UNSPECIFIED: 0,
+  MUST_NOT_MATCH: 1,
+  MUST_MATCH: 2,
+} as const;
+
+export type PreconditionOperation = number;
+
 export const RelationshipTargetType = {
   UNSPECIFIED: 0,
   SUBJECT: 1,
@@ -507,6 +515,15 @@ export const RelationshipTargetType = {
 } as const;
 
 export type RelationshipTargetType = number;
+
+export const RelationshipUpdateOperation = {
+  UNSPECIFIED: 0,
+  CREATE: 1,
+  TOUCH: 2,
+  DELETE: 3,
+} as const;
+
+export type RelationshipUpdateOperation = number;
 
 export const SourceLayer = {
   UNSPECIFIED: 0,
@@ -631,6 +648,15 @@ export interface ModelRelation {
   allowedTargets: ModelAllowedTarget[];
 }
 
+/**
+ * Precondition is evaluated against the relationship snapshot captured before
+ * any update in the request is applied.
+ */
+export interface Precondition {
+  operation: PreconditionOperation;
+  filter?: RelationshipFilter;
+}
+
 export interface Relationship {
   tuple?: RelationshipTuple;
   properties?: JsonObjectInput;
@@ -661,6 +687,17 @@ export interface RelationshipTuple {
   target?: RelationshipTarget;
   relation: string;
   resource?: Resource;
+}
+
+/**
+ * RelationshipUpdate changes one relationship in an atomic write request.
+ * CREATE fails if the relationship is already present, TOUCH upserts it, and
+ * DELETE is idempotent and protects the stored source layer when one is
+ * specified.
+ */
+export interface RelationshipUpdate {
+  operation: RelationshipUpdateOperation;
+  relationship?: Relationship;
 }
 
 export interface Resource {
@@ -701,6 +738,19 @@ export interface SubjectSetType {
   resourceType: string;
   relation: string;
 }
+
+/**
+ * WriteRelationshipsRequest evaluates all preconditions against the initial
+ * relationship snapshot, then applies all updates atomically or applies none.
+ * The response is intentionally empty because Gestalt does not expose a
+ * revision or ZedToken for relationship writes.
+ */
+export interface WriteRelationshipsRequest {
+  updates: RelationshipUpdate[];
+  optionalPreconditions: Precondition[];
+}
+
+export interface WriteRelationshipsResponse {}
 
 /**
  * AuthorizeRequest models RFC 6749 authorization endpoint parameters.

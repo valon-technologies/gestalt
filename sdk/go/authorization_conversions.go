@@ -228,6 +228,59 @@ func protoListRelationshipsResponse(in *ListRelationshipsResponse) (*proto.ListR
 	return &proto.ListRelationshipsResponse{Relationships: relationships, NextPageToken: in.NextPageToken}, nil
 }
 
+func relationshipUpdateFromProto(in *proto.RelationshipUpdate) *RelationshipUpdate {
+	if in == nil {
+		return nil
+	}
+	return &RelationshipUpdate{
+		Operation:    RelationshipUpdateOperation(in.GetOperation()),
+		Relationship: relationshipFromProto(in.GetRelationship()),
+	}
+}
+
+func preconditionFromProto(in *proto.Precondition) *Precondition {
+	if in == nil {
+		return nil
+	}
+	return &Precondition{
+		Operation: PreconditionOperation(in.GetOperation()),
+		Filter:    relationshipFilterFromProto(in.GetFilter()),
+	}
+}
+
+func writeRelationshipsRequestFromProto(in *proto.WriteRelationshipsRequest) *WriteRelationshipsRequest {
+	if in == nil {
+		return nil
+	}
+	return &WriteRelationshipsRequest{
+		Updates:               relationshipUpdatesFromProto(in.GetUpdates()),
+		OptionalPreconditions: preconditionsFromProto(in.GetOptionalPreconditions()),
+	}
+}
+
+func relationshipUpdatesFromProto(in []*proto.RelationshipUpdate) []*RelationshipUpdate {
+	out := make([]*RelationshipUpdate, 0, len(in))
+	for _, item := range in {
+		out = append(out, relationshipUpdateFromProto(item))
+	}
+	return out
+}
+
+func preconditionsFromProto(in []*proto.Precondition) []*Precondition {
+	out := make([]*Precondition, 0, len(in))
+	for _, item := range in {
+		out = append(out, preconditionFromProto(item))
+	}
+	return out
+}
+
+func protoWriteRelationshipsResponse(in *WriteRelationshipsResponse) *proto.WriteRelationshipsResponse {
+	if in == nil {
+		return nil
+	}
+	return &proto.WriteRelationshipsResponse{}
+}
+
 func relationshipFromProto(in *proto.Relationship) *Relationship {
 	if in == nil {
 		return nil
