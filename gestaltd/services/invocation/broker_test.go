@@ -820,7 +820,7 @@ func TestBrokerInvokeStreamRejectsNonStreamingProvider(t *testing.T) {
 	if len(recorder.records) != 1 {
 		t.Fatalf("got %d invocation records, want one", len(recorder.records))
 	}
-	if got := recorder.records[0]; got.Provider != "plain" || got.Outcome != observability.InvocationFailed {
+	if got := recorder.records[0]; got.Provider != "plain" || got.Operation != "plain.op" || got.Outcome != observability.InvocationFailed {
 		t.Fatalf("record = %#v, want failed dispatch record", got)
 	}
 }
@@ -1042,7 +1042,7 @@ func TestBrokerInvokeMaybeStreamRejectsNonStreamingProvider(t *testing.T) {
 	if len(recorder.records) != 1 {
 		t.Fatalf("got %d invocation records, want one", len(recorder.records))
 	}
-	if got := recorder.records[0]; got.Provider != "broken-stream" || got.Outcome != observability.InvocationFailed {
+	if got := recorder.records[0]; got.Provider != "broken-stream" || got.Operation != "events.watch" || got.Outcome != observability.InvocationFailed {
 		t.Fatalf("record = %#v, want failed dispatch record", got)
 	}
 }

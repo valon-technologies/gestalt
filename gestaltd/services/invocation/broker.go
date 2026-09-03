@@ -307,7 +307,7 @@ func (b *Broker) ListCapabilities() []core.Capability {
 func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (result *core.OperationResult, err error) {
 	startedAt := time.Now()
 	metricProvider := metricutil.UnknownAttrValue
-	metricOperation := metricutil.UnknownAttrValue
+	metricOperation := metricutil.AttrValue(operation)
 	metricTransport := metricutil.UnknownAttrValue
 	metricConnectionMode := metricutil.UnknownAttrValue
 
@@ -458,7 +458,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error) {
 	startedAt := time.Now()
 	metricProvider := metricutil.UnknownAttrValue
-	metricOperation := metricutil.UnknownAttrValue
+	metricOperation := metricutil.AttrValue(operation)
 	metricTransport := metricutil.UnknownAttrValue
 	metricConnectionMode := metricutil.UnknownAttrValue
 	var dispatchErr error
@@ -646,7 +646,7 @@ func (o *InvokeOutcome) IsStream() bool { return o != nil && o.Stream != nil }
 func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*InvokeOutcome, error) {
 	startedAt := time.Now()
 	metricProvider := metricutil.UnknownAttrValue
-	metricOperation := metricutil.UnknownAttrValue
+	metricOperation := metricutil.AttrValue(operation)
 	metricTransport := metricutil.UnknownAttrValue
 	metricConnectionMode := metricutil.UnknownAttrValue
 	var dispatchErr error
@@ -827,22 +827,23 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 // context watcher and StreamFinalizer hook cover consumers that stop reading
 // because the client disconnected or the transport failed to send a frame.
 type observingStreamReader struct {
-	inner        core.StreamReader
-	broker       *Broker
-	ctx          context.Context
-	span         trace.Span
-	startedAt    time.Time
-	principal    *principal.Principal
-	providerName string
-	operation    string
-	transport    string
-	mu           sync.Mutex
-	metadataSeen bool
-	frameSeen    bool
-	endOnce      sync.Once
-	stopWatch    func() bool
-	resultStatus int
-	resultErr    error
+	inner           core.StreamReader
+	broker          *Broker
+	ctx             context.Context
+	span            trace.Span
+	startedAt       time.Time
+	principal       *principal.Principal
+	providerName    string
+	operation       string
+	transport       string
+	mu              sync.Mutex
+	metadataSeen    bool
+	frameSeen       bool
+	terminalPending bool
+	finished        bool
+	stopWatch       func() bool
+	resultStatus    int
+	resultErr       error
 }
 
 func newObservingStreamReader(
@@ -866,7 +867,7 @@ func newObservingStreamReader(
 		transport:    transport,
 	}
 	reader.stopWatch = context.AfterFunc(ctx, func() {
-		reader.FinalizeStream(ctx.Err())
+		reader.finish(ctx.Err(), false, false)
 	})
 	return reader
 }
@@ -874,17 +875,12 @@ func newObservingStreamReader(
 func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 	frame, err := r.inner.Recv()
 	if err != nil {
-		if !errors.Is(err, io.EOF) {
-			r.mu.Lock()
-			if r.resultErr == nil {
-				r.resultErr = err
-			}
-			r.mu.Unlock()
-		}
+		r.markTerminal(err)
 		r.endSpan()
 		return nil, err
 	}
 	if frame == nil {
+		r.markTerminal(nil)
 		r.endSpan()
 		return nil, nil
 	}
@@ -900,6 +896,9 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 		}
 		r.resultStatus = result.Status
 		r.mu.Unlock()
+		if terminalMetadata {
+			r.markTerminal(nil)
+		}
 		r.broker.observePlugin5xxResult(r.ctx, r.span, r.principal, r.providerName, r.operation, r.transport, result)
 		if terminalMetadata {
 			r.endSpan()
@@ -910,18 +909,27 @@ func (r *observingStreamReader) Recv() (*core.InvokeFrame, error) {
 	return frame, nil
 }
 
+func (r *observingStreamReader) markTerminal(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.finished {
+		return
+	}
+	r.terminalPending = true
+	if err != nil && !errors.Is(err, io.EOF) && r.resultErr == nil {
+		r.resultErr = err
+	}
+}
+
 // FinalizeStream records an invocation when its transport stops consuming the
 // reader before Recv can observe a terminal frame. It is safe to call more
 // than once; only the first completion records the request.
 func (r *observingStreamReader) FinalizeStream(err error) {
-	if err != nil && !errors.Is(err, io.EOF) {
-		r.mu.Lock()
-		if r.resultErr == nil {
-			r.resultErr = err
-		}
-		r.mu.Unlock()
+	if errors.Is(err, io.EOF) {
+		r.endSpan()
+		return
 	}
-	r.endSpan()
+	r.finish(err, false, true)
 }
 
 func (r *observingStreamReader) terminalResultStatusLocked() int {
@@ -943,23 +951,35 @@ func (r *observingStreamReader) terminalResultStatusLocked() int {
 // called on EOF, error, nil frames, and terminal metadata frames so callers
 // that stop after an error frame cannot leave the request unrecorded.
 func (r *observingStreamReader) endSpan() {
-	r.endOnce.Do(func() {
-		if r.stopWatch != nil {
-			r.stopWatch()
-		}
-		r.mu.Lock()
-		resultStatus := r.terminalResultStatusLocked()
-		resultErr := r.resultErr
+	r.finish(nil, true, true)
+}
+
+func (r *observingStreamReader) finish(err error, natural, stopWatch bool) {
+	r.mu.Lock()
+	if r.finished || (!natural && r.terminalPending) {
 		r.mu.Unlock()
-		r.broker.recordInvocationRecord(
-			r.startedAt,
-			r.providerName,
-			r.operation,
-			resultStatus,
-			operationResultFailed(resultStatus, resultErr),
-		)
-		r.span.End()
-	})
+		return
+	}
+	if err != nil && !errors.Is(err, io.EOF) && r.resultErr == nil {
+		r.resultErr = err
+	}
+	r.finished = true
+	resultStatus := r.terminalResultStatusLocked()
+	resultErr := r.resultErr
+	contextStop := r.stopWatch
+	r.mu.Unlock()
+
+	if stopWatch && contextStop != nil {
+		contextStop()
+	}
+	r.broker.recordInvocationRecord(
+		r.startedAt,
+		r.providerName,
+		r.operation,
+		resultStatus,
+		operationResultFailed(resultStatus, resultErr),
+	)
+	r.span.End()
 }
 
 func (b *Broker) observePlugin5xxResult(ctx context.Context, span trace.Span, p *principal.Principal, providerName, operation, transport string, result *core.OperationResult) {
