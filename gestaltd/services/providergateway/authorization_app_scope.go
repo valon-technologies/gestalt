@@ -15,6 +15,50 @@ const (
 	appAdminRelation             = "admin"
 )
 
+type appScopedRelationshipMutationContext struct {
+	appID  string
+	action string
+}
+
+type appScopedRelationshipMutationKey struct{}
+
+func WithAppScopedRelationshipMutationAuth(ctx context.Context, appID, action string) context.Context {
+	appID = strings.TrimSpace(appID)
+	action = strings.TrimSpace(action)
+	if appID == "" || action == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, appScopedRelationshipMutationKey{}, appScopedRelationshipMutationContext{
+		appID:  appID,
+		action: action,
+	})
+}
+
+func AppScopedRelationshipMutationFromContext(ctx context.Context) (appID, action string, ok bool) {
+	value, ok := ctx.Value(appScopedRelationshipMutationKey{}).(appScopedRelationshipMutationContext)
+	if !ok {
+		return "", "", false
+	}
+	appID = strings.TrimSpace(value.appID)
+	action = strings.TrimSpace(value.action)
+	if appID == "" || action == "" {
+		return "", "", false
+	}
+	return appID, action, true
+}
+
+func appScopedRelationshipActionFromMethod(fullMethod string) string {
+	_, method := splitFullMethod(fullMethod)
+	switch method {
+	case "AddRelationship":
+		return "grant_add"
+	case "DeleteRelationship":
+		return "grant_remove"
+	default:
+		return ""
+	}
+}
+
 func relationshipTupleFromAuthorizationRequest(fullMethod string, req gproto.Message) (*proto.RelationshipTuple, bool) {
 	if req == nil {
 		return nil, false

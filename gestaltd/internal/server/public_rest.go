@@ -179,7 +179,7 @@ func handleRESTInvoke(
 	))
 	ctx = stripInternalIdentityMetadata(ctx)
 
-	p, adapted, err := transport.PreparePublicRequest(ctx, invokeFullMethod, &protoReq)
+	ctx, p, adapted, err := transport.PreparePublicRequest(ctx, invokeFullMethod, &protoReq)
 	if err != nil {
 		publicRESTErrorHandler(ctx, nil, nil, w, r, err)
 		return

@@ -22,53 +22,53 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	ctx context.Context,
 	fullMethod string,
 	req gproto.Message,
-) (*principal.Principal, gproto.Message, error) {
+) (context.Context, *principal.Principal, gproto.Message, error) {
 	if t == nil {
-		return nil, nil, status.Error(codes.Internal, "provider gateway: transport is nil")
+		return ctx, nil, nil, status.Error(codes.Internal, "provider gateway: transport is nil")
 	}
 	if req == nil {
-		return nil, nil, status.Error(codes.InvalidArgument, "request is required")
+		return ctx, nil, nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	fullMethod = strings.TrimSpace(fullMethod)
 	if fullMethod == "" {
-		return nil, nil, status.Error(codes.Internal, "provider gateway: full method is required")
+		return ctx, nil, nil, status.Error(codes.Internal, "provider gateway: full method is required")
 	}
 	origin, ok := publicrpc.PublicOriginFromContext(ctx)
 	if !ok {
-		return nil, nil, status.Error(codes.Internal, "provider gateway: public origin marker is required")
+		return ctx, nil, nil, status.Error(codes.Internal, "provider gateway: public origin marker is required")
 	}
 	if origin.FullMethod != fullMethod {
-		return nil, nil, status.Errorf(codes.Internal, "provider gateway: public origin method %q does not match %q", origin.FullMethod, fullMethod)
+		return ctx, nil, nil, status.Errorf(codes.Internal, "provider gateway: public origin method %q does not match %q", origin.FullMethod, fullMethod)
 	}
 	if t.publicMethods == nil {
-		return nil, nil, status.Error(codes.NotFound, "method is not public")
+		return ctx, nil, nil, status.Error(codes.NotFound, "method is not public")
 	}
 	policy, ok := t.publicMethods.Lookup(fullMethod)
 	if !ok {
-		return nil, nil, status.Error(codes.NotFound, "method is not public")
+		return ctx, nil, nil, status.Error(codes.NotFound, "method is not public")
 	}
 
 	if publicIdentityLoginMethod(fullMethod) {
 		adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, nil, nil, req, policy, fullMethod)
 		if err != nil {
-			return nil, nil, err
+			return ctx, nil, nil, err
 		}
-		return nil, adapted, nil
+		return ctx, nil, adapted, nil
 	}
 
 	var p *principal.Principal
 	if t.identity != nil {
 		token := bearerTokenFromContext(ctx)
 		if token == "" {
-			return nil, nil, status.Error(codes.Unauthenticated, "bearer token is required")
+			return ctx, nil, nil, status.Error(codes.Unauthenticated, "bearer token is required")
 		}
 		resolved, err := t.resolvePublicPrincipal(ctx, token)
 		if err != nil {
-			return nil, nil, err
+			return ctx, nil, nil, err
 		}
 		p = resolved
 		if err := t.canonicalizePublicCredentialPrincipal(ctx, fullMethod, p); err != nil {
-			return nil, nil, err
+			return ctx, nil, nil, err
 		}
 	} else {
 		// No IdentityProvider: the caller is anonymous. Use a stable anonymous
@@ -77,16 +77,17 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	}
 	resourceID, err := t.publicResourceID(req, fullMethod)
 	if err != nil {
-		return nil, nil, err
+		return ctx, nil, nil, err
 	}
-	if err := t.enforcePublicAuthorization(ctx, p, resourceID, fullMethod, req); err != nil {
-		return nil, nil, err
+	ctx, err = t.enforcePublicAuthorization(ctx, p, resourceID, fullMethod, req)
+	if err != nil {
+		return ctx, nil, nil, err
 	}
 	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, t.users, p, req, policy, fullMethod)
 	if err != nil {
-		return nil, nil, err
+		return ctx, nil, nil, err
 	}
-	return p, adapted, nil
+	return ctx, p, adapted, nil
 }
 
 func (t *ProviderGatewayTransport) resolvePublicPrincipal(ctx context.Context, token string) (*principal.Principal, error) {
@@ -105,17 +106,17 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	p *principal.Principal,
 	providerID, fullMethod string,
 	req gproto.Message,
-) error {
+) (context.Context, error) {
 	service, _ := splitFullMethod(fullMethod)
 	if service == proto.App_ServiceDesc.ServiceName || service == proto.Identity_ServiceDesc.ServiceName || service == proto.RemoteManagement_ServiceDesc.ServiceName {
-		return nil
+		return ctx, nil
 	}
 	if t == nil || t.authorization == nil {
-		return nil
+		return ctx, nil
 	}
 	subjectID, err := principal.ResolveCredentialSubjectID(ctx, t.users, p)
 	if err != nil {
-		return status.Error(codes.Unauthenticated, "authenticated subject is required")
+		return ctx, status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
 	if isAuthorizationServiceMethod(fullMethod) {
 		return t.enforceAuthorizationPublicAccess(ctx, subjectID, fullMethod, req)
@@ -126,12 +127,12 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	checkReq := invocation.SubjectAccessRequest(subjectID, action.GetName(), resource)
 	allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, checkReq)
 	if err != nil {
-		return status.Error(codes.Unavailable, "authorization provider unavailable")
+		return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
 	}
 	if !allowed {
-		return status.Error(codes.PermissionDenied, "access denied")
+		return ctx, status.Error(codes.PermissionDenied, "access denied")
 	}
-	return nil
+	return ctx, nil
 }
 
 func bearerTokenFromContext(ctx context.Context) string {

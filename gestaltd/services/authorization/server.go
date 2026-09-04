@@ -2,10 +2,15 @@ package authorization
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -52,14 +57,20 @@ func (s *providerServer) AddRelationship(ctx context.Context, req *proto.AddRela
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.AddRelationship(s.gatewayContext(ctx), req)
+	startedAt := time.Now()
+	resp, err := s.provider.AddRelationship(s.gatewayContext(ctx), req)
+	recordAppScopedRelationshipMutation(ctx, startedAt, err)
+	return resp, err
 }
 
 func (s *providerServer) DeleteRelationship(ctx context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.DeleteRelationship(s.gatewayContext(ctx), req)
+	startedAt := time.Now()
+	resp, err := s.provider.DeleteRelationship(s.gatewayContext(ctx), req)
+	recordAppScopedRelationshipMutation(ctx, startedAt, err)
+	return resp, err
 }
 
 func (s *providerServer) SetAuthorizationState(ctx context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
@@ -99,4 +110,29 @@ func (s *providerServer) requireProvider() error {
 		return status.Error(codes.FailedPrecondition, "authorization provider is not configured")
 	}
 	return nil
+}
+
+func recordAppScopedRelationshipMutation(ctx context.Context, startedAt time.Time, err error) {
+	if _, ok := publicrpc.PublicOriginFromContext(ctx); !ok {
+		return
+	}
+	appID, action, ok := providergateway.AppScopedRelationshipMutationFromContext(ctx)
+	if !ok {
+		return
+	}
+	failed := err != nil
+	interaction := observability.AppAdminUIInteraction{
+		App:     appID,
+		Surface: observability.AppAdminUISurfaceMembers,
+		Action:  action,
+		Failed:  failed,
+		Err:     err,
+	}
+	if failed {
+		interaction.FailureCategory = observability.AppAdminUIFailureCategoryGRPC(err)
+	}
+	if meta := invocation.MetaFromContext(ctx); meta != nil {
+		interaction.RequestID = strings.TrimSpace(meta.RequestID)
+	}
+	observability.RecordAppAdminUIInteraction(ctx, startedAt, interaction)
 }

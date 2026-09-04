@@ -133,7 +133,7 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 		if !ok {
 			return nil, status.Error(codes.Internal, "request type mismatch")
 		}
-		p, adapted, err := transport.PreparePublicRequest(ctx, origin.FullMethod, msg)
+		ctx, p, adapted, err := transport.PreparePublicRequest(ctx, origin.FullMethod, msg)
 		if err != nil {
 			if reportSubject != nil {
 				reportSubject(ctx, nil)
@@ -189,6 +189,7 @@ type publicAuthStream struct {
 	fullMethod    string
 	authed        bool
 	principal     *principal.Principal
+	preparedCtx   context.Context
 	reportSubject publicStreamSubjectLabelReporter
 }
 
@@ -196,7 +197,11 @@ func (s *publicAuthStream) Context() context.Context {
 	// Always strip caller-supplied internal identity metadata, mirroring the
 	// unary public interceptor: a public caller must not forge a trusted
 	// caller subject. The resolved principal is reattached below.
-	ctx := stripInternalIdentityMetadata(s.ServerStream.Context())
+	ctx := s.ServerStream.Context()
+	if s.preparedCtx != nil {
+		ctx = s.preparedCtx
+	}
+	ctx = stripInternalIdentityMetadata(ctx)
 	if s.principal != nil {
 		canonical := principal.Canonicalized(s.principal)
 		ctx = principal.WithPrincipal(ctx, canonical)
@@ -218,7 +223,7 @@ func (s *publicAuthStream) RecvMsg(msg any) error {
 			return status.Error(codes.Internal, "request type mismatch")
 		}
 		ctx := stripInternalIdentityMetadata(s.ServerStream.Context())
-		p, adapted, err := s.transport.PreparePublicRequest(ctx, s.fullMethod, m)
+		ctx, p, adapted, err := s.transport.PreparePublicRequest(ctx, s.fullMethod, m)
 		if err != nil {
 			if s.reportSubject != nil {
 				s.reportSubject(s, nil)
@@ -228,6 +233,7 @@ func (s *publicAuthStream) RecvMsg(msg any) error {
 		if s.reportSubject != nil {
 			s.reportSubject(s, p)
 		}
+		s.preparedCtx = ctx
 		s.principal = p
 		if adapted != nil && m != adapted {
 			gproto.Reset(m)
