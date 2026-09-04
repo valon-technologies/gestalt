@@ -96,7 +96,7 @@ func (s *Server) mountedUIListingAccessRequest(appName, subjectID string) (invoc
 		return invocation.ResourceAccessRequest{}, false
 	}
 	access := mountedResourceAccess{
-		appKey:       strings.TrimSpace(mounted.AppName),
+		actionName:   mountedUIAuthorizationActionName(mounted),
 		resourceName: resourceName,
 		subjectID:    subjectID,
 		allowedRoles: mounted.AllowedRoles,

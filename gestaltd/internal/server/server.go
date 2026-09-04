@@ -59,6 +59,7 @@ type MountedUI struct {
 	Path                string
 	AppName             string
 	AuthorizationPolicy string
+	authorizationAction string
 	AllowedRoles        []string
 	Handler             http.Handler
 	// ThemeStylesheet and ThemeAssetsDir are resolved absolute paths to a
@@ -86,6 +87,7 @@ type MountedHTTPBinding struct {
 
 type AdminRouteConfig struct {
 	AuthorizationPolicy string
+	AuthorizationAction string
 	AllowedRoles        []string
 }
 

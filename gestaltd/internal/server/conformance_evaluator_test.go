@@ -286,9 +286,9 @@ func conformanceResourcesEqual(a, b *proto.Resource) bool {
 		strings.TrimSpace(a.GetId()) == strings.TrimSpace(b.GetId())
 }
 
-// ListRelationships answers the roster and transition-shim reads. When the spec
-// sets a page size it pages, so a caller that ignores next_page_token loses
-// rows and the test notices.
+// ListRelationships answers roster reads. When the spec sets a page size it
+// pages, so a caller that ignores next_page_token loses rows and the test
+// notices.
 func (e *conformanceEvaluator) ListRelationships(
 	_ context.Context, req *proto.ListRelationshipsRequest,
 ) (*proto.ListRelationshipsResponse, error) {

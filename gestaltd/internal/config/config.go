@@ -1981,6 +1981,7 @@ type ManagementListenerConfig struct {
 
 type AdminConfig struct {
 	AuthorizationPolicy string   `yaml:"authorizationPolicy,omitempty"`
+	AuthorizationAction string   `yaml:"authorizationAction,omitempty"`
 	AllowedRoles        []string `yaml:"allowedRoles,omitempty"`
 }
 
@@ -3869,6 +3870,7 @@ func normalizeAdminConfig(cfg *Config) error {
 	}
 	admin := cfg.Server.Admin
 	admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
+	admin.AuthorizationAction = strings.TrimSpace(admin.AuthorizationAction)
 	if len(admin.AllowedRoles) == 0 {
 		if admin.AuthorizationPolicy != "" {
 			admin.AllowedRoles = []string{"admin"}

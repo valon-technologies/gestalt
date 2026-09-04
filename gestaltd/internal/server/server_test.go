@@ -2503,7 +2503,8 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 	user := seedUserRecord(t, svc, "theme-user", "theme-user@example.test", time.Now())
 	authz := &serverTestAuthorizationProvider{
 		resourceTypes: []*proto.AuthorizationModelResourceType{{
-			Name: "brandPolicy",
+			Name:    "brandPolicy",
+			Actions: []*proto.ModelAction{{Name: "brand", Relations: []string{"viewer"}}},
 		}},
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(
@@ -2634,10 +2635,10 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 
 	authz := &serverTestAuthorizationProvider{
 		resourceTypes: []*proto.AuthorizationModelResourceType{
-			{Name: "app"},
+			{Name: "app", Actions: []*proto.ModelAction{{Name: "sampleApp", Relations: []string{"admin"}}}},
 			{Name: "viewerPolicy", DefaultRole: "viewer"},
 			{Name: "defaultRolePolicy", DefaultRole: "reader"},
-			{Name: "adminPolicy"},
+			{Name: "adminPolicy", Actions: []*proto.ModelAction{{Name: "adminPolicy", Relations: []string{"admin"}}}},
 		},
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(
@@ -2759,6 +2760,9 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	}
 	if got := authz.checkAccessRequests[len(authz.checkAccessRequests)-1].GetResource().GetType(); got != "adminPolicy" {
 		t.Fatalf("decision resource type = %q, want adminPolicy", got)
+	}
+	if got := authz.checkAccessRequests[len(authz.checkAccessRequests)-1].GetAction().GetName(); got != "adminPolicy" {
+		t.Fatalf("decision action = %q, want adminPolicy", got)
 	}
 }
 
@@ -3178,7 +3182,10 @@ func TestMountedAppStaticAuthorizationRelationshipAllow(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	user := seedUserRecord(t, svc, "alpha-user", "alpha-user@example.test", time.Now())
 	authz := &serverTestAuthorizationProvider{
-		resourceTypes: []*proto.AuthorizationModelResourceType{{Name: "app"}},
+		resourceTypes: []*proto.AuthorizationModelResourceType{{
+			Name:    "app",
+			Actions: []*proto.ModelAction{{Name: "alpha", Relations: []string{"viewer"}}},
+		}},
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(principal.UserSubjectID(user.ID), "viewer", "app", "alpha"),
 		},

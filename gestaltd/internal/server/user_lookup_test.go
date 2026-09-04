@@ -157,13 +157,10 @@ func TestUserLookupHonorsGroupDerivedOperatorRole(t *testing.T) {
 	}
 }
 
-// TestUserLookupWorksWhenModelDeclaresNoMatchingAction guards the transition
-// shim. The user-lookup resource is policy-shaped like gestaltAdmin: it carries
-// the operator relation but declares no actions. CheckAccessRequest is
-// action-shaped, so an evaluator asked about an undeclared action answers
-// "denied" to a question it cannot represent. Without the shim an operator
-// grant would never restore lookup and the gate would stay shut for everyone.
-func TestUserLookupWorksWhenModelDeclaresNoMatchingAction(t *testing.T) {
+// TestUserLookupDeniesWhenModelDeclaresNoMatchingAction proves user lookup
+// trusts the evaluator's decision and never treats a direct relationship as a
+// second source of truth.
+func TestUserLookupDeniesWhenModelDeclaresNoMatchingAction(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
@@ -177,8 +174,8 @@ func TestUserLookupWorksWhenModelDeclaresNoMatchingAction(t *testing.T) {
 			testAuthorizationRelationship(memberSubject, "viewer", "app", "g-issues"),
 			testAuthorizationRelationship(adminSubject, testUserLookupRole, testUserLookupResource, testUserLookupResource),
 		},
-		// The app type answers actions; the user-lookup type declares the
-		// operator relation but no actions at all, as a real policy type does.
+		// The app type answers actions; the user-lookup type deliberately does
+		// not answer its requested action.
 		resourceTypes: []*proto.AuthorizationModelResourceType{
 			{Name: "app", Actions: []*proto.ModelAction{{Name: "*"}}},
 			{Name: testUserLookupResource},
@@ -213,7 +210,7 @@ func TestUserLookupWorksWhenModelDeclaresNoMatchingAction(t *testing.T) {
 	if !ok {
 		t.Fatalf("member row missing: %#v", rows)
 	}
-	if email != "bob@valon.com" {
-		t.Fatalf("operator grant did not resolve email when the model declares no matching action: %#v", rows)
+	if email != "" {
+		t.Fatalf("direct operator relationship bypassed the evaluator denial: %#v", rows)
 	}
 }

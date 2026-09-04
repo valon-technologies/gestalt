@@ -204,7 +204,7 @@ authorization:
 
 `agent.defaultToolNarrowingThreshold` controls implicit default MCP catalog grants for agent providers that support the catalog. When the total visible catalog is larger than this threshold and the latest user message exactly names a provider, Gestalt grants that provider instead of a global wildcard. Omit it to use the server default; set it to `0` to narrow whenever any visible catalog tool exists.
 
-`admin.authorizationPolicy` names the policy used to protect the built-in `/admin` route. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
+`admin.authorizationPolicy` names the policy used to protect the built-in `/admin` route. `admin.authorizationAction` names the action checked on that policy and defaults to the policy name for backward compatibility. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
 `authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, allowed targets, and optional per-resource `defaultRole` values. For apps with `apps.<name>.static`, `defaultRole` on the app resource type controls the role used when serving mounted static assets. `authorization.relationships` defines static relationship tuples against those resource types.
 
@@ -308,6 +308,7 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `runtime.defaultProvider` | | Default runtime-provider selector for apps and providers that opt into `runtime`. This does not move anything into hosted runtimes by itself. |
 | `runtime.relayBaseUrl` | `server.baseUrl` | Absolute HTTP(S) URL that hosted runtimes use for Gestalt host-service relay and egress proxy callbacks. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
+| `admin.authorizationAction` | `admin.authorizationPolicy` | Action checked on the admin authorization policy. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `authorization.models` | | Static authorization model fragments keyed by model name. Each fragment defines `resourceTypes`, relation `subjectTypes` or `allowedTargets`, and actions. |
 | `authorization.relationships` | | Static relationship tuples with `subject`, `relation`, and `resource` fields. |
