@@ -51,34 +51,40 @@ func (t *ProviderGatewayTransport) enforceAuthorizationPublicAccess(
 	}
 
 	resource := &proto.Resource{Type: authorizationResourceType, Id: authorizationResourceID}
-	actions := authorizationPublicActions(read, write)
-	for _, action := range actions {
+	allowed := false
+	for _, action := range authorizationPublicActions(read, write) {
 		checkReq := invocation.SubjectAccessRequest(subjectID, action, resource)
-		allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, checkReq)
+		accessAllowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, checkReq)
 		if err != nil {
 			return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
 		}
-		if allowed {
-			return ctx, nil
+		if accessAllowed {
+			allowed = true
+			break
 		}
 	}
-	if write {
-		if tuple, ok := relationshipTupleFromAuthorizationRequest(fullMethod, req); ok {
-			allowed, err := allowsAppScopedRelationshipMutation(ctx, t.authorization, subjectID, tuple)
+	if !allowed && write {
+		tuple, ok := relationshipTupleFromAuthorizationRequest(fullMethod, req)
+		if ok {
+			var err error
+			allowed, err = allowsAppScopedRelationshipMutation(ctx, t.authorization, subjectID, tuple)
 			if err != nil {
 				return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
 			}
-			if allowed {
-				appID := strings.TrimSpace(tuple.GetResource().GetId())
-				action := appScopedRelationshipActionFromMethod(fullMethod)
-				return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple), nil
+			if !allowed {
+				deniedErr := status.Error(codes.PermissionDenied, "access denied")
+				recordAppScopedRelationshipAuthFailure(ctx, subjectID, tuple, fullMethod, deniedErr)
+				return ctx, deniedErr
 			}
-			deniedErr := status.Error(codes.PermissionDenied, "access denied")
-			recordAppScopedRelationshipAuthFailure(ctx, subjectID, tuple, fullMethod, deniedErr)
-			return ctx, deniedErr
 		}
 	}
-	return ctx, status.Error(codes.PermissionDenied, "access denied")
+	if !allowed {
+		return ctx, status.Error(codes.PermissionDenied, "access denied")
+	}
+	if write {
+		ctx = withAppScopedRelationshipMutationAuthFromRequest(ctx, fullMethod, req)
+	}
+	return ctx, nil
 }
 
 func authorizationPublicActions(read, write bool) []string {

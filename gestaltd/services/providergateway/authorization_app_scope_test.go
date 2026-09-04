@@ -123,18 +123,10 @@ func TestAllowsAppScopedRelationshipMutationRejectsGlobalResources(t *testing.T)
 	}
 }
 
-func TestEnforceAuthorizationPublicAccessAllowsAppAdminRelationshipWrite(t *testing.T) {
+func TestEnforceAuthorizationPublicAccessMarksAppRelationshipWrite(t *testing.T) {
 	t.Parallel()
 
-	provider := &appScopedAuthorizationProvider{
-		stubAuthorizationProvider: &stubAuthorizationProvider{
-			allowedActions: map[string]bool{"viewer": true},
-		},
-		appAdmin: map[string]bool{"roadmap": true},
-	}
-	transport := &ProviderGatewayTransport{authorization: provider}
-
-	req := &proto.AddRelationshipRequest{
+	addViewerReq := &proto.AddRelationshipRequest{
 		Relationship: &proto.Relationship{
 			Tuple: &proto.RelationshipTuple{
 				Resource: &proto.Resource{Type: "app", Id: "roadmap"},
@@ -147,14 +139,80 @@ func TestEnforceAuthorizationPublicAccessAllowsAppAdminRelationshipWrite(t *test
 			},
 		},
 	}
-	_, err := transport.enforceAuthorizationPublicAccess(
+
+	tests := []struct {
+		name      string
+		transport *ProviderGatewayTransport
+	}{
+		{
+			name: "app_admin",
+			transport: &ProviderGatewayTransport{
+				authorization: &appScopedAuthorizationProvider{
+					stubAuthorizationProvider: &stubAuthorizationProvider{
+						allowedActions: map[string]bool{"viewer": true},
+					},
+					appAdmin: map[string]bool{"roadmap": true},
+				},
+			},
+		},
+		{
+			name: "global_admin",
+			transport: &ProviderGatewayTransport{
+				authorization: &stubAuthorizationProvider{
+					allowedActions: map[string]bool{"admin": true},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, err := tc.transport.enforceAuthorizationPublicAccess(
+				context.Background(),
+				"user:admin@example.com",
+				proto.Authorization_AddRelationship_FullMethodName,
+				addViewerReq,
+			)
+			if err != nil {
+				t.Fatalf("enforceAuthorizationPublicAccess error = %v, want nil", err)
+			}
+			appID, action, targetKind, targetID, ok := AppScopedRelationshipMutationFromContext(ctx)
+			if !ok || appID != "roadmap" || action != "grant_add" || targetKind != "user" || targetID != "viewer@example.com" {
+				t.Fatalf("context marker = (%q, %q, %q, %q, %v), want (roadmap, grant_add, user, viewer@example.com, true)", appID, action, targetKind, targetID, ok)
+			}
+		})
+	}
+}
+
+func TestEnforceAuthorizationPublicAccessSkipsMalformedAppRelationshipWriteMarker(t *testing.T) {
+	t.Parallel()
+
+	transport := &ProviderGatewayTransport{
+		authorization: &stubAuthorizationProvider{
+			allowedActions: map[string]bool{"admin": true},
+		},
+	}
+
+	ctx, err := transport.enforceAuthorizationPublicAccess(
 		context.Background(),
 		"user:admin@example.com",
 		proto.Authorization_AddRelationship_FullMethodName,
-		req,
+		&proto.AddRelationshipRequest{
+			Relationship: &proto.Relationship{
+				Tuple: &proto.RelationshipTuple{
+					Resource: &proto.Resource{Type: "app", Id: "roadmap"},
+					Relation: "viewer",
+				},
+			},
+		},
 	)
 	if err != nil {
 		t.Fatalf("enforceAuthorizationPublicAccess error = %v, want nil", err)
+	}
+	if _, _, _, _, ok := AppScopedRelationshipMutationFromContext(ctx); ok {
+		t.Fatal("context marker present for malformed app relationship tuple, want absent")
 	}
 }
 
