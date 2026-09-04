@@ -558,7 +558,7 @@ mod tests {
 
     #[test]
     fn canonical_subject_id_prefers_roster_subject_id() {
-        let members = vec![AppAdminMember {
+        let members = [AppAdminMember {
             role: "viewer".to_string(),
             mutable: true,
             subject_id: Some("user:canonical-id".to_string()),
