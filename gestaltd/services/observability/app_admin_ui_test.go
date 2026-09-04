@@ -97,8 +97,6 @@ func TestRecordAppAdminUIInteractionOmitsSubjectIDsFromMetrics(t *testing.T) {
 }
 
 func TestLogAppAdminUI(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name        string
 		interaction AppAdminUIInteraction
@@ -153,8 +151,6 @@ func TestLogAppAdminUI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			var buf bytes.Buffer
 			previous := slog.Default()
 			slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
