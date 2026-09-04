@@ -4,9 +4,8 @@ use serde_json::Value;
 
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::{
-    AuthorizationAppsCommands, AuthorizationAppsMembersCommands,
-    AuthorizationAppsMembersListArgs, AuthorizationAppsMembersRemoveArgs,
-    AuthorizationAppsMembersSetArgs,
+    AuthorizationAppsCommands, AuthorizationAppsMembersCommands, AuthorizationAppsMembersListArgs,
+    AuthorizationAppsMembersRemoveArgs, AuthorizationAppsMembersSetArgs,
 };
 use crate::commands::authorization::{
     build_app_member_relationship, relationship_tuple_from_parts,
@@ -28,15 +27,15 @@ pub fn dispatch(
         AuthorizationAppsCommands::Members { command } => match command {
             AuthorizationAppsMembersCommands::List(args) => list_members(api, &args, format),
             AuthorizationAppsMembersCommands::Set(args) => set_member(authz, api, &args, format),
-            AuthorizationAppsMembersCommands::Remove(args) => remove_member(authz, api, &args, format),
+            AuthorizationAppsMembersCommands::Remove(args) => {
+                remove_member(authz, api, &args, format)
+            }
         },
     }
 }
 
 fn list_apps(api: &ApiClient, format: Format) -> Result<()> {
-    let resp = api
-        .get("/api/v1/apps")
-        .context("failed to list apps")?;
+    let resp = api.get("/api/v1/apps").context("failed to list apps")?;
     match format {
         Format::Json => output::print_json(&resp),
         Format::Table => {
@@ -70,10 +69,7 @@ fn list_members(
     format: Format,
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
-    let path = format!(
-        "/api/v1/apps/{}/admin/members",
-        encode_path_segment(&app)
-    );
+    let path = format!("/api/v1/apps/{}/admin/members", encode_path_segment(&app));
     let resp = api
         .get(&path)
         .with_context(|| format!("failed to list members for app {app}"))?;
@@ -88,10 +84,7 @@ fn list_members(
                 .collect();
             println!(
                 "{}",
-                output::render_table(
-                    &["Role", "Source", "Mutable", "Subject", "Email"],
-                    &rows
-                )
+                output::render_table(&["Role", "Source", "Mutable", "Subject", "Email"], &rows)
             );
         }
     }
@@ -117,9 +110,9 @@ fn set_member(
                     "role": role,
                     "changed": false,
                 })),
-                Format::Table => output::print_success(&format!(
-                    "{subject_id} already has {role} on {app}."
-                )),
+                Format::Table => {
+                    output::print_success(&format!("{subject_id} already has {role} on {app}."))
+                }
             }
             return Ok(());
         }
@@ -139,9 +132,9 @@ fn set_member(
             "role": role,
             "changed": true,
         })),
-        Format::Table => output::print_success(&format!(
-            "Granted {role} on {app} to {subject_id}."
-        )),
+        Format::Table => {
+            output::print_success(&format!("Granted {role} on {app} to {subject_id}."))
+        }
     }
     Ok(())
 }
@@ -154,7 +147,12 @@ fn remove_member(
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
     let subject = normalize_subject_id(&args.subject)?;
-    let roles = match args.role.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+    let roles = match args
+        .role
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
         Some(role) => vec![require_role(role)?],
         None => mutable_member_roles_for_subject(api, &app, &subject)?,
     };
@@ -198,15 +196,12 @@ fn mutable_member_roles_for_subject(
     app: &str,
     subject_id: &str,
 ) -> Result<Vec<String>> {
-    let path = format!(
-        "/api/v1/apps/{}/admin/members",
-        encode_path_segment(app)
-    );
+    let path = format!("/api/v1/apps/{}/admin/members", encode_path_segment(app));
     let resp = api
         .get(&path)
         .with_context(|| format!("failed to list members for app {app}"))?;
-    let members: Vec<AppAdminMember> = serde_json::from_value(resp)
-        .context("failed to parse app admin members response")?;
+    let members: Vec<AppAdminMember> =
+        serde_json::from_value(resp).context("failed to parse app admin members response")?;
     Ok(members
         .into_iter()
         .filter(|member| member.mutable && subject_matches_member(subject_id, member))
@@ -325,8 +320,8 @@ struct AppAdminMember {
 #[cfg(test)]
 mod tests {
     use super::{
-        member_subject_id, normalize_subject_id, normalize_user_email_subject, subject_matches_member,
-        AppAdminMember,
+        AppAdminMember, member_subject_id, normalize_subject_id, normalize_user_email_subject,
+        subject_matches_member,
     };
 
     #[test]
@@ -339,10 +334,7 @@ mod tests {
 
     #[test]
     fn normalize_subject_id_prefixes_bare_ids() {
-        assert_eq!(
-            normalize_subject_id("user_123").unwrap(),
-            "user:user_123"
-        );
+        assert_eq!(normalize_subject_id("user_123").unwrap(), "user:user_123");
     }
 
     #[test]
