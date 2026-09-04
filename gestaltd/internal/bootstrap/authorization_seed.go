@@ -32,6 +32,10 @@ func bootstrapAuthorizationSeedIfEmpty(
 		return fmt.Errorf("check authorization store: %w", err)
 	}
 	if !empty {
+		slog.InfoContext(ctx, "authorization state seed skipped: store already has model or relationships",
+			"provider", providerName,
+			"seed_file", seedFile,
+		)
 		return nil
 	}
 
