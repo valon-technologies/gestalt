@@ -99,6 +99,20 @@ func RecordAppAdminUIInteraction(ctx context.Context, startedAt time.Time, inter
 	}
 }
 
+func appendAppAdminUILogSubject(
+	attrs []any,
+	kindKey, idKey, subjectKind, subjectID string,
+) []any {
+	subjectKind = strings.TrimSpace(subjectKind)
+	if subjectKind == "" {
+		return attrs
+	}
+	return append(attrs,
+		slog.String(kindKey, subjectKind),
+		slog.String(idKey, strings.TrimSpace(subjectID)),
+	)
+}
+
 func LogAppAdminUIFailure(ctx context.Context, interaction AppAdminUIInteraction) {
 	attrs := []any{
 		slog.String("event", "app_admin.ui"),
@@ -107,6 +121,20 @@ func LogAppAdminUIFailure(ctx context.Context, interaction AppAdminUIInteraction
 		slog.String("action", interaction.Action),
 		slog.String("failure_category", interaction.FailureCategory),
 	}
+	attrs = appendAppAdminUILogSubject(
+		attrs,
+		"principal_subject_kind",
+		"principal_subject_id",
+		interaction.PrincipalSubjectKind,
+		interaction.PrincipalSubjectID,
+	)
+	attrs = appendAppAdminUILogSubject(
+		attrs,
+		"target_subject_kind",
+		"target_subject_id",
+		interaction.TargetSubjectKind,
+		interaction.TargetSubjectID,
+	)
 	if interaction.Err != nil {
 		attrs = append(attrs, slog.String("error", interaction.Err.Error()))
 	} else if interaction.StatusCode > 0 {
