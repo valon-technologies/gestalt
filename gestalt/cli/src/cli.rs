@@ -292,7 +292,14 @@ pub struct AuthorizationAppsMembersRemoveArgs {
     /// App name
     pub app: String,
     /// Member subject id, such as user:abc
-    pub subject: String,
+    #[arg(conflicts_with_all = ["email", "subject_id"], required_unless_present_any = ["email", "subject_id"])]
+    pub subject: Option<String>,
+    /// Member email address
+    #[arg(long, conflicts_with_all = ["subject", "subject_id"])]
+    pub email: Option<String>,
+    /// Member subject id, such as user:abc or service_account:bot
+    #[arg(long = "subject-id", conflicts_with_all = ["subject", "email"])]
+    pub subject_id: Option<String>,
     /// Relationship role to remove; when omitted, removes all mutable grants for the subject
     #[arg(long)]
     pub role: Option<String>,

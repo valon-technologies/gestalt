@@ -159,7 +159,12 @@ fn remove_member(
     format: Format,
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
-    let subject = normalize_subject_id(&args.subject)?;
+    let subject = resolve_member_subject_id(
+        api,
+        &app,
+        args.email.as_deref(),
+        args.subject_id.as_deref().or(args.subject.as_deref()),
+    )?;
     let mutable_roles = mutable_roles_for_subject(authz, api, &app, &subject)?;
     let roles = match args
         .role
