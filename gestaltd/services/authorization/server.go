@@ -51,7 +51,7 @@ func (s *providerServer) WriteRelationships(ctx context.Context, req *proto.Writ
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.WriteRelationships(s.gatewayContext(ctx), req)
+	return s.provider.WriteRelationships(s.gatewayContext(ctx), stampPublicRuntimeWriteRelationships(ctx, req))
 }
 
 func (s *providerServer) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
@@ -59,7 +59,7 @@ func (s *providerServer) AddRelationship(ctx context.Context, req *proto.AddRela
 		return nil, err
 	}
 	startedAt := time.Now()
-	resp, err := s.provider.AddRelationship(s.gatewayContext(ctx), req)
+	resp, err := s.provider.AddRelationship(s.gatewayContext(ctx), stampPublicRuntimeAddRelationship(ctx, req))
 	recordAppScopedRelationshipMutation(ctx, startedAt, err)
 	return resp, err
 }
