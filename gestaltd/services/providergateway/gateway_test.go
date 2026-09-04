@@ -430,7 +430,7 @@ func TestPreparePublicRequest(t *testing.T) {
 			}
 			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(metadataPairs...))
 
-			p, adapted, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
+			ctx, p, adapted, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
 			if tc.wantCode != codes.OK {
 				assertGRPCCode(t, err, tc.wantCode)
 				return
@@ -804,7 +804,7 @@ func TestPublicRequestOptionalProviderMatrix(t *testing.T) {
 			}
 			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(pairs...))
 
-			_, _, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
+			_, _, _, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
 			if tc.wantCode == codes.OK {
 				if err != nil {
 					t.Fatalf("PreparePublicRequest: %v", err)
@@ -862,7 +862,7 @@ func TestPublicRequestLoginMethodsWithoutAuth(t *testing.T) {
 			} {
 				ctx := publicrpc.WithPublicOrigin(context.Background(), fullMethod)
 				ctx = metadata.NewIncomingContext(ctx, metadata.Pairs())
-				if _, _, err := transport.PreparePublicRequest(ctx, fullMethod, &proto.AuthorizeRequest{
+				if _, _, _, err := transport.PreparePublicRequest(ctx, fullMethod, &proto.AuthorizeRequest{
 					ResponseType: "code",
 					ClientId:     "gestalt-cli",
 					RedirectUri:  "http://localhost:8080/callback",

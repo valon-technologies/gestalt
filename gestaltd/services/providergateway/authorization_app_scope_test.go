@@ -147,7 +147,7 @@ func TestEnforceAuthorizationPublicAccessAllowsAppAdminRelationshipWrite(t *test
 			},
 		},
 	}
-	err := transport.enforceAuthorizationPublicAccess(
+	_, err := transport.enforceAuthorizationPublicAccess(
 		context.Background(),
 		"user:admin@example.com",
 		proto.Authorization_AddRelationship_FullMethodName,
@@ -166,7 +166,7 @@ func TestEnforceAuthorizationPublicAccessDeniesAppAdminModelWrite(t *testing.T) 
 	}
 	transport := &ProviderGatewayTransport{authorization: provider}
 
-	err := transport.enforceAuthorizationPublicAccess(
+	_, err := transport.enforceAuthorizationPublicAccess(
 		context.Background(),
 		"user:admin@example.com",
 		proto.Authorization_SetActiveModel_FullMethodName,

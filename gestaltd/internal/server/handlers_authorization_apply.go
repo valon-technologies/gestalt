@@ -44,7 +44,7 @@ func handleRESTApplyAuthorizationState(
 		httpHeadersToGRPCMetadata(r.Header),
 	))
 	ctx = stripInternalIdentityMetadata(ctx)
-	if _, _, err := transport.PreparePublicRequest(ctx, applyAuthorizationStateFullMethod, &protoReq); err != nil {
+	if _, _, _, err := transport.PreparePublicRequest(ctx, applyAuthorizationStateFullMethod, &protoReq); err != nil {
 		publicRESTErrorHandler(ctx, nil, nil, w, r, err)
 		return
 	}

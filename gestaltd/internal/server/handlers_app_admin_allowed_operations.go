@@ -37,9 +37,9 @@ type appAdminAllowedOperationsUpdateRequest struct {
 }
 
 func (s *Server) mountAppAdminAllowedOperationsRoutes(r chi.Router) {
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware, s.appAdminUIObservabilityMiddleware).
 		Get("/apps/{app}/admin/allowed-operations", s.getAppAdminAllowedOperations)
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware, s.appAdminUIObservabilityMiddleware).
 		Put("/apps/{app}/admin/allowed-operations", s.putAppAdminAllowedOperations)
 }
 

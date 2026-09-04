@@ -181,24 +181,37 @@ func (s *Server) mountAppAdminRegistryRoutes(r chi.Router) {
 
 func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		surface, action, instrumented := appAdminUIRouteSpecForRequest(r)
+		appName := strings.TrimSpace(chi.URLParam(r, "app"))
+		recordAuthFailure := func(status int, message string) {
+			if !instrumented {
+				return
+			}
+			recordAppAdminUIAuthFailure(r.Context(), r, appName, surface, action, appAdminUIAuthFailureError(message))
+		}
+
 		if s.authorization == nil {
 			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 			return
 		}
 		p := PrincipalFromContext(r.Context())
 		if p == nil {
+			recordAuthFailure(http.StatusUnauthorized, "missing authorization")
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		}
 		if err := requireUserCaller(w, p); err != nil {
+			recordAuthFailure(http.StatusForbidden, errUserRequired.Error())
 			return
 		}
 		subjectID, err := principal.ResolveAuthorizationSubjectID(r.Context(), s.credentialUserResolver(), p)
 		switch {
 		case errors.Is(err, principal.ErrCredentialSubjectRequired):
+			recordAuthFailure(http.StatusUnauthorized, "missing authorization")
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		case errors.Is(err, principal.ErrOpaqueCredentialSubject):
+			recordAuthFailure(http.StatusForbidden, "app access denied")
 			writeError(w, http.StatusForbidden, "app access denied")
 			return
 		case err != nil:
@@ -207,16 +220,18 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 		}
 		subjectID = strings.TrimSpace(subjectID)
 		if subjectID == "" {
+			recordAuthFailure(http.StatusUnauthorized, "missing authorization")
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		}
-		appName := strings.TrimSpace(chi.URLParam(r, "app"))
+		appName = strings.TrimSpace(chi.URLParam(r, "app"))
 		allowed, err := s.hasExplicitAppAdmin(r.Context(), subjectID, appName)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 			return
 		}
 		if !allowed {
+			recordAuthFailure(http.StatusForbidden, "app access denied")
 			writeError(w, http.StatusForbidden, "app access denied")
 			return
 		}
