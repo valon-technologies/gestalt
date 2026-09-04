@@ -63,11 +63,11 @@ func TestLogAppAdminUI(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
+		name        string
 		interaction AppAdminUIInteraction
-		wantLevel string
-		want      map[string]string
-		omit      []string
+		wantLevel   string
+		want        map[string]string
+		omit        []string
 	}{
 		{
 			name: "failure includes principal target and category",
