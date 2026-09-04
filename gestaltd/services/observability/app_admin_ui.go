@@ -94,9 +94,7 @@ func RecordAppAdminUIInteraction(ctx context.Context, startedAt time.Time, inter
 		)
 	}
 	RecordAppAdminUI(ctx, startedAt, interaction.Failed, attrs...)
-	if interaction.Failed {
-		LogAppAdminUIFailure(ctx, interaction)
-	}
+	LogAppAdminUI(ctx, interaction)
 }
 
 func appendAppAdminUILogSubject(
@@ -113,13 +111,17 @@ func appendAppAdminUILogSubject(
 	)
 }
 
-func LogAppAdminUIFailure(ctx context.Context, interaction AppAdminUIInteraction) {
+func LogAppAdminUI(ctx context.Context, interaction AppAdminUIInteraction) {
+	outcome := AppAdminUIOutcomeSuccess
+	if interaction.Failed {
+		outcome = AppAdminUIOutcomeFailure
+	}
 	attrs := []any{
 		slog.String("event", "app_admin.ui"),
 		slog.String("app", interaction.App),
 		slog.String("surface", interaction.Surface),
 		slog.String("action", interaction.Action),
-		slog.String("failure_category", interaction.FailureCategory),
+		slog.String("outcome", outcome),
 	}
 	attrs = appendAppAdminUILogSubject(
 		attrs,
@@ -135,10 +137,15 @@ func LogAppAdminUIFailure(ctx context.Context, interaction AppAdminUIInteraction
 		interaction.TargetSubjectKind,
 		interaction.TargetSubjectID,
 	)
-	if interaction.Err != nil {
-		attrs = append(attrs, slog.String("error", interaction.Err.Error()))
-	} else if interaction.StatusCode > 0 {
-		attrs = append(attrs, slog.String("error", fmt.Sprintf("HTTP %d", interaction.StatusCode)))
+	if interaction.Failed {
+		if failureCategory := strings.TrimSpace(interaction.FailureCategory); failureCategory != "" {
+			attrs = append(attrs, slog.String("failure_category", failureCategory))
+		}
+		if interaction.Err != nil {
+			attrs = append(attrs, slog.String("error", interaction.Err.Error()))
+		} else if interaction.StatusCode > 0 {
+			attrs = append(attrs, slog.String("error", fmt.Sprintf("HTTP %d", interaction.StatusCode)))
+		}
 	}
 	if requestID := strings.TrimSpace(interaction.RequestID); requestID != "" {
 		attrs = append(attrs, slog.String("request_id", requestID))
@@ -147,7 +154,11 @@ func LogAppAdminUIFailure(ctx context.Context, interaction AppAdminUIInteraction
 	if spanCtx.IsValid() {
 		attrs = append(attrs, slog.String("trace_id", spanCtx.TraceID().String()))
 	}
-	slog.WarnContext(ctx, "app admin ui interaction failed", attrs...)
+	if interaction.Failed {
+		slog.WarnContext(ctx, "app admin ui interaction failed", attrs...)
+		return
+	}
+	slog.InfoContext(ctx, "app admin ui interaction", attrs...)
 }
 
 func AppAdminUIFailureCategoryHTTP(status int) string {
