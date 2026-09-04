@@ -23,8 +23,6 @@ import (
 
 const reversePublicationResourceType = "reversePublication"
 const reversePublicationResourceID = "reversePublication"
-const legacyAdminResourceType = "gestaltAdmin"
-const legacyAdminResourceID = "gestaltAdmin"
 
 // EndpointValidator dials a candidate tunnel and runs the tunnel-only
 // RegistrationLifecycle.Check. RR-6/RR-7 supply the real one; tests inject a fake.
@@ -190,26 +188,16 @@ func (s *Service) authorizePublication(ctx context.Context, p *principal.Princip
 		return resolveSubjectError(err)
 	}
 
-	resources := []*proto.Resource{
-		{Type: reversePublicationResourceType, Id: reversePublicationResourceID},
-		// Preserve existing access while deployments migrate administrators to the
-		// narrower reverse-publication permission.
-		{Type: legacyAdminResourceType, Id: legacyAdminResourceID},
-	}
-	var authorizationFailed bool
-	for _, resource := range resources {
-		req := invocation.SubjectAccessRequest(subjectID, action, resource)
-		allowed, checkErr := invocation.CheckSubjectAccess(ctx, s.authz, req)
-		if checkErr != nil {
-			authorizationFailed = true
-			continue
-		}
-		if allowed {
-			return nil
-		}
-	}
-	if authorizationFailed {
+	req := invocation.SubjectAccessRequest(subjectID, action, &proto.Resource{
+		Type: reversePublicationResourceType,
+		Id:   reversePublicationResourceID,
+	})
+	allowed, err := invocation.CheckSubjectAccess(ctx, s.authz, req)
+	if err != nil {
 		return status.Error(codes.Unavailable, "authorization provider unavailable")
+	}
+	if allowed {
+		return nil
 	}
 	return status.Error(codes.PermissionDenied, "access denied")
 }

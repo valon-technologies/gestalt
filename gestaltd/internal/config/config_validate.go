@@ -2360,7 +2360,11 @@ func validateAdminConfig(cfg *Config) error {
 	}
 	admin := cfg.Server.Admin
 	policy := strings.TrimSpace(admin.AuthorizationPolicy)
-	if policy != "" || len(admin.AllowedRoles) > 0 {
+	action := strings.TrimSpace(admin.AuthorizationAction)
+	if action != "" && policy == "" {
+		return fmt.Errorf("config validation: server.admin.authorizationAction requires server.admin.authorizationPolicy")
+	}
+	if policy != "" || action != "" || len(admin.AllowedRoles) > 0 {
 		_, authProvider, err := cfg.SelectedIdentityProvider()
 		if err != nil {
 			return err

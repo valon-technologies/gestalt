@@ -307,18 +307,6 @@ func TestPublicationAuthorizationStates(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy_admin_permission_allows", func(t *testing.T) {
-		t.Parallel()
-		svc := newRemoteService(t, &stubAuthz{
-			allowedResourceTypes: map[string]bool{"gestaltAdmin": true},
-		})
-		if _, err := svc.CreateRemote(ctx, &proto.CreateRemoteRequest{
-			Tunnel: validTunnel(), Providers: []*proto.RemoteProviderDefinition{appProvider("app", "test-app")}, ExpectedGeneration: 0,
-		}); err != nil {
-			t.Fatalf("legacy admin CreateRemote: %v", err)
-		}
-	})
-
 	t.Run("provider_failure_returns_unavailable", func(t *testing.T) {
 		t.Parallel()
 		svc := newRemoteService(t, &stubAuthz{err: errors.New("authz down")})

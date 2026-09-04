@@ -1384,8 +1384,33 @@ server:
 	}
 }
 
-func TestLoadConfigAdminBaseURLValidation(t *testing.T) {
+func TestLoadConfigAdminValidation(t *testing.T) {
 	t.Parallel()
+
+	t.Run("authorization action requires a policy", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v8
+server:
+  encryptionKey: server-key
+  admin:
+    authorizationAction: manage_admin
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.admin.authorizationAction requires server.admin.authorizationPolicy") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 
 	t.Run("invalid baseUrl is allowed when built-in admin auth is unset", func(t *testing.T) {
 		t.Parallel()
@@ -1445,6 +1470,7 @@ server:
     baseUrl: https://gestalt.example.test:9090
   admin:
     authorizationPolicy: admin_policy
+    authorizationAction: manage_admin
     allowedRoles: [admin]
 providers:
   identity:

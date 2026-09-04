@@ -149,6 +149,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		},
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
+			AuthorizationAction: cfg.Server.Admin.AuthorizationAction,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
 		},
 		UserLookup: UserLookupRouteConfig{
