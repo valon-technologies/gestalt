@@ -122,18 +122,18 @@ func recordAppScopedRelationshipMutation(ctx context.Context, startedAt time.Tim
 		return
 	}
 	failed := err != nil
-	interaction := observability.AppAdminUIInteraction{
-		App:               appID,
-		Surface:           observability.AppAdminUISurfaceMembers,
-		Action:            action,
-		Failed:            failed,
-		Err:               err,
-		TargetSubjectKind: targetSubjectKind,
-		TargetSubjectID:   targetSubjectID,
-	}
 	principalKind, principalID := principal.MetricAuthorizationSubject(principal.FromContext(ctx))
-	interaction.PrincipalSubjectKind = principalKind
-	interaction.PrincipalSubjectID = principalID
+	interaction := observability.AppAdminUIInteraction{
+		App:                  appID,
+		Surface:              observability.AppAdminUISurfaceMembers,
+		Action:               action,
+		Failed:               failed,
+		Err:                  err,
+		TargetSubjectKind:    targetSubjectKind,
+		TargetSubjectID:      targetSubjectID,
+		PrincipalSubjectKind: principalKind,
+		PrincipalSubjectID:   principalID,
+	}
 	if failed {
 		interaction.FailureCategory = observability.AppAdminUIFailureCategoryGRPC(err)
 	}

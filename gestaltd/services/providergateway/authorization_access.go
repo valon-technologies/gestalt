@@ -5,11 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
@@ -108,6 +107,7 @@ func recordAppScopedRelationshipAuthFailure(ctx context.Context, subjectID strin
 		return
 	}
 	targetSubjectKind, targetSubjectID := relationshipTupleTargetSubjectMetric(tuple)
+	principalKind, principalID := principal.MetricAuthorizationSubject(&principal.Principal{SubjectID: subjectID})
 	observability.RecordAppAdminUIInteraction(ctx, time.Now(), observability.AppAdminUIInteraction{
 		App:                  appID,
 		Surface:              observability.AppAdminUISurfaceMembers,
@@ -115,31 +115,9 @@ func recordAppScopedRelationshipAuthFailure(ctx context.Context, subjectID strin
 		Failed:               true,
 		FailureCategory:      observability.AppAdminUIFailureAuth,
 		Err:                  err,
-		PrincipalSubjectKind: principalSubjectKindFromID(subjectID),
-		PrincipalSubjectID:   principalSubjectIDFromID(subjectID),
+		PrincipalSubjectKind: principalKind,
+		PrincipalSubjectID:   principalID,
 		TargetSubjectKind:    targetSubjectKind,
 		TargetSubjectID:      targetSubjectID,
 	})
-}
-
-func principalSubjectKindFromID(subjectID string) string {
-	subjectKind, parsedID, ok := core.ParseSubjectID(strings.TrimSpace(subjectID))
-	if ok && parsedID != "" {
-		return subjectKind
-	}
-	if strings.TrimSpace(subjectID) != "" {
-		return "subject"
-	}
-	return metricutil.UnknownAttrValue
-}
-
-func principalSubjectIDFromID(subjectID string) string {
-	_, parsedID, ok := core.ParseSubjectID(strings.TrimSpace(subjectID))
-	if ok && parsedID != "" {
-		return parsedID
-	}
-	if trimmed := strings.TrimSpace(subjectID); trimmed != "" {
-		return trimmed
-	}
-	return metricutil.UnknownAttrValue
 }

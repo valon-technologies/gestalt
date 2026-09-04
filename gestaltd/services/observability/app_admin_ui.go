@@ -33,13 +33,13 @@ const (
 )
 
 var (
-	AttrAppAdminUIApp                 = attribute.Key("gestaltd.app_admin.ui.app")
-	AttrAppAdminUISurface             = attribute.Key("gestaltd.app_admin.ui.surface")
-	AttrAppAdminUIAction              = attribute.Key("gestaltd.app_admin.ui.action")
-	AttrAppAdminUIOutcome             = attribute.Key("gestaltd.app_admin.ui.outcome")
-	AttrAppAdminUIFailureCategory     = attribute.Key("gestaltd.app_admin.ui.failure_category")
-	AttrAppAdminUITargetSubjectKind   = attribute.Key("gestaltd.app_admin.ui.target_subject.kind")
-	AttrAppAdminUITargetSubjectID     = attribute.Key("gestaltd.app_admin.ui.target_subject.id")
+	AttrAppAdminUIApp               = attribute.Key("gestaltd.app_admin.ui.app")
+	AttrAppAdminUISurface           = attribute.Key("gestaltd.app_admin.ui.surface")
+	AttrAppAdminUIAction            = attribute.Key("gestaltd.app_admin.ui.action")
+	AttrAppAdminUIOutcome           = attribute.Key("gestaltd.app_admin.ui.outcome")
+	AttrAppAdminUIFailureCategory   = attribute.Key("gestaltd.app_admin.ui.failure_category")
+	AttrAppAdminUITargetSubjectKind = attribute.Key("gestaltd.app_admin.ui.target_subject.kind")
+	AttrAppAdminUITargetSubjectID   = attribute.Key("gestaltd.app_admin.ui.target_subject.id")
 )
 
 type AppAdminUIInteraction struct {
