@@ -122,11 +122,13 @@ class ConnectionParamDef(_message.Message):
     DEFAULT_VALUE_FIELD_NUMBER: _ClassVar[int]
     FROM_FIELD_NUMBER: _ClassVar[int]
     FIELD_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_IDENTITY_FIELD_NUMBER: _ClassVar[int]
     required: bool
     description: str
     default_value: str
     field: str
-    def __init__(self, required: _Optional[bool] = ..., description: _Optional[str] = ..., default_value: _Optional[str] = ..., field: _Optional[str] = ..., **kwargs) -> None: ...
+    account_identity: bool
+    def __init__(self, required: _Optional[bool] = ..., description: _Optional[str] = ..., default_value: _Optional[str] = ..., field: _Optional[str] = ..., account_identity: _Optional[bool] = ..., **kwargs) -> None: ...
 
 class ProviderMetadata(_message.Message):
     __slots__ = ()

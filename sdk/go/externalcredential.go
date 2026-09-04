@@ -31,10 +31,14 @@ type ExternalCredentialOpaque struct {
 // ExternalCredential is the credential record stored by the host, keyed by
 // (subject, audience, qualifier). Exactly one of Grant, Client, Opaque is set.
 type ExternalCredential struct {
-	ID           string
-	Subject      string
-	Audience     string
-	Qualifier    string
+	ID        string
+	Subject   string
+	Audience  string
+	Qualifier string
+	// AccountKey is an opaque, host-owned grouping key for the linked provider
+	// account. Providers persist it unchanged and do not use it as a runtime
+	// connection parameter.
+	AccountKey   string
 	Grant        *ExternalCredentialGrant
 	Client       *ExternalCredentialClientInfo
 	Opaque       *ExternalCredentialOpaque
@@ -200,6 +204,15 @@ func (c *ExternalCredential) GetQualifier() string {
 		return ""
 	}
 	return c.Qualifier
+}
+
+// GetAccountKey returns the opaque host-owned account grouping key; it is safe
+// to call on a nil receiver.
+func (c *ExternalCredential) GetAccountKey() string {
+	if c == nil {
+		return ""
+	}
+	return c.AccountKey
 }
 
 // GetGrant returns the grant variant; it is safe to call on a nil receiver.

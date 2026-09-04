@@ -193,6 +193,9 @@ pub struct ConnectionParamDef {
     pub from: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub field: ::prost::alloc::string::String,
+    /// Marks a token-response parameter as the provider's stable account ID.
+    #[prost(bool, tag = "6")]
+    pub account_identity: bool,
 }
 /// ProviderMetadata describes an integration provider's static capabilities.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1959,6 +1962,10 @@ pub struct ExternalCredential {
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "10")]
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
+    /// Opaque, host-owned grouping key for the linked provider account. Providers
+    /// must persist it unchanged and must not expose it as a connection param.
+    #[prost(string, tag = "11")]
+    pub account_key: ::prost::alloc::string::String,
     #[prost(oneof = "external_credential::Credential", tags = "5, 6, 7")]
     pub credential: ::core::option::Option<external_credential::Credential>,
 }

@@ -167,6 +167,10 @@ export interface ConnectionParamDef {
   defaultValue: string;
   from: string;
   field: string;
+  /**
+   * Marks a token-response parameter as the provider's stable account ID.
+   */
+  accountIdentity: boolean;
 }
 
 /**

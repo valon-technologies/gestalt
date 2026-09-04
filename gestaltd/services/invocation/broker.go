@@ -1382,24 +1382,13 @@ func (b *Broker) connectionID(providerName, connection string) string {
 }
 
 // chosenCredentialInstance returns the account the subject has chosen for this
-// connection and whether a choice exists. Preferred wins only when that
-// qualifier still exists among credentials; otherwise a sole credential is
-// implicitly chosen (including empty qualifier). ok=false means zero or
+// connection and whether a choice exists. Credentials with the same explicit
+// provider account key count as one account, while keyless credentials remain
+// distinct. Preferred wins among usable credentials; otherwise a sole account
+// is implicitly chosen (including empty qualifier). ok=false means zero or
 // ambiguous accounts — the connection is not connected.
 func chosenCredentialInstance(credentials []*core.ExternalCredential, preferred string) (instance string, ok bool) {
-	creds := nonNilCredentials(credentials)
-	preferred = strings.TrimSpace(preferred)
-	if preferred != "" {
-		for _, credential := range creds {
-			if strings.TrimSpace(credential.Qualifier) == preferred {
-				return preferred, true
-			}
-		}
-	}
-	if len(creds) == 1 {
-		return strings.TrimSpace(creds[0].Qualifier), true
-	}
-	return "", false
+	return core.ChooseCredentialInstance(credentials, preferred, time.Now())
 }
 
 func nonNilCredentials(credentials []*core.ExternalCredential) []*core.ExternalCredential {
@@ -1610,6 +1599,19 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	if err != nil {
 		return ctx, ConnectionRuntimeCredential{}, err
 	}
+	credentialConnection := strings.TrimSpace(connection)
+	if credentialConnection == "" {
+		credentialConnection = core.AppConnectionName
+	}
+	// Preserve the resolved instance before the provider call can fail. A
+	// reconnect response may arrive while resolving a stored grant, before the
+	// successful-response path below has a credential to attach to context.
+	ctx = WithCredentialContext(ctx, CredentialContext{
+		Mode:       credentialMode,
+		SubjectID:  credentialSubjectID,
+		Connection: credentialConnection,
+		Instance:   instance,
+	})
 
 	runtimeInfo := ConnectionRuntimeInfo{}
 	if b.connectionRuntime != nil {
@@ -1660,10 +1662,6 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	storedCredential := resp.Credential
 	if storedCredential == nil {
 		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
-	}
-	credentialConnection := strings.TrimSpace(connection)
-	if credentialConnection == "" {
-		credentialConnection = core.AppConnectionName
 	}
 	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, credentialConnection, storedCredential.Qualifier)
 	ctx = WithCredentialContext(ctx, CredentialContext{

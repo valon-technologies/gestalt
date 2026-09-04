@@ -347,6 +347,57 @@ type recordingExternalCredentialProvider struct {
 	exchangeCredentialCalls atomic.Int64
 }
 
+type flakyDeleteExternalCredentialProvider struct {
+	core.ExternalCredentialProvider
+	failID     string
+	failDelete bool
+}
+
+type orderedExternalCredentialProvider struct {
+	core.ExternalCredentialProvider
+	order []string
+}
+
+func (p *orderedExternalCredentialProvider) ListCredentials(ctx context.Context, subject, audience string) ([]*core.ExternalCredential, error) {
+	credentials, err := p.ExternalCredentialProvider.ListCredentials(ctx, subject, audience)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]*core.ExternalCredential, len(credentials))
+	for _, credential := range credentials {
+		if credential != nil {
+			byID[credential.ID] = credential
+		}
+	}
+	ordered := make([]*core.ExternalCredential, 0, len(credentials))
+	seen := make(map[string]struct{}, len(credentials))
+	for _, id := range p.order {
+		credential, ok := byID[id]
+		if !ok {
+			continue
+		}
+		ordered = append(ordered, credential)
+		seen[id] = struct{}{}
+	}
+	for _, credential := range credentials {
+		if credential == nil {
+			continue
+		}
+		if _, ok := seen[credential.ID]; ok {
+			continue
+		}
+		ordered = append(ordered, credential)
+	}
+	return ordered, nil
+}
+
+func (p *flakyDeleteExternalCredentialProvider) DeleteCredential(ctx context.Context, id string) error {
+	if p.failDelete && id == p.failID {
+		return fmt.Errorf("temporary delete failure for %s", id)
+	}
+	return p.ExternalCredentialProvider.DeleteCredential(ctx, id)
+}
+
 func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	t.Parallel()
 
@@ -4852,13 +4903,13 @@ func TestListIntegrations_StaleRefreshFailuresRequireReconnect(t *testing.T) {
 	assertConnection(expiredFailed, testDefaultConnection, "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"reconnect", "disconnect"})
 	assertStatus("expired-untried", "ready", "connected", "not_checked", []string{"disconnect", "add_instance"})
 	assertStatus("unexpired-error", "ready", "connected", "not_checked", []string{"disconnect", "add_instance"})
-	mixed := assertStatus("mixed", "degraded", "invalid", "unhealthy", []string{"select_instance", "disconnect", "add_instance"})
-	assertConnection(mixed, testDefaultConnection, "degraded", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "disconnect", "add_instance"})
-	allInvalid := assertStatus("all-invalid-multi", "needs_user_connection", "invalid", "unhealthy", []string{"select_instance", "disconnect"})
-	assertConnection(allInvalid, testDefaultConnection, "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "disconnect"})
+	mixed := assertStatus("mixed", "degraded", "invalid", "unhealthy", []string{"select_instance", "reconnect", "disconnect", "add_instance"})
+	assertConnection(mixed, testDefaultConnection, "degraded", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "reconnect", "disconnect", "add_instance"})
+	allInvalid := assertStatus("all-invalid-multi", "needs_user_connection", "invalid", "unhealthy", []string{"select_instance", "reconnect", "disconnect"})
+	assertConnection(allInvalid, testDefaultConnection, "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "reconnect", "disconnect"})
 	namedStale := assertStatus("named-stale", "degraded", "invalid", "unhealthy", []string{})
 	assertConnection(namedStale, testDefaultConnection, "ready", "connected", "not_checked", "", []string{"disconnect", "add_instance"})
-	assertConnection(namedStale, "archive", "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"disconnect"})
+	assertConnection(namedStale, "archive", "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"reconnect", "disconnect"})
 }
 
 func TestListIntegrations_AuthTypes(t *testing.T) {
@@ -6074,6 +6125,181 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		if recordingCreds.deleteCredentialCalls.Load() == 0 {
 			t.Fatal("expected disconnect to delete credentials through ExternalCredentialProvider")
+		}
+	})
+
+	t.Run("disconnects hidden duplicate credentials for one account", func(t *testing.T) {
+		t.Parallel()
+
+		svc := testutil.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		metadata := `{"account_key":"provider:v1:shared"}`
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-visible",
+			Subject:      principal.UserSubjectID(u.ID),
+			Audience:     "app-svc:workspace",
+			Qualifier:    "visible-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "visible-token"},
+		})
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-hidden",
+			Subject:      principal.UserSubjectID(u.ID),
+			Audience:     "app-svc:workspace",
+			Qualifier:    "hidden-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "hidden-token"},
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "workspace")
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		credentials, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "app-svc")
+		if err != nil {
+			t.Fatalf("ListCredentialsForProvider: %v", err)
+		}
+		if len(credentials) != 0 {
+			t.Fatalf("credentials = %+v, want all duplicate account credentials removed", credentials)
+		}
+	})
+
+	t.Run("clears preferred instance when it is a hidden duplicate", func(t *testing.T) {
+		t.Parallel()
+
+		svc := testutil.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		subjectID := principal.UserSubjectID(u.ID)
+		metadata := `{"account_key":"provider:v1:shared"}`
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-visible",
+			Subject:      subjectID,
+			Audience:     "app-svc:workspace",
+			Qualifier:    "visible-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "visible-token"},
+		})
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-preferred",
+			Subject:      subjectID,
+			Audience:     "app-svc:workspace",
+			Qualifier:    "preferred-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "preferred-token"},
+		})
+		if _, err := svc.ConnectionInstancePreferences.Set(context.Background(), subjectID, "app-svc:workspace", "preferred-label"); err != nil {
+			t.Fatalf("Set preference: %v", err)
+		}
+		svc.ExternalCredentials = &orderedExternalCredentialProvider{
+			ExternalCredentialProvider: svc.ExternalCredentials,
+			order:                      []string{"tok-visible", "tok-preferred"},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "workspace")
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		preference, err := svc.ConnectionInstancePreferences.Get(context.Background(), subjectID, "app-svc:workspace")
+		if err == nil || preference != nil {
+			t.Fatalf("preference = %+v, err=%v, want cleared preference", preference, err)
+		}
+	})
+
+	t.Run("disconnect succeeds when duplicate cleanup is temporarily unavailable", func(t *testing.T) {
+		t.Parallel()
+
+		svc := testutil.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		metadata := `{"account_key":"provider:v1:shared"}`
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-visible",
+			Subject:      principal.UserSubjectID(u.ID),
+			Audience:     "app-svc:workspace",
+			Qualifier:    "visible-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "visible-token"},
+		})
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:           "tok-hidden",
+			Subject:      principal.UserSubjectID(u.ID),
+			Audience:     "app-svc:workspace",
+			Qualifier:    "hidden-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "hidden-token"},
+		})
+		flaky := &flakyDeleteExternalCredentialProvider{
+			ExternalCredentialProvider: svc.ExternalCredentials,
+			failID:                     "tok-hidden",
+			failDelete:                 true,
+		}
+		svc.ExternalCredentials = flaky
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "workspace")
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc?_connection=workspace&_instance=visible-label", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 after selected credential deletion, got %d", resp.StatusCode)
+		}
+
+		credentials, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "app-svc")
+		if err != nil {
+			t.Fatalf("ListCredentialsForProvider: %v", err)
+		}
+		if len(credentials) != 1 || credentials[0].ID != "tok-hidden" {
+			t.Fatalf("credentials = %+v, want deferred duplicate retained", credentials)
+		}
+
+		flaky.failDelete = false
+		retry, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc", nil)
+		retryResp, err := http.DefaultClient.Do(retry)
+		if err != nil {
+			t.Fatalf("retry request: %v", err)
+		}
+		_ = retryResp.Body.Close()
+		if retryResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected retry 200, got %d", retryResp.StatusCode)
+		}
+		credentials, err = listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "app-svc")
+		if err != nil {
+			t.Fatalf("ListCredentialsForProvider after retry: %v", err)
+		}
+		if len(credentials) != 0 {
+			t.Fatalf("credentials = %+v, want deferred duplicate removed on retry", credentials)
 		}
 	})
 
@@ -9553,7 +9779,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if stored.Grant == nil || stored.Grant.AccessToken != "oauth-token" {
 			t.Fatalf("stored grant = %+v, want access token %q", stored.Grant, "oauth-token")
 		}
-		if recordingCreds.upsertCredentialCalls.Load() == 0 {
+		if recordingCreds.createCredentialCalls.Load()+recordingCreds.upsertCredentialCalls.Load() == 0 {
 			t.Fatal("expected oauth callback to store credentials through ExternalCredentialProvider")
 		}
 		var metadata map[string]string
@@ -9565,6 +9791,9 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			"account_id": "account-456",
 		}) {
 			t.Fatalf("stored metadata = %+v", metadata)
+		}
+		if !strings.HasPrefix(stored.AccountKey, "provider:v1:") {
+			t.Fatalf("account key = %q, want provider-owned key", stored.AccountKey)
 		}
 
 		lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
@@ -9774,6 +10003,9 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			"workspace":  "beta",
 		}) {
 			t.Fatalf("stored connection metadata = %+v", metadata)
+		}
+		if !strings.HasPrefix(stored.AccountKey, "provider:v1:") {
+			t.Fatalf("account key = %q, want provider-owned key", stored.AccountKey)
 		}
 		if !strings.Contains(identityRaw, `"kind":"site"`) || !strings.Contains(identityRaw, "Site B") {
 			t.Fatalf("stored account_identity = %q, want site fact for Site B", identityRaw)

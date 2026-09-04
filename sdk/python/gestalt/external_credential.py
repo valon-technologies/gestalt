@@ -81,6 +81,9 @@ class ExternalCredential:
     metadata_json: str = ""
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
+    #: Opaque, host-owned grouping key for the linked provider account. Providers
+    #: must persist it unchanged and must not expose it as a connection param.
+    account_key: str = ""
     credential: ExternalCredentialCredential = None
 
 

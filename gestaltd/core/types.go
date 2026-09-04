@@ -268,6 +268,10 @@ type ExternalCredential struct {
 	Subject   string
 	Audience  string
 	Qualifier string
+	// AccountKey is an opaque, host-owned grouping key for the linked provider
+	// account. It is not a runtime connection parameter and must be persisted
+	// unchanged by external credential providers.
+	AccountKey string
 
 	// Exactly one of Grant, Client, Opaque is set.
 	Grant  *ExternalCredentialGrant

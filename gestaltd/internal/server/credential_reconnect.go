@@ -94,46 +94,37 @@ func (s *Server) loadReconnectGrant(ctx context.Context, subjectID, audience, in
 		}
 		return stored
 	}
-	credentials, listErr := s.externalCredentials.ListCredentials(ctx, subjectID, audience)
-	if listErr != nil {
-		slog.WarnContext(ctx, "listing credentials after stored-credential reject", "audience", audience, "error", listErr)
+	credentials, err := s.externalCredentials.ListCredentials(ctx, subjectID, audience)
+	if err != nil {
+		slog.WarnContext(ctx, "listing credentials after stored-credential reject", "audience", audience, "error", err)
 		return nil
 	}
 	preferred := ""
 	if s.connectionInstancePreferences != nil {
 		preferred, _ = s.connectionInstancePreferences.PreferredInstance(ctx, subjectID, audience)
 	}
-	chosen, ok := chosenReconnectInstance(credentials, preferred)
-	if !ok {
+	if preferred != "" {
+		for _, credential := range credentials {
+			if credential != nil && credential.Grant != nil && strings.TrimSpace(credential.Qualifier) == preferred {
+				return credential
+			}
+		}
 		return nil
 	}
-	stored, err := s.externalCredentials.GetCredential(ctx, subjectID, audience, chosen)
-	if err != nil || stored == nil {
-		return nil
-	}
-	return stored
-}
-
-func chosenReconnectInstance(credentials []*core.ExternalCredential, preferred string) (string, bool) {
-	matches := make([]*core.ExternalCredential, 0, len(credentials))
+	var sole *core.ExternalCredential
 	for _, credential := range credentials {
 		if credential == nil || credential.Grant == nil {
 			continue
 		}
-		matches = append(matches, credential)
-	}
-	preferred = strings.TrimSpace(preferred)
-	if preferred != "" {
-		for _, credential := range matches {
-			if strings.TrimSpace(credential.Qualifier) == preferred {
-				return preferred, true
-			}
+		if sole != nil {
+			// The request did not identify the grant and no preference exists;
+			// never guess between credentials, especially after the broker has
+			// already marked the grant it actually resolved.
+			return nil
 		}
+		sole = credential
 	}
-	if len(matches) == 1 {
-		return strings.TrimSpace(matches[0].Qualifier), true
-	}
-	return "", false
+	return sole
 }
 
 func firstNonEmpty(values ...string) string {

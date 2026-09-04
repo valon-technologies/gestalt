@@ -279,15 +279,16 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	tm := credentialMaterial{
-		SubjectID:      state.SubjectID,
-		AuthSource:     state.AuthSource,
-		Integration:    providerName,
-		Connection:     state.Connection,
-		Instance:       callbackInstance,
-		AccessToken:    tokenResp.AccessToken,
-		RefreshToken:   tokenResp.RefreshToken,
-		TokenExpiresAt: tokenExpiresAt,
-		MetadataJSON:   metadata,
+		SubjectID:         state.SubjectID,
+		AuthSource:        state.AuthSource,
+		Integration:       providerName,
+		Connection:        state.Connection,
+		Instance:          callbackInstance,
+		AccessToken:       tokenResp.AccessToken,
+		RefreshToken:      tokenResp.RefreshToken,
+		TokenExpiresAt:    tokenExpiresAt,
+		MetadataJSON:      metadata,
+		ProviderAccountID: providerAccountIDFromTokenResponse(selected.ParamDefs, tokenResp),
 	}
 	tm.ConnectionID = selected.Def.ConnectionID
 	tm.ActorSubjectID = state.ActorSubjectID
@@ -296,8 +297,18 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 	result, err := s.runConnectionSetup(credentialMaterialContext(r.Context(), nil, tm), prov, tm, tm.AccessToken)
 	if err != nil {
-		auditErr = errors.New("connection setup failed")
+		status, message := connectionSetupFailure(err)
+		auditErr = errors.New(message)
 		slog.ErrorContext(r.Context(), "connection setup failed", "provider", providerName, "error", err)
+		if status == http.StatusConflict {
+			writeCallbackError(
+				status,
+				"connection_instance_conflict",
+				providerName+" connection conflict",
+				message,
+			)
+			return
+		}
 		pageMessage := "Gestalt could not finish saving this connection. Start the connection again from Integrations."
 		writeCallbackError(
 			http.StatusBadGateway,

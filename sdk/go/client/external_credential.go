@@ -75,7 +75,10 @@ type ExternalCredential struct {
 	MetadataJson string
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
-	Credential   ExternalCredentialCredential
+	// Opaque, host-owned grouping key for the linked provider account. Providers
+	// must persist it unchanged and must not expose it as a connection param.
+	AccountKey string
+	Credential ExternalCredentialCredential
 }
 
 // ExternalCredentialAuthConfig is the native message type for gestalt.provider.v1.ExternalCredentialAuthConfig.

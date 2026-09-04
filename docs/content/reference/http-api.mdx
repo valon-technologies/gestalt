@@ -72,6 +72,10 @@ valid instance. Multiple stored accounts with no preferred leave
 `status: needs_instance_selection` and `connected: false` (credentials may still
 appear under `instances`).
 
+Each `instances[]` item may include `identity`. `identity` contains
+display-oriented facts about the linked provider account. Internal grouping keys
+are not part of the public response.
+
 ```json
 {
   "name": "github",

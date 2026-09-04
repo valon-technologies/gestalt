@@ -142,6 +142,7 @@ export function toWireExternalCredential(
     ...(value.updatedAt !== undefined
       ? { updatedAt: toWireTimestamp(value.updatedAt) }
       : {}),
+    accountKey: value.accountKey ?? "",
     credential: toWireExternalCredentialCredential(
       value.credential ?? { case: undefined },
     ),
@@ -163,6 +164,7 @@ export function fromWireExternalCredential(
     ...(value.updatedAt !== undefined
       ? { updatedAt: fromWireTimestamp(value.updatedAt) }
       : {}),
+    accountKey: value.accountKey,
     credential: fromWireExternalCredentialCredential(value.credential),
   };
 }

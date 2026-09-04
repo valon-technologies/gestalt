@@ -56,11 +56,12 @@ func declarativeConnectionParamDefs(params map[string]config.ConnectionParamDef)
 	out := make(map[string]declarative.ConnectionParamDef, len(params))
 	for name, param := range params {
 		out[name] = declarative.ConnectionParamDef{
-			Required:    param.Required,
-			Description: param.Description,
-			Default:     param.Default,
-			From:        param.From,
-			Field:       param.Field,
+			Required:        param.Required,
+			Description:     param.Description,
+			Default:         param.Default,
+			From:            param.From,
+			Field:           param.Field,
+			AccountIdentity: param.AccountIdentity,
 		}
 	}
 	return out

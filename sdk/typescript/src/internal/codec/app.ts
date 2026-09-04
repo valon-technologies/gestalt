@@ -303,6 +303,7 @@ export function toWireConnectionParamDef(
     defaultValue: value.defaultValue ?? "",
     from: value.from ?? "",
     field: value.field ?? "",
+    accountIdentity: value.accountIdentity ?? false,
   });
 }
 
@@ -315,6 +316,7 @@ export function fromWireConnectionParamDef(
     defaultValue: value.defaultValue,
     from: value.from,
     field: value.field,
+    accountIdentity: value.accountIdentity,
   };
 }
 

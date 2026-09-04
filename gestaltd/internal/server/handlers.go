@@ -55,8 +55,18 @@ type instanceInfo struct {
 	Connection string           `json:"connection,omitempty"`
 	Preferred  bool             `json:"preferred,omitempty"`
 	Identity   *accountIdentity `json:"identity,omitempty"`
+	// AccountKey is server-only grouping state. It must never become part of
+	// the public app response contract.
+	AccountKey string `json:"-"`
 
 	credentialInvalid bool
+	credentialID      string
+	credentialCreated time.Time
+}
+
+type matchedCredential struct {
+	credential *core.ExternalCredential
+	connection string
 }
 
 type credentialFieldInfo struct {
@@ -299,7 +309,10 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 				Name:              tok.Qualifier,
 				Connection:        userFacingConnectionName(binding.Connection),
 				Identity:          identityFromMetadataJSON(tok.MetadataJSON),
+				AccountKey:        core.AccountKeyForCredential(tok),
 				credentialInvalid: credentialInvalid,
+				credentialID:      tok.ID,
+				credentialCreated: tok.CreatedAt,
 			})
 		}
 	}
@@ -307,10 +320,7 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 }
 
 func credentialNeedsReconnect(credential *core.ExternalCredential, now time.Time) bool {
-	if credential == nil || credential.Grant == nil || credential.Grant.ExpiresAt == nil || credential.Grant.RefreshErrorCount <= 0 {
-		return false
-	}
-	return !credential.Grant.ExpiresAt.After(now)
+	return core.CredentialNeedsReconnect(credential, now)
 }
 
 type pluginConnectionBinding struct {
@@ -429,10 +439,6 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type matchedCredential struct {
-		credential *core.ExternalCredential
-		connection string
-	}
 	var matched []matchedCredential
 	for _, tok := range tokens {
 		if tok == nil {
@@ -455,55 +461,86 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	groups := groupMatchedCredentialsByAccount(matched)
 	if requestedInstance != "" {
-		var instanceMatched []matchedCredential
-		for _, tok := range matched {
-			if tok.credential.Qualifier == requestedInstance {
-				instanceMatched = append(instanceMatched, tok)
-			}
+		groups = selectCredentialGroupsForInstance(groups, requestedInstance)
+		if len(groups) == 0 {
+			auditErr = errors.New("connection instance not found")
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
+			return
 		}
-		matched = instanceMatched
 	}
 
-	if len(matched) == 0 {
-		auditErr = errors.New("connection instance not found")
-		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
-		return
-	}
-	if len(matched) > 1 {
+	if len(groups) > 1 {
 		auditErr = errors.New("multiple matching connections")
-		labels := make([]string, len(matched))
-		for i, t := range matched {
+		labels := make([]string, len(groups))
+		for i, group := range groups {
+			t := group.members[0]
 			labels[i] = fmt.Sprintf("%s/%s", t.connection, t.credential.Qualifier)
 		}
+		sort.Strings(labels)
 		hint := "?" + httpInstanceParam + "=NAME"
 		if requestedInstance != "" {
 			hint = "?" + httpConnectionParam + "=NAME"
 		}
-		writeError(w, http.StatusConflict, fmt.Sprintf("multiple connections exist for %q (%v); specify %s", name, labels, hint))
+		writeError(w, http.StatusConflict, fmt.Sprintf("Multiple connection instances match %q. Choose one with %s. Available instances: %v.", name, hint, labels))
 		return
 	}
 
-	tokenID := matched[0].credential.ID
-	auditTarget = connectionAuditTarget(name, matched[0].connection, matched[0].credential.Qualifier)
+	disconnected := groups[0].members[0]
+	tokenID := disconnected.credential.ID
+	auditTarget = connectionAuditTarget(name, disconnected.connection, disconnected.credential.Qualifier)
 	if tokenID == "" {
 		auditErr = errors.New("connection credential is missing an ID")
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
 		return
 	}
 
-	if err := s.externalCredentials.DeleteCredential(r.Context(), tokenID); err != nil {
-		auditErr = errors.New("failed to disconnect integration")
-		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
-		return
+	deleteIDs := []string{tokenID}
+	for _, member := range groups[0].members {
+		if member.credential.ID != "" && member.credential.ID != tokenID {
+			deleteIDs = append(deleteIDs, member.credential.ID)
+		}
+	}
+	sort.Strings(deleteIDs[1:])
+	for index, id := range deleteIDs {
+		if err := s.externalCredentials.DeleteCredential(r.Context(), id); err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				continue
+			}
+			if index == 0 {
+				auditErr = errors.New("failed to disconnect integration")
+				writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
+				return
+			}
+			// The requested credential is already gone. Cleanup of a stale
+			// duplicate is best effort so a transient provider error does not
+			// turn a successful disconnect into a retry-hostile failure.
+			slog.WarnContext(r.Context(), "failed to remove duplicate credential after disconnect", "credential_id", id, "integration", name, "error", err)
+		}
 	}
 
-	disconnected := matched[0]
 	if s.connectionInstancePreferences != nil {
 		connectionID := serverCredentialConnectionID(name, disconnected.connection, s.effectiveConnectionDefOrEmpty(name, disconnected.connection))
-		if pref, err := s.connectionInstancePreferences.Get(r.Context(), subjectID, connectionID); err == nil && pref != nil && pref.Instance == disconnected.credential.Qualifier {
-			if err := s.connectionInstancePreferences.Delete(r.Context(), subjectID, connectionID); err != nil {
-				slog.WarnContext(r.Context(), "failed to clear preferred instance after disconnect", "integration", name, "connection", disconnected.connection, "error", err)
+		if pref, err := s.connectionInstancePreferences.Get(r.Context(), subjectID, connectionID); err == nil && pref != nil {
+			deletedIDs := make(map[string]struct{}, len(deleteIDs))
+			for _, id := range deleteIDs {
+				deletedIDs[id] = struct{}{}
+			}
+			preferenceDeleted := false
+			for _, tok := range tokens {
+				if tok == nil || tok.Qualifier != pref.Instance {
+					continue
+				}
+				if _, ok := deletedIDs[tok.ID]; ok {
+					preferenceDeleted = true
+					break
+				}
+			}
+			if preferenceDeleted {
+				if err := s.connectionInstancePreferences.Delete(r.Context(), subjectID, connectionID); err != nil {
+					slog.WarnContext(r.Context(), "failed to clear preferred instance after disconnect", "integration", name, "connection", disconnected.connection, "error", err)
+				}
 			}
 		}
 	}
@@ -511,6 +548,65 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
+}
+
+type logicalCredentialGroup struct {
+	members []matchedCredential
+}
+
+// groupMatchedCredentialsByAccount keeps connection scope in the server
+// layer, then delegates account equality (including keyless singleton rules)
+// to the core policy used by status and invocation.
+func groupMatchedCredentialsByAccount(matched []matchedCredential) []logicalCredentialGroup {
+	type scopedGroup struct {
+		members []matchedCredential
+	}
+	scopes := make([]scopedGroup, 0, len(matched))
+	scopeIndexes := make(map[string]int, len(matched))
+	for _, candidate := range matched {
+		key := candidate.connection + "\x00" + candidate.credential.Audience
+		index, ok := scopeIndexes[key]
+		if !ok {
+			scopeIndexes[key] = len(scopes)
+			scopes = append(scopes, scopedGroup{})
+			index = len(scopes) - 1
+		}
+		scopes[index].members = append(scopes[index].members, candidate)
+	}
+
+	groups := make([]logicalCredentialGroup, 0, len(matched))
+	for _, scope := range scopes {
+		candidates := make([]core.CredentialAccountCandidate, len(scope.members))
+		for index, member := range scope.members {
+			candidates[index] = core.CredentialAccountCandidate{
+				AccountKey: core.AccountKeyForCredential(member.credential),
+				ID:         member.credential.ID,
+				Qualifier:  member.credential.Qualifier,
+				CreatedAt:  member.credential.CreatedAt,
+			}
+		}
+		for _, indexes := range core.GroupCredentialAccountCandidateGroups(candidates) {
+			members := make([]matchedCredential, 0, len(indexes))
+			for _, index := range indexes {
+				members = append(members, scope.members[index])
+			}
+			groups = append(groups, logicalCredentialGroup{members: members})
+		}
+	}
+	return groups
+}
+
+func selectCredentialGroupsForInstance(groups []logicalCredentialGroup, instance string) []logicalCredentialGroup {
+	selected := make([]logicalCredentialGroup, 0, len(groups))
+	for _, group := range groups {
+		for _, member := range group.members {
+			if member.credential.Qualifier == instance {
+				selected = append(selected, group)
+				break
+			}
+		}
+	}
+	return selected
 }
 
 func (s *Server) getProvider(ctx context.Context, w http.ResponseWriter, name string) (core.Provider, bool) {

@@ -57,11 +57,12 @@ func (d *DiscoveryDef) ToCore() *core.DiscoveryConfig {
 }
 
 type ConnectionParamDef struct {
-	Required    bool   `yaml:"required" json:"required"`
-	Description string `yaml:"description" json:"description"`
-	Default     string `yaml:"default" json:"default"`
-	From        string `yaml:"from" json:"from"`   // "" = user-provided, "token_response" = from OAuth response, "discovery" = from post-connect discovery
-	Field       string `yaml:"field" json:"field"` // JSON field name for token_response extraction
+	Required        bool   `yaml:"required" json:"required"`
+	Description     string `yaml:"description" json:"description"`
+	Default         string `yaml:"default" json:"default"`
+	From            string `yaml:"from" json:"from"`                       // "" = user-provided, "token_response" = from OAuth response, "discovery" = from post-connect discovery
+	Field           string `yaml:"field" json:"field"`                     // JSON field name for token_response extraction
+	AccountIdentity bool   `yaml:"accountIdentity" json:"accountIdentity"` // stable provider account ID
 }
 
 type AuthDef struct {

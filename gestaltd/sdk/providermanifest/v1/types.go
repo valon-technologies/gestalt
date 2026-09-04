@@ -719,11 +719,12 @@ type ProviderDiscovery struct {
 }
 
 type ProviderConnectionParam struct {
-	Required    bool   `json:"required,omitempty" yaml:"required,omitempty"`
-	Description string `json:"description,omitempty" yaml:"description,omitempty"`
-	Default     string `json:"default,omitempty" yaml:"default,omitempty"`
-	From        string `json:"from,omitempty" yaml:"from,omitempty"`
-	Field       string `json:"field,omitempty" yaml:"field,omitempty"`
+	Required        bool   `json:"required,omitempty" yaml:"required,omitempty"`
+	Description     string `json:"description,omitempty" yaml:"description,omitempty"`
+	Default         string `json:"default,omitempty" yaml:"default,omitempty"`
+	From            string `json:"from,omitempty" yaml:"from,omitempty"`
+	Field           string `json:"field,omitempty" yaml:"field,omitempty"`
+	AccountIdentity bool   `json:"accountIdentity,omitempty" yaml:"accountIdentity,omitempty"`
 }
 
 type ManifestPaginationConfig struct {

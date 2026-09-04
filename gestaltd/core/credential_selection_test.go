@@ -1,0 +1,136 @@
+package core
+
+import (
+	"testing"
+	"time"
+)
+
+func TestChooseCredentialInstanceGroupsExplicitAccountDuplicates(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(10, 0)
+	credentials := []*ExternalCredential{
+		{ID: "credential-new", Qualifier: "new-label", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(2, 0)},
+		{ID: "credential-old", Qualifier: "old-label", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(1, 0)},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "", now); !ok || got != "old-label" {
+		t.Fatalf("chosen instance = %q, ok=%v, want oldest duplicate account", got, ok)
+	}
+}
+
+func TestChooseCredentialInstancePrefersUsableCredential(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(10, 0)
+	expires := time.Unix(9, 0)
+	credentials := []*ExternalCredential{
+		{
+			ID:           "credential-preferred",
+			Qualifier:    "preferred-label",
+			MetadataJSON: `{"account_key":"provider:v1:shared"}`,
+			Grant:        &ExternalCredentialGrant{ExpiresAt: &expires, RefreshErrorCount: 1},
+		},
+		{
+			ID:           "credential-usable",
+			Qualifier:    "usable-label",
+			MetadataJSON: `{"account_key":"provider:v1:shared"}`,
+		},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "preferred-label", now); !ok || got != "usable-label" {
+		t.Fatalf("chosen instance = %q, ok=%v, want usable duplicate account", got, ok)
+	}
+}
+
+func TestChooseCredentialInstanceSkipsInvalidSiblingWhenOneUsableAccountRemains(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(10, 0)
+	expires := time.Unix(9, 0)
+	credentials := []*ExternalCredential{
+		{
+			ID:           "credential-invalid",
+			Qualifier:    "dead-label",
+			MetadataJSON: `{"account_key":"provider:v1:dead"}`,
+			Grant:        &ExternalCredentialGrant{ExpiresAt: &expires, RefreshErrorCount: 1},
+		},
+		{
+			ID:           "credential-usable",
+			Qualifier:    "healthy-label",
+			MetadataJSON: `{"account_key":"provider:v1:healthy"}`,
+		},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "dead-label", now); !ok || got != "healthy-label" {
+		t.Fatalf("chosen instance = %q, ok=%v, want sole usable account", got, ok)
+	}
+}
+
+func TestChooseCredentialInstanceDoesNotTreatEmptyPreferenceAsSelection(t *testing.T) {
+	t.Parallel()
+
+	credentials := []*ExternalCredential{
+		{ID: "credential-labeled", Qualifier: "labeled", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(1, 0)},
+		{ID: "credential-empty", MetadataJSON: `{"account_key":"provider:v1:shared"}`, CreatedAt: time.Unix(2, 0)},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "", time.Unix(10, 0)); !ok || got != "labeled" {
+		t.Fatalf("chosen instance = %q, ok=%v, want oldest labeled credential", got, ok)
+	}
+}
+
+func TestChooseCredentialInstanceKeepsKeylessCredentialsAmbiguous(t *testing.T) {
+	t.Parallel()
+
+	credentials := []*ExternalCredential{
+		{ID: "credential-a", Qualifier: "first-label"},
+		{ID: "credential-b", Qualifier: "second-label"},
+	}
+
+	if got, ok := ChooseCredentialInstance(credentials, "", time.Now()); ok || got != "" {
+		t.Fatalf("chosen instance = %q, ok=%v, want ambiguous keyless credentials", got, ok)
+	}
+}
+
+func TestGroupCredentialAccountCandidatesNormalizesAndKeepsKeylessRecords(t *testing.T) {
+	t.Parallel()
+
+	candidates := []CredentialAccountCandidate{
+		{ID: "shared-old", AccountKey: " provider:v1:shared ", Qualifier: "old", CreatedAt: time.Unix(1, 0)},
+		{ID: "shared-new", AccountKey: "provider:v1:shared", Qualifier: "new", CreatedAt: time.Unix(2, 0)},
+		{ID: "legacy", Qualifier: "legacy"},
+	}
+	got := GroupCredentialAccountCandidates(candidates, "")
+	if len(got) != 2 || got[0].ID != "shared-old" || got[0].AccountKey != "provider:v1:shared" || got[1].ID != "legacy" {
+		t.Fatalf("grouped candidates = %+v, want normalized shared account plus keyless record", got)
+	}
+}
+
+func TestValidateConnectionParamDefsRequiresOneTypedTokenIdentity(t *testing.T) {
+	t.Parallel()
+
+	valid := map[string]ConnectionParamDef{
+		"account_id": {From: "token_response", Field: "account.id", AccountIdentity: true},
+	}
+	if err := ValidateConnectionParamDefs(valid); err != nil {
+		t.Fatalf("valid account identity rejected: %v", err)
+	}
+
+	for name, defs := range map[string]map[string]ConnectionParamDef{
+		"discovery identity": {
+			"account_id": {From: "discovery", Field: "id", AccountIdentity: true},
+		},
+		"missing response field": {
+			"account_id": {From: "token_response", AccountIdentity: true},
+		},
+		"multiple identities": {
+			"account_id": {From: "token_response", Field: "account.id", AccountIdentity: true},
+			"tenant_id":  {From: "token_response", Field: "tenant.id", AccountIdentity: true},
+		},
+	} {
+		if err := ValidateConnectionParamDefs(defs); err == nil {
+			t.Errorf("%s: expected validation error", name)
+		}
+	}
+}

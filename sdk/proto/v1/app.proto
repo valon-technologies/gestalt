@@ -96,6 +96,8 @@ message ConnectionParamDef {
   string default_value = 3;
   string from = 4;
   string field = 5;
+  // Marks a token-response parameter as the provider's stable account ID.
+  bool account_identity = 6;
 }
 
 // ProviderMetadata describes an integration provider's static capabilities.
