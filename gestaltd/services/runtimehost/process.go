@@ -236,6 +236,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		proc.sandboxCleanup = cleanup
 		proc.cmd = cmd
 	} else {
+		inheritProxyEnv(env)
 		cmd, _, err := startCommandWithRetry(ctx, func() (*exec.Cmd, func(), error) {
 			cmd := exec.Command(cfg.Command, cfg.Args...)
 			cmd.Dir = cfg.Workdir
@@ -518,6 +519,27 @@ var safeEnvKeys = []string{
 	"SSL_CERT_FILE", "SSL_CERT_DIR",
 	"GESTALT_HOST_SERVICE_TLS_CA_FILE",
 	"GESTALT_HOST_SERVICE_TLS_CA_PEM",
+}
+
+var proxyEnvAliases = [][2]string{
+	{"HTTP_PROXY", "http_proxy"},
+	{"HTTPS_PROXY", "https_proxy"},
+	{"NO_PROXY", "no_proxy"},
+}
+
+func inheritProxyEnv(env map[string]string) {
+	for _, aliases := range proxyEnvAliases {
+		_, upperOverride := env[aliases[0]]
+		_, lowerOverride := env[aliases[1]]
+		if upperOverride || lowerOverride {
+			continue
+		}
+		for _, key := range aliases {
+			if value, ok := os.LookupEnv(key); ok {
+				env[key] = value
+			}
+		}
+	}
 }
 
 func safeBaseEnv() []string {
