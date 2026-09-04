@@ -213,9 +213,6 @@ func validateSCIMConfig(cfg *Config) error {
 		if len(client.Credentials) == 0 || len(client.Credentials) > 2 {
 			return fmt.Errorf("config validation: %s.credentials must contain one or two credentials", path)
 		}
-		if len(client.ActiveUserRelationships) == 0 {
-			return fmt.Errorf("config validation: %s.activeUserRelationships must contain at least one relationship", path)
-		}
 		for i, credential := range client.Credentials {
 			credentialPath := fmt.Sprintf("%s.credentials[%d]", path, i)
 			id := strings.TrimSpace(credential.ID)

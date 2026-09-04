@@ -127,6 +127,15 @@ authorization:
 	if got := cfg.Server.SCIM.Clients["rippling"].AuthoritativeUserDomains[0]; got != "valon.com" {
 		t.Fatalf("normalized domain = %q", got)
 	}
+	withoutProjection := strings.Replace(validAuthorization, `        activeUserRelationships:
+          - relation: member
+            resource:
+              type: group
+              id: valon-employees
+`, "", 1)
+	if _, err := config.Load(writeSCIMConfig(t, "apiVersion: gestaltd.config/v8\n"+withoutProjection)); err != nil {
+		t.Fatalf("configuration without active-user projection should be valid: %v", err)
+	}
 	withoutAuthorization := strings.Replace(validAuthorization, `  authorization:
     authz:
       source:
