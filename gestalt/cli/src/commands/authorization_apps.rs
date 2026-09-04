@@ -106,6 +106,7 @@ fn set_member(
     let role = require_role(&args.role)?;
     let subject_id =
         resolve_member_subject_id(api, &app, args.email.as_deref(), args.subject_id.as_deref())?;
+    let subject_id = canonical_subject_id_from_roster(api, &app, &subject_id)?;
 
     let existing = mutable_roles_for_subject(authz, api, &app, &subject_id)?;
     let other_roles: Vec<String> = existing
@@ -165,6 +166,7 @@ fn remove_member(
         args.email.as_deref(),
         args.subject_id.as_deref().or(args.subject.as_deref()),
     )?;
+    let subject = canonical_subject_id_from_roster(api, &app, &subject)?;
     let mutable_roles = mutable_roles_for_subject(authz, api, &app, &subject)?;
     let roles = match args
         .role
@@ -333,6 +335,31 @@ fn resolve_member_subject_id(
     bail!(
         "could not resolve {email} to a canonical user id; pass --subject-id user:<uuid> from `members list`"
     )
+}
+
+fn canonical_subject_id_from_roster(
+    api: &ApiClient,
+    app: &str,
+    subject_id: &str,
+) -> Result<String> {
+    let normalized = normalize_subject_id(subject_id)?;
+    if is_service_account_subject(&normalized) {
+        return Ok(normalized);
+    }
+    for member in load_app_admin_members(api, app)? {
+        if !subject_matches_member(&normalized, &member) {
+            continue;
+        }
+        if let Some(canonical) = member
+            .subject_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Ok(canonical.to_string());
+        }
+    }
+    Ok(normalized)
 }
 
 fn subject_id_for_email_in_members(
@@ -527,5 +554,23 @@ mod tests {
     fn service_account_subject_detection() {
         assert!(is_service_account_subject("service_account:bot"));
         assert!(!is_service_account_subject("user:abc"));
+    }
+
+    #[test]
+    fn canonical_subject_id_prefers_roster_subject_id() {
+        let members = vec![AppAdminMember {
+            role: "viewer".to_string(),
+            mutable: true,
+            subject_id: Some("user:canonical-id".to_string()),
+            selector_value: None,
+            email: Some("alice@example.com".to_string()),
+        }];
+        let normalized = normalize_subject_id("user:alice@example.com").unwrap();
+        let canonical = members
+            .iter()
+            .find(|member| subject_matches_member(&normalized, member))
+            .and_then(|member| member.subject_id.clone())
+            .unwrap();
+        assert_eq!(canonical, "user:canonical-id");
     }
 }
