@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -51,7 +52,7 @@ func (s *providerServer) WriteRelationships(ctx context.Context, req *proto.Writ
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.WriteRelationships(s.gatewayContext(ctx), req)
+	return s.provider.WriteRelationships(s.gatewayContext(ctx), stampPublicRuntimeWriteRelationships(ctx, req))
 }
 
 func (s *providerServer) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
@@ -59,7 +60,7 @@ func (s *providerServer) AddRelationship(ctx context.Context, req *proto.AddRela
 		return nil, err
 	}
 	startedAt := time.Now()
-	resp, err := s.provider.AddRelationship(s.gatewayContext(ctx), req)
+	resp, err := s.provider.AddRelationship(s.gatewayContext(ctx), stampPublicRuntimeAddRelationship(ctx, req))
 	recordAppScopedRelationshipMutation(ctx, startedAt, err)
 	return resp, err
 }
@@ -141,4 +142,47 @@ func recordAppScopedRelationshipMutation(ctx context.Context, startedAt time.Tim
 		interaction.RequestID = strings.TrimSpace(meta.RequestID)
 	}
 	observability.RecordAppAdminUIInteraction(ctx, startedAt, interaction)
+}
+
+func relationshipWithPublicRuntimeSourceLayer(ctx context.Context, relationship *proto.Relationship) *proto.Relationship {
+	if _, ok := publicrpc.PublicOriginFromContext(ctx); !ok {
+		return relationship
+	}
+	if relationship == nil || relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED {
+		return relationship
+	}
+	cloned := gproto.Clone(relationship).(*proto.Relationship)
+	cloned.SourceLayer = proto.SourceLayer_SOURCE_LAYER_RUNTIME
+	return cloned
+}
+
+func stampPublicRuntimeAddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) *proto.AddRelationshipRequest {
+	stamped := relationshipWithPublicRuntimeSourceLayer(ctx, req.GetRelationship())
+	if stamped == req.GetRelationship() {
+		return req
+	}
+	cloned := gproto.Clone(req).(*proto.AddRelationshipRequest)
+	cloned.Relationship = stamped
+	return cloned
+}
+
+func stampPublicRuntimeWriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) *proto.WriteRelationshipsRequest {
+	if _, ok := publicrpc.PublicOriginFromContext(ctx); !ok {
+		return req
+	}
+	cloned := req
+	for i, update := range req.GetUpdates() {
+		if update.GetOperation() != proto.RelationshipUpdate_OPERATION_TOUCH {
+			continue
+		}
+		stamped := relationshipWithPublicRuntimeSourceLayer(ctx, update.GetRelationship())
+		if stamped == update.GetRelationship() {
+			continue
+		}
+		if cloned == req {
+			cloned = gproto.Clone(req).(*proto.WriteRelationshipsRequest)
+		}
+		cloned.Updates[i].Relationship = stamped
+	}
+	return cloned
 }
