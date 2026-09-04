@@ -59,6 +59,9 @@ func (t *ProviderGatewayTransport) enforceAuthorizationPublicAccess(
 			return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
 		}
 		if allowed {
+			if write {
+				return withAppAdminRelationshipMutationAuth(ctx, fullMethod, req), nil
+			}
 			return ctx, nil
 		}
 	}
@@ -69,9 +72,7 @@ func (t *ProviderGatewayTransport) enforceAuthorizationPublicAccess(
 				return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
 			}
 			if allowed {
-				appID := strings.TrimSpace(tuple.GetResource().GetId())
-				action := appScopedRelationshipActionFromMethod(fullMethod)
-				return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple), nil
+				return withAppAdminRelationshipMutationAuth(ctx, fullMethod, req), nil
 			}
 			deniedErr := status.Error(codes.PermissionDenied, "access denied")
 			recordAppScopedRelationshipAuthFailure(ctx, subjectID, tuple, fullMethod, deniedErr)
@@ -120,4 +121,17 @@ func recordAppScopedRelationshipAuthFailure(ctx context.Context, subjectID strin
 		TargetSubjectKind:    targetSubjectKind,
 		TargetSubjectID:      targetSubjectID,
 	})
+}
+
+func withAppAdminRelationshipMutationAuth(ctx context.Context, fullMethod string, req gproto.Message) context.Context {
+	tuple, ok := relationshipTupleFromAuthorizationRequest(fullMethod, req)
+	if !ok || strings.TrimSpace(tuple.GetResource().GetType()) != appAuthorizationResourceType {
+		return ctx
+	}
+	appID := strings.TrimSpace(tuple.GetResource().GetId())
+	action := appScopedRelationshipActionFromMethod(fullMethod)
+	if appID == "" || action == "" {
+		return ctx
+	}
+	return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple)
 }
