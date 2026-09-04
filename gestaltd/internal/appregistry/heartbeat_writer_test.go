@@ -182,6 +182,7 @@ func TestHeartbeatWriterWritesRegistryAppsWithOneDesiredVersionLoad(t *testing.T
 		},
 		InstanceID:    "instance",
 		SourceVersion: "source",
+		Revision:      "revision",
 		Now:           func() time.Time { return now },
 	})
 	if err := writer.WriteOnce(context.Background()); err != nil {
@@ -190,6 +191,12 @@ func TestHeartbeatWriterWritesRegistryAppsWithOneDesiredVersionLoad(t *testing.T
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	got := service.writes[0]
+	if got.Revision != "revision" {
+		t.Fatalf("revision = %q, want revision", got.Revision)
+	}
+	if !got.Ready || got.LastError != "" {
+		t.Fatalf("readiness = (%v, %q), want ready", got.Ready, got.LastError)
+	}
 	if len(got.Apps) != 1 {
 		t.Fatalf("apps = %#v, want registry app only", got.Apps)
 	}

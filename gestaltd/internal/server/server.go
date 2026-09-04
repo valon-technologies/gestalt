@@ -190,6 +190,7 @@ type Server struct {
 	appRegistryPublish            *appregistry.StatelessPublishService
 	appRegistryPublishAllowedApps map[string]struct{}
 	appFleetProjector             *appregistry.FleetProjector
+	appRegistryHeartbeatTTL       time.Duration
 	appVersionChanges             *coredata.AppVersionChangeRequestService
 	gestaltdSourceVersions        *coredata.GestaltdSourceVersionService
 	instanceHeartbeats            *coredata.GestaltdInstanceHeartbeatService
@@ -202,6 +203,7 @@ type Server struct {
 	appRegistryReconcileNotify    func(string)
 	artifactsDir                  string
 	sourceVersion                 string
+	revision                      string
 	appRegistryRolloutMode        config.AppRegistryRolloutMode
 	appRuntimeState               AppRuntimeState
 	routeProfile                  RouteProfile
@@ -278,6 +280,7 @@ type Config struct {
 	ArtifactsDir                  string
 	GestaltdVersion               string
 	SourceVersion                 string
+	Revision                      string
 	AppRuntimeState               AppRuntimeState
 	RouteProfile                  RouteProfile
 	MeterProvider                 metric.MeterProvider
@@ -448,12 +451,12 @@ func New(cfg Config) (*Server, error) {
 	if tunnelResolver != nil && cfg.Providers != nil {
 		cfg.Providers.SetRemoteResolver(tunnelResolver)
 	}
+	heartbeatTTL := cfg.AppRegistryHeartbeatTTL
+	if heartbeatTTL <= 0 {
+		heartbeatTTL = config.DefaultAppRegistryHeartbeatTTL
+	}
 	fleetProjector := cfg.AppFleetProjector
 	if fleetProjector == nil {
-		heartbeatTTL := cfg.AppRegistryHeartbeatTTL
-		if heartbeatTTL <= 0 {
-			heartbeatTTL = config.DefaultAppRegistryHeartbeatTTL
-		}
 		fleetProjector = &appregistry.FleetProjector{
 			ChangeRequests: cfg.Services.AppVersionChangeRequests,
 			SourceVersions: cfg.Services.GestaltdSourceVersionState,
@@ -528,6 +531,7 @@ func New(cfg Config) (*Server, error) {
 		appRegistryPublish:            cfg.AppRegistryPublish,
 		appRegistryPublishAllowedApps: cloneStringSet(cfg.AppRegistryPublishAllowedApps),
 		appFleetProjector:             fleetProjector,
+		appRegistryHeartbeatTTL:       heartbeatTTL,
 		appVersionChanges:             cfg.Services.AppVersionChangeRequests,
 		gestaltdSourceVersions:        cfg.Services.GestaltdSourceVersionState,
 		instanceHeartbeats:            cfg.Services.GestaltdInstanceHeartbeats,
@@ -540,6 +544,7 @@ func New(cfg Config) (*Server, error) {
 		appRegistryReconcileNotify:    cfg.AppRegistryReconcileNotify,
 		artifactsDir:                  strings.TrimSpace(cfg.ArtifactsDir),
 		sourceVersion:                 strings.TrimSpace(cfg.SourceVersion),
+		revision:                      strings.TrimSpace(cfg.Revision),
 		appRegistryRolloutMode:        cfg.AppRegistryRolloutMode,
 		appRuntimeState:               cfg.AppRuntimeState,
 		routeProfile:                  cfg.RouteProfile,

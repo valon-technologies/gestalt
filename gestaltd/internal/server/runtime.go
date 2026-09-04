@@ -96,6 +96,13 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err != nil {
 		return fmt.Errorf("resolve app registry heartbeat TTL: %w", err)
 	}
+	sourceVersion := appregistry.ResolveSourceVersion()
+	var readinessHeartbeats instanceHeartbeatReader
+	readinessInstanceID := ""
+	if sourceVersion != "" {
+		readinessHeartbeats = result.Services.GestaltdInstanceHeartbeats
+		readinessInstanceID = appregistry.ResolveInstanceID()
+	}
 	baseConfig := Config{
 		Auth:                  result.Auth,
 		SelectedAuthProvider:  result.SelectedAuthProvider,
@@ -130,7 +137,16 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		StateSecret:            crypto.DeriveKey(cfg.Server.EncryptionKey),
 		S3:                     result.S3,
 		Readiness: ReadinessChecker(func() string {
-			if reason := runtimeReadinessStatus(workflowProvidersReady, result.Services)(); reason != "" {
+			if reason := runtimeReadinessStatus(
+				workflowProvidersReady,
+				result.ProvidersReady,
+				result.AppProvidersInitialized,
+				result.Services,
+				readinessHeartbeats,
+				readinessInstanceID,
+				sourceVersion,
+				appregistry.ResolveRevision(),
+			)(); reason != "" {
 				return reason
 			}
 			return reverseRemote.readinessReason()
@@ -162,7 +178,8 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		AppRegistryRolloutMode:  cfg.Server.AppRegistry.RolloutMode,
 		ArtifactsDir:            cfg.Server.ArtifactsDir,
 		GestaltdVersion:         strings.TrimSpace(gestaltdVersion),
-		SourceVersion:           appregistry.ResolveSourceVersion(),
+		SourceVersion:           sourceVersion,
+		Revision:                appregistry.ResolveRevision(),
 		AppRuntimeState:         appRuntimeState,
 		AppProviderRestarter:    appProviderRestarter,
 	}
@@ -334,7 +351,20 @@ type indexedDBPinger interface {
 	Ping(context.Context) error
 }
 
-func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services indexedDBPinger) ReadinessChecker {
+type instanceHeartbeatReader interface {
+	Get(context.Context, string) (*core.GestaltdInstanceHeartbeat, error)
+}
+
+func runtimeReadinessStatus(
+	workflowProvidersReady <-chan struct{},
+	appProvidersReady <-chan struct{},
+	registryAppsReady <-chan struct{},
+	services indexedDBPinger,
+	heartbeats instanceHeartbeatReader,
+	instanceID string,
+	sourceVersion string,
+	revision string,
+) ReadinessChecker {
 	return func() string {
 		select {
 		case <-workflowProvidersReady:
@@ -350,11 +380,59 @@ func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services ind
 		if err := services.Ping(pingCtx); err != nil {
 			return "indexeddb unavailable"
 		}
+
+		if !readinessChannelClosed(appProvidersReady) {
+			return "app providers loading"
+		}
+		if !readinessChannelClosed(registryAppsReady) {
+			return "registry apps loading"
+		}
+		if heartbeats != nil && strings.TrimSpace(instanceID) != "" {
+			heartbeatCtx, heartbeatCancel := context.WithTimeout(context.Background(), readinessIndexedDBPingTimeout)
+			defer heartbeatCancel()
+			heartbeat, err := heartbeats.Get(heartbeatCtx, instanceID)
+			if err != nil ||
+				!appregistry.HeartbeatReady(heartbeat) ||
+				strings.TrimSpace(heartbeat.SourceVersion) != strings.TrimSpace(sourceVersion) ||
+				strings.TrimSpace(heartbeat.Revision) != strings.TrimSpace(revision) {
+				return "apps not ready"
+			}
+		}
 		return ""
 	}
 }
 
-func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor, readyCallback func(), reverseRemote *reverseRemoteSetup) error {
+func readinessChannelClosed(ready <-chan struct{}) bool {
+	if ready == nil {
+		return true
+	}
+	select {
+	case <-ready:
+		return true
+	default:
+		return false
+	}
+}
+
+func appProviderFleetReady(ctx context.Context, result *bootstrap.Result) <-chan struct{} {
+	ready := make(chan struct{})
+	go func() {
+		for _, dependency := range []<-chan struct{}{result.ProvidersReady, result.AppProvidersInitialized} {
+			if dependency == nil {
+				continue
+			}
+			select {
+			case <-dependency:
+			case <-ctx.Done():
+				return
+			}
+		}
+		close(ready)
+	}()
+	return ready
+}
+
+func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan struct{}, devSupervisor *providerdev.Supervisor, readyCallback func(), reverseRemote *reverseRemoteSetup) error {
 	if devSupervisor != nil {
 		defer devSupervisor.Stop()
 	}
@@ -389,6 +467,16 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 	if readyCallback != nil {
 		readyCallback()
 	}
+	// Build every local provider after startup work completes but before this
+	// replica is admitted. Candidates do this with no traffic; outgoing
+	// revisions do the same if Cloud Run autoscales them during cutover.
+	go func() {
+		select {
+		case <-workflowProvidersReady:
+			result.ActivateAppProviders(ctx)
+		case <-ctx.Done():
+		}
+	}()
 
 	defer func() {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), runtimeShutdownTimeout)
@@ -658,7 +746,9 @@ func startAppRegistryHeartbeatWriter(
 		Runtime:        result.AppRuntimeSnapshotter,
 		InstanceID:     appregistry.ResolveInstanceID(),
 		SourceVersion:  sourceVersion,
-		Ready:          result.AppProvidersInitialized,
+		Revision:       appregistry.ResolveRevision(),
+		StartupError:   result.AppProviderStartupError,
+		Ready:          appProviderFleetReady(ctx, result),
 		Interval:       interval,
 		Retention:      retention,
 	})
