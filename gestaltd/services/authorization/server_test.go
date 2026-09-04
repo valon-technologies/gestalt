@@ -58,9 +58,8 @@ func TestProviderServerStampsPublicRuntimeSourceLayer(t *testing.T) {
 	provider := &relationshipWriteRecordingAuthorizationProvider{}
 	server := NewProviderServer(provider)
 
-	if _, err := server.AddRelationship(context.Background(), &proto.AddRelationshipRequest{
-		Relationship: &proto.Relationship{Tuple: tuple},
-	}); err != nil {
+	internalAddReq := &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: tuple}}
+	if _, err := server.AddRelationship(context.Background(), internalAddReq); err != nil {
 		t.Fatalf("internal AddRelationship: %v", err)
 	}
 	if got := provider.lastAdd.GetRelationship().GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED {
@@ -68,13 +67,15 @@ func TestProviderServerStampsPublicRuntimeSourceLayer(t *testing.T) {
 	}
 
 	publicCtx := publicrpc.WithPublicOrigin(context.Background(), proto.Authorization_AddRelationship_FullMethodName)
-	if _, err := server.AddRelationship(publicCtx, &proto.AddRelationshipRequest{
-		Relationship: &proto.Relationship{Tuple: tuple},
-	}); err != nil {
+	publicAddReq := &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: tuple}}
+	if _, err := server.AddRelationship(publicCtx, publicAddReq); err != nil {
 		t.Fatalf("public AddRelationship: %v", err)
 	}
 	if got := provider.lastAdd.GetRelationship().GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
 		t.Fatalf("public source layer = %v, want runtime", got)
+	}
+	if got := publicAddReq.GetRelationship().GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED {
+		t.Fatalf("original public AddRelationship source layer = %v, want unspecified", got)
 	}
 
 	if _, err := server.AddRelationship(publicCtx, &proto.AddRelationshipRequest{
@@ -89,18 +90,34 @@ func TestProviderServerStampsPublicRuntimeSourceLayer(t *testing.T) {
 		t.Fatalf("explicit static source layer = %v, want static_config", got)
 	}
 
-	relationship := &proto.Relationship{Tuple: tuple}
-	writeCtx := publicrpc.WithPublicOrigin(context.Background(), proto.Authorization_WriteRelationships_FullMethodName)
-	if _, err := server.WriteRelationships(writeCtx, &proto.WriteRelationshipsRequest{
+	internalWriteReq := &proto.WriteRelationshipsRequest{
 		Updates: []*proto.RelationshipUpdate{{
 			Operation:    proto.RelationshipUpdate_OPERATION_TOUCH,
-			Relationship: relationship,
+			Relationship: &proto.Relationship{Tuple: tuple},
 		}},
-	}); err != nil {
+	}
+	if _, err := server.WriteRelationships(context.Background(), internalWriteReq); err != nil {
+		t.Fatalf("internal WriteRelationships touch: %v", err)
+	}
+	if got := provider.lastWrite.GetUpdates()[0].GetRelationship().GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED {
+		t.Fatalf("internal touch source layer = %v, want unspecified", got)
+	}
+
+	writeCtx := publicrpc.WithPublicOrigin(context.Background(), proto.Authorization_WriteRelationships_FullMethodName)
+	publicWriteReq := &proto.WriteRelationshipsRequest{
+		Updates: []*proto.RelationshipUpdate{{
+			Operation:    proto.RelationshipUpdate_OPERATION_TOUCH,
+			Relationship: &proto.Relationship{Tuple: tuple},
+		}},
+	}
+	if _, err := server.WriteRelationships(writeCtx, publicWriteReq); err != nil {
 		t.Fatalf("public WriteRelationships touch: %v", err)
 	}
 	if got := provider.lastWrite.GetUpdates()[0].GetRelationship().GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
 		t.Fatalf("touch source layer = %v, want runtime", got)
+	}
+	if got := publicWriteReq.GetUpdates()[0].GetRelationship().GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED {
+		t.Fatalf("original public WriteRelationships source layer = %v, want unspecified", got)
 	}
 
 	if _, err := server.WriteRelationships(writeCtx, &proto.WriteRelationshipsRequest{
