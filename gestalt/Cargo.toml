@@ -3,5 +3,5 @@ resolver = "2"
 members = ["cli"]
 
 [workspace.package]
-version = "0.0.2-alpha.17"
+version = "0.0.2-alpha.18"
 edition = "2024"
