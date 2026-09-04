@@ -123,18 +123,10 @@ func TestAllowsAppScopedRelationshipMutationRejectsGlobalResources(t *testing.T)
 	}
 }
 
-func TestEnforceAuthorizationPublicAccessAllowsAppAdminRelationshipWrite(t *testing.T) {
+func TestEnforceAuthorizationPublicAccessMarksAppRelationshipWrite(t *testing.T) {
 	t.Parallel()
 
-	provider := &appScopedAuthorizationProvider{
-		stubAuthorizationProvider: &stubAuthorizationProvider{
-			allowedActions: map[string]bool{"viewer": true},
-		},
-		appAdmin: map[string]bool{"roadmap": true},
-	}
-	transport := &ProviderGatewayTransport{authorization: provider}
-
-	req := &proto.AddRelationshipRequest{
+	addViewerReq := &proto.AddRelationshipRequest{
 		Relationship: &proto.Relationship{
 			Tuple: &proto.RelationshipTuple{
 				Resource: &proto.Resource{Type: "app", Id: "roadmap"},
@@ -147,54 +139,50 @@ func TestEnforceAuthorizationPublicAccessAllowsAppAdminRelationshipWrite(t *test
 			},
 		},
 	}
-	ctx, err := transport.enforceAuthorizationPublicAccess(
-		context.Background(),
-		"user:admin@example.com",
-		proto.Authorization_AddRelationship_FullMethodName,
-		req,
-	)
-	if err != nil {
-		t.Fatalf("enforceAuthorizationPublicAccess error = %v, want nil", err)
-	}
-	appID, action, targetKind, targetID, ok := AppScopedRelationshipMutationFromContext(ctx)
-	if !ok || appID != "roadmap" || action != "grant_add" || targetKind != "user" || targetID != "viewer@example.com" {
-		t.Fatalf("context marker = (%q, %q, %q, %q, %v), want (roadmap, grant_add, user, viewer@example.com, true)", appID, action, targetKind, targetID, ok)
-	}
-}
 
-func TestEnforceAuthorizationPublicAccessMarksGestaltAdminAppRelationshipWrite(t *testing.T) {
-	t.Parallel()
-
-	transport := &ProviderGatewayTransport{
-		authorization: &stubAuthorizationProvider{
-			allowedActions: map[string]bool{"admin": true},
-		},
-	}
-	req := &proto.AddRelationshipRequest{
-		Relationship: &proto.Relationship{
-			Tuple: &proto.RelationshipTuple{
-				Resource: &proto.Resource{Type: "app", Id: "doc-walkthrough-test"},
-				Relation: "viewer",
-				Target: &proto.RelationshipTarget{
-					Kind: &proto.RelationshipTarget_Subject{
-						Subject: &proto.Subject{Type: "subject", Id: "user:griffin.ansel@valon.com"},
+	tests := []struct {
+		name      string
+		transport *ProviderGatewayTransport
+	}{
+		{
+			name: "app_admin",
+			transport: &ProviderGatewayTransport{
+				authorization: &appScopedAuthorizationProvider{
+					stubAuthorizationProvider: &stubAuthorizationProvider{
+						allowedActions: map[string]bool{"viewer": true},
 					},
+					appAdmin: map[string]bool{"roadmap": true},
+				},
+			},
+		},
+		{
+			name: "global_admin",
+			transport: &ProviderGatewayTransport{
+				authorization: &stubAuthorizationProvider{
+					allowedActions: map[string]bool{"admin": true},
 				},
 			},
 		},
 	}
-	ctx, err := transport.enforceAuthorizationPublicAccess(
-		context.Background(),
-		"user:michael.wang@valon.com",
-		proto.Authorization_AddRelationship_FullMethodName,
-		req,
-	)
-	if err != nil {
-		t.Fatalf("enforceAuthorizationPublicAccess error = %v, want nil", err)
-	}
-	appID, action, targetKind, targetID, ok := AppScopedRelationshipMutationFromContext(ctx)
-	if !ok || appID != "doc-walkthrough-test" || action != "grant_add" || targetKind != "user" || targetID != "griffin.ansel@valon.com" {
-		t.Fatalf("context marker = (%q, %q, %q, %q, %v), want (doc-walkthrough-test, grant_add, user, griffin.ansel@valon.com, true)", appID, action, targetKind, targetID, ok)
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, err := tc.transport.enforceAuthorizationPublicAccess(
+				context.Background(),
+				"user:admin@example.com",
+				proto.Authorization_AddRelationship_FullMethodName,
+				addViewerReq,
+			)
+			if err != nil {
+				t.Fatalf("enforceAuthorizationPublicAccess error = %v, want nil", err)
+			}
+			appID, action, targetKind, targetID, ok := AppScopedRelationshipMutationFromContext(ctx)
+			if !ok || appID != "roadmap" || action != "grant_add" || targetKind != "user" || targetID != "viewer@example.com" {
+				t.Fatalf("context marker = (%q, %q, %q, %q, %v), want (roadmap, grant_add, user, viewer@example.com, true)", appID, action, targetKind, targetID, ok)
+			}
+		})
 	}
 }
 

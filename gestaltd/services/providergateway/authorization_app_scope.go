@@ -116,6 +116,19 @@ func relationshipTupleFromAuthorizationRequest(fullMethod string, req gproto.Mes
 	}
 }
 
+func withAppScopedRelationshipMutationAuthFromRequest(ctx context.Context, fullMethod string, req gproto.Message) context.Context {
+	tuple, ok := relationshipTupleFromAuthorizationRequest(fullMethod, req)
+	if !ok || strings.TrimSpace(tuple.GetResource().GetType()) != appAuthorizationResourceType {
+		return ctx
+	}
+	appID := strings.TrimSpace(tuple.GetResource().GetId())
+	action := appScopedRelationshipActionFromMethod(fullMethod)
+	if appID == "" || action == "" {
+		return ctx
+	}
+	return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple)
+}
+
 func allowsAppScopedRelationshipMutation(
 	ctx context.Context,
 	authorization core.AuthorizationProvider,
