@@ -1861,6 +1861,7 @@ type AuthorizationConfig struct {
 	Models        map[string]AuthorizationModelDef          `yaml:"models,omitempty"`
 	Relationships []AuthorizationRelationshipDef            `yaml:"relationships,omitempty"`
 	ResourceTypes map[string]AuthorizationResourcePolicyDef `yaml:"resourceTypes,omitempty"`
+	SeedFile      string                                    `yaml:"seedFile,omitempty"`
 }
 
 type AuthorizationModelDef struct {
@@ -3921,6 +3922,10 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 
 	if server := nestedMap(root, "server"); server != nil {
 		resolveRelativeStringField(server, "artifactsDir", baseDir)
+	}
+
+	if authorization := nestedMap(root, "authorization"); authorization != nil {
+		resolveRelativeStringField(authorization, "seedFile", baseDir)
 	}
 
 	if providers := nestedMap(root, "providers"); providers != nil {

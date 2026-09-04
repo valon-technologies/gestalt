@@ -78,6 +78,10 @@ func bootstrapAuthorizationProviderState(
 	if provider == nil {
 		return nil
 	}
+	if err := bootstrapAuthorizationSeedIfEmpty(ctx, name, provider, cfg.Authorization, users); err != nil {
+		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
+	}
+	apply := resolveAuthorizationStateApply(cfg)
 	model, err := staticAuthorizationModel(cfg)
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
@@ -100,9 +104,8 @@ func bootstrapAuthorizationProviderState(
 	}
 	staticRelationships = append(staticRelationships, runtimeRelationships...)
 	digest := model.GetId()
-	apply := resolveAuthorizationStateApply(cfg)
 	if !apply {
-		slog.InfoContext(ctx, "authorization state plan (no-op): startup will not mutate authorization provider state",
+		slog.InfoContext(ctx, "authorization state plan (no-op): config authorization overlay not applied at startup",
 			"provider", name,
 			"model_digest", digest,
 			"resource_type_count", len(model.GetResourceTypes()),
@@ -407,6 +410,19 @@ func AuthorizationResourceTypeNames(cfg *config.Config) map[string]struct{} {
 	}
 	for _, model := range cfg.Authorization.Models {
 		for name := range model.ResourceTypes {
+			names[name] = struct{}{}
+		}
+	}
+	seedFile := strings.TrimSpace(cfg.Authorization.SeedFile)
+	if seedFile == "" {
+		return names
+	}
+	req, err := loadAuthorizationSeedFile(seedFile)
+	if err != nil {
+		return names
+	}
+	for _, resourceType := range req.GetModel().GetResourceTypes() {
+		if name := strings.TrimSpace(resourceType.GetName()); name != "" {
 			names[name] = struct{}{}
 		}
 	}
