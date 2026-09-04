@@ -107,6 +107,18 @@ func LogAppAdminUIFailure(ctx context.Context, interaction AppAdminUIInteraction
 		slog.String("action", interaction.Action),
 		slog.String("failure_category", interaction.FailureCategory),
 	}
+	if kind := strings.TrimSpace(interaction.PrincipalSubjectKind); kind != "" {
+		attrs = append(attrs,
+			slog.String("principal_subject_kind", kind),
+			slog.String("principal_subject_id", strings.TrimSpace(interaction.PrincipalSubjectID)),
+		)
+	}
+	if kind := strings.TrimSpace(interaction.TargetSubjectKind); kind != "" {
+		attrs = append(attrs,
+			slog.String("target_subject_kind", kind),
+			slog.String("target_subject_id", strings.TrimSpace(interaction.TargetSubjectID)),
+		)
+	}
 	if interaction.Err != nil {
 		attrs = append(attrs, slog.String("error", interaction.Err.Error()))
 	} else if interaction.StatusCode > 0 {

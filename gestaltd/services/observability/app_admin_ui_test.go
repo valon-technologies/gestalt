@@ -1,7 +1,12 @@
 package observability
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,4 +57,41 @@ func TestRecordAppAdminUI(t *testing.T) {
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, failAttrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, failAttrs)
+}
+
+func TestLogAppAdminUIFailureIncludesPrincipalAndTargetSubjects(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	LogAppAdminUIFailure(context.Background(), AppAdminUIInteraction{
+		App:                  "g-issues",
+		Surface:              AppAdminUISurfaceMembers,
+		Action:               AppAdminUIActionGrantAdd,
+		FailureCategory:      AppAdminUIFailureAuth,
+		StatusCode:           http.StatusForbidden,
+		PrincipalSubjectKind: "user",
+		PrincipalSubjectID:   "user:abc",
+		TargetSubjectKind:    "user",
+		TargetSubjectID:      "user:def",
+	})
+
+	var record map[string]string
+	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+		t.Fatalf("unmarshal log record: %v", err)
+	}
+	for key, want := range map[string]string{
+		"event":                  "app_admin.ui",
+		"principal_subject_kind": "user",
+		"principal_subject_id":   "user:abc",
+		"target_subject_kind":    "user",
+		"target_subject_id":      "user:def",
+	} {
+		if got := strings.TrimSpace(record[key]); got != want {
+			t.Fatalf("%s = %q, want %q", key, got, want)
+		}
+	}
 }
