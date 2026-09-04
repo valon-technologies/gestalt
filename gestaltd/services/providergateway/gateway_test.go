@@ -430,7 +430,7 @@ func TestPreparePublicRequest(t *testing.T) {
 			}
 			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(metadataPairs...))
 
-			ctx, p, adapted, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
+			_, p, adapted, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
 			if tc.wantCode != codes.OK {
 				assertGRPCCode(t, err, tc.wantCode)
 				return

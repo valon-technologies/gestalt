@@ -29,7 +29,7 @@ type appAdminMemberRow struct {
 }
 
 func (s *Server) mountAppAdminMembersRoutes(r chi.Router) {
-	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminAuthorizationMiddleware, s.appAdminUIObservabilityMiddleware).
+	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminUIObservabilityMiddleware, s.appAdminAuthorizationMiddleware).
 		Get("/apps/{app}/admin/members", s.listAppAdminMembers)
 }
 

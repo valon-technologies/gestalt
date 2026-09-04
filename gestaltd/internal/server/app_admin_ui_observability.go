@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -41,12 +40,12 @@ func (s *Server) appAdminUIObservabilityMiddleware(next http.Handler) http.Handl
 		next.ServeHTTP(recorder, r)
 		failed := recorder.status >= http.StatusBadRequest
 		interaction := observability.AppAdminUIInteraction{
-			App:       appName,
-			Surface:   surface,
-			Action:    action,
-			Failed:    failed,
+			App:        appName,
+			Surface:    surface,
+			Action:     action,
+			Failed:     failed,
 			StatusCode: recorder.status,
-			RequestID: appAdminUIRequestID(r),
+			RequestID:  appAdminUIRequestID(r),
 		}
 		if failed {
 			interaction.FailureCategory = observability.AppAdminUIFailureCategoryHTTP(recorder.status)
@@ -74,22 +73,6 @@ func appAdminUIRouteSpecForRequest(r *http.Request) (surface, action string, ok 
 		}
 	}
 	return "", "", false
-}
-
-func recordAppAdminUIAuthFailure(ctx context.Context, r *http.Request, appName, surface, action string, err error) {
-	if strings.TrimSpace(appName) == "" || surface == "" || action == "" {
-		return
-	}
-	observability.RecordAppAdminUIInteraction(ctx, time.Now(), observability.AppAdminUIInteraction{
-		App:             appName,
-		Surface:         surface,
-		Action:          action,
-		Failed:          true,
-		FailureCategory: observability.AppAdminUIFailureAuth,
-		StatusCode:      http.StatusForbidden,
-		Err:             err,
-		RequestID:       appAdminUIRequestID(r),
-	})
 }
 
 func appAdminUIRequestID(r *http.Request) string {

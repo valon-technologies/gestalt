@@ -79,6 +79,43 @@ func TestAppAdminUIObservabilityMiddlewareRecordsValidationFailure(t *testing.T)
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.ui.duration", attrs)
 }
 
+func TestAppAdminUIObservabilityMiddlewareRecordsAuthorizationUnavailable(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+
+	s := &Server{}
+	handler := s.appAdminUIObservabilityMiddleware(s.appAdminAuthorizationMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("next handler should not run when authorization is unavailable")
+	})))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps/g-issues/admin/members", nil)
+	req = req.WithContext(ctx)
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("app", "g-issues")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := map[string]string{
+		"gestaltd.app_admin.ui.app":              "g-issues",
+		"gestaltd.app_admin.ui.surface":          "members",
+		"gestaltd.app_admin.ui.action":           "list",
+		"gestaltd.app_admin.ui.outcome":          "failure",
+		"gestaltd.app_admin.ui.failure_category": "server",
+	}
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.ui.duration", attrs)
+}
+
 func TestAppAdminUIFailureCategoryFromStatus(t *testing.T) {
 	t.Parallel()
 
