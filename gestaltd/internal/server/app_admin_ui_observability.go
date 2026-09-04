@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 )
@@ -39,13 +40,16 @@ func (s *Server) appAdminUIObservabilityMiddleware(next http.Handler) http.Handl
 		recorder := &appAdminUIResponseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
 		failed := recorder.status >= http.StatusBadRequest
+		principalKind, principalID := principal.MetricAuthorizationSubject(PrincipalFromContext(r.Context()))
 		interaction := observability.AppAdminUIInteraction{
-			App:        appName,
-			Surface:    surface,
-			Action:     action,
-			Failed:     failed,
-			StatusCode: recorder.status,
-			RequestID:  appAdminUIRequestID(r),
+			App:                  appName,
+			Surface:              surface,
+			Action:               action,
+			Failed:               failed,
+			StatusCode:           recorder.status,
+			RequestID:            appAdminUIRequestID(r),
+			PrincipalSubjectKind: principalKind,
+			PrincipalSubjectID:   principalID,
 		}
 		if failed {
 			interaction.FailureCategory = observability.AppAdminUIFailureCategoryHTTP(recorder.status)

@@ -33,22 +33,28 @@ const (
 )
 
 var (
-	AttrAppAdminUIApp             = attribute.Key("gestaltd.app_admin.ui.app")
-	AttrAppAdminUISurface         = attribute.Key("gestaltd.app_admin.ui.surface")
-	AttrAppAdminUIAction          = attribute.Key("gestaltd.app_admin.ui.action")
-	AttrAppAdminUIOutcome         = attribute.Key("gestaltd.app_admin.ui.outcome")
-	AttrAppAdminUIFailureCategory = attribute.Key("gestaltd.app_admin.ui.failure_category")
+	AttrAppAdminUIApp               = attribute.Key("gestaltd.app_admin.ui.app")
+	AttrAppAdminUISurface           = attribute.Key("gestaltd.app_admin.ui.surface")
+	AttrAppAdminUIAction            = attribute.Key("gestaltd.app_admin.ui.action")
+	AttrAppAdminUIOutcome           = attribute.Key("gestaltd.app_admin.ui.outcome")
+	AttrAppAdminUIFailureCategory   = attribute.Key("gestaltd.app_admin.ui.failure_category")
+	AttrAppAdminUITargetSubjectKind = attribute.Key("gestaltd.app_admin.ui.target_subject.kind")
+	AttrAppAdminUITargetSubjectID   = attribute.Key("gestaltd.app_admin.ui.target_subject.id")
 )
 
 type AppAdminUIInteraction struct {
-	App             string
-	Surface         string
-	Action          string
-	Failed          bool
-	FailureCategory string
-	StatusCode      int
-	Err             error
-	RequestID       string
+	App                  string
+	Surface              string
+	Action               string
+	Failed               bool
+	FailureCategory      string
+	StatusCode           int
+	Err                  error
+	RequestID            string
+	PrincipalSubjectKind string
+	PrincipalSubjectID   string
+	TargetSubjectKind    string
+	TargetSubjectID      string
 }
 
 func RecordAppAdminUI(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
@@ -74,6 +80,18 @@ func RecordAppAdminUIInteraction(ctx context.Context, startedAt time.Time, inter
 	}
 	if interaction.Failed && interaction.FailureCategory != "" {
 		attrs = append(attrs, AttrAppAdminUIFailureCategory.String(interaction.FailureCategory))
+	}
+	if kind := strings.TrimSpace(interaction.PrincipalSubjectKind); kind != "" {
+		attrs = append(attrs,
+			AttrSubjectKind.String(kind),
+			AttrSubjectID.String(strings.TrimSpace(interaction.PrincipalSubjectID)),
+		)
+	}
+	if kind := strings.TrimSpace(interaction.TargetSubjectKind); kind != "" {
+		attrs = append(attrs,
+			AttrAppAdminUITargetSubjectKind.String(kind),
+			AttrAppAdminUITargetSubjectID.String(strings.TrimSpace(interaction.TargetSubjectID)),
+		)
 	}
 	RecordAppAdminUI(ctx, startedAt, interaction.Failed, attrs...)
 	if interaction.Failed {

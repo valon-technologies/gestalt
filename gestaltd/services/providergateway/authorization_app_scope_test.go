@@ -211,6 +211,35 @@ func TestRelationshipTupleFromAuthorizationRequest(t *testing.T) {
 	}
 }
 
+func TestRelationshipTupleTargetSubjectMetric(t *testing.T) {
+	t.Parallel()
+
+	kind, id := relationshipTupleTargetSubjectMetric(&proto.RelationshipTuple{
+		Target: &proto.RelationshipTarget{
+			Kind: &proto.RelationshipTarget_Subject{
+				Subject: &proto.Subject{Type: "subject", Id: "user:viewer@example.com"},
+			},
+		},
+	})
+	if kind != "user" || id != "viewer@example.com" {
+		t.Fatalf("subject target = (%q, %q), want (user, viewer@example.com)", kind, id)
+	}
+
+	kind, id = relationshipTupleTargetSubjectMetric(&proto.RelationshipTuple{
+		Target: &proto.RelationshipTarget{
+			Kind: &proto.RelationshipTarget_SubjectSet{
+				SubjectSet: &proto.SubjectSet{
+					Resource: &proto.Resource{Type: "group", Id: "valon-employees"},
+					Relation: "member",
+				},
+			},
+		},
+	})
+	if kind != "subject_set" || id != "group:valon-employees#member" {
+		t.Fatalf("subject set target = (%q, %q), want (subject_set, group:valon-employees#member)", kind, id)
+	}
+}
+
 func TestAllowsAppScopedRelationshipMutationAllowsSubjectSetTarget(t *testing.T) {
 	t.Parallel()
 

@@ -16,35 +16,69 @@ const (
 )
 
 type appScopedRelationshipMutationContext struct {
-	appID  string
-	action string
+	appID             string
+	action            string
+	targetSubjectKind string
+	targetSubjectID   string
 }
 
 type appScopedRelationshipMutationKey struct{}
 
-func WithAppScopedRelationshipMutationAuth(ctx context.Context, appID, action string) context.Context {
+func WithAppScopedRelationshipMutationAuth(ctx context.Context, appID, action string, tuple *proto.RelationshipTuple) context.Context {
 	appID = strings.TrimSpace(appID)
 	action = strings.TrimSpace(action)
 	if appID == "" || action == "" {
 		return ctx
 	}
+	targetSubjectKind, targetSubjectID := relationshipTupleTargetSubjectMetric(tuple)
 	return context.WithValue(ctx, appScopedRelationshipMutationKey{}, appScopedRelationshipMutationContext{
-		appID:  appID,
-		action: action,
+		appID:             appID,
+		action:            action,
+		targetSubjectKind: targetSubjectKind,
+		targetSubjectID:   targetSubjectID,
 	})
 }
 
-func AppScopedRelationshipMutationFromContext(ctx context.Context) (appID, action string, ok bool) {
+func AppScopedRelationshipMutationFromContext(ctx context.Context) (appID, action, targetSubjectKind, targetSubjectID string, ok bool) {
 	value, ok := ctx.Value(appScopedRelationshipMutationKey{}).(appScopedRelationshipMutationContext)
 	if !ok {
-		return "", "", false
+		return "", "", "", "", false
 	}
 	appID = strings.TrimSpace(value.appID)
 	action = strings.TrimSpace(value.action)
 	if appID == "" || action == "" {
-		return "", "", false
+		return "", "", "", "", false
 	}
-	return appID, action, true
+	return appID, action, strings.TrimSpace(value.targetSubjectKind), strings.TrimSpace(value.targetSubjectID), true
+}
+
+func relationshipTupleTargetSubjectMetric(tuple *proto.RelationshipTuple) (kind, id string) {
+	if tuple == nil {
+		return "", ""
+	}
+	switch target := tuple.GetTarget().GetKind().(type) {
+	case *proto.RelationshipTarget_Subject:
+		subjectID := strings.TrimSpace(target.Subject.GetId())
+		if subjectKind, parsedID, ok := core.ParseSubjectID(subjectID); ok && parsedID != "" {
+			return subjectKind, parsedID
+		}
+		if subjectID != "" {
+			return "subject", subjectID
+		}
+	case *proto.RelationshipTarget_SubjectSet:
+		resource := target.SubjectSet.GetResource()
+		relation := strings.TrimSpace(target.SubjectSet.GetRelation())
+		resourceType := strings.TrimSpace(resource.GetType())
+		resourceID := strings.TrimSpace(resource.GetId())
+		if resourceType != "" && resourceID != "" {
+			selector := resourceType + ":" + resourceID
+			if relation != "" {
+				selector += "#" + relation
+			}
+			return "subject_set", selector
+		}
+	}
+	return "", ""
 }
 
 func appScopedRelationshipActionFromMethod(fullMethod string) string {

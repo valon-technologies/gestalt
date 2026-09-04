@@ -21,7 +21,7 @@ func TestAddRelationshipRecordsAppScopedMutationMetrics(t *testing.T) {
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 	ctx = publicrpc.WithPublicOrigin(ctx, proto.Authorization_AddRelationship_FullMethodName)
-	ctx = providergateway.WithAppScopedRelationshipMutationAuth(ctx, "roadmap", "grant_add")
+	ctx = providergateway.WithAppScopedRelationshipMutationAuth(ctx, "roadmap", "grant_add", nil)
 
 	provider := &stubAuthorizationProvider{}
 	server := NewProviderServer(provider)
@@ -74,7 +74,7 @@ func TestDeleteRelationshipRecordsAppScopedMutationFailure(t *testing.T) {
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 	ctx = publicrpc.WithPublicOrigin(ctx, proto.Authorization_DeleteRelationship_FullMethodName)
-	ctx = providergateway.WithAppScopedRelationshipMutationAuth(ctx, "roadmap", "grant_remove")
+	ctx = providergateway.WithAppScopedRelationshipMutationAuth(ctx, "roadmap", "grant_remove", nil)
 
 	provider := &stubAuthorizationProvider{
 		deleteErr: status.Error(codes.InvalidArgument, "invalid tuple"),

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"google.golang.org/grpc/codes"
@@ -70,10 +71,10 @@ func (t *ProviderGatewayTransport) enforceAuthorizationPublicAccess(
 			if allowed {
 				appID := strings.TrimSpace(tuple.GetResource().GetId())
 				action := appScopedRelationshipActionFromMethod(fullMethod)
-				return WithAppScopedRelationshipMutationAuth(ctx, appID, action), nil
+				return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple), nil
 			}
 			deniedErr := status.Error(codes.PermissionDenied, "access denied")
-			recordAppScopedRelationshipAuthFailure(ctx, tuple, fullMethod, deniedErr)
+			recordAppScopedRelationshipAuthFailure(ctx, subjectID, tuple, fullMethod, deniedErr)
 			return ctx, deniedErr
 		}
 	}
@@ -96,7 +97,7 @@ func isAuthorizationServiceMethod(fullMethod string) bool {
 	return service == proto.Authorization_ServiceDesc.ServiceName
 }
 
-func recordAppScopedRelationshipAuthFailure(ctx context.Context, tuple *proto.RelationshipTuple, fullMethod string, err error) {
+func recordAppScopedRelationshipAuthFailure(ctx context.Context, subjectID string, tuple *proto.RelationshipTuple, fullMethod string, err error) {
 	if tuple == nil || strings.TrimSpace(tuple.GetResource().GetType()) != appAuthorizationResourceType {
 		return
 	}
@@ -105,12 +106,18 @@ func recordAppScopedRelationshipAuthFailure(ctx context.Context, tuple *proto.Re
 	if appID == "" || action == "" {
 		return
 	}
+	targetSubjectKind, targetSubjectID := relationshipTupleTargetSubjectMetric(tuple)
+	principalKind, principalID := principal.MetricAuthorizationSubject(&principal.Principal{SubjectID: subjectID})
 	observability.RecordAppAdminUIInteraction(ctx, time.Now(), observability.AppAdminUIInteraction{
-		App:             appID,
-		Surface:         observability.AppAdminUISurfaceMembers,
-		Action:          action,
-		Failed:          true,
-		FailureCategory: observability.AppAdminUIFailureAuth,
-		Err:             err,
+		App:                  appID,
+		Surface:              observability.AppAdminUISurfaceMembers,
+		Action:               action,
+		Failed:               true,
+		FailureCategory:      observability.AppAdminUIFailureAuth,
+		Err:                  err,
+		PrincipalSubjectKind: principalKind,
+		PrincipalSubjectID:   principalID,
+		TargetSubjectKind:    targetSubjectKind,
+		TargetSubjectID:      targetSubjectID,
 	})
 }

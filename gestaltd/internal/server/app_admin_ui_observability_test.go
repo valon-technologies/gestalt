@@ -41,6 +41,8 @@ func TestAppAdminUIObservabilityMiddlewareRecordsSuccess(t *testing.T) {
 		"gestaltd.app_admin.ui.surface": "members",
 		"gestaltd.app_admin.ui.action":  "list",
 		"gestaltd.app_admin.ui.outcome": "success",
+		"gestaltd.subject.kind":         "unknown",
+		"gestaltd.subject.id":           "unknown",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
 	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", attrs)
@@ -73,6 +75,8 @@ func TestAppAdminUIObservabilityMiddlewareRecordsValidationFailure(t *testing.T)
 		"gestaltd.app_admin.ui.action":           "save",
 		"gestaltd.app_admin.ui.outcome":          "failure",
 		"gestaltd.app_admin.ui.failure_category": "validation",
+		"gestaltd.subject.kind":                  "unknown",
+		"gestaltd.subject.id":                    "unknown",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)
@@ -110,6 +114,8 @@ func TestAppAdminUIObservabilityMiddlewareRecordsAuthorizationUnavailable(t *tes
 		"gestaltd.app_admin.ui.action":           "list",
 		"gestaltd.app_admin.ui.outcome":          "failure",
 		"gestaltd.app_admin.ui.failure_category": "server",
+		"gestaltd.subject.kind":                  "unknown",
+		"gestaltd.subject.id":                    "unknown",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)
