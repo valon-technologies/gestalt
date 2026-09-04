@@ -6041,6 +6041,181 @@ apps:
 	})
 }
 
+func TestLoadPathsAuthorizationSeedFileResolvesRelativeToOverlay(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	baseDir := filepath.Join(dir, "base")
+	overlayDir := filepath.Join(dir, "overlay")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatalf("mkdir base: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(overlayDir, "authorization"), 0o755); err != nil {
+		t.Fatalf("mkdir overlay: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(overlayDir, "authorization", "seed.json"), []byte(`{
+  "model": {
+    "resourceTypes": [
+      {
+        "name": "team",
+        "relations": [
+          {
+            "name": "member",
+            "allowedTargets": [
+              {"subjectType": "subject"}
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("write overlay seed: %v", err)
+	}
+	basePath := filepath.Join(baseDir, "config.yaml")
+	overlayPath := filepath.Join(overlayDir, "config.yaml")
+	if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v8
+authorization:
+  seedFile: base-seed.json
+`), 0o644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	if err := os.WriteFile(overlayPath, []byte(`
+apiVersion: gestaltd.config/v8
+authorization:
+  seedFile: authorization/seed.json
+`), 0o644); err != nil {
+		t.Fatalf("write overlay: %v", err)
+	}
+
+	cfg, err := LoadPaths([]string{basePath, overlayPath})
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+	want := filepath.Join(overlayDir, "authorization", "seed.json")
+	if got := cfg.Authorization.SeedFile; got != want {
+		t.Fatalf("Authorization.SeedFile = %q, want %q", got, want)
+	}
+}
+
+func TestLoadPathsAuthorizationRelationshipsValidateAgainstSeedFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "authorization"), 0o755); err != nil {
+		t.Fatalf("mkdir authorization: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "authorization", "seed.json"), []byte(`{
+  "model": {
+    "resourceTypes": [
+      {
+        "name": "authorization",
+        "relations": [
+          {
+            "name": "admin",
+            "allowedTargets": [
+              {"subjectType": "subject"}
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	basePath := filepath.Join(dir, "base.yaml")
+	overlayPath := filepath.Join(dir, "overlay.yaml")
+	if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v8
+authorization:
+  seedFile: authorization/seed.json
+`), 0o644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	if err := os.WriteFile(overlayPath, []byte(`
+apiVersion: gestaltd.config/v8
+authorization:
+  relationships:
+    - resource:
+        type: authorization
+        id: authorization
+      relation: admin
+      subject:
+        type: subject
+        id: user:alice
+`), 0o644); err != nil {
+		t.Fatalf("write overlay: %v", err)
+	}
+
+	if _, err := LoadPaths([]string{basePath, overlayPath}); err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+}
+
+func TestLoadPathsSCIMValidatesAgainstSeedFileAndInlineResourcePolicy(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "authorization"), 0o755); err != nil {
+		t.Fatalf("mkdir authorization: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "authorization", "seed.json"), []byte(`{
+  "model": {
+    "resourceTypes": [
+      {
+        "name": "group",
+        "relations": [
+          {
+            "name": "member",
+            "allowedTargets": [
+              {"subjectType": "subject"},
+              {"subjectSetType": {"resourceType": "group", "relation": "member"}}
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(`
+apiVersion: gestaltd.config/v8
+server:
+  scim:
+    clients:
+      rippling:
+        credentials:
+          - id: current
+            bearerToken: token
+        activeUserRelationships:
+          - relation: member
+            resource:
+              type: group
+              id: valon-employees
+providers:
+  authorization:
+    indexeddb:
+      source:
+        path: /tmp/authorization/manifest.yaml
+authorization:
+  seedFile: authorization/seed.json
+  resourceTypes:
+    group:
+      dynamic:
+        allowAdditionalRelationships: true
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if _, err := Load(configPath); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+}
+
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {
 	t.Parallel()
 

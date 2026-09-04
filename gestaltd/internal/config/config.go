@@ -3924,6 +3924,10 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 		resolveRelativeStringField(server, "artifactsDir", baseDir)
 	}
 
+	if authorization := nestedMap(root, "authorization"); authorization != nil {
+		resolveRelativeStringField(authorization, "seedFile", baseDir)
+	}
+
 	if providers := nestedMap(root, "providers"); providers != nil {
 		for _, section := range []struct {
 			key  string
@@ -4091,7 +4095,6 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	for _, entry := range cfg.Apps {
 		resolveEntry(entry)
 	}
-	cfg.Authorization.SeedFile = resolveRelativePath(baseDir, cfg.Authorization.SeedFile)
 }
 
 func resolveRelativePath(baseDir, value string) string {

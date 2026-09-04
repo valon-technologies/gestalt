@@ -21,7 +21,9 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // ValidateStructure checks config shape: integration references, app
@@ -166,11 +168,9 @@ func validateSCIMConfig(cfg *Config) error {
 	if cfg == nil || len(cfg.Server.SCIM.Clients) == 0 {
 		return nil
 	}
-	resourceTypes := make(map[string]AuthorizationResourceTypeDef)
-	for _, model := range cfg.Authorization.Models {
-		for name, resourceType := range model.ResourceTypes {
-			resourceTypes[name] = resourceType
-		}
+	resourceTypes, _, err := authorizationResourceTypesForValidation(cfg)
+	if err != nil {
+		return err
 	}
 	groupType, hasGroup := resourceTypes["group"]
 	if !hasGroup {
@@ -1964,33 +1964,19 @@ func normalizeProviderRuntimeConfig(subject string, entry *ProviderEntry, allowL
 }
 
 func validateAuthorizationModelConfig(cfg *Config) error {
-	definedResourceTypes := make(map[string]string)
-	resourceTypeRelations := make(map[string]map[string]AuthorizationRelationDef)
-	for modelName, model := range cfg.Authorization.Models {
-		if err := validateAuthorizationMapKey("authorization.models", modelName); err != nil {
-			return err
-		}
-		if err := validateAuthorizationSourceMetadata("authorization.models."+modelName+".source", model.Source); err != nil {
-			return err
-		}
-		for resourceTypeName, resourceType := range model.ResourceTypes {
-			resourcePath := fmt.Sprintf("authorization.models.%s.resourceTypes.%s", modelName, resourceTypeName)
-			if err := validateAuthorizationResourceTypeDef(fmt.Sprintf("authorization.models.%s.resourceTypes", modelName), resourceTypeName, resourcePath, resourceType); err != nil {
-				return err
-			}
-			if prev, exists := definedResourceTypes[resourceTypeName]; exists {
-				return fmt.Errorf("config validation: %s duplicates resource type already defined at %s", resourcePath, prev)
-			}
-			definedResourceTypes[resourceTypeName] = resourcePath
-			resourceTypeRelations[resourceTypeName] = resourceType.Relations
-		}
+	resourceTypes, definedResourceTypes, err := authorizationResourceTypesForValidation(cfg)
+	if err != nil {
+		return err
 	}
-	for modelName, model := range cfg.Authorization.Models {
-		for resourceTypeName, resourceType := range model.ResourceTypes {
-			resourcePath := fmt.Sprintf("authorization.models.%s.resourceTypes.%s", modelName, resourceTypeName)
-			if err := validateAuthorizationResourceTypeReferences(resourcePath, resourceType, resourceTypeRelations); err != nil {
-				return err
-			}
+	resourceTypeRelations := make(map[string]map[string]AuthorizationRelationDef)
+	for resourceTypeName, resourceType := range resourceTypes {
+		resourceTypeRelations[resourceTypeName] = resourceType.Relations
+	}
+
+	for resourceTypeName, resourceType := range resourceTypes {
+		resourcePath := definedResourceTypes[resourceTypeName]
+		if err := validateAuthorizationResourceTypeReferences(resourcePath, resourceType, resourceTypeRelations); err != nil {
+			return err
 		}
 	}
 	for resourceTypeName := range cfg.Authorization.ResourceTypes {
@@ -2009,6 +1995,105 @@ func validateAuthorizationModelConfig(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+func authorizationResourceTypesForValidation(cfg *Config) (map[string]AuthorizationResourceTypeDef, map[string]string, error) {
+	resourceTypes := make(map[string]AuthorizationResourceTypeDef)
+	definedResourceTypes := make(map[string]string)
+	if cfg == nil {
+		return resourceTypes, definedResourceTypes, nil
+	}
+	if strings.TrimSpace(cfg.Authorization.SeedFile) != "" {
+		seedResourceTypes, err := loadAuthorizationSeedResourceTypes(cfg.Authorization.SeedFile)
+		if err != nil {
+			return nil, nil, err
+		}
+		for resourceTypeName, resourceType := range seedResourceTypes {
+			resourcePath := fmt.Sprintf("authorization.seedFile(%q).model.resourceTypes.%s", cfg.Authorization.SeedFile, resourceTypeName)
+			if err := validateAuthorizationResourceTypeDef("authorization.seedFile.model.resourceTypes", resourceTypeName, resourcePath, resourceType); err != nil {
+				return nil, nil, err
+			}
+			resourceTypes[resourceTypeName] = resourceType
+			definedResourceTypes[resourceTypeName] = resourcePath
+		}
+	}
+	for modelName, model := range cfg.Authorization.Models {
+		if err := validateAuthorizationMapKey("authorization.models", modelName); err != nil {
+			return nil, nil, err
+		}
+		if err := validateAuthorizationSourceMetadata("authorization.models."+modelName+".source", model.Source); err != nil {
+			return nil, nil, err
+		}
+		for resourceTypeName, resourceType := range model.ResourceTypes {
+			resourcePath := fmt.Sprintf("authorization.models.%s.resourceTypes.%s", modelName, resourceTypeName)
+			if err := validateAuthorizationResourceTypeDef(fmt.Sprintf("authorization.models.%s.resourceTypes", modelName), resourceTypeName, resourcePath, resourceType); err != nil {
+				return nil, nil, err
+			}
+			if prev, exists := definedResourceTypes[resourceTypeName]; exists {
+				return nil, nil, fmt.Errorf("config validation: %s duplicates resource type already defined at %s", resourcePath, prev)
+			}
+			definedResourceTypes[resourceTypeName] = resourcePath
+			resourceTypes[resourceTypeName] = resourceType
+		}
+	}
+	for resourceTypeName, policy := range cfg.Authorization.ResourceTypes {
+		if resourceType, ok := resourceTypes[resourceTypeName]; ok {
+			resourceType.Dynamic = policy.Dynamic
+			resourceTypes[resourceTypeName] = resourceType
+		}
+	}
+	return resourceTypes, definedResourceTypes, nil
+}
+
+func loadAuthorizationSeedResourceTypes(path string) (map[string]AuthorizationResourceTypeDef, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("config validation: read authorization seed file %q: %w", path, err)
+	}
+	var req proto.SetAuthorizationStateRequest
+	if err := protojson.Unmarshal(data, &req); err != nil {
+		return nil, fmt.Errorf("config validation: parse authorization seed file %q: %w", path, err)
+	}
+	resourceTypes := make(map[string]AuthorizationResourceTypeDef)
+	for _, resourceType := range req.GetModel().GetResourceTypes() {
+		name := strings.TrimSpace(resourceType.GetName())
+		if _, exists := resourceTypes[name]; exists {
+			return nil, fmt.Errorf("config validation: authorization.seedFile(%q).model.resourceTypes.%s duplicates resource type already defined in seed file", path, name)
+		}
+		def := AuthorizationResourceTypeDef{
+			DefaultRole: strings.TrimSpace(resourceType.GetDefaultRole()),
+			Relations:   make(map[string]AuthorizationRelationDef),
+			Actions:     make(map[string]AuthorizationActionDef),
+		}
+		for _, relation := range resourceType.GetRelations() {
+			relationName := strings.TrimSpace(relation.GetName())
+			relationDef := AuthorizationRelationDef{}
+			for _, target := range relation.GetAllowedTargets() {
+				targetDef := AuthorizationAllowedTargetDef{
+					SubjectType:  strings.TrimSpace(target.GetSubjectType()),
+					ResourceType: strings.TrimSpace(target.GetResourceType()),
+				}
+				if subjectSetType := target.GetSubjectSetType(); subjectSetType != nil {
+					targetDef.SubjectSet = &AuthorizationSubjectSetTargetDef{
+						ResourceType: strings.TrimSpace(subjectSetType.GetResourceType()),
+						Relation:     strings.TrimSpace(subjectSetType.GetRelation()),
+					}
+				}
+				relationDef.AllowedTargets = append(relationDef.AllowedTargets, targetDef)
+			}
+			def.Relations[relationName] = relationDef
+		}
+		for _, action := range resourceType.GetActions() {
+			actionName := strings.TrimSpace(action.GetName())
+			relations := make([]string, 0, len(action.GetRelations()))
+			for _, relation := range action.GetRelations() {
+				relations = append(relations, strings.TrimSpace(relation))
+			}
+			def.Actions[actionName] = AuthorizationActionDef{Relations: relations}
+		}
+		resourceTypes[name] = def
+	}
+	return resourceTypes, nil
 }
 
 func validateAuthorizationResourceTypeReferences(path string, def AuthorizationResourceTypeDef, resourceTypes map[string]map[string]AuthorizationRelationDef) error {
