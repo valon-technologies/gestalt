@@ -52,13 +52,13 @@ func TestEnforceAuthorizationPublicAccessRecordsAppScopedAuthFailure(t *testing.
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":              "roadmap",
-		"gestaltd.app_admin.ui.surface":          "members",
-		"gestaltd.app_admin.ui.action":           "grant_add",
-		"gestaltd.app_admin.ui.outcome":          "failure",
-		"gestaltd.app_admin.ui.failure_category": "auth_failure",
-		"gestaltd.subject.kind":                  "user",
-		"gestaltd.subject.id":                    "outsider@example.com",
+		"gestaltd.app_admin.ui.app":                 "roadmap",
+		"gestaltd.app_admin.ui.surface":             "members",
+		"gestaltd.app_admin.ui.action":              "grant_add",
+		"gestaltd.app_admin.ui.outcome":             "failure",
+		"gestaltd.app_admin.ui.failure_category":    "auth_failure",
+		"gestaltd.subject.kind":                     "user",
+		"gestaltd.subject.id":                       "outsider@example.com",
 		"gestaltd.app_admin.ui.target_subject.kind": "user",
 		"gestaltd.app_admin.ui.target_subject.id":   "viewer@example.com",
 	}
