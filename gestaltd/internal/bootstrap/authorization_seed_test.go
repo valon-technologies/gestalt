@@ -110,6 +110,44 @@ func TestBootstrapAuthorizationSeedIfEmptyAppliesSeedFile(t *testing.T) {
 	}
 }
 
+func TestBootstrapAuthorizationSeedIfEmptyRunsWhenApplyEnabled(t *testing.T) {
+	t.Parallel()
+
+	seedPath := writeAuthorizationSeedFile(t, `{
+  "model": {
+    "resourceTypes": [
+      {
+        "name": "app",
+        "sourceLayer": "SOURCE_LAYER_STATIC_CONFIG",
+        "relations": [
+          {
+            "name": "admin",
+            "allowedTargets": [{ "subjectType": "subject" }]
+          }
+        ]
+      }
+    ]
+  }
+}`)
+
+	provider := &seedTrackingAuthorizationProvider{emptyStore: true}
+	cfg := authorizationBootstrapTestConfig(boolPtr(true))
+	cfg.Authorization.SeedFile = seedPath
+	cfg.Authorization.Models = nil
+
+	if err := bootstrapAuthorizationProviderState(
+		context.Background(),
+		cfg,
+		map[string]core.AuthorizationProvider{"authz": provider},
+		nil,
+	); err != nil {
+		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
+	}
+	if provider.setModelCalls != 1 {
+		t.Fatalf("SetActiveModel calls = %d, want 1", provider.setModelCalls)
+	}
+}
+
 func TestBootstrapAuthorizationSeedIfEmptySkipsPopulatedStore(t *testing.T) {
 	t.Parallel()
 
