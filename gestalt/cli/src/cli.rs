@@ -238,6 +238,71 @@ pub enum AuthorizationCommands {
         #[command(subcommand)]
         command: AuthorizationSubjectCommands,
     },
+    /// Inspect and manage app-scoped authorization grants
+    Apps {
+        #[command(subcommand)]
+        command: AuthorizationAppsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationAppsCommands {
+    /// List apps in the catalog
+    List,
+    /// Manage member grants for an app
+    Members {
+        #[command(subcommand)]
+        command: AuthorizationAppsMembersCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationAppsMembersCommands {
+    /// List member grants for an app
+    List(AuthorizationAppsMembersListArgs),
+    /// Grant or change a member role on an app
+    Set(AuthorizationAppsMembersSetArgs),
+    /// Remove a member grant from an app
+    Remove(AuthorizationAppsMembersRemoveArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationAppsMembersListArgs {
+    /// App name
+    pub app: String,
+}
+
+#[derive(Args)]
+pub struct AuthorizationAppsMembersSetArgs {
+    /// App name
+    pub app: String,
+    /// Existing roster member email address
+    #[arg(long, conflicts_with = "subject_id")]
+    pub email: Option<String>,
+    /// Member subject id, such as user:abc or service_account:bot
+    #[arg(long = "subject-id", conflicts_with = "email")]
+    pub subject_id: Option<String>,
+    /// App role to grant, such as viewer, editor, or admin
+    #[arg(long)]
+    pub role: String,
+}
+
+#[derive(Args)]
+pub struct AuthorizationAppsMembersRemoveArgs {
+    /// App name
+    pub app: String,
+    /// Member subject id, such as user:abc
+    #[arg(conflicts_with_all = ["email", "subject_id"], required_unless_present_any = ["email", "subject_id"])]
+    pub subject: Option<String>,
+    /// Existing roster member email address
+    #[arg(long, conflicts_with_all = ["subject", "subject_id"])]
+    pub email: Option<String>,
+    /// Member subject id, such as user:abc or service_account:bot
+    #[arg(long = "subject-id", conflicts_with_all = ["subject", "email"])]
+    pub subject_id: Option<String>,
+    /// Relationship role to remove; when omitted, removes all mutable grants for the subject
+    #[arg(long)]
+    pub role: Option<String>,
 }
 
 #[derive(Subcommand)]

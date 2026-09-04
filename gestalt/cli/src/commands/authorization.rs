@@ -11,6 +11,7 @@ use crate::cli::{
 use crate::output::{self, Format};
 
 use crate::api::ApiClient;
+use crate::commands::authorization_apps;
 use crate::commands::authorization_subjects;
 
 use gestalt_sdk::authorization::source_layer::{
@@ -130,6 +131,9 @@ pub fn dispatch(
         AuthorizationCommands::Subjects { command } => {
             authorization_subjects::dispatch(api, command, format)
         }
+        AuthorizationCommands::Apps { command } => {
+            authorization_apps::dispatch(api, authz, command, format)
+        }
         AuthorizationCommands::State { command } => match command {
             AuthorizationStateCommands::Apply(args) => apply_state(api, &args, format),
         },
@@ -156,7 +160,7 @@ fn apply_state(
     Ok(())
 }
 
-fn build_relationship_from_args(
+pub(crate) fn build_relationship_from_args(
     args: &crate::cli::AuthorizationRelationshipMutationArgs,
 ) -> Result<Relationship> {
     Ok(Relationship {
@@ -172,7 +176,25 @@ fn build_relationship_from_args(
     })
 }
 
-fn relationship_tuple_from_parts(
+pub(crate) fn build_app_member_relationship(
+    app: &str,
+    role: &str,
+    subject_id: &str,
+) -> Result<Relationship> {
+    Ok(Relationship {
+        tuple: Some(relationship_tuple_from_parts(
+            "app",
+            app,
+            role,
+            Some(subject_id),
+            None,
+        )?),
+        properties: None,
+        source_layer: SOURCE_LAYER_RUNTIME,
+    })
+}
+
+pub(crate) fn relationship_tuple_from_parts(
     resource_type: &str,
     resource_id: &str,
     relation: &str,
