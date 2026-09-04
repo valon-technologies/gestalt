@@ -67,17 +67,18 @@ func TestLogAppAdminUIFailureIncludesPrincipalAndTargetSubjects(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	LogAppAdminUIFailure(context.Background(), AppAdminUIInteraction{
+	LogAppAdminUI(context.Background(), AppAdminUIInteraction{
 		App:                  "g-issues",
 		Surface:              AppAdminUISurfaceMembers,
 		Action:               AppAdminUIActionGrantAdd,
+		Failed:               true,
 		FailureCategory:      AppAdminUIFailureAuth,
 		StatusCode:           http.StatusForbidden,
 		PrincipalSubjectKind: "user",
 		PrincipalSubjectID:   "user:abc",
 		TargetSubjectKind:    "user",
 		TargetSubjectID:      "user:def",
-	})
+	}, AppAdminUIOutcomeFailure)
 
 	var record map[string]string
 	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
@@ -85,13 +86,52 @@ func TestLogAppAdminUIFailureIncludesPrincipalAndTargetSubjects(t *testing.T) {
 	}
 	for key, want := range map[string]string{
 		"event":                  "app_admin.ui",
+		"outcome":                AppAdminUIOutcomeFailure,
+		"level":                  "WARN",
 		"principal_subject_kind": "user",
 		"principal_subject_id":   "user:abc",
 		"target_subject_kind":    "user",
 		"target_subject_id":      "user:def",
+		"failure_category":       AppAdminUIFailureAuth,
 	} {
 		if got := strings.TrimSpace(record[key]); got != want {
 			t.Fatalf("%s = %q, want %q", key, got, want)
 		}
+	}
+}
+
+func TestLogAppAdminUISuccessIncludesOutcome(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	LogAppAdminUI(context.Background(), AppAdminUIInteraction{
+		App:                  "g-issues",
+		Surface:              AppAdminUISurfaceMembers,
+		Action:               AppAdminUIActionList,
+		PrincipalSubjectKind: "user",
+		PrincipalSubjectID:   "user:abc",
+	}, AppAdminUIOutcomeSuccess)
+
+	var record map[string]string
+	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+		t.Fatalf("unmarshal log record: %v", err)
+	}
+	for key, want := range map[string]string{
+		"event":                  "app_admin.ui",
+		"outcome":                AppAdminUIOutcomeSuccess,
+		"level":                  "INFO",
+		"principal_subject_kind": "user",
+		"principal_subject_id":   "user:abc",
+	} {
+		if got := strings.TrimSpace(record[key]); got != want {
+			t.Fatalf("%s = %q, want %q", key, got, want)
+		}
+	}
+	if _, ok := record["failure_category"]; ok {
+		t.Fatalf("failure_category should be omitted on success logs")
 	}
 }
