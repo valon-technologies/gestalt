@@ -57,6 +57,10 @@ func TestEnforceAuthorizationPublicAccessRecordsAppScopedAuthFailure(t *testing.
 		"gestaltd.app_admin.ui.action":           "grant_add",
 		"gestaltd.app_admin.ui.outcome":          "failure",
 		"gestaltd.app_admin.ui.failure_category": "auth_failure",
+		"gestaltd.subject.kind":                  "user",
+		"gestaltd.subject.id":                    "outsider@example.com",
+		"gestaltd.app_admin.ui.target_subject.kind": "user",
+		"gestaltd.app_admin.ui.target_subject.id":   "viewer@example.com",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)
@@ -65,9 +69,17 @@ func TestEnforceAuthorizationPublicAccessRecordsAppScopedAuthFailure(t *testing.
 func TestWithAppScopedRelationshipMutationAuth(t *testing.T) {
 	t.Parallel()
 
-	ctx := WithAppScopedRelationshipMutationAuth(context.Background(), "roadmap", "grant_remove")
-	appID, action, ok := AppScopedRelationshipMutationFromContext(ctx)
-	if !ok || appID != "roadmap" || action != "grant_remove" {
-		t.Fatalf("context marker = (%q, %q, %v), want (roadmap, grant_remove, true)", appID, action, ok)
+	ctx := WithAppScopedRelationshipMutationAuth(context.Background(), "roadmap", "grant_remove", &proto.RelationshipTuple{
+		Resource: &proto.Resource{Type: "app", Id: "roadmap"},
+		Relation: "viewer",
+		Target: &proto.RelationshipTarget{
+			Kind: &proto.RelationshipTarget_Subject{
+				Subject: &proto.Subject{Type: "subject", Id: "user:viewer@example.com"},
+			},
+		},
+	})
+	appID, action, targetKind, targetID, ok := AppScopedRelationshipMutationFromContext(ctx)
+	if !ok || appID != "roadmap" || action != "grant_remove" || targetKind != "user" || targetID != "viewer@example.com" {
+		t.Fatalf("context marker = (%q, %q, %q, %q, %v), want (roadmap, grant_remove, user, viewer@example.com, true)", appID, action, targetKind, targetID, ok)
 	}
 }

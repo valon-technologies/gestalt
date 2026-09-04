@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
@@ -116,18 +117,23 @@ func recordAppScopedRelationshipMutation(ctx context.Context, startedAt time.Tim
 	if _, ok := publicrpc.PublicOriginFromContext(ctx); !ok {
 		return
 	}
-	appID, action, ok := providergateway.AppScopedRelationshipMutationFromContext(ctx)
+	appID, action, targetSubjectKind, targetSubjectID, ok := providergateway.AppScopedRelationshipMutationFromContext(ctx)
 	if !ok {
 		return
 	}
 	failed := err != nil
 	interaction := observability.AppAdminUIInteraction{
-		App:     appID,
-		Surface: observability.AppAdminUISurfaceMembers,
-		Action:  action,
-		Failed:  failed,
-		Err:     err,
+		App:               appID,
+		Surface:           observability.AppAdminUISurfaceMembers,
+		Action:            action,
+		Failed:            failed,
+		Err:               err,
+		TargetSubjectKind: targetSubjectKind,
+		TargetSubjectID:   targetSubjectID,
 	}
+	principalKind, principalID := principal.MetricAuthorizationSubject(principal.FromContext(ctx))
+	interaction.PrincipalSubjectKind = principalKind
+	interaction.PrincipalSubjectID = principalID
 	if failed {
 		interaction.FailureCategory = observability.AppAdminUIFailureCategoryGRPC(err)
 	}

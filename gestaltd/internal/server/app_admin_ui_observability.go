@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 )
 
@@ -50,6 +51,9 @@ func (s *Server) appAdminUIObservabilityMiddleware(next http.Handler) http.Handl
 		if failed {
 			interaction.FailureCategory = observability.AppAdminUIFailureCategoryHTTP(recorder.status)
 		}
+		principalKind, principalID := principal.MetricAuthorizationSubject(PrincipalFromContext(r.Context()))
+		interaction.PrincipalSubjectKind = principalKind
+		interaction.PrincipalSubjectID = principalID
 		observability.RecordAppAdminUIInteraction(r.Context(), startedAt, interaction)
 	})
 }
