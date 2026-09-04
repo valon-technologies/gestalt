@@ -276,7 +276,7 @@ pub struct AuthorizationAppsMembersListArgs {
 pub struct AuthorizationAppsMembersSetArgs {
     /// App name
     pub app: String,
-    /// Member email address
+    /// Existing roster member email address
     #[arg(long, conflicts_with = "subject_id")]
     pub email: Option<String>,
     /// Member subject id, such as user:abc or service_account:bot
@@ -294,7 +294,7 @@ pub struct AuthorizationAppsMembersRemoveArgs {
     /// Member subject id, such as user:abc
     #[arg(conflicts_with_all = ["email", "subject_id"], required_unless_present_any = ["email", "subject_id"])]
     pub subject: Option<String>,
-    /// Member email address
+    /// Existing roster member email address
     #[arg(long, conflicts_with_all = ["subject", "subject_id"])]
     pub email: Option<String>,
     /// Member subject id, such as user:abc or service_account:bot

@@ -17,8 +17,7 @@ use gestalt_sdk::authorization::{
     AddRelationshipRequest, DeleteRelationshipRequest, ListRelationshipsRequest, Relationship,
     RelationshipFilter, RelationshipTargetKind, Resource,
 };
-use gestalt_sdk::public::generated::app::AppInvokeRequest;
-use gestalt_sdk::public::generated::app_client::{AppClient, AuthorizationClient};
+use gestalt_sdk::public::generated::app_client::AuthorizationClient;
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
 pub fn dispatch(
@@ -336,14 +335,11 @@ fn resolve_canonical_member_subject_id(
         .filter(|value| !value.is_empty())
         .context("either --email or --subject-id is required")?;
     let members = load_app_admin_members(api, app)?;
-    if let Some(subject_id) = subject_id_for_email_in_members(&members, email)? {
+    if let Some(subject_id) = subject_id_for_email_in_members(&members, email) {
         return Ok(subject_id);
     }
-    if let Some(user_id) = lookup_user_id_by_email(api, email)? {
-        return Ok(format!("user:{user_id}"));
-    }
     bail!(
-        "could not resolve {email} to a canonical user id; pass --subject-id user:<uuid> from `members list`"
+        "could not resolve {email} from the app member roster; pass --subject-id user:<uuid> from `members list`"
     )
 }
 
@@ -371,10 +367,7 @@ fn canonical_subject_id_from_members(
     Ok(normalized)
 }
 
-fn subject_id_for_email_in_members(
-    members: &[AppAdminMember],
-    email: &str,
-) -> Result<Option<String>> {
+fn subject_id_for_email_in_members(members: &[AppAdminMember], email: &str) -> Option<String> {
     let normalized_email = email.trim().to_lowercase();
     for member in members {
         let Some(member_email) = member.email.as_deref() else {
@@ -387,48 +380,10 @@ fn subject_id_for_email_in_members(
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
         {
-            return Ok(Some(subject_id.to_string()));
+            return Some(subject_id.to_string());
         }
     }
-    Ok(None)
-}
-
-fn lookup_user_id_by_email(api: &ApiClient, email: &str) -> Result<Option<String>> {
-    let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
-    let app_client = AppClient::new(transport);
-    let resp = app_client
-        .invoke_sync(AppInvokeRequest {
-            app: "home".to_string(),
-            operation: "users.list".to_string(),
-            ..Default::default()
-        })
-        .context("failed to list users while resolving email to canonical user id")?;
-    let users = resp
-        .get("users")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let normalized_email = email.trim().to_lowercase();
-    for user in users {
-        let user_email = user
-            .get("email")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_lowercase();
-        if user_email != normalized_email {
-            continue;
-        }
-        if let Some(id) = user
-            .get("id")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            return Ok(Some(id.to_string()));
-        }
-    }
-    Ok(None)
+    None
 }
 
 fn subject_matches_member(subject_id: &str, member: &AppAdminMember) -> bool {
@@ -555,7 +510,8 @@ struct AppAdminMember {
 mod tests {
     use super::{
         AppAdminMember, RoleSetPlan, canonical_subject_id_from_members, is_service_account_subject,
-        normalize_subject_id, plan_role_set, subject_matches_member,
+        normalize_subject_id, plan_role_set, subject_id_for_email_in_members,
+        subject_matches_member,
     };
 
     #[test]
@@ -595,6 +551,25 @@ mod tests {
         assert_eq!(
             canonical_subject_id_from_members(&members, "user:alice@example.com").unwrap(),
             "user:canonical-id"
+        );
+    }
+
+    #[test]
+    fn subject_id_for_email_uses_roster_only() {
+        let members = [AppAdminMember {
+            role: "viewer".to_string(),
+            mutable: true,
+            subject_id: Some("user:canonical-id".to_string()),
+            selector_value: None,
+            email: Some("Alice@Example.com".to_string()),
+        }];
+        assert_eq!(
+            subject_id_for_email_in_members(&members, "alice@example.com"),
+            Some("user:canonical-id".to_string())
+        );
+        assert_eq!(
+            subject_id_for_email_in_members(&members, "bob@example.com"),
+            None
         );
     }
 
