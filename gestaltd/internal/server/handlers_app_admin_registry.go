@@ -183,11 +183,11 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		surface, action, instrumented := appAdminUIRouteSpecForRequest(r)
 		appName := strings.TrimSpace(chi.URLParam(r, "app"))
-		recordAuthFailure := func(status int, message string) {
+		recordAuthFailure := func(message string) {
 			if !instrumented {
 				return
 			}
-			recordAppAdminUIAuthFailure(r.Context(), r, appName, surface, action, appAdminUIAuthFailureError(message))
+			recordAppAdminUIAuthFailure(r.Context(), r, appName, surface, action, errors.New(message))
 		}
 
 		if s.authorization == nil {
@@ -196,22 +196,22 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 		}
 		p := PrincipalFromContext(r.Context())
 		if p == nil {
-			recordAuthFailure(http.StatusUnauthorized, "missing authorization")
+			recordAuthFailure("missing authorization")
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		}
 		if err := requireUserCaller(w, p); err != nil {
-			recordAuthFailure(http.StatusForbidden, errUserRequired.Error())
+			recordAuthFailure(errUserRequired.Error())
 			return
 		}
 		subjectID, err := principal.ResolveAuthorizationSubjectID(r.Context(), s.credentialUserResolver(), p)
 		switch {
 		case errors.Is(err, principal.ErrCredentialSubjectRequired):
-			recordAuthFailure(http.StatusUnauthorized, "missing authorization")
+			recordAuthFailure("missing authorization")
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		case errors.Is(err, principal.ErrOpaqueCredentialSubject):
-			recordAuthFailure(http.StatusForbidden, "app access denied")
+			recordAuthFailure("app access denied")
 			writeError(w, http.StatusForbidden, "app access denied")
 			return
 		case err != nil:
@@ -220,7 +220,7 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 		}
 		subjectID = strings.TrimSpace(subjectID)
 		if subjectID == "" {
-			recordAuthFailure(http.StatusUnauthorized, "missing authorization")
+			recordAuthFailure("missing authorization")
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		}
@@ -231,7 +231,7 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 			return
 		}
 		if !allowed {
-			recordAuthFailure(http.StatusForbidden, "app access denied")
+			recordAuthFailure("app access denied")
 			writeError(w, http.StatusForbidden, "app access denied")
 			return
 		}

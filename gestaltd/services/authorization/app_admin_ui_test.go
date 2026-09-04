@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc/codes"
@@ -116,13 +117,13 @@ func (p *stubAuthorizationProvider) DeleteRelationship(context.Context, *proto.D
 func TestAppAdminUIFailureCategoryFromRPC(t *testing.T) {
 	t.Parallel()
 
-	if got := appAdminUIFailureCategoryFromRPC(status.Error(codes.PermissionDenied, "denied")); got != "auth_failure" {
+	if got := observability.AppAdminUIFailureCategoryGRPC(status.Error(codes.PermissionDenied, "denied")); got != "auth_failure" {
 		t.Fatalf("category = %q, want auth_failure", got)
 	}
-	if got := appAdminUIFailureCategoryFromRPC(status.Error(codes.InvalidArgument, "bad")); got != "validation" {
+	if got := observability.AppAdminUIFailureCategoryGRPC(status.Error(codes.InvalidArgument, "bad")); got != "validation" {
 		t.Fatalf("category = %q, want validation", got)
 	}
-	if got := appAdminUIFailureCategoryFromRPC(status.Error(codes.Internal, "boom")); got != "server" {
+	if got := observability.AppAdminUIFailureCategoryGRPC(status.Error(codes.Internal, "boom")); got != "server" {
 		t.Fatalf("category = %q, want server", got)
 	}
 }

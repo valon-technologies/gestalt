@@ -2,7 +2,6 @@ package authorization
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -12,8 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -124,61 +121,18 @@ func recordAppScopedRelationshipMutation(ctx context.Context, startedAt time.Tim
 		return
 	}
 	failed := err != nil
-	outcome := "success"
-	if failed {
-		outcome = "failure"
-	}
-	attrs := []attribute.KeyValue{
-		observability.AttrAppAdminUIApp.String(appID),
-		observability.AttrAppAdminUISurface.String("members"),
-		observability.AttrAppAdminUIAction.String(action),
-		observability.AttrAppAdminUIOutcome.String(outcome),
+	interaction := observability.AppAdminUIInteraction{
+		App:     appID,
+		Surface: observability.AppAdminUISurfaceMembers,
+		Action:  action,
+		Failed:  failed,
+		Err:     err,
 	}
 	if failed {
-		failureCategory := appAdminUIFailureCategoryFromRPC(err)
-		attrs = append(attrs, observability.AttrAppAdminUIFailureCategory.String(failureCategory))
-	}
-	observability.RecordAppAdminUI(ctx, startedAt, failed, attrs...)
-	if failed {
-		logAppScopedRelationshipMutationFailure(ctx, appID, action, appAdminUIFailureCategoryFromRPC(err), err)
-	}
-}
-
-func appAdminUIFailureCategoryFromRPC(err error) string {
-	if err == nil {
-		return ""
-	}
-	switch status.Code(err) {
-	case codes.Unauthenticated, codes.PermissionDenied:
-		return "auth_failure"
-	case codes.InvalidArgument:
-		return "validation"
-	case codes.Internal, codes.Unavailable:
-		return "server"
-	default:
-		return "other"
-	}
-}
-
-func logAppScopedRelationshipMutationFailure(ctx context.Context, appID, action, failureCategory string, err error) {
-	attrs := []any{
-		slog.String("event", "app_admin.ui"),
-		slog.String("app", appID),
-		slog.String("surface", "members"),
-		slog.String("action", action),
-		slog.String("failure_category", failureCategory),
-	}
-	if err != nil {
-		attrs = append(attrs, slog.String("error", err.Error()))
+		interaction.FailureCategory = observability.AppAdminUIFailureCategoryGRPC(err)
 	}
 	if meta := invocation.MetaFromContext(ctx); meta != nil {
-		if requestID := strings.TrimSpace(meta.RequestID); requestID != "" {
-			attrs = append(attrs, slog.String("request_id", requestID))
-		}
+		interaction.RequestID = strings.TrimSpace(meta.RequestID)
 	}
-	spanCtx := trace.SpanContextFromContext(ctx)
-	if spanCtx.IsValid() {
-		attrs = append(attrs, slog.String("trace_id", spanCtx.TraceID().String()))
-	}
-	slog.WarnContext(ctx, "app admin ui interaction failed", attrs...)
+	observability.RecordAppAdminUIInteraction(ctx, startedAt, interaction)
 }

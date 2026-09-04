@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
@@ -85,14 +86,14 @@ func TestAppAdminUIFailureCategoryFromStatus(t *testing.T) {
 		status int
 		want   string
 	}{
-		{status: http.StatusUnauthorized, want: appAdminUIFailureAuth},
-		{status: http.StatusForbidden, want: appAdminUIFailureAuth},
-		{status: http.StatusBadRequest, want: appAdminUIFailureValidation},
-		{status: http.StatusNotFound, want: appAdminUIFailureOther},
-		{status: http.StatusInternalServerError, want: appAdminUIFailureServer},
+		{status: http.StatusUnauthorized, want: observability.AppAdminUIFailureAuth},
+		{status: http.StatusForbidden, want: observability.AppAdminUIFailureAuth},
+		{status: http.StatusBadRequest, want: observability.AppAdminUIFailureValidation},
+		{status: http.StatusNotFound, want: observability.AppAdminUIFailureOther},
+		{status: http.StatusInternalServerError, want: observability.AppAdminUIFailureServer},
 	}
 	for _, tc := range tests {
-		if got := appAdminUIFailureCategoryFromStatus(tc.status); got != tc.want {
+		if got := observability.AppAdminUIFailureCategoryHTTP(tc.status); got != tc.want {
 			t.Fatalf("status %d category = %q, want %q", tc.status, got, tc.want)
 		}
 	}

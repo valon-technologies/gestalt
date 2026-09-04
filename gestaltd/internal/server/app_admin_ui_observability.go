@@ -2,9 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -12,26 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
-)
-
-const (
-	appAdminUISurfaceMembers           = "members"
-	appAdminUISurfaceAllowedOperations = "allowed_operations"
-
-	appAdminUIActionList       = "list"
-	appAdminUIActionSave       = "save"
-	appAdminUIActionGrantAdd   = "grant_add"
-	appAdminUIActionGrantRemove = "grant_remove"
-
-	appAdminUIOutcomeSuccess = "success"
-	appAdminUIOutcomeFailure = "failure"
-
-	appAdminUIFailureAuth       = "auth_failure"
-	appAdminUIFailureValidation = "validation"
-	appAdminUIFailureServer     = "server"
-	appAdminUIFailureOther      = "other"
 )
 
 type appAdminUIResponseRecorder struct {
@@ -63,22 +40,18 @@ func (s *Server) appAdminUIObservabilityMiddleware(next http.Handler) http.Handl
 		recorder := &appAdminUIResponseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
 		failed := recorder.status >= http.StatusBadRequest
-		failureCategory := ""
-		if failed {
-			failureCategory = appAdminUIFailureCategoryFromStatus(recorder.status)
+		interaction := observability.AppAdminUIInteraction{
+			App:       appName,
+			Surface:   surface,
+			Action:    action,
+			Failed:    failed,
+			StatusCode: recorder.status,
+			RequestID: appAdminUIRequestID(r),
 		}
-		recordAppAdminUIInteraction(
-			r.Context(),
-			r,
-			startedAt,
-			appName,
-			surface,
-			action,
-			failed,
-			failureCategory,
-			recorder.status,
-			nil,
-		)
+		if failed {
+			interaction.FailureCategory = observability.AppAdminUIFailureCategoryHTTP(recorder.status)
+		}
+		observability.RecordAppAdminUIInteraction(r.Context(), startedAt, interaction)
 	})
 }
 
@@ -91,121 +64,43 @@ func appAdminUIRouteSpecForRequest(r *http.Request) (surface, action string, ok 
 	case http.MethodGet:
 		switch {
 		case strings.HasSuffix(path, "/admin/members"):
-			return appAdminUISurfaceMembers, appAdminUIActionList, true
+			return observability.AppAdminUISurfaceMembers, observability.AppAdminUIActionList, true
 		case strings.HasSuffix(path, "/admin/allowed-operations"):
-			return appAdminUISurfaceAllowedOperations, appAdminUIActionList, true
+			return observability.AppAdminUISurfaceAllowedOperations, observability.AppAdminUIActionList, true
 		}
 	case http.MethodPut:
 		if strings.HasSuffix(path, "/admin/allowed-operations") {
-			return appAdminUISurfaceAllowedOperations, appAdminUIActionSave, true
+			return observability.AppAdminUISurfaceAllowedOperations, observability.AppAdminUIActionSave, true
 		}
 	}
 	return "", "", false
-}
-
-func appAdminUIFailureCategoryFromStatus(status int) string {
-	switch {
-	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return appAdminUIFailureAuth
-	case status == http.StatusBadRequest:
-		return appAdminUIFailureValidation
-	case status >= http.StatusInternalServerError:
-		return appAdminUIFailureServer
-	default:
-		return appAdminUIFailureOther
-	}
 }
 
 func recordAppAdminUIAuthFailure(ctx context.Context, r *http.Request, appName, surface, action string, err error) {
 	if strings.TrimSpace(appName) == "" || surface == "" || action == "" {
 		return
 	}
-	recordAppAdminUIInteraction(
-		ctx,
-		r,
-		time.Now(),
-		appName,
-		surface,
-		action,
-		true,
-		appAdminUIFailureAuth,
-		http.StatusForbidden,
-		err,
-	)
+	observability.RecordAppAdminUIInteraction(ctx, time.Now(), observability.AppAdminUIInteraction{
+		App:             appName,
+		Surface:         surface,
+		Action:          action,
+		Failed:          true,
+		FailureCategory: observability.AppAdminUIFailureAuth,
+		StatusCode:      http.StatusForbidden,
+		Err:             err,
+		RequestID:       appAdminUIRequestID(r),
+	})
 }
 
-func recordAppAdminUIInteraction(
-	ctx context.Context,
-	r *http.Request,
-	startedAt time.Time,
-	appName, surface, action string,
-	failed bool,
-	failureCategory string,
-	statusCode int,
-	err error,
-) {
-	appName = strings.TrimSpace(appName)
-	if appName == "" || surface == "" || action == "" {
-		return
+func appAdminUIRequestID(r *http.Request) string {
+	if r == nil {
+		return ""
 	}
-	outcome := appAdminUIOutcomeSuccess
-	if failed {
-		outcome = appAdminUIOutcomeFailure
+	if requestID := strings.TrimSpace(r.Header.Get("X-Request-ID")); requestID != "" {
+		return requestID
 	}
-	attrs := []attribute.KeyValue{
-		observability.AttrAppAdminUIApp.String(appName),
-		observability.AttrAppAdminUISurface.String(surface),
-		observability.AttrAppAdminUIAction.String(action),
-		observability.AttrAppAdminUIOutcome.String(outcome),
+	if meta := invocation.MetaFromContext(r.Context()); meta != nil {
+		return strings.TrimSpace(meta.RequestID)
 	}
-	if failed && failureCategory != "" {
-		attrs = append(attrs, observability.AttrAppAdminUIFailureCategory.String(failureCategory))
-	}
-	observability.RecordAppAdminUI(ctx, startedAt, failed, attrs...)
-	if failed {
-		logAppAdminUIFailure(ctx, r, appName, surface, action, failureCategory, statusCode, err)
-	}
-}
-
-func logAppAdminUIFailure(
-	ctx context.Context,
-	r *http.Request,
-	app, surface, action, failureCategory string,
-	statusCode int,
-	err error,
-) {
-	attrs := []any{
-		slog.String("event", "app_admin.ui"),
-		slog.String("app", app),
-		slog.String("surface", surface),
-		slog.String("action", action),
-		slog.String("failure_category", failureCategory),
-	}
-	if err != nil {
-		attrs = append(attrs, slog.String("error", err.Error()))
-	} else if statusCode > 0 {
-		attrs = append(attrs, slog.String("error", fmt.Sprintf("HTTP %d", statusCode)))
-	}
-	if r != nil {
-		if requestID := strings.TrimSpace(r.Header.Get("X-Request-ID")); requestID != "" {
-			attrs = append(attrs, slog.String("request_id", requestID))
-		}
-	}
-	if meta := invocation.MetaFromContext(ctx); meta != nil {
-		if requestID := strings.TrimSpace(meta.RequestID); requestID != "" {
-			attrs = append(attrs, slog.String("request_id", requestID))
-		}
-	}
-	spanCtx := trace.SpanContextFromContext(ctx)
-	if spanCtx.IsValid() {
-		attrs = append(attrs, slog.String("trace_id", spanCtx.TraceID().String()))
-	}
-	slog.WarnContext(ctx, "app admin ui interaction failed", attrs...)
-}
-
-func appAdminUIAuthFailureError(message string) error {
-	if strings.TrimSpace(message) == "" {
-		return errors.New("app access denied")
-	}
-	return errors.New(message)
+	return ""
 }
