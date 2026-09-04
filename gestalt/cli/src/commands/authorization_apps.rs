@@ -104,21 +104,16 @@ fn set_member(
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
     let role = require_role(&args.role)?;
-    let subject_id =
-        resolve_member_subject_id(api, &app, args.email.as_deref(), args.subject_id.as_deref())?;
-    let subject_id = canonical_subject_id_from_roster(api, &app, &subject_id)?;
+    let subject_id = resolve_canonical_member_subject_id(
+        api,
+        &app,
+        args.email.as_deref(),
+        args.subject_id.as_deref(),
+    )?;
 
     let existing = mutable_roles_for_subject(authz, api, &app, &subject_id)?;
-    let other_roles: Vec<String> = existing
-        .iter()
-        .filter(|existing_role| existing_role.as_str() != role)
-        .cloned()
-        .collect();
-    for existing_role in &other_roles {
-        delete_member_tuple(authz, &app, existing_role, &subject_id)?;
-    }
-
-    if existing.iter().any(|existing_role| existing_role == &role) {
+    let plan = plan_role_set(&existing, &role);
+    if plan.roles_to_remove.is_empty() && !plan.add_role {
         match format {
             Format::Json => output::print_json(&serde_json::json!({
                 "app": app,
@@ -133,12 +128,19 @@ fn set_member(
         return Ok(());
     }
 
-    let relationship = build_app_member_relationship(&app, &role, &subject_id)?;
-    authz
-        .add_relationship_sync(AddRelationshipRequest {
-            relationship: Some(relationship),
-        })
-        .context("failed to grant app member access")?;
+    for existing_role in &plan.roles_to_remove {
+        delete_member_tuple(authz, &app, existing_role, &subject_id)?;
+    }
+
+    if plan.add_role {
+        let relationship = build_app_member_relationship(&app, &role, &subject_id)?;
+        authz
+            .add_relationship_sync(AddRelationshipRequest {
+                relationship: Some(relationship),
+            })
+            .context("failed to grant app member access")?;
+    }
+
     match format {
         Format::Json => output::print_json(&serde_json::json!({
             "app": app,
@@ -147,7 +149,11 @@ fn set_member(
             "changed": true,
         })),
         Format::Table => {
-            output::print_success(&format!("Granted {role} on {app} to {subject_id}."))
+            if plan.add_role {
+                output::print_success(&format!("Granted {role} on {app} to {subject_id}."))
+            } else {
+                output::print_success(&format!("Updated {subject_id} on {app} to only {role}."))
+            }
         }
     }
     Ok(())
@@ -160,13 +166,12 @@ fn remove_member(
     format: Format,
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
-    let subject = resolve_member_subject_id(
+    let subject = resolve_canonical_member_subject_id(
         api,
         &app,
         args.email.as_deref(),
         args.subject_id.as_deref().or(args.subject.as_deref()),
     )?;
-    let subject = canonical_subject_id_from_roster(api, &app, &subject)?;
     let mutable_roles = mutable_roles_for_subject(authz, api, &app, &subject)?;
     let roles = match args
         .role
@@ -312,21 +317,26 @@ fn load_app_admin_members(api: &ApiClient, app: &str) -> Result<Vec<AppAdminMemb
     serde_json::from_value(resp).context("failed to parse app admin members response")
 }
 
-fn resolve_member_subject_id(
+fn resolve_canonical_member_subject_id(
     api: &ApiClient,
     app: &str,
     email: Option<&str>,
     subject_id: Option<&str>,
 ) -> Result<String> {
     if let Some(subject_id) = subject_id.map(str::trim).filter(|value| !value.is_empty()) {
-        return normalize_subject_id(subject_id);
+        let normalized = normalize_subject_id(subject_id)?;
+        if is_service_account_subject(&normalized) {
+            return Ok(normalized);
+        }
+        return canonical_subject_id_from_members(&load_app_admin_members(api, app)?, &normalized);
     }
+
     let email = email
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .context("either --email or --subject-id is required")?;
-
-    if let Some(subject_id) = subject_id_for_email_in_members(api, app, email)? {
+    let members = load_app_admin_members(api, app)?;
+    if let Some(subject_id) = subject_id_for_email_in_members(&members, email)? {
         return Ok(subject_id);
     }
     if let Some(user_id) = lookup_user_id_by_email(api, email)? {
@@ -337,17 +347,16 @@ fn resolve_member_subject_id(
     )
 }
 
-fn canonical_subject_id_from_roster(
-    api: &ApiClient,
-    app: &str,
+fn canonical_subject_id_from_members(
+    members: &[AppAdminMember],
     subject_id: &str,
 ) -> Result<String> {
     let normalized = normalize_subject_id(subject_id)?;
     if is_service_account_subject(&normalized) {
         return Ok(normalized);
     }
-    for member in load_app_admin_members(api, app)? {
-        if !subject_matches_member(&normalized, &member) {
+    for member in members {
+        if !subject_matches_member(&normalized, member) {
             continue;
         }
         if let Some(canonical) = member
@@ -363,12 +372,11 @@ fn canonical_subject_id_from_roster(
 }
 
 fn subject_id_for_email_in_members(
-    api: &ApiClient,
-    app: &str,
+    members: &[AppAdminMember],
     email: &str,
 ) -> Result<Option<String>> {
     let normalized_email = email.trim().to_lowercase();
-    for member in load_app_admin_members(api, app)? {
+    for member in members {
         let Some(member_email) = member.email.as_deref() else {
             continue;
         };
@@ -388,14 +396,13 @@ fn subject_id_for_email_in_members(
 fn lookup_user_id_by_email(api: &ApiClient, email: &str) -> Result<Option<String>> {
     let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
     let app_client = AppClient::new(transport);
-    let resp = match app_client.invoke_sync(AppInvokeRequest {
-        app: "home".to_string(),
-        operation: "users.list".to_string(),
-        ..Default::default()
-    }) {
-        Ok(resp) => resp,
-        Err(_) => return Ok(None),
-    };
+    let resp = app_client
+        .invoke_sync(AppInvokeRequest {
+            app: "home".to_string(),
+            operation: "users.list".to_string(),
+            ..Default::default()
+        })
+        .context("failed to list users while resolving email to canonical user id")?;
     let users = resp
         .get("users")
         .and_then(Value::as_array)
@@ -511,6 +518,25 @@ fn require_role(role: &str) -> Result<String> {
     Ok(trimmed.to_string())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct RoleSetPlan {
+    roles_to_remove: Vec<String>,
+    add_role: bool,
+}
+
+fn plan_role_set(existing_roles: &[String], role: &str) -> RoleSetPlan {
+    let already_has_role = existing_roles.iter().any(|existing| existing == role);
+    let roles_to_remove = existing_roles
+        .iter()
+        .filter(|existing| existing.as_str() != role)
+        .cloned()
+        .collect();
+    RoleSetPlan {
+        roles_to_remove,
+        add_role: !already_has_role,
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppAdminMember {
@@ -528,7 +554,8 @@ struct AppAdminMember {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppAdminMember, is_service_account_subject, normalize_subject_id, subject_matches_member,
+        AppAdminMember, RoleSetPlan, canonical_subject_id_from_members, is_service_account_subject,
+        normalize_subject_id, plan_role_set, subject_matches_member,
     };
 
     #[test]
@@ -565,12 +592,42 @@ mod tests {
             selector_value: None,
             email: Some("alice@example.com".to_string()),
         }];
-        let normalized = normalize_subject_id("user:alice@example.com").unwrap();
-        let canonical = members
-            .iter()
-            .find(|member| subject_matches_member(&normalized, member))
-            .and_then(|member| member.subject_id.clone())
-            .unwrap();
-        assert_eq!(canonical, "user:canonical-id");
+        assert_eq!(
+            canonical_subject_id_from_members(&members, "user:alice@example.com").unwrap(),
+            "user:canonical-id"
+        );
+    }
+
+    #[test]
+    fn plan_role_set_noop_when_only_requested_role_present() {
+        assert_eq!(
+            plan_role_set(&["viewer".to_string()], "viewer"),
+            RoleSetPlan {
+                roles_to_remove: vec![],
+                add_role: false,
+            }
+        );
+    }
+
+    #[test]
+    fn plan_role_set_removes_extra_roles_without_readding() {
+        assert_eq!(
+            plan_role_set(&["viewer".to_string(), "editor".to_string()], "viewer"),
+            RoleSetPlan {
+                roles_to_remove: vec!["editor".to_string()],
+                add_role: false,
+            }
+        );
+    }
+
+    #[test]
+    fn plan_role_set_replaces_existing_role() {
+        assert_eq!(
+            plan_role_set(&["editor".to_string()], "viewer"),
+            RoleSetPlan {
+                roles_to_remove: vec!["editor".to_string()],
+                add_role: true,
+            }
+        );
     }
 }
