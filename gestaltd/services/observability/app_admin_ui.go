@@ -94,7 +94,7 @@ func RecordAppAdminUIInteraction(ctx context.Context, startedAt time.Time, inter
 		)
 	}
 	RecordAppAdminUI(ctx, startedAt, interaction.Failed, attrs...)
-	LogAppAdminUI(ctx, interaction, outcome)
+	LogAppAdminUI(ctx, interaction)
 }
 
 func appendAppAdminUILogSubject(
@@ -111,7 +111,11 @@ func appendAppAdminUILogSubject(
 	)
 }
 
-func LogAppAdminUI(ctx context.Context, interaction AppAdminUIInteraction, outcome string) {
+func LogAppAdminUI(ctx context.Context, interaction AppAdminUIInteraction) {
+	outcome := AppAdminUIOutcomeSuccess
+	if interaction.Failed {
+		outcome = AppAdminUIOutcomeFailure
+	}
 	attrs := []any{
 		slog.String("event", "app_admin.ui"),
 		slog.String("app", interaction.App),
