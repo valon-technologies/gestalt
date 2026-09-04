@@ -399,12 +399,7 @@ fn subject_matches_member(subject_id: &str, member: &AppAdminMember) -> bool {
             return true;
         }
     }
-    member
-        .selector_value
-        .as_deref()
-        .and_then(|value| normalize_subject_id(value).ok())
-        .as_deref()
-        == Some(normalized.as_str())
+    false
 }
 
 fn member_row(value: &Value) -> Vec<String> {
@@ -449,6 +444,11 @@ fn normalize_subject_id(raw: &str) -> Result<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         bail!("subject id is required");
+    }
+    if trimmed.contains('#') {
+        bail!(
+            "subject id must be a direct subject, not a subject-set selector; use `authorization relationships` for group grants"
+        );
     }
     if trimmed.contains(':') {
         Ok(trimmed.to_string())
@@ -501,8 +501,6 @@ struct AppAdminMember {
     #[serde(default)]
     subject_id: Option<String>,
     #[serde(default)]
-    selector_value: Option<String>,
-    #[serde(default)]
     email: Option<String>,
 }
 
@@ -525,12 +523,34 @@ mod tests {
             role: "viewer".to_string(),
             mutable: true,
             subject_id: Some("user:abc".to_string()),
-            selector_value: None,
             email: Some("alice@example.com".to_string()),
         };
         assert!(subject_matches_member("user:abc", &member));
         assert!(subject_matches_member("user:alice@example.com", &member));
         assert!(!subject_matches_member("user:def", &member));
+    }
+
+    #[test]
+    fn subject_matches_member_ignores_subject_set_selectors() {
+        let member = AppAdminMember {
+            role: "viewer".to_string(),
+            mutable: true,
+            subject_id: None,
+            email: None,
+        };
+        assert!(!subject_matches_member(
+            "group:valon-employees#member",
+            &member
+        ));
+    }
+
+    #[test]
+    fn normalize_subject_id_rejects_subject_set_selectors() {
+        let err = normalize_subject_id("group:valon-employees#member").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("subject id must be a direct subject")
+        );
     }
 
     #[test]
@@ -545,7 +565,6 @@ mod tests {
             role: "viewer".to_string(),
             mutable: true,
             subject_id: Some("user:canonical-id".to_string()),
-            selector_value: None,
             email: Some("alice@example.com".to_string()),
         }];
         assert_eq!(
@@ -560,7 +579,6 @@ mod tests {
             role: "viewer".to_string(),
             mutable: true,
             subject_id: Some("user:canonical-id".to_string()),
-            selector_value: None,
             email: Some("Alice@Example.com".to_string()),
         }];
         assert_eq!(
