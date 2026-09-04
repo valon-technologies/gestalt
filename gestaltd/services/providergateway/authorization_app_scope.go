@@ -123,7 +123,7 @@ func withAppScopedRelationshipMutationAuthFromRequest(ctx context.Context, fullM
 	}
 	appID := strings.TrimSpace(tuple.GetResource().GetId())
 	action := appScopedRelationshipActionFromMethod(fullMethod)
-	if appID == "" || action == "" {
+	if appID == "" || action == "" || strings.TrimSpace(tuple.GetRelation()) == "" || !relationshipTupleHasDelegableTarget(tuple) {
 		return ctx
 	}
 	return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple)

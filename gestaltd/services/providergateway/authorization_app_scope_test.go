@@ -186,6 +186,36 @@ func TestEnforceAuthorizationPublicAccessMarksAppRelationshipWrite(t *testing.T)
 	}
 }
 
+func TestEnforceAuthorizationPublicAccessSkipsMalformedAppRelationshipWriteMarker(t *testing.T) {
+	t.Parallel()
+
+	transport := &ProviderGatewayTransport{
+		authorization: &stubAuthorizationProvider{
+			allowedActions: map[string]bool{"admin": true},
+		},
+	}
+
+	ctx, err := transport.enforceAuthorizationPublicAccess(
+		context.Background(),
+		"user:admin@example.com",
+		proto.Authorization_AddRelationship_FullMethodName,
+		&proto.AddRelationshipRequest{
+			Relationship: &proto.Relationship{
+				Tuple: &proto.RelationshipTuple{
+					Resource: &proto.Resource{Type: "app", Id: "roadmap"},
+					Relation: "viewer",
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("enforceAuthorizationPublicAccess error = %v, want nil", err)
+	}
+	if _, _, _, _, ok := AppScopedRelationshipMutationFromContext(ctx); ok {
+		t.Fatal("context marker present for malformed app relationship tuple, want absent")
+	}
+}
+
 func TestEnforceAuthorizationPublicAccessDeniesAppAdminModelWrite(t *testing.T) {
 	t.Parallel()
 
