@@ -58,9 +58,7 @@ func TestEnforceAuthorizationPublicAccessRecordsAppScopedAuthFailure(t *testing.
 		"gestaltd.app_admin.ui.outcome":             "failure",
 		"gestaltd.app_admin.ui.failure_category":    "auth_failure",
 		"gestaltd.subject.kind":                     "user",
-		"gestaltd.subject.id":                       "outsider@example.com",
 		"gestaltd.app_admin.ui.target_subject.kind": "user",
-		"gestaltd.app_admin.ui.target_subject.id":   "viewer@example.com",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)

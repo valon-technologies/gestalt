@@ -82,16 +82,10 @@ func RecordAppAdminUIInteraction(ctx context.Context, startedAt time.Time, inter
 		attrs = append(attrs, AttrAppAdminUIFailureCategory.String(interaction.FailureCategory))
 	}
 	if kind := strings.TrimSpace(interaction.PrincipalSubjectKind); kind != "" {
-		attrs = append(attrs,
-			AttrSubjectKind.String(kind),
-			AttrSubjectID.String(strings.TrimSpace(interaction.PrincipalSubjectID)),
-		)
+		attrs = append(attrs, AttrSubjectKind.String(kind))
 	}
 	if kind := strings.TrimSpace(interaction.TargetSubjectKind); kind != "" {
-		attrs = append(attrs,
-			AttrAppAdminUITargetSubjectKind.String(kind),
-			AttrAppAdminUITargetSubjectID.String(strings.TrimSpace(interaction.TargetSubjectID)),
-		)
+		attrs = append(attrs, AttrAppAdminUITargetSubjectKind.String(kind))
 	}
 	RecordAppAdminUI(ctx, startedAt, interaction.Failed, attrs...)
 	LogAppAdminUI(ctx, interaction)
