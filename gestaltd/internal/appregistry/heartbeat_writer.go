@@ -33,6 +33,8 @@ type HeartbeatWriter struct {
 	Runtime        RuntimeSnapshotter
 	InstanceID     string
 	SourceVersion  string
+	Revision       string
+	StartupError   func() error
 	Ready          <-chan struct{}
 	Interval       time.Duration
 	Retention      time.Duration
@@ -55,6 +57,8 @@ type HeartbeatWriterConfig struct {
 	Runtime        RuntimeSnapshotter
 	InstanceID     string
 	SourceVersion  string
+	Revision       string
+	StartupError   func() error
 	Ready          <-chan struct{}
 	Interval       time.Duration
 	Retention      time.Duration
@@ -70,6 +74,8 @@ func NewHeartbeatWriter(cfg HeartbeatWriterConfig) *HeartbeatWriter {
 		Runtime:        cfg.Runtime,
 		InstanceID:     strings.TrimSpace(cfg.InstanceID),
 		SourceVersion:  strings.TrimSpace(cfg.SourceVersion),
+		Revision:       strings.TrimSpace(cfg.Revision),
+		StartupError:   cfg.StartupError,
 		Ready:          cfg.Ready,
 		Interval:       cfg.Interval,
 		Retention:      cfg.Retention,
@@ -165,26 +171,25 @@ func (w *HeartbeatWriter) WriteOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list desired app versions: %w", err)
 	}
-	desiredByApp := make(map[string]string)
 	knownByApp := make(map[string][]*core.AppInstallation)
 	for _, installation := range known {
-		if installation == nil {
-			continue
+		if installation != nil {
+			app := strings.TrimSpace(installation.AppName)
+			knownByApp[app] = append(knownByApp[app], installation)
 		}
-		app := strings.TrimSpace(installation.AppName)
-		knownByApp[app] = append(knownByApp[app], installation)
 	}
+	desiredByApp := make(map[string]string, len(knownByApp))
 	for app, installations := range knownByApp {
 		desiredByApp[app] = coredata.LatestKnownVersion(installations)
 	}
 
-	runtime := w.Runtime.SnapshotRegistryApps()
+	runtimeApps := w.Runtime.SnapshotRegistryApps()
 	apps := make(map[string]core.GestaltdInstanceAppHeartbeat)
 	for app, entry := range w.ConfiguredApps {
 		if entry == nil || !entry.Source.IsRegistry() {
 			continue
 		}
-		observation, ok := runtime[app]
+		observation, ok := runtimeApps[app]
 		if !ok {
 			observation = core.RegistryAppRuntimeObservation{
 				State:     core.GestaltdInstanceAppStateUnknown,
@@ -199,9 +204,26 @@ func (w *HeartbeatWriter) WriteOnce(ctx context.Context) error {
 			LastError:      observation.LastError,
 		}
 	}
+	ready := true
+	lastError := ""
+	if w.StartupError != nil {
+		if err := w.StartupError(); err != nil {
+			ready = false
+			lastError = err.Error()
+		}
+	}
+	for app, observation := range apps {
+		if ready && !appHeartbeatReady(observation) {
+			ready = false
+			lastError = fmt.Sprintf("registry app %q is %s at %q; desired %q", app, observation.State, observation.RunningVersion, observation.DesiredVersion)
+		}
+	}
 	if _, err := w.Heartbeats.Upsert(ctx, &core.GestaltdInstanceHeartbeat{
 		InstanceID:    w.InstanceID,
 		SourceVersion: w.SourceVersion,
+		Revision:      w.Revision,
+		Ready:         ready,
+		LastError:     lastError,
 		StartedAt:     startedAt,
 		HeartbeatAt:   now,
 		Apps:          apps,
@@ -215,6 +237,20 @@ func (w *HeartbeatWriter) WriteOnce(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// HeartbeatReady reports whether a fleet heartbeat passed every local app
+// provider and registry app readiness check.
+func HeartbeatReady(heartbeat *core.GestaltdInstanceHeartbeat) bool {
+	return heartbeat != nil && heartbeat.Ready
+}
+
+func appHeartbeatReady(app core.GestaltdInstanceAppHeartbeat) bool {
+	desired := strings.TrimSpace(app.DesiredVersion)
+	if desired == "" {
+		return app.State == core.GestaltdInstanceAppStateNotRunning
+	}
+	return app.State == core.GestaltdInstanceAppStateRunning && strings.TrimSpace(app.RunningVersion) == desired
 }
 
 func (w *HeartbeatWriter) pruneDue(now time.Time) bool {

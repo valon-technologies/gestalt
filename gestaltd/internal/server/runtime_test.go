@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
@@ -80,7 +81,7 @@ func TestRuntimeReadinessStatusWaitsForWorkflowProviders(t *testing.T) {
 	t.Parallel()
 
 	workflowProvidersReady := make(chan struct{})
-	check := runtimeReadinessStatus(workflowProvidersReady, fakeIndexedDBPinger{})
+	check := runtimeReadinessStatus(workflowProvidersReady, nil, nil, fakeIndexedDBPinger{}, nil, "", "", "")
 
 	if got := check(); got != "workflow providers loading" {
 		t.Fatalf("readiness before workflow providers = %q, want %q", got, "workflow providers loading")
@@ -99,7 +100,13 @@ func TestRuntimeReadinessStatusChecksIndexedDBAfterProviders(t *testing.T) {
 	close(workflowProvidersReady)
 	check := runtimeReadinessStatus(
 		workflowProvidersReady,
+		nil,
+		nil,
 		fakeIndexedDBPinger{err: errors.New("down")},
+		nil,
+		"",
+		"",
+		"",
 	)
 
 	if got := check(); got != "indexeddb unavailable" {
@@ -135,7 +142,7 @@ func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
 	}
 
 	workflowProvidersReady := make(chan struct{})
-	ready := runtimeReadinessStatus(workflowProvidersReady, fakeIndexedDBPinger{})
+	ready := runtimeReadinessStatus(workflowProvidersReady, nil, nil, fakeIndexedDBPinger{}, nil, "", "", "")
 
 	servers := []namedHTTPServer{{
 		name:   "public",
@@ -176,19 +183,44 @@ func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
 	<-serveDone
 }
 
-func TestServeRuntimeReadyBeforeRegistryAppsStart(t *testing.T) {
+func TestServeRuntimeWaitsForRegistryApps(t *testing.T) {
 	t.Parallel()
 
 	registryStarted := make(chan struct{})
+	registryReady := make(chan struct{})
+	releaseRegistry := make(chan struct{})
+	services := testutil.NewStubServices(t)
+	now := time.Now()
+	if _, err := services.GestaltdInstanceHeartbeats.Upsert(context.Background(), &core.GestaltdInstanceHeartbeat{
+		InstanceID: "instance", SourceVersion: "source", Revision: "revision",
+		StartedAt: now, HeartbeatAt: now,
+	}); err != nil {
+		t.Fatalf("seed heartbeat: %v", err)
+	}
 	result := &bootstrap.Result{
-		Invoker: invocation.NewBroker(nil, nil, nil),
+		Invoker:                 invocation.NewBroker(nil, nil, nil),
+		Services:                services,
+		AppProvidersInitialized: registryReady,
 		RegistryAppStartup: func(ctx context.Context) {
 			close(registryStarted)
-			<-ctx.Done()
+			select {
+			case <-releaseRegistry:
+				close(registryReady)
+			case <-ctx.Done():
+			}
 		},
 	}
 	workflowProvidersReady := make(chan struct{})
-	ready := runtimeReadinessStatus(workflowProvidersReady, fakeIndexedDBPinger{})
+	ready := runtimeReadinessStatus(
+		workflowProvidersReady,
+		nil,
+		registryReady,
+		services,
+		services.GestaltdInstanceHeartbeats,
+		"instance",
+		"source",
+		"revision",
+	)
 	servers := []namedHTTPServer{{
 		name:   "public",
 		server: newHTTPServer("127.0.0.1:0", http.NewServeMux()),
@@ -206,8 +238,31 @@ func TestServeRuntimeReadyBeforeRegistryAppsStart(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("registry app startup was never invoked")
 	}
-	if got := ready(); got != "" {
-		t.Fatalf("readiness while registry apps start = %q, want ready", got)
+	if got := ready(); got != "registry apps loading" {
+		t.Fatalf("readiness while registry apps start = %q, want %q", got, "registry apps loading")
+	}
+	close(releaseRegistry)
+	appDeadline := time.After(5 * time.Second)
+	for ready() != "apps not ready" {
+		select {
+		case <-time.After(10 * time.Millisecond):
+		case <-appDeadline:
+			t.Fatal("readiness did not expose the unhealthy app heartbeat")
+		}
+	}
+	if _, err := services.GestaltdInstanceHeartbeats.Upsert(context.Background(), &core.GestaltdInstanceHeartbeat{
+		InstanceID: "instance", SourceVersion: "source", Revision: "revision", Ready: true,
+		StartedAt: now, HeartbeatAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("mark heartbeat ready: %v", err)
+	}
+	deadline := time.After(5 * time.Second)
+	for ready() != "" {
+		select {
+		case <-deadline:
+			t.Fatal("readiness never became ready after registry apps started")
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 
 	cancel()

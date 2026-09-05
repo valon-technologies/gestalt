@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -235,12 +237,16 @@ func TestRegistryAppStartupSkipsRemotePlacement(t *testing.T) {
 	}
 }
 
-func TestStartAppRegistryHeartbeatWriterUsesBootstrapReadiness(t *testing.T) {
+func TestStartAppRegistryHeartbeatWriterWaitsForCompleteAppReadiness(t *testing.T) {
 	t.Setenv("SOURCE_VERSION", "source-v3")
+	t.Setenv("K_REVISION", "revision-v3")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	services := testutil.NewStubServices(t)
-	ready := make(chan struct{})
+	providersReady := make(chan struct{})
+	registryAppsReady := make(chan struct{})
+	var providerFailed atomic.Bool
+	providerFailed.Store(true)
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
 			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
@@ -248,8 +254,15 @@ func TestStartAppRegistryHeartbeatWriterUsesBootstrapReadiness(t *testing.T) {
 	}
 	result := &bootstrap.Result{
 		Services:                services,
-		AppProvidersInitialized: ready,
-		AppRuntimeSnapshotter:   serverRuntimeSnapshotter{},
+		ProvidersReady:          providersReady,
+		AppProvidersInitialized: registryAppsReady,
+		AppProviderStartupError: func() error {
+			if providerFailed.Load() {
+				return errors.New("provider build failed")
+			}
+			return nil
+		},
+		AppRuntimeSnapshotter: serverRuntimeSnapshotter{},
 	}
 	writer, err := startAppRegistryHeartbeatWriter(ctx, cfg, result)
 	if err != nil {
@@ -263,17 +276,33 @@ func TestStartAppRegistryHeartbeatWriterUsesBootstrapReadiness(t *testing.T) {
 	if heartbeats, err := services.GestaltdInstanceHeartbeats.List(ctx); err != nil || len(heartbeats) != 0 {
 		t.Fatalf("heartbeats before ready = %#v, err %v", heartbeats, err)
 	}
-	close(ready)
+	close(registryAppsReady)
+	time.Sleep(20 * time.Millisecond)
+	if heartbeats, err := services.GestaltdInstanceHeartbeats.List(ctx); err != nil || len(heartbeats) != 0 {
+		t.Fatalf("heartbeats before providers ready = %#v, err %v", heartbeats, err)
+	}
+	close(providersReady)
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		heartbeats, listErr := services.GestaltdInstanceHeartbeats.List(ctx)
 		if listErr == nil && len(heartbeats) == 1 {
-			if heartbeats[0].SourceVersion != "source-v3" {
-				t.Fatalf("source version = %q", heartbeats[0].SourceVersion)
+			if heartbeats[0].Ready || heartbeats[0].LastError != "provider build failed" {
+				t.Fatalf("failed provider heartbeat = %#v", heartbeats[0])
+			}
+			providerFailed.Store(false)
+			if err := writer.WriteOnce(ctx); err != nil {
+				t.Fatalf("write recovered heartbeat: %v", err)
+			}
+			recovered, err := services.GestaltdInstanceHeartbeats.Get(ctx, heartbeats[0].InstanceID)
+			if err != nil {
+				t.Fatalf("get recovered heartbeat: %v", err)
+			}
+			if recovered.SourceVersion != "source-v3" || recovered.Revision != "revision-v3" || !recovered.Ready || recovered.LastError != "" {
+				t.Fatalf("recovered heartbeat = %#v", recovered)
 			}
 			return
 		}
 		time.Sleep(time.Millisecond)
 	}
-	t.Fatal("heartbeat was not written after bootstrap readiness")
+	t.Fatal("heartbeat was not written after complete app readiness")
 }

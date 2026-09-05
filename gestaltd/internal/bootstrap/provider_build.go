@@ -439,13 +439,14 @@ func newProviderActivation(
 		ready <-chan struct{},
 		connAuth func() map[string]map[string]OAuthHandler,
 		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
+		errs func() []error,
 	),
 ) func() {
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			ready, connAuth, manualConnAuth, _ := b.Start(baseCtx, deps, builder)
-			onStart(ready, connAuth, manualConnAuth)
+			ready, connAuth, manualConnAuth, errs := b.Start(baseCtx, deps, builder)
+			onStart(ready, connAuth, manualConnAuth, errs)
 		})
 	}
 }
