@@ -52,16 +52,15 @@ func TestEnforceAuthorizationPublicAccessRecordsAppScopedAuthFailure(t *testing.
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":                 "roadmap",
-		"gestaltd.app_admin.ui.surface":             "members",
-		"gestaltd.app_admin.ui.action":              "grant_add",
-		"gestaltd.app_admin.ui.outcome":             "failure",
-		"gestaltd.app_admin.ui.failure_category":    "auth_failure",
-		"gestaltd.subject.kind":                     "user",
-		"gestaltd.app_admin.ui.target_subject.kind": "user",
+		"gestaltd.app_admin.app":                 "roadmap",
+		"gestaltd.app_admin.operation":           "members_grant_add",
+		"gestaltd.app_admin.outcome":             "failure",
+		"gestaltd.app_admin.failure_category":    "auth_failure",
+		"gestaltd.subject.kind":                  "user",
+		"gestaltd.app_admin.target_subject.kind": "user",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.error_count", 1, attrs)
 }
 
 func TestWithAppScopedRelationshipMutationAuth(t *testing.T) {

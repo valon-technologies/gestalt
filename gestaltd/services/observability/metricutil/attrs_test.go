@@ -71,6 +71,21 @@ func containsAttr(attrs []attribute.KeyValue, key, value string) bool {
 	return false
 }
 
+func TestClientKindFromContext(t *testing.T) {
+	t.Parallel()
+
+	if got := metricutil.ClientKindFromContext(context.Background()); got != "" {
+		t.Fatalf("ClientKindFromContext() = %q, want empty", got)
+	}
+
+	labeler := &otelhttp.Labeler{}
+	labeler.Add(attribute.String("gestaltd.client.kind", metricutil.ClientKindCLI))
+	ctx := otelhttp.ContextWithLabeler(context.Background(), labeler)
+	if got := metricutil.ClientKindFromContext(ctx); got != metricutil.ClientKindCLI {
+		t.Fatalf("ClientKindFromContext() = %q, want %q", got, metricutil.ClientKindCLI)
+	}
+}
+
 func TestHTTPServerAttrsOmitsUnsetDimensions(t *testing.T) {
 	t.Parallel()
 

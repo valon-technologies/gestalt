@@ -12,7 +12,20 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 )
+
+func TestAppAdminOperation(t *testing.T) {
+	t.Parallel()
+
+	if got := AppAdminOperation(AppAdminUISurfaceMembers, AppAdminUIActionList); got != "members_list" {
+		t.Fatalf("AppAdminOperation() = %q, want members_list", got)
+	}
+	if got := AppAdminOperation(" ", AppAdminUIActionList); got != "" {
+		t.Fatalf("AppAdminOperation() = %q, want empty", got)
+	}
+}
 
 func TestRecordAppAdminUI(t *testing.T) {
 	t.Parallel()
@@ -22,41 +35,37 @@ func TestRecordAppAdminUI(t *testing.T) {
 	startedAt := time.Now()
 
 	RecordAppAdminUI(ctx, startedAt, false,
-		AttrAppAdminUIApp.String("g-issues"),
-		AttrAppAdminUISurface.String("members"),
-		AttrAppAdminUIAction.String("list"),
-		AttrAppAdminUIOutcome.String("success"),
+		AttrAppAdminApp.String("g-issues"),
+		AttrAppAdminOperation.String("members_list"),
+		AttrAppAdminOutcome.String("success"),
 	)
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":     "g-issues",
-		"gestaltd.app_admin.ui.surface": "members",
-		"gestaltd.app_admin.ui.action":  "list",
-		"gestaltd.app_admin.ui.outcome": "success",
+		"gestaltd.app_admin.app":       "g-issues",
+		"gestaltd.app_admin.operation": "members_list",
+		"gestaltd.app_admin.outcome":   "success",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
-	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.ui.duration", attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.error_count", attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.duration", attrs)
 
 	RecordAppAdminUI(ctx, startedAt, true,
-		AttrAppAdminUIApp.String("g-issues"),
-		AttrAppAdminUISurface.String("members"),
-		AttrAppAdminUIAction.String("grant_add"),
-		AttrAppAdminUIOutcome.String("failure"),
-		AttrAppAdminUIFailureCategory.String("auth_failure"),
+		AttrAppAdminApp.String("g-issues"),
+		AttrAppAdminOperation.String("members_grant_add"),
+		AttrAppAdminOutcome.String("failure"),
+		AttrAppAdminFailureCategory.String("auth_failure"),
 	)
 
 	rm = metrictest.CollectMetrics(t, metrics.Reader)
 	failAttrs := map[string]string{
-		"gestaltd.app_admin.ui.app":              "g-issues",
-		"gestaltd.app_admin.ui.surface":          "members",
-		"gestaltd.app_admin.ui.action":           "grant_add",
-		"gestaltd.app_admin.ui.outcome":          "failure",
-		"gestaltd.app_admin.ui.failure_category": "auth_failure",
+		"gestaltd.app_admin.app":              "g-issues",
+		"gestaltd.app_admin.operation":        "members_grant_add",
+		"gestaltd.app_admin.outcome":          "failure",
+		"gestaltd.app_admin.failure_category": "auth_failure",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, failAttrs)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, failAttrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, failAttrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.error_count", 1, failAttrs)
 }
 
 func TestRecordAppAdminUIInteractionOmitsSubjectIDsFromMetrics(t *testing.T) {
@@ -69,6 +78,7 @@ func TestRecordAppAdminUIInteractionOmitsSubjectIDsFromMetrics(t *testing.T) {
 		App:                  "g-issues",
 		Surface:              AppAdminUISurfaceMembers,
 		Action:               AppAdminUIActionGrantAdd,
+		ClientKind:           metricutil.ClientKindCLI,
 		PrincipalSubjectKind: "user",
 		PrincipalSubjectID:   "user:abc",
 		TargetSubjectKind:    "user",
@@ -77,23 +87,47 @@ func TestRecordAppAdminUIInteractionOmitsSubjectIDsFromMetrics(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":                 "g-issues",
-		"gestaltd.app_admin.ui.surface":             "members",
-		"gestaltd.app_admin.ui.action":              "grant_add",
-		"gestaltd.app_admin.ui.outcome":             "success",
-		"gestaltd.subject.kind":                     "user",
-		"gestaltd.app_admin.ui.target_subject.kind": "user",
+		"gestaltd.app_admin.app":                 "g-issues",
+		"gestaltd.app_admin.operation":           "members_grant_add",
+		"gestaltd.app_admin.outcome":             "success",
+		"gestaltd.client.kind":                   metricutil.ClientKindCLI,
+		"gestaltd.subject.kind":                  "user",
+		"gestaltd.app_admin.target_subject.kind": "user",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
-	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.ui.count", map[string]string{
-		"gestaltd.app_admin.ui.app":                 "g-issues",
-		"gestaltd.app_admin.ui.surface":             "members",
-		"gestaltd.app_admin.ui.action":              "grant_add",
-		"gestaltd.app_admin.ui.outcome":             "success",
-		"gestaltd.subject.kind":                     "user",
-		"gestaltd.subject.id":                       "user:abc",
-		"gestaltd.app_admin.ui.target_subject.kind": "user",
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.count", map[string]string{
+		"gestaltd.app_admin.app":                 "g-issues",
+		"gestaltd.app_admin.operation":           "members_grant_add",
+		"gestaltd.app_admin.outcome":             "success",
+		"gestaltd.subject.kind":                  "user",
+		"gestaltd.subject.id":                    "user:abc",
+		"gestaltd.app_admin.target_subject.kind": "user",
 	})
+}
+
+func TestRecordAppAdminUIInteractionClientKindFromContext(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	labeler := &otelhttp.Labeler{}
+	labeler.Add(attribute.String("gestaltd.client.kind", metricutil.ClientKindWeb))
+	ctx := otelhttp.ContextWithLabeler(context.Background(), labeler)
+	ctx = metricutil.WithMeterProvider(ctx, metrics.Provider)
+
+	RecordAppAdminUIInteraction(ctx, time.Now(), AppAdminUIInteraction{
+		App:     "g-issues",
+		Surface: AppAdminUISurfaceMembers,
+		Action:  AppAdminUIActionList,
+	})
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := map[string]string{
+		"gestaltd.app_admin.app":       "g-issues",
+		"gestaltd.app_admin.operation": "members_list",
+		"gestaltd.app_admin.outcome":   "success",
+		"gestaltd.client.kind":         metricutil.ClientKindWeb,
+	}
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
 }
 
 func TestLogAppAdminUI(t *testing.T) { //nolint:paralleltest // mutates slog.Default()

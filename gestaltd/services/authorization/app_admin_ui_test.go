@@ -40,13 +40,12 @@ func TestAddRelationshipRecordsAppScopedMutationMetrics(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":     "roadmap",
-		"gestaltd.app_admin.ui.surface": "members",
-		"gestaltd.app_admin.ui.action":  "grant_add",
-		"gestaltd.app_admin.ui.outcome": "success",
+		"gestaltd.app_admin.app":       "roadmap",
+		"gestaltd.app_admin.operation": "members_grant_add",
+		"gestaltd.app_admin.outcome":   "success",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
-	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.error_count", attrs)
 }
 
 func TestAddRelationshipSkipsMetricsWithoutAppScopedMarker(t *testing.T) {
@@ -65,7 +64,7 @@ func TestAddRelationshipSkipsMetricsWithoutAppScopedMarker(t *testing.T) {
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	metrictest.RequireNoMetric(t, rm, "gestaltd.app_admin.ui.count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.app_admin.count")
 }
 
 func TestDeleteRelationshipRecordsAppScopedMutationFailure(t *testing.T) {
@@ -88,14 +87,13 @@ func TestDeleteRelationshipRecordsAppScopedMutationFailure(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":              "roadmap",
-		"gestaltd.app_admin.ui.surface":          "members",
-		"gestaltd.app_admin.ui.action":           "grant_remove",
-		"gestaltd.app_admin.ui.outcome":          "failure",
-		"gestaltd.app_admin.ui.failure_category": "validation",
+		"gestaltd.app_admin.app":              "roadmap",
+		"gestaltd.app_admin.operation":        "members_grant_remove",
+		"gestaltd.app_admin.outcome":          "failure",
+		"gestaltd.app_admin.failure_category": "validation",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.error_count", 1, attrs)
 }
 
 type stubAuthorizationProvider struct {
