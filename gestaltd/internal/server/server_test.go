@@ -2771,13 +2771,15 @@ type serverTestAuthorizationProvider struct {
 
 	mu sync.Mutex
 
-	resourceTypes            []*proto.AuthorizationModelResourceType
-	relationships            []*proto.Relationship
-	listRelationshipRequests []*proto.ListRelationshipsRequest
-	checkAccessRequests      []*proto.CheckAccessRequest
-	checkAccessManyRequests  []*proto.CheckAccessManyRequest
-	checkAccessErr           error
-	checkAccessManyErr       error
+	resourceTypes              []*proto.AuthorizationModelResourceType
+	relationships              []*proto.Relationship
+	listRelationshipRequests   []*proto.ListRelationshipsRequest
+	addRelationshipRequests    []*proto.AddRelationshipRequest
+	deleteRelationshipRequests []*proto.DeleteRelationshipRequest
+	checkAccessRequests        []*proto.CheckAccessRequest
+	checkAccessManyRequests    []*proto.CheckAccessManyRequest
+	checkAccessErr             error
+	checkAccessManyErr         error
 }
 
 // CheckAccess models the provider-owned evaluator: it expands subject sets so a
@@ -2904,6 +2906,32 @@ func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, r
 		out = append(out, relationship)
 	}
 	return &proto.ListRelationshipsResponse{Relationships: out}, nil
+}
+
+func (p *serverTestAuthorizationProvider) AddRelationship(_ context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.addRelationshipRequests = append(p.addRelationshipRequests, req)
+	relationship := req.GetRelationship()
+	if relationship != nil {
+		p.relationships = append(p.relationships, relationship)
+	}
+	return &proto.AddRelationshipResponse{Relationship: relationship}, nil
+}
+
+func (p *serverTestAuthorizationProvider) DeleteRelationship(_ context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.deleteRelationshipRequests = append(p.deleteRelationshipRequests, req)
+	tuple := req.GetRelationshipTuple()
+	next := p.relationships[:0]
+	for _, relationship := range p.relationships {
+		if !relationshipTupleEqual(relationship.GetTuple(), tuple) {
+			next = append(next, relationship)
+		}
+	}
+	p.relationships = next
+	return &proto.DeleteRelationshipResponse{}, nil
 }
 
 type serviceAccountCredentialAuthorizationProvider struct {
@@ -3039,6 +3067,31 @@ func relationshipMatchesFilter(relationship *proto.Relationship, filter *proto.R
 		}
 	}
 	return true
+}
+
+func relationshipTupleEqual(left, right *proto.RelationshipTuple) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	if left.GetResource().GetType() != right.GetResource().GetType() || left.GetResource().GetId() != right.GetResource().GetId() {
+		return false
+	}
+	if strings.TrimSpace(left.GetRelation()) != strings.TrimSpace(right.GetRelation()) {
+		return false
+	}
+	leftSubject := left.GetTarget().GetSubject()
+	rightSubject := right.GetTarget().GetSubject()
+	if leftSubject != nil || rightSubject != nil {
+		return leftSubject.GetType() == rightSubject.GetType() && leftSubject.GetId() == rightSubject.GetId()
+	}
+	leftSet := left.GetTarget().GetSubjectSet()
+	rightSet := right.GetTarget().GetSubjectSet()
+	if leftSet == nil || rightSet == nil {
+		return leftSet == rightSet
+	}
+	return leftSet.GetResource().GetType() == rightSet.GetResource().GetType() &&
+		leftSet.GetResource().GetId() == rightSet.GetResource().GetId() &&
+		strings.TrimSpace(leftSet.GetRelation()) == strings.TrimSpace(rightSet.GetRelation())
 }
 
 // appAdminTestAppDefs registers the apps used by app-admin tests so the shared

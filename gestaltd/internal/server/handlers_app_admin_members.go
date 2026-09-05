@@ -2,7 +2,11 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -31,6 +35,33 @@ type appAdminMemberRow struct {
 func (s *Server) mountAppAdminMembersRoutes(r chi.Router) {
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminUIObservabilityMiddleware, s.appAdminAuthorizationMiddleware).
 		Get("/apps/{app}/admin/members", s.listAppAdminMembers)
+	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminUIObservabilityMiddleware, s.appAdminAuthorizationMiddleware).
+		Post("/apps/{app}/admin/members", s.setAppAdminMember)
+	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminUIObservabilityMiddleware, s.appAdminAuthorizationMiddleware).
+		Delete("/apps/{app}/admin/members", s.removeAppAdminMember)
+}
+
+type appAdminMemberSetRequest struct {
+	SubjectID string `json:"subjectId"`
+	Role      string `json:"role"`
+}
+
+type appAdminMemberRemoveRequest struct {
+	SubjectID string `json:"subjectId"`
+	Role      string `json:"role,omitempty"`
+}
+
+type appAdminMemberSetResponse struct {
+	App       string `json:"app"`
+	SubjectID string `json:"subjectId"`
+	Role      string `json:"role"`
+	Changed   bool   `json:"changed"`
+}
+
+type appAdminMemberRemoveResponse struct {
+	App          string   `json:"app"`
+	SubjectID    string   `json:"subjectId"`
+	RemovedRoles []string `json:"removedRoles"`
 }
 
 func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +83,131 @@ func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
 	// Members is the human/group access roster. Service-account grants are
 	// owned by GET /apps/{app}/admin/identities.
 	writeJSON(w, http.StatusOK, s.projectAppAdminHumanMemberRows(r.Context(), rows))
+}
+
+func (s *Server) setAppAdminMember(w http.ResponseWriter, r *http.Request) {
+	appName := strings.TrimSpace(chi.URLParam(r, "app"))
+	if appName == "" {
+		writeError(w, http.StatusBadRequest, "app is required")
+		return
+	}
+	request, ok := decodeAppAdminMemberSetRequest(w, r)
+	if !ok {
+		return
+	}
+	subjectID := strings.TrimSpace(request.SubjectID)
+	role := strings.TrimSpace(request.Role)
+	if subjectID == "" {
+		writeError(w, http.StatusBadRequest, "subjectId is required")
+		return
+	}
+	if err := validateAppAdminMemberSubjectID(subjectID); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	recordAppAdminUITargetSubject(r.Context(), subjectID)
+	if role == "" {
+		writeError(w, http.StatusBadRequest, "role is required")
+		return
+	}
+	if err := validateAppAdminMemberRole(role); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	existing, err := s.mutableAppAdminMemberRoles(r.Context(), appName, subjectID)
+	if err != nil {
+		slog.Error("app admin member roles load failed", "app", appName, "subject_id", subjectID, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+		return
+	}
+	addRole := true
+	for _, existingRole := range existing {
+		if existingRole == role {
+			addRole = false
+			continue
+		}
+		if err := s.deleteAppAdminMemberRole(r.Context(), appName, existingRole, subjectID); err != nil {
+			slog.Error("app admin member grant remove failed", "app", appName, "subject_id", subjectID, "role", existingRole, "error", err)
+			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+			return
+		}
+	}
+	if addRole {
+		if err := s.addAppAdminMemberRole(r.Context(), appName, role, subjectID); err != nil {
+			slog.Error("app admin member grant add failed", "app", appName, "subject_id", subjectID, "role", role, "error", err)
+			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, appAdminMemberSetResponse{
+		App:       appName,
+		SubjectID: subjectID,
+		Role:      role,
+		Changed:   addRole || len(existing) > 1,
+	})
+}
+
+func (s *Server) removeAppAdminMember(w http.ResponseWriter, r *http.Request) {
+	appName := strings.TrimSpace(chi.URLParam(r, "app"))
+	if appName == "" {
+		writeError(w, http.StatusBadRequest, "app is required")
+		return
+	}
+	request, ok := decodeAppAdminMemberRemoveRequest(w, r)
+	if !ok {
+		return
+	}
+	subjectID := strings.TrimSpace(request.SubjectID)
+	if subjectID == "" {
+		writeError(w, http.StatusBadRequest, "subjectId is required")
+		return
+	}
+	if err := validateAppAdminMemberSubjectID(subjectID); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	recordAppAdminUITargetSubject(r.Context(), subjectID)
+	existing, err := s.mutableAppAdminMemberRoles(r.Context(), appName, subjectID)
+	if err != nil {
+		slog.Error("app admin member roles load failed", "app", appName, "subject_id", subjectID, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+		return
+	}
+	roles := existing
+	if role := strings.TrimSpace(request.Role); role != "" {
+		if err := validateAppAdminMemberRole(role); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		found := false
+		for _, existingRole := range existing {
+			if existingRole == role {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeError(w, http.StatusBadRequest, "no mutable "+role+" grant found for "+subjectID+" on "+appName)
+			return
+		}
+		roles = []string{role}
+	}
+	if len(roles) == 0 {
+		writeError(w, http.StatusBadRequest, "no mutable member grants found for "+subjectID+" on "+appName)
+		return
+	}
+	for _, role := range roles {
+		if err := s.deleteAppAdminMemberRole(r.Context(), appName, role, subjectID); err != nil {
+			slog.Error("app admin member grant remove failed", "app", appName, "subject_id", subjectID, "role", role, "error", err)
+			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, appAdminMemberRemoveResponse{
+		App:          appName,
+		SubjectID:    subjectID,
+		RemovedRoles: roles,
+	})
 }
 
 // isAppAdminServiceAccountRow partitions the shared app authorization grant
@@ -119,6 +275,111 @@ func (s *Server) listAuthorizationMemberRows(ctx context.Context, resource *prot
 		if pageToken == "" {
 			return projectAppAdminMemberRoster(rows), nil
 		}
+	}
+}
+
+func decodeAppAdminMemberSetRequest(w http.ResponseWriter, r *http.Request) (appAdminMemberSetRequest, bool) {
+	var request appAdminMemberSetRequest
+	if !decodeStrictJSONBody(w, r, &request) {
+		return appAdminMemberSetRequest{}, false
+	}
+	return request, true
+}
+
+func decodeAppAdminMemberRemoveRequest(w http.ResponseWriter, r *http.Request) (appAdminMemberRemoveRequest, bool) {
+	var request appAdminMemberRemoveRequest
+	if !decodeStrictJSONBody(w, r, &request) {
+		return appAdminMemberRemoveRequest{}, false
+	}
+	return request, true
+}
+
+func decodeStrictJSONBody(w http.ResponseWriter, r *http.Request, out any) bool {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	return true
+}
+
+func (s *Server) mutableAppAdminMemberRoles(ctx context.Context, appName, subjectID string) ([]string, error) {
+	rows, err := s.listAppAuthorizationMemberRows(ctx, appName)
+	if err != nil {
+		return nil, err
+	}
+	roles := make([]string, 0)
+	for _, row := range rows {
+		if !row.Mutable || !appAdminMemberRowMatchesSubject(row, subjectID) {
+			continue
+		}
+		roles = append(roles, row.Role)
+	}
+	return roles, nil
+}
+
+func appAdminMemberRowMatchesSubject(row appAdminMemberRow, subjectID string) bool {
+	subjectID = strings.TrimSpace(subjectID)
+	return subjectID != "" && row.SelectorKind == "subject_id" && strings.TrimSpace(row.SubjectID) == subjectID
+}
+
+func (s *Server) addAppAdminMemberRole(ctx context.Context, appName, role, subjectID string) error {
+	if s == nil || s.authorization == nil {
+		return errors.New("authorization is unavailable")
+	}
+	_, err := s.authorization.AddRelationship(ctx, &proto.AddRelationshipRequest{
+		Relationship: &proto.Relationship{
+			Tuple:       appAdminMemberRelationshipTuple(appName, role, subjectID),
+			SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
+		},
+	})
+	return err
+}
+
+func (s *Server) deleteAppAdminMemberRole(ctx context.Context, appName, role, subjectID string) error {
+	if s == nil || s.authorization == nil {
+		return errors.New("authorization is unavailable")
+	}
+	_, err := s.authorization.DeleteRelationship(ctx, &proto.DeleteRelationshipRequest{
+		RelationshipTuple: appAdminMemberRelationshipTuple(appName, role, subjectID),
+	})
+	return err
+}
+
+func appAdminMemberRelationshipTuple(appName, role, subjectID string) *proto.RelationshipTuple {
+	return &proto.RelationshipTuple{
+		Resource: &proto.Resource{Type: "app", Id: strings.TrimSpace(appName)},
+		Relation: strings.TrimSpace(role),
+		Target: &proto.RelationshipTarget{
+			Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
+				Type: "subject",
+				Id:   strings.TrimSpace(subjectID),
+			}},
+		},
+	}
+}
+
+func validateAppAdminMemberSubjectID(subjectID string) error {
+	if strings.Contains(subjectID, "#") {
+		return errors.New("subjectId must be a direct subject, not a subject-set selector")
+	}
+	if _, _, ok := core.ParseSubjectID(subjectID); !ok {
+		return errors.New("subjectId must include a subject kind prefix")
+	}
+	return nil
+}
+
+func validateAppAdminMemberRole(role string) error {
+	switch strings.TrimSpace(role) {
+	case "admin", "viewer", "editor":
+		return nil
+	default:
+		return errors.New("role must be admin, viewer, or editor")
 	}
 }
 

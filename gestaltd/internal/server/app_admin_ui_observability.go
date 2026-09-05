@@ -1,11 +1,13 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
@@ -15,6 +17,13 @@ type appAdminUIResponseRecorder struct {
 	http.ResponseWriter
 	status int
 }
+
+type appAdminUITargetSubject struct {
+	kind string
+	id   string
+}
+
+type appAdminUITargetSubjectKey struct{}
 
 func (w *appAdminUIResponseRecorder) WriteHeader(statusCode int) {
 	w.status = statusCode
@@ -37,6 +46,8 @@ func (s *Server) appAdminUIObservabilityMiddleware(next http.Handler) http.Handl
 		}
 		appName := strings.TrimSpace(chi.URLParam(r, "app"))
 		startedAt := time.Now()
+		target := &appAdminUITargetSubject{}
+		r = r.WithContext(context.WithValue(r.Context(), appAdminUITargetSubjectKey{}, target))
 		recorder := &appAdminUIResponseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
 		failed := recorder.status >= http.StatusBadRequest
@@ -50,12 +61,31 @@ func (s *Server) appAdminUIObservabilityMiddleware(next http.Handler) http.Handl
 			RequestID:            appAdminUIRequestID(r),
 			PrincipalSubjectKind: principalKind,
 			PrincipalSubjectID:   principalID,
+			TargetSubjectKind:    target.kind,
+			TargetSubjectID:      target.id,
 		}
 		if failed {
 			interaction.FailureCategory = observability.AppAdminUIFailureCategoryHTTP(recorder.status)
 		}
 		observability.RecordAppAdminUIInteraction(r.Context(), startedAt, interaction)
 	})
+}
+
+func recordAppAdminUITargetSubject(ctx context.Context, subjectID string) {
+	target, ok := ctx.Value(appAdminUITargetSubjectKey{}).(*appAdminUITargetSubject)
+	if !ok || target == nil {
+		return
+	}
+	subjectID = strings.TrimSpace(subjectID)
+	if kind, id, ok := core.ParseSubjectID(subjectID); ok {
+		target.kind = kind
+		target.id = id
+		return
+	}
+	if subjectID != "" {
+		target.kind = "subject"
+		target.id = subjectID
+	}
 }
 
 func appAdminUIRouteSpecForRequest(r *http.Request) (surface, action string, ok bool) {
@@ -70,6 +100,14 @@ func appAdminUIRouteSpecForRequest(r *http.Request) (surface, action string, ok 
 			return observability.AppAdminUISurfaceMembers, observability.AppAdminUIActionList, true
 		case strings.HasSuffix(path, "/admin/allowed-operations"):
 			return observability.AppAdminUISurfaceAllowedOperations, observability.AppAdminUIActionList, true
+		}
+	case http.MethodPost:
+		if strings.HasSuffix(path, "/admin/members") {
+			return observability.AppAdminUISurfaceMembers, observability.AppAdminUIActionGrantAdd, true
+		}
+	case http.MethodDelete:
+		if strings.HasSuffix(path, "/admin/members") {
+			return observability.AppAdminUISurfaceMembers, observability.AppAdminUIActionGrantRemove, true
 		}
 	case http.MethodPut:
 		if strings.HasSuffix(path, "/admin/allowed-operations") {
