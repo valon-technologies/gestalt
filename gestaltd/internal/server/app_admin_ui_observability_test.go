@@ -37,15 +37,14 @@ func TestAppAdminUIObservabilityMiddlewareRecordsSuccess(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":     "g-issues",
-		"gestaltd.app_admin.ui.surface": "members",
-		"gestaltd.app_admin.ui.action":  "list",
-		"gestaltd.app_admin.ui.outcome": "success",
-		"gestaltd.subject.kind":         "unknown",
+		"gestaltd.app_admin.app":       "g-issues",
+		"gestaltd.app_admin.operation": "members_list",
+		"gestaltd.app_admin.outcome":   "success",
+		"gestaltd.subject.kind":        "unknown",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
-	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.ui.duration", attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.error_count", attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.duration", attrs)
 }
 
 func TestAppAdminUIObservabilityMiddlewareRecordsValidationFailure(t *testing.T) {
@@ -69,16 +68,15 @@ func TestAppAdminUIObservabilityMiddlewareRecordsValidationFailure(t *testing.T)
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":              "g-issues",
-		"gestaltd.app_admin.ui.surface":          "allowed_operations",
-		"gestaltd.app_admin.ui.action":           "save",
-		"gestaltd.app_admin.ui.outcome":          "failure",
-		"gestaltd.app_admin.ui.failure_category": "validation",
-		"gestaltd.subject.kind":                  "unknown",
+		"gestaltd.app_admin.app":              "g-issues",
+		"gestaltd.app_admin.operation":        "allowed_operations_save",
+		"gestaltd.app_admin.outcome":          "failure",
+		"gestaltd.app_admin.failure_category": "validation",
+		"gestaltd.subject.kind":               "unknown",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.ui.duration", attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.error_count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.duration", attrs)
 }
 
 func TestAppAdminUIObservabilityMiddlewareRecordsAuthorizationUnavailable(t *testing.T) {
@@ -107,16 +105,15 @@ func TestAppAdminUIObservabilityMiddlewareRecordsAuthorizationUnavailable(t *tes
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.app_admin.ui.app":              "g-issues",
-		"gestaltd.app_admin.ui.surface":          "members",
-		"gestaltd.app_admin.ui.action":           "list",
-		"gestaltd.app_admin.ui.outcome":          "failure",
-		"gestaltd.app_admin.ui.failure_category": "server",
-		"gestaltd.subject.kind":                  "unknown",
+		"gestaltd.app_admin.app":              "g-issues",
+		"gestaltd.app_admin.operation":        "members_list",
+		"gestaltd.app_admin.outcome":          "failure",
+		"gestaltd.app_admin.failure_category": "server",
+		"gestaltd.subject.kind":               "unknown",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.ui.duration", attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.count", 1, attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.error_count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.app_admin.duration", attrs)
 }
 
 func TestAppAdminUIFailureCategoryFromStatus(t *testing.T) {

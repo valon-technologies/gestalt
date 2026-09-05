@@ -188,6 +188,19 @@ func DBClientAttrs(dims DBMetricDims) []attribute.KeyValue {
 	return attrs
 }
 
+func ClientKindFromContext(ctx context.Context) string {
+	labeler, ok := otelhttp.LabelerFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	for _, attr := range labeler.Get() {
+		if attr.Key == attrGestaltdClientKind {
+			return attr.Value.AsString()
+		}
+	}
+	return ""
+}
+
 func appendStringAttr(attrs []attribute.KeyValue, key attribute.Key, value string) []attribute.KeyValue {
 	value = strings.TrimSpace(value)
 	if value == "" {

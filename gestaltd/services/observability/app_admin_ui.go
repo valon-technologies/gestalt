@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
@@ -33,19 +34,19 @@ const (
 )
 
 var (
-	AttrAppAdminUIApp               = attribute.Key("gestaltd.app_admin.ui.app")
-	AttrAppAdminUISurface           = attribute.Key("gestaltd.app_admin.ui.surface")
-	AttrAppAdminUIAction            = attribute.Key("gestaltd.app_admin.ui.action")
-	AttrAppAdminUIOutcome           = attribute.Key("gestaltd.app_admin.ui.outcome")
-	AttrAppAdminUIFailureCategory   = attribute.Key("gestaltd.app_admin.ui.failure_category")
-	AttrAppAdminUITargetSubjectKind = attribute.Key("gestaltd.app_admin.ui.target_subject.kind")
-	AttrAppAdminUITargetSubjectID   = attribute.Key("gestaltd.app_admin.ui.target_subject.id")
+	AttrAppAdminApp               = attribute.Key("gestaltd.app_admin.app")
+	AttrAppAdminOperation         = attribute.Key("gestaltd.app_admin.operation")
+	AttrAppAdminOutcome           = attribute.Key("gestaltd.app_admin.outcome")
+	AttrAppAdminFailureCategory   = attribute.Key("gestaltd.app_admin.failure_category")
+	AttrAppAdminTargetSubjectKind = attribute.Key("gestaltd.app_admin.target_subject.kind")
+	AttrAppAdminUITargetSubjectID = attribute.Key("gestaltd.app_admin.ui.target_subject.id")
 )
 
 type AppAdminUIInteraction struct {
 	App                  string
 	Surface              string
 	Action               string
+	ClientKind           string
 	Failed               bool
 	FailureCategory      string
 	StatusCode           int
@@ -57,15 +58,25 @@ type AppAdminUIInteraction struct {
 	TargetSubjectID      string
 }
 
+func AppAdminOperation(surface, action string) string {
+	surface = strings.TrimSpace(surface)
+	action = strings.TrimSpace(action)
+	if surface == "" || action == "" {
+		return ""
+	}
+	return surface + "_" + action
+}
+
 func RecordAppAdminUI(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
-	record(ctx, &appAdminUIMetrics, "gestaltd.app_admin.ui", "gestaltd app admin UI interactions", startedAt, failed, attrs...)
+	record(ctx, &appAdminUIMetrics, "gestaltd.app_admin", "gestaltd app admin interactions", startedAt, failed, attrs...)
 }
 
 func RecordAppAdminUIInteraction(ctx context.Context, startedAt time.Time, interaction AppAdminUIInteraction) {
 	interaction.App = strings.TrimSpace(interaction.App)
 	interaction.Surface = strings.TrimSpace(interaction.Surface)
 	interaction.Action = strings.TrimSpace(interaction.Action)
-	if interaction.App == "" || interaction.Surface == "" || interaction.Action == "" {
+	operation := AppAdminOperation(interaction.Surface, interaction.Action)
+	if interaction.App == "" || operation == "" {
 		return
 	}
 	outcome := AppAdminUIOutcomeSuccess
@@ -73,22 +84,35 @@ func RecordAppAdminUIInteraction(ctx context.Context, startedAt time.Time, inter
 		outcome = AppAdminUIOutcomeFailure
 	}
 	attrs := []attribute.KeyValue{
-		AttrAppAdminUIApp.String(interaction.App),
-		AttrAppAdminUISurface.String(interaction.Surface),
-		AttrAppAdminUIAction.String(interaction.Action),
-		AttrAppAdminUIOutcome.String(outcome),
+		AttrAppAdminApp.String(interaction.App),
+		AttrAppAdminOperation.String(operation),
+		AttrAppAdminOutcome.String(outcome),
 	}
 	if interaction.Failed && interaction.FailureCategory != "" {
-		attrs = append(attrs, AttrAppAdminUIFailureCategory.String(interaction.FailureCategory))
+		attrs = append(attrs, AttrAppAdminFailureCategory.String(interaction.FailureCategory))
 	}
 	if kind := strings.TrimSpace(interaction.PrincipalSubjectKind); kind != "" {
 		attrs = append(attrs, AttrSubjectKind.String(kind))
 	}
 	if kind := strings.TrimSpace(interaction.TargetSubjectKind); kind != "" {
-		attrs = append(attrs, AttrAppAdminUITargetSubjectKind.String(kind))
+		attrs = append(attrs, AttrAppAdminTargetSubjectKind.String(kind))
+	}
+	if clientKindAttr, ok := appAdminClientKindAttr(ctx, interaction.ClientKind); ok {
+		attrs = append(attrs, clientKindAttr)
 	}
 	RecordAppAdminUI(ctx, startedAt, interaction.Failed, attrs...)
 	LogAppAdminUI(ctx, interaction)
+}
+
+func appAdminClientKindAttr(ctx context.Context, explicit string) (attribute.KeyValue, bool) {
+	kind := strings.TrimSpace(explicit)
+	if kind == "" {
+		kind = metricutil.ClientKindFromContext(ctx)
+	}
+	if kind != metricutil.ClientKindWeb && kind != metricutil.ClientKindCLI {
+		return attribute.KeyValue{}, false
+	}
+	return attribute.String("gestaltd.client.kind", kind), true
 }
 
 func appendAppAdminUILogSubject(
