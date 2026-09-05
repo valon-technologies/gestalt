@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -300,5 +301,116 @@ func TestAppAdminMembersListForbiddenWithoutAdmin(t *testing.T) {
 	if response.StatusCode != http.StatusForbidden {
 		body, _ := io.ReadAll(response.Body)
 		t.Fatalf("GET status = %d, want 403: %s", response.StatusCode, body)
+	}
+}
+
+func TestAppAdminMembersSetAddsRuntimeGrant(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	viewerID := principal.UserSubjectID(testCanonicalViewerUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
+		},
+	}
+	authz.relationships[0].SourceLayer = proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/apps/g-issues/admin/members", bytes.NewBufferString(`{"subjectId":"`+viewerID+`","role":"viewer"}`))
+	request.Header.Set("Authorization", "Bearer alice-token")
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST members: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST status = %d: %s", response.StatusCode, body)
+	}
+
+	var body struct {
+		Changed bool `json:"changed"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !body.Changed {
+		t.Fatal("changed = false, want true")
+	}
+	authz.mu.Lock()
+	defer authz.mu.Unlock()
+	if len(authz.addRelationshipRequests) != 1 {
+		t.Fatalf("AddRelationship calls = %d, want 1", len(authz.addRelationshipRequests))
+	}
+	added := authz.addRelationshipRequests[0].GetRelationship()
+	if added.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
+		t.Fatalf("source layer = %v, want runtime", added.GetSourceLayer())
+	}
+	if tuple := added.GetTuple(); tuple.GetResource().GetId() != "g-issues" || tuple.GetRelation() != "viewer" || tuple.GetTarget().GetSubject().GetId() != viewerID {
+		t.Fatalf("added tuple = %#v", tuple)
+	}
+}
+
+func TestAppAdminMembersRemoveDeletesRuntimeGrants(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	viewerID := principal.UserSubjectID(testCanonicalViewerUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
+			testAuthorizationRelationship(viewerID, "viewer", "app", "g-issues"),
+			testAuthorizationRelationship(viewerID, "editor", "app", "g-issues"),
+		},
+	}
+	for i := range authz.relationships {
+		authz.relationships[i].SourceLayer = proto.SourceLayer_SOURCE_LAYER_RUNTIME
+	}
+	authz.relationships[0].SourceLayer = proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/g-issues/admin/members", bytes.NewBufferString(`{"subjectId":"`+viewerID+`"}`))
+	request.Header.Set("Authorization", "Bearer alice-token")
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("DELETE members: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("DELETE status = %d: %s", response.StatusCode, body)
+	}
+
+	var body struct {
+		RemovedRoles []string `json:"removedRoles"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.RemovedRoles) != 2 {
+		t.Fatalf("removedRoles = %#v, want two roles", body.RemovedRoles)
+	}
+	authz.mu.Lock()
+	defer authz.mu.Unlock()
+	if len(authz.deleteRelationshipRequests) != 2 {
+		t.Fatalf("DeleteRelationship calls = %d, want 2", len(authz.deleteRelationshipRequests))
+	}
+	if len(authz.relationships) != 1 || authz.relationships[0].GetTuple().GetTarget().GetSubject().GetId() != adminID {
+		t.Fatalf("remaining relationships = %#v", authz.relationships)
 	}
 }

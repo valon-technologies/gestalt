@@ -147,6 +147,8 @@ func TestAppAdminUIRouteSpecForRequest(t *testing.T) {
 		ok      bool
 	}{
 		{method: http.MethodGet, path: "/api/v1/apps/demo/admin/members", surface: "members", action: "list", ok: true},
+		{method: http.MethodPost, path: "/api/v1/apps/demo/admin/members", surface: "members", action: "grant_add", ok: true},
+		{method: http.MethodDelete, path: "/api/v1/apps/demo/admin/members", surface: "members", action: "grant_remove", ok: true},
 		{method: http.MethodGet, path: "/api/v1/apps/demo/admin/allowed-operations", surface: "allowed_operations", action: "list", ok: true},
 		{method: http.MethodPut, path: "/api/v1/apps/demo/admin/allowed-operations", surface: "allowed_operations", action: "save", ok: true},
 		{method: http.MethodGet, path: "/api/v1/apps/demo/admin/registry", ok: false},

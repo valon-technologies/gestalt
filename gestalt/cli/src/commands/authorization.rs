@@ -176,24 +176,6 @@ pub(crate) fn build_relationship_from_args(
     })
 }
 
-pub(crate) fn build_app_member_relationship(
-    app: &str,
-    role: &str,
-    subject_id: &str,
-) -> Result<Relationship> {
-    Ok(Relationship {
-        tuple: Some(relationship_tuple_from_parts(
-            "app",
-            app,
-            role,
-            Some(subject_id),
-            None,
-        )?),
-        properties: None,
-        source_layer: SOURCE_LAYER_RUNTIME,
-    })
-}
-
 pub(crate) fn relationship_tuple_from_parts(
     resource_type: &str,
     resource_id: &str,
