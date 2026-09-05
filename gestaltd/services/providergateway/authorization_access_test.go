@@ -20,6 +20,7 @@ func TestAuthorizationMethodAccessClass(t *testing.T) {
 		{method: "SetAuthorizationState", write: true, ok: true},
 		{method: "AddRelationship", write: true, ok: true},
 		{method: "DeleteRelationship", write: true, ok: true},
+		{method: "WriteRelationships", write: true, ok: true},
 		{method: "Ping", ok: false},
 	}
 

@@ -20,7 +20,16 @@ const (
 	legacyAuthorizationAction = "authorization"
 )
 
-func authorizationMethodAccessClass(fullMethod string) (read bool, write bool, ok bool) {
+type authorizationEnforcementPolicy int
+
+const (
+	authorizationPolicyUnsupported authorizationEnforcementPolicy = iota
+	authorizationPolicyGlobalRead
+	authorizationPolicyGlobalAdminWrite
+	authorizationPolicyRelationshipWrite
+)
+
+func authorizationMethodEnforcementPolicy(fullMethod string) (authorizationEnforcementPolicy, bool) {
 	_, method := splitFullMethod(fullMethod)
 	switch method {
 	case "GetActiveModelRef",
@@ -28,12 +37,25 @@ func authorizationMethodAccessClass(fullMethod string) (read bool, write bool, o
 		"ListRelationships",
 		"CheckAccess",
 		"CheckAccessMany":
+		return authorizationPolicyGlobalRead, true
+	case "SetActiveModel", "SetAuthorizationState":
+		return authorizationPolicyGlobalAdminWrite, true
+	case "AddRelationship", "DeleteRelationship", "WriteRelationships":
+		return authorizationPolicyRelationshipWrite, true
+	default:
+		return authorizationPolicyUnsupported, false
+	}
+}
+
+func authorizationMethodAccessClass(fullMethod string) (read bool, write bool, ok bool) {
+	policy, ok := authorizationMethodEnforcementPolicy(fullMethod)
+	if !ok {
+		return false, false, false
+	}
+	switch policy {
+	case authorizationPolicyGlobalRead:
 		return true, false, true
-	case "SetActiveModel",
-		"SetAuthorizationState",
-		"AddRelationship",
-		"DeleteRelationship",
-		"WriteRelationships":
+	case authorizationPolicyGlobalAdminWrite, authorizationPolicyRelationshipWrite:
 		return false, true, true
 	default:
 		return false, false, false
@@ -45,46 +67,94 @@ func (t *ProviderGatewayTransport) enforceAuthorizationPublicAccess(
 	subjectID, fullMethod string,
 	req gproto.Message,
 ) (context.Context, error) {
-	read, write, ok := authorizationMethodAccessClass(fullMethod)
+	policy, ok := authorizationMethodEnforcementPolicy(fullMethod)
 	if !ok {
 		return ctx, status.Error(codes.Internal, "provider gateway: unsupported authorization method")
 	}
 
+	read := policy == authorizationPolicyGlobalRead
+	write := policy == authorizationPolicyGlobalAdminWrite || policy == authorizationPolicyRelationshipWrite
+	globalAdmin, err := t.hasAuthorizationPublicAdminAccess(ctx, subjectID, read, write)
+	if err != nil {
+		return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
+	}
+
+	switch policy {
+	case authorizationPolicyGlobalRead, authorizationPolicyGlobalAdminWrite:
+		if !globalAdmin {
+			return ctx, status.Error(codes.PermissionDenied, "access denied")
+		}
+		return ctx, nil
+	case authorizationPolicyRelationshipWrite:
+		allowed, err := t.allowsRelationshipWriteAccess(ctx, subjectID, fullMethod, req, globalAdmin)
+		if err != nil {
+			return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
+		}
+		if !allowed {
+			return ctx, status.Error(codes.PermissionDenied, "access denied")
+		}
+		ctx = withAppScopedRelationshipMutationAuthFromRequest(ctx, fullMethod, req)
+		return ctx, nil
+	default:
+		return ctx, status.Error(codes.Internal, "provider gateway: unsupported authorization method")
+	}
+}
+
+func (t *ProviderGatewayTransport) hasAuthorizationPublicAdminAccess(
+	ctx context.Context,
+	subjectID string,
+	read, write bool,
+) (bool, error) {
 	resource := &proto.Resource{Type: authorizationResourceType, Id: authorizationResourceID}
-	allowed := false
 	for _, action := range authorizationPublicActions(read, write) {
 		checkReq := invocation.SubjectAccessRequest(subjectID, action, resource)
 		accessAllowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, checkReq)
 		if err != nil {
-			return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
+			return false, err
 		}
 		if accessAllowed {
-			allowed = true
-			break
+			return true, nil
 		}
 	}
-	if !allowed && write {
-		tuple, ok := relationshipTupleFromAuthorizationRequest(fullMethod, req)
-		if ok {
-			var err error
-			allowed, err = allowsAppScopedRelationshipMutation(ctx, t.authorization, subjectID, tuple)
-			if err != nil {
-				return ctx, status.Error(codes.Unavailable, "authorization provider unavailable")
-			}
-			if !allowed {
-				deniedErr := status.Error(codes.PermissionDenied, "access denied")
-				recordAppScopedRelationshipAuthFailure(ctx, subjectID, tuple, fullMethod, deniedErr)
-				return ctx, deniedErr
-			}
+	return false, nil
+}
+
+func (t *ProviderGatewayTransport) allowsRelationshipWriteAccess(
+	ctx context.Context,
+	subjectID, fullMethod string,
+	req gproto.Message,
+	globalAdmin bool,
+) (bool, error) {
+	tuples := relationshipTuplesFromAuthorizationRequest(fullMethod, req)
+	if len(tuples) == 0 {
+		return globalAdmin, nil
+	}
+	for _, tuple := range tuples {
+		allowed, err := t.allowsRelationshipTupleWrite(ctx, subjectID, tuple, globalAdmin)
+		if err != nil {
+			return false, err
+		}
+		if !allowed {
+			recordAppScopedRelationshipAuthFailure(ctx, subjectID, tuple, fullMethod, status.Error(codes.PermissionDenied, "access denied"))
+			return false, nil
 		}
 	}
-	if !allowed {
-		return ctx, status.Error(codes.PermissionDenied, "access denied")
+	return true, nil
+}
+
+func (t *ProviderGatewayTransport) allowsRelationshipTupleWrite(
+	ctx context.Context,
+	subjectID string,
+	tuple *proto.RelationshipTuple,
+	globalAdmin bool,
+) (bool, error) {
+	if !isAppScopedRelationshipTuple(tuple) {
+		return globalAdmin, nil
 	}
-	if write {
-		ctx = withAppScopedRelationshipMutationAuthFromRequest(ctx, fullMethod, req)
+	if globalAdmin && isAppBootstrapRelationshipTuple(tuple) {
+		return true, nil
 	}
-	return ctx, nil
+	return allowsAppScopedRelationshipMutation(ctx, t.authorization, subjectID, tuple)
 }
 
 func authorizationPublicActions(read, write bool) []string {
