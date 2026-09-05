@@ -10,6 +10,10 @@ import (
 
 const AppRegistryKindGCS = "gcs"
 
+type AppRegistryAuth string
+
+const AppRegistryAuthGCPADC AppRegistryAuth = "gcpADC"
+
 const (
 	defaultGCSAppRegistryPublicURLPrefix = "https://storage.googleapis.com/"
 	defaultAppRegistryUnusedRetention    = 72 * time.Hour
@@ -18,6 +22,7 @@ const (
 
 type AppRegistryConfig struct {
 	Kind      string                      `yaml:"kind,omitempty"`
+	Auth      AppRegistryAuth             `yaml:"auth,omitempty"`
 	GCS       *AppRegistryGCSConfig       `yaml:"gcs,omitempty"`
 	Retention *AppRegistryRetentionConfig `yaml:"retention,omitempty"`
 }
@@ -36,6 +41,7 @@ type AppRegistryGCSConfig struct {
 
 type appRegistryConfigYAML struct {
 	Kind      string                      `yaml:"kind,omitempty"`
+	Auth      AppRegistryAuth             `yaml:"auth,omitempty"`
 	GCS       *AppRegistryGCSConfig       `yaml:"gcs,omitempty"`
 	Retention *AppRegistryRetentionConfig `yaml:"retention,omitempty"`
 }
@@ -61,6 +67,7 @@ func (c *AppRegistryConfig) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	c.Kind = raw.Kind
+	c.Auth = raw.Auth
 	c.GCS = raw.GCS
 	c.Retention = raw.Retention
 	return nil

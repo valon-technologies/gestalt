@@ -3,6 +3,8 @@ package appregistry
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"path"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -48,7 +50,28 @@ func fetchConfiguredRegistryEntry(
 	if entry.Version != version {
 		return nil, fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version)
 	}
+	if err := relocateGCSArtifactURLs(entry, publicRoot); err != nil {
+		return nil, err
+	}
 	return &configuredRegistryEntry{PublicRoot: publicRoot, Entry: entry}, nil
+}
+
+func relocateGCSArtifactURLs(entry *Entry, publicRoot string) error {
+	for platform, artifact := range entry.Artifacts {
+		storageURL := strings.TrimSpace(artifact.URL)
+		parsed, err := url.Parse(storageURL)
+		if err != nil || !strings.EqualFold(parsed.Scheme, "gs") {
+			continue
+		}
+		objectPath := strings.TrimPrefix(parsed.Path, "/")
+		expectedPrefix := AppArtifactPrefix(entry.App, entry.Version) + "/"
+		if parsed.Host == "" || path.Clean(objectPath) != objectPath || !strings.HasPrefix(objectPath, expectedPrefix) {
+			return fmt.Errorf("registry entry artifact for platform %q has invalid GCS URL", platform)
+		}
+		artifact.PublicURL = PublicURL(publicRoot, objectPath)
+		entry.Artifacts[platform] = artifact
+	}
+	return nil
 }
 
 func resolveRegistryArtifact(entry *Entry, platform string) (*registryArtifact, error) {

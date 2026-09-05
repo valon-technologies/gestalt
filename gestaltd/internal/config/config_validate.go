@@ -377,6 +377,11 @@ func validateAppRegistries(cfg *Config) error {
 		if err := validateAppRegistryLocation("appRegistries", name, registry); err != nil {
 			return err
 		}
+		switch registry.Auth {
+		case "", AppRegistryAuthGCPADC:
+		default:
+			return fmt.Errorf("config validation: appRegistries.%s.auth must be %q when set", name, AppRegistryAuthGCPADC)
+		}
 	}
 	return nil
 }
