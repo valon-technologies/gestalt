@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::{
@@ -227,12 +227,8 @@ fn list_allowed_operations(
     format: Format,
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
-    let path = format!(
-        "/api/v1/apps/{}/admin/allowed-operations",
-        encode_path_segment(&app)
-    );
     let resp = api
-        .get(&path)
+        .get(&app_admin_allowed_operations_path(&app))
         .with_context(|| format!("failed to list allowed operations for app {app}"))?;
     match format {
         Format::Json => output::print_json(&resp),
@@ -260,12 +256,8 @@ fn set_allowed_operations(
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
     let body = build_allowed_operations_update_request(args)?;
-    let path = format!(
-        "/api/v1/apps/{}/admin/allowed-operations",
-        encode_path_segment(&app)
-    );
     let resp = api
-        .put(&path, &body)
+        .put(&app_admin_allowed_operations_path(&app), &body)
         .with_context(|| format!("failed to update allowed operations for app {app}"))?;
     match format {
         Format::Json => output::print_json(&resp),
@@ -295,7 +287,7 @@ fn build_allowed_operations_update_request(
         bail!("pass --set id=viewer,editor and/or --remove id, or use --input-file");
     }
 
-    let mut operations = std::collections::HashMap::new();
+    let mut operations = HashMap::new();
     for entry in &args.set {
         let (operation_id, roles) = parse_operation_roles_assignment(entry)?;
         operations.insert(
@@ -306,22 +298,26 @@ fn build_allowed_operations_update_request(
         );
     }
 
-    let removed: Vec<String> = args
-        .remove
-        .iter()
-        .map(|id| {
-            let trimmed = id.trim();
-            if trimmed.is_empty() {
-                bail!("operation id is required");
-            }
-            Ok(trimmed.to_string())
-        })
-        .collect::<Result<_>>()?;
+    let mut removed = Vec::with_capacity(args.remove.len());
+    for id in &args.remove {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            bail!("operation id is required");
+        }
+        removed.push(trimmed.to_string());
+    }
 
     Ok(AllowedOperationsUpdateRequest {
         operations,
         removed,
     })
+}
+
+fn app_admin_allowed_operations_path(app: &str) -> String {
+    format!(
+        "/api/v1/apps/{}/admin/allowed-operations",
+        encode_path_segment(app)
+    )
 }
 
 fn parse_operation_roles_assignment(raw: &str) -> Result<(String, Vec<String>)> {
@@ -653,7 +649,7 @@ fn plan_role_set(existing_roles: &[String], role: &str) -> RoleSetPlan {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppAdminMember {
     role: String,
@@ -668,7 +664,7 @@ struct AppAdminMember {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AllowedOperationsUpdateRequest {
-    operations: std::collections::HashMap<String, OperationOverrideBody>,
+    operations: HashMap<String, OperationOverrideBody>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     removed: Vec<String>,
 }
