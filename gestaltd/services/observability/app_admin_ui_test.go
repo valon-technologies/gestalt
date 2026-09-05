@@ -59,9 +59,44 @@ func TestRecordAppAdminUI(t *testing.T) {
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.error_count", 1, failAttrs)
 }
 
-func TestLogAppAdminUI(t *testing.T) {
+func TestRecordAppAdminUIInteractionOmitsSubjectIDsFromMetrics(t *testing.T) {
 	t.Parallel()
 
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+
+	RecordAppAdminUIInteraction(ctx, time.Now(), AppAdminUIInteraction{
+		App:                  "g-issues",
+		Surface:              AppAdminUISurfaceMembers,
+		Action:               AppAdminUIActionGrantAdd,
+		PrincipalSubjectKind: "user",
+		PrincipalSubjectID:   "user:abc",
+		TargetSubjectKind:    "user",
+		TargetSubjectID:      "user:def",
+	})
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := map[string]string{
+		"gestaltd.app_admin.ui.app":                 "g-issues",
+		"gestaltd.app_admin.ui.surface":             "members",
+		"gestaltd.app_admin.ui.action":              "grant_add",
+		"gestaltd.app_admin.ui.outcome":             "success",
+		"gestaltd.subject.kind":                     "user",
+		"gestaltd.app_admin.ui.target_subject.kind": "user",
+	}
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.app_admin.ui.count", 1, attrs)
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.app_admin.ui.count", map[string]string{
+		"gestaltd.app_admin.ui.app":                 "g-issues",
+		"gestaltd.app_admin.ui.surface":             "members",
+		"gestaltd.app_admin.ui.action":              "grant_add",
+		"gestaltd.app_admin.ui.outcome":             "success",
+		"gestaltd.subject.kind":                     "user",
+		"gestaltd.subject.id":                       "user:abc",
+		"gestaltd.app_admin.ui.target_subject.kind": "user",
+	})
+}
+
+func TestLogAppAdminUI(t *testing.T) { //nolint:paralleltest // mutates slog.Default()
 	tests := []struct {
 		name        string
 		interaction AppAdminUIInteraction
@@ -114,10 +149,8 @@ func TestLogAppAdminUI(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range tests { //nolint:paralleltest // mutates slog.Default()
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			var buf bytes.Buffer
 			previous := slog.Default()
 			slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
