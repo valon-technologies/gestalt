@@ -96,7 +96,7 @@ func TestRecordAppAdminUIInteractionOmitsSubjectIDsFromMetrics(t *testing.T) {
 	})
 }
 
-func TestLogAppAdminUI(t *testing.T) {
+func TestLogAppAdminUI(t *testing.T) { //nolint:paralleltest // mutates slog.Default()
 	tests := []struct {
 		name        string
 		interaction AppAdminUIInteraction
@@ -149,7 +149,7 @@ func TestLogAppAdminUI(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range tests { //nolint:paralleltest // mutates slog.Default()
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			previous := slog.Default()
