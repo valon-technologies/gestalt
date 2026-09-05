@@ -254,6 +254,12 @@ pub enum AuthorizationAppsCommands {
         #[command(subcommand)]
         command: AuthorizationAppsMembersCommands,
     },
+    /// Manage allowed operation exposure for an app
+    #[command(name = "allowed-operations")]
+    AllowedOperations {
+        #[command(subcommand)]
+        command: AuthorizationAppsAllowedOperationsCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -303,6 +309,38 @@ pub struct AuthorizationAppsMembersRemoveArgs {
     /// Relationship role to remove; when omitted, removes all mutable grants for the subject
     #[arg(long)]
     pub role: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationAppsAllowedOperationsCommands {
+    /// List allowed operation exposure for an app
+    List(AuthorizationAppsAllowedOperationsListArgs),
+    /// Update allowed operation exposure for an app
+    Set(AuthorizationAppsAllowedOperationsSetArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationAppsAllowedOperationsListArgs {
+    /// App name
+    pub app: String,
+}
+
+#[derive(Args)]
+pub struct AuthorizationAppsAllowedOperationsSetArgs {
+    /// App name
+    pub app: String,
+    /// JSON file with {"operations": {...}, "removed": [...]} in app-admin shape
+    #[arg(
+        long = "input-file",
+        conflicts_with_all = ["set", "remove"]
+    )]
+    pub input_file: Option<String>,
+    /// Operation override as id=viewer,editor (repeatable)
+    #[arg(long, action = clap::ArgAction::Append, conflicts_with = "input_file")]
+    pub set: Vec<String>,
+    /// Operation id to remove from the runtime overlay (repeatable)
+    #[arg(long, action = clap::ArgAction::Append, conflicts_with = "input_file")]
+    pub remove: Vec<String>,
 }
 
 #[derive(Subcommand)]

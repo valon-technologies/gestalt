@@ -1,10 +1,13 @@
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::{
-    AuthorizationAppsCommands, AuthorizationAppsMembersCommands, AuthorizationAppsMembersListArgs,
+    AuthorizationAppsAllowedOperationsCommands, AuthorizationAppsAllowedOperationsListArgs,
+    AuthorizationAppsAllowedOperationsSetArgs, AuthorizationAppsCommands,
+    AuthorizationAppsMembersCommands, AuthorizationAppsMembersListArgs,
     AuthorizationAppsMembersRemoveArgs, AuthorizationAppsMembersSetArgs,
 };
 use crate::commands::authorization::{
@@ -33,6 +36,14 @@ pub fn dispatch(
             AuthorizationAppsMembersCommands::Set(args) => set_member(authz, api, &args, format),
             AuthorizationAppsMembersCommands::Remove(args) => {
                 remove_member(authz, api, &args, format)
+            }
+        },
+        AuthorizationAppsCommands::AllowedOperations { command } => match command {
+            AuthorizationAppsAllowedOperationsCommands::List(args) => {
+                list_allowed_operations(api, &args, format)
+            }
+            AuthorizationAppsAllowedOperationsCommands::Set(args) => {
+                set_allowed_operations(api, &args, format)
             }
         },
     }
@@ -208,6 +219,156 @@ fn remove_member(
         )),
     }
     Ok(())
+}
+
+fn list_allowed_operations(
+    api: &ApiClient,
+    args: &AuthorizationAppsAllowedOperationsListArgs,
+    format: Format,
+) -> Result<()> {
+    let app = require_app_name(&args.app)?;
+    let path = format!(
+        "/api/v1/apps/{}/admin/allowed-operations",
+        encode_path_segment(&app)
+    );
+    let resp = api
+        .get(&path)
+        .with_context(|| format!("failed to list allowed operations for app {app}"))?;
+    match format {
+        Format::Json => output::print_json(&resp),
+        Format::Table => {
+            let rows: Vec<Vec<String>> = resp
+                .get("operations")
+                .and_then(Value::as_array)
+                .unwrap_or(&Vec::new())
+                .iter()
+                .map(allowed_operation_row)
+                .collect();
+            println!(
+                "{}",
+                output::render_table(&["ID", "Source", "Allowed Roles"], &rows)
+            );
+        }
+    }
+    Ok(())
+}
+
+fn set_allowed_operations(
+    api: &ApiClient,
+    args: &AuthorizationAppsAllowedOperationsSetArgs,
+    format: Format,
+) -> Result<()> {
+    let app = require_app_name(&args.app)?;
+    let body = build_allowed_operations_update_request(args)?;
+    let path = format!(
+        "/api/v1/apps/{}/admin/allowed-operations",
+        encode_path_segment(&app)
+    );
+    let resp = api
+        .put(&path, &body)
+        .with_context(|| format!("failed to update allowed operations for app {app}"))?;
+    match format {
+        Format::Json => output::print_json(&resp),
+        Format::Table => {
+            output::print_success(&format!("Updated allowed operations for {app}."))
+        }
+    }
+    Ok(())
+}
+
+fn build_allowed_operations_update_request(
+    args: &AuthorizationAppsAllowedOperationsSetArgs,
+) -> Result<AllowedOperationsUpdateRequest> {
+    if let Some(path) = args
+        .input_file
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let raw = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read allowed operations file {path}"))?;
+        return serde_json::from_str(&raw)
+            .with_context(|| format!("failed to parse allowed operations file {path}"));
+    }
+
+    if args.set.is_empty() && args.remove.is_empty() {
+        bail!("pass --set id=viewer,editor and/or --remove id, or use --input-file");
+    }
+
+    let mut operations = std::collections::HashMap::new();
+    for entry in &args.set {
+        let (operation_id, roles) = parse_operation_roles_assignment(entry)?;
+        operations.insert(
+            operation_id,
+            OperationOverrideBody {
+                allowed_roles: roles,
+            },
+        );
+    }
+
+    let removed: Vec<String> = args
+        .remove
+        .iter()
+        .map(|id| {
+            let trimmed = id.trim();
+            if trimmed.is_empty() {
+                bail!("operation id is required");
+            }
+            Ok(trimmed.to_string())
+        })
+        .collect::<Result<_>>()?;
+
+    Ok(AllowedOperationsUpdateRequest {
+        operations,
+        removed,
+    })
+}
+
+fn parse_operation_roles_assignment(raw: &str) -> Result<(String, Vec<String>)> {
+    let (operation_id, roles_raw) = raw
+        .split_once('=')
+        .with_context(|| format!("expected operation override as id=viewer,editor, got {raw:?}"))?;
+    let operation_id = operation_id.trim();
+    if operation_id.is_empty() {
+        bail!("operation id is required");
+    }
+    let roles: Vec<String> = roles_raw
+        .split(',')
+        .map(str::trim)
+        .filter(|role| !role.is_empty())
+        .map(str::to_string)
+        .collect();
+    if roles.is_empty() {
+        bail!("allowed roles are required for operation {operation_id}");
+    }
+    Ok((operation_id.to_string(), roles))
+}
+
+fn allowed_operation_row(value: &Value) -> Vec<String> {
+    let roles = value
+        .get("allowedRoles")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    vec![
+        value
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        value
+            .get("source")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        roles,
+    ]
 }
 
 fn delete_member_tuple(
@@ -492,7 +653,7 @@ fn plan_role_set(existing_roles: &[String], role: &str) -> RoleSetPlan {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AppAdminMember {
     role: String,
@@ -504,11 +665,26 @@ struct AppAdminMember {
     email: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AllowedOperationsUpdateRequest {
+    operations: std::collections::HashMap<String, OperationOverrideBody>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    removed: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationOverrideBody {
+    allowed_roles: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        AppAdminMember, RoleSetPlan, canonical_subject_id_from_members, is_service_account_subject,
-        normalize_subject_id, plan_role_set, subject_id_for_email_in_members,
+        AppAdminMember, AuthorizationAppsAllowedOperationsSetArgs, RoleSetPlan,
+        canonical_subject_id_from_members, is_service_account_subject, normalize_subject_id,
+        parse_operation_roles_assignment, plan_role_set, subject_id_for_email_in_members,
         subject_matches_member,
     };
 
@@ -622,5 +798,33 @@ mod tests {
                 add_role: true,
             }
         );
+    }
+
+    #[test]
+    fn parse_operation_roles_assignment_splits_roles() {
+        assert_eq!(
+            parse_operation_roles_assignment("get_item=viewer,editor").unwrap(),
+            ("get_item".to_string(), vec!["viewer".to_string(), "editor".to_string()])
+        );
+    }
+
+    #[test]
+    fn parse_operation_roles_assignment_rejects_missing_roles() {
+        assert!(parse_operation_roles_assignment("get_item=").is_err());
+    }
+
+    #[test]
+    fn build_allowed_operations_update_request_supports_remove_only() {
+        let body = super::build_allowed_operations_update_request(
+            &AuthorizationAppsAllowedOperationsSetArgs {
+                app: "home".to_string(),
+                input_file: None,
+                set: vec![],
+                remove: vec!["legacy_op".to_string()],
+            },
+        )
+        .unwrap();
+        assert!(body.operations.is_empty());
+        assert_eq!(body.removed, vec!["legacy_op".to_string()]);
     }
 }
