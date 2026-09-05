@@ -93,26 +93,62 @@ func appScopedRelationshipActionFromMethod(fullMethod string) string {
 	}
 }
 
+func isAppBootstrapRelationshipTuple(tuple *proto.RelationshipTuple) bool {
+	if tuple == nil {
+		return false
+	}
+	return strings.TrimSpace(tuple.GetResource().GetType()) == appAuthorizationResourceType &&
+		strings.TrimSpace(tuple.GetRelation()) == appAdminRelation
+}
+
+func isAppScopedRelationshipTuple(tuple *proto.RelationshipTuple) bool {
+	if tuple == nil {
+		return false
+	}
+	return strings.TrimSpace(tuple.GetResource().GetType()) == appAuthorizationResourceType
+}
+
 func relationshipTupleFromAuthorizationRequest(fullMethod string, req gproto.Message) (*proto.RelationshipTuple, bool) {
-	if req == nil {
+	tuples := relationshipTuplesFromAuthorizationRequest(fullMethod, req)
+	if len(tuples) != 1 {
 		return nil, false
+	}
+	return tuples[0], true
+}
+
+func relationshipTuplesFromAuthorizationRequest(fullMethod string, req gproto.Message) []*proto.RelationshipTuple {
+	if req == nil {
+		return nil
 	}
 	_, method := splitFullMethod(fullMethod)
 	switch method {
 	case "AddRelationship":
 		addReq, ok := req.(*proto.AddRelationshipRequest)
 		if !ok || addReq.GetRelationship() == nil {
-			return nil, false
+			return nil
 		}
-		return addReq.GetRelationship().GetTuple(), true
+		return []*proto.RelationshipTuple{addReq.GetRelationship().GetTuple()}
 	case "DeleteRelationship":
 		deleteReq, ok := req.(*proto.DeleteRelationshipRequest)
-		if !ok {
-			return nil, false
+		if !ok || deleteReq.GetRelationshipTuple() == nil {
+			return nil
 		}
-		return deleteReq.GetRelationshipTuple(), true
+		return []*proto.RelationshipTuple{deleteReq.GetRelationshipTuple()}
+	case "WriteRelationships":
+		writeReq, ok := req.(*proto.WriteRelationshipsRequest)
+		if !ok {
+			return nil
+		}
+		tuples := make([]*proto.RelationshipTuple, 0, len(writeReq.GetUpdates()))
+		for _, update := range writeReq.GetUpdates() {
+			if update == nil || update.GetRelationship() == nil || update.GetRelationship().GetTuple() == nil {
+				continue
+			}
+			tuples = append(tuples, update.GetRelationship().GetTuple())
+		}
+		return tuples
 	default:
-		return nil, false
+		return nil
 	}
 }
 
