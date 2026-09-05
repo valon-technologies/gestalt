@@ -8,8 +8,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 func TestAppAdminSurfacesForbiddenForAuthorizationAdminOnly(t *testing.T) {
