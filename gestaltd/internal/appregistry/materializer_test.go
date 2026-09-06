@@ -2,9 +2,12 @@ package appregistry_test
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -14,6 +17,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestMaterializer_serializes_same_app(t *testing.T) {
 	t.Parallel()
@@ -134,6 +143,40 @@ func TestMaterializer_downloads_and_extracts_artifact(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(destDir, "manifest.yaml")); err != nil {
 		t.Fatalf("stat manifest.yaml: %v", err)
+	}
+}
+
+func TestMaterializer_downloads_copied_artifact_from_configured_registry(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	const targetBucket = "copied-registry"
+	targetRegistry, err := config.NewGCSAppRegistry(targetBucket)
+	if err != nil {
+		t.Fatalf("NewGCSAppRegistry: %v", err)
+	}
+	targetPrefix := "/" + targetBucket + "/"
+	sourcePrefix := "/" + registrytest.Bucket + "/"
+	reader := &appregistry.RegistryReader{HTTPClient: &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if !strings.HasPrefix(req.URL.Path, targetPrefix) {
+			return nil, fmt.Errorf("unexpected registry path %q", req.URL.Path)
+		}
+		clone := req.Clone(req.Context())
+		clone.URL.Path = sourcePrefix + strings.TrimPrefix(req.URL.Path, targetPrefix)
+		return fixture.Reader.HTTPClient.Transport.RoundTrip(clone)
+	})}}
+	materializer := &appregistry.Materializer{
+		Registries:   map[string]config.AppRegistryConfig{"toolshed": targetRegistry},
+		Reader:       reader,
+		ArtifactsDir: t.TempDir(),
+	}
+
+	if _, err := materializer.Ensure(t.Context(), &core.AppInstallation{
+		AppName:  "g-issues",
+		Version:  fixture.Version,
+		Registry: "toolshed",
+	}); err != nil {
+		t.Fatalf("Ensure: %v", err)
 	}
 }
 

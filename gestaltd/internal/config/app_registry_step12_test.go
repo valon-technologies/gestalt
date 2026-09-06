@@ -66,6 +66,40 @@ server: {}
 	}
 }
 
+func TestAppRegistryAuthValidation(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+appRegistries:
+  toolshed:
+    kind: gcs
+    auth: gcpADC
+    gcs:
+      bucket: private-registry
+server: {}
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.AppRegistries["toolshed"].Auth; got != AppRegistryAuthGCPADC {
+		t.Fatalf("auth = %q, want %q", got, AppRegistryAuthGCPADC)
+	}
+
+	path = mustWriteConfigFile(t, `
+appRegistries:
+  toolshed:
+    kind: gcs
+    auth: signedUrl
+    gcs:
+      bucket: private-registry
+server: {}
+`)
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), `auth must be "gcpADC" when set`) {
+		t.Fatalf("Load error = %v, want unsupported auth error", err)
+	}
+}
+
 func TestAppRegistryMaxReconcileAttemptsValidation(t *testing.T) {
 	t.Parallel()
 	for _, value := range []string{"0", "-1"} {

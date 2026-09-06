@@ -58,6 +58,10 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err != nil {
 		return err
 	}
+	appRegistryReader, err := appregistry.NewRegistryReader(ctx, cfg.AppRegistries)
+	if err != nil {
+		return fmt.Errorf("configure app registry reader: %w", err)
+	}
 
 	if cfg.Server.BaseURL != "" {
 		slog.Debug("gestaltd base URL configured",
@@ -158,6 +162,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		},
 		OperationAccessChecker:  operationAccessChecker(result.Invoker),
 		AppRegistries:           cfg.AppRegistries,
+		AppRegistryReader:       appRegistryReader,
 		AppRegistryHeartbeatTTL: heartbeatTTL,
 		AppRegistryRolloutMode:  cfg.Server.AppRegistry.RolloutMode,
 		ArtifactsDir:            cfg.Server.ArtifactsDir,
@@ -174,11 +179,11 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	baseConfig.AppRegistryPublish = publishService
 	baseConfig.AppRegistryPublishAllowedApps = cfg.Server.AppRegistry.Publish.AllowedAppSet()
 
-	result.RegistryAppStartup = registryAppStartup(cfg, result, nil)
+	result.RegistryAppStartup = registryAppStartup(cfg, result, appRegistryReader)
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
-	autoDeployController, err := startAppRegistryAutoDeployController(ctx, cfg, result, gestaltdVersion)
+	autoDeployController, err := startAppRegistryAutoDeployController(ctx, cfg, result, gestaltdVersion, appRegistryReader)
 	if err != nil {
 		return err
 	}
@@ -190,7 +195,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		onRolloutTerminal = autoDeployController.Notify
 		baseConfig.AppAutoDeployNotify = autoDeployController.Notify
 	}
-	catalogPoller := startAppRegistryCatalogPoller(ctx, cfg, result, restartDelay, disableRestartDelay, onRolloutTerminal)
+	catalogPoller := startAppRegistryCatalogPoller(ctx, cfg, result, restartDelay, disableRestartDelay, onRolloutTerminal, appRegistryReader)
 	if catalogPoller != nil {
 		defer catalogPoller.Stop()
 		baseConfig.AppRegistryReconcileNotify = catalogPoller.Notify
@@ -567,6 +572,7 @@ func startAppRegistryCatalogPoller(
 	restartDelay time.Duration,
 	disableRestartDelay bool,
 	onRolloutTerminal func(string),
+	reader *appregistry.RegistryReader,
 ) *appregistry.CatalogPoller {
 	if result == nil || result.Services == nil {
 		return nil
@@ -584,6 +590,7 @@ func startAppRegistryCatalogPoller(
 			materializer = &appregistry.Materializer{
 				Registries:   cfg.AppRegistries,
 				ArtifactsDir: artifactsDir,
+				Reader:       reader,
 			}
 		}
 	}
@@ -714,6 +721,7 @@ func startAppRegistryAutoDeployController(
 	cfg *config.Config,
 	result *bootstrap.Result,
 	gestaltdVersion string,
+	reader *appregistry.RegistryReader,
 ) (*autodeploy.Controller, error) {
 	if cfg == nil || result == nil || result.Services == nil {
 		return nil, nil
@@ -749,7 +757,6 @@ func startAppRegistryAutoDeployController(
 	if err != nil {
 		return nil, fmt.Errorf("server.appRegistry.autoDeployPollInterval: %w", err)
 	}
-	reader := &appregistry.RegistryReader{}
 	installer := &appregistry.Installer{
 		Registries:       cfg.AppRegistries,
 		ConfigApps:       cfg.Apps,

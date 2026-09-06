@@ -61,7 +61,7 @@ func TestServerInstallerWiringPreservesConfiguredRolloutMode(t *testing.T) {
 			cfg.Server.AppRegistry.RolloutMode = mode
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			controller, err := startAppRegistryAutoDeployController(ctx, cfg, &bootstrap.Result{Services: services}, "0.1.0")
+			controller, err := startAppRegistryAutoDeployController(ctx, cfg, &bootstrap.Result{Services: services}, "0.1.0", fixture.Reader)
 			if err != nil {
 				t.Fatalf("startAppRegistryAutoDeployController: %v", err)
 			}
@@ -91,6 +91,7 @@ func TestCatalogPollerWiringPreservesIndependentCadences(t *testing.T) {
 		&bootstrap.Result{Services: testutil.NewStubServices(t)},
 		0,
 		false,
+		nil,
 		nil,
 	)
 	if poller == nil {
