@@ -13,6 +13,9 @@ import (
 const (
 	appAuthorizationResourceType = "app"
 	appAdminRelation             = "admin"
+	groupAuthorizationResourceType = "group"
+	groupAdminRelation             = "admin"
+	groupMemberRelation            = "member"
 )
 
 type appScopedRelationshipMutationContext struct {
@@ -163,6 +166,39 @@ func withAppScopedRelationshipMutationAuthFromRequest(ctx context.Context, fullM
 		return ctx
 	}
 	return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple)
+}
+
+func allowsGroupScopedRelationshipMutation(
+	ctx context.Context,
+	authorization core.AuthorizationProvider,
+	subjectID string,
+	tuple *proto.RelationshipTuple,
+) (bool, error) {
+	if authorization == nil || tuple == nil || !isGroupMemberRelationshipTuple(tuple) {
+		return false, nil
+	}
+	groupID := strings.TrimSpace(tuple.GetResource().GetId())
+	if groupID == "" {
+		return false, nil
+	}
+	decision, err := invocation.CheckResourceAccess(ctx, authorization, invocation.ResourceAccessRequest{
+		SubjectID:    subjectID,
+		Action:       groupID,
+		Resource:     &proto.Resource{Type: groupAuthorizationResourceType, Id: groupID},
+		AllowedRoles: []string{groupAdminRelation},
+	})
+	if err != nil {
+		return false, err
+	}
+	return decision.Allowed && decision.Role == groupAdminRelation, nil
+}
+
+func isGroupMemberRelationshipTuple(tuple *proto.RelationshipTuple) bool {
+	if tuple == nil {
+		return false
+	}
+	return strings.TrimSpace(tuple.GetResource().GetType()) == groupAuthorizationResourceType &&
+		strings.TrimSpace(tuple.GetRelation()) == groupMemberRelation
 }
 
 func allowsAppScopedRelationshipMutation(

@@ -148,6 +148,9 @@ func (t *ProviderGatewayTransport) allowsRelationshipTupleWrite(
 	tuple *proto.RelationshipTuple,
 	globalAdmin bool,
 ) (bool, error) {
+	if isGroupMemberRelationshipTuple(tuple) {
+		return allowsGroupScopedRelationshipMutation(ctx, t.authorization, subjectID, tuple)
+	}
 	if !isAppScopedRelationshipTuple(tuple) {
 		return globalAdmin, nil
 	}
