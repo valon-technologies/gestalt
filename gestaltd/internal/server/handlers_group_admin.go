@@ -50,6 +50,8 @@ func (s *Server) mountGroupAdminRoutes(r chi.Router) {
 		Get("/groups", s.listGroupAdminGroups)
 	r.With(s.pluginRouteAuthMiddleware("group"), s.groupAdminCreateAuthorizationMiddleware).
 		Post("/groups", s.createGroupAdminGroup)
+	r.With(s.pluginRouteAuthMiddleware("group"), s.groupAdminShowAuthorizationMiddleware).
+		Get("/groups/{group}", s.getGroupAdminGroup)
 	r.With(s.pluginRouteAuthMiddleware("group"), s.groupAdminAuthorizationMiddleware).
 		Get("/groups/{group}/admin/members", s.listGroupAdminMembers)
 	r.With(s.pluginRouteAuthMiddleware("group"), s.groupAdminAuthorizationMiddleware).
@@ -254,20 +256,43 @@ func (s *Server) canListGroupAdminGroups(ctx context.Context, subjectID string) 
 	if ok, err := s.hasGestaltAdmin(ctx, subjectID); err != nil || ok {
 		return ok, err
 	}
-	groupIDs, err := s.listGroupIDs(ctx)
+	return s.hasAnyGroupAdmin(ctx, subjectID)
+}
+
+func (s *Server) canViewGroupAdminGroup(ctx context.Context, subjectID, groupID string) (bool, error) {
+	if ok, err := s.hasAuthorizationViewer(ctx, subjectID); err != nil || ok {
+		return ok, err
+	}
+	if ok, err := s.hasGestaltAdmin(ctx, subjectID); err != nil || ok {
+		return ok, err
+	}
+	return s.hasExplicitGroupAdmin(ctx, subjectID, groupID)
+}
+
+func (s *Server) hasAnyGroupAdmin(ctx context.Context, subjectID string) (bool, error) {
+	if s == nil || s.authorization == nil {
+		return false, errors.New("authorization is unavailable")
+	}
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" {
+		return false, nil
+	}
+	resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
+		Filter: &proto.RelationshipFilter{
+			ResourceType: groupAuthorizationResourceType,
+			Relation:     groupAdminRelation,
+			Target: &proto.RelationshipTarget{
+				Kind: &proto.RelationshipTarget_Subject{
+					Subject: &proto.Subject{Type: "subject", Id: subjectID},
+				},
+			},
+		},
+		PageSize: 1,
+	})
 	if err != nil {
 		return false, err
 	}
-	for _, groupID := range groupIDs {
-		allowed, err := s.hasExplicitGroupAdmin(ctx, subjectID, groupID)
-		if err != nil {
-			return false, err
-		}
-		if allowed {
-			return true, nil
-		}
-	}
-	return false, nil
+	return len(resp.GetRelationships()) > 0, nil
 }
 
 func (s *Server) canCreateGroupAdminGroup(ctx context.Context, subjectID string) (bool, error) {
@@ -335,6 +360,52 @@ func (s *Server) countGroupMembers(ctx context.Context, groupID string) (int, er
 			return count, nil
 		}
 	}
+}
+
+func (s *Server) groupAdminShowAuthorizationMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.authorization == nil {
+			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+			return
+		}
+		subjectID, ok := s.resolveGroupAdminSubjectID(w, r)
+		if !ok {
+			return
+		}
+		groupID := strings.TrimSpace(chi.URLParam(r, "group"))
+		if groupID == "" {
+			writeError(w, http.StatusBadRequest, "group is required")
+			return
+		}
+		allowed, err := s.canViewGroupAdminGroup(r.Context(), subjectID, groupID)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+			return
+		}
+		if !allowed {
+			writeError(w, http.StatusForbidden, "group access denied")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) getGroupAdminGroup(w http.ResponseWriter, r *http.Request) {
+	groupID := strings.TrimSpace(chi.URLParam(r, "group"))
+	if groupID == "" {
+		writeError(w, http.StatusBadRequest, "group is required")
+		return
+	}
+	subjectID, ok := s.resolveGroupAdminSubjectID(w, r)
+	if !ok {
+		return
+	}
+	summary, err := s.groupAdminSummary(r.Context(), subjectID, groupID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }
 
 func (s *Server) listGroupAdminGroups(w http.ResponseWriter, r *http.Request) {
