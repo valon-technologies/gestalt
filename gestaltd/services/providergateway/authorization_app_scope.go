@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	appAuthorizationResourceType = "app"
-	appAdminRelation             = "admin"
+	appAuthorizationResourceType   = "app"
+	appAdminRelation               = "admin"
 	groupAuthorizationResourceType = "group"
 	groupAdminRelation             = "admin"
 	groupMemberRelation            = "member"
@@ -177,6 +177,9 @@ func allowsGroupScopedRelationshipMutation(
 	if authorization == nil || tuple == nil || !isGroupMemberRelationshipTuple(tuple) {
 		return false, nil
 	}
+	if !relationshipTupleHasDirectSubjectTarget(tuple) {
+		return false, nil
+	}
 	groupID := strings.TrimSpace(tuple.GetResource().GetId())
 	if groupID == "" {
 		return false, nil
@@ -238,7 +241,7 @@ func allowsAppScopedRelationshipMutation(
 func relationshipTupleHasDelegableTarget(tuple *proto.RelationshipTuple) bool {
 	switch tuple.GetTarget().GetKind().(type) {
 	case *proto.RelationshipTarget_Subject:
-		return strings.TrimSpace(tuple.GetTarget().GetSubject().GetId()) != ""
+		return relationshipTupleHasDirectSubjectTarget(tuple)
 	case *proto.RelationshipTarget_SubjectSet:
 		subjectSet := tuple.GetTarget().GetSubjectSet()
 		return strings.TrimSpace(subjectSet.GetResource().GetType()) != "" &&
@@ -246,4 +249,9 @@ func relationshipTupleHasDelegableTarget(tuple *proto.RelationshipTuple) bool {
 	default:
 		return false
 	}
+}
+
+func relationshipTupleHasDirectSubjectTarget(tuple *proto.RelationshipTuple) bool {
+	subject := tuple.GetTarget().GetSubject()
+	return subject != nil && strings.TrimSpace(subject.GetId()) != ""
 }

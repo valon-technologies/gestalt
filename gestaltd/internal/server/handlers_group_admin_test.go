@@ -173,6 +173,121 @@ func TestGroupAdminMembersMutations(t *testing.T) {
 	}
 }
 
+func TestGroupAdminCreatePersistsDisplayName(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	groupID := "servicemacusa-employees"
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "authorization", "authorization"),
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createRequest, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/groups",
+		bytes.NewBufferString(`{"id":"`+groupID+`","displayName":"ServiceMac employees"}`),
+	)
+	createRequest.Header.Set("Authorization", "Bearer alice-token")
+	createRequest.Header.Set("Content-Type", "application/json")
+	createResponse, err := http.DefaultClient.Do(createRequest)
+	if err != nil {
+		t.Fatalf("POST group: %v", err)
+	}
+	defer func() { _ = createResponse.Body.Close() }()
+	if createResponse.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createResponse.Body)
+		t.Fatalf("POST group status = %d: %s", createResponse.StatusCode, body)
+	}
+
+	var created struct {
+		Group struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"displayName"`
+			CanAdmin    bool   `json:"canAdmin"`
+		} `json:"group"`
+	}
+	if err := json.NewDecoder(createResponse.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created group: %v", err)
+	}
+	if created.Group.ID != groupID || created.Group.DisplayName != "ServiceMac employees" || !created.Group.CanAdmin {
+		t.Fatalf("created group = %#v", created.Group)
+	}
+	if got := authz.relationships[len(authz.relationships)-1].GetProperties().GetFields()["displayName"].GetStringValue(); got != "ServiceMac employees" {
+		t.Fatalf("stored displayName = %q", got)
+	}
+
+	getRequest, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/groups/"+groupID, nil)
+	getRequest.Header.Set("Authorization", "Bearer alice-token")
+	getResponse, err := http.DefaultClient.Do(getRequest)
+	if err != nil {
+		t.Fatalf("GET group: %v", err)
+	}
+	defer func() { _ = getResponse.Body.Close() }()
+	if getResponse.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(getResponse.Body)
+		t.Fatalf("GET group status = %d: %s", getResponse.StatusCode, body)
+	}
+
+	var summary struct {
+		DisplayName string `json:"displayName"`
+	}
+	if err := json.NewDecoder(getResponse.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode group: %v", err)
+	}
+	if summary.DisplayName != "ServiceMac employees" {
+		t.Fatalf("GET group displayName = %q", summary.DisplayName)
+	}
+}
+
+func TestGroupAdminCreateRejectsExistingGroup(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	groupID := "servicemacusa-employees"
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "authorization", "authorization"),
+			testAuthorizationRelationship("user:existing@example.com", "member", "group", groupID),
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createRequest, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/groups",
+		bytes.NewBufferString(`{"id":"`+groupID+`","displayName":"ServiceMac employees"}`),
+	)
+	createRequest.Header.Set("Authorization", "Bearer alice-token")
+	createRequest.Header.Set("Content-Type", "application/json")
+	createResponse, err := http.DefaultClient.Do(createRequest)
+	if err != nil {
+		t.Fatalf("POST group: %v", err)
+	}
+	defer func() { _ = createResponse.Body.Close() }()
+	if createResponse.StatusCode != http.StatusConflict {
+		body, _ := io.ReadAll(createResponse.Body)
+		t.Fatalf("POST existing group status = %d, want 409: %s", createResponse.StatusCode, body)
+	}
+	if len(authz.addRelationshipRequests) != 0 {
+		t.Fatalf("add relationship requests = %d, want 0", len(authz.addRelationshipRequests))
+	}
+}
+
 func TestGroupAdminScimGroupIsReadOnly(t *testing.T) {
 	t.Parallel()
 
