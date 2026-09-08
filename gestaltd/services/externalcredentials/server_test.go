@@ -55,6 +55,7 @@ func TestExternalCredentialCapabilityDiscoveryFallsBackToLegacyOnFailure(t *test
 	for _, code := range []codes.Code{codes.Unimplemented, codes.Unavailable, codes.DeadlineExceeded} {
 		code := code
 		t.Run(code.String(), func(t *testing.T) {
+			t.Parallel()
 			got := externalCredentialProviderPersistsAccountKey(context.Background(), func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error) {
 				return nil, status.Error(code, "capability service unavailable")
 			})
