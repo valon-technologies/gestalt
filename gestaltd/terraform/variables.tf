@@ -36,14 +36,7 @@ variable "ci_binary_bucket_location" {
 variable "gestaltd_chart_reader_service_accounts" {
   description = "Service account emails allowed to read gestaltd Helm charts from Artifact Registry."
   type        = set(string)
-  default = [
-    "github-deploy-dev@valon-tools-dev.iam.gserviceaccount.com",
-    "github-deploy-stage@valon-tools-stage.iam.gserviceaccount.com",
-    "terraform-dev@valon-tools-dev.iam.gserviceaccount.com",
-    "terraform-stage@valon-tools-stage.iam.gserviceaccount.com",
-    "tools-dev-nodes@valon-tools-dev.iam.gserviceaccount.com",
-    "tools-stage-nodes@valon-tools-stage.iam.gserviceaccount.com",
-  ]
+  default     = []
 }
 
 variable "gestaltd_ci_image_reader_service_accounts" {
