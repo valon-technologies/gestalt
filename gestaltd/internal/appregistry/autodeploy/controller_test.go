@@ -366,7 +366,7 @@ type fakeFleetHealthReader struct {
 	err        error
 }
 
-func (f fakeFleetHealthReader) Project(context.Context, string) (*core.AppFleetProjection, error) {
+func (f fakeFleetHealthReader) ProjectForRollout(context.Context, *core.AppRollout) (*core.AppFleetProjection, error) {
 	return f.projection, f.err
 }
 
@@ -386,6 +386,7 @@ func testController(services *testutil.Services, reader RegistryReader, installe
 		services.AppVersionChangeRequests,
 		reader,
 		installer,
+		fakeFleetHealthReader{},
 		map[string]AppConfig{
 			"g-issues": {Registry: "toolshed", PublicRoot: "https://registry.test"},
 		},

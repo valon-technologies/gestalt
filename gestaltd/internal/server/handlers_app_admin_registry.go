@@ -438,7 +438,7 @@ func appAdminAutoDeployFromCore(settings *core.AppAutoDeploySettings) appAdminAu
 	return appAdminAutoDeploy{
 		Enabled:        settings.Enabled,
 		Paused:         settings.Paused,
-		PauseReason:    settings.PauseReason,
+		PauseReason:    string(settings.PauseReason),
 		PendingVersion: settings.PendingVersion,
 		LastError:      settings.LastError,
 	}
@@ -691,17 +691,7 @@ func (s *Server) selectAppAdminRegistryVersion(w http.ResponseWriter, r *http.Re
 		Version:  version,
 		Actor:    subjectID,
 	}
-	install := s.appRegistryInstaller.Select
-	if s.appRollouts != nil && s.appVersionChanges != nil {
-		if rollout, rolloutErr := s.appRollouts.Get(r.Context(), app.name); rolloutErr == nil &&
-			rollout.State == core.AppRolloutStateFailed && rollout.Version == version {
-			if known, knownErr := s.appVersionChanges.ListKnownVersionsByApp(r.Context(), app.name); knownErr == nil &&
-				coredata.LatestKnownVersion(known) == version {
-				install = s.appRegistryInstaller.Retry
-			}
-		}
-	}
-	result, err := install(r.Context(), installInput)
+	result, err := s.appRegistryInstaller.Select(r.Context(), installInput)
 	if err != nil {
 		writeAppAdminRegistryInstallError(w, err)
 		return
@@ -757,6 +747,7 @@ func writeAppAdminRegistryInstallError(w http.ResponseWriter, err error) {
 	status := http.StatusBadGateway
 	switch {
 	case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled),
+		errors.Is(err, appregistry.ErrAppRolloutRetryNotAllowed),
 		errors.Is(err, appregistry.ErrInstallValidationFailed),
 		errors.Is(err, appregistry.ErrAppVersionExpired),
 		errors.Is(err, appregistry.ErrAppVersionLocked):

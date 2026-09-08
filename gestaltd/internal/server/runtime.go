@@ -769,26 +769,27 @@ func startAppRegistryAutoDeployController(
 		SourceVersion:    appregistry.ResolveSourceVersion(),
 		RolloutMode:      core.AppRolloutMode(cfg.Server.AppRegistry.RolloutMode),
 	}
-	controller := autodeploy.New(
-		services.AutoDeploySettings,
-		services.AppRollouts,
-		services.AppVersionChangeRequests,
-		reader,
-		installer,
-		apps,
-		interval,
-	)
 	heartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
 	if err != nil {
 		return nil, fmt.Errorf("server.appRegistry.heartbeatTtl: %w", err)
 	}
-	controller.Fleet = &appregistry.FleetProjector{
+	fleet := &appregistry.FleetProjector{
 		ChangeRequests: services.AppVersionChangeRequests,
 		SourceVersions: services.GestaltdSourceVersionState,
 		Heartbeats:     services.GestaltdInstanceHeartbeats,
 		Rollouts:       services.AppRollouts,
 		HeartbeatTTL:   heartbeatTTL,
 	}
+	controller := autodeploy.New(
+		services.AutoDeploySettings,
+		services.AppRollouts,
+		services.AppVersionChangeRequests,
+		reader,
+		installer,
+		fleet,
+		apps,
+		interval,
+	)
 	controller.Start(ctx)
 	return controller, nil
 }

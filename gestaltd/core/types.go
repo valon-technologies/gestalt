@@ -199,12 +199,21 @@ type AppAutoDeploySettings struct {
 	App                 string
 	Enabled             bool
 	Paused              bool
-	PauseReason         string
+	PauseReason         AppAutoDeployPauseReason
 	PendingVersion      string
 	LastSeenVersion     string
 	LastError           string
 	LastFailedRolloutAt time.Time
 }
+
+// AppAutoDeployPauseReason identifies why the controller stopped automatic
+// admissions. It is intentionally separate from the user-controlled Enabled
+// setting.
+type AppAutoDeployPauseReason string
+
+const (
+	AppAutoDeployPauseReasonRolloutFailed AppAutoDeployPauseReason = "rollout_failed"
+)
 
 type AppVersionRolloutOutcome struct {
 	ID          string

@@ -110,7 +110,7 @@ func normalizeAppAutoDeploySettings(settings *core.AppAutoDeploySettings) {
 	settings.App = strings.TrimSpace(settings.App)
 	settings.PendingVersion = strings.TrimSpace(settings.PendingVersion)
 	settings.LastSeenVersion = strings.TrimSpace(settings.LastSeenVersion)
-	settings.PauseReason = strings.TrimSpace(settings.PauseReason)
+	settings.PauseReason = core.AppAutoDeployPauseReason(strings.TrimSpace(string(settings.PauseReason)))
 	settings.LastError = strings.TrimSpace(settings.LastError)
 	if !settings.LastFailedRolloutAt.IsZero() {
 		settings.LastFailedRolloutAt = settings.LastFailedRolloutAt.UTC().Truncate(time.Millisecond)
@@ -123,7 +123,7 @@ func appAutoDeploySettingsRecord(settings *core.AppAutoDeploySettings) idb.Recor
 		"app":                    settings.App,
 		"enabled":                settings.Enabled,
 		"paused":                 settings.Paused,
-		"pause_reason":           settings.PauseReason,
+		"pause_reason":           string(settings.PauseReason),
 		"pending_version":        settings.PendingVersion,
 		"last_seen_version":      settings.LastSeenVersion,
 		"last_error":             settings.LastError,
@@ -137,7 +137,7 @@ func recordToAppAutoDeploySettings(rec idb.Record) *core.AppAutoDeploySettings {
 		App:                 recString(rec, "app"),
 		Enabled:             enabled,
 		Paused:              recBool(rec, "paused"),
-		PauseReason:         recString(rec, "pause_reason"),
+		PauseReason:         core.AppAutoDeployPauseReason(recString(rec, "pause_reason")),
 		PendingVersion:      recString(rec, "pending_version"),
 		LastSeenVersion:     recString(rec, "last_seen_version"),
 		LastError:           recString(rec, "last_error"),

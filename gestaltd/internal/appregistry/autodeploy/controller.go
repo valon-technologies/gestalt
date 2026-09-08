@@ -30,7 +30,7 @@ type Installer interface {
 }
 
 type FleetHealthReader interface {
-	Project(ctx context.Context, app string) (*core.AppFleetProjection, error)
+	ProjectForRollout(ctx context.Context, rollout *core.AppRollout) (*core.AppFleetProjection, error)
 }
 
 type Controller struct {
@@ -57,6 +57,7 @@ func New(
 	changeRequests *coredata.AppVersionChangeRequestService,
 	reader RegistryReader,
 	installer Installer,
+	fleet FleetHealthReader,
 	apps map[string]AppConfig,
 	interval time.Duration,
 ) *Controller {
@@ -72,6 +73,7 @@ func New(
 		ChangeRequests: changeRequests,
 		Reader:         reader,
 		Installer:      installer,
+		Fleet:          fleet,
 		Apps:           cloneApps(apps),
 		Interval:       interval,
 		done:           make(chan struct{}),
@@ -210,7 +212,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 					current.LastError = ""
 				} else {
 					current.Paused = true
-					current.PauseReason = "rollout_failed"
+					current.PauseReason = core.AppAutoDeployPauseReasonRolloutFailed
 					current.LastError = fmt.Sprintf("automatic deployment paused after rollout for %s failed; retry the version to resume", rollout.Version)
 				}
 				return nil
@@ -322,7 +324,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 
 func (c *Controller) validate() error {
 	if c == nil || c.Settings == nil || c.Rollouts == nil || c.ChangeRequests == nil ||
-		c.Reader == nil || c.Installer == nil {
+		c.Reader == nil || c.Installer == nil || c.Fleet == nil {
 		return fmt.Errorf("auto-deploy controller is not configured")
 	}
 	return nil
@@ -335,7 +337,7 @@ func (c *Controller) failedRolloutIsHealthy(ctx context.Context, app string, rol
 	if c.Fleet == nil {
 		return false, fmt.Errorf("check failed rollout health: fleet health reader is not configured")
 	}
-	projection, err := c.Fleet.Project(ctx, app)
+	projection, err := c.Fleet.ProjectForRollout(ctx, rollout)
 	if err != nil {
 		return false, fmt.Errorf("check failed rollout health for %s: %w", app, err)
 	}

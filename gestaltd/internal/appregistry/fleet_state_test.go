@@ -1,11 +1,55 @@
 package appregistry
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 )
+
+type rolloutProjectionHeartbeats struct {
+	source     string
+	heartbeats []*core.GestaltdInstanceHeartbeat
+}
+
+func (r rolloutProjectionHeartbeats) ListFreshBySourceVersion(_ context.Context, source string, _ time.Time) ([]*core.GestaltdInstanceHeartbeat, error) {
+	if source != r.source {
+		return nil, nil
+	}
+	return r.heartbeats, nil
+}
+
+func TestFleetProjectorProjectForRolloutUsesRolloutSnapshot(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	projector := &FleetProjector{
+		Heartbeats: rolloutProjectionHeartbeats{
+			source: "source-old",
+			heartbeats: []*core.GestaltdInstanceHeartbeat{
+				heartbeatForFleet("one", "source-old", now, map[string]core.GestaltdInstanceAppHeartbeat{
+					"app": {State: core.GestaltdInstanceAppStateRunning, RunningVersion: "v1"},
+				}),
+			},
+		},
+		HeartbeatTTL: time.Minute,
+		Now:          func() time.Time { return now },
+	}
+	projection, err := projector.ProjectForRollout(context.Background(), &core.AppRollout{
+		App:                     "app",
+		Version:                 "v1",
+		Mode:                    core.AppRolloutModeHeartbeat,
+		TargetSourceVersion:     "source-old",
+		MinimumHealthyInstances: 1,
+	})
+	if err != nil {
+		t.Fatalf("ProjectForRollout: %v", err)
+	}
+	if projection.State != core.AppFleetStateHealthy ||
+		projection.SourceVersion != "source-old" || projection.DesiredVersion != "v1" {
+		t.Fatalf("projection = %#v", projection)
+	}
+}
 
 func TestEvaluateFleetState(t *testing.T) {
 	t.Parallel()

@@ -180,6 +180,8 @@ var AppAutoDeploySettingsSchema = idb.ObjectStoreOptions{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "app", Type: idb.TypeString, NotNull: true, Unique: true},
 		{Name: "enabled", Type: idb.TypeBool, NotNull: true},
+		{Name: "paused", Type: idb.TypeBool},
+		{Name: "pause_reason", Type: idb.TypeString},
 		{Name: "pending_version", Type: idb.TypeString},
 		{Name: "last_seen_version", Type: idb.TypeString},
 		{Name: "last_error", Type: idb.TypeString},

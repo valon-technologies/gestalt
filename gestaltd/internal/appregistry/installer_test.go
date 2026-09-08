@@ -146,7 +146,7 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 	}
 }
 
-func TestInstallerRetryReadmitsOnlyTheFailedDesiredVersion(t *testing.T) {
+func TestInstallerSelectReadmitsOnlyTheFailedDesiredVersion(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -179,12 +179,12 @@ func TestInstallerRetryReadmitsOnlyTheFailedDesiredVersion(t *testing.T) {
 		t.Fatalf("MarkFailed: %v", err)
 	}
 
-	if _, err := installer.Retry(ctx, appregistry.InstallInput{
+	if _, err := installer.Select(ctx, appregistry.InstallInput{
 		Registry: "toolshed",
 		App:      "g-issues",
 		Version:  fixture.Version,
 	}); err != nil {
-		t.Fatalf("Retry: %v", err)
+		t.Fatalf("Select failed desired version: %v", err)
 	}
 	requests, err := svc.AppVersionChangeRequests.ListRequestsByApp(ctx, "g-issues")
 	if err != nil {
@@ -237,6 +237,39 @@ func TestInstallerRetryRejectsAnActiveRollout(t *testing.T) {
 		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
 	}); !errors.Is(err, appregistry.ErrAppRolloutActive) {
 		t.Fatalf("Retry error = %v, want %v", err, appregistry.ErrAppRolloutActive)
+	}
+}
+
+func TestInstallerRetryRejectsACompletedRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	configEntry := configEntryWithResolvedVersion("0.0.0-config")
+	configEntry.Source.Registry = "toolshed"
+	installer := &appregistry.Installer{
+		Registries:     map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		ConfigApps:     map[string]*config.ProviderEntry{"g-issues": configEntry},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
+	}
+	first, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
+	})
+	if err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if _, err := svc.AppRollouts.MarkCompleteForRollout(ctx, first.Rollout, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkComplete: %v", err)
+	}
+
+	if _, err := installer.Retry(ctx, appregistry.InstallInput{
+		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
+	}); !errors.Is(err, appregistry.ErrAppRolloutRetryNotAllowed) {
+		t.Fatalf("Retry error = %v, want %v", err, appregistry.ErrAppRolloutRetryNotAllowed)
 	}
 }
 
