@@ -112,6 +112,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		SelectedAuthProvider:  result.SelectedAuthProvider,
 		AuthProviders:         result.AuthProviders,
 		Authorization:         authorizationProvider,
+		DisplayNameResolver:   result.DisplayNameResolver,
 		ProviderKinds:         bootstrap.ProviderAuthorizationKinds(cfg),
 		AuthorizationPolicies: bootstrap.ProviderAuthorizationPolicies(cfg),
 		AuditSink:             result.AuditSink,

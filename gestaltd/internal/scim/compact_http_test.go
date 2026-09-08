@@ -150,6 +150,41 @@ func TestCompactSCIMUserAndGroupContract(t *testing.T) {
 		t.Fatal("missing ETag")
 	}
 }
+
+func TestSCIMAuthorizationResourceDisplayNameFollowsGroup(t *testing.T) {
+	t.Parallel()
+
+	service, _, handler := newSCIMService(t, nil, newRecordingAuthorization(), testSCIMConfig(map[string]config.SCIMClientConfig{
+		"rippling": ripplingClient(nil),
+	}))
+	created := scimRequest(t, handler, http.MethodPost, "/scim/v2/Groups", testCurrentToken, map[string]any{
+		"schemas":     []string{scim.GroupSchemaURN},
+		"displayName": "Engineering",
+	})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create group: %d %s", created.Code, created.Body.String())
+	}
+	var group scim.Group
+	if err := json.Unmarshal(created.Body.Bytes(), &group); err != nil {
+		t.Fatal(err)
+	}
+
+	name, err := service.ResolveAuthorizationResourceDisplayName(context.Background(), &proto.Resource{Type: "group", Id: group.ID})
+	if err != nil || name != "Engineering" {
+		t.Fatalf("resolved initial group name = %q, err = %v", name, err)
+	}
+	updated := scimRequest(t, handler, http.MethodPut, "/scim/v2/Groups/"+group.ID, testCurrentToken, map[string]any{
+		"schemas":     []string{scim.GroupSchemaURN},
+		"displayName": "Platform Engineering",
+	})
+	if updated.Code != http.StatusOK {
+		t.Fatalf("rename group: %d %s", updated.Code, updated.Body.String())
+	}
+	name, err = service.ResolveAuthorizationResourceDisplayName(context.Background(), &proto.Resource{Type: "group", Id: group.ID})
+	if err != nil || name != "Platform Engineering" {
+		t.Fatalf("resolved renamed group name = %q, err = %v", name, err)
+	}
+}
 func TestCompactSCIMNamespaceAndETag(t *testing.T) {
 	t.Parallel()
 	h, _, _ := setup(t)

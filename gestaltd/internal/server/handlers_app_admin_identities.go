@@ -54,7 +54,8 @@ func (s *Server) projectAppAdminIdentityRows(ctx context.Context, rows []appAdmi
 	allowLookup := s.userLookupAllowed(ctx)
 	labels := make(map[string]string)
 	out := make([]appAdminIdentityRow, 0)
-	for _, row := range rows {
+	for i := range rows {
+		row := rows[i]
 		if !isAppAdminServiceAccountRow(row) {
 			continue
 		}

@@ -432,18 +432,33 @@ fn member_row(value: &Value) -> Vec<String> {
             .and_then(Value::as_bool)
             .map(|mutable| mutable.to_string())
             .unwrap_or_default(),
-        value
-            .get("subjectId")
-            .or_else(|| value.get("selectorValue"))
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string(),
+        member_subject_label(value),
         value
             .get("email")
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string(),
     ]
+}
+
+fn member_subject_label(value: &Value) -> String {
+    let selector = value
+        .get("subjectId")
+        .or_else(|| value.get("selectorValue"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let display_name = value
+        .get("subjectSet")
+        .and_then(|subject_set| subject_set.get("resource"))
+        .and_then(|resource| resource.get("displayName"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty());
+    match display_name {
+        Some(name) if !selector.is_empty() => format!("{name} ({selector})"),
+        Some(name) => name.to_string(),
+        None => selector.to_string(),
+    }
 }
 
 fn is_service_account_subject(subject_id: &str) -> bool {
@@ -531,8 +546,9 @@ struct OperationOverrideBody {
 mod tests {
     use super::{
         AppAdminMember, AuthorizationAppsAllowedOperationsSetArgs,
-        canonical_subject_id_from_members, is_service_account_subject, normalize_subject_id,
-        parse_operation_roles_assignment, subject_id_for_email_in_members, subject_matches_member,
+        canonical_subject_id_from_members, is_service_account_subject, member_subject_label,
+        normalize_subject_id, parse_operation_roles_assignment, subject_id_for_email_in_members,
+        subject_matches_member,
     };
 
     #[test]
@@ -604,6 +620,15 @@ mod tests {
             subject_id_for_email_in_members(&members, "bob@example.com"),
             None
         );
+    }
+
+    #[test]
+    fn member_subject_label_prefers_subject_set_display_name_and_keeps_selector() {
+        let row = serde_json::json!({
+            "selectorValue": "group:eng#member",
+            "subjectSet": {"resource": {"displayName": "Engineering"}}
+        });
+        assert_eq!(member_subject_label(&row), "Engineering (group:eng#member)");
     }
 
     #[test]

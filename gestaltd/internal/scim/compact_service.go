@@ -61,6 +61,23 @@ type CompactService struct {
 	now           func() time.Time
 }
 
+func (s *CompactService) authorizationResourceDisplayName(ctx context.Context, resource *proto.Resource) (string, error) {
+	if resource == nil || !strings.EqualFold(strings.TrimSpace(resource.GetType()), "group") || strings.TrimSpace(resource.GetId()) == "" {
+		return "", nil
+	}
+	record, err := s.db.ObjectStore(coredata.StoreSCIMResources).Get(ctx, strings.TrimSpace(resource.GetId()))
+	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	if recordString(record, "resource_type") != "Group" {
+		return "", nil
+	}
+	return strings.TrimSpace(recordString(record, "display_name")), nil
+}
+
 func NewService(db coredb.IndexedDB, authorization core.AuthorizationProvider, baseURL string, cfg config.ServerSCIMConfig) (*Service, error) {
 	s := &CompactService{db: db, authorization: authorization, baseURL: strings.TrimRight(baseURL, "/"), clients: map[string]*compactClient{}, domainOwners: map[string]string{}, now: time.Now}
 	if _, err := db.CreateObjectStore(context.Background(), coredata.StoreSCIMResources, coredata.SCIMResourcesSchema); err != nil && !errors.Is(err, idb.ErrAlreadyExists) {
