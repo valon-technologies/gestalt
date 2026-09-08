@@ -29,12 +29,17 @@ type Installer interface {
 	Select(ctx context.Context, input appregistry.InstallInput) (*appregistry.InstallOutput, error)
 }
 
+type FleetHealthReader interface {
+	ProjectForRollout(ctx context.Context, rollout *core.AppRollout) (*core.AppFleetProjection, error)
+}
+
 type Controller struct {
 	Settings       *coredata.AutoDeploySettingsService
 	Rollouts       *coredata.AppRolloutService
 	ChangeRequests *coredata.AppVersionChangeRequestService
 	Reader         RegistryReader
 	Installer      Installer
+	Fleet          FleetHealthReader
 	Apps           map[string]AppConfig
 	Interval       time.Duration
 
@@ -52,6 +57,7 @@ func New(
 	changeRequests *coredata.AppVersionChangeRequestService,
 	reader RegistryReader,
 	installer Installer,
+	fleet FleetHealthReader,
 	apps map[string]AppConfig,
 	interval time.Duration,
 ) *Controller {
@@ -67,6 +73,7 @@ func New(
 		ChangeRequests: changeRequests,
 		Reader:         reader,
 		Installer:      installer,
+		Fleet:          fleet,
 		Apps:           cloneApps(apps),
 		Interval:       interval,
 		done:           make(chan struct{}),
@@ -146,7 +153,7 @@ func (c *Controller) ReconcileAll(ctx context.Context) error {
 	if err := c.validate(); err != nil {
 		return err
 	}
-	settings, err := c.Settings.ListEnabled(ctx)
+	settings, err := c.Settings.ListAll(ctx)
 	if err != nil {
 		return err
 	}
@@ -178,23 +185,36 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 	if err != nil {
 		return err
 	}
-	if !settings.Enabled {
-		return nil
-	}
-
 	rollout, err := c.Rollouts.Get(ctx, appName)
 	if err != nil && !errors.Is(err, core.ErrNotFound) {
 		return err
 	}
+	if !settings.Enabled {
+		return nil
+	}
+	if settings.Paused {
+		return nil
+	}
 	if rollout != nil && rollout.State == core.AppRolloutStateFailed {
 		failedAt := rollout.FailedAt.UTC().Truncate(time.Millisecond)
 		if settings.LastFailedRolloutAt.Before(failedAt) {
-			_, updateErr := c.Settings.Update(ctx, appName, func(current *core.AppAutoDeploySettings) error {
-				current.Enabled = false
+			healthy, healthErr := c.failedRolloutIsHealthy(ctx, appName, rollout)
+			if healthErr != nil {
+				return healthErr
+			}
+			_, _, updateErr := c.Settings.UpdateForRollout(ctx, rollout, func(current *core.AppAutoDeploySettings) error {
 				current.PendingVersion = ""
 				current.LastSeenVersion = ""
-				current.LastError = fmt.Sprintf("rollout for %s failed", rollout.Version)
 				current.LastFailedRolloutAt = failedAt
+				if healthy {
+					current.Paused = false
+					current.PauseReason = ""
+					current.LastError = ""
+				} else {
+					current.Paused = true
+					current.PauseReason = core.AppAutoDeployPauseReasonRolloutFailed
+					current.LastError = fmt.Sprintf("Automatic deployment is paused because rollout of version %s failed. Select that version again to retry.", rollout.Version)
+				}
 				return nil
 			})
 			return updateErr
@@ -220,7 +240,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 		if len(versions) > 0 {
 			newest := versions[0].Version
 			settings, err = c.Settings.Update(ctx, appName, func(current *core.AppAutoDeploySettings) error {
-				if !current.Enabled {
+				if !current.Enabled || current.Paused {
 					return nil
 				}
 				if current.LastSeenVersion != newest {
@@ -237,6 +257,9 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 	}
 
 	if !settings.Enabled {
+		return nil
+	}
+	if settings.Paused {
 		return nil
 	}
 	if rollout != nil && (rollout.State == core.AppRolloutStateEnrolling || rollout.State == core.AppRolloutStateRestarting) {
@@ -301,10 +324,25 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 
 func (c *Controller) validate() error {
 	if c == nil || c.Settings == nil || c.Rollouts == nil || c.ChangeRequests == nil ||
-		c.Reader == nil || c.Installer == nil {
+		c.Reader == nil || c.Installer == nil || c.Fleet == nil {
 		return fmt.Errorf("auto-deploy controller is not configured")
 	}
 	return nil
+}
+
+func (c *Controller) failedRolloutIsHealthy(ctx context.Context, app string, rollout *core.AppRollout) (bool, error) {
+	if rollout == nil {
+		return false, fmt.Errorf("check failed rollout health: rollout is required")
+	}
+	if c.Fleet == nil {
+		return false, fmt.Errorf("check failed rollout health: fleet health reader is not configured")
+	}
+	projection, err := c.Fleet.ProjectForRollout(ctx, rollout)
+	if err != nil {
+		return false, fmt.Errorf("check failed rollout health for %s: %w", app, err)
+	}
+	return projection != nil && projection.State == core.AppFleetStateHealthy &&
+		strings.TrimSpace(projection.DesiredVersion) == strings.TrimSpace(rollout.Version), nil
 }
 
 func isCandidateRejection(err error) bool {

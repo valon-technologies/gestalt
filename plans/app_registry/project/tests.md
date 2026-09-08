@@ -589,7 +589,7 @@ go test ./internal/coredata/... -run TestAutoDeploySettingsService -count=1
 | --- | --- |
 | `TestAutoDeploySettingsService/missing_settings` | `Get` returns `ErrNotFound` for an app with no row |
 | `TestAutoDeploySettingsService/update_initializes_and_round_trips` | `Update` creates a row, normalizes fields, and round-trips through `Get` |
-| `TestAutoDeploySettingsService/list_enabled` | `ListEnabled` returns only apps with `enabled: true` |
+| `TestAutoDeploySettingsService/update_initializes_and_round_trips` | `Update` persists pause state alongside the legacy settings schema |
 
 ### Gestalt Controller Tests (`autodeploy/controller_test.go`)
 
@@ -606,7 +606,7 @@ go test ./internal/appregistry/autodeploy/... -count=1
 | --- | --- |
 | `TestControllerDetectsAndAdmitsNewestVersion` | Publish detection admits the newest snapshot when no rollout is active |
 | `TestControllerCoalescesDuringActiveRollout` | Active rollout updates `pending_version` without starting a second admission |
-| `TestControllerDisablesOnFailedRollout` | Rollout `failed` disables auto-deploy, clears pending, and records `last_error` |
+| `TestControllerPausesOnFailedRollout` | Rollout `failed` pauses auto-deploy while retaining `enabled`, clears pending, and records `last_error` |
 | `TestControllerCandidateRejectionWaitsForNextPublish` | Validation failure clears pending and records `last_error` without retrying until the next publish |
 
 ### Gestalt API Tests (`handlers_app_admin_registry_test.go`)

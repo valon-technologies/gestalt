@@ -146,6 +146,133 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 	}
 }
 
+func TestInstallerSelectReadmitsOnlyTheFailedDesiredVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	configEntry := configEntryWithResolvedVersion("0.0.0-config")
+	configEntry.Source.Registry = "toolshed"
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": configEntry,
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
+	}
+
+	first, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+	})
+	if err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if _, err := svc.AppRollouts.MarkFailedForRollout(ctx, first.Rollout, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+
+	if _, err := installer.Select(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+	}); err != nil {
+		t.Fatalf("Select failed desired version: %v", err)
+	}
+	requests, err := svc.AppVersionChangeRequests.ListRequestsByApp(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("ListRequestsByApp: %v", err)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want fresh retry request", len(requests))
+	}
+	second, err := svc.AppRollouts.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get retry rollout: %v", err)
+	}
+	if _, err := svc.AppRollouts.MarkFailedForRollout(ctx, second, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkFailed retry rollout: %v", err)
+	}
+
+	if _, err := installer.Select(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  "not-current",
+	}); err == nil {
+		t.Fatal("Retry accepted a version other than the current desired version")
+	}
+}
+
+func TestInstallerRetryRejectsAnActiveRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	configEntry := configEntryWithResolvedVersion("0.0.0-config")
+	configEntry.Source.Registry = "toolshed"
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": configEntry,
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
+	}
+	if _, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
+	}); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if _, err := installer.Select(ctx, appregistry.InstallInput{
+		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
+	}); !errors.Is(err, appregistry.ErrAppRolloutActive) {
+		t.Fatalf("Retry error = %v, want %v", err, appregistry.ErrAppRolloutActive)
+	}
+}
+
+func TestInstallerSelectRejectsACompletedCurrentRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	configEntry := configEntryWithResolvedVersion("0.0.0-config")
+	configEntry.Source.Registry = "toolshed"
+	installer := &appregistry.Installer{
+		Registries:     map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		ConfigApps:     map[string]*config.ProviderEntry{"g-issues": configEntry},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
+	}
+	first, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
+	})
+	if err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if _, err := svc.AppRollouts.MarkCompleteForRollout(ctx, first.Rollout, time.Now().UTC()); err != nil {
+		t.Fatalf("MarkComplete: %v", err)
+	}
+
+	if _, err := installer.Select(ctx, appregistry.InstallInput{
+		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
+	}); !errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled) {
+		t.Fatalf("Select error = %v, want %v", err, appregistry.ErrAppVersionAlreadyInstalled)
+	}
+}
+
 func TestInstaller_creates_one_active_rollout_per_app(t *testing.T) {
 	t.Parallel()
 

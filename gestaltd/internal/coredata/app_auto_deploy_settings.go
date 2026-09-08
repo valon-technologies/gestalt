@@ -52,13 +52,13 @@ func (s *AutoDeploySettingsService) Get(ctx context.Context, app string) (*core.
 	return recordToAppAutoDeploySettings(rec), nil
 }
 
-func (s *AutoDeploySettingsService) ListEnabled(ctx context.Context) ([]*core.AppAutoDeploySettings, error) {
+func (s *AutoDeploySettingsService) ListAll(ctx context.Context) ([]*core.AppAutoDeploySettings, error) {
 	if s == nil {
-		return nil, fmt.Errorf("list enabled app auto-deploy settings: service is not configured")
+		return nil, fmt.Errorf("list app auto-deploy settings: service is not configured")
 	}
-	recs, err := s.store.Index("by_enabled").GetAll(ctx, true)
+	recs, err := s.store.GetAll(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("list enabled app auto-deploy settings: %w", err)
+		return nil, fmt.Errorf("list app auto-deploy settings: %w", err)
 	}
 	out := make([]*core.AppAutoDeploySettings, 0, len(recs))
 	for _, rec := range recs {
@@ -106,10 +106,100 @@ func (s *AutoDeploySettingsService) Update(
 	return settings, nil
 }
 
+// UpdateForRollout applies an update only while expected is still the current
+// failed rollout. Reading both records in one transaction prevents a stale
+// controller observation from pausing a newer manual retry.
+func (s *AutoDeploySettingsService) UpdateForRollout(
+	ctx context.Context,
+	expected *core.AppRollout,
+	update func(*core.AppAutoDeploySettings) error,
+) (*core.AppAutoDeploySettings, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: service is not configured")
+	}
+	if expected == nil {
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: rollout is required")
+	}
+	if update == nil {
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: update function is required")
+	}
+	app := strings.TrimSpace(expected.App)
+	if app == "" {
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: rollout app is required")
+	}
+	if err := s.EnsureStore(ctx); err != nil {
+		return nil, false, err
+	}
+
+	tx, err := s.db.Transaction(ctx, []string{StoreAppAutoDeploySettings, StoreAppRollouts}, idb.TransactionReadwrite, idb.TransactionOptions{})
+	if err != nil {
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+
+	rolloutRec, err := tx.ObjectStore(StoreAppRollouts).Get(ctx, app)
+	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			if err := tx.Commit(ctx); err != nil {
+				return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: commit unchanged: %w", err)
+			}
+			committed = true
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: load current rollout: %w", err)
+	}
+	currentRollout := recordToAppRollout(rolloutRec)
+	if !sameAppRolloutIdentity(currentRollout, expected) || currentRollout.State != core.AppRolloutStateFailed {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: commit unchanged: %w", err)
+		}
+		committed = true
+		return nil, false, nil
+	}
+
+	settings := &core.AppAutoDeploySettings{App: app}
+	settingsRec, err := tx.ObjectStore(StoreAppAutoDeploySettings).Get(ctx, app)
+	if err == nil {
+		settings = recordToAppAutoDeploySettings(settingsRec)
+	} else if !errors.Is(err, idb.ErrNotFound) {
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: load current settings: %w", err)
+	}
+	if err := update(settings); err != nil {
+		return nil, false, err
+	}
+	settings.App = app
+	normalizeAppAutoDeploySettings(settings)
+	if err := tx.ObjectStore(StoreAppAutoDeploySettings).Put(ctx, appAutoDeploySettingsRecord(settings)); err != nil {
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: write: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, false, fmt.Errorf("update app auto-deploy settings for rollout: commit: %w", err)
+	}
+	committed = true
+	return settings, true, nil
+}
+
+func sameAppRolloutIdentity(left, right *core.AppRollout) bool {
+	if left == nil || right == nil {
+		return false
+	}
+	return strings.TrimSpace(left.App) == strings.TrimSpace(right.App) &&
+		strings.TrimSpace(left.Version) == strings.TrimSpace(right.Version) &&
+		left.Mode == right.Mode &&
+		strings.TrimSpace(left.TargetSourceVersion) == strings.TrimSpace(right.TargetSourceVersion) &&
+		left.CreatedAt.Equal(right.CreatedAt)
+}
+
 func normalizeAppAutoDeploySettings(settings *core.AppAutoDeploySettings) {
 	settings.App = strings.TrimSpace(settings.App)
 	settings.PendingVersion = strings.TrimSpace(settings.PendingVersion)
 	settings.LastSeenVersion = strings.TrimSpace(settings.LastSeenVersion)
+	settings.PauseReason = core.AppAutoDeployPauseReason(strings.TrimSpace(string(settings.PauseReason)))
 	settings.LastError = strings.TrimSpace(settings.LastError)
 	if !settings.LastFailedRolloutAt.IsZero() {
 		settings.LastFailedRolloutAt = settings.LastFailedRolloutAt.UTC().Truncate(time.Millisecond)
@@ -121,6 +211,8 @@ func appAutoDeploySettingsRecord(settings *core.AppAutoDeploySettings) idb.Recor
 		"id":                     settings.App,
 		"app":                    settings.App,
 		"enabled":                settings.Enabled,
+		"paused":                 settings.Paused,
+		"pause_reason":           string(settings.PauseReason),
 		"pending_version":        settings.PendingVersion,
 		"last_seen_version":      settings.LastSeenVersion,
 		"last_error":             settings.LastError,
@@ -133,9 +225,16 @@ func recordToAppAutoDeploySettings(rec idb.Record) *core.AppAutoDeploySettings {
 	return &core.AppAutoDeploySettings{
 		App:                 recString(rec, "app"),
 		Enabled:             enabled,
+		Paused:              recBool(rec, "paused"),
+		PauseReason:         core.AppAutoDeployPauseReason(recString(rec, "pause_reason")),
 		PendingVersion:      recString(rec, "pending_version"),
 		LastSeenVersion:     recString(rec, "last_seen_version"),
 		LastError:           recString(rec, "last_error"),
 		LastFailedRolloutAt: recTime(rec, "last_failed_rollout_at"),
 	}
+}
+
+func recBool(rec idb.Record, key string) bool {
+	value, _ := rec[key].(bool)
+	return value
 }

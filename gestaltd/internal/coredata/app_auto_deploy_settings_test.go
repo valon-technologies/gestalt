@@ -38,6 +38,8 @@ func TestAutoDeploySettingsService(t *testing.T) {
 		failedAt := time.Date(2026, 7, 28, 12, 0, 0, 123456789, time.UTC)
 		got, err := svc.Update(ctx, " g-issues ", func(settings *core.AppAutoDeploySettings) error {
 			settings.Enabled = true
+			settings.Paused = true
+			settings.PauseReason = "rollout_failed"
 			settings.PendingVersion = " v2 "
 			settings.LastSeenVersion = " v2 "
 			settings.LastError = " validation failed "
@@ -47,7 +49,7 @@ func TestAutoDeploySettingsService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Update: %v", err)
 		}
-		if got.App != "g-issues" || !got.Enabled || got.PendingVersion != "v2" ||
+		if got.App != "g-issues" || !got.Enabled || !got.Paused || got.PauseReason != "rollout_failed" || got.PendingVersion != "v2" ||
 			got.LastSeenVersion != "v2" || got.LastError != "validation failed" ||
 			!got.LastFailedRolloutAt.Equal(failedAt.Truncate(time.Millisecond)) {
 			t.Fatalf("updated settings = %#v", got)
@@ -87,35 +89,6 @@ func TestAutoDeploySettingsService(t *testing.T) {
 		}
 	})
 
-	t.Run("list enabled", func(t *testing.T) {
-		t.Parallel()
-		svc := testutil.NewStubServices(t).AutoDeploySettings
-		for app, enabled := range map[string]bool{
-			"g-issues": true,
-			"g-slack":  false,
-			"g-tasks":  true,
-		} {
-			if _, err := svc.Update(ctx, app, func(settings *core.AppAutoDeploySettings) error {
-				settings.Enabled = enabled
-				return nil
-			}); err != nil {
-				t.Fatalf("Update %s: %v", app, err)
-			}
-		}
-		got, err := svc.ListEnabled(ctx)
-		if err != nil {
-			t.Fatalf("ListEnabled: %v", err)
-		}
-		if len(got) != 2 {
-			t.Fatalf("enabled settings = %#v, want two", got)
-		}
-		for _, settings := range got {
-			if !settings.Enabled || settings.App == "g-slack" {
-				t.Fatalf("enabled settings includes %#v", settings)
-			}
-		}
-	})
-
 	t.Run("validation and failed update", func(t *testing.T) {
 		t.Parallel()
 		svc := testutil.NewStubServices(t).AutoDeploySettings
@@ -137,6 +110,59 @@ func TestAutoDeploySettingsService(t *testing.T) {
 		}
 		if _, err := svc.Get(ctx, "g-issues"); !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("Get after failed update error = %v, want %v", err, core.ErrNotFound)
+		}
+	})
+
+	t.Run("update for rollout ignores stale rollout", func(t *testing.T) {
+		t.Parallel()
+		svc := testutil.NewStubServices(t)
+		createdAt := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+		failed, err := svc.AppRollouts.Create(ctx, &core.AppRollout{
+			App: "g-issues", Version: "v1", State: core.AppRolloutStateEnrolling,
+			CreatedAt: createdAt, EnrollmentEndsAt: createdAt.Add(time.Minute), Deadline: createdAt.Add(2 * time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("create failed rollout: %v", err)
+		}
+		if _, err := svc.AppRollouts.MarkFailedForRollout(ctx, failed, createdAt.Add(time.Minute)); err != nil {
+			t.Fatalf("mark failed rollout: %v", err)
+		}
+		failed, err = svc.AppRollouts.Get(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("get failed rollout: %v", err)
+		}
+		if _, applied, err := svc.AutoDeploySettings.UpdateForRollout(ctx, failed, func(settings *core.AppAutoDeploySettings) error {
+			settings.Enabled = true
+			settings.Paused = true
+			return nil
+		}); err != nil || !applied {
+			t.Fatalf("initial update: applied=%v err=%v", applied, err)
+		}
+		replacement, err := svc.AppRollouts.Create(ctx, &core.AppRollout{
+			App: "g-issues", Version: "v1", State: core.AppRolloutStateEnrolling,
+			CreatedAt: createdAt.Add(2 * time.Minute), EnrollmentEndsAt: createdAt.Add(3 * time.Minute), Deadline: createdAt.Add(4 * time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("create replacement rollout: %v", err)
+		}
+		if _, err := svc.AppRollouts.MarkFailedForRollout(ctx, replacement, createdAt.Add(3*time.Minute)); err != nil {
+			t.Fatalf("mark replacement failed rollout: %v", err)
+		}
+		if _, applied, err := svc.AutoDeploySettings.UpdateForRollout(ctx, failed, func(settings *core.AppAutoDeploySettings) error {
+			settings.Paused = false
+			return nil
+		}); err != nil || applied {
+			t.Fatalf("stale update: applied=%v err=%v", applied, err)
+		}
+		if replacement.CreatedAt.Equal(failed.CreatedAt) {
+			t.Fatal("replacement rollout did not get a new identity")
+		}
+		settings, err := svc.AutoDeploySettings.Get(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("get settings: %v", err)
+		}
+		if !settings.Paused {
+			t.Fatalf("stale update changed settings: %#v", settings)
 		}
 	})
 }

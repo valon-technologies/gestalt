@@ -173,6 +173,9 @@ var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
 }
 
 var AppAutoDeploySettingsSchema = idb.ObjectStoreOptions{
+	// Keep this schema compatible with the store deployed before pause state
+	// was added. relationaldb preserves undeclared record fields, so the new
+	// fields are persisted without changing existing store metadata.
 	Indexes: []idb.IndexSchema{
 		{Name: "by_enabled", KeyPath: []string{"enabled"}},
 	},

@@ -51,6 +51,7 @@ type InstallOutput struct {
 	Installation *core.AppInstallation
 	FromVersion  string
 	Rollout      *core.AppRollout
+	Retried      bool
 }
 
 type installMode int
@@ -60,6 +61,7 @@ const (
 	installModeAdd
 	installModeUpgrade
 	installModeSelect
+	installModeRetry
 )
 
 func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOutput, error) {
@@ -137,6 +139,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		strings.TrimSpace(configEntry.Source.Registry) != registryName {
 		return nil, ErrRegistrySourceMismatch
 	}
+	currentDesired := coredata.LatestKnownVersion(knownVersions)
 	var fromVersion string
 	switch mode {
 	case installModeAdd:
@@ -148,9 +151,9 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		if len(knownVersions) == 0 {
 			return nil, ErrAppNotAdded
 		}
-		fromVersion = coredata.LatestKnownVersion(knownVersions)
+		fromVersion = currentDesired
 	case installModeSelect:
-		fromVersion = coredata.LatestKnownVersion(knownVersions)
+		fromVersion = currentDesired
 		if fromVersion == "" {
 			fromVersion = "registry:first-install"
 		}
@@ -160,7 +163,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 			return nil, fmt.Errorf("resolve from_version: no known fleet version and app is not pinned in config")
 		}
 	}
-	if mode != installModeSelect {
+	if mode != installModeSelect && mode != installModeRetry {
 		alreadyKnown, err := i.ChangeRequests.HasKnownVersion(installCtx, appName, version)
 		if err != nil {
 			return nil, fmt.Errorf("check known app version: %w", err)
@@ -169,15 +172,32 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 			return nil, ErrAppVersionAlreadyInstalled
 		}
 	}
+	var currentRollout *core.AppRollout
+	retried := mode == installModeRetry
 	if current, getErr := i.Rollouts.Get(installCtx, appName); getErr == nil {
+		currentRollout = current
 		if current.State == core.AppRolloutStateEnrolling || current.State == core.AppRolloutStateRestarting {
 			return nil, ErrAppRolloutActive
 		}
 	} else if !errors.Is(getErr, core.ErrNotFound) {
 		return nil, fmt.Errorf("check active app rollout: %w", getErr)
 	}
-	if mode == installModeSelect && coredata.LatestKnownVersion(knownVersions) == version {
-		return nil, ErrAppVersionAlreadyInstalled
+	if mode == installModeSelect && currentDesired == version {
+		if currentRollout == nil || currentRollout.State != core.AppRolloutStateFailed ||
+			strings.TrimSpace(currentRollout.Version) != version {
+			return nil, ErrAppVersionAlreadyInstalled
+		}
+		// Selecting the current desired version after its rollout failed is the
+		// user-facing retry command. Keep that decision inside admission so all
+		// callers share the same failed-rollout checks.
+		mode = installModeRetry
+		retried = true
+	}
+	if mode == installModeRetry {
+		if currentRollout == nil || currentRollout.State != core.AppRolloutStateFailed ||
+			strings.TrimSpace(currentRollout.Version) != version || currentDesired != version {
+			return nil, fmt.Errorf("%w: version %q is not the failed current desired rollout", ErrAppRolloutRetryNotAllowed, version)
+		}
 	}
 	if strings.TrimSpace(i.SourceVersion) != "" {
 		if i.SourceVersions == nil {
@@ -208,11 +228,18 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if err != nil {
 		return nil, fmt.Errorf("fetch retention index: %w", err)
 	}
-	currentDesired := coredata.LatestKnownVersion(knownVersions)
-	if mode == installModeSelect || mode == installModeUpgrade || mode == installModeAdd {
+	switch mode {
+	case installModeRetry:
+		if err := RetryVersionSelectable(version, retentionIndex, policy, i.now()); err != nil {
+			return nil, err
+		}
+	case installModeSelect, installModeUpgrade, installModeAdd:
 		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now()); err != nil {
 			return nil, err
 		}
+	}
+	if mode == installModeRetry && currentDesired != version {
+		return nil, fmt.Errorf("retry version %q is not the current desired version", version)
 	}
 
 	source, err := fetchConfiguredRegistryEntry(installCtx, i.Registries, reader, registryName, appName, version)
@@ -295,6 +322,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		Installation: coredata.InstallationFromChangeRequest(addedRequest),
 		FromVersion:  fromVersion,
 		Rollout:      rollout,
+		Retried:      retried,
 	}, nil
 }
 

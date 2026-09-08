@@ -176,9 +176,9 @@ States:
 
 | State | Condition |
 | --- | --- |
-| `healthy` | Live count is at least the minimum, and every live replica reports `running` at the desired version. |
+| `healthy` | Live count and running desired count are both at least the minimum, with no running old-version or error replicas. `starting`/`not_running` replicas are neutral idle capacity. |
 | `converging` | A rollout is active and the fleet is not yet healthy, but its deadline has not passed. |
-| `degraded` | At least the minimum replicas are live, but one or more report an error, unknown state, no running version, or a version mismatch. |
+| `degraded` | At least the minimum replicas are live, but one or more running replicas report an error, unknown state, or a version mismatch, or fewer than the minimum are running desired. |
 | `unknown` | Source/minimum state is unavailable, or fewer than the minimum replicas have fresh heartbeats. |
 
 The projection includes:
@@ -191,6 +191,7 @@ The projection includes:
   "minimumHealthyInstances": 5,
   "liveInstances": 5,
   "runningDesiredVersion": 5,
+  "notRunning": 0,
   "mismatched": 0,
   "errors": 0,
   "heartbeatTtlSeconds": 45,
@@ -225,9 +226,9 @@ The minimum count is snapshotted from current source-version state at admission.
 The heartbeat evaluator may set `healthy_since` when:
 
 - the rollout's target source version is still current
-- at least `minimum_healthy_instances` fresh target-source heartbeats exist
-- every fresh target-source heartbeat reports the rollout version as running
-- no fresh heartbeat reports an app error, unknown state, missing app, or version mismatch
+  - at least `minimum_healthy_instances` fresh target-source heartbeats exist
+  - at least `minimum_healthy_instances` fresh target-source heartbeats report the rollout version as running
+  - no fresh heartbeat reports an app error, unknown state, missing app, or running version mismatch
 
 If the condition becomes false, clear `healthy_since`.
 
@@ -251,7 +252,7 @@ Replica identity is diagnostic, not a required rollout slot:
 5. B runs the desired app version.
 6. If the live fleet meets the minimum and every live replica agrees, the rollout may complete after the stability window.
 
-A fresh, unhealthy heartbeat cannot be hidden by scaling above the minimum. Every fresh target-source replica must agree.
+A fresh running replica on the wrong version or with an error cannot be hidden by scaling above the minimum. A live host with the app `starting` or `not_running` is reported as neutral idle capacity; it is not counted as desired-version evidence or as a version mismatch.
 
 ## Recovery After Failure
 
@@ -278,6 +279,10 @@ Record recovery once when:
 - current fleet state satisfies the same 60-second healthy stability window
 
 Recovery does not change rollout state, append a change request, reset retention, or trigger auto-deploy coalescing. It is observability, not a second admission.
+
+### Auto-deploy safety
+
+`enabled` is user intent and is never cleared by a rollout evaluator. A real failed rollout sets a separate runtime pause with reason `rollout_failed`, retaining the user's enabled setting and the failure history. If the current fleet is already healthy for the failed desired version, the evaluator clears the stale runtime error instead of pausing. Manual retry or an explicit user toggle clears the runtime pause; unrelated manual disables remain disabled.
 
 ## APIs and Admin UI
 

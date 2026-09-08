@@ -103,6 +103,53 @@ func (p *FleetProjector) Project(ctx context.Context, app string) (*core.AppFlee
 	return &projection, nil
 }
 
+// ProjectForRollout evaluates the fleet using the rollout's admission
+// snapshot. A terminal rollout must not be judged using a later source or
+// capacity change, because that would answer a different rollout's question.
+func (p *FleetProjector) ProjectForRollout(ctx context.Context, rollout *core.AppRollout) (*core.AppFleetProjection, error) {
+	if p == nil || p.Heartbeats == nil {
+		return nil, fmt.Errorf("fleet projector is not configured")
+	}
+	if rollout == nil {
+		return nil, fmt.Errorf("fleet projector: rollout is required")
+	}
+	app := strings.TrimSpace(rollout.App)
+	if app == "" {
+		return nil, fmt.Errorf("fleet projector: rollout app is required")
+	}
+	// Enrollment rollouts predate the heartbeat snapshot fields. Preserve
+	// their existing current-fleet behavior; heartbeat rollouts have the
+	// explicit inputs needed for an exact historical evaluation.
+	if rollout.Mode != core.AppRolloutModeHeartbeat ||
+		strings.TrimSpace(rollout.TargetSourceVersion) == "" || rollout.MinimumHealthyInstances <= 0 {
+		return p.Project(ctx, app)
+	}
+	now := p.now()
+	ttl := p.HeartbeatTTL
+	if ttl <= 0 {
+		return nil, fmt.Errorf("fleet projector: heartbeat TTL must be positive")
+	}
+	heartbeats, err := p.Heartbeats.ListFreshBySourceVersion(
+		ctx,
+		rollout.TargetSourceVersion,
+		now.Add(-ttl),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("project rollout fleet: load fresh heartbeats: %w", err)
+	}
+	projection := EvaluateFleetState(FleetEvaluation{
+		App:                     app,
+		DesiredVersion:          rollout.Version,
+		SourceVersion:           rollout.TargetSourceVersion,
+		MinimumHealthyInstances: rollout.MinimumHealthyInstances,
+		Cutoff:                  now.Add(-ttl),
+		EvaluatedAt:             now,
+		Heartbeats:              heartbeats,
+	})
+	projection.HeartbeatTTL = ttl
+	return &projection, nil
+}
+
 type FleetEvaluation struct {
 	App                     string
 	DesiredVersion          string
@@ -171,6 +218,12 @@ func EvaluateFleetState(input FleetEvaluation) core.AppFleetProjection {
 		case core.GestaltdInstanceAppStateError, core.GestaltdInstanceAppStateUnknown:
 			replica.Class = core.AppFleetReplicaClassError
 			projection.Errors++
+		case core.GestaltdInstanceAppStateStarting, core.GestaltdInstanceAppStateNotRunning:
+			// A live host can exist without a running provider, especially for
+			// low-traffic Cloud Run apps. This is neutral fleet evidence: it is
+			// neither proof of the desired version nor evidence of an old one.
+			replica.Class = core.AppFleetReplicaClassNotRunning
+			projection.NotRunning++
 		default:
 			replica.Class = core.AppFleetReplicaClassMismatched
 			projection.Mismatched++
@@ -183,7 +236,8 @@ func EvaluateFleetState(input FleetEvaluation) core.AppFleetProjection {
 	switch {
 	case !validBasis || projection.LiveInstances < input.MinimumHealthyInstances:
 		projection.State = core.AppFleetStateUnknown
-	case projection.RunningDesiredVersion == projection.LiveInstances:
+	case projection.RunningDesiredVersion >= input.MinimumHealthyInstances &&
+		projection.Mismatched == 0 && projection.Errors == 0:
 		projection.State = core.AppFleetStateHealthy
 	default:
 		projection.State = core.AppFleetStateDegraded

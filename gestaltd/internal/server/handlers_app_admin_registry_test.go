@@ -96,7 +96,10 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 		SelectionDisabled bool   `json:"selectionDisabled"`
 		DisabledReason    string `json:"disabledReason"`
 		AutoDeploy        struct {
-			Enabled bool `json:"enabled"`
+			Enabled     bool   `json:"enabled"`
+			Paused      bool   `json:"paused"`
+			PauseReason string `json:"pauseReason"`
+			LastError   string `json:"lastError"`
 		} `json:"autoDeploy"`
 		PublishedVersions []struct {
 			SourceRef   string `json:"sourceRef"`
@@ -112,7 +115,7 @@ func TestAppAdminRegistrySelectAndRead(t *testing.T) {
 	if state.DesiredVersion != fixture.Version || !state.SelectionDisabled || state.DisabledReason != "rollout in progress" {
 		t.Fatalf("registry state = %#v", state)
 	}
-	if state.AutoDeploy.Enabled {
+	if state.AutoDeploy.Enabled || state.AutoDeploy.Paused || state.AutoDeploy.PauseReason != "" || state.AutoDeploy.LastError != "" {
 		t.Fatalf("autoDeploy = %#v, want disabled default", state.AutoDeploy)
 	}
 	if len(state.PublishedVersions) != 1 || state.PublishedVersions[0].SourceRef == "" ||
@@ -276,7 +279,7 @@ func TestAppAdminRegistryAutoDeploy(t *testing.T) {
 	}
 
 	disabled := update(`{"enabled":false}`, http.StatusOK)
-	if disabled.AutoDeploy.Enabled || disabled.AutoDeploy.PendingVersion != "" {
+	if disabled.AutoDeploy.Enabled || disabled.AutoDeploy.PendingVersion != "" || disabled.AutoDeploy.LastError != "" {
 		t.Fatalf("disabled response = %#v", disabled)
 	}
 	update(`{}`, http.StatusBadRequest)

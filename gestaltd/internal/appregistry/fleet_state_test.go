@@ -1,11 +1,55 @@
 package appregistry
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 )
+
+type rolloutProjectionHeartbeats struct {
+	source     string
+	heartbeats []*core.GestaltdInstanceHeartbeat
+}
+
+func (r rolloutProjectionHeartbeats) ListFreshBySourceVersion(_ context.Context, source string, _ time.Time) ([]*core.GestaltdInstanceHeartbeat, error) {
+	if source != r.source {
+		return nil, nil
+	}
+	return r.heartbeats, nil
+}
+
+func TestFleetProjectorProjectForRolloutUsesRolloutSnapshot(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	projector := &FleetProjector{
+		Heartbeats: rolloutProjectionHeartbeats{
+			source: "source-old",
+			heartbeats: []*core.GestaltdInstanceHeartbeat{
+				heartbeatForFleet("one", "source-old", now, map[string]core.GestaltdInstanceAppHeartbeat{
+					"app": {State: core.GestaltdInstanceAppStateRunning, RunningVersion: "v1"},
+				}),
+			},
+		},
+		HeartbeatTTL: time.Minute,
+		Now:          func() time.Time { return now },
+	}
+	projection, err := projector.ProjectForRollout(context.Background(), &core.AppRollout{
+		App:                     "app",
+		Version:                 "v1",
+		Mode:                    core.AppRolloutModeHeartbeat,
+		TargetSourceVersion:     "source-old",
+		MinimumHealthyInstances: 1,
+	})
+	if err != nil {
+		t.Fatalf("ProjectForRollout: %v", err)
+	}
+	if projection.State != core.AppFleetStateHealthy ||
+		projection.SourceVersion != "source-old" || projection.DesiredVersion != "v1" {
+		t.Fatalf("projection = %#v", projection)
+	}
+}
 
 func TestEvaluateFleetState(t *testing.T) {
 	t.Parallel()
@@ -32,6 +76,7 @@ func TestEvaluateFleetState(t *testing.T) {
 		wantState  core.AppFleetState
 		wantLive   int
 		wantRun    int
+		wantIdle   int
 		wantMis    int
 		wantErrors int
 	}{
@@ -82,12 +127,47 @@ func TestEvaluateFleetState(t *testing.T) {
 			wantErrors: 1,
 		},
 		{
-			name:       "autoscaling requires every replica healthy",
-			minimum:    2,
-			heartbeats: []*core.GestaltdInstanceHeartbeat{healthy("one", now), healthy("two", now), healthy("three", now)},
-			wantState:  core.AppFleetStateHealthy,
-			wantLive:   3,
-			wantRun:    3,
+			name:    "idle replica is neutral when minimum is healthy",
+			minimum: 2,
+			heartbeats: []*core.GestaltdInstanceHeartbeat{
+				healthy("one", now),
+				healthy("two", now),
+				heartbeatForFleet("idle", "source", now, map[string]core.GestaltdInstanceAppHeartbeat{
+					"app": {State: core.GestaltdInstanceAppStateNotRunning},
+				}),
+			},
+			wantState: core.AppFleetStateHealthy,
+			wantLive:  3,
+			wantRun:   2,
+			wantIdle:  1,
+		},
+		{
+			name:    "starting replica is neutral while desired capacity is met",
+			minimum: 1,
+			heartbeats: []*core.GestaltdInstanceHeartbeat{
+				healthy("one", now),
+				heartbeatForFleet("starting", "source", now, map[string]core.GestaltdInstanceAppHeartbeat{
+					"app": {State: core.GestaltdInstanceAppStateStarting},
+				}),
+			},
+			wantState: core.AppFleetStateHealthy,
+			wantLive:  2,
+			wantRun:   1,
+			wantIdle:  1,
+		},
+		{
+			name:    "live capacity below running desired minimum is degraded",
+			minimum: 2,
+			heartbeats: []*core.GestaltdInstanceHeartbeat{
+				healthy("one", now),
+				heartbeatForFleet("starting", "source", now, map[string]core.GestaltdInstanceAppHeartbeat{
+					"app": {State: core.GestaltdInstanceAppStateStarting},
+				}),
+			},
+			wantState: core.AppFleetStateDegraded,
+			wantLive:  2,
+			wantRun:   1,
+			wantIdle:  1,
 		},
 		{
 			name:    "matching active rollout overlays converging",
@@ -140,6 +220,7 @@ func TestEvaluateFleetState(t *testing.T) {
 			if got.State != tc.wantState ||
 				got.LiveInstances != tc.wantLive ||
 				got.RunningDesiredVersion != tc.wantRun ||
+				got.NotRunning != tc.wantIdle ||
 				got.Mismatched != tc.wantMis ||
 				got.Errors != tc.wantErrors {
 				t.Fatalf("projection = %#v", got)
@@ -147,22 +228,24 @@ func TestEvaluateFleetState(t *testing.T) {
 			if len(got.Replicas) != got.LiveInstances {
 				t.Fatalf("replicas len = %d, liveInstances = %d", len(got.Replicas), got.LiveInstances)
 			}
-			var onDesired, mismatched, errors int
+			var onDesired, idle, mismatched, errors int
 			for _, replica := range got.Replicas {
 				switch replica.Class {
 				case core.AppFleetReplicaClassOnDesired:
 					onDesired++
 				case core.AppFleetReplicaClassMismatched:
 					mismatched++
+				case core.AppFleetReplicaClassNotRunning:
+					idle++
 				case core.AppFleetReplicaClassError:
 					errors++
 				default:
 					t.Fatalf("unexpected replica class %q in %#v", replica.Class, replica)
 				}
 			}
-			if onDesired != got.RunningDesiredVersion || mismatched != got.Mismatched || errors != got.Errors {
-				t.Fatalf("replica class counts on=%d mis=%d err=%d; aggregates run=%d mis=%d err=%d",
-					onDesired, mismatched, errors, got.RunningDesiredVersion, got.Mismatched, got.Errors)
+			if onDesired != got.RunningDesiredVersion || idle != got.NotRunning || mismatched != got.Mismatched || errors != got.Errors {
+				t.Fatalf("replica class counts on=%d idle=%d mis=%d err=%d; aggregates run=%d idle=%d mis=%d err=%d",
+					onDesired, idle, mismatched, errors, got.RunningDesiredVersion, got.NotRunning, got.Mismatched, got.Errors)
 			}
 		})
 	}
