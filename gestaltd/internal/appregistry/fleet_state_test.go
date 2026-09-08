@@ -32,6 +32,7 @@ func TestEvaluateFleetState(t *testing.T) {
 		wantState  core.AppFleetState
 		wantLive   int
 		wantRun    int
+		wantIdle   int
 		wantMis    int
 		wantErrors int
 	}{
@@ -82,12 +83,19 @@ func TestEvaluateFleetState(t *testing.T) {
 			wantErrors: 1,
 		},
 		{
-			name:       "autoscaling requires every replica healthy",
-			minimum:    2,
-			heartbeats: []*core.GestaltdInstanceHeartbeat{healthy("one", now), healthy("two", now), healthy("three", now)},
-			wantState:  core.AppFleetStateHealthy,
-			wantLive:   3,
-			wantRun:    3,
+			name:    "idle replica is neutral when minimum is healthy",
+			minimum: 2,
+			heartbeats: []*core.GestaltdInstanceHeartbeat{
+				healthy("one", now),
+				healthy("two", now),
+				heartbeatForFleet("idle", "source", now, map[string]core.GestaltdInstanceAppHeartbeat{
+					"app": {State: core.GestaltdInstanceAppStateNotRunning},
+				}),
+			},
+			wantState: core.AppFleetStateHealthy,
+			wantLive:  3,
+			wantRun:   2,
+			wantIdle:  1,
 		},
 		{
 			name:    "matching active rollout overlays converging",
@@ -140,6 +148,7 @@ func TestEvaluateFleetState(t *testing.T) {
 			if got.State != tc.wantState ||
 				got.LiveInstances != tc.wantLive ||
 				got.RunningDesiredVersion != tc.wantRun ||
+				got.NotRunning != tc.wantIdle ||
 				got.Mismatched != tc.wantMis ||
 				got.Errors != tc.wantErrors {
 				t.Fatalf("projection = %#v", got)
@@ -147,22 +156,24 @@ func TestEvaluateFleetState(t *testing.T) {
 			if len(got.Replicas) != got.LiveInstances {
 				t.Fatalf("replicas len = %d, liveInstances = %d", len(got.Replicas), got.LiveInstances)
 			}
-			var onDesired, mismatched, errors int
+			var onDesired, idle, mismatched, errors int
 			for _, replica := range got.Replicas {
 				switch replica.Class {
 				case core.AppFleetReplicaClassOnDesired:
 					onDesired++
 				case core.AppFleetReplicaClassMismatched:
 					mismatched++
+				case core.AppFleetReplicaClassNotRunning:
+					idle++
 				case core.AppFleetReplicaClassError:
 					errors++
 				default:
 					t.Fatalf("unexpected replica class %q in %#v", replica.Class, replica)
 				}
 			}
-			if onDesired != got.RunningDesiredVersion || mismatched != got.Mismatched || errors != got.Errors {
-				t.Fatalf("replica class counts on=%d mis=%d err=%d; aggregates run=%d mis=%d err=%d",
-					onDesired, mismatched, errors, got.RunningDesiredVersion, got.Mismatched, got.Errors)
+			if onDesired != got.RunningDesiredVersion || idle != got.NotRunning || mismatched != got.Mismatched || errors != got.Errors {
+				t.Fatalf("replica class counts on=%d idle=%d mis=%d err=%d; aggregates run=%d idle=%d mis=%d err=%d",
+					onDesired, idle, mismatched, errors, got.RunningDesiredVersion, got.NotRunning, got.Mismatched, got.Errors)
 			}
 		})
 	}

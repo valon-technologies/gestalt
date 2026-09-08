@@ -40,6 +40,8 @@ type appAdminRegistryResponse struct {
 
 type appAdminAutoDeploy struct {
 	Enabled        bool   `json:"enabled"`
+	Paused         bool   `json:"paused"`
+	PauseReason    string `json:"pauseReason,omitempty"`
 	PendingVersion string `json:"pendingVersion,omitempty"`
 	LastError      string `json:"lastError,omitempty"`
 }
@@ -93,6 +95,7 @@ type appAdminFleetState struct {
 	MinimumHealthyInstances int                    `json:"minimumHealthyInstances"`
 	LiveInstances           int                    `json:"liveInstances"`
 	RunningDesiredVersion   int                    `json:"runningDesiredVersion"`
+	NotRunning              int                    `json:"notRunning"`
 	Mismatched              int                    `json:"mismatched"`
 	Errors                  int                    `json:"errors"`
 	HeartbeatTTLSeconds     int64                  `json:"heartbeatTtlSeconds"`
@@ -405,6 +408,8 @@ func (s *Server) updateAppAdminRegistryAutoDeploy(w http.ResponseWriter, r *http
 	}
 	settings, err := s.autoDeploySettings.Update(r.Context(), app.name, func(settings *core.AppAutoDeploySettings) error {
 		settings.Enabled = *request.Enabled
+		settings.Paused = false
+		settings.PauseReason = ""
 		if settings.Enabled {
 			settings.LastError = ""
 			settings.LastSeenVersion = ""
@@ -431,6 +436,8 @@ func appAdminAutoDeployFromCore(settings *core.AppAutoDeploySettings) appAdminAu
 	}
 	return appAdminAutoDeploy{
 		Enabled:        settings.Enabled,
+		Paused:         settings.Paused,
+		PauseReason:    settings.PauseReason,
 		PendingVersion: settings.PendingVersion,
 		LastError:      settings.LastError,
 	}
@@ -476,6 +483,7 @@ func appAdminFleetStateFromProjection(projection *core.AppFleetProjection) *appA
 		MinimumHealthyInstances: projection.MinimumHealthyInstances,
 		LiveInstances:           projection.LiveInstances,
 		RunningDesiredVersion:   projection.RunningDesiredVersion,
+		NotRunning:              projection.NotRunning,
 		Mismatched:              projection.Mismatched,
 		Errors:                  projection.Errors,
 		HeartbeatTTLSeconds:     int64(projection.HeartbeatTTL / time.Second),
@@ -676,15 +684,40 @@ func (s *Server) selectAppAdminRegistryVersion(w http.ResponseWriter, r *http.Re
 		return
 	}
 	subjectID := strings.TrimSpace(principal.Canonicalized(PrincipalFromContext(r.Context())).SubjectID)
-	result, err := s.appRegistryInstaller.Select(r.Context(), appregistry.InstallInput{
+	installInput := appregistry.InstallInput{
 		Registry: app.registry,
 		App:      app.name,
 		Version:  version,
 		Actor:    subjectID,
-	})
+	}
+	install := s.appRegistryInstaller.Select
+	if s.appRollouts != nil && s.appVersionChanges != nil {
+		if rollout, rolloutErr := s.appRollouts.Get(r.Context(), app.name); rolloutErr == nil &&
+			rollout.State == core.AppRolloutStateFailed && rollout.Version == version {
+			if known, knownErr := s.appVersionChanges.ListKnownVersionsByApp(r.Context(), app.name); knownErr == nil &&
+				coredata.LatestKnownVersion(known) == version {
+				install = s.appRegistryInstaller.Retry
+			}
+		}
+	}
+	result, err := install(r.Context(), installInput)
 	if err != nil {
 		writeAppAdminRegistryInstallError(w, err)
 		return
+	}
+	if s.autoDeploySettings != nil {
+		if current, settingsErr := s.autoDeploySettings.Get(r.Context(), app.name); settingsErr == nil && current.Enabled && current.Paused {
+			if _, settingsErr = s.autoDeploySettings.Update(r.Context(), app.name, func(settings *core.AppAutoDeploySettings) error {
+				settings.Paused = false
+				settings.PauseReason = ""
+				settings.LastError = ""
+				return nil
+			}); settingsErr != nil {
+				slog.Error("clear app auto-deploy pause after manual retry failed", "app", app.name, "error", settingsErr)
+			}
+		} else if settingsErr != nil && !errors.Is(settingsErr, core.ErrNotFound) {
+			slog.Error("load app auto-deploy settings after manual retry failed", "app", app.name, "error", settingsErr)
+		}
 	}
 	s.notifyAppRegistryReconcile(app.name)
 	writeJSON(w, http.StatusOK, appAdminRegistryVersionResponse{

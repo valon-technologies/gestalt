@@ -778,6 +778,17 @@ func startAppRegistryAutoDeployController(
 		apps,
 		interval,
 	)
+	heartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
+	if err != nil {
+		return nil, fmt.Errorf("server.appRegistry.heartbeatTtl: %w", err)
+	}
+	controller.Fleet = &appregistry.FleetProjector{
+		ChangeRequests: services.AppVersionChangeRequests,
+		SourceVersions: services.GestaltdSourceVersionState,
+		Heartbeats:     services.GestaltdInstanceHeartbeats,
+		Rollouts:       services.AppRollouts,
+		HeartbeatTTL:   heartbeatTTL,
+	}
 	controller.Start(ctx)
 	return controller, nil
 }

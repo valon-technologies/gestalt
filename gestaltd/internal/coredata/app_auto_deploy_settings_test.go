@@ -38,6 +38,8 @@ func TestAutoDeploySettingsService(t *testing.T) {
 		failedAt := time.Date(2026, 7, 28, 12, 0, 0, 123456789, time.UTC)
 		got, err := svc.Update(ctx, " g-issues ", func(settings *core.AppAutoDeploySettings) error {
 			settings.Enabled = true
+			settings.Paused = true
+			settings.PauseReason = "rollout_failed"
 			settings.PendingVersion = " v2 "
 			settings.LastSeenVersion = " v2 "
 			settings.LastError = " validation failed "
@@ -47,7 +49,7 @@ func TestAutoDeploySettingsService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Update: %v", err)
 		}
-		if got.App != "g-issues" || !got.Enabled || got.PendingVersion != "v2" ||
+		if got.App != "g-issues" || !got.Enabled || !got.Paused || got.PauseReason != "rollout_failed" || got.PendingVersion != "v2" ||
 			got.LastSeenVersion != "v2" || got.LastError != "validation failed" ||
 			!got.LastFailedRolloutAt.Equal(failedAt.Truncate(time.Millisecond)) {
 			t.Fatalf("updated settings = %#v", got)

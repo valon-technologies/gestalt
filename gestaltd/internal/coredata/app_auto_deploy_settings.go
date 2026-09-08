@@ -67,6 +67,21 @@ func (s *AutoDeploySettingsService) ListEnabled(ctx context.Context) ([]*core.Ap
 	return out, nil
 }
 
+func (s *AutoDeploySettingsService) ListAll(ctx context.Context) ([]*core.AppAutoDeploySettings, error) {
+	if s == nil {
+		return nil, fmt.Errorf("list app auto-deploy settings: service is not configured")
+	}
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list app auto-deploy settings: %w", err)
+	}
+	out := make([]*core.AppAutoDeploySettings, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, recordToAppAutoDeploySettings(rec))
+	}
+	return out, nil
+}
+
 // Update atomically initializes or mutates one app's settings. A missing row
 // starts disabled with all progress fields empty.
 func (s *AutoDeploySettingsService) Update(
@@ -110,6 +125,7 @@ func normalizeAppAutoDeploySettings(settings *core.AppAutoDeploySettings) {
 	settings.App = strings.TrimSpace(settings.App)
 	settings.PendingVersion = strings.TrimSpace(settings.PendingVersion)
 	settings.LastSeenVersion = strings.TrimSpace(settings.LastSeenVersion)
+	settings.PauseReason = strings.TrimSpace(settings.PauseReason)
 	settings.LastError = strings.TrimSpace(settings.LastError)
 	if !settings.LastFailedRolloutAt.IsZero() {
 		settings.LastFailedRolloutAt = settings.LastFailedRolloutAt.UTC().Truncate(time.Millisecond)
@@ -121,6 +137,8 @@ func appAutoDeploySettingsRecord(settings *core.AppAutoDeploySettings) idb.Recor
 		"id":                     settings.App,
 		"app":                    settings.App,
 		"enabled":                settings.Enabled,
+		"paused":                 settings.Paused,
+		"pause_reason":           settings.PauseReason,
 		"pending_version":        settings.PendingVersion,
 		"last_seen_version":      settings.LastSeenVersion,
 		"last_error":             settings.LastError,
@@ -133,9 +151,16 @@ func recordToAppAutoDeploySettings(rec idb.Record) *core.AppAutoDeploySettings {
 	return &core.AppAutoDeploySettings{
 		App:                 recString(rec, "app"),
 		Enabled:             enabled,
+		Paused:              recBool(rec, "paused"),
+		PauseReason:         recString(rec, "pause_reason"),
 		PendingVersion:      recString(rec, "pending_version"),
 		LastSeenVersion:     recString(rec, "last_seen_version"),
 		LastError:           recString(rec, "last_error"),
 		LastFailedRolloutAt: recTime(rec, "last_failed_rollout_at"),
 	}
+}
+
+func recBool(rec idb.Record, key string) bool {
+	value, _ := rec[key].(bool)
+	return value
 }

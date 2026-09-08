@@ -60,6 +60,7 @@ const (
 	installModeAdd
 	installModeUpgrade
 	installModeSelect
+	installModeRetry
 )
 
 func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOutput, error) {
@@ -76,6 +77,13 @@ func (i *Installer) Upgrade(ctx context.Context, input InstallInput) (*InstallOu
 
 func (i *Installer) Select(ctx context.Context, input InstallInput) (*InstallOutput, error) {
 	return i.install(ctx, input, installModeSelect)
+}
+
+// Retry re-admits the currently desired version after a terminal rollout
+// failure. The version is already known to the fleet, so this bypasses the
+// normal already-installed guard while creating a fresh rollout event.
+func (i *Installer) Retry(ctx context.Context, input InstallInput) (*InstallOutput, error) {
+	return i.install(ctx, input, installModeRetry)
 }
 
 func (i *Installer) install(ctx context.Context, input InstallInput, mode installMode) (*InstallOutput, error) {
@@ -160,7 +168,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 			return nil, fmt.Errorf("resolve from_version: no known fleet version and app is not pinned in config")
 		}
 	}
-	if mode != installModeSelect {
+	if mode != installModeSelect && mode != installModeRetry {
 		alreadyKnown, err := i.ChangeRequests.HasKnownVersion(installCtx, appName, version)
 		if err != nil {
 			return nil, fmt.Errorf("check known app version: %w", err)
@@ -213,6 +221,9 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now()); err != nil {
 			return nil, err
 		}
+	}
+	if mode == installModeRetry && currentDesired != version {
+		return nil, fmt.Errorf("retry version %q is not the current desired version", version)
 	}
 
 	source, err := fetchConfiguredRegistryEntry(installCtx, i.Registries, reader, registryName, appName, version)

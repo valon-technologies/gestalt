@@ -181,13 +181,16 @@ func TestControllerDisablesOnFailedRollout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get settings: %v", err)
 	}
-	if settings.Enabled || settings.PendingVersion != "" || settings.LastSeenVersion != "" ||
-		settings.LastError == "" || !settings.LastFailedRolloutAt.Equal(start.Add(15*time.Minute)) {
+	if !settings.Enabled || !settings.Paused || settings.PauseReason != "rollout_failed" ||
+		settings.PendingVersion != "" || settings.LastSeenVersion != "" || settings.LastError == "" ||
+		!settings.LastFailedRolloutAt.Equal(start.Add(15*time.Minute)) {
 		t.Fatalf("settings = %#v", settings)
 	}
 
 	if _, err := services.AutoDeploySettings.Update(t.Context(), "g-issues", func(current *core.AppAutoDeploySettings) error {
 		current.Enabled = true
+		current.Paused = false
+		current.PauseReason = ""
 		current.LastError = ""
 		return nil
 	}); err != nil {
@@ -200,8 +203,93 @@ func TestControllerDisablesOnFailedRollout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get re-enabled settings: %v", err)
 	}
-	if !settings.Enabled || len(installer.inputs) != 1 || installer.inputs[0].Version != "v2" {
+	if !settings.Enabled || settings.Paused || len(installer.inputs) != 1 || installer.inputs[0].Version != "v2" {
 		t.Fatalf("re-enabled settings = %#v, inputs = %#v", settings, installer.inputs)
+	}
+}
+
+func TestControllerDoesNotPauseHealthyFailedRollout(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	enableAutoDeploy(t, services, "g-issues")
+	start := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	rollout, err := services.AppRollouts.Create(t.Context(), &core.AppRollout{
+		App:              "g-issues",
+		Version:          "v1",
+		State:            core.AppRolloutStateEnrolling,
+		CreatedAt:        start,
+		EnrollmentEndsAt: start.Add(time.Minute),
+		Deadline:         start.Add(15 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+	if _, err := services.AppRollouts.MarkFailedForRollout(t.Context(), rollout, start.Add(15*time.Minute)); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+	reader := &fakeReader{results: []*appregistry.AppIndexFetchResult{{Index: testIndex("g-issues", "v1")}}}
+	controller := testController(services, reader, &fakeInstaller{})
+	controller.Fleet = fakeFleetHealthReader{projection: &core.AppFleetProjection{
+		State:          core.AppFleetStateHealthy,
+		DesiredVersion: "v1",
+	}}
+
+	if err := controller.Reconcile(t.Context(), "g-issues"); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	settings, err := services.AutoDeploySettings.Get(t.Context(), "g-issues")
+	if err != nil {
+		t.Fatalf("Get settings: %v", err)
+	}
+	if !settings.Enabled || settings.Paused || settings.LastError != "" ||
+		!settings.LastFailedRolloutAt.Equal(start.Add(15*time.Minute)) {
+		t.Fatalf("settings = %#v", settings)
+	}
+}
+
+func TestControllerRepairsLegacyDisabledHealthyRollout(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	rollout, err := services.AppRollouts.Create(t.Context(), &core.AppRollout{
+		App:              "g-issues",
+		Version:          "v1",
+		State:            core.AppRolloutStateEnrolling,
+		CreatedAt:        start,
+		EnrollmentEndsAt: start.Add(time.Minute),
+		Deadline:         start.Add(15 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+	failedAt := start.Add(15 * time.Minute)
+	if _, err := services.AppRollouts.MarkFailedForRollout(t.Context(), rollout, failedAt); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+	if _, err := services.AutoDeploySettings.Update(t.Context(), "g-issues", func(settings *core.AppAutoDeploySettings) error {
+		settings.LastError = "rollout for v1 failed"
+		settings.LastFailedRolloutAt = failedAt
+		return nil
+	}); err != nil {
+		t.Fatalf("seed legacy settings: %v", err)
+	}
+	controller := testController(services, &fakeReader{}, &fakeInstaller{})
+	controller.Fleet = fakeFleetHealthReader{projection: &core.AppFleetProjection{
+		State:          core.AppFleetStateHealthy,
+		DesiredVersion: "v1",
+	}}
+
+	if err := controller.ReconcileAll(t.Context()); err != nil {
+		t.Fatalf("ReconcileAll: %v", err)
+	}
+	settings, err := services.AutoDeploySettings.Get(t.Context(), "g-issues")
+	if err != nil {
+		t.Fatalf("Get settings: %v", err)
+	}
+	if !settings.Enabled || settings.Paused || settings.LastError != "" {
+		t.Fatalf("repaired settings = %#v", settings)
 	}
 }
 
@@ -272,6 +360,15 @@ func (r *fakeReader) FetchAppIndexConditional(
 type fakeInstaller struct {
 	inputs []appregistry.InstallInput
 	errs   []error
+}
+
+type fakeFleetHealthReader struct {
+	projection *core.AppFleetProjection
+	err        error
+}
+
+func (f fakeFleetHealthReader) Project(context.Context, string) (*core.AppFleetProjection, error) {
+	return f.projection, f.err
 }
 
 func (i *fakeInstaller) Select(_ context.Context, input appregistry.InstallInput) (*appregistry.InstallOutput, error) {

@@ -171,6 +171,12 @@ func EvaluateFleetState(input FleetEvaluation) core.AppFleetProjection {
 		case core.GestaltdInstanceAppStateError, core.GestaltdInstanceAppStateUnknown:
 			replica.Class = core.AppFleetReplicaClassError
 			projection.Errors++
+		case core.GestaltdInstanceAppStateStarting, core.GestaltdInstanceAppStateNotRunning:
+			// A live host can exist without a running provider, especially for
+			// low-traffic Cloud Run apps. This is neutral fleet evidence: it is
+			// neither proof of the desired version nor evidence of an old one.
+			replica.Class = core.AppFleetReplicaClassNotRunning
+			projection.NotRunning++
 		default:
 			replica.Class = core.AppFleetReplicaClassMismatched
 			projection.Mismatched++
@@ -183,7 +189,8 @@ func EvaluateFleetState(input FleetEvaluation) core.AppFleetProjection {
 	switch {
 	case !validBasis || projection.LiveInstances < input.MinimumHealthyInstances:
 		projection.State = core.AppFleetStateUnknown
-	case projection.RunningDesiredVersion == projection.LiveInstances:
+	case projection.RunningDesiredVersion >= input.MinimumHealthyInstances &&
+		projection.Mismatched == 0 && projection.Errors == 0:
 		projection.State = core.AppFleetStateHealthy
 	default:
 		projection.State = core.AppFleetStateDegraded

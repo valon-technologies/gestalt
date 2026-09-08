@@ -683,6 +683,7 @@ func (p *CatalogPoller) updateHeartbeatRolloutOutcome(ctx context.Context, rollo
 		FailureSummary: core.AppRolloutFailureSummary{
 			LiveInstances:         projection.LiveInstances,
 			RunningDesiredVersion: projection.RunningDesiredVersion,
+			NotRunning:            projection.NotRunning,
 			Mismatched:            projection.Mismatched,
 			Errors:                projection.Errors,
 		},
