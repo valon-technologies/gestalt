@@ -486,10 +486,12 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *tenantAppD
 		names = append(names, snapshot.entries[i].Name)
 	}
 	s.prefetchIntegrationListingDecisions(ctx, p, names)
+	sourceTreeURLs := s.appSourceTreeURLs(ctx, snapshot)
 
 	out := &appDirectory{entries: make([]appDirectoryEntry, 0, len(snapshot.entries))}
 	for i := range snapshot.entries {
 		entry := s.viewerDirectoryEntry(ctx, p, snapshot.entries[i])
+		entry.SourceTreeURL = sourceTreeURLs[entry.Name]
 		usable, err := s.directoryEntryUsable(ctx, p, entry)
 		if err != nil {
 			return nil, err
@@ -503,50 +505,62 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *tenantAppD
 }
 
 func (s *Server) viewerDirectoryEntry(ctx context.Context, p *principal.Principal, entry tenantAppDirectoryEntry) appDirectoryEntry {
-	projected := viewerDirectoryEntry(
+	return viewerDirectoryEntry(
 		entry,
 		s.integrationMountedPathForPrincipalContext(ctx, p, entry.Name, entry.DeclaredMount),
 		s.integrationManagementPath(ctx, p, entry.Name),
 	)
-	// Registry source metadata belongs to the installed version, so resolve it
-	// while projecting the request rather than freezing it in the tenant
-	// snapshot.
-	projected.SourceTreeURL = s.appSourceTreeURL(ctx, entry.Name, s.pluginDefs[entry.Name])
-	return projected
 }
 
-func (s *Server) appSourceTreeURL(ctx context.Context, appName string, plugin *config.ProviderEntry) string {
-	if plugin != nil {
+func (s *Server) appSourceTreeURLs(ctx context.Context, snapshot *tenantAppDirectory) map[string]string {
+	urls := make(map[string]string, len(snapshot.entries))
+	registryApps := make(map[string]configuredRegistryApp)
+	for i := range snapshot.entries {
+		entry := &snapshot.entries[i]
+		plugin := s.pluginDefs[entry.Name]
+		if plugin == nil {
+			continue
+		}
 		if sourceTreeURL := plugin.SourceTreeURL(); sourceTreeURL != "" {
-			return sourceTreeURL
+			urls[entry.Name] = sourceTreeURL
+			continue
+		}
+		if registry := strings.TrimSpace(plugin.Source.Registry); registry != "" {
+			registryApps[entry.Name] = configuredRegistryApp{name: entry.Name, registry: registry}
 		}
 	}
-	app, ok := s.registryApp(appName)
-	if !ok {
-		return ""
+	if len(registryApps) == 0 || s.appVersionChanges == nil {
+		return urls
 	}
-	if s.appVersionChanges == nil {
-		return ""
-	}
-	known, err := s.appVersionChanges.ListKnownVersionsByApp(ctx, app.name)
+	known, err := s.appVersionChanges.ListAllKnownVersions(ctx)
 	if err != nil {
-		return ""
+		return urls
 	}
-	installation := coredata.LatestKnownInstallation(known)
-	if installation == nil {
-		return ""
+	byApp := make(map[string][]*core.AppInstallation)
+	for _, installation := range known {
+		if installation != nil {
+			byApp[installation.AppName] = append(byApp[installation.AppName], installation)
+		}
 	}
-	if sourceRepository := strings.TrimSpace(installation.SourceRepository); sourceRepository != "" {
-		return appregistry.SourceTreeURLForApp(sourceRepository, installation.AppName, installation.SourceRef)
+	for name, app := range registryApps {
+		installation := coredata.LatestKnownInstallation(byApp[name])
+		if installation == nil {
+			continue
+		}
+		if sourceRepository := strings.TrimSpace(installation.SourceRepository); sourceRepository != "" {
+			urls[name] = appregistry.SourceTreeURLForApp(sourceRepository, installation.AppName, installation.SourceRef)
+			continue
+		}
+		urls[name] = s.legacyRegistryAppSourceTreeURL(ctx, app, installation.Version)
 	}
-	return s.legacyRegistryAppSourceTreeURL(ctx, app, installation.Version)
+	return urls
 }
 
 // legacyRegistryAppSourceTreeURL supports installations recorded before source
 // repository identity was persisted. New installations never use this remote
 // read path; it can be removed after those historical records are migrated.
 func (s *Server) legacyRegistryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp, version string) string {
-	if s == nil || s.appRegistryReader == nil || s.appVersionChanges == nil {
+	if s == nil || s.appRegistryReader == nil {
 		return ""
 	}
 	if version == "" {
