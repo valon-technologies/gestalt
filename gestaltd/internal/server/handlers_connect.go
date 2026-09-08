@@ -831,6 +831,17 @@ func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCa
 // bearer Grant); exactly one of the two is non-empty on success.
 func buildEffectiveManualCredential(req connectManualRequest, auth config.ConnectionAuthDef, tokenExchange bool) (map[string]string, string, error) {
 	if tokenExchange {
+		// The UI historically sends a single credential as the raw
+		// `credential` field. Preserve that API shape when the token exchange
+		// declares exactly one named field, while keeping multi-field exchanges
+		// explicit and unambiguous.
+		if req.Credential != "" && len(auth.Credentials) == 1 {
+			fields := map[string]string{auth.Credentials[0].Name: req.Credential}
+			if err := validateManualCredentialValues(fields); err != nil {
+				return nil, "", err
+			}
+			return fields, "", nil
+		}
 		if req.Credential != "" {
 			return nil, "", errors.New("manual token exchange requires named credentials")
 		}

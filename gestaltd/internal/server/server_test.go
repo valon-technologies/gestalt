@@ -15298,6 +15298,59 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 
 	fixedNow := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 
+	t.Run("accepts a raw value for a single declared credential", func(t *testing.T) {
+		t.Parallel()
+
+		var seenToken string
+		tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			seenToken = r.PostForm.Get("token")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"manual-access"}`))
+		}))
+		testutil.CloseOnCleanup(t, tokenSrv)
+
+		svc := testutil.NewStubServices(t)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "single-token"},
+			})
+			cfg.DefaultConnection = map[string]string{"single-token": config.AppConnectionName}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"single-token": {
+					Auth: &config.ConnectionAuthDef{
+						Type:          providermanifestv1.AuthTypeManual,
+						TokenURL:      tokenSrv.URL,
+						TokenExchange: "form",
+						Credentials: []config.CredentialFieldDef{
+							{Name: "token", Label: "Token"},
+						},
+					},
+				},
+			}
+			cfg.Now = func() time.Time { return fixedNow }
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"single-token","credential":"mock-token"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if seenToken != "mock-token" {
+			t.Fatalf("token exchange token = %q, want mock-token", seenToken)
+		}
+	})
+
 	t.Run("exchanges declared credentials and stores refresh source", func(t *testing.T) {
 		t.Parallel()
 
