@@ -35,7 +35,7 @@ func TestAdvertisedConnectionsZipSchemaAndStatus(t *testing.T) {
 	}
 	advertised := s.advertisedConnectionsForPlugin("demo", app)
 	schemas := s.connectionSchemasFromAdvertised("demo", advertised)
-	infos := s.connectionInfosFromAdvertised(context.Background(), "demo", advertised, nil, nil)
+	infos := s.connectionInfosFromAdvertised(context.Background(), "demo", advertised, nil, "", nil)
 	if len(schemas) == 0 {
 		t.Fatal("expected advertised connection schema")
 	}

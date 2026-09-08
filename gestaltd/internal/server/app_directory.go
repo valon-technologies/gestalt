@@ -19,8 +19,7 @@ import (
 const appCatalogIconPathPrefix = "/api/v1/catalog/apps/"
 
 // tenantAppDirectory is the process-wide Apps snapshot: names, copy, icons,
-// and connection schema. It never holds a live Provider. Tunnel proxies are
-// bound to one HTTP request and must be resolved again for overlay status.
+// connection mode, and connection schema. It never holds a live Provider.
 type tenantAppDirectory struct {
 	entries []tenantAppDirectoryEntry
 }
@@ -30,6 +29,7 @@ type tenantAppDirectoryEntry struct {
 	DisplayName      string
 	Description      string
 	IconSVG          string
+	ConnectionMode   core.ConnectionMode
 	DeclaredMount    string
 	Prompts          []appPromptInfo
 	Advertised       []advertisedConnection
@@ -59,6 +59,7 @@ type appDirectoryEntry struct {
 	DisplayName      string
 	Description      string
 	IconSVG          string
+	ConnectionMode   core.ConnectionMode
 	DeclaredMount    string
 	MountedPath      string
 	ManagementPath   string
@@ -82,6 +83,7 @@ type appCatalogEntry struct {
 	Name           string                 `json:"name"`
 	DisplayName    string                 `json:"displayName,omitempty"`
 	Description    string                 `json:"description,omitempty"`
+	IconSVG        string                 `json:"iconSvg,omitempty"`
 	IconURL        string                 `json:"iconUrl,omitempty"`
 	MountedPath    string                 `json:"mountedPath,omitempty"`
 	ManagementPath string                 `json:"managementPath,omitempty"`
@@ -155,6 +157,7 @@ func (entry appDirectoryEntry) catalogJSON() appCatalogEntry {
 		Name:           entry.Name,
 		DisplayName:    entry.DisplayName,
 		Description:    entry.Description,
+		IconSVG:        entry.IconSVG,
 		MountedPath:    entry.MountedPath,
 		ManagementPath: entry.ManagementPath,
 		Prompts:        entry.Prompts,
@@ -184,6 +187,7 @@ func viewerDirectoryEntry(entry tenantAppDirectoryEntry, mountedPath, management
 		DisplayName:      entry.DisplayName,
 		Description:      entry.Description,
 		IconSVG:          entry.IconSVG,
+		ConnectionMode:   entry.ConnectionMode,
 		DeclaredMount:    entry.DeclaredMount,
 		MountedPath:      mountedPath,
 		ManagementPath:   managementPath,
@@ -420,10 +424,11 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 	}
 	plugin := s.pluginDefs[name]
 	entry := tenantAppDirectoryEntry{
-		Name:        name,
-		DisplayName: prov.DisplayName(),
-		Description: prov.Description(),
-		Loaded:      true,
+		Name:           name,
+		DisplayName:    prov.DisplayName(),
+		Description:    prov.Description(),
+		ConnectionMode: core.NormalizeConnectionMode(prov.ConnectionMode()),
+		Loaded:         true,
 	}
 	s.applyPluginDirectoryFields(&entry, plugin)
 	s.attachDirectoryConnections(&entry, plugin)
@@ -471,6 +476,11 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *tenantAppD
 	}
 	p := PrincipalFromContext(r.Context())
 	ctx, _ := withListingDecisionCache(r.Context())
+	if s.authorization != nil {
+		if resolved, err := s.resolvePrincipalUserID(ctx, p); err == nil && resolved != nil {
+			p = resolved
+		}
+	}
 	names := make([]string, 0, len(snapshot.entries))
 	for i := range snapshot.entries {
 		names = append(names, snapshot.entries[i].Name)
@@ -585,6 +595,11 @@ func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (ap
 	}
 	p := PrincipalFromContext(r.Context())
 	ctx, _ := withListingDecisionCache(r.Context())
+	if s.authorization != nil {
+		if resolved, err := s.resolvePrincipalUserID(ctx, p); err == nil && resolved != nil {
+			p = resolved
+		}
+	}
 	s.prefetchIntegrationListingDecisions(ctx, p, []string{found.Name})
 	entry := s.viewerDirectoryEntry(ctx, p, found)
 	usable, err := s.directoryEntryUsable(ctx, p, entry)
@@ -627,6 +642,7 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 		return []integrationInfo{}, nil
 	}
 	p := PrincipalFromContext(r.Context())
+	subjectID, _ := principal.ResolveCredentialSubjectID(r.Context(), s.users, p)
 	connected, err := s.subjectConnectedIntegrations(r)
 	if err != nil {
 		return nil, &appListingError{
@@ -654,21 +670,10 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 			Actions:         []string{},
 		}
 		instances := connected[entry.Name]
-		info.Connections = s.connectionInfosFromAdvertised(r.Context(), entry.Name, entry.Advertised, instances, p)
+		info.Connections = s.connectionInfosFromAdvertised(r.Context(), entry.Name, entry.Advertised, instances, subjectID, p)
 		authTypes := resolvedAuthTypesFromConnections(info.Connections)
-		s.applyIntegrationConnectionStatus(&info, s.liveProviderForListing(r.Context(), entry), instances, authTypes, p)
+		s.applyIntegrationConnectionStatus(&info, entry.ConnectionMode, instances, authTypes, p)
 		out = append(out, info)
 	}
 	return out, nil
-}
-
-func (s *Server) liveProviderForListing(ctx context.Context, entry *appDirectoryEntry) core.Provider {
-	if entry == nil || !entry.Loaded || s == nil || s.providers == nil {
-		return nil
-	}
-	prov, err := s.providers.GetWithContext(ctx, entry.Name)
-	if err != nil {
-		return nil
-	}
-	return prov
 }
