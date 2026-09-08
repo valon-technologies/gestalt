@@ -21,26 +21,30 @@ import (
 // appAdminMemberRow is the shared authorization grant roster row used before
 // Members / Identities projections. Field names match the Members UI contract.
 type appAdminMemberRow struct {
-	Email         string                   `json:"email,omitempty"`
-	Role          string                   `json:"role"`
-	Source        string                   `json:"source"`
-	Mutable       bool                     `json:"mutable"`
-	Effective     bool                     `json:"effective"`
-	ShadowedBy    string                   `json:"shadowedBy,omitempty"`
-	SelectorKind  string                   `json:"selectorKind,omitempty"`
-	SelectorValue string                   `json:"selectorValue,omitempty"`
-	SubjectID     string                   `json:"subjectId,omitempty"`
-	Principal     *appAdminMemberPrincipal `json:"principal,omitempty"`
+	Email         string                    `json:"email,omitempty"`
+	Role          string                    `json:"role"`
+	Source        string                    `json:"source"`
+	Mutable       bool                      `json:"mutable"`
+	Effective     bool                      `json:"effective"`
+	ShadowedBy    string                    `json:"shadowedBy,omitempty"`
+	SelectorKind  string                    `json:"selectorKind,omitempty"`
+	SelectorValue string                    `json:"selectorValue,omitempty"`
+	SubjectID     string                    `json:"subjectId,omitempty"`
+	SubjectSet    *appAdminMemberSubjectSet `json:"subjectSet,omitempty"`
 }
 
-// appAdminMemberPrincipal carries display metadata without changing the
-// canonical selector used by authorization mutations. Group names are
-// optional because older relationships may not have resource properties.
-type appAdminMemberPrincipal struct {
-	Kind        string `json:"kind"`
+// appAdminMemberSubjectSet mirrors the authorization target shape while
+// carrying presentation metadata separately from the canonical selector used
+// by authorization mutations.
+type appAdminMemberSubjectSet struct {
+	Resource appAdminMemberSubjectSetResource `json:"resource"`
+	Relation string                           `json:"relation,omitempty"`
+}
+
+type appAdminMemberSubjectSetResource struct {
+	Type        string `json:"type"`
 	ID          string `json:"id"`
 	DisplayName string `json:"displayName,omitempty"`
-	Relation    string `json:"relation,omitempty"`
 }
 
 func (s *Server) mountAppAdminMembersRoutes(r chi.Router) {
@@ -462,13 +466,13 @@ func (s *Server) appAdminMemberRowFromRelationship(_ context.Context, relationsh
 		}
 		row.SelectorKind = "subject_set"
 		row.SelectorValue = selector
-		if resourceType == "group" {
-			row.Principal = &appAdminMemberPrincipal{
-				Kind:        "group",
+		row.SubjectSet = &appAdminMemberSubjectSet{
+			Resource: appAdminMemberSubjectSetResource{
+				Type:        resourceType,
 				ID:          resourceID,
 				DisplayName: authorizationResourceDisplayName(target.SubjectSet.GetResource()),
-				Relation:    relation,
-			}
+			},
+			Relation: relation,
 		}
 		return row, true
 	default:
@@ -476,18 +480,18 @@ func (s *Server) appAdminMemberRowFromRelationship(_ context.Context, relationsh
 	}
 }
 
-// authorizationResourceDisplayName reads the optional display metadata carried
-// by the group resource. Authorization keeps the resource ID stable; the
-// resource's display name is presentation data and may change independently.
+// authorizationResourceDisplayName reads the one canonical display metadata
+// field carried by an authorization resource. Authorization keeps the
+// resource ID stable; the resource's display name is presentation data and may
+// change independently.
 func authorizationResourceDisplayName(resource *proto.Resource) string {
 	if resource == nil || resource.GetProperties() == nil {
 		return ""
 	}
-	for _, key := range []string{"displayName", "display_name", "name"} {
-		if value := resource.GetProperties().GetFields()[key]; value != nil {
-			if displayName := strings.TrimSpace(value.GetStringValue()); displayName != "" {
-				return displayName
-			}
+	value := resource.GetProperties().GetFields()[core.AuthorizationResourceDisplayNameProperty]
+	if value != nil {
+		if displayName := strings.TrimSpace(value.GetStringValue()); displayName != "" {
+			return displayName
 		}
 	}
 	return ""

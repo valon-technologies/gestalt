@@ -6,6 +6,10 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
+// AuthorizationResourceDisplayNameProperty is the canonical resource property
+// used when authorization-backed resources need a human-readable name.
+const AuthorizationResourceDisplayNameProperty = "displayName"
+
 type AuthorizationProvider interface {
 	CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error)
 	CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error)

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -224,7 +225,26 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 								Resource: &proto.Resource{
 									Type:       "group",
 									Id:         "eng",
-									Properties: mustStruct(t, map[string]any{"displayName": "Engineering"}),
+									Properties: mustStruct(t, map[string]any{core.AuthorizationResourceDisplayNameProperty: "Engineering"}),
+								},
+								Relation: "member",
+							},
+						},
+					},
+					Relation: "viewer",
+					Resource: &proto.Resource{Type: "app", Id: "g-issues"},
+				},
+				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
+			},
+			{
+				Tuple: &proto.RelationshipTuple{
+					Target: &proto.RelationshipTarget{
+						Kind: &proto.RelationshipTarget_SubjectSet{
+							SubjectSet: &proto.SubjectSet{
+								Resource: &proto.Resource{
+									Type:       "group",
+									Id:         "legacy",
+									Properties: mustStruct(t, map[string]any{"name": "Legacy Name"}),
 								},
 								Relation: "member",
 							},
@@ -263,28 +283,39 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 		SelectorKind  string `json:"selectorKind"`
 		SelectorValue string `json:"selectorValue"`
 		SubjectID     string `json:"subjectId"`
-		Principal     *struct {
-			Kind        string `json:"kind"`
-			ID          string `json:"id"`
-			DisplayName string `json:"displayName"`
-			Relation    string `json:"relation"`
-		} `json:"principal"`
+		SubjectSet    *struct {
+			Resource struct {
+				Type        string `json:"type"`
+				ID          string `json:"id"`
+				DisplayName string `json:"displayName"`
+			} `json:"resource"`
+			Relation string `json:"relation"`
+		} `json:"subjectSet"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	found := false
+	legacyFound := false
 	for _, row := range rows {
 		if row.SelectorKind == "subject_set" && row.SelectorValue == "group:eng#member" && row.Role == "viewer" && row.SubjectID == "" {
-			if row.Principal == nil || row.Principal.Kind != "group" || row.Principal.ID != "eng" || row.Principal.DisplayName != "Engineering" || row.Principal.Relation != "member" {
-				t.Fatalf("subject_set principal = %#v, want named group", row.Principal)
+			if row.SubjectSet == nil || row.SubjectSet.Resource.Type != "group" || row.SubjectSet.Resource.ID != "eng" || row.SubjectSet.Resource.DisplayName != "Engineering" || row.SubjectSet.Relation != "member" {
+				t.Fatalf("subject_set = %#v, want named group subject set", row.SubjectSet)
 			}
 			found = true
-			break
+		}
+		if row.SelectorKind == "subject_set" && row.SelectorValue == "group:legacy#member" {
+			if row.SubjectSet == nil || row.SubjectSet.Resource.DisplayName != "" {
+				t.Fatalf("legacy subject_set = %#v, want no non-canonical display name", row.SubjectSet)
+			}
+			legacyFound = true
 		}
 	}
 	if !found {
 		t.Fatalf("subject_set row missing: %#v", rows)
+	}
+	if !legacyFound {
+		t.Fatalf("legacy subject_set row missing: %#v", rows)
 	}
 }
 
