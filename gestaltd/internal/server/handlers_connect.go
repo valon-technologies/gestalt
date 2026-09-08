@@ -471,11 +471,12 @@ func principalForCredentialMaterial(p *principal.Principal, tm credentialMateria
 }
 
 type connectionSetupResult struct {
-	Status       string                   `json:"status"`
-	Integration  string                   `json:"integration,omitempty"`
-	SelectionURL string                   `json:"selectionUrl,omitempty"`
-	PendingToken string                   `json:"pendingToken,omitempty"`
-	Candidates   []discoveryCandidateInfo `json:"candidates,omitempty"`
+	Status           string                   `json:"status"`
+	Integration      string                   `json:"integration,omitempty"`
+	AlreadyConnected bool                     `json:"alreadyConnected,omitempty"`
+	SelectionURL     string                   `json:"selectionUrl,omitempty"`
+	PendingToken     string                   `json:"pendingToken,omitempty"`
+	Candidates       []discoveryCandidateInfo `json:"candidates,omitempty"`
 }
 
 type discoveryCandidateInfo struct {
@@ -698,6 +699,7 @@ func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm 
 
 func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
 	enriched := s.enrichAccountIdentity(ctx, tm)
+	alreadyConnected := s.accountAlreadyConnected(ctx, enriched)
 	if err := s.ensureAppAccessDefaults(ctx, enriched, prov); err != nil {
 		return nil, err
 	}
@@ -706,7 +708,36 @@ func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm 
 		return nil, err
 	}
 	s.maybeSetDefaultInstancePreference(ctx, enriched.SubjectID, enriched.Integration, enriched.Connection, stored.Qualifier)
-	return &connectionSetupResult{Status: "connected", Integration: enriched.Integration}, nil
+	return &connectionSetupResult{
+		Status:           "connected",
+		Integration:      enriched.Integration,
+		AlreadyConnected: alreadyConnected,
+	}, nil
+}
+
+// accountAlreadyConnected reports whether the provider account was already
+// linked before this connection attempt. It is presentation metadata only: a
+// failed lookup must not turn a successful connection into an error.
+func (s *Server) accountAlreadyConnected(ctx context.Context, tm credentialMaterial) bool {
+	accountKey := strings.TrimSpace(tm.AccountKey)
+	if accountKey == "" {
+		return false
+	}
+	audience := strings.TrimSpace(tm.ConnectionID)
+	if audience == "" {
+		audience = tm.Integration + ":" + tm.Connection
+	}
+	credentials, err := s.externalCredentials.ListCredentials(ctx, tm.SubjectID, audience)
+	if err != nil {
+		slog.WarnContext(ctx, "could not determine whether account was already connected", "integration", tm.Integration, "error", err)
+		return false
+	}
+	for _, credential := range credentials {
+		if core.AccountKeyForCredential(credential) == accountKey {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) ensureAppAccessDefaults(ctx context.Context, tm credentialMaterial, prov core.Provider) error {

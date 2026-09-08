@@ -8,8 +8,41 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
+
+func TestAccountAlreadyConnectedMatchesLogicalAccount(t *testing.T) {
+	t.Parallel()
+
+	provider := coretesting.NewStubExternalCredentialProvider()
+	s := &Server{externalCredentials: provider}
+	ctx := context.Background()
+	if err := provider.CreateCredential(ctx, &core.ExternalCredential{
+		ID:         "existing",
+		Subject:    "user:1",
+		Audience:   "slack:default",
+		Qualifier:  "Valon",
+		AccountKey: "slack:v1:T123:U456",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !s.accountAlreadyConnected(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		AccountKey:   "slack:v1:T123:U456",
+	}) {
+		t.Fatal("expected matching account key to be reported as already connected")
+	}
+	if s.accountAlreadyConnected(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		AccountKey:   "slack:v1:T999:U888",
+	}) {
+		t.Fatal("expected different account key to be reported as new")
+	}
+}
 
 func TestConnectionSetupFailureDescribesInstanceConflict(t *testing.T) {
 	t.Parallel()
