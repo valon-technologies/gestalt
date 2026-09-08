@@ -696,7 +696,7 @@ func (s *Server) selectAppAdminRegistryVersion(w http.ResponseWriter, r *http.Re
 		writeAppAdminRegistryInstallError(w, err)
 		return
 	}
-	if s.autoDeploySettings != nil {
+	if result.Retried && s.autoDeploySettings != nil {
 		if current, settingsErr := s.autoDeploySettings.Get(r.Context(), app.name); settingsErr == nil && current.Enabled && current.Paused {
 			if _, settingsErr = s.autoDeploySettings.Update(r.Context(), app.name, func(settings *core.AppAutoDeploySettings) error {
 				settings.Paused = false

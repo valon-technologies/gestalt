@@ -61,7 +61,14 @@ func TestServerInstallerWiringPreservesConfiguredRolloutMode(t *testing.T) {
 			cfg.Server.AppRegistry.RolloutMode = mode
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			controller, err := startAppRegistryAutoDeployController(ctx, cfg, &bootstrap.Result{Services: services}, "0.1.0", fixture.Reader)
+			fleet := &appregistry.FleetProjector{
+				ChangeRequests: services.AppVersionChangeRequests,
+				SourceVersions: services.GestaltdSourceVersionState,
+				Heartbeats:     services.GestaltdInstanceHeartbeats,
+				Rollouts:       services.AppRollouts,
+				HeartbeatTTL:   time.Minute,
+			}
+			controller, err := startAppRegistryAutoDeployController(ctx, cfg, &bootstrap.Result{Services: services}, "0.1.0", fixture.Reader, fleet)
 			if err != nil {
 				t.Fatalf("startAppRegistryAutoDeployController: %v", err)
 			}

@@ -246,6 +246,13 @@ func VersionSelectable(version, desiredVersion string, retention *RetentionIndex
 	}
 }
 
+// RetryVersionSelectable applies retention rules to a version that is already
+// desired. A failed rollout may retry that version, but only while its retained
+// artifact remains deployable.
+func RetryVersionSelectable(version string, retention *RetentionIndex, policy RetentionPolicy, now time.Time) error {
+	return VersionSelectable(version, "", retention, policy, now)
+}
+
 func retentionVersion(index *RetentionIndex, version string) (RetentionVersion, bool) {
 	if index == nil || index.Versions == nil {
 		return RetentionVersion{}, false

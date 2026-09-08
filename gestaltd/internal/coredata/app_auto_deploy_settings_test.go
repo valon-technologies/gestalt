@@ -112,4 +112,57 @@ func TestAutoDeploySettingsService(t *testing.T) {
 			t.Fatalf("Get after failed update error = %v, want %v", err, core.ErrNotFound)
 		}
 	})
+
+	t.Run("update for rollout ignores stale rollout", func(t *testing.T) {
+		t.Parallel()
+		svc := testutil.NewStubServices(t)
+		createdAt := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+		failed, err := svc.AppRollouts.Create(ctx, &core.AppRollout{
+			App: "g-issues", Version: "v1", State: core.AppRolloutStateEnrolling,
+			CreatedAt: createdAt, EnrollmentEndsAt: createdAt.Add(time.Minute), Deadline: createdAt.Add(2 * time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("create failed rollout: %v", err)
+		}
+		if _, err := svc.AppRollouts.MarkFailedForRollout(ctx, failed, createdAt.Add(time.Minute)); err != nil {
+			t.Fatalf("mark failed rollout: %v", err)
+		}
+		failed, err = svc.AppRollouts.Get(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("get failed rollout: %v", err)
+		}
+		if _, applied, err := svc.AutoDeploySettings.UpdateForRollout(ctx, failed, func(settings *core.AppAutoDeploySettings) error {
+			settings.Enabled = true
+			settings.Paused = true
+			return nil
+		}); err != nil || !applied {
+			t.Fatalf("initial update: applied=%v err=%v", applied, err)
+		}
+		replacement, err := svc.AppRollouts.Create(ctx, &core.AppRollout{
+			App: "g-issues", Version: "v1", State: core.AppRolloutStateEnrolling,
+			CreatedAt: createdAt.Add(2 * time.Minute), EnrollmentEndsAt: createdAt.Add(3 * time.Minute), Deadline: createdAt.Add(4 * time.Minute),
+		})
+		if err != nil {
+			t.Fatalf("create replacement rollout: %v", err)
+		}
+		if _, err := svc.AppRollouts.MarkFailedForRollout(ctx, replacement, createdAt.Add(3*time.Minute)); err != nil {
+			t.Fatalf("mark replacement failed rollout: %v", err)
+		}
+		if _, applied, err := svc.AutoDeploySettings.UpdateForRollout(ctx, failed, func(settings *core.AppAutoDeploySettings) error {
+			settings.Paused = false
+			return nil
+		}); err != nil || applied {
+			t.Fatalf("stale update: applied=%v err=%v", applied, err)
+		}
+		if replacement.CreatedAt.Equal(failed.CreatedAt) {
+			t.Fatal("replacement rollout did not get a new identity")
+		}
+		settings, err := svc.AutoDeploySettings.Get(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("get settings: %v", err)
+		}
+		if !settings.Paused {
+			t.Fatalf("stale update changed settings: %#v", settings)
+		}
+	})
 }

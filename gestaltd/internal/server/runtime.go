@@ -100,6 +100,13 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err != nil {
 		return fmt.Errorf("resolve app registry heartbeat TTL: %w", err)
 	}
+	fleetProjector := &appregistry.FleetProjector{
+		ChangeRequests: result.Services.AppVersionChangeRequests,
+		SourceVersions: result.Services.GestaltdSourceVersionState,
+		Heartbeats:     result.Services.GestaltdInstanceHeartbeats,
+		Rollouts:       result.Services.AppRollouts,
+		HeartbeatTTL:   heartbeatTTL,
+	}
 	baseConfig := Config{
 		Auth:                  result.Auth,
 		SelectedAuthProvider:  result.SelectedAuthProvider,
@@ -163,6 +170,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		OperationAccessChecker:  operationAccessChecker(result.Invoker),
 		AppRegistries:           cfg.AppRegistries,
 		AppRegistryReader:       appRegistryReader,
+		AppFleetProjector:       fleetProjector,
 		AppRegistryHeartbeatTTL: heartbeatTTL,
 		AppRegistryRolloutMode:  cfg.Server.AppRegistry.RolloutMode,
 		ArtifactsDir:            cfg.Server.ArtifactsDir,
@@ -182,7 +190,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
-	autoDeployController, err := startAppRegistryAutoDeployController(ctx, cfg, result, gestaltdVersion, appRegistryReader)
+	autoDeployController, err := startAppRegistryAutoDeployController(ctx, cfg, result, gestaltdVersion, appRegistryReader, fleetProjector)
 	if err != nil {
 		return err
 	}
@@ -721,6 +729,7 @@ func startAppRegistryAutoDeployController(
 	result *bootstrap.Result,
 	gestaltdVersion string,
 	reader *appregistry.RegistryReader,
+	fleet *appregistry.FleetProjector,
 ) (*autodeploy.Controller, error) {
 	if cfg == nil || result == nil || result.Services == nil {
 		return nil, nil
@@ -769,16 +778,8 @@ func startAppRegistryAutoDeployController(
 		SourceVersion:    appregistry.ResolveSourceVersion(),
 		RolloutMode:      core.AppRolloutMode(cfg.Server.AppRegistry.RolloutMode),
 	}
-	heartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
-	if err != nil {
-		return nil, fmt.Errorf("server.appRegistry.heartbeatTtl: %w", err)
-	}
-	fleet := &appregistry.FleetProjector{
-		ChangeRequests: services.AppVersionChangeRequests,
-		SourceVersions: services.GestaltdSourceVersionState,
-		Heartbeats:     services.GestaltdInstanceHeartbeats,
-		Rollouts:       services.AppRollouts,
-		HeartbeatTTL:   heartbeatTTL,
+	if fleet == nil {
+		return nil, fmt.Errorf("app registry fleet projector is not configured")
 	}
 	controller := autodeploy.New(
 		services.AutoDeploySettings,

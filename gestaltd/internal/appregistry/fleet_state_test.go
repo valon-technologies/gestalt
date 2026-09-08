@@ -142,6 +142,34 @@ func TestEvaluateFleetState(t *testing.T) {
 			wantIdle:  1,
 		},
 		{
+			name:    "starting replica is neutral while desired capacity is met",
+			minimum: 1,
+			heartbeats: []*core.GestaltdInstanceHeartbeat{
+				healthy("one", now),
+				heartbeatForFleet("starting", "source", now, map[string]core.GestaltdInstanceAppHeartbeat{
+					"app": {State: core.GestaltdInstanceAppStateStarting},
+				}),
+			},
+			wantState: core.AppFleetStateHealthy,
+			wantLive:  2,
+			wantRun:   1,
+			wantIdle:  1,
+		},
+		{
+			name:    "live capacity below running desired minimum is degraded",
+			minimum: 2,
+			heartbeats: []*core.GestaltdInstanceHeartbeat{
+				healthy("one", now),
+				heartbeatForFleet("starting", "source", now, map[string]core.GestaltdInstanceAppHeartbeat{
+					"app": {State: core.GestaltdInstanceAppStateStarting},
+				}),
+			},
+			wantState: core.AppFleetStateDegraded,
+			wantLive:  2,
+			wantRun:   1,
+			wantIdle:  1,
+		},
+		{
 			name:    "matching active rollout overlays converging",
 			minimum: 1,
 			heartbeats: []*core.GestaltdInstanceHeartbeat{

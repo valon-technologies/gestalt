@@ -201,7 +201,7 @@ func TestInstallerSelectReadmitsOnlyTheFailedDesiredVersion(t *testing.T) {
 		t.Fatalf("MarkFailed retry rollout: %v", err)
 	}
 
-	if _, err := installer.Retry(ctx, appregistry.InstallInput{
+	if _, err := installer.Select(ctx, appregistry.InstallInput{
 		Registry: "toolshed",
 		App:      "g-issues",
 		Version:  "not-current",
@@ -233,14 +233,14 @@ func TestInstallerRetryRejectsAnActiveRollout(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
-	if _, err := installer.Retry(ctx, appregistry.InstallInput{
+	if _, err := installer.Select(ctx, appregistry.InstallInput{
 		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
 	}); !errors.Is(err, appregistry.ErrAppRolloutActive) {
 		t.Fatalf("Retry error = %v, want %v", err, appregistry.ErrAppRolloutActive)
 	}
 }
 
-func TestInstallerRetryRejectsACompletedRollout(t *testing.T) {
+func TestInstallerSelectRejectsACompletedCurrentRollout(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -266,10 +266,10 @@ func TestInstallerRetryRejectsACompletedRollout(t *testing.T) {
 		t.Fatalf("MarkComplete: %v", err)
 	}
 
-	if _, err := installer.Retry(ctx, appregistry.InstallInput{
+	if _, err := installer.Select(ctx, appregistry.InstallInput{
 		Registry: "toolshed", App: "g-issues", Version: fixture.Version,
-	}); !errors.Is(err, appregistry.ErrAppRolloutRetryNotAllowed) {
-		t.Fatalf("Retry error = %v, want %v", err, appregistry.ErrAppRolloutRetryNotAllowed)
+	}); !errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled) {
+		t.Fatalf("Select error = %v, want %v", err, appregistry.ErrAppVersionAlreadyInstalled)
 	}
 }
 

@@ -51,6 +51,7 @@ type InstallOutput struct {
 	Installation *core.AppInstallation
 	FromVersion  string
 	Rollout      *core.AppRollout
+	Retried      bool
 }
 
 type installMode int
@@ -77,13 +78,6 @@ func (i *Installer) Upgrade(ctx context.Context, input InstallInput) (*InstallOu
 
 func (i *Installer) Select(ctx context.Context, input InstallInput) (*InstallOutput, error) {
 	return i.install(ctx, input, installModeSelect)
-}
-
-// Retry re-admits the currently desired version after a terminal rollout
-// failure. The version is already known to the fleet, so this bypasses the
-// normal already-installed guard while creating a fresh rollout event.
-func (i *Installer) Retry(ctx context.Context, input InstallInput) (*InstallOutput, error) {
-	return i.install(ctx, input, installModeRetry)
 }
 
 func (i *Installer) install(ctx context.Context, input InstallInput, mode installMode) (*InstallOutput, error) {
@@ -179,6 +173,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		}
 	}
 	var currentRollout *core.AppRollout
+	retried := mode == installModeRetry
 	if current, getErr := i.Rollouts.Get(installCtx, appName); getErr == nil {
 		currentRollout = current
 		if current.State == core.AppRolloutStateEnrolling || current.State == core.AppRolloutStateRestarting {
@@ -196,6 +191,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		// user-facing retry command. Keep that decision inside admission so all
 		// callers share the same failed-rollout checks.
 		mode = installModeRetry
+		retried = true
 	}
 	if mode == installModeRetry {
 		if currentRollout == nil || currentRollout.State != core.AppRolloutStateFailed ||
@@ -232,7 +228,11 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if err != nil {
 		return nil, fmt.Errorf("fetch retention index: %w", err)
 	}
-	if mode == installModeSelect || mode == installModeUpgrade || mode == installModeAdd {
+	if mode == installModeRetry {
+		if err := RetryVersionSelectable(version, retentionIndex, policy, i.now()); err != nil {
+			return nil, err
+		}
+	} else if mode == installModeSelect || mode == installModeUpgrade || mode == installModeAdd {
 		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now()); err != nil {
 			return nil, err
 		}
@@ -321,6 +321,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		Installation: coredata.InstallationFromChangeRequest(addedRequest),
 		FromVersion:  fromVersion,
 		Rollout:      rollout,
+		Retried:      retried,
 	}, nil
 }
 

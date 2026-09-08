@@ -147,7 +147,7 @@ func TestControllerCoalescesDuringActiveRollout(t *testing.T) {
 	}
 }
 
-func TestControllerDisablesOnFailedRollout(t *testing.T) {
+func TestControllerPausesOnFailedRollout(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)

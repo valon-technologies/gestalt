@@ -202,7 +202,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 			if healthErr != nil {
 				return healthErr
 			}
-			_, updateErr := c.Settings.Update(ctx, appName, func(current *core.AppAutoDeploySettings) error {
+			_, _, updateErr := c.Settings.UpdateForRollout(ctx, rollout, func(current *core.AppAutoDeploySettings) error {
 				current.PendingVersion = ""
 				current.LastSeenVersion = ""
 				current.LastFailedRolloutAt = failedAt
@@ -213,7 +213,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 				} else {
 					current.Paused = true
 					current.PauseReason = core.AppAutoDeployPauseReasonRolloutFailed
-					current.LastError = fmt.Sprintf("automatic deployment paused after rollout for %s failed; retry the version to resume", rollout.Version)
+					current.LastError = fmt.Sprintf("Automatic deployment is paused because rollout of version %s failed. Select that version again to retry.", rollout.Version)
 				}
 				return nil
 			})
