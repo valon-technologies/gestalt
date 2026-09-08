@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -136,15 +137,16 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		authSource = p.AuthSource()
 	}
 	tm := credentialMaterial{
-		SubjectID:    subjectID,
-		AuthSource:   authSource,
-		ConnectionID: conn.ConnectionID,
-		Integration:  req.Integration,
-		Connection:   manualConnection,
-		Instance:     manualInstance,
-		Fields:       fields,
-		AccessToken:  rawCredential,
-		MetadataJSON: manualMeta,
+		SubjectID:         subjectID,
+		AuthSource:        authSource,
+		ConnectionID:      conn.ConnectionID,
+		Integration:       req.Integration,
+		Connection:        manualConnection,
+		Instance:          manualInstance,
+		Fields:            fields,
+		AccessToken:       rawCredential,
+		MetadataJSON:      manualMeta,
+		ProviderAccountID: providerAccountIDFromTokenResponse(selected.ParamDefs, tokenResp),
 	}
 	credentialActorFromPrincipal(p, subjectID).applyTo(&tm)
 
@@ -157,9 +159,10 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.runConnectionSetup(r.Context(), prov, tm, discoveryToken)
 	if err != nil {
-		auditErr = errors.New("connection setup failed")
+		status, message := connectionSetupFailure(err)
+		auditErr = errors.New(message)
 		slog.ErrorContext(r.Context(), "connection setup failed", "provider", req.Integration, "error", err)
-		writeError(w, http.StatusBadGateway, "connection setup failed")
+		writeError(w, status, message)
 		return
 	}
 
@@ -260,7 +263,15 @@ func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided 
 
 func buildConnectionMetadata(defs map[string]core.ConnectionParamDef, userParams map[string]string, tokenResp *core.OAuthTokenResponse) (string, error) {
 	metadata := make(map[string]string)
+	for name := range defs {
+		if isHostOwnedMetadataKey(name) {
+			return "", fmt.Errorf("connection parameter %q is reserved for host-owned account metadata", name)
+		}
+	}
 	for k, v := range userParams {
+		if isHostOwnedMetadataKey(k) {
+			return "", fmt.Errorf("connection parameter %q is reserved for host-owned account metadata", k)
+		}
 		metadata[k] = v
 	}
 
@@ -298,6 +309,59 @@ func buildConnectionMetadata(defs map[string]core.ConnectionParamDef, userParams
 	return string(b), nil
 }
 
+func isHostOwnedMetadataKey(key string) bool {
+	key = strings.TrimSpace(key)
+	return key == accountIdentityMetadataKey || key == accountKeyMetadataKey
+}
+
+// providerAccountIDFromTokenResponse extracts the provider-owned identifier
+// from a connection parameter explicitly marked accountIdentity. The field
+// may map to a nested token-response value such as account.id. The name-based
+// fallback exists only for manifests written before accountIdentity was added.
+func providerAccountIDFromTokenResponse(defs map[string]core.ConnectionParamDef, tokenResp *core.OAuthTokenResponse) string {
+	if tokenResp == nil || len(tokenResp.Extra) == 0 {
+		return ""
+	}
+	var names []string
+	for name, def := range defs {
+		if def.From == "token_response" && def.AccountIdentity {
+			names = append(names, name)
+		}
+	}
+	// Keep existing manifests working while they migrate to the explicit
+	// accountIdentity declaration. New manifests must declare the role rather
+	// than relying on a parameter name.
+	if len(names) == 0 {
+		for name, def := range defs {
+			if def.From == "token_response" && isProviderAccountIDParam(name) {
+				names = append(names, name)
+			}
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		def := defs[name]
+		field := strings.TrimSpace(def.Field)
+		if field == "" {
+			field = name
+		}
+		value, ok := apiexec.ExtractJSONPath(tokenResp.Extra, field)
+		if !ok {
+			continue
+		}
+		candidate := fmt.Sprintf("%v", value)
+		if safeTokenResponseValue.MatchString(candidate) {
+			return strings.TrimSpace(candidate)
+		}
+	}
+	return ""
+}
+
+func isProviderAccountIDParam(name string) bool {
+	name = strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(strings.TrimSpace(name)))
+	return name == "accountid" || name == "provideraccountid"
+}
+
 type bearerTransport struct {
 	token string
 	base  http.RoundTripper
@@ -320,14 +384,16 @@ type credentialMaterial struct {
 	Instance     string
 	// Fields holds named manual credentials, stored as an Opaque credential.
 	// When empty, the token fields below are stored as a Grant.
-	Fields          map[string]string
-	AccessToken     string
-	RefreshToken    string
-	TokenExpiresAt  *time.Time
-	MetadataJSON    string
-	ActorSubjectID  string
-	ActorUserID     string
-	ActorAuthSource string
+	Fields            map[string]string
+	AccessToken       string
+	RefreshToken      string
+	TokenExpiresAt    *time.Time
+	MetadataJSON      string
+	AccountKey        string
+	ProviderAccountID string
+	ActorSubjectID    string
+	ActorUserID       string
+	ActorAuthSource   string
 }
 
 type credentialActor struct {
@@ -428,6 +494,7 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 		Subject:      tm.SubjectID,
 		Audience:     audience,
 		Qualifier:    tm.Instance,
+		AccountKey:   strings.TrimSpace(tm.AccountKey),
 		MetadataJSON: tm.MetadataJSON,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -442,10 +509,67 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 			LastRefreshedAt: &now,
 		}
 	}
-	if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
+	accountKey := core.AccountKeyForCredential(tok)
+	tok.AccountKey = accountKey
+	if accountKey != "" {
+		if cleaned, cleanupErr := removeAccountKeyMetadata(tok.MetadataJSON); cleanupErr == nil {
+			tok.MetadataJSON = cleaned
+		}
+	}
+	if err := s.storeCredentialAtInstance(ctx, tok); err != nil {
 		return nil, err
 	}
 	return tok, nil
+}
+
+// storeCredentialAtInstance makes the exact (subject, audience, qualifier)
+// record the provider's concurrency boundary. AccountKey is only used to
+// validate an existing record or upgrade a legacy keyless record; it never
+// triggers a list-and-delete operation across other qualifiers.
+func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.ExternalCredential) error {
+	existing, err := s.externalCredentials.GetCredential(ctx, candidate.Subject, candidate.Audience, candidate.Qualifier)
+	if err == nil {
+		return s.upsertCredentialAtInstance(ctx, candidate, existing)
+	}
+	if !errors.Is(err, core.ErrNotFound) {
+		return fmt.Errorf("get credential at instance %q: %w", candidate.Qualifier, err)
+	}
+	if err := s.externalCredentials.CreateCredential(ctx, candidate); err == nil {
+		return nil
+	} else if !errors.Is(err, core.ErrAlreadyExists) {
+		return err
+	}
+
+	// A different server won the insert between Get and Create. Read the
+	// provider-owned record and apply the same account-ownership rule.
+	existing, err = s.externalCredentials.GetCredential(ctx, candidate.Subject, candidate.Audience, candidate.Qualifier)
+	if err != nil {
+		return fmt.Errorf("read credential after instance conflict: %w", err)
+	}
+	return s.upsertCredentialAtInstance(ctx, candidate, existing)
+}
+
+func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, existing *core.ExternalCredential) error {
+	existingKey := core.AccountKeyForCredential(existing)
+	candidateKey := core.AccountKeyForCredential(candidate)
+	if existingKey != "" && existingKey != candidateKey {
+		return &core.CredentialInstanceConflictError{Instance: candidate.Qualifier, DifferentAccount: true}
+	}
+
+	candidate.ID = existing.ID
+	candidate.CreatedAt = existing.CreatedAt
+	return s.externalCredentials.UpsertCredential(ctx, candidate)
+}
+
+func connectionSetupFailure(err error) (int, string) {
+	var conflict *core.CredentialInstanceConflictError
+	if errors.As(err, &conflict) {
+		if conflict.DifferentAccount {
+			return http.StatusConflict, fmt.Sprintf("The instance name %q is already linked to another account. Choose a different instance name and try again.", conflict.Instance)
+		}
+		return http.StatusConflict, fmt.Sprintf("The instance name %q is already in use. Choose a different instance name and try again.", conflict.Instance)
+	}
+	return http.StatusBadGateway, "connection setup failed"
 }
 
 func validateProviderMetadata(source string, metadata map[string]string) error {
@@ -454,7 +578,7 @@ func validateProviderMetadata(source string, metadata map[string]string) error {
 		source = "provider"
 	}
 	for k, v := range metadata {
-		if k == accountIdentityMetadataKey {
+		if isHostOwnedMetadataKey(k) {
 			return fmt.Errorf("%s must not set reserved metadata key %q", source, k)
 		}
 		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
@@ -476,7 +600,7 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 		}
 	}
 	for k, v := range extra {
-		if k == accountIdentityMetadataKey {
+		if isHostOwnedMetadataKey(k) {
 			// Host-owned; never accept from provider/discovery overlays.
 			continue
 		}
@@ -539,10 +663,11 @@ func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm 
 	if err := s.ensureAppAccessDefaults(ctx, enriched, prov); err != nil {
 		return nil, err
 	}
-	if _, err := s.storeCredentialFromMaterial(ctx, enriched); err != nil {
+	stored, err := s.storeCredentialFromMaterial(ctx, enriched)
+	if err != nil {
 		return nil, err
 	}
-	s.maybeSetDefaultInstancePreference(ctx, enriched.SubjectID, enriched.Integration, enriched.Connection, enriched.Instance)
+	s.maybeSetDefaultInstancePreference(ctx, enriched.SubjectID, enriched.Integration, enriched.Connection, stored.Qualifier)
 	return &connectionSetupResult{Status: "connected", Integration: enriched.Integration}, nil
 }
 
@@ -611,10 +736,14 @@ func (s *Server) configuredConnectionInfo(integration, connection string) (confi
 	if !ok {
 		return configuredConnectionInfo{}, fmt.Errorf("connection %q is not configured for integration %q", connection, integration)
 	}
+	paramDefs := connectionParamDefsFromConfig(conn.ConnectionParams)
+	if err := core.ValidateConnectionParamDefs(paramDefs); err != nil {
+		return configuredConnectionInfo{}, fmt.Errorf("invalid connection parameters: %w", err)
+	}
 	return configuredConnectionInfo{
 		Def:       conn,
 		Mode:      config.ConnectionModeForConnection(conn),
-		ParamDefs: connectionParamDefsFromConfig(conn.ConnectionParams),
+		ParamDefs: paramDefs,
 	}, nil
 }
 
@@ -625,11 +754,12 @@ func connectionParamDefsFromConfig(defs map[string]config.ConnectionParamDef) ma
 	out := make(map[string]core.ConnectionParamDef, len(defs))
 	for name, def := range defs {
 		out[name] = core.ConnectionParamDef{
-			Required:    def.Required,
-			Description: def.Description,
-			Default:     def.Default,
-			From:        def.From,
-			Field:       def.Field,
+			Required:        def.Required,
+			Description:     def.Description,
+			Default:         def.Default,
+			From:            def.From,
+			Field:           def.Field,
+			AccountIdentity: def.AccountIdentity,
 		}
 	}
 	return out

@@ -128,7 +128,7 @@ func (s *Server) implicitIntegrationStatus(integration string, prov core.Provide
 			Connected:       false,
 		}
 	default:
-		return subjectConnectionStatus(groupInstancesForConnection(instances, ""), len(authTypes) > 0, ownerKindForPrincipal(p), "")
+		return subjectConnectionStatus(groupInstancesForConnection(instances, "", ""), len(authTypes) > 0, ownerKindForPrincipal(p), "")
 	}
 }
 
@@ -407,7 +407,7 @@ func reconnectStatusActions(instances []instanceInfo, reconnectable, disconnecta
 	if len(instances) > 1 {
 		actions = append(actions, actionSelectInstance)
 	}
-	if reconnectable && reconnectTargetsDefaultInstance(instances) {
+	if reconnectable && invalidInstanceCount(instances) > 0 {
 		actions = append(actions, actionReconnect)
 	}
 	if disconnectable {
@@ -417,10 +417,6 @@ func reconnectStatusActions(instances []instanceInfo, reconnectable, disconnecta
 		actions = append(actions, actionAddInstance)
 	}
 	return actions
-}
-
-func reconnectTargetsDefaultInstance(instances []instanceInfo) bool {
-	return len(instances) == 1 && instances[0].Name == defaultTokenInstance
 }
 
 func subjectConnectionActions(disconnectable, connectable, selectInstance bool) []string {
@@ -460,14 +456,36 @@ func ownerKindForPrincipal(p *principal.Principal) string {
 	}
 }
 
-func groupInstancesForConnection(instances []instanceInfo, connection string) []instanceInfo {
+func groupInstancesForConnection(instances []instanceInfo, connection, preferred string) []instanceInfo {
 	connection = userFacingConnectionName(config.ResolveConnectionAlias(connection))
-	out := make([]instanceInfo, 0, len(instances))
+	filtered := make([]instanceInfo, 0, len(instances))
 	for _, instance := range instances {
 		if connection != "" && config.ResolveConnectionAlias(instance.Connection) != config.ResolveConnectionAlias(connection) {
 			continue
 		}
-		out = append(out, instance)
+		filtered = append(filtered, instance)
+	}
+	return dedupeInstancesByAccount(filtered, strings.TrimSpace(preferred))
+}
+
+func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []instanceInfo {
+	if len(instances) < 2 {
+		return instances
+	}
+	candidates := make([]core.CredentialAccountCandidate, len(instances))
+	for i, instance := range instances {
+		candidates[i] = core.CredentialAccountCandidate{
+			AccountKey:     instance.AccountKey,
+			ID:             instance.credentialID,
+			Qualifier:      instance.Name,
+			CreatedAt:      instance.credentialCreated,
+			NeedsReconnect: instance.credentialInvalid,
+		}
+	}
+	indices := core.GroupCredentialAccountCandidateIndices(candidates, preferred)
+	out := make([]instanceInfo, 0, len(indices))
+	for _, index := range indices {
+		out = append(out, instances[index])
 	}
 	return out
 }

@@ -107,11 +107,12 @@ type SessionCatalogProvider interface {
 }
 
 type ConnectionParamDef struct {
-	Required    bool
-	Description string
-	Default     string
-	From        string // "" = user-provided, "token_response" = from OAuth response, "discovery" = from provider discovery
-	Field       string // JSON field name for token_response extraction
+	Required        bool
+	Description     string
+	Default         string
+	From            string // "" = user-provided, "token_response" = from OAuth response, "discovery" = from provider discovery
+	Field           string // JSON field name for token_response extraction
+	AccountIdentity bool   // token-response field is the provider's stable account ID
 }
 
 type CredentialFieldDef struct {

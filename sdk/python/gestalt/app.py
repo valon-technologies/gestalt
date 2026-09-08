@@ -161,6 +161,8 @@ class ConnectionParamDef:
     default_value: str = ""
     from_: str = ""
     field: str = ""
+    #: Marks a token-response parameter as the provider's stable account ID.
+    account_identity: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -25,3 +25,38 @@ func TestConnectionParamsFromMetadataJSON_Empty(t *testing.T) {
 		t.Fatalf("params=%v err=%v", params, err)
 	}
 }
+
+func TestAccountKeyFromMetadataJSON_UsesOnlyExplicitKey(t *testing.T) {
+	t.Parallel()
+
+	if got := AccountKeyFromMetadataJSON(`{"account_key":" provider:v1:abc ","email":"user@example.com"}`); got != "provider:v1:abc" {
+		t.Fatalf("account key = %q, want explicit provider key", got)
+	}
+	if got := AccountKeyFromMetadataJSON(`{"email":"user@example.com"}`); got != "" {
+		t.Fatalf("account key = %q, want empty without explicit key", got)
+	}
+	if got := AccountKeyFromMetadataJSON(`{"account_key": {"not":"a string"}}`); got != "" {
+		t.Fatalf("account key = %q, want empty for malformed metadata", got)
+	}
+}
+
+func TestAccountKeyForCredential_PrefersTypedIdentity(t *testing.T) {
+	t.Parallel()
+
+	credential := &ExternalCredential{
+		AccountKey:   "provider:v1:typed",
+		MetadataJSON: `{"account_key":"provider:v1:legacy"}`,
+	}
+	if got := AccountKeyForCredential(credential); got != "provider:v1:typed" {
+		t.Fatalf("account key = %q, want typed account key", got)
+	}
+}
+
+func TestAccountKeyForCredential_ReadsLegacyIdentity(t *testing.T) {
+	t.Parallel()
+
+	credential := &ExternalCredential{MetadataJSON: `{"account_key":"provider:v1:legacy"}`}
+	if got := AccountKeyForCredential(credential); got != "provider:v1:legacy" {
+		t.Fatalf("account key = %q, want legacy account key during migration", got)
+	}
+}

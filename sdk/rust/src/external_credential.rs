@@ -95,6 +95,11 @@ pub struct ExternalCredential {
     #[serde(with = "crate::serde_time")]
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
+    /// Opaque, host-owned grouping key for the linked provider account. Providers
+    /// must persist it unchanged and must not expose it as a connection param.
+    ///
+    /// The `account_key` field.
+    pub account_key: String,
     /// The `credential` oneof; None when unset.
     pub credential: Option<ExternalCredentialCredential>,
 }

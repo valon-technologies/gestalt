@@ -238,6 +238,12 @@ pub(crate) fn encode_wire_external_credential_json(
             crate::public::proto_json::encode_timestamp(inner),
         );
     }
+    if !value.account_key.is_empty() {
+        object.insert(
+            "accountKey".into(),
+            serde_json::Value::String(value.account_key.to_string()),
+        );
+    }
     if let Some(active) = &value.credential {
         match active {
             v1::external_credential::Credential::Grant(inner) => {
@@ -302,6 +308,10 @@ pub(crate) fn decode_wire_external_credential_json(
             .get("updatedAt")
             .map(|value| crate::public::proto_json::decode_timestamp(value))
             .transpose()?,
+        account_key: match object.get("accountKey") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
         credential: {
             let mut active = None;
             if let Some(value) = object.get("grant") {

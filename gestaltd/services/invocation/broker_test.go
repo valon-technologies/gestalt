@@ -1497,3 +1497,82 @@ func TestBrokerInvoke_UpstreamUnauthorizedPersistsReconnectRequired(t *testing.T
 		t.Fatalf("stored ExpiresAt = %v, want in the past", stored.Grant.ExpiresAt)
 	}
 }
+
+func TestBrokerResolveCredentialFailurePersistsResolvedInstanceOnly(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	provider := coretesting.NewStubExternalCredentialProvider()
+	subjectID := principal.UserSubjectID("user-resolution-reconnect")
+	connectionID := "provider:" + core.AppConnectionName
+	metadata := `{"account_key":"provider:v1:shared"}`
+	for _, credential := range []*core.ExternalCredential{
+		{
+			ID:           "credential-old",
+			Subject:      subjectID,
+			Audience:     connectionID,
+			Qualifier:    "old-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "old-token"},
+			CreatedAt:    time.Unix(1, 0),
+		},
+		{
+			ID:           "credential-new",
+			Subject:      subjectID,
+			Audience:     connectionID,
+			Qualifier:    "new-label",
+			MetadataJSON: metadata,
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "new-token"},
+			CreatedAt:    time.Unix(2, 0),
+		},
+	} {
+		if err := provider.UpsertCredential(context.Background(), credential); err != nil {
+			t.Fatalf("UpsertCredential: %v", err)
+		}
+	}
+	provider.ResolveCredentialFunc = func(context.Context, *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+		return nil, core.ErrReconnectRequired
+	}
+
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "provider",
+			ConnMode: core.ConnectionModeSubject,
+			CatalogVal: &catalog.Catalog{
+				Name: "provider",
+				Operations: []catalog.CatalogOperation{
+					{ID: "search", Method: "GET"},
+				},
+			},
+		}),
+		svc.Users,
+		provider,
+	)
+
+	_, err := broker.Invoke(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+		UserID:    "user-resolution-reconnect",
+		Kind:      principal.KindUser,
+	}, "provider", "", "search", nil)
+	if err == nil {
+		t.Fatal("expected invoke error")
+	}
+	if !StoredCredentialRejected(err) {
+		t.Fatalf("err = %v, want stored-credential reject", err)
+	}
+
+	old, err := provider.GetCredential(context.Background(), subjectID, connectionID, "old-label")
+	if err != nil {
+		t.Fatalf("GetCredential(old): %v", err)
+	}
+	if old.Grant == nil || old.Grant.RefreshErrorCount != 1 {
+		t.Fatalf("old credential = %+v, want reconnect-required state", old)
+	}
+	newCredential, err := provider.GetCredential(context.Background(), subjectID, connectionID, "new-label")
+	if err != nil {
+		t.Fatalf("GetCredential(new): %v", err)
+	}
+	if newCredential.Grant == nil || newCredential.Grant.RefreshErrorCount != 0 {
+		t.Fatalf("new credential = %+v, want untouched duplicate", newCredential)
+	}
+}

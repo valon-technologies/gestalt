@@ -639,14 +639,16 @@ func (x *Catalog) GetOperations() []*CatalogOperation {
 
 // ConnectionParamDef describes one provider-defined connection parameter.
 type ConnectionParamDef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Required      bool                   `protobuf:"varint,1,opt,name=required,proto3" json:"required,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	DefaultValue  string                 `protobuf:"bytes,3,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
-	From          string                 `protobuf:"bytes,4,opt,name=from,proto3" json:"from,omitempty"`
-	Field         string                 `protobuf:"bytes,5,opt,name=field,proto3" json:"field,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Required     bool                   `protobuf:"varint,1,opt,name=required,proto3" json:"required,omitempty"`
+	Description  string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	DefaultValue string                 `protobuf:"bytes,3,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
+	From         string                 `protobuf:"bytes,4,opt,name=from,proto3" json:"from,omitempty"`
+	Field        string                 `protobuf:"bytes,5,opt,name=field,proto3" json:"field,omitempty"`
+	// Marks a token-response parameter as the provider's stable account ID.
+	AccountIdentity bool `protobuf:"varint,6,opt,name=account_identity,json=accountIdentity,proto3" json:"account_identity,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ConnectionParamDef) Reset() {
@@ -712,6 +714,13 @@ func (x *ConnectionParamDef) GetField() string {
 		return x.Field
 	}
 	return ""
+}
+
+func (x *ConnectionParamDef) GetAccountIdentity() bool {
+	if x != nil {
+		return x.AccountIdentity
+	}
+	return false
 }
 
 // ProviderMetadata describes an integration provider's static capabilities.
@@ -2750,13 +2759,14 @@ const file_v1_app_proto_rawDesc = "" +
 	"\bicon_svg\x18\x04 \x01(\tR\aiconSvg\x12E\n" +
 	"\n" +
 	"operations\x18\x05 \x03(\v2%.gestalt.provider.v1.CatalogOperationR\n" +
-	"operations\"\xa1\x01\n" +
+	"operations\"\xcc\x01\n" +
 	"\x12ConnectionParamDef\x12\x1a\n" +
 	"\brequired\x18\x01 \x01(\bR\brequired\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
 	"\rdefault_value\x18\x03 \x01(\tR\fdefaultValue\x12\x12\n" +
 	"\x04from\x18\x04 \x01(\tR\x04from\x12\x14\n" +
-	"\x05field\x18\x05 \x01(\tR\x05field\"\xcf\x05\n" +
+	"\x05field\x18\x05 \x01(\tR\x05field\x12)\n" +
+	"\x10account_identity\x18\x06 \x01(\bR\x0faccountIdentity\"\xcf\x05\n" +
 	"\x10ProviderMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +

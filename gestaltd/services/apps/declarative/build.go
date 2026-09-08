@@ -45,6 +45,32 @@ func Build(def *Definition, conn ConnectionDef, opts ...BuildOption) (core.Provi
 	d := *def
 	def = &d
 	ApplyConnectionAuth(def, conn)
+	connectionDefs := make(map[string]core.ConnectionParamDef, len(conn.ConnectionParams))
+	for name, cpd := range conn.ConnectionParams {
+		connectionDefs[name] = core.ConnectionParamDef{
+			Required:        cpd.Required,
+			Description:     cpd.Description,
+			Default:         cpd.Default,
+			From:            cpd.From,
+			Field:           cpd.Field,
+			AccountIdentity: cpd.AccountIdentity,
+		}
+	}
+	if len(connectionDefs) == 0 {
+		for name, cpd := range def.Connection {
+			connectionDefs[name] = core.ConnectionParamDef{
+				Required:        cpd.Required,
+				Description:     cpd.Description,
+				Default:         cpd.Default,
+				From:            cpd.From,
+				Field:           cpd.Field,
+				AccountIdentity: cpd.AccountIdentity,
+			}
+		}
+	}
+	if err := core.ValidateConnectionParamDefs(connectionDefs); err != nil {
+		return nil, fmt.Errorf("%s: invalid connection parameters: %w", def.Provider, err)
+	}
 
 	baseURL := def.BaseURL
 
@@ -171,28 +197,8 @@ func Build(def *Definition, conn ConnectionDef, opts ...BuildOption) (core.Provi
 		}
 	}
 
-	if len(conn.ConnectionParams) > 0 {
-		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(conn.ConnectionParams))
-		for name, cpd := range conn.ConnectionParams {
-			base.ConnectionDefs[name] = core.ConnectionParamDef{
-				Required:    cpd.Required,
-				Description: cpd.Description,
-				Default:     cpd.Default,
-				From:        cpd.From,
-				Field:       cpd.Field,
-			}
-		}
-	} else if len(def.Connection) > 0 {
-		base.ConnectionDefs = make(map[string]core.ConnectionParamDef, len(def.Connection))
-		for name, cpd := range def.Connection {
-			base.ConnectionDefs[name] = core.ConnectionParamDef{
-				Required:    cpd.Required,
-				Description: cpd.Description,
-				Default:     cpd.Default,
-				From:        cpd.From,
-				Field:       cpd.Field,
-			}
-		}
+	if len(connectionDefs) > 0 {
+		base.ConnectionDefs = connectionDefs
 	}
 
 	base.SetCatalog(cat)

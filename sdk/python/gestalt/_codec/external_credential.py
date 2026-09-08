@@ -118,6 +118,7 @@ def to_wire_external_credential(value: native.ExternalCredential) -> Any:
         updated_at=None
         if value.updated_at is None
         else to_wire_timestamp(value.updated_at),
+        account_key=value.account_key,
         **to_wire_external_credential_credential(value.credential),
     )
 
@@ -135,6 +136,7 @@ def from_wire_external_credential(value: Any) -> native.ExternalCredential:
         updated_at=from_wire_timestamp(value.updated_at)
         if value.HasField("updated_at")
         else None,
+        account_key=value.account_key,
         credential=from_wire_external_credential_credential(value),
     )
 

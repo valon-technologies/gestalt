@@ -330,10 +330,10 @@ func (s *Server) connectionInfoFromAuth(ctx context.Context, integration, name, 
 	if !ok {
 		return connectionDefInfo{}, false
 	}
-	connectionInstances := groupInstancesForConnection(instances, instanceConnection)
 	connectionID := serverCredentialConnectionID(integration, instanceConnection, conn)
 	subjectID, _ := principal.ResolveCredentialSubjectID(ctx, s.users, p)
 	storedPreferred := s.preferredInstanceForConnection(ctx, subjectID, connectionID)
+	connectionInstances := groupInstancesForConnection(instances, instanceConnection, storedPreferred)
 	status := noAuthConnectionStatus()
 	preferredInstance := ""
 	if schema.Mode != string(core.ConnectionModeNone) {

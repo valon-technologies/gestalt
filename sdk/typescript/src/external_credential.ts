@@ -90,6 +90,11 @@ export interface ExternalCredential {
   metadataJson: string;
   createdAt?: Date;
   updatedAt?: Date;
+  /**
+   * Opaque, host-owned grouping key for the linked provider account. Providers
+   * must persist it unchanged and must not expose it as a connection param.
+   */
+  accountKey: string;
   credential: ExternalCredentialCredential;
 }
 

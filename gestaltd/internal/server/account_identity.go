@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +20,7 @@ import (
 // provider/discovery metadata must not set it. Runtime connection-param
 // surfaces must strip it via core.ConnectionParamsFromMetadataJSON.
 const accountIdentityMetadataKey = core.AccountIdentityMetadataKey
+const accountKeyMetadataKey = core.AccountKeyMetadataKey
 
 const oauthIdentityProbeTimeout = 3 * time.Second
 
@@ -26,6 +29,10 @@ type identityFact struct {
 	Kind    string `json:"kind"`
 	Value   string `json:"value"`
 	Primary bool   `json:"primary,omitempty"`
+}
+
+type oauthIdentityFacts struct {
+	Facts []identityFact
 }
 
 // accountIdentity is the projected Connection identity payload.
@@ -123,6 +130,16 @@ func setAccountIdentity(metadataJSON string, id *accountIdentity) (string, error
 	}
 	m[accountIdentityMetadataKey] = string(b)
 	return marshalMetadataMap(m)
+}
+
+func accountKeyFromProviderID(integration, providerID string) string {
+	integration = strings.TrimSpace(integration)
+	providerID = strings.TrimSpace(providerID)
+	if integration == "" || providerID == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(integration + "\x00" + providerID))
+	return "provider:v1:" + hex.EncodeToString(digest[:])
 }
 
 func normalizeIdentityFacts(facts []identityFact) []identityFact {
@@ -259,6 +276,10 @@ func mergeIdentityFacts(base []identityFact, extra ...identityFact) []identityFa
 }
 
 func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMaterial) credentialMaterial {
+	storedAccountKey := strings.TrimSpace(tm.AccountKey)
+	if storedAccountKey == "" {
+		storedAccountKey = core.AccountKeyFromMetadataJSON(tm.MetadataJSON)
+	}
 	existing, err := parseAccountIdentity(tm.MetadataJSON)
 	if err != nil {
 		// Corrupt identity blob: drop it and rebuild from known sources.
@@ -279,23 +300,52 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 	}
 
 	// OAuth probes are integration-scoped and never run for opaque/manual
-	// field credentials (AccessToken may hold a raw secret there).
+	// field credentials (AccessToken may hold a raw secret there). They enrich
+	// display facts only; the stable account key must come from the provider's
+	// typed token-response contract.
 	if len(tm.Fields) == 0 {
 		if token := strings.TrimSpace(tm.AccessToken); token != "" {
-			facts = mergeIdentityFacts(facts, fetchOAuthAccountIdentityFacts(ctx, tm.Integration, token)...)
+			providerIdentity := fetchOAuthIdentityFacts(ctx, tm.Integration, token)
+			facts = mergeIdentityFacts(facts, providerIdentity.Facts...)
 		}
 	}
 
-	if len(facts) == 0 {
-		return tm
+	if len(facts) > 0 {
+		merged, err := setAccountIdentity(tm.MetadataJSON, &accountIdentity{Facts: facts})
+		if err != nil {
+			slog.WarnContext(ctx, "account identity enrichment skipped", "integration", tm.Integration, "error", err)
+			return tm
+		}
+		tm.MetadataJSON = merged
 	}
-	merged, err := setAccountIdentity(tm.MetadataJSON, &accountIdentity{Facts: facts})
-	if err != nil {
-		slog.WarnContext(ctx, "account identity enrichment skipped", "integration", tm.Integration, "error", err)
-		return tm
+
+	// Preserve an existing key when a provider later returns a richer set of
+	// facts. This makes the identity stable across reconnects and leaves the
+	// display projection free to evolve.
+	if storedAccountKey == "" {
+		key := accountKeyFromProviderID(tm.Integration, tm.ProviderAccountID)
+		if key != "" {
+			storedAccountKey = key
+		}
 	}
-	tm.MetadataJSON = merged
+	tm.AccountKey = storedAccountKey
+	if tm.AccountKey != "" {
+		if cleaned, err := removeAccountKeyMetadata(tm.MetadataJSON); err == nil {
+			tm.MetadataJSON = cleaned
+		} else {
+			slog.WarnContext(ctx, "account key metadata cleanup skipped", "integration", tm.Integration, "error", err)
+		}
+	}
 	return tm
+}
+
+func removeAccountKeyMetadata(metadataJSON string) (string, error) {
+	m, err := parseMetadataMap(metadataJSON)
+	if err != nil {
+		return "", err
+	}
+	delete(m, accountKeyMetadataKey)
+	return marshalMetadataMap(m)
 }
 
 // oauthIdentitySource selects the single identity probe family for an
@@ -318,18 +368,18 @@ func oauthIdentitySource(integration string) string {
 	}
 }
 
-func fetchOAuthAccountIdentityFacts(ctx context.Context, integration, accessToken string) []identityFact {
+func fetchOAuthIdentityFacts(ctx context.Context, integration, accessToken string) oauthIdentityFacts {
 	source := oauthIdentitySource(integration)
 	if source == "" || strings.TrimSpace(accessToken) == "" {
-		return nil
+		return oauthIdentityFacts{}
 	}
 	client := &http.Client{Timeout: oauthIdentityProbeTimeout}
 	switch source {
 	case "gmail":
-		if facts := fetchGoogleUserInfoFacts(ctx, client, accessToken); len(facts) > 0 {
-			return facts
+		if identity := fetchGoogleUserInfoFacts(ctx, client, accessToken); len(identity.Facts) > 0 {
+			return identity
 		}
-		return fetchGmailProfileFacts(ctx, client, accessToken)
+		return oauthIdentityFacts{Facts: fetchGmailProfileFacts(ctx, client, accessToken)}
 	case "google":
 		return fetchGoogleUserInfoFacts(ctx, client, accessToken)
 	case "slack":
@@ -337,7 +387,7 @@ func fetchOAuthAccountIdentityFacts(ctx context.Context, integration, accessToke
 	case "github":
 		return fetchGitHubUserFacts(ctx, client, accessToken)
 	default:
-		return nil
+		return oauthIdentityFacts{}
 	}
 }
 
@@ -381,11 +431,15 @@ func stringField(obj map[string]any, keys ...string) string {
 	return ""
 }
 
-func fetchGoogleUserInfoFacts(ctx context.Context, client *http.Client, accessToken string) []identityFact {
+func fetchGoogleUserInfoFacts(ctx context.Context, client *http.Client, accessToken string) oauthIdentityFacts {
 	obj, err := fetchJSONObject(ctx, client, http.MethodGet, "https://openidconnect.googleapis.com/userinfo", accessToken)
 	if err != nil {
-		return nil
+		return oauthIdentityFacts{}
 	}
+	return googleUserInfoIdentity(obj)
+}
+
+func googleUserInfoIdentity(obj map[string]any) oauthIdentityFacts {
 	var facts []identityFact
 	if email := stringField(obj, "email"); email != "" {
 		facts = append(facts, identityFact{Kind: "email", Value: email, Primary: true})
@@ -393,7 +447,7 @@ func fetchGoogleUserInfoFacts(ctx context.Context, client *http.Client, accessTo
 	if name := stringField(obj, "name"); name != "" {
 		facts = append(facts, identityFact{Kind: "display_name", Value: name})
 	}
-	return facts
+	return oauthIdentityFacts{Facts: facts}
 }
 
 func fetchGmailProfileFacts(ctx context.Context, client *http.Client, accessToken string) []identityFact {
@@ -407,13 +461,17 @@ func fetchGmailProfileFacts(ctx context.Context, client *http.Client, accessToke
 	return nil
 }
 
-func fetchSlackAuthTestFacts(ctx context.Context, client *http.Client, accessToken string) []identityFact {
+func fetchSlackAuthTestFacts(ctx context.Context, client *http.Client, accessToken string) oauthIdentityFacts {
 	obj, err := fetchJSONObject(ctx, client, http.MethodPost, "https://slack.com/api/auth.test", accessToken)
 	if err != nil {
-		return nil
+		return oauthIdentityFacts{}
 	}
+	return slackAuthTestIdentity(obj)
+}
+
+func slackAuthTestIdentity(obj map[string]any) oauthIdentityFacts {
 	if ok, _ := obj["ok"].(bool); !ok {
-		return nil
+		return oauthIdentityFacts{}
 	}
 	var facts []identityFact
 	if team := stringField(obj, "team"); team != "" {
@@ -422,14 +480,18 @@ func fetchSlackAuthTestFacts(ctx context.Context, client *http.Client, accessTok
 	if user := stringField(obj, "user"); user != "" {
 		facts = append(facts, identityFact{Kind: "login", Value: user})
 	}
-	return facts
+	return oauthIdentityFacts{Facts: facts}
 }
 
-func fetchGitHubUserFacts(ctx context.Context, client *http.Client, accessToken string) []identityFact {
+func fetchGitHubUserFacts(ctx context.Context, client *http.Client, accessToken string) oauthIdentityFacts {
 	obj, err := fetchJSONObject(ctx, client, http.MethodGet, "https://api.github.com/user", accessToken)
 	if err != nil {
-		return nil
+		return oauthIdentityFacts{}
 	}
+	return gitHubUserIdentity(obj)
+}
+
+func gitHubUserIdentity(obj map[string]any) oauthIdentityFacts {
 	var facts []identityFact
 	if login := stringField(obj, "login"); login != "" {
 		facts = append(facts, identityFact{Kind: "login", Value: login, Primary: true})
@@ -440,5 +502,5 @@ func fetchGitHubUserFacts(ctx context.Context, client *http.Client, accessToken 
 	if email := stringField(obj, "email"); email != "" {
 		facts = append(facts, identityFact{Kind: "email", Value: email})
 	}
-	return facts
+	return oauthIdentityFacts{Facts: facts}
 }

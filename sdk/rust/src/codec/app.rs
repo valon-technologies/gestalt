@@ -155,6 +155,7 @@ pub(crate) fn from_wire_connection_param_def(value: v1::ConnectionParamDef) -> C
         default_value: value.default_value,
         from: value.from,
         field: value.field,
+        account_identity: value.account_identity,
     }
 }
 

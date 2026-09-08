@@ -451,11 +451,12 @@ If discovery returns exactly one item, Gestalt merges its metadata into the stor
 
 The `params` map on a connection defines parameters that are populated during or after connect rather than from user input.
 
-| Field         | Type   | Purpose                                                                        |
-| ------------- | ------ | ------------------------------------------------------------------------------ |
-| `required`    | bool   | Whether the parameter must be present for a valid connection.                  |
-| `description` | string | Describes the parameter to the user.                                           |
-| `from`        | string | Set to `discovery` to populate the value from post-connect discovery metadata. |
+| Field              | Type   | Purpose                                                                                  |
+| ------------------ | ------ | ---------------------------------------------------------------------------------------- |
+| `required`          | bool   | Whether the parameter must be present for a valid connection.                            |
+| `description`       | string | Describes the parameter to the user.                                                     |
+| `from`              | string | Set to `discovery` to populate the value from post-connect discovery metadata.            |
+| `accountIdentity`   | bool   | Marks a `token_response` parameter as the provider's stable account identifier.           |
 
 ## Identity Provider Metadata
 

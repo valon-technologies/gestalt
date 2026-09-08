@@ -63,6 +63,7 @@ class ExternalCredential(_message.Message):
     METADATA_JSON_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_KEY_FIELD_NUMBER: _ClassVar[int]
     id: str
     subject: str
     audience: str
@@ -73,7 +74,8 @@ class ExternalCredential(_message.Message):
     metadata_json: str
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., subject: _Optional[str] = ..., audience: _Optional[str] = ..., qualifier: _Optional[str] = ..., grant: _Optional[_Union[ExternalCredentialGrant, _Mapping]] = ..., client: _Optional[_Union[ExternalCredentialClientInfo, _Mapping]] = ..., opaque: _Optional[_Union[ExternalCredentialOpaque, _Mapping]] = ..., metadata_json: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    account_key: str
+    def __init__(self, id: _Optional[str] = ..., subject: _Optional[str] = ..., audience: _Optional[str] = ..., qualifier: _Optional[str] = ..., grant: _Optional[_Union[ExternalCredentialGrant, _Mapping]] = ..., client: _Optional[_Union[ExternalCredentialClientInfo, _Mapping]] = ..., opaque: _Optional[_Union[ExternalCredentialOpaque, _Mapping]] = ..., metadata_json: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., account_key: _Optional[str] = ...) -> None: ...
 
 class CreateExternalCredentialRequest(_message.Message):
     __slots__ = ()

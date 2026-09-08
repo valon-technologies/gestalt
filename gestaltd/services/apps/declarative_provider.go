@@ -105,6 +105,10 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		discovery = def.Discovery
 	}
 	cat := declarativeCatalog(manifest, options)
+	connectionDefs := ConnectionParamDefsFromManifest(params)
+	if err := core.ValidateConnectionParamDefs(connectionDefs); err != nil {
+		return nil, fmt.Errorf("%s: invalid connection parameters: %w", cat.Name, err)
+	}
 	accessDefaults := manifest.Spec.AccessDefaultOperations()
 	accessDefaultsSet := manifest.Spec.Access != nil
 	if accessDefaultsSet {
@@ -126,7 +130,7 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		HTTPClient:                  httpClient,
 		MethodDefaultParamLocations: true,
 		RequestContentType:          declarativeJSONContentType,
-		ConnectionDefs:              ConnectionParamDefsFromManifest(params),
+		ConnectionDefs:              connectionDefs,
 		DiscoveryDef:                DiscoveryConfigFromManifest(discovery),
 		CredentialFieldDefs:         declarativeCredentialFields(auth),
 		CheckEgress:                 options.egressCheck,

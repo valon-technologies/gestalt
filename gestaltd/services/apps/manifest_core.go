@@ -14,11 +14,12 @@ func ConnectionParamDefsFromManifest(defs map[string]providermanifestv1.Provider
 	out := make(map[string]core.ConnectionParamDef, len(defs))
 	for name, def := range defs {
 		out[name] = core.ConnectionParamDef{
-			Required:    def.Required,
-			Description: def.Description,
-			Default:     def.Default,
-			From:        def.From,
-			Field:       def.Field,
+			Required:        def.Required,
+			Description:     def.Description,
+			Default:         def.Default,
+			From:            def.From,
+			Field:           def.Field,
+			AccountIdentity: def.AccountIdentity,
 		}
 	}
 	return out
