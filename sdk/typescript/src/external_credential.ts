@@ -202,6 +202,11 @@ export interface ResolveExternalCredentialResponse {
 
 export interface UpsertExternalCredentialRequest {
   credential?: ExternalCredential;
+  /**
+   * When set, the provider must update only if this is still the stored
+   * credential ID for the credential's (subject, audience, qualifier) key.
+   */
+  expectedCredentialId: string;
 }
 
 export interface ValidateExternalCredentialConfigRequest {
@@ -275,6 +280,7 @@ export class ExternalCredentials {
     credential?: Init<ExternalCredential>,
   ): Promise<ExternalCredential> {
     const request = {
+      expectedCredentialId: "",
       ...(credential !== undefined ? { credential } : {}),
     } satisfies Init<UpsertExternalCredentialRequest>;
     const response = await callUnary(() =>

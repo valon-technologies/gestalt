@@ -49,6 +49,35 @@ func TestExternalCredentialCapabilitiesRoundTripOverTransport(t *testing.T) {
 	}
 }
 
+func TestExternalCredentialConditionalUpsertRoundTripsExpectedID(t *testing.T) {
+	t.Parallel()
+
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	if err := provider.CreateCredential(ctx, &core.ExternalCredential{
+		ID:        "credential-1",
+		Subject:   "user:test",
+		Audience:  "github:default",
+		Qualifier: "org",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "old-token"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	remote := newRemoteProvider(t, provider)
+	updated := &core.ExternalCredential{
+		Subject:   "user:test",
+		Audience:  "github:default",
+		Qualifier: "org",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "new-token"},
+	}
+	if err := remote.UpsertCredentialIfID(ctx, updated, "credential-1"); err != nil {
+		t.Fatalf("conditional upsert: %v", err)
+	}
+	if err := remote.UpsertCredentialIfID(ctx, updated, "stale-id"); !errors.Is(err, core.ErrAlreadyExists) {
+		t.Fatalf("stale conditional upsert error = %v, want conflict", err)
+	}
+}
+
 func TestExternalCredentialCapabilityDiscoveryFallsBackToLegacyOnFailure(t *testing.T) {
 	t.Parallel()
 
@@ -209,9 +238,10 @@ func TestExternalCredentialRoundTripsOverTransport(t *testing.T) {
 		{
 			name: "grant",
 			credential: core.ExternalCredential{
-				Subject:   "user:test",
-				Audience:  "github:default",
-				Qualifier: "org",
+				Subject:    "user:test",
+				Audience:   "github:default",
+				Qualifier:  "org",
+				AccountKey: "github:v1:acme",
 				Grant: &core.ExternalCredentialGrant{
 					AccessToken:       "access-token",
 					RefreshToken:      "refresh-token",
@@ -273,6 +303,9 @@ func TestExternalCredentialRoundTripsOverTransport(t *testing.T) {
 			}
 			if got.MetadataJSON != want.MetadataJSON {
 				t.Fatalf("metadataJSON = %q, want %q", got.MetadataJSON, want.MetadataJSON)
+			}
+			if got.AccountKey != want.AccountKey {
+				t.Fatalf("account key = %q, want %q", got.AccountKey, want.AccountKey)
 			}
 			if !reflect.DeepEqual(got.Grant, want.Grant) {
 				t.Fatalf("grant = %+v, want %+v", got.Grant, want.Grant)

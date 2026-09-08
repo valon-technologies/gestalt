@@ -1464,6 +1464,12 @@ pub(crate) fn encode_wire_upsert_external_credential_request_json(
             encode_wire_external_credential_json(inner),
         );
     }
+    if !value.expected_credential_id.is_empty() {
+        object.insert(
+            "expectedCredentialId".into(),
+            serde_json::Value::String(value.expected_credential_id.to_string()),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -1483,6 +1489,10 @@ pub(crate) fn decode_wire_upsert_external_credential_request_json(
             .get("credential")
             .map(|value| decode_wire_external_credential_json(value))
             .transpose()?,
+        expected_credential_id: match object.get("expectedCredentialId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
         ..Default::default()
     })
 }

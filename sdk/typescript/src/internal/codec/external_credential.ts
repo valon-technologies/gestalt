@@ -545,6 +545,7 @@ export function toWireUpsertExternalCredentialRequest(
     ...(value.credential !== undefined
       ? { credential: toWireExternalCredential(value.credential) }
       : {}),
+    expectedCredentialId: value.expectedCredentialId ?? "",
   });
 }
 
@@ -555,6 +556,7 @@ export function fromWireUpsertExternalCredentialRequest(
     ...(value.credential !== undefined
       ? { credential: fromWireExternalCredential(value.credential) }
       : {}),
+    expectedCredentialId: value.expectedCredentialId,
   };
 }
 

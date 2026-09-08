@@ -108,6 +108,70 @@ type legacyAccountKeyProvider struct {
 	core.ExternalCredentialProvider
 }
 
+type replacingConditionalProvider struct {
+	core.ExternalCredentialProvider
+	replaced bool
+}
+
+func (p *replacingConditionalProvider) UpsertCredentialIfID(ctx context.Context, credential *core.ExternalCredential, expectedID string) error {
+	if !p.replaced {
+		p.replaced = true
+		if err := p.DeleteCredential(ctx, expectedID); err != nil {
+			return err
+		}
+		if err := p.CreateCredential(ctx, &core.ExternalCredential{
+			ID:         "replacement",
+			Subject:    credential.Subject,
+			Audience:   credential.Audience,
+			Qualifier:  credential.Qualifier,
+			AccountKey: credential.AccountKey,
+			Grant:      &core.ExternalCredentialGrant{AccessToken: "replacement-token"},
+		}); err != nil {
+			return err
+		}
+	}
+	conditional := p.ExternalCredentialProvider.(core.ExternalCredentialConditionalUpserter)
+	return conditional.UpsertCredentialIfID(ctx, credential, expectedID)
+}
+
+func TestStoreCredentialFromMaterial_ConditionalUpsertRejectsReplacement(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	inner := coretesting.NewStubExternalCredentialProvider()
+	if err := inner.CreateCredential(ctx, &core.ExternalCredential{
+		ID:         "original",
+		Subject:    "user:1",
+		Audience:   "slack:default",
+		Qualifier:  "workspace",
+		AccountKey: "slack:v1:T123:U456",
+		Grant:      &core.ExternalCredentialGrant{AccessToken: "original-token"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	provider := &replacingConditionalProvider{ExternalCredentialProvider: inner}
+	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
+
+	_, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+		SubjectID:            "user:1",
+		ConnectionID:         "slack:default",
+		Instance:             "workspace",
+		AccountKey:           "slack:v1:T123:U456",
+		AccessToken:          "stale-token",
+		ExpectedCredentialID: "original",
+	})
+	if !errors.Is(err, core.ErrAlreadyExists) {
+		t.Fatalf("conditional reconnect error = %v, want conflict", err)
+	}
+	got, err := provider.GetCredential(ctx, "user:1", "slack:default", "workspace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "replacement" || got.Grant == nil || got.Grant.AccessToken != "replacement-token" {
+		t.Fatalf("stored replacement = %+v, want replacement credential", got)
+	}
+}
+
 func (p *legacyAccountKeyProvider) CreateCredential(ctx context.Context, credential *core.ExternalCredential) error {
 	clone := *credential
 	clone.AccountKey = ""

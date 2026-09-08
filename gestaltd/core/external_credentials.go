@@ -23,6 +23,13 @@ type ExternalCredentialProvider interface {
 	ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
 }
 
+// ExternalCredentialConditionalUpserter updates one credential only when the
+// stored record still has expectedID. Providers implement this optional
+// contract when their storage can enforce the comparison atomically.
+type ExternalCredentialConditionalUpserter interface {
+	UpsertCredentialIfID(ctx context.Context, credential *ExternalCredential, expectedID string) error
+}
+
 // ExternalCredentialAccountKeyPersistence reports whether a provider
 // round-trips ExternalCredential.AccountKey. Providers that do not implement
 // this capability are treated conservatively as legacy providers, so the host

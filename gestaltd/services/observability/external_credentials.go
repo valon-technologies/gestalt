@@ -39,6 +39,20 @@ func (p *observedExternalCredentialProvider) UpsertCredential(ctx context.Contex
 	return p.delegate.UpsertCredential(ctx, credential)
 }
 
+func (p *observedExternalCredentialProvider) UpsertCredentialIfID(ctx context.Context, credential *core.ExternalCredential, expectedID string) (err error) {
+	conditional, ok := p.delegate.(core.ExternalCredentialConditionalUpserter)
+	if !ok {
+		return core.ErrConditionalUpsertUnsupported
+	}
+	ctx, end := p.start(ctx, "conditional_upsert_credential", credentialAudience(credential))
+	defer func() { end(err) }()
+	return conditional.UpsertCredentialIfID(ctx, credential, expectedID)
+}
+
+func (p *observedExternalCredentialProvider) PersistsAccountKey() bool {
+	return core.ExternalCredentialProviderPersistsAccountKey(p.delegate)
+}
+
 func (p *observedExternalCredentialProvider) GetCredential(ctx context.Context, subject, audience, qualifier string) (credential *core.ExternalCredential, err error) {
 	ctx, end := p.start(ctx, "get_credential", audience)
 	defer func() { end(err) }()

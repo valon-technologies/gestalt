@@ -421,10 +421,13 @@ func (x *CreateExternalCredentialRequest) GetCredential() *ExternalCredential {
 }
 
 type UpsertExternalCredentialRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Credential    *ExternalCredential    `protobuf:"bytes,1,opt,name=credential,proto3" json:"credential,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Credential *ExternalCredential    `protobuf:"bytes,1,opt,name=credential,proto3" json:"credential,omitempty"`
+	// When set, the provider must update only if this is still the stored
+	// credential ID for the credential's (subject, audience, qualifier) key.
+	ExpectedCredentialId string `protobuf:"bytes,2,opt,name=expected_credential_id,json=expectedCredentialId,proto3" json:"expected_credential_id,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *UpsertExternalCredentialRequest) Reset() {
@@ -462,6 +465,13 @@ func (x *UpsertExternalCredentialRequest) GetCredential() *ExternalCredential {
 		return x.Credential
 	}
 	return nil
+}
+
+func (x *UpsertExternalCredentialRequest) GetExpectedCredentialId() string {
+	if x != nil {
+		return x.ExpectedCredentialId
+	}
+	return ""
 }
 
 type GetExternalCredentialRequest struct {
@@ -1521,11 +1531,12 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x1fCreateExternalCredentialRequest\x12G\n" +
 	"\n" +
 	"credential\x18\x01 \x01(\v2'.gestalt.provider.v1.ExternalCredentialR\n" +
-	"credential\"j\n" +
+	"credential\"\xa0\x01\n" +
 	"\x1fUpsertExternalCredentialRequest\x12G\n" +
 	"\n" +
 	"credential\x18\x01 \x01(\v2'.gestalt.provider.v1.ExternalCredentialR\n" +
-	"credential\"r\n" +
+	"credential\x124\n" +
+	"\x16expected_credential_id\x18\x02 \x01(\tR\x14expectedCredentialId\"r\n" +
 	"\x1cGetExternalCredentialRequest\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x1a\n" +
 	"\baudience\x18\x02 \x01(\tR\baudience\x12\x1c\n" +

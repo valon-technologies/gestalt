@@ -56,7 +56,8 @@ type CreateExternalCredentialRequest struct {
 
 // UpsertExternalCredentialRequest is the request for creating or updating a credential.
 type UpsertExternalCredentialRequest struct {
-	Credential *ExternalCredential
+	Credential           *ExternalCredential
+	ExpectedCredentialID string
 }
 
 // GetExternalCredentialRequest is the request for fetching one credential.
@@ -907,6 +908,12 @@ type ExternalCredentialProvider interface {
 	ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error
 	ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error)
 	ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
+}
+
+// ExternalCredentialConditionalUpsertProvider atomically updates a credential
+// only when ExpectedCredentialID still identifies the stored record.
+type ExternalCredentialConditionalUpsertProvider interface {
+	UpsertCredentialIfID(ctx context.Context, req *UpsertExternalCredentialRequest) (*ExternalCredential, error)
 }
 
 // ExternalCredentialAccountKeyPersistenceProvider reports whether the

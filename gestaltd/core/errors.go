@@ -3,13 +3,14 @@ package core
 import "errors"
 
 var (
-	ErrNotFound            = errors.New("not found")
-	ErrAlreadyExists       = errors.New("already exists")
-	ErrAlreadyRegistered   = errors.New("already registered")
-	ErrMCPOnly             = errors.New("this integration is accessible only via MCP")
-	ErrAmbiguousCredential = errors.New("ambiguous external credential")
-	ErrReconnectRequired   = errors.New("external credential reconnect required")
-	ErrProviderActivating  = errors.New("provider is still activating")
+	ErrNotFound                     = errors.New("not found")
+	ErrAlreadyExists                = errors.New("already exists")
+	ErrAlreadyRegistered            = errors.New("already registered")
+	ErrMCPOnly                      = errors.New("this integration is accessible only via MCP")
+	ErrAmbiguousCredential          = errors.New("ambiguous external credential")
+	ErrReconnectRequired            = errors.New("external credential reconnect required")
+	ErrProviderActivating           = errors.New("provider is still activating")
+	ErrConditionalUpsertUnsupported = errors.New("conditional credential upsert is not supported")
 )
 
 // CredentialInstanceConflictError identifies an instance name already owned

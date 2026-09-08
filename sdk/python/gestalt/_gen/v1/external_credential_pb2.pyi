@@ -86,8 +86,10 @@ class CreateExternalCredentialRequest(_message.Message):
 class UpsertExternalCredentialRequest(_message.Message):
     __slots__ = ()
     CREDENTIAL_FIELD_NUMBER: _ClassVar[int]
+    EXPECTED_CREDENTIAL_ID_FIELD_NUMBER: _ClassVar[int]
     credential: ExternalCredential
-    def __init__(self, credential: _Optional[_Union[ExternalCredential, _Mapping]] = ...) -> None: ...
+    expected_credential_id: str
+    def __init__(self, credential: _Optional[_Union[ExternalCredential, _Mapping]] = ..., expected_credential_id: _Optional[str] = ...) -> None: ...
 
 class GetExternalCredentialRequest(_message.Message):
     __slots__ = ()

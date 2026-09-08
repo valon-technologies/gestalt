@@ -124,6 +124,22 @@ func (r *remoteExternalCredentialProvider) UpsertCredential(ctx context.Context,
 	return nil
 }
 
+func (r *remoteExternalCredentialProvider) UpsertCredentialIfID(ctx context.Context, credential *core.ExternalCredential, expectedID string) error {
+	if credential == nil {
+		return fmt.Errorf("external credential is required")
+	}
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+	_, err := r.client.UpsertCredential(ctx, &proto.UpsertExternalCredentialRequest{
+		Credential:           externalCredentialToProto(credential),
+		ExpectedCredentialId: strings.TrimSpace(expectedID),
+	})
+	if err != nil {
+		return externalCredentialRPCError("conditional upsert external credential", err)
+	}
+	return nil
+}
+
 func (r *remoteExternalCredentialProvider) GetCredential(ctx context.Context, subject, audience, qualifier string) (*core.ExternalCredential, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
@@ -512,6 +528,11 @@ func externalCredentialRPCError(operation string, err error) error {
 	case codes.FailedPrecondition:
 		if strings.Contains(strings.ToLower(status.Convert(err).Message()), "ambiguous") {
 			return core.ErrAmbiguousCredential
+		}
+		return fmt.Errorf("%s: %w", operation, err)
+	case codes.Unimplemented:
+		if strings.Contains(strings.ToLower(status.Convert(err).Message()), "conditional credential upsert") {
+			return core.ErrConditionalUpsertUnsupported
 		}
 		return fmt.Errorf("%s: %w", operation, err)
 	case codes.OK:

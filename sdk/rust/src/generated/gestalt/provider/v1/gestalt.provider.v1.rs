@@ -1990,6 +1990,10 @@ pub struct CreateExternalCredentialRequest {
 pub struct UpsertExternalCredentialRequest {
     #[prost(message, optional, tag = "1")]
     pub credential: ::core::option::Option<ExternalCredential>,
+    /// When set, the provider must update only if this is still the stored
+    /// credential ID for the credential's (subject, audience, qualifier) key.
+    #[prost(string, tag = "2")]
+    pub expected_credential_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetExternalCredentialRequest {

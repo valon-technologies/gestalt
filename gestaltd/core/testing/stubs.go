@@ -44,6 +44,29 @@ func (p *StubExternalCredentialProvider) UpsertCredential(_ context.Context, cre
 	return p.storeCredential(credential, false)
 }
 
+func (p *StubExternalCredentialProvider) UpsertCredentialIfID(_ context.Context, credential *core.ExternalCredential, expectedID string) error {
+	if p != nil && p.PutErr != nil {
+		return p.PutErr
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, existing := range p.credentials {
+		if existing.Subject == credential.Subject && existing.Audience == credential.Audience && existing.Qualifier == credential.Qualifier {
+			if existing.ID != expectedID {
+				return core.ErrAlreadyExists
+			}
+			cloned := cloneExternalCredential(*credential)
+			cloned.ID = existing.ID
+			cloned.CreatedAt = existing.CreatedAt
+			cloned.UpdatedAt = time.Now().UTC()
+			p.credentials[cloned.ID] = *cloned
+			*credential = *cloned
+			return nil
+		}
+	}
+	return core.ErrNotFound
+}
+
 func (p *StubExternalCredentialProvider) GetCredential(_ context.Context, subject, audience, qualifier string) (*core.ExternalCredential, error) {
 	if p != nil && p.GetErr != nil {
 		return nil, p.GetErr

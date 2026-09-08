@@ -501,7 +501,8 @@ func ToWireUpsertExternalCredentialRequest(value *UpsertExternalCredentialReques
 		return nil
 	}
 	out := &proto.UpsertExternalCredentialRequest{
-		Credential: ToWireExternalCredential(value.Credential),
+		Credential:           ToWireExternalCredential(value.Credential),
+		ExpectedCredentialId: value.ExpectedCredentialId,
 	}
 	return out
 }
@@ -511,7 +512,8 @@ func FromWireUpsertExternalCredentialRequest(value *proto.UpsertExternalCredenti
 		return nil
 	}
 	out := &UpsertExternalCredentialRequest{
-		Credential: FromWireExternalCredential(value.Credential),
+		Credential:           FromWireExternalCredential(value.Credential),
+		ExpectedCredentialId: value.ExpectedCredentialId,
 	}
 	return out
 }

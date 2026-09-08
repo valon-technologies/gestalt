@@ -491,6 +491,7 @@ def to_wire_upsert_external_credential_request(
         credential=None
         if value.credential is None
         else to_wire_external_credential(value.credential),
+        expected_credential_id=value.expected_credential_id,
     )
 
 
@@ -501,6 +502,7 @@ def from_wire_upsert_external_credential_request(
         credential=from_wire_external_credential(value.credential)
         if value.HasField("credential")
         else None,
+        expected_credential_id=value.expected_credential_id,
     )
 
 

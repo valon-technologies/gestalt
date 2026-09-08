@@ -196,6 +196,9 @@ type ResolveExternalCredentialResponse struct {
 // UpsertExternalCredentialRequest is the native message type for gestalt.provider.v1.UpsertExternalCredentialRequest.
 type UpsertExternalCredentialRequest struct {
 	Credential *ExternalCredential
+	// When set, the provider must update only if this is still the stored
+	// credential ID for the credential's (subject, audience, qualifier) key.
+	ExpectedCredentialId string
 }
 
 // ValidateExternalCredentialConfigRequest is the native message type for gestalt.provider.v1.ValidateExternalCredentialConfigRequest.

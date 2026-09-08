@@ -328,6 +328,7 @@ pub(crate) fn to_wire_upsert_external_credential_request(
 ) -> v1::UpsertExternalCredentialRequest {
     v1::UpsertExternalCredentialRequest {
         credential: value.credential.map(to_wire_external_credential),
+        expected_credential_id: value.expected_credential_id,
     }
 }
 

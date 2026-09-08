@@ -206,6 +206,9 @@ class ResolveExternalCredentialResponse:
 @dataclass(frozen=True, slots=True)
 class UpsertExternalCredentialRequest:
     credential: ExternalCredential | None = None
+    #: When set, the provider must update only if this is still the stored
+    #: credential ID for the credential's (subject, audience, qualifier) key.
+    expected_credential_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)

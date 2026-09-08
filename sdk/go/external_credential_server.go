@@ -52,7 +52,16 @@ func (s *externalCredentialServer) UpsertCredential(ctx context.Context, req *pr
 	if err != nil {
 		return nil, providerRPCError("upsert external credential", err)
 	}
-	credential, err := s.provider.UpsertCredential(ctx, nativeReq)
+	var credential *ExternalCredential
+	if nativeReq.ExpectedCredentialID != "" {
+		conditional, ok := s.provider.(ExternalCredentialConditionalUpsertProvider)
+		if !ok {
+			return nil, status.Error(codes.Unimplemented, "conditional credential upsert is not supported")
+		}
+		credential, err = conditional.UpsertCredentialIfID(ctx, nativeReq)
+	} else {
+		credential, err = s.provider.UpsertCredential(ctx, nativeReq)
+	}
 	if err != nil {
 		return nil, providerRPCError("upsert external credential", err)
 	}

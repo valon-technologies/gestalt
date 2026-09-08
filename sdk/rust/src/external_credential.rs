@@ -311,6 +311,11 @@ pub struct ResolveExternalCredentialResponse {
 pub struct UpsertExternalCredentialRequest {
     /// The `credential` field; None when unset.
     pub credential: Option<ExternalCredential>,
+    /// When set, the provider must update only if this is still the stored
+    /// credential ID for the credential's (subject, audience, qualifier) key.
+    ///
+    /// The `expected_credential_id` field.
+    pub expected_credential_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.ValidateExternalCredentialConfigRequest`.
@@ -418,7 +423,10 @@ impl ExternalCredentials {
         &mut self,
         credential: Option<ExternalCredential>,
     ) -> Result<ExternalCredential, GestaltError> {
-        let request = UpsertExternalCredentialRequest { credential };
+        let request = UpsertExternalCredentialRequest {
+            credential,
+            ..Default::default()
+        };
         let mut tonic_request =
             tonic::Request::new(to_wire_upsert_external_credential_request(request));
         if let Some(timeout) = self.timeout {
