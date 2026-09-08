@@ -228,11 +228,12 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if err != nil {
 		return nil, fmt.Errorf("fetch retention index: %w", err)
 	}
-	if mode == installModeRetry {
+	switch mode {
+	case installModeRetry:
 		if err := RetryVersionSelectable(version, retentionIndex, policy, i.now()); err != nil {
 			return nil, err
 		}
-	} else if mode == installModeSelect || mode == installModeUpgrade || mode == installModeAdd {
+	case installModeSelect, installModeUpgrade, installModeAdd:
 		if err := VersionSelectable(version, currentDesired, retentionIndex, policy, i.now()); err != nil {
 			return nil, err
 		}
