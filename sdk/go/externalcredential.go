@@ -60,6 +60,7 @@ type UpsertExternalCredentialRequest struct {
 	ExpectedCredentialID string
 }
 
+// GetExpectedCredentialID returns the optimistic-concurrency credential ID.
 func (r *UpsertExternalCredentialRequest) GetExpectedCredentialID() string {
 	if r == nil {
 		return ""
