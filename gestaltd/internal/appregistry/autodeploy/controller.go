@@ -240,7 +240,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 		if len(versions) > 0 {
 			newest := versions[0].Version
 			settings, err = c.Settings.Update(ctx, appName, func(current *core.AppAutoDeploySettings) error {
-				if !current.Enabled {
+				if !current.Enabled || current.Paused {
 					return nil
 				}
 				if current.LastSeenVersion != newest {
