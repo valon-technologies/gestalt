@@ -857,7 +857,7 @@ func TestCatalogPollerReconcileOncePropagatesRestartErrors(t *testing.T) {
 	}
 }
 
-func TestCatalogPollerReconcileOnceRestartsOnceForMultipleVersions(t *testing.T) {
+func TestCatalogPollerReconcileOnceRestartsLatestVersion(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
@@ -903,14 +903,12 @@ func TestCatalogPollerReconcileOnceRestartsOnceForMultipleVersions(t *testing.T)
 		t.Fatalf("startCalls = %d, want 1", got)
 	}
 
-	for _, version := range []string{"0.0.0-snapshot.g222222", "0.0.0-snapshot.g333333"} {
-		materialization, err := services.AppInstanceMaterializations.Get(context.Background(), "replica-a", "g-issues", version)
-		if err != nil {
-			t.Fatalf("Get materialization for %s: %v", version, err)
-		}
-		if materialization.RestartedAt != now {
-			t.Fatalf("RestartedAt for %s = %v, want %v", version, materialization.RestartedAt, now)
-		}
+	materialization, err := services.AppInstanceMaterializations.Get(context.Background(), "replica-a", "g-issues", "0.0.0-snapshot.g333333")
+	if err != nil {
+		t.Fatalf("Get materialization: %v", err)
+	}
+	if materialization.RestartedAt != now {
+		t.Fatalf("RestartedAt = %v, want %v", materialization.RestartedAt, now)
 	}
 }
 

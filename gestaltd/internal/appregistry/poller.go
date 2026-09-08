@@ -354,9 +354,11 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	defer p.endInflight(appName)
 
 	restartBlocked := false
+	var rolloutMaterialization *core.AppInstanceMaterialization
+	var rolloutVersion string
 	if rollout != nil {
-		version := strings.TrimSpace(rollout.Version)
-		if findInstallation(installations, version) == nil {
+		rolloutVersion = strings.TrimSpace(rollout.Version)
+		if findInstallation(installations, rolloutVersion) == nil {
 			if rollout.Mode == core.AppRolloutModeHeartbeat {
 				_, err := p.updateHeartbeatRolloutOutcome(ctx, rollout)
 				return err
@@ -366,16 +368,18 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 				if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
 					return nil
 				} else if err != nil {
-					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, version, err)
+					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, rolloutVersion, err)
 				}
 				p.recordRolloutOutcome(ctx, updated)
 				p.notifyRolloutTerminal(appName)
 			}
 			return nil
 		}
-		if _, err := p.ensureAcknowledged(ctx, instanceID, appName, version, rollout.CreatedAt); err != nil {
+		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, rolloutVersion, rollout.CreatedAt)
+		if err != nil {
 			return err
 		}
+		rolloutMaterialization = materialization
 		if rollout.State == core.AppRolloutStateEnrolling {
 			if p.now().Before(rollout.EnrollmentEndsAt) {
 				restartBlocked = true
@@ -386,7 +390,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 					return nil
 				}
 				if err != nil {
-					return fmt.Errorf("start rollout restart phase for %s@%s: %w", appName, version, err)
+					return fmt.Errorf("start rollout restart phase for %s@%s: %w", appName, rolloutVersion, err)
 				}
 			}
 		}
@@ -405,28 +409,6 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return nil
 	}
 
-	pending := make([]*core.AppInstallation, 0, len(installations))
-	for _, installation := range installations {
-		version := strings.TrimSpace(installation.Version)
-		if version == "" {
-			continue
-		}
-		selectionEpoch := installation.UpdatedAt
-		if rollout != nil && strings.TrimSpace(rollout.Version) == version {
-			selectionEpoch = rollout.CreatedAt
-		}
-		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, version, selectionEpoch)
-		if err != nil {
-			return err
-		}
-		if materialization.RestartedAt.IsZero() {
-			pending = append(pending, installation)
-		}
-	}
-	if len(pending) == 0 {
-		return nil
-	}
-
 	driverVersion := coredata.LatestKnownVersion(installations)
 	if driverVersion == "" {
 		return fmt.Errorf("select desired version for app %s", appName)
@@ -435,6 +417,19 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	if desired == nil {
 		return fmt.Errorf("find desired installation for app %s@%s", appName, driverVersion)
 	}
+	desiredMaterialization := rolloutMaterialization
+	if rolloutVersion != driverVersion {
+		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, driverVersion, desired.UpdatedAt)
+		if err != nil {
+			return err
+		}
+		desiredMaterialization = materialization
+	}
+	if !desiredMaterialization.RestartedAt.IsZero() {
+		return nil
+	}
+	pending := []*core.AppInstallation{desired}
+
 	if acceptor, ok := p.AppRestarter.(interface {
 		AcceptsRegistry(string, string) bool
 	}); ok {
@@ -442,10 +437,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 			return fmt.Errorf("registry for %s@%s does not match configured source", appName, driverVersion)
 		}
 	}
-	retryLimitReached := false
-	if materialization, err := p.Materializations.Get(ctx, instanceID, appName, driverVersion); err == nil {
-		retryLimitReached = materialization.AttemptCount >= p.maxReconcileAttempts()
-	}
+	retryLimitReached := desiredMaterialization.AttemptCount >= p.maxReconcileAttempts()
 
 	if p.AppRestarter == nil {
 		return nil

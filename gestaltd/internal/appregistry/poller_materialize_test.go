@@ -297,16 +297,6 @@ func TestCatalogPollerRunningLatestSkipsSupersededMaterialization(t *testing.T) 
 	if materialization.RestartedAt.IsZero() {
 		t.Fatal("RestartedAt is zero")
 	}
-	oldMaterialization, err := h.services.AppInstanceMaterializations.Get(h.ctx, "replica-a", "g-issues", oldVersion)
-	if err != nil {
-		t.Fatalf("Get old materialization: %v", err)
-	}
-	if !oldMaterialization.MaterializedAt.IsZero() {
-		t.Fatalf("old MaterializedAt = %v, want zero", oldMaterialization.MaterializedAt)
-	}
-	if oldMaterialization.RestartedAt.IsZero() {
-		t.Fatal("old RestartedAt is zero")
-	}
 	oldPath := appregistry.MaterializedPath(h.artifactsDir, "g-issues", oldVersion)
 	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
 		t.Fatalf("old version stat error = %v, want not exist", err)
