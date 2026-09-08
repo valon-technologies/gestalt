@@ -30,6 +30,22 @@ type appAdminMemberRow struct {
 	SelectorKind  string                    `json:"selectorKind,omitempty"`
 	SelectorValue string                    `json:"selectorValue,omitempty"`
 	SubjectID     string                    `json:"subjectId,omitempty"`
+	SubjectSet    *appAdminMemberSubjectSet `json:"-"`
+}
+
+// appAdminMemberResponse is the app-admin members wire contract. Keeping it
+// separate from the shared roster row prevents subject-set presentation data
+// from leaking into platform-admin responses that reuse the internal mapper.
+type appAdminMemberResponse struct {
+	Email         string                    `json:"email,omitempty"`
+	Role          string                    `json:"role"`
+	Source        string                    `json:"source"`
+	Mutable       bool                      `json:"mutable"`
+	Effective     bool                      `json:"effective"`
+	ShadowedBy    string                    `json:"shadowedBy,omitempty"`
+	SelectorKind  string                    `json:"selectorKind,omitempty"`
+	SelectorValue string                    `json:"selectorValue,omitempty"`
+	SubjectID     string                    `json:"subjectId,omitempty"`
 	SubjectSet    *appAdminMemberSubjectSet `json:"subjectSet,omitempty"`
 }
 
@@ -97,7 +113,7 @@ func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	// Members is the human/group access roster. Service-account grants are
 	// owned by GET /apps/{app}/admin/identities.
-	writeJSON(w, http.StatusOK, s.projectAppAdminHumanMemberRows(r.Context(), rows))
+	writeJSON(w, http.StatusOK, projectAppAdminMemberResponses(s.projectAppAdminHumanMemberRows(r.Context(), rows)))
 }
 
 func (s *Server) setAppAdminMember(w http.ResponseWriter, r *http.Request) {
@@ -248,7 +264,8 @@ func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
 func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow) []appAdminMemberRow {
 	allowLookup := s.userLookupAllowed(ctx)
 	out := make([]appAdminMemberRow, 0, len(rows))
-	for _, row := range rows {
+	for i := range rows {
+		row := rows[i]
 		if isAppAdminServiceAccountRow(row) {
 			continue
 		}
@@ -329,7 +346,8 @@ func (s *Server) mutableAppAdminMemberRoles(ctx context.Context, appName, subjec
 		return nil, err
 	}
 	roles := make([]string, 0)
-	for _, row := range rows {
+	for i := range rows {
+		row := rows[i]
 		if !row.Mutable || !appAdminMemberRowMatchesSubject(row, subjectID) {
 			continue
 		}
@@ -425,7 +443,7 @@ func projectAppAdminMemberRoster(rows []appAdminMemberRow) []appAdminMemberRow {
 	return out
 }
 
-func (s *Server) appAdminMemberRowFromRelationship(_ context.Context, relationship *proto.Relationship) (appAdminMemberRow, bool) {
+func (s *Server) appAdminMemberRowFromRelationship(ctx context.Context, relationship *proto.Relationship) (appAdminMemberRow, bool) {
 	if relationship == nil || relationship.GetTuple() == nil {
 		return appAdminMemberRow{}, false
 	}
@@ -470,7 +488,7 @@ func (s *Server) appAdminMemberRowFromRelationship(_ context.Context, relationsh
 			Resource: appAdminMemberSubjectSetResource{
 				Type:        resourceType,
 				ID:          resourceID,
-				DisplayName: authorizationResourceDisplayName(target.SubjectSet.GetResource()),
+				DisplayName: s.authorizationResourceDisplayName(ctx, target.SubjectSet.GetResource()),
 			},
 			Relation: relation,
 		}
@@ -480,18 +498,43 @@ func (s *Server) appAdminMemberRowFromRelationship(_ context.Context, relationsh
 	}
 }
 
+func projectAppAdminMemberResponses(rows []appAdminMemberRow) []appAdminMemberResponse {
+	out := make([]appAdminMemberResponse, 0, len(rows))
+	for i := range rows {
+		row := rows[i]
+		out = append(out, appAdminMemberResponse{
+			Email: row.Email, Role: row.Role, Source: row.Source, Mutable: row.Mutable,
+			Effective: row.Effective, ShadowedBy: row.ShadowedBy, SelectorKind: row.SelectorKind,
+			SelectorValue: row.SelectorValue, SubjectID: row.SubjectID, SubjectSet: row.SubjectSet,
+		})
+	}
+	return out
+}
+
 // authorizationResourceDisplayName reads the one canonical display metadata
 // field carried by an authorization resource. Authorization keeps the
 // resource ID stable; the resource's display name is presentation data and may
 // change independently.
-func authorizationResourceDisplayName(resource *proto.Resource) string {
+func (s *Server) authorizationResourceDisplayName(ctx context.Context, resource *proto.Resource) string {
 	if resource == nil || resource.GetProperties() == nil {
+		if s.displayNameResolver != nil {
+			name, err := s.displayNameResolver(ctx, resource)
+			if err == nil {
+				return strings.TrimSpace(name)
+			}
+		}
 		return ""
 	}
 	value := resource.GetProperties().GetFields()[core.AuthorizationResourceDisplayNameProperty]
 	if value != nil {
 		if displayName := strings.TrimSpace(value.GetStringValue()); displayName != "" {
 			return displayName
+		}
+	}
+	if s.displayNameResolver != nil {
+		name, err := s.displayNameResolver(ctx, resource)
+		if err == nil {
+			return strings.TrimSpace(name)
 		}
 	}
 	return ""

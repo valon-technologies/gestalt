@@ -1,6 +1,10 @@
 package scim
 
-import "context"
+import (
+	"context"
+
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+)
 
 // Service is the SCIM handle shared by HTTP bootstrap and authorization
 // gating. SCIM state is held by CompactService; the AuthorizationProvider is
@@ -23,4 +27,15 @@ func (s *Service) IsEligible(ctx context.Context, coreID, email string) (bool, e
 		return true, nil
 	}
 	return s.compact.IsEligible(ctx, coreID, email)
+}
+
+// ResolveAuthorizationResourceDisplayName returns current metadata from the
+// resource-owning SCIM store. Authorization relationships intentionally keep
+// only stable resource IDs, so renamed groups do not require relationship
+// rewrites to remain readable in admin projections.
+func (s *Service) ResolveAuthorizationResourceDisplayName(ctx context.Context, resource *proto.Resource) (string, error) {
+	if s == nil || s.compact == nil {
+		return "", nil
+	}
+	return s.compact.authorizationResourceDisplayName(ctx, resource)
 }

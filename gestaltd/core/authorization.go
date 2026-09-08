@@ -10,6 +10,12 @@ import (
 // used when authorization-backed resources need a human-readable name.
 const AuthorizationResourceDisplayNameProperty = "displayName"
 
+// AuthorizationResourceDisplayNameResolver resolves current presentation
+// metadata for authorization resources without changing their stable IDs.
+// It is optional because a provider may carry displayName in resource
+// properties while a resource-owning service can supply fresher metadata.
+type AuthorizationResourceDisplayNameResolver func(context.Context, *proto.Resource) (string, error)
+
 type AuthorizationProvider interface {
 	CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error)
 	CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error)

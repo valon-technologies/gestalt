@@ -2,12 +2,12 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -225,7 +225,7 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 								Resource: &proto.Resource{
 									Type:       "group",
 									Id:         "eng",
-									Properties: mustStruct(t, map[string]any{core.AuthorizationResourceDisplayNameProperty: "Engineering"}),
+									Properties: mustStruct(t, map[string]any{"displayName": "Engineering"}),
 								},
 								Relation: "member",
 							},
@@ -255,6 +255,21 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 				},
 				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
 			},
+			{
+				Tuple: &proto.RelationshipTuple{
+					Target: &proto.RelationshipTarget{
+						Kind: &proto.RelationshipTarget_SubjectSet{
+							SubjectSet: &proto.SubjectSet{
+								Resource: &proto.Resource{Type: "group", Id: "resolved"},
+								Relation: "member",
+							},
+						},
+					},
+					Relation: "viewer",
+					Resource: &proto.Resource{Type: "app", Id: "g-issues"},
+				},
+				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
+			},
 		},
 	}
 	authz.relationships[0].SourceLayer = proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG
@@ -263,6 +278,12 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
 		cfg.AppDefs = appAdminTestAppDefs()
+		cfg.DisplayNameResolver = func(_ context.Context, resource *proto.Resource) (string, error) {
+			if resource.GetType() == "group" && resource.GetId() == "resolved" {
+				return "Resolved from owner", nil
+			}
+			return "", nil
+		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -297,6 +318,7 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 	}
 	found := false
 	legacyFound := false
+	resolvedFound := false
 	for _, row := range rows {
 		if row.SelectorKind == "subject_set" && row.SelectorValue == "group:eng#member" && row.Role == "viewer" && row.SubjectID == "" {
 			if row.SubjectSet == nil || row.SubjectSet.Resource.Type != "group" || row.SubjectSet.Resource.ID != "eng" || row.SubjectSet.Resource.DisplayName != "Engineering" || row.SubjectSet.Relation != "member" {
@@ -310,12 +332,21 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 			}
 			legacyFound = true
 		}
+		if row.SelectorKind == "subject_set" && row.SelectorValue == "group:resolved#member" {
+			if row.SubjectSet == nil || row.SubjectSet.Resource.DisplayName != "Resolved from owner" {
+				t.Fatalf("resolved subject_set = %#v, want owner metadata", row.SubjectSet)
+			}
+			resolvedFound = true
+		}
 	}
 	if !found {
 		t.Fatalf("subject_set row missing: %#v", rows)
 	}
 	if !legacyFound {
 		t.Fatalf("legacy subject_set row missing: %#v", rows)
+	}
+	if !resolvedFound {
+		t.Fatalf("resolved subject_set row missing: %#v", rows)
 	}
 }
 

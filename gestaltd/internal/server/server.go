@@ -119,6 +119,7 @@ type Server struct {
 	authProviders                 map[string]core.IdentityProvider
 	serverAuthProvider            string
 	authorization                 core.AuthorizationProvider
+	displayNameResolver           core.AuthorizationResourceDisplayNameResolver
 	providerKinds                 map[string]invocation.ProviderKind
 	authorizationPolicies         map[string]string
 	operationAccess               invocation.OperationAccessChecker
@@ -225,6 +226,7 @@ type Config struct {
 	SelectedAuthProvider  string
 	AuthProviders         map[string]core.IdentityProvider
 	Authorization         core.AuthorizationProvider
+	DisplayNameResolver   core.AuthorizationResourceDisplayNameResolver
 	ProviderKinds         map[string]invocation.ProviderKind
 	AuthorizationPolicies map[string]string
 	// OperationAccessChecker answers batched operation-access questions for
@@ -470,6 +472,7 @@ func New(cfg Config) (*Server, error) {
 		authProviders:                 authProviders,
 		serverAuthProvider:            serverAuthProvider,
 		authorization:                 cfg.Authorization,
+		displayNameResolver:           cfg.DisplayNameResolver,
 		providerKinds:                 cfg.ProviderKinds,
 		authorizationPolicies:         cfg.AuthorizationPolicies,
 		operationAccess:               operationAccess,

@@ -245,6 +245,7 @@ type Result struct {
 	SelectedAuthProvider    string
 	AuthProviders           map[string]core.IdentityProvider
 	Authorization           map[string]core.AuthorizationProvider
+	DisplayNameResolver     core.AuthorizationResourceDisplayNameResolver
 	Services                *coredata.Services
 	ExtraIndexedDBs         []indexeddb.IndexedDB
 	ExtraCaches             []corecache.Cache
@@ -1586,10 +1587,16 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		scimHandler = scim.NewHandler(prepared.SCIM)
 	}
 	result := &Result{
-		Auth:                           prepared.Auth,
-		SelectedAuthProvider:           prepared.SelectedAuthProvider,
-		AuthProviders:                  prepared.AuthProviders,
-		Authorization:                  prepared.Authorization,
+		Auth:                 prepared.Auth,
+		SelectedAuthProvider: prepared.SelectedAuthProvider,
+		AuthProviders:        prepared.AuthProviders,
+		Authorization:        prepared.Authorization,
+		DisplayNameResolver: func(ctx context.Context, resource *proto.Resource) (string, error) {
+			if prepared.SCIM == nil {
+				return "", nil
+			}
+			return prepared.SCIM.ResolveAuthorizationResourceDisplayName(ctx, resource)
+		},
 		Services:                       prepared.Services,
 		ExtraIndexedDBs:                prepared.ExtraIndexedDBs,
 		ExtraCaches:                    prepared.ExtraCaches,
