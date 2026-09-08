@@ -276,7 +276,7 @@ func TestAppAdminRegistryAutoDeploy(t *testing.T) {
 	}
 
 	disabled := update(`{"enabled":false}`, http.StatusOK)
-	if disabled.AutoDeploy.Enabled || disabled.AutoDeploy.PendingVersion != "" {
+	if disabled.AutoDeploy.Enabled || disabled.AutoDeploy.PendingVersion != "" || disabled.AutoDeploy.LastError != "" {
 		t.Fatalf("disabled response = %#v", disabled)
 	}
 	update(`{}`, http.StatusBadRequest)

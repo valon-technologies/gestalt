@@ -52,21 +52,6 @@ func (s *AutoDeploySettingsService) Get(ctx context.Context, app string) (*core.
 	return recordToAppAutoDeploySettings(rec), nil
 }
 
-func (s *AutoDeploySettingsService) ListEnabled(ctx context.Context) ([]*core.AppAutoDeploySettings, error) {
-	if s == nil {
-		return nil, fmt.Errorf("list enabled app auto-deploy settings: service is not configured")
-	}
-	recs, err := s.store.Index("by_enabled").GetAll(ctx, true)
-	if err != nil {
-		return nil, fmt.Errorf("list enabled app auto-deploy settings: %w", err)
-	}
-	out := make([]*core.AppAutoDeploySettings, 0, len(recs))
-	for _, rec := range recs {
-		out = append(out, recordToAppAutoDeploySettings(rec))
-	}
-	return out, nil
-}
-
 func (s *AutoDeploySettingsService) ListAll(ctx context.Context) ([]*core.AppAutoDeploySettings, error) {
 	if s == nil {
 		return nil, fmt.Errorf("list app auto-deploy settings: service is not configured")

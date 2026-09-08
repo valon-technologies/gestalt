@@ -89,35 +89,6 @@ func TestAutoDeploySettingsService(t *testing.T) {
 		}
 	})
 
-	t.Run("list enabled", func(t *testing.T) {
-		t.Parallel()
-		svc := testutil.NewStubServices(t).AutoDeploySettings
-		for app, enabled := range map[string]bool{
-			"g-issues": true,
-			"g-slack":  false,
-			"g-tasks":  true,
-		} {
-			if _, err := svc.Update(ctx, app, func(settings *core.AppAutoDeploySettings) error {
-				settings.Enabled = enabled
-				return nil
-			}); err != nil {
-				t.Fatalf("Update %s: %v", app, err)
-			}
-		}
-		got, err := svc.ListEnabled(ctx)
-		if err != nil {
-			t.Fatalf("ListEnabled: %v", err)
-		}
-		if len(got) != 2 {
-			t.Fatalf("enabled settings = %#v, want two", got)
-		}
-		for _, settings := range got {
-			if !settings.Enabled || settings.App == "g-slack" {
-				t.Fatalf("enabled settings includes %#v", settings)
-			}
-		}
-	})
-
 	t.Run("validation and failed update", func(t *testing.T) {
 		t.Parallel()
 		svc := testutil.NewStubServices(t).AutoDeploySettings

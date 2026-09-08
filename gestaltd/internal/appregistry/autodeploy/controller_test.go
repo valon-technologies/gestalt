@@ -173,6 +173,10 @@ func TestControllerDisablesOnFailedRollout(t *testing.T) {
 	}}
 	installer := &fakeInstaller{}
 	controller := testController(services, reader, installer)
+	controller.Fleet = fakeFleetHealthReader{projection: &core.AppFleetProjection{
+		State:          core.AppFleetStateDegraded,
+		DesiredVersion: "v1",
+	}}
 
 	if err := controller.Reconcile(t.Context(), "g-issues"); err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -248,7 +252,7 @@ func TestControllerDoesNotPauseHealthyFailedRollout(t *testing.T) {
 	}
 }
 
-func TestControllerRepairsLegacyDisabledHealthyRollout(t *testing.T) {
+func TestControllerPreservesExplicitlyDisabledAutoDeploy(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
@@ -276,11 +280,6 @@ func TestControllerRepairsLegacyDisabledHealthyRollout(t *testing.T) {
 		t.Fatalf("seed legacy settings: %v", err)
 	}
 	controller := testController(services, &fakeReader{}, &fakeInstaller{})
-	controller.Fleet = fakeFleetHealthReader{projection: &core.AppFleetProjection{
-		State:          core.AppFleetStateHealthy,
-		DesiredVersion: "v1",
-	}}
-
 	if err := controller.ReconcileAll(t.Context()); err != nil {
 		t.Fatalf("ReconcileAll: %v", err)
 	}
@@ -288,8 +287,8 @@ func TestControllerRepairsLegacyDisabledHealthyRollout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get settings: %v", err)
 	}
-	if !settings.Enabled || settings.Paused || settings.LastError != "" {
-		t.Fatalf("repaired settings = %#v", settings)
+	if settings.Enabled || settings.Paused || settings.LastError != "rollout for v1 failed" {
+		t.Fatalf("preserved settings = %#v", settings)
 	}
 }
 

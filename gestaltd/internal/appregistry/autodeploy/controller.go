@@ -188,7 +188,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 		return err
 	}
 	if !settings.Enabled {
-		return c.repairLegacyPause(ctx, settings, rollout)
+		return nil
 	}
 	if settings.Paused {
 		return nil
@@ -211,7 +211,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 				} else {
 					current.Paused = true
 					current.PauseReason = "rollout_failed"
-					current.LastError = fmt.Sprintf("rollout for %s failed", rollout.Version)
+					current.LastError = fmt.Sprintf("automatic deployment paused after rollout for %s failed; retry the version to resume", rollout.Version)
 				}
 				return nil
 			})
@@ -329,8 +329,11 @@ func (c *Controller) validate() error {
 }
 
 func (c *Controller) failedRolloutIsHealthy(ctx context.Context, app string, rollout *core.AppRollout) (bool, error) {
-	if c.Fleet == nil || rollout == nil {
-		return false, nil
+	if rollout == nil {
+		return false, fmt.Errorf("check failed rollout health: rollout is required")
+	}
+	if c.Fleet == nil {
+		return false, fmt.Errorf("check failed rollout health: fleet health reader is not configured")
 	}
 	projection, err := c.Fleet.Project(ctx, app)
 	if err != nil {
@@ -338,25 +341,6 @@ func (c *Controller) failedRolloutIsHealthy(ctx context.Context, app string, rol
 	}
 	return projection != nil && projection.State == core.AppFleetStateHealthy &&
 		strings.TrimSpace(projection.DesiredVersion) == strings.TrimSpace(rollout.Version), nil
-}
-
-func (c *Controller) repairLegacyPause(ctx context.Context, settings *core.AppAutoDeploySettings, rollout *core.AppRollout) error {
-	if settings == nil || rollout == nil || rollout.State != core.AppRolloutStateFailed || c.Fleet == nil ||
-		!strings.HasPrefix(settings.LastError, "rollout for ") {
-		return nil
-	}
-	healthy, err := c.failedRolloutIsHealthy(ctx, settings.App, rollout)
-	if err != nil || !healthy {
-		return err
-	}
-	_, err = c.Settings.Update(ctx, settings.App, func(current *core.AppAutoDeploySettings) error {
-		current.Enabled = true
-		current.Paused = false
-		current.PauseReason = ""
-		current.LastError = ""
-		return nil
-	})
-	return err
 }
 
 func isCandidateRejection(err error) bool {
