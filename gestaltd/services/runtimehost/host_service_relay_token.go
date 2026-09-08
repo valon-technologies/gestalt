@@ -16,9 +16,7 @@ const (
 	hostServiceRelayTokenAudience   = "gestalt-host-service-relay"
 	defaultHostServiceRelayTokenTTL = 24 * time.Hour
 	maxHostServiceRelayTokenTTL     = 30 * 24 * time.Hour
-	// DefaultInvocationCapabilityTTL is the lifetime of caller-scoped tokens
-	// minted for a provider Execute. request.gestalt() reuses that JWT for
-	// agent, identity, app, and workflow RPCs until the activity returns.
+	// DefaultInvocationCapabilityTTL scopes caller-scoped invocation capabilities.
 	DefaultInvocationCapabilityTTL = 30 * time.Minute
 )
 
