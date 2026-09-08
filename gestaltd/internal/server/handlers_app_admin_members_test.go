@@ -221,7 +221,11 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 					Target: &proto.RelationshipTarget{
 						Kind: &proto.RelationshipTarget_SubjectSet{
 							SubjectSet: &proto.SubjectSet{
-								Resource: &proto.Resource{Type: "group", Id: "eng"},
+								Resource: &proto.Resource{
+									Type:       "group",
+									Id:         "eng",
+									Properties: mustStruct(t, map[string]any{"displayName": "Engineering"}),
+								},
 								Relation: "member",
 							},
 						},
@@ -259,6 +263,12 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 		SelectorKind  string `json:"selectorKind"`
 		SelectorValue string `json:"selectorValue"`
 		SubjectID     string `json:"subjectId"`
+		Principal     *struct {
+			Kind        string `json:"kind"`
+			ID          string `json:"id"`
+			DisplayName string `json:"displayName"`
+			Relation    string `json:"relation"`
+		} `json:"principal"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -266,6 +276,9 @@ func TestAppAdminMembersListSubjectSet(t *testing.T) {
 	found := false
 	for _, row := range rows {
 		if row.SelectorKind == "subject_set" && row.SelectorValue == "group:eng#member" && row.Role == "viewer" && row.SubjectID == "" {
+			if row.Principal == nil || row.Principal.Kind != "group" || row.Principal.ID != "eng" || row.Principal.DisplayName != "Engineering" || row.Principal.Relation != "member" {
+				t.Fatalf("subject_set principal = %#v, want named group", row.Principal)
+			}
 			found = true
 			break
 		}
