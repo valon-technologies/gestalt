@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -497,9 +498,9 @@ func (s *Server) viewerDirectoryEntry(ctx context.Context, p *principal.Principa
 		s.integrationMountedPathForPrincipalContext(ctx, p, entry.Name, entry.DeclaredMount),
 		s.integrationManagementPath(ctx, p, entry.Name),
 	)
-	// Registry source metadata depends on the installed app version, so resolve
-	// it while projecting the request rather than freezing it in the tenant
-	// snapshot. Successful lookups are still cached by app and version.
+	// Registry source metadata belongs to the installed version, so resolve it
+	// while projecting the request rather than freezing it in the tenant
+	// snapshot.
 	projected.SourceTreeURL = s.appSourceTreeURL(ctx, entry.Name, s.pluginDefs[entry.Name])
 	return projected
 }
@@ -514,28 +515,33 @@ func (s *Server) appSourceTreeURL(ctx context.Context, appName string, plugin *c
 	if !ok {
 		return ""
 	}
-	return s.registryAppSourceTreeURL(ctx, app)
-}
-
-func (s *Server) registryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp) string {
-	if s == nil || s.appRegistryReader == nil || s.appVersionChanges == nil {
+	if s.appVersionChanges == nil {
 		return ""
 	}
 	known, err := s.appVersionChanges.ListKnownVersionsByApp(ctx, app.name)
 	if err != nil {
 		return ""
 	}
-	version := coredata.LatestKnownVersion(known)
+	installation := coredata.LatestKnownInstallation(known)
+	if installation == nil {
+		return ""
+	}
+	if sourceRepository := strings.TrimSpace(installation.SourceRepository); sourceRepository != "" {
+		return appregistry.SourceTreeURLForApp(sourceRepository, installation.AppName, installation.SourceRef)
+	}
+	return s.legacyRegistryAppSourceTreeURL(ctx, app, installation.Version)
+}
+
+// legacyRegistryAppSourceTreeURL supports installations recorded before source
+// repository identity was persisted. New installations never use this remote
+// read path; it can be removed after those historical records are migrated.
+func (s *Server) legacyRegistryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp, version string) string {
+	if s == nil || s.appRegistryReader == nil || s.appVersionChanges == nil {
+		return ""
+	}
 	if version == "" {
 		return ""
 	}
-	cacheKey := app.name + "\x00" + version
-	s.appRegistrySourceMu.Lock()
-	if sourceTreeURL := s.appRegistrySourceTreeURLs[cacheKey]; sourceTreeURL != "" {
-		s.appRegistrySourceMu.Unlock()
-		return sourceTreeURL
-	}
-	s.appRegistrySourceMu.Unlock()
 
 	registry, ok := s.appRegistries[app.registry]
 	if !ok {
@@ -553,9 +559,6 @@ func (s *Server) registryAppSourceTreeURL(ctx context.Context, app configuredReg
 	if sourceTreeURL == "" {
 		return ""
 	}
-	s.appRegistrySourceMu.Lock()
-	s.appRegistrySourceTreeURLs[cacheKey] = sourceTreeURL
-	s.appRegistrySourceMu.Unlock()
 	return sourceTreeURL
 }
 

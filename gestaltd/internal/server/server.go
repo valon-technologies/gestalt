@@ -186,8 +186,6 @@ type Server struct {
 	adminRoute                    AdminRouteConfig
 	appRegistries                 map[string]config.AppRegistryConfig
 	appRegistryReader             *appregistry.RegistryReader
-	appRegistrySourceMu           sync.Mutex
-	appRegistrySourceTreeURLs     map[string]string
 	appRegistryInstaller          *appregistry.Installer
 	appRegistryPublish            *appregistry.StatelessPublishService
 	appRegistryPublishAllowedApps map[string]struct{}
@@ -526,7 +524,6 @@ func New(cfg Config) (*Server, error) {
 		adminRoute:                    adminRoute,
 		appRegistries:                 cloneAppRegistryConfig(cfg.AppRegistries),
 		appRegistryReader:             cfg.AppRegistryReader,
-		appRegistrySourceTreeURLs:     make(map[string]string),
 		appRegistryInstaller:          newAppRegistryInstaller(cfg),
 		appRegistryPublish:            cfg.AppRegistryPublish,
 		appRegistryPublishAllowedApps: cloneStringSet(cfg.AppRegistryPublishAllowedApps),

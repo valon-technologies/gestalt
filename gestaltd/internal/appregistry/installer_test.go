@@ -91,6 +91,13 @@ func TestInstaller_does_not_materialize_locally(t *testing.T) {
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
+	known, err := svc.AppVersionChangeRequests.ListKnownVersionsByApp(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("ListKnownVersionsByApp: %v", err)
+	}
+	if len(known) != 1 || known[0].SourceRepository != "github.com/valon-technologies/valon-tools" {
+		t.Fatalf("known installations = %#v, want published source repository", known)
+	}
 
 	materialized := filepath.Join(artifactsDir, appregistry.RegistryInstallSubdir, "g-issues", fixture.Version)
 	if _, err := os.Stat(materialized); err == nil {

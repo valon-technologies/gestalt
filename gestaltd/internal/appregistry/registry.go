@@ -86,7 +86,15 @@ type Entry struct {
 // app name is sufficient to project the source directory from the immutable
 // repository and source ref recorded in the entry.
 func (e Entry) SourceTreeURL() string {
-	repositoryLocation := strings.TrimSpace(e.Repository)
+	return SourceTreeURLForApp(e.Repository, e.App, e.SourceRef)
+}
+
+// SourceTreeURLForApp projects the source directory for a published app from
+// the source identity captured at publication time. The registry contract
+// fixes app sources under apps/{app}, so callers only need the repository,
+// application name, and immutable source ref from the installation record.
+func SourceTreeURLForApp(repositoryLocation, appName, sourceRef string) string {
+	repositoryLocation = strings.TrimSpace(repositoryLocation)
 	if strings.HasPrefix(strings.ToLower(repositoryLocation), "github.com/") {
 		repositoryLocation = "https://" + repositoryLocation
 	}
@@ -94,8 +102,8 @@ func (e Entry) SourceTreeURL() string {
 	if err != nil {
 		return ""
 	}
-	ref := strings.TrimSpace(e.SourceRef)
-	appName := strings.TrimSpace(e.App)
+	ref := strings.TrimSpace(sourceRef)
+	appName = strings.TrimSpace(appName)
 	if ref == "" || appName == "" {
 		return ""
 	}

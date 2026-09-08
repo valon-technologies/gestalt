@@ -12,6 +12,7 @@ import (
 
 const (
 	appVersionChangeRequestMetaRegistry           = "registry"
+	appVersionChangeRequestMetaSourceRepository   = "source_repository"
 	appVersionChangeRequestMetaSourceRef          = "source_ref"
 	appVersionChangeRequestMetaProviderReleaseURL = "provider_release_url"
 	appVersionChangeRequestMetaArtifactChecksums  = "artifact_checksums"
@@ -24,6 +25,7 @@ func ChangeRequestMetadata(installation *core.AppInstallation) map[string]any {
 	}
 	metadata := map[string]any{
 		appVersionChangeRequestMetaRegistry:           strings.TrimSpace(installation.Registry),
+		appVersionChangeRequestMetaSourceRepository:   strings.TrimSpace(installation.SourceRepository),
 		appVersionChangeRequestMetaSourceRef:          strings.TrimSpace(installation.SourceRef),
 		appVersionChangeRequestMetaProviderReleaseURL: strings.TrimSpace(installation.ProviderReleaseURL),
 	}
@@ -110,6 +112,7 @@ func installationFromChangeRequest(request *core.AppVersionChangeRequest) *core.
 	}
 	if metadata := request.Metadata; metadata != nil {
 		installation.Registry = stringMeta(metadata, appVersionChangeRequestMetaRegistry)
+		installation.SourceRepository = stringMeta(metadata, appVersionChangeRequestMetaSourceRepository)
 		installation.SourceRef = stringMeta(metadata, appVersionChangeRequestMetaSourceRef)
 		installation.ProviderReleaseURL = stringMeta(metadata, appVersionChangeRequestMetaProviderReleaseURL)
 		installation.ArtifactChecksums = stringMapMeta(metadata, appVersionChangeRequestMetaArtifactChecksums)
@@ -128,8 +131,19 @@ func InstallationFromChangeRequest(request *core.AppVersionChangeRequest) *core.
 }
 
 func LatestKnownVersion(installations []*core.AppInstallation) string {
-	if len(installations) == 0 {
+	latest := LatestKnownInstallation(installations)
+	if latest == nil {
 		return ""
+	}
+	return strings.TrimSpace(latest.Version)
+}
+
+// LatestKnownInstallation returns the local installation record that currently
+// represents the desired version. Keeping the full record is important for
+// projections that need immutable publication metadata, not just its version.
+func LatestKnownInstallation(installations []*core.AppInstallation) *core.AppInstallation {
+	if len(installations) == 0 {
+		return nil
 	}
 	latest := installations[0]
 	for _, installation := range installations[1:] {
@@ -143,10 +157,7 @@ func LatestKnownVersion(installations []*core.AppInstallation) string {
 			latest = installation
 		}
 	}
-	if latest == nil {
-		return ""
-	}
-	return strings.TrimSpace(latest.Version)
+	return latest
 }
 
 func stringMeta(metadata map[string]any, key string) string {

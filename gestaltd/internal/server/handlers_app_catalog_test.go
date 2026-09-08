@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -24,18 +23,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
-
-type failOnceRegistryEntryTransport struct {
-	base   http.RoundTripper
-	failed atomic.Bool
-}
-
-func (t *failOnceRegistryEntryTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if strings.Contains(request.URL.Path, "/versions/") && t.failed.CompareAndSwap(false, true) {
-		return nil, fmt.Errorf("temporary registry entry failure")
-	}
-	return t.base.RoundTrip(request)
-}
 
 type errorListCredentials struct {
 	core.ExternalCredentialProvider
@@ -369,9 +356,11 @@ func TestAppCatalogIncludesSourceTreeURLForRegistryApp(t *testing.T) {
 		ToVersion:   fixture.Version,
 		Actor:       testCanonicalAdminUserID,
 		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
-			AppName:  "g-issues",
-			Version:  fixture.Version,
-			Registry: "toolshed",
+			AppName:          "g-issues",
+			Version:          fixture.Version,
+			SourceRepository: "github.com/valon-technologies/valon-tools",
+			SourceRef:        "abc123def456abc123def456abc123def456abcd",
+			Registry:         "toolshed",
 		}),
 	})
 	if err != nil {
@@ -388,15 +377,11 @@ func TestAppCatalogIncludesSourceTreeURLForRegistryApp(t *testing.T) {
 		cfg.Authorization = authz
 		cfg.Services = services
 		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
-		cfg.AppRegistryReader = fixture.Reader
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
-	fixture.Reader.HTTPClient.Transport = &failOnceRegistryEntryTransport{
-		base: fixture.Reader.HTTPClient.Transport,
-	}
 
 	getCatalog := func() []struct {
 		Name          string `json:"name"`
@@ -423,10 +408,6 @@ func TestAppCatalogIncludesSourceTreeURLForRegistryApp(t *testing.T) {
 		return apps
 	}
 
-	first := getCatalog()
-	if len(first) != 1 || first[0].Name != "g-issues" || first[0].SourceTreeURL != "" {
-		t.Fatalf("first apps = %#v, want one app without sourceTreeUrl", first)
-	}
 	apps := getCatalog()
 	if len(apps) != 1 || apps[0].Name != "g-issues" {
 		t.Fatalf("apps = %#v", apps)
