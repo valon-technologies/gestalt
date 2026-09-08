@@ -381,7 +381,7 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 	dir := &tenantAppDirectory{entries: make([]tenantAppDirectoryEntry, 0, len(names)+len(registryApps))}
 	cacheable := true
 	for _, name := range names {
-		entry, ok, err := s.tenantProviderDirectoryEntry(ctx, name)
+		entry, ok, entryCacheable, err := s.tenantProviderDirectoryEntry(ctx, name)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, false, err
@@ -392,6 +392,7 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 		if !ok {
 			continue
 		}
+		cacheable = cacheable && entryCacheable
 		seen[name] = struct{}{}
 		dir.entries = append(dir.entries, entry)
 	}
@@ -402,21 +403,23 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 		if s.integrationHiddenFromCatalog(app.name) {
 			continue
 		}
-		dir.entries = append(dir.entries, s.tenantRegistryDirectoryEntry(ctx, app.name))
+		entry, entryCacheable := s.tenantRegistryDirectoryEntry(ctx, app.name)
+		cacheable = cacheable && entryCacheable
+		dir.entries = append(dir.entries, entry)
 	}
 	return dir, cacheable, nil
 }
 
-func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) (tenantAppDirectoryEntry, bool, error) {
+func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) (tenantAppDirectoryEntry, bool, bool, error) {
 	if s.integrationHiddenFromCatalog(name) {
-		return tenantAppDirectoryEntry{}, false, nil
+		return tenantAppDirectoryEntry{}, false, true, nil
 	}
 	prov, err := s.providers.GetWithContext(ctx, name)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return tenantAppDirectoryEntry{}, false, nil
+			return tenantAppDirectoryEntry{}, false, true, nil
 		}
-		return tenantAppDirectoryEntry{}, false, fmt.Errorf("resolve app %q: %w", name, err)
+		return tenantAppDirectoryEntry{}, false, false, fmt.Errorf("resolve app %q: %w", name, err)
 	}
 	plugin := s.pluginDefs[name]
 	entry := tenantAppDirectoryEntry{
@@ -425,38 +428,40 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 		Description: prov.Description(),
 		Loaded:      true,
 	}
-	s.applyPluginDirectoryFields(ctx, &entry, plugin)
+	entryCacheable := s.applyPluginDirectoryFields(ctx, &entry, plugin)
 	s.attachDirectoryConnections(&entry, plugin)
 	if cat := prov.Catalog(); cat != nil {
 		entry.IconSVG = cat.IconSVG
 	}
-	return entry, true, nil
+	return entry, true, entryCacheable, nil
 }
 
-func (s *Server) tenantRegistryDirectoryEntry(ctx context.Context, name string) tenantAppDirectoryEntry {
+func (s *Server) tenantRegistryDirectoryEntry(ctx context.Context, name string) (tenantAppDirectoryEntry, bool) {
 	plugin := s.pluginDefs[name]
 	entry := tenantAppDirectoryEntry{
 		Name:        name,
 		DisplayName: name,
 	}
-	s.applyPluginDirectoryFields(ctx, &entry, plugin)
+	entryCacheable := s.applyPluginDirectoryFields(ctx, &entry, plugin)
 	if plugin != nil && strings.TrimSpace(plugin.DisplayName) != "" {
 		entry.DisplayName = strings.TrimSpace(plugin.DisplayName)
 	}
 	s.attachDirectoryConnections(&entry, plugin)
-	return entry
+	return entry, entryCacheable
 }
 
-func (s *Server) applyPluginDirectoryFields(ctx context.Context, entry *tenantAppDirectoryEntry, plugin *config.ProviderEntry) {
+func (s *Server) applyPluginDirectoryFields(ctx context.Context, entry *tenantAppDirectoryEntry, plugin *config.ProviderEntry) bool {
 	if entry == nil {
-		return
+		return true
 	}
 	entry.Prompts = s.appPrompts[entry.Name]
-	entry.SourceTreeURL = s.appSourceTreeURL(ctx, entry.Name, plugin)
+	sourceTreeURL, sourceCacheable := s.appSourceTreeURL(ctx, entry.Name, plugin)
+	entry.SourceTreeURL = sourceTreeURL
 	if plugin == nil {
-		return
+		return sourceCacheable
 	}
 	entry.DeclaredMount = pluginDeclaredMount(plugin)
+	return sourceCacheable
 }
 
 func pluginDeclaredMount(plugin *config.ProviderEntry) string {
@@ -501,59 +506,59 @@ func (s *Server) viewerDirectoryEntry(ctx context.Context, p *principal.Principa
 	)
 }
 
-func (s *Server) appSourceTreeURL(ctx context.Context, appName string, plugin *config.ProviderEntry) string {
+func (s *Server) appSourceTreeURL(ctx context.Context, appName string, plugin *config.ProviderEntry) (string, bool) {
 	if plugin != nil {
 		if sourceTreeURL := plugin.SourceTreeURL(); sourceTreeURL != "" {
-			return sourceTreeURL
+			return sourceTreeURL, true
 		}
 	}
 	app, ok := s.registryApp(appName)
 	if !ok {
-		return ""
+		return "", true
 	}
 	return s.registryAppSourceTreeURL(ctx, app)
 }
 
-func (s *Server) registryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp) string {
+func (s *Server) registryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp) (string, bool) {
 	if s == nil || s.appRegistryReader == nil || s.appVersionChanges == nil {
-		return ""
+		return "", false
 	}
 	known, err := s.appVersionChanges.ListKnownVersionsByApp(ctx, app.name)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	version := coredata.LatestKnownVersion(known)
 	if version == "" {
-		return ""
+		return "", false
 	}
 	cacheKey := app.name + "\x00" + version
 	s.appRegistrySourceMu.Lock()
 	if sourceTreeURL := s.appRegistrySourceTreeURLs[cacheKey]; sourceTreeURL != "" {
 		s.appRegistrySourceMu.Unlock()
-		return sourceTreeURL
+		return sourceTreeURL, true
 	}
 	s.appRegistrySourceMu.Unlock()
 
 	registry, ok := s.appRegistries[app.registry]
 	if !ok {
-		return ""
+		return "", false
 	}
 	publicRoot, err := registry.PublicURL()
 	if err != nil {
-		return ""
+		return "", false
 	}
 	entry, err := s.appRegistryReader.FetchEntry(ctx, publicRoot, app.name, version)
 	if err != nil || entry == nil {
-		return ""
+		return "", false
 	}
 	sourceTreeURL := entry.SourceTreeURL()
 	if sourceTreeURL == "" {
-		return ""
+		return "", false
 	}
 	s.appRegistrySourceMu.Lock()
 	s.appRegistrySourceTreeURLs[cacheKey] = sourceTreeURL
 	s.appRegistrySourceMu.Unlock()
-	return sourceTreeURL
+	return sourceTreeURL, true
 }
 
 func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (appDirectoryEntry, bool, error) {
