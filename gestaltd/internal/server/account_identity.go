@@ -32,7 +32,8 @@ type identityFact struct {
 }
 
 type oauthIdentityFacts struct {
-	Facts []identityFact
+	Facts             []identityFact
+	ProviderAccountID string
 }
 
 // accountIdentity is the projected Connection identity payload.
@@ -301,12 +302,15 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 
 	// OAuth probes are integration-scoped and never run for opaque/manual
 	// field credentials (AccessToken may hold a raw secret there). They enrich
-	// display facts only; the stable account key must come from the provider's
-	// typed token-response contract.
+	// display facts and may return an explicit provider account ID when the
+	// provider exposes it from the identity response.
 	if len(tm.Fields) == 0 {
 		if token := strings.TrimSpace(tm.AccessToken); token != "" {
 			providerIdentity := fetchOAuthIdentityFacts(ctx, tm.Integration, token)
 			facts = mergeIdentityFacts(facts, providerIdentity.Facts...)
+			if strings.TrimSpace(tm.ProviderAccountID) == "" {
+				tm.ProviderAccountID = providerIdentity.ProviderAccountID
+			}
 		}
 	}
 
@@ -345,6 +349,19 @@ func removeAccountKeyMetadata(metadataJSON string) (string, error) {
 		return "", err
 	}
 	delete(m, accountKeyMetadataKey)
+	return marshalMetadataMap(m)
+}
+
+func setAccountKeyMetadata(metadataJSON, accountKey string) (string, error) {
+	m, err := parseMetadataMap(metadataJSON)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(accountKey) == "" {
+		delete(m, accountKeyMetadataKey)
+	} else {
+		m[accountKeyMetadataKey] = strings.TrimSpace(accountKey)
+	}
 	return marshalMetadataMap(m)
 }
 
@@ -480,7 +497,13 @@ func slackAuthTestIdentity(obj map[string]any) oauthIdentityFacts {
 	if user := stringField(obj, "user"); user != "" {
 		facts = append(facts, identityFact{Kind: "login", Value: user})
 	}
-	return oauthIdentityFacts{Facts: facts}
+	teamID := stringField(obj, "team_id")
+	userID := stringField(obj, "user_id")
+	providerAccountID := ""
+	if teamID != "" && userID != "" {
+		providerAccountID = teamID + ":" + userID
+	}
+	return oauthIdentityFacts{Facts: facts, ProviderAccountID: providerAccountID}
 }
 
 func fetchGitHubUserFacts(ctx context.Context, client *http.Client, accessToken string) oauthIdentityFacts {

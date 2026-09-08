@@ -104,6 +104,80 @@ func TestStoreCredentialFromMaterial_UsesProviderUniquenessForConcurrentReconnec
 	}
 }
 
+type legacyAccountKeyProvider struct {
+	inner *coretesting.StubExternalCredentialProvider
+}
+
+func (p *legacyAccountKeyProvider) CreateCredential(ctx context.Context, credential *core.ExternalCredential) error {
+	clone := *credential
+	clone.AccountKey = ""
+	return p.inner.CreateCredential(ctx, &clone)
+}
+
+func (p *legacyAccountKeyProvider) UpsertCredential(ctx context.Context, credential *core.ExternalCredential) error {
+	clone := *credential
+	clone.AccountKey = ""
+	return p.inner.UpsertCredential(ctx, &clone)
+}
+
+func (p *legacyAccountKeyProvider) GetCredential(ctx context.Context, subject, audience, qualifier string) (*core.ExternalCredential, error) {
+	return p.inner.GetCredential(ctx, subject, audience, qualifier)
+}
+
+func (p *legacyAccountKeyProvider) ListCredentials(ctx context.Context, subject, audience string) ([]*core.ExternalCredential, error) {
+	return p.inner.ListCredentials(ctx, subject, audience)
+}
+
+func (p *legacyAccountKeyProvider) DeleteCredential(ctx context.Context, id string) error {
+	return p.inner.DeleteCredential(ctx, id)
+}
+
+func (p *legacyAccountKeyProvider) ValidateCredentialConfig(ctx context.Context, req *core.ValidateExternalCredentialConfigRequest) error {
+	return p.inner.ValidateCredentialConfig(ctx, req)
+}
+
+func (p *legacyAccountKeyProvider) ResolveCredential(ctx context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+	return p.inner.ResolveCredential(ctx, req)
+}
+
+func (p *legacyAccountKeyProvider) ExchangeCredential(ctx context.Context, req *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
+	return p.inner.ExchangeCredential(ctx, req)
+}
+
+func TestStoreCredentialFromMaterial_PersistsAccountKeyForLegacyProvider(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	inner := coretesting.NewStubExternalCredentialProvider()
+	provider := &legacyAccountKeyProvider{inner: inner}
+	accountKey := accountKeyFromProviderID("slack", "T123:U456")
+	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
+
+	if _, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		Instance:     "Valon",
+		MetadataJSON: `{"account_id":"T123:U456"}`,
+		AccountKey:   accountKey,
+		AccessToken:  "mock-token",
+	}); err != nil {
+		t.Fatalf("store credential: %v", err)
+	}
+
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 1 {
+		t.Fatalf("credentials = %d, want one", len(credentials))
+	}
+	if got := core.AccountKeyForCredential(credentials[0]); got != accountKey {
+		t.Fatalf("account key = %q, want %q", got, accountKey)
+	}
+	if got := accountKeyStoredInMetadataJSON(credentials[0].MetadataJSON); got != accountKey {
+		t.Fatalf("compatibility account key = %q, want %q", got, accountKey)
+	}
+}
+
 func TestStoreCredentialFromMaterial_IsSafeAcrossServerInstances(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
