@@ -553,7 +553,7 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 	existing, err := s.externalCredentials.GetCredential(ctx, candidate.Subject, candidate.Audience, candidate.Qualifier)
 	if err == nil {
 		if expectedCredentialID != "" && existing.ID != expectedCredentialID {
-			return credentialTargetConflict(candidate.Qualifier)
+			return credentialTargetMismatch(candidate.Qualifier)
 		}
 		if err := s.upsertCredentialAtInstance(ctx, candidate, existing, expectedCredentialID); err != nil {
 			return err
@@ -564,7 +564,7 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 		return fmt.Errorf("get credential at instance %q: %w", candidate.Qualifier, err)
 	}
 	if expectedCredentialID != "" {
-		return credentialTargetConflict(candidate.Qualifier)
+		return credentialTargetMismatch(candidate.Qualifier)
 	}
 	if err := s.externalCredentials.CreateCredential(ctx, candidate); err == nil {
 		return nil
@@ -579,7 +579,7 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 		return fmt.Errorf("read credential after instance conflict: %w", err)
 	}
 	if expectedCredentialID != "" && existing.ID != expectedCredentialID {
-		return credentialTargetConflict(candidate.Qualifier)
+		return credentialTargetMismatch(candidate.Qualifier)
 	}
 	if err := s.upsertCredentialAtInstance(ctx, candidate, existing, expectedCredentialID); err != nil {
 		return err
@@ -599,7 +599,7 @@ func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, exis
 	candidateKey := core.AccountKeyForCredential(candidate)
 	if existingKey != "" && candidateKey == "" {
 		if strings.TrimSpace(expectedCredentialID) == "" || strings.TrimSpace(expectedCredentialID) != existing.ID {
-			return credentialTargetConflict(candidate.Qualifier)
+			return credentialOwnershipUnknown(candidate.Qualifier)
 		}
 		// An explicit reconnect may retain the existing key when the identity
 		// probe cannot provide one. The credential ID is the ownership proof.
@@ -622,8 +622,36 @@ func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, exis
 	return s.externalCredentials.UpsertCredential(ctx, candidate)
 }
 
-func credentialTargetConflict(instance string) error {
-	return &core.CredentialInstanceConflictError{Instance: instance, DifferentAccount: true}
+type credentialTargetMismatchError struct {
+	Instance string
+}
+
+func (e *credentialTargetMismatchError) Error() string {
+	return "credential target no longer matches instance " + e.Instance
+}
+
+func (e *credentialTargetMismatchError) Unwrap() error {
+	return core.ErrAlreadyExists
+}
+
+func credentialTargetMismatch(instance string) error {
+	return &credentialTargetMismatchError{Instance: instance}
+}
+
+type credentialOwnershipUnknownError struct {
+	Instance string
+}
+
+func (e *credentialOwnershipUnknownError) Error() string {
+	return "could not verify credential ownership for instance " + e.Instance
+}
+
+func (e *credentialOwnershipUnknownError) Unwrap() error {
+	return core.ErrAlreadyExists
+}
+
+func credentialOwnershipUnknown(instance string) error {
+	return &credentialOwnershipUnknownError{Instance: instance}
 }
 
 func (s *Server) validateRequestedCredentialID(ctx context.Context, subjectID, audience, instance, requestedID string) (string, error) {
@@ -634,17 +662,25 @@ func (s *Server) validateRequestedCredentialID(ctx context.Context, subjectID, a
 	credential, err := s.externalCredentials.GetCredential(ctx, subjectID, audience, instance)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return "", credentialTargetConflict(instance)
+			return "", credentialTargetMismatch(instance)
 		}
 		return "", fmt.Errorf("validate requested credential: %w", err)
 	}
 	if credential == nil || credential.ID != requestedID {
-		return "", credentialTargetConflict(instance)
+		return "", credentialTargetMismatch(instance)
 	}
 	return requestedID, nil
 }
 
 func connectionSetupFailure(err error) (int, string) {
+	var targetMismatch *credentialTargetMismatchError
+	if errors.As(err, &targetMismatch) {
+		return http.StatusConflict, fmt.Sprintf("The connection changed before instance %q could be updated. Refresh and try again.", targetMismatch.Instance)
+	}
+	var ownershipUnknown *credentialOwnershipUnknownError
+	if errors.As(err, &ownershipUnknown) {
+		return http.StatusConflict, fmt.Sprintf("Gestalt could not verify account ownership for instance %q. Refresh and try again.", ownershipUnknown.Instance)
+	}
 	var conflict *core.CredentialInstanceConflictError
 	if errors.As(err, &conflict) {
 		if conflict.DifferentAccount {

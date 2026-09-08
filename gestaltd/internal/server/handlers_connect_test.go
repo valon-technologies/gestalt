@@ -61,6 +61,19 @@ func TestConnectionSetupFailureDescribesInstanceConflict(t *testing.T) {
 	}
 }
 
+func TestConnectionSetupFailureDescribesStaleReconnectTarget(t *testing.T) {
+	t.Parallel()
+
+	status, message := connectionSetupFailure(credentialTargetMismatch("Shared label"))
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", status, http.StatusConflict)
+	}
+	want := `The connection changed before instance "Shared label" could be updated. Refresh and try again.`
+	if message != want {
+		t.Fatalf("message = %q, want %q", message, want)
+	}
+}
+
 func TestInstanceInfoDoesNotExposeInternalAccountKey(t *testing.T) {
 	t.Parallel()
 

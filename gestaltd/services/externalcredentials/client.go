@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -60,19 +62,22 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 		return nil, err
 	}
 
-	persistsAccountKey := false
-	capCtx, capCancel := runtimehost.ProviderCallContext(ctx)
-	caps, capErr := client.GetCapabilities(capCtx, &emptypb.Empty{})
-	capCancel()
-	if capErr != nil && status.Code(capErr) != codes.Unimplemented {
-		_ = proc.Close()
-		return nil, fmt.Errorf("get external credential capabilities: %w", capErr)
-	}
-	if caps != nil {
-		persistsAccountKey = caps.GetPersistsAccountKey()
-	}
+	persistsAccountKey := externalCredentialProviderPersistsAccountKey(ctx, client.GetCapabilities)
 
 	return &remoteExternalCredentialProvider{client: client, closer: proc, persistsAccountKey: persistsAccountKey}, nil
+}
+
+func externalCredentialProviderPersistsAccountKey(ctx context.Context, getCapabilities func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error)) bool {
+	capCtx, capCancel := runtimehost.ProviderCallContext(ctx)
+	caps, err := getCapabilities(capCtx, &emptypb.Empty{})
+	capCancel()
+	if err != nil {
+		if status.Code(err) != codes.Unimplemented {
+			slog.WarnContext(ctx, "external credential capability discovery failed; using legacy storage compatibility", "error", err)
+		}
+		return false
+	}
+	return caps != nil && caps.GetPersistsAccountKey()
 }
 
 func (r *remoteExternalCredentialProvider) PersistsAccountKey() bool {
