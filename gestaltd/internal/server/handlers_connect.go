@@ -570,6 +570,20 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, existing *core.ExternalCredential) error {
 	existingKey := core.AccountKeyForCredential(existing)
 	candidateKey := core.AccountKeyForCredential(candidate)
+	if existingKey != "" && candidateKey == "" {
+		// A failed identity probe must not make a reconnect look like a
+		// different account. The existing record is authoritative for this
+		// exact instance; retain its key while refreshing the credential.
+		candidate.AccountKey = existingKey
+		candidateKey = existingKey
+		if !core.ExternalCredentialProviderPersistsAccountKey(s.externalCredentials) {
+			metadata, err := setAccountKeyMetadata(candidate.MetadataJSON, existingKey)
+			if err != nil {
+				return fmt.Errorf("persist account key compatibility metadata: %w", err)
+			}
+			candidate.MetadataJSON = metadata
+		}
+	}
 	if existingKey != "" && existingKey != candidateKey {
 		return &core.CredentialInstanceConflictError{Instance: candidate.Qualifier, DifferentAccount: true}
 	}

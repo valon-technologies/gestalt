@@ -434,6 +434,46 @@ func TestStoreCredentialFromMaterial_DoesNotOverwriteDifferentAccountWithSameIns
 	}
 }
 
+func TestStoreCredentialFromMaterial_PreservesExistingAccountKeyWhenIdentityProbeFails(t *testing.T) {
+	t.Parallel()
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	accountKey := accountKeyFromProviderID("slack", "T123:U456")
+	if err := provider.UpsertCredential(ctx, &core.ExternalCredential{
+		ID:         "existing-account",
+		Subject:    "user:1",
+		Audience:   "slack:default",
+		Qualifier:  "shared-label",
+		AccountKey: accountKey,
+		Grant:      &core.ExternalCredentialGrant{AccessToken: "existing-token"},
+		CreatedAt:  time.Unix(1, 0),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(2, 0) }}
+	stored, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		Instance:     "shared-label",
+		AccessToken:  "refreshed-token",
+	})
+	if err != nil {
+		t.Fatalf("store credential error = %v, want reconnect to retain existing account key", err)
+	}
+	if stored.ID != "existing-account" || stored.AccountKey != accountKey {
+		t.Fatalf("stored credential = %+v, want existing id and account key %q", stored, accountKey)
+	}
+
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 1 || credentials[0].AccountKey != accountKey || credentials[0].Grant.AccessToken != "refreshed-token" {
+		t.Fatalf("credentials = %+v, want refreshed credential with retained account key", credentials)
+	}
+}
+
 func TestStoreCredentialFromMaterial_UpgradesKeylessCredentialForSameInstance(t *testing.T) {
 	t.Parallel()
 	provider := coretesting.NewStubExternalCredentialProvider()
