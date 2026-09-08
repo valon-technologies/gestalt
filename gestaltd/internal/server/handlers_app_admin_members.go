@@ -425,13 +425,15 @@ func memberGrantKey(row appAdminMemberRow) string {
 // exists as both static and runtime, the runtime row is marked shadowed.
 func projectAppAdminMemberRoster(rows []appAdminMemberRow) []appAdminMemberRow {
 	staticKeys := make(map[string]struct{})
-	for _, row := range rows {
+	for i := range rows {
+		row := rows[i]
 		if row.Source == "static" {
 			staticKeys[memberGrantKey(row)] = struct{}{}
 		}
 	}
 	out := make([]appAdminMemberRow, 0, len(rows))
-	for _, row := range rows {
+	for i := range rows {
+		row := rows[i]
 		if row.Source == "dynamic" {
 			if _, ok := staticKeys[memberGrantKey(row)]; ok {
 				row.Effective = false
@@ -502,11 +504,7 @@ func projectAppAdminMemberResponses(rows []appAdminMemberRow) []appAdminMemberRe
 	out := make([]appAdminMemberResponse, 0, len(rows))
 	for i := range rows {
 		row := rows[i]
-		out = append(out, appAdminMemberResponse{
-			Email: row.Email, Role: row.Role, Source: row.Source, Mutable: row.Mutable,
-			Effective: row.Effective, ShadowedBy: row.ShadowedBy, SelectorKind: row.SelectorKind,
-			SelectorValue: row.SelectorValue, SubjectID: row.SubjectID, SubjectSet: row.SubjectSet,
-		})
+		out = append(out, appAdminMemberResponse(row))
 	}
 	return out
 }
