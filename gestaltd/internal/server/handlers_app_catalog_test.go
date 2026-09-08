@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -23,6 +24,18 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
+
+type failOnceRegistryEntryTransport struct {
+	base   http.RoundTripper
+	failed atomic.Bool
+}
+
+func (t *failOnceRegistryEntryTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if strings.Contains(request.URL.Path, "/versions/") && t.failed.CompareAndSwap(false, true) {
+		return nil, fmt.Errorf("temporary registry entry failure")
+	}
+	return t.base.RoundTrip(request)
+}
 
 type errorListCredentials struct {
 	core.ExternalCredentialProvider
@@ -381,25 +394,40 @@ func TestAppCatalogIncludesSourceTreeURLForRegistryApp(t *testing.T) {
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
+	fixture.Reader.HTTPClient.Transport = &failOnceRegistryEntryTransport{
+		base: fixture.Reader.HTTPClient.Transport,
+	}
 
-	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/catalog/apps", nil)
-	request.Header.Set("Authorization", "Bearer alice-token")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("GET catalog: %v", err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("status = %d: %s", response.StatusCode, body)
-	}
-	var apps []struct {
+	getCatalog := func() []struct {
 		Name          string `json:"name"`
 		SourceTreeURL string `json:"sourceTreeUrl"`
+	} {
+		request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/catalog/apps", nil)
+		request.Header.Set("Authorization", "Bearer alice-token")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("GET catalog: %v", err)
+		}
+		defer func() { _ = response.Body.Close() }()
+		if response.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(response.Body)
+			t.Fatalf("status = %d: %s", response.StatusCode, body)
+		}
+		var apps []struct {
+			Name          string `json:"name"`
+			SourceTreeURL string `json:"sourceTreeUrl"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&apps); err != nil {
+			t.Fatalf("decode catalog: %v", err)
+		}
+		return apps
 	}
-	if err := json.NewDecoder(response.Body).Decode(&apps); err != nil {
-		t.Fatalf("decode catalog: %v", err)
+
+	first := getCatalog()
+	if len(first) != 1 || first[0].Name != "g-issues" || first[0].SourceTreeURL != "" {
+		t.Fatalf("first apps = %#v, want one app without sourceTreeUrl", first)
 	}
+	apps := getCatalog()
 	if len(apps) != 1 || apps[0].Name != "g-issues" {
 		t.Fatalf("apps = %#v", apps)
 	}

@@ -31,7 +31,6 @@ type tenantAppDirectoryEntry struct {
 	IconSVG          string
 	DeclaredMount    string
 	Prompts          []appPromptInfo
-	SourceTreeURL    string
 	Advertised       []advertisedConnection
 	ConnectionSchema []connectionSchemaInfo
 	Loaded           bool
@@ -188,7 +187,6 @@ func viewerDirectoryEntry(entry tenantAppDirectoryEntry, mountedPath, management
 		MountedPath:      mountedPath,
 		ManagementPath:   managementPath,
 		Prompts:          entry.Prompts,
-		SourceTreeURL:    entry.SourceTreeURL,
 		Advertised:       entry.Advertised,
 		ConnectionSchema: entry.ConnectionSchema,
 		Loaded:           entry.Loaded,
@@ -381,7 +379,7 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 	dir := &tenantAppDirectory{entries: make([]tenantAppDirectoryEntry, 0, len(names)+len(registryApps))}
 	cacheable := true
 	for _, name := range names {
-		entry, ok, entryCacheable, err := s.tenantProviderDirectoryEntry(ctx, name)
+		entry, ok, err := s.tenantProviderDirectoryEntry(ctx, name)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, false, err
@@ -392,7 +390,6 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 		if !ok {
 			continue
 		}
-		cacheable = cacheable && entryCacheable
 		seen[name] = struct{}{}
 		dir.entries = append(dir.entries, entry)
 	}
@@ -403,23 +400,22 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 		if s.integrationHiddenFromCatalog(app.name) {
 			continue
 		}
-		entry, entryCacheable := s.tenantRegistryDirectoryEntry(ctx, app.name)
-		cacheable = cacheable && entryCacheable
+		entry := s.tenantRegistryDirectoryEntry(app.name)
 		dir.entries = append(dir.entries, entry)
 	}
 	return dir, cacheable, nil
 }
 
-func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) (tenantAppDirectoryEntry, bool, bool, error) {
+func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) (tenantAppDirectoryEntry, bool, error) {
 	if s.integrationHiddenFromCatalog(name) {
-		return tenantAppDirectoryEntry{}, false, true, nil
+		return tenantAppDirectoryEntry{}, false, nil
 	}
 	prov, err := s.providers.GetWithContext(ctx, name)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return tenantAppDirectoryEntry{}, false, true, nil
+			return tenantAppDirectoryEntry{}, false, nil
 		}
-		return tenantAppDirectoryEntry{}, false, false, fmt.Errorf("resolve app %q: %w", name, err)
+		return tenantAppDirectoryEntry{}, false, fmt.Errorf("resolve app %q: %w", name, err)
 	}
 	plugin := s.pluginDefs[name]
 	entry := tenantAppDirectoryEntry{
@@ -428,40 +424,37 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 		Description: prov.Description(),
 		Loaded:      true,
 	}
-	entryCacheable := s.applyPluginDirectoryFields(ctx, &entry, plugin)
+	s.applyPluginDirectoryFields(&entry, plugin)
 	s.attachDirectoryConnections(&entry, plugin)
 	if cat := prov.Catalog(); cat != nil {
 		entry.IconSVG = cat.IconSVG
 	}
-	return entry, true, entryCacheable, nil
+	return entry, true, nil
 }
 
-func (s *Server) tenantRegistryDirectoryEntry(ctx context.Context, name string) (tenantAppDirectoryEntry, bool) {
+func (s *Server) tenantRegistryDirectoryEntry(name string) tenantAppDirectoryEntry {
 	plugin := s.pluginDefs[name]
 	entry := tenantAppDirectoryEntry{
 		Name:        name,
 		DisplayName: name,
 	}
-	entryCacheable := s.applyPluginDirectoryFields(ctx, &entry, plugin)
+	s.applyPluginDirectoryFields(&entry, plugin)
 	if plugin != nil && strings.TrimSpace(plugin.DisplayName) != "" {
 		entry.DisplayName = strings.TrimSpace(plugin.DisplayName)
 	}
 	s.attachDirectoryConnections(&entry, plugin)
-	return entry, entryCacheable
+	return entry
 }
 
-func (s *Server) applyPluginDirectoryFields(ctx context.Context, entry *tenantAppDirectoryEntry, plugin *config.ProviderEntry) bool {
+func (s *Server) applyPluginDirectoryFields(entry *tenantAppDirectoryEntry, plugin *config.ProviderEntry) {
 	if entry == nil {
-		return true
+		return
 	}
 	entry.Prompts = s.appPrompts[entry.Name]
-	sourceTreeURL, sourceCacheable := s.appSourceTreeURL(ctx, entry.Name, plugin)
-	entry.SourceTreeURL = sourceTreeURL
 	if plugin == nil {
-		return sourceCacheable
+		return
 	}
 	entry.DeclaredMount = pluginDeclaredMount(plugin)
-	return sourceCacheable
 }
 
 func pluginDeclaredMount(plugin *config.ProviderEntry) string {
@@ -499,66 +492,71 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *tenantAppD
 }
 
 func (s *Server) viewerDirectoryEntry(ctx context.Context, p *principal.Principal, entry tenantAppDirectoryEntry) appDirectoryEntry {
-	return viewerDirectoryEntry(
+	projected := viewerDirectoryEntry(
 		entry,
 		s.integrationMountedPathForPrincipalContext(ctx, p, entry.Name, entry.DeclaredMount),
 		s.integrationManagementPath(ctx, p, entry.Name),
 	)
+	// Registry source metadata depends on the installed app version, so resolve
+	// it while projecting the request rather than freezing it in the tenant
+	// snapshot. Successful lookups are still cached by app and version.
+	projected.SourceTreeURL = s.appSourceTreeURL(ctx, entry.Name, s.pluginDefs[entry.Name])
+	return projected
 }
 
-func (s *Server) appSourceTreeURL(ctx context.Context, appName string, plugin *config.ProviderEntry) (string, bool) {
+func (s *Server) appSourceTreeURL(ctx context.Context, appName string, plugin *config.ProviderEntry) string {
 	if plugin != nil {
 		if sourceTreeURL := plugin.SourceTreeURL(); sourceTreeURL != "" {
-			return sourceTreeURL, true
+			return sourceTreeURL
 		}
 	}
 	app, ok := s.registryApp(appName)
 	if !ok {
-		return "", true
+		return ""
 	}
 	return s.registryAppSourceTreeURL(ctx, app)
 }
 
-func (s *Server) registryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp) (string, bool) {
+func (s *Server) registryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp) string {
 	if s == nil || s.appRegistryReader == nil || s.appVersionChanges == nil {
-		return "", false
+		return ""
 	}
 	known, err := s.appVersionChanges.ListKnownVersionsByApp(ctx, app.name)
 	if err != nil {
-		return "", false
+		return ""
 	}
 	version := coredata.LatestKnownVersion(known)
 	if version == "" {
-		return "", false
+		return ""
 	}
 	cacheKey := app.name + "\x00" + version
 	s.appRegistrySourceMu.Lock()
 	if sourceTreeURL := s.appRegistrySourceTreeURLs[cacheKey]; sourceTreeURL != "" {
 		s.appRegistrySourceMu.Unlock()
-		return sourceTreeURL, true
+		return sourceTreeURL
 	}
 	s.appRegistrySourceMu.Unlock()
 
 	registry, ok := s.appRegistries[app.registry]
 	if !ok {
-		return "", false
+		return ""
 	}
 	publicRoot, err := registry.PublicURL()
 	if err != nil {
-		return "", false
+		return ""
 	}
 	entry, err := s.appRegistryReader.FetchEntry(ctx, publicRoot, app.name, version)
 	if err != nil || entry == nil {
-		return "", false
+		return ""
 	}
 	sourceTreeURL := entry.SourceTreeURL()
 	if sourceTreeURL == "" {
-		return "", false
+		return ""
 	}
 	s.appRegistrySourceMu.Lock()
 	s.appRegistrySourceTreeURLs[cacheKey] = sourceTreeURL
 	s.appRegistrySourceMu.Unlock()
-	return sourceTreeURL, true
+	return sourceTreeURL
 }
 
 func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (appDirectoryEntry, bool, error) {

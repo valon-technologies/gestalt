@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"sort"
@@ -100,9 +99,11 @@ func (e Entry) SourceTreeURL() string {
 	if ref == "" || appName == "" {
 		return ""
 	}
-	return "https://github.com/" + url.PathEscape(repository.Owner) + "/" +
-		url.PathEscape(repository.Name) + "/tree/" + url.PathEscape(ref) +
-		"/apps/" + url.PathEscape(appName)
+	return (config.GitSourceIdentity{
+		Repo:   repository,
+		Ref:    ref,
+		AppDir: path.Join(appSourcePathPrefix, appName),
+	}).TreeURL()
 }
 
 type Publication struct {

@@ -27,6 +27,15 @@ func TestEntrySourceTreeURL(t *testing.T) {
 				Repository: "gitlab.example.com/acme/valon-tools",
 			},
 		},
+		{
+			name: "www github repository",
+			entry: Entry{
+				App:        "g-issues",
+				SourceRef:  "release/2026-09",
+				Repository: "https://www.github.com/valon-technologies/valon-tools.git",
+			},
+			want: "https://github.com/valon-technologies/valon-tools/tree/release%2F2026-09/apps/g-issues",
+		},
 	}
 
 	for _, tt := range tests {
