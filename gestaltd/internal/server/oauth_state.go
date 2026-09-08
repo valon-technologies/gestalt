@@ -26,6 +26,7 @@ type integrationOAuthState struct {
 	Integration      string            `json:"int"`
 	Connection       string            `json:"con,omitempty"`
 	Instance         string            `json:"ins,omitempty"`
+	CredentialID     string            `json:"cid,omitempty"`
 	Verifier         string            `json:"ver,omitempty"`
 	ConnectionParams map[string]string `json:"cp,omitempty"`
 	ExpiresAt        int64             `json:"exp"`

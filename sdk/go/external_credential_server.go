@@ -18,6 +18,14 @@ func newExternalCredentialProviderServer(provider ExternalCredentialProvider) *e
 	return &externalCredentialServer{provider: provider}
 }
 
+func (s *externalCredentialServer) GetCapabilities(context.Context, *emptypb.Empty) (*proto.ExternalCredentialCapabilities, error) {
+	persistsAccountKey := false
+	if provider, ok := s.provider.(ExternalCredentialAccountKeyPersistenceProvider); ok {
+		persistsAccountKey = provider.PersistsAccountKey()
+	}
+	return &proto.ExternalCredentialCapabilities{PersistsAccountKey: persistsAccountKey}, nil
+}
+
 func (s *externalCredentialServer) CreateCredential(ctx context.Context, req *proto.CreateExternalCredentialRequest) (*proto.ExternalCredential, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")

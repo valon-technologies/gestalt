@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -69,6 +70,41 @@ func TestInstanceInfoDoesNotExposeInternalAccountKey(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "accountKey") {
 		t.Fatalf("instance info exposed internal account key: %s", encoded)
+	}
+}
+
+func TestInstanceInfoExposesCredentialIDForExplicitReconnect(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := json.Marshal(instanceInfo{CredentialID: "credential-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"credentialId":"credential-123"`) {
+		t.Fatalf("instance info omitted credential id: %s", encoded)
+	}
+}
+
+func TestValidateRequestedCredentialIDRequiresTheExactInstanceRecord(t *testing.T) {
+	t.Parallel()
+
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	if err := provider.CreateCredential(ctx, &core.ExternalCredential{
+		ID:        "credential-123",
+		Subject:   "user:1",
+		Audience:  "slack:default",
+		Qualifier: "workspace",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{externalCredentials: provider}
+
+	if got, err := s.validateRequestedCredentialID(ctx, "user:1", "slack:default", "workspace", "credential-123"); err != nil || got != "credential-123" {
+		t.Fatalf("validated credential ID = %q, error = %v; want exact target", got, err)
+	}
+	if _, err := s.validateRequestedCredentialID(ctx, "user:1", "slack:default", "workspace", "credential-456"); !errors.Is(err, core.ErrAlreadyExists) {
+		t.Fatalf("mismatched credential error = %v, want conflict", err)
 	}
 }
 

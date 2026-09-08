@@ -23,6 +23,12 @@ func NewProviderServer(provider core.ExternalCredentialProvider) proto.ExternalC
 	return &externalCredentialProviderServer{provider: provider}
 }
 
+func (s *externalCredentialProviderServer) GetCapabilities(context.Context, *emptypb.Empty) (*proto.ExternalCredentialCapabilities, error) {
+	return &proto.ExternalCredentialCapabilities{
+		PersistsAccountKey: core.ExternalCredentialProviderPersistsAccountKey(s.provider),
+	}, nil
+}
+
 func (s *externalCredentialProviderServer) CreateCredential(ctx context.Context, req *proto.CreateExternalCredentialRequest) (*proto.ExternalCredential, error) {
 	if req == nil || req.GetCredential() == nil {
 		return nil, status.Error(codes.InvalidArgument, "credential is required")

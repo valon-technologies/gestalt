@@ -453,10 +453,11 @@ func TestStoreCredentialFromMaterial_PreservesExistingAccountKeyWhenIdentityProb
 
 	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(2, 0) }}
 	stored, err := s.storeCredentialFromMaterial(ctx, credentialMaterial{
-		SubjectID:    "user:1",
-		ConnectionID: "slack:default",
-		Instance:     "shared-label",
-		AccessToken:  "refreshed-token",
+		SubjectID:            "user:1",
+		ConnectionID:         "slack:default",
+		Instance:             "shared-label",
+		AccessToken:          "refreshed-token",
+		ExpectedCredentialID: "existing-account",
 	})
 	if err != nil {
 		t.Fatalf("store credential error = %v, want reconnect to retain existing account key", err)

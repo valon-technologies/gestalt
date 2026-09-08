@@ -25,6 +25,7 @@ type connectManualRequest struct {
 	Integration      string            `json:"integration"`
 	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
+	CredentialID     string            `json:"credentialId,omitempty"`
 	ServiceAccountID string            `json:"serviceAccountId"`
 	Credential       string            `json:"credential"`
 	Credentials      map[string]string `json:"credentials"`
@@ -85,6 +86,13 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		auditErr = err
 		return
 	}
+	expectedCredentialID, err := s.validateRequestedCredentialID(r.Context(), subjectID, credentialAudience(req.Integration, manualConnection, conn.ConnectionID), manualInstance, req.CredentialID)
+	if err != nil {
+		auditErr = err
+		status, message := connectionSetupFailure(err)
+		writeError(w, status, message)
+		return
+	}
 	auditTarget = connectionAuditTarget(req.Integration, manualConnection, manualInstance)
 
 	tokenExchange := manualTokenExchangeConfigured(auth)
@@ -137,16 +145,17 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		authSource = p.AuthSource()
 	}
 	tm := credentialMaterial{
-		SubjectID:         subjectID,
-		AuthSource:        authSource,
-		ConnectionID:      conn.ConnectionID,
-		Integration:       req.Integration,
-		Connection:        manualConnection,
-		Instance:          manualInstance,
-		Fields:            fields,
-		AccessToken:       rawCredential,
-		MetadataJSON:      manualMeta,
-		ProviderAccountID: providerAccountIDFromTokenResponse(selected.ParamDefs, tokenResp),
+		SubjectID:            subjectID,
+		AuthSource:           authSource,
+		ConnectionID:         conn.ConnectionID,
+		Integration:          req.Integration,
+		Connection:           manualConnection,
+		Instance:             manualInstance,
+		Fields:               fields,
+		AccessToken:          rawCredential,
+		MetadataJSON:         manualMeta,
+		ProviderAccountID:    providerAccountIDFromTokenResponse(selected.ParamDefs, tokenResp),
+		ExpectedCredentialID: expectedCredentialID,
 	}
 	credentialActorFromPrincipal(p, subjectID).applyTo(&tm)
 
@@ -394,6 +403,10 @@ type credentialMaterial struct {
 	ActorSubjectID    string
 	ActorUserID       string
 	ActorAuthSource   string
+	// ExpectedCredentialID is set only for an explicit reconnect. It prevents
+	// an identity lookup failure from authorizing an update to a different
+	// credential that happens to use the same display label.
+	ExpectedCredentialID string `json:"expectedCredentialId,omitempty"`
 }
 
 type credentialActor struct {
@@ -486,10 +499,7 @@ type discoveryCandidateInfo struct {
 
 func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialMaterial) (*core.ExternalCredential, error) {
 	now := s.now().UTC().Truncate(time.Second)
-	audience := strings.TrimSpace(tm.ConnectionID)
-	if audience == "" {
-		audience = tm.Integration + ":" + tm.Connection
-	}
+	audience := credentialAudience(tm.Integration, tm.Connection, tm.ConnectionID)
 	tok := &core.ExternalCredential{
 		ID:           uuid.NewString(),
 		Subject:      tm.SubjectID,
@@ -528,7 +538,7 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 			tok.MetadataJSON = metadata
 		}
 	}
-	if err := s.storeCredentialAtInstance(ctx, tok); err != nil {
+	if err := s.storeCredentialAtInstance(ctx, tok, tm.ExpectedCredentialID); err != nil {
 		return nil, err
 	}
 	return tok, nil
@@ -538,16 +548,23 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 // record the provider's concurrency boundary. AccountKey is only used to
 // validate an existing record or upgrade a legacy keyless record; it never
 // triggers a list-and-delete operation across other qualifiers.
-func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.ExternalCredential) error {
+func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.ExternalCredential, expectedCredentialID string) error {
+	expectedCredentialID = strings.TrimSpace(expectedCredentialID)
 	existing, err := s.externalCredentials.GetCredential(ctx, candidate.Subject, candidate.Audience, candidate.Qualifier)
 	if err == nil {
-		if err := s.upsertCredentialAtInstance(ctx, candidate, existing); err != nil {
+		if expectedCredentialID != "" && existing.ID != expectedCredentialID {
+			return credentialTargetConflict(candidate.Qualifier)
+		}
+		if err := s.upsertCredentialAtInstance(ctx, candidate, existing, expectedCredentialID); err != nil {
 			return err
 		}
 		return nil
 	}
 	if !errors.Is(err, core.ErrNotFound) {
 		return fmt.Errorf("get credential at instance %q: %w", candidate.Qualifier, err)
+	}
+	if expectedCredentialID != "" {
+		return credentialTargetConflict(candidate.Qualifier)
 	}
 	if err := s.externalCredentials.CreateCredential(ctx, candidate); err == nil {
 		return nil
@@ -561,19 +578,31 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 	if err != nil {
 		return fmt.Errorf("read credential after instance conflict: %w", err)
 	}
-	if err := s.upsertCredentialAtInstance(ctx, candidate, existing); err != nil {
+	if expectedCredentialID != "" && existing.ID != expectedCredentialID {
+		return credentialTargetConflict(candidate.Qualifier)
+	}
+	if err := s.upsertCredentialAtInstance(ctx, candidate, existing, expectedCredentialID); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, existing *core.ExternalCredential) error {
+func credentialAudience(integration, connection, connectionID string) string {
+	if audience := strings.TrimSpace(connectionID); audience != "" {
+		return audience
+	}
+	return strings.TrimSpace(integration) + ":" + strings.TrimSpace(connection)
+}
+
+func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, existing *core.ExternalCredential, expectedCredentialID string) error {
 	existingKey := core.AccountKeyForCredential(existing)
 	candidateKey := core.AccountKeyForCredential(candidate)
 	if existingKey != "" && candidateKey == "" {
-		// A failed identity probe must not make a reconnect look like a
-		// different account. The existing record is authoritative for this
-		// exact instance; retain its key while refreshing the credential.
+		if strings.TrimSpace(expectedCredentialID) == "" || strings.TrimSpace(expectedCredentialID) != existing.ID {
+			return credentialTargetConflict(candidate.Qualifier)
+		}
+		// An explicit reconnect may retain the existing key when the identity
+		// probe cannot provide one. The credential ID is the ownership proof.
 		candidate.AccountKey = existingKey
 		candidateKey = existingKey
 		if !core.ExternalCredentialProviderPersistsAccountKey(s.externalCredentials) {
@@ -591,6 +620,28 @@ func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, exis
 	candidate.ID = existing.ID
 	candidate.CreatedAt = existing.CreatedAt
 	return s.externalCredentials.UpsertCredential(ctx, candidate)
+}
+
+func credentialTargetConflict(instance string) error {
+	return &core.CredentialInstanceConflictError{Instance: instance, DifferentAccount: true}
+}
+
+func (s *Server) validateRequestedCredentialID(ctx context.Context, subjectID, audience, instance, requestedID string) (string, error) {
+	requestedID = strings.TrimSpace(requestedID)
+	if requestedID == "" {
+		return "", nil
+	}
+	credential, err := s.externalCredentials.GetCredential(ctx, subjectID, audience, instance)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return "", credentialTargetConflict(instance)
+		}
+		return "", fmt.Errorf("validate requested credential: %w", err)
+	}
+	if credential == nil || credential.ID != requestedID {
+		return "", credentialTargetConflict(instance)
+	}
+	return requestedID, nil
 }
 
 func connectionSetupFailure(err error) (int, string) {
@@ -716,10 +767,7 @@ func (s *Server) accountAlreadyConnected(ctx context.Context, tm credentialMater
 	if accountKey == "" {
 		return false
 	}
-	audience := strings.TrimSpace(tm.ConnectionID)
-	if audience == "" {
-		audience = tm.Integration + ":" + tm.Connection
-	}
+	audience := credentialAudience(tm.Integration, tm.Connection, tm.ConnectionID)
 	credentials, err := s.externalCredentials.ListCredentials(ctx, tm.SubjectID, audience)
 	if err != nil {
 		slog.WarnContext(ctx, "could not determine whether account was already connected", "integration", tm.Integration, "error", err)

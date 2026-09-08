@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -31,8 +32,9 @@ type ExecConfig struct {
 }
 
 type remoteExternalCredentialProvider struct {
-	client proto.ExternalCredentialsClient
-	closer io.Closer
+	client             proto.ExternalCredentialsClient
+	closer             io.Closer
+	persistsAccountKey bool
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredentialProvider, error) {
@@ -58,7 +60,23 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 		return nil, err
 	}
 
-	return &remoteExternalCredentialProvider{client: client, closer: proc}, nil
+	persistsAccountKey := false
+	capCtx, capCancel := runtimehost.ProviderCallContext(ctx)
+	caps, capErr := client.GetCapabilities(capCtx, &emptypb.Empty{})
+	capCancel()
+	if capErr != nil && status.Code(capErr) != codes.Unimplemented {
+		_ = proc.Close()
+		return nil, fmt.Errorf("get external credential capabilities: %w", capErr)
+	}
+	if caps != nil {
+		persistsAccountKey = caps.GetPersistsAccountKey()
+	}
+
+	return &remoteExternalCredentialProvider{client: client, closer: proc, persistsAccountKey: persistsAccountKey}, nil
+}
+
+func (r *remoteExternalCredentialProvider) PersistsAccountKey() bool {
+	return r != nil && r.persistsAccountKey
 }
 
 func (r *remoteExternalCredentialProvider) CreateCredential(ctx context.Context, credential *core.ExternalCredential) error {

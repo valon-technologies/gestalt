@@ -12,6 +12,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func newRemoteProvider(t *testing.T, provider core.ExternalCredentialProvider) *remoteExternalCredentialProvider {
@@ -21,6 +22,29 @@ func newRemoteProvider(t *testing.T, provider core.ExternalCredentialProvider) *
 		proto.RegisterExternalCredentialsServer(server, NewProviderServer(provider))
 	})
 	return &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
+}
+
+type accountKeyPersistenceExternalCredentialProvider struct {
+	core.ExternalCredentialProvider
+}
+
+func (accountKeyPersistenceExternalCredentialProvider) PersistsAccountKey() bool {
+	return true
+}
+
+func TestExternalCredentialCapabilitiesRoundTripOverTransport(t *testing.T) {
+	t.Parallel()
+
+	remote := newRemoteProvider(t, accountKeyPersistenceExternalCredentialProvider{
+		ExternalCredentialProvider: coretesting.NewStubExternalCredentialProvider(),
+	})
+	caps, err := remote.client.GetCapabilities(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("GetCapabilities: %v", err)
+	}
+	if !caps.GetPersistsAccountKey() {
+		t.Fatal("PersistsAccountKey = false, want true")
+	}
 }
 
 type wrappedNotFoundExternalCredentialProvider struct{}

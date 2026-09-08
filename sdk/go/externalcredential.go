@@ -908,3 +908,11 @@ type ExternalCredentialProvider interface {
 	ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error)
 	ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
 }
+
+// ExternalCredentialAccountKeyPersistenceProvider reports whether the
+// provider stores ExternalCredential.AccountKey as a typed field. Providers
+// that do not implement this optional capability are treated as legacy and
+// receive the host's metadata compatibility copy.
+type ExternalCredentialAccountKeyPersistenceProvider interface {
+	PersistsAccountKey() bool
+}
