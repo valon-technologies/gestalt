@@ -80,6 +80,32 @@ func TestAuthenticateGRPCRejectsWrongMethodPrefix(t *testing.T) {
 	}
 }
 
+func TestCallerCapabilityDefaultsToThirtyMinutes(t *testing.T) {
+	t.Parallel()
+
+	manager := testRelayTokenManager(t)
+	start := time.Unix(1_700_000_000, 0)
+	manager.now = func() time.Time { return start }
+	token, err := manager.MintToken(HostServiceRelayTokenRequest{
+		Service:      "identity",
+		MethodPrefix: "/" + proto.Identity_ServiceDesc.ServiceName + "/",
+		Caller:       &PrincipalClaims{SubjectID: "user:alice"},
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	manager.now = func() time.Time { return start.Add(30*time.Minute - time.Second) }
+	if _, err := manager.ResolveToken(token); err != nil {
+		t.Fatalf("ResolveToken before 30m: %v", err)
+	}
+
+	manager.now = func() time.Time { return start.Add(30*time.Minute + time.Second) }
+	if _, err := manager.ResolveToken(token); err == nil {
+		t.Fatal("ResolveToken after 30m: want expired")
+	}
+}
+
 func TestAuthenticateGRPCRejectsExpiredCapability(t *testing.T) {
 	t.Parallel()
 
