@@ -346,20 +346,29 @@ func TestSlackIdentityProducesOneLogicalAccountAcrossDifferentLabels(t *testing.
 		"team_id": "T123",
 		"user_id": "U456",
 		"team":    "Valon",
-		"user":    "giovannivocale",
+		"user":    "example-user",
 	})
 	if identity.ProviderAccountID != "T123:U456" {
 		t.Fatalf("provider account id = %q, want T123:U456", identity.ProviderAccountID)
 	}
 	accountKey := accountKeyFromProviderID("slack", identity.ProviderAccountID)
-	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
+	s := &Server{
+		externalCredentials: provider,
+		now:                 func() time.Time { return time.Unix(3, 0) },
+		oauthIdentityProbe: func(_ context.Context, integration, token string) oauthIdentityFacts {
+			if integration != "slack" || token == "" {
+				return oauthIdentityFacts{}
+			}
+			return identity
+		},
+	}
 	for _, label := range []string{"Valon", "valon 2"} {
 		material := s.enrichAccountIdentity(ctx, credentialMaterial{
-			SubjectID:         "user:1",
-			ConnectionID:      "slack:default",
-			Integration:       "slack",
-			Instance:          label,
-			ProviderAccountID: identity.ProviderAccountID,
+			SubjectID:    "user:1",
+			ConnectionID: "slack:default",
+			Integration:  "slack",
+			Instance:     label,
+			AccessToken:  "oauth-token",
 		})
 		if _, err := s.storeCredentialFromMaterial(ctx, material); err != nil {
 			t.Fatalf("store %q: %v", label, err)

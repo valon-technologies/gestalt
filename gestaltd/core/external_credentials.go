@@ -23,6 +23,19 @@ type ExternalCredentialProvider interface {
 	ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
 }
 
+// ExternalCredentialAccountKeyPersistence reports whether a provider
+// round-trips ExternalCredential.AccountKey. Providers that do not implement
+// this capability are treated conservatively as legacy providers, so the host
+// writes the reserved metadata compatibility copy as well.
+type ExternalCredentialAccountKeyPersistence interface {
+	PersistsAccountKey() bool
+}
+
+func ExternalCredentialProviderPersistsAccountKey(provider ExternalCredentialProvider) bool {
+	persister, ok := provider.(ExternalCredentialAccountKeyPersistence)
+	return ok && persister.PersistsAccountKey()
+}
+
 type ExternalCredentialTokenExchangeDriver struct {
 	Type            string
 	TargetPrincipal string

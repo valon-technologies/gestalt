@@ -358,6 +358,18 @@ type orderedExternalCredentialProvider struct {
 	order []string
 }
 
+func (r *recordingExternalCredentialProvider) PersistsAccountKey() bool {
+	return core.ExternalCredentialProviderPersistsAccountKey(r.inner)
+}
+
+func (p *flakyDeleteExternalCredentialProvider) PersistsAccountKey() bool {
+	return core.ExternalCredentialProviderPersistsAccountKey(p.ExternalCredentialProvider)
+}
+
+func (p *orderedExternalCredentialProvider) PersistsAccountKey() bool {
+	return core.ExternalCredentialProviderPersistsAccountKey(p.ExternalCredentialProvider)
+}
+
 func (p *orderedExternalCredentialProvider) ListCredentials(ctx context.Context, subject, audience string) ([]*core.ExternalCredential, error) {
 	credentials, err := p.ExternalCredentialProvider.ListCredentials(ctx, subject, audience)
 	if err != nil {
@@ -15677,6 +15689,83 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestConnectManualReportsLogicalAccountStatus(t *testing.T) {
+	t.Parallel()
+
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"manual-access","expires_in":3600,"account":{"id":"acct_123"}}`))
+	}))
+	testutil.CloseOnCleanup(t, tokenSrv)
+
+	svc := testutil.NewStubServices(t)
+	credentialProvider := svc.ExternalCredentials.(*coretesting.StubExternalCredentialProvider)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProviderWithCapabilities{
+			stubManualProvider: stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "logical-account"},
+			},
+			connectionParams: map[string]core.ConnectionParamDef{
+				"account_id": {From: "token_response", Field: "account.id", Required: true},
+			},
+		})
+		cfg.DefaultConnection = map[string]string{"logical-account": config.AppConnectionName}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"logical-account": {
+				Auth: &config.ConnectionAuthDef{
+					Type:          providermanifestv1.AuthTypeManual,
+					TokenURL:      tokenSrv.URL,
+					TokenExchange: "form",
+					Credentials:   []config.CredentialFieldDef{{Name: "token"}},
+				},
+				ConnectionParams: map[string]config.ConnectionParamDef{
+					"account_id": {From: "token_response", Field: "account.id", Required: true},
+				},
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	post := func(instance string) (int, struct {
+		Status           string `json:"status"`
+		AlreadyConnected bool   `json:"alreadyConnected"`
+	}) {
+		t.Helper()
+		body := fmt.Sprintf(`{"integration":"logical-account","instance":%q,"credential":"mock-token"}`, instance)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		var result struct {
+			Status           string `json:"status"`
+			AlreadyConnected bool   `json:"alreadyConnected"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return resp.StatusCode, result
+	}
+
+	if status, result := post("first-label"); status != http.StatusOK || result.Status != "connected" || result.AlreadyConnected {
+		t.Fatalf("first connection = (%d, %+v), want 200/connected/not-already-connected", status, result)
+	}
+	if status, result := post("second-label"); status != http.StatusOK || result.Status != "connected" || !result.AlreadyConnected {
+		t.Fatalf("same account with a new label = (%d, %+v), want 200/connected/already-connected", status, result)
+	}
+
+	credentialProvider.ListErr = fmt.Errorf("temporary list failure")
+	if status, result := post("third-label"); status != http.StatusOK || result.Status != "connected" || result.AlreadyConnected {
+		t.Fatalf("connection with account lookup failure = (%d, %+v), want 200/connected/not-already-connected", status, result)
+	}
 }
 
 func TestRefresh_UsesManualTokenExchangeHandlers(t *testing.T) {

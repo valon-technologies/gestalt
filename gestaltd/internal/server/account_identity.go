@@ -306,7 +306,11 @@ func (s *Server) enrichAccountIdentity(ctx context.Context, tm credentialMateria
 	// provider exposes it from the identity response.
 	if len(tm.Fields) == 0 {
 		if token := strings.TrimSpace(tm.AccessToken); token != "" {
-			providerIdentity := fetchOAuthIdentityFacts(ctx, tm.Integration, token)
+			probe := fetchOAuthIdentityFacts
+			if s != nil && s.oauthIdentityProbe != nil {
+				probe = s.oauthIdentityProbe
+			}
+			providerIdentity := probe(ctx, tm.Integration, token)
 			facts = mergeIdentityFacts(facts, providerIdentity.Facts...)
 			if strings.TrimSpace(tm.ProviderAccountID) == "" {
 				tm.ProviderAccountID = providerIdentity.ProviderAccountID

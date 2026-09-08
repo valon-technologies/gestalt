@@ -28,6 +28,8 @@ func NewStubExternalCredentialProvider() *StubExternalCredentialProvider {
 	return &StubExternalCredentialProvider{credentials: make(map[string]core.ExternalCredential)}
 }
 
+func (*StubExternalCredentialProvider) PersistsAccountKey() bool { return true }
+
 func (p *StubExternalCredentialProvider) CreateCredential(_ context.Context, credential *core.ExternalCredential) error {
 	if p != nil && p.PutErr != nil {
 		return p.PutErr

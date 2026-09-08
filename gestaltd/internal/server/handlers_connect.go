@@ -513,8 +513,19 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 	accountKey := core.AccountKeyForCredential(tok)
 	tok.AccountKey = accountKey
 	if accountKey != "" {
-		if cleaned, cleanupErr := removeAccountKeyMetadata(tok.MetadataJSON); cleanupErr == nil {
-			tok.MetadataJSON = cleaned
+		if core.ExternalCredentialProviderPersistsAccountKey(s.externalCredentials) {
+			if cleaned, cleanupErr := removeAccountKeyMetadata(tok.MetadataJSON); cleanupErr == nil {
+				tok.MetadataJSON = cleaned
+			}
+		} else {
+			// Older external-credential providers may not round-trip AccountKey.
+			// Preserve the compatibility copy on the credential we write so the
+			// storage boundary does not need a read-after-write repair request.
+			metadata, metadataErr := setAccountKeyMetadata(tok.MetadataJSON, accountKey)
+			if metadataErr != nil {
+				return nil, fmt.Errorf("persist account key compatibility metadata: %w", metadataErr)
+			}
+			tok.MetadataJSON = metadata
 		}
 	}
 	if err := s.storeCredentialAtInstance(ctx, tok); err != nil {
@@ -528,19 +539,18 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 // validate an existing record or upgrade a legacy keyless record; it never
 // triggers a list-and-delete operation across other qualifiers.
 func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.ExternalCredential) error {
-	candidateKey := core.AccountKeyForCredential(candidate)
 	existing, err := s.externalCredentials.GetCredential(ctx, candidate.Subject, candidate.Audience, candidate.Qualifier)
 	if err == nil {
 		if err := s.upsertCredentialAtInstance(ctx, candidate, existing); err != nil {
 			return err
 		}
-		return s.ensureAccountKeyPersisted(ctx, candidate, candidateKey)
+		return nil
 	}
 	if !errors.Is(err, core.ErrNotFound) {
 		return fmt.Errorf("get credential at instance %q: %w", candidate.Qualifier, err)
 	}
 	if err := s.externalCredentials.CreateCredential(ctx, candidate); err == nil {
-		return s.ensureAccountKeyPersisted(ctx, candidate, candidateKey)
+		return nil
 	} else if !errors.Is(err, core.ErrAlreadyExists) {
 		return err
 	}
@@ -553,37 +563,6 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 	}
 	if err := s.upsertCredentialAtInstance(ctx, candidate, existing); err != nil {
 		return err
-	}
-	return s.ensureAccountKeyPersisted(ctx, candidate, candidateKey)
-}
-
-// ensureAccountKeyPersisted keeps the typed account key authoritative while
-// maintaining a metadata bridge for credential providers that predate the
-// AccountKey field. The bridge can be removed after every deployed provider
-// persists the typed field through its storage round trip.
-func (s *Server) ensureAccountKeyPersisted(ctx context.Context, candidate *core.ExternalCredential, candidateKey string) error {
-	candidateKey = strings.TrimSpace(candidateKey)
-	if candidateKey == "" {
-		return nil
-	}
-	persisted, err := s.externalCredentials.GetCredential(ctx, candidate.Subject, candidate.Audience, candidate.Qualifier)
-	if err != nil {
-		return fmt.Errorf("read credential after account key persistence: %w", err)
-	}
-	if core.AccountKeyForCredential(persisted) == candidateKey {
-		return nil
-	}
-
-	metadata, err := setAccountKeyMetadata(candidate.MetadataJSON, candidateKey)
-	if err != nil {
-		return fmt.Errorf("prepare account key compatibility metadata: %w", err)
-	}
-	fallback := *candidate
-	fallback.ID = persisted.ID
-	fallback.CreatedAt = persisted.CreatedAt
-	fallback.MetadataJSON = metadata
-	if err := s.externalCredentials.UpsertCredential(ctx, &fallback); err != nil {
-		return fmt.Errorf("persist account key compatibility metadata: %w", err)
 	}
 	return nil
 }

@@ -162,6 +162,7 @@ type Server struct {
 	sessionIssuer                 []byte
 	stateCodec                    *integrationOAuthStateCodec
 	now                           func() time.Time
+	oauthIdentityProbe            func(context.Context, string, string) oauthIdentityFacts
 	readiness                     ReadinessChecker
 	meterProvider                 metric.MeterProvider
 	prometheusMetrics             http.Handler
