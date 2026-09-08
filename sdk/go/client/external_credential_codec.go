@@ -215,7 +215,8 @@ func ToWireExternalCredentialCapabilities(value *ExternalCredentialCapabilities)
 		return nil
 	}
 	out := &proto.ExternalCredentialCapabilities{
-		PersistsAccountKey: value.PersistsAccountKey,
+		PersistsAccountKey:        value.PersistsAccountKey,
+		SupportsConditionalUpsert: value.SupportsConditionalUpsert,
 	}
 	return out
 }
@@ -225,7 +226,8 @@ func FromWireExternalCredentialCapabilities(value *proto.ExternalCredentialCapab
 		return nil
 	}
 	out := &ExternalCredentialCapabilities{
-		PersistsAccountKey: value.PersistsAccountKey,
+		PersistsAccountKey:        value.PersistsAccountKey,
+		SupportsConditionalUpsert: value.SupportsConditionalUpsert,
 	}
 	return out
 }

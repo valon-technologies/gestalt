@@ -3690,6 +3690,7 @@ pub mod external_credentials_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        ///
         pub async fn get_capabilities(
             &mut self,
             request: impl tonic::IntoRequest<()>,
@@ -3890,6 +3891,7 @@ pub mod external_credentials_server {
     /// Generated trait containing gRPC methods that should be implemented for use with ExternalCredentialsServer.
     #[async_trait]
     pub trait ExternalCredentials: std::marker::Send + std::marker::Sync + 'static {
+        ///
         async fn get_capabilities(
             &self,
             request: tonic::Request<()>,

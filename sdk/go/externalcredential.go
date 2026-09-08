@@ -60,6 +60,13 @@ type UpsertExternalCredentialRequest struct {
 	ExpectedCredentialID string
 }
 
+func (r *UpsertExternalCredentialRequest) GetExpectedCredentialID() string {
+	if r == nil {
+		return ""
+	}
+	return r.ExpectedCredentialID
+}
+
 // GetExternalCredentialRequest is the request for fetching one credential.
 type GetExternalCredentialRequest struct {
 	Subject   string

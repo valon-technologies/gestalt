@@ -23,7 +23,7 @@ func newRemoteProvider(t *testing.T, provider core.ExternalCredentialProvider) *
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterExternalCredentialsServer(server, NewProviderServer(provider))
 	})
-	return &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
+	return &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn), supportsConditionalUpsert: true}
 }
 
 type accountKeyPersistenceExternalCredentialProvider struct {
@@ -32,6 +32,10 @@ type accountKeyPersistenceExternalCredentialProvider struct {
 
 func (accountKeyPersistenceExternalCredentialProvider) PersistsAccountKey() bool {
 	return true
+}
+
+func (p accountKeyPersistenceExternalCredentialProvider) UpsertCredentialIfID(ctx context.Context, credential *core.ExternalCredential, expectedID string) error {
+	return p.ExternalCredentialProvider.(core.ExternalCredentialConditionalUpserter).UpsertCredentialIfID(ctx, credential, expectedID)
 }
 
 func TestExternalCredentialCapabilitiesRoundTripOverTransport(t *testing.T) {
@@ -46,6 +50,9 @@ func TestExternalCredentialCapabilitiesRoundTripOverTransport(t *testing.T) {
 	}
 	if !caps.GetPersistsAccountKey() {
 		t.Fatal("PersistsAccountKey = false, want true")
+	}
+	if !caps.GetSupportsConditionalUpsert() {
+		t.Fatal("SupportsConditionalUpsert = false, want true")
 	}
 }
 

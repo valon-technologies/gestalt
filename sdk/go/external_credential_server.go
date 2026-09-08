@@ -23,7 +23,11 @@ func (s *externalCredentialServer) GetCapabilities(context.Context, *emptypb.Emp
 	if provider, ok := s.provider.(ExternalCredentialAccountKeyPersistenceProvider); ok {
 		persistsAccountKey = provider.PersistsAccountKey()
 	}
-	return &proto.ExternalCredentialCapabilities{PersistsAccountKey: persistsAccountKey}, nil
+	_, supportsConditionalUpsert := s.provider.(ExternalCredentialConditionalUpsertProvider)
+	return &proto.ExternalCredentialCapabilities{
+		PersistsAccountKey:        persistsAccountKey,
+		SupportsConditionalUpsert: supportsConditionalUpsert,
+	}, nil
 }
 
 func (s *externalCredentialServer) CreateCredential(ctx context.Context, req *proto.CreateExternalCredentialRequest) (*proto.ExternalCredential, error) {

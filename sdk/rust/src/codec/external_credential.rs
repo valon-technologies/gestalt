@@ -159,6 +159,7 @@ pub(crate) fn from_wire_external_credential_capabilities(
 ) -> ExternalCredentialCapabilities {
     ExternalCredentialCapabilities {
         persists_account_key: value.persists_account_key,
+        supports_conditional_upsert: value.supports_conditional_upsert,
     }
 }
 

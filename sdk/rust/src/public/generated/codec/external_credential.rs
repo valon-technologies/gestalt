@@ -1058,6 +1058,12 @@ pub(crate) fn encode_wire_external_credential_capabilities_json(
             serde_json::Value::Bool(value.persists_account_key),
         );
     }
+    if value.supports_conditional_upsert {
+        object.insert(
+            "supportsConditionalUpsert".into(),
+            serde_json::Value::Bool(value.supports_conditional_upsert),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -1074,6 +1080,10 @@ pub(crate) fn decode_wire_external_credential_capabilities_json(
     };
     Ok(v1::ExternalCredentialCapabilities {
         persists_account_key: match object.get("persistsAccountKey") {
+            Some(value) => crate::public::proto_json::decode_bool(value)?,
+            None => false,
+        },
+        supports_conditional_upsert: match object.get("supportsConditionalUpsert") {
             Some(value) => crate::public::proto_json::decode_bool(value)?,
             None => false,
         },

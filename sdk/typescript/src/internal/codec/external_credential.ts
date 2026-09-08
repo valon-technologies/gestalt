@@ -277,6 +277,7 @@ export function toWireExternalCredentialCapabilities(
 ): wire.ExternalCredentialCapabilities {
   return create(wire.ExternalCredentialCapabilitiesSchema, {
     persistsAccountKey: value.persistsAccountKey ?? false,
+    supportsConditionalUpsert: value.supportsConditionalUpsert ?? false,
   });
 }
 
@@ -285,6 +286,7 @@ export function fromWireExternalCredentialCapabilities(
 ): ExternalCredentialCapabilities {
   return {
     persistsAccountKey: value.persistsAccountKey,
+    supportsConditionalUpsert: value.supportsConditionalUpsert,
   };
 }
 

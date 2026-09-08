@@ -325,5 +325,7 @@ class ExchangeExternalCredentialResponse(_message.Message):
 class ExternalCredentialCapabilities(_message.Message):
     __slots__ = ()
     PERSISTS_ACCOUNT_KEY_FIELD_NUMBER: _ClassVar[int]
+    SUPPORTS_CONDITIONAL_UPSERT_FIELD_NUMBER: _ClassVar[int]
     persists_account_key: bool
-    def __init__(self, persists_account_key: _Optional[bool] = ...) -> None: ...
+    supports_conditional_upsert: bool
+    def __init__(self, persists_account_key: _Optional[bool] = ..., supports_conditional_upsert: _Optional[bool] = ...) -> None: ...

@@ -520,9 +520,6 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 			LastRefreshedAt: &now,
 		}
 	}
-	if err := s.normalizeAccountKeyForStorage(tok); err != nil {
-		return nil, err
-	}
 	if err := s.storeCredentialAtInstance(ctx, tok, tm.ExpectedCredentialID); err != nil {
 		return nil, err
 	}
@@ -550,6 +547,9 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 	}
 	if expectedCredentialID != "" {
 		return credentialTargetMismatch(candidate.Qualifier)
+	}
+	if err := s.normalizeAccountKeyForStorage(candidate); err != nil {
+		return err
 	}
 	if err := s.externalCredentials.CreateCredential(ctx, candidate); err == nil {
 		return nil

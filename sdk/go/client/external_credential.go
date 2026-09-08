@@ -109,6 +109,9 @@ type ExternalCredentialCapabilities struct {
 	// Providers that persist ExternalCredential.account_key do not need the
 	// legacy metadata compatibility copy from the host.
 	PersistsAccountKey bool
+	// Providers that enforce expected_credential_id atomically support safe
+	// reconnect updates.
+	SupportsConditionalUpsert bool
 }
 
 // ExternalCredentialClientInfo is the native message type for gestalt.provider.v1.ExternalCredentialClientInfo.

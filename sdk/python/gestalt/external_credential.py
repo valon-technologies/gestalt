@@ -119,6 +119,9 @@ class ExternalCredentialCapabilities:
     #: Providers that persist ExternalCredential.account_key do not need the
     #: legacy metadata compatibility copy from the host.
     persists_account_key: bool = False
+    #: Providers that enforce expected_credential_id atomically support safe
+    #: reconnect updates.
+    supports_conditional_upsert: bool = False
 
 
 @dataclass(frozen=True, slots=True)

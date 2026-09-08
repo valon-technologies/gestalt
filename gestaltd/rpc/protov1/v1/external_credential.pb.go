@@ -1447,8 +1447,11 @@ type ExternalCredentialCapabilities struct {
 	// Providers that persist ExternalCredential.account_key do not need the
 	// legacy metadata compatibility copy from the host.
 	PersistsAccountKey bool `protobuf:"varint,1,opt,name=persists_account_key,json=persistsAccountKey,proto3" json:"persists_account_key,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Providers that enforce expected_credential_id atomically support safe
+	// reconnect updates.
+	SupportsConditionalUpsert bool `protobuf:"varint,2,opt,name=supports_conditional_upsert,json=supportsConditionalUpsert,proto3" json:"supports_conditional_upsert,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *ExternalCredentialCapabilities) Reset() {
@@ -1484,6 +1487,13 @@ func (*ExternalCredentialCapabilities) Descriptor() ([]byte, []int) {
 func (x *ExternalCredentialCapabilities) GetPersistsAccountKey() bool {
 	if x != nil {
 		return x.PersistsAccountKey
+	}
+	return false
+}
+
+func (x *ExternalCredentialCapabilities) GetSupportsConditionalUpsert() bool {
+	if x != nil {
+		return x.SupportsConditionalUpsert
 	}
 	return false
 }
@@ -1652,9 +1662,10 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
 	"\"ExchangeExternalCredentialResponse\x12[\n" +
-	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse:\x12\x9a\xb5\x18\x0etoken_response\"R\n" +
+	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse:\x12\x9a\xb5\x18\x0etoken_response\"\x92\x01\n" +
 	"\x1eExternalCredentialCapabilities\x120\n" +
-	"\x14persists_account_key\x18\x01 \x01(\bR\x12persistsAccountKey2\xe3\f\n" +
+	"\x14persists_account_key\x18\x01 \x01(\bR\x12persistsAccountKey\x12>\n" +
+	"\x1bsupports_conditional_upsert\x18\x02 \x01(\bR\x19supportsConditionalUpsert2\xe3\f\n" +
 	"\x13ExternalCredentials\x12n\n" +
 	"\x0fGetCapabilities\x12\x16.google.protobuf.Empty\x1a3.gestalt.provider.v1.ExternalCredentialCapabilities\"\x0e\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x8f\x01\n" +
 	"\x10CreateCredential\x124.gestalt.provider.v1.CreateExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\"\x1c\x8a\xb5\x18\n" +

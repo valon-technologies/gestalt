@@ -126,6 +126,11 @@ export interface ExternalCredentialCapabilities {
    * legacy metadata compatibility copy from the host.
    */
   persistsAccountKey: boolean;
+  /**
+   * Providers that enforce expected_credential_id atomically support safe
+   * reconnect updates.
+   */
+  supportsConditionalUpsert: boolean;
 }
 
 export interface ExternalCredentialClientInfo {

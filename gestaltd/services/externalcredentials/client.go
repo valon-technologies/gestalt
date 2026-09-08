@@ -34,9 +34,10 @@ type ExecConfig struct {
 }
 
 type remoteExternalCredentialProvider struct {
-	client             proto.ExternalCredentialsClient
-	closer             io.Closer
-	persistsAccountKey bool
+	client                    proto.ExternalCredentialsClient
+	closer                    io.Closer
+	persistsAccountKey        bool
+	supportsConditionalUpsert bool
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredentialProvider, error) {
@@ -62,12 +63,26 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 		return nil, err
 	}
 
-	persistsAccountKey := externalCredentialProviderPersistsAccountKey(ctx, client.GetCapabilities)
+	capabilities := externalCredentialProviderCapabilities(ctx, client.GetCapabilities)
 
-	return &remoteExternalCredentialProvider{client: client, closer: proc, persistsAccountKey: persistsAccountKey}, nil
+	return &remoteExternalCredentialProvider{
+		client:                    client,
+		closer:                    proc,
+		persistsAccountKey:        capabilities.PersistsAccountKey,
+		supportsConditionalUpsert: capabilities.SupportsConditionalUpsert,
+	}, nil
 }
 
 func externalCredentialProviderPersistsAccountKey(ctx context.Context, getCapabilities func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error)) bool {
+	return externalCredentialProviderCapabilities(ctx, getCapabilities).PersistsAccountKey
+}
+
+type externalCredentialCapabilities struct {
+	PersistsAccountKey        bool
+	SupportsConditionalUpsert bool
+}
+
+func externalCredentialProviderCapabilities(ctx context.Context, getCapabilities func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error)) externalCredentialCapabilities {
 	capCtx, capCancel := runtimehost.ProviderCallContext(ctx)
 	caps, err := getCapabilities(capCtx, &emptypb.Empty{})
 	capCancel()
@@ -75,9 +90,12 @@ func externalCredentialProviderPersistsAccountKey(ctx context.Context, getCapabi
 		if status.Code(err) != codes.Unimplemented {
 			slog.WarnContext(ctx, "external credential capability discovery failed; using legacy storage compatibility", "error", err)
 		}
-		return false
+		return externalCredentialCapabilities{}
 	}
-	return caps != nil && caps.GetPersistsAccountKey()
+	return externalCredentialCapabilities{
+		PersistsAccountKey:        caps != nil && caps.GetPersistsAccountKey(),
+		SupportsConditionalUpsert: caps != nil && caps.GetSupportsConditionalUpsert(),
+	}
 }
 
 func (r *remoteExternalCredentialProvider) PersistsAccountKey() bool {
@@ -127,6 +145,9 @@ func (r *remoteExternalCredentialProvider) UpsertCredential(ctx context.Context,
 func (r *remoteExternalCredentialProvider) UpsertCredentialIfID(ctx context.Context, credential *core.ExternalCredential, expectedID string) error {
 	if credential == nil {
 		return fmt.Errorf("external credential is required")
+	}
+	if !r.supportsConditionalUpsert {
+		return core.ErrConditionalUpsertUnsupported
 	}
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()

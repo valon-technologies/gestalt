@@ -26,3 +26,18 @@ func TestInstrumentExternalCredentialProviderPreservesOptionalCapabilities(t *te
 		t.Fatalf("conditional upsert error = %v, want %v", err, core.ErrNotFound)
 	}
 }
+
+type nonConditionalExternalCredentialProvider struct {
+	core.ExternalCredentialProvider
+}
+
+func TestInstrumentExternalCredentialProviderDoesNotAdvertiseMissingCapabilities(t *testing.T) {
+	t.Parallel()
+
+	instrumented := InstrumentExternalCredentialProvider("test", nonConditionalExternalCredentialProvider{
+		ExternalCredentialProvider: coretesting.NewStubExternalCredentialProvider(),
+	})
+	if _, ok := instrumented.(core.ExternalCredentialConditionalUpserter); ok {
+		t.Fatal("instrumented provider advertised unsupported conditional upsert")
+	}
+}

@@ -2192,6 +2192,10 @@ pub struct ExternalCredentialCapabilities {
     /// legacy metadata compatibility copy from the host.
     #[prost(bool, tag = "1")]
     pub persists_account_key: bool,
+    /// Providers that enforce expected_credential_id atomically support safe
+    /// reconnect updates.
+    #[prost(bool, tag = "2")]
+    pub supports_conditional_upsert: bool,
 }
 /// AuthorizeRequest models RFC 6749 authorization endpoint parameters.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

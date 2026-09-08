@@ -25,7 +25,8 @@ func NewProviderServer(provider core.ExternalCredentialProvider) proto.ExternalC
 
 func (s *externalCredentialProviderServer) GetCapabilities(context.Context, *emptypb.Empty) (*proto.ExternalCredentialCapabilities, error) {
 	return &proto.ExternalCredentialCapabilities{
-		PersistsAccountKey: core.ExternalCredentialProviderPersistsAccountKey(s.provider),
+		PersistsAccountKey:        core.ExternalCredentialProviderPersistsAccountKey(s.provider),
+		SupportsConditionalUpsert: core.ExternalCredentialProviderSupportsConditionalUpsert(s.provider),
 	}, nil
 }
 

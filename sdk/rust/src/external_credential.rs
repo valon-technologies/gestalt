@@ -155,6 +155,11 @@ pub struct ExternalCredentialCapabilities {
     ///
     /// The `persists_account_key` field.
     pub persists_account_key: bool,
+    /// Providers that enforce expected_credential_id atomically support safe
+    /// reconnect updates.
+    ///
+    /// The `supports_conditional_upsert` field.
+    pub supports_conditional_upsert: bool,
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialClientInfo`.

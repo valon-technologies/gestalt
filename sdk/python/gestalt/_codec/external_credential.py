@@ -233,6 +233,7 @@ def to_wire_external_credential_capabilities(
 ) -> Any:
     return _external_credential_pb2.ExternalCredentialCapabilities(
         persists_account_key=value.persists_account_key,
+        supports_conditional_upsert=value.supports_conditional_upsert,
     )
 
 
@@ -241,6 +242,7 @@ def from_wire_external_credential_capabilities(
 ) -> native.ExternalCredentialCapabilities:
     return native.ExternalCredentialCapabilities(
         persists_account_key=value.persists_account_key,
+        supports_conditional_upsert=value.supports_conditional_upsert,
     )
 
 

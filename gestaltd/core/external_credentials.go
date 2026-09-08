@@ -43,6 +43,11 @@ func ExternalCredentialProviderPersistsAccountKey(provider ExternalCredentialPro
 	return ok && persister.PersistsAccountKey()
 }
 
+func ExternalCredentialProviderSupportsConditionalUpsert(provider ExternalCredentialProvider) bool {
+	_, ok := provider.(ExternalCredentialConditionalUpserter)
+	return ok
+}
+
 type ExternalCredentialTokenExchangeDriver struct {
 	Type            string
 	TargetPrincipal string
