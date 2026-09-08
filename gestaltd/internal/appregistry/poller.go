@@ -124,6 +124,11 @@ func ResolveSourceVersion() string {
 	return strings.TrimSpace(os.Getenv(sourceVersionEnvVar))
 }
 
+// ResolveRevision returns the immutable Cloud Run revision name when present.
+func ResolveRevision() string {
+	return strings.TrimSpace(os.Getenv("K_REVISION"))
+}
+
 func resolveInstanceID(instanceIDEnv, hostname string) string {
 	if v := strings.TrimSpace(instanceIDEnv); v != "" {
 		return v

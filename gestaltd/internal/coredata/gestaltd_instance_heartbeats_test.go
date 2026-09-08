@@ -19,6 +19,8 @@ func TestGestaltdInstanceHeartbeatServiceRoundTripAndReplace(t *testing.T) {
 	heartbeat := &core.GestaltdInstanceHeartbeat{
 		InstanceID:    " instance-1 ",
 		SourceVersion: " source-a ",
+		Revision:      " revision-a ",
+		Ready:         true,
 		StartedAt:     startedAt,
 		HeartbeatAt:   firstHeartbeatAt,
 		Apps: map[string]core.GestaltdInstanceAppHeartbeat{
@@ -35,7 +37,7 @@ func TestGestaltdInstanceHeartbeatServiceRoundTripAndReplace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
-	if stored.InstanceID != "instance-1" || stored.SourceVersion != "source-a" {
+	if stored.InstanceID != "instance-1" || stored.SourceVersion != "source-a" || stored.Revision != "revision-a" || !stored.Ready {
 		t.Fatalf("stored heartbeat = %#v", stored)
 	}
 	if stored.HeartbeatAt.Nanosecond() != 123000000 {

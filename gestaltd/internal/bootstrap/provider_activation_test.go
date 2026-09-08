@@ -153,6 +153,7 @@ func TestNewProviderActivationStartsProvidersOnce(t *testing.T) {
 		ready <-chan struct{},
 		_ func() map[string]map[string]OAuthHandler,
 		_ func() map[string]map[string]ManualTokenExchanger,
+		_ func() []error,
 	) {
 		gotReady = ready
 	})

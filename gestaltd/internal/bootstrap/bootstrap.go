@@ -260,6 +260,7 @@ type Result struct {
 	StartupProvidersReady   <-chan struct{}
 	AppProvidersInitialized <-chan struct{}
 	ProvidersReady          <-chan struct{}
+	AppProviderStartupError func() error
 	FatalAppProviderState   <-chan error
 	ConnectionAuth          func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth    func() map[string]map[string]ManualTokenExchanger
@@ -1319,6 +1320,8 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	var (
 		connAuthResolver       func() map[string]map[string]OAuthHandler
 		manualConnAuthResolver func() map[string]map[string]ManualTokenExchanger
+		startupErrors          func() []error
+		deferredErrors         func() []error
 	)
 	startup := newDeferredProviders()
 	deferred := newDeferredProviders()
@@ -1445,7 +1448,9 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		ready <-chan struct{},
 		connAuth func() map[string]map[string]OAuthHandler,
 		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
+		errs func() []error,
 	) {
+		startupErrors = errs
 		startup.set(connAuth, manualConnAuth)
 		go func() {
 			<-ready
@@ -1466,7 +1471,9 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		ready <-chan struct{},
 		connAuth func() map[string]map[string]OAuthHandler,
 		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
+		errs func() []error,
 	) {
+		deferredErrors = errs
 		deferred.set(connAuth, manualConnAuth)
 		go func() {
 			<-ready
@@ -1586,25 +1593,35 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		scimHandler = scim.NewHandler(prepared.SCIM)
 	}
 	result := &Result{
-		Auth:                           prepared.Auth,
-		SelectedAuthProvider:           prepared.SelectedAuthProvider,
-		AuthProviders:                  prepared.AuthProviders,
-		Authorization:                  prepared.Authorization,
-		Services:                       prepared.Services,
-		ExtraIndexedDBs:                prepared.ExtraIndexedDBs,
-		ExtraCaches:                    prepared.ExtraCaches,
-		S3:                             prepared.Deps.S3,
-		ExtraS3s:                       prepared.ExtraS3s,
-		ExtraWorkflows:                 extraWorkflows,
-		ExtraAgents:                    extraAgents,
-		Providers:                      providers,
-		WorkflowControl:                prepared.Deps.WorkflowRuntime,
-		AgentControl:                   prepared.Deps.AgentRuntime,
-		AgentManager:                   prepared.Deps.AgentManager,
-		FeatureFlags:                   flags,
-		StartupProvidersReady:          startup.ready(),
-		AppProvidersInitialized:        appProvidersInitialized,
-		ProvidersReady:                 deferred.ready(),
+		Auth:                    prepared.Auth,
+		SelectedAuthProvider:    prepared.SelectedAuthProvider,
+		AuthProviders:           prepared.AuthProviders,
+		Authorization:           prepared.Authorization,
+		Services:                prepared.Services,
+		ExtraIndexedDBs:         prepared.ExtraIndexedDBs,
+		ExtraCaches:             prepared.ExtraCaches,
+		S3:                      prepared.Deps.S3,
+		ExtraS3s:                prepared.ExtraS3s,
+		ExtraWorkflows:          extraWorkflows,
+		ExtraAgents:             extraAgents,
+		Providers:               providers,
+		WorkflowControl:         prepared.Deps.WorkflowRuntime,
+		AgentControl:            prepared.Deps.AgentRuntime,
+		AgentManager:            prepared.Deps.AgentManager,
+		FeatureFlags:            flags,
+		StartupProvidersReady:   startup.ready(),
+		AppProvidersInitialized: appProvidersInitialized,
+		ProvidersReady:          deferred.ready(),
+		AppProviderStartupError: func() error {
+			var errs []error
+			if startupErrors != nil {
+				errs = append(errs, startupErrors()...)
+			}
+			if deferredErrors != nil {
+				errs = append(errs, deferredErrors()...)
+			}
+			return errors.Join(errs...)
+		},
 		FatalAppProviderState:          fatalAppProviderState,
 		ConnectionAuth:                 connAuthResolver,
 		ManualConnectionAuth:           manualConnAuthResolver,

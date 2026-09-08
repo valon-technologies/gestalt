@@ -173,6 +173,9 @@ func gestaltdInstanceHeartbeatRecord(heartbeat *core.GestaltdInstanceHeartbeat) 
 	normalized := &core.GestaltdInstanceHeartbeat{
 		InstanceID:    strings.TrimSpace(heartbeat.InstanceID),
 		SourceVersion: strings.TrimSpace(heartbeat.SourceVersion),
+		Revision:      strings.TrimSpace(heartbeat.Revision),
+		Ready:         heartbeat.Ready,
+		LastError:     strings.TrimSpace(heartbeat.LastError),
 		StartedAt:     normalizedHeartbeatTime(heartbeat.StartedAt),
 		HeartbeatAt:   normalizedHeartbeatTime(heartbeat.HeartbeatAt),
 		Apps:          cloneHeartbeatApps(heartbeat.Apps),
@@ -193,6 +196,9 @@ func gestaltdInstanceHeartbeatRecord(heartbeat *core.GestaltdInstanceHeartbeat) 
 		"id":             normalized.InstanceID,
 		"instance_id":    normalized.InstanceID,
 		"source_version": normalized.SourceVersion,
+		"revision":       normalized.Revision,
+		"ready":          normalized.Ready,
+		"last_error":     normalized.LastError,
 		"started_at":     normalized.StartedAt,
 		"heartbeat_at":   normalized.HeartbeatAt,
 		"apps":           heartbeatAppsJSONValue(normalized.Apps),
@@ -232,9 +238,13 @@ func recordToGestaltdInstanceHeartbeat(rec idb.Record) *core.GestaltdInstanceHea
 	if raw := recJSON(rec, "apps"); len(raw) > 0 {
 		_ = json.Unmarshal(raw, &apps)
 	}
+	ready, _ := rec["ready"].(bool)
 	return &core.GestaltdInstanceHeartbeat{
 		InstanceID:    recString(rec, "instance_id"),
 		SourceVersion: recString(rec, "source_version"),
+		Revision:      recString(rec, "revision"),
+		Ready:         ready,
+		LastError:     recString(rec, "last_error"),
 		StartedAt:     recTime(rec, "started_at"),
 		HeartbeatAt:   recTime(rec, "heartbeat_at"),
 		Apps:          apps,

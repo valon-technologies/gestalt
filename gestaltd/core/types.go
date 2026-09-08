@@ -82,6 +82,9 @@ type GestaltdInstanceAppHeartbeat struct {
 type GestaltdInstanceHeartbeat struct {
 	InstanceID    string
 	SourceVersion string
+	Revision      string
+	Ready         bool
+	LastError     string
 	StartedAt     time.Time
 	HeartbeatAt   time.Time
 	Apps          map[string]GestaltdInstanceAppHeartbeat

@@ -155,6 +155,92 @@ func TestActivateEndpointPromotesSourceVersionAndRetargetsRollout(t *testing.T) 
 	}
 }
 
+func TestActivateEndpointWaitsForEveryRequestedRevisionInstance(t *testing.T) {
+	t.Parallel()
+
+	var services *coredata.Services
+	now := time.Date(2026, 9, 4, 18, 5, 0, 0, time.UTC)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.SourceVersion = "source-new"
+		cfg.Revision = "candidate-revision"
+		cfg.Now = func() time.Time { return now }
+		cfg.AppRegistryHeartbeatTTL = time.Minute
+		services = cfg.Services
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	upsertHeartbeat := func(instanceID, revision string, registryReady bool) {
+		t.Helper()
+		app := core.GestaltdInstanceAppHeartbeat{
+			State:          core.GestaltdInstanceAppStateError,
+			DesiredVersion: "v1",
+		}
+		if registryReady {
+			app.State = core.GestaltdInstanceAppStateRunning
+			app.RunningVersion = "v1"
+		}
+		if _, err := services.GestaltdInstanceHeartbeats.Upsert(context.Background(), &core.GestaltdInstanceHeartbeat{
+			InstanceID:    instanceID,
+			SourceVersion: "source-new",
+			Revision:      revision,
+			Ready:         registryReady,
+			StartedAt:     now,
+			HeartbeatAt:   now,
+			Apps:          map[string]core.GestaltdInstanceAppHeartbeat{"registry-app": app},
+		}); err != nil {
+			t.Fatalf("Upsert heartbeat: %v", err)
+		}
+	}
+	upsertHeartbeat("old-revision", "previous-revision", true)
+	for _, instanceID := range []string{"candidate-1", "candidate-2", "candidate-3", "candidate-4"} {
+		upsertHeartbeat(instanceID, "candidate-revision", true)
+	}
+
+	type activationResult struct {
+		status int
+		err    error
+	}
+	result := make(chan activationResult, 1)
+	go func() {
+		resp, err := http.Post(
+			srv.URL+"/activate?source_version=source-new&minimum_healthy_instances=5&wait_for_ready=true&revision_name=candidate-revision",
+			"",
+			nil,
+		)
+		if err != nil {
+			result <- activationResult{err: err}
+			return
+		}
+		_ = resp.Body.Close()
+		result <- activationResult{status: resp.StatusCode}
+	}()
+
+	select {
+	case got := <-result:
+		t.Fatalf("activation completed before the fifth candidate was ready: %+v", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+	upsertHeartbeat("candidate-5", "candidate-revision", false)
+	select {
+	case got := <-result:
+		t.Fatalf("activation completed while the fifth candidate app was unhealthy: %+v", got)
+	case <-time.After(600 * time.Millisecond):
+	}
+	upsertHeartbeat("candidate-5", "candidate-revision", true)
+
+	select {
+	case got := <-result:
+		if got.err != nil {
+			t.Fatalf("POST /activate: %v", got.err)
+		}
+		if got.status != http.StatusOK {
+			t.Fatalf("activation status = %d, want %d", got.status, http.StatusOK)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("activation did not complete after every candidate became ready")
+	}
+}
+
 func TestActivateEndpointRetargetsIntoConfiguredHeartbeatMode(t *testing.T) {
 	t.Parallel()
 
