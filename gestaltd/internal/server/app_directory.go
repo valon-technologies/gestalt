@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -30,7 +32,6 @@ type tenantAppDirectoryEntry struct {
 	IconSVG          string
 	DeclaredMount    string
 	Prompts          []appPromptInfo
-	SourceTreeURL    string
 	Advertised       []advertisedConnection
 	ConnectionSchema []connectionSchemaInfo
 	Loaded           bool
@@ -187,7 +188,6 @@ func viewerDirectoryEntry(entry tenantAppDirectoryEntry, mountedPath, management
 		MountedPath:      mountedPath,
 		ManagementPath:   managementPath,
 		Prompts:          entry.Prompts,
-		SourceTreeURL:    entry.SourceTreeURL,
 		Advertised:       entry.Advertised,
 		ConnectionSchema: entry.ConnectionSchema,
 		Loaded:           entry.Loaded,
@@ -401,7 +401,8 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 		if s.integrationHiddenFromCatalog(app.name) {
 			continue
 		}
-		dir.entries = append(dir.entries, s.tenantRegistryDirectoryEntry(app.name))
+		entry := s.tenantRegistryDirectoryEntry(app.name)
+		dir.entries = append(dir.entries, entry)
 	}
 	return dir, cacheable, nil
 }
@@ -454,7 +455,6 @@ func (s *Server) applyPluginDirectoryFields(entry *tenantAppDirectoryEntry, plug
 	if plugin == nil {
 		return
 	}
-	entry.SourceTreeURL = plugin.SourceTreeURL()
 	entry.DeclaredMount = pluginDeclaredMount(plugin)
 }
 
@@ -493,11 +493,73 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *tenantAppD
 }
 
 func (s *Server) viewerDirectoryEntry(ctx context.Context, p *principal.Principal, entry tenantAppDirectoryEntry) appDirectoryEntry {
-	return viewerDirectoryEntry(
+	projected := viewerDirectoryEntry(
 		entry,
 		s.integrationMountedPathForPrincipalContext(ctx, p, entry.Name, entry.DeclaredMount),
 		s.integrationManagementPath(ctx, p, entry.Name),
 	)
+	// Registry source metadata belongs to the installed version, so resolve it
+	// while projecting the request rather than freezing it in the tenant
+	// snapshot.
+	projected.SourceTreeURL = s.appSourceTreeURL(ctx, entry.Name, s.pluginDefs[entry.Name])
+	return projected
+}
+
+func (s *Server) appSourceTreeURL(ctx context.Context, appName string, plugin *config.ProviderEntry) string {
+	if plugin != nil {
+		if sourceTreeURL := plugin.SourceTreeURL(); sourceTreeURL != "" {
+			return sourceTreeURL
+		}
+	}
+	app, ok := s.registryApp(appName)
+	if !ok {
+		return ""
+	}
+	if s.appVersionChanges == nil {
+		return ""
+	}
+	known, err := s.appVersionChanges.ListKnownVersionsByApp(ctx, app.name)
+	if err != nil {
+		return ""
+	}
+	installation := coredata.LatestKnownInstallation(known)
+	if installation == nil {
+		return ""
+	}
+	if sourceRepository := strings.TrimSpace(installation.SourceRepository); sourceRepository != "" {
+		return appregistry.SourceTreeURLForApp(sourceRepository, installation.AppName, installation.SourceRef)
+	}
+	return s.legacyRegistryAppSourceTreeURL(ctx, app, installation.Version)
+}
+
+// legacyRegistryAppSourceTreeURL supports installations recorded before source
+// repository identity was persisted. New installations never use this remote
+// read path; it can be removed after those historical records are migrated.
+func (s *Server) legacyRegistryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp, version string) string {
+	if s == nil || s.appRegistryReader == nil || s.appVersionChanges == nil {
+		return ""
+	}
+	if version == "" {
+		return ""
+	}
+
+	registry, ok := s.appRegistries[app.registry]
+	if !ok {
+		return ""
+	}
+	publicRoot, err := registry.PublicURL()
+	if err != nil {
+		return ""
+	}
+	entry, err := s.appRegistryReader.FetchEntry(ctx, publicRoot, app.name, version)
+	if err != nil || entry == nil {
+		return ""
+	}
+	sourceTreeURL := entry.SourceTreeURL()
+	if sourceTreeURL == "" {
+		return ""
+	}
+	return sourceTreeURL
 }
 
 func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (appDirectoryEntry, bool, error) {

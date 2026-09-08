@@ -27,6 +27,7 @@ type ManagedSubject struct {
 type AppInstallation struct {
 	AppName            string
 	Version            string
+	SourceRepository   string
 	SourceRef          string
 	Registry           string
 	ProviderReleaseURL string

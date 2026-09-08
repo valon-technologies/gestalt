@@ -22,3 +22,26 @@ func TestLatestKnownVersionBreaksTimestampTiesLexicographically(t *testing.T) {
 		}
 	}
 }
+
+func TestInstallationFromChangeRequestPreservesSourceIdentity(t *testing.T) {
+	t.Parallel()
+
+	request := &core.AppVersionChangeRequest{
+		App:       "g-issues",
+		ToVersion: "1.2.3",
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName:          "g-issues",
+			Version:          "1.2.3",
+			SourceRepository: " github.com/valon-technologies/valon-tools ",
+			SourceRef:        " abc123 ",
+		}),
+	}
+
+	installation := coredata.InstallationFromChangeRequest(request)
+	if installation.SourceRepository != "github.com/valon-technologies/valon-tools" {
+		t.Fatalf("SourceRepository = %q", installation.SourceRepository)
+	}
+	if installation.SourceRef != "abc123" {
+		t.Fatalf("SourceRef = %q", installation.SourceRef)
+	}
+}

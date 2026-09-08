@@ -237,6 +237,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	known := &core.AppInstallation{
 		AppName:            appName,
 		Version:            version,
+		SourceRepository:   entry.Repository,
 		SourceRef:          entry.SourceRef,
 		Registry:           registryName,
 		ProviderReleaseURL: entryURL,
