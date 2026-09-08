@@ -13,7 +13,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -340,6 +342,70 @@ func TestAppCatalogIncludesSourceTreeURL(t *testing.T) {
 	}
 	if _, exists := composedByName["notes"]["sourceTreeUrl"]; exists {
 		t.Fatalf("composed notes sourceTreeUrl = %+v, want omitted", composedByName["notes"]["sourceTreeUrl"])
+	}
+}
+
+func TestAppCatalogIncludesSourceTreeURLForRegistryApp(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	_, err := services.AppVersionChangeRequests.AppendRequest(t.Context(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "none",
+		ToVersion:   fixture.Version,
+		Actor:       testCanonicalAdminUserID,
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName:  "g-issues",
+			Version:  fixture.Version,
+			Registry: "toolshed",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/catalog/apps", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET catalog: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d: %s", response.StatusCode, body)
+	}
+	var apps []struct {
+		Name          string `json:"name"`
+		SourceTreeURL string `json:"sourceTreeUrl"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&apps); err != nil {
+		t.Fatalf("decode catalog: %v", err)
+	}
+	if len(apps) != 1 || apps[0].Name != "g-issues" {
+		t.Fatalf("apps = %#v", apps)
+	}
+	want := "https://github.com/valon-technologies/valon-tools/tree/abc123def456abc123def456abc123def456abcd/apps/g-issues"
+	if apps[0].SourceTreeURL != want {
+		t.Fatalf("sourceTreeUrl = %q, want %q", apps[0].SourceTreeURL, want)
 	}
 }
 

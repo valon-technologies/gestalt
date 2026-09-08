@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -78,6 +80,29 @@ type Entry struct {
 	Compatibility     Compatibility       `json:"compatibility,omitempty"`
 	PublishedAt       time.Time           `json:"publishedAt"`
 	PublishStartedAt  *time.Time          `json:"publishStartedAt,omitempty"`
+}
+
+// SourceTreeURL is the GitHub tree for the source that produced this
+// published app. Registry app sources are validated as apps/{app}, so the
+// app name is sufficient to project the source directory from the immutable
+// repository and source ref recorded in the entry.
+func (e Entry) SourceTreeURL() string {
+	repositoryLocation := strings.TrimSpace(e.Repository)
+	if strings.HasPrefix(strings.ToLower(repositoryLocation), "github.com/") {
+		repositoryLocation = "https://" + repositoryLocation
+	}
+	repository, err := config.ParseGitHubRepo(repositoryLocation)
+	if err != nil {
+		return ""
+	}
+	ref := strings.TrimSpace(e.SourceRef)
+	appName := strings.TrimSpace(e.App)
+	if ref == "" || appName == "" {
+		return ""
+	}
+	return "https://github.com/" + url.PathEscape(repository.Owner) + "/" +
+		url.PathEscape(repository.Name) + "/tree/" + url.PathEscape(ref) +
+		"/apps/" + url.PathEscape(appName)
 }
 
 type Publication struct {

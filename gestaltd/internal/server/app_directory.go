@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -401,7 +402,7 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 		if s.integrationHiddenFromCatalog(app.name) {
 			continue
 		}
-		dir.entries = append(dir.entries, s.tenantRegistryDirectoryEntry(app.name))
+		dir.entries = append(dir.entries, s.tenantRegistryDirectoryEntry(ctx, app.name))
 	}
 	return dir, cacheable, nil
 }
@@ -424,7 +425,7 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 		Description: prov.Description(),
 		Loaded:      true,
 	}
-	s.applyPluginDirectoryFields(&entry, plugin)
+	s.applyPluginDirectoryFields(ctx, &entry, plugin)
 	s.attachDirectoryConnections(&entry, plugin)
 	if cat := prov.Catalog(); cat != nil {
 		entry.IconSVG = cat.IconSVG
@@ -432,13 +433,13 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 	return entry, true, nil
 }
 
-func (s *Server) tenantRegistryDirectoryEntry(name string) tenantAppDirectoryEntry {
+func (s *Server) tenantRegistryDirectoryEntry(ctx context.Context, name string) tenantAppDirectoryEntry {
 	plugin := s.pluginDefs[name]
 	entry := tenantAppDirectoryEntry{
 		Name:        name,
 		DisplayName: name,
 	}
-	s.applyPluginDirectoryFields(&entry, plugin)
+	s.applyPluginDirectoryFields(ctx, &entry, plugin)
 	if plugin != nil && strings.TrimSpace(plugin.DisplayName) != "" {
 		entry.DisplayName = strings.TrimSpace(plugin.DisplayName)
 	}
@@ -446,15 +447,15 @@ func (s *Server) tenantRegistryDirectoryEntry(name string) tenantAppDirectoryEnt
 	return entry
 }
 
-func (s *Server) applyPluginDirectoryFields(entry *tenantAppDirectoryEntry, plugin *config.ProviderEntry) {
+func (s *Server) applyPluginDirectoryFields(ctx context.Context, entry *tenantAppDirectoryEntry, plugin *config.ProviderEntry) {
 	if entry == nil {
 		return
 	}
 	entry.Prompts = s.appPrompts[entry.Name]
+	entry.SourceTreeURL = s.appSourceTreeURL(ctx, entry.Name, plugin)
 	if plugin == nil {
 		return
 	}
-	entry.SourceTreeURL = plugin.SourceTreeURL()
 	entry.DeclaredMount = pluginDeclaredMount(plugin)
 }
 
@@ -498,6 +499,61 @@ func (s *Server) viewerDirectoryEntry(ctx context.Context, p *principal.Principa
 		s.integrationMountedPathForPrincipalContext(ctx, p, entry.Name, entry.DeclaredMount),
 		s.integrationManagementPath(ctx, p, entry.Name),
 	)
+}
+
+func (s *Server) appSourceTreeURL(ctx context.Context, appName string, plugin *config.ProviderEntry) string {
+	if plugin != nil {
+		if sourceTreeURL := plugin.SourceTreeURL(); sourceTreeURL != "" {
+			return sourceTreeURL
+		}
+	}
+	app, ok := s.registryApp(appName)
+	if !ok {
+		return ""
+	}
+	return s.registryAppSourceTreeURL(ctx, app)
+}
+
+func (s *Server) registryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp) string {
+	if s == nil || s.appRegistryReader == nil || s.appVersionChanges == nil {
+		return ""
+	}
+	known, err := s.appVersionChanges.ListKnownVersionsByApp(ctx, app.name)
+	if err != nil {
+		return ""
+	}
+	version := coredata.LatestKnownVersion(known)
+	if version == "" {
+		return ""
+	}
+	cacheKey := app.name + "\x00" + version
+	s.appRegistrySourceMu.Lock()
+	if sourceTreeURL := s.appRegistrySourceTreeURLs[cacheKey]; sourceTreeURL != "" {
+		s.appRegistrySourceMu.Unlock()
+		return sourceTreeURL
+	}
+	s.appRegistrySourceMu.Unlock()
+
+	registry, ok := s.appRegistries[app.registry]
+	if !ok {
+		return ""
+	}
+	publicRoot, err := registry.PublicURL()
+	if err != nil {
+		return ""
+	}
+	entry, err := s.appRegistryReader.FetchEntry(ctx, publicRoot, app.name, version)
+	if err != nil || entry == nil {
+		return ""
+	}
+	sourceTreeURL := entry.SourceTreeURL()
+	if sourceTreeURL == "" {
+		return ""
+	}
+	s.appRegistrySourceMu.Lock()
+	s.appRegistrySourceTreeURLs[cacheKey] = sourceTreeURL
+	s.appRegistrySourceMu.Unlock()
+	return sourceTreeURL
 }
 
 func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (appDirectoryEntry, bool, error) {
