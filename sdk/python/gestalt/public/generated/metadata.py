@@ -373,6 +373,14 @@ METHOD_AUTHORIZATION_LIST_ACTIVE_MODEL_RESOURCE_TYPES = Method(
     reject=(),
 )
 
+METHOD_EXTERNAL_CREDENTIALS_GET_CAPABILITIES = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="GetCapabilities",
+    full_method="/gestalt.provider.v1.ExternalCredentials/GetCapabilities",
+    fill=(),
+    reject=(),
+)
+
 METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL = Method(
     service="gestalt.provider.v1.ExternalCredentials",
     name="CreateCredential",

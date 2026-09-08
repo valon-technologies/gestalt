@@ -9,6 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // CreateExternalCredentialRequest is the native message type for gestalt.provider.v1.CreateExternalCredentialRequest.
@@ -101,6 +102,13 @@ type ExternalCredentialAuthConfig struct {
 	AccessTokenPath      string
 	TokenExchangeDrivers []*ExternalCredentialTokenExchangeDriver
 	RefreshToken         string
+}
+
+// ExternalCredentialCapabilities is the native message type for gestalt.provider.v1.ExternalCredentialCapabilities.
+type ExternalCredentialCapabilities struct {
+	// Providers that persist ExternalCredential.account_key do not need the
+	// legacy metadata compatibility copy from the host.
+	PersistsAccountKey bool
 }
 
 // ExternalCredentialClientInfo is the native message type for gestalt.provider.v1.ExternalCredentialClientInfo.
@@ -229,6 +237,15 @@ func ConnectExternalCredentials(ctx context.Context, name string) (*ExternalCred
 		return nil, toGestaltError(err)
 	}
 	return NewExternalCredentials(conn), nil
+}
+
+// GetCapabilities calls the GetCapabilities RPC of ExternalCredentials.
+func (c *ExternalCredentials) GetCapabilities(ctx context.Context) (*ExternalCredentialCapabilities, error) {
+	response, err := c.client.GetCapabilities(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWireExternalCredentialCapabilities(response), nil
 }
 
 // CreateCredential is the ergonomic form of [ExternalCredentials.CreateCredentialRaw].

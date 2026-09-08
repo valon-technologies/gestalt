@@ -20,6 +20,15 @@ func NewExternalCredentialsClient(transport Transport) *ExternalCredentialsClien
 	return &ExternalCredentialsClient{transport: transport}
 }
 
+func (c *ExternalCredentialsClient) GetCapabilities(ctx context.Context) (*gestaltclient.ExternalCredentialCapabilities, error) {
+	wire := &emptypb.Empty{}
+	out := &proto.ExternalCredentialCapabilities{}
+	if err := c.transport.Unary(ctx, MethodExternalCredentialsGetCapabilities, wire, out); err != nil {
+		return nil, toGestaltError(err)
+	}
+	return gestaltclient.FromWireExternalCredentialCapabilities(out), nil
+}
+
 func (c *ExternalCredentialsClient) CreateCredential(ctx context.Context, request *gestaltclient.CreateExternalCredentialRequest) (*gestaltclient.ExternalCredential, error) {
 	wire := gestaltclient.ToWireCreateExternalCredentialRequest(request)
 	out := &proto.ExternalCredential{}

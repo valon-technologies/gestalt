@@ -10,6 +10,7 @@ import type {
   ExchangeExternalCredentialResponse,
   ExternalCredential,
   ExternalCredentialAuthConfig,
+  ExternalCredentialCapabilities,
   ExternalCredentialClientInfo,
   ExternalCredentialCredential,
   ExternalCredentialGrant,
@@ -268,6 +269,22 @@ export function fromWireExternalCredentialAuthConfig(
       fromWireExternalCredentialTokenExchangeDriver,
     ),
     refreshToken: value.refreshToken,
+  };
+}
+
+export function toWireExternalCredentialCapabilities(
+  value: Init<ExternalCredentialCapabilities>,
+): wire.ExternalCredentialCapabilities {
+  return create(wire.ExternalCredentialCapabilitiesSchema, {
+    persistsAccountKey: value.persistsAccountKey ?? false,
+  });
+}
+
+export function fromWireExternalCredentialCapabilities(
+  value: wire.ExternalCredentialCapabilities,
+): ExternalCredentialCapabilities {
+  return {
+    persistsAccountKey: value.persistsAccountKey,
   };
 }
 

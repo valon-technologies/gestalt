@@ -210,6 +210,26 @@ func FromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthCon
 	return out
 }
 
+func ToWireExternalCredentialCapabilities(value *ExternalCredentialCapabilities) *proto.ExternalCredentialCapabilities {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ExternalCredentialCapabilities{
+		PersistsAccountKey: value.PersistsAccountKey,
+	}
+	return out
+}
+
+func FromWireExternalCredentialCapabilities(value *proto.ExternalCredentialCapabilities) *ExternalCredentialCapabilities {
+	if value == nil {
+		return nil
+	}
+	out := &ExternalCredentialCapabilities{
+		PersistsAccountKey: value.PersistsAccountKey,
+	}
+	return out
+}
+
 func ToWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *proto.ExternalCredentialClientInfo {
 	if value == nil {
 		return nil

@@ -20,6 +20,7 @@ import * as wire from "./internal/gen/v1/external_credential_pb.ts";
 import {
   fromWireExchangeExternalCredentialResponse,
   fromWireExternalCredential,
+  fromWireExternalCredentialCapabilities,
   fromWireListExternalCredentialsResponse,
   fromWireResolveExternalCredentialResponse,
   toWireCreateExternalCredentialRequest,
@@ -117,6 +118,14 @@ export interface ExternalCredentialAuthConfig {
   accessTokenPath: string;
   tokenExchangeDrivers: ExternalCredentialTokenExchangeDriver[];
   refreshToken: string;
+}
+
+export interface ExternalCredentialCapabilities {
+  /**
+   * Providers that persist ExternalCredential.account_key do not need the
+   * legacy metadata compatibility copy from the host.
+   */
+  persistsAccountKey: boolean;
 }
 
 export interface ExternalCredentialClientInfo {
@@ -226,6 +235,13 @@ export class ExternalCredentials {
       hostServiceMetadataInterceptors(token, options?.name?.trim() ?? ""),
     );
     return new ExternalCredentials(transport, options);
+  }
+
+  async getCapabilities(): Promise<ExternalCredentialCapabilities> {
+    const response = await callUnary(() =>
+      this.client.getCapabilities({}, callOptions(this.timeoutMs)),
+    );
+    return fromWireExternalCredentialCapabilities(response);
   }
 
   async createCredential(

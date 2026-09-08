@@ -319,3 +319,9 @@ class ExchangeExternalCredentialResponse(_message.Message):
     TOKEN_RESPONSE_FIELD_NUMBER: _ClassVar[int]
     token_response: ExternalCredentialTokenResponse
     def __init__(self, token_response: _Optional[_Union[ExternalCredentialTokenResponse, _Mapping]] = ...) -> None: ...
+
+class ExternalCredentialCapabilities(_message.Message):
+    __slots__ = ()
+    PERSISTS_ACCOUNT_KEY_FIELD_NUMBER: _ClassVar[int]
+    persists_account_key: bool
+    def __init__(self, persists_account_key: _Optional[bool] = ...) -> None: ...

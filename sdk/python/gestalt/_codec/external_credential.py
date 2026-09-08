@@ -228,6 +228,22 @@ def from_wire_external_credential_auth_config(
     )
 
 
+def to_wire_external_credential_capabilities(
+    value: native.ExternalCredentialCapabilities,
+) -> Any:
+    return _external_credential_pb2.ExternalCredentialCapabilities(
+        persists_account_key=value.persists_account_key,
+    )
+
+
+def from_wire_external_credential_capabilities(
+    value: Any,
+) -> native.ExternalCredentialCapabilities:
+    return native.ExternalCredentialCapabilities(
+        persists_account_key=value.persists_account_key,
+    )
+
+
 def to_wire_external_credential_client_info(
     value: native.ExternalCredentialClientInfo,
 ) -> Any:

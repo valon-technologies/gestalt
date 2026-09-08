@@ -1047,6 +1047,40 @@ pub(crate) fn decode_wire_exchange_external_credential_response_json(
     })
 }
 
+/// Encodes a wire `ExternalCredentialCapabilities` as protobuf JSON.
+pub(crate) fn encode_wire_external_credential_capabilities_json(
+    value: &v1::ExternalCredentialCapabilities,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if value.persists_account_key {
+        object.insert(
+            "persistsAccountKey".into(),
+            serde_json::Value::Bool(value.persists_account_key),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `ExternalCredentialCapabilities`.
+pub(crate) fn decode_wire_external_credential_capabilities_json(
+    value: &serde_json::Value,
+) -> Result<v1::ExternalCredentialCapabilities, crate::public::generated::rpc_support::GestaltError>
+{
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::ExternalCredentialCapabilities {
+        persists_account_key: match object.get("persistsAccountKey") {
+            Some(value) => crate::public::proto_json::decode_bool(value)?,
+            None => false,
+        },
+        ..Default::default()
+    })
+}
+
 /// Encodes a wire `GetExternalCredentialRequest` as protobuf JSON.
 pub(crate) fn encode_wire_get_external_credential_request_json(
     value: &v1::GetExternalCredentialRequest,

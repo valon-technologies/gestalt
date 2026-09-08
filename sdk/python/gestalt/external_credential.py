@@ -7,9 +7,10 @@ from __future__ import annotations
 import datetime
 import os
 from dataclasses import dataclass, field
-from typing import overload
+from typing import Any, overload
 
 import grpc
+from google.protobuf import empty_pb2 as _empty_pb2
 
 from ._codec import external_credential as _codec
 from ._codec import support as _support
@@ -19,6 +20,8 @@ from ._grpc_transport import (
     ENV_HOST_SERVICE_TOKEN,
     host_service_channel,
 )
+
+_empty: Any = _empty_pb2
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +112,13 @@ class ExternalCredentialAuthConfig:
         default_factory=list
     )
     refresh_token: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalCredentialCapabilities:
+    #: Providers that persist ExternalCredential.account_key do not need the
+    #: legacy metadata compatibility copy from the host.
+    persists_account_key: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +261,12 @@ class ExternalCredentials:
         """Close the client at the end of a context manager block."""
 
         self.close()
+
+    def get_capabilities(self) -> ExternalCredentialCapabilities:
+        response = _support.call_unary(
+            lambda: self._stub.GetCapabilities(_empty.Empty(), timeout=self._timeout)
+        )
+        return _codec.from_wire_external_credential_capabilities(response)
 
     @overload
     def create_credential(

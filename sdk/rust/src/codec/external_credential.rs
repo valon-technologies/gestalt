@@ -6,12 +6,12 @@ use crate::codec::support::{from_wire_timestamp, to_wire_timestamp};
 use crate::external_credential::{
     CreateExternalCredentialRequest, DeleteExternalCredentialRequest,
     ExchangeExternalCredentialRequest, ExchangeExternalCredentialResponse, ExternalCredential,
-    ExternalCredentialAuthConfig, ExternalCredentialClientInfo, ExternalCredentialCredential,
-    ExternalCredentialGrant, ExternalCredentialOpaque, ExternalCredentialTokenExchangeDriver,
-    ExternalCredentialTokenResponse, GetExternalCredentialRequest, ListExternalCredentialsRequest,
-    ListExternalCredentialsResponse, ResolveExternalCredentialRequest,
-    ResolveExternalCredentialResponse, UpsertExternalCredentialRequest,
-    ValidateExternalCredentialConfigRequest,
+    ExternalCredentialAuthConfig, ExternalCredentialCapabilities, ExternalCredentialClientInfo,
+    ExternalCredentialCredential, ExternalCredentialGrant, ExternalCredentialOpaque,
+    ExternalCredentialTokenExchangeDriver, ExternalCredentialTokenResponse,
+    GetExternalCredentialRequest, ListExternalCredentialsRequest, ListExternalCredentialsResponse,
+    ResolveExternalCredentialRequest, ResolveExternalCredentialResponse,
+    UpsertExternalCredentialRequest, ValidateExternalCredentialConfigRequest,
 };
 use crate::generated::v1;
 
@@ -150,6 +150,15 @@ pub(crate) fn to_wire_external_credential_auth_config(
             .map(to_wire_external_credential_token_exchange_driver)
             .collect(),
         refresh_token: value.refresh_token,
+    }
+}
+
+/// Converts a wire `ExternalCredentialCapabilities` to its native message.
+pub(crate) fn from_wire_external_credential_capabilities(
+    value: v1::ExternalCredentialCapabilities,
+) -> ExternalCredentialCapabilities {
+    ExternalCredentialCapabilities {
+        persists_account_key: value.persists_account_key,
     }
 }
 

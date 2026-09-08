@@ -3690,6 +3690,28 @@ pub mod external_credentials_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        pub async fn get_capabilities(
+            &mut self,
+            request: impl tonic::IntoRequest<()>,
+        ) -> std::result::Result<
+            tonic::Response<super::ExternalCredentialCapabilities>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.ExternalCredentials/GetCapabilities",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.ExternalCredentials",
+                "GetCapabilities",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
         pub async fn create_credential(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateExternalCredentialRequest>,
@@ -3709,6 +3731,7 @@ pub mod external_credentials_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        ///
         pub async fn upsert_credential(
             &mut self,
             request: impl tonic::IntoRequest<super::UpsertExternalCredentialRequest>,
@@ -3867,10 +3890,19 @@ pub mod external_credentials_server {
     /// Generated trait containing gRPC methods that should be implemented for use with ExternalCredentialsServer.
     #[async_trait]
     pub trait ExternalCredentials: std::marker::Send + std::marker::Sync + 'static {
+        async fn get_capabilities(
+            &self,
+            request: tonic::Request<()>,
+        ) -> std::result::Result<
+            tonic::Response<super::ExternalCredentialCapabilities>,
+            tonic::Status,
+        >;
+        ///
         async fn create_credential(
             &self,
             request: tonic::Request<super::CreateExternalCredentialRequest>,
         ) -> std::result::Result<tonic::Response<super::ExternalCredential>, tonic::Status>;
+        ///
         async fn upsert_credential(
             &self,
             request: tonic::Request<super::UpsertExternalCredentialRequest>,
@@ -3989,6 +4021,42 @@ pub mod external_credentials_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
+                "/gestalt.provider.v1.ExternalCredentials/GetCapabilities" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetCapabilitiesSvc<T: ExternalCredentials>(pub Arc<T>);
+                    impl<T: ExternalCredentials> tonic::server::UnaryService<()> for GetCapabilitiesSvc<T> {
+                        type Response = super::ExternalCredentialCapabilities;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as ExternalCredentials>::get_capabilities(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetCapabilitiesSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/gestalt.provider.v1.ExternalCredentials/CreateCredential" => {
                     #[allow(non_camel_case_types)]
                     struct CreateCredentialSvc<T: ExternalCredentials>(pub Arc<T>);

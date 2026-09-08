@@ -2182,6 +2182,13 @@ pub struct ExchangeExternalCredentialResponse {
     #[prost(message, optional, tag = "1")]
     pub token_response: ::core::option::Option<ExternalCredentialTokenResponse>,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExternalCredentialCapabilities {
+    /// Providers that persist ExternalCredential.account_key do not need the
+    /// legacy metadata compatibility copy from the host.
+    #[prost(bool, tag = "1")]
+    pub persists_account_key: bool,
+}
 /// AuthorizeRequest models RFC 6749 authorization endpoint parameters.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizeRequest {
