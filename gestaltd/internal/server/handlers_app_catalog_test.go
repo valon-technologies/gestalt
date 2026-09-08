@@ -68,7 +68,7 @@ func TestAppCatalogOmitsSubjectConnectionState(t *testing.T) {
 	if app["name"] != "slack" {
 		t.Fatalf("catalog name = %#v, want slack", app["name"])
 	}
-	for _, field := range []string{"status", "credentialState", "healthState", "actions", "iconSvg"} {
+	for _, field := range []string{"status", "credentialState", "healthState", "actions"} {
 		if _, ok := app[field]; ok {
 			t.Fatalf("catalog must not include subject or icon bytes field %q: %#v", field, app)
 		}
@@ -172,7 +172,7 @@ func TestAppCatalogSucceedsWhenSubjectCredentialsFail(t *testing.T) {
 	}
 }
 
-func TestAppCatalogServesIconsByURL(t *testing.T) {
+func TestAppCatalogIncludesIcons(t *testing.T) {
 	t.Parallel()
 
 	const testSVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`
@@ -239,8 +239,8 @@ func TestAppCatalogServesIconsByURL(t *testing.T) {
 	if len(catalogApps) != 1 {
 		t.Fatalf("catalog = %s", catalog)
 	}
-	if catalogApps[0].IconSVG != "" {
-		t.Fatalf("catalog inlined icon bytes: %q", catalogApps[0].IconSVG)
+	if catalogApps[0].IconSVG != testSVG {
+		t.Fatalf("iconSvg = %q, want %q", catalogApps[0].IconSVG, testSVG)
 	}
 	wantURL := "/api/v1/catalog/apps/iconprov/icon"
 	if catalogApps[0].IconURL != wantURL {
@@ -537,55 +537,8 @@ func TestAppOverlayNoAuthIsNotProductConnected(t *testing.T) {
 	}
 }
 
-type countingMissResolver struct {
-	calls atomic.Int32
-}
-
-func (c *countingMissResolver) ResolveProvider(context.Context, string) (core.Provider, error) {
-	c.calls.Add(1)
-	return nil, core.ErrNotFound
-}
-
-func TestAppCatalogReusesTenantDirectoryAcrossRequests(t *testing.T) {
-	t.Parallel()
-
-	resolver := &countingMissResolver{}
-	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
-	providers.SetRemoteResolver(resolver)
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = providers
-		cfg.AppDefs = testPluginDefsForConnections("slack", "default")
-		cfg.Services = testutil.NewStubServices(t)
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	first := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
-	afterCatalog := resolver.calls.Load()
-	if afterCatalog == 0 {
-		t.Fatal("catalog snapshot never resolved providers")
-	}
-	second := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
-	if resolver.calls.Load() != afterCatalog {
-		t.Fatalf("second catalog rebuilt the tenant directory: resolver calls %d after first, %d after second", afterCatalog, resolver.calls.Load())
-	}
-	_ = getJSONPath(t, ts, "/api/v1/me/app-connections", http.StatusOK, "")
-	afterOverlay := resolver.calls.Load()
-	if afterOverlay <= afterCatalog {
-		t.Fatal("connection overlay must resolve a live provider instead of reusing the snapshot handle")
-	}
-	_ = getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
-	if resolver.calls.Load() != afterOverlay {
-		t.Fatalf("catalog after overlay rebuilt the tenant directory: resolver calls %d after overlay, %d after later catalog", afterOverlay, resolver.calls.Load())
-	}
-	if string(first) != string(second) {
-		t.Fatalf("cached catalog changed: %s vs %s", first, second)
-	}
-}
-
 type requestScopedStubResolver struct {
-	stub  *coretesting.StubIntegration
-	calls atomic.Int32
+	stub *coretesting.StubIntegration
 }
 
 type requestScopedStub struct {
@@ -606,13 +559,12 @@ func (p *requestScopedStub) ConnectionMode() core.ConnectionMode {
 }
 
 func (r *requestScopedStubResolver) ResolveProvider(ctx context.Context, _ string) (core.Provider, error) {
-	r.calls.Add(1)
 	p := &requestScopedStub{StubIntegration: r.stub}
 	context.AfterFunc(ctx, func() { _ = p.Close() })
 	return p, nil
 }
 
-func TestAppCatalogDoesNotCacheRequestScopedProviders(t *testing.T) {
+func TestAppCatalogOverlayWorksAfterRequestScopedProviderCloses(t *testing.T) {
 	t.Parallel()
 
 	resolver := &requestScopedStubResolver{
@@ -629,14 +581,7 @@ func TestAppCatalogDoesNotCacheRequestScopedProviders(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	first := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "")
-	afterCatalog := resolver.calls.Load()
-	if afterCatalog == 0 {
-		t.Fatal("catalog snapshot never resolved providers")
-	}
 	overlay := getJSONPath(t, ts, "/api/v1/me/app-connections", http.StatusOK, "")
-	if resolver.calls.Load() <= afterCatalog {
-		t.Fatal("overlay reused a closed snapshot provider instead of resolving a live one")
-	}
 	var statuses []struct {
 		Name   string `json:"name"`
 		Status string `json:"status"`
@@ -794,14 +739,12 @@ func TestAppCatalogDoesNotCacheFailedProviderResolve(t *testing.T) {
 	}
 }
 
-func TestAppCatalogSharesTenantSnapshotAcrossViewers(t *testing.T) {
+func TestAppCatalogProjectsAccessPerViewer(t *testing.T) {
 	t.Parallel()
 
 	aliceID := principal.UserSubjectID(testCanonicalViewerUserID)
 	bobID := principal.UserSubjectID(testCanonicalAdminUserID)
-	resolver := &countingMissResolver{}
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack", ConnMode: core.ConnectionModeNone})
-	providers.SetRemoteResolver(resolver)
 
 	rootDir := t.TempDir()
 	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>app</html>")
@@ -832,10 +775,6 @@ func TestAppCatalogSharesTenantSnapshotAcrossViewers(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	alice := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "Bearer alice-token")
-	afterAlice := resolver.calls.Load()
-	if afterAlice == 0 {
-		t.Fatal("alice catalog never resolved providers")
-	}
 	var aliceApps []listedIntegration
 	if err := json.Unmarshal(alice, &aliceApps); err != nil {
 		t.Fatalf("decode alice catalog: %v", err)
@@ -845,9 +784,6 @@ func TestAppCatalogSharesTenantSnapshotAcrossViewers(t *testing.T) {
 	}
 
 	bob := getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, "Bearer bob-token")
-	if resolver.calls.Load() != afterAlice {
-		t.Fatalf("bob catalog rebuilt the tenant directory: resolver calls %d after alice, %d after bob", afterAlice, resolver.calls.Load())
-	}
 	var bobApps []listedIntegration
 	if err := json.Unmarshal(bob, &bobApps); err != nil {
 		t.Fatalf("decode bob catalog: %v", err)

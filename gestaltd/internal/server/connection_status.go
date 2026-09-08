@@ -44,8 +44,8 @@ const (
 	ownerKindUnknown        = "unknown"
 )
 
-func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) {
-	status := s.defaultIntegrationStatus(info, prov, instances, authTypes, p)
+func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, mode core.ConnectionMode, instances []instanceInfo, authTypes []string, p *principal.Principal) {
+	status := s.defaultIntegrationStatus(info, mode, instances, authTypes, p)
 	info.Status = status.Status
 	info.CredentialState = status.CredentialState
 	info.HealthState = status.HealthState
@@ -53,7 +53,7 @@ func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov co
 	info.Connected = status.Connected
 }
 
-func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
+func (s *Server) defaultIntegrationStatus(info *integrationInfo, mode core.ConnectionMode, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
 	if info == nil {
 		return unknownConnectionStatus()
 	}
@@ -65,7 +65,7 @@ func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provi
 	} else if conn, ok := info.singleConnectionStatus(); ok {
 		status = statusFromConnectionInfo(conn)
 	} else if len(info.Connections) == 0 {
-		status = s.implicitIntegrationStatus(info.Name, prov, instances, authTypes, p)
+		status = s.implicitIntegrationStatus(info.Name, mode, instances, authTypes, p)
 	} else {
 		status = summarizeConnectionStatuses(info.Connections)
 	}
@@ -113,12 +113,11 @@ func (s *Server) defaultConnectionName(integration string) string {
 	return plan.AuthDefaultConnection()
 }
 
-func (s *Server) implicitIntegrationStatus(integration string, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
-	if prov == nil {
+func (s *Server) implicitIntegrationStatus(integration string, mode core.ConnectionMode, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
+	if strings.TrimSpace(string(mode)) == "" {
 		return unknownConnectionStatus()
 	}
-	mode := core.NormalizeConnectionMode(prov.ConnectionMode())
-	switch mode {
+	switch core.NormalizeConnectionMode(mode) {
 	case core.ConnectionModeNone:
 		return connectionStatusInfo{
 			Status:          connectionStatusReady,

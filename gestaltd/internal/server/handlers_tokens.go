@@ -233,11 +233,11 @@ func (s *Server) connectionSchemasFromAdvertised(integration string, connections
 	return schemas
 }
 
-func (s *Server) connectionInfosFromAdvertised(ctx context.Context, integration string, connections []advertisedConnection, instances []instanceInfo, p *principal.Principal) []connectionDefInfo {
+func (s *Server) connectionInfosFromAdvertised(ctx context.Context, integration string, connections []advertisedConnection, instances []instanceInfo, subjectID string, p *principal.Principal) []connectionDefInfo {
 	infos := make([]connectionDefInfo, 0, len(connections))
 	for i := range connections {
 		conn := connections[i]
-		if info, ok := s.connectionInfoFromAuth(ctx, integration, conn.Name, conn.InstanceConnection, conn.Def, instances, conn.IncludeWithoutAuth, p); ok {
+		if info, ok := s.connectionInfoFromAuth(ctx, integration, conn.Name, conn.InstanceConnection, conn.Def, instances, conn.IncludeWithoutAuth, subjectID, p); ok {
 			infos = append(infos, info)
 		}
 	}
@@ -325,13 +325,12 @@ func userFacingConnectionName(name string) string {
 	return name
 }
 
-func (s *Server) connectionInfoFromAuth(ctx context.Context, integration, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, includeWithoutAuth bool, p *principal.Principal) (connectionDefInfo, bool) {
+func (s *Server) connectionInfoFromAuth(ctx context.Context, integration, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, includeWithoutAuth bool, subjectID string, p *principal.Principal) (connectionDefInfo, bool) {
 	schema, ok := s.connectionSchemaFromDef(integration, name, conn, includeWithoutAuth)
 	if !ok {
 		return connectionDefInfo{}, false
 	}
 	connectionID := serverCredentialConnectionID(integration, instanceConnection, conn)
-	subjectID, _ := principal.ResolveCredentialSubjectID(ctx, s.users, p)
 	storedPreferred := s.preferredInstanceForConnection(ctx, subjectID, connectionID)
 	connectionInstances := groupInstancesForConnection(instances, instanceConnection, storedPreferred)
 	status := noAuthConnectionStatus()
