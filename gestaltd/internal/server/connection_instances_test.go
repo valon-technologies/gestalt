@@ -105,50 +105,26 @@ func TestStoreCredentialFromMaterial_UsesProviderUniquenessForConcurrentReconnec
 }
 
 type legacyAccountKeyProvider struct {
-	inner *coretesting.StubExternalCredentialProvider
+	core.ExternalCredentialProvider
 }
 
 func (p *legacyAccountKeyProvider) CreateCredential(ctx context.Context, credential *core.ExternalCredential) error {
 	clone := *credential
 	clone.AccountKey = ""
-	return p.inner.CreateCredential(ctx, &clone)
+	return p.ExternalCredentialProvider.CreateCredential(ctx, &clone)
 }
 
 func (p *legacyAccountKeyProvider) UpsertCredential(ctx context.Context, credential *core.ExternalCredential) error {
 	clone := *credential
 	clone.AccountKey = ""
-	return p.inner.UpsertCredential(ctx, &clone)
-}
-
-func (p *legacyAccountKeyProvider) GetCredential(ctx context.Context, subject, audience, qualifier string) (*core.ExternalCredential, error) {
-	return p.inner.GetCredential(ctx, subject, audience, qualifier)
-}
-
-func (p *legacyAccountKeyProvider) ListCredentials(ctx context.Context, subject, audience string) ([]*core.ExternalCredential, error) {
-	return p.inner.ListCredentials(ctx, subject, audience)
-}
-
-func (p *legacyAccountKeyProvider) DeleteCredential(ctx context.Context, id string) error {
-	return p.inner.DeleteCredential(ctx, id)
-}
-
-func (p *legacyAccountKeyProvider) ValidateCredentialConfig(ctx context.Context, req *core.ValidateExternalCredentialConfigRequest) error {
-	return p.inner.ValidateCredentialConfig(ctx, req)
-}
-
-func (p *legacyAccountKeyProvider) ResolveCredential(ctx context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
-	return p.inner.ResolveCredential(ctx, req)
-}
-
-func (p *legacyAccountKeyProvider) ExchangeCredential(ctx context.Context, req *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
-	return p.inner.ExchangeCredential(ctx, req)
+	return p.ExternalCredentialProvider.UpsertCredential(ctx, &clone)
 }
 
 func TestStoreCredentialFromMaterial_PersistsAccountKeyForLegacyProvider(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	inner := coretesting.NewStubExternalCredentialProvider()
-	provider := &legacyAccountKeyProvider{inner: inner}
+	provider := &legacyAccountKeyProvider{ExternalCredentialProvider: inner}
 	accountKey := accountKeyFromProviderID("slack", "T123:U456")
 	s := &Server{externalCredentials: provider, now: func() time.Time { return time.Unix(3, 0) }}
 

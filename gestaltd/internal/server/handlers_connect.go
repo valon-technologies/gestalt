@@ -520,23 +520,8 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 			LastRefreshedAt: &now,
 		}
 	}
-	accountKey := core.AccountKeyForCredential(tok)
-	tok.AccountKey = accountKey
-	if accountKey != "" {
-		if core.ExternalCredentialProviderPersistsAccountKey(s.externalCredentials) {
-			if cleaned, cleanupErr := removeAccountKeyMetadata(tok.MetadataJSON); cleanupErr == nil {
-				tok.MetadataJSON = cleaned
-			}
-		} else {
-			// Older external-credential providers may not round-trip AccountKey.
-			// Preserve the compatibility copy on the credential we write so the
-			// storage boundary does not need a read-after-write repair request.
-			metadata, metadataErr := setAccountKeyMetadata(tok.MetadataJSON, accountKey)
-			if metadataErr != nil {
-				return nil, fmt.Errorf("persist account key compatibility metadata: %w", metadataErr)
-			}
-			tok.MetadataJSON = metadata
-		}
+	if err := s.normalizeAccountKeyForStorage(tok); err != nil {
+		return nil, err
 	}
 	if err := s.storeCredentialAtInstance(ctx, tok, tm.ExpectedCredentialID); err != nil {
 		return nil, err
@@ -616,10 +601,37 @@ func (s *Server) upsertCredentialAtInstance(ctx context.Context, candidate, exis
 	if existingKey != "" && existingKey != candidateKey {
 		return &core.CredentialInstanceConflictError{Instance: candidate.Qualifier, DifferentAccount: true}
 	}
+	if err := s.normalizeAccountKeyForStorage(candidate); err != nil {
+		return err
+	}
 
 	candidate.ID = existing.ID
 	candidate.CreatedAt = existing.CreatedAt
 	return s.externalCredentials.UpsertCredential(ctx, candidate)
+}
+
+// normalizeAccountKeyForStorage applies the one storage-boundary policy for
+// typed account keys and the compatibility metadata used by legacy providers.
+// Keeping this after ownership validation prevents a compatibility write from
+// becoming an independent read-after-write repair operation.
+func (s *Server) normalizeAccountKeyForStorage(credential *core.ExternalCredential) error {
+	accountKey := core.AccountKeyForCredential(credential)
+	credential.AccountKey = accountKey
+	if accountKey == "" {
+		return nil
+	}
+	if core.ExternalCredentialProviderPersistsAccountKey(s.externalCredentials) {
+		if cleaned, err := removeAccountKeyMetadata(credential.MetadataJSON); err == nil {
+			credential.MetadataJSON = cleaned
+		}
+		return nil
+	}
+	metadata, err := setAccountKeyMetadata(credential.MetadataJSON, accountKey)
+	if err != nil {
+		return fmt.Errorf("persist account key compatibility metadata: %w", err)
+	}
+	credential.MetadataJSON = metadata
+	return nil
 }
 
 type credentialTargetMismatchError struct {
