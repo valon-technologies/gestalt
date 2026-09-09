@@ -168,13 +168,20 @@ func withAppScopedRelationshipMutationAuthFromRequest(ctx context.Context, fullM
 	return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple)
 }
 
-func allowsGroupScopedRelationshipMutation(
+func (t *ProviderGatewayTransport) isScimManagedGroup(groupID string) bool {
+	if t == nil || t.scimManagedGroupIDs == nil {
+		return false
+	}
+	_, ok := t.scimManagedGroupIDs[strings.TrimSpace(groupID)]
+	return ok
+}
+
+func (t *ProviderGatewayTransport) allowsGroupScopedRelationshipMutation(
 	ctx context.Context,
-	authorization core.AuthorizationProvider,
 	subjectID string,
 	tuple *proto.RelationshipTuple,
 ) (bool, error) {
-	if authorization == nil || tuple == nil || !isGroupMemberRelationshipTuple(tuple) {
+	if t == nil || t.authorization == nil || tuple == nil || !isGroupMemberRelationshipTuple(tuple) {
 		return false, nil
 	}
 	if !relationshipTupleHasDirectSubjectTarget(tuple) {
@@ -184,7 +191,10 @@ func allowsGroupScopedRelationshipMutation(
 	if groupID == "" {
 		return false, nil
 	}
-	decision, err := invocation.CheckResourceAccess(ctx, authorization, invocation.ResourceAccessRequest{
+	if t.isScimManagedGroup(groupID) {
+		return false, nil
+	}
+	decision, err := invocation.CheckResourceAccess(ctx, t.authorization, invocation.ResourceAccessRequest{
 		SubjectID:    subjectID,
 		Action:       groupID,
 		Resource:     &proto.Resource{Type: groupAuthorizationResourceType, Id: groupID},

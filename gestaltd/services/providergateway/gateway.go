@@ -19,12 +19,13 @@ type UserStore interface {
 }
 
 type ProviderGatewayTransport struct {
-	authorization core.AuthorizationProvider
-	identity      core.IdentityProvider
-	users         UserStore
-	publicMethods *publicrpc.Registry
-	publicBaseURL string
-	registry      *LocalRegistry
+	authorization       core.AuthorizationProvider
+	identity            core.IdentityProvider
+	users               UserStore
+	publicMethods       *publicrpc.Registry
+	publicBaseURL       string
+	registry            *LocalRegistry
+	scimManagedGroupIDs map[string]struct{}
 }
 
 func NewProviderGatewayTransport() *ProviderGatewayTransport {
@@ -36,6 +37,13 @@ func (t *ProviderGatewayTransport) SetAuthorizationProvider(authorization core.A
 		return
 	}
 	t.authorization = authorization
+}
+
+func (t *ProviderGatewayTransport) SetScimManagedGroupIDs(ids map[string]struct{}) {
+	if t == nil {
+		return
+	}
+	t.scimManagedGroupIDs = ids
 }
 
 func (t *ProviderGatewayTransport) SetIdentityProvider(identity core.IdentityProvider) {

@@ -165,9 +165,9 @@ func TestAllowsGroupScopedRelationshipMutation(t *testing.T) {
 		groupAdmin: map[string]bool{"servicemacusa-employees": true},
 	}
 
-	allowed, err := allowsGroupScopedRelationshipMutation(
+	transport := &ProviderGatewayTransport{authorization: provider}
+	allowed, err := transport.allowsGroupScopedRelationshipMutation(
 		context.Background(),
-		provider,
 		"user:admin@example.com",
 		tuple,
 	)
@@ -198,9 +198,9 @@ func TestAllowsGroupScopedRelationshipMutationRejectsSubjectSets(t *testing.T) {
 		groupAdmin: map[string]bool{"servicemacusa-employees": true},
 	}
 
-	allowed, err := allowsGroupScopedRelationshipMutation(
+	transport := &ProviderGatewayTransport{authorization: provider}
+	allowed, err := transport.allowsGroupScopedRelationshipMutation(
 		context.Background(),
-		provider,
 		"user:admin@example.com",
 		tuple,
 	)
@@ -209,6 +209,38 @@ func TestAllowsGroupScopedRelationshipMutationRejectsSubjectSets(t *testing.T) {
 	}
 	if allowed {
 		t.Fatal("allowsGroupScopedRelationshipMutation allowed = true for subject_set target, want false")
+	}
+}
+
+func TestAllowsGroupScopedRelationshipMutationRejectsScimManagedGroups(t *testing.T) {
+	t.Parallel()
+
+	tuple := &proto.RelationshipTuple{
+		Resource: &proto.Resource{Type: "group", Id: "e7dce358-8291-431f-baf0-fdb8a10b4252"},
+		Relation: "member",
+		Target: &proto.RelationshipTarget{
+			Kind: &proto.RelationshipTarget_Subject{
+				Subject: &proto.Subject{Type: "subject", Id: "user:viewer@example.com"},
+			},
+		},
+	}
+	transport := &ProviderGatewayTransport{
+		authorization: &groupScopedAuthorizationProvider{
+			groupAdmin: map[string]bool{"e7dce358-8291-431f-baf0-fdb8a10b4252": true},
+		},
+		scimManagedGroupIDs: map[string]struct{}{"e7dce358-8291-431f-baf0-fdb8a10b4252": {}},
+	}
+
+	allowed, err := transport.allowsGroupScopedRelationshipMutation(
+		context.Background(),
+		"user:admin@example.com",
+		tuple,
+	)
+	if err != nil {
+		t.Fatalf("allowsGroupScopedRelationshipMutation error = %v", err)
+	}
+	if allowed {
+		t.Fatal("allowsGroupScopedRelationshipMutation allowed = true for SCIM group, want false")
 	}
 }
 

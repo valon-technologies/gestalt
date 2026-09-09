@@ -347,6 +347,18 @@ func TestGroupAdminScimGroupIsReadOnly(t *testing.T) {
 		body, _ := io.ReadAll(addResponse.Body)
 		t.Fatalf("POST member status = %d: %s", addResponse.StatusCode, body)
 	}
+
+	listRequest, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/groups/"+groupID+"/admin/members", nil)
+	listRequest.Header.Set("Authorization", "Bearer alice-token")
+	listResponse, err := http.DefaultClient.Do(listRequest)
+	if err != nil {
+		t.Fatalf("GET members: %v", err)
+	}
+	defer func() { _ = listResponse.Body.Close() }()
+	if listResponse.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResponse.Body)
+		t.Fatalf("GET members status = %d: %s", listResponse.StatusCode, body)
+	}
 }
 
 func TestGroupAdminListAllowsDelegatedAdmin(t *testing.T) {
@@ -390,6 +402,82 @@ func TestGroupAdminListAllowsDelegatedAdmin(t *testing.T) {
 	response, err = http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("GET groups after grant: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET groups status = %d: %s", response.StatusCode, body)
+	}
+}
+
+func TestGroupAdminListAllowsSubjectSetAdmin(t *testing.T) {
+	t.Parallel()
+
+	viewerID := principal.UserSubjectID(testCanonicalViewerUserID)
+	groupID := "servicemacusa-employees"
+	adminsGroupID := "group-admins"
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			{
+				Tuple: &proto.RelationshipTuple{
+					Resource: &proto.Resource{Type: "group", Id: groupID},
+					Relation: "admin",
+					Target: &proto.RelationshipTarget{
+						Kind: &proto.RelationshipTarget_SubjectSet{
+							SubjectSet: &proto.SubjectSet{
+								Resource: &proto.Resource{Type: "group", Id: adminsGroupID},
+								Relation: "member",
+							},
+						},
+					},
+				},
+			},
+			testAuthorizationRelationship(viewerID, "member", "group", adminsGroupID),
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("viewer-token", viewerID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/groups", nil)
+	request.Header.Set("Authorization", "Bearer viewer-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET groups: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET groups status = %d: %s", response.StatusCode, body)
+	}
+}
+
+func TestGroupAdminListAllowsAuthorizationAdmin(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "authorization", "authorization"),
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/groups", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET groups: %v", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {

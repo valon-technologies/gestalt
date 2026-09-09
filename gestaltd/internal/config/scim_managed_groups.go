@@ -2,8 +2,9 @@ package config
 
 import "strings"
 
-// ScimManagedGroupIDs returns group resource ids provisioned by Rippling SCIM
-// plus any bootstrap SCIM groups wired through authorization relationships.
+// ScimManagedGroupIDs returns Rippling-managed group ids: SCIM user
+// projections plus platform subject-set grants (gestalt/authorization).
+// App subject-set grants stay editable so local roster groups are not locked.
 func ScimManagedGroupIDs(cfg *Config) map[string]struct{} {
 	ids := map[string]struct{}{}
 	if cfg == nil {
@@ -21,14 +22,11 @@ func ScimManagedGroupIDs(cfg *Config) map[string]struct{} {
 		}
 	}
 	for _, relationship := range cfg.Authorization.Relationships {
-		if !hasAuthorizationRelationshipTarget(relationship.Target) {
+		if strings.TrimSpace(relationship.Resource.Type) == "app" {
 			continue
 		}
 		subjectSet := relationship.Target.SubjectSet
-		if subjectSet == nil {
-			continue
-		}
-		if strings.TrimSpace(subjectSet.Resource.Type) != "group" {
+		if subjectSet == nil || strings.TrimSpace(subjectSet.Resource.Type) != "group" {
 			continue
 		}
 		id := strings.TrimSpace(subjectSet.Resource.ID)
