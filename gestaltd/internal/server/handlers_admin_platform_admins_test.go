@@ -34,6 +34,21 @@ func TestAdminPlatformAdminsList(t *testing.T) {
 				},
 				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
 			},
+			{
+				Tuple: &proto.RelationshipTuple{
+					Target: &proto.RelationshipTarget{
+						Kind: &proto.RelationshipTarget_SubjectSet{
+							SubjectSet: &proto.SubjectSet{
+								Resource: &proto.Resource{Type: "group", Id: "carrington"},
+								Relation: "member",
+							},
+						},
+					},
+					Relation: "viewer",
+					Resource: &proto.Resource{Type: "gestalt", Id: "gestalt"},
+				},
+				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
+			},
 		},
 	}
 	authz.relationships[0].SourceLayer = proto.SourceLayer_SOURCE_LAYER_RUNTIME
