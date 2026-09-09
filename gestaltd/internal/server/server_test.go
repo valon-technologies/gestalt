@@ -3111,6 +3111,9 @@ func relationshipMatchesFilter(relationship *proto.Relationship, filter *proto.R
 	if relation := strings.TrimSpace(filter.GetRelation()); relation != "" && tuple.GetRelation() != relation {
 		return false
 	}
+	if resourceType := strings.TrimSpace(filter.GetResourceType()); resourceType != "" && tuple.GetResource().GetType() != resourceType {
+		return false
+	}
 	if target := filter.GetTarget().GetSubject(); target != nil {
 		subject := tuple.GetTarget().GetSubject()
 		if subject.GetType() != target.GetType() || subject.GetId() != target.GetId() {

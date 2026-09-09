@@ -206,6 +206,7 @@ type Server struct {
 	appRegistryRolloutMode        config.AppRegistryRolloutMode
 	appRuntimeState               AppRuntimeState
 	routeProfile                  RouteProfile
+	scimManagedGroupIDs           map[string]struct{}
 	activateAppProviders          func(context.Context)
 	appProviderRestarter          interface {
 		RestartApp(context.Context, string) error
@@ -264,6 +265,7 @@ type Config struct {
 	PrometheusMetrics             http.Handler
 	MCPHandler                    http.Handler
 	SCIMHandler                   http.Handler
+	ScimManagedGroupIDs           map[string]struct{}
 	PublicHostServices            *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport        *providergateway.ProviderGatewayTransport
 	S3                            map[string]s3sdk.S3
@@ -517,6 +519,7 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:             cfg.PrometheusMetrics,
 		mcpHandler:                    cfg.MCPHandler,
 		scimHandler:                   cfg.SCIMHandler,
+		scimManagedGroupIDs:           cfg.ScimManagedGroupIDs,
 		hostServiceRelayTokens:        hostServiceRelayTokens,
 		publicHostServices:            cfg.PublicHostServices,
 		s3:                            cfg.S3,

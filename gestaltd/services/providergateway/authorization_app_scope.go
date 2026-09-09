@@ -11,8 +11,11 @@ import (
 )
 
 const (
-	appAuthorizationResourceType = "app"
-	appAdminRelation             = "admin"
+	appAuthorizationResourceType   = "app"
+	appAdminRelation               = "admin"
+	groupAuthorizationResourceType = "group"
+	groupAdminRelation             = "admin"
+	groupMemberRelation            = "member"
 )
 
 type appScopedRelationshipMutationContext struct {
@@ -165,6 +168,52 @@ func withAppScopedRelationshipMutationAuthFromRequest(ctx context.Context, fullM
 	return WithAppScopedRelationshipMutationAuth(ctx, appID, action, tuple)
 }
 
+func (t *ProviderGatewayTransport) isScimManagedGroup(groupID string) bool {
+	if t == nil || t.scimManagedGroupIDs == nil {
+		return false
+	}
+	_, ok := t.scimManagedGroupIDs[strings.TrimSpace(groupID)]
+	return ok
+}
+
+func (t *ProviderGatewayTransport) allowsGroupScopedRelationshipMutation(
+	ctx context.Context,
+	subjectID string,
+	tuple *proto.RelationshipTuple,
+) (bool, error) {
+	if t == nil || t.authorization == nil || tuple == nil || !isGroupMemberRelationshipTuple(tuple) {
+		return false, nil
+	}
+	if !relationshipTupleHasDirectSubjectTarget(tuple) {
+		return false, nil
+	}
+	groupID := strings.TrimSpace(tuple.GetResource().GetId())
+	if groupID == "" {
+		return false, nil
+	}
+	if t.isScimManagedGroup(groupID) {
+		return false, nil
+	}
+	decision, err := invocation.CheckResourceAccess(ctx, t.authorization, invocation.ResourceAccessRequest{
+		SubjectID:    subjectID,
+		Action:       groupID,
+		Resource:     &proto.Resource{Type: groupAuthorizationResourceType, Id: groupID},
+		AllowedRoles: []string{groupAdminRelation},
+	})
+	if err != nil {
+		return false, err
+	}
+	return decision.Allowed && decision.Role == groupAdminRelation, nil
+}
+
+func isGroupMemberRelationshipTuple(tuple *proto.RelationshipTuple) bool {
+	if tuple == nil {
+		return false
+	}
+	return strings.TrimSpace(tuple.GetResource().GetType()) == groupAuthorizationResourceType &&
+		strings.TrimSpace(tuple.GetRelation()) == groupMemberRelation
+}
+
 func allowsAppScopedRelationshipMutation(
 	ctx context.Context,
 	authorization core.AuthorizationProvider,
@@ -202,7 +251,7 @@ func allowsAppScopedRelationshipMutation(
 func relationshipTupleHasDelegableTarget(tuple *proto.RelationshipTuple) bool {
 	switch tuple.GetTarget().GetKind().(type) {
 	case *proto.RelationshipTarget_Subject:
-		return strings.TrimSpace(tuple.GetTarget().GetSubject().GetId()) != ""
+		return relationshipTupleHasDirectSubjectTarget(tuple)
 	case *proto.RelationshipTarget_SubjectSet:
 		subjectSet := tuple.GetTarget().GetSubjectSet()
 		return strings.TrimSpace(subjectSet.GetResource().GetType()) != "" &&
@@ -210,4 +259,9 @@ func relationshipTupleHasDelegableTarget(tuple *proto.RelationshipTuple) bool {
 	default:
 		return false
 	}
+}
+
+func relationshipTupleHasDirectSubjectTarget(tuple *proto.RelationshipTuple) bool {
+	subject := tuple.GetTarget().GetSubject()
+	return subject != nil && strings.TrimSpace(subject.GetId()) != ""
 }

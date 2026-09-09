@@ -948,6 +948,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	gatewayTransport := providergateway.NewProviderGatewayTransport()
 	gatewayTransport.SetPublicMethods(registry)
+	gatewayTransport.SetScimManagedGroupIDs(config.ScimManagedGroupIDs(cfg))
 
 	if err := ResolveConfigSecrets(ctx, cfg, factories); err != nil {
 		return nil, err
