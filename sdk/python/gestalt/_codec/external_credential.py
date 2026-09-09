@@ -228,6 +228,24 @@ def from_wire_external_credential_auth_config(
     )
 
 
+def to_wire_external_credential_capabilities(
+    value: native.ExternalCredentialCapabilities,
+) -> Any:
+    return _external_credential_pb2.ExternalCredentialCapabilities(
+        persists_account_key=value.persists_account_key,
+        supports_conditional_upsert=value.supports_conditional_upsert,
+    )
+
+
+def from_wire_external_credential_capabilities(
+    value: Any,
+) -> native.ExternalCredentialCapabilities:
+    return native.ExternalCredentialCapabilities(
+        persists_account_key=value.persists_account_key,
+        supports_conditional_upsert=value.supports_conditional_upsert,
+    )
+
+
 def to_wire_external_credential_client_info(
     value: native.ExternalCredentialClientInfo,
 ) -> Any:
@@ -475,6 +493,7 @@ def to_wire_upsert_external_credential_request(
         credential=None
         if value.credential is None
         else to_wire_external_credential(value.credential),
+        expected_credential_id=value.expected_credential_id,
     )
 
 
@@ -485,6 +504,7 @@ def from_wire_upsert_external_credential_request(
         credential=from_wire_external_credential(value.credential)
         if value.HasField("credential")
         else None,
+        expected_credential_id=value.expected_credential_id,
     )
 
 

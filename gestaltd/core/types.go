@@ -27,6 +27,7 @@ type ManagedSubject struct {
 type AppInstallation struct {
 	AppName            string
 	Version            string
+	SourceRepository   string
 	SourceRef          string
 	Registry           string
 	ProviderReleaseURL string
@@ -112,6 +113,7 @@ type AppFleetReplicaClass string
 
 const (
 	AppFleetReplicaClassOnDesired  AppFleetReplicaClass = "on_desired"
+	AppFleetReplicaClassNotRunning AppFleetReplicaClass = "not_running"
 	AppFleetReplicaClassMismatched AppFleetReplicaClass = "mismatched"
 	AppFleetReplicaClassError      AppFleetReplicaClass = "error"
 )
@@ -140,6 +142,7 @@ type AppFleetProjection struct {
 	MinimumHealthyInstances int
 	LiveInstances           int
 	RunningDesiredVersion   int
+	NotRunning              int
 	Mismatched              int
 	Errors                  int
 	HeartbeatTTL            time.Duration
@@ -167,6 +170,7 @@ type AppRolloutFailureSummary struct {
 	LiveInstances           int       `json:"live_instances"`
 	MinimumHealthyInstances int       `json:"minimum_healthy_instances"`
 	RunningDesiredVersion   int       `json:"running_desired_version"`
+	NotRunning              int       `json:"not_running"`
 	Mismatched              int       `json:"mismatched"`
 	Errors                  int       `json:"errors"`
 	SourceVersion           string    `json:"source_version"`
@@ -194,11 +198,22 @@ type AppRollout struct {
 type AppAutoDeploySettings struct {
 	App                 string
 	Enabled             bool
+	Paused              bool
+	PauseReason         AppAutoDeployPauseReason
 	PendingVersion      string
 	LastSeenVersion     string
 	LastError           string
 	LastFailedRolloutAt time.Time
 }
+
+// AppAutoDeployPauseReason identifies why the controller stopped automatic
+// admissions. It is intentionally separate from the user-controlled Enabled
+// setting.
+type AppAutoDeployPauseReason string
+
+const (
+	AppAutoDeployPauseReasonRolloutFailed AppAutoDeployPauseReason = "rollout_failed"
+)
 
 type AppVersionRolloutOutcome struct {
 	ID          string

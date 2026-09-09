@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,8 +13,10 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -31,8 +34,10 @@ type ExecConfig struct {
 }
 
 type remoteExternalCredentialProvider struct {
-	client proto.ExternalCredentialsClient
-	closer io.Closer
+	client                    proto.ExternalCredentialsClient
+	closer                    io.Closer
+	persistsAccountKey        bool
+	supportsConditionalUpsert bool
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredentialProvider, error) {
@@ -58,7 +63,43 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 		return nil, err
 	}
 
-	return &remoteExternalCredentialProvider{client: client, closer: proc}, nil
+	capabilities := externalCredentialProviderCapabilities(ctx, client.GetCapabilities)
+
+	return &remoteExternalCredentialProvider{
+		client:                    client,
+		closer:                    proc,
+		persistsAccountKey:        capabilities.PersistsAccountKey,
+		supportsConditionalUpsert: capabilities.SupportsConditionalUpsert,
+	}, nil
+}
+
+func externalCredentialProviderPersistsAccountKey(ctx context.Context, getCapabilities func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error)) bool {
+	return externalCredentialProviderCapabilities(ctx, getCapabilities).PersistsAccountKey
+}
+
+type externalCredentialCapabilities struct {
+	PersistsAccountKey        bool
+	SupportsConditionalUpsert bool
+}
+
+func externalCredentialProviderCapabilities(ctx context.Context, getCapabilities func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error)) externalCredentialCapabilities {
+	capCtx, capCancel := runtimehost.ProviderCallContext(ctx)
+	caps, err := getCapabilities(capCtx, &emptypb.Empty{})
+	capCancel()
+	if err != nil {
+		if status.Code(err) != codes.Unimplemented {
+			slog.WarnContext(ctx, "external credential capability discovery failed; using legacy storage compatibility", "error", err)
+		}
+		return externalCredentialCapabilities{}
+	}
+	return externalCredentialCapabilities{
+		PersistsAccountKey:        caps != nil && caps.GetPersistsAccountKey(),
+		SupportsConditionalUpsert: caps != nil && caps.GetSupportsConditionalUpsert(),
+	}
+}
+
+func (r *remoteExternalCredentialProvider) PersistsAccountKey() bool {
+	return r != nil && r.persistsAccountKey
 }
 
 func (r *remoteExternalCredentialProvider) CreateCredential(ctx context.Context, credential *core.ExternalCredential) error {
@@ -98,6 +139,25 @@ func (r *remoteExternalCredentialProvider) UpsertCredential(ctx context.Context,
 		return fmt.Errorf("upsert external credential: provider returned nil credential")
 	}
 	*credential = *externalCredentialFromProto(resp)
+	return nil
+}
+
+func (r *remoteExternalCredentialProvider) UpsertCredentialIfID(ctx context.Context, credential *core.ExternalCredential, expectedID string) error {
+	if credential == nil {
+		return fmt.Errorf("external credential is required")
+	}
+	if !r.supportsConditionalUpsert {
+		return core.ErrConditionalUpsertUnsupported
+	}
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+	_, err := r.client.UpsertCredential(ctx, &proto.UpsertExternalCredentialRequest{
+		Credential:           externalCredentialToProto(credential),
+		ExpectedCredentialId: strings.TrimSpace(expectedID),
+	})
+	if err != nil {
+		return externalCredentialRPCError("conditional upsert external credential", err)
+	}
 	return nil
 }
 
@@ -489,6 +549,11 @@ func externalCredentialRPCError(operation string, err error) error {
 	case codes.FailedPrecondition:
 		if strings.Contains(strings.ToLower(status.Convert(err).Message()), "ambiguous") {
 			return core.ErrAmbiguousCredential
+		}
+		return fmt.Errorf("%s: %w", operation, err)
+	case codes.Unimplemented:
+		if strings.Contains(strings.ToLower(status.Convert(err).Message()), "conditional credential upsert") {
+			return core.ErrConditionalUpsertUnsupported
 		}
 		return fmt.Errorf("%s: %w", operation, err)
 	case codes.OK:

@@ -100,11 +100,19 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err != nil {
 		return fmt.Errorf("resolve app registry heartbeat TTL: %w", err)
 	}
+	fleetProjector := &appregistry.FleetProjector{
+		ChangeRequests: result.Services.AppVersionChangeRequests,
+		SourceVersions: result.Services.GestaltdSourceVersionState,
+		Heartbeats:     result.Services.GestaltdInstanceHeartbeats,
+		Rollouts:       result.Services.AppRollouts,
+		HeartbeatTTL:   heartbeatTTL,
+	}
 	baseConfig := Config{
 		Auth:                  result.Auth,
 		SelectedAuthProvider:  result.SelectedAuthProvider,
 		AuthProviders:         result.AuthProviders,
 		Authorization:         authorizationProvider,
+		DisplayNameResolver:   result.DisplayNameResolver,
 		ProviderKinds:         bootstrap.ProviderAuthorizationKinds(cfg),
 		AuthorizationPolicies: bootstrap.ProviderAuthorizationPolicies(cfg),
 		AuditSink:             result.AuditSink,
@@ -124,6 +132,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		CatalogConnection:      httpCatalogConnectionMap(connMaps),
 		MCPConnection:          connMaps.MCPConnection,
 		SCIMHandler:            result.SCIMHandler,
+		ScimManagedGroupIDs:    config.ScimManagedGroupIDs(cfg),
 		ConnectionAuth:         result.ConnectionAuth,
 		ManualConnectionAuth:   result.ManualConnectionAuth,
 		AppDefs:                cfg.Apps,
@@ -163,6 +172,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		OperationAccessChecker:  operationAccessChecker(result.Invoker),
 		AppRegistries:           cfg.AppRegistries,
 		AppRegistryReader:       appRegistryReader,
+		AppFleetProjector:       fleetProjector,
 		AppRegistryHeartbeatTTL: heartbeatTTL,
 		AppRegistryRolloutMode:  cfg.Server.AppRegistry.RolloutMode,
 		ArtifactsDir:            cfg.Server.ArtifactsDir,
@@ -178,12 +188,11 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	}
 	baseConfig.AppRegistryPublish = publishService
 	baseConfig.AppRegistryPublishAllowedApps = cfg.Server.AppRegistry.Publish.AllowedAppSet()
-
 	result.RegistryAppStartup = registryAppStartup(cfg, result, appRegistryReader)
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
-	autoDeployController, err := startAppRegistryAutoDeployController(ctx, cfg, result, gestaltdVersion, appRegistryReader)
+	autoDeployController, err := startAppRegistryAutoDeployController(ctx, cfg, result, gestaltdVersion, appRegistryReader, fleetProjector)
 	if err != nil {
 		return err
 	}
@@ -722,6 +731,7 @@ func startAppRegistryAutoDeployController(
 	result *bootstrap.Result,
 	gestaltdVersion string,
 	reader *appregistry.RegistryReader,
+	fleet *appregistry.FleetProjector,
 ) (*autodeploy.Controller, error) {
 	if cfg == nil || result == nil || result.Services == nil {
 		return nil, nil
@@ -770,12 +780,16 @@ func startAppRegistryAutoDeployController(
 		SourceVersion:    appregistry.ResolveSourceVersion(),
 		RolloutMode:      core.AppRolloutMode(cfg.Server.AppRegistry.RolloutMode),
 	}
+	if fleet == nil {
+		return nil, fmt.Errorf("app registry fleet projector is not configured")
+	}
 	controller := autodeploy.New(
 		services.AutoDeploySettings,
 		services.AppRollouts,
 		services.AppVersionChangeRequests,
 		reader,
 		installer,
+		fleet,
 		apps,
 		interval,
 	)

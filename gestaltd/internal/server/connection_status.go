@@ -44,8 +44,8 @@ const (
 	ownerKindUnknown        = "unknown"
 )
 
-func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) {
-	status := s.defaultIntegrationStatus(info, prov, instances, authTypes, p)
+func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, mode core.ConnectionMode, instances []instanceInfo, authTypes []string, p *principal.Principal) {
+	status := s.defaultIntegrationStatus(info, mode, instances, authTypes, p)
 	info.Status = status.Status
 	info.CredentialState = status.CredentialState
 	info.HealthState = status.HealthState
@@ -53,7 +53,7 @@ func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov co
 	info.Connected = status.Connected
 }
 
-func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
+func (s *Server) defaultIntegrationStatus(info *integrationInfo, mode core.ConnectionMode, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
 	if info == nil {
 		return unknownConnectionStatus()
 	}
@@ -65,7 +65,7 @@ func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provi
 	} else if conn, ok := info.singleConnectionStatus(); ok {
 		status = statusFromConnectionInfo(conn)
 	} else if len(info.Connections) == 0 {
-		status = s.implicitIntegrationStatus(info.Name, prov, instances, authTypes, p)
+		status = s.implicitIntegrationStatus(info.Name, mode, instances, authTypes, p)
 	} else {
 		status = summarizeConnectionStatuses(info.Connections)
 	}
@@ -113,12 +113,11 @@ func (s *Server) defaultConnectionName(integration string) string {
 	return plan.AuthDefaultConnection()
 }
 
-func (s *Server) implicitIntegrationStatus(integration string, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
-	if prov == nil {
+func (s *Server) implicitIntegrationStatus(integration string, mode core.ConnectionMode, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
+	if strings.TrimSpace(string(mode)) == "" {
 		return unknownConnectionStatus()
 	}
-	mode := core.NormalizeConnectionMode(prov.ConnectionMode())
-	switch mode {
+	switch core.NormalizeConnectionMode(mode) {
 	case core.ConnectionModeNone:
 		return connectionStatusInfo{
 			Status:          connectionStatusReady,
@@ -359,7 +358,8 @@ func preferredInstanceValid(instances []instanceInfo, preferredInstance string) 
 	if preferredInstance == "" {
 		return false
 	}
-	for _, instance := range instances {
+	for i := range instances {
+		instance := &instances[i]
 		if instance.Name == preferredInstance && !instance.credentialInvalid {
 			return true
 		}
@@ -373,8 +373,8 @@ func markPreferredInstances(instances []instanceInfo, preferredInstance string) 
 		return instances
 	}
 	found := false
-	for _, instance := range instances {
-		if instance.Name == preferredInstance {
+	for i := range instances {
+		if instances[i].Name == preferredInstance {
 			found = true
 			break
 		}
@@ -383,9 +383,9 @@ func markPreferredInstances(instances []instanceInfo, preferredInstance string) 
 		return instances
 	}
 	out := make([]instanceInfo, len(instances))
-	for i, instance := range instances {
-		out[i] = instance
-		if instance.Name == preferredInstance {
+	for i := range instances {
+		out[i] = instances[i]
+		if instances[i].Name == preferredInstance {
 			out[i].Preferred = true
 		}
 	}
@@ -394,8 +394,8 @@ func markPreferredInstances(instances []instanceInfo, preferredInstance string) 
 
 func invalidInstanceCount(instances []instanceInfo) int {
 	count := 0
-	for _, instance := range instances {
-		if instance.credentialInvalid {
+	for i := range instances {
+		if instances[i].credentialInvalid {
 			count++
 		}
 	}
@@ -459,11 +459,12 @@ func ownerKindForPrincipal(p *principal.Principal) string {
 func groupInstancesForConnection(instances []instanceInfo, connection, preferred string) []instanceInfo {
 	connection = userFacingConnectionName(config.ResolveConnectionAlias(connection))
 	filtered := make([]instanceInfo, 0, len(instances))
-	for _, instance := range instances {
+	for i := range instances {
+		instance := &instances[i]
 		if connection != "" && config.ResolveConnectionAlias(instance.Connection) != config.ResolveConnectionAlias(connection) {
 			continue
 		}
-		filtered = append(filtered, instance)
+		filtered = append(filtered, *instance)
 	}
 	return dedupeInstancesByAccount(filtered, strings.TrimSpace(preferred))
 }
@@ -473,13 +474,13 @@ func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []inst
 		return instances
 	}
 	candidates := make([]core.CredentialAccountCandidate, len(instances))
-	for i, instance := range instances {
+	for i := range instances {
 		candidates[i] = core.CredentialAccountCandidate{
-			AccountKey:     instance.AccountKey,
-			ID:             instance.credentialID,
-			Qualifier:      instance.Name,
-			CreatedAt:      instance.credentialCreated,
-			NeedsReconnect: instance.credentialInvalid,
+			AccountKey:     instances[i].AccountKey,
+			ID:             instances[i].credentialID,
+			Qualifier:      instances[i].Name,
+			CreatedAt:      instances[i].credentialCreated,
+			NeedsReconnect: instances[i].credentialInvalid,
 		}
 	}
 	indices := core.GroupCredentialAccountCandidateIndices(candidates, preferred)

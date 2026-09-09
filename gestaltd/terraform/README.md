@@ -14,10 +14,6 @@ It creates:
 - CI image publisher service account
 - Artifact Registry writer access for the publisher service account
 - Artifact Registry writer access for the CI image publisher service account
-- Artifact Registry reader access for configured `valon-tools` Terraform and
-  GitHub deploy service accounts
-- Artifact Registry reader access for the `valon-tools` GitHub Actions service
-  account that pulls pinned `gestaltd` CI images during Docker builds
 
 The release workflow consumes the `github_actions_variables` output. Copy those
 values into the `valon-technologies/gestalt` repository variables:
@@ -64,13 +60,6 @@ counterpart to the semver GitHub Release binaries, and the only SHA-addressed
 artifact carrying a native macOS binary (the CI and alpine images are
 linux-only). Consumers fetch them over plain public HTTPS by commit SHA, with no
 authentication.
-
-`valon-tools` environments should consume the chart repository location as input
-variables instead of creating their own per-environment chart repository.
-The `gestaltd_chart_reader_service_accounts` variable controls which
-environment Terraform and GitHub deploy service accounts can read the chart
-repository. By default this grants read access to the dev and stage
-`valon-tools` Terraform and GitHub deploy service accounts.
 
 ## Continuous Deployment
 

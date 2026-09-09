@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -78,6 +79,39 @@ type Entry struct {
 	Compatibility     Compatibility       `json:"compatibility,omitempty"`
 	PublishedAt       time.Time           `json:"publishedAt"`
 	PublishStartedAt  *time.Time          `json:"publishStartedAt,omitempty"`
+}
+
+// SourceTreeURL is the GitHub tree for the source that produced this
+// published app. Registry app sources are validated as apps/{app}, so the
+// app name is sufficient to project the source directory from the immutable
+// repository and source ref recorded in the entry.
+func (e Entry) SourceTreeURL() string {
+	return SourceTreeURLForApp(e.Repository, e.App, e.SourceRef)
+}
+
+// SourceTreeURLForApp projects the source directory for a published app from
+// the source identity captured at publication time. The registry contract
+// fixes app sources under apps/{app}, so callers only need the repository,
+// application name, and immutable source ref from the installation record.
+func SourceTreeURLForApp(repositoryLocation, appName, sourceRef string) string {
+	repositoryLocation = strings.TrimSpace(repositoryLocation)
+	if strings.HasPrefix(strings.ToLower(repositoryLocation), "github.com/") {
+		repositoryLocation = "https://" + repositoryLocation
+	}
+	repository, err := config.ParseGitHubRepo(repositoryLocation)
+	if err != nil {
+		return ""
+	}
+	ref := strings.TrimSpace(sourceRef)
+	appName = strings.TrimSpace(appName)
+	if ref == "" || appName == "" {
+		return ""
+	}
+	return (config.GitSourceIdentity{
+		Repo:   repository,
+		Ref:    ref,
+		AppDir: path.Join(appSourcePathPrefix, appName),
+	}).TreeURL()
 }
 
 type Publication struct {

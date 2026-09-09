@@ -10,15 +10,16 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 const appCatalogIconPathPrefix = "/api/v1/catalog/apps/"
 
 // tenantAppDirectory is the process-wide Apps snapshot: names, copy, icons,
-// and connection schema. It never holds a live Provider. Tunnel proxies are
-// bound to one HTTP request and must be resolved again for overlay status.
+// connection mode, and connection schema. It never holds a live Provider.
 type tenantAppDirectory struct {
 	entries []tenantAppDirectoryEntry
 }
@@ -28,9 +29,9 @@ type tenantAppDirectoryEntry struct {
 	DisplayName      string
 	Description      string
 	IconSVG          string
+	ConnectionMode   core.ConnectionMode
 	DeclaredMount    string
 	Prompts          []appPromptInfo
-	SourceTreeURL    string
 	Advertised       []advertisedConnection
 	ConnectionSchema []connectionSchemaInfo
 	Loaded           bool
@@ -58,6 +59,7 @@ type appDirectoryEntry struct {
 	DisplayName      string
 	Description      string
 	IconSVG          string
+	ConnectionMode   core.ConnectionMode
 	DeclaredMount    string
 	MountedPath      string
 	ManagementPath   string
@@ -81,6 +83,7 @@ type appCatalogEntry struct {
 	Name           string                 `json:"name"`
 	DisplayName    string                 `json:"displayName,omitempty"`
 	Description    string                 `json:"description,omitempty"`
+	IconSVG        string                 `json:"iconSvg,omitempty"`
 	IconURL        string                 `json:"iconUrl,omitempty"`
 	MountedPath    string                 `json:"mountedPath,omitempty"`
 	ManagementPath string                 `json:"managementPath,omitempty"`
@@ -154,6 +157,7 @@ func (entry appDirectoryEntry) catalogJSON() appCatalogEntry {
 		Name:           entry.Name,
 		DisplayName:    entry.DisplayName,
 		Description:    entry.Description,
+		IconSVG:        entry.IconSVG,
 		MountedPath:    entry.MountedPath,
 		ManagementPath: entry.ManagementPath,
 		Prompts:        entry.Prompts,
@@ -183,11 +187,11 @@ func viewerDirectoryEntry(entry tenantAppDirectoryEntry, mountedPath, management
 		DisplayName:      entry.DisplayName,
 		Description:      entry.Description,
 		IconSVG:          entry.IconSVG,
+		ConnectionMode:   entry.ConnectionMode,
 		DeclaredMount:    entry.DeclaredMount,
 		MountedPath:      mountedPath,
 		ManagementPath:   managementPath,
 		Prompts:          entry.Prompts,
-		SourceTreeURL:    entry.SourceTreeURL,
 		Advertised:       entry.Advertised,
 		ConnectionSchema: entry.ConnectionSchema,
 		Loaded:           entry.Loaded,
@@ -401,7 +405,8 @@ func (s *Server) buildTenantAppDirectory(ctx context.Context) (*tenantAppDirecto
 		if s.integrationHiddenFromCatalog(app.name) {
 			continue
 		}
-		dir.entries = append(dir.entries, s.tenantRegistryDirectoryEntry(app.name))
+		entry := s.tenantRegistryDirectoryEntry(app.name)
+		dir.entries = append(dir.entries, entry)
 	}
 	return dir, cacheable, nil
 }
@@ -419,10 +424,11 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 	}
 	plugin := s.pluginDefs[name]
 	entry := tenantAppDirectoryEntry{
-		Name:        name,
-		DisplayName: prov.DisplayName(),
-		Description: prov.Description(),
-		Loaded:      true,
+		Name:           name,
+		DisplayName:    prov.DisplayName(),
+		Description:    prov.Description(),
+		ConnectionMode: core.NormalizeConnectionMode(prov.ConnectionMode()),
+		Loaded:         true,
 	}
 	s.applyPluginDirectoryFields(&entry, plugin)
 	s.attachDirectoryConnections(&entry, plugin)
@@ -454,7 +460,6 @@ func (s *Server) applyPluginDirectoryFields(entry *tenantAppDirectoryEntry, plug
 	if plugin == nil {
 		return
 	}
-	entry.SourceTreeURL = plugin.SourceTreeURL()
 	entry.DeclaredMount = pluginDeclaredMount(plugin)
 }
 
@@ -471,15 +476,22 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *tenantAppD
 	}
 	p := PrincipalFromContext(r.Context())
 	ctx, _ := withListingDecisionCache(r.Context())
+	if s.authorization != nil {
+		if resolved, err := s.resolvePrincipalUserID(ctx, p); err == nil && resolved != nil {
+			p = resolved
+		}
+	}
 	names := make([]string, 0, len(snapshot.entries))
 	for i := range snapshot.entries {
 		names = append(names, snapshot.entries[i].Name)
 	}
 	s.prefetchIntegrationListingDecisions(ctx, p, names)
+	sourceTreeURLs := s.appSourceTreeURLs(ctx, snapshot)
 
 	out := &appDirectory{entries: make([]appDirectoryEntry, 0, len(snapshot.entries))}
 	for i := range snapshot.entries {
 		entry := s.viewerDirectoryEntry(ctx, p, snapshot.entries[i])
+		entry.SourceTreeURL = sourceTreeURLs[entry.Name]
 		usable, err := s.directoryEntryUsable(ctx, p, entry)
 		if err != nil {
 			return nil, err
@@ -498,6 +510,80 @@ func (s *Server) viewerDirectoryEntry(ctx context.Context, p *principal.Principa
 		s.integrationMountedPathForPrincipalContext(ctx, p, entry.Name, entry.DeclaredMount),
 		s.integrationManagementPath(ctx, p, entry.Name),
 	)
+}
+
+func (s *Server) appSourceTreeURLs(ctx context.Context, snapshot *tenantAppDirectory) map[string]string {
+	urls := make(map[string]string, len(snapshot.entries))
+	registryApps := make(map[string]configuredRegistryApp)
+	for i := range snapshot.entries {
+		entry := &snapshot.entries[i]
+		plugin := s.pluginDefs[entry.Name]
+		if plugin == nil {
+			continue
+		}
+		if sourceTreeURL := plugin.SourceTreeURL(); sourceTreeURL != "" {
+			urls[entry.Name] = sourceTreeURL
+			continue
+		}
+		if registry := strings.TrimSpace(plugin.Source.Registry); registry != "" {
+			registryApps[entry.Name] = configuredRegistryApp{name: entry.Name, registry: registry}
+		}
+	}
+	if len(registryApps) == 0 || s.appVersionChanges == nil {
+		return urls
+	}
+	known, err := s.appVersionChanges.ListAllKnownVersions(ctx)
+	if err != nil {
+		return urls
+	}
+	byApp := make(map[string][]*core.AppInstallation)
+	for _, installation := range known {
+		if installation != nil {
+			byApp[installation.AppName] = append(byApp[installation.AppName], installation)
+		}
+	}
+	for name, app := range registryApps {
+		installation := coredata.LatestKnownInstallation(byApp[name])
+		if installation == nil {
+			continue
+		}
+		if sourceRepository := strings.TrimSpace(installation.SourceRepository); sourceRepository != "" {
+			urls[name] = appregistry.SourceTreeURLForApp(sourceRepository, installation.AppName, installation.SourceRef)
+			continue
+		}
+		urls[name] = s.legacyRegistryAppSourceTreeURL(ctx, app, installation.Version)
+	}
+	return urls
+}
+
+// legacyRegistryAppSourceTreeURL supports installations recorded before source
+// repository identity was persisted. New installations never use this remote
+// read path; it can be removed after those historical records are migrated.
+func (s *Server) legacyRegistryAppSourceTreeURL(ctx context.Context, app configuredRegistryApp, version string) string {
+	if s == nil || s.appRegistryReader == nil {
+		return ""
+	}
+	if version == "" {
+		return ""
+	}
+
+	registry, ok := s.appRegistries[app.registry]
+	if !ok {
+		return ""
+	}
+	publicRoot, err := registry.PublicURL()
+	if err != nil {
+		return ""
+	}
+	entry, err := s.appRegistryReader.FetchEntry(ctx, publicRoot, app.name, version)
+	if err != nil || entry == nil {
+		return ""
+	}
+	sourceTreeURL := entry.SourceTreeURL()
+	if sourceTreeURL == "" {
+		return ""
+	}
+	return sourceTreeURL
 }
 
 func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (appDirectoryEntry, bool, error) {
@@ -523,6 +609,11 @@ func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (ap
 	}
 	p := PrincipalFromContext(r.Context())
 	ctx, _ := withListingDecisionCache(r.Context())
+	if s.authorization != nil {
+		if resolved, err := s.resolvePrincipalUserID(ctx, p); err == nil && resolved != nil {
+			p = resolved
+		}
+	}
 	s.prefetchIntegrationListingDecisions(ctx, p, []string{found.Name})
 	entry := s.viewerDirectoryEntry(ctx, p, found)
 	usable, err := s.directoryEntryUsable(ctx, p, entry)
@@ -565,6 +656,11 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 		return []integrationInfo{}, nil
 	}
 	p := PrincipalFromContext(r.Context())
+	subjectID, _ := principal.ResolveCredentialSubjectID(r.Context(), s.users, p)
+	preferences := map[string]string{}
+	if s.connectionInstancePreferences != nil {
+		preferences, _ = s.connectionInstancePreferences.ListForSubject(r.Context(), subjectID)
+	}
 	connected, err := s.subjectConnectedIntegrations(r)
 	if err != nil {
 		return nil, &appListingError{
@@ -592,21 +688,10 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 			Actions:         []string{},
 		}
 		instances := connected[entry.Name]
-		info.Connections = s.connectionInfosFromAdvertised(r.Context(), entry.Name, entry.Advertised, instances, p)
+		info.Connections = s.connectionInfosFromAdvertised(entry.Name, entry.Advertised, instances, preferences, p)
 		authTypes := resolvedAuthTypesFromConnections(info.Connections)
-		s.applyIntegrationConnectionStatus(&info, s.liveProviderForListing(r.Context(), entry), instances, authTypes, p)
+		s.applyIntegrationConnectionStatus(&info, entry.ConnectionMode, instances, authTypes, p)
 		out = append(out, info)
 	}
 	return out, nil
-}
-
-func (s *Server) liveProviderForListing(ctx context.Context, entry *appDirectoryEntry) core.Provider {
-	if entry == nil || !entry.Loaded || s == nil || s.providers == nil {
-		return nil
-	}
-	prov, err := s.providers.GetWithContext(ctx, entry.Name)
-	if err != nil {
-		return nil
-	}
-	return prov
 }

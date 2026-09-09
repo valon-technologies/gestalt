@@ -8,6 +8,10 @@ var ErrInstallVersionLocked = errors.New("app rollout admission already in progr
 // ErrAppRolloutActive means the app already has an enrolling or restarting rollout.
 var ErrAppRolloutActive = errors.New("app already has an active rollout")
 
+// ErrAppRolloutRetryNotAllowed means retry was requested without a matching
+// terminal failed rollout for the current desired version.
+var ErrAppRolloutRetryNotAllowed = errors.New("app rollout retry is not allowed")
+
 // ErrAppVersionAlreadyInstalled means the requested app version is already in the catalog.
 var ErrAppVersionAlreadyInstalled = errors.New("app version is already installed")
 

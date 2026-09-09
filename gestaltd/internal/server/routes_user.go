@@ -8,6 +8,7 @@ import (
 func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 	s.mountAppAdminRegistryRoutes(r)
 	s.mountAppAdminMembersRoutes(r)
+	s.mountGroupAdminRoutes(r)
 	s.mountAppAdminIdentitiesRoutes(r)
 	s.mountAppAdminAllowedOperationsRoutes(r)
 	s.mountAppAdminMetricsRoutes(r)

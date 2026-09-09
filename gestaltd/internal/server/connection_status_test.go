@@ -169,7 +169,7 @@ func TestDefaultModeNoneDoesNotHideSubjectProductConnected(t *testing.T) {
 			},
 		},
 	}
-	s.applyIntegrationConnectionStatus(info, nil, nil, nil, nil)
+	s.applyIntegrationConnectionStatus(info, "", nil, nil, nil)
 	if !info.Connected {
 		t.Fatal("chosen subject account must keep the app product-connected when the default row is mode-none")
 	}
@@ -189,7 +189,7 @@ func TestDefaultModeNoneAloneIsNotProductConnected(t *testing.T) {
 			Connected:       false,
 		}},
 	}
-	s.applyIntegrationConnectionStatus(info, nil, nil, nil, nil)
+	s.applyIntegrationConnectionStatus(info, "", nil, nil, nil)
 	if info.Connected {
 		t.Fatal("a mode-none default row must not mark the app product-connected")
 	}

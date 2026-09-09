@@ -10,6 +10,7 @@ import type {
   ExchangeExternalCredentialResponse,
   ExternalCredential,
   ExternalCredentialAuthConfig,
+  ExternalCredentialCapabilities,
   ExternalCredentialClientInfo,
   ExternalCredentialCredential,
   ExternalCredentialGrant,
@@ -271,6 +272,24 @@ export function fromWireExternalCredentialAuthConfig(
   };
 }
 
+export function toWireExternalCredentialCapabilities(
+  value: Init<ExternalCredentialCapabilities>,
+): wire.ExternalCredentialCapabilities {
+  return create(wire.ExternalCredentialCapabilitiesSchema, {
+    persistsAccountKey: value.persistsAccountKey ?? false,
+    supportsConditionalUpsert: value.supportsConditionalUpsert ?? false,
+  });
+}
+
+export function fromWireExternalCredentialCapabilities(
+  value: wire.ExternalCredentialCapabilities,
+): ExternalCredentialCapabilities {
+  return {
+    persistsAccountKey: value.persistsAccountKey,
+    supportsConditionalUpsert: value.supportsConditionalUpsert,
+  };
+}
+
 export function toWireExternalCredentialClientInfo(
   value: Init<ExternalCredentialClientInfo>,
 ): wire.ExternalCredentialClientInfo {
@@ -528,6 +547,7 @@ export function toWireUpsertExternalCredentialRequest(
     ...(value.credential !== undefined
       ? { credential: toWireExternalCredential(value.credential) }
       : {}),
+    expectedCredentialId: value.expectedCredentialId ?? "",
   });
 }
 
@@ -538,6 +558,7 @@ export function fromWireUpsertExternalCredentialRequest(
     ...(value.credential !== undefined
       ? { credential: fromWireExternalCredential(value.credential) }
       : {}),
+    expectedCredentialId: value.expectedCredentialId,
   };
 }
 

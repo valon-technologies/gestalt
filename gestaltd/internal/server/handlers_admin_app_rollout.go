@@ -64,6 +64,7 @@ type adminAppFleetStateInfo struct {
 	MinimumHealthyInstances int    `json:"minimumHealthyInstances"`
 	LiveInstances           int    `json:"liveInstances"`
 	RunningDesiredVersion   int    `json:"runningDesiredVersion"`
+	NotRunning              int    `json:"notRunning"`
 	Mismatched              int    `json:"mismatched"`
 	Errors                  int    `json:"errors"`
 	HeartbeatTTLSeconds     int64  `json:"heartbeatTtlSeconds"`
@@ -404,6 +405,7 @@ func adminAppFleetStateFromCore(projection *core.AppFleetProjection) adminAppFle
 		MinimumHealthyInstances: projection.MinimumHealthyInstances,
 		LiveInstances:           projection.LiveInstances,
 		RunningDesiredVersion:   projection.RunningDesiredVersion,
+		NotRunning:              projection.NotRunning,
 		Mismatched:              projection.Mismatched,
 		Errors:                  projection.Errors,
 		HeartbeatTTLSeconds:     int64(projection.HeartbeatTTL / time.Second),

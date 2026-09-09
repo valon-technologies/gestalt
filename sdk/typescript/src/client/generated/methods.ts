@@ -450,6 +450,14 @@ export const PUBLIC_METHODS = {
       reject: [],
       stream: false,
     },
+    getCapabilities: {
+      service: "ExternalCredentials",
+      method: "GetCapabilities",
+      grpcPath: "/gestalt.provider.v1.ExternalCredentials/GetCapabilities",
+      fill: [],
+      reject: [],
+      stream: false,
+    },
     getCredential: {
       service: "ExternalCredentials",
       method: "GetCredential",

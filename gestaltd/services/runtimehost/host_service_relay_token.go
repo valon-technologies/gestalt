@@ -16,8 +16,8 @@ const (
 	hostServiceRelayTokenAudience   = "gestalt-host-service-relay"
 	defaultHostServiceRelayTokenTTL = 24 * time.Hour
 	maxHostServiceRelayTokenTTL     = 30 * 24 * time.Hour
-	// DefaultInvocationCapabilityTTL scopes short-lived invocation capabilities.
-	DefaultInvocationCapabilityTTL = 5 * time.Minute
+	// DefaultInvocationCapabilityTTL scopes caller-scoped invocation capabilities.
+	DefaultInvocationCapabilityTTL = 30 * time.Minute
 )
 
 // PrincipalClaims carries verified caller identity inside a host-service capability.

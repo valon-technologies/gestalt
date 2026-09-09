@@ -56,7 +56,16 @@ type CreateExternalCredentialRequest struct {
 
 // UpsertExternalCredentialRequest is the request for creating or updating a credential.
 type UpsertExternalCredentialRequest struct {
-	Credential *ExternalCredential
+	Credential           *ExternalCredential
+	ExpectedCredentialID string
+}
+
+// GetExpectedCredentialID returns the optimistic-concurrency credential ID.
+func (r *UpsertExternalCredentialRequest) GetExpectedCredentialID() string {
+	if r == nil {
+		return ""
+	}
+	return r.ExpectedCredentialID
 }
 
 // GetExternalCredentialRequest is the request for fetching one credential.
@@ -907,4 +916,18 @@ type ExternalCredentialProvider interface {
 	ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error
 	ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error)
 	ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
+}
+
+// ExternalCredentialConditionalUpsertProvider atomically updates a credential
+// only when ExpectedCredentialID still identifies the stored record.
+type ExternalCredentialConditionalUpsertProvider interface {
+	UpsertCredentialIfID(ctx context.Context, req *UpsertExternalCredentialRequest) (*ExternalCredential, error)
+}
+
+// ExternalCredentialAccountKeyPersistenceProvider reports whether the
+// provider stores ExternalCredential.AccountKey as a typed field. Providers
+// that do not implement this optional capability are treated as legacy and
+// receive the host's metadata compatibility copy.
+type ExternalCredentialAccountKeyPersistenceProvider interface {
+	PersistsAccountKey() bool
 }

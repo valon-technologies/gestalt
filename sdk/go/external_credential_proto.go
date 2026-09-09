@@ -115,7 +115,7 @@ func upsertExternalCredentialRequestFromProto(value *proto.UpsertExternalCredent
 	if err != nil {
 		return nil, err
 	}
-	return &UpsertExternalCredentialRequest{Credential: credential}, nil
+	return &UpsertExternalCredentialRequest{Credential: credential, ExpectedCredentialID: value.GetExpectedCredentialId()}, nil
 }
 
 func getExternalCredentialRequestFromProto(value *proto.GetExternalCredentialRequest) *GetExternalCredentialRequest {

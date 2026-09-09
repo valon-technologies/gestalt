@@ -44,11 +44,18 @@ func (g *authorizationGate) CheckAccessMany(ctx context.Context, req *proto.Chec
 	decisions := make([]*proto.CheckAccessResponse, len(req.Requests))
 	forward := &proto.CheckAccessManyRequest{}
 	indexes := make([]int, 0, len(req.Requests))
+	eligibility := make(map[string]bool)
 	for i, request := range req.Requests {
-		eligible, err := g.requestEligible(ctx, request)
-		if err != nil {
-			// Eligibility datastore failures fail closed as an ordinary denial.
-			eligible = false
+		subjectID := strings.TrimSpace(request.GetSubject().GetId())
+		eligible, checked := eligibility[subjectID]
+		if !checked {
+			var err error
+			eligible, err = g.requestEligible(ctx, request)
+			if err != nil {
+				// Eligibility datastore failures fail closed as an ordinary denial.
+				eligible = false
+			}
+			eligibility[subjectID] = eligible
 		}
 		if !eligible {
 			decisions[i] = &proto.CheckAccessResponse{Allowed: false}

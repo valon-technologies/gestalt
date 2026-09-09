@@ -431,6 +431,8 @@ Primary key: `app` (app name).
 {
   "app": "g-issues",
   "enabled": true,
+  "paused": false,
+  "pause_reason": "",
   "pending_version": "0.0.0-snapshot.gdef456",
   "last_seen_version": "0.0.0-snapshot.gabc123",
   "last_error": "",
@@ -441,10 +443,12 @@ Primary key: `app` (app name).
 | Field | Purpose |
 | --- | --- |
 | `enabled` | Per-app toggle; writable only via app-admin API |
+| `paused` | Runtime safety stop set after a failed rollout; does not change user intent |
+| `pause_reason` | Stable runtime pause reason, currently `rollout_failed` |
 | `pending_version` | Newest published version waiting for admission |
 | `last_seen_version` | Deduplicate publish detection across polls |
 | `last_error` | Last failure message; set on validation failure or rollout `failed` |
-| `last_failed_rollout_at` | Deduplicate handling of a persisted failed rollout across disable and re-enable |
+| `last_failed_rollout_at` | Deduplicate handling of a persisted failed rollout |
 
 The store is created idempotently during bootstrap. When `SkipSchemaBootstrap` is true, `EnsureStore` runs before reads and writes so existing deployments that started before the store was added still converge. See [lifecycle.md](../operations/lifecycle.md#auto-deploy-published-snapshots).
 
@@ -455,11 +459,11 @@ The store is created idempotently during bootstrap. When `SkipSchemaBootstrap` i
 | Method | Description |
 | --- | --- |
 | `Get(ctx, app)` | Load settings for one app. Returns `ErrNotFound` when no row exists. |
-| `ListEnabled(ctx)` | List apps with `enabled: true`. |
+| `ListAll(ctx)` | List persisted settings; the controller filters disabled and unknown apps. |
 | `Update(ctx, app, fn)` | Read-modify-write one app's settings. Missing rows start disabled with empty progress fields. |
 | `EnsureStore(ctx)` | Idempotently create the object store when schema bootstrap is skipped. |
 
-`Get` and `Update` back `GET` and `PUT /api/v1/apps/{app}/admin/registry/auto-deploy`. The registry-state route projects `enabled`, `pendingVersion`, and `lastError`.
+`Get` and `Update` back `GET` and `PUT /api/v1/apps/{app}/admin/registry/auto-deploy`. The registry-state route projects `enabled`, `paused`, `pauseReason`, `pendingVersion`, and `lastError`.
 
 ---
 

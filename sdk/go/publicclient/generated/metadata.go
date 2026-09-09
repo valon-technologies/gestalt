@@ -356,6 +356,15 @@ var MethodAuthorizationListActiveModelResourceTypes = Method{
 	Reject:          nil,
 }
 
+var MethodExternalCredentialsGetCapabilities = Method{
+	Service:    "gestalt.provider.v1.ExternalCredentials",
+	Name:       "GetCapabilities",
+	FullMethod: "/gestalt.provider.v1.ExternalCredentials/GetCapabilities",
+	Stream:     false,
+	Fill:       nil,
+	Reject:     nil,
+}
+
 var MethodExternalCredentialsCreateCredential = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "CreateCredential",

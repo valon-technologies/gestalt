@@ -20,6 +20,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	ExternalCredentials_GetCapabilities_FullMethodName          = "/gestalt.provider.v1.ExternalCredentials/GetCapabilities"
 	ExternalCredentials_CreateCredential_FullMethodName         = "/gestalt.provider.v1.ExternalCredentials/CreateCredential"
 	ExternalCredentials_UpsertCredential_FullMethodName         = "/gestalt.provider.v1.ExternalCredentials/UpsertCredential"
 	ExternalCredentials_GetCredential_FullMethodName            = "/gestalt.provider.v1.ExternalCredentials/GetCredential"
@@ -34,6 +35,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ExternalCredentialsClient interface {
+	GetCapabilities(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ExternalCredentialCapabilities, error)
 	CreateCredential(ctx context.Context, in *CreateExternalCredentialRequest, opts ...grpc.CallOption) (*ExternalCredential, error)
 	UpsertCredential(ctx context.Context, in *UpsertExternalCredentialRequest, opts ...grpc.CallOption) (*ExternalCredential, error)
 	GetCredential(ctx context.Context, in *GetExternalCredentialRequest, opts ...grpc.CallOption) (*ExternalCredential, error)
@@ -50,6 +52,16 @@ type externalCredentialsClient struct {
 
 func NewExternalCredentialsClient(cc grpc.ClientConnInterface) ExternalCredentialsClient {
 	return &externalCredentialsClient{cc}
+}
+
+func (c *externalCredentialsClient) GetCapabilities(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ExternalCredentialCapabilities, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExternalCredentialCapabilities)
+	err := c.cc.Invoke(ctx, ExternalCredentials_GetCapabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *externalCredentialsClient) CreateCredential(ctx context.Context, in *CreateExternalCredentialRequest, opts ...grpc.CallOption) (*ExternalCredential, error) {
@@ -136,6 +148,7 @@ func (c *externalCredentialsClient) ExchangeCredential(ctx context.Context, in *
 // All implementations must embed UnimplementedExternalCredentialsServer
 // for forward compatibility.
 type ExternalCredentialsServer interface {
+	GetCapabilities(context.Context, *emptypb.Empty) (*ExternalCredentialCapabilities, error)
 	CreateCredential(context.Context, *CreateExternalCredentialRequest) (*ExternalCredential, error)
 	UpsertCredential(context.Context, *UpsertExternalCredentialRequest) (*ExternalCredential, error)
 	GetCredential(context.Context, *GetExternalCredentialRequest) (*ExternalCredential, error)
@@ -154,6 +167,9 @@ type ExternalCredentialsServer interface {
 // pointer dereference when methods are called.
 type UnimplementedExternalCredentialsServer struct{}
 
+func (UnimplementedExternalCredentialsServer) GetCapabilities(context.Context, *emptypb.Empty) (*ExternalCredentialCapabilities, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCapabilities not implemented")
+}
 func (UnimplementedExternalCredentialsServer) CreateCredential(context.Context, *CreateExternalCredentialRequest) (*ExternalCredential, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateCredential not implemented")
 }
@@ -197,6 +213,24 @@ func RegisterExternalCredentialsServer(s grpc.ServiceRegistrar, srv ExternalCred
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&ExternalCredentials_ServiceDesc, srv)
+}
+
+func _ExternalCredentials_GetCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExternalCredentialsServer).GetCapabilities(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExternalCredentials_GetCapabilities_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExternalCredentialsServer).GetCapabilities(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _ExternalCredentials_CreateCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -350,6 +384,10 @@ var ExternalCredentials_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "gestalt.provider.v1.ExternalCredentials",
 	HandlerType: (*ExternalCredentialsServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetCapabilities",
+			Handler:    _ExternalCredentials_GetCapabilities_Handler,
+		},
 		{
 			MethodName: "CreateCredential",
 			Handler:    _ExternalCredentials_CreateCredential_Handler,

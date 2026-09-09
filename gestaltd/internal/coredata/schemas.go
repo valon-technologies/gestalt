@@ -6,6 +6,7 @@ import (
 
 const (
 	StoreUsers                          = "users"
+	StoreGroups                         = "groups"
 	StoreManagedSubjects                = "managed_subjects"
 	StoreAuthorizationDynamicFragments  = "authz_dynamic_fragments"
 	StoreAppSHAs                        = "app_shas"
@@ -65,6 +66,17 @@ var UsersSchema = idb.ObjectStoreOptions{
 		{Name: "display_name", Type: idb.TypeString},
 		{Name: "created_at", Type: idb.TypeTime},
 		{Name: "updated_at", Type: idb.TypeTime},
+	},
+}
+
+// GroupsSchema is the id → display_name map for authorization groups.
+// Same shape as users (id → email): the group resource id is the key.
+var GroupsSchema = idb.ObjectStoreOptions{
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "display_name", Type: idb.TypeString, NotNull: true},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},
 }
 
@@ -173,6 +185,9 @@ var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
 }
 
 var AppAutoDeploySettingsSchema = idb.ObjectStoreOptions{
+	// Keep this schema compatible with the store deployed before pause state
+	// was added. relationaldb preserves undeclared record fields, so the new
+	// fields are persisted without changing existing store metadata.
 	Indexes: []idb.IndexSchema{
 		{Name: "by_enabled", KeyPath: []string{"enabled"}},
 	},

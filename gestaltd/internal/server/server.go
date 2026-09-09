@@ -119,12 +119,14 @@ type Server struct {
 	authProviders                 map[string]core.IdentityProvider
 	serverAuthProvider            string
 	authorization                 core.AuthorizationProvider
+	displayNameResolver           core.AuthorizationResourceDisplayNameResolver
 	providerKinds                 map[string]invocation.ProviderKind
 	authorizationPolicies         map[string]string
 	operationAccess               invocation.OperationAccessChecker
 	userLookupRoute               UserLookupRouteConfig
 	auditSink                     core.AuditSink
 	users                         userStore
+	groups                        *coredata.GroupService
 	externalCredentials           core.ExternalCredentialProvider
 	connectionInstancePreferences *coredata.ConnectionInstancePreferenceService
 	appAccessProfiles             *coredata.AppAccessProfileService
@@ -162,6 +164,7 @@ type Server struct {
 	sessionIssuer                 []byte
 	stateCodec                    *integrationOAuthStateCodec
 	now                           func() time.Time
+	oauthIdentityProbe            func(context.Context, string, string) oauthIdentityFacts
 	readiness                     ReadinessChecker
 	meterProvider                 metric.MeterProvider
 	prometheusMetrics             http.Handler
@@ -205,6 +208,7 @@ type Server struct {
 	appRegistryRolloutMode        config.AppRegistryRolloutMode
 	appRuntimeState               AppRuntimeState
 	routeProfile                  RouteProfile
+	scimManagedGroupIDs           map[string]struct{}
 	activateAppProviders          func(context.Context)
 	appProviderRestarter          interface {
 		RestartApp(context.Context, string) error
@@ -225,6 +229,7 @@ type Config struct {
 	SelectedAuthProvider  string
 	AuthProviders         map[string]core.IdentityProvider
 	Authorization         core.AuthorizationProvider
+	DisplayNameResolver   core.AuthorizationResourceDisplayNameResolver
 	ProviderKinds         map[string]invocation.ProviderKind
 	AuthorizationPolicies map[string]string
 	// OperationAccessChecker answers batched operation-access questions for
@@ -262,6 +267,7 @@ type Config struct {
 	PrometheusMetrics             http.Handler
 	MCPHandler                    http.Handler
 	SCIMHandler                   http.Handler
+	ScimManagedGroupIDs           map[string]struct{}
 	PublicHostServices            *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport        *providergateway.ProviderGatewayTransport
 	S3                            map[string]s3sdk.S3
@@ -391,6 +397,10 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Services.Users != nil {
 		users = cfg.Services.Users
 	}
+	if cfg.Services.Groups == nil {
+		return nil, fmt.Errorf("groups directory is required")
+	}
+	groups := cfg.Services.Groups
 	externalCredentials := cfg.Services.ExternalCredentials
 	connectionInstancePreferences := cfg.Services.ConnectionInstancePreferences
 	if core.ExternalCredentialProviderMissing(externalCredentials) {
@@ -470,12 +480,14 @@ func New(cfg Config) (*Server, error) {
 		authProviders:                 authProviders,
 		serverAuthProvider:            serverAuthProvider,
 		authorization:                 cfg.Authorization,
+		displayNameResolver:           cfg.DisplayNameResolver,
 		providerKinds:                 cfg.ProviderKinds,
 		authorizationPolicies:         cfg.AuthorizationPolicies,
 		operationAccess:               operationAccess,
 		userLookupRoute:               userLookupRoute,
 		auditSink:                     cfg.AuditSink,
 		users:                         users,
+		groups:                        groups,
 		externalCredentials:           externalCredentials,
 		connectionInstancePreferences: connectionInstancePreferences,
 		appAccessProfiles:             cfg.Services.AppAccessProfiles,
@@ -514,6 +526,7 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:             cfg.PrometheusMetrics,
 		mcpHandler:                    cfg.MCPHandler,
 		scimHandler:                   cfg.SCIMHandler,
+		scimManagedGroupIDs:           cfg.ScimManagedGroupIDs,
 		hostServiceRelayTokens:        hostServiceRelayTokens,
 		publicHostServices:            cfg.PublicHostServices,
 		s3:                            cfg.S3,

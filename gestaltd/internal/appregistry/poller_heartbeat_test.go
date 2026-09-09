@@ -87,6 +87,29 @@ func TestHeartbeatRolloutUsesFreshTargetSourceFleetAndReplacementReplicas(t *tes
 	}
 }
 
+func TestHeartbeatRolloutFailureSummaryIncludesNotRunningReplicas(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	rollout := heartbeatPollerRollout(t, services, start, 2)
+	clock := start.Add(15 * time.Minute)
+	poller := heartbeatRolloutPoller(services, &clock)
+
+	upsertRolloutHeartbeat(t, services, "running", "source-a", clock, "v2", core.GestaltdInstanceAppStateRunning)
+	upsertRolloutHeartbeat(t, services, "starting", "source-a", clock, "v2", core.GestaltdInstanceAppStateStarting)
+	if terminal, err := poller.updateHeartbeatRolloutOutcome(ctx, rollout); err != nil || !terminal {
+		t.Fatalf("deadline evaluation terminal=%v err=%v", terminal, err)
+	}
+	failed, err := services.AppRollouts.Get(ctx, rollout.App)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.FailureSummary == nil || failed.FailureSummary.NotRunning != 1 || failed.FailureSummary.RunningDesiredVersion != 1 {
+		t.Fatalf("failure summary = %#v", failed.FailureSummary)
+	}
+}
+
 func heartbeatPollerRollout(t *testing.T, services *coredata.Services, start time.Time, minimum int) *core.AppRollout {
 	t.Helper()
 	ctx := context.Background()

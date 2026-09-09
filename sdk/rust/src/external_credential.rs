@@ -4,11 +4,11 @@
 
 use crate::codec::external_credential::{
     from_wire_exchange_external_credential_response, from_wire_external_credential,
-    from_wire_list_external_credentials_response, from_wire_resolve_external_credential_response,
-    to_wire_create_external_credential_request, to_wire_delete_external_credential_request,
-    to_wire_exchange_external_credential_request, to_wire_get_external_credential_request,
-    to_wire_list_external_credentials_request, to_wire_resolve_external_credential_request,
-    to_wire_upsert_external_credential_request,
+    from_wire_external_credential_capabilities, from_wire_list_external_credentials_response,
+    from_wire_resolve_external_credential_response, to_wire_create_external_credential_request,
+    to_wire_delete_external_credential_request, to_wire_exchange_external_credential_request,
+    to_wire_get_external_credential_request, to_wire_list_external_credentials_request,
+    to_wire_resolve_external_credential_request, to_wire_upsert_external_credential_request,
     to_wire_validate_external_credential_config_request,
 };
 use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
@@ -144,6 +144,22 @@ pub struct ExternalCredentialAuthConfig {
     pub token_exchange_drivers: Vec<ExternalCredentialTokenExchangeDriver>,
     /// The `refresh_token` field.
     pub refresh_token: String,
+}
+
+/// Native message type for `gestalt.provider.v1.ExternalCredentialCapabilities`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalCredentialCapabilities {
+    /// Providers that persist ExternalCredential.account_key do not need the
+    /// legacy metadata compatibility copy from the host.
+    ///
+    /// The `persists_account_key` field.
+    pub persists_account_key: bool,
+    /// Providers that enforce expected_credential_id atomically support safe
+    /// reconnect updates.
+    ///
+    /// The `supports_conditional_upsert` field.
+    pub supports_conditional_upsert: bool,
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialClientInfo`.
@@ -300,6 +316,11 @@ pub struct ResolveExternalCredentialResponse {
 pub struct UpsertExternalCredentialRequest {
     /// The `credential` field; None when unset.
     pub credential: Option<ExternalCredential>,
+    /// When set, the provider must update only if this is still the stored
+    /// credential ID for the credential's (subject, audience, qualifier) key.
+    ///
+    /// The `expected_credential_id` field.
+    pub expected_credential_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.ValidateExternalCredentialConfigRequest`.
@@ -359,6 +380,20 @@ impl ExternalCredentials {
         })
     }
 
+    /// Calls `gestalt.provider.v1.ExternalCredentials.GetCapabilities`.
+    pub async fn get_capabilities(
+        &mut self,
+    ) -> Result<ExternalCredentialCapabilities, GestaltError> {
+        let mut tonic_request = tonic::Request::new(());
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.get_capabilities(tonic_request).await?;
+        Ok(from_wire_external_credential_capabilities(
+            response.into_inner(),
+        ))
+    }
+
     /// Calls `gestalt.provider.v1.ExternalCredentials.CreateCredential`.
     pub async fn create_credential(
         &mut self,
@@ -393,7 +428,10 @@ impl ExternalCredentials {
         &mut self,
         credential: Option<ExternalCredential>,
     ) -> Result<ExternalCredential, GestaltError> {
-        let request = UpsertExternalCredentialRequest { credential };
+        let request = UpsertExternalCredentialRequest {
+            credential,
+            ..Default::default()
+        };
         let mut tonic_request =
             tonic::Request::new(to_wire_upsert_external_credential_request(request));
         if let Some(timeout) = self.timeout {

@@ -86,6 +86,31 @@ func TestApplyDesiredVersionTransitionExpiresAt(t *testing.T) {
 	}
 }
 
+func TestRetryVersionSelectableUsesRetentionState(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	policy := appregistry.RetentionPolicy{UnusedRetention: 72 * time.Hour, DeployedRetention: 720 * time.Hour}
+	retention := appregistry.NewEmptyRetentionIndex()
+	retention.Versions["expired"] = appregistry.RetentionVersion{PublishedAt: now.Add(-96 * time.Hour)}
+	retention.Versions["locked"] = appregistry.RetentionVersion{
+		PublishedAt:  now.Add(-800 * time.Hour),
+		EverDeployed: true,
+		ExpiresAt:    ptrTime(now.Add(-time.Hour)),
+	}
+	retention.Versions["retryable"] = appregistry.RetentionVersion{EverDeployed: true}
+
+	if err := appregistry.RetryVersionSelectable("retryable", retention, policy, now); err != nil {
+		t.Fatalf("retryable version rejected: %v", err)
+	}
+	if err := appregistry.RetryVersionSelectable("expired", retention, policy, now); err != appregistry.ErrAppVersionExpired {
+		t.Fatalf("expired retry error = %v, want %v", err, appregistry.ErrAppVersionExpired)
+	}
+	if err := appregistry.RetryVersionSelectable("locked", retention, policy, now); err != appregistry.ErrAppVersionLocked {
+		t.Fatalf("locked retry error = %v, want %v", err, appregistry.ErrAppVersionLocked)
+	}
+}
+
 func ptrTime(value time.Time) *time.Time {
 	value = value.UTC()
 	return &value

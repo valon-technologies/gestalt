@@ -80,11 +80,26 @@ func TestRuntimeHeartbeatFieldsRoundTripWithLegacyStoreSchemas(t *testing.T) {
 			{Name: "failed_at", Type: idb.TypeTime},
 		},
 	}
+	legacyAutoDeploySettingsSchema := idb.ObjectStoreOptions{
+		Indexes: []idb.IndexSchema{
+			{Name: "by_enabled", KeyPath: []string{"enabled"}},
+		},
+		Columns: []idb.ColumnDef{
+			{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+			{Name: "app", Type: idb.TypeString, NotNull: true, Unique: true},
+			{Name: "enabled", Type: idb.TypeBool, NotNull: true},
+			{Name: "pending_version", Type: idb.TypeString},
+			{Name: "last_seen_version", Type: idb.TypeString},
+			{Name: "last_error", Type: idb.TypeString},
+			{Name: "last_failed_rollout_at", Type: idb.TypeTime},
+		},
+	}
 	db := &schemaMatchingIndexedDB{
 		inner: &coretesting.StubIndexedDB{},
 		existing: map[string]idb.ObjectStoreOptions{
 			coredata.StoreGestaltdSourceVersionState: legacySourceVersionSchema,
 			coredata.StoreAppRollouts:                legacyAppRolloutsSchema,
+			coredata.StoreAppAutoDeploySettings:      legacyAutoDeploySettingsSchema,
 		},
 	}
 	services, err := coredata.New(db)
@@ -179,6 +194,14 @@ func TestRuntimeHeartbeatFieldsRoundTripWithLegacyStoreSchemas(t *testing.T) {
 	if !transitioned {
 		t.Fatal("deadline heartbeat did not transition")
 	}
+	if _, err := services.AutoDeploySettings.Update(ctx, "g-issues", func(settings *core.AppAutoDeploySettings) error {
+		settings.Enabled = true
+		settings.Paused = true
+		settings.PauseReason = core.AppAutoDeployPauseReasonRolloutFailed
+		return nil
+	}); err != nil {
+		t.Fatalf("persist auto-deploy pause state: %v", err)
+	}
 
 	// A second bootstrap represents either a replacement process or an older
 	// process joining during a rolling deployment. It must accept the unchanged
@@ -199,5 +222,12 @@ func TestRuntimeHeartbeatFieldsRoundTripWithLegacyStoreSchemas(t *testing.T) {
 		rollout.FailureSummary.MinimumHealthyInstances != 2 ||
 		rollout.FailureSummary.SourceVersion != "source-a" {
 		t.Fatalf("round-tripped failed heartbeat rollout = %#v", rollout)
+	}
+	settings, err := services.AutoDeploySettings.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("read auto-deploy settings after repeat bootstrap: %v", err)
+	}
+	if !settings.Enabled || !settings.Paused || settings.PauseReason != core.AppAutoDeployPauseReasonRolloutFailed {
+		t.Fatalf("round-tripped auto-deploy settings = %#v", settings)
 	}
 }

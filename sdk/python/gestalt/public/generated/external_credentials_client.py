@@ -15,6 +15,7 @@ from gestalt.external_credential import (
     ExchangeExternalCredentialRequest,
     ExchangeExternalCredentialResponse,
     ExternalCredential,
+    ExternalCredentialCapabilities,
     GetExternalCredentialRequest,
     ListExternalCredentialsRequest,
     ListExternalCredentialsResponse,
@@ -29,6 +30,7 @@ from .metadata import (
     METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL,
     METHOD_EXTERNAL_CREDENTIALS_DELETE_CREDENTIAL,
     METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL,
+    METHOD_EXTERNAL_CREDENTIALS_GET_CAPABILITIES,
     METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
     METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS,
     METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL,
@@ -45,6 +47,17 @@ class ExternalCredentialsClient:
 
     def __init__(self, transport: UnaryTransport) -> None:
         self._transport = transport
+
+    def get_capabilities(self) -> ExternalCredentialCapabilities:
+        wire = _empty.Empty()
+        wire_response = self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_GET_CAPABILITIES,
+            wire,
+            _external_credential_pb2.ExternalCredentialCapabilities,
+        )
+        return _external_credential_provider_codec.from_wire_external_credential_capabilities(
+            wire_response
+        )
 
     def create_credential(
         self, request: CreateExternalCredentialRequest
@@ -166,6 +179,17 @@ class AsyncExternalCredentialsClient:
 
     def __init__(self, transport: AsyncUnaryTransport) -> None:
         self._transport = transport
+
+    async def get_capabilities(self) -> ExternalCredentialCapabilities:
+        wire = _empty.Empty()
+        wire_response = await self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_GET_CAPABILITIES,
+            wire,
+            _external_credential_pb2.ExternalCredentialCapabilities,
+        )
+        return _external_credential_provider_codec.from_wire_external_credential_capabilities(
+            wire_response
+        )
 
     async def create_credential(
         self, request: CreateExternalCredentialRequest

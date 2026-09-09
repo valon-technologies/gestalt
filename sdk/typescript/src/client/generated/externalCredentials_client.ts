@@ -11,12 +11,14 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import type {
   ExchangeExternalCredentialResponse,
   ExternalCredential,
+  ExternalCredentialCapabilities,
   ListExternalCredentialsResponse,
   ResolveExternalCredentialResponse,
 } from "../../external_credential.ts";
 import {
   fromWireExchangeExternalCredentialResponse,
   fromWireExternalCredential,
+  fromWireExternalCredentialCapabilities,
   fromWireListExternalCredentialsResponse,
   fromWireResolveExternalCredentialResponse,
 } from "../../internal/codec/external_credential.ts";
@@ -25,6 +27,7 @@ import {
   DeleteExternalCredentialRequestSchema,
   ExchangeExternalCredentialRequestSchema,
   ExchangeExternalCredentialResponseSchema,
+  ExternalCredentialCapabilitiesSchema,
   ExternalCredentialSchema,
   GetExternalCredentialRequestSchema,
   ListExternalCredentialsRequestSchema,
@@ -59,6 +62,20 @@ import type { Transport, PublicUnaryCallOptions } from "./transport.ts";
 
 export class ExternalCredentialsClient {
   constructor(private readonly transport: Transport) {}
+
+  async getCapabilities(
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<ExternalCredentialCapabilities> {
+    return fromWireExternalCredentialCapabilities(
+      await this.transport.unary(
+        PUBLIC_METHODS.externalCredentials.getCapabilities,
+        create(EmptySchema, {}),
+        EmptySchema,
+        ExternalCredentialCapabilitiesSchema,
+        callOptions,
+      ),
+    );
+  }
 
   async createCredential(
     request: PublicExternalCredentialsCreateCredentialRequest,

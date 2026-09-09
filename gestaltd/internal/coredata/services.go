@@ -10,6 +10,7 @@ import (
 
 type Services struct {
 	Users                          *UserService
+	Groups                         *GroupService
 	ExternalCredentials            core.ExternalCredentialProvider
 	ManagedSubjects                *ManagedSubjectService
 	AppVersionChangeRequests       *AppVersionChangeRequestService
@@ -107,7 +108,11 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	} else if err := ensureSCIMStores(ctx, ds); err != nil {
 		return nil, err
 	}
+	if err := ensureGroupsStore(ctx, ds); err != nil {
+		return nil, err
+	}
 	users := NewUserService(ds)
+	groups := NewGroupService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
 	appVersionChangeRequests := NewAppVersionChangeRequestService(ds)
 	appVersionInstallLocks := NewAppVersionInstallLockService(ds)
@@ -125,6 +130,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	return &Services{
 		ExternalCredentials:            nil,
 		Users:                          users,
+		Groups:                         groups,
 		ManagedSubjects:                managedSubjects,
 		AppVersionChangeRequests:       appVersionChangeRequests,
 		AppVersionInstallLocks:         appVersionInstallLocks,
@@ -146,6 +152,13 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 func ensureSCIMStores(ctx context.Context, ds indexeddb.IndexedDB) error {
 	if _, err := ds.CreateObjectStore(ctx, StoreSCIMResources, SCIMResourcesSchema); err != nil {
 		return fmt.Errorf("ensure scim_resources store: %w", err)
+	}
+	return nil
+}
+
+func ensureGroupsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
+	if _, err := ds.CreateObjectStore(ctx, StoreGroups, GroupsSchema); err != nil {
+		return fmt.Errorf("ensure groups store: %w", err)
 	}
 	return nil
 }

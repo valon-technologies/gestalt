@@ -18,6 +18,18 @@ func newExternalCredentialProviderServer(provider ExternalCredentialProvider) *e
 	return &externalCredentialServer{provider: provider}
 }
 
+func (s *externalCredentialServer) GetCapabilities(context.Context, *emptypb.Empty) (*proto.ExternalCredentialCapabilities, error) {
+	persistsAccountKey := false
+	if provider, ok := s.provider.(ExternalCredentialAccountKeyPersistenceProvider); ok {
+		persistsAccountKey = provider.PersistsAccountKey()
+	}
+	_, supportsConditionalUpsert := s.provider.(ExternalCredentialConditionalUpsertProvider)
+	return &proto.ExternalCredentialCapabilities{
+		PersistsAccountKey:        persistsAccountKey,
+		SupportsConditionalUpsert: supportsConditionalUpsert,
+	}, nil
+}
+
 func (s *externalCredentialServer) CreateCredential(ctx context.Context, req *proto.CreateExternalCredentialRequest) (*proto.ExternalCredential, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
@@ -44,7 +56,16 @@ func (s *externalCredentialServer) UpsertCredential(ctx context.Context, req *pr
 	if err != nil {
 		return nil, providerRPCError("upsert external credential", err)
 	}
-	credential, err := s.provider.UpsertCredential(ctx, nativeReq)
+	var credential *ExternalCredential
+	if nativeReq.ExpectedCredentialID != "" {
+		conditional, ok := s.provider.(ExternalCredentialConditionalUpsertProvider)
+		if !ok {
+			return nil, status.Error(codes.Unimplemented, "conditional credential upsert is not supported")
+		}
+		credential, err = conditional.UpsertCredentialIfID(ctx, nativeReq)
+	} else {
+		credential, err = s.provider.UpsertCredential(ctx, nativeReq)
+	}
 	if err != nil {
 		return nil, providerRPCError("upsert external credential", err)
 	}
