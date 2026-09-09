@@ -106,22 +106,6 @@ func decodeSelectPreferredInstanceRequest(r io.Reader, req *selectPreferredInsta
 	return decoder.Decode(req)
 }
 
-func (s *Server) preferredInstanceForConnection(ctx context.Context, subjectID, connectionID string) string {
-	if s == nil || s.connectionInstancePreferences == nil {
-		return ""
-	}
-	subjectID = strings.TrimSpace(subjectID)
-	connectionID = strings.TrimSpace(connectionID)
-	if subjectID == "" || connectionID == "" {
-		return ""
-	}
-	pref, err := s.connectionInstancePreferences.Get(ctx, subjectID, connectionID)
-	if err != nil || pref == nil {
-		return ""
-	}
-	return pref.Instance
-}
-
 func (s *Server) maybeSetDefaultInstancePreference(ctx context.Context, subjectID, integration, connection, instance string) {
 	if s == nil || s.connectionInstancePreferences == nil {
 		return

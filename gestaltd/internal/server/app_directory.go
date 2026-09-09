@@ -657,6 +657,10 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 	}
 	p := PrincipalFromContext(r.Context())
 	subjectID, _ := principal.ResolveCredentialSubjectID(r.Context(), s.users, p)
+	preferences := map[string]string{}
+	if s.connectionInstancePreferences != nil {
+		preferences, _ = s.connectionInstancePreferences.ListForSubject(r.Context(), subjectID)
+	}
 	connected, err := s.subjectConnectedIntegrations(r)
 	if err != nil {
 		return nil, &appListingError{
@@ -684,7 +688,7 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 			Actions:         []string{},
 		}
 		instances := connected[entry.Name]
-		info.Connections = s.connectionInfosFromAdvertised(r.Context(), entry.Name, entry.Advertised, instances, subjectID, p)
+		info.Connections = s.connectionInfosFromAdvertised(entry.Name, entry.Advertised, instances, preferences, p)
 		authTypes := resolvedAuthTypesFromConnections(info.Connections)
 		s.applyIntegrationConnectionStatus(&info, entry.ConnectionMode, instances, authTypes, p)
 		out = append(out, info)

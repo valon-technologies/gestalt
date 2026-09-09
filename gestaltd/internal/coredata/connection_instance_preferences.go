@@ -53,6 +53,27 @@ func (s *ConnectionInstancePreferenceService) Get(ctx context.Context, subjectID
 	return recordToConnectionInstancePreference(rec), nil
 }
 
+func (s *ConnectionInstancePreferenceService) ListForSubject(ctx context.Context, subjectID string) (map[string]string, error) {
+	if s == nil {
+		return nil, fmt.Errorf("list connection instance preferences: service is not configured")
+	}
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" {
+		return map[string]string{}, nil
+	}
+	subjectRange := idb.Bound([]any{subjectID, ""}, []any{subjectID, "\uffff"}, false, false)
+	recs, err := s.store.Index("by_subject_connection").GetAll(ctx, subjectRange)
+	if err != nil {
+		return nil, fmt.Errorf("list connection instance preferences: %w", err)
+	}
+	preferences := make(map[string]string)
+	for _, rec := range recs {
+		pref := recordToConnectionInstancePreference(rec)
+		preferences[pref.ConnectionID] = pref.Instance
+	}
+	return preferences, nil
+}
+
 func (s *ConnectionInstancePreferenceService) Set(ctx context.Context, subjectID, connectionID, instance string) (*ConnectionInstancePreference, error) {
 	if s == nil {
 		return nil, fmt.Errorf("set connection instance preference: service is not configured")
