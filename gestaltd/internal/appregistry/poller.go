@@ -45,6 +45,7 @@ type CatalogPoller struct {
 	BootstrapReady              <-chan struct{}
 	MaxReconcileAttempts        int
 	Now                         func() time.Time
+	BeforeRolloutComplete       func(context.Context, string, string) (bool, error)
 	OnRolloutTerminal           func(string)
 	HeartbeatTTL                time.Duration
 	HealthyStabilityWindow      time.Duration
@@ -78,6 +79,7 @@ type CatalogPollerConfig struct {
 	BootstrapReady              <-chan struct{}
 	MaxReconcileAttempts        int
 	Now                         func() time.Time
+	BeforeRolloutComplete       func(context.Context, string, string) (bool, error)
 	OnRolloutTerminal           func(string)
 	HeartbeatTTL                time.Duration
 	HealthyStabilityWindow      time.Duration
@@ -102,6 +104,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 		BootstrapReady:              cfg.BootstrapReady,
 		MaxReconcileAttempts:        cfg.MaxReconcileAttempts,
 		Now:                         cfg.Now,
+		BeforeRolloutComplete:       cfg.BeforeRolloutComplete,
 		OnRolloutTerminal:           cfg.OnRolloutTerminal,
 		HeartbeatTTL:                cfg.HeartbeatTTL,
 		HealthyStabilityWindow:      cfg.HealthyStabilityWindow,
@@ -371,7 +374,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, rolloutVersion, err)
 				}
 				p.recordRolloutOutcome(ctx, updated)
-				p.notifyRolloutTerminal(appName)
+				p.notifyRolloutTerminal(updated.App)
 			}
 			return nil
 		}
@@ -627,15 +630,21 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 		converged = false
 	}
 	if converged {
-		updated, err := p.Rollouts.MarkCompleteForRollout(ctx, rollout, p.now())
-		if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
-			return false, nil
-		} else if err != nil {
-			return false, fmt.Errorf("complete rollout %s@%s: %w", rollout.App, rollout.Version, err)
+		ready, prepareErr := p.prepareRolloutCompletion(ctx, rollout)
+		if prepareErr != nil && p.now().Before(rollout.Deadline) {
+			return false, prepareErr
 		}
-		p.recordRolloutOutcome(ctx, updated)
-		p.notifyRolloutTerminal(rollout.App)
-		return true, nil
+		if prepareErr == nil && ready {
+			updated, err := p.Rollouts.MarkCompleteForRollout(ctx, rollout, p.now())
+			if errors.Is(err, coredata.ErrAppRolloutEpochMismatch) {
+				return false, nil
+			} else if err != nil {
+				return false, fmt.Errorf("complete rollout %s@%s: %w", rollout.App, rollout.Version, err)
+			}
+			p.recordRolloutOutcome(ctx, updated)
+			p.notifyRolloutTerminal(updated.App)
+			return true, nil
+		}
 	}
 	if !p.now().Before(rollout.Deadline) {
 		updated, err := p.Rollouts.MarkFailedForRollout(ctx, rollout, p.now())
@@ -645,7 +654,7 @@ func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.
 			return false, fmt.Errorf("fail rollout %s@%s: %w", rollout.App, rollout.Version, err)
 		}
 		p.recordRolloutOutcome(ctx, updated)
-		p.notifyRolloutTerminal(rollout.App)
+		p.notifyRolloutTerminal(updated.App)
 		return true, nil
 	}
 	return false, nil
@@ -676,8 +685,22 @@ func (p *CatalogPoller) updateHeartbeatRolloutOutcome(ctx context.Context, rollo
 		EvaluatedAt:             now,
 		Heartbeats:              heartbeats,
 	})
+	healthy := projection.State == core.AppFleetStateHealthy
+	stableAt := rollout.HealthySince.Add(p.HealthyStabilityWindow)
+	if healthy && !rollout.HealthySince.IsZero() && !now.Before(stableAt) && !stableAt.After(rollout.Deadline) {
+		ready, prepareErr := p.prepareRolloutCompletion(ctx, rollout)
+		if prepareErr != nil {
+			if now.Before(rollout.Deadline) {
+				return false, prepareErr
+			}
+			healthy = false
+		}
+		if prepareErr == nil && !ready {
+			return false, nil
+		}
+	}
 	updated, transitioned, err := p.Rollouts.EvaluateHeartbeatRollout(ctx, rollout, coredata.HeartbeatRolloutEvaluation{
-		Healthy:         projection.State == core.AppFleetStateHealthy,
+		Healthy:         healthy,
 		StabilityWindow: p.HealthyStabilityWindow,
 		EvaluatedAt:     now,
 		FailureSummary: core.AppRolloutFailureSummary{
@@ -700,6 +723,17 @@ func (p *CatalogPoller) updateHeartbeatRolloutOutcome(ctx context.Context, rollo
 	p.recordRolloutOutcome(ctx, updated)
 	p.notifyRolloutTerminal(updated.App)
 	return true, nil
+}
+
+func (p *CatalogPoller) prepareRolloutCompletion(ctx context.Context, rollout *core.AppRollout) (bool, error) {
+	if p == nil || p.BeforeRolloutComplete == nil {
+		return true, nil
+	}
+	ready, err := p.BeforeRolloutComplete(ctx, rollout.App, rollout.Version)
+	if err != nil {
+		return false, fmt.Errorf("prepare rollout completion for %s@%s: %w", rollout.App, rollout.Version, err)
+	}
+	return ready, nil
 }
 
 func (p *CatalogPoller) notifyRolloutTerminal(app string) {

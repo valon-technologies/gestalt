@@ -146,6 +146,7 @@ func desiredAppWorkflowDefinitions(cfg *config.Config, decls map[string][]*proto
 		}
 	}
 
+	knownApps := slices.Sorted(maps.Keys(cfg.Apps))
 	for _, appName := range slices.Sorted(maps.Keys(decls)) {
 		specs := decls[appName]
 		for i, specProto := range specs {
@@ -173,6 +174,15 @@ func desiredAppWorkflowDefinitions(cfg *config.Config, decls map[string][]*proto
 			}
 			spec.ID = appWorkflowDefinitionID(appName, localID)
 			storedID := spec.ID
+			if owner := coreworkflow.DefinitionOwnerApp(storedID, knownApps); owner != appName {
+				return nil, fmt.Errorf(
+					"bootstrap: app %q workflow definition %q has ambiguous id %q owned by configured app %q",
+					appName,
+					localID,
+					storedID,
+					owner,
+				)
+			}
 			if _, exists := desired[storedID]; exists {
 				return nil, fmt.Errorf(
 					"bootstrap: workflow definition id %q is declared by both app %q and app %q",

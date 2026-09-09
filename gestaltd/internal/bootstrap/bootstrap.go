@@ -285,7 +285,8 @@ type Result struct {
 	AppRuntimeSnapshotter interface {
 		SnapshotRegistryApps() map[string]core.RegistryAppRuntimeObservation
 	}
-	RegistryAppStartup func(context.Context)
+	RegistryAppStartup              func(context.Context)
+	ReconcileAppWorkflowDefinitions func(context.Context, string) error
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -1522,11 +1523,19 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	}
 	var deferredWorkflowConfigReconcileTasks []workflowConfigReconcileTask
 	var startupWorkflowConfigReconcile func(context.Context) error
+	var appWorkflowConfigReconcile func(context.Context, string) error
 	if flags.Enabled(featureflags.Workflow) {
 		defaultWorkflowProvider, _, defaultProviderErr := cfg.EffectiveWorkflowProvider("")
 		switch {
 		case defaultProviderErr == nil && strings.TrimSpace(defaultWorkflowProvider) != "":
-			deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, deferredAppWorkflowReconcileTask(deferred, prepared.Deps.WorkflowRuntime, defaultWorkflowProvider, reconcileWorkflowConfig))
+			appWorkflowReconcileTask := deferredAppWorkflowReconcileTask(deferred, prepared.Deps.WorkflowRuntime, defaultWorkflowProvider, reconcileWorkflowConfig)
+			appWorkflowConfigReconcile = func(ctx context.Context, app string) error {
+				if err := waitRuntimeWorkflowProviderReady(ctx, prepared.Deps.WorkflowRuntime, defaultWorkflowProvider); err != nil {
+					return err
+				}
+				return reconcileAppWorkflowDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Deps.AppWorkflowDeclarations, app)
+			}
+			deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, appWorkflowReconcileTask)
 		case defaultProviderErr != nil:
 			slog.Warn("skipping deferred app workflow declaration reconcile: default workflow provider unavailable", "error", defaultProviderErr)
 		default:
@@ -1642,6 +1651,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		startup:                        startup,
 		deferred:                       deferred,
 	}
+	result.ReconcileAppWorkflowDefinitions = appWorkflowConfigReconcile
 	for _, pending := range updateBuilds.pending {
 		if pending.proxy != nil {
 			pending.proxy.setActivationTrigger(result.ActivateAppProviders)
