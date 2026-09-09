@@ -294,6 +294,58 @@ func TestWaitForPluginConnReturnsProcessExitBeforeReady(t *testing.T) {
 	}
 }
 
+func TestDialUnixSocketReceivesLargeProviderResponse(t *testing.T) {
+	t.Parallel()
+
+	// This matches the 4,438,910-byte production response generated while
+	// reading the 3,312,204-byte Bradley workbook after encoding and wrapping.
+	const providerResponseBodyBytes = 4_438_910
+
+	socket := filepath.Join(t.TempDir(), "app.sock")
+	lis, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatalf("listen unix socket: %v", err)
+	}
+	srv := grpc.NewServer()
+	proto.RegisterAppProviderServer(srv, &largeResponseProviderServer{
+		body: make([]byte, providerResponseBodyBytes),
+	})
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- srv.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+		<-serveDone
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := dialReadyUnixSocket(ctx, socket, make(chan error), ProcessConfig{})
+	if err != nil {
+		t.Fatalf("dial provider socket: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	resp, err := proto.NewAppProviderClient(conn).Execute(ctx, &proto.ExecuteRequest{})
+	if err != nil {
+		t.Fatalf("execute large provider response: %v", err)
+	}
+	if got := len(resp.GetBody()); got != providerResponseBodyBytes {
+		t.Fatalf("provider response body length = %d, want %d", got, providerResponseBodyBytes)
+	}
+}
+
+type largeResponseProviderServer struct {
+	proto.UnimplementedAppProviderServer
+	body []byte
+}
+
+func (s *largeResponseProviderServer) Execute(context.Context, *proto.ExecuteRequest) (*proto.OperationResult, error) {
+	return &proto.OperationResult{Status: 200, Body: s.body}, nil
+}
+
 func TestProviderProcessEnvAddsTelemetryDefaultsWithoutOverridingProviderEnv(t *testing.T) {
 	t.Parallel()
 

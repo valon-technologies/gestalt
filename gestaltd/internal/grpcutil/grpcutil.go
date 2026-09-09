@@ -1,10 +1,22 @@
-// Package grpcutil provides shared helpers for gRPC-over-HTTP dispatch.
+// Package grpcutil provides shared helpers for gRPC transports and request detection.
 package grpcutil
 
 import (
 	"net/http"
 	"strings"
+
+	"google.golang.org/grpc"
 )
+
+// InternalMaxReceiveMessageBytes is the maximum unary response size for
+// internal app-provider clients. Public gRPC clients keep the default limit.
+const InternalMaxReceiveMessageBytes = 16 * 1024 * 1024
+
+// InternalClientDialOption allows internal provider clients to receive large
+// operation results without changing public gRPC server or client limits.
+func InternalClientDialOption() grpc.DialOption {
+	return grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(InternalMaxReceiveMessageBytes))
+}
 
 // IsGRPCRequest reports whether r is a gRPC request, identified by the
 // Content-Type header prefix "application/grpc". Used by HTTP handlers that

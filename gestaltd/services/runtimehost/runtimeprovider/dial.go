@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/grpcutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -277,6 +278,7 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 	conn, err := grpc.NewClient(
 		"passthrough:///localhost",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpcutil.InternalClientDialOption(),
 		grpc.WithAuthority("localhost"),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			var d net.Dialer
@@ -295,6 +297,7 @@ func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpcutil.InternalClientDialOption(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
 	if err != nil {
@@ -316,6 +319,7 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 			ServerName: host,
 			NextProtos: []string{"h2"},
 		})),
+		grpcutil.InternalClientDialOption(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
 	if err != nil {

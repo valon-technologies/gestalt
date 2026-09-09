@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/grpcutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -594,6 +595,7 @@ func dialUnixSocket(ctx context.Context, socket string, cfg ProcessConfig) (*grp
 	conn, err := grpc.NewClient(
 		"passthrough:///localhost",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpcutil.InternalClientDialOption(),
 		// grpc-go uses the dial target as the HTTP/2 authority by default. Passing
 		// the raw Unix socket path here works for Go plugins, but tonic rejects that
 		// authority and resets the stream with PROTOCOL_ERROR before any RPC handler
