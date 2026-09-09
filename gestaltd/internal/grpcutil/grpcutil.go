@@ -8,10 +8,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-// InternalMaxReceiveMessageBytes is the maximum response size for internal
-// gRPC clients. It accommodates Gmail's 25 MiB attachment limit after
-// base64 expansion, while leaving the public gRPC defaults unchanged.
-const InternalMaxReceiveMessageBytes = 40 * 1024 * 1024
+// InternalMaxReceiveMessageBytes is the short-term maximum response size for
+// internal gRPC clients. It gives headroom above the observed Bradley Gmail
+// attachment response without allowing full Gmail-sized unary payloads.
+const InternalMaxReceiveMessageBytes = 16 * 1024 * 1024
 
 // InternalClientDialOption allows internal provider clients to receive large
 // operation results without changing public gRPC server or client limits.
