@@ -396,6 +396,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Services.Users != nil {
 		users = cfg.Services.Users
 	}
+	if cfg.Services.Groups == nil {
+		return nil, fmt.Errorf("groups directory is required")
+	}
 	groups := cfg.Services.Groups
 	externalCredentials := cfg.Services.ExternalCredentials
 	connectionInstancePreferences := cfg.Services.ConnectionInstancePreferences

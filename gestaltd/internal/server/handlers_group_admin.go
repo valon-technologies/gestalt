@@ -56,7 +56,7 @@ func (s *Server) mountGroupAdminRoutes(r chi.Router) {
 		Post("/groups", s.createGroupAdminGroup)
 	r.With(s.authMiddleware, s.groupAdminShowAuthorizationMiddleware).
 		Get("/groups/{group}", s.getGroupAdminGroup)
-	r.With(s.authMiddleware, s.groupAdminShowAuthorizationMiddleware).
+	r.With(s.authMiddleware, s.groupAdminAuthorizationMiddleware).
 		Patch("/groups/{group}", s.updateGroupAdminGroup)
 	r.With(s.authMiddleware, s.groupAdminShowAuthorizationMiddleware).
 		Get("/groups/{group}/admin/members", s.listGroupAdminMembers)
@@ -380,24 +380,14 @@ func (s *Server) groupMemberCount(ctx context.Context, groupID string) (int, err
 }
 
 func (s *Server) groupDisplayName(ctx context.Context, groupID string) (string, error) {
-	if s.groups != nil {
-		name, err := s.groups.DisplayName(ctx, groupID)
-		if err != nil {
-			return "", err
-		}
-		if name != "" {
-			return name, nil
-		}
+	name, err := s.groups.DisplayName(ctx, groupID)
+	if err != nil {
+		return "", err
 	}
-	if resolved := strings.TrimSpace(s.authorizationResourceDisplayName(ctx, s.groupResource(groupID))); resolved != "" {
-		if s.groups != nil {
-			if _, err := s.groups.UpsertDisplayName(ctx, groupID, resolved); err != nil {
-				return "", err
-			}
-		}
-		return resolved, nil
+	if name != "" {
+		return name, nil
 	}
-	return "", nil
+	return strings.TrimSpace(s.authorizationResourceDisplayName(ctx, s.groupResource(groupID))), nil
 }
 
 func (s *Server) groupAdminShowAuthorizationMiddleware(next http.Handler) http.Handler {
@@ -529,11 +519,9 @@ func (s *Server) createGroupAdminGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "group already exists")
 		return
 	}
-	if s.groups != nil {
-		if _, err := s.groups.UpsertDisplayName(r.Context(), groupID, displayName); err != nil {
-			writeError(w, http.StatusServiceUnavailable, "group directory is unavailable")
-			return
-		}
+	if _, err := s.groups.UpsertDisplayName(r.Context(), groupID, displayName); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "group directory is unavailable")
+		return
 	}
 	if err := s.addGroupAdminMemberRole(r.Context(), groupID, groupAdminRelation, subjectID); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
@@ -544,7 +532,6 @@ func (s *Server) createGroupAdminGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 		return
 	}
-	summary.DisplayName = displayName
 	writeJSON(w, http.StatusCreated, groupAdminCreateResponse{Group: summary})
 }
 
@@ -558,23 +545,6 @@ func (s *Server) updateGroupAdminGroup(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	canAdmin, err := s.hasExplicitGroupAdmin(r.Context(), subjectID, groupID)
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
-		return
-	}
-	if !canAdmin {
-		globalAdmin, err := s.hasGestaltAdmin(r.Context(), subjectID)
-		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
-			return
-		}
-		canAdmin = globalAdmin
-	}
-	if !canAdmin {
-		writeError(w, http.StatusForbidden, "group access denied")
-		return
-	}
 	var request groupAdminUpdateRequest
 	if !decodeStrictJSONBody(w, r, &request) {
 		return
@@ -582,10 +552,6 @@ func (s *Server) updateGroupAdminGroup(w http.ResponseWriter, r *http.Request) {
 	displayName := strings.TrimSpace(request.DisplayName)
 	if displayName == "" {
 		writeError(w, http.StatusBadRequest, "displayName is required")
-		return
-	}
-	if s.groups == nil {
-		writeError(w, http.StatusServiceUnavailable, "group directory is unavailable")
 		return
 	}
 	if _, err := s.groups.UpsertDisplayName(r.Context(), groupID, displayName); err != nil {
