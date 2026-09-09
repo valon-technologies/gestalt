@@ -20,6 +20,7 @@ import * as wire from "./internal/gen/v1/external_credential_pb.ts";
 import {
   fromWireExchangeExternalCredentialResponse,
   fromWireExternalCredential,
+  fromWireExternalCredentialCapabilities,
   fromWireListExternalCredentialsResponse,
   fromWireResolveExternalCredentialResponse,
   toWireCreateExternalCredentialRequest,
@@ -119,6 +120,19 @@ export interface ExternalCredentialAuthConfig {
   refreshToken: string;
 }
 
+export interface ExternalCredentialCapabilities {
+  /**
+   * Providers that persist ExternalCredential.account_key do not need the
+   * legacy metadata compatibility copy from the host.
+   */
+  persistsAccountKey: boolean;
+  /**
+   * Providers that enforce expected_credential_id atomically support safe
+   * reconnect updates.
+   */
+  supportsConditionalUpsert: boolean;
+}
+
 export interface ExternalCredentialClientInfo {
   clientId: string;
   clientSecret: string;
@@ -193,6 +207,11 @@ export interface ResolveExternalCredentialResponse {
 
 export interface UpsertExternalCredentialRequest {
   credential?: ExternalCredential;
+  /**
+   * When set, the provider must update only if this is still the stored
+   * credential ID for the credential's (subject, audience, qualifier) key.
+   */
+  expectedCredentialId: string;
 }
 
 export interface ValidateExternalCredentialConfigRequest {
@@ -228,6 +247,13 @@ export class ExternalCredentials {
     return new ExternalCredentials(transport, options);
   }
 
+  async getCapabilities(): Promise<ExternalCredentialCapabilities> {
+    const response = await callUnary(() =>
+      this.client.getCapabilities({}, callOptions(this.timeoutMs)),
+    );
+    return fromWireExternalCredentialCapabilities(response);
+  }
+
   async createCredential(
     credential?: Init<ExternalCredential>,
   ): Promise<ExternalCredential> {
@@ -259,6 +285,7 @@ export class ExternalCredentials {
     credential?: Init<ExternalCredential>,
   ): Promise<ExternalCredential> {
     const request = {
+      expectedCredentialId: "",
       ...(credential !== undefined ? { credential } : {}),
     } satisfies Init<UpsertExternalCredentialRequest>;
     const response = await callUnary(() =>

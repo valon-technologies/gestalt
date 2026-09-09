@@ -63,7 +63,17 @@ func (p *stubExternalCredentialProvider) CreateCredential(_ context.Context, req
 	return value, nil
 }
 
-func (p *stubExternalCredentialProvider) UpsertCredential(_ context.Context, req *gestalt.UpsertExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
+func (p *stubExternalCredentialProvider) UpsertCredential(ctx context.Context, req *gestalt.UpsertExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
+	return p.upsertCredential(req, "")
+}
+
+func (p *stubExternalCredentialProvider) UpsertCredentialIfID(_ context.Context, req *gestalt.UpsertExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
+	return p.upsertCredential(req, req.ExpectedCredentialID)
+}
+
+func (p *stubExternalCredentialProvider) PersistsAccountKey() bool { return true }
+
+func (p *stubExternalCredentialProvider) upsertCredential(req *gestalt.UpsertExternalCredentialRequest, expectedID string) (*gestalt.ExternalCredential, error) {
 	if req == nil || req.GetCredential() == nil {
 		return nil, fmt.Errorf("credential is required")
 	}
@@ -74,6 +84,9 @@ func (p *stubExternalCredentialProvider) UpsertCredential(_ context.Context, req
 
 	key := externalCredentialLookupKey(value.GetSubject(), value.GetAudience(), value.GetQualifier())
 	existing := p.credentials[key]
+	if expectedID != "" && (existing == nil || existing.GetId() != expectedID) {
+		return nil, gestalt.ErrAlreadyExists
+	}
 	now := time.Now().UTC()
 	if existing != nil {
 		value.ID = existing.GetId()
@@ -232,12 +245,20 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 	if meta.GetKind() != proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL {
 		t.Fatalf("provider kind = %v, want %v", meta.GetKind(), proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL)
 	}
+	caps, err := client.GetCapabilities(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true))
+	if err != nil {
+		t.Fatalf("GetCapabilities: %v", err)
+	}
+	if !caps.GetPersistsAccountKey() || !caps.GetSupportsConditionalUpsert() {
+		t.Fatalf("capabilities = %+v, want account-key and conditional-upsert support", caps)
+	}
 
 	upserted, err := client.UpsertCredential(rpcCtx, &proto.UpsertExternalCredentialRequest{
 		Credential: &proto.ExternalCredential{
-			Subject:   "user:user-123",
-			Audience:  "slack:default",
-			Qualifier: "workspace-1",
+			Subject:    "user:user-123",
+			Audience:   "slack:default",
+			Qualifier:  "workspace-1",
+			AccountKey: "slack:v1:T123:U456",
 			Credential: &proto.ExternalCredential_Grant{Grant: &proto.ExternalCredentialGrant{
 				AccessToken: "xoxb-123",
 				Scope:       "channels:read chat:write",
@@ -252,6 +273,29 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 	}
 	if upserted.GetUpdatedAt() == nil {
 		t.Fatal("UpsertCredential returned nil updated_at")
+	}
+	if upserted.GetAccountKey() != "slack:v1:T123:U456" {
+		t.Fatalf("account key = %q, want slack:v1:T123:U456", upserted.GetAccountKey())
+	}
+
+	conditional, err := client.UpsertCredential(rpcCtx, &proto.UpsertExternalCredentialRequest{
+		ExpectedCredentialId: upserted.GetId(),
+		Credential: &proto.ExternalCredential{
+			Subject:    "user:user-123",
+			Audience:   "slack:default",
+			Qualifier:  "workspace-1",
+			AccountKey: "slack:v1:T123:U456",
+			Credential: &proto.ExternalCredential_Grant{Grant: &proto.ExternalCredentialGrant{AccessToken: "xoxb-456"}},
+		},
+	}, grpc.WaitForReady(true))
+	if err != nil || conditional.GetGrant().GetAccessToken() != "xoxb-456" {
+		t.Fatalf("conditional UpsertCredential = %+v, error = %v", conditional, err)
+	}
+	if _, err := client.UpsertCredential(rpcCtx, &proto.UpsertExternalCredentialRequest{
+		ExpectedCredentialId: "stale-id",
+		Credential:           conditional,
+	}, grpc.WaitForReady(true)); status.Code(err) != codes.AlreadyExists {
+		t.Fatalf("stale conditional upsert code = %v, want ALREADY_EXISTS", err)
 	}
 
 	created, err := client.CreateCredential(rpcCtx, &proto.CreateExternalCredentialRequest{
@@ -294,8 +338,8 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCredential: %v", err)
 	}
-	if got.GetGrant().GetAccessToken() != "xoxb-123" {
-		t.Fatalf("access token = %q, want %q", got.GetGrant().GetAccessToken(), "xoxb-123")
+	if got.GetGrant().GetAccessToken() != "xoxb-456" {
+		t.Fatalf("access token = %q, want %q", got.GetGrant().GetAccessToken(), "xoxb-456")
 	}
 
 	listed, err := client.ListCredentials(rpcCtx, &proto.ListExternalCredentialsRequest{

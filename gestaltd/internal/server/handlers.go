@@ -51,10 +51,11 @@ var (
 )
 
 type instanceInfo struct {
-	Name       string           `json:"name"`
-	Connection string           `json:"connection,omitempty"`
-	Preferred  bool             `json:"preferred,omitempty"`
-	Identity   *accountIdentity `json:"identity,omitempty"`
+	Name         string           `json:"name"`
+	Connection   string           `json:"connection,omitempty"`
+	CredentialID string           `json:"credentialId,omitempty"`
+	Preferred    bool             `json:"preferred,omitempty"`
+	Identity     *accountIdentity `json:"identity,omitempty"`
 	// AccountKey is server-only grouping state. It must never become part of
 	// the public app response contract.
 	AccountKey string `json:"-"`
@@ -308,6 +309,7 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 			m[binding.App] = append(m[binding.App], instanceInfo{
 				Name:              tok.Qualifier,
 				Connection:        userFacingConnectionName(binding.Connection),
+				CredentialID:      tok.ID,
 				Identity:          identityFromMetadataJSON(tok.MetadataJSON),
 				AccountKey:        core.AccountKeyForCredential(tok),
 				credentialInvalid: credentialInvalid,

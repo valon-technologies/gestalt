@@ -12,6 +12,9 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func newRemoteProvider(t *testing.T, provider core.ExternalCredentialProvider) *remoteExternalCredentialProvider {
@@ -20,7 +23,83 @@ func newRemoteProvider(t *testing.T, provider core.ExternalCredentialProvider) *
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterExternalCredentialsServer(server, NewProviderServer(provider))
 	})
-	return &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
+	return &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn), supportsConditionalUpsert: true}
+}
+
+type accountKeyPersistenceExternalCredentialProvider struct {
+	core.ExternalCredentialProvider
+}
+
+func (accountKeyPersistenceExternalCredentialProvider) PersistsAccountKey() bool {
+	return true
+}
+
+func (p accountKeyPersistenceExternalCredentialProvider) UpsertCredentialIfID(ctx context.Context, credential *core.ExternalCredential, expectedID string) error {
+	return p.ExternalCredentialProvider.(core.ExternalCredentialConditionalUpserter).UpsertCredentialIfID(ctx, credential, expectedID)
+}
+
+func TestExternalCredentialCapabilitiesRoundTripOverTransport(t *testing.T) {
+	t.Parallel()
+
+	remote := newRemoteProvider(t, accountKeyPersistenceExternalCredentialProvider{
+		ExternalCredentialProvider: coretesting.NewStubExternalCredentialProvider(),
+	})
+	caps, err := remote.client.GetCapabilities(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("GetCapabilities: %v", err)
+	}
+	if !caps.GetPersistsAccountKey() {
+		t.Fatal("PersistsAccountKey = false, want true")
+	}
+	if !caps.GetSupportsConditionalUpsert() {
+		t.Fatal("SupportsConditionalUpsert = false, want true")
+	}
+}
+
+func TestExternalCredentialConditionalUpsertRoundTripsExpectedID(t *testing.T) {
+	t.Parallel()
+
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	if err := provider.CreateCredential(ctx, &core.ExternalCredential{
+		ID:        "credential-1",
+		Subject:   "user:test",
+		Audience:  "github:default",
+		Qualifier: "org",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "old-token"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	remote := newRemoteProvider(t, provider)
+	updated := &core.ExternalCredential{
+		Subject:   "user:test",
+		Audience:  "github:default",
+		Qualifier: "org",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "new-token"},
+	}
+	if err := remote.UpsertCredentialIfID(ctx, updated, "credential-1"); err != nil {
+		t.Fatalf("conditional upsert: %v", err)
+	}
+	if err := remote.UpsertCredentialIfID(ctx, updated, "stale-id"); !errors.Is(err, core.ErrAlreadyExists) {
+		t.Fatalf("stale conditional upsert error = %v, want conflict", err)
+	}
+}
+
+func TestExternalCredentialCapabilityDiscoveryFallsBackToLegacyOnFailure(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []codes.Code{codes.Unimplemented, codes.Unavailable, codes.DeadlineExceeded} {
+		code := code
+		t.Run(code.String(), func(t *testing.T) {
+			t.Parallel()
+			got := externalCredentialProviderPersistsAccountKey(context.Background(), func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error) {
+				return nil, status.Error(code, "capability service unavailable")
+			})
+			if got {
+				t.Fatalf("capability fallback = true for %s, want legacy false", code)
+			}
+		})
+	}
 }
 
 type wrappedNotFoundExternalCredentialProvider struct{}
@@ -166,9 +245,10 @@ func TestExternalCredentialRoundTripsOverTransport(t *testing.T) {
 		{
 			name: "grant",
 			credential: core.ExternalCredential{
-				Subject:   "user:test",
-				Audience:  "github:default",
-				Qualifier: "org",
+				Subject:    "user:test",
+				Audience:   "github:default",
+				Qualifier:  "org",
+				AccountKey: "github:v1:acme",
 				Grant: &core.ExternalCredentialGrant{
 					AccessToken:       "access-token",
 					RefreshToken:      "refresh-token",
@@ -230,6 +310,9 @@ func TestExternalCredentialRoundTripsOverTransport(t *testing.T) {
 			}
 			if got.MetadataJSON != want.MetadataJSON {
 				t.Fatalf("metadataJSON = %q, want %q", got.MetadataJSON, want.MetadataJSON)
+			}
+			if got.AccountKey != want.AccountKey {
+				t.Fatalf("account key = %q, want %q", got.AccountKey, want.AccountKey)
 			}
 			if !reflect.DeepEqual(got.Grant, want.Grant) {
 				t.Fatalf("grant = %+v, want %+v", got.Grant, want.Grant)

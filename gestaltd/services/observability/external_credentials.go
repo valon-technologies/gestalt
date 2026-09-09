@@ -14,16 +14,30 @@ type observedExternalCredentialProvider struct {
 	delegate core.ExternalCredentialProvider
 }
 
+type observedConditionalExternalCredentialProvider struct {
+	*observedExternalCredentialProvider
+	conditional core.ExternalCredentialConditionalUpserter
+}
+
 func InstrumentExternalCredentialProvider(name string, provider core.ExternalCredentialProvider) core.ExternalCredentialProvider {
 	if provider == nil {
 		return nil
 	}
-	if _, ok := provider.(*observedExternalCredentialProvider); ok {
+	switch provider.(type) {
+	case *observedExternalCredentialProvider, *observedConditionalExternalCredentialProvider:
 		return provider
 	}
-	return &observedExternalCredentialProvider{
+	observed := &observedExternalCredentialProvider{
 		name:     strings.TrimSpace(name),
 		delegate: provider,
+	}
+	conditional, ok := provider.(core.ExternalCredentialConditionalUpserter)
+	if !ok {
+		return observed
+	}
+	return &observedConditionalExternalCredentialProvider{
+		observedExternalCredentialProvider: observed,
+		conditional:                        conditional,
 	}
 }
 
@@ -37,6 +51,16 @@ func (p *observedExternalCredentialProvider) UpsertCredential(ctx context.Contex
 	ctx, end := p.start(ctx, "upsert_credential", credentialAudience(credential))
 	defer func() { end(err) }()
 	return p.delegate.UpsertCredential(ctx, credential)
+}
+
+func (p *observedConditionalExternalCredentialProvider) UpsertCredentialIfID(ctx context.Context, credential *core.ExternalCredential, expectedID string) (err error) {
+	ctx, end := p.start(ctx, "conditional_upsert_credential", credentialAudience(credential))
+	defer func() { end(err) }()
+	return p.conditional.UpsertCredentialIfID(ctx, credential, expectedID)
+}
+
+func (p *observedExternalCredentialProvider) PersistsAccountKey() bool {
+	return core.ExternalCredentialProviderPersistsAccountKey(p.delegate)
 }
 
 func (p *observedExternalCredentialProvider) GetCredential(ctx context.Context, subject, audience, qualifier string) (credential *core.ExternalCredential, err error) {

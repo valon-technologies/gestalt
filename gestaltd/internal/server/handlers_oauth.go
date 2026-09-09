@@ -19,6 +19,7 @@ type startOAuthRequest struct {
 	Integration      string            `json:"integration"`
 	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
+	CredentialID     string            `json:"credentialId,omitempty"`
 	ServiceAccountID string            `json:"serviceAccountId"`
 	Scopes           []string          `json:"scopes"`
 	ConnectionParams map[string]string `json:"connectionParams"`
@@ -78,6 +79,13 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		auditErr = err
 		return
 	}
+	expectedCredentialID, err := s.validateRequestedCredentialID(r.Context(), subjectID, credentialAudience(req.Integration, connection, selected.Def.ConnectionID), instance, req.CredentialID)
+	if err != nil {
+		auditErr = err
+		status, message := connectionSetupFailure(err)
+		writeError(w, status, message)
+		return
+	}
 	auditTarget = connectionAuditTarget(req.Integration, connection, instance)
 
 	connParams, ok := resolveConnectionParams(w, selected.ParamDefs, req.ConnectionParams)
@@ -113,6 +121,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		Integration:      req.Integration,
 		Connection:       connection,
 		Instance:         instance,
+		CredentialID:     expectedCredentialID,
 		Verifier:         verifier,
 		ConnectionParams: connParams,
 		ExpiresAt:        s.now().Add(integrationOAuthStateTTL).Unix(),
@@ -279,16 +288,17 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	tm := credentialMaterial{
-		SubjectID:         state.SubjectID,
-		AuthSource:        state.AuthSource,
-		Integration:       providerName,
-		Connection:        state.Connection,
-		Instance:          callbackInstance,
-		AccessToken:       tokenResp.AccessToken,
-		RefreshToken:      tokenResp.RefreshToken,
-		TokenExpiresAt:    tokenExpiresAt,
-		MetadataJSON:      metadata,
-		ProviderAccountID: providerAccountIDFromTokenResponse(selected.ParamDefs, tokenResp),
+		SubjectID:            state.SubjectID,
+		AuthSource:           state.AuthSource,
+		Integration:          providerName,
+		Connection:           state.Connection,
+		Instance:             callbackInstance,
+		AccessToken:          tokenResp.AccessToken,
+		RefreshToken:         tokenResp.RefreshToken,
+		TokenExpiresAt:       tokenExpiresAt,
+		MetadataJSON:         metadata,
+		ProviderAccountID:    providerAccountIDFromTokenResponse(selected.ParamDefs, tokenResp),
+		ExpectedCredentialID: state.CredentialID,
 	}
 	tm.ConnectionID = selected.Def.ConnectionID
 	tm.ActorSubjectID = state.ActorSubjectID

@@ -3,13 +3,47 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
+
+func TestAccountAlreadyConnectedMatchesLogicalAccount(t *testing.T) {
+	t.Parallel()
+
+	provider := coretesting.NewStubExternalCredentialProvider()
+	s := &Server{externalCredentials: provider}
+	ctx := context.Background()
+	if err := provider.CreateCredential(ctx, &core.ExternalCredential{
+		ID:         "existing",
+		Subject:    "user:1",
+		Audience:   "slack:default",
+		Qualifier:  "Valon",
+		AccountKey: "slack:v1:T123:U456",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !s.accountAlreadyConnected(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		AccountKey:   "slack:v1:T123:U456",
+	}) {
+		t.Fatal("expected matching account key to be reported as already connected")
+	}
+	if s.accountAlreadyConnected(ctx, credentialMaterial{
+		SubjectID:    "user:1",
+		ConnectionID: "slack:default",
+		AccountKey:   "slack:v1:T999:U888",
+	}) {
+		t.Fatal("expected different account key to be reported as new")
+	}
+}
 
 func TestConnectionSetupFailureDescribesInstanceConflict(t *testing.T) {
 	t.Parallel()
@@ -27,6 +61,19 @@ func TestConnectionSetupFailureDescribesInstanceConflict(t *testing.T) {
 	}
 }
 
+func TestConnectionSetupFailureDescribesStaleReconnectTarget(t *testing.T) {
+	t.Parallel()
+
+	status, message := connectionSetupFailure(credentialTargetMismatch("Shared label"))
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", status, http.StatusConflict)
+	}
+	want := `The connection changed before instance "Shared label" could be updated. Refresh and try again.`
+	if message != want {
+		t.Fatalf("message = %q, want %q", message, want)
+	}
+}
+
 func TestInstanceInfoDoesNotExposeInternalAccountKey(t *testing.T) {
 	t.Parallel()
 
@@ -36,6 +83,41 @@ func TestInstanceInfoDoesNotExposeInternalAccountKey(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "accountKey") {
 		t.Fatalf("instance info exposed internal account key: %s", encoded)
+	}
+}
+
+func TestInstanceInfoExposesCredentialIDForExplicitReconnect(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := json.Marshal(instanceInfo{CredentialID: "credential-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"credentialId":"credential-123"`) {
+		t.Fatalf("instance info omitted credential id: %s", encoded)
+	}
+}
+
+func TestValidateRequestedCredentialIDRequiresTheExactInstanceRecord(t *testing.T) {
+	t.Parallel()
+
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	if err := provider.CreateCredential(ctx, &core.ExternalCredential{
+		ID:        "credential-123",
+		Subject:   "user:1",
+		Audience:  "slack:default",
+		Qualifier: "workspace",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{externalCredentials: provider}
+
+	if got, err := s.validateRequestedCredentialID(ctx, "user:1", "slack:default", "workspace", "credential-123"); err != nil || got != "credential-123" {
+		t.Fatalf("validated credential ID = %q, error = %v; want exact target", got, err)
+	}
+	if _, err := s.validateRequestedCredentialID(ctx, "user:1", "slack:default", "workspace", "credential-456"); !errors.Is(err, core.ErrAlreadyExists) {
+		t.Fatalf("mismatched credential error = %v, want conflict", err)
 	}
 }
 

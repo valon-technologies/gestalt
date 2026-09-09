@@ -358,7 +358,8 @@ func preferredInstanceValid(instances []instanceInfo, preferredInstance string) 
 	if preferredInstance == "" {
 		return false
 	}
-	for _, instance := range instances {
+	for i := range instances {
+		instance := &instances[i]
 		if instance.Name == preferredInstance && !instance.credentialInvalid {
 			return true
 		}
@@ -372,8 +373,8 @@ func markPreferredInstances(instances []instanceInfo, preferredInstance string) 
 		return instances
 	}
 	found := false
-	for _, instance := range instances {
-		if instance.Name == preferredInstance {
+	for i := range instances {
+		if instances[i].Name == preferredInstance {
 			found = true
 			break
 		}
@@ -382,9 +383,9 @@ func markPreferredInstances(instances []instanceInfo, preferredInstance string) 
 		return instances
 	}
 	out := make([]instanceInfo, len(instances))
-	for i, instance := range instances {
-		out[i] = instance
-		if instance.Name == preferredInstance {
+	for i := range instances {
+		out[i] = instances[i]
+		if instances[i].Name == preferredInstance {
 			out[i].Preferred = true
 		}
 	}
@@ -393,8 +394,8 @@ func markPreferredInstances(instances []instanceInfo, preferredInstance string) 
 
 func invalidInstanceCount(instances []instanceInfo) int {
 	count := 0
-	for _, instance := range instances {
-		if instance.credentialInvalid {
+	for i := range instances {
+		if instances[i].credentialInvalid {
 			count++
 		}
 	}
@@ -458,11 +459,12 @@ func ownerKindForPrincipal(p *principal.Principal) string {
 func groupInstancesForConnection(instances []instanceInfo, connection, preferred string) []instanceInfo {
 	connection = userFacingConnectionName(config.ResolveConnectionAlias(connection))
 	filtered := make([]instanceInfo, 0, len(instances))
-	for _, instance := range instances {
+	for i := range instances {
+		instance := &instances[i]
 		if connection != "" && config.ResolveConnectionAlias(instance.Connection) != config.ResolveConnectionAlias(connection) {
 			continue
 		}
-		filtered = append(filtered, instance)
+		filtered = append(filtered, *instance)
 	}
 	return dedupeInstancesByAccount(filtered, strings.TrimSpace(preferred))
 }
@@ -472,13 +474,13 @@ func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []inst
 		return instances
 	}
 	candidates := make([]core.CredentialAccountCandidate, len(instances))
-	for i, instance := range instances {
+	for i := range instances {
 		candidates[i] = core.CredentialAccountCandidate{
-			AccountKey:     instance.AccountKey,
-			ID:             instance.credentialID,
-			Qualifier:      instance.Name,
-			CreatedAt:      instance.credentialCreated,
-			NeedsReconnect: instance.credentialInvalid,
+			AccountKey:     instances[i].AccountKey,
+			ID:             instances[i].credentialID,
+			Qualifier:      instances[i].Name,
+			CreatedAt:      instances[i].credentialCreated,
+			NeedsReconnect: instances[i].credentialInvalid,
 		}
 	}
 	indices := core.GroupCredentialAccountCandidateIndices(candidates, preferred)

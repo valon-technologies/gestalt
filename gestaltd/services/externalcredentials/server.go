@@ -23,6 +23,13 @@ func NewProviderServer(provider core.ExternalCredentialProvider) proto.ExternalC
 	return &externalCredentialProviderServer{provider: provider}
 }
 
+func (s *externalCredentialProviderServer) GetCapabilities(context.Context, *emptypb.Empty) (*proto.ExternalCredentialCapabilities, error) {
+	return &proto.ExternalCredentialCapabilities{
+		PersistsAccountKey:        core.ExternalCredentialProviderPersistsAccountKey(s.provider),
+		SupportsConditionalUpsert: core.ExternalCredentialProviderSupportsConditionalUpsert(s.provider),
+	}, nil
+}
+
 func (s *externalCredentialProviderServer) CreateCredential(ctx context.Context, req *proto.CreateExternalCredentialRequest) (*proto.ExternalCredential, error) {
 	if req == nil || req.GetCredential() == nil {
 		return nil, status.Error(codes.InvalidArgument, "credential is required")
@@ -39,7 +46,17 @@ func (s *externalCredentialProviderServer) UpsertCredential(ctx context.Context,
 		return nil, status.Error(codes.InvalidArgument, "credential is required")
 	}
 	credential := externalCredentialFromProto(req.GetCredential())
-	if err := s.provider.UpsertCredential(ctx, credential); err != nil {
+	var err error
+	if expectedID := strings.TrimSpace(req.GetExpectedCredentialId()); expectedID != "" {
+		conditional, ok := s.provider.(core.ExternalCredentialConditionalUpserter)
+		if !ok {
+			return nil, status.Error(codes.Unimplemented, core.ErrConditionalUpsertUnsupported.Error())
+		}
+		err = conditional.UpsertCredentialIfID(ctx, credential, expectedID)
+	} else {
+		err = s.provider.UpsertCredential(ctx, credential)
+	}
+	if err != nil {
 		return nil, externalCredentialToGRPCError("upsert external credential", err)
 	}
 	stored, err := s.provider.GetCredential(ctx, credential.Subject, credential.Audience, credential.Qualifier)

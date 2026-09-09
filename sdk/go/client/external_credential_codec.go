@@ -210,6 +210,28 @@ func FromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthCon
 	return out
 }
 
+func ToWireExternalCredentialCapabilities(value *ExternalCredentialCapabilities) *proto.ExternalCredentialCapabilities {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ExternalCredentialCapabilities{
+		PersistsAccountKey:        value.PersistsAccountKey,
+		SupportsConditionalUpsert: value.SupportsConditionalUpsert,
+	}
+	return out
+}
+
+func FromWireExternalCredentialCapabilities(value *proto.ExternalCredentialCapabilities) *ExternalCredentialCapabilities {
+	if value == nil {
+		return nil
+	}
+	out := &ExternalCredentialCapabilities{
+		PersistsAccountKey:        value.PersistsAccountKey,
+		SupportsConditionalUpsert: value.SupportsConditionalUpsert,
+	}
+	return out
+}
+
 func ToWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *proto.ExternalCredentialClientInfo {
 	if value == nil {
 		return nil
@@ -481,7 +503,8 @@ func ToWireUpsertExternalCredentialRequest(value *UpsertExternalCredentialReques
 		return nil
 	}
 	out := &proto.UpsertExternalCredentialRequest{
-		Credential: ToWireExternalCredential(value.Credential),
+		Credential:           ToWireExternalCredential(value.Credential),
+		ExpectedCredentialId: value.ExpectedCredentialId,
 	}
 	return out
 }
@@ -491,7 +514,8 @@ func FromWireUpsertExternalCredentialRequest(value *proto.UpsertExternalCredenti
 		return nil
 	}
 	out := &UpsertExternalCredentialRequest{
-		Credential: FromWireExternalCredential(value.Credential),
+		Credential:           FromWireExternalCredential(value.Credential),
+		ExpectedCredentialId: value.ExpectedCredentialId,
 	}
 	return out
 }

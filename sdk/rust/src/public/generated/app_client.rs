@@ -38,11 +38,11 @@ use crate::codec::authorization::{
 };
 use crate::codec::external_credential::{
     from_wire_exchange_external_credential_response, from_wire_external_credential,
-    from_wire_list_external_credentials_response, from_wire_resolve_external_credential_response,
-    to_wire_create_external_credential_request, to_wire_delete_external_credential_request,
-    to_wire_exchange_external_credential_request, to_wire_get_external_credential_request,
-    to_wire_list_external_credentials_request, to_wire_resolve_external_credential_request,
-    to_wire_upsert_external_credential_request,
+    from_wire_external_credential_capabilities, from_wire_list_external_credentials_response,
+    from_wire_resolve_external_credential_response, to_wire_create_external_credential_request,
+    to_wire_delete_external_credential_request, to_wire_exchange_external_credential_request,
+    to_wire_get_external_credential_request, to_wire_list_external_credentials_request,
+    to_wire_resolve_external_credential_request, to_wire_upsert_external_credential_request,
     to_wire_validate_external_credential_config_request,
 };
 use crate::codec::identity::{
@@ -74,9 +74,10 @@ use crate::codec::workflow::{
 use crate::external_credential::{
     CreateExternalCredentialRequest, DeleteExternalCredentialRequest,
     ExchangeExternalCredentialRequest, ExchangeExternalCredentialResponse, ExternalCredential,
-    GetExternalCredentialRequest, ListExternalCredentialsRequest, ListExternalCredentialsResponse,
-    ResolveExternalCredentialRequest, ResolveExternalCredentialResponse,
-    UpsertExternalCredentialRequest, ValidateExternalCredentialConfigRequest,
+    ExternalCredentialCapabilities, GetExternalCredentialRequest, ListExternalCredentialsRequest,
+    ListExternalCredentialsResponse, ResolveExternalCredentialRequest,
+    ResolveExternalCredentialResponse, UpsertExternalCredentialRequest,
+    ValidateExternalCredentialConfigRequest,
 };
 use crate::identity::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
@@ -929,6 +930,19 @@ impl<T: Send + Sync> ExternalCredentialsClient<T> {
 }
 
 impl<T: crate::public::generated::unary_transport::GrpcCapable> ExternalCredentialsClient<T> {
+    pub async fn get_capabilities(&self) -> Result<ExternalCredentialCapabilities, GestaltError> {
+        let wire = Empty::default();
+        let mut wire_response = crate::generated::v1::ExternalCredentialCapabilities::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_GET_CAPABILITIES,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_external_credential_capabilities(wire_response))
+    }
+
     pub async fn create_credential(
         &self,
         request: CreateExternalCredentialRequest,
@@ -1063,6 +1077,17 @@ impl<T: crate::public::generated::unary_transport::GrpcCapable> ExternalCredenti
 }
 
 impl<T: crate::public::generated::unary_transport::SyncGrpcCapable> ExternalCredentialsClient<T> {
+    pub fn get_capabilities_sync(&self) -> Result<ExternalCredentialCapabilities, GestaltError> {
+        let wire = Empty::default();
+        let mut wire_response = crate::generated::v1::ExternalCredentialCapabilities::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_GET_CAPABILITIES,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_external_credential_capabilities(wire_response))
+    }
+
     pub fn create_credential_sync(
         &self,
         request: CreateExternalCredentialRequest,

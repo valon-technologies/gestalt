@@ -49,7 +49,8 @@ use crate::public::generated::codec::authorization::{
     encode_wire_set_authorization_state_request_json, encode_wire_write_relationships_request_json,
 };
 use crate::public::generated::codec::external_credential::{
-    decode_wire_exchange_external_credential_response_json, decode_wire_external_credential_json,
+    decode_wire_exchange_external_credential_response_json,
+    decode_wire_external_credential_capabilities_json, decode_wire_external_credential_json,
     decode_wire_list_external_credentials_response_json,
     decode_wire_resolve_external_credential_response_json,
     encode_wire_create_external_credential_request_json,
@@ -411,6 +412,15 @@ fn decode_list_active_model_resource_types_response_json(
     value: &Value,
 ) -> Result<Vec<u8>, GestaltError> {
     let wire = decode_wire_list_active_model_resource_types_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_capabilities_request_json(_bytes: &[u8]) -> Result<Value, GestaltError> {
+    Ok(Value::Object(Map::new()))
+}
+
+fn decode_get_capabilities_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_external_credential_capabilities_json(value)?;
     Ok(wire.encode_to_vec())
 }
 
@@ -1497,6 +1507,21 @@ pub const METHOD_AUTHORIZATION_LIST_ACTIVE_MODEL_RESOURCE_TYPES: Method = Method
     reject: &[],
     encode_request_json: Some(encode_list_active_model_resource_types_request_json),
     decode_response_json: Some(decode_list_active_model_resource_types_response_json),
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_GET_CAPABILITIES: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "GetCapabilities",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/GetCapabilities",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_get_capabilities_request_json),
+    decode_response_json: Some(decode_get_capabilities_response_json),
 };
 
 pub const METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL: Method = Method {

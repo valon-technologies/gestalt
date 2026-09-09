@@ -7,8 +7,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 )
 
 func setAccountKey(metadataJSON, key string) (string, error) {
@@ -263,10 +265,11 @@ func TestOAuthIdentitySource(t *testing.T) {
 func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name      string
-		response  string
-		parse     func(map[string]any) oauthIdentityFacts
-		wantFacts map[string]string
+		name                  string
+		response              string
+		parse                 func(map[string]any) oauthIdentityFacts
+		wantFacts             map[string]string
+		wantProviderAccountID string
 	}{
 		{
 			name:      "google userinfo",
@@ -281,10 +284,11 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 			wantFacts: map[string]string{"email": "user@example.com"},
 		},
 		{
-			name:      "slack auth test",
-			response:  `{"ok":true,"team_id":"T123","user_id":"U456","team":"Example Workspace","user":"example-user"}`,
-			parse:     slackAuthTestIdentity,
-			wantFacts: map[string]string{"workspace": "Example Workspace", "login": "example-user"},
+			name:                  "slack auth test",
+			response:              `{"ok":true,"team_id":"T123","user_id":"U456","team":"Example Workspace","user":"example-user"}`,
+			parse:                 slackAuthTestIdentity,
+			wantFacts:             map[string]string{"workspace": "Example Workspace", "login": "example-user"},
+			wantProviderAccountID: "T123:U456",
 		},
 		{
 			name:      "slack missing user id",
@@ -326,7 +330,60 @@ func TestOAuthAccountIdentityResponseParsers(t *testing.T) {
 					t.Fatalf("fact %s = %q, want %q", kind, facts[kind], want)
 				}
 			}
+			if got.ProviderAccountID != tc.wantProviderAccountID {
+				t.Fatalf("provider account id = %q, want %q", got.ProviderAccountID, tc.wantProviderAccountID)
+			}
 		})
+	}
+}
+
+func TestSlackIdentityProducesOneLogicalAccountAcrossDifferentLabels(t *testing.T) {
+	t.Parallel()
+	provider := coretesting.NewStubExternalCredentialProvider()
+	ctx := context.Background()
+	identity := slackAuthTestIdentity(map[string]any{
+		"ok":      true,
+		"team_id": "T123",
+		"user_id": "U456",
+		"team":    "Valon",
+		"user":    "example-user",
+	})
+	if identity.ProviderAccountID != "T123:U456" {
+		t.Fatalf("provider account id = %q, want T123:U456", identity.ProviderAccountID)
+	}
+	accountKey := accountKeyFromProviderID("slack", identity.ProviderAccountID)
+	s := &Server{
+		externalCredentials: provider,
+		now:                 func() time.Time { return time.Unix(3, 0) },
+		oauthIdentityProbe: func(_ context.Context, integration, token string) oauthIdentityFacts {
+			if integration != "slack" || token == "" {
+				return oauthIdentityFacts{}
+			}
+			return identity
+		},
+	}
+	for _, label := range []string{"Valon", "valon 2"} {
+		material := s.enrichAccountIdentity(ctx, credentialMaterial{
+			SubjectID:    "user:1",
+			ConnectionID: "slack:default",
+			Integration:  "slack",
+			Instance:     label,
+			AccessToken:  "oauth-token",
+		})
+		if _, err := s.storeCredentialFromMaterial(ctx, material); err != nil {
+			t.Fatalf("store %q: %v", label, err)
+		}
+	}
+	credentials, err := provider.ListCredentials(ctx, "user:1", "slack:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credentials) != 2 {
+		t.Fatalf("credentials = %d, want one provider-owned record per label", len(credentials))
+	}
+	accounts := core.GroupCredentialAccounts(credentials, "", time.Unix(3, 0))
+	if len(accounts) != 1 || accounts[0].AccountKey != accountKey {
+		t.Fatalf("logical accounts = %+v, want one account with key %q", accounts, accountKey)
 	}
 }
 

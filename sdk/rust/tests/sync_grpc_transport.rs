@@ -17,7 +17,8 @@ use generated::v1::{
     DeleteExternalCredentialRequest as WireDeleteRequest,
     ExchangeExternalCredentialRequest as WireExchangeRequest,
     ExchangeExternalCredentialResponse as WireExchangeResponse,
-    ExternalCredential as WireCredential, GetExternalCredentialRequest as WireGetRequest,
+    ExternalCredential as WireCredential, ExternalCredentialCapabilities as WireCapabilities,
+    GetExternalCredentialRequest as WireGetRequest,
     ListExternalCredentialsRequest as WireListRequest,
     ListExternalCredentialsResponse as WireListResponse,
     ResolveExternalCredentialRequest as WireResolveRequest,
@@ -33,6 +34,13 @@ struct StubExternalCredentials;
 
 #[tonic::async_trait]
 impl ExternalCredentials for StubExternalCredentials {
+    async fn get_capabilities(
+        &self,
+        _request: Request<()>,
+    ) -> Result<Response<WireCapabilities>, Status> {
+        Err(Status::unimplemented("unused"))
+    }
+
     async fn create_credential(
         &self,
         _request: Request<WireCreateRequest>,
@@ -98,6 +106,13 @@ struct StubUnauthenticated;
 
 #[tonic::async_trait]
 impl ExternalCredentials for StubUnauthenticated {
+    async fn get_capabilities(
+        &self,
+        _request: Request<()>,
+    ) -> Result<Response<WireCapabilities>, Status> {
+        Err(Status::unimplemented("unused"))
+    }
+
     async fn create_credential(
         &self,
         _request: Request<WireCreateRequest>,
