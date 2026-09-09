@@ -1,4 +1,4 @@
-// Package grpcutil provides shared helpers for internal gRPC transports.
+// Package grpcutil provides shared helpers for gRPC transports and request detection.
 package grpcutil
 
 import (
