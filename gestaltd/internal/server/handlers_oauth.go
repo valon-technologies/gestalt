@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -346,8 +345,8 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	// A browser popup can't be closed by its opener after OAuth (COOP severs the
 	// link), so serve a self-closing page; API clients keep the redirect.
 	if strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html") {
-		writeConnectionCompletePage(w, providerName)
+		writeConnectionCompletePage(w, providerName, result.AlreadyConnected)
 		return
 	}
-	http.Redirect(w, r, "/apps?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
+	http.Redirect(w, r, connectionSuccessURL(providerName, result.AlreadyConnected), http.StatusSeeOther)
 }
