@@ -55,3 +55,35 @@ func TestScimManagedGroupIDsUsesActiveUserRelationshipsOnly(t *testing.T) {
 		t.Fatalf("ids = %#v, app subject-set group must not be SCIM-managed", ids)
 	}
 }
+
+func TestGroupDisplayNameUsesConfigThenKnownThenSlug(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Server: ServerConfig{
+			SCIM: ServerSCIMConfig{
+				Clients: map[string]SCIMClientConfig{
+					"rippling": {
+						ActiveUserRelationships: []SCIMRelationshipConfig{{
+							Relation: "member",
+							Resource: AuthorizationResourceDef{
+								Type:       "group",
+								ID:         "e7dce358-8291-431f-baf0-fdb8a10b4252",
+								Properties: map[string]string{"displayName": "Valon Employees"},
+							},
+						}},
+					},
+				},
+			},
+		},
+	}
+	if got := GroupDisplayName(cfg, "e7dce358-8291-431f-baf0-fdb8a10b4252"); got != "Valon Employees" {
+		t.Fatalf("config name = %q", got)
+	}
+	if got := GroupDisplayName(nil, "servicemacusa-employees"); got != "ServiceMac employees" {
+		t.Fatalf("known name = %q", got)
+	}
+	if got := GroupDisplayName(nil, "partner-ops"); got != "Partner Ops" {
+		t.Fatalf("slug name = %q", got)
+	}
+}

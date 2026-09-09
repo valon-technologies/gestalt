@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -451,6 +452,13 @@ func (s *Server) groupAdminSummary(ctx context.Context, subjectID, groupID strin
 	memberCount, displayName, err := s.groupMetadata(ctx, groupID)
 	if err != nil {
 		return groupAdminSummary{}, err
+	}
+	if displayName == "" || displayName == groupID {
+		if resolved := s.authorizationResourceDisplayName(ctx, s.groupResource(groupID)); resolved != "" {
+			displayName = resolved
+		} else if fallback := config.GroupDisplayName(nil, groupID); fallback != "" {
+			displayName = fallback
+		}
 	}
 	if displayName == "" {
 		displayName = groupID
