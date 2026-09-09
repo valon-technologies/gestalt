@@ -7,6 +7,8 @@ import (
 )
 
 func TestConnectionSuccessURLIncludesDuplicateResult(t *testing.T) {
+	t.Parallel()
+
 	if got, want := connectionSuccessURL("slack", true), "/apps?alreadyConnected=true&connected=slack"; got != want {
 		t.Fatalf("connectionSuccessURL() = %q, want %q", got, want)
 	}
@@ -16,6 +18,8 @@ func TestConnectionSuccessURLIncludesDuplicateResult(t *testing.T) {
 }
 
 func TestConnectionCompletePagePostsDuplicateResult(t *testing.T) {
+	t.Parallel()
+
 	response := httptest.NewRecorder()
 	writeConnectionCompletePage(response, "slack", true)
 
@@ -35,6 +39,8 @@ func TestConnectionCompletePagePostsDuplicateResult(t *testing.T) {
 }
 
 func TestConnectionCompletePagePostsNewConnectionResult(t *testing.T) {
+	t.Parallel()
+
 	response := httptest.NewRecorder()
 	writeConnectionCompletePage(response, "slack", false)
 
