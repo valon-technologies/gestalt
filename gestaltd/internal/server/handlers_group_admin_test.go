@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -183,11 +184,13 @@ func TestGroupAdminCreatePersistsDisplayName(t *testing.T) {
 			testAuthorizationRelationship(adminID, "admin", "authorization", "authorization"),
 		},
 	}
+	svc := testutil.NewStubServices(t)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
 		cfg.Authorization = authz
 		cfg.AppDefs = appAdminTestAppDefs()
+		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -221,8 +224,15 @@ func TestGroupAdminCreatePersistsDisplayName(t *testing.T) {
 	if created.Group.ID != groupID || created.Group.DisplayName != "ServiceMac employees" || !created.Group.CanAdmin {
 		t.Fatalf("created group = %#v", created.Group)
 	}
-	if got := authz.relationships[len(authz.relationships)-1].GetProperties().GetFields()["displayName"].GetStringValue(); got != "ServiceMac employees" {
-		t.Fatalf("stored displayName = %q", got)
+	stored, err := svc.Groups.DisplayName(context.Background(), groupID)
+	if err != nil {
+		t.Fatalf("Groups.DisplayName: %v", err)
+	}
+	if stored != "ServiceMac employees" {
+		t.Fatalf("groups store displayName = %q", stored)
+	}
+	if props := authz.relationships[len(authz.relationships)-1].GetProperties(); props != nil && len(props.GetFields()) > 0 {
+		t.Fatalf("admin tuple properties = %#v", props.GetFields())
 	}
 
 	getRequest, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/groups/"+groupID, nil)
@@ -245,6 +255,64 @@ func TestGroupAdminCreatePersistsDisplayName(t *testing.T) {
 	}
 	if summary.DisplayName != "ServiceMac employees" {
 		t.Fatalf("GET group displayName = %q", summary.DisplayName)
+	}
+}
+
+func TestGroupAdminPatchUpdatesDisplayNameStore(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	groupID := "4a78ccd4-d32c-405a-b42d-ed862e19eea4"
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "group", groupID),
+		},
+	}
+	svc := testutil.NewStubServices(t)
+	if _, err := svc.Groups.UpsertDisplayName(context.Background(), groupID, "Unnamed group"); err != nil {
+		t.Fatalf("seed group name: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	patchRequest, _ := http.NewRequest(
+		http.MethodPatch,
+		ts.URL+"/api/v1/groups/"+groupID,
+		bytes.NewBufferString(`{"displayName":"Internal operators"}`),
+	)
+	patchRequest.Header.Set("Authorization", "Bearer alice-token")
+	patchRequest.Header.Set("Content-Type", "application/json")
+	patchResponse, err := http.DefaultClient.Do(patchRequest)
+	if err != nil {
+		t.Fatalf("PATCH group: %v", err)
+	}
+	defer func() { _ = patchResponse.Body.Close() }()
+	if patchResponse.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(patchResponse.Body)
+		t.Fatalf("PATCH group status = %d: %s", patchResponse.StatusCode, body)
+	}
+
+	var summary struct {
+		DisplayName string `json:"displayName"`
+	}
+	if err := json.NewDecoder(patchResponse.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode patched group: %v", err)
+	}
+	if summary.DisplayName != "Internal operators" {
+		t.Fatalf("patched displayName = %q", summary.DisplayName)
+	}
+	stored, err := svc.Groups.DisplayName(context.Background(), groupID)
+	if err != nil {
+		t.Fatalf("Groups.DisplayName: %v", err)
+	}
+	if stored != "Internal operators" {
+		t.Fatalf("groups store displayName = %q", stored)
 	}
 }
 

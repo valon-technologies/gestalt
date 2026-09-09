@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"google.golang.org/protobuf/types/known/structpb"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -18,7 +17,6 @@ const (
 	groupAuthorizationResourceType = "group"
 	groupAdminRelation             = "admin"
 	groupMemberRelation            = "member"
-	groupDisplayNameProperty       = "displayName"
 )
 
 type groupAdminSummary struct {
@@ -32,6 +30,10 @@ type groupAdminSummary struct {
 
 type groupAdminCreateRequest struct {
 	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+}
+
+type groupAdminUpdateRequest struct {
 	DisplayName string `json:"displayName"`
 }
 
@@ -54,6 +56,8 @@ func (s *Server) mountGroupAdminRoutes(r chi.Router) {
 		Post("/groups", s.createGroupAdminGroup)
 	r.With(s.authMiddleware, s.groupAdminShowAuthorizationMiddleware).
 		Get("/groups/{group}", s.getGroupAdminGroup)
+	r.With(s.authMiddleware, s.groupAdminAuthorizationMiddleware).
+		Patch("/groups/{group}", s.updateGroupAdminGroup)
 	r.With(s.authMiddleware, s.groupAdminShowAuthorizationMiddleware).
 		Get("/groups/{group}/admin/members", s.listGroupAdminMembers)
 	r.With(s.authMiddleware, s.groupAdminAuthorizationMiddleware).
@@ -344,9 +348,8 @@ func (s *Server) groupExists(ctx context.Context, groupID string) (bool, error) 
 	return len(resp.GetRelationships()) > 0, nil
 }
 
-func (s *Server) groupMetadata(ctx context.Context, groupID string) (int, string, error) {
+func (s *Server) groupMemberCount(ctx context.Context, groupID string) (int, error) {
 	memberCount := 0
-	displayName := ""
 	pageToken := ""
 	resource := s.groupResource(groupID)
 	for {
@@ -358,7 +361,7 @@ func (s *Server) groupMetadata(ctx context.Context, groupID string) (int, string
 			PageToken: pageToken,
 		})
 		if err != nil {
-			return 0, "", err
+			return 0, err
 		}
 		for _, relationship := range resp.GetRelationships() {
 			tuple := relationship.GetTuple()
@@ -368,15 +371,23 @@ func (s *Server) groupMetadata(ctx context.Context, groupID string) (int, string
 			if strings.TrimSpace(tuple.GetRelation()) == groupMemberRelation {
 				memberCount++
 			}
-			if displayName == "" {
-				displayName = strings.TrimSpace(relationship.GetProperties().GetFields()[groupDisplayNameProperty].GetStringValue())
-			}
 		}
 		pageToken = strings.TrimSpace(resp.GetNextPageToken())
 		if pageToken == "" {
-			return memberCount, displayName, nil
+			return memberCount, nil
 		}
 	}
+}
+
+func (s *Server) groupDisplayName(ctx context.Context, groupID string) (string, error) {
+	name, err := s.groups.DisplayName(ctx, groupID)
+	if err != nil {
+		return "", err
+	}
+	if name != "" {
+		return name, nil
+	}
+	return strings.TrimSpace(s.authorizationResourceDisplayName(ctx, s.groupResource(groupID))), nil
 }
 
 func (s *Server) groupAdminShowAuthorizationMiddleware(next http.Handler) http.Handler {
@@ -448,7 +459,11 @@ func (s *Server) listGroupAdminGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) groupAdminSummary(ctx context.Context, subjectID, groupID string) (groupAdminSummary, error) {
-	memberCount, displayName, err := s.groupMetadata(ctx, groupID)
+	memberCount, err := s.groupMemberCount(ctx, groupID)
+	if err != nil {
+		return groupAdminSummary{}, err
+	}
+	displayName, err := s.groupDisplayName(ctx, groupID)
 	if err != nil {
 		return groupAdminSummary{}, err
 	}
@@ -504,7 +519,11 @@ func (s *Server) createGroupAdminGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "group already exists")
 		return
 	}
-	if err := s.addGroupAdminMemberRole(r.Context(), groupID, groupAdminRelation, subjectID, displayName); err != nil {
+	if _, err := s.groups.UpsertDisplayName(r.Context(), groupID, displayName); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "group directory is unavailable")
+		return
+	}
+	if err := s.addGroupAdminMemberRole(r.Context(), groupID, groupAdminRelation, subjectID); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 		return
 	}
@@ -513,8 +532,38 @@ func (s *Server) createGroupAdminGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 		return
 	}
-	summary.DisplayName = displayName
 	writeJSON(w, http.StatusCreated, groupAdminCreateResponse{Group: summary})
+}
+
+func (s *Server) updateGroupAdminGroup(w http.ResponseWriter, r *http.Request) {
+	groupID := strings.TrimSpace(chi.URLParam(r, "group"))
+	if groupID == "" {
+		writeError(w, http.StatusBadRequest, "group is required")
+		return
+	}
+	subjectID, ok := s.resolveGroupAdminSubjectID(w, r)
+	if !ok {
+		return
+	}
+	var request groupAdminUpdateRequest
+	if !decodeStrictJSONBody(w, r, &request) {
+		return
+	}
+	displayName := strings.TrimSpace(request.DisplayName)
+	if displayName == "" {
+		writeError(w, http.StatusBadRequest, "displayName is required")
+		return
+	}
+	if _, err := s.groups.UpsertDisplayName(r.Context(), groupID, displayName); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "group directory is unavailable")
+		return
+	}
+	summary, err := s.groupAdminSummary(r.Context(), subjectID, groupID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }
 
 func (s *Server) listGroupAdminMembers(w http.ResponseWriter, r *http.Request) {
@@ -608,25 +657,13 @@ func (s *Server) removeGroupAdminMember(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) addGroupAdminMemberRole(ctx context.Context, groupID, role, subjectID string, displayName ...string) error {
+func (s *Server) addGroupAdminMemberRole(ctx context.Context, groupID, role, subjectID string) error {
 	if s == nil || s.authorization == nil {
 		return errors.New("authorization is unavailable")
-	}
-	var properties *structpb.Struct
-	if len(displayName) > 0 {
-		name := strings.TrimSpace(displayName[0])
-		if name != "" {
-			var err error
-			properties, err = structpb.NewStruct(map[string]any{groupDisplayNameProperty: name})
-			if err != nil {
-				return err
-			}
-		}
 	}
 	_, err := s.authorization.AddRelationship(ctx, &proto.AddRelationshipRequest{
 		Relationship: &proto.Relationship{
 			Tuple:       groupAdminMemberRelationshipTuple(groupID, role, subjectID),
-			Properties:  properties,
 			SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
 		},
 	})
