@@ -529,11 +529,11 @@ func (s *Server) listGroupAdminMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filtered := make([]appAdminMemberRow, 0, len(rows))
-	for _, row := range rows {
-		if row.Role != groupMemberRelation {
+	for i := range rows {
+		if rows[i].Role != groupMemberRelation {
 			continue
 		}
-		filtered = append(filtered, row)
+		filtered = append(filtered, rows[i])
 	}
 	writeJSON(w, http.StatusOK, s.projectAppAdminHumanMemberRows(r.Context(), filtered))
 }

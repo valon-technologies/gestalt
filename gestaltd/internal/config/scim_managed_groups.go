@@ -21,7 +21,8 @@ func ScimManagedGroupIDs(cfg *Config) map[string]struct{} {
 			}
 		}
 	}
-	for _, relationship := range cfg.Authorization.Relationships {
+	for i := range cfg.Authorization.Relationships {
+		relationship := &cfg.Authorization.Relationships[i]
 		if strings.TrimSpace(relationship.Resource.Type) == "app" {
 			continue
 		}
