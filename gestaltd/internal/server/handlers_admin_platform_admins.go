@@ -47,17 +47,24 @@ func (s *Server) listAdminPlatformAdmins(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	resource := s.platformAdminResource()
+	role := s.configuredPlatformAdminRole()
 	rows, err := s.listAuthorizationMemberRows(r.Context(), resource)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 		return
+	}
+	filtered := make([]appAdminMemberRow, 0, len(rows))
+	for i := range rows {
+		if strings.TrimSpace(rows[i].Role) == role {
+			filtered = append(filtered, rows[i])
+		}
 	}
 	writeJSON(w, http.StatusOK, adminPlatformAdminsResponse{
 		Resource: adminPlatformAdminResource{
 			Type: resource.GetType(),
 			ID:   resource.GetId(),
 		},
-		Role:    s.configuredPlatformAdminRole(),
-		Members: s.projectAppAdminHumanMemberRows(r.Context(), rows),
+		Role:    role,
+		Members: s.projectAppAdminHumanMemberRows(r.Context(), filtered),
 	})
 }
