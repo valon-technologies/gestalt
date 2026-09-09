@@ -261,10 +261,24 @@ func connectionSuccessURL(integration string, alreadyConnected bool) string {
 	return linkURL
 }
 
+func connectionSuccessCopy(integration string, alreadyConnected, autoClose bool) (string, string) {
+	if alreadyConnected {
+		if autoClose {
+			return integration + " already connected", "This account was already connected. This window will close automatically."
+		}
+		return integration + " already connected", "This account was already connected. You can close this tab now."
+	}
+	if autoClose {
+		return integration + " connected", "Your connection has been saved. This window will close automatically."
+	}
+	return integration + " connected", "Your connection has been saved. You can close this tab now."
+}
+
 func writeConnectionCompletePage(w http.ResponseWriter, integration string, alreadyConnected bool) {
+	title, message := connectionSuccessCopy(integration, alreadyConnected, true)
 	writePendingConnectionPage(w, http.StatusOK, pendingConnectionPageView{
-		Title:            integration + " connected",
-		Message:          "Your connection has been saved. This window will close automatically.",
+		Title:            title,
+		Message:          message,
 		LinkURL:          connectionSuccessURL(integration, alreadyConnected),
 		LinkLabel:        "Open integrations",
 		AutoClose:        true,
@@ -273,10 +287,11 @@ func writeConnectionCompletePage(w http.ResponseWriter, integration string, alre
 }
 
 func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration string, alreadyConnected bool) {
+	title, message := connectionSuccessCopy(integration, alreadyConnected, false)
 	s.clearPendingConnectionCookie(w)
 	writePendingConnectionPage(w, http.StatusOK, pendingConnectionPageView{
-		Title:     integration + " connected",
-		Message:   "Your connection has been saved. You can close this tab now.",
+		Title:     title,
+		Message:   message,
 		LinkURL:   connectionSuccessURL(integration, alreadyConnected),
 		LinkLabel: "Open integrations",
 	}, "failed to render success page")

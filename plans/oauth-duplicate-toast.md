@@ -11,9 +11,10 @@ but the callback success paths discarded that result.
 
 Preserve the existing server-side `AlreadyConnected` result through every OAuth
 completion path. The popup success page sends it with the existing completion
-message, and same-tab/fallback links include it as a query parameter. The client
-still confirms the connection by refreshing the catalog before showing success;
-the flag only selects the duplicate-specific copy.
+message, visible fallback pages use the duplicate-specific copy, and same-tab/
+fallback links include it as a query parameter. The client still confirms the
+connection by refreshing the catalog before showing success; the flag only
+selects the duplicate-specific copy.
 
 ## Acceptance criteria
 

@@ -9742,12 +9742,16 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		handler := &testOAuthHandler{
 			authorizationBaseURLVal: "https://auth.example.com/oauth/authorize",
 			exchangeCodeFn: func(_ context.Context, code string) (*core.OAuthTokenResponse, error) {
-				if code == "good-code" {
+				if code == "good-code" || code == "new-popup-code" {
+					accountID := "account-456"
+					if code == "new-popup-code" {
+						accountID = "account-789"
+					}
 					return &core.OAuthTokenResponse{
 						AccessToken: "oauth-token",
 						Extra: map[string]any{
 							"tenant":  map[string]any{"id": "tenant-123"},
-							"account": map[string]any{"id": "account-456"},
+							"account": map[string]any{"id": accountID},
 						},
 					}, nil
 				}
@@ -9891,6 +9895,42 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("expected audit target_name default/default, got %v", auditRecord["target_name"])
 		}
 
+		newPopupStartReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", bytes.NewBufferString(`{"integration":"oauth-svc","instance":"new-popup"}`))
+		newPopupStartReq.Header.Set("Content-Type", "application/json")
+		newPopupStartReq.Header.Set("Authorization", "Bearer session-token")
+		newPopupStartResp, err := http.DefaultClient.Do(newPopupStartReq)
+		if err != nil {
+			t.Fatalf("new popup start request: %v", err)
+		}
+		defer func() { _ = newPopupStartResp.Body.Close() }()
+		if newPopupStartResp.StatusCode != http.StatusOK {
+			t.Fatalf("new popup start status = %d, want 200", newPopupStartResp.StatusCode)
+		}
+		var newPopupStartResult map[string]string
+		if err := json.NewDecoder(newPopupStartResp.Body).Decode(&newPopupStartResult); err != nil {
+			t.Fatalf("decoding new popup start response: %v", err)
+		}
+		newPopupCallbackReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=new-popup-code&state="+url.QueryEscape(newPopupStartResult["state"]), nil)
+		newPopupCallbackReq.Header.Set("Accept", "text/html")
+		newPopupCallbackResp, err := noRedirect.Do(newPopupCallbackReq)
+		if err != nil {
+			t.Fatalf("new popup callback request: %v", err)
+		}
+		defer func() { _ = newPopupCallbackResp.Body.Close() }()
+		if newPopupCallbackResp.StatusCode != http.StatusOK {
+			t.Fatalf("new popup callback status = %d, want 200", newPopupCallbackResp.StatusCode)
+		}
+		newPopupBody, err := io.ReadAll(newPopupCallbackResp.Body)
+		if err != nil {
+			t.Fatalf("read new popup callback body: %v", err)
+		}
+		if !strings.Contains(string(newPopupBody), `alreadyConnected: false`) {
+			t.Fatalf("new popup callback omitted alreadyConnected=false: %s", newPopupBody)
+		}
+		if !strings.Contains(string(newPopupBody), `/apps?connected=oauth-svc`) || strings.Contains(string(newPopupBody), "alreadyConnected=true") {
+			t.Fatalf("new popup callback had incorrect fallback URL: %s", newPopupBody)
+		}
+
 		duplicateStartReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", bytes.NewBufferString(`{"integration":"oauth-svc"}`))
 		duplicateStartReq.Header.Set("Content-Type", "application/json")
 		duplicateStartReq.Header.Set("Authorization", "Bearer session-token")
@@ -9952,6 +9992,9 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		if !strings.Contains(string(popupBody), `alreadyConnected: true`) {
 			t.Fatalf("popup duplicate callback omitted alreadyConnected=true: %s", popupBody)
+		}
+		if !strings.Contains(string(popupBody), "oauth-svc already connected") || !strings.Contains(string(popupBody), "This account was already connected.") {
+			t.Fatalf("popup duplicate callback omitted duplicate copy: %s", popupBody)
 		}
 		if !strings.Contains(string(popupBody), `/apps?alreadyConnected=true&amp;connected=oauth-svc`) {
 			t.Fatalf("popup duplicate callback omitted fallback URL: %s", popupBody)
@@ -10244,6 +10287,9 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		if !strings.Contains(string(fallbackSuccessBody), `/apps?alreadyConnected=true&amp;connected=oauth-svc`) {
 			t.Fatalf("fallback success page omitted duplicate URL: %s", fallbackSuccessBody)
+		}
+		if !strings.Contains(string(fallbackSuccessBody), "oauth-svc already connected") || !strings.Contains(string(fallbackSuccessBody), "This account was already connected.") {
+			t.Fatalf("fallback success page omitted duplicate copy: %s", fallbackSuccessBody)
 		}
 	})
 }
