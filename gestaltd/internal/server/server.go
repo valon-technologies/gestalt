@@ -126,6 +126,7 @@ type Server struct {
 	userLookupRoute               UserLookupRouteConfig
 	auditSink                     core.AuditSink
 	users                         userStore
+	groups                        *coredata.GroupService
 	externalCredentials           core.ExternalCredentialProvider
 	connectionInstancePreferences *coredata.ConnectionInstancePreferenceService
 	appAccessProfiles             *coredata.AppAccessProfileService
@@ -395,6 +396,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Services.Users != nil {
 		users = cfg.Services.Users
 	}
+	groups := cfg.Services.Groups
 	externalCredentials := cfg.Services.ExternalCredentials
 	connectionInstancePreferences := cfg.Services.ConnectionInstancePreferences
 	if core.ExternalCredentialProviderMissing(externalCredentials) {
@@ -481,6 +483,7 @@ func New(cfg Config) (*Server, error) {
 		userLookupRoute:               userLookupRoute,
 		auditSink:                     cfg.AuditSink,
 		users:                         users,
+		groups:                        groups,
 		externalCredentials:           externalCredentials,
 		connectionInstancePreferences: connectionInstancePreferences,
 		appAccessProfiles:             cfg.Services.AppAccessProfiles,
