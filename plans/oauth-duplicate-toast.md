@@ -25,6 +25,11 @@ the flag only selects the duplicate-specific copy.
 ## Validation
 
 - `go test ./gestaltd/internal/server`
+- Handler-level regression coverage must verify that a duplicate OAuth callback
+  preserves `AlreadyConnected` in both the popup completion payload and the
+  non-HTML redirect.
+- Pending-connection selection must preserve the same result in both the
+  authenticated redirect path and the unauthenticated fallback page.
 - Client validation runs in the companion toolshed worktree.
 - `git diff --check`
 
