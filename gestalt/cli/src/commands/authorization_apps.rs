@@ -16,6 +16,9 @@ use gestalt_sdk::public::generated::app_client::AuthorizationClient;
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
 use crate::commands::authorization_app_member_groups::{remove_group_member, set_group_member};
+use crate::commands::authorization_app_member_people::{
+    resolve_canonical_member_subject_id, trimmed_option,
+};
 
 pub fn dispatch(
     api: &ApiClient,
@@ -113,7 +116,7 @@ fn set_member(
     }
     let subject_id = resolve_canonical_member_subject_id(
         api,
-        &app,
+        &app_admin_members_path(&app),
         args.email.as_deref(),
         args.subject_id.as_deref(),
     )?;
@@ -152,11 +155,9 @@ fn remove_member(
         let role = trimmed_option(args.role.as_deref())
             .map(require_role)
             .transpose()?;
-        let members_path = app_admin_members_path(&app);
         return remove_group_member(
             api,
             authz,
-            &members_path,
             &app,
             group_id,
             role.as_deref(),
@@ -165,15 +166,11 @@ fn remove_member(
     }
     let subject = resolve_canonical_member_subject_id(
         api,
-        &app,
+        &app_admin_members_path(&app),
         args.email.as_deref(),
         args.subject_id.as_deref().or(args.subject.as_deref()),
     )?;
-    let role = args
-        .role
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
+    let role = trimmed_option(args.role.as_deref())
         .map(require_role)
         .transpose()?;
     let resp = api
@@ -346,130 +343,6 @@ fn allowed_operation_row(value: &Value) -> Vec<String> {
     ]
 }
 
-fn load_app_admin_members(api: &ApiClient, app: &str) -> Result<Vec<AppAdminMember>> {
-    let resp = api
-        .get(&app_admin_members_path(app))
-        .with_context(|| format!("failed to list members for app {app}"))?;
-    serde_json::from_value(resp).context("failed to parse app admin members response")
-}
-
-fn resolve_canonical_member_subject_id(
-    api: &ApiClient,
-    app: &str,
-    email: Option<&str>,
-    subject_id: Option<&str>,
-) -> Result<String> {
-    if let Some(subject_id) = subject_id.map(str::trim).filter(|value| !value.is_empty()) {
-        let normalized = normalize_subject_id(subject_id)?;
-        if is_service_account_subject(&normalized) {
-            return Ok(normalized);
-        }
-        return canonical_subject_id_from_members(&load_app_admin_members(api, app)?, &normalized);
-    }
-
-    let email = email
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .context("either --email, --subject-id, or --group-id is required")?;
-    resolve_email_subject_id(api, app, email)
-}
-
-fn resolve_email_subject_id(api: &ApiClient, app: &str, email: &str) -> Result<String> {
-    let members = load_app_admin_members(api, app)?;
-    if let Some(subject_id) = subject_id_for_email_in_members(&members, email) {
-        return Ok(subject_id);
-    }
-    resolve_workspace_user_subject_id(api, email)
-}
-
-fn resolve_workspace_user_subject_id(api: &ApiClient, email: &str) -> Result<String> {
-    let resp = api
-        .get("/api/v1/home/users.list")
-        .context("failed to load workspace user directory")?;
-    let empty = Vec::new();
-    let users = resp
-        .get("users")
-        .and_then(Value::as_array)
-        .unwrap_or(&empty);
-    workspace_user_subject_id_for_email(email, users)
-}
-
-fn workspace_user_subject_id_for_email(email: &str, users: &[Value]) -> Result<String> {
-    let normalized = email.trim().to_lowercase();
-    for user in users {
-        let Some(user_email) = user.get("email").and_then(Value::as_str).map(str::trim) else {
-            continue;
-        };
-        let Some(user_id) = user.get("id").and_then(Value::as_str).map(str::trim) else {
-            continue;
-        };
-        if user_email.is_empty() || user_id.is_empty() {
-            continue;
-        }
-        if user_email.eq_ignore_ascii_case(&normalized) {
-            return Ok(format!("user:{user_id}"));
-        }
-    }
-    bail!(
-        "could not resolve {email} from the workspace user directory; use an address from `home.users.list` or pass --subject-id user:<uuid>"
-    )
-}
-
-fn trimmed_option(value: Option<&str>) -> Option<&str> {
-    value.map(str::trim).filter(|value| !value.is_empty())
-}
-
-fn canonical_subject_id_from_members(
-    members: &[AppAdminMember],
-    subject_id: &str,
-) -> Result<String> {
-    let normalized = normalize_subject_id(subject_id)?;
-    if is_service_account_subject(&normalized) {
-        return Ok(normalized);
-    }
-    for member in members {
-        if !subject_matches_member(&normalized, member) {
-            continue;
-        }
-        if let Some(canonical) = member
-            .subject_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            return Ok(canonical.to_string());
-        }
-    }
-    Ok(normalized)
-}
-
-fn subject_id_for_email_in_members(members: &[AppAdminMember], email: &str) -> Option<String> {
-    let normalized_email = email.trim().to_lowercase();
-    for member in members {
-        let Some(member_email) = member.email.as_deref() else {
-            continue;
-        };
-        if member_email.trim().eq_ignore_ascii_case(&normalized_email)
-            && let Some(subject_id) = member
-                .subject_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-        {
-            return Some(subject_id.to_string());
-        }
-    }
-    None
-}
-
-fn subject_matches_member(subject_id: &str, member: &AppAdminMember) -> bool {
-    let normalized = normalize_subject_id(subject_id).unwrap_or_default();
-    member
-        .subject_id
-        .as_deref()
-        .is_some_and(|subject| normalize_subject_id(subject).ok().as_deref() == Some(normalized.as_str()))
-}
-
 fn member_row(value: &Value) -> Vec<String> {
     vec![
         value
@@ -516,52 +389,6 @@ fn member_subject_label(value: &Value) -> String {
     }
 }
 
-fn is_service_account_subject(subject_id: &str) -> bool {
-    subject_id
-        .trim()
-        .to_ascii_lowercase()
-        .starts_with("service_account:")
-}
-
-fn normalize_subject_id(raw: &str) -> Result<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        bail!("subject id is required");
-    }
-    if trimmed.contains('#') {
-        bail!(
-            "subject id must be a direct subject, not a subject-set selector; use --group-id or `authorization relationships` for group grants"
-        );
-    }
-    let subject_id = if trimmed.contains(':') {
-        trimmed.to_string()
-    } else {
-        format!("user:{trimmed}")
-    };
-    reject_user_email_subject_id(&subject_id)?;
-    Ok(subject_id)
-}
-
-fn reject_user_email_subject_id(subject_id: &str) -> Result<()> {
-    if is_service_account_subject(subject_id) {
-        return Ok(());
-    }
-    let Some(local) = subject_id
-        .trim()
-        .strip_prefix("user:")
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(());
-    };
-    if local.contains('@') {
-        bail!(
-            "subject id must be a canonical user uuid (user:<uuid>); resolve people with --email from the workspace directory"
-        );
-    }
-    Ok(())
-}
-
 fn require_app_name(app: &str) -> Result<String> {
     let trimmed = app.trim();
     if trimmed.is_empty() {
@@ -579,15 +406,6 @@ fn require_role(role: &str) -> Result<String> {
         bail!("role must be admin, viewer, or editor");
     }
     Ok(trimmed.to_string())
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AppAdminMember {
-    #[serde(default)]
-    subject_id: Option<String>,
-    #[serde(default)]
-    email: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -622,122 +440,9 @@ struct OperationOverrideBody {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppAdminMember, AuthorizationAppsAllowedOperationsSetArgs,
-        canonical_subject_id_from_members, is_service_account_subject, member_subject_label,
-        normalize_subject_id, parse_operation_roles_assignment, subject_id_for_email_in_members,
-        subject_matches_member, trimmed_option,
+        AuthorizationAppsAllowedOperationsSetArgs, member_subject_label,
+        parse_operation_roles_assignment,
     };
-
-    #[test]
-    fn normalize_subject_id_prefixes_bare_ids() {
-        assert_eq!(normalize_subject_id("user_123").unwrap(), "user:user_123");
-    }
-
-    #[test]
-    fn subject_matches_member_compares_subject_id_and_email() {
-        let member = AppAdminMember {
-            subject_id: Some("user:abc".to_string()),
-            email: Some("alice@example.com".to_string()),
-        };
-        assert!(subject_matches_member("user:abc", &member));
-        assert!(!subject_matches_member("user:def", &member));
-        assert!(!subject_matches_member("user:alice@example.com", &member));
-    }
-
-    #[test]
-    fn subject_matches_member_ignores_subject_set_selectors() {
-        let member = AppAdminMember {
-            subject_id: None,
-            email: None,
-        };
-        assert!(!subject_matches_member(
-            "group:valon-employees#member",
-            &member
-        ));
-    }
-
-    #[test]
-    fn normalize_subject_id_rejects_user_email_subject() {
-        let err = normalize_subject_id("user:alice@example.com").unwrap_err();
-        assert!(err.to_string().contains("canonical user uuid"));
-        let err = normalize_subject_id("alice@example.com").unwrap_err();
-        assert!(err.to_string().contains("canonical user uuid"));
-    }
-
-    #[test]
-    fn normalize_subject_id_rejects_subject_set_selectors() {
-        let err = normalize_subject_id("group:valon-employees#member").unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("subject id must be a direct subject")
-        );
-    }
-
-    #[test]
-    fn service_account_subject_detection() {
-        assert!(is_service_account_subject("service_account:bot"));
-        assert!(!is_service_account_subject("user:abc"));
-    }
-
-    #[test]
-    fn canonical_subject_id_prefers_roster_subject_id() {
-        let members = [AppAdminMember {
-            subject_id: Some("user:canonical-id".to_string()),
-            email: Some("alice@example.com".to_string()),
-        }];
-        assert_eq!(
-            canonical_subject_id_from_members(&members, "user:canonical-id").unwrap(),
-            "user:canonical-id"
-        );
-    }
-
-    #[test]
-    fn subject_id_for_email_uses_roster_only() {
-        let members = [AppAdminMember {
-            subject_id: Some("user:canonical-id".to_string()),
-            email: Some("Alice@Example.com".to_string()),
-        }];
-        assert_eq!(
-            subject_id_for_email_in_members(&members, "alice@example.com"),
-            Some("user:canonical-id".to_string())
-        );
-        assert_eq!(
-            subject_id_for_email_in_members(&members, "bob@example.com"),
-            None
-        );
-    }
-
-    #[test]
-    fn workspace_user_subject_id_for_email_resolves_directory_match() {
-        let users = [serde_json::json!({
-            "id": "11111111-1111-1111-1111-111111111111",
-            "email": "Alice@Example.com",
-        })];
-        assert_eq!(
-            super::workspace_user_subject_id_for_email("alice@example.com", &users).unwrap(),
-            "user:11111111-1111-1111-1111-111111111111"
-        );
-    }
-
-    #[test]
-    fn workspace_user_subject_id_for_email_rejects_unknown_directory_user() {
-        let users = [serde_json::json!({
-            "id": "11111111-1111-1111-1111-111111111111",
-            "email": "alice@example.com",
-        })];
-        let err = super::workspace_user_subject_id_for_email("bob@example.com", &users).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("could not resolve bob@example.com from the workspace user directory")
-        );
-    }
-
-    #[test]
-    fn trimmed_option_rejects_blank_values() {
-        assert_eq!(trimmed_option(Some("  alice  ")), Some("alice"));
-        assert_eq!(trimmed_option(Some("   ")), None);
-        assert_eq!(trimmed_option(None), None);
-    }
 
     #[test]
     fn member_subject_label_prefers_subject_set_display_name_and_keeps_selector() {

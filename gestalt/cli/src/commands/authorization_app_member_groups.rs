@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
-use crate::api::ApiClient;
+use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::AuthorizationRelationshipMutationArgs;
 use crate::commands::authorization::{
     build_relationship_from_args, relationship_tuple_from_parts,
@@ -51,16 +51,19 @@ pub(crate) fn set_group_member(
 pub(crate) fn remove_group_member(
     api: &ApiClient,
     authz: &AuthorizationClient<SyncRestTransport>,
-    members_path: &str,
     app: &str,
     group_id: &str,
     role: Option<&str>,
     format: Format,
 ) -> Result<()> {
+    let members_path = format!(
+        "/api/v1/apps/{}/admin/members",
+        encode_path_segment(app)
+    );
     let subject_set = group_member_subject_set(group_id);
     let roles = match role {
         Some(role) => vec![role.to_string()],
-        None => mutable_group_roles(api, members_path, &subject_set)?,
+        None => mutable_group_roles(api, &members_path, &subject_set)?,
     };
     if roles.is_empty() {
         bail!("no mutable group grants found for {group_id} on {app}");

@@ -4,6 +4,7 @@ pub mod apps;
 pub mod auth;
 pub mod authorization;
 pub mod authorization_app_member_groups;
+pub mod authorization_app_member_people;
 pub mod authorization_apps;
 pub mod authorization_groups;
 pub mod authorization_subjects;
