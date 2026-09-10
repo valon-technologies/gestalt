@@ -388,15 +388,13 @@ func (b *preparedProviderBuilds) Start(
 		batchWG.Wait()
 	}
 
-	for _, batch := range pendingBatches {
-		if len(batch) == 0 {
-			continue
-		}
-		runBatch(batch)
-	}
-
 	go func() {
-		wg.Wait()
+		for _, batch := range pendingBatches {
+			if len(batch) == 0 {
+				continue
+			}
+			runBatch(batch)
+		}
 		cancelInstall()
 		close(ready)
 	}()
