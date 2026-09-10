@@ -37,6 +37,21 @@ CURSOR_PREV = 2
 #: Iterate in descending key order while collapsing duplicate index keys.
 CURSOR_PREV_UNIQUE = 3
 
+_TRANSACTION_READ_OPERATIONS = frozenset(
+    {
+        "get",
+        "get_key",
+        "get_all",
+        "get_all_keys",
+        "count",
+        "index_get",
+        "index_get_key",
+        "index_get_all",
+        "index_get_all_keys",
+        "index_count",
+    }
+)
+
 
 class NotFoundError(Exception):
     """Raised when an IndexedDB record, store, or cursor target is missing."""
@@ -969,6 +984,7 @@ class Transaction:
         durability_hint: str = "default",
     ) -> None:
         self._stub = stub
+        self._stores = frozenset(stores)
         self._closed = False
         self._request_id = 0
         self._request_iter = _RequestIterator()
@@ -1073,9 +1089,16 @@ class Transaction:
             raise TransactionError("transaction response request_id mismatch")
         try:
             _raise_rpc_status(op_resp.error)
-        except Exception:
-            self._closed = True
-            self._request_iter.close()
+        except Exception as error:
+            operation_name = operation.WhichOneof("operation")
+            recoverable_missing_read = (
+                isinstance(error, NotFoundError)
+                and operation_name in _TRANSACTION_READ_OPERATIONS
+                and getattr(operation, operation_name).store in self._stores
+            )
+            if not recoverable_missing_read:
+                self._closed = True
+                self._request_iter.close()
             raise
         return op_resp
 
