@@ -1271,17 +1271,28 @@ func (b *Broker) checkInvocationOperationAccess(ctx context.Context, p *principa
 }
 
 func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
-	if b == nil || b.appAccessProfiles == nil || p == nil || principal.IsNonUserPrincipal(p) {
+	profile, err := b.appAccessProfile(ctx, p, providerName)
+	if err != nil {
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+	}
+	if appAccessProfileAllows(profile, operationID) {
 		return nil
+	}
+	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+}
+
+func (b *Broker) appAccessProfile(ctx context.Context, p *principal.Principal, providerName string) (*core.AppAccessProfile, error) {
+	if b == nil || b.appAccessProfiles == nil || p == nil || principal.IsNonUserPrincipal(p) {
+		return nil, nil
 	}
 	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, b.users, p)
 	if err != nil {
 		if !errors.Is(err, principal.ErrOpaqueCredentialSubject) {
-			return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+			return nil, err
 		}
 		subjectID = legacyAppAccessSubjectID(p)
 		if subjectID == "" {
-			return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+			return nil, err
 		}
 		// Older local callers can carry a non-UUID user ID. Preserve their
 		// existing no-profile allow behavior, but honor a legacy raw profile
@@ -1291,16 +1302,23 @@ func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, pro
 	profile, err := b.appAccessProfiles.GetAppAccessProfile(ctx, subjectID, providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return nil
+			return nil, nil
 		}
-		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+		return nil, err
+	}
+	return profile, nil
+}
+
+func appAccessProfileAllows(profile *core.AppAccessProfile, operationID string) bool {
+	if profile == nil {
+		return true
 	}
 	for _, enabled := range profile.EnabledOperations {
 		if strings.TrimSpace(enabled) == strings.TrimSpace(operationID) {
-			return nil
+			return true
 		}
 	}
-	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+	return false
 }
 
 func legacyAppAccessSubjectID(p *principal.Principal) string {
