@@ -123,6 +123,7 @@ func (b *Broker) CheckOperationAccessMany(
 		profile         *core.AppAccessProfile
 		profileErr      error
 		delegatesRemote bool
+		resource        *proto.Resource
 	}
 	accessByProvider := make(map[string]providerAccess)
 	for i, query := range queries {
@@ -162,10 +163,15 @@ func (b *Broker) CheckOperationAccessMany(
 	properties := subjectAccessProperties(p)
 	reqs := make([]ResourceAccessRequest, 0, len(pending))
 	for _, i := range pending {
+		access := accessByProvider[queries[i].Provider]
+		if access.resource == nil {
+			access.resource = b.authorizationResource(ctx, queries[i].Provider)
+			accessByProvider[queries[i].Provider] = access
+		}
 		reqs = append(reqs, ResourceAccessRequest{
 			SubjectID:         subjectID,
 			Action:            queries[i].Operation,
-			Resource:          b.authorizationResource(ctx, queries[i].Provider),
+			Resource:          access.resource,
 			AllowedRoles:      queries[i].AllowedRoles,
 			SubjectProperties: properties,
 		})
