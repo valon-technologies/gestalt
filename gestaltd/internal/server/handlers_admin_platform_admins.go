@@ -28,7 +28,7 @@ func (s *Server) platformAdminResource() *proto.Resource {
 	if name == "" {
 		name = defaultAdminAuthorizationResource
 	}
-	return s.authorizationResource(name)
+	return configuredAuthorizationResource(name)
 }
 
 func (s *Server) configuredPlatformAdminRole() string {

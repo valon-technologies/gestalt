@@ -104,7 +104,7 @@ func (s *Server) mountedUIListingAccessRequest(appName, subjectID string) (invoc
 	return invocation.ResourceAccessRequest{
 		SubjectID:    access.subjectID,
 		Action:       access.action(),
-		Resource:     s.authorizationResource(access.resourceName),
+		Resource:     s.mountedUIAuthorizationResource(mounted),
 		AllowedRoles: access.allowedRoles,
 	}, true
 }
