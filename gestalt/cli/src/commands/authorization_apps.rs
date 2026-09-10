@@ -112,7 +112,7 @@ fn set_member(
     let app = require_app_name(&args.app)?;
     let role = require_role(&args.role)?;
     if let Some(group_id) = trimmed_option(args.group_id.as_deref()) {
-        return set_group_member(authz, &app, group_id, &role, format);
+        return set_group_member(api, authz, &app, group_id, &role, format);
     }
     let subject_id = resolve_canonical_member_subject_id(
         api,
