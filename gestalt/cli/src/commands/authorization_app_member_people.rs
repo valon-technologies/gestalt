@@ -20,9 +20,7 @@ pub(crate) fn trimmed_option(value: Option<&str>) -> Option<&str> {
 }
 
 pub(crate) fn load_app_admin_members(api: &ApiClient, path: &str) -> Result<Vec<AppAdminMember>> {
-    let resp = api
-        .get(path)
-        .context("failed to list app admin members")?;
+    let resp = api.get(path).context("failed to list app admin members")?;
     serde_json::from_value(resp).context("failed to parse app admin members response")
 }
 
@@ -41,8 +39,8 @@ pub(crate) fn resolve_canonical_member_subject_id(
         return canonical_subject_id_from_members(&members, &normalized);
     }
 
-    let email = trimmed_option(email)
-        .context("either --email, --subject-id, or --group-id is required")?;
+    let email =
+        trimmed_option(email).context("either --email, --subject-id, or --group-id is required")?;
     resolve_email_subject_id(api, members_path, email)
 }
 
@@ -199,9 +197,7 @@ fn is_canonical_user_uuid(value: &str) -> bool {
     if bytes[8] != b'-' || bytes[13] != b'-' || bytes[18] != b'-' || bytes[23] != b'-' {
         return false;
     }
-    value
-        .chars()
-        .all(|ch| ch.is_ascii_hexdigit() || ch == '-')
+    value.chars().all(|ch| ch.is_ascii_hexdigit() || ch == '-')
 }
 
 #[cfg(test)]
@@ -261,7 +257,9 @@ mod tests {
     #[test]
     fn service_account_subject_detection() {
         assert!(is_service_account_subject("service_account:bot"));
-        assert!(!is_service_account_subject("user:11111111-1111-1111-1111-111111111111"));
+        assert!(!is_service_account_subject(
+            "user:11111111-1111-1111-1111-111111111111"
+        ));
     }
 
     #[test]

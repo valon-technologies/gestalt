@@ -155,14 +155,7 @@ fn remove_member(
         let role = trimmed_option(args.role.as_deref())
             .map(require_role)
             .transpose()?;
-        return remove_group_member(
-            api,
-            authz,
-            &app,
-            group_id,
-            role.as_deref(),
-            format,
-        );
+        return remove_group_member(api, authz, &app, group_id, role.as_deref(), format);
     }
     let subject = resolve_canonical_member_subject_id(
         api,

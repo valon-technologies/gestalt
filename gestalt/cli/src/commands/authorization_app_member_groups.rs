@@ -3,9 +3,7 @@ use serde_json::Value;
 
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::AuthorizationRelationshipMutationArgs;
-use crate::commands::authorization::{
-    build_relationship_from_args, relationship_tuple_from_parts,
-};
+use crate::commands::authorization::{build_relationship_from_args, relationship_tuple_from_parts};
 use crate::output::{self, Format};
 
 use gestalt_sdk::authorization::{AddRelationshipRequest, DeleteRelationshipRequest};
@@ -41,9 +39,9 @@ pub(crate) fn set_group_member(
             "role": role,
             "subjectSet": subject_set,
         })),
-        Format::Table => output::print_success(&format!(
-            "Granted {role} on {app} to group {group_id}."
-        )),
+        Format::Table => {
+            output::print_success(&format!("Granted {role} on {app} to group {group_id}."))
+        }
     }
     Ok(())
 }
@@ -56,10 +54,7 @@ pub(crate) fn remove_group_member(
     role: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let members_path = format!(
-        "/api/v1/apps/{}/admin/members",
-        encode_path_segment(app)
-    );
+    let members_path = format!("/api/v1/apps/{}/admin/members", encode_path_segment(app));
     let subject_set = group_member_subject_set(group_id);
     let roles = match role {
         Some(role) => vec![role.to_string()],
@@ -69,8 +64,7 @@ pub(crate) fn remove_group_member(
         bail!("no mutable group grants found for {group_id} on {app}");
     }
     for role in &roles {
-        let tuple =
-            relationship_tuple_from_parts("app", app, role, None, Some(&subject_set))?;
+        let tuple = relationship_tuple_from_parts("app", app, role, None, Some(&subject_set))?;
         authz
             .delete_relationship_sync(DeleteRelationshipRequest {
                 relationship_tuple: Some(tuple),
@@ -115,10 +109,10 @@ fn mutable_group_roles(
         if row.get("mutable").and_then(Value::as_bool) != Some(true) {
             continue;
         }
-        if let Some(role) = row.get("role").and_then(Value::as_str).map(str::trim) {
-            if !role.is_empty() {
-                roles.push(role.to_string());
-            }
+        if let Some(role) = row.get("role").and_then(Value::as_str).map(str::trim)
+            && !role.is_empty()
+        {
+            roles.push(role.to_string());
         }
     }
     Ok(roles)

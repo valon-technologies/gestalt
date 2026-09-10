@@ -561,9 +561,11 @@ mod tests {
 
     #[test]
     fn decode_struct_accepts_null() {
-        assert!(decode_struct(&serde_json::json!(null))
-            .unwrap()
-            .fields
-            .is_empty());
+        assert!(
+            decode_struct(&serde_json::json!(null))
+                .unwrap()
+                .fields
+                .is_empty()
+        );
     }
 }

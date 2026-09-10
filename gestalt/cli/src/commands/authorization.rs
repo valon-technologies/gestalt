@@ -11,10 +11,10 @@ use crate::cli::{
 use crate::output::{self, Format};
 
 use crate::api::ApiClient;
+use crate::cli::AuthorizationGroupsCommands;
 use crate::commands::authorization_apps;
 use crate::commands::authorization_groups;
 use crate::commands::authorization_subjects;
-use crate::cli::AuthorizationGroupsCommands;
 
 use gestalt_sdk::authorization::source_layer::{
     SOURCE_LAYER_RUNTIME, SOURCE_LAYER_STATIC_CONFIG, SOURCE_LAYER_UNSPECIFIED,
@@ -370,7 +370,10 @@ mod tests {
         })
         .unwrap();
         let tuple = relationship.tuple.expect("tuple");
-        assert_eq!(tuple.resource.as_ref().map(|r| r.id.as_str()), Some("g-issues"));
+        assert_eq!(
+            tuple.resource.as_ref().map(|r| r.id.as_str()),
+            Some("g-issues")
+        );
         assert_eq!(tuple.relation, "viewer");
         assert_eq!(relationship.source_layer, SOURCE_LAYER_RUNTIME);
     }

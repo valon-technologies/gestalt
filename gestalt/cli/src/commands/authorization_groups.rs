@@ -20,13 +20,7 @@ pub fn list_groups(api: &ApiClient, format: Format) -> Result<()> {
             println!(
                 "{}",
                 output::render_table(
-                    &[
-                        "ID",
-                        "Display Name",
-                        "Members",
-                        "SCIM Managed",
-                        "Editable",
-                    ],
+                    &["ID", "Display Name", "Members", "SCIM Managed", "Editable",],
                     &rows,
                 )
             );
