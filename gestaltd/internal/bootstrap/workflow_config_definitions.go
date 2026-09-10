@@ -32,6 +32,37 @@ type desiredWorkflowConfigDefinition struct {
 type workflowConfigProviderFilter func(providerName string) bool
 
 func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, appDecls *appWorkflowDeclarations, includeProvider workflowConfigProviderFilter) error {
+	var reported map[string][]*proto.WorkflowDefinitionSpec
+	if appDecls != nil {
+		reported = appDecls.Snapshot()
+	}
+	return reconcileWorkflowConfigDefinitionsFromDeclarations(ctx, cfg, runtime, reported, includeProvider, "")
+}
+
+func reconcileAppWorkflowDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, appDecls *appWorkflowDeclarations, app string) error {
+	app = strings.TrimSpace(app)
+	if cfg == nil || runtime == nil || appDecls == nil || app == "" {
+		return nil
+	}
+	reported := appDecls.Snapshot()
+	if _, ok := reported[app]; !ok {
+		return fmt.Errorf("bootstrap: app %q has not reported workflow definitions", app)
+	}
+	defaultProvider, _, err := cfg.EffectiveWorkflowProvider("")
+	if err != nil {
+		return err
+	}
+	return reconcileWorkflowConfigDefinitionsFromDeclarations(
+		ctx,
+		cfg,
+		runtime,
+		reported,
+		workflowConfigOnlyProvider(defaultProvider),
+		app,
+	)
+}
+
+func reconcileWorkflowConfigDefinitionsFromDeclarations(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, reported map[string][]*proto.WorkflowDefinitionSpec, includeProvider workflowConfigProviderFilter, app string) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
@@ -39,10 +70,6 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 	cfgDesired, err := desiredWorkflowConfigDefinitions(cfg)
 	if err != nil {
 		return err
-	}
-	var reported map[string][]*proto.WorkflowDefinitionSpec
-	if appDecls != nil {
-		reported = appDecls.Snapshot()
 	}
 	appDesired, err := desiredAppWorkflowDefinitions(cfg, reported)
 	if err != nil {
@@ -56,6 +83,9 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 	for _, definitionID := range slices.Sorted(maps.Keys(desired)) {
 		desiredEntry := desired[definitionID]
 		if !workflowConfigProviderIncluded(includeProvider, desiredEntry.ProviderName) {
+			continue
+		}
+		if app != "" && desiredEntry.FromApp != app {
 			continue
 		}
 		spec := desiredEntry.Spec
@@ -101,7 +131,7 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 		}
 	}
 
-	if err := cleanupRemovedWorkflowConfigDefinitions(ctx, cfg, runtime, reported, desired, includeProvider); err != nil {
+	if err := cleanupRemovedWorkflowConfigDefinitions(ctx, cfg, runtime, reported, desired, includeProvider, app); err != nil {
 		return err
 	}
 	return nil
@@ -191,16 +221,20 @@ func isWorkflowObjectNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, reported map[string][]*proto.WorkflowDefinitionSpec, desired map[string]desiredWorkflowConfigDefinition, includeProvider workflowConfigProviderFilter) error {
+func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, reported map[string][]*proto.WorkflowDefinitionSpec, desired map[string]desiredWorkflowConfigDefinition, includeProvider workflowConfigProviderFilter, app string) error {
 	desiredByProviderDefinition := make(map[string]struct{}, len(desired))
 	for definitionID := range desired {
 		entry := desired[definitionID]
 		if !workflowConfigProviderIncluded(includeProvider, entry.ProviderName) {
 			continue
 		}
+		if app != "" && entry.FromApp != app {
+			continue
+		}
 		desiredByProviderDefinition[workflowConfigProviderObjectKey(entry.ProviderName, entry.DefinitionID)] = struct{}{}
 	}
 	protectedPrefixes := appWorkflowProtectedPrefixes(cfg, reported)
+	knownApps := slices.Sorted(maps.Keys(cfg.Apps))
 	for _, providerName := range runtime.ConfiguredProviderNames() {
 		if !workflowConfigProviderIncluded(includeProvider, providerName) {
 			continue
@@ -220,6 +254,9 @@ func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, cfg *config.Co
 				return fmt.Errorf("bootstrap: decode workflow definition from provider %q: %w", providerName, err)
 			}
 			if definition == nil || !isManagedWorkflowDefinitionOwned(definition, definition.ID) {
+				continue
+			}
+			if app != "" && coreworkflow.DefinitionOwnerApp(definition.ID, knownApps) != app {
 				continue
 			}
 			if _, ok := desiredByProviderDefinition[workflowConfigProviderObjectKey(providerName, definition.ID)]; ok {

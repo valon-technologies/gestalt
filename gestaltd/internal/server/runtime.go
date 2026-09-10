@@ -592,6 +592,34 @@ func startAppRegistryCatalogPoller(
 	if changeRequests == nil || materializations == nil || rollouts == nil {
 		return nil
 	}
+	appRuntimeState, _ := result.AppRestarter.(AppRuntimeState)
+	beforeRolloutComplete := func(ctx context.Context, app, version string) (bool, error) {
+		if result.ReconcileAppWorkflowDefinitions == nil {
+			return true, nil
+		}
+		restartable, err := result.AppRestarter.Restartable(app)
+		if err != nil {
+			return false, err
+		}
+		if !restartable {
+			return true, nil
+		}
+		if appRuntimeState == nil {
+			return false, nil
+		}
+		ready := false
+		err = appRuntimeState.WithRunningVersion(app, func(runningVersion string) error {
+			if strings.TrimSpace(runningVersion) != strings.TrimSpace(version) {
+				return nil
+			}
+			ready = true
+			return result.ReconcileAppWorkflowDefinitions(ctx, app)
+		})
+		if !ready {
+			return false, nil
+		}
+		return true, err
+	}
 	var materializer *appregistry.Materializer
 	if cfg != nil && len(cfg.AppRegistries) > 0 {
 		artifactsDir := strings.TrimSpace(cfg.Server.ArtifactsDir)
@@ -638,6 +666,7 @@ func startAppRegistryCatalogPoller(
 		RestartReady:                result.AppProvidersInitialized,
 		BootstrapReady:              result.AppProvidersInitialized,
 		MaxReconcileAttempts:        cfg.Server.AppRegistry.MaxReconcileAttempts,
+		BeforeRolloutComplete:       beforeRolloutComplete,
 		OnRolloutTerminal:           onRolloutTerminal,
 	})
 	poller.Start(ctx)
