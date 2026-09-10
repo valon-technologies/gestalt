@@ -115,7 +115,14 @@ var pendingConnectionSelectionPage = template.Must(template.New("pending-connect
   </main>
   {{if .AutoClose}}
   <script>
-    try { if (window.opener) { window.opener.postMessage({ type: "gestalt:connection-complete" }, "*"); } } catch (e) {}
+    try {
+      if (window.opener) {
+        window.opener.postMessage({
+          type: "gestalt:connection-complete",
+          alreadyConnected: {{if .AlreadyConnected}}true{{else}}false{{end}}
+        }, "*");
+      }
+    } catch (e) {}
     setTimeout(function () { window.close(); }, 600);
   </script>
   {{end}}
@@ -124,15 +131,16 @@ var pendingConnectionSelectionPage = template.Must(template.New("pending-connect
 `))
 
 type pendingConnectionPageView struct {
-	Title        string
-	Message      string
-	Action       string
-	PendingToken string
-	Candidates   []core.DiscoveryCandidate
-	LinkURL      string
-	LinkLabel    string
-	Footer       string
-	AutoClose    bool
+	Title            string
+	Message          string
+	Action           string
+	PendingToken     string
+	Candidates       []core.DiscoveryCandidate
+	LinkURL          string
+	LinkLabel        string
+	Footer           string
+	AutoClose        bool
+	AlreadyConnected bool
 }
 
 func writePendingConnectionPage(w http.ResponseWriter, status int, view pendingConnectionPageView, renderErr string) {
@@ -240,30 +248,51 @@ func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, stat
 // browser popup: it closes itself (window.close) since, post-OAuth, the opener
 // can't close it — Cross-Origin-Opener-Policy on the provider's pages severs the
 // opener↔popup link. A visible message + link is the fallback if close is blocked.
-func writeConnectionCompletePage(w http.ResponseWriter, integration string) {
+func connectionSuccessURL(integration string, alreadyConnected bool) string {
 	linkURL := "/apps"
 	if connectedURL, err := setURLQueryParam(linkURL, "connected", integration); err == nil {
 		linkURL = connectedURL
 	}
+	if alreadyConnected {
+		if duplicateURL, err := setURLQueryParam(linkURL, "alreadyConnected", "true"); err == nil {
+			linkURL = duplicateURL
+		}
+	}
+	return linkURL
+}
+
+func connectionSuccessCopy(integration string, alreadyConnected, autoClose bool) (string, string) {
+	if alreadyConnected {
+		if autoClose {
+			return integration + " already connected", "This account was already connected. This window will close automatically."
+		}
+		return integration + " already connected", "This account was already connected. You can close this tab now."
+	}
+	if autoClose {
+		return integration + " connected", "Your connection has been saved. This window will close automatically."
+	}
+	return integration + " connected", "Your connection has been saved. You can close this tab now."
+}
+
+func writeConnectionCompletePage(w http.ResponseWriter, integration string, alreadyConnected bool) {
+	title, message := connectionSuccessCopy(integration, alreadyConnected, true)
 	writePendingConnectionPage(w, http.StatusOK, pendingConnectionPageView{
-		Title:     integration + " connected",
-		Message:   "Your connection has been saved. This window will close automatically.",
-		LinkURL:   linkURL,
-		LinkLabel: "Open integrations",
-		AutoClose: true,
+		Title:            title,
+		Message:          message,
+		LinkURL:          connectionSuccessURL(integration, alreadyConnected),
+		LinkLabel:        "Open integrations",
+		AutoClose:        true,
+		AlreadyConnected: alreadyConnected,
 	}, "failed to render connection success page")
 }
 
-func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration string) {
+func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration string, alreadyConnected bool) {
+	title, message := connectionSuccessCopy(integration, alreadyConnected, false)
 	s.clearPendingConnectionCookie(w)
-	linkURL := "/apps"
-	if connectedURL, err := setURLQueryParam(linkURL, "connected", integration); err == nil {
-		linkURL = connectedURL
-	}
 	writePendingConnectionPage(w, http.StatusOK, pendingConnectionPageView{
-		Title:     integration + " connected",
-		Message:   "Your connection has been saved. You can close this tab now.",
-		LinkURL:   linkURL,
+		Title:     title,
+		Message:   message,
+		LinkURL:   connectionSuccessURL(integration, alreadyConnected),
 		LinkLabel: "Open integrations",
 	}, "failed to render success page")
 }
@@ -459,7 +488,8 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		auditErr = errors.New("integration not found")
 		return
 	}
-	if _, err := s.completeConnection(credentialMaterialContext(r.Context(), completionPrincipal, tm), prov, tm); err != nil {
+	result, err := s.completeConnection(credentialMaterialContext(r.Context(), completionPrincipal, tm), prov, tm)
+	if err != nil {
 		status, message := connectionSetupFailure(err)
 		auditErr = errors.New(message)
 		writeError(w, status, message)
@@ -468,10 +498,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	if _, err := r.Cookie(sessionCookieName); err == nil {
 		s.clearPendingConnectionCookie(w)
-		connectedURL := "/apps"
-		if nextURL, err := setURLQueryParam(connectedURL, "connected", state.Credential.Integration); err == nil {
-			connectedURL = nextURL
-		}
+		connectedURL := connectionSuccessURL(state.Credential.Integration, result.AlreadyConnected)
 		auditAllowed = true
 		auditErr = nil
 		http.Redirect(w, r, connectedURL, http.StatusSeeOther)
@@ -480,5 +507,5 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	auditAllowed = true
 	auditErr = nil
-	s.writePendingConnectionSuccessPage(w, state.Credential.Integration)
+	s.writePendingConnectionSuccessPage(w, state.Credential.Integration, result.AlreadyConnected)
 }
