@@ -300,7 +300,7 @@ pub struct AuthorizationAppsMembersSetArgs {
         required_unless_present_any = ["subject_id", "group_id"]
     )]
     pub email: Option<String>,
-    /// Member subject id, such as user:abc or service_account:bot
+    /// Member subject id, such as user:<uuid> or service_account:bot
     #[arg(
         long = "subject-id",
         conflicts_with_all = ["email", "group_id"],
@@ -323,7 +323,7 @@ pub struct AuthorizationAppsMembersSetArgs {
 pub struct AuthorizationAppsMembersRemoveArgs {
     /// App name
     pub app: String,
-    /// Member subject id, such as user:abc
+    /// Member subject id, such as user:<uuid>
     #[arg(
         conflicts_with_all = ["email", "subject_id", "group_id"],
         required_unless_present_any = ["email", "subject_id", "group_id"]
@@ -332,7 +332,7 @@ pub struct AuthorizationAppsMembersRemoveArgs {
     /// Existing roster member email address
     #[arg(long, conflicts_with_all = ["subject", "subject_id", "group_id"])]
     pub email: Option<String>,
-    /// Member subject id, such as user:abc or service_account:bot
+    /// Member subject id, such as user:<uuid> or service_account:bot
     #[arg(long = "subject-id", conflicts_with_all = ["subject", "email", "group_id"])]
     pub subject_id: Option<String>,
     /// Workspace group id to remove (maps to group:{id}#member)

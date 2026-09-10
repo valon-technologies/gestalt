@@ -464,18 +464,10 @@ fn subject_id_for_email_in_members(members: &[AppAdminMember], email: &str) -> O
 
 fn subject_matches_member(subject_id: &str, member: &AppAdminMember) -> bool {
     let normalized = normalize_subject_id(subject_id).unwrap_or_default();
-    if let Some(subject) = member.subject_id.as_deref()
-        && normalize_subject_id(subject).ok().as_deref() == Some(normalized.as_str())
-    {
-        return true;
-    }
-    if let Some(email) = member.email.as_deref() {
-        let email_subject = format!("user:{}", email.trim().to_lowercase());
-        if normalize_subject_id(&email_subject).ok().as_deref() == Some(normalized.as_str()) {
-            return true;
-        }
-    }
-    false
+    member
+        .subject_id
+        .as_deref()
+        .is_some_and(|subject| normalize_subject_id(subject).ok().as_deref() == Some(normalized.as_str()))
 }
 
 fn member_row(value: &Value) -> Vec<String> {
@@ -541,11 +533,33 @@ fn normalize_subject_id(raw: &str) -> Result<String> {
             "subject id must be a direct subject, not a subject-set selector; use --group-id or `authorization relationships` for group grants"
         );
     }
-    if trimmed.contains(':') {
-        Ok(trimmed.to_string())
+    let subject_id = if trimmed.contains(':') {
+        trimmed.to_string()
     } else {
-        Ok(format!("user:{trimmed}"))
+        format!("user:{trimmed}")
+    };
+    reject_user_email_subject_id(&subject_id)?;
+    Ok(subject_id)
+}
+
+fn reject_user_email_subject_id(subject_id: &str) -> Result<()> {
+    if is_service_account_subject(subject_id) {
+        return Ok(());
     }
+    let Some(local) = subject_id
+        .trim()
+        .strip_prefix("user:")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
+    if local.contains('@') {
+        bail!(
+            "subject id must be a canonical user uuid (user:<uuid>); resolve people with --email from the workspace directory"
+        );
+    }
+    Ok(())
 }
 
 fn require_app_name(app: &str) -> Result<String> {
@@ -626,8 +640,8 @@ mod tests {
             email: Some("alice@example.com".to_string()),
         };
         assert!(subject_matches_member("user:abc", &member));
-        assert!(subject_matches_member("user:alice@example.com", &member));
         assert!(!subject_matches_member("user:def", &member));
+        assert!(!subject_matches_member("user:alice@example.com", &member));
     }
 
     #[test]
@@ -640,6 +654,14 @@ mod tests {
             "group:valon-employees#member",
             &member
         ));
+    }
+
+    #[test]
+    fn normalize_subject_id_rejects_user_email_subject() {
+        let err = normalize_subject_id("user:alice@example.com").unwrap_err();
+        assert!(err.to_string().contains("canonical user uuid"));
+        let err = normalize_subject_id("alice@example.com").unwrap_err();
+        assert!(err.to_string().contains("canonical user uuid"));
     }
 
     #[test]
@@ -664,7 +686,7 @@ mod tests {
             email: Some("alice@example.com".to_string()),
         }];
         assert_eq!(
-            canonical_subject_id_from_members(&members, "user:alice@example.com").unwrap(),
+            canonical_subject_id_from_members(&members, "user:canonical-id").unwrap(),
             "user:canonical-id"
         );
     }
