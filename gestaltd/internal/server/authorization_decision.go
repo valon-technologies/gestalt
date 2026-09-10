@@ -17,10 +17,16 @@ func (s *Server) authorizationMapper() invocation.AuthorizationResourceMapper {
 	return invocation.NewAuthorizationResourceMapper(s.providerKinds, s.authorizationPolicies)
 }
 
-// authorizationResource resolves the authorization resource for an app key or
-// policy alias.
+// authorizationResource resolves the authorization resource for an app key.
 func (s *Server) authorizationResource(appKey string) *proto.Resource {
 	return s.authorizationMapper().Resource(appKey)
+}
+
+// configuredAuthorizationResource resolves a configured authorization policy
+// name to its dedicated resource type. Use this for server admin, mounted UI,
+// and other platform gates that are not app keys.
+func configuredAuthorizationResource(policy string) *proto.Resource {
+	return invocation.DedicatedAuthorizationResource(policy)
 }
 
 // checkResourceAccess routes an HTTP-surface authorization question through the

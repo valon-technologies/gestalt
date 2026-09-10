@@ -6,12 +6,17 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
+func DedicatedAuthorizationResource(name string) *proto.Resource {
+	name = strings.TrimSpace(name)
+	return &proto.Resource{Type: name, Id: name}
+}
+
 func AuthorizationResource(name string, kinds map[string]ProviderKind) *proto.Resource {
 	name = strings.TrimSpace(name)
 	if kind, ok := kinds[name]; ok {
 		return &proto.Resource{Type: string(kind), Id: name}
 	}
-	return &proto.Resource{Type: name, Id: name}
+	return &proto.Resource{Type: string(ProviderKindApp), Id: name}
 }
 
 // AuthorizationResourceMapper is the single place that maps an app key to the
@@ -39,13 +44,18 @@ func (m AuthorizationResourceMapper) Policy(appKey string) string {
 	return appKey
 }
 
-// Resource returns the authorization resource for an app key. A configured
-// policy alias becomes its own dedicated resource type; otherwise the provider
-// kind supplies the resource type.
+// Resource returns the authorization resource for an app key. An explicit
+// authorizationPolicy alias uses that dedicated resource type; otherwise apps
+// resolve to app:{appKey} (or the configured provider kind for workflows).
 func (m AuthorizationResourceMapper) Resource(appKey string) *proto.Resource {
 	appKey = strings.TrimSpace(appKey)
 	if policy := strings.TrimSpace(m.policies[appKey]); policy != "" {
-		return &proto.Resource{Type: policy, Id: policy}
+		return DedicatedAuthorizationResource(policy)
+	}
+	for _, policy := range m.policies {
+		if strings.TrimSpace(policy) == appKey {
+			return DedicatedAuthorizationResource(appKey)
+		}
 	}
 	return AuthorizationResource(appKey, m.kinds)
 }

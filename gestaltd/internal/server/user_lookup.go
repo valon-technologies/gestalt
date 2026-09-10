@@ -89,7 +89,7 @@ func (s *Server) userLookupAllowed(ctx context.Context) bool {
 	decision, err := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
 		SubjectID:    subjectID,
 		Action:       policy,
-		Resource:     s.authorizationResource(policy),
+		Resource:     invocation.DedicatedAuthorizationResource(policy),
 		AllowedRoles: s.userLookupRoute.AllowedRoles,
 	})
 	if err != nil {

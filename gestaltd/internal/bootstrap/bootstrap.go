@@ -2562,11 +2562,7 @@ func ProviderAuthorizationKinds(cfg *config.Config) map[string]invocation.Provid
 	if cfg == nil {
 		return kinds
 	}
-	dedicatedResourceTypes := AuthorizationResourceTypeNames(cfg)
 	for name := range cfg.Apps {
-		if _, hasDedicatedResourceType := dedicatedResourceTypes[name]; hasDedicatedResourceType {
-			continue
-		}
 		kinds[name] = invocation.ProviderKindApp
 	}
 	for name := range cfg.Providers.Workflow {
@@ -2583,14 +2579,9 @@ func ProviderAuthorizationPolicies(cfg *config.Config) map[string]string {
 	if cfg == nil {
 		return policies
 	}
-	dedicatedResourceTypes := AuthorizationResourceTypeNames(cfg)
 	for name, app := range cfg.Apps {
 		if policy := strings.TrimSpace(app.AuthorizationPolicy); policy != "" {
 			policies[name] = policy
-			continue
-		}
-		if _, hasDedicatedResourceType := dedicatedResourceTypes[name]; hasDedicatedResourceType {
-			policies[name] = name
 		}
 	}
 	return policies

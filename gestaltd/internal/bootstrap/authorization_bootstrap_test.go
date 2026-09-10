@@ -540,7 +540,7 @@ func (p *statefulAuthorizationProvider) Ping(context.Context) error { return nil
 
 func (p *statefulAuthorizationProvider) Close() error { return nil }
 
-func TestProviderAuthorizationKindsSkipsDedicatedAppResourceTypes(t *testing.T) {
+func TestProviderAuthorizationKindsRegistersApps(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{
@@ -552,23 +552,14 @@ func TestProviderAuthorizationKindsSkipsDedicatedAppResourceTypes(t *testing.T) 
 			Workflow: map[string]*config.ProviderEntry{"nightly": {}},
 			Agent:    map[string]*config.ProviderEntry{"assistant": {}},
 		},
-		Authorization: config.AuthorizationConfig{
-			Models: map[string]config.AuthorizationModelDef{
-				"default": {
-					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
-						"legacy_app": {},
-					},
-				},
-			},
-		},
 	}
 
 	got := ProviderAuthorizationKinds(cfg)
 	if _, ok := got["workspace_review"]; !ok || got["workspace_review"] != invocation.ProviderKindApp {
 		t.Fatalf("workspace_review kind = %v, want app", got["workspace_review"])
 	}
-	if _, ok := got["legacy_app"]; ok {
-		t.Fatalf("legacy_app should be excluded from provider kinds, got %v", got["legacy_app"])
+	if got["legacy_app"] != invocation.ProviderKindApp {
+		t.Fatalf("legacy_app kind = %v, want app", got["legacy_app"])
 	}
 	if got["nightly"] != invocation.ProviderKindWorkflow {
 		t.Fatalf("nightly kind = %v, want workflow", got["nightly"])
@@ -603,10 +594,10 @@ func TestProviderAuthorizationPolicies(t *testing.T) {
 		t.Fatalf("shared policy = %q, want workspace", got["shared"])
 	}
 	if _, ok := got["own"]; ok {
-		t.Fatal("own app should use its app name instead of an explicit policy")
+		t.Fatal("own app should not get an implicit policy alias")
 	}
-	if got["legacy"] != "legacy" {
-		t.Fatalf("legacy policy = %q, want self-alias", got["legacy"])
+	if _, ok := got["legacy"]; ok {
+		t.Fatalf("legacy app should not auto-map to a dedicated policy alias, got %v", got["legacy"])
 	}
 }
 

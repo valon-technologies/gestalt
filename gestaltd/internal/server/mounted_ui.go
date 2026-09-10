@@ -273,6 +273,7 @@ func (s *Server) authorizeMountedAppAccess(ctx context.Context, p *principal.Pri
 	return s.authorizeMountedResourceRoles(ctx, mountedResourceAccess{
 		actionName:   mountedUIAuthorizationActionName(mounted),
 		resourceName: resourceName,
+		resource:     s.mountedUIAuthorizationResource(mounted),
 		subjectID:    subjectID,
 		allowedRoles: mounted.AllowedRoles,
 	})
@@ -284,6 +285,7 @@ func (s *Server) authorizeMountedAppAccess(ctx context.Context, p *principal.Pri
 type mountedResourceAccess struct {
 	actionName   string
 	resourceName string
+	resource     *proto.Resource
 	subjectID    string
 	allowedRoles []string
 }
@@ -341,7 +343,7 @@ func (s *Server) authorizeMountedResourceRoles(ctx context.Context, access mount
 	decision, err := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
 		SubjectID:    access.subjectID,
 		Action:       access.action(),
-		Resource:     s.authorizationResource(access.resourceName),
+		Resource:     access.resource,
 		AllowedRoles: access.allowedRoles,
 	})
 	if err != nil {
@@ -353,7 +355,7 @@ func (s *Server) authorizeMountedResourceRoles(ctx context.Context, access mount
 
 	// The evaluator did not name an authorizing relation. Read the active model
 	// once for the resource type's defaultRole.
-	model, err := s.mountedUIResourceModel(ctx, access.resourceName)
+	model, err := s.mountedUIResourceModel(ctx, access.resource)
 	if err != nil {
 		return invocation.AccessContext{}, false, err
 	}
@@ -374,6 +376,13 @@ func mountedUIAuthorizationResourceName(mounted MountedUI) string {
 		return name
 	}
 	return strings.TrimSpace(mounted.AppName)
+}
+
+func (s *Server) mountedUIAuthorizationResource(mounted MountedUI) *proto.Resource {
+	if name := strings.TrimSpace(mounted.AuthorizationPolicy); name != "" {
+		return configuredAuthorizationResource(name)
+	}
+	return s.authorizationResource(strings.TrimSpace(mounted.AppName))
 }
 
 func mountedUIRequiresAuthorization(mounted MountedUI) bool {
@@ -402,11 +411,11 @@ type mountedUIModelSnapshot struct {
 // mountedUIResourceModel reads the mount's resource type from the active model.
 // Within a listing request the read is memoized per resource type, so filtering
 // many apps does not re-read the same model entry once per app.
-func (s *Server) mountedUIResourceModel(ctx context.Context, resourceName string) (mountedUIModelSnapshot, error) {
-	if s == nil || s.authorization == nil {
+func (s *Server) mountedUIResourceModel(ctx context.Context, resource *proto.Resource) (mountedUIModelSnapshot, error) {
+	if s == nil || s.authorization == nil || resource == nil {
 		return mountedUIModelSnapshot{}, invocation.ErrAuthorizationUnavailable
 	}
-	typeName := strings.TrimSpace(s.authorizationResource(resourceName).GetType())
+	typeName := strings.TrimSpace(resource.GetType())
 	cache := listingDecisionCacheFromContext(ctx)
 	if cached, ok := cache.model(typeName); ok {
 		return cached, nil
