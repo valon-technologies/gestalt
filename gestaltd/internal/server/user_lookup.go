@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -90,7 +89,7 @@ func (s *Server) userLookupAllowed(ctx context.Context) bool {
 	decision, err := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
 		SubjectID:    subjectID,
 		Action:       policy,
-		Resource:     &proto.Resource{Type: policy, Id: policy},
+		Resource:     invocation.DedicatedAuthorizationResource(policy),
 		AllowedRoles: s.userLookupRoute.AllowedRoles,
 	})
 	if err != nil {
