@@ -383,7 +383,6 @@ fn resolve_email_subject_id(api: &ApiClient, app: &str, email: &str) -> Result<S
 }
 
 fn resolve_workspace_user_subject_id(api: &ApiClient, email: &str) -> Result<String> {
-    let normalized = email.trim().to_lowercase();
     let resp = api
         .get("/api/v1/home/users.list")
         .context("failed to load workspace user directory")?;
@@ -392,6 +391,11 @@ fn resolve_workspace_user_subject_id(api: &ApiClient, email: &str) -> Result<Str
         .get("users")
         .and_then(Value::as_array)
         .unwrap_or(&empty);
+    workspace_user_subject_id_for_email(email, users)
+}
+
+fn workspace_user_subject_id_for_email(email: &str, users: &[Value]) -> Result<String> {
+    let normalized = email.trim().to_lowercase();
     for user in users {
         let Some(user_email) = user.get("email").and_then(Value::as_str).map(str::trim) else {
             continue;
@@ -406,7 +410,9 @@ fn resolve_workspace_user_subject_id(api: &ApiClient, email: &str) -> Result<Str
             return Ok(format!("user:{user_id}"));
         }
     }
-    Ok(format!("user:{normalized}"))
+    bail!(
+        "could not resolve {email} from the workspace user directory; use an address from `home.users.list` or pass --subject-id user:<uuid>"
+    )
 }
 
 fn trimmed_option(value: Option<&str>) -> Option<&str> {
@@ -676,6 +682,31 @@ mod tests {
         assert_eq!(
             subject_id_for_email_in_members(&members, "bob@example.com"),
             None
+        );
+    }
+
+    #[test]
+    fn workspace_user_subject_id_for_email_resolves_directory_match() {
+        let users = [serde_json::json!({
+            "id": "11111111-1111-1111-1111-111111111111",
+            "email": "Alice@Example.com",
+        })];
+        assert_eq!(
+            super::workspace_user_subject_id_for_email("alice@example.com", &users).unwrap(),
+            "user:11111111-1111-1111-1111-111111111111"
+        );
+    }
+
+    #[test]
+    fn workspace_user_subject_id_for_email_rejects_unknown_directory_user() {
+        let users = [serde_json::json!({
+            "id": "11111111-1111-1111-1111-111111111111",
+            "email": "alice@example.com",
+        })];
+        let err = super::workspace_user_subject_id_for_email("bob@example.com", &users).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("could not resolve bob@example.com from the workspace user directory")
         );
     }
 
