@@ -119,26 +119,28 @@ func (b *Broker) CheckOperationAccessMany(
 ) ([]error, error) {
 	results := make([]error, len(queries))
 	pending := make([]int, 0, len(queries))
-	type appAccess struct {
-		profile *core.AppAccessProfile
-		err     error
+	type providerAccess struct {
+		profile         *core.AppAccessProfile
+		profileErr      error
+		delegatesRemote bool
 	}
-	appAccessByProvider := make(map[string]appAccess)
+	accessByProvider := make(map[string]providerAccess)
 	for i, query := range queries {
 		if !principal.AllowsOperationPermission(p, query.Provider, query.Operation) {
 			results[i] = operationAccessDenied(query)
 			continue
 		}
-		access, ok := appAccessByProvider[query.Provider]
+		access, ok := accessByProvider[query.Provider]
 		if !ok {
-			access.profile, access.err = b.appAccessProfile(ctx, p, query.Provider)
-			appAccessByProvider[query.Provider] = access
+			access.profile, access.profileErr = b.appAccessProfile(ctx, p, query.Provider)
+			access.delegatesRemote = b.providerDelegatesRemoteAuthorization(ctx, query.Provider)
+			accessByProvider[query.Provider] = access
 		}
-		if access.err != nil || !appAccessProfileAllows(access.profile, query.Operation) {
+		if access.profileErr != nil || !appAccessProfileAllows(access.profile, query.Operation) {
 			results[i] = operationAccessDenied(query)
 			continue
 		}
-		if !b.providerDelegatesRemoteAuthorization(ctx, query.Provider) {
+		if !access.delegatesRemote {
 			pending = append(pending, i)
 		}
 	}
