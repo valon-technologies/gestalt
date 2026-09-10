@@ -264,6 +264,10 @@ func (s *Server) publicGRPCMiddleware(next http.Handler) http.Handler {
 			writeGRPCTrailersOnly(w, codes.Unauthenticated, "public-grpc-unavailable")
 			return
 		}
+		if err := s.waitForServingReady(r.Context()); err != nil {
+			writeGRPCTrailersOnly(w, codes.Unavailable, "app-providers-loading")
+			return
+		}
 		s.publicGRPCHandler.ServeHTTP(w, r)
 	})
 }
