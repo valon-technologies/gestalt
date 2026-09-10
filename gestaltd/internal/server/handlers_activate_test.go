@@ -39,6 +39,50 @@ func TestActivateAppProvidersEndpointTriggersActivation(t *testing.T) {
 	}
 }
 
+func TestActivateWaitsForServingReadiness(t *testing.T) {
+	t.Parallel()
+
+	servingReady := make(chan struct{})
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.ServingReady = servingReady
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	type activationResult struct {
+		status int
+		err    error
+	}
+	done := make(chan activationResult, 1)
+	go func() {
+		resp, err := http.Post(srv.URL+"/activate", "", nil)
+		if err != nil {
+			done <- activationResult{err: err}
+			return
+		}
+		_ = resp.Body.Close()
+		done <- activationResult{status: resp.StatusCode}
+	}()
+
+	select {
+	case result := <-done:
+		t.Fatalf("activation completed before serving readiness: status %d, error %v", result.status, result.err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(servingReady)
+	select {
+	case result := <-done:
+		if result.err != nil {
+			t.Fatalf("POST /activate: %v", result.err)
+		}
+		if result.status != http.StatusOK {
+			t.Fatalf("status = %d, want %d", result.status, http.StatusOK)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("activation did not complete after serving readiness")
+	}
+}
+
 func TestActivateAppProvidersEndpointNotExposedOnPublicRouteProfile(t *testing.T) {
 	t.Parallel()
 

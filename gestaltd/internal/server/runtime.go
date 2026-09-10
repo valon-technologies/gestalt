@@ -152,6 +152,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		PublicHostServices:    result.PublicHostServices,
 		ActivateAppProviders:  result.ActivateAppProviders,
 		WaitAppProvidersReady: result.WaitAppProvidersReady,
+		ServingReady:          result.AppProvidersInitialized,
 		IndexedDB:             publicIndexedDB,
 		RemoteManagement:      reverseRemote.remoteManagement,
 		FrpsHandler:           reverseRemote.frpsHandler,

@@ -4040,6 +4040,52 @@ func TestReadinessCheck_IndexedDBDown(t *testing.T) {
 	}
 }
 
+func TestPublicTrafficWaitsForServingReadiness(t *testing.T) {
+	t.Parallel()
+
+	servingReady := make(chan struct{})
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.ServingReady = servingReady
+		cfg.MountedUIs = []server.MountedUI{{
+			Path:    "/",
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	health, err := http.Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	_ = health.Body.Close()
+	if health.StatusCode != http.StatusOK {
+		t.Fatalf("health status = %d, want %d", health.StatusCode, http.StatusOK)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/", nil)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("public request completed before serving readiness")
+	}
+
+	close(servingReady)
+	resp, err = http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET / after serving readiness: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("public status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+}
+
 func TestAuthMiddleware_ValidSession(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {

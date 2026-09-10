@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -37,14 +38,10 @@ func (s *Server) routes() {
 	switch s.routeProfile {
 	case RouteProfilePublic:
 		s.mountCoreRoutes(r, metricsHidden)
-		s.mountSCIMRoutes(r)
-		s.mountMCPRoutes(r)
-		s.mountHTTPBindingRoutes(r)
-		s.mountS3ObjectAccessRoutes(r)
-		s.mountAPIRoutes(r)
-		s.mountAdminAPIRoutes(r)
-		s.mountAdminPageRedirects(r)
-		s.mountMountedUIRoutes(r)
+		r.Group(func(r chi.Router) {
+			r.Use(s.servingReadyMiddleware)
+			s.mountServingRoutes(r)
+		})
 		s.mountManagementHiddenRoutes(r)
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
@@ -54,15 +51,47 @@ func (s *Server) routes() {
 		s.mountActivateRoute(r)
 	default:
 		s.mountCoreRoutes(r, metricsAuthenticated)
-		s.mountSCIMRoutes(r)
-		s.mountMCPRoutes(r)
-		s.mountHTTPBindingRoutes(r)
-		s.mountS3ObjectAccessRoutes(r)
-		s.mountAPIRoutes(r)
-		s.mountAdminAPIRoutes(r)
-		s.mountAdminPageRedirects(r)
-		s.mountMountedUIRoutes(r)
 		s.mountActivateRoute(r)
+		r.Group(func(r chi.Router) {
+			r.Use(s.servingReadyMiddleware)
+			s.mountServingRoutes(r)
+		})
+	}
+}
+
+func (s *Server) mountServingRoutes(r chi.Router) {
+	s.mountSCIMRoutes(r)
+	s.mountMCPRoutes(r)
+	s.mountHTTPBindingRoutes(r)
+	s.mountS3ObjectAccessRoutes(r)
+	s.mountAPIRoutes(r)
+	s.mountAdminAPIRoutes(r)
+	s.mountAdminPageRedirects(r)
+	s.mountMountedUIRoutes(r)
+}
+
+func (s *Server) servingReadyMiddleware(next http.Handler) http.Handler {
+	if s.servingReady == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := s.waitForServingReady(r.Context()); err != nil {
+			writeError(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) waitForServingReady(ctx context.Context) error {
+	if s.servingReady == nil {
+		return nil
+	}
+	select {
+	case <-s.servingReady:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
