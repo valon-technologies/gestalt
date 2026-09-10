@@ -1230,17 +1230,12 @@ func (b *Broker) authorizationPolicy(providerName string) string {
 func (b *Broker) authorizationResource(ctx context.Context, providerName string) *proto.Resource {
 	providerName = strings.TrimSpace(providerName)
 	mapper := b.authorizationMapper()
-	if b != nil {
-		if strings.TrimSpace(b.authorizationPolicies[providerName]) != "" {
-			return mapper.Resource(providerName)
-		}
-		if b.providers != nil {
-			if _, err := b.providers.GetWithContext(ctx, providerName); err == nil {
-				return &proto.Resource{Type: string(ProviderKindApp), Id: providerName}
-			}
-		}
-		if b.providerKinds[providerName] != "" {
-			return mapper.Resource(providerName)
+	if b != nil && strings.TrimSpace(b.authorizationPolicies[providerName]) != "" {
+		return mapper.Resource(providerName)
+	}
+	if b != nil && b.providers != nil {
+		if _, err := b.providers.GetWithContext(ctx, providerName); err == nil {
+			return &proto.Resource{Type: string(ProviderKindApp), Id: providerName}
 		}
 	}
 	return mapper.Resource(providerName)
