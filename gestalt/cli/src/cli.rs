@@ -243,6 +243,17 @@ pub enum AuthorizationCommands {
         #[command(subcommand)]
         command: AuthorizationAppsCommands,
     },
+    /// Inspect workspace groups from Admin
+    Groups {
+        #[command(subcommand)]
+        command: AuthorizationGroupsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationGroupsCommands {
+    /// List workspace groups
+    List,
 }
 
 #[derive(Subcommand)]
@@ -283,11 +294,26 @@ pub struct AuthorizationAppsMembersSetArgs {
     /// App name
     pub app: String,
     /// Existing roster member email address
-    #[arg(long, conflicts_with = "subject_id")]
+    #[arg(
+        long,
+        conflicts_with_all = ["subject_id", "group_id"],
+        required_unless_present_any = ["subject_id", "group_id"]
+    )]
     pub email: Option<String>,
-    /// Member subject id, such as user:abc or service_account:bot
-    #[arg(long = "subject-id", conflicts_with = "email")]
+    /// Member subject id, such as user:<uuid> or service_account:bot
+    #[arg(
+        long = "subject-id",
+        conflicts_with_all = ["email", "group_id"],
+        required_unless_present_any = ["email", "group_id"]
+    )]
     pub subject_id: Option<String>,
+    /// Workspace group id to grant (maps to group:{id}#member)
+    #[arg(
+        long = "group-id",
+        conflicts_with_all = ["email", "subject_id"],
+        required_unless_present_any = ["email", "subject_id"]
+    )]
+    pub group_id: Option<String>,
     /// App role to grant, such as viewer, editor, or admin
     #[arg(long)]
     pub role: String,
@@ -297,15 +323,21 @@ pub struct AuthorizationAppsMembersSetArgs {
 pub struct AuthorizationAppsMembersRemoveArgs {
     /// App name
     pub app: String,
-    /// Member subject id, such as user:abc
-    #[arg(conflicts_with_all = ["email", "subject_id"], required_unless_present_any = ["email", "subject_id"])]
+    /// Member subject id, such as user:<uuid>
+    #[arg(
+        conflicts_with_all = ["email", "subject_id", "group_id"],
+        required_unless_present_any = ["email", "subject_id", "group_id"]
+    )]
     pub subject: Option<String>,
     /// Existing roster member email address
-    #[arg(long, conflicts_with_all = ["subject", "subject_id"])]
+    #[arg(long, conflicts_with_all = ["subject", "subject_id", "group_id"])]
     pub email: Option<String>,
-    /// Member subject id, such as user:abc or service_account:bot
-    #[arg(long = "subject-id", conflicts_with_all = ["subject", "email"])]
+    /// Member subject id, such as user:<uuid> or service_account:bot
+    #[arg(long = "subject-id", conflicts_with_all = ["subject", "email", "group_id"])]
     pub subject_id: Option<String>,
+    /// Workspace group id to remove (maps to group:{id}#member)
+    #[arg(long = "group-id", conflicts_with_all = ["subject", "email", "subject_id"])]
+    pub group_id: Option<String>,
     /// Relationship role to remove; when omitted, removes all mutable grants for the subject
     #[arg(long)]
     pub role: Option<String>,
