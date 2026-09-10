@@ -390,6 +390,37 @@ func (r *Result) ActivateAppProviders(ctx context.Context) {
 	r.activateAppProviders(ctx)
 }
 
+func (r *Result) WaitAppProvidersReady(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	if r.StartupProvidersReady != nil {
+		select {
+		case <-r.StartupProvidersReady:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	r.mu.Lock()
+	deferred := r.deferred
+	r.mu.Unlock()
+	if deferred == nil {
+		return nil
+	}
+	deferred.mu.Lock()
+	triggered := deferred.triggered
+	deferred.mu.Unlock()
+	if !triggered {
+		return nil
+	}
+	select {
+	case <-deferred.ready():
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
+}
+
 type workflowConfigReconcileTask struct {
 	name      string
 	reconcile func(context.Context) error
@@ -1438,6 +1469,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	storedSHAs := readAppSHAs(ctx, prepared.Services.DB)
 	autoActivate := resolveAutoActivate(cfg)
 	noopBuilds, updateBuilds := providerBuilds.partition(newAppStartupCategorizer(storedSHAs, autoActivate))
+	updateBuilds.stageServingCritical = true
 	updateBuilds.onInstalled = func(name, sha string) {
 		if err := writeAppSHA(ctx, prepared.Services.DB, name, sha); err != nil {
 			slog.WarnContext(ctx, "persisting app sha failed", "provider", name, "error", err)

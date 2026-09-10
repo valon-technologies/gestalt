@@ -210,6 +210,8 @@ type Server struct {
 	routeProfile                  RouteProfile
 	scimManagedGroupIDs           map[string]struct{}
 	activateAppProviders          func(context.Context)
+	waitAppProvidersReady         func(context.Context) error
+	appDefs                       map[string]*config.ProviderEntry
 	appProviderRestarter          interface {
 		RestartApp(context.Context, string) error
 	}
@@ -289,6 +291,7 @@ type Config struct {
 	MeterProvider                 metric.MeterProvider
 	TracerProvider                trace.TracerProvider
 	ActivateAppProviders          func(context.Context)
+	WaitAppProvidersReady         func(context.Context) error
 	AppProviderRestarter          interface {
 		RestartApp(context.Context, string) error
 	}
@@ -557,6 +560,8 @@ func New(cfg Config) (*Server, error) {
 		appRuntimeState:               cfg.AppRuntimeState,
 		routeProfile:                  cfg.RouteProfile,
 		activateAppProviders:          cfg.ActivateAppProviders,
+		waitAppProvidersReady:         cfg.WaitAppProvidersReady,
+		appDefs:                       cfg.AppDefs,
 		appProviderRestarter:          cfg.AppProviderRestarter,
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{

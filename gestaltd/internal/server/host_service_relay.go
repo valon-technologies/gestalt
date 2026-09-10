@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/grpcutil"
 	"github.com/valon-technologies/gestalt/server/services/hostserviceingress"
@@ -41,6 +42,24 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 		if err != nil {
 			writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
 			return
+		}
+		if handler == nil {
+			ticker := time.NewTicker(25 * time.Millisecond)
+			defer ticker.Stop()
+			deadline := time.Now().Add(2 * time.Second)
+			for handler == nil && time.Now().Before(deadline) {
+				select {
+				case <-r.Context().Done():
+					writeGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
+					return
+				case <-ticker.C:
+					handler, err = s.unifiedHostServiceHandler(r.Context(), capability, r.URL.Path)
+					if err != nil {
+						writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
+						return
+					}
+				}
+			}
 		}
 		if handler == nil {
 			writeGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")

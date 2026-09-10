@@ -148,13 +148,14 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 			}
 			return reverseRemote.readinessReason()
 		}),
-		PrometheusMetrics:    result.Telemetry.PrometheusHandler(),
-		PublicHostServices:   result.PublicHostServices,
-		ActivateAppProviders: result.ActivateAppProviders,
-		IndexedDB:            publicIndexedDB,
-		RemoteManagement:     reverseRemote.remoteManagement,
-		FrpsHandler:          reverseRemote.frpsHandler,
-		FrpsConnectHandler:   reverseRemote.frpsConnectHandler,
+		PrometheusMetrics:     result.Telemetry.PrometheusHandler(),
+		PublicHostServices:    result.PublicHostServices,
+		ActivateAppProviders:  result.ActivateAppProviders,
+		WaitAppProvidersReady: result.WaitAppProvidersReady,
+		IndexedDB:             publicIndexedDB,
+		RemoteManagement:      reverseRemote.remoteManagement,
+		FrpsHandler:           reverseRemote.frpsHandler,
+		FrpsConnectHandler:    reverseRemote.frpsConnectHandler,
 		TunnelResolver: TunnelResolverConfig{
 			RemoteRegistrations: tunnelRemoteRegistrations(reverseRemote, result),
 			ConnectAddr:         reverseRemote.connectAddr,
