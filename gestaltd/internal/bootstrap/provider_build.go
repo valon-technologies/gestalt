@@ -60,14 +60,15 @@ type pendingProviderBuild struct {
 }
 
 type preparedProviderBuilds struct {
-	providers      *registry.ProviderMap[core.Provider]
-	lifecycles     *appProviderLifecycles
-	pending        []pendingProviderBuild
-	authMu         sync.RWMutex
-	connAuth       map[string]map[string]OAuthHandler
-	manualConnAuth map[string]map[string]ManualTokenExchanger
-	errs           []error
-	onInstalled    func(name, sha string)
+	providers            *registry.ProviderMap[core.Provider]
+	lifecycles           *appProviderLifecycles
+	pending              []pendingProviderBuild
+	stageServingCritical bool
+	authMu               sync.RWMutex
+	connAuth             map[string]map[string]OAuthHandler
+	manualConnAuth       map[string]map[string]ManualTokenExchanger
+	errs                 []error
+	onInstalled          func(name, sha string)
 }
 
 func prepareProviderBuilds(
@@ -273,11 +274,30 @@ func (b *preparedProviderBuilds) Start(
 
 	installCtx, cancelInstall := context.WithTimeout(ctx, providerInstallTimeout)
 
-	for _, pending := range b.pending {
-		wg.Add(1)
-		go func(pending pendingProviderBuild) {
-			defer wg.Done()
-			buildCtx := invocation.WithCallerProvider(installCtx, invocation.ProviderKindApp, pending.name)
+	pendingBatches := [][]pendingProviderBuild{b.pending}
+	if b.stageServingCritical {
+		critical, other := partitionPendingServingCritical(b.pending)
+		pendingBatches = nil
+		if len(critical) > 0 {
+			pendingBatches = append(pendingBatches, critical)
+		}
+		if len(other) > 0 {
+			pendingBatches = append(pendingBatches, other)
+		}
+		if len(pendingBatches) == 0 {
+			pendingBatches = [][]pendingProviderBuild{{}}
+		}
+	}
+
+	runBatch := func(batch []pendingProviderBuild) {
+		var batchWG sync.WaitGroup
+		for _, pending := range batch {
+			batchWG.Add(1)
+			wg.Add(1)
+			go func(pending pendingProviderBuild) {
+				defer wg.Done()
+				defer batchWG.Done()
+				buildCtx := invocation.WithCallerProvider(installCtx, invocation.ProviderKindApp, pending.name)
 			release, err := b.lifecycles.acquire(buildCtx, pending.name)
 			if err != nil {
 				if pending.proxy != nil && b.pendingProxyOwnsProvider(pending) {
@@ -362,8 +382,17 @@ func (b *preparedProviderBuilds) Start(
 				}
 				deps.AppWorkflowDeclarations.Set(pending.name, decls)
 			}
-			slog.Debug("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
-		}(pending)
+				slog.Debug("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
+			}(pending)
+		}
+		batchWG.Wait()
+	}
+
+	for _, batch := range pendingBatches {
+		if len(batch) == 0 {
+			continue
+		}
+		runBatch(batch)
 	}
 
 	go func() {

@@ -441,22 +441,33 @@ func callStartProvider(ctx context.Context, client proto.AppProviderClient, name
 	if err != nil {
 		return fmt.Errorf("encode provider config: %w", err)
 	}
-	resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
-		Name:            name,
-		Config:          cfgStruct,
-		ProtocolVersion: proto.CurrentProtocolVersion,
-	})
-	if err != nil {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
+			Name:            name,
+			Config:          cfgStruct,
+			ProtocolVersion: proto.CurrentProtocolVersion,
+		})
+		if err == nil {
+			if v := resp.GetProtocolVersion(); v != proto.CurrentProtocolVersion {
+				return fmt.Errorf("provider responded with protocol version %d, host requires %d",
+					v, proto.CurrentProtocolVersion)
+			}
+			return nil
+		}
 		if status.Code(err) == codes.Unimplemented {
 			return nil
 		}
-		return fmt.Errorf("start provider: %w", err)
+		if status.Code(err) != codes.Unavailable {
+			return fmt.Errorf("start provider: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("start provider: %w", err)
+		case <-ticker.C:
+		}
 	}
-	if v := resp.GetProtocolVersion(); v != proto.CurrentProtocolVersion {
-		return fmt.Errorf("provider responded with protocol version %d, host requires %d",
-			v, proto.CurrentProtocolVersion)
-	}
-	return nil
 }
 
 func invocationIDFromContext(ctx context.Context) string {
