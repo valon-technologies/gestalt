@@ -12,6 +12,7 @@ use crate::output::{self, Format};
 
 use crate::api::ApiClient;
 use crate::commands::authorization_apps;
+use crate::commands::authorization_groups;
 use crate::commands::authorization_subjects;
 
 use gestalt_sdk::authorization::source_layer::{
@@ -134,6 +135,11 @@ pub fn dispatch(
         AuthorizationCommands::Apps { command } => {
             authorization_apps::dispatch(api, authz, command, format)
         }
+        AuthorizationCommands::Groups { command } => match command {
+            crate::cli::AuthorizationGroupsCommands::List => {
+                authorization_groups::list_groups(api, format)
+            }
+        },
         AuthorizationCommands::State { command } => match command {
             AuthorizationStateCommands::Apply(args) => apply_state(api, &args, format),
         },
@@ -350,7 +356,25 @@ fn model_id(value: &Value) -> Option<&str> {
 mod tests {
     use serde_json::json;
 
-    use super::{model_id, next_page_token};
+    use super::{build_relationship_from_args, model_id, next_page_token};
+    use crate::cli::AuthorizationRelationshipMutationArgs;
+    use gestalt_sdk::authorization::source_layer::SOURCE_LAYER_RUNTIME;
+
+    #[test]
+    fn build_relationship_from_args_supports_subject_set_target() {
+        let relationship = build_relationship_from_args(&AuthorizationRelationshipMutationArgs {
+            resource_type: "app".to_string(),
+            resource_id: "g-issues".to_string(),
+            relation: "viewer".to_string(),
+            subject_id: None,
+            subject_set: Some("group:valon-employees#member".to_string()),
+        })
+        .unwrap();
+        let tuple = relationship.tuple.expect("tuple");
+        assert_eq!(tuple.resource.as_ref().map(|r| r.id.as_str()), Some("g-issues"));
+        assert_eq!(tuple.relation, "viewer");
+        assert_eq!(relationship.source_layer, SOURCE_LAYER_RUNTIME);
+    }
 
     #[test]
     fn next_page_token_returns_trimmed_non_empty_token() {

@@ -336,6 +336,9 @@ pub(crate) fn encode_struct(value: &prost_types::Struct) -> serde_json::Value {
 pub(crate) fn decode_struct(
     value: &serde_json::Value,
 ) -> Result<prost_types::Struct, GestaltError> {
+    if value.is_null() {
+        return Ok(prost_types::Struct::default());
+    }
     let Some(object) = value.as_object() else {
         return Err(invalid_argument("expected struct object"));
     };
@@ -554,5 +557,13 @@ mod tests {
         let encoded = encode_f64(f64::NAN);
         assert_eq!(encoded, serde_json::json!("NaN"));
         assert!(decode_f64(&encoded).expect("decode nan").is_nan());
+    }
+
+    #[test]
+    fn decode_struct_accepts_null() {
+        assert!(decode_struct(&serde_json::json!(null))
+            .unwrap()
+            .fields
+            .is_empty());
     }
 }

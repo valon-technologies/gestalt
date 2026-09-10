@@ -12,12 +12,18 @@ use crate::cli::{
 };
 use crate::output::{self, Format};
 
+use gestalt_sdk::authorization::source_layer::SOURCE_LAYER_RUNTIME;
+use gestalt_sdk::authorization::{
+    AddRelationshipRequest, DeleteRelationshipRequest, Relationship,
+};
 use gestalt_sdk::public::generated::app_client::AuthorizationClient;
 use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
+use crate::commands::authorization::relationship_tuple_from_parts;
+
 pub fn dispatch(
     api: &ApiClient,
-    _authz: &AuthorizationClient<SyncRestTransport>,
+    authz: &AuthorizationClient<SyncRestTransport>,
     command: AuthorizationAppsCommands,
     format: Format,
 ) -> Result<()> {
@@ -25,8 +31,10 @@ pub fn dispatch(
         AuthorizationAppsCommands::List => list_apps(api, format),
         AuthorizationAppsCommands::Members { command } => match command {
             AuthorizationAppsMembersCommands::List(args) => list_members(api, &args, format),
-            AuthorizationAppsMembersCommands::Set(args) => set_member(api, &args, format),
-            AuthorizationAppsMembersCommands::Remove(args) => remove_member(api, &args, format),
+            AuthorizationAppsMembersCommands::Set(args) => set_member(api, authz, &args, format),
+            AuthorizationAppsMembersCommands::Remove(args) => {
+                remove_member(api, authz, &args, format)
+            }
         },
         AuthorizationAppsCommands::AllowedOperations { command } => match command {
             AuthorizationAppsAllowedOperationsCommands::List(args) => {
@@ -98,11 +106,20 @@ fn list_members(
 
 fn set_member(
     api: &ApiClient,
+    authz: &AuthorizationClient<SyncRestTransport>,
     args: &AuthorizationAppsMembersSetArgs,
     format: Format,
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
     let role = require_role(&args.role)?;
+    if let Some(group_id) = args
+        .group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return set_group_member(authz, &app, group_id, &role, format);
+    }
     let subject_id = resolve_canonical_member_subject_id(
         api,
         &app,
@@ -135,10 +152,26 @@ fn set_member(
 
 fn remove_member(
     api: &ApiClient,
+    authz: &AuthorizationClient<SyncRestTransport>,
     args: &AuthorizationAppsMembersRemoveArgs,
     format: Format,
 ) -> Result<()> {
     let app = require_app_name(&args.app)?;
+    if let Some(group_id) = args
+        .group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let role = args
+            .role
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(require_role)
+            .transpose()?;
+        return remove_group_member(api, authz, &app, group_id, role.as_deref(), format);
+    }
     let subject = resolve_canonical_member_subject_id(
         api,
         &app,
@@ -346,14 +379,148 @@ fn resolve_canonical_member_subject_id(
     let email = email
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .context("either --email or --subject-id is required")?;
+        .context("either --email, --subject-id, or --group-id is required")?;
+    resolve_email_subject_id(api, app, email)
+}
+
+fn resolve_email_subject_id(api: &ApiClient, app: &str, email: &str) -> Result<String> {
     let members = load_app_admin_members(api, app)?;
     if let Some(subject_id) = subject_id_for_email_in_members(&members, email) {
         return Ok(subject_id);
     }
-    bail!(
-        "could not resolve {email} from the app member roster; pass --subject-id user:<uuid> from `members list`"
-    )
+    resolve_workspace_user_subject_id(api, email)
+}
+
+fn resolve_workspace_user_subject_id(api: &ApiClient, email: &str) -> Result<String> {
+    let normalized = email.trim().to_lowercase();
+    let resp = api
+        .get("/api/v1/home/users.list")
+        .context("failed to load workspace user directory")?;
+    let users = resp.get("users").and_then(Value::as_array);
+    let empty = Vec::new();
+    let users = users.unwrap_or(&empty);
+    for user in users {
+        let user_email = user
+            .get("email")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let user_id = user
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if let (Some(user_email), Some(user_id)) = (user_email, user_id)
+            && user_email.eq_ignore_ascii_case(&normalized)
+        {
+            return Ok(format!("user:{user_id}"));
+        }
+    }
+    Ok(format!("user:{normalized}"))
+}
+
+fn set_group_member(
+    authz: &AuthorizationClient<SyncRestTransport>,
+    app: &str,
+    group_id: &str,
+    role: &str,
+    format: Format,
+) -> Result<()> {
+    let subject_set = group_member_subject_set(group_id);
+    let tuple = relationship_tuple_from_parts("app", app, role, None, Some(&subject_set))?;
+    authz
+        .add_relationship_sync(AddRelationshipRequest {
+            relationship: Some(Relationship {
+                tuple: Some(tuple),
+                properties: None,
+                source_layer: SOURCE_LAYER_RUNTIME,
+            }),
+        })
+        .with_context(|| {
+            format!("failed to grant {role} on {app} to group {group_id} ({subject_set})")
+        })?;
+    match format {
+        Format::Json => output::print_json(&serde_json::json!({
+            "changed": true,
+            "groupId": group_id,
+            "role": role,
+            "subjectSet": subject_set,
+        })),
+        Format::Table => output::print_success(&format!(
+            "Granted {role} on {app} to group {group_id}."
+        )),
+    }
+    Ok(())
+}
+
+fn remove_group_member(
+    api: &ApiClient,
+    authz: &AuthorizationClient<SyncRestTransport>,
+    app: &str,
+    group_id: &str,
+    role: Option<&str>,
+    format: Format,
+) -> Result<()> {
+    let subject_set = group_member_subject_set(group_id);
+    let roles = match role {
+        Some(role) => vec![role.to_string()],
+        None => mutable_group_roles(api, app, &subject_set)?,
+    };
+    if roles.is_empty() {
+        bail!("no mutable group grants found for {group_id} on {app}");
+    }
+    for role in &roles {
+        let tuple =
+            relationship_tuple_from_parts("app", app, role, None, Some(&subject_set))?;
+        authz
+            .delete_relationship_sync(DeleteRelationshipRequest {
+                relationship_tuple: Some(tuple),
+            })
+            .with_context(|| {
+                format!("failed to remove {role} on {app} for group {group_id} ({subject_set})")
+            })?;
+    }
+    match format {
+        Format::Json => output::print_json(&serde_json::json!({
+            "removedRoles": roles,
+            "groupId": group_id,
+            "subjectSet": subject_set,
+        })),
+        Format::Table => output::print_success(&format!(
+            "Removed {} grant(s) for group {group_id} on {app}.",
+            roles.len()
+        )),
+    }
+    Ok(())
+}
+
+fn group_member_subject_set(group_id: &str) -> String {
+    format!("group:{}#member", group_id.trim())
+}
+
+fn mutable_group_roles(api: &ApiClient, app: &str, subject_set: &str) -> Result<Vec<String>> {
+    let resp = api
+        .get(&app_admin_members_path(app))
+        .with_context(|| format!("failed to list members for app {app}"))?;
+    let mut roles = Vec::new();
+    for row in resp.as_array().unwrap_or(&Vec::new()) {
+        let selector = row
+            .get("selectorValue")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if selector != subject_set {
+            continue;
+        }
+        if row.get("mutable").and_then(Value::as_bool) != Some(true) {
+            continue;
+        }
+        if let Some(role) = row.get("role").and_then(Value::as_str).map(str::trim) {
+            if !role.is_empty() {
+                roles.push(role.to_string());
+            }
+        }
+    }
+    Ok(roles)
 }
 
 fn canonical_subject_id_from_members(
@@ -475,7 +642,7 @@ fn normalize_subject_id(raw: &str) -> Result<String> {
     }
     if trimmed.contains('#') {
         bail!(
-            "subject id must be a direct subject, not a subject-set selector; use `authorization relationships` for group grants"
+            "subject id must be a direct subject, not a subject-set selector; use --group-id or `authorization relationships` for group grants"
         );
     }
     if trimmed.contains(':') {
@@ -619,6 +786,14 @@ mod tests {
         assert_eq!(
             subject_id_for_email_in_members(&members, "bob@example.com"),
             None
+        );
+    }
+
+    #[test]
+    fn group_member_subject_set_formats_selector() {
+        assert_eq!(
+            super::group_member_subject_set("valon-employees"),
+            "group:valon-employees#member"
         );
     }
 
