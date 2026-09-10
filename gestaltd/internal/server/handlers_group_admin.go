@@ -296,9 +296,13 @@ func (s *Server) canCreateGroupAdminGroup(ctx context.Context, subjectID string)
 	return s.hasGestaltAdmin(ctx, subjectID)
 }
 
-func (s *Server) listGroupIDs(ctx context.Context) ([]string, error) {
-	seen := map[string]struct{}{}
-	ids := make([]string, 0)
+type groupRoster struct {
+	ids          []string
+	memberCounts map[string]int
+}
+
+func (s *Server) loadGroupRoster(ctx context.Context) (groupRoster, error) {
+	roster := groupRoster{memberCounts: map[string]int{}}
 	pageToken := ""
 	for {
 		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
@@ -309,27 +313,35 @@ func (s *Server) listGroupIDs(ctx context.Context) ([]string, error) {
 			PageToken: pageToken,
 		})
 		if err != nil {
-			return nil, err
+			return groupRoster{}, err
 		}
 		for _, relationship := range resp.GetRelationships() {
-			if relationship == nil || relationship.GetTuple() == nil {
+			tuple := relationship.GetTuple()
+			if tuple == nil {
 				continue
 			}
-			id := strings.TrimSpace(relationship.GetTuple().GetResource().GetId())
+			id := strings.TrimSpace(tuple.GetResource().GetId())
 			if id == "" {
 				continue
 			}
-			if _, ok := seen[id]; ok {
-				continue
+			if _, ok := roster.memberCounts[id]; !ok {
+				roster.ids = append(roster.ids, id)
+				roster.memberCounts[id] = 0
 			}
-			seen[id] = struct{}{}
-			ids = append(ids, id)
+			if strings.TrimSpace(tuple.GetRelation()) == groupMemberRelation {
+				roster.memberCounts[id]++
+			}
 		}
 		pageToken = strings.TrimSpace(resp.GetNextPageToken())
 		if pageToken == "" {
-			return ids, nil
+			return roster, nil
 		}
 	}
+}
+
+func (s *Server) listGroupIDs(ctx context.Context) ([]string, error) {
+	roster, err := s.loadGroupRoster(ctx)
+	return roster.ids, err
 }
 
 func (s *Server) groupExists(ctx context.Context, groupID string) (bool, error) {
@@ -441,21 +453,76 @@ func (s *Server) listGroupAdminGroups(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	groupIDs, err := s.listGroupIDs(r.Context())
+	roster, err := s.loadGroupRoster(r.Context())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 		return
 	}
-	summaries := make([]groupAdminSummary, 0, len(groupIDs))
-	for _, groupID := range groupIDs {
-		summary, err := s.groupAdminSummary(r.Context(), subjectID, groupID)
+	globalAdmin, err := s.hasGestaltAdmin(r.Context(), subjectID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+		return
+	}
+	var groupAdmin []bool
+	if !globalAdmin {
+		groupAdmin, err = s.explicitGroupAdminAccess(r.Context(), subjectID, roster.ids)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 			return
 		}
-		summaries = append(summaries, summary)
+	}
+	displayNames, err := s.groups.DisplayNames(r.Context())
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "group directory is unavailable")
+		return
+	}
+	summaries := make([]groupAdminSummary, 0, len(roster.ids))
+	for i, groupID := range roster.ids {
+		displayName := displayNames[groupID]
+		if displayName == "" {
+			displayName = strings.TrimSpace(s.authorizationResourceDisplayName(r.Context(), s.groupResource(groupID)))
+		}
+		if displayName == "" {
+			displayName = groupID
+		}
+		scimManaged := s.isScimManagedGroup(groupID)
+		summaries = append(summaries, groupAdminSummary{
+			ID:          groupID,
+			DisplayName: displayName,
+			MemberCount: roster.memberCounts[groupID],
+			ScimManaged: scimManaged,
+			Editable:    !scimManaged,
+			CanAdmin:    (globalAdmin || groupAdmin[i]) && !scimManaged,
+		})
 	}
 	writeJSON(w, http.StatusOK, summaries)
+}
+
+func (s *Server) explicitGroupAdminAccess(ctx context.Context, subjectID string, groupIDs []string) ([]bool, error) {
+	requests := make([]invocation.ResourceAccessRequest, 0, len(groupIDs))
+	for _, groupID := range groupIDs {
+		requests = append(requests, invocation.ResourceAccessRequest{
+			SubjectID:    subjectID,
+			Action:       groupID,
+			Resource:     s.groupResource(groupID),
+			AllowedRoles: []string{groupAdminRelation},
+		})
+	}
+	decisions, err := invocation.CheckResourceAccessMany(ctx, s.authorization, requests)
+	allowed := make([]bool, len(groupIDs))
+	if err != nil {
+		for i, groupID := range groupIDs {
+			allowed[i], err = s.hasExplicitGroupAdmin(ctx, subjectID, groupID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return allowed, nil
+	}
+	for i, decision := range decisions {
+		allowed[i] = decision.Allowed && decision.Role == groupAdminRelation
+	}
+	return allowed, nil
 }
 
 func (s *Server) groupAdminSummary(ctx context.Context, subjectID, groupID string) (groupAdminSummary, error) {
