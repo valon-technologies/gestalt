@@ -247,6 +247,38 @@ class TestNestedJSON(unittest.TestCase):
 
 
 class TestTransaction(unittest.TestCase):
+    def test_not_found_read_keeps_transaction_open(self) -> None:
+        c = _client()
+        c.create_object_store("transaction_missing_read")
+
+        with c.transaction(["transaction_missing_read"], "readwrite") as tx:
+            store = tx.object_store("transaction_missing_read")
+            with self.assertRaises(NotFoundError):
+                store.get("missing")
+            store.put({"id": "created-after-miss"})
+
+        self.assertEqual(
+            c.object_store("transaction_missing_read").get("created-after-miss")["id"],
+            "created-after-miss",
+        )
+        c.close()
+
+    def test_not_found_write_closes_transaction(self) -> None:
+        c = _client()
+        c.create_object_store("transaction_allowed")
+        c.create_object_store("transaction_out_of_scope")
+
+        tx = c.transaction(["transaction_allowed"], "readwrite")
+        allowed = tx.object_store("transaction_allowed")
+        allowed.put({"id": "rolled-back"})
+        with self.assertRaises(NotFoundError):
+            tx.object_store("transaction_out_of_scope").put({"id": "denied"})
+        with self.assertRaises(TransactionError):
+            allowed.put({"id": "also-denied"})
+        with self.assertRaises(NotFoundError):
+            c.object_store("transaction_allowed").get("rolled-back")
+        c.close()
+
     def test_readwrite_commits_and_reads_own_writes(self) -> None:
         c = _client()
         c.create_object_store("transaction_commit")
