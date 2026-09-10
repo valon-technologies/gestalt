@@ -298,90 +298,90 @@ func (b *preparedProviderBuilds) Start(
 				defer wg.Done()
 				defer batchWG.Done()
 				buildCtx := invocation.WithCallerProvider(installCtx, invocation.ProviderKindApp, pending.name)
-			release, err := b.lifecycles.acquire(buildCtx, pending.name)
-			if err != nil {
-				if pending.proxy != nil && b.pendingProxyOwnsProvider(pending) {
-					pending.proxy.fail(err)
-					b.providers.Remove(pending.name)
-				}
-				errMu.Lock()
-				buildErrs = append(buildErrs, fmt.Errorf("integration %q: wait for provider lifecycle: %w", pending.name, err))
-				errMu.Unlock()
-				return
-			}
-			defer release()
-			if pending.proxy != nil {
-				current, getErr := b.providers.Get(pending.name)
-				if getErr != nil || current != pending.proxy {
-					slog.Debug("skipping superseded deferred provider activation", "provider", pending.name)
+				release, err := b.lifecycles.acquire(buildCtx, pending.name)
+				if err != nil {
+					if pending.proxy != nil && b.pendingProxyOwnsProvider(pending) {
+						pending.proxy.fail(err)
+						b.providers.Remove(pending.name)
+					}
+					errMu.Lock()
+					buildErrs = append(buildErrs, fmt.Errorf("integration %q: wait for provider lifecycle: %w", pending.name, err))
+					errMu.Unlock()
 					return
 				}
-			}
-			result, err := builder(buildCtx, pending.name, pending.entry, deps)
-			if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
+				defer release()
 				if pending.proxy != nil {
-					pending.proxy.fail(err)
-					b.providers.Remove(pending.name)
+					current, getErr := b.providers.Get(pending.name)
+					if getErr != nil || current != pending.proxy {
+						slog.Debug("skipping superseded deferred provider activation", "provider", pending.name)
+						return
+					}
 				}
-				slog.Debug("frontend-only dev app; no backend provider registered", "provider", pending.name)
-				return
-			}
-			if err != nil {
-				errMu.Lock()
-				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
-				errMu.Unlock()
-				if pending.proxy != nil {
-					pending.proxy.fail(err)
-					b.providers.Remove(pending.name)
+				result, err := builder(buildCtx, pending.name, pending.entry, deps)
+				if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
+					if pending.proxy != nil {
+						pending.proxy.fail(err)
+						b.providers.Remove(pending.name)
+					}
+					slog.Debug("frontend-only dev app; no backend provider registered", "provider", pending.name)
+					return
 				}
-				slog.Warn("skipping provider", "provider", pending.name, "error", err)
-				return
-			}
-			if err := validateProviderConnectionMode(pending.name, result.Provider.ConnectionMode()); err != nil {
-				errMu.Lock()
-				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
-				errMu.Unlock()
-				if pending.proxy != nil {
-					pending.proxy.fail(err)
-					b.providers.Remove(pending.name)
-				}
-				closeIfPossible(result.Provider)
-				slog.Warn("skipping provider", "provider", pending.name, "error", err)
-				return
-			}
-			if pending.proxy != nil {
-				if err := b.providers.Replace(pending.name, result.Provider); err != nil {
+				if err != nil {
 					errMu.Lock()
 					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
 					errMu.Unlock()
-					pending.proxy.fail(err)
-					b.providers.Remove(pending.name)
-					closeIfPossible(result.Provider)
-					slog.Warn("replacing startup provider proxy failed", "provider", pending.name, "error", err)
+					if pending.proxy != nil {
+						pending.proxy.fail(err)
+						b.providers.Remove(pending.name)
+					}
+					slog.Warn("skipping provider", "provider", pending.name, "error", err)
 					return
 				}
-				pending.proxy.publish(result.Provider)
-			} else {
-				if err := b.providers.Register(pending.name, result.Provider); err != nil {
+				if err := validateProviderConnectionMode(pending.name, result.Provider.ConnectionMode()); err != nil {
 					errMu.Lock()
 					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
 					errMu.Unlock()
+					if pending.proxy != nil {
+						pending.proxy.fail(err)
+						b.providers.Remove(pending.name)
+					}
 					closeIfPossible(result.Provider)
-					slog.Warn("registering provider failed", "provider", pending.name, "error", err)
+					slog.Warn("skipping provider", "provider", pending.name, "error", err)
 					return
 				}
-			}
-			b.storeConnectionAuth(pending.name, result)
-			if b.onInstalled != nil && pending.sha != "" {
-				b.onInstalled(pending.name, pending.sha)
-			}
-			if deps.AppWorkflowDeclarations != nil {
-				decls := result.WorkflowDeclarations
-				if decls == nil {
-					decls = []*proto.WorkflowDefinitionSpec{}
+				if pending.proxy != nil {
+					if err := b.providers.Replace(pending.name, result.Provider); err != nil {
+						errMu.Lock()
+						buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
+						errMu.Unlock()
+						pending.proxy.fail(err)
+						b.providers.Remove(pending.name)
+						closeIfPossible(result.Provider)
+						slog.Warn("replacing startup provider proxy failed", "provider", pending.name, "error", err)
+						return
+					}
+					pending.proxy.publish(result.Provider)
+				} else {
+					if err := b.providers.Register(pending.name, result.Provider); err != nil {
+						errMu.Lock()
+						buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
+						errMu.Unlock()
+						closeIfPossible(result.Provider)
+						slog.Warn("registering provider failed", "provider", pending.name, "error", err)
+						return
+					}
 				}
-				deps.AppWorkflowDeclarations.Set(pending.name, decls)
-			}
+				b.storeConnectionAuth(pending.name, result)
+				if b.onInstalled != nil && pending.sha != "" {
+					b.onInstalled(pending.name, pending.sha)
+				}
+				if deps.AppWorkflowDeclarations != nil {
+					decls := result.WorkflowDeclarations
+					if decls == nil {
+						decls = []*proto.WorkflowDefinitionSpec{}
+					}
+					deps.AppWorkflowDeclarations.Set(pending.name, decls)
+				}
 				slog.Debug("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
 			}(pending)
 		}

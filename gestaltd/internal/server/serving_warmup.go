@@ -23,7 +23,8 @@ type activateWarmupResponse struct {
 func servingWarmupPaths(appDefs map[string]*config.ProviderEntry, mounted []MountedUI) []string {
 	paths := []string{"/", "/icon.svg"}
 	seen := map[string]bool{"/": true, "/icon.svg": true}
-	for _, ui := range mounted {
+	for i := range mounted {
+		ui := mounted[i]
 		path := normalizeServingWarmupPath(ui.Path)
 		if path == "" || seen[path] {
 			continue
