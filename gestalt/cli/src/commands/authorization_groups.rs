@@ -49,11 +49,8 @@ fn group_row(value: &Value) -> Vec<String> {
             .to_string(),
         value
             .get("memberCount")
-            .map(|count| match count {
-                Value::Number(number) => number.to_string(),
-                Value::String(text) => text.clone(),
-                _ => String::new(),
-            })
+            .and_then(Value::as_u64)
+            .map(|count| count.to_string())
             .unwrap_or_default(),
         value
             .get("scimManaged")

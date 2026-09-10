@@ -14,6 +14,7 @@ use crate::api::ApiClient;
 use crate::commands::authorization_apps;
 use crate::commands::authorization_groups;
 use crate::commands::authorization_subjects;
+use crate::cli::AuthorizationGroupsCommands;
 
 use gestalt_sdk::authorization::source_layer::{
     SOURCE_LAYER_RUNTIME, SOURCE_LAYER_STATIC_CONFIG, SOURCE_LAYER_UNSPECIFIED,
@@ -136,9 +137,7 @@ pub fn dispatch(
             authorization_apps::dispatch(api, authz, command, format)
         }
         AuthorizationCommands::Groups { command } => match command {
-            crate::cli::AuthorizationGroupsCommands::List => {
-                authorization_groups::list_groups(api, format)
-            }
+            AuthorizationGroupsCommands::List => authorization_groups::list_groups(api, format),
         },
         AuthorizationCommands::State { command } => match command {
             AuthorizationStateCommands::Apply(args) => apply_state(api, &args, format),
