@@ -41,6 +41,22 @@ func (s *GroupService) DisplayName(ctx context.Context, groupID string) (string,
 	return strings.TrimSpace(group.DisplayName), nil
 }
 
+func (s *GroupService) DisplayNames(ctx context.Context) (map[string]string, error) {
+	if s == nil {
+		return nil, fmt.Errorf("list groups: service is not configured")
+	}
+	records, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list groups: %w", err)
+	}
+	names := make(map[string]string, len(records))
+	for _, record := range records {
+		group := recordToGroup(record)
+		names[group.ID] = strings.TrimSpace(group.DisplayName)
+	}
+	return names, nil
+}
+
 func (s *GroupService) Get(ctx context.Context, groupID string) (*Group, error) {
 	if s == nil {
 		return nil, fmt.Errorf("get group: service is not configured")
