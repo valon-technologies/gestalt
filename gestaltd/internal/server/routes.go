@@ -49,9 +49,11 @@ func (s *Server) routes() {
 		s.mountAdminAPIRoutes(r)
 		s.mountAdminPageRedirects(r)
 		s.mountActivateRoute(r)
+		s.mountPromoteRoute(r)
 	default:
 		s.mountCoreRoutes(r, metricsAuthenticated)
 		s.mountActivateRoute(r)
+		s.mountPromoteRoute(r)
 		r.Group(func(r chi.Router) {
 			r.Use(s.servingReadyMiddleware)
 			s.mountServingRoutes(r)
@@ -252,6 +254,7 @@ func (s *Server) mountManagementHiddenRoutes(r chi.Router) {
 	notFound := http.NotFoundHandler()
 	r.Handle("/metrics", notFound)
 	r.Handle("/activate", notFound)
+	r.Handle("/promote", notFound)
 }
 
 func (s *Server) mountMCPRoutes(r chi.Router) {

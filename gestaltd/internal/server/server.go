@@ -209,8 +209,10 @@ type Server struct {
 	appRuntimeState               AppRuntimeState
 	routeProfile                  RouteProfile
 	scimManagedGroupIDs           map[string]struct{}
-	activateAppProviders          func(context.Context)
-	waitAppProvidersReady         func(context.Context) error
+	activateAppProviders           func(context.Context)
+	waitAppProvidersReady          func(context.Context) error
+	promoteSharedStateOnActivate   bool
+	finishSharedStartupPromotion   func(context.Context) error
 	servingReady                  <-chan struct{}
 	appProviderRestarter          interface {
 		RestartApp(context.Context, string) error
@@ -290,8 +292,10 @@ type Config struct {
 	RouteProfile                  RouteProfile
 	MeterProvider                 metric.MeterProvider
 	TracerProvider                trace.TracerProvider
-	ActivateAppProviders          func(context.Context)
-	WaitAppProvidersReady         func(context.Context) error
+	ActivateAppProviders            func(context.Context)
+	WaitAppProvidersReady           func(context.Context) error
+	PromoteSharedStateOnActivate    *bool
+	FinishSharedStartupPromotion    func(context.Context) error
 	ServingReady                  <-chan struct{}
 	AppProviderRestarter          interface {
 		RestartApp(context.Context, string) error
@@ -305,6 +309,13 @@ type Config struct {
 	AppAutoDeployNotify func(app string)
 	// AppRegistryReconcileNotify requests prompt local runtime reconciliation.
 	AppRegistryReconcileNotify func(app string)
+}
+
+func resolveServerPromoteSharedStateOnActivate(cfg Config) bool {
+	if cfg.PromoteSharedStateOnActivate != nil {
+		return *cfg.PromoteSharedStateOnActivate
+	}
+	return true
 }
 
 func New(cfg Config) (*Server, error) {
@@ -560,8 +571,10 @@ func New(cfg Config) (*Server, error) {
 		appRegistryRolloutMode:        cfg.AppRegistryRolloutMode,
 		appRuntimeState:               cfg.AppRuntimeState,
 		routeProfile:                  cfg.RouteProfile,
-		activateAppProviders:          cfg.ActivateAppProviders,
-		waitAppProvidersReady:         cfg.WaitAppProvidersReady,
+		activateAppProviders:           cfg.ActivateAppProviders,
+		waitAppProvidersReady:          cfg.WaitAppProvidersReady,
+		promoteSharedStateOnActivate:   resolveServerPromoteSharedStateOnActivate(cfg),
+		finishSharedStartupPromotion:   cfg.FinishSharedStartupPromotion,
 		servingReady:                  cfg.ServingReady,
 		appProviderRestarter:          cfg.AppProviderRestarter,
 	}
