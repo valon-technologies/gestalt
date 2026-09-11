@@ -339,6 +339,37 @@ func TestHeartbeatSourceVersionActivationDefaultsOmittedMinimum(t *testing.T) {
 	}
 }
 
+func TestGestaltdSourceVersionTemporalPromotionEvidenceIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	if _, err := services.GestaltdSourceVersionState.Activate(ctx, "source-old", start, false, 2*time.Minute, 15*time.Minute); err != nil {
+		t.Fatalf("Activate old: %v", err)
+	}
+	promoted, err := services.GestaltdSourceVersionState.TemporalWorkersPromotedForSourceVersion(ctx, "source-new")
+	if err != nil {
+		t.Fatalf("TemporalWorkersPromotedForSourceVersion before mark: %v", err)
+	}
+	if promoted {
+		t.Fatal("expected temporal promotion evidence to be absent before mark")
+	}
+	if _, err := services.GestaltdSourceVersionState.MarkTemporalWorkersPromoted(ctx, "source-new", start.Add(time.Minute)); err != nil {
+		t.Fatalf("MarkTemporalWorkersPromoted: %v", err)
+	}
+	promoted, err = services.GestaltdSourceVersionState.TemporalWorkersPromotedForSourceVersion(ctx, "source-new")
+	if err != nil {
+		t.Fatalf("TemporalWorkersPromotedForSourceVersion after mark: %v", err)
+	}
+	if !promoted {
+		t.Fatal("expected temporal promotion evidence after mark")
+	}
+	if _, err := services.GestaltdSourceVersionState.MarkTemporalWorkersPromoted(ctx, "source-new", start.Add(2*time.Minute)); err != nil {
+		t.Fatalf("MarkTemporalWorkersPromoted retry: %v", err)
+	}
+}
+
 func TestHeartbeatSourceVersionActivationRejectsNonPositiveMinimum(t *testing.T) {
 	t.Parallel()
 
