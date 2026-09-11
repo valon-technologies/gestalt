@@ -28,6 +28,11 @@ var (
 	resolvedInstanceIDOnce sync.Once
 )
 
+type appMaterializationKey struct {
+	app     string
+	version string
+}
+
 type CatalogPoller struct {
 	ChangeRequests              *coredata.AppVersionChangeRequestService
 	Materializations            *coredata.AppInstanceMaterializationService
@@ -290,6 +295,21 @@ func (p *CatalogPoller) ReconcileOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list catalog known versions: %w", err)
 	}
+	materializations, err := p.Materializations.ListByInstance(ctx, instanceID)
+	if err != nil {
+		return fmt.Errorf("list instance materializations: %w", err)
+	}
+	materializationsByAppVersion := make(map[appMaterializationKey]*core.AppInstanceMaterialization, len(materializations))
+	for _, materialization := range materializations {
+		if materialization == nil {
+			continue
+		}
+		key := appMaterializationKey{
+			app:     strings.TrimSpace(materialization.App),
+			version: strings.TrimSpace(materialization.Version),
+		}
+		materializationsByAppVersion[key] = materialization
+	}
 
 	active, err := p.Rollouts.ListActive(ctx)
 	if err != nil {
@@ -305,13 +325,13 @@ func (p *CatalogPoller) ReconcileOnce(ctx context.Context) error {
 	var errs []error
 	byApp := groupInstallationsByApp(known)
 	for appName, installations := range byApp {
-		if err := p.reconcileApp(ctx, instanceID, appName, installations, activeByApp[appName]); err != nil {
+		if err := p.reconcileApp(ctx, instanceID, appName, installations, activeByApp[appName], materializationsByAppVersion); err != nil {
 			errs = append(errs, p.recordFailure(ctx, instanceID, appName, installations, err))
 		}
 		delete(activeByApp, appName)
 	}
 	for appName, rollout := range activeByApp {
-		if err := p.reconcileApp(ctx, instanceID, appName, nil, rollout); err != nil {
+		if err := p.reconcileApp(ctx, instanceID, appName, nil, rollout, materializationsByAppVersion); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -346,7 +366,13 @@ func groupInstallationsByApp(known []*core.AppInstallation) map[string][]*core.A
 	return byApp
 }
 
-func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName string, installations []*core.AppInstallation, rollout *core.AppRollout) error {
+func (p *CatalogPoller) reconcileApp(
+	ctx context.Context,
+	instanceID, appName string,
+	installations []*core.AppInstallation,
+	rollout *core.AppRollout,
+	materializations map[appMaterializationKey]*core.AppInstanceMaterialization,
+) error {
 	appName = strings.TrimSpace(appName)
 	if appName == "" {
 		return nil
@@ -378,7 +404,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 			}
 			return nil
 		}
-		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, rolloutVersion, rollout.CreatedAt)
+		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, rolloutVersion, rollout.CreatedAt, materializations)
 		if err != nil {
 			return err
 		}
@@ -422,7 +448,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	}
 	desiredMaterialization := rolloutMaterialization
 	if rolloutVersion != driverVersion {
-		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, driverVersion, desired.UpdatedAt)
+		materialization, err := p.ensureAcknowledged(ctx, instanceID, appName, driverVersion, desired.UpdatedAt, materializations)
 		if err != nil {
 			return err
 		}
@@ -958,7 +984,21 @@ func (p *CatalogPoller) markAllRestarted(ctx context.Context, instanceID, appNam
 	return nil
 }
 
-func (p *CatalogPoller) ensureAcknowledged(ctx context.Context, instanceID, appName, version string, rolloutCreatedAt time.Time) (*core.AppInstanceMaterialization, error) {
+func (p *CatalogPoller) ensureAcknowledged(
+	ctx context.Context,
+	instanceID, appName, version string,
+	rolloutCreatedAt time.Time,
+	materializations map[appMaterializationKey]*core.AppInstanceMaterialization,
+) (*core.AppInstanceMaterialization, error) {
+	key := appMaterializationKey{app: strings.TrimSpace(appName), version: strings.TrimSpace(version)}
+	if existing := materializations[key]; existing != nil {
+		rolloutCreatedAt = rolloutCreatedAt.UTC().Truncate(time.Millisecond)
+		sourceVersionPresent := strings.TrimSpace(p.SourceVersion) == "" || strings.TrimSpace(existing.SourceVersion) != ""
+		acknowledgementCurrent := rolloutCreatedAt.IsZero() || !existing.AcknowledgedAt.Before(rolloutCreatedAt)
+		if sourceVersionPresent && acknowledgementCurrent {
+			return existing, nil
+		}
+	}
 	acknowledgedAt := p.now()
 	input := &core.AppInstanceMaterialization{
 		InstanceID:     instanceID,
@@ -977,6 +1017,7 @@ func (p *CatalogPoller) ensureAcknowledged(ctx context.Context, instanceID, appN
 	if err != nil {
 		return nil, fmt.Errorf("acknowledge %s@%s: %w", appName, version, err)
 	}
+	materializations[key] = materialization
 	return materialization, nil
 }
 
