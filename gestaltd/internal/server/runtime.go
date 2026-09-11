@@ -249,6 +249,10 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		return fmt.Errorf("creating public server: %w", err)
 	}
 
+	uiSettings := resolveUIReadinessSettings(cfg, gestaltdVersion, baseConfig.SourceVersion)
+	var uiMonitor *UIReadinessMonitor
+	var managementHandler *Server
+
 	servers := []namedHTTPServer{{
 		name:   "public",
 		server: newHTTPServer(cfg.Server.PublicAddr(), publicHandler),
@@ -270,7 +274,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		managementConfig.RouteProfile = RouteProfileManagement
 		managementConfig.DevHandlerResolver = publicConfig.DevHandlerResolver
 
-		managementHandler, err := New(managementConfig)
+		managementHandler, err = New(managementConfig)
 		if err != nil {
 			if devSupervisor != nil {
 				devSupervisor.Stop()
@@ -283,7 +287,26 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		})
 	}
 
-	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor, onReady, reverseRemote)
+	if uiSettings.enabled {
+		uiMonitor = NewUIReadinessMonitor(UIReadinessMonitorConfig{
+			Handler:         publicHandler,
+			MountedUIs:      publicHandler.mountedUIs,
+			ExtraProbePaths: uiSettings.extraProbePaths,
+			ProbeBearer:     uiSettings.probeBearer,
+			ReleaseID:       uiSettings.releaseID,
+			SourceVersion:   baseConfig.SourceVersion,
+			InstanceID:      appregistry.ResolveInstanceID(),
+			ProcessID:       appregistry.ResolveProcessID(),
+			ServingReady:    result.AppProvidersInitialized,
+			RecheckInterval: uiSettings.recheckInterval,
+		})
+		publicHandler.uiReadiness = uiMonitor
+		if managementHandler != nil {
+			managementHandler.uiReadiness = uiMonitor
+		}
+	}
+
+	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor, onReady, reverseRemote, uiMonitor)
 }
 
 func registryAppStartup(cfg *config.Config, result *bootstrap.Result, reader *appregistry.RegistryReader) func(context.Context) {
@@ -372,9 +395,12 @@ func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services ind
 	}
 }
 
-func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor, readyCallback func(), reverseRemote *reverseRemoteSetup) error {
+func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor, readyCallback func(), reverseRemote *reverseRemoteSetup, uiMonitor *UIReadinessMonitor) error {
 	if devSupervisor != nil {
 		defer devSupervisor.Stop()
+	}
+	if uiMonitor != nil {
+		uiMonitor.Start(ctx)
 	}
 
 	type boundServer struct {

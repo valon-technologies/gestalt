@@ -228,6 +228,12 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 			return
 		}
 	}
+	if s.uiReadiness != nil {
+		if reason := s.uiReadiness.ReadinessReason(); reason != "" {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": reason})
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

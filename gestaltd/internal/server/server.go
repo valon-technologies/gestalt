@@ -217,6 +217,7 @@ type Server struct {
 	appProviderRestarter          interface {
 		RestartApp(context.Context, string) error
 	}
+	uiReadiness *UIReadinessMonitor
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -297,6 +298,7 @@ type Config struct {
 	PromoteSharedStateOnActivate  *bool
 	FinishSharedStartupPromotion  func(context.Context) error
 	ServingReady                  <-chan struct{}
+	UIReadiness                   *UIReadinessMonitor
 	AppProviderRestarter          interface {
 		RestartApp(context.Context, string) error
 	}
@@ -577,6 +579,7 @@ func New(cfg Config) (*Server, error) {
 		finishSharedStartupPromotion:  cfg.FinishSharedStartupPromotion,
 		servingReady:                  cfg.ServingReady,
 		appProviderRestarter:          cfg.AppProviderRestarter,
+		uiReadiness:                   cfg.UIReadiness,
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,
