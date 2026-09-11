@@ -259,6 +259,9 @@ type IndexQueryRequest struct {
 	Index string
 	Query *IndexedDBQuery
 	Count *uint32
+	// queries matches the union of several exact keys or ranges. It is used by
+	// IndexGetAll; query carries the first entry for rolling compatibility.
+	Queries []*IndexedDBQuery
 }
 
 // IndexSchema is the native message type for gestalt.provider.v1.IndexSchema.

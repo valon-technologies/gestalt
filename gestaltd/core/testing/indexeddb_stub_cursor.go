@@ -94,8 +94,19 @@ func normalizeStubQuery(query any) *sdkclient.IndexedDBQuery {
 }
 
 func (c *stubCursor) applyQuery(query any) {
-	nativeQuery := normalizeStubQuery(query)
-	c.query = nativeQuery
+	querySet, ok := query.(idb.QuerySet)
+	var queries []*sdkclient.IndexedDBQuery
+	if ok {
+		queries = querySet.Queries()
+		if len(queries) == 0 {
+			c.err = fmt.Errorf("indexeddb: AnyOf requires at least one query")
+			return
+		}
+	}
+	if !ok {
+		queries = []*sdkclient.IndexedDBQuery{normalizeStubQuery(query)}
+	}
+	c.query = queries[0]
 	filtered := make([]string, 0, len(c.keys))
 	var filteredIdx []any
 	for i, k := range c.keys {
@@ -103,12 +114,16 @@ func (c *stubCursor) applyQuery(query any) {
 		if c.indexKeys != nil {
 			cur = c.indexKeys[i]
 		}
-		ok, err := idb.MatchQuery(cur, nativeQuery)
-		if err != nil {
-			c.err = err
-			return
+		matched := false
+		for _, query := range queries {
+			match, err := idb.MatchQuery(cur, query)
+			if err != nil {
+				c.err = err
+				return
+			}
+			matched = matched || match
 		}
-		if !ok {
+		if !matched {
 			continue
 		}
 		filtered = append(filtered, k)

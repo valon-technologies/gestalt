@@ -2584,6 +2584,10 @@ pub struct IndexQueryRequest {
     pub query: ::core::option::Option<IndexedDbQuery>,
     #[prost(uint32, optional, tag = "4")]
     pub count: ::core::option::Option<u32>,
+    /// queries matches the union of several exact keys or ranges. It is used by
+    /// IndexGetAll; query carries the first entry for rolling compatibility.
+    #[prost(message, repeated, tag = "5")]
+    pub queries: ::prost::alloc::vec::Vec<IndexedDbQuery>,
 }
 /// CountResponse reports how many rows matched a query.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]

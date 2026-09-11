@@ -411,6 +411,7 @@ export function toWireIndexQueryRequest(
       ? { query: toWireIndexedDBQuery(value.query) }
       : {}),
     ...(value.count !== undefined ? { count: value.count } : {}),
+    queries: (value.queries ?? []).map(toWireIndexedDBQuery),
   });
 }
 
@@ -424,6 +425,7 @@ export function fromWireIndexQueryRequest(
       ? { query: fromWireIndexedDBQuery(value.query) }
       : {}),
     ...(value.count !== undefined ? { count: value.count } : {}),
+    queries: value.queries.map(fromWireIndexedDBQuery),
   };
 }
 

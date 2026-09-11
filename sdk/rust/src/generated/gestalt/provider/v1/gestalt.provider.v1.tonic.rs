@@ -5161,6 +5161,8 @@ pub mod indexed_db_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        /** Lifecycle
+        */
         pub async fn create_object_store(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateObjectStoreRequest>,
@@ -5563,6 +5565,8 @@ pub mod indexed_db_server {
     /// Generated trait containing gRPC methods that should be implemented for use with IndexedDbServer.
     #[async_trait]
     pub trait IndexedDb: std::marker::Send + std::marker::Sync + 'static {
+        /** Lifecycle
+        */
         async fn create_object_store(
             &self,
             request: tonic::Request<super::CreateObjectStoreRequest>,

@@ -345,6 +345,9 @@ func ToWireIndexQueryRequest(value *IndexQueryRequest) *proto.IndexQueryRequest 
 		Query: ToWireIndexedDBQuery(value.Query),
 		Count: value.Count,
 	}
+	for _, item := range value.Queries {
+		out.Queries = append(out.Queries, ToWireIndexedDBQuery(item))
+	}
 	return out
 }
 
@@ -357,6 +360,9 @@ func FromWireIndexQueryRequest(value *proto.IndexQueryRequest) *IndexQueryReques
 		Index: value.Index,
 		Query: FromWireIndexedDBQuery(value.Query),
 		Count: value.Count,
+	}
+	for _, item := range value.Queries {
+		out.Queries = append(out.Queries, FromWireIndexedDBQuery(item))
 	}
 	return out
 }

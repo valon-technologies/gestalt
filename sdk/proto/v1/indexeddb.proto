@@ -156,6 +156,9 @@ message IndexQueryRequest {
   string index = 2;
   IndexedDBQuery query = 3;
   optional uint32 count = 4;
+  // queries matches the union of several exact keys or ranges. It is used by
+  // IndexGetAll; query carries the first entry for rolling compatibility.
+  repeated IndexedDBQuery queries = 5;
 }
 
 // CountResponse reports how many rows matched a query.

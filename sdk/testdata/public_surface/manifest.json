@@ -5,7 +5,7 @@
     "rust",
     "typescript"
   ],
-  "grpcMethodCount": 76,
+  "grpcMethodCount": 77,
   "restMethodCount": 47,
   "methods": [
     {
@@ -965,6 +965,30 @@
         "typescript": {
           "service": "ExternalCredentialsClient",
           "method": "exchangeCredential"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "GetCapabilities",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/GetCapabilities",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "GetCapabilities"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "get_capabilities"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "get_capabilities"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "getCapabilities"
         }
       }
     },

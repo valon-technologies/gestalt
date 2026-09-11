@@ -273,6 +273,11 @@ pub struct IndexQueryRequest {
     pub query: Option<IndexedDBQuery>,
     /// The `count` field; None when unset.
     pub count: Option<u32>,
+    /// queries matches the union of several exact keys or ranges. It is used by
+    /// IndexGetAll; query carries the first entry for rolling compatibility.
+    ///
+    /// The `queries` field.
+    pub queries: Vec<IndexedDBQuery>,
 }
 
 /// IndexSchema describes one secondary index on an object store.
@@ -1210,6 +1215,7 @@ impl IndexedDB {
             index,
             query,
             count: options.count,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_index_query_request(request));
         if let Some(timeout) = self.timeout {
@@ -1245,6 +1251,7 @@ impl IndexedDB {
             index,
             query,
             count: options.count,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_index_query_request(request));
         if let Some(timeout) = self.timeout {

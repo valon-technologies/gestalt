@@ -81,10 +81,11 @@ type IndexedDBObjectStoreRangeRequest struct {
 
 // IndexedDBIndexQueryRequest queries records through a secondary index.
 type IndexedDBIndexQueryRequest struct {
-	Store string
-	Index string
-	Query *client.IndexedDBQuery
-	Count *uint32
+	Store   string
+	Index   string
+	Query   *client.IndexedDBQuery
+	Queries []*client.IndexedDBQuery
+	Count   *uint32
 }
 
 // IndexedDBOpenCursorRequest opens a cursor over a store or index.

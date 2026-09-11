@@ -57,6 +57,16 @@ func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 			t.Fatalf("Put: %v", err)
 		}
 	}
+	matched, err := client.ObjectStore(store).Index("by_pair").GetAll(ctx, gestalt.AnyOf(
+		[]any{"active", int64(2)},
+		[]any{"inactive", int64(1)},
+	))
+	if err != nil {
+		t.Fatalf("Index GetAll AnyOf: %v", err)
+	}
+	if len(matched) != 2 {
+		t.Fatalf("Index GetAll AnyOf len = %d, want 2", len(matched))
+	}
 
 	cursor, err := client.ObjectStore(store).Index("by_pair").OpenCursor(ctx, nil, gestalt.CursorNext)
 	if err != nil {
@@ -366,11 +376,19 @@ func (p *nativeIndexedDBProvider) indexEntries(req gestalt.IndexedDBIndexQueryRe
 		if !ok {
 			continue
 		}
-		match, err := gestalt.MatchIndexedDBQuery(key, req.Query)
-		if err != nil {
-			return nil, err
+		queries := req.Queries
+		if len(queries) == 0 {
+			queries = []*gestalt.IndexedDBQuery{req.Query}
 		}
-		if !match {
+		matched := false
+		for _, query := range queries {
+			match, err := gestalt.MatchIndexedDBQuery(key, query)
+			if err != nil {
+				return nil, err
+			}
+			matched = matched || match
+		}
+		if !matched {
 			continue
 		}
 		entries = append(entries, gestalt.IndexedDBCursorSnapshotEntry{
