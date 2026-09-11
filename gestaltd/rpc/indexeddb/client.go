@@ -1029,20 +1029,12 @@ func objectStoreRangeRequest(store string, query any, count ...uint32) *proto.Ob
 }
 
 func objectStoreGetAllRangeRequest(store string, query any, count ...uint32) (*proto.ObjectStoreRangeRequest, error) {
-	querySet, ok := query.(idb.QuerySet)
-	if !ok {
-		return objectStoreRangeRequest(store, query, count...), nil
-	}
-	queries := querySet.Queries()
-	if len(queries) == 0 {
-		return nil, errors.New("indexeddb: AnyOf requires at least one query")
-	}
 	req := objectStoreRangeRequest(store, nil, count...)
-	req.Queries = make([]*proto.IndexedDBQuery, len(queries))
-	for i, query := range queries {
-		req.Queries[i] = sdkclient.ToWireIndexedDBQuery(query)
+	var err error
+	req.Query, req.Queries, err = getAllQueries(query)
+	if err != nil {
+		return nil, err
 	}
-	req.Query = req.Queries[0]
 	return req, nil
 }
 
@@ -1056,21 +1048,29 @@ func indexQueryRequest(store, index string, query any, count ...uint32) *proto.I
 }
 
 func indexGetAllQueryRequest(store, index string, query any, count ...uint32) (*proto.IndexQueryRequest, error) {
+	req := indexQueryRequest(store, index, nil, count...)
+	var err error
+	req.Query, req.Queries, err = getAllQueries(query)
+	if err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+func getAllQueries(query any) (*proto.IndexedDBQuery, []*proto.IndexedDBQuery, error) {
 	querySet, ok := query.(idb.QuerySet)
 	if !ok {
-		return indexQueryRequest(store, index, query, count...), nil
+		return toWireQuery(query), nil, nil
 	}
 	queries := querySet.Queries()
 	if len(queries) == 0 {
-		return nil, errors.New("indexeddb: AnyOf requires at least one query")
+		return nil, nil, errors.New("indexeddb: AnyOf requires at least one query")
 	}
-	req := indexQueryRequest(store, index, nil, count...)
-	req.Queries = make([]*proto.IndexedDBQuery, len(queries))
+	wireQueries := make([]*proto.IndexedDBQuery, len(queries))
 	for i, query := range queries {
-		req.Queries[i] = sdkclient.ToWireIndexedDBQuery(query)
+		wireQueries[i] = sdkclient.ToWireIndexedDBQuery(query)
 	}
-	req.Query = req.Queries[0]
-	return req, nil
+	return wireQueries[0], wireQueries, nil
 }
 
 func transactionModeToProto(mode idb.TransactionMode) proto.TransactionMode {

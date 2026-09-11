@@ -254,7 +254,7 @@ func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRang
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	query := objectStoreGetAllQuery(req)
+	query := getAllQuery(req.GetQuery(), req.GetQueries())
 	var recs []idb.Record
 	if req.Count != nil && *req.Count > 0 {
 		recs, err = store.GetAll(ctx, query, *req.Count)
@@ -340,7 +340,7 @@ func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	query := indexGetAllQuery(req)
+	query := getAllQuery(req.GetQuery(), req.GetQueries())
 	var recs []idb.Record
 	if req.Count != nil && *req.Count > 0 {
 		recs, err = store.Index(req.GetIndex()).GetAll(ctx, query, *req.Count)
@@ -623,7 +623,7 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx id
 		if err != nil {
 			return nil, err
 		}
-		query := objectStoreGetAllQuery(body.GetAll)
+		query := getAllQuery(body.GetAll.GetQuery(), body.GetAll.GetQueries())
 		var recs []idb.Record
 		if body.GetAll.Count != nil && *body.GetAll.Count > 0 {
 			recs, err = store.GetAll(ctx, query, *body.GetAll.Count)
@@ -751,7 +751,7 @@ func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx 
 	if err != nil {
 		return nil, err
 	}
-	query := indexGetAllQuery(req)
+	query := getAllQuery(req.GetQuery(), req.GetQueries())
 	var recs []idb.Record
 	if req.Count != nil && *req.Count > 0 {
 		recs, err = idx.GetAll(ctx, query, *req.Count)
@@ -764,23 +764,10 @@ func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx 
 	return recordsResponseFromRecords(recs)
 }
 
-func indexGetAllQuery(req *proto.IndexQueryRequest) any {
-	if len(req.GetQueries()) == 0 {
-		return req.GetQuery()
+func getAllQuery(query *proto.IndexedDBQuery, queries []*proto.IndexedDBQuery) any {
+	if len(queries) == 0 {
+		return query
 	}
-	queries := req.GetQueries()
-	rest := make([]any, len(queries)-1)
-	for i, query := range queries[1:] {
-		rest[i] = sdkclient.FromWireIndexedDBQuery(query)
-	}
-	return idb.AnyOf(sdkclient.FromWireIndexedDBQuery(queries[0]), rest...)
-}
-
-func objectStoreGetAllQuery(req *proto.ObjectStoreRangeRequest) any {
-	if len(req.GetQueries()) == 0 {
-		return req.GetQuery()
-	}
-	queries := req.GetQueries()
 	rest := make([]any, len(queries)-1)
 	for i, query := range queries[1:] {
 		rest[i] = sdkclient.FromWireIndexedDBQuery(query)
