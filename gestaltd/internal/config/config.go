@@ -2014,6 +2014,12 @@ type ServerConfig struct {
 	SCIM          ServerSCIMConfig         `yaml:"scim,omitempty"`
 	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
+	// PromoteSharedStateOnActivate gates whether POST /activate may promote
+	// shared gestaltd source-version and rollout coordination state. When
+	// false, /activate only prepares local providers; POST /promote performs
+	// shared promotion explicitly. When unset, /activate keeps promoting shared
+	// state for backward compatibility.
+	PromoteSharedStateOnActivate *bool `yaml:"promoteSharedStateOnActivate,omitempty"`
 	// AuthorizationStateApply gates whether server startup is allowed to
 	// overwrite active authorization provider state. When unset, the
 	// GESTALTD_AUTHORIZATION_STATE_APPLY environment variable is consulted;

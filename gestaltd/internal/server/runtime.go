@@ -148,15 +148,17 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 			}
 			return reverseRemote.readinessReason()
 		}),
-		PrometheusMetrics:     result.Telemetry.PrometheusHandler(),
-		PublicHostServices:    result.PublicHostServices,
-		ActivateAppProviders:  result.ActivateAppProviders,
-		WaitAppProvidersReady: result.WaitAppProvidersReady,
-		ServingReady:          result.AppProvidersInitialized,
-		IndexedDB:             publicIndexedDB,
-		RemoteManagement:      reverseRemote.remoteManagement,
-		FrpsHandler:           reverseRemote.frpsHandler,
-		FrpsConnectHandler:    reverseRemote.frpsConnectHandler,
+		PrometheusMetrics:            result.Telemetry.PrometheusHandler(),
+		PublicHostServices:           result.PublicHostServices,
+		ActivateAppProviders:         result.ActivateAppProviders,
+		WaitAppProvidersReady:        result.WaitAppProvidersReady,
+		PromoteSharedStateOnActivate: serverBoolPtr(!result.DeferSharedStartupWrites()),
+		FinishSharedStartupPromotion: result.FinishSharedStartupPromotion,
+		ServingReady:                 result.AppProvidersInitialized,
+		IndexedDB:                    publicIndexedDB,
+		RemoteManagement:             reverseRemote.remoteManagement,
+		FrpsHandler:                  reverseRemote.frpsHandler,
+		FrpsConnectHandler:           reverseRemote.frpsConnectHandler,
 		TunnelResolver: TunnelResolverConfig{
 			RemoteRegistrations: tunnelRemoteRegistrations(reverseRemote, result),
 			ConnectAddr:         reverseRemote.connectAddr,
@@ -445,7 +447,9 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		if err := result.StartRegistryApps(ctx); err != nil && ctx.Err() == nil {
 			slog.WarnContext(ctx, "registry app workflow reconciliation failed; continuing", "error", err)
 		}
-		result.StartWorkflowConfigReconciliation(ctx)
+		if !result.DeferSharedStartupWrites() {
+			result.StartWorkflowConfigReconciliation(ctx)
+		}
 
 		select {
 		case <-result.ProvidersReady:
@@ -943,3 +947,5 @@ func CheckGCSRegistryPermissionsForTest() func(context.Context, string) error {
 func SetCheckGCSRegistryPermissionsForTest(fn func(context.Context, string) error) {
 	checkGCSRegistryPermissionsFn = fn
 }
+
+func serverBoolPtr(v bool) *bool { return &v }

@@ -300,6 +300,9 @@ type Result struct {
 	startAppProviders                   func()
 	appProvidersInitialized             chan struct{}
 	activateAppProviders                func(context.Context)
+	pendingAppSHAs                      *pendingAppSHAWriter
+	deferSharedStartupWrites            bool
+	sharedStatePromoted                 bool
 	startup                             *deferredProviders
 	deferred                            *deferredProviders
 	mu                                  sync.Mutex
@@ -361,7 +364,7 @@ func (r *Result) StartRegistryApps(ctx context.Context) error {
 		if r.appProvidersInitialized != nil {
 			close(r.appProvidersInitialized)
 		}
-		if r.startupWorkflowConfigReconcile != nil {
+		if r.startupWorkflowConfigReconcile != nil && !r.deferSharedStartupWrites {
 			r.registryAppStartupErr = r.startupWorkflowConfigReconcile(ctx)
 			if r.registryAppStartupErr != nil && ctx.Err() == nil {
 				go runWorkflowConfigReconcileTask(ctx, workflowConfigReconcileTask{
@@ -369,6 +372,7 @@ func (r *Result) StartRegistryApps(ctx context.Context) error {
 					reconcile: r.startupWorkflowConfigReconcile,
 				})
 			}
+			r.startupWorkflowConfigReconcile = nil
 		}
 	})
 	return r.registryAppStartupErr
@@ -388,6 +392,56 @@ func (r *Result) ActivateAppProviders(ctx context.Context) {
 	}
 	r.mu.Unlock()
 	r.activateAppProviders(ctx)
+}
+
+func (r *Result) DeferSharedStartupWrites() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.deferSharedStartupWrites
+}
+
+// FinishSharedStartupPromotion flushes deferred shared startup writes and starts
+// deferred workflow-definition reconciliation after shared gestaltd pointers are
+// promoted explicitly.
+func (r *Result) FinishSharedStartupPromotion(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return fmt.Errorf("bootstrap result already closed")
+	}
+	if r.sharedStatePromoted {
+		r.mu.Unlock()
+		return nil
+	}
+	pending := r.pendingAppSHAs
+	workflows := append([]coreworkflow.Provider(nil), r.ExtraWorkflows...)
+	startupReconcile := r.startupWorkflowConfigReconcile
+	r.mu.Unlock()
+
+	if err := pending.Flush(ctx); err != nil {
+		return err
+	}
+	if err := promoteWorkflowProviders(ctx, workflows); err != nil {
+		return err
+	}
+	if startupReconcile != nil {
+		if err := startupReconcile(ctx); err != nil {
+			return err
+		}
+	}
+	r.StartWorkflowConfigReconciliation(ctx)
+
+	r.mu.Lock()
+	r.sharedStatePromoted = true
+	r.startupWorkflowConfigReconcile = nil
+	r.mu.Unlock()
+	return nil
 }
 
 func (r *Result) WaitAppProvidersReady(ctx context.Context) error {
@@ -1468,9 +1522,16 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	}()
 	storedSHAs := readAppSHAs(ctx, prepared.Services.DB)
 	autoActivate := resolveAutoActivate(cfg)
+	promoteSharedStateOnActivate := resolvePromoteSharedStateOnActivate(cfg)
+	deferSharedStartupWrites := !promoteSharedStateOnActivate
+	pendingAppSHAs := newPendingAppSHAWriter(prepared.Services.DB, deferSharedStartupWrites)
 	noopBuilds, updateBuilds := providerBuilds.partition(newAppStartupCategorizer(storedSHAs, autoActivate))
 	updateBuilds.stageServingCritical = true
 	updateBuilds.onInstalled = func(name, sha string) {
+		if deferSharedStartupWrites {
+			pendingAppSHAs.Record(name, sha)
+			return
+		}
 		if err := writeAppSHA(ctx, prepared.Services.DB, name, sha); err != nil {
 			slog.WarnContext(ctx, "persisting app sha failed", "provider", name, "error", err)
 		}
@@ -1680,6 +1741,8 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		startAppProviders:              startAppProviders,
 		appProvidersInitialized:        appProvidersInitialized,
 		activateAppProviders:           activateAppProviders,
+		pendingAppSHAs:                 pendingAppSHAs,
+		deferSharedStartupWrites:       deferSharedStartupWrites,
 		startup:                        startup,
 		deferred:                       deferred,
 	}
