@@ -15,8 +15,7 @@ import (
 )
 
 type RecoveryChangeRequests interface {
-	ListAllKnownVersions(context.Context) ([]*core.AppInstallation, error)
-	LatestDesiredRevisionID(context.Context, string, string) (string, error)
+	ListDesiredRevisions(context.Context) ([]coredata.AppDesiredRevision, error)
 }
 
 type RecoveryOutcomes interface {
@@ -170,7 +169,7 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 		return fmt.Errorf("app version recovery observer: stability window must be positive")
 	}
 
-	known, err := o.ChangeRequests.ListAllKnownVersions(ctx)
+	desiredRevisions, err := o.ChangeRequests.ListDesiredRevisions(ctx)
 	if err != nil {
 		o.resetAll()
 		return fmt.Errorf("observe app recovery: load desired versions: %w", err)
@@ -195,18 +194,13 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 		return fmt.Errorf("observe app recovery: load fresh heartbeats: %w", err)
 	}
 
-	byApp := groupInstallationsByApp(known)
-	seen := make(map[string]struct{}, len(byApp))
+	seen := make(map[string]struct{}, len(desiredRevisions))
 	var errs []error
-	for app, installations := range byApp {
+	for _, desired := range desiredRevisions {
+		app := strings.TrimSpace(desired.App)
 		seen[app] = struct{}{}
-		desiredVersion := coredata.LatestKnownVersion(installations)
-		changeRequestID, err := o.ChangeRequests.LatestDesiredRevisionID(ctx, app, desiredVersion)
-		if err != nil {
-			o.reset(app)
-			errs = append(errs, fmt.Errorf("observe app recovery for %s: load desired revision: %w", app, err))
-			continue
-		}
+		desiredVersion := strings.TrimSpace(desired.Version)
+		changeRequestID := strings.TrimSpace(desired.ChangeRequestID)
 		if changeRequestID == "" || o.isCompleted(changeRequestID) {
 			o.reset(app)
 			continue
