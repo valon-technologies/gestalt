@@ -76,17 +76,6 @@ func (s *Server) promoteFleetSourceVersion(w http.ResponseWriter, r *http.Reques
 	return true
 }
 
-func (s *Server) commitDeferredStartupState(w http.ResponseWriter, r *http.Request) bool {
-	if s.finishSharedStartupPromotion == nil {
-		return true
-	}
-	if err := s.finishSharedStartupPromotion(r.Context()); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return false
-	}
-	return true
-}
-
 func (s *Server) runLocalActivation(w http.ResponseWriter, r *http.Request) bool {
 	if s.activateAppProviders != nil {
 		s.activateAppProviders(r.Context())

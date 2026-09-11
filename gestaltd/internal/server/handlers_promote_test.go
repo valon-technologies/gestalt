@@ -65,6 +65,71 @@ func TestActivateWithoutSharedPromotionLeavesSourceVersionUnchanged(t *testing.T
 	}
 }
 
+func TestPromoteRegistryRequiresTemporalWorkersFirst(t *testing.T) {
+	t.Parallel()
+
+	var temporalPromoted bool
+	var services *coredata.Services
+	start := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.SourceVersion = "source-new"
+		promoteOnActivate := false
+		cfg.PromoteSharedStateOnActivate = &promoteOnActivate
+		cfg.FinishSharedStartupPromotion = func(context.Context) error {
+			temporalPromoted = true
+			return nil
+		}
+		cfg.TemporalWorkersPromoted = func() bool { return temporalPromoted }
+		cfg.Now = func() time.Time { return start.Add(5 * time.Minute) }
+		services = cfg.Services
+		if _, err := services.GestaltdSourceVersionState.Activate(
+			context.Background(),
+			"source-old",
+			start,
+			false,
+			appregistry.DefaultRolloutEnrollmentWindow,
+			appregistry.DefaultRolloutTimeout,
+		); err != nil {
+			t.Fatalf("seed source version: %v", err)
+		}
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	resp, err := http.Post(srv.URL+"/promote/registry?source_version=source-new&minimum_healthy_instances=5", "", nil)
+	if err != nil {
+		t.Fatalf("POST /promote/registry: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		t.Fatalf("registry before temporal status = %d, want %d", resp.StatusCode, http.StatusPreconditionFailed)
+	}
+
+	resp, err = http.Post(srv.URL+"/promote/temporal", "", nil)
+	if err != nil {
+		t.Fatalf("POST /promote/temporal: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("temporal promote status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	resp, err = http.Post(srv.URL+"/promote/registry?source_version=source-new&minimum_healthy_instances=5", "", nil)
+	if err != nil {
+		t.Fatalf("POST /promote/registry after temporal: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("registry after temporal status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	current, err := services.GestaltdSourceVersionState.CurrentForAdmission(context.Background())
+	if err != nil {
+		t.Fatalf("CurrentForAdmission: %v", err)
+	}
+	if current != "source-new" {
+		t.Fatalf("current source version = %q, want source-new", current)
+	}
+}
+
 func TestPromoteEndpointPromotesSharedState(t *testing.T) {
 	t.Parallel()
 

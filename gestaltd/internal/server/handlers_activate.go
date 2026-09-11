@@ -17,7 +17,7 @@ func (s *Server) activateAppProvidersHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if s.promoteSharedStateOnActivate {
-		if !s.promoteFleetSourceVersion(w, r, req) || !s.commitDeferredStartupState(w, r) {
+		if !s.promoteTemporalWorkers(w, r) || !s.promoteFleetSourceVersion(w, r, req) {
 			return
 		}
 	}
