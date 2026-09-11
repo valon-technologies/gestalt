@@ -427,20 +427,25 @@ func (r *Result) PromoteTemporalWorkers(ctx context.Context) error {
 		r.mu.Unlock()
 		return fmt.Errorf("bootstrap result already closed")
 	}
-	if r.sharedStatePromoted {
-		r.mu.Unlock()
-		return nil
-	}
+	alreadyPromoted := r.sharedStatePromoted
 	pending := r.pendingAppSHAs
 	workflows := append([]coreworkflow.Provider(nil), r.ExtraWorkflows...)
 	startupReconcile := r.startupWorkflowConfigReconcile
 	r.mu.Unlock()
 
-	if err := pending.Flush(ctx); err != nil {
-		return err
+	if !alreadyPromoted {
+		if err := pending.Flush(ctx); err != nil {
+			return err
+		}
 	}
+	// Always re-run workflow provider promotion so explicit /promote/temporal can
+	// advance Temporal Worker Deployment current even when this process already
+	// completed shared startup bookkeeping.
 	if err := promoteWorkflowProviders(ctx, workflows); err != nil {
 		return err
+	}
+	if alreadyPromoted {
+		return nil
 	}
 	if startupReconcile != nil {
 		if err := startupReconcile(ctx); err != nil {
