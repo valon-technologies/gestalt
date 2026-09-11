@@ -300,10 +300,10 @@ func normalizedSourceVersionTime(value time.Time) time.Time {
 
 func gestaltdSourceVersionStateRecord(state *core.GestaltdSourceVersionState) idb.Record {
 	return idb.Record{
-		"id":                                     gestaltdSourceVersionStateID,
-		"current_source_version":                 strings.TrimSpace(state.CurrentSourceVersion),
-		"minimum_healthy_instances":              state.MinimumHealthyInstances,
-		"updated_at":                             normalizedSourceVersionTime(state.UpdatedAt),
+		"id":                        gestaltdSourceVersionStateID,
+		"current_source_version":    strings.TrimSpace(state.CurrentSourceVersion),
+		"minimum_healthy_instances": state.MinimumHealthyInstances,
+		"updated_at":                normalizedSourceVersionTime(state.UpdatedAt),
 		"temporal_workers_promoted_source_version": strings.TrimSpace(state.TemporalWorkersPromotedSourceVersion),
 		"temporal_workers_promoted_at":             normalizedSourceVersionTime(state.TemporalWorkersPromotedAt),
 	}

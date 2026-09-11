@@ -23,7 +23,7 @@ func TestStartupGateReportReflectsRuntimeSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /startup-gate: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}

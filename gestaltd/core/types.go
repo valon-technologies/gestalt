@@ -234,9 +234,9 @@ type AppVersionRecoveryObservation struct {
 }
 
 type GestaltdSourceVersionState struct {
-	CurrentSourceVersion               string
-	MinimumHealthyInstances            int
-	UpdatedAt                          time.Time
+	CurrentSourceVersion                 string
+	MinimumHealthyInstances              int
+	UpdatedAt                            time.Time
 	TemporalWorkersPromotedSourceVersion string
 	TemporalWorkersPromotedAt            time.Time
 }
