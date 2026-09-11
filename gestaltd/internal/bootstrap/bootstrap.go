@@ -419,11 +419,9 @@ func (r *Result) FinishSharedStartupPromotion(ctx context.Context) error {
 		r.mu.Unlock()
 		return nil
 	}
-	r.sharedStatePromoted = true
 	pending := r.pendingAppSHAs
 	workflows := append([]coreworkflow.Provider(nil), r.ExtraWorkflows...)
 	startupReconcile := r.startupWorkflowConfigReconcile
-	r.startupWorkflowConfigReconcile = nil
 	r.mu.Unlock()
 
 	if err := pending.Flush(ctx); err != nil {
@@ -438,6 +436,11 @@ func (r *Result) FinishSharedStartupPromotion(ctx context.Context) error {
 		}
 	}
 	r.StartWorkflowConfigReconciliation(ctx)
+
+	r.mu.Lock()
+	r.sharedStatePromoted = true
+	r.startupWorkflowConfigReconcile = nil
+	r.mu.Unlock()
 	return nil
 }
 

@@ -16,7 +16,7 @@ func (s *Server) promoteSharedStateHandler(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
-	if !s.promoteSharedGestaltState(w, r, req) {
+	if !s.promoteFleetSourceVersion(w, r, req) || !s.commitDeferredStartupState(w, r) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

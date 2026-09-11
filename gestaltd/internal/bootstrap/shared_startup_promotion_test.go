@@ -17,6 +17,7 @@ func TestResolvePromoteSharedStateOnActivateDefaultsTrue(t *testing.T) {
 }
 
 func TestResolvePromoteSharedStateOnActivateHonorsConfig(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{Server: config.ServerConfig{PromoteSharedStateOnActivate: boolPtr(false)}}
 	if resolvePromoteSharedStateOnActivate(cfg) {
 		t.Fatal("expected config false to disable promote-on-activate")
@@ -24,6 +25,7 @@ func TestResolvePromoteSharedStateOnActivateHonorsConfig(t *testing.T) {
 }
 
 func TestPendingAppSHAWriterFlushesDeferredWrites(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := &coretesting.StubIndexedDB{}
 	if _, err := coredata.New(db); err != nil {
@@ -39,4 +41,3 @@ func TestPendingAppSHAWriterFlushesDeferredWrites(t *testing.T) {
 		t.Fatalf("stored sha = %q, want sha-1", shas["github"])
 	}
 }
-

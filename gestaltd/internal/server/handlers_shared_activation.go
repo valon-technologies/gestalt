@@ -42,7 +42,7 @@ func firstQueryValue(query map[string][]string, key string) string {
 	return values[0]
 }
 
-func (s *Server) promoteSharedGestaltState(w http.ResponseWriter, r *http.Request, req sharedActivationRequest) bool {
+func (s *Server) promoteFleetSourceVersion(w http.ResponseWriter, r *http.Request, req sharedActivationRequest) bool {
 	if s.sourceVersion == "" {
 		return true
 	}
@@ -73,11 +73,16 @@ func (s *Server) promoteSharedGestaltState(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return false
 	}
-	if s.finishSharedStartupPromotion != nil {
-		if err := s.finishSharedStartupPromotion(r.Context()); err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return false
-		}
+	return true
+}
+
+func (s *Server) commitDeferredStartupState(w http.ResponseWriter, r *http.Request) bool {
+	if s.finishSharedStartupPromotion == nil {
+		return true
+	}
+	if err := s.finishSharedStartupPromotion(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return false
 	}
 	return true
 }
