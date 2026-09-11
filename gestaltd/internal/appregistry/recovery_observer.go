@@ -47,6 +47,7 @@ type RecoveryObserver struct {
 	stateMu   sync.Mutex
 	healthy   map[string]recoveryStability
 	completed map[string]struct{}
+	outcomes  map[string]*core.AppVersionRolloutOutcome
 }
 
 type RecoveryObserverConfig struct {
@@ -86,6 +87,7 @@ func NewRecoveryObserver(cfg RecoveryObserverConfig) *RecoveryObserver {
 		NewTicker:       cfg.NewTicker,
 		healthy:         make(map[string]recoveryStability),
 		completed:       make(map[string]struct{}),
+		outcomes:        make(map[string]*core.AppVersionRolloutOutcome),
 	}
 }
 
@@ -195,17 +197,21 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 	}
 
 	seen := make(map[string]struct{}, len(desiredRevisions))
+	desiredRequestIDs := make(map[string]struct{}, len(desiredRevisions))
 	var errs []error
 	for _, desired := range desiredRevisions {
 		app := strings.TrimSpace(desired.App)
 		seen[app] = struct{}{}
 		desiredVersion := strings.TrimSpace(desired.Version)
 		changeRequestID := strings.TrimSpace(desired.ChangeRequestID)
+		if changeRequestID != "" {
+			desiredRequestIDs[changeRequestID] = struct{}{}
+		}
 		if changeRequestID == "" || o.isCompleted(changeRequestID) {
 			o.reset(app)
 			continue
 		}
-		outcome, err := o.Outcomes.Get(ctx, changeRequestID)
+		outcome, err := o.loadOutcome(ctx, changeRequestID)
 		if errors.Is(err, core.ErrNotFound) {
 			o.reset(app)
 			continue
@@ -219,6 +225,9 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 			strings.TrimSpace(outcome.App) != app ||
 			strings.TrimSpace(outcome.Version) != desiredVersion {
 			o.reset(app)
+			if outcome != nil && !outcome.CompletedAt.IsZero() {
+				o.markCompleted(changeRequestID)
+			}
 			continue
 		}
 
@@ -263,8 +272,32 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 			o.markCompleted(changeRequestID)
 		}
 	}
-	o.resetUnseen(seen)
+	o.resetUnseen(seen, desiredRequestIDs)
 	return errors.Join(errs...)
+}
+
+func (o *RecoveryObserver) loadOutcome(ctx context.Context, changeRequestID string) (*core.AppVersionRolloutOutcome, error) {
+	o.stateMu.Lock()
+	cached := o.outcomes[changeRequestID]
+	o.stateMu.Unlock()
+	if cached != nil {
+		return cached, nil
+	}
+
+	outcome, err := o.Outcomes.Get(ctx, changeRequestID)
+	if err != nil || outcome == nil {
+		return outcome, err
+	}
+	// Rollout outcomes are immutable terminal records. Cache only records that
+	// have reached one terminal state; missing outcomes continue to be polled.
+	if outcome.CompletedAt.IsZero() == outcome.FailedAt.IsZero() {
+		return outcome, nil
+	}
+	copy := *outcome
+	o.stateMu.Lock()
+	o.outcomes[changeRequestID] = &copy
+	o.stateMu.Unlock()
+	return &copy, nil
 }
 
 func (o *RecoveryObserver) advance(app string, next recoveryStability, now time.Time) (time.Time, bool) {
@@ -295,12 +328,22 @@ func (o *RecoveryObserver) resetAll() {
 	clear(o.healthy)
 }
 
-func (o *RecoveryObserver) resetUnseen(seen map[string]struct{}) {
+func (o *RecoveryObserver) resetUnseen(seen, desiredRequestIDs map[string]struct{}) {
 	o.stateMu.Lock()
 	defer o.stateMu.Unlock()
 	for app := range o.healthy {
 		if _, ok := seen[app]; !ok {
 			delete(o.healthy, app)
+		}
+	}
+	for changeRequestID := range o.completed {
+		if _, ok := desiredRequestIDs[changeRequestID]; !ok {
+			delete(o.completed, changeRequestID)
+		}
+	}
+	for changeRequestID := range o.outcomes {
+		if _, ok := desiredRequestIDs[changeRequestID]; !ok {
+			delete(o.outcomes, changeRequestID)
 		}
 	}
 }
