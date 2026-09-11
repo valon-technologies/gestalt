@@ -116,6 +116,7 @@ const (
 func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
+	r.Get("/startup-gate", s.startupGateReport)
 	r.Get("/fleet-readiness", s.fleetReadinessReport)
 	if s.frpsHandler != nil {
 		r.Handle("/~!frp", s.frpsHandler)

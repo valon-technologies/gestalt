@@ -213,6 +213,7 @@ type Server struct {
 	waitAppProvidersReady         func(context.Context) error
 	promoteSharedStateOnActivate  bool
 	finishSharedStartupPromotion  func(context.Context) error
+	temporalWorkersPromoted       func() bool
 	servingReady                  <-chan struct{}
 	appProviderRestarter          interface {
 		RestartApp(context.Context, string) error
@@ -297,6 +298,7 @@ type Config struct {
 	WaitAppProvidersReady         func(context.Context) error
 	PromoteSharedStateOnActivate  *bool
 	FinishSharedStartupPromotion  func(context.Context) error
+	TemporalWorkersPromoted       func() bool
 	ServingReady                  <-chan struct{}
 	UIReadiness                   *UIReadinessMonitor
 	AppProviderRestarter          interface {
@@ -577,6 +579,7 @@ func New(cfg Config) (*Server, error) {
 		waitAppProvidersReady:         cfg.WaitAppProvidersReady,
 		promoteSharedStateOnActivate:  resolveServerPromoteSharedStateOnActivate(cfg),
 		finishSharedStartupPromotion:  cfg.FinishSharedStartupPromotion,
+		temporalWorkersPromoted:       cfg.TemporalWorkersPromoted,
 		servingReady:                  cfg.ServingReady,
 		appProviderRestarter:          cfg.AppProviderRestarter,
 		uiReadiness:                   cfg.UIReadiness,

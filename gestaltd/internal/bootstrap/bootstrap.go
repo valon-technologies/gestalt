@@ -403,10 +403,22 @@ func (r *Result) DeferSharedStartupWrites() bool {
 	return r.deferSharedStartupWrites
 }
 
-// FinishSharedStartupPromotion flushes deferred shared startup writes and starts
-// deferred workflow-definition reconciliation after shared gestaltd pointers are
-// promoted explicitly.
-func (r *Result) FinishSharedStartupPromotion(ctx context.Context) error {
+// TemporalWorkersPromoted reports whether deferred Temporal worker promotion and
+// workflow-definition reconciliation have completed for this process.
+func (r *Result) TemporalWorkersPromoted() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	promoted := r.sharedStatePromoted
+	r.mu.Unlock()
+	return promoted
+}
+
+// PromoteTemporalWorkers flushes deferred app SHA writes, promotes Temporal
+// workers, and reconciles workflow definitions. It is idempotent and must run
+// before registry coordination is promoted.
+func (r *Result) PromoteTemporalWorkers(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
@@ -442,6 +454,12 @@ func (r *Result) FinishSharedStartupPromotion(ctx context.Context) error {
 	r.startupWorkflowConfigReconcile = nil
 	r.mu.Unlock()
 	return nil
+}
+
+// FinishSharedStartupPromotion promotes Temporal workers for explicit shared
+// startup flows. Registry coordination is promoted separately.
+func (r *Result) FinishSharedStartupPromotion(ctx context.Context) error {
+	return r.PromoteTemporalWorkers(ctx)
 }
 
 func (r *Result) WaitAppProvidersReady(ctx context.Context) error {
