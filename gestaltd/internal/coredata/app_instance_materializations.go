@@ -48,6 +48,25 @@ func (s *AppInstanceMaterializationService) Get(ctx context.Context, instanceID,
 	return recordToAppInstanceMaterialization(rec), nil
 }
 
+func (s *AppInstanceMaterializationService) ListByInstance(ctx context.Context, instanceID string) ([]*core.AppInstanceMaterialization, error) {
+	if s == nil {
+		return nil, fmt.Errorf("list app instance materializations: service is not configured")
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return nil, fmt.Errorf("list app instance materializations: instance_id is required")
+	}
+	recs, err := s.store.Index("by_instance").GetAll(ctx, instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("list app instance materializations: %w", err)
+	}
+	out := make([]*core.AppInstanceMaterialization, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, recordToAppInstanceMaterialization(rec))
+	}
+	return out, nil
+}
+
 func (s *AppInstanceMaterializationService) ListByAppVersion(ctx context.Context, app, version string) ([]*core.AppInstanceMaterialization, error) {
 	if s == nil {
 		return nil, fmt.Errorf("list app instance materializations: service is not configured")
