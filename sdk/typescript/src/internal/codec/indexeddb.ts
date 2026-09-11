@@ -618,6 +618,7 @@ export function toWireObjectStoreRangeRequest(
       ? { query: toWireIndexedDBQuery(value.query) }
       : {}),
     ...(value.count !== undefined ? { count: value.count } : {}),
+    queries: (value.queries ?? []).map(toWireIndexedDBQuery),
   });
 }
 
@@ -630,6 +631,7 @@ export function fromWireObjectStoreRangeRequest(
       ? { query: fromWireIndexedDBQuery(value.query) }
       : {}),
     ...(value.count !== undefined ? { count: value.count } : {}),
+    queries: value.queries.map(fromWireIndexedDBQuery),
   };
 }
 

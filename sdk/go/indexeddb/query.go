@@ -2,7 +2,7 @@ package indexeddb
 
 import "github.com/valon-technologies/gestalt/sdk/go/client"
 
-// QuerySet is a non-empty union of exact keys and key ranges for Index.GetAll.
+// QuerySet is a non-empty union of exact keys and key ranges for GetAll.
 type QuerySet struct {
 	queries []*client.IndexedDBQuery
 }

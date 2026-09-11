@@ -294,6 +294,11 @@ pub(crate) fn to_wire_object_store_range_request(
         store: value.store,
         query: value.query.map(to_wire_indexed_db_query),
         count: value.count,
+        queries: value
+            .queries
+            .into_iter()
+            .map(to_wire_indexed_db_query)
+            .collect(),
     }
 }
 

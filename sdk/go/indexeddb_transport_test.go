@@ -646,6 +646,14 @@ func TestTransport_GetAllCount(t *testing.T) {
 		t.Fatalf("GetAll page ids = %v %v, want a b", page[0]["id"], page[1]["id"])
 	}
 
+	selected, err := s.GetAll(ctx, gestalt.AnyOf("b", "d", "missing"))
+	if err != nil {
+		t.Fatalf("ObjectStore GetAll AnyOf: %v", err)
+	}
+	if len(selected) != 2 || selected[0]["id"] != "b" || selected[1]["id"] != "d" {
+		t.Fatalf("ObjectStore GetAll AnyOf = %#v, want rows b and d", selected)
+	}
+
 	keys, err := s.GetAllKeys(ctx, nil, 3)
 	if err != nil {
 		t.Fatalf("GetAllKeys count=3: %v", err)
@@ -708,6 +716,13 @@ func TestTransport_GetAllCount(t *testing.T) {
 	}
 	if len(txPage) != 2 || txPage[0]["id"] != "a" || txPage[1]["id"] != "b" {
 		t.Fatalf("tx GetAll = %#v, want first two rows", txPage)
+	}
+	txSelected, err := tx.ObjectStore(store).GetAll(ctx, gestalt.AnyOf("a", "e", "missing"))
+	if err != nil {
+		t.Fatalf("Transaction ObjectStore GetAll AnyOf: %v", err)
+	}
+	if len(txSelected) != 2 || txSelected[0]["id"] != "a" || txSelected[1]["id"] != "e" {
+		t.Fatalf("Transaction ObjectStore GetAll AnyOf = %#v, want rows a and e", txSelected)
 	}
 }
 

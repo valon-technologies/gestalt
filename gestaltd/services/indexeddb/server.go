@@ -254,11 +254,12 @@ func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRang
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	query := objectStoreGetAllQuery(req)
 	var recs []idb.Record
 	if req.Count != nil && *req.Count > 0 {
-		recs, err = store.GetAll(ctx, req.GetQuery(), *req.Count)
+		recs, err = store.GetAll(ctx, query, *req.Count)
 	} else {
-		recs, err = store.GetAll(ctx, req.GetQuery())
+		recs, err = store.GetAll(ctx, query)
 	}
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -622,11 +623,12 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx id
 		if err != nil {
 			return nil, err
 		}
+		query := objectStoreGetAllQuery(body.GetAll)
 		var recs []idb.Record
 		if body.GetAll.Count != nil && *body.GetAll.Count > 0 {
-			recs, err = store.GetAll(ctx, body.GetAll.GetQuery(), *body.GetAll.Count)
+			recs, err = store.GetAll(ctx, query, *body.GetAll.Count)
 		} else {
-			recs, err = store.GetAll(ctx, body.GetAll.GetQuery())
+			recs, err = store.GetAll(ctx, query)
 		}
 		if err != nil {
 			return nil, err
@@ -763,6 +765,18 @@ func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx 
 }
 
 func indexGetAllQuery(req *proto.IndexQueryRequest) any {
+	if len(req.GetQueries()) == 0 {
+		return req.GetQuery()
+	}
+	queries := req.GetQueries()
+	rest := make([]any, len(queries)-1)
+	for i, query := range queries[1:] {
+		rest[i] = sdkclient.FromWireIndexedDBQuery(query)
+	}
+	return idb.AnyOf(sdkclient.FromWireIndexedDBQuery(queries[0]), rest...)
+}
+
+func objectStoreGetAllQuery(req *proto.ObjectStoreRangeRequest) any {
 	if len(req.GetQueries()) == 0 {
 		return req.GetQuery()
 	}

@@ -54,20 +54,14 @@ func (s *AppVersionRolloutOutcomeService) GetMany(ctx context.Context, changeReq
 	if s == nil {
 		return nil, fmt.Errorf("get app version rollout outcomes: service is not configured")
 	}
-	out := make(map[string]*core.AppVersionRolloutOutcome, len(changeRequestIDs))
-	for _, id := range changeRequestIDs {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		outcome, err := s.Get(ctx, id)
-		if errors.Is(err, core.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		out[id] = outcome
+	records, err := getRecordsByIDs(ctx, s.store, changeRequestIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get app version rollout outcomes: %w", err)
+	}
+	out := make(map[string]*core.AppVersionRolloutOutcome, len(records))
+	for _, record := range records {
+		outcome := recordToAppVersionRolloutOutcome(record)
+		out[outcome.ID] = outcome
 	}
 	return out, nil
 }

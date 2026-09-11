@@ -398,7 +398,15 @@ func objectStoreRequestFromProto(req *proto.ObjectStoreRequest) IndexedDBObjectS
 }
 
 func objectStoreRangeRequestFromProto(req *proto.ObjectStoreRangeRequest) IndexedDBObjectStoreRangeRequest {
-	out := IndexedDBObjectStoreRangeRequest{Store: req.GetStore(), Query: client.FromWireIndexedDBQuery(req.GetQuery())}
+	queries := make([]*client.IndexedDBQuery, len(req.GetQueries()))
+	for i, query := range req.GetQueries() {
+		queries[i] = client.FromWireIndexedDBQuery(query)
+	}
+	out := IndexedDBObjectStoreRangeRequest{
+		Store:   req.GetStore(),
+		Query:   client.FromWireIndexedDBQuery(req.GetQuery()),
+		Queries: queries,
+	}
 	if req.Count != nil {
 		count := req.GetCount()
 		out.Count = &count

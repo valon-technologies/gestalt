@@ -57,6 +57,13 @@ func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 			t.Fatalf("Put: %v", err)
 		}
 	}
+	selected, err := client.ObjectStore(store).GetAll(ctx, gestalt.AnyOf("a", "c", "missing"))
+	if err != nil {
+		t.Fatalf("ObjectStore GetAll AnyOf: %v", err)
+	}
+	if len(selected) != 2 {
+		t.Fatalf("ObjectStore GetAll AnyOf len = %d, want 2", len(selected))
+	}
 	matched, err := client.ObjectStore(store).Index("by_pair").GetAll(ctx, gestalt.AnyOf(
 		[]any{"active", int64(2)},
 		[]any{"inactive", int64(1)},
@@ -217,7 +224,7 @@ func (p *nativeIndexedDBProvider) Clear(_ context.Context, store string) error {
 }
 
 func (p *nativeIndexedDBProvider) GetAll(_ context.Context, req gestalt.IndexedDBObjectStoreRangeRequest) ([]gestalt.Record, error) {
-	entries, err := p.objectEntries(req.Store, req.Query)
+	entries, err := p.objectEntriesForRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +236,7 @@ func (p *nativeIndexedDBProvider) GetAll(_ context.Context, req gestalt.IndexedD
 }
 
 func (p *nativeIndexedDBProvider) GetAllKeys(_ context.Context, req gestalt.IndexedDBObjectStoreRangeRequest) ([]string, error) {
-	entries, err := p.objectEntries(req.Store, req.Query)
+	entries, err := p.objectEntriesForRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -350,6 +357,18 @@ func (p *nativeIndexedDBProvider) BeginTransaction(_ context.Context, req gestal
 }
 
 func (p *nativeIndexedDBProvider) objectEntries(store string, query *gestalt.IndexedDBQuery) ([]gestalt.IndexedDBCursorSnapshotEntry, error) {
+	return p.objectEntriesForQueries(store, []*gestalt.IndexedDBQuery{query})
+}
+
+func (p *nativeIndexedDBProvider) objectEntriesForRequest(req gestalt.IndexedDBObjectStoreRangeRequest) ([]gestalt.IndexedDBCursorSnapshotEntry, error) {
+	queries := req.Queries
+	if len(queries) == 0 {
+		queries = []*gestalt.IndexedDBQuery{req.Query}
+	}
+	return p.objectEntriesForQueries(req.Store, queries)
+}
+
+func (p *nativeIndexedDBProvider) objectEntriesForQueries(store string, queries []*gestalt.IndexedDBQuery) ([]gestalt.IndexedDBCursorSnapshotEntry, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	records := p.stores[store]
@@ -361,9 +380,18 @@ func (p *nativeIndexedDBProvider) objectEntries(store string, query *gestalt.Ind
 			PrimaryKeyValue: id,
 			Record:          cloneRecord(record),
 		}
-		entries = append(entries, entry)
+		for _, query := range queries {
+			matched, err := gestalt.MatchIndexedDBQuery(id, query)
+			if err != nil {
+				return nil, err
+			}
+			if matched {
+				entries = append(entries, entry)
+				break
+			}
+		}
 	}
-	return gestalt.ApplyIndexedDBQuery(entries, query)
+	return gestalt.ApplyIndexedDBQuery(entries, nil)
 }
 
 func (p *nativeIndexedDBProvider) indexEntries(req gestalt.IndexedDBIndexQueryRequest) ([]gestalt.IndexedDBCursorSnapshotEntry, error) {

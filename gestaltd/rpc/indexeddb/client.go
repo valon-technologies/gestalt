@@ -212,7 +212,11 @@ func (o *objectStore) Clear(ctx context.Context) error {
 func (o *objectStore) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
 	defer cancel()
-	resp, err := o.client.GetAll(ctx, objectStoreRangeRequest(o.store, query, count...))
+	req, err := objectStoreGetAllRangeRequest(o.store, query, count...)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := o.client.GetAll(ctx, req)
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -594,7 +598,11 @@ func (s *txObjectStore) Clear(ctx context.Context) error {
 
 func (s *txObjectStore) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	_ = ctx
-	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetAll{GetAll: objectStoreRangeRequest(s.store, query, count...)}})
+	req, err := objectStoreGetAllRangeRequest(s.store, query, count...)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetAll{GetAll: req}})
 	if err != nil {
 		return nil, err
 	}
@@ -1018,6 +1026,24 @@ func objectStoreRangeRequest(store string, query any, count ...uint32) *proto.Ob
 		req.Count = &c
 	}
 	return req
+}
+
+func objectStoreGetAllRangeRequest(store string, query any, count ...uint32) (*proto.ObjectStoreRangeRequest, error) {
+	querySet, ok := query.(idb.QuerySet)
+	if !ok {
+		return objectStoreRangeRequest(store, query, count...), nil
+	}
+	queries := querySet.Queries()
+	if len(queries) == 0 {
+		return nil, errors.New("indexeddb: AnyOf requires at least one query")
+	}
+	req := objectStoreRangeRequest(store, nil, count...)
+	req.Queries = make([]*proto.IndexedDBQuery, len(queries))
+	for i, query := range queries {
+		req.Queries[i] = sdkclient.ToWireIndexedDBQuery(query)
+	}
+	req.Query = req.Queries[0]
+	return req, nil
 }
 
 func indexQueryRequest(store, index string, query any, count ...uint32) *proto.IndexQueryRequest {

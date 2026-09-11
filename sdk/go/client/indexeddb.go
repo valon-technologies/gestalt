@@ -377,6 +377,9 @@ type ObjectStoreRangeRequest struct {
 	Store string
 	Query *IndexedDBQuery
 	Count *uint32
+	// queries matches the union of several exact keys or ranges. It is used by
+	// GetAll; query carries the first entry for rolling compatibility.
+	Queries []*IndexedDBQuery
 }
 
 // ObjectStoreRequest is the native message type for gestalt.provider.v1.ObjectStoreRequest.

@@ -407,6 +407,11 @@ pub struct ObjectStoreRangeRequest {
     pub query: Option<IndexedDBQuery>,
     /// The `count` field; None when unset.
     pub count: Option<u32>,
+    /// queries matches the union of several exact keys or ranges. It is used by
+    /// GetAll; query carries the first entry for rolling compatibility.
+    ///
+    /// The `queries` field.
+    pub queries: Vec<IndexedDBQuery>,
 }
 
 /// ObjectStoreRequest addresses one object store row by primary key.
@@ -1010,6 +1015,7 @@ impl IndexedDB {
             store,
             query,
             count: options.count,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_object_store_range_request(request));
         if let Some(timeout) = self.timeout {
@@ -1043,6 +1049,7 @@ impl IndexedDB {
             store,
             query,
             count: options.count,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_object_store_range_request(request));
         if let Some(timeout) = self.timeout {

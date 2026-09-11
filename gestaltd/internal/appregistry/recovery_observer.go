@@ -19,10 +19,11 @@ type RecoveryChangeRequests interface {
 }
 
 type RecoveryOutcomes interface {
-	Get(context.Context, string) (*core.AppVersionRolloutOutcome, error)
+	GetMany(context.Context, []string) (map[string]*core.AppVersionRolloutOutcome, error)
 }
 
 type RecoveryObservations interface {
+	GetMany(context.Context, []string) (map[string]*core.AppVersionRecoveryObservation, error)
 	RecordIfCurrentFailed(context.Context, *core.AppVersionRecoveryObservation) (*core.AppVersionRecoveryObservation, bool, error)
 }
 
@@ -46,8 +47,6 @@ type RecoveryObserver struct {
 	passMu    sync.Mutex
 	stateMu   sync.Mutex
 	healthy   map[string]recoveryStability
-	completed map[string]struct{}
-	outcomes  map[string]*core.AppVersionRolloutOutcome
 }
 
 type RecoveryObserverConfig struct {
@@ -86,8 +85,6 @@ func NewRecoveryObserver(cfg RecoveryObserverConfig) *RecoveryObserver {
 		Now:             cfg.Now,
 		NewTicker:       cfg.NewTicker,
 		healthy:         make(map[string]recoveryStability),
-		completed:       make(map[string]struct{}),
-		outcomes:        make(map[string]*core.AppVersionRolloutOutcome),
 	}
 }
 
@@ -195,39 +192,45 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 		o.resetAll()
 		return fmt.Errorf("observe app recovery: load fresh heartbeats: %w", err)
 	}
+	changeRequestIDs := make([]string, 0, len(desiredRevisions))
+	for _, desired := range desiredRevisions {
+		if id := strings.TrimSpace(desired.ChangeRequestID); id != "" {
+			changeRequestIDs = append(changeRequestIDs, id)
+		}
+	}
+	recoveryObservations, err := o.Observations.GetMany(ctx, changeRequestIDs)
+	if err != nil {
+		o.resetAll()
+		return fmt.Errorf("observe app recovery: load prior observations: %w", err)
+	}
+	pendingOutcomeIDs := make([]string, 0, len(changeRequestIDs))
+	for _, id := range changeRequestIDs {
+		if recoveryObservations[id] == nil {
+			pendingOutcomeIDs = append(pendingOutcomeIDs, id)
+		}
+	}
+	outcomes, err := o.Outcomes.GetMany(ctx, pendingOutcomeIDs)
+	if err != nil {
+		o.resetAll()
+		return fmt.Errorf("observe app recovery: load rollout outcomes: %w", err)
+	}
 
 	seen := make(map[string]struct{}, len(desiredRevisions))
-	desiredRequestIDs := make(map[string]struct{}, len(desiredRevisions))
 	var errs []error
 	for _, desired := range desiredRevisions {
 		app := strings.TrimSpace(desired.App)
 		seen[app] = struct{}{}
 		desiredVersion := strings.TrimSpace(desired.Version)
 		changeRequestID := strings.TrimSpace(desired.ChangeRequestID)
-		if changeRequestID != "" {
-			desiredRequestIDs[changeRequestID] = struct{}{}
-		}
-		if changeRequestID == "" || o.isCompleted(changeRequestID) {
+		if changeRequestID == "" || recoveryObservations[changeRequestID] != nil {
 			o.reset(app)
 			continue
 		}
-		outcome, err := o.loadOutcome(ctx, changeRequestID)
-		if errors.Is(err, core.ErrNotFound) {
-			o.reset(app)
-			continue
-		}
-		if err != nil {
-			o.reset(app)
-			errs = append(errs, fmt.Errorf("observe app recovery for %s: load rollout outcome: %w", app, err))
-			continue
-		}
+		outcome := outcomes[changeRequestID]
 		if outcome == nil || outcome.FailedAt.IsZero() || !outcome.CompletedAt.IsZero() ||
 			strings.TrimSpace(outcome.App) != app ||
 			strings.TrimSpace(outcome.Version) != desiredVersion {
 			o.reset(app)
-			if outcome != nil && !outcome.CompletedAt.IsZero() {
-				o.markCompleted(changeRequestID)
-			}
 			continue
 		}
 
@@ -254,7 +257,7 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 		if !stable || now.Sub(healthySince) < o.StabilityWindow {
 			continue
 		}
-		_, recorded, err := o.Observations.RecordIfCurrentFailed(ctx, &core.AppVersionRecoveryObservation{
+		_, _, err := o.Observations.RecordIfCurrentFailed(ctx, &core.AppVersionRecoveryObservation{
 			ID:                      changeRequestID,
 			App:                     app,
 			Version:                 desiredVersion,
@@ -268,36 +271,9 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 			continue
 		}
 		o.reset(app)
-		if recorded {
-			o.markCompleted(changeRequestID)
-		}
 	}
-	o.resetUnseen(seen, desiredRequestIDs)
+	o.resetUnseen(seen)
 	return errors.Join(errs...)
-}
-
-func (o *RecoveryObserver) loadOutcome(ctx context.Context, changeRequestID string) (*core.AppVersionRolloutOutcome, error) {
-	o.stateMu.Lock()
-	cached := o.outcomes[changeRequestID]
-	o.stateMu.Unlock()
-	if cached != nil {
-		return cached, nil
-	}
-
-	outcome, err := o.Outcomes.Get(ctx, changeRequestID)
-	if err != nil || outcome == nil {
-		return outcome, err
-	}
-	// Rollout outcomes are immutable terminal records. Cache only records that
-	// have reached one terminal state; missing outcomes continue to be polled.
-	if outcome.CompletedAt.IsZero() == outcome.FailedAt.IsZero() {
-		return outcome, nil
-	}
-	copy := *outcome
-	o.stateMu.Lock()
-	o.outcomes[changeRequestID] = &copy
-	o.stateMu.Unlock()
-	return &copy, nil
 }
 
 func (o *RecoveryObserver) advance(app string, next recoveryStability, now time.Time) (time.Time, bool) {
@@ -328,7 +304,7 @@ func (o *RecoveryObserver) resetAll() {
 	clear(o.healthy)
 }
 
-func (o *RecoveryObserver) resetUnseen(seen, desiredRequestIDs map[string]struct{}) {
+func (o *RecoveryObserver) resetUnseen(seen map[string]struct{}) {
 	o.stateMu.Lock()
 	defer o.stateMu.Unlock()
 	for app := range o.healthy {
@@ -336,29 +312,6 @@ func (o *RecoveryObserver) resetUnseen(seen, desiredRequestIDs map[string]struct
 			delete(o.healthy, app)
 		}
 	}
-	for changeRequestID := range o.completed {
-		if _, ok := desiredRequestIDs[changeRequestID]; !ok {
-			delete(o.completed, changeRequestID)
-		}
-	}
-	for changeRequestID := range o.outcomes {
-		if _, ok := desiredRequestIDs[changeRequestID]; !ok {
-			delete(o.outcomes, changeRequestID)
-		}
-	}
-}
-
-func (o *RecoveryObserver) isCompleted(id string) bool {
-	o.stateMu.Lock()
-	defer o.stateMu.Unlock()
-	_, ok := o.completed[id]
-	return ok
-}
-
-func (o *RecoveryObserver) markCompleted(id string) {
-	o.stateMu.Lock()
-	defer o.stateMu.Unlock()
-	o.completed[id] = struct{}{}
 }
 
 func (o *RecoveryObserver) configured() bool {

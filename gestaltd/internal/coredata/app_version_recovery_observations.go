@@ -47,20 +47,14 @@ func (s *AppVersionRecoveryObservationService) GetMany(ctx context.Context, chan
 	if s == nil {
 		return nil, fmt.Errorf("get app version recovery observations: service is not configured")
 	}
-	out := make(map[string]*core.AppVersionRecoveryObservation, len(changeRequestIDs))
-	for _, id := range changeRequestIDs {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		observation, err := s.Get(ctx, id)
-		if errors.Is(err, core.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		out[id] = observation
+	records, err := getRecordsByIDs(ctx, s.store, changeRequestIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get app version recovery observations: %w", err)
+	}
+	out := make(map[string]*core.AppVersionRecoveryObservation, len(records))
+	for _, record := range records {
+		observation := recordToAppVersionRecoveryObservation(record)
+		out[observation.ID] = observation
 	}
 	return out, nil
 }

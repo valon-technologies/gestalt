@@ -186,10 +186,12 @@ class ObjectStoreRangeRequest(_message.Message):
     STORE_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     COUNT_FIELD_NUMBER: _ClassVar[int]
+    QUERIES_FIELD_NUMBER: _ClassVar[int]
     store: str
     query: IndexedDBQuery
     count: int
-    def __init__(self, store: _Optional[str] = ..., query: _Optional[_Union[IndexedDBQuery, _Mapping]] = ..., count: _Optional[int] = ...) -> None: ...
+    queries: _containers.RepeatedCompositeFieldContainer[IndexedDBQuery]
+    def __init__(self, store: _Optional[str] = ..., query: _Optional[_Union[IndexedDBQuery, _Mapping]] = ..., count: _Optional[int] = ..., queries: _Optional[_Iterable[_Union[IndexedDBQuery, _Mapping]]] = ...) -> None: ...
 
 class CreateObjectStoreRequest(_message.Message):
     __slots__ = ()

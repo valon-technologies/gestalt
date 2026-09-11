@@ -376,6 +376,11 @@ export interface ObjectStoreRangeRequest {
   store: string;
   query?: IndexedDBQuery;
   count?: number;
+  /**
+   * queries matches the union of several exact keys or ranges. It is used by
+   * GetAll; query carries the first entry for rolling compatibility.
+   */
+  queries: IndexedDBQuery[];
 }
 
 /**
@@ -1033,6 +1038,7 @@ export class IndexedDB {
   ): Promise<RecordsResponse> {
     const request = {
       store,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
       ...(options?.count !== undefined ? { count: options.count } : {}),
     } satisfies Init<ObjectStoreRangeRequest>;
@@ -1064,6 +1070,7 @@ export class IndexedDB {
   ): Promise<KeysResponse> {
     const request = {
       store,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
       ...(options?.count !== undefined ? { count: options.count } : {}),
     } satisfies Init<ObjectStoreRangeRequest>;
@@ -1091,6 +1098,7 @@ export class IndexedDB {
   async count(store: string, query?: Init<IndexedDBQuery>): Promise<bigint> {
     const request = {
       store,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
     } satisfies Init<ObjectStoreRangeRequest>;
     const response = fromWireCountResponse(
@@ -1122,6 +1130,7 @@ export class IndexedDB {
   ): Promise<DeleteResponse> {
     const request = {
       store,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
     } satisfies Init<ObjectStoreRangeRequest>;
     const response = await callUnary(() =>

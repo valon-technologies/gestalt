@@ -123,6 +123,9 @@ message ObjectStoreRangeRequest {
   string store = 1;
   IndexedDBQuery query = 2;
   optional uint32 count = 3;
+  // queries matches the union of several exact keys or ranges. It is used by
+  // GetAll; query carries the first entry for rolling compatibility.
+  repeated IndexedDBQuery queries = 4;
 }
 
 // CreateObjectStoreRequest creates a new object store.

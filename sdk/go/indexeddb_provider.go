@@ -74,9 +74,10 @@ type IndexedDBRecordRequest struct {
 
 // IndexedDBObjectStoreRangeRequest addresses a query over a store.
 type IndexedDBObjectStoreRangeRequest struct {
-	Store string
-	Query *client.IndexedDBQuery
-	Count *uint32
+	Store   string
+	Query   *client.IndexedDBQuery
+	Queries []*client.IndexedDBQuery
+	Count   *uint32
 }
 
 // IndexedDBIndexQueryRequest queries records through a secondary index.

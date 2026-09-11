@@ -461,6 +461,7 @@ def to_wire_object_store_range_request(value: native.ObjectStoreRangeRequest) ->
         store=value.store,
         query=None if value.query is None else to_wire_indexed_db_query(value.query),
         count=value.count,
+        queries=[to_wire_indexed_db_query(item) for item in value.queries],
     )
 
 
@@ -471,6 +472,7 @@ def from_wire_object_store_range_request(value: Any) -> native.ObjectStoreRangeR
         if value.HasField("query")
         else None,
         count=value.count if value.HasField("count") else None,
+        queries=[from_wire_indexed_db_query(item) for item in value.queries],
     )
 
 

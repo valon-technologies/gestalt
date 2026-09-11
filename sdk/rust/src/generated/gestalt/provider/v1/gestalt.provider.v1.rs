@@ -2538,6 +2538,10 @@ pub struct ObjectStoreRangeRequest {
     pub query: ::core::option::Option<IndexedDbQuery>,
     #[prost(uint32, optional, tag = "3")]
     pub count: ::core::option::Option<u32>,
+    /// queries matches the union of several exact keys or ranges. It is used by
+    /// GetAll; query carries the first entry for rolling compatibility.
+    #[prost(message, repeated, tag = "4")]
+    pub queries: ::prost::alloc::vec::Vec<IndexedDbQuery>,
 }
 /// CreateObjectStoreRequest creates a new object store.
 #[derive(Clone, PartialEq, ::prost::Message)]

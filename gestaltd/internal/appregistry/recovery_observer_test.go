@@ -320,6 +320,13 @@ type failOnceRecoveryRecorder struct {
 	calls    int
 }
 
+func (r *failOnceRecoveryRecorder) GetMany(
+	ctx context.Context,
+	changeRequestIDs []string,
+) (map[string]*core.AppVersionRecoveryObservation, error) {
+	return r.delegate.GetMany(ctx, changeRequestIDs)
+}
+
 func (r *failOnceRecoveryRecorder) RecordIfCurrentFailed(
 	ctx context.Context,
 	observation *core.AppVersionRecoveryObservation,

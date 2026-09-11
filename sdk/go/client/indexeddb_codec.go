@@ -564,6 +564,9 @@ func ToWireObjectStoreRangeRequest(value *ObjectStoreRangeRequest) *proto.Object
 		Query: ToWireIndexedDBQuery(value.Query),
 		Count: value.Count,
 	}
+	for _, item := range value.Queries {
+		out.Queries = append(out.Queries, ToWireIndexedDBQuery(item))
+	}
 	return out
 }
 
@@ -575,6 +578,9 @@ func FromWireObjectStoreRangeRequest(value *proto.ObjectStoreRangeRequest) *Obje
 		Store: value.Store,
 		Query: FromWireIndexedDBQuery(value.Query),
 		Count: value.Count,
+	}
+	for _, item := range value.Queries {
+		out.Queries = append(out.Queries, FromWireIndexedDBQuery(item))
 	}
 	return out
 }
