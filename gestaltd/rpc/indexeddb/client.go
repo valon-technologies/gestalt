@@ -309,7 +309,11 @@ func (idx *indexClient) GetKey(ctx context.Context, query any) (string, error) {
 func (idx *indexClient) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
 	defer cancel()
-	resp, err := idx.client.IndexGetAll(ctx, indexQueryRequest(idx.store, idx.index, query, count...))
+	req, err := indexGetAllQueryRequest(idx.store, idx.index, query, count...)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := idx.client.IndexGetAll(ctx, req)
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -663,7 +667,11 @@ func (idx *txIndex) GetKey(ctx context.Context, query any) (string, error) {
 
 func (idx *txIndex) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	_ = ctx
-	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetAll{IndexGetAll: indexQueryRequest(idx.store, idx.index, query, count...)}})
+	req, err := indexGetAllQueryRequest(idx.store, idx.index, query, count...)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetAll{IndexGetAll: req}})
 	if err != nil {
 		return nil, err
 	}
@@ -1019,6 +1027,24 @@ func indexQueryRequest(store, index string, query any, count ...uint32) *proto.I
 		req.Count = &c
 	}
 	return req
+}
+
+func indexGetAllQueryRequest(store, index string, query any, count ...uint32) (*proto.IndexQueryRequest, error) {
+	querySet, ok := query.(idb.QuerySet)
+	if !ok {
+		return indexQueryRequest(store, index, query, count...), nil
+	}
+	queries := querySet.Queries()
+	if len(queries) == 0 {
+		return nil, errors.New("indexeddb: AnyOf requires at least one query")
+	}
+	req := indexQueryRequest(store, index, nil, count...)
+	req.Queries = make([]*proto.IndexedDBQuery, len(queries))
+	for i, query := range queries {
+		req.Queries[i] = sdkclient.ToWireIndexedDBQuery(query)
+	}
+	req.Query = req.Queries[0]
+	return req, nil
 }
 
 func transactionModeToProto(mode idb.TransactionMode) proto.TransactionMode {

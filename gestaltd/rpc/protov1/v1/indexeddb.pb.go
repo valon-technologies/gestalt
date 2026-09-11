@@ -1448,11 +1448,14 @@ func (x *DeleteIndexRequest) GetName() string {
 
 // IndexQueryRequest addresses a secondary index plus an optional query.
 type IndexQueryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Index         string                 `protobuf:"bytes,2,opt,name=index,proto3" json:"index,omitempty"`
-	Query         *IndexedDBQuery        `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
-	Count         *uint32                `protobuf:"varint,4,opt,name=count,proto3,oneof" json:"count,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Store string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Index string                 `protobuf:"bytes,2,opt,name=index,proto3" json:"index,omitempty"`
+	Query *IndexedDBQuery        `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	Count *uint32                `protobuf:"varint,4,opt,name=count,proto3,oneof" json:"count,omitempty"`
+	// queries matches the union of several exact keys or ranges. It is used by
+	// IndexGetAll; query carries the first entry for rolling compatibility.
+	Queries       []*IndexedDBQuery `protobuf:"bytes,5,rep,name=queries,proto3" json:"queries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1513,6 +1516,13 @@ func (x *IndexQueryRequest) GetCount() uint32 {
 		return *x.Count
 	}
 	return 0
+}
+
+func (x *IndexQueryRequest) GetQueries() []*IndexedDBQuery {
+	if x != nil {
+		return x.Queries
+	}
+	return nil
 }
 
 // CountResponse reports how many rows matched a query.
@@ -3233,12 +3243,13 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\x06unique\x18\x04 \x01(\bR\x06unique\">\n" +
 	"\x12DeleteIndexRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\x9f\x01\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\xde\x01\n" +
 	"\x11IndexQueryRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\tR\x05index\x129\n" +
 	"\x05query\x18\x03 \x01(\v2#.gestalt.provider.v1.IndexedDBQueryR\x05query\x12\x19\n" +
-	"\x05count\x18\x04 \x01(\rH\x00R\x05count\x88\x01\x01B\b\n" +
+	"\x05count\x18\x04 \x01(\rH\x00R\x05count\x88\x01\x01\x12=\n" +
+	"\aqueries\x18\x05 \x03(\v2#.gestalt.provider.v1.IndexedDBQueryR\aqueriesB\b\n" +
 	"\x06_count\"0\n" +
 	"\rCountResponse\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x03R\x05count:\t\x9a\xb5\x18\x05count\"\xdb\x01\n" +
@@ -3460,102 +3471,103 @@ var file_v1_indexeddb_proto_depIdxs = []int32{
 	11, // 16: gestalt.provider.v1.ObjectStoreRangeRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
 	5,  // 17: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
 	11, // 18: gestalt.provider.v1.IndexQueryRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
-	11, // 19: gestalt.provider.v1.OpenCursorRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
-	0,  // 20: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
-	8,  // 21: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
-	26, // 22: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
-	4,  // 23: gestalt.provider.v1.CursorCommand.update:type_name -> gestalt.provider.v1.Record
-	25, // 24: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
-	27, // 25: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
-	8,  // 26: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
-	4,  // 27: gestalt.provider.v1.CursorEntry.record:type_name -> gestalt.provider.v1.Record
-	29, // 28: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
-	1,  // 29: gestalt.provider.v1.BeginTransactionRequest.mode:type_name -> gestalt.provider.v1.TransactionMode
-	2,  // 30: gestalt.provider.v1.BeginTransactionRequest.durability_hint:type_name -> gestalt.provider.v1.TransactionDurabilityHint
-	47, // 31: gestalt.provider.v1.TransactionCommitResponse.error:type_name -> google.rpc.Status
-	47, // 32: gestalt.provider.v1.TransactionAbortResponse.error:type_name -> google.rpc.Status
-	16, // 33: gestalt.provider.v1.TransactionOperation.get:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	16, // 34: gestalt.provider.v1.TransactionOperation.get_key:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	12, // 35: gestalt.provider.v1.TransactionOperation.add:type_name -> gestalt.provider.v1.RecordRequest
-	12, // 36: gestalt.provider.v1.TransactionOperation.put:type_name -> gestalt.provider.v1.RecordRequest
-	16, // 37: gestalt.provider.v1.TransactionOperation.delete:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	17, // 38: gestalt.provider.v1.TransactionOperation.clear:type_name -> gestalt.provider.v1.ObjectStoreNameRequest
-	18, // 39: gestalt.provider.v1.TransactionOperation.get_all:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 40: gestalt.provider.v1.TransactionOperation.get_all_keys:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 41: gestalt.provider.v1.TransactionOperation.count:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 42: gestalt.provider.v1.TransactionOperation.delete_range:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	23, // 43: gestalt.provider.v1.TransactionOperation.index_get:type_name -> gestalt.provider.v1.IndexQueryRequest
-	23, // 44: gestalt.provider.v1.TransactionOperation.index_get_key:type_name -> gestalt.provider.v1.IndexQueryRequest
-	23, // 45: gestalt.provider.v1.TransactionOperation.index_get_all:type_name -> gestalt.provider.v1.IndexQueryRequest
-	23, // 46: gestalt.provider.v1.TransactionOperation.index_get_all_keys:type_name -> gestalt.provider.v1.IndexQueryRequest
-	23, // 47: gestalt.provider.v1.TransactionOperation.index_count:type_name -> gestalt.provider.v1.IndexQueryRequest
-	23, // 48: gestalt.provider.v1.TransactionOperation.index_delete:type_name -> gestalt.provider.v1.IndexQueryRequest
-	47, // 49: gestalt.provider.v1.TransactionOperationResponse.error:type_name -> google.rpc.Status
-	48, // 50: gestalt.provider.v1.TransactionOperationResponse.empty:type_name -> google.protobuf.Empty
-	13, // 51: gestalt.provider.v1.TransactionOperationResponse.record:type_name -> gestalt.provider.v1.RecordResponse
-	14, // 52: gestalt.provider.v1.TransactionOperationResponse.records:type_name -> gestalt.provider.v1.RecordsResponse
-	32, // 53: gestalt.provider.v1.TransactionOperationResponse.key:type_name -> gestalt.provider.v1.KeyResponse
-	15, // 54: gestalt.provider.v1.TransactionOperationResponse.keys:type_name -> gestalt.provider.v1.KeysResponse
-	24, // 55: gestalt.provider.v1.TransactionOperationResponse.count:type_name -> gestalt.provider.v1.CountResponse
-	31, // 56: gestalt.provider.v1.TransactionOperationResponse.delete:type_name -> gestalt.provider.v1.DeleteResponse
-	33, // 57: gestalt.provider.v1.TransactionClientMessage.begin:type_name -> gestalt.provider.v1.BeginTransactionRequest
-	39, // 58: gestalt.provider.v1.TransactionClientMessage.operation:type_name -> gestalt.provider.v1.TransactionOperation
-	35, // 59: gestalt.provider.v1.TransactionClientMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitRequest
-	37, // 60: gestalt.provider.v1.TransactionClientMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortRequest
-	34, // 61: gestalt.provider.v1.TransactionServerMessage.begin:type_name -> gestalt.provider.v1.TransactionBeginResponse
-	40, // 62: gestalt.provider.v1.TransactionServerMessage.operation:type_name -> gestalt.provider.v1.TransactionOperationResponse
-	36, // 63: gestalt.provider.v1.TransactionServerMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitResponse
-	38, // 64: gestalt.provider.v1.TransactionServerMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortResponse
-	3,  // 65: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
-	19, // 66: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
-	20, // 67: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
-	21, // 68: gestalt.provider.v1.IndexedDB.CreateIndex:input_type -> gestalt.provider.v1.CreateIndexRequest
-	22, // 69: gestalt.provider.v1.IndexedDB.DeleteIndex:input_type -> gestalt.provider.v1.DeleteIndexRequest
-	16, // 70: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	16, // 71: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	12, // 72: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
-	12, // 73: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
-	16, // 74: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	17, // 75: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
-	18, // 76: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 77: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 78: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 79: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	23, // 80: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
-	23, // 81: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
-	23, // 82: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
-	23, // 83: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
-	23, // 84: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
-	23, // 85: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
-	28, // 86: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
-	41, // 87: gestalt.provider.v1.IndexedDB.Transaction:input_type -> gestalt.provider.v1.TransactionClientMessage
-	48, // 88: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
-	48, // 89: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
-	48, // 90: gestalt.provider.v1.IndexedDB.CreateIndex:output_type -> google.protobuf.Empty
-	48, // 91: gestalt.provider.v1.IndexedDB.DeleteIndex:output_type -> google.protobuf.Empty
-	13, // 92: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
-	32, // 93: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
-	48, // 94: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
-	48, // 95: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
-	48, // 96: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
-	48, // 97: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
-	14, // 98: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	15, // 99: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	24, // 100: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
-	31, // 101: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
-	13, // 102: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
-	32, // 103: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
-	14, // 104: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	15, // 105: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	24, // 106: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
-	31, // 107: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
-	30, // 108: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
-	42, // 109: gestalt.provider.v1.IndexedDB.Transaction:output_type -> gestalt.provider.v1.TransactionServerMessage
-	88, // [88:110] is the sub-list for method output_type
-	66, // [66:88] is the sub-list for method input_type
-	66, // [66:66] is the sub-list for extension type_name
-	66, // [66:66] is the sub-list for extension extendee
-	0,  // [0:66] is the sub-list for field type_name
+	11, // 19: gestalt.provider.v1.IndexQueryRequest.queries:type_name -> gestalt.provider.v1.IndexedDBQuery
+	11, // 20: gestalt.provider.v1.OpenCursorRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
+	0,  // 21: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
+	8,  // 22: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
+	26, // 23: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
+	4,  // 24: gestalt.provider.v1.CursorCommand.update:type_name -> gestalt.provider.v1.Record
+	25, // 25: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
+	27, // 26: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
+	8,  // 27: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
+	4,  // 28: gestalt.provider.v1.CursorEntry.record:type_name -> gestalt.provider.v1.Record
+	29, // 29: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
+	1,  // 30: gestalt.provider.v1.BeginTransactionRequest.mode:type_name -> gestalt.provider.v1.TransactionMode
+	2,  // 31: gestalt.provider.v1.BeginTransactionRequest.durability_hint:type_name -> gestalt.provider.v1.TransactionDurabilityHint
+	47, // 32: gestalt.provider.v1.TransactionCommitResponse.error:type_name -> google.rpc.Status
+	47, // 33: gestalt.provider.v1.TransactionAbortResponse.error:type_name -> google.rpc.Status
+	16, // 34: gestalt.provider.v1.TransactionOperation.get:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	16, // 35: gestalt.provider.v1.TransactionOperation.get_key:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	12, // 36: gestalt.provider.v1.TransactionOperation.add:type_name -> gestalt.provider.v1.RecordRequest
+	12, // 37: gestalt.provider.v1.TransactionOperation.put:type_name -> gestalt.provider.v1.RecordRequest
+	16, // 38: gestalt.provider.v1.TransactionOperation.delete:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	17, // 39: gestalt.provider.v1.TransactionOperation.clear:type_name -> gestalt.provider.v1.ObjectStoreNameRequest
+	18, // 40: gestalt.provider.v1.TransactionOperation.get_all:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 41: gestalt.provider.v1.TransactionOperation.get_all_keys:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 42: gestalt.provider.v1.TransactionOperation.count:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 43: gestalt.provider.v1.TransactionOperation.delete_range:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	23, // 44: gestalt.provider.v1.TransactionOperation.index_get:type_name -> gestalt.provider.v1.IndexQueryRequest
+	23, // 45: gestalt.provider.v1.TransactionOperation.index_get_key:type_name -> gestalt.provider.v1.IndexQueryRequest
+	23, // 46: gestalt.provider.v1.TransactionOperation.index_get_all:type_name -> gestalt.provider.v1.IndexQueryRequest
+	23, // 47: gestalt.provider.v1.TransactionOperation.index_get_all_keys:type_name -> gestalt.provider.v1.IndexQueryRequest
+	23, // 48: gestalt.provider.v1.TransactionOperation.index_count:type_name -> gestalt.provider.v1.IndexQueryRequest
+	23, // 49: gestalt.provider.v1.TransactionOperation.index_delete:type_name -> gestalt.provider.v1.IndexQueryRequest
+	47, // 50: gestalt.provider.v1.TransactionOperationResponse.error:type_name -> google.rpc.Status
+	48, // 51: gestalt.provider.v1.TransactionOperationResponse.empty:type_name -> google.protobuf.Empty
+	13, // 52: gestalt.provider.v1.TransactionOperationResponse.record:type_name -> gestalt.provider.v1.RecordResponse
+	14, // 53: gestalt.provider.v1.TransactionOperationResponse.records:type_name -> gestalt.provider.v1.RecordsResponse
+	32, // 54: gestalt.provider.v1.TransactionOperationResponse.key:type_name -> gestalt.provider.v1.KeyResponse
+	15, // 55: gestalt.provider.v1.TransactionOperationResponse.keys:type_name -> gestalt.provider.v1.KeysResponse
+	24, // 56: gestalt.provider.v1.TransactionOperationResponse.count:type_name -> gestalt.provider.v1.CountResponse
+	31, // 57: gestalt.provider.v1.TransactionOperationResponse.delete:type_name -> gestalt.provider.v1.DeleteResponse
+	33, // 58: gestalt.provider.v1.TransactionClientMessage.begin:type_name -> gestalt.provider.v1.BeginTransactionRequest
+	39, // 59: gestalt.provider.v1.TransactionClientMessage.operation:type_name -> gestalt.provider.v1.TransactionOperation
+	35, // 60: gestalt.provider.v1.TransactionClientMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitRequest
+	37, // 61: gestalt.provider.v1.TransactionClientMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortRequest
+	34, // 62: gestalt.provider.v1.TransactionServerMessage.begin:type_name -> gestalt.provider.v1.TransactionBeginResponse
+	40, // 63: gestalt.provider.v1.TransactionServerMessage.operation:type_name -> gestalt.provider.v1.TransactionOperationResponse
+	36, // 64: gestalt.provider.v1.TransactionServerMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitResponse
+	38, // 65: gestalt.provider.v1.TransactionServerMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortResponse
+	3,  // 66: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
+	19, // 67: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
+	20, // 68: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
+	21, // 69: gestalt.provider.v1.IndexedDB.CreateIndex:input_type -> gestalt.provider.v1.CreateIndexRequest
+	22, // 70: gestalt.provider.v1.IndexedDB.DeleteIndex:input_type -> gestalt.provider.v1.DeleteIndexRequest
+	16, // 71: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	16, // 72: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	12, // 73: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
+	12, // 74: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
+	16, // 75: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	17, // 76: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
+	18, // 77: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 78: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 79: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 80: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	23, // 81: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
+	23, // 82: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
+	23, // 83: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
+	23, // 84: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
+	23, // 85: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
+	23, // 86: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
+	28, // 87: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
+	41, // 88: gestalt.provider.v1.IndexedDB.Transaction:input_type -> gestalt.provider.v1.TransactionClientMessage
+	48, // 89: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
+	48, // 90: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
+	48, // 91: gestalt.provider.v1.IndexedDB.CreateIndex:output_type -> google.protobuf.Empty
+	48, // 92: gestalt.provider.v1.IndexedDB.DeleteIndex:output_type -> google.protobuf.Empty
+	13, // 93: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
+	32, // 94: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
+	48, // 95: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
+	48, // 96: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
+	48, // 97: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
+	48, // 98: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
+	14, // 99: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	15, // 100: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	24, // 101: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
+	31, // 102: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
+	13, // 103: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
+	32, // 104: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
+	14, // 105: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	15, // 106: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	24, // 107: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
+	31, // 108: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
+	30, // 109: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
+	42, // 110: gestalt.provider.v1.IndexedDB.Transaction:output_type -> gestalt.provider.v1.TransactionServerMessage
+	89, // [89:111] is the sub-list for method output_type
+	67, // [67:89] is the sub-list for method input_type
+	67, // [67:67] is the sub-list for extension type_name
+	67, // [67:67] is the sub-list for extension extendee
+	0,  // [0:67] is the sub-list for field type_name
 }
 
 func init() { file_v1_indexeddb_proto_init() }

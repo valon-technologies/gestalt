@@ -407,10 +407,15 @@ func objectStoreRangeRequestFromProto(req *proto.ObjectStoreRangeRequest) Indexe
 }
 
 func indexQueryRequestFromProto(req *proto.IndexQueryRequest) (IndexedDBIndexQueryRequest, error) {
+	queries := make([]*client.IndexedDBQuery, len(req.GetQueries()))
+	for i, query := range req.GetQueries() {
+		queries[i] = client.FromWireIndexedDBQuery(query)
+	}
 	out := IndexedDBIndexQueryRequest{
-		Store: req.GetStore(),
-		Index: req.GetIndex(),
-		Query: client.FromWireIndexedDBQuery(req.GetQuery()),
+		Store:   req.GetStore(),
+		Index:   req.GetIndex(),
+		Query:   client.FromWireIndexedDBQuery(req.GetQuery()),
+		Queries: queries,
 	}
 	if req.Count != nil {
 		count := req.GetCount()

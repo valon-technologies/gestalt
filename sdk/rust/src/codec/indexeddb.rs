@@ -176,6 +176,11 @@ pub(crate) fn to_wire_index_query_request(value: IndexQueryRequest) -> v1::Index
         index: value.index,
         query: value.query.map(to_wire_indexed_db_query),
         count: value.count,
+        queries: value
+            .queries
+            .into_iter()
+            .map(to_wire_indexed_db_query)
+            .collect(),
     }
 }
 

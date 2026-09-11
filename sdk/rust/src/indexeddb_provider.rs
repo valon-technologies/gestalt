@@ -2003,6 +2003,7 @@ impl TransactionIndex<'_> {
             index: self.index.clone(),
             query: query.to_proto(),
             count,
+            queries: Vec::new(),
         }
     }
 }
@@ -2272,6 +2273,7 @@ impl Index {
             index: self.index.clone(),
             query: query.to_proto(),
             count,
+            queries: Vec::new(),
         }
     }
 

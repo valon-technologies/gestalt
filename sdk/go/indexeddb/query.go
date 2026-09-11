@@ -2,6 +2,26 @@ package indexeddb
 
 import "github.com/valon-technologies/gestalt/sdk/go/client"
 
+// QuerySet is a non-empty union of exact keys and key ranges for Index.GetAll.
+type QuerySet struct {
+	queries []*client.IndexedDBQuery
+}
+
+// AnyOf returns a query that matches any supplied key or range.
+func AnyOf(first any, rest ...any) QuerySet {
+	queries := make([]*client.IndexedDBQuery, 1, 1+len(rest))
+	queries[0] = ToQuery(first)
+	for _, query := range rest {
+		queries = append(queries, ToQuery(query))
+	}
+	return QuerySet{queries: queries}
+}
+
+// Queries returns the members of the union.
+func (q QuerySet) Queries() []*client.IndexedDBQuery {
+	return q.queries
+}
+
 // ToQuery converts an ergonomic query (nil, key, *KeyRange, or native query) to
 // the sdkgen-native query type. Nil means all records. Invalid keys panic.
 //

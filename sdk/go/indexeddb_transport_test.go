@@ -677,6 +677,26 @@ func TestTransport_GetAllCount(t *testing.T) {
 		t.Fatalf("Index GetAll = %#v, want first two active rows", active)
 	}
 
+	matched, err := idxStore.Index("by_status").GetAll(ctx, gestalt.AnyOf("active", "inactive"))
+	if err != nil {
+		t.Fatalf("Index GetAll AnyOf: %v", err)
+	}
+	if len(matched) != 5 {
+		t.Fatalf("Index GetAll AnyOf len = %d, want 5", len(matched))
+	}
+	indexTx, err := testClient.Transaction(ctx, []string{store + "_idx"}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Index transaction: %v", err)
+	}
+	defer indexTx.Abort(ctx)
+	matched, err = indexTx.ObjectStore(store+"_idx").Index("by_status").GetAll(ctx, gestalt.AnyOf("inactive", "missing"))
+	if err != nil {
+		t.Fatalf("Transaction Index GetAll AnyOf: %v", err)
+	}
+	if len(matched) != 1 || matched[0]["id"] != "e" {
+		t.Fatalf("Transaction Index GetAll AnyOf = %#v, want inactive row", matched)
+	}
+
 	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})
 	if err != nil {
 		t.Fatalf("Transaction: %v", err)

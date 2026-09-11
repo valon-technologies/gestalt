@@ -1,6 +1,6 @@
 # Public API availability
 
-Generated from the public surface manifest (76 gRPC methods, 47 REST methods).
+Generated from the public surface manifest (77 gRPC methods, 47 REST methods).
 
 | Service | Method | REST | Go | Python | Rust | TypeScript |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -31,6 +31,7 @@ Generated from the public surface manifest (76 gRPC methods, 47 REST methods).
 | ExternalCredentials | CreateCredential | gRPC only | ExternalCredentialsClient.CreateCredential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.createCredential |
 | ExternalCredentials | DeleteCredential | gRPC only | ExternalCredentialsClient.DeleteCredential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.deleteCredential |
 | ExternalCredentials | ExchangeCredential | gRPC only | ExternalCredentialsClient.ExchangeCredential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchangeCredential |
+| ExternalCredentials | GetCapabilities | gRPC only | ExternalCredentialsClient.GetCapabilities | ExternalCredentialsClient.get_capabilities | ExternalCredentialsClient.get_capabilities | ExternalCredentialsClient.getCapabilities |
 | ExternalCredentials | GetCredential | gRPC only | ExternalCredentialsClient.GetCredential | ExternalCredentialsClient.get_credential | ExternalCredentialsClient.get_credential | ExternalCredentialsClient.getCredential |
 | ExternalCredentials | ListCredentials | gRPC only | ExternalCredentialsClient.ListCredentials | ExternalCredentialsClient.list_credentials | ExternalCredentialsClient.list_credentials | ExternalCredentialsClient.listCredentials |
 | ExternalCredentials | ResolveCredential | gRPC only | ExternalCredentialsClient.ResolveCredential | ExternalCredentialsClient.resolve_credential | ExternalCredentialsClient.resolve_credential | ExternalCredentialsClient.resolveCredential |

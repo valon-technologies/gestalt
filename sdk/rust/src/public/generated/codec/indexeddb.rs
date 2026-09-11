@@ -780,6 +780,18 @@ pub(crate) fn encode_wire_index_query_request_json(
     if let Some(inner) = &value.count {
         object.insert("count".into(), serde_json::json!(*inner));
     }
+    if !value.queries.is_empty() {
+        object.insert(
+            "queries".into(),
+            serde_json::Value::Array(
+                value
+                    .queries
+                    .iter()
+                    .map(|item| encode_wire_indexed_db_query_json(item))
+                    .collect(),
+            ),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -810,6 +822,17 @@ pub(crate) fn decode_wire_index_query_request_json(
             .get("count")
             .map(|value| crate::public::proto_json::decode_u32(value))
             .transpose()?,
+        queries: match object.get("queries") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for queries")
+                })?
+                .iter()
+                .map(|item| decode_wire_indexed_db_query_json(item))
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
         ..Default::default()
     })
 }

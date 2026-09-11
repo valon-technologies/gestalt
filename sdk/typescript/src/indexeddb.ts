@@ -271,6 +271,11 @@ export interface IndexQueryRequest {
   index: string;
   query?: IndexedDBQuery;
   count?: number;
+  /**
+   * queries matches the union of several exact keys or ranges. It is used by
+   * IndexGetAll; query carries the first entry for rolling compatibility.
+   */
+  queries: IndexedDBQuery[];
 }
 
 /**
@@ -1148,6 +1153,7 @@ export class IndexedDB {
     const request = {
       store,
       index,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = await callUnary(() =>
@@ -1180,6 +1186,7 @@ export class IndexedDB {
     const request = {
       store,
       index,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = await callUnary(() =>
@@ -1210,6 +1217,7 @@ export class IndexedDB {
     const request = {
       store,
       index,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
       ...(options?.count !== undefined ? { count: options.count } : {}),
     } satisfies Init<IndexQueryRequest>;
@@ -1243,6 +1251,7 @@ export class IndexedDB {
     const request = {
       store,
       index,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
       ...(options?.count !== undefined ? { count: options.count } : {}),
     } satisfies Init<IndexQueryRequest>;
@@ -1275,6 +1284,7 @@ export class IndexedDB {
     const request = {
       store,
       index,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = fromWireCountResponse(
@@ -1308,6 +1318,7 @@ export class IndexedDB {
     const request = {
       store,
       index,
+      queries: [],
       ...(query !== undefined ? { query } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = await callUnary(() =>

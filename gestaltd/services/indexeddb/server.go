@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -338,11 +339,12 @@ func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	query := indexGetAllQuery(req)
 	var recs []idb.Record
 	if req.Count != nil && *req.Count > 0 {
-		recs, err = store.Index(req.GetIndex()).GetAll(ctx, req.GetQuery(), *req.Count)
+		recs, err = store.Index(req.GetIndex()).GetAll(ctx, query, *req.Count)
 	} else {
-		recs, err = store.Index(req.GetIndex()).GetAll(ctx, req.GetQuery())
+		recs, err = store.Index(req.GetIndex()).GetAll(ctx, query)
 	}
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -747,16 +749,29 @@ func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx 
 	if err != nil {
 		return nil, err
 	}
+	query := indexGetAllQuery(req)
 	var recs []idb.Record
 	if req.Count != nil && *req.Count > 0 {
-		recs, err = idx.GetAll(ctx, req.GetQuery(), *req.Count)
+		recs, err = idx.GetAll(ctx, query, *req.Count)
 	} else {
-		recs, err = idx.GetAll(ctx, req.GetQuery())
+		recs, err = idx.GetAll(ctx, query)
 	}
 	if err != nil {
 		return nil, err
 	}
 	return recordsResponseFromRecords(recs)
+}
+
+func indexGetAllQuery(req *proto.IndexQueryRequest) any {
+	if len(req.GetQueries()) == 0 {
+		return req.GetQuery()
+	}
+	queries := req.GetQueries()
+	rest := make([]any, len(queries)-1)
+	for i, query := range queries[1:] {
+		rest[i] = sdkclient.FromWireIndexedDBQuery(query)
+	}
+	return idb.AnyOf(sdkclient.FromWireIndexedDBQuery(queries[0]), rest...)
 }
 
 func (s *indexedDBServer) executeTransactionIndexGetAllKeys(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) ([]string, error) {

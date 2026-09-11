@@ -248,6 +248,9 @@ class IndexQueryRequest:
     index: str = ""
     query: IndexedDBQuery | None = None
     count: int | None = None
+    #: queries matches the union of several exact keys or ranges. It is used by
+    #: IndexGetAll; query carries the first entry for rolling compatibility.
+    queries: list[IndexedDBQuery] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

@@ -22,6 +22,7 @@ type (
 	KeyRange                  = indexeddb.KeyRange
 	KeyValue                  = client.KeyValue
 	IndexedDBQuery            = client.IndexedDBQuery
+	QuerySet                  = indexeddb.QuerySet
 	CursorDirection           = indexeddb.CursorDirection
 	TransactionMode           = indexeddb.TransactionMode
 	TransactionDurabilityHint = indexeddb.TransactionDurabilityHint
@@ -60,6 +61,11 @@ func Only(v any) *KeyRange {
 	return indexeddb.Only(v)
 }
 
+// AnyOf returns a query that matches any supplied key or range (re-export).
+func AnyOf(first any, rest ...any) QuerySet {
+	return indexeddb.AnyOf(first, rest...)
+}
+
 // Bound returns a range between lower and upper (re-export).
 func Bound(lower, upper any, lowerOpen, upperOpen bool) *KeyRange {
 	return indexeddb.Bound(lower, upper, lowerOpen, upperOpen)
@@ -94,6 +100,7 @@ func MatchQuery(key any, query *IndexedDBQuery) (bool, error) {
 func MatchIndexedDBQuery(key any, query *IndexedDBQuery) (bool, error) {
 	return MatchQuery(key, query)
 }
+
 // Aliases to the IndexedDB sentinel errors in sdk/go/indexeddb.
 //
 //nolint:revive // grouped aliases documented at their canonical definitions

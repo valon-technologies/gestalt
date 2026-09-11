@@ -300,6 +300,7 @@ def to_wire_index_query_request(value: native.IndexQueryRequest) -> Any:
         index=value.index,
         query=None if value.query is None else to_wire_indexed_db_query(value.query),
         count=value.count,
+        queries=[to_wire_indexed_db_query(item) for item in value.queries],
     )
 
 
@@ -311,6 +312,7 @@ def from_wire_index_query_request(value: Any) -> native.IndexQueryRequest:
         if value.HasField("query")
         else None,
         count=value.count if value.HasField("count") else None,
+        queries=[from_wire_indexed_db_query(item) for item in value.queries],
     )
 
 
