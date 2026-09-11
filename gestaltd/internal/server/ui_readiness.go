@@ -11,20 +11,20 @@ import (
 
 const uiReadinessIncompleteReason = "ui readiness incomplete"
 
-type uiProbeResult struct {
+type UIProbeResult struct {
 	Mount      string  `json:"mount"`
 	Ready      bool    `json:"ready"`
 	StatusCode *int    `json:"status_code"`
 	Error      *string `json:"error,omitempty"`
 }
 
-type fleetReadinessReport struct {
+type FleetReadinessReport struct {
 	ReleaseID     string          `json:"release_id"`
 	SourceVersion string          `json:"source_version"`
 	InstanceID    string          `json:"instance_id"`
 	ProcessID     string          `json:"process_id"`
 	ReportedAt    float64         `json:"reported_at"`
-	UIs           []uiProbeResult `json:"uis"`
+	UIs           []UIProbeResult `json:"uis"`
 }
 
 type UIReadinessMonitor struct {
@@ -41,7 +41,7 @@ type UIReadinessMonitor struct {
 	now             func() time.Time
 
 	mu     sync.RWMutex
-	report fleetReadinessReport
+	report FleetReadinessReport
 	ready  bool
 }
 
@@ -130,9 +130,9 @@ func (m *UIReadinessMonitor) ReadinessReason() string {
 	return ""
 }
 
-func (m *UIReadinessMonitor) Report() fleetReadinessReport {
+func (m *UIReadinessMonitor) Report() FleetReadinessReport {
 	if m == nil {
-		return fleetReadinessReport{}
+		return FleetReadinessReport{}
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -140,10 +140,11 @@ func (m *UIReadinessMonitor) Report() fleetReadinessReport {
 }
 
 func (m *UIReadinessMonitor) evaluate() {
-	results := make([]uiProbeResult, 0, len(m.mounted)+len(m.extraProbePaths))
+	results := make([]UIProbeResult, 0, len(m.mounted)+len(m.extraProbePaths))
 	ready := true
 
-	for _, mounted := range m.mounted {
+	for i := range m.mounted {
+		mounted := m.mounted[i]
 		if mounted.Handler == nil || strings.TrimSpace(mounted.Path) == "" {
 			continue
 		}
@@ -167,7 +168,7 @@ func (m *UIReadinessMonitor) evaluate() {
 		}
 	}
 
-	report := fleetReadinessReport{
+	report := FleetReadinessReport{
 		ReleaseID:     m.releaseID,
 		SourceVersion: m.sourceVersion,
 		InstanceID:    m.instanceID,
@@ -195,7 +196,7 @@ func mountedUIProbePaths(mounted MountedUI) []string {
 	return paths
 }
 
-func probeMountedUI(handler http.Handler, path string, bearer string) uiProbeResult {
+func probeMountedUI(handler http.Handler, path string, bearer string) UIProbeResult {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
@@ -204,7 +205,7 @@ func probeMountedUI(handler http.Handler, path string, bearer string) uiProbeRes
 	handler.ServeHTTP(rec, req)
 
 	code := rec.Code
-	result := uiProbeResult{
+	result := UIProbeResult{
 		Mount:      path,
 		Ready:      uiProbeStatusReady(code),
 		StatusCode: &code,

@@ -12,6 +12,7 @@ func TestResolveProcessIDFromEnv(t *testing.T) {
 }
 
 func TestResolveProcessIDGeneratesUUIDWhenUnset(t *testing.T) {
+	t.Parallel()
 	got := resolveProcessID("")
 	if got == "" {
 		t.Fatal("resolveProcessID returned empty string")

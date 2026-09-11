@@ -7,6 +7,7 @@ import (
 )
 
 func TestResolveUIReadinessSettingsDefaultsDisabled(t *testing.T) {
+	t.Parallel()
 	settings := resolveUIReadinessSettings(&config.Config{}, "1.2.3", "sha-a")
 	if settings.enabled {
 		t.Fatal("ui readiness should default to disabled")
@@ -17,6 +18,7 @@ func TestResolveUIReadinessSettingsDefaultsDisabled(t *testing.T) {
 }
 
 func TestResolveUIReadinessSettingsHonorsConfig(t *testing.T) {
+	t.Parallel()
 	enabled := true
 	cfg := &config.Config{
 		Server: config.ServerConfig{

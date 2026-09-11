@@ -8,6 +8,7 @@ import (
 )
 
 func TestUIReadinessMonitorMarksReadyAfterServingAndProbe(t *testing.T) {
+	t.Parallel()
 	servingReady := make(chan struct{})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sample/", func(w http.ResponseWriter, _ *http.Request) {
@@ -46,6 +47,7 @@ func TestUIReadinessMonitorMarksReadyAfterServingAndProbe(t *testing.T) {
 }
 
 func TestUIReadinessMonitorRejectsRedirect(t *testing.T) {
+	t.Parallel()
 	servingReady := make(chan struct{})
 	close(servingReady)
 
@@ -73,6 +75,7 @@ func TestUIReadinessMonitorRejectsRedirect(t *testing.T) {
 }
 
 func TestReadinessCheckIncludesUIReadiness(t *testing.T) {
+	t.Parallel()
 	servingReady := make(chan struct{})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sample/", func(w http.ResponseWriter, _ *http.Request) {
