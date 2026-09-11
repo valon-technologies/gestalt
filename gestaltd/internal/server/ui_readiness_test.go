@@ -112,6 +112,7 @@ func TestReadinessCheckIncludesUIReadiness(t *testing.T) {
 }
 
 func TestFleetReadinessEndpoint(t *testing.T) {
+	t.Parallel()
 	servingReady := make(chan struct{})
 	close(servingReady)
 
