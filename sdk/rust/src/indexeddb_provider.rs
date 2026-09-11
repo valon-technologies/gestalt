@@ -1805,6 +1805,7 @@ impl TransactionObjectStore<'_> {
                     store: self.store.clone(),
                     query: query.to_proto(),
                     count,
+                    queries: Vec::new(),
                 },
             ))
             .await?;
@@ -1830,6 +1831,7 @@ impl TransactionObjectStore<'_> {
                     store: self.store.clone(),
                     query: query.to_proto(),
                     count,
+                    queries: Vec::new(),
                 },
             ))
             .await?;
@@ -1849,6 +1851,7 @@ impl TransactionObjectStore<'_> {
                     store: self.store.clone(),
                     query: query.to_proto(),
                     count: None,
+                    queries: Vec::new(),
                 },
             ))
             .await?;
@@ -1868,6 +1871,7 @@ impl TransactionObjectStore<'_> {
                     store: self.store.clone(),
                     query: query.to_proto(),
                     count: None,
+                    queries: Vec::new(),
                 },
             ))
             .await?;
@@ -2155,6 +2159,7 @@ impl ObjectStore {
                 store: self.store.clone(),
                 query: query.to_proto(),
                 count,
+                queries: Vec::new(),
             })
             .await
             .map_err(map_status)?;
@@ -2179,6 +2184,7 @@ impl ObjectStore {
                 store: self.store.clone(),
                 query: query.to_proto(),
                 count,
+                queries: Vec::new(),
             })
             .await
             .map_err(map_status)?;
@@ -2194,6 +2200,7 @@ impl ObjectStore {
                 store: self.store.clone(),
                 query: query.to_proto(),
                 count: None,
+                queries: Vec::new(),
             })
             .await
             .map_err(map_status)?;
@@ -2209,6 +2216,7 @@ impl ObjectStore {
                 store: self.store.clone(),
                 query: query.to_proto(),
                 count: None,
+                queries: Vec::new(),
             })
             .await
             .map_err(map_status)?;
