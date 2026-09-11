@@ -130,6 +130,34 @@ func TestPromoteRegistryRequiresTemporalWorkersFirst(t *testing.T) {
 	}
 }
 
+func TestActivatePromotionRejectsMismatchedSourceVersionBeforeTemporalPromotion(t *testing.T) {
+	t.Parallel()
+
+	var temporalPromoted bool
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.SourceVersion = "source-new"
+		promoteOnActivate := true
+		cfg.PromoteSharedStateOnActivate = &promoteOnActivate
+		cfg.FinishSharedStartupPromotion = func(context.Context) error {
+			temporalPromoted = true
+			return nil
+		}
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	resp, err := http.Post(srv.URL+"/activate?source_version=source-wrong&minimum_healthy_instances=5", "", nil)
+	if err != nil {
+		t.Fatalf("POST /activate: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("activate status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	if temporalPromoted {
+		t.Fatal("temporal promotion ran for mismatched source version on /activate")
+	}
+}
+
 func TestPromoteTemporalRejectsMismatchedSourceVersionBeforePromotion(t *testing.T) {
 	t.Parallel()
 
