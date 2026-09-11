@@ -97,7 +97,8 @@ func TestGestaltdInstanceHeartbeatServiceListsBySourceVersion(t *testing.T) {
 func TestGestaltdInstanceHeartbeatServiceListsFreshAndPrunesByIndexedTime(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	svc := testutil.NewStubServices(t).GestaltdInstanceHeartbeats
+	services := testutil.NewStubServices(t)
+	svc := services.GestaltdInstanceHeartbeats
 	now := time.Date(2026, 7, 30, 14, 0, 0, 0, time.UTC)
 	for _, heartbeat := range []*core.GestaltdInstanceHeartbeat{
 		{InstanceID: "boundary", SourceVersion: "source-a", StartedAt: now.Add(-time.Hour), HeartbeatAt: now.Add(-45 * time.Second), Apps: map[string]core.GestaltdInstanceAppHeartbeat{}},
@@ -106,6 +107,17 @@ func TestGestaltdInstanceHeartbeatServiceListsFreshAndPrunesByIndexedTime(t *tes
 	} {
 		if _, err := svc.Upsert(ctx, heartbeat); err != nil {
 			t.Fatalf("Upsert(%s): %v", heartbeat.InstanceID, err)
+		}
+	}
+	for _, instanceID := range []string{"boundary", "stale", "other"} {
+		if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+			InstanceID:     instanceID,
+			SourceVersion:  "source-a",
+			App:            "g-issues",
+			Version:        "v2",
+			AcknowledgedAt: now.Add(-time.Minute),
+		}); err != nil {
+			t.Fatalf("Acknowledge(%s): %v", instanceID, err)
 		}
 	}
 	fresh, err := svc.ListFreshBySourceVersion(ctx, "source-a", now.Add(-45*time.Second))
@@ -128,6 +140,14 @@ func TestGestaltdInstanceHeartbeatServiceListsFreshAndPrunesByIndexedTime(t *tes
 	}
 	if len(all) != 2 {
 		t.Fatalf("remaining heartbeats = %#v", all)
+	}
+	if _, err := services.AppInstanceMaterializations.Get(ctx, "stale", "g-issues", "v2"); err == nil {
+		t.Fatal("stale instance materialization still exists after heartbeat pruning")
+	}
+	for _, instanceID := range []string{"boundary", "other"} {
+		if _, err := services.AppInstanceMaterializations.Get(ctx, instanceID, "g-issues", "v2"); err != nil {
+			t.Fatalf("Get materialization for retained instance %s: %v", instanceID, err)
+		}
 	}
 }
 
