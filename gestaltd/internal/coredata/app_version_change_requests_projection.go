@@ -19,6 +19,12 @@ const (
 	appVersionChangeRequestMetaInstalledAt        = "installed_at"
 )
 
+type AppDesiredRevision struct {
+	App             string
+	Version         string
+	ChangeRequestID string
+}
+
 func ChangeRequestMetadata(installation *core.AppInstallation) map[string]any {
 	if installation == nil {
 		return nil
@@ -53,15 +59,66 @@ func (s *AppVersionChangeRequestService) ListAllKnownVersions(ctx context.Contex
 	if s == nil {
 		return nil, fmt.Errorf("list all known app versions: change request service is not configured")
 	}
-	recs, err := s.store.GetAll(ctx, nil)
+	requests, err := s.listAllRequests(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list all known app versions: %w", err)
+	}
+	return knownVersionsFromRequests(requests), nil
+}
+
+func (s *AppVersionChangeRequestService) ListDesiredRevisions(ctx context.Context) ([]AppDesiredRevision, error) {
+	if s == nil {
+		return nil, fmt.Errorf("list desired app revisions: change request service is not configured")
+	}
+	requests, err := s.listAllRequests(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list desired app revisions: %w", err)
+	}
+	installationsByApp := make(map[string][]*core.AppInstallation)
+	for _, installation := range knownVersionsFromRequests(requests) {
+		if installation == nil {
+			continue
+		}
+		app := strings.TrimSpace(installation.AppName)
+		if app != "" {
+			installationsByApp[app] = append(installationsByApp[app], installation)
+		}
+	}
+	requestsByApp := make(map[string][]*core.AppVersionChangeRequest)
+	for _, request := range requests {
+		if request == nil {
+			continue
+		}
+		app := strings.TrimSpace(request.App)
+		if app != "" {
+			requestsByApp[app] = append(requestsByApp[app], request)
+		}
+	}
+	out := make([]AppDesiredRevision, 0, len(installationsByApp))
+	for app, installations := range installationsByApp {
+		version := LatestKnownVersion(installations)
+		out = append(out, AppDesiredRevision{
+			App:             app,
+			Version:         version,
+			ChangeRequestID: latestDesiredRevisionID(requestsByApp[app], version),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].App < out[j].App
+	})
+	return out, nil
+}
+
+func (s *AppVersionChangeRequestService) listAllRequests(ctx context.Context) ([]*core.AppVersionChangeRequest, error) {
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return nil, err
 	}
 	requests := make([]*core.AppVersionChangeRequest, 0, len(recs))
 	for _, rec := range recs {
 		requests = append(requests, recordToAppVersionChangeRequest(rec))
 	}
-	return knownVersionsFromRequests(requests), nil
+	return requests, nil
 }
 
 func knownVersionsFromRequests(requests []*core.AppVersionChangeRequest) []*core.AppInstallation {
