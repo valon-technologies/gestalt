@@ -1641,8 +1641,11 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		return merged
 	}
 
+	workflowConfigReconcileOpts := workflowConfigReconcileOptions{
+		allowDestructiveCleanup: !deferSharedStartupWrites,
+	}
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
-		return reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Deps.AppWorkflowDeclarations, includeProvider)
+		return reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Deps.AppWorkflowDeclarations, includeProvider, workflowConfigReconcileOpts)
 	}
 	var deferredWorkflowConfigReconcileTasks []workflowConfigReconcileTask
 	var startupWorkflowConfigReconcile func(context.Context) error

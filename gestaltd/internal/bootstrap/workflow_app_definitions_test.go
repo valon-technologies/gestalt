@@ -205,6 +205,25 @@ func (p *principalCapturingProvider) DeleteDefinition(ctx context.Context, req *
 	return p.fakeWorkflowProvider.DeleteDefinition(ctx, req)
 }
 
+func TestReconcileWorkflowConfigDefinitions_SkipsDestructiveCleanupWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg, runtime, provider, decls := testWorkflowReconcileEnv(t)
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+	delete(cfg.Workflows.Definitions, "backup")
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: false}); err != nil {
+		t.Fatalf("non-destructive reconcile: %v", err)
+	}
+	if len(provider.deletedDefinitions) != 0 {
+		t.Fatalf("deleted definitions = %#v, want none when destructive cleanup disabled", provider.deletedDefinitions)
+	}
+	if provider.definitions["cfg_backup"] == nil {
+		t.Fatal("cfg_backup was deleted while destructive cleanup was disabled")
+	}
+}
+
 func TestReconcileWorkflowConfigDefinitions_AttachesBootstrapPrincipal(t *testing.T) {
 	t.Parallel()
 
@@ -212,7 +231,7 @@ func TestReconcileWorkflowConfigDefinitions_AttachesBootstrapPrincipal(t *testin
 	provider := &principalCapturingProvider{fakeWorkflowProvider: inner}
 	runtime.providers["temporal"] = provider
 
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 
@@ -230,7 +249,7 @@ func TestReconcileWorkflowConfigDefinitions_AttachesBootstrapPrincipal(t *testin
 	// to trigger cleanup. App-managed definitions are protected from cleanup
 	// when their app stops reporting, so removing an app decl does not delete.
 	delete(cfg.Workflows.Definitions, "backup")
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err != nil {
 		t.Fatalf("reconcile cleanup: %v", err)
 	}
 	if !provider.deleteOK || provider.deleteSubject != workflowConfigOwnerSubjectID() {
@@ -245,7 +264,7 @@ func TestReconcileAppWorkflowDefinitions(t *testing.T) {
 	decls.Set("notes", []*proto.WorkflowDefinitionSpec{
 		testAppWorkflowSpecProto("daily-summary", "service_account:sa1", "0 2 * * *"),
 	})
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err != nil {
 		t.Fatalf("reconcile apply: %v", err)
 	}
 	if len(provider.appliedDefinitions) != 2 {
@@ -268,7 +287,7 @@ func TestReconcileAppWorkflowDefinitions(t *testing.T) {
 	decls.Set("notes", []*proto.WorkflowDefinitionSpec{
 		testAppWorkflowSpecProto("daily-summary", "service_account:sa1", "0 3 * * *"),
 	})
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err != nil {
 		t.Fatalf("reconcile edit: %v", err)
 	}
 	if len(provider.appliedDefinitions) < 3 {
@@ -276,7 +295,7 @@ func TestReconcileAppWorkflowDefinitions(t *testing.T) {
 	}
 
 	decls.Set("notes", nil)
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err != nil {
 		t.Fatalf("reconcile remove: %v", err)
 	}
 	if len(provider.deletedDefinitions) != 1 || provider.deletedDefinitions[0].GetDefinitionId() != "app_notes_daily-summary" {
@@ -291,7 +310,7 @@ func TestReconcileAppWorkflowDefinitions(t *testing.T) {
 		"app_notes_old": {ID: "app_notes_old"},
 	}
 	decls = newAppWorkflowDeclarations()
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err != nil {
 		t.Fatalf("reconcile unreported app: %v", err)
 	}
 	if len(provider.deletedDefinitions) != 1 {
@@ -299,7 +318,7 @@ func TestReconcileAppWorkflowDefinitions(t *testing.T) {
 	}
 
 	delete(cfg.Apps, "notes")
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err != nil {
 		t.Fatalf("reconcile removed app: %v", err)
 	}
 	if len(provider.deletedDefinitions) != 2 || provider.deletedDefinitions[1].GetDefinitionId() != "app_notes_old" {
@@ -309,7 +328,7 @@ func TestReconcileAppWorkflowDefinitions(t *testing.T) {
 	decls.Set("notes", []*proto.WorkflowDefinitionSpec{
 		testAppWorkflowSpecProto("daily", "", "0 2 * * *"),
 	})
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err == nil {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err == nil {
 		t.Fatal("expected validation error for missing run_as")
 	}
 
@@ -329,7 +348,7 @@ func TestReconcileAppWorkflowDefinitions(t *testing.T) {
 			invalidDecls.Set("notes", []*proto.WorkflowDefinitionSpec{
 				testAppWorkflowSpecProto(tc.localID, "service_account:sa1", "0 2 * * *"),
 			})
-			err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, invalidDecls, nil)
+			err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, invalidDecls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("localID=%q err = %v, want substring %q", tc.localID, err, tc.want)
 			}
@@ -343,7 +362,7 @@ func TestReconcileAppWorkflowDefinitions(t *testing.T) {
 	decls.Set("a_b", []*proto.WorkflowDefinitionSpec{
 		testAppWorkflowSpecProto("c", "service_account:sa1", "0 2 * * *"),
 	})
-	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err == nil || !strings.Contains(err.Error(), "app_a_b_c") {
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true}); err == nil || !strings.Contains(err.Error(), "app_a_b_c") {
 		t.Fatalf("duplicate id error = %v", err)
 	}
 }
