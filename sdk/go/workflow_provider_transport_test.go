@@ -20,6 +20,8 @@ type fullWorkflowProvider struct {
 	definitionSubject   string
 	deliverEventSubject string
 	deliveredEvents     []string
+	promoteCalls        int
+	promoteErr          error
 }
 
 func (p *fullWorkflowProvider) Configure(_ context.Context, name string, _ map[string]any) error {
@@ -70,6 +72,11 @@ func (p *fullWorkflowProvider) DeliverEvent(ctx context.Context, req *gestalt.De
 		return &gestalt.WorkflowEvent{ID: "delivered-go", Type: req.Event.Type}, nil
 	}
 	return &gestalt.WorkflowEvent{ID: "delivered-go"}, nil
+}
+
+func (p *fullWorkflowProvider) PromoteWorkers(context.Context) error {
+	p.promoteCalls++
+	return p.promoteErr
 }
 
 func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
@@ -181,6 +188,44 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 	if provider.deliverEventSubject != "user:transport" {
 		t.Fatalf("DeliverEvent subject = %q, want user:transport", provider.deliverEventSubject)
+	}
+
+	promoteResp, err := runtimeClient.PromoteWorkers(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true))
+	if err != nil {
+		t.Fatalf("PromoteWorkers: %v", err)
+	}
+	if promoteResp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Fatalf("PromoteWorkers protocol_version = %d, want %d", promoteResp.GetProtocolVersion(), proto.CurrentProtocolVersion)
+	}
+	if provider.promoteCalls != 1 {
+		t.Fatalf("promoteCalls = %d, want 1", provider.promoteCalls)
+	}
+}
+
+func TestWorkflowProviderPromoteWorkersReturnsUnimplementedWithoutWorkerPromoter(t *testing.T) {
+	socket := newSocketPath(t, "workflow-promote-unimplemented.sock")
+	t.Setenv(proto.EnvProviderSocket, socket)
+	t.Setenv(proto.EnvProviderName, "workflow-test")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	provider := &gestalt.UnimplementedWorkflowProvider{}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- gestalt.ServeWorkflowProvider(ctx, provider)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		waitServeResult(t, errCh)
+	})
+
+	conn := newUnixConn(t, socket)
+	runtimeClient := proto.NewProviderLifecycleClient(conn)
+	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer rpcCancel()
+
+	_, err := runtimeClient.PromoteWorkers(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true))
+	if err == nil {
+		t.Fatal("expected PromoteWorkers to fail for provider without worker promotion support")
 	}
 }
 

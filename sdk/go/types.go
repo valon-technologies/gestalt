@@ -82,6 +82,12 @@ type Starter interface {
 	Start(ctx context.Context) error
 }
 
+// WorkerPromoter is implemented by workflow providers that can advance an
+// external worker deployment to the configured build during explicit promotion.
+type WorkerPromoter interface {
+	PromoteWorkers(ctx context.Context) error
+}
+
 // Closer is implemented by providers that need explicit shutdown handling.
 type Closer interface {
 	Close() error

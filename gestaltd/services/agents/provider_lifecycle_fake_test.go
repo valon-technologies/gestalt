@@ -26,3 +26,7 @@ func (*fakeProviderLifecycleClient) HealthCheck(context.Context, *emptypb.Empty,
 func (*fakeProviderLifecycleClient) StartProvider(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.StartRuntimeProviderResponse, error) {
 	return nil, errors.New("unexpected StartProvider call")
 }
+
+func (*fakeProviderLifecycleClient) PromoteWorkers(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.PromoteWorkersResponse, error) {
+	return nil, errors.New("unexpected PromoteWorkers call")
+}

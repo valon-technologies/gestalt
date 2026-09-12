@@ -135,6 +135,25 @@ func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleCli
 	return nil
 }
 
+func PromoteRuntimeWorkers(ctx context.Context, client proto.ProviderLifecycleClient) error {
+	if client == nil {
+		return fmt.Errorf("runtime client is required")
+	}
+	promoteCtx, cancel := providerPromotionContext(ctx)
+	defer cancel()
+	resp, err := client.PromoteWorkers(promoteCtx, &emptypb.Empty{})
+	if err != nil {
+		return fmt.Errorf("promote workers: %w", err)
+	}
+	if resp == nil {
+		return fmt.Errorf("provider promote workers returned nil response")
+	}
+	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+		return fmt.Errorf("provider responded with protocol version %d, host requires %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
+	}
+	return nil
+}
+
 func validateRuntimeProtocol(meta *proto.ProviderIdentity) error {
 	if meta == nil {
 		return fmt.Errorf("provider identity is required")
@@ -173,6 +192,16 @@ func ProviderSessionCreateContext(parent context.Context) (context.Context, cont
 func providerStartContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
+	}
+	return context.WithTimeout(parent, providerStartTimeout)
+}
+
+func providerPromotionContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if _, ok := parent.Deadline(); ok {
+		return context.WithCancel(parent)
 	}
 	return context.WithTimeout(parent, providerStartTimeout)
 }

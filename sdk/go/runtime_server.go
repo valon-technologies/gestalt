@@ -87,6 +87,17 @@ func (s *runtimeServer) StartProvider(ctx context.Context, _ *emptypb.Empty) (*p
 	return &proto.StartRuntimeProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
 }
 
+func (s *runtimeServer) PromoteWorkers(ctx context.Context, _ *emptypb.Empty) (*proto.PromoteWorkersResponse, error) {
+	promoter, ok := s.provider.(WorkerPromoter)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "provider does not support explicit worker promotion")
+	}
+	if err := promoter.PromoteWorkers(ctx); err != nil {
+		return nil, status.Errorf(codes.Unknown, "promote workers: %v", err)
+	}
+	return &proto.PromoteWorkersResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+}
+
 func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 	switch kind {
 	case ProviderKindApp:

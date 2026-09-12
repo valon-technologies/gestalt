@@ -86,13 +86,27 @@ type promotableWorkflowProvider interface {
 	PromoteWorkers(context.Context) error
 }
 
+func promoteDelegatedWorkflowWorkers(ctx context.Context, provider coreworkflow.Provider) error {
+	if provider == nil {
+		return fmt.Errorf("workflow provider is not configured")
+	}
+	promotable, ok := provider.(promotableWorkflowProvider)
+	if !ok {
+		return fmt.Errorf("workflow provider does not support explicit worker promotion")
+	}
+	return promotable.PromoteWorkers(ctx)
+}
+
 func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Provider) error {
 	var errs []error
 	promoted := 0
+	configured := 0
+	var unsupported []coreworkflow.Provider
 	for _, provider := range providers {
 		if provider == nil {
 			continue
 		}
+		configured++
 		if promotable, ok := provider.(promotableWorkflowProvider); ok {
 			if err := promotable.PromoteWorkers(ctx); err != nil {
 				errs = append(errs, err)
@@ -101,6 +115,7 @@ func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Prov
 			promoted++
 			continue
 		}
+		unsupported = append(unsupported, provider)
 		slog.WarnContext(
 			ctx,
 			"workflow provider does not support explicit worker promotion",
@@ -108,12 +123,19 @@ func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Prov
 			fmt.Sprintf("%T", provider),
 		)
 	}
-	if len(providers) > 0 && promoted == 0 {
-		slog.WarnContext(
-			ctx,
-			"no workflow providers handled explicit worker promotion",
-			"provider_count",
-			len(providers),
+	for _, provider := range unsupported {
+		errs = append(
+			errs,
+			fmt.Errorf(
+				"workflow provider does not support explicit worker promotion: %T",
+				provider,
+			),
+		)
+	}
+	if configured > 0 && promoted == 0 && len(unsupported) < configured {
+		errs = append(
+			errs,
+			fmt.Errorf("no workflow providers handled explicit worker promotion (provider_count=%d)", configured),
 		)
 	}
 	return errors.Join(errs...)

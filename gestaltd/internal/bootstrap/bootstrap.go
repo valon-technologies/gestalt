@@ -755,6 +755,13 @@ func (p *workflowProviderWithCleanup) WaitRuntimeWorkersReady(ctx context.Contex
 	return nil
 }
 
+func (p *workflowProviderWithCleanup) PromoteWorkers(ctx context.Context) error {
+	if p == nil {
+		return fmt.Errorf("workflow provider is not configured")
+	}
+	return promoteDelegatedWorkflowWorkers(ctx, p.Provider)
+}
+
 type agentProviderWithTracking struct {
 	delegate     coreagent.Provider
 	providerName string

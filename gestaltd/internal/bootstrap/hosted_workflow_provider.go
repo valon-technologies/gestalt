@@ -312,6 +312,13 @@ func (p *workflowProviderWithRuntimeWorkers) WaitRuntimeWorkersReady(ctx context
 	return p.workers.WaitReady(ctx)
 }
 
+func (p *workflowProviderWithRuntimeWorkers) PromoteWorkers(ctx context.Context) error {
+	if p == nil {
+		return fmt.Errorf("workflow provider is not configured")
+	}
+	return promoteDelegatedWorkflowWorkers(ctx, p.Provider)
+}
+
 func (p *workflowProviderWithRuntimeWorkers) Close() error {
 	var errs []error
 	if p != nil && p.workers != nil {
