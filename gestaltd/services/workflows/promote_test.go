@@ -44,7 +44,7 @@ func TestRemoteWorkflowPromoteWorkersInvokesLifecycleRPC(t *testing.T) {
 
 	calls := 0
 	provider := &remoteWorkflow{
-		name:    "local",
+		name: "local",
 		runtime: &recordingLifecycleClient{
 			promoteWorkers: func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.PromoteWorkersResponse, error) {
 				calls++

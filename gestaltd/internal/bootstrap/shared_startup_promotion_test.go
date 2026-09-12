@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
