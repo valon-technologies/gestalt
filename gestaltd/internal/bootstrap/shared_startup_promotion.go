@@ -101,6 +101,7 @@ func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Prov
 	var errs []error
 	promoted := 0
 	configured := 0
+	var unsupported []coreworkflow.Provider
 	for _, provider := range providers {
 		if provider == nil {
 			continue
@@ -114,6 +115,7 @@ func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Prov
 			promoted++
 			continue
 		}
+		unsupported = append(unsupported, provider)
 		slog.WarnContext(
 			ctx,
 			"workflow provider does not support explicit worker promotion",
@@ -122,10 +124,22 @@ func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Prov
 		)
 	}
 	if configured > 0 && promoted == 0 {
-		errs = append(
-			errs,
-			fmt.Errorf("no workflow providers handled explicit worker promotion (provider_count=%d)", configured),
-		)
+		if len(unsupported) == configured {
+			for _, provider := range unsupported {
+				errs = append(
+					errs,
+					fmt.Errorf(
+						"workflow provider does not support explicit worker promotion: %T",
+						provider,
+					),
+				)
+			}
+		} else {
+			errs = append(
+				errs,
+				fmt.Errorf("no workflow providers handled explicit worker promotion (provider_count=%d)", configured),
+			)
+		}
 	}
 	return errors.Join(errs...)
 }

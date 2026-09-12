@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
@@ -52,9 +54,30 @@ func TestPromoteWorkflowProvidersInvokesPromotableProviders(t *testing.T) {
 func TestPromoteWorkflowProvidersFailsWhenNoProviderHandlesPromotion(t *testing.T) {
 	t.Parallel()
 
-	err := promoteWorkflowProviders(context.Background(), []coreworkflow.Provider{&startupTestWorkflowProvider{}})
+	provider := &startupTestWorkflowProvider{}
+	err := promoteWorkflowProviders(context.Background(), []coreworkflow.Provider{provider})
 	if err == nil {
 		t.Fatal("expected explicit promotion to fail when provider is not promotable")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("%T", provider)) {
+		t.Fatalf("promoteWorkflowProviders error = %v, want provider type %T", err, provider)
+	}
+}
+
+func TestPromoteWorkflowProvidersReportsEachUnsupportedProvider(t *testing.T) {
+	t.Parallel()
+
+	first := &startupTestWorkflowProvider{}
+	second := &startupTestWorkflowProvider{}
+	err := promoteWorkflowProviders(context.Background(), []coreworkflow.Provider{first, second})
+	if err == nil {
+		t.Fatal("expected explicit promotion to fail when every provider is unsupported")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("%T", first)) {
+		t.Fatalf("promoteWorkflowProviders error = %v, want first provider type", err)
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("%T", second)) {
+		t.Fatalf("promoteWorkflowProviders error = %v, want second provider type", err)
 	}
 }
 
