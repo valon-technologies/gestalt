@@ -18,6 +18,9 @@ import (
 const pendingConnectionPath = "/api/v1/auth/pending-connection"
 const pendingConnectionCookieName = "pending_connection_state"
 
+// OAuth / pending-connection interstitial: full-document result page for the
+// auth popup or tab — not a shadcn Dialog (no app-chrome overlay). Content plus
+// a bottom-right primary action; the card is borderless.
 var pendingConnectionSelectionPage = template.Must(template.New("pending-connection-selection").Parse(`<!doctype html>
 <html lang="en">
 <head>
@@ -25,92 +28,140 @@ var pendingConnectionSelectionPage = template.Must(template.New("pending-connect
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
   <style>
+    :root {
+      --background: #f7f4ee;
+      --foreground: #221c15;
+      --card: #ffffff;
+      --muted-foreground: #5f5448;
+      --border: #ddd4c6;
+      --primary: #221c15;
+      --primary-foreground: #f7f4ee;
+      --radius: 0.5rem;
+      --control-height: 2.25rem;
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f7f4ee;
-      color: #221c15;
+      background: var(--background);
+      color: var(--foreground);
       min-height: 100vh;
       display: grid;
       place-items: center;
       padding: 20px;
     }
     main {
-      width: min(100%, 640px);
-      background: #fff;
-      border: 1px solid #ddd4c6;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 16px 40px rgba(34, 28, 21, 0.08);
+      width: min(100%, 28rem);
+      background: var(--card);
+      border: none;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      min-height: 12rem;
     }
+    .content { flex: 1 1 auto; }
     h1 {
       margin: 0;
       font-size: 1.5rem;
       line-height: 1.25;
+      font-weight: 600;
     }
     p, .footer {
-      margin: 12px 0 0;
-      color: #5f5448;
+      margin: 0.75rem 0 0;
+      color: var(--muted-foreground);
     }
+    .content > p:first-of-type { margin-top: 0.75rem; }
     ul {
       list-style: none;
-      margin: 20px 0 0;
+      margin: 1.25rem 0 0;
       padding: 0;
       display: grid;
-      gap: 10px;
+      gap: 0.625rem;
     }
-    button {
+    button.candidate {
       width: 100%;
-      border: 1px solid #ddd4c6;
-      border-radius: 12px;
-      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--card);
       color: inherit;
-      padding: 14px 16px;
+      padding: 0.875rem 1rem;
       text-align: left;
       font: inherit;
       cursor: pointer;
       transition: border-color 120ms ease, box-shadow 120ms ease;
     }
-    button:hover {
+    button.candidate:hover {
       border-color: #9a6a37;
       box-shadow: 0 10px 24px rgba(41, 29, 18, 0.08);
     }
-    strong, a {
-      color: #7b5228;
-    }
+    button.candidate strong { color: #7b5228; }
     .subtle {
       display: block;
-      margin-top: 4px;
-      color: #5f5448;
+      margin-top: 0.25rem;
+      color: var(--muted-foreground);
       font-size: 0.92rem;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: auto;
+      padding-top: 1.25rem;
+    }
+    a.button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: var(--control-height);
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: var(--primary-foreground);
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    a.button:hover { filter: brightness(1.08); }
+    a.button:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>{{.Title}}</h1>
-    <p>{{.Message}}</p>
-    {{if .Candidates}}
-    <ul>
-      {{range $i, $candidate := .Candidates}}
-      <li>
-        <form method="post" action="{{$.Action}}">
-          <input type="hidden" name="pending_token" value="{{$.PendingToken}}">
-          <input type="hidden" name="candidate_index" value="{{$i}}">
-          <button type="submit">
-            <strong>{{$candidate.Name}}</strong>
-            <span class="subtle">{{$candidate.ID}}</span>
-          </button>
-        </form>
-      </li>
+    <div class="content">
+      <h1>{{.Title}}</h1>
+      <p>{{.Message}}</p>
+      {{if .Candidates}}
+      <ul>
+        {{range $i, $candidate := .Candidates}}
+        <li>
+          <form method="post" action="{{$.Action}}">
+            <input type="hidden" name="pending_token" value="{{$.PendingToken}}">
+            <input type="hidden" name="candidate_index" value="{{$i}}">
+            <button class="candidate" type="submit">
+              <strong>{{$candidate.Name}}</strong>
+              <span class="subtle">{{$candidate.ID}}</span>
+            </button>
+          </form>
+        </li>
+        {{end}}
+      </ul>
       {{end}}
-    </ul>
-    {{end}}
+      {{if .Footer}}
+      <p class="footer">{{.Footer}}</p>
+      {{end}}
+    </div>
     {{if .LinkURL}}
-    <p><a href="{{.LinkURL}}">{{.LinkLabel}}</a></p>
-    {{end}}
-    {{if .Footer}}
-    <p class="footer">{{.Footer}}</p>
+    <div class="actions">
+      <a class="button" href="{{.LinkURL}}">{{.LinkLabel}}</a>
+    </div>
     {{end}}
   </main>
   {{if .AutoClose}}
