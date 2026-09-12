@@ -86,6 +86,17 @@ type promotableWorkflowProvider interface {
 	PromoteWorkers(context.Context) error
 }
 
+func promoteDelegatedWorkflowWorkers(ctx context.Context, provider coreworkflow.Provider) error {
+	if provider == nil {
+		return fmt.Errorf("workflow provider is not configured")
+	}
+	promotable, ok := provider.(promotableWorkflowProvider)
+	if !ok {
+		return fmt.Errorf("workflow provider does not support explicit worker promotion")
+	}
+	return promotable.PromoteWorkers(ctx)
+}
+
 func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Provider) error {
 	var errs []error
 	promoted := 0

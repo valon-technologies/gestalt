@@ -143,9 +143,6 @@ func PromoteRuntimeWorkers(ctx context.Context, client proto.ProviderLifecycleCl
 	defer cancel()
 	resp, err := client.PromoteWorkers(promoteCtx, &emptypb.Empty{})
 	if err != nil {
-		if status.Code(err) == codes.Canceled || status.Code(err) == codes.DeadlineExceeded {
-			return fmt.Errorf("promote workers: %w", err)
-		}
 		return fmt.Errorf("promote workers: %w", err)
 	}
 	if resp == nil {

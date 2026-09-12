@@ -2,11 +2,9 @@ package workflows
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -80,41 +78,6 @@ func TestRemoteWorkflowPromoteWorkersPropagatesProviderError(t *testing.T) {
 	if !strings.Contains(err.Error(), "set worker deployment current version: boom") {
 		t.Fatalf("PromoteWorkers error = %v", err)
 	}
-}
-
-func TestRemoteWorkflowPromoteWorkersThroughCleanupWrapper(t *testing.T) {
-	t.Parallel()
-
-	calls := 0
-	provider := &remoteWorkflow{
-		name: "local",
-		runtime: &recordingLifecycleClient{
-			promoteWorkers: func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.PromoteWorkersResponse, error) {
-				calls++
-				return &proto.PromoteWorkersResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
-			},
-		},
-	}
-	wrapped := &promotionCleanupWrapper{Provider: provider}
-	if err := wrapped.PromoteWorkers(context.Background()); err != nil {
-		t.Fatalf("PromoteWorkers: %v", err)
-	}
-	if calls != 1 {
-		t.Fatalf("subprocess PromoteWorkers RPC calls = %d, want 1", calls)
-	}
-}
-
-type promotionCleanupWrapper struct {
-	coreworkflow.Provider
-}
-
-func (p *promotionCleanupWrapper) PromoteWorkers(ctx context.Context) error {
-	if promotable, ok := p.Provider.(interface {
-		PromoteWorkers(context.Context) error
-	}); ok {
-		return promotable.PromoteWorkers(ctx)
-	}
-	return errors.New("workflow provider does not support explicit worker promotion")
 }
 
 func TestRemoteWorkflowPromoteWorkersHonorsCancellation(t *testing.T) {

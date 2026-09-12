@@ -93,9 +93,6 @@ func (s *runtimeServer) PromoteWorkers(ctx context.Context, _ *emptypb.Empty) (*
 		return nil, status.Error(codes.Unimplemented, "provider does not support explicit worker promotion")
 	}
 	if err := promoter.PromoteWorkers(ctx); err != nil {
-		if ctx.Err() != nil {
-			return nil, status.Errorf(codes.Canceled, "promote workers: %v", err)
-		}
 		return nil, status.Errorf(codes.Unknown, "promote workers: %v", err)
 	}
 	return &proto.PromoteWorkersResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil

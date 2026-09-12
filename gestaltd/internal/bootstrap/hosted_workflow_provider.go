@@ -313,13 +313,10 @@ func (p *workflowProviderWithRuntimeWorkers) WaitRuntimeWorkersReady(ctx context
 }
 
 func (p *workflowProviderWithRuntimeWorkers) PromoteWorkers(ctx context.Context) error {
-	if p == nil || p.Provider == nil {
+	if p == nil {
 		return fmt.Errorf("workflow provider is not configured")
 	}
-	if promotable, ok := p.Provider.(promotableWorkflowProvider); ok {
-		return promotable.PromoteWorkers(ctx)
-	}
-	return fmt.Errorf("workflow provider does not support explicit worker promotion")
+	return promoteDelegatedWorkflowWorkers(ctx, p.Provider)
 }
 
 func (p *workflowProviderWithRuntimeWorkers) Close() error {
