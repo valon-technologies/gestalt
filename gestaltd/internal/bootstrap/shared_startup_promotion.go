@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -87,6 +88,7 @@ type promotableWorkflowProvider interface {
 
 func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Provider) error {
 	var errs []error
+	promoted := 0
 	for _, provider := range providers {
 		if provider == nil {
 			continue
@@ -94,8 +96,25 @@ func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Prov
 		if promotable, ok := provider.(promotableWorkflowProvider); ok {
 			if err := promotable.PromoteWorkers(ctx); err != nil {
 				errs = append(errs, err)
+				continue
 			}
+			promoted++
+			continue
 		}
+		slog.WarnContext(
+			ctx,
+			"workflow provider does not support explicit worker promotion",
+			"provider_type",
+			fmt.Sprintf("%T", provider),
+		)
+	}
+	if len(providers) > 0 && promoted == 0 {
+		slog.WarnContext(
+			ctx,
+			"no workflow providers handled explicit worker promotion",
+			"provider_count",
+			len(providers),
+		)
 	}
 	return errors.Join(errs...)
 }

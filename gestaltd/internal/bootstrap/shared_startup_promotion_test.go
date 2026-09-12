@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -21,6 +22,28 @@ func TestResolvePromoteSharedStateOnActivateHonorsConfig(t *testing.T) {
 	cfg := &config.Config{Server: config.ServerConfig{PromoteSharedStateOnActivate: boolPtr(false)}}
 	if resolvePromoteSharedStateOnActivate(cfg) {
 		t.Fatal("expected config false to disable promote-on-activate")
+	}
+}
+
+type promotableTestWorkflowProvider struct {
+	startupTestWorkflowProvider
+	promoteCalls int
+}
+
+func (p *promotableTestWorkflowProvider) PromoteWorkers(context.Context) error {
+	p.promoteCalls++
+	return nil
+}
+
+func TestPromoteWorkflowProvidersInvokesPromotableProviders(t *testing.T) {
+	t.Parallel()
+
+	provider := &promotableTestWorkflowProvider{}
+	if err := promoteWorkflowProviders(context.Background(), []coreworkflow.Provider{provider}); err != nil {
+		t.Fatalf("promoteWorkflowProviders: %v", err)
+	}
+	if provider.promoteCalls != 1 {
+		t.Fatalf("promoteCalls = %d, want 1", provider.promoteCalls)
 	}
 }
 
