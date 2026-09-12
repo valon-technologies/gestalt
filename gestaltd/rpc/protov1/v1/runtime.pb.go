@@ -414,6 +414,52 @@ func (x *StartRuntimeProviderResponse) GetProtocolVersion() int32 {
 	return 0
 }
 
+// PromoteWorkersResponse confirms the protocol version the provider is serving
+// after explicit worker promotion completes.
+type PromoteWorkersResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ProtocolVersion int32                  `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PromoteWorkersResponse) Reset() {
+	*x = PromoteWorkersResponse{}
+	mi := &file_v1_runtime_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PromoteWorkersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PromoteWorkersResponse) ProtoMessage() {}
+
+func (x *PromoteWorkersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_runtime_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PromoteWorkersResponse.ProtoReflect.Descriptor instead.
+func (*PromoteWorkersResponse) Descriptor() ([]byte, []int) {
+	return file_v1_runtime_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *PromoteWorkersResponse) GetProtocolVersion() int32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
 var File_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_v1_runtime_proto_rawDesc = "" +
@@ -439,6 +485,8 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"_\n" +
 	"\x1cStartRuntimeProviderResponse\x12)\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion:\x14\x9a\xb5\x18\x10protocol_version\"Y\n" +
+	"\x16PromoteWorkersResponse\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion:\x14\x9a\xb5\x18\x10protocol_version*\x94\x03\n" +
 	"\fProviderKind\x12\x1d\n" +
 	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
@@ -455,12 +503,13 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x12\x17\n" +
 	"\x13PROVIDER_KIND_AGENT\x10\v\x12%\n" +
 	"!PROVIDER_KIND_EXTERNAL_CREDENTIAL\x10\f\x12\x16\n" +
-	"\x12PROVIDER_KIND_TEST\x10\r2\xb3\x03\n" +
+	"\x12PROVIDER_KIND_TEST\x10\r2\x8a\x04\n" +
 	"\x11ProviderLifecycle\x12T\n" +
 	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12\x9a\x01\n" +
 	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\"&\x8a\xb5\x18\x04name\x8a\xb5\x18\x10protocol_version\x8a\xb5\x18\x06config\x12O\n" +
 	"\vHealthCheck\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.HealthCheckResponse\x12Z\n" +
-	"\rStartProvider\x12\x16.google.protobuf.Empty\x1a1.gestalt.provider.v1.StartRuntimeProviderResponseB\xd8\x01\n" +
+	"\rStartProvider\x12\x16.google.protobuf.Empty\x1a1.gestalt.provider.v1.StartRuntimeProviderResponse\x12U\n" +
+	"\x0ePromoteWorkers\x12\x16.google.protobuf.Empty\x1a+.gestalt.provider.v1.PromoteWorkersResponseB\xd8\x01\n" +
 	"\x17com.gestalt.provider.v1B\fRuntimeProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -476,7 +525,7 @@ func file_v1_runtime_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_v1_runtime_proto_goTypes = []any{
 	(ProviderKind)(0),                    // 0: gestalt.provider.v1.ProviderKind
 	(*ProviderIdentity)(nil),             // 1: gestalt.provider.v1.ProviderIdentity
@@ -484,22 +533,25 @@ var file_v1_runtime_proto_goTypes = []any{
 	(*ConfigureProviderResponse)(nil),    // 3: gestalt.provider.v1.ConfigureProviderResponse
 	(*HealthCheckResponse)(nil),          // 4: gestalt.provider.v1.HealthCheckResponse
 	(*StartRuntimeProviderResponse)(nil), // 5: gestalt.provider.v1.StartRuntimeProviderResponse
-	(*structpb.Struct)(nil),              // 6: google.protobuf.Struct
-	(*emptypb.Empty)(nil),                // 7: google.protobuf.Empty
+	(*PromoteWorkersResponse)(nil),       // 6: gestalt.provider.v1.PromoteWorkersResponse
+	(*structpb.Struct)(nil),              // 7: google.protobuf.Struct
+	(*emptypb.Empty)(nil),                // 8: google.protobuf.Empty
 }
 var file_v1_runtime_proto_depIdxs = []int32{
 	0, // 0: gestalt.provider.v1.ProviderIdentity.kind:type_name -> gestalt.provider.v1.ProviderKind
-	6, // 1: gestalt.provider.v1.ConfigureProviderRequest.config:type_name -> google.protobuf.Struct
-	7, // 2: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:input_type -> google.protobuf.Empty
+	7, // 1: gestalt.provider.v1.ConfigureProviderRequest.config:type_name -> google.protobuf.Struct
+	8, // 2: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:input_type -> google.protobuf.Empty
 	2, // 3: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:input_type -> gestalt.provider.v1.ConfigureProviderRequest
-	7, // 4: gestalt.provider.v1.ProviderLifecycle.HealthCheck:input_type -> google.protobuf.Empty
-	7, // 5: gestalt.provider.v1.ProviderLifecycle.StartProvider:input_type -> google.protobuf.Empty
-	1, // 6: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:output_type -> gestalt.provider.v1.ProviderIdentity
-	3, // 7: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:output_type -> gestalt.provider.v1.ConfigureProviderResponse
-	4, // 8: gestalt.provider.v1.ProviderLifecycle.HealthCheck:output_type -> gestalt.provider.v1.HealthCheckResponse
-	5, // 9: gestalt.provider.v1.ProviderLifecycle.StartProvider:output_type -> gestalt.provider.v1.StartRuntimeProviderResponse
-	6, // [6:10] is the sub-list for method output_type
-	2, // [2:6] is the sub-list for method input_type
+	8, // 4: gestalt.provider.v1.ProviderLifecycle.HealthCheck:input_type -> google.protobuf.Empty
+	8, // 5: gestalt.provider.v1.ProviderLifecycle.StartProvider:input_type -> google.protobuf.Empty
+	8, // 6: gestalt.provider.v1.ProviderLifecycle.PromoteWorkers:input_type -> google.protobuf.Empty
+	1, // 7: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:output_type -> gestalt.provider.v1.ProviderIdentity
+	3, // 8: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:output_type -> gestalt.provider.v1.ConfigureProviderResponse
+	4, // 9: gestalt.provider.v1.ProviderLifecycle.HealthCheck:output_type -> gestalt.provider.v1.HealthCheckResponse
+	5, // 10: gestalt.provider.v1.ProviderLifecycle.StartProvider:output_type -> gestalt.provider.v1.StartRuntimeProviderResponse
+	6, // 11: gestalt.provider.v1.ProviderLifecycle.PromoteWorkers:output_type -> gestalt.provider.v1.PromoteWorkersResponse
+	7, // [7:12] is the sub-list for method output_type
+	2, // [2:7] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -517,7 +569,7 @@ func file_v1_runtime_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_runtime_proto_rawDesc), len(file_v1_runtime_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

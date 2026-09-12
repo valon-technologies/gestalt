@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
@@ -28,11 +29,12 @@ func TestResolvePromoteSharedStateOnActivateHonorsConfig(t *testing.T) {
 type promotableTestWorkflowProvider struct {
 	startupTestWorkflowProvider
 	promoteCalls int
+	promoteErr   error
 }
 
 func (p *promotableTestWorkflowProvider) PromoteWorkers(context.Context) error {
 	p.promoteCalls++
-	return nil
+	return p.promoteErr
 }
 
 func TestPromoteWorkflowProvidersInvokesPromotableProviders(t *testing.T) {
@@ -44,6 +46,41 @@ func TestPromoteWorkflowProvidersInvokesPromotableProviders(t *testing.T) {
 	}
 	if provider.promoteCalls != 1 {
 		t.Fatalf("promoteCalls = %d, want 1", provider.promoteCalls)
+	}
+}
+
+func TestPromoteWorkflowProvidersFailsWhenNoProviderHandlesPromotion(t *testing.T) {
+	t.Parallel()
+
+	err := promoteWorkflowProviders(context.Background(), []coreworkflow.Provider{&startupTestWorkflowProvider{}})
+	if err == nil {
+		t.Fatal("expected explicit promotion to fail when provider is not promotable")
+	}
+}
+
+func TestPromoteWorkflowProvidersPropagatesProviderError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("set worker deployment current version: boom")
+	provider := &promotableTestWorkflowProvider{
+		promoteErr: wantErr,
+	}
+	err := promoteWorkflowProviders(context.Background(), []coreworkflow.Provider{provider})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("promoteWorkflowProviders error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestWorkflowCleanupWrapperForwardsPromoteWorkers(t *testing.T) {
+	t.Parallel()
+
+	inner := &promotableTestWorkflowProvider{}
+	wrapped := &workflowProviderWithCleanup{Provider: inner}
+	if err := promoteWorkflowProviders(context.Background(), []coreworkflow.Provider{wrapped}); err != nil {
+		t.Fatalf("promoteWorkflowProviders: %v", err)
+	}
+	if inner.promoteCalls != 1 {
+		t.Fatalf("inner promoteCalls = %d, want 1", inner.promoteCalls)
 	}
 }
 

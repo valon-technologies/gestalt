@@ -17,6 +17,7 @@ type fakeProviderLifecycleClient struct {
 	configureProvider   func(context.Context, *proto.ConfigureProviderRequest, ...grpc.CallOption) (*proto.ConfigureProviderResponse, error)
 	healthCheck         func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.HealthCheckResponse, error)
 	startProvider       func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.StartRuntimeProviderResponse, error)
+	promoteWorkers      func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.PromoteWorkersResponse, error)
 }
 
 func (c *fakeProviderLifecycleClient) GetProviderIdentity(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*proto.ProviderIdentity, error) {
@@ -39,6 +40,13 @@ func (c *fakeProviderLifecycleClient) StartProvider(ctx context.Context, in *emp
 		return c.startProvider(ctx, in, opts...)
 	}
 	return &proto.StartRuntimeProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+}
+
+func (c *fakeProviderLifecycleClient) PromoteWorkers(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*proto.PromoteWorkersResponse, error) {
+	if c.promoteWorkers != nil {
+		return c.promoteWorkers(ctx, in, opts...)
+	}
+	return nil, status.Error(codes.Unimplemented, "promote workers not implemented")
 }
 
 func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
@@ -257,5 +265,67 @@ func TestStartRuntimeProviderValidatesProtocolVersion(t *testing.T) {
 	}
 	if err := StartRuntimeProvider(context.Background(), client); err == nil {
 		t.Fatal("StartRuntimeProvider should reject protocol mismatch")
+	}
+}
+
+func TestPromoteRuntimeWorkersPropagatesProviderError(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeProviderLifecycleClient{
+		promoteWorkers: func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.PromoteWorkersResponse, error) {
+			return nil, status.Error(codes.Unknown, "set worker deployment current version: boom")
+		},
+	}
+	if err := PromoteRuntimeWorkers(context.Background(), client); err == nil {
+		t.Fatal("PromoteRuntimeWorkers should fail on provider error")
+	}
+}
+
+func TestPromoteRuntimeWorkersFailsWhenUnimplemented(t *testing.T) {
+	t.Parallel()
+
+	if err := PromoteRuntimeWorkers(context.Background(), &fakeProviderLifecycleClient{}); err == nil {
+		t.Fatal("PromoteRuntimeWorkers should fail when RPC is unimplemented")
+	}
+}
+
+func TestPromoteRuntimeWorkersHonorsCancellation(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeProviderLifecycleClient{
+		promoteWorkers: func(ctx context.Context, _ *emptypb.Empty, _ ...grpc.CallOption) (*proto.PromoteWorkersResponse, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := PromoteRuntimeWorkers(ctx, client); err == nil {
+		t.Fatal("PromoteRuntimeWorkers should fail when context is canceled")
+	}
+}
+
+func TestPromoteRuntimeWorkersUsesPromotionTimeout(t *testing.T) {
+	t.Parallel()
+
+	var remaining time.Duration
+	client := &fakeProviderLifecycleClient{
+		promoteWorkers: func(ctx context.Context, _ *emptypb.Empty, _ ...grpc.CallOption) (*proto.PromoteWorkersResponse, error) {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("PromoteWorkers context has no deadline")
+			}
+			remaining = time.Until(deadline)
+			return &proto.PromoteWorkersResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+		},
+	}
+	if err := PromoteRuntimeWorkers(context.Background(), client); err != nil {
+		t.Fatalf("PromoteRuntimeWorkers: %v", err)
+	}
+	if remaining <= ProviderRPCTimeout {
+		t.Fatalf("PromoteWorkers remaining deadline = %s, want above request timeout %s", remaining, ProviderRPCTimeout)
+	}
+	if remaining > providerStartTimeout {
+		t.Fatalf("PromoteWorkers remaining deadline = %s, want at most promotion timeout %s", remaining, providerStartTimeout)
 	}
 }

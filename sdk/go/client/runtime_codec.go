@@ -125,3 +125,23 @@ func FromWireStartRuntimeProviderResponse(value *proto.StartRuntimeProviderRespo
 	}
 	return out
 }
+
+func ToWirePromoteWorkersResponse(value *PromoteWorkersResponse) *proto.PromoteWorkersResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.PromoteWorkersResponse{
+		ProtocolVersion: value.ProtocolVersion,
+	}
+	return out
+}
+
+func FromWirePromoteWorkersResponse(value *proto.PromoteWorkersResponse) *PromoteWorkersResponse {
+	if value == nil {
+		return nil
+	}
+	out := &PromoteWorkersResponse{
+		ProtocolVersion: value.ProtocolVersion,
+	}
+	return out
+}

@@ -73,6 +73,14 @@ message StartRuntimeProviderResponse {
   int32 protocol_version = 1;
 }
 
+// PromoteWorkersResponse confirms the protocol version the provider is serving
+// after explicit worker promotion completes.
+message PromoteWorkersResponse {
+  option (unwrap) = "protocol_version";
+
+  int32 protocol_version = 1;
+}
+
 // ProviderLifecycle is the common lifecycle protocol shared by every provider
 // kind.
 service ProviderLifecycle {
@@ -84,4 +92,5 @@ service ProviderLifecycle {
   }
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
   rpc StartProvider(google.protobuf.Empty) returns (StartRuntimeProviderResponse);
+  rpc PromoteWorkers(google.protobuf.Empty) returns (PromoteWorkersResponse);
 }

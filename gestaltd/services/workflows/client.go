@@ -335,6 +335,13 @@ func (r *remoteWorkflow) Start(ctx context.Context) error {
 	return runtimehost.StartRuntimeProvider(ctx, r.runtime)
 }
 
+func (r *remoteWorkflow) PromoteWorkers(ctx context.Context) error {
+	if r.runtime == nil {
+		return fmt.Errorf("workflow provider runtime lifecycle is not configured")
+	}
+	return runtimehost.PromoteRuntimeWorkers(ctx, r.runtime)
+}
+
 func (r *remoteWorkflow) Close() error {
 	if r == nil || r.closer == nil {
 		return nil

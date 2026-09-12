@@ -94,6 +94,14 @@ type StartRuntimeProviderResponse struct {
 	ProtocolVersion int32
 }
 
+// PromoteWorkersResponse is the native message type for gestalt.provider.v1.PromoteWorkersResponse.
+//
+// PromoteWorkersResponse confirms the protocol version the provider is serving
+// after explicit worker promotion completes.
+type PromoteWorkersResponse struct {
+	ProtocolVersion int32
+}
+
 // ProviderLifecycle is the generated client for gestalt.provider.v1.ProviderLifecycle.
 // Every transport error is converted to *GestaltError.
 //
@@ -163,4 +171,23 @@ func (c *ProviderLifecycle) StartProviderRaw(ctx context.Context) (*StartRuntime
 		return nil, toGestaltError(err)
 	}
 	return FromWireStartRuntimeProviderResponse(response), nil
+}
+
+// PromoteWorkers is the ergonomic form of [ProviderLifecycle.PromoteWorkersRaw].
+// The response collapses to its protocolVersion field.
+func (c *ProviderLifecycle) PromoteWorkers(ctx context.Context) (int32, error) {
+	response, err := c.client.PromoteWorkers(ctx, &emptypb.Empty{})
+	if err != nil {
+		return 0, toGestaltError(err)
+	}
+	return FromWirePromoteWorkersResponse(response).ProtocolVersion, nil
+}
+
+// PromoteWorkersRaw is the faithful form of [ProviderLifecycle.PromoteWorkers].
+func (c *ProviderLifecycle) PromoteWorkersRaw(ctx context.Context) (*PromoteWorkersResponse, error) {
+	response, err := c.client.PromoteWorkers(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWirePromoteWorkersResponse(response), nil
 }
