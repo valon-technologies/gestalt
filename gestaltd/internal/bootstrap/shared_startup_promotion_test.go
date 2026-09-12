@@ -64,6 +64,26 @@ func TestPromoteWorkflowProvidersFailsWhenNoProviderHandlesPromotion(t *testing.
 	}
 }
 
+func TestPromoteWorkflowProvidersFailsWhenMixedSuccessAndUnsupported(t *testing.T) {
+	t.Parallel()
+
+	promotable := &promotableTestWorkflowProvider{}
+	unsupported := &startupTestWorkflowProvider{}
+	err := promoteWorkflowProviders(
+		context.Background(),
+		[]coreworkflow.Provider{promotable, unsupported},
+	)
+	if err == nil {
+		t.Fatal("expected explicit promotion to fail when an unsupported provider is configured")
+	}
+	if promotable.promoteCalls != 1 {
+		t.Fatalf("promoteCalls = %d, want 1", promotable.promoteCalls)
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("%T", unsupported)) {
+		t.Fatalf("promoteWorkflowProviders error = %v, want unsupported provider type", err)
+	}
+}
+
 func TestPromoteWorkflowProvidersReportsEachUnsupportedProvider(t *testing.T) {
 	t.Parallel()
 

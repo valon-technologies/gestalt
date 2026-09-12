@@ -123,23 +123,20 @@ func promoteWorkflowProviders(ctx context.Context, providers []coreworkflow.Prov
 			fmt.Sprintf("%T", provider),
 		)
 	}
-	if configured > 0 && promoted == 0 {
-		if len(unsupported) == configured {
-			for _, provider := range unsupported {
-				errs = append(
-					errs,
-					fmt.Errorf(
-						"workflow provider does not support explicit worker promotion: %T",
-						provider,
-					),
-				)
-			}
-		} else {
-			errs = append(
-				errs,
-				fmt.Errorf("no workflow providers handled explicit worker promotion (provider_count=%d)", configured),
-			)
-		}
+	for _, provider := range unsupported {
+		errs = append(
+			errs,
+			fmt.Errorf(
+				"workflow provider does not support explicit worker promotion: %T",
+				provider,
+			),
+		)
+	}
+	if configured > 0 && promoted == 0 && len(unsupported) < configured {
+		errs = append(
+			errs,
+			fmt.Errorf("no workflow providers handled explicit worker promotion (provider_count=%d)", configured),
+		)
 	}
 	return errors.Join(errs...)
 }
