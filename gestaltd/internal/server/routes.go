@@ -320,10 +320,17 @@ func (s *Server) servePrometheusMetrics(w http.ResponseWriter, r *http.Request) 
 
 // Deployment hosts expose a tagged revision, so every path requires the
 // qualification credential even when a normal user session or webhook would
-// otherwise be accepted. Ingress must preserve Host and restrict source CIDRs.
+// otherwise be accepted. When deployment hosts are configured, activation and
+// promotion also require the credential on every host: public routing reaches
+// the same runtime. Ingress must preserve Host and restrict source CIDRs.
 func (s *Server) deploymentHostMiddleware(next http.Handler) http.Handler {
 	hosts := strings.FieldsFunc(os.Getenv("GESTALTD_DEPLOYMENT_HOSTS"), func(r rune) bool { return r == ',' || r == ';' })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		managementPath := r.URL.Path == "/activate" || r.URL.Path == "/promote" || strings.HasPrefix(r.URL.Path, "/promote/")
+		if len(hosts) > 0 && managementPath && !s.appVersionPauseAuthorized(r) {
+			writeError(w, http.StatusUnauthorized, "deployment qualification bearer token is required")
+			return
+		}
 		host := strings.ToLower(strings.TrimSuffix(strings.Split(r.Host, ":")[0], "."))
 		for _, restricted := range hosts {
 			if restricted = strings.ToLower(strings.TrimSpace(restricted)); restricted != "" && host == restricted {
