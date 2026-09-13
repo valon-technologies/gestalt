@@ -2020,6 +2020,11 @@ type ServerConfig struct {
 	// shared promotion explicitly. When unset, /activate keeps promoting shared
 	// state for backward compatibility.
 	PromoteSharedStateOnActivate *bool `yaml:"promoteSharedStateOnActivate,omitempty"`
+	// RejectSharedStatePromotion rejects POST /promote and POST /promote/registry
+	// before any registry or Temporal side effects. Use with
+	// promoteSharedStateOnActivate: false to fence all shared promotion writers
+	// while keeping local /activate preparation available.
+	RejectSharedStatePromotion *bool `yaml:"rejectSharedStatePromotion,omitempty"`
 	// AuthorizationStateApply gates whether server startup is allowed to
 	// overwrite active authorization provider state. When unset, the
 	// GESTALTD_AUTHORIZATION_STATE_APPLY environment variable is consulted;

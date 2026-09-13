@@ -244,6 +244,63 @@ func TestPromoteRegistryUsesFleetTemporalPromotionEvidence(t *testing.T) {
 	}
 }
 
+func TestRejectSharedStatePromotionBlocksRegistryWriters(t *testing.T) {
+	t.Parallel()
+
+	var temporalPromoted bool
+	var services *coredata.Services
+	start := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.SourceVersion = "source-new"
+		promoteOnActivate := false
+		rejectPromotion := true
+		cfg.PromoteSharedStateOnActivate = &promoteOnActivate
+		cfg.RejectSharedStatePromotion = &rejectPromotion
+		cfg.FinishSharedStartupPromotion = func(context.Context) error {
+			temporalPromoted = true
+			return nil
+		}
+		cfg.TemporalWorkersPromoted = func() bool { return temporalPromoted }
+		cfg.Now = func() time.Time { return start.Add(5 * time.Minute) }
+		services = cfg.Services
+		if _, err := services.GestaltdSourceVersionState.Activate(
+			context.Background(),
+			"source-old",
+			start,
+			false,
+			appregistry.DefaultRolloutEnrollmentWindow,
+			appregistry.DefaultRolloutTimeout,
+		); err != nil {
+			t.Fatalf("seed source version: %v", err)
+		}
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	for _, path := range []string{
+		"/promote?source_version=source-new&minimum_healthy_instances=5",
+		"/promote/registry?source_version=source-new&minimum_healthy_instances=5",
+	} {
+		resp, err := http.Post(srv.URL+path, "", nil)
+		if err != nil {
+			t.Fatalf("POST %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("%s status = %d, want %d", path, resp.StatusCode, http.StatusForbidden)
+		}
+	}
+	if temporalPromoted {
+		t.Fatal("temporal promotion ran while shared state promotion was rejected")
+	}
+	current, err := services.GestaltdSourceVersionState.CurrentForAdmission(context.Background())
+	if err != nil {
+		t.Fatalf("CurrentForAdmission: %v", err)
+	}
+	if current != "source-old" {
+		t.Fatalf("current source version = %q, want source-old", current)
+	}
+}
+
 func TestPromoteEndpointPromotesSharedState(t *testing.T) {
 	t.Parallel()
 
