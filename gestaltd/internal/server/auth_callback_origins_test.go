@@ -21,6 +21,8 @@ func TestAuthCallbackURLUsesOnlyConfiguredHTTPSOrigins(t *testing.T) {
 		{"deploy.vt.valon.tools", "https://vt.valon.tools/api/v1/auth/login/callback"},
 	} {
 		t.Run(tc.host, func(t *testing.T) {
+			t.Parallel()
+
 			r := httptest.NewRequest("GET", "https://vt.valon.tools/api/v1/auth/login", nil)
 			r.Host = tc.host
 			r.Header.Set("X-Forwarded-Host", "attacker.example")
