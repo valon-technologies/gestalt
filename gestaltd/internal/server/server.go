@@ -212,6 +212,7 @@ type Server struct {
 	activateAppProviders          func(context.Context)
 	waitAppProvidersReady         func(context.Context) error
 	promoteSharedStateOnActivate  bool
+	rejectSharedStatePromotion    bool
 	finishSharedStartupPromotion  func(context.Context) error
 	temporalWorkersPromoted       func() bool
 	servingReady                  <-chan struct{}
@@ -297,6 +298,7 @@ type Config struct {
 	ActivateAppProviders          func(context.Context)
 	WaitAppProvidersReady         func(context.Context) error
 	PromoteSharedStateOnActivate  *bool
+	RejectSharedStatePromotion    *bool
 	FinishSharedStartupPromotion  func(context.Context) error
 	TemporalWorkersPromoted       func() bool
 	ServingReady                  <-chan struct{}
@@ -320,6 +322,13 @@ func resolveServerPromoteSharedStateOnActivate(cfg Config) bool {
 		return *cfg.PromoteSharedStateOnActivate
 	}
 	return true
+}
+
+func resolveServerRejectSharedStatePromotion(cfg Config) bool {
+	if cfg.RejectSharedStatePromotion != nil {
+		return *cfg.RejectSharedStatePromotion
+	}
+	return false
 }
 
 func New(cfg Config) (*Server, error) {
@@ -578,6 +587,7 @@ func New(cfg Config) (*Server, error) {
 		activateAppProviders:          cfg.ActivateAppProviders,
 		waitAppProvidersReady:         cfg.WaitAppProvidersReady,
 		promoteSharedStateOnActivate:  resolveServerPromoteSharedStateOnActivate(cfg),
+		rejectSharedStatePromotion:    resolveServerRejectSharedStatePromotion(cfg),
 		finishSharedStartupPromotion:  cfg.FinishSharedStartupPromotion,
 		temporalWorkersPromoted:       cfg.TemporalWorkersPromoted,
 		servingReady:                  cfg.ServingReady,

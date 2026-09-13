@@ -153,6 +153,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		ActivateAppProviders:         result.ActivateAppProviders,
 		WaitAppProvidersReady:        result.WaitAppProvidersReady,
 		PromoteSharedStateOnActivate: serverBoolPtr(!result.DeferSharedStartupWrites()),
+		RejectSharedStatePromotion:   cfg.Server.RejectSharedStatePromotion,
 		FinishSharedStartupPromotion: result.PromoteTemporalWorkers,
 		TemporalWorkersPromoted:      result.TemporalWorkersPromoted,
 		ServingReady:                 result.AppProvidersInitialized,

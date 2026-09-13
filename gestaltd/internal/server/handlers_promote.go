@@ -14,7 +14,18 @@ func (s *Server) mountPromoteRoute(r chi.Router) {
 	r.Post("/promote/registry", s.promoteRegistryHandler)
 }
 
+func (s *Server) rejectSharedStatePromotionIfDisabled(w http.ResponseWriter) bool {
+	if !s.rejectSharedStatePromotion {
+		return false
+	}
+	writeError(w, http.StatusForbidden, "shared state promotion is disabled for this revision")
+	return true
+}
+
 func (s *Server) promoteSharedStateHandler(w http.ResponseWriter, r *http.Request) {
+	if s.rejectSharedStatePromotionIfDisabled(w) {
+		return
+	}
 	req, errMsg := parseSharedActivationRequest(r.URL.Query())
 	if errMsg != "" {
 		writeError(w, http.StatusBadRequest, errMsg)
@@ -42,6 +53,9 @@ func (s *Server) promoteTemporalHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) promoteRegistryHandler(w http.ResponseWriter, r *http.Request) {
+	if s.rejectSharedStatePromotionIfDisabled(w) {
+		return
+	}
 	req, errMsg := parseSharedActivationRequest(r.URL.Query())
 	if errMsg != "" {
 		writeError(w, http.StatusBadRequest, errMsg)
