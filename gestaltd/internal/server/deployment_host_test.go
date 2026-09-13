@@ -1,0 +1,46 @@
+package server_test
+
+import (
+	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"net/http"
+	"testing"
+)
+
+func TestDeploymentHostRequiresBearerForEveryPath(t *testing.T) {
+	t.Setenv("GESTALTD_DEPLOYMENT_HOSTS", "deploy.vt.valon.tools")
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.UIReadiness = server.NewUIReadinessMonitor(server.UIReadinessMonitorConfig{ProbeBearer: "qualification-token"})
+	})
+	testutil.CloseOnCleanup(t, srv)
+	for _, path := range []string{"/startup-gate", "/fleet-readiness", "/", "/api/v1/test/webhooks", "/scim/v2", "/promote/registry"} {
+		req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = "deploy.vt.valon.tools"
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("%s: got %d", path, resp.StatusCode)
+		}
+	}
+	for _, host := range []string{"vt.valon.tools", "valon.tools", "deploy.vt.valon.tools"} {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/startup-gate", nil)
+		req.Host = host
+		if host == "deploy.vt.valon.tools" {
+			req.Header.Set("Authorization", "Bearer qualification-token")
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: got %d", host, resp.StatusCode)
+		}
+	}
+}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
@@ -48,6 +49,28 @@ func TestControllerDetectsAndAdmitsNewestVersion(t *testing.T) {
 	}
 	if len(reader.ifNoneMatch) != 2 || reader.ifNoneMatch[1] != `"v2"` {
 		t.Fatalf("If-None-Match values = %#v", reader.ifNoneMatch)
+	}
+}
+
+func TestControllerKeepsPendingVersionWhileRuntimeDeployPauseIsActive(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	enableAutoDeploy(t, services, "g-issues")
+	reader := &fakeReader{results: []*appregistry.AppIndexFetchResult{
+		{Index: testIndex("g-issues", "v2"), ETag: `"v2"`},
+	}}
+	installer := &fakeInstaller{errs: []error{coredata.ErrAppDeployPaused}}
+	controller := testController(services, reader, installer)
+	if err := controller.Reconcile(t.Context(), "g-issues"); err != nil {
+		t.Fatalf("Reconcile while paused: %v", err)
+	}
+	settings, err := services.AutoDeploySettings.Get(t.Context(), "g-issues")
+	if err != nil {
+		t.Fatalf("Get settings: %v", err)
+	}
+	if settings.PendingVersion != "v2" || settings.LastError != "" {
+		t.Fatalf("paused settings = %#v", settings)
 	}
 }
 

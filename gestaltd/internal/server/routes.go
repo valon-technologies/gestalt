@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ func (s *Server) connectMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) routes() {
 	r := s.router
+	r.Use(s.deploymentHostMiddleware)
 	r.Use(clientKindTelemetryMiddleware)
 	r.Use(requestMetaMiddleware)
 	r.Use(routePatternTelemetryMiddleware)
@@ -314,4 +316,24 @@ func (s *Server) servePrometheusMetrics(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s.prometheusMetrics.ServeHTTP(w, r)
+}
+
+// Deployment hosts expose a tagged revision, so every path requires the
+// qualification credential even when a normal user session or webhook would
+// otherwise be accepted. Ingress must preserve Host and restrict source CIDRs.
+func (s *Server) deploymentHostMiddleware(next http.Handler) http.Handler {
+	hosts := strings.Split(os.Getenv("GESTALTD_DEPLOYMENT_HOSTS"), ",")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := strings.ToLower(strings.TrimSuffix(strings.Split(r.Host, ":")[0], "."))
+		for _, restricted := range hosts {
+			if restricted = strings.ToLower(strings.TrimSpace(restricted)); restricted != "" && host == restricted {
+				if !s.appVersionPauseAuthorized(r) {
+					writeError(w, http.StatusUnauthorized, "deployment qualification bearer token is required")
+					return
+				}
+				break
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }

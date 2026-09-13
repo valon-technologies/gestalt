@@ -2,16 +2,74 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 func (s *Server) mountPromoteRoute(r chi.Router) {
 	r.Post("/promote", s.promoteSharedStateHandler)
 	r.Post("/promote/temporal", s.promoteTemporalHandler)
 	r.Post("/promote/registry", s.promoteRegistryHandler)
+	r.Post("/deployment/app-version-pause", s.acquireAppVersionPauseHandler)
+	r.Delete("/deployment/app-version-pause", s.releaseAppVersionPauseHandler)
+}
+
+func (s *Server) appVersionPauseAuthorized(r *http.Request) bool {
+	if s.uiReadiness == nil || strings.TrimSpace(s.uiReadiness.probeBearer) == "" {
+		return false
+	}
+	const prefix = "Bearer "
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, prefix) {
+		return false
+	}
+	want := []byte(strings.TrimSpace(s.uiReadiness.probeBearer))
+	got := []byte(strings.TrimSpace(strings.TrimPrefix(header, prefix)))
+	return len(want) == len(got) && subtle.ConstantTimeCompare(want, got) == 1
+}
+
+func (s *Server) changeAppVersionPauseHandler(w http.ResponseWriter, r *http.Request, acquire bool) {
+	if !s.appVersionPauseAuthorized(r) {
+		writeError(w, http.StatusUnauthorized, "deployment qualification bearer token is required")
+		return
+	}
+	if s.gestaltdSourceVersions == nil {
+		writeError(w, http.StatusServiceUnavailable, "source version state is unavailable")
+		return
+	}
+	owner := strings.TrimSpace(firstQueryValue(r.URL.Query(), "owner"))
+	token := strings.TrimSpace(r.Header.Get("X-Valon-Deploy-Token"))
+	var err error
+	if acquire {
+		_, err = s.gestaltdSourceVersions.AcquireAppDeployPause(r.Context(), owner, token)
+	} else {
+		_, err = s.gestaltdSourceVersions.ReleaseAppDeployPause(r.Context(), owner, token)
+	}
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, coredata.ErrAppDeployPauseConflict) {
+			status = http.StatusConflict
+		} else if strings.Contains(err.Error(), "required") {
+			status = http.StatusBadRequest
+		}
+		writeError(w, status, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "owner": owner})
+}
+
+func (s *Server) acquireAppVersionPauseHandler(w http.ResponseWriter, r *http.Request) {
+	s.changeAppVersionPauseHandler(w, r, true)
+}
+
+func (s *Server) releaseAppVersionPauseHandler(w http.ResponseWriter, r *http.Request) {
+	s.changeAppVersionPauseHandler(w, r, false)
 }
 
 func (s *Server) rejectSharedStatePromotionIfDisabled(w http.ResponseWriter) bool {

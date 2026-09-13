@@ -65,6 +65,57 @@ func TestActivateWithoutSharedPromotionLeavesSourceVersionUnchanged(t *testing.T
 	}
 }
 
+func TestAppVersionPauseEndpointRequiresQualificationAndOwningToken(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 9, 13, 18, 0, 0, 0, time.UTC)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.UIReadiness = server.NewUIReadinessMonitor(server.UIReadinessMonitorConfig{
+			ProbeBearer: "qualification-token",
+		})
+		if _, err := cfg.Services.GestaltdSourceVersionState.Activate(
+			context.Background(), "source-a", start, false,
+			appregistry.DefaultRolloutEnrollmentWindow,
+			appregistry.DefaultRolloutTimeout,
+		); err != nil {
+			t.Fatalf("seed source version: %v", err)
+		}
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	request := func(method, deployToken, bearer string) int {
+		req, err := http.NewRequest(method, srv.URL+"/deployment/app-version-pause?owner=runtime-123", nil)
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		if deployToken != "" {
+			req.Header.Set("X-Valon-Deploy-Token", deployToken)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("pause request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	if got := request(http.MethodPost, "deploy-token", ""); got != http.StatusUnauthorized {
+		t.Fatalf("unauthorized acquire = %d", got)
+	}
+	if got := request(http.MethodPost, "deploy-token", "qualification-token"); got != http.StatusOK {
+		t.Fatalf("authorized acquire = %d", got)
+	}
+	if got := request(http.MethodDelete, "wrong-token", "qualification-token"); got != http.StatusConflict {
+		t.Fatalf("wrong-owner release = %d", got)
+	}
+	if got := request(http.MethodDelete, "deploy-token", "qualification-token"); got != http.StatusOK {
+		t.Fatalf("owning release = %d", got)
+	}
+}
+
 func TestPromoteRegistryRequiresTemporalWorkersFirst(t *testing.T) {
 	t.Parallel()
 

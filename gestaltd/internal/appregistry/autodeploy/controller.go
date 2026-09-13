@@ -306,7 +306,8 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 		})
 		return updateErr
 	case errors.Is(err, appregistry.ErrAppRolloutActive),
-		errors.Is(err, appregistry.ErrInstallVersionLocked):
+		errors.Is(err, appregistry.ErrInstallVersionLocked),
+		errors.Is(err, coredata.ErrAppDeployPaused):
 		return nil
 	case isCandidateRejection(err):
 		_, updateErr := c.Settings.Update(ctx, appName, func(current *core.AppAutoDeploySettings) error {

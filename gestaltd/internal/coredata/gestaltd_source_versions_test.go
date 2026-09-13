@@ -11,6 +11,39 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
+func TestAppDeployPauseFencesRolloutCreationAndRequiresOwnerToken(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 9, 13, 18, 0, 0, 0, time.UTC)
+	if _, err := services.GestaltdSourceVersionState.Activate(ctx, "source-a", start, false, 2*time.Minute, 15*time.Minute); err != nil {
+		t.Fatalf("Activate: %v", err)
+	}
+	if _, err := services.GestaltdSourceVersionState.AcquireAppDeployPause(ctx, "runtime-123", "token-a"); err != nil {
+		t.Fatalf("AcquireAppDeployPause: %v", err)
+	}
+	if _, err := services.GestaltdSourceVersionState.AcquireAppDeployPause(ctx, "runtime-123", "token-a"); err != nil {
+		t.Fatalf("idempotent AcquireAppDeployPause: %v", err)
+	}
+	rollout := &core.AppRollout{
+		App: "g-issues", Version: "v2", State: core.AppRolloutStateEnrolling,
+		CreatedAt: start, EnrollmentEndsAt: start.Add(time.Minute), Deadline: start.Add(10 * time.Minute),
+	}
+	if _, err := services.GestaltdSourceVersionState.CreateAppRollout(ctx, rollout); !errors.Is(err, coredata.ErrAppDeployPaused) {
+		t.Fatalf("CreateAppRollout error = %v, want app deploy paused", err)
+	}
+	if _, err := services.GestaltdSourceVersionState.ReleaseAppDeployPause(ctx, "runtime-123", "wrong-token"); !errors.Is(err, coredata.ErrAppDeployPauseConflict) {
+		t.Fatalf("wrong-token release error = %v, want conflict", err)
+	}
+	if _, err := services.GestaltdSourceVersionState.ReleaseAppDeployPause(ctx, "runtime-123", "token-a"); err != nil {
+		t.Fatalf("ReleaseAppDeployPause: %v", err)
+	}
+	if _, err := services.GestaltdSourceVersionState.CreateAppRollout(ctx, rollout); err != nil {
+		t.Fatalf("CreateAppRollout after release: %v", err)
+	}
+}
+
 func TestGestaltdSourceVersionActivationRetargetsActiveRollouts(t *testing.T) {
 	t.Parallel()
 

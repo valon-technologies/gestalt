@@ -239,6 +239,8 @@ type GestaltdSourceVersionState struct {
 	UpdatedAt                            time.Time
 	TemporalWorkersPromotedSourceVersion string
 	TemporalWorkersPromotedAt            time.Time
+	AppDeployPauseOwner                  string
+	AppDeployPauseToken                  string
 }
 
 type ExternalCredentialGrant struct {
