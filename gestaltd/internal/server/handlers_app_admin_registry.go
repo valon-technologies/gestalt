@@ -757,6 +757,8 @@ func writeAppAdminRegistryInstallError(w http.ResponseWriter, err error) {
 	case errors.Is(err, appregistry.ErrInstallVersionLocked),
 		errors.Is(err, appregistry.ErrAppRolloutActive):
 		status = http.StatusConflict
+	case errors.Is(err, coredata.ErrAppDeployPaused):
+		status = http.StatusLocked
 	case errors.Is(err, coredata.ErrGestaltdSourceVersionUnavailable):
 		status = http.StatusServiceUnavailable
 	case errors.Is(err, appregistry.ErrRegistrySourceMismatch):

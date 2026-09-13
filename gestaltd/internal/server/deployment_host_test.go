@@ -1,10 +1,11 @@
 package server_test
 
 import (
-	"github.com/valon-technologies/gestalt/server/internal/server"
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"net/http"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 func TestDeploymentHostRequiresBearerForEveryPath(t *testing.T) {
@@ -23,13 +24,18 @@ func TestDeploymentHostRequiresBearerForEveryPath(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			t.Fatal(err)
+		}
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("%s: got %d", path, resp.StatusCode)
 		}
 	}
 	for _, host := range []string{"vt.valon.tools", "valon.tools", "deploy.vt.valon.tools", "retained.deploy.vt.valon.tools"} {
-		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/startup-gate", nil)
+		req, err := http.NewRequest(http.MethodGet, srv.URL+"/startup-gate", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 		req.Host = host
 		if host == "deploy.vt.valon.tools" || host == "retained.deploy.vt.valon.tools" {
 			req.Header.Set("Authorization", "Bearer qualification-token")
@@ -38,7 +44,9 @@ func TestDeploymentHostRequiresBearerForEveryPath(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			t.Fatal(err)
+		}
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("%s: got %d", host, resp.StatusCode)
 		}
