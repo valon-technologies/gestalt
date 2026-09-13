@@ -6352,6 +6352,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		metadata := `{"account_key":"provider:v1:shared"}`
 		seedToken(t, svc, &core.ExternalCredential{
 			ID:           "tok-visible",
+			CreatedAt:    time.Unix(100, 0),
 			Subject:      principal.UserSubjectID(u.ID),
 			Audience:     "app-svc:workspace",
 			Qualifier:    "visible-label",
@@ -6360,6 +6361,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		})
 		seedToken(t, svc, &core.ExternalCredential{
 			ID:           "tok-hidden",
+			CreatedAt:    time.Unix(200, 0),
 			Subject:      principal.UserSubjectID(u.ID),
 			Audience:     "app-svc:workspace",
 			Qualifier:    "hidden-label",
