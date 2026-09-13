@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	stdpath "path"
 	"strconv"
 	"strings"
@@ -375,6 +376,31 @@ func browserLoginStateForNextPath(nextPath string) string {
 
 func (s *Server) authCallbackURL(r *http.Request) (string, error) {
 	base := s.publicBaseURL
+	// Compatibility origins need their own callback so the host-only login
+	// state cookie reaches the callback. Never trust an arbitrary request host
+	// or forwarded host when choosing an OAuth redirect URI.
+	for _, origin := range strings.FieldsFunc(os.Getenv("GESTALTD_AUTH_CALLBACK_ORIGINS"), func(r rune) bool { return r == ',' || r == ';' }) {
+		allowed, err := url.Parse(strings.TrimSpace(origin))
+		if err != nil || allowed.Scheme != "https" || allowed.Hostname() == "" || allowed.User != nil ||
+			(allowed.Path != "" && allowed.Path != "/") || allowed.RawQuery != "" || allowed.ForceQuery || allowed.Fragment != "" {
+			continue
+		}
+		requestOrigin, err := url.Parse("https://" + r.Host)
+		if err != nil || requestOrigin.User != nil || requestOrigin.Path != "" || requestOrigin.RawQuery != "" || requestOrigin.ForceQuery || requestOrigin.Fragment != "" {
+			continue
+		}
+		normalizedHost := func(u *url.URL) string {
+			port := u.Port()
+			if port == "" {
+				port = "443"
+			}
+			return strings.TrimSuffix(strings.ToLower(u.Hostname()), ".") + ":" + port
+		}
+		if normalizedHost(requestOrigin) == normalizedHost(allowed) {
+			base = strings.TrimRight(allowed.String(), "/")
+			break
+		}
+	}
 	if base == "" {
 		scheme := "http"
 		if r.TLS != nil {
