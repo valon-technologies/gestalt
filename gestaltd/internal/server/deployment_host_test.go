@@ -8,7 +8,7 @@ import (
 )
 
 func TestDeploymentHostRequiresBearerForEveryPath(t *testing.T) {
-	t.Setenv("GESTALTD_DEPLOYMENT_HOSTS", "deploy.vt.valon.tools")
+	t.Setenv("GESTALTD_DEPLOYMENT_HOSTS", "deploy.vt.valon.tools;retained.deploy.vt.valon.tools")
 	srv := newTestServer(t, func(cfg *server.Config) {
 		cfg.UIReadiness = server.NewUIReadinessMonitor(server.UIReadinessMonitorConfig{ProbeBearer: "qualification-token"})
 	})
@@ -28,10 +28,10 @@ func TestDeploymentHostRequiresBearerForEveryPath(t *testing.T) {
 			t.Fatalf("%s: got %d", path, resp.StatusCode)
 		}
 	}
-	for _, host := range []string{"vt.valon.tools", "valon.tools", "deploy.vt.valon.tools"} {
+	for _, host := range []string{"vt.valon.tools", "valon.tools", "deploy.vt.valon.tools", "retained.deploy.vt.valon.tools"} {
 		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/startup-gate", nil)
 		req.Host = host
-		if host == "deploy.vt.valon.tools" {
+		if host == "deploy.vt.valon.tools" || host == "retained.deploy.vt.valon.tools" {
 			req.Header.Set("Authorization", "Bearer qualification-token")
 		}
 		resp, err := http.DefaultClient.Do(req)

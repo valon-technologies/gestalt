@@ -322,7 +322,7 @@ func (s *Server) servePrometheusMetrics(w http.ResponseWriter, r *http.Request) 
 // qualification credential even when a normal user session or webhook would
 // otherwise be accepted. Ingress must preserve Host and restrict source CIDRs.
 func (s *Server) deploymentHostMiddleware(next http.Handler) http.Handler {
-	hosts := strings.Split(os.Getenv("GESTALTD_DEPLOYMENT_HOSTS"), ",")
+	hosts := strings.FieldsFunc(os.Getenv("GESTALTD_DEPLOYMENT_HOSTS"), func(r rune) bool { return r == ',' || r == ';' })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := strings.ToLower(strings.TrimSuffix(strings.Split(r.Host, ":")[0], "."))
 		for _, restricted := range hosts {
