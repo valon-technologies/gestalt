@@ -141,9 +141,10 @@ func (m *UIReadinessMonitor) Report() FleetReadinessReport {
 
 func (m *UIReadinessMonitor) evaluate() {
 	paths := make([]string, 0, len(m.mounted)+len(m.extraProbePaths))
-	for _, mounted := range m.mounted {
+	for index := range m.mounted {
+		mounted := &m.mounted[index]
 		if mounted.Handler != nil && strings.TrimSpace(mounted.Path) != "" {
-			paths = append(paths, mountedUIProbePaths(mounted)...)
+			paths = append(paths, mountedUIProbePaths(*mounted)...)
 		}
 	}
 	for _, path := range m.extraProbePaths {
