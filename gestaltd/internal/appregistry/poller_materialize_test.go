@@ -130,6 +130,34 @@ func TestCatalogPollerPreservesUnconfiguredInstallations(t *testing.T) {
 	if err != nil || len(known) != 1 || known[0].AppName != "g-issues" {
 		t.Fatalf("installation history changed: %v %v", known, err)
 	}
+	start := h.clock
+	if _, err := h.services.AppRollouts.Create(h.ctx, &core.AppRollout{
+		App: "g-issues", Version: h.fixture.Version, State: core.AppRolloutStateEnrolling,
+		CreatedAt: start, EnrollmentEndsAt: start.Add(time.Minute), Deadline: start.Add(2 * time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []struct {
+		after time.Duration
+		want  core.AppRolloutState
+	}{{time.Minute, core.AppRolloutStateRestarting}, {2 * time.Minute, core.AppRolloutStateFailed}} {
+		h.clock = start.Add(step.after)
+		if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+			t.Fatalf("reconcile unconfigured rollout: %v", err)
+		}
+		rollout, err := h.services.AppRollouts.Get(h.ctx, "g-issues")
+		if err != nil || rollout.State != step.want {
+			t.Fatalf("rollout after %s: %v %v, want %s", step.after, rollout, err, step.want)
+		}
+	}
+	active, err := h.services.AppRollouts.ListActive(h.ctx)
+	if err != nil || len(active) != 0 {
+		t.Fatalf("expired rollout still blocks admission: %v %v", active, err)
+	}
+	materializations, err = h.services.AppInstanceMaterializations.ListByInstance(h.ctx, "replica-a")
+	if err != nil || len(materializations) != 0 {
+		t.Fatalf("unconfigured rollout enrolled the instance: %v %v", materializations, err)
+	}
 	// A source that configures the app can still converge the same installation.
 	h.poller.AppRestarter = h.restarter
 	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
