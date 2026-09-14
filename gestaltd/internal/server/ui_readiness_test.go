@@ -1,8 +1,10 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -139,5 +141,66 @@ func TestFleetReadinessEndpoint(t *testing.T) {
 	srv.fleetReadinessReport(rec, httptest.NewRequest(http.MethodGet, "/fleet-readiness", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /fleet-readiness = %d, want 200", rec.Code)
+	}
+}
+
+func TestUIReadinessProbesUseBoundedConcurrencyAndWaitForEveryResult(t *testing.T) {
+	t.Parallel()
+	started := make(chan struct{}, 16)
+	release := make(chan struct{})
+	var active, peak atomic.Int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current := active.Add(1)
+		defer active.Add(-1)
+		for previous := peak.Load(); current > previous; previous = peak.Load() {
+			if peak.CompareAndSwap(previous, current) {
+				break
+			}
+		}
+		started <- struct{}{}
+		<-release
+		if r.URL.Path == "/probe/15" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	paths := make([]string, 16)
+	for index := range paths {
+		paths[index] = fmt.Sprintf("/probe/%d", index)
+	}
+	monitor := NewUIReadinessMonitor(UIReadinessMonitorConfig{
+		Handler: handler, ExtraProbePaths: paths,
+	})
+	done := make(chan struct{})
+	go func() { monitor.evaluate(); close(done) }()
+	for range 8 {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			close(release)
+			t.Fatal("the bounded probe batch did not start concurrently")
+		}
+	}
+	if monitor.ReadinessReason() == "" || monitor.Report().ReportedAt != 0 {
+		t.Error("unfinished probe batch was admitted")
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("probe evaluation did not finish")
+	}
+	if peak.Load() != 8 {
+		t.Fatalf("peak probe concurrency = %d, want 8", peak.Load())
+	}
+	report := monitor.Report()
+	if len(report.UIs) != len(paths) || monitor.ReadinessReason() == "" {
+		t.Fatalf("missing results or failed probe admitted: %+v", report)
+	}
+	for index, result := range report.UIs {
+		if result.Mount != paths[index] || result.Ready != (index != 15) {
+			t.Fatalf("probe result %d = %+v", index, result)
+		}
 	}
 }

@@ -140,29 +140,39 @@ func (m *UIReadinessMonitor) Report() FleetReadinessReport {
 }
 
 func (m *UIReadinessMonitor) evaluate() {
-	results := make([]UIProbeResult, 0, len(m.mounted)+len(m.extraProbePaths))
-	ready := true
-
-	for i := range m.mounted {
-		mounted := m.mounted[i]
-		if mounted.Handler == nil || strings.TrimSpace(mounted.Path) == "" {
-			continue
-		}
-		for _, path := range mountedUIProbePaths(mounted) {
-			result := probeMountedUI(m.handler, path, m.probeBearer)
-			results = append(results, result)
-			if !result.Ready {
-				ready = false
-			}
+	paths := make([]string, 0, len(m.mounted)+len(m.extraProbePaths))
+	for _, mounted := range m.mounted {
+		if mounted.Handler != nil && strings.TrimSpace(mounted.Path) != "" {
+			paths = append(paths, mountedUIProbePaths(mounted)...)
 		}
 	}
 	for _, path := range m.extraProbePaths {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			continue
+		if path = strings.TrimSpace(path); path != "" {
+			paths = append(paths, path)
 		}
-		result := probeMountedUI(m.handler, path, m.probeBearer)
-		results = append(results, result)
+	}
+
+	// These are ordinary read-only HTTP requests. Bound their concurrency so a
+	// large inventory fits the instance startup window without a request burst.
+	results := make([]UIProbeResult, len(paths))
+	jobs := make(chan int, len(paths))
+	for index := range paths {
+		jobs <- index
+	}
+	close(jobs)
+	var workers sync.WaitGroup
+	for range min(8, len(paths)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				results[index] = probeMountedUI(m.handler, paths[index], m.probeBearer)
+			}
+		}()
+	}
+	workers.Wait()
+	ready := true
+	for _, result := range results {
 		if !result.Ready {
 			ready = false
 		}
