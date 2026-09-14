@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 )
+
+const adminRegistrySummaryConcurrency = 8
 
 type adminRegistryAppSummary struct {
 	App            string                  `json:"app"`
@@ -135,16 +138,49 @@ func (s *Server) listAdminRegistryApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apps := s.configuredRegistryApps()
-	out := make([]adminRegistryAppSummary, 0, len(apps))
-	for _, app := range apps {
-		summary, err := s.loadAdminRegistryAppSummary(r, app, nil)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to load registry app state")
-			return
-		}
-		out = append(out, summary)
+	out, err := loadAdminRegistryAppSummaries(apps, func(app configuredRegistryApp) (adminRegistryAppSummary, error) {
+		return s.loadAdminRegistryAppSummary(r, app, nil)
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load registry app state")
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func loadAdminRegistryAppSummaries(
+	apps []configuredRegistryApp,
+	load func(configuredRegistryApp) (adminRegistryAppSummary, error),
+) ([]adminRegistryAppSummary, error) {
+	out := make([]adminRegistryAppSummary, len(apps))
+	jobs := make(chan int)
+	workerCount := min(adminRegistrySummaryConcurrency, len(apps))
+	var workers sync.WaitGroup
+	var firstErr error
+	var errOnce sync.Once
+	for range workerCount {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				summary, err := load(apps[index])
+				if err != nil {
+					errOnce.Do(func() { firstErr = err })
+					continue
+				}
+				out[index] = summary
+			}
+		}()
+	}
+	for index := range apps {
+		jobs <- index
+	}
+	close(jobs)
+	workers.Wait()
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return out, nil
 }
 
 func (s *Server) getAdminRegistryApp(w http.ResponseWriter, r *http.Request) {
