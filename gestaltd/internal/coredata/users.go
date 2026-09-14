@@ -24,6 +24,19 @@ func NewUserService(ds indexeddb.IndexedDB) *UserService {
 	return &UserService{store: ds.ObjectStore(StoreUsers)}
 }
 
+// ListUsers reads the workspace directory without exposing credentials or tokens.
+func (s *UserService) ListUsers(ctx context.Context) ([]*core.User, error) {
+	records, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	users := make([]*core.User, 0, len(records))
+	for _, record := range records {
+		users = append(users, recordToUser(record))
+	}
+	return users, nil
+}
+
 func (s *UserService) GetUser(ctx context.Context, id string) (*core.User, error) {
 	rec, err := s.store.Get(ctx, id)
 	if err != nil {

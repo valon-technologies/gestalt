@@ -203,6 +203,7 @@ func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 			s.mountAdminAppRolloutRoutes(r)
 			s.mountAdminMetricsRoutes(r)
 			s.mountAdminPlatformAdminsRoutes(r)
+			s.mountAdminUsersRoutes(r)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(10 * time.Minute))
