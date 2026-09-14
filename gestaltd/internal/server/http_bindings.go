@@ -51,7 +51,6 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 	slices.Sort(names)
 
 	mounted := make([]MountedHTTPBinding, 0)
-	legacyMounted := make([]MountedHTTPBinding, 0)
 	for _, pluginName := range names {
 		entry := entries[pluginName]
 		if entry == nil {
@@ -101,9 +100,6 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 				if _, ok := operationIDs[target]; !ok {
 					return nil, fmt.Errorf("http binding %s.%s target %q is not in provider catalog", pluginName, bindingName, target)
 				}
-				if relativePathConflictsWithGenericOperation(relativePath, target, operationIDs) {
-					return nil, fmt.Errorf("http binding %s.%s path %q conflicts with the generic operation route", pluginName, bindingName, binding.Path)
-				}
 				if relativePathConflictsWithGenericOperation(namespacedHTTPBindingRelativePath(relativePath), target, operationIDs) {
 					return nil, fmt.Errorf("http binding %s.%s namespaced path conflicts with the generic operation route", pluginName, bindingName)
 				}
@@ -126,14 +122,8 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 				Security:       scheme,
 			}
 			mounted = append(mounted, mountedBinding)
-
-			// Keep the pre-namespace route as a temporary rollback alias while
-			// callers migrate to the host-owned /webhooks namespace.
-			mountedBinding.Path = legacyMountedHTTPBindingPath(pluginName, relativePath)
-			legacyMounted = append(legacyMounted, mountedBinding)
 		}
 	}
-	mounted = appendNonConflictingLegacyHTTPBindings(mounted, legacyMounted)
 	if err := validateMountedHTTPBindingRoutes(mounted, mountedUIs); err != nil {
 		return nil, err
 	}
@@ -159,7 +149,7 @@ func normalizeHTTPBindingMountedPath(pathValue string) (string, error) {
 }
 
 func mountedHTTPBindingPath(pluginName, relativePath string) string {
-	return legacyMountedHTTPBindingPath(pluginName, namespacedHTTPBindingRelativePath(relativePath))
+	return "/api/v1/" + strings.TrimSpace(pluginName) + namespacedHTTPBindingRelativePath(relativePath)
 }
 
 func namespacedHTTPBindingRelativePath(relativePath string) string {
@@ -167,28 +157,6 @@ func namespacedHTTPBindingRelativePath(relativePath string) string {
 		return httpBindingRouteNamespace
 	}
 	return httpBindingRouteNamespace + relativePath
-}
-
-func legacyMountedHTTPBindingPath(pluginName, relativePath string) string {
-	base := "/api/v1/" + strings.TrimSpace(pluginName)
-	if relativePath == "" || relativePath == "/" {
-		return base
-	}
-	return base + relativePath
-}
-
-func appendNonConflictingLegacyHTTPBindings(canonical, legacy []MountedHTTPBinding) []MountedHTTPBinding {
-	canonicalRoutes := make(map[string]struct{}, len(canonical))
-	for i := range canonical {
-		canonicalRoutes[canonical[i].Method+" "+canonical[i].Path] = struct{}{}
-	}
-	for i := range legacy {
-		if _, exists := canonicalRoutes[legacy[i].Method+" "+legacy[i].Path]; exists {
-			continue
-		}
-		canonical = append(canonical, legacy[i])
-	}
-	return canonical
 }
 
 func relativePathConflictsWithGenericOperation(relativePath, target string, operationIDs map[string]struct{}) bool {

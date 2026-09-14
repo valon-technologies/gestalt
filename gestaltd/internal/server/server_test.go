@@ -10793,7 +10793,7 @@ func TestVisibleFalseGenericRouteSkipsSessionCatalogCredentialResolution(t *test
 	}
 }
 
-func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
+func TestHostedHTTPBinding_DoesNotConflictWithGenericOperationRoutes(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
@@ -10801,6 +10801,9 @@ func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 		StubIntegration: coretesting.StubIntegration{
 			N:        "reports",
 			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(fmt.Sprintf(`{"operation":%q}`, operation))}, nil
+			},
 		},
 		ops: []core.Operation{
 			{Name: "status", Method: http.MethodGet},
@@ -10830,12 +10833,29 @@ func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 		},
 	}
 
-	_, err := server.New(cfg)
-	if err == nil {
-		t.Fatal("expected generic operation route conflict")
+	s, err := server.New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
 	}
-	if !strings.Contains(err.Error(), "generic operation route") {
-		t.Fatalf("error = %v, want generic operation route conflict", err)
+	ts := httptest.NewServer(s)
+	testutil.CloseOnCleanup(t, ts)
+	for _, route := range []struct {
+		path   string
+		status int
+		body   string
+	}{
+		{"/api/v1/reports/status", http.StatusUnauthorized, `{"error":"missing authorization"}`},
+		{"/api/v1/reports/webhooks/status", http.StatusOK, `{"operation":"handle_status"}`},
+	} {
+		resp, err := http.Get(ts.URL + route.path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", route.path, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != route.status || strings.TrimSpace(string(body)) != route.body {
+			t.Fatalf("GET %s = %d %s, want %d %s", route.path, resp.StatusCode, body, route.status, route.body)
+		}
 	}
 }
 
@@ -10885,7 +10905,7 @@ func TestHostedHTTPBinding_RejectsWebhooksOperationRouteConflict(t *testing.T) {
 	}
 }
 
-func TestHostedHTTPBinding_AllowsOverrideOfGenericOperationRoute(t *testing.T) {
+func TestHostedHTTPBinding_AllowsBindingToGenericOperation(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
@@ -10961,6 +10981,12 @@ func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
 						Security: "public",
 						Target:   "receive_event",
 					},
+					"root": {
+						Path: "/", Method: http.MethodPost, Security: "public", Target: "receive_event",
+					},
+					"nested": {
+						Path: "/webhooks/delivery", Method: http.MethodPost, Security: "public", Target: "receive_event",
+					},
 				},
 			},
 		}
@@ -10968,12 +10994,18 @@ func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	const body = `{"event":"opened"}`
-	paths := []string{
-		"/api/v1/" + providerName + "/webhooks/delivery",
-		"/api/v1/" + providerName + "/delivery",
+	paths := []struct {
+		path   string
+		status int
+	}{
+		{"/api/v1/" + providerName + "/webhooks/delivery", http.StatusOK},
+		{"/api/v1/" + providerName + "/webhooks", http.StatusOK},
+		{"/api/v1/" + providerName + "/webhooks/webhooks/delivery", http.StatusOK},
+		{"/api/v1/" + providerName + "/delivery", http.StatusNotFound},
+		{"/api/v1/" + providerName, http.StatusNotFound},
 	}
-	for _, requestPath := range paths {
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+requestPath, strings.NewReader(body))
+	for _, route := range paths {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+route.path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Slack-Request-Timestamp", "123")
 		req.Header.Set("X-Slack-Signature", "v0=abc")
@@ -10982,8 +11014,16 @@ func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
 			t.Fatalf("http binding request: %v", err)
 		}
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusOK)
+		if resp.StatusCode != route.status {
+			t.Fatalf("%s status = %d, want %d", route.path, resp.StatusCode, route.status)
+		}
+		if route.status == http.StatusNotFound {
+			select {
+			case <-workflowSeen:
+				t.Fatal("removed route invoked the provider")
+			default:
+			}
+			continue
 		}
 
 		var workflow map[string]any
@@ -10996,8 +11036,8 @@ func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
 		if httpContext == nil {
 			t.Fatal("workflow http context is missing")
 		}
-		if got := invocation.WorkflowContextString(httpContext, "path"); got != requestPath {
-			t.Fatalf("workflow http path = %q, want %q", got, requestPath)
+		if got := invocation.WorkflowContextString(httpContext, "path"); got != route.path {
+			t.Fatalf("workflow http path = %q, want %q", got, route.path)
 		}
 		headers, ok := httpContext["headers"].(map[string]any)
 		if !ok {
