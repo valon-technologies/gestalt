@@ -49,6 +49,14 @@ type boundaryUserStore struct {
 	err          error
 }
 
+func (b boundaryUserStore) ListUsers(context.Context) ([]*core.User, error) {
+	users := make([]*core.User, 0, len(b.usersByEmail))
+	for email, id := range b.usersByEmail {
+		users = append(users, &core.User{ID: id, Email: email})
+	}
+	return users, b.err
+}
+
 func (b boundaryUserStore) FindOrCreateUser(_ context.Context, email string) (*core.User, error) {
 	if b.err != nil {
 		return nil, b.err

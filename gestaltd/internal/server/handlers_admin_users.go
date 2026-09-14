@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -26,14 +25,11 @@ func (s *Server) mountAdminUsersRoutes(r chi.Router) {
 }
 
 func (s *Server) listAdminUsers(w http.ResponseWriter, r *http.Request) {
-	directory, ok := s.users.(interface {
-		ListUsers(context.Context) ([]*core.User, error)
-	})
-	if !ok {
+	if s.users == nil {
 		writeError(w, http.StatusServiceUnavailable, "user directory is unavailable")
 		return
 	}
-	users, err := directory.ListUsers(r.Context())
+	users, err := s.users.ListUsers(r.Context())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "user directory is unavailable")
 		return

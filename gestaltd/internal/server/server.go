@@ -95,11 +95,12 @@ type AppRuntimeState interface {
 	WithRunningVersion(app string, fn func(version string) error) error
 }
 
-// userStore is the persisted user lookup the server needs to canonicalize
-// human identities before authorization.
+// userStore is the persisted workspace directory used to resolve human
+// identities before authorization and list users for platform admins.
 type userStore interface {
 	principal.CredentialUserResolver
 	GetUser(ctx context.Context, id string) (*core.User, error)
+	ListUsers(ctx context.Context) ([]*core.User, error)
 }
 
 // credentialUserResolver returns the user store used to canonicalize human

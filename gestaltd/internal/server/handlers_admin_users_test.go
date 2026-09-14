@@ -30,6 +30,7 @@ func TestAdminDirectoryRequiresPlatformAdmin(t *testing.T) {
 			{"authorization-unavailable", true, true, true, http.StatusInternalServerError},
 		} {
 			t.Run(endpoint.path+"/"+scenario.name, func(t *testing.T) {
+				t.Parallel()
 				ts, authz := newAuthorizedAdminTestServerWithProvider(t, scenario.admin)
 				testutil.CloseOnCleanup(t, ts)
 				if scenario.authzError {
@@ -46,7 +47,7 @@ func TestAdminDirectoryRequiresPlatformAdmin(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer resp.Body.Close()
+				defer func() { _ = resp.Body.Close() }()
 				body, _ := io.ReadAll(resp.Body)
 				if resp.StatusCode != scenario.status {
 					t.Fatalf("status=%d want=%d: %s", resp.StatusCode, scenario.status, body)
@@ -72,7 +73,7 @@ func TestAdminDirectoryReturnsOnlyIDsAndEmails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var payload struct {
 		Users []map[string]any `json:"users"`
 	}
@@ -88,15 +89,15 @@ func TestAdminDirectoryReturnsOnlyIDsAndEmails(t *testing.T) {
 		}
 	}
 
-	resp, err = http.Post(ts.URL+"/admin/api/v1/users/lookup-emails", "application/json", strings.NewReader(`{"userIds":["user:`+alice+`","`+alice+`","invalid","33333333-3333-4333-8333-333333333333"]}`))
+	lookupResp, err := http.Post(ts.URL+"/admin/api/v1/users/lookup-emails", "application/json", strings.NewReader(`{"userIds":["user:`+alice+`","`+alice+`","invalid","33333333-3333-4333-8333-333333333333"]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = lookupResp.Body.Close() }()
 	var lookup struct {
 		Emails map[string]string `json:"emails"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&lookup); err != nil {
+	if err := json.NewDecoder(lookupResp.Body).Decode(&lookup); err != nil {
 		t.Fatal(err)
 	}
 	if len(lookup.Emails) != 1 || lookup.Emails[alice] != "alice@example.test" {
@@ -117,7 +118,7 @@ func TestAdminDirectoryRejectsInvalidLookupPayload(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status=%d", resp.StatusCode)
 		}
