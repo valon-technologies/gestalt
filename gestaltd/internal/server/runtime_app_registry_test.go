@@ -22,6 +22,7 @@ type startupRecordingRestarter struct {
 	stoppedApp     string
 }
 
+func (*startupRecordingRestarter) Configured(string) bool           { return true }
 func (*startupRecordingRestarter) Restartable(string) (bool, error) { return true, nil }
 func (r *startupRecordingRestarter) StopApp(_ context.Context, app string) error {
 	r.stoppedApp = app

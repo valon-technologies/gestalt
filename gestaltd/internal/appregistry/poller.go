@@ -377,6 +377,11 @@ func (p *CatalogPoller) reconcileApp(
 	if appName == "" {
 		return nil
 	}
+	// The catalog retains installations from other source configurations.
+	// Only configured apps belong to this instance's reconciliation scope.
+	if p.AppRestarter != nil && !p.AppRestarter.Configured(appName) {
+		return nil
+	}
 	if !p.beginInflight(appName) {
 		return nil
 	}

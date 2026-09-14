@@ -277,6 +277,7 @@ type Result struct {
 	SCIMHandler             http.Handler
 	DevSupervisor           *providerdev.Supervisor
 	AppRestarter            interface {
+		Configured(string) bool
 		Restartable(string) (bool, error)
 		StopApp(context.Context, string) error
 		StartApp(context.Context, string, string) error

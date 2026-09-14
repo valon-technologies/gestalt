@@ -28,6 +28,8 @@ type recordingAppRestarter struct {
 	runningVersion string
 }
 
+func (*recordingAppRestarter) Configured(string) bool { return true }
+
 func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
 	if r == nil {
 		return false, nil
