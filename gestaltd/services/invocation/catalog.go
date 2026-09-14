@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -362,7 +363,8 @@ func FilterCatalogForPrincipal(
 	filtered := cat.Clone()
 	operations := make([]catalog.CatalogOperation, 0, len(filtered.Operations))
 	for i := range filtered.Operations {
-		if results[i] == nil {
+		if results[i].Err == nil {
+			filtered.Operations[i].AllowedRoles = slices.Clone(results[i].AllowedRoles)
 			operations = append(operations, filtered.Operations[i])
 		}
 	}

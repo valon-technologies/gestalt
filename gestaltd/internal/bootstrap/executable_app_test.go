@@ -2591,7 +2591,13 @@ paths:
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+	services := testutil.NewStubServices(t)
+	if err := services.AppAllowedOperations.Patch(context.Background(), "notion", core.AppOperationPolicy{
+		"list_pages": {"admin"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{Services: services})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}

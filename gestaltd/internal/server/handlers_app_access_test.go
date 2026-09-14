@@ -322,12 +322,8 @@ func serveAppAccessTestRequest(t *testing.T, server *Server, method string, payl
 	}
 	req = req.WithContext(ctx)
 	recorder := httptest.NewRecorder()
-	if method == http.MethodPut {
-		req.Header.Set("Content-Type", "application/json")
-		server.updateAppAccess(recorder, req)
-	} else {
-		server.getAppAccess(recorder, req)
-	}
+	req.Header.Set("Content-Type", "application/json")
+	server.appAccessHandler(recorder, req)
 	return recorder
 }
 

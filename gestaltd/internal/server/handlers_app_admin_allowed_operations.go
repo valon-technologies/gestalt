@@ -1,22 +1,17 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
 
@@ -32,254 +27,124 @@ type appAdminAllowedOperationsResponse struct {
 }
 
 type appAdminAllowedOperationsUpdateRequest struct {
-	Operations map[string]*operationexposure.OperationOverride `json:"operations"`
-	Removed    []string                                        `json:"removed,omitempty"`
+	Operations map[string]struct {
+		AllowedRoles []string `json:"allowedRoles"`
+	} `json:"operations"`
+	Removed []string `json:"removed,omitempty"`
 }
 
 func (s *Server) mountAppAdminAllowedOperationsRoutes(r chi.Router) {
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminUIObservabilityMiddleware, s.appAdminAuthorizationMiddleware).
-		Get("/apps/{app}/admin/allowed-operations", s.getAppAdminAllowedOperations)
+		Get("/apps/{app}/admin/allowed-operations", s.appAdminAllowedOperationsHandler)
 	r.With(s.pluginRouteAuthMiddleware("app"), s.appAdminUIObservabilityMiddleware, s.appAdminAuthorizationMiddleware).
-		Put("/apps/{app}/admin/allowed-operations", s.putAppAdminAllowedOperations)
+		Put("/apps/{app}/admin/allowed-operations", s.appAdminAllowedOperationsHandler)
 }
 
-func (s *Server) getAppAdminAllowedOperations(w http.ResponseWriter, r *http.Request) {
-	appName := strings.TrimSpace(chi.URLParam(r, "app"))
-	if appName == "" {
-		writeError(w, http.StatusBadRequest, "app is required")
-		return
-	}
-	entry, ok := s.pluginDefs[appName]
-	if !ok || entry == nil {
+func (s *Server) appAdminAllowedOperationsHandler(w http.ResponseWriter, r *http.Request) {
+	app := chi.URLParam(r, "app")
+	if s.pluginDefs[app] == nil {
 		writeError(w, http.StatusNotFound, "app not found")
 		return
 	}
-	rows, err := s.projectAppAdminAllowedOperationRows(r.Context(), appName, entry)
-	if err != nil {
-		slog.Error("app admin allowed operations projection failed", "app", appName, "error", err)
-		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
-		return
-	}
-	writeJSON(w, http.StatusOK, appAdminAllowedOperationsResponse{
-		App:        appName,
-		Operations: rows,
-	})
-}
-
-func (s *Server) putAppAdminAllowedOperations(w http.ResponseWriter, r *http.Request) {
-	appName := strings.TrimSpace(chi.URLParam(r, "app"))
-	if appName == "" {
-		writeError(w, http.StatusBadRequest, "app is required")
-		return
-	}
-	entry, ok := s.pluginDefs[appName]
-	if !ok || entry == nil {
-		writeError(w, http.StatusNotFound, "app not found")
+	prov, ok := s.getProvider(r.Context(), w, app)
+	if !ok {
 		return
 	}
 	if s.appAllowedOperations == nil {
 		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
 		return
 	}
-	var request appAdminAllowedOperationsUpdateRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	// Use the provider's exposed catalog, including aliases and unrestricted
+	// operations. Runtime permissions must never become the definition baseline.
+	baseline, err := s.appAccessBaselineCatalog(r, app, prov)
+	if err != nil || baseline == nil {
+		slog.ErrorContext(r.Context(), "app operation catalog unavailable", "app", app, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "app catalog is unavailable")
 		return
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	policy, err := s.appAllowedOperations.GetAppOperationPolicy(r.Context(), app)
+	if err != nil {
+		s.writeAppOperationPolicyError(w, r, app, err)
 		return
 	}
-	if request.Operations == nil {
-		writeError(w, http.StatusBadRequest, "operations is required")
-		return
-	}
-	if err := s.validateAppAdminAllowedOperationsUpdate(entry, request); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := s.appAllowedOperations.EnsureStore(r.Context()); err != nil {
-		slog.Error("app admin allowed operations store unavailable", "app", appName, "error", err)
-		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
-		return
-	}
-	current, err := s.appAllowedOperations.GetOverlay(r.Context(), appName)
-	if err != nil && !errors.Is(err, core.ErrNotFound) {
-		slog.Error("app admin allowed operations load failed", "app", appName, "error", err)
-		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
-		return
-	}
-	overlay := coredata.MergeOverlayPatch(
-		current,
-		appName,
-		request.Operations,
-		normalizeRemovedOperationIDs(request.Removed),
-	)
-	if overlay == nil {
-		if err := s.appAllowedOperations.DeleteOverlay(r.Context(), appName); err != nil {
-			slog.Error("app admin allowed operations delete failed", "app", appName, "error", err)
-			writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
+	if r.Method == http.MethodPut {
+		var request appAdminAllowedOperationsUpdateRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
-	} else if err := s.appAllowedOperations.SetOverlay(r.Context(), overlay); err != nil {
-		slog.Error("app admin allowed operations update failed", "app", appName, "error", err)
-		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
-		return
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		patch, err := request.permissionPatch(baseline, policy)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := s.appAllowedOperations.Patch(r.Context(), app, patch); err != nil {
+			s.writeAppOperationPolicyError(w, r, app, err)
+			return
+		}
+		policy, err = s.appAllowedOperations.GetAppOperationPolicy(r.Context(), app)
+		if err != nil {
+			s.writeAppOperationPolicyError(w, r, app, err)
+			return
+		}
 	}
-	// Rebuild this app provider so invoke gates and catalogs pick up the merged overlay.
-	if err := s.restartAppProviderForAllowedOperations(r.Context(), appName); err != nil {
-		slog.Error("app admin allowed operations provider restart failed", "app", appName, "error", err)
-		writeError(w, http.StatusServiceUnavailable, "allowed operations were saved but the app provider did not restart")
-		return
+	rows := make([]appAdminAllowedOperationRow, 0, len(baseline.Operations))
+	effective := policy.Catalog(baseline)
+	for i := range effective.Operations {
+		operation := &effective.Operations[i]
+		source := "config"
+		if _, changed := policy[operation.ID]; changed {
+			source = "runtime"
+		}
+		rows = append(rows, appAdminAllowedOperationRow{
+			ID: operation.ID, AllowedRoles: operation.AllowedRoles, Source: source,
+		})
 	}
-	rows, err := s.projectAppAdminAllowedOperationRows(r.Context(), appName, entry)
-	if err != nil {
-		slog.Error("app admin allowed operations projection failed", "app", appName, "error", err)
-		writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
-		return
-	}
-	writeJSON(w, http.StatusOK, appAdminAllowedOperationsResponse{
-		App:        appName,
-		Operations: rows,
-	})
+	slices.SortFunc(rows, func(a, b appAdminAllowedOperationRow) int { return strings.Compare(a.ID, b.ID) })
+	writeJSON(w, http.StatusOK, appAdminAllowedOperationsResponse{App: app, Operations: rows})
 }
 
-func (s *Server) restartAppProviderForAllowedOperations(ctx context.Context, appName string) error {
-	if s.appProviderRestarter == nil {
-		return errors.New("app provider restarter is unavailable")
-	}
-	return s.appProviderRestarter.RestartApp(ctx, appName)
+func (s *Server) writeAppOperationPolicyError(w http.ResponseWriter, r *http.Request, app string, err error) {
+	slog.ErrorContext(r.Context(), "app operation permissions unavailable", "app", app, "error", err)
+	writeError(w, http.StatusServiceUnavailable, "allowed operations are unavailable")
 }
 
-func (s *Server) projectAppAdminAllowedOperationRows(
-	ctx context.Context,
-	appName string,
-	entry *config.ProviderEntry,
-) ([]appAdminAllowedOperationRow, error) {
-	static := entry.EffectiveAllowedOperations()
-	var runtimeOps map[string]*operationexposure.OperationOverride
-	var removed []string
-	if s.appAllowedOperations != nil {
-		overlay, err := s.appAllowedOperations.GetOverlay(ctx, appName)
-		if err == nil && overlay != nil {
-			runtimeOps = overlay.Operations
-			removed = overlay.Removed
-		} else if err != nil && !errors.Is(err, core.ErrNotFound) {
+func (request appAdminAllowedOperationsUpdateRequest) permissionPatch(baseline *catalog.Catalog, current core.AppOperationPolicy) (core.AppOperationPolicy, error) {
+	if request.Operations == nil {
+		return nil, errors.New("operations is required")
+	}
+	known := make(map[string]bool, len(baseline.Operations)+len(current))
+	for i := range baseline.Operations {
+		known[baseline.Operations[i].ID] = true
+	}
+	// A temporarily unavailable session catalog must not strand existing policy.
+	for id := range current {
+		known[id] = true
+	}
+	patch := make(core.AppOperationPolicy, len(request.Operations)+len(request.Removed))
+	for _, id := range request.Removed {
+		patch[id] = nil
+	}
+	for id, permission := range request.Operations {
+		if _, removed := patch[id]; removed {
+			return nil, errors.New("operation " + id + " cannot be both updated and removed")
+		}
+		roles, err := packageio.NormalizeUIAllowedRoles("allowedRoles", permission.AllowedRoles)
+		if err != nil {
 			return nil, err
 		}
+		patch[id] = roles
 	}
-	effective := operationexposure.MergeAllowedOperationsWithOverlay(static, runtimeOps, removed)
-	ids := slices.Sorted(maps.Keys(effective))
-	rows := make([]appAdminAllowedOperationRow, 0, len(ids))
-	for _, id := range ids {
-		override := effective[id]
-		row := appAdminAllowedOperationRow{
-			ID:     id,
-			Source: allowedOperationSource(id, static, runtimeOps),
-		}
-		if override != nil && len(override.AllowedRoles) > 0 {
-			row.AllowedRoles = append([]string(nil), override.AllowedRoles...)
-		}
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
-func allowedOperationSource(
-	id string,
-	static map[string]*operationexposure.OperationOverride,
-	runtimeOps map[string]*operationexposure.OperationOverride,
-) string {
-	if runtimeOps[id] != nil {
-		return "runtime"
-	}
-	if static[id] != nil {
-		return "config"
-	}
-	return "runtime"
-}
-
-func (s *Server) validateAppAdminAllowedOperationsUpdate(
-	entry *config.ProviderEntry,
-	request appAdminAllowedOperationsUpdateRequest,
-) error {
-	known := appManifestOperationIDs(entry)
-	for _, id := range request.Removed {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return errors.New("removed operation id is required")
-		}
-		if len(known) > 0 {
-			if _, ok := known[id]; !ok {
-				return errors.New("operation " + id + " is not in the app catalog")
-			}
+	for id := range patch {
+		if id == "" || strings.TrimSpace(id) != id || !known[id] {
+			return nil, errors.New("operation " + id + " is not in the app catalog")
 		}
 	}
-	for id, override := range request.Operations {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return errors.New("operation id is required")
-		}
-		if len(known) > 0 {
-			if _, ok := known[id]; !ok {
-				return errors.New("operation " + id + " is not in the app catalog")
-			}
-		}
-		if override == nil || len(override.AllowedRoles) == 0 {
-			return errors.New("allowedRoles is required for operation " + id)
-		}
-		if _, err := packageio.NormalizeUIAllowedRoles("allowedRoles", override.AllowedRoles); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func appManifestOperationIDs(entry *config.ProviderEntry) map[string]struct{} {
-	if entry == nil {
-		return nil
-	}
-	if entry.ResolvedCatalog != nil {
-		ids := make(map[string]struct{}, len(entry.ResolvedCatalog.Operations))
-		for i := range entry.ResolvedCatalog.Operations {
-			id := strings.TrimSpace(entry.ResolvedCatalog.Operations[i].ID)
-			if id != "" {
-				ids[id] = struct{}{}
-			}
-		}
-		if len(ids) > 0 {
-			return ids
-		}
-	}
-	static := entry.EffectiveAllowedOperations()
-	if len(static) == 0 {
-		return nil
-	}
-	ids := make(map[string]struct{}, len(static))
-	for id := range static {
-		ids[id] = struct{}{}
-	}
-	return ids
-}
-
-func normalizeRemovedOperationIDs(removed []string) []string {
-	if len(removed) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(removed))
-	seen := make(map[string]struct{}, len(removed))
-	for _, id := range removed {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
+	return patch, nil
 }

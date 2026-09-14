@@ -216,10 +216,7 @@ type Server struct {
 	finishSharedStartupPromotion  func(context.Context) error
 	temporalWorkersPromoted       func() bool
 	servingReady                  <-chan struct{}
-	appProviderRestarter          interface {
-		RestartApp(context.Context, string) error
-	}
-	uiReadiness *UIReadinessMonitor
+	uiReadiness                   *UIReadinessMonitor
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -303,14 +300,11 @@ type Config struct {
 	TemporalWorkersPromoted       func() bool
 	ServingReady                  <-chan struct{}
 	UIReadiness                   *UIReadinessMonitor
-	AppProviderRestarter          interface {
-		RestartApp(context.Context, string) error
-	}
-	IndexedDB          indexeddb.IndexedDB
-	RemoteManagement   proto.RemoteManagementServer
-	FrpsHandler        http.Handler
-	FrpsConnectHandler http.Handler
-	TunnelResolver     TunnelResolverConfig
+	IndexedDB                     indexeddb.IndexedDB
+	RemoteManagement              proto.RemoteManagementServer
+	FrpsHandler                   http.Handler
+	FrpsConnectHandler            http.Handler
+	TunnelResolver                TunnelResolverConfig
 	// AppAutoDeployNotify requests prompt auto-deploy reconciliation for an app.
 	AppAutoDeployNotify func(app string)
 	// AppRegistryReconcileNotify requests prompt local runtime reconciliation.
@@ -591,7 +585,6 @@ func New(cfg Config) (*Server, error) {
 		finishSharedStartupPromotion:  cfg.FinishSharedStartupPromotion,
 		temporalWorkersPromoted:       cfg.TemporalWorkersPromoted,
 		servingReady:                  cfg.ServingReady,
-		appProviderRestarter:          cfg.AppProviderRestarter,
 		uiReadiness:                   cfg.UIReadiness,
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{

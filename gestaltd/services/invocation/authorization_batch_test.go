@@ -183,14 +183,14 @@ func TestCheckOperationAccessManyMatchesSingleDecision(t *testing.T) {
 		if len(query.AllowedRoles) > 0 {
 			continue
 		}
-		if (batched[i] == nil) != (single == nil) {
+		if (batched[i].Err == nil) != (single == nil) {
 			t.Fatalf("query %d: batched = %v, single = %v", i, batched[i], single)
 		}
 	}
-	if batched[2] != nil {
+	if batched[2].Err != nil {
 		t.Fatalf("admin role query denied: %v", batched[2])
 	}
-	if batched[3] == nil {
+	if batched[3].Err == nil {
 		t.Fatal("viewer role query allowed an admin-only operation")
 	}
 }
@@ -214,10 +214,10 @@ func TestCheckOperationAccessManyFallsBackWhenBatchFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckOperationAccessMany: %v", err)
 	}
-	if results[0] != nil {
+	if results[0].Err != nil {
 		t.Fatalf("granted operation denied after batch failure: %v", results[0])
 	}
-	if results[1] == nil {
+	if results[1].Err == nil {
 		t.Fatal("ungranted operation allowed after batch failure")
 	}
 	if authz.checkAccessCalls != 2 {

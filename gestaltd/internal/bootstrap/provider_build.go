@@ -625,7 +625,7 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 		return nil, fmt.Errorf("integration %q must resolve to a provider manifest", name)
 	}
 
-	allowedOperations := buildAllowedOperations(ctx, name, entry, deps)
+	allowedOperations := entry.EffectiveAllowedOperations()
 
 	switch {
 	case manifestApp.IsSpecLoaded() && manifest.Entrypoint == nil:
@@ -676,7 +676,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 		return nil, err
 	}
 	workflowDeclarations := appservice.DeclaredWorkflowDefinitions(pluginProv)
-	allowedOperations := buildAllowedOperations(ctx, name, entry, deps)
+	allowedOperations := entry.EffectiveAllowedOperations()
 
 	if manifestApp.IsDeclarative() {
 		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestApp)

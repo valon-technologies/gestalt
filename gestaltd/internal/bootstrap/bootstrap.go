@@ -1481,6 +1481,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithConnectionInstancePreferences(prepared.Services.ConnectionInstancePreferences),
 		invocation.WithAppAccessProfiles(prepared.Services.AppAccessProfiles),
+		invocation.WithAppOperationPolicies(prepared.Services.AppAllowedOperations),
 		invocation.WithAuthorizationProvider(authorizationProvider),
 		invocation.WithProviderKinds(kinds),
 		invocation.WithAuthorizationPolicies(authorizationPolicies),

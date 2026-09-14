@@ -5,161 +5,93 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
+	"maps"
+	"slices"
 	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
-
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 )
 
-// AppAllowedOperationsOverlay is the runtime delta app administrators manage without a deploy PR.
-type AppAllowedOperationsOverlay struct {
-	App        string
-	Operations map[string]*operationexposure.OperationOverride
-	Removed    []string
-	UpdatedAt  time.Time
-}
-
 type AppAllowedOperationsService struct {
-	db    indexeddb.IndexedDB
 	store idb.ObjectStore
 }
 
 func NewAppAllowedOperationsService(ds indexeddb.IndexedDB) *AppAllowedOperationsService {
-	return &AppAllowedOperationsService{
-		db:    ds,
-		store: ds.ObjectStore(StoreAppAllowedOperations),
-	}
+	return &AppAllowedOperationsService{store: ds.ObjectStore(StoreAppAllowedOperations)}
 }
 
-func (s *AppAllowedOperationsService) EnsureStore(ctx context.Context) error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("ensure app allowed operations store: service is not configured")
-	}
-	return ensureAppAllowedOperationsStore(ctx, s.db)
+// operationPermissions is the persisted wire shape. Runtime policy cannot
+// replace aliases, schemas, GraphQL documents, or any other provider metadata.
+type operationPermissions struct {
+	AllowedRoles []string `json:"allowedRoles"`
 }
 
-func (s *AppAllowedOperationsService) GetOverlay(ctx context.Context, app string) (*AppAllowedOperationsOverlay, error) {
-	if s == nil {
-		return nil, fmt.Errorf("get app allowed operations overlay: service is not configured")
+func (s *AppAllowedOperationsService) GetAppOperationPolicy(ctx context.Context, app string) (core.AppOperationPolicy, error) {
+	record, err := s.store.Get(ctx, app)
+	if errors.Is(err, idb.ErrNotFound) {
+		return nil, nil
 	}
-	app = strings.TrimSpace(app)
-	if app == "" {
-		return nil, fmt.Errorf("get app allowed operations overlay: app is required")
-	}
-	rec, err := s.store.Get(ctx, app)
 	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("get app allowed operations overlay: %w", err)
+		return nil, fmt.Errorf("get app operation policy: %w", err)
 	}
-	return recordToAppAllowedOperationsOverlay(rec)
-}
-
-func (s *AppAllowedOperationsService) SetOverlay(ctx context.Context, overlay *AppAllowedOperationsOverlay) error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("set app allowed operations overlay: service is not configured")
-	}
-	if overlay == nil {
-		return fmt.Errorf("set app allowed operations overlay: overlay is required")
-	}
-	overlay.App = strings.TrimSpace(overlay.App)
-	if overlay.App == "" {
-		return fmt.Errorf("set app allowed operations overlay: app is required")
-	}
-	if err := s.EnsureStore(ctx); err != nil {
-		return err
-	}
-	overlay.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	record, err := appAllowedOperationsRecord(overlay)
-	if err != nil {
-		return fmt.Errorf("set app allowed operations overlay: encode: %w", err)
-	}
-	if err := s.store.Put(ctx, record); err != nil {
-		return fmt.Errorf("set app allowed operations overlay: write: %w", err)
-	}
-	return nil
-}
-
-func (s *AppAllowedOperationsService) DeleteOverlay(ctx context.Context, app string) error {
-	if s == nil {
-		return fmt.Errorf("delete app allowed operations overlay: service is not configured")
-	}
-	app = strings.TrimSpace(app)
-	if app == "" {
-		return fmt.Errorf("delete app allowed operations overlay: app is required")
-	}
-	if err := s.EnsureStore(ctx); err != nil {
-		return err
-	}
-	if err := s.store.Delete(ctx, app); err != nil && !errors.Is(err, idb.ErrNotFound) {
-		return fmt.Errorf("delete app allowed operations overlay: %w", err)
-	}
-	return nil
-}
-
-func MergeOverlayPatch(
-	current *AppAllowedOperationsOverlay,
-	app string,
-	operations map[string]*operationexposure.OperationOverride,
-	removed []string,
-) *AppAllowedOperationsOverlay {
-	var currentOps map[string]*operationexposure.OperationOverride
-	var currentRemoved []string
-	if current != nil {
-		currentOps = current.Operations
-		currentRemoved = current.Removed
-	}
-	ops, mergedRemoved := operationexposure.MergeOverlayPatch(currentOps, currentRemoved, operations, removed)
-	if ops == nil && mergedRemoved == nil {
-		return nil
-	}
-	return &AppAllowedOperationsOverlay{
-		App:        app,
-		Operations: ops,
-		Removed:    mergedRemoved,
-	}
-}
-
-func appAllowedOperationsRecord(overlay *AppAllowedOperationsOverlay) (idb.Record, error) {
-	operationsJSON, err := json.Marshal(overlay.Operations)
-	if err != nil {
-		return nil, fmt.Errorf("encode operations_json: %w", err)
-	}
-	removedJSON, err := json.Marshal(overlay.Removed)
-	if err != nil {
-		return nil, fmt.Errorf("encode removed_json: %w", err)
-	}
-	return idb.Record{
-		"id":              overlay.App,
-		"app":             overlay.App,
-		"operations_json": string(operationsJSON),
-		"removed_json":    string(removedJSON),
-		"updated_at":      overlay.UpdatedAt,
-	}, nil
-}
-
-func recordToAppAllowedOperationsOverlay(rec idb.Record) (*AppAllowedOperationsOverlay, error) {
-	operations := map[string]*operationexposure.OperationOverride{}
-	if raw := recString(rec, "operations_json"); raw != "" {
-		if err := json.Unmarshal([]byte(raw), &operations); err != nil {
-			return nil, fmt.Errorf("decode operations_json: %w", err)
-		}
+	// Keep the existing storage format so deployments need no data migration.
+	var operations map[string]operationPermissions
+	if err := json.Unmarshal([]byte(recString(record, "operations_json")), &operations); err != nil {
+		return nil, fmt.Errorf("decode operation permissions: %w", err)
 	}
 	var removed []string
-	if raw := recString(rec, "removed_json"); raw != "" {
-		if err := json.Unmarshal([]byte(raw), &removed); err != nil {
-			return nil, fmt.Errorf("decode removed_json: %w", err)
+	if err := json.Unmarshal([]byte(recString(record, "removed_json")), &removed); err != nil {
+		return nil, fmt.Errorf("decode removed operations: %w", err)
+	}
+	policy := make(core.AppOperationPolicy, len(operations)+len(removed))
+	for _, id := range removed {
+		policy[id] = nil
+	}
+	// Existing records used operations-over-removed precedence.
+	for id, permissions := range operations {
+		policy[id] = permissions.AllowedRoles
+	}
+	return policy, nil
+}
+
+// Patch applies only supplied permission changes. An empty patch is a no-op,
+// not a reset of other administrators' previously saved choices.
+func (s *AppAllowedOperationsService) Patch(ctx context.Context, app string, patch core.AppOperationPolicy) error {
+	if len(patch) == 0 {
+		return nil
+	}
+	policy, err := s.GetAppOperationPolicy(ctx, app)
+	if err != nil {
+		return err
+	}
+	if policy == nil {
+		policy = make(core.AppOperationPolicy)
+	}
+	maps.Copy(policy, patch)
+	operations := make(map[string]operationPermissions)
+	removed := make([]string, 0)
+	for id, roles := range policy {
+		if len(roles) == 0 {
+			removed = append(removed, id)
+		} else {
+			operations[id] = operationPermissions{AllowedRoles: roles}
 		}
 	}
-	return &AppAllowedOperationsOverlay{
-		App:        recString(rec, "app"),
-		Operations: operations,
-		Removed:    removed,
-		UpdatedAt:  recTime(rec, "updated_at"),
-	}, nil
+	slices.Sort(removed)
+	operationsJSON, err := json.Marshal(operations)
+	if err != nil {
+		return err
+	}
+	removedJSON, err := json.Marshal(removed)
+	if err != nil {
+		return err
+	}
+	return s.store.Put(ctx, idb.Record{
+		"id": app, "app": app,
+		"operations_json": string(operationsJSON),
+		"removed_json":    string(removedJSON),
+		"updated_at":      time.Now().UTC().Truncate(time.Millisecond),
+	})
 }

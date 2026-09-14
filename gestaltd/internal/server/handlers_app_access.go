@@ -37,7 +37,7 @@ type updateAppAccessRequest struct {
 	EnabledOperations []string `json:"enabledOperations"`
 }
 
-func (s *Server) getAppAccess(w http.ResponseWriter, r *http.Request) {
+func (s *Server) appAccessHandler(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 	prov, ok := s.getProvider(r.Context(), w, name)
 	if !ok {
@@ -50,56 +50,34 @@ func (s *Server) getAppAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	cat, err := s.appAccessCatalog(r, name, prov)
 	if err != nil {
-		s.writeAppAccessError(w, err)
+		s.writeAppOperationPolicyError(w, r, name, err)
 		return
 	}
-	response, err := s.appAccessResponse(r, subjectID, name, prov, cat)
-	if err != nil {
-		s.writeAppAccessError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
-func (s *Server) updateAppAccess(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimSpace(chi.URLParam(r, "name"))
-	prov, ok := s.getProvider(r.Context(), w, name)
-	if !ok {
-		return
-	}
-	subjectID, err := s.resolveAppAccessSubject(r)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "a user session is required")
-		return
-	}
-	var req updateAppAccessRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	cat, err := s.appAccessCatalog(r, name, prov)
-	if err != nil {
-		s.writeAppAccessError(w, err)
-		return
-	}
-	valid := make(map[string]struct{})
-	if cat != nil {
-		for i := range cat.Operations {
-			valid[cat.Operations[i].ID] = struct{}{}
+	if r.Method == http.MethodPut {
+		var req updateAppAccessRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
 		}
-	}
-	enabled, invalid := normalizeRequestedAppAccess(req.EnabledOperations, valid)
-	if len(invalid) > 0 {
-		writeError(w, http.StatusBadRequest, "that app operation is not available; choose an operation from the list and try again")
-		return
-	}
-	if s.appAccessProfiles == nil {
-		writeError(w, http.StatusServiceUnavailable, "app access settings are unavailable")
-		return
-	}
-	if _, err := s.appAccessProfiles.SetAppAccessOperations(r.Context(), subjectID, name, enabled); err != nil {
-		s.writeAppAccessError(w, err)
-		return
+		valid := make(map[string]struct{})
+		if cat != nil {
+			for i := range cat.Operations {
+				valid[cat.Operations[i].ID] = struct{}{}
+			}
+		}
+		enabled, invalid := normalizeRequestedAppAccess(req.EnabledOperations, valid)
+		if len(invalid) > 0 {
+			writeError(w, http.StatusBadRequest, "that app operation is not available; choose an operation from the list and try again")
+			return
+		}
+		if s.appAccessProfiles == nil {
+			writeError(w, http.StatusServiceUnavailable, "app access settings are unavailable")
+			return
+		}
+		if _, err := s.appAccessProfiles.SetAppAccessOperations(r.Context(), subjectID, name, enabled); err != nil {
+			s.writeAppAccessError(w, err)
+			return
+		}
 	}
 	response, err := s.appAccessResponse(r, subjectID, name, prov, cat)
 	if err != nil {
@@ -174,6 +152,18 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 }
 
 func (s *Server) appAccessCatalog(r *http.Request, app string, prov core.Provider) (*catalog.Catalog, error) {
+	baseline, err := s.appAccessBaselineCatalog(r, app, prov)
+	if err != nil || s.appAllowedOperations == nil {
+		return baseline, err
+	}
+	policy, err := s.appAllowedOperations.GetAppOperationPolicy(r.Context(), app)
+	if err != nil {
+		return nil, err
+	}
+	return policy.Catalog(baseline), nil
+}
+
+func (s *Server) appAccessBaselineCatalog(r *http.Request, app string, prov core.Provider) (*catalog.Catalog, error) {
 	staticCat := appAccessCapabilityCatalog(prov, s.publicCatalog(app, prov, prov.Catalog()))
 	if !core.SupportsSessionCatalog(prov) {
 		return staticCat, nil

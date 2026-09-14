@@ -21,11 +21,6 @@ const (
 	invokeAuthorizationDenyReasonRoleDenied         = "role_denied"
 )
 
-func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
-	_, err := b.evaluateInvokeAuthorization(ctx, p, providerName, operationID, nil)
-	return err
-}
-
 func (b *Broker) authorizeOperation(
 	ctx context.Context,
 	p *principal.Principal,

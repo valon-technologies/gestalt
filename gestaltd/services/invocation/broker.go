@@ -142,6 +142,7 @@ type Broker struct {
 	mcpMapper                     ConnectionMapper
 	connectionRuntime             ConnectionRuntimeResolver
 	appAccessProfiles             core.AppAccessProfileStore
+	appOperationPolicies          core.AppOperationPolicyStore
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]ProviderKind
 	authorizationPolicies         map[string]string
@@ -180,6 +181,12 @@ func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption
 // checked in the broker so every invocation surface shares the same decision.
 func WithAppAccessProfiles(store core.AppAccessProfileStore) BrokerOption {
 	return func(b *Broker) { b.appAccessProfiles = store }
+}
+
+// WithAppOperationPolicies reads app-admin permissions at the shared request
+// boundary. Provider instances and catalogs contain definitions, not policy.
+func WithAppOperationPolicies(store core.AppOperationPolicyStore) BrokerOption {
+	return func(b *Broker) { b.appOperationPolicies = store }
 }
 
 func WithProviderKinds(kinds map[string]ProviderKind) BrokerOption {
@@ -379,14 +386,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
-	if err := b.checkInvocationOperationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+	ctx, opMeta, err = b.authorizeInvocation(ctx, p, prov, providerName, opMeta)
+	if err != nil {
 		return fail(err)
-	}
-	if !providerDelegatesRemoteAuthorization(prov) {
-		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
-		if err != nil {
-			return fail(err)
-		}
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -537,14 +539,9 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	if err != nil {
 		return fail(err)
 	}
-	if err := b.checkInvocationOperationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+	ctx, opMeta, err = b.authorizeInvocation(ctx, p, prov, providerName, opMeta)
+	if err != nil {
 		return fail(err)
-	}
-	if !providerDelegatesRemoteAuthorization(prov) {
-		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
-		if err != nil {
-			return fail(err)
-		}
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -724,14 +721,9 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return fail(err)
 	}
-	if err := b.checkInvocationOperationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+	ctx, opMeta, err = b.authorizeInvocation(ctx, p, prov, providerName, opMeta)
+	if err != nil {
 		return fail(err)
-	}
-	if !providerDelegatesRemoteAuthorization(prov) {
-		ctx, err = b.authorizeOperation(ctx, p, providerName, opMeta)
-		if err != nil {
-			return fail(err)
-		}
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -1103,15 +1095,15 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	if !principal.AllowsProviderPermission(p, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
-	if err := b.checkInvocationOperationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
-		return fail(err)
-	}
 	setSubjectAttribute(p)
 	ctx = withResolvedPrincipal(ctx, p)
-	if !providerDelegatesRemoteAuthorization(prov) {
-		if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
-			return fail(err)
-		}
+	operation, found := catalog.OperationByID(prov.Catalog(), graphQLOperationID)
+	if !found {
+		operation = catalog.CatalogOperation{ID: graphQLOperationID}
+	}
+	ctx, _, err = b.authorizeInvocation(ctx, p, prov, providerName, operation)
+	if err != nil {
+		return fail(err)
 	}
 
 	conn := ConnectionFromContext(ctx)
@@ -1245,24 +1237,18 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 	if !principal.AllowsOperationPermission(p, providerName, operationID) {
 		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
-	if err := b.checkAppAccess(ctx, p, providerName, operationID); err != nil {
-		return err
+	var prov core.Provider
+	operation := catalog.CatalogOperation{ID: operationID}
+	if b != nil && b.providers != nil {
+		prov, _ = b.providers.GetWithContext(ctx, providerName)
+		if prov != nil {
+			if metadata, ok := catalog.OperationByID(prov.Catalog(), operationID); ok {
+				operation = metadata
+			}
+		}
 	}
-	if b.providerDelegatesRemoteAuthorization(ctx, providerName) {
-		return nil
-	}
-	return b.checkAuthorizationAccess(ctx, p, providerName, operationID)
-}
-
-// checkInvocationOperationAccess is the shared caller-side operation gate for
-// every invocation mode. Workspace authorization is applied separately because
-// remote-delegated providers own that decision, but user app capabilities and
-// token operation scopes must be enforced before any provider dispatch.
-func (b *Broker) checkInvocationOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
-	if !principal.AllowsOperationPermission(p, providerName, operationID) {
-		return fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, operationID)
-	}
-	return b.checkAppAccess(ctx, p, providerName, operationID)
+	_, _, err := b.authorizeInvocation(ctx, p, prov, providerName, operation)
+	return err
 }
 
 func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {

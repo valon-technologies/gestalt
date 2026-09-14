@@ -261,7 +261,7 @@ type erroringOperationAccess struct{}
 
 func (erroringOperationAccess) CheckOperationAccessMany(
 	context.Context, *principal.Principal, []invocation.OperationAccessQuery,
-) ([]error, error) {
+) ([]invocation.OperationAccessDecision, error) {
 	return nil, errors.New("evaluator unavailable")
 }
 
@@ -275,13 +275,14 @@ type allowOneOperationAccess struct {
 
 func (a *allowOneOperationAccess) CheckOperationAccessMany(
 	_ context.Context, _ *principal.Principal, queries []invocation.OperationAccessQuery,
-) ([]error, error) {
+) ([]invocation.OperationAccessDecision, error) {
 	a.calls++
 	a.queries += len(queries)
-	results := make([]error, len(queries))
+	results := make([]invocation.OperationAccessDecision, len(queries))
 	for i, query := range queries {
+		results[i].AllowedRoles = query.AllowedRoles
 		if query.Operation != a.allowed {
-			results[i] = errors.New("denied")
+			results[i].Err = errors.New("denied")
 		}
 	}
 	return results, nil

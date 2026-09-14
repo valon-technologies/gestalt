@@ -85,6 +85,13 @@ type OperationAccessQuery struct {
 	AllowedRoles []string
 }
 
+// OperationAccessDecision carries the effective roles used for authorization,
+// so discovery advertises the same permissions without a second policy read.
+type OperationAccessDecision struct {
+	Err          error
+	AllowedRoles []string
+}
+
 // OperationAccessChecker answers many operation-access questions with one
 // batched evaluator call. Catalog and MCP listing depend on this interface so
 // they can reach exactly the decisions invocation reaches.
@@ -93,12 +100,12 @@ type OperationAccessChecker interface {
 		ctx context.Context,
 		p *principal.Principal,
 		queries []OperationAccessQuery,
-	) ([]error, error)
+	) ([]OperationAccessDecision, error)
 }
 
 // CheckOperationAccessMany answers many operation-access questions with one
-// batched evaluator call. Element i is nil when the operation is allowed and
-// otherwise carries the same ErrAuthorizationDenied error CheckOperationAccess
+// batched evaluator call. Element i has no error when the operation is allowed
+// and otherwise carries the same ErrAuthorizationDenied error CheckOperationAccess
 // would return for that operation.
 //
 // Every answer runs through the same token-scope check, the same remote
@@ -116,10 +123,11 @@ func (b *Broker) CheckOperationAccessMany(
 	ctx context.Context,
 	p *principal.Principal,
 	queries []OperationAccessQuery,
-) ([]error, error) {
-	results := make([]error, len(queries))
+) ([]OperationAccessDecision, error) {
+	results := make([]OperationAccessDecision, len(queries))
 	pending := make([]int, 0, len(queries))
 	type providerAccess struct {
+		policy          core.AppOperationPolicy
 		profile         *core.AppAccessProfile
 		profileErr      error
 		delegatesRemote bool
@@ -128,17 +136,24 @@ func (b *Broker) CheckOperationAccessMany(
 	accessByProvider := make(map[string]providerAccess)
 	for i, query := range queries {
 		if !principal.AllowsOperationPermission(p, query.Provider, query.Operation) {
-			results[i] = operationAccessDenied(query)
+			results[i].Err = operationAccessDenied(query)
 			continue
 		}
 		access, ok := accessByProvider[query.Provider]
 		if !ok {
+			var err error
+			access.policy, err = b.appOperationPolicy(ctx, query.Provider)
+			if err != nil {
+				return nil, err
+			}
 			access.profile, access.profileErr = b.appAccessProfile(ctx, p, query.Provider)
 			access.delegatesRemote = b.providerDelegatesRemoteAuthorization(ctx, query.Provider)
 			accessByProvider[query.Provider] = access
 		}
-		if access.profileErr != nil || !appAccessProfileAllows(access.profile, query.Operation) {
-			results[i] = operationAccessDenied(query)
+		roles, allowed := access.policy.Resolve(query.Operation, query.AllowedRoles)
+		results[i].AllowedRoles = roles
+		if !allowed || access.profileErr != nil || !appAccessProfileAllows(access.profile, query.Operation) {
+			results[i].Err = operationAccessDenied(query)
 			continue
 		}
 		if !access.delegatesRemote {
@@ -154,7 +169,7 @@ func (b *Broker) CheckOperationAccessMany(
 	subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
 	if err != nil {
 		for _, i := range pending {
-			results[i] = fmt.Errorf("%w: %s.%s: %v",
+			results[i].Err = fmt.Errorf("%w: %s.%s: %v",
 				ErrAuthorizationDenied, queries[i].Provider, queries[i].Operation, err)
 		}
 		return results, nil
@@ -172,7 +187,7 @@ func (b *Broker) CheckOperationAccessMany(
 			SubjectID:         subjectID,
 			Action:            queries[i].Operation,
 			Resource:          access.resource,
-			AllowedRoles:      queries[i].AllowedRoles,
+			AllowedRoles:      results[i].AllowedRoles,
 			SubjectProperties: properties,
 		})
 	}
@@ -184,12 +199,12 @@ func (b *Broker) CheckOperationAccessMany(
 			if singleErr != nil {
 				return nil, singleErr
 			}
-			results[i] = operationAccessResult(decision, queries[i])
+			results[i].Err = operationAccessResult(decision, queries[i])
 		}
 		return results, nil
 	}
 	for n, i := range pending {
-		results[i] = operationAccessResult(decisions[n], queries[i])
+		results[i].Err = operationAccessResult(decisions[n], queries[i])
 	}
 	return results, nil
 }

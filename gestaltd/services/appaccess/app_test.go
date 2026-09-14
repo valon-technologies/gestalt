@@ -2,9 +2,9 @@ package appaccess
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -40,6 +40,9 @@ type recordingAppInvocation struct {
 	graphQLProviderName string
 	graphQLDocument     string
 	graphQLVariables    map[string]any
+	invokeErr           error
+	streamErr           error
+	graphQLErr          error
 }
 
 func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
@@ -72,6 +75,9 @@ func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Princi
 		i.toolRefs = append([]coreagent.ToolRef(nil), refs.Refs...)
 	}
 	i.params = params
+	if i.invokeErr != nil {
+		return nil, i.invokeErr
+	}
 	return &core.OperationResult{Status: 202, Body: []byte("accepted")}, nil
 }
 
@@ -80,6 +86,9 @@ func (i *recordingAppInvocation) InvokeGraphQL(ctx context.Context, _ *principal
 	i.graphQLProviderName = providerName
 	i.graphQLDocument = request.Document
 	i.graphQLVariables = request.Variables
+	if i.graphQLErr != nil {
+		return nil, i.graphQLErr
+	}
 	return &core.OperationResult{Status: 208, Body: []byte("graphql-accepted")}, nil
 }
 
@@ -630,6 +639,9 @@ func (i *recordingAppInvocation) InvokeStream(ctx context.Context, p *principal.
 	if p != nil {
 		i.subjectID = p.SubjectID
 	}
+	if i.streamErr != nil {
+		return nil, i.streamErr
+	}
 	return &sliceStreamReader{
 		frames: []*core.InvokeFrame{
 			{Metadata: &core.InvokeMetadata{Status: 200, MediaType: "application/x-ndjson"}},
@@ -749,7 +761,7 @@ func TestInvokeFrameToProtoDataOnlyYieldsOneFrame(t *testing.T) {
 	}
 }
 
-func TestAppStreamErrorMapsAllInvocationErrors(t *testing.T) {
+func TestAppServerInvocationErrorsMapToGRPCStatusAtWireBoundary(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name        string
@@ -762,8 +774,7 @@ func TestAppStreamErrorMapsAllInvocationErrors(t *testing.T) {
 		{"not authenticated", invocation.ErrNotAuthenticated, codes.Unauthenticated, ""},
 		{"authorization denied", invocation.ErrAuthorizationDenied, codes.PermissionDenied, ""},
 		{"scope denied", invocation.ErrScopeDenied, codes.PermissionDenied, ""},
-		{"no credential", invocation.ErrNoCredential, codes.FailedPrecondition, ""},
-		{"reconnect required", invocation.ErrReconnectRequired, codes.FailedPrecondition, ""},
+		{"authorization unavailable", fmt.Errorf("%w: operation permissions for workspace: db down", invocation.ErrAuthorizationUnavailable), codes.Unavailable, "authorization provider unavailable: operation permissions for workspace: db down"},
 		{"invalid invocation", invocation.ErrInvalidInvocation, codes.InvalidArgument, ""},
 		{"streaming unsupported", invocation.ErrStreamingUnsupported, codes.FailedPrecondition, ""},
 		{"ambiguous instance", invocation.ErrAmbiguousInstance, codes.Aborted, ""},
@@ -773,57 +784,64 @@ func TestAppStreamErrorMapsAllInvocationErrors(t *testing.T) {
 		{"unknown", assertErr("unknown"), codes.Unknown, "app invocation failed: unknown"},
 		{"grpc status", status.Error(codes.Unavailable, "upstream unavailable"), codes.Unavailable, "upstream unavailable"},
 	}
+	modes := []string{"unary", "stream", "graphql"}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			st, ok := status.FromError(appStreamError(tc.err))
-			if !ok {
-				t.Fatalf("appStreamError did not return a gRPC status: %v", appStreamError(tc.err))
-			}
-			if st.Code() != tc.wantCode {
-				t.Fatalf("got code %s, want %s", st.Code(), tc.wantCode)
-			}
-			if tc.wantMessage != "" && st.Message() != tc.wantMessage {
-				t.Fatalf("got message %q, want %q", st.Message(), tc.wantMessage)
+			for _, mode := range modes {
+				gotErr := appWireError(t, mode, tc.err)
+				st := status.Convert(gotErr)
+				if st.Code() != tc.wantCode {
+					t.Fatalf("%s code = %s, want %s", mode, st.Code(), tc.wantCode)
+				}
+				if tc.wantMessage != "" && st.Message() != tc.wantMessage {
+					t.Fatalf("%s message = %q, want %q", mode, st.Message(), tc.wantMessage)
+				}
 			}
 		})
 	}
 }
 
-func TestAppOperationResultPreservesGRPCStatusAndUsesAppWording(t *testing.T) {
-	t.Parallel()
+func appWireError(t *testing.T, mode string, invokerErr error) error {
+	t.Helper()
+	invoker := &recordingAppInvocation{
+		invokeErr:  invokerErr,
+		streamErr:  invokerErr,
+		graphQLErr: invokerErr,
+	}
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, NewAppServer(invoker))
+	}))
 
-	for _, tc := range []struct {
-		name    string
-		code    codes.Code
-		message string
-	}{
-		{name: "invalid argument", code: codes.InvalidArgument, message: "context is server-filled"},
-		{name: "internal", code: codes.Internal, message: "upstream exploded"},
-		{name: "unavailable", code: codes.Unavailable, message: "upstream unavailable"},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			_, err := appOperationResult(nil, status.Error(tc.code, tc.message))
-			if status.Code(err) != tc.code || status.Convert(err).Message() != tc.message {
-				t.Fatalf("error = %v, want %s %q", err, tc.code, tc.message)
-			}
+	switch mode {
+	case "unary":
+		_, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+			App:       "workspace",
+			Operation: "unary.op",
+			Context:   requestContext(t, "caller", nil),
 		})
-	}
-
-	_, err := appOperationResult(nil, assertErr("ordinary failure"))
-	if status.Code(err) != codes.Unknown || !strings.Contains(err.Error(), "app invocation failed: ordinary failure") {
-		t.Fatalf("ordinary error = %v, want Unknown app-invocation wording", err)
-	}
-
-	_, err = appOperationResult(nil, invocation.ErrOperationNotFound)
-	if status.Code(err) != codes.NotFound {
-		t.Fatalf("typed invocation error code = %s, want NotFound", status.Code(err))
-	}
-	_, err = appOperationResult(nil, nil)
-	if status.Code(err) != codes.Internal || status.Convert(err).Message() != "app invocation returned no result" {
-		t.Fatalf("nil result error = %v, want app wording", err)
+		return err
+	case "stream":
+		stream, err := client.InvokeStream(context.Background(), &proto.AppInvokeRequest{
+			App:       "workspace",
+			Operation: "stream.op",
+			Context:   requestContext(t, "caller", nil),
+		})
+		if err != nil {
+			return err
+		}
+		_, err = stream.Recv()
+		return err
+	case "graphql":
+		_, err := client.InvokeGraphQL(context.Background(), &proto.AppInvokeGraphQLRequest{
+			App:      "workspace",
+			Document: "query Viewer { viewer { id } }",
+			Context:  requestContext(t, "caller", nil),
+		})
+		return err
+	default:
+		t.Fatalf("unknown app wire mode %q", mode)
+		return nil
 	}
 }
 

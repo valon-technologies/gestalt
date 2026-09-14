@@ -6,65 +6,15 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
-func TestAuthorizationSurface(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		ctx  context.Context
-		want string
-	}{
-		{
-			name: "explicit http binding",
-			ctx:  WithInvocationSurface(context.Background(), InvocationSurfaceHTTPBinding),
-			want: "http_binding",
-		},
-		{
-			name: "workflow caller",
-			ctx: WithCallerProvider(
-				WithEntry(context.Background(), EntryGRPC),
-				ProviderKindWorkflow,
-				"temporal",
-			),
-			want: "workflow",
-		},
-		{
-			name: "cross-app caller",
-			ctx: WithCallerProvider(
-				WithEntry(context.Background(), EntryGRPC),
-				ProviderKindApp,
-				"ci-cd",
-			),
-			want: "cross_app",
-		},
-		{
-			name: "http entry without explicit surface",
-			ctx:  WithEntry(context.Background(), EntryHTTP),
-			want: "http",
-		},
-		{
-			name: "unknown internal entry",
-			ctx:  context.Background(),
-			want: metricutil.UnknownAttrValue,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := authorizationSurface(tc.ctx); got != tc.want {
-				t.Fatalf("authorizationSurface() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestEvaluateInvokeAuthorizationRecordsAllowAndDenyMetrics(t *testing.T) {
+func TestInvocationRecordsAllowAndDenyAuthorizationMetrics(t *testing.T) {
 	t.Parallel()
 
 	metrics := metrictest.NewManualMeterProvider(t)
@@ -73,8 +23,15 @@ func TestEvaluateInvokeAuthorizationRecordsAllowAndDenyMetrics(t *testing.T) {
 		allowed:          true,
 		matchedRelations: []string{"admin"},
 	}
+	provider := &coretesting.StubIntegration{
+		N: "traffic-cop", ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{ID: "sync.workqueue", AllowedRoles: []string{"admin"}}}},
+		ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: 200}, nil
+		},
+	}
 	broker := NewBroker(
-		nil,
+		testutil.NewProviderRegistry(t, provider),
 		nil,
 		nil,
 		WithAuthorizationProvider(authz),
@@ -95,9 +52,9 @@ func TestEvaluateInvokeAuthorizationRecordsAllowAndDenyMetrics(t *testing.T) {
 		"gestaltd.subject.kind":                  "user",
 		"gestaltd.subject.id":                    "user@example.com",
 	}
-	_, err := broker.evaluateInvokeAuthorization(ctx, p, "traffic-cop", "sync.workqueue", []string{"admin"})
+	_, err := broker.Invoke(ctx, p, "traffic-cop", "", "sync.workqueue", nil)
 	if err != nil {
-		t.Fatalf("evaluateInvokeAuthorization allow: %v", err)
+		t.Fatalf("Invoke allow: %v", err)
 	}
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.invoke.authorization.count", 1, allowAttrs)
@@ -113,16 +70,16 @@ func TestEvaluateInvokeAuthorizationRecordsAllowAndDenyMetrics(t *testing.T) {
 		"gestaltd.subject.kind":                     "user",
 		"gestaltd.subject.id":                       "user@example.com",
 	}
-	_, err = broker.evaluateInvokeAuthorization(ctx, p, "traffic-cop", "sync.workqueue", []string{"admin"})
+	_, err = broker.Invoke(ctx, p, "traffic-cop", "", "sync.workqueue", nil)
 	if !errors.Is(err, ErrAuthorizationDenied) {
-		t.Fatalf("evaluateInvokeAuthorization deny error = %v, want ErrAuthorizationDenied", err)
+		t.Fatalf("Invoke deny error = %v, want ErrAuthorizationDenied", err)
 	}
 	rm = metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.invoke.authorization.count", 1, denyAttrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.invoke.authorization.error_count", 1, denyAttrs)
 }
 
-func TestCheckAuthorizationAccessRecordsRelationDeniedMetric(t *testing.T) {
+func TestInvocationRecordsRelationDeniedAuthorizationMetric(t *testing.T) {
 	t.Parallel()
 
 	metrics := metrictest.NewManualMeterProvider(t)
@@ -131,7 +88,11 @@ func TestCheckAuthorizationAccessRecordsRelationDeniedMetric(t *testing.T) {
 		metrics.Provider,
 	)
 	authz := &recordingAuthorizationProvider{allowed: false}
-	broker := NewBroker(nil, nil, nil, WithAuthorizationProvider(authz))
+	provider := &coretesting.StubIntegration{
+		N: "slack", ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{ID: "chat.postMessage"}}},
+	}
+	broker := NewBroker(testutil.NewProviderRegistry(t, provider), nil, nil, WithAuthorizationProvider(authz))
 
 	denyAttrs := map[string]string{
 		"gestalt.provider":                          "slack",
@@ -142,14 +103,16 @@ func TestCheckAuthorizationAccessRecordsRelationDeniedMetric(t *testing.T) {
 		"gestaltd.subject.kind":                     "service_account",
 		"gestaltd.subject.id":                       "workflow-roadmap",
 	}
-	err := broker.checkAuthorizationAccess(
+	_, err := broker.Invoke(
 		ctx,
 		&principal.Principal{SubjectID: "service_account:workflow-roadmap"},
 		"slack",
+		"",
 		"chat.postMessage",
+		nil,
 	)
 	if !errors.Is(err, ErrAuthorizationDenied) {
-		t.Fatalf("checkAuthorizationAccess error = %v, want ErrAuthorizationDenied", err)
+		t.Fatalf("Invoke error = %v, want ErrAuthorizationDenied", err)
 	}
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.invoke.authorization.count", 1, denyAttrs)
@@ -177,9 +140,6 @@ func TestCheckProviderAccessDoesNotRecordInvokeAuthorizationMetric(t *testing.T)
 	)
 	if err != nil {
 		t.Fatalf("CheckProviderAccess: %v", err)
-	}
-	if authz.checkAccessCalls != 1 {
-		t.Fatalf("CheckAccess calls = %d, want 1", authz.checkAccessCalls)
 	}
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireNoMetric(t, rm, "gestaltd.invoke.authorization.count")

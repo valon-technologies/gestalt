@@ -30,17 +30,18 @@ type recordingOperationAccess struct {
 
 func (r *recordingOperationAccess) CheckOperationAccessMany(
 	_ context.Context, _ *principal.Principal, queries []invocation.OperationAccessQuery,
-) ([]error, error) {
+) ([]invocation.OperationAccessDecision, error) {
 	r.calls++
 	r.lastBatch = len(queries)
 	r.totalQueries += len(queries)
 	if r.err != nil {
 		return nil, r.err
 	}
-	results := make([]error, len(queries))
+	results := make([]invocation.OperationAccessDecision, len(queries))
 	for i, query := range queries {
+		results[i].AllowedRoles = query.AllowedRoles
 		if !r.allowed[query.Provider+"."+query.Operation] && !r.allowed[query.Operation] {
-			results[i] = errors.New("denied")
+			results[i].Err = errors.New("denied")
 		}
 	}
 	return results, nil

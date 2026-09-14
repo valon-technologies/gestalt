@@ -141,7 +141,7 @@ func (s *AppServer) InvokeStream(req *proto.AppInvokeRequest, stream proto.App_I
 	}
 	reader, err := streamInvoker.InvokeStream(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
 	if err != nil {
-		return appStreamError(err)
+		return invocationStatusError(err)
 	}
 	for {
 		frame, err := reader.Recv()
@@ -150,7 +150,7 @@ func (s *AppServer) InvokeStream(req *proto.AppInvokeRequest, stream proto.App_I
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			return appStreamError(err)
+			return invocationStatusError(err)
 		}
 		for _, pf := range invokeFrameToProto(frame) {
 			if err := stream.Send(pf); err != nil {
@@ -211,7 +211,7 @@ func (s *AppServer) InvokeMaybeStream(ctx context.Context, req *proto.AppInvokeR
 	}
 	outcome, err := maybeInvoker.InvokeMaybeStream(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
 	if err != nil {
-		return nil, appStreamError(err)
+		return nil, invocationStatusError(err)
 	}
 	return outcome, nil
 }
@@ -244,45 +244,6 @@ func invokeFrameToProto(frame *core.InvokeFrame) []*proto.InvokeFrame {
 		})
 	}
 	return frames
-}
-
-// appStreamError maps an invocation error to a gRPC status for streaming,
-// mirroring the unary invocationStatusError mappings so clients see the same
-// gRPC codes regardless of transport.
-func appStreamError(err error) error {
-	switch {
-	case errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, invocation.ErrNotAuthenticated):
-		return status.Error(codes.Unauthenticated, "not authenticated")
-	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
-		return status.Error(codes.PermissionDenied, err.Error())
-	case errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrReconnectRequired):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, invocation.ErrInvalidInvocation):
-		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, invocation.ErrStreamingUnsupported):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, invocation.ErrAmbiguousInstance):
-		return status.Error(codes.Aborted, err.Error())
-	default:
-		var maxDepthErr *invocation.MaxDepthError
-		if errors.As(err, &maxDepthErr) {
-			return status.Error(codes.ResourceExhausted, maxDepthErr.Error())
-		}
-		var rateLimitErr *invocation.RateLimitError
-		if errors.As(err, &rateLimitErr) {
-			return status.Error(codes.ResourceExhausted, rateLimitErr.Error())
-		}
-		var recursionErr *invocation.RecursionError
-		if errors.As(err, &recursionErr) {
-			return status.Error(codes.FailedPrecondition, recursionErr.Error())
-		}
-		if st, ok := status.FromError(err); ok {
-			return st.Err()
-		}
-		return status.Error(codes.Unknown, fmt.Sprintf("app invocation failed: %v", err))
-	}
 }
 
 func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
@@ -705,6 +666,8 @@ func invocationStatusError(err error) error {
 		return status.Error(codes.Unauthenticated, err.Error())
 	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
 		return status.Error(codes.PermissionDenied, err.Error())
+	case errors.Is(err, invocation.ErrAuthorizationUnavailable):
+		return status.Error(codes.Unavailable, err.Error())
 	case errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, invocation.ErrInvalidInvocation):

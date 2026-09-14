@@ -264,7 +264,7 @@ func (h *StatelessHTTPHandler) allowedOperations(ctx context.Context, p *princip
 		return nil, mcpgo.NewToolResultError(fmt.Sprintf("operation access returned %d decisions for %d operations", len(results), len(queries)))
 	}
 	for i := range results {
-		allowed[i] = results[i] == nil
+		allowed[i] = results[i].Err == nil
 	}
 	return allowed, nil
 }
