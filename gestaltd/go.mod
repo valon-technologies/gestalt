@@ -19,7 +19,7 @@ require (
 	github.com/pb33f/libopenapi v0.36.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.67.5
+	github.com/prometheus/common v0.71.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/wundergraph/graphql-go-tools/v2 v2.4.1
@@ -40,15 +40,15 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.4
-	golang.org/x/crypto v0.54.0
-	golang.org/x/mod v0.37.0
-	golang.org/x/net v0.56.0
+	golang.org/x/crypto v0.55.0
+	golang.org/x/mod v0.38.0
+	golang.org/x/net v0.58.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.287.1
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260720155508-bb71a54f79dc
 	google.golang.org/grpc v1.82.1
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -153,7 +153,7 @@ require (
 	github.com/pb33f/jsonpath v0.8.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
-	github.com/prometheus/procfs v0.20.1 // indirect
+	github.com/prometheus/procfs v0.21.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/valon-technologies/gestalt/sdk/go v0.0.0
 	github.com/valon-technologies/gestalt/server/rpc v0.0.0
@@ -163,9 +163,8 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
 	go.opentelemetry.io/otel/log v0.19.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
-	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260720155508-bb71a54f79dc
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.77 // indirect
 )
