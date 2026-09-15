@@ -91,30 +91,17 @@ func (m *UIReadinessMonitor) Start(ctx context.Context) {
 		if !m.waitForServingReady(ctx) {
 			return
 		}
-		m.evaluate()
-		if m.isReady() {
-			return
-		}
-		ticker := time.NewTicker(m.recheckInterval)
-		defer ticker.Stop()
 		for {
+			if m.evaluate() {
+				return
+			}
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
-				m.evaluate()
-				if m.isReady() {
-					return
-				}
+			case <-time.After(m.recheckInterval):
 			}
 		}
 	}()
-}
-
-func (m *UIReadinessMonitor) isReady() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.ready
 }
 
 func (m *UIReadinessMonitor) waitForServingReady(ctx context.Context) bool {
@@ -147,11 +134,15 @@ func (m *UIReadinessMonitor) Report() FleetReadinessReport {
 		return FleetReadinessReport{}
 	}
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.report
+	report := m.report
+	m.mu.RUnlock()
+	if report.ReportedAt != 0 {
+		report.ReportedAt = float64(m.now().Unix())
+	}
+	return report
 }
 
-func (m *UIReadinessMonitor) evaluate() {
+func (m *UIReadinessMonitor) evaluate() bool {
 	paths := make([]string, 0, len(m.mounted)+len(m.extraProbePaths))
 	for index := range m.mounted {
 		mounted := &m.mounted[index]
@@ -200,10 +191,12 @@ func (m *UIReadinessMonitor) evaluate() {
 		UIs:           results,
 	}
 
+	ready = ready && len(results) > 0
 	m.mu.Lock()
 	m.report = report
-	m.ready = ready && len(results) > 0
+	m.ready = ready
 	m.mu.Unlock()
+	return ready
 }
 
 func mountedUIProbePaths(mounted MountedUI) []string {

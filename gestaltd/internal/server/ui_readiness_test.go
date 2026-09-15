@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -161,6 +162,7 @@ func TestFleetReadinessEndpoint(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	now := time.Unix(1_700_000_000, 0)
 	monitor := NewUIReadinessMonitor(UIReadinessMonitorConfig{
 		Handler: mux,
 		MountedUIs: []MountedUI{{
@@ -171,14 +173,23 @@ func TestFleetReadinessEndpoint(t *testing.T) {
 		InstanceID:   "instance-a",
 		ProcessID:    "process-a",
 		ServingReady: servingReady,
+		Now:          func() time.Time { return now },
 	})
 	monitor.evaluate()
+	now = now.Add(2 * time.Minute)
 
 	srv := &Server{uiReadiness: monitor}
 	rec := httptest.NewRecorder()
 	srv.fleetReadinessReport(rec, httptest.NewRequest(http.MethodGet, "/fleet-readiness", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /fleet-readiness = %d, want 200", rec.Code)
+	}
+	var report FleetReadinessReport
+	if err := json.NewDecoder(rec.Body).Decode(&report); err != nil {
+		t.Fatalf("decode fleet readiness report: %v", err)
+	}
+	if report.ReportedAt != float64(now.Unix()) {
+		t.Fatalf("reported_at = %v, want current response time %v", report.ReportedAt, now.Unix())
 	}
 }
 
