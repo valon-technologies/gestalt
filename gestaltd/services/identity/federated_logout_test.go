@@ -49,3 +49,22 @@ func TestRemoteIdentityProviderFederatedLogoutURL(t *testing.T) {
 		t.Fatalf("FederatedLogoutURL() = %q, want %q", got, want)
 	}
 }
+
+func TestRemoteIdentityProviderFederatedLogoutURLSupportsAuth0CustomDomain(t *testing.T) {
+	t.Parallel()
+
+	provider := &remoteIdentityProvider{
+		name:          "auth0",
+		oidcIssuerURL: "https://auth.berkadia.valon.tools/",
+		oidcClientID:  "client-id",
+		oidcAuth0:     true,
+	}
+	got, err := provider.FederatedLogoutURL("https://berkadia.valon.tools/")
+	if err != nil {
+		t.Fatalf("FederatedLogoutURL() error = %v", err)
+	}
+	want := "https://auth.berkadia.valon.tools/v2/logout?client_id=client-id&returnTo=https%3A%2F%2Fberkadia.valon.tools%2F"
+	if got != want {
+		t.Fatalf("FederatedLogoutURL() = %q, want %q", got, want)
+	}
+}

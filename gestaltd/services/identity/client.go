@@ -50,6 +50,7 @@ type remoteIdentityProvider struct {
 	callbackURL   string
 	oidcIssuerURL string
 	oidcClientID  string
+	oidcAuth0     bool
 	closer        io.Closer
 }
 
@@ -110,6 +111,7 @@ func newRemoteIdentityProvider(ctx context.Context, runtimeClient proto.Provider
 }
 
 func (p *remoteIdentityProvider) configure(ctx context.Context, name string, config map[string]any) error {
+	configuredAsAuth0 := strings.EqualFold(strings.TrimSpace(name), "auth0")
 	if p.runtime == nil {
 		if strings.TrimSpace(name) != "" {
 			p.name = name
@@ -132,11 +134,12 @@ func (p *remoteIdentityProvider) configure(ctx context.Context, name string, con
 		p.description = meta.Description
 	}
 	p.oidcIssuerURL, p.oidcClientID = oidcLogoutConfigFromMap(config)
+	p.oidcAuth0 = configuredAsAuth0
 	return nil
 }
 
 func (p *remoteIdentityProvider) FederatedLogoutURL(returnTo string) (string, error) {
-	return BuildOIDCFederatedLogoutURL(p.oidcIssuerURL, p.oidcClientID, returnTo)
+	return buildOIDCFederatedLogoutURL(p.oidcIssuerURL, p.oidcClientID, returnTo, p.oidcAuth0)
 }
 
 func (p *remoteIdentityProvider) DisplayName() string {

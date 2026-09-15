@@ -29,6 +29,10 @@ func FederatedLogoutURL(provider core.IdentityProvider, returnTo string) (string
 
 // BuildOIDCFederatedLogoutURL builds an Auth0 /v2/logout URL.
 func BuildOIDCFederatedLogoutURL(issuerURL, clientID, returnTo string) (string, error) {
+	return buildOIDCFederatedLogoutURL(issuerURL, clientID, returnTo, false)
+}
+
+func buildOIDCFederatedLogoutURL(issuerURL, clientID, returnTo string, configuredAsAuth0 bool) (string, error) {
 	returnTo = strings.TrimSpace(returnTo)
 	if returnTo == "" {
 		return "", fmt.Errorf("oidc auth: returnTo is required")
@@ -42,7 +46,7 @@ func BuildOIDCFederatedLogoutURL(issuerURL, clientID, returnTo string) (string, 
 	if err != nil || issuerParsed.Scheme == "" || issuerParsed.Host == "" {
 		return "", fmt.Errorf("oidc auth: invalid issuer url")
 	}
-	if !strings.HasSuffix(strings.ToLower(issuerParsed.Hostname()), ".auth0.com") {
+	if !configuredAsAuth0 && !strings.HasSuffix(strings.ToLower(issuerParsed.Hostname()), ".auth0.com") {
 		return "", fmt.Errorf("oidc auth: federated logout is not supported for issuer")
 	}
 	parsed, err := url.Parse(issuer + "/v2/logout")
