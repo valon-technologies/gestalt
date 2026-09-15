@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -45,6 +46,43 @@ func TestUIReadinessMonitorMarksReadyAfterServingAndProbe(t *testing.T) {
 	report := monitor.Report()
 	if report.ReleaseID != "release-a" || report.InstanceID != "instance-a" || len(report.UIs) != 1 || !report.UIs[0].Ready {
 		t.Fatalf("unexpected fleet report: %+v", report)
+	}
+}
+
+func TestUIReadinessMonitorStopsPollingAfterSuccessfulProbe(t *testing.T) {
+	t.Parallel()
+	servingReady := make(chan struct{})
+	close(servingReady)
+	var probes atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sample/", func(w http.ResponseWriter, _ *http.Request) {
+		probes.Add(1)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	monitor := NewUIReadinessMonitor(UIReadinessMonitorConfig{
+		Handler: mux,
+		MountedUIs: []MountedUI{{
+			Path:    "/sample",
+			Handler: mux,
+		}},
+		ServingReady:    servingReady,
+		RecheckInterval: time.Millisecond,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	monitor.Start(ctx)
+
+	deadline := time.Now().Add(time.Second)
+	for probes.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if probes.Load() != 1 {
+		t.Fatalf("initial probe count = %d, want 1", probes.Load())
+	}
+	time.Sleep(20 * time.Millisecond)
+	if got := probes.Load(); got != 1 {
+		t.Fatalf("probe count after readiness = %d, want 1", got)
 	}
 }
 

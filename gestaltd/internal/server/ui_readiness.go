@@ -92,6 +92,9 @@ func (m *UIReadinessMonitor) Start(ctx context.Context) {
 			return
 		}
 		m.evaluate()
+		if m.isReady() {
+			return
+		}
 		ticker := time.NewTicker(m.recheckInterval)
 		defer ticker.Stop()
 		for {
@@ -100,9 +103,18 @@ func (m *UIReadinessMonitor) Start(ctx context.Context) {
 				return
 			case <-ticker.C:
 				m.evaluate()
+				if m.isReady() {
+					return
+				}
 			}
 		}
 	}()
+}
+
+func (m *UIReadinessMonitor) isReady() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.ready
 }
 
 func (m *UIReadinessMonitor) waitForServingReady(ctx context.Context) bool {
