@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -21,6 +22,9 @@ func (s *Server) integrationSettingsAccessibleContext(ctx context.Context, p *pr
 		return false, nil
 	}
 	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), p)
+	if errors.Is(err, principal.ErrCredentialSubjectRequired) || errors.Is(err, principal.ErrOpaqueCredentialSubject) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
@@ -40,28 +44,31 @@ func (s *Server) integrationSettingsAccessibleContext(ctx context.Context, p *pr
 
 // prefetchIntegrationListingDecisions answers every authorization question the
 // Apps list is about to ask — may they use this app, open its web UI, or
-// admin it — with a single batched evaluator call. The per-app handlers
+// admin it — with bounded evaluator batches. The per-app handlers
 // below still ask checkResourceAccess; they simply find the answer already
 // cached.
-func (s *Server) prefetchIntegrationListingDecisions(ctx context.Context, p *principal.Principal, appNames []string) error {
+func (s *Server) prefetchIntegrationListingDecisions(ctx context.Context, p *principal.Principal, appNames []string) {
 	if s == nil || s.authorization == nil || p == nil || principal.IsNonUserPrincipal(p) {
-		return nil
+		return
 	}
 	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), p)
 	if err != nil {
-		return err
+		return
 	}
 	if subjectID = strings.TrimSpace(subjectID); subjectID == "" {
-		return nil
+		return
 	}
 
 	reqs := make([]invocation.ResourceAccessRequest, 0, 3*len(appNames))
 	for _, name := range appNames {
-		reqs = append(reqs, invocation.ResourceAccessRequest{
-			SubjectID: subjectID,
-			Action:    name,
-			Resource:  s.authorizationResource(name),
-		})
+		mounted, mountedOK := s.mountedUIForProvider(name, s.configuredMountedPath(name))
+		if !mountedOK || mountedUIRequiresAuthorization(mounted) {
+			reqs = append(reqs, invocation.ResourceAccessRequest{
+				SubjectID: subjectID,
+				Action:    name,
+				Resource:  s.authorizationResource(name),
+			})
+		}
 		if req, ok := s.mountedUIListingAccessRequest(name, subjectID); ok {
 			reqs = append(reqs, req)
 		}
@@ -74,7 +81,7 @@ func (s *Server) prefetchIntegrationListingDecisions(ctx context.Context, p *pri
 			})
 		}
 	}
-	return s.prefetchListingDecisions(ctx, reqs)
+	s.prefetchListingDecisions(ctx, reqs)
 }
 
 // mountedUIListingAccessRequest is the exact question

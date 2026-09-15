@@ -485,9 +485,7 @@ func (s *Server) projectViewerAppDirectory(r *http.Request, snapshot *tenantAppD
 	for i := range snapshot.entries {
 		names = append(names, snapshot.entries[i].Name)
 	}
-	if err := s.prefetchIntegrationListingDecisions(ctx, p, names); err != nil {
-		return nil, err
-	}
+	s.prefetchIntegrationListingDecisions(ctx, p, names)
 	sourceTreeURLs := s.appSourceTreeURLs(ctx, snapshot)
 
 	out := &appDirectory{entries: make([]appDirectoryEntry, 0, len(snapshot.entries))}
@@ -616,9 +614,7 @@ func (s *Server) visibleProviderDirectoryEntry(r *http.Request, name string) (ap
 			p = resolved
 		}
 	}
-	if err := s.prefetchIntegrationListingDecisions(ctx, p, []string{found.Name}); err != nil {
-		return appDirectoryEntry{}, false, err
-	}
+	s.prefetchIntegrationListingDecisions(ctx, p, []string{found.Name})
 	entry := s.viewerDirectoryEntry(ctx, p, found)
 	usable, err := s.directoryEntryUsable(ctx, p, entry)
 	if err != nil {

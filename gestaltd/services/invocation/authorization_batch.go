@@ -103,8 +103,8 @@ type OperationAccessChecker interface {
 	) ([]OperationAccessDecision, error)
 }
 
-// CheckOperationAccessMany answers many operation-access questions with one
-// batched evaluator call. Element i has no error when the operation is allowed
+// CheckOperationAccessMany answers operation-access questions in bounded
+// evaluator batches. Element i has no error when the operation is allowed
 // and otherwise carries the same ErrAuthorizationDenied error CheckOperationAccess
 // would return for that operation.
 //
@@ -189,12 +189,16 @@ func (b *Broker) CheckOperationAccessMany(
 		})
 	}
 
-	decisions, batchErr := CheckResourceAccessMany(ctx, b.authorization, reqs)
-	if batchErr != nil {
-		return nil, batchErr
-	}
-	for n, i := range pending {
-		results[i].Err = operationAccessResult(decisions[n], queries[i])
+	for start := 0; start < len(reqs); start += MaxBatchedAccessChecks {
+		end := min(start+MaxBatchedAccessChecks, len(reqs))
+		decisions, err := CheckResourceAccessMany(ctx, b.authorization, reqs[start:end])
+		if err != nil {
+			return nil, err
+		}
+		for n, decision := range decisions {
+			i := pending[start+n]
+			results[i].Err = operationAccessResult(decision, queries[i])
+		}
 	}
 	return results, nil
 }

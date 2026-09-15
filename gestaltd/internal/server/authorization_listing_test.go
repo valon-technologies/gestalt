@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -210,12 +211,69 @@ func TestAppsListingFailsWithoutPerItemRetries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status=%d, want 500", resp.StatusCode)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d, want 503", resp.StatusCode)
 	}
 	if len(authz.checkAccessManyRequests) != 1 || len(authz.checkAccessRequests) != 0 {
 		t.Fatalf("failed listing made %d batch calls and %d individual calls", len(authz.checkAccessManyRequests), len(authz.checkAccessRequests))
+	}
+}
+
+func TestAppsListingChunksLargeDirectories(t *testing.T) {
+	t.Parallel()
+	subjectID := principal.UserSubjectID(testCanonicalViewerUserID)
+	authz := &serverTestAuthorizationProvider{}
+	providers := make([]core.Provider, 1001)
+	apps := make(map[string]*config.ProviderEntry, len(providers))
+	for i := range providers {
+		name := fmt.Sprintf("app-%04d", i)
+		providers[i] = &coretesting.StubIntegration{N: name, DN: name, ConnMode: core.ConnectionModeNone}
+		apps[name] = &config.ProviderEntry{}
+		authz.relationships = append(authz.relationships, testAuthorizationRelationship(subjectID, "viewer", "app", name))
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("listing-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Services = testutil.NewStubServices(t)
+		cfg.Providers = testutil.NewProviderRegistry(t, providers...)
+		cfg.AppDefs = apps
+	})
+	testutil.CloseOnCleanup(t, ts)
+	if got := listIntegrationsForTest(t, ts); len(got) != len(providers) {
+		t.Fatalf("listed %d apps, want %d", len(got), len(providers))
+	}
+	if len(authz.checkAccessManyRequests) != 2 || len(authz.checkAccessRequests) != 0 {
+		t.Fatalf("large listing made %d batches and %d individual calls", len(authz.checkAccessManyRequests), len(authz.checkAccessRequests))
+	}
+}
+
+func TestPublicAppsListingSurvivesUnavailableAuthorization(t *testing.T) {
+	t.Parallel()
+	for _, subject := range []string{principal.UserSubjectID(testCanonicalViewerUserID), "user:opaque-subject"} {
+		t.Run(subject, func(t *testing.T) {
+			t.Parallel()
+			authz := &serverTestAuthorizationProvider{checkAccessManyErr: context.DeadlineExceeded}
+			rootDir := t.TempDir()
+			writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>public</html>")
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Auth = authStubWithSessionTokenIntrospect("listing-token", subject, "")
+				cfg.Authorization = authz
+				cfg.Services = testutil.NewStubServices(t)
+				cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "publicApp", DN: "Public", ConnMode: core.ConnectionModeNone})
+				cfg.AppDefs = map[string]*config.ProviderEntry{"publicApp": {
+					Static: &config.AppStaticConfig{Mount: "/public", Public: true}, ResolvedStaticRoot: rootDir,
+				}}
+			})
+			testutil.CloseOnCleanup(t, ts)
+			apps := listIntegrationsForTest(t, ts)
+			if path, ok := mountedPathFor(apps, "publicApp"); !ok || path != "/public" {
+				t.Fatalf("public mount missing from %v", apps)
+			}
+			if len(authz.checkAccessManyRequests) != 0 || len(authz.checkAccessRequests) != 0 {
+				t.Fatal("public listing queried the evaluator")
+			}
+		})
 	}
 }
 

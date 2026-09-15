@@ -214,6 +214,31 @@ func TestCheckOperationAccessManyFailsWithoutPerItemRetries(t *testing.T) {
 	}
 }
 
+func TestCheckOperationAccessManyChunksLargeListings(t *testing.T) {
+	t.Parallel()
+	authz := &batchAuthorizationProvider{allow: map[string][]string{"user:u-123|chat.postMessage": {"user"}}}
+	queries := make([]OperationAccessQuery, 1001)
+	for i := range queries {
+		operation := "chat.postMessage"
+		if i%2 != 0 {
+			operation = "chat.delete"
+		}
+		queries[i] = OperationAccessQuery{Provider: "slack", Operation: operation}
+	}
+	results, err := batchTestBroker(t, authz).CheckOperationAccessMany(context.Background(), batchTestPrincipal(), queries)
+	if err != nil || len(results) != len(queries) {
+		t.Fatalf("large listing returned %d decisions, error=%v", len(results), err)
+	}
+	for i, result := range results {
+		if (result.Err == nil) != (i%2 == 0) {
+			t.Fatalf("operation %d authorization=%v", i, result.Err)
+		}
+	}
+	if authz.checkAccessManyCalls != 2 || authz.checkAccessCalls != 0 {
+		t.Fatalf("large listing made %d batches and %d individual calls", authz.checkAccessManyCalls, authz.checkAccessCalls)
+	}
+}
+
 // TestFilterCatalogForPrincipalReturnsErrorInsteadOfEmptyCatalog is the
 // access-loss guard: an unreachable evaluator must surface an error, never a
 // silently empty operation list that reads as "you have no apps".
