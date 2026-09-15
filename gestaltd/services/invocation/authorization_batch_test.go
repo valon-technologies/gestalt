@@ -195,33 +195,22 @@ func TestCheckOperationAccessManyMatchesSingleDecision(t *testing.T) {
 	}
 }
 
-// TestCheckOperationAccessManyFallsBackWhenBatchFails proves the safety
-// property that matters most: a provider that cannot serve the batch must not
-// turn every entry into a denial. Listing degrades to per-item calls instead.
-func TestCheckOperationAccessManyFallsBackWhenBatchFails(t *testing.T) {
+func TestCheckOperationAccessManyFailsWithoutPerItemRetries(t *testing.T) {
 	t.Parallel()
-
 	authz := &batchAuthorizationProvider{
 		allow:              map[string][]string{"user:u-123|chat.postMessage": {"user"}},
-		checkAccessManyErr: errors.New("batch rpc unimplemented"),
+		checkAccessManyErr: context.DeadlineExceeded,
 	}
 	broker := batchTestBroker(t, authz)
-
 	results, err := broker.CheckOperationAccessMany(context.Background(), batchTestPrincipal(), []OperationAccessQuery{
 		{Provider: "slack", Operation: "chat.postMessage"},
 		{Provider: "slack", Operation: "chat.delete"},
 	})
-	if err != nil {
-		t.Fatalf("CheckOperationAccessMany: %v", err)
+	if !errors.Is(err, context.DeadlineExceeded) || results != nil {
+		t.Fatalf("batch result=%v error=%v", results, err)
 	}
-	if results[0].Err != nil {
-		t.Fatalf("granted operation denied after batch failure: %v", results[0])
-	}
-	if results[1].Err == nil {
-		t.Fatal("ungranted operation allowed after batch failure")
-	}
-	if authz.checkAccessCalls != 2 {
-		t.Fatalf("fallback CheckAccess calls = %d, want 2", authz.checkAccessCalls)
+	if authz.checkAccessCalls != 0 || authz.checkAccessManyCalls != 1 {
+		t.Fatalf("batch calls=%d individual calls=%d", authz.checkAccessManyCalls, authz.checkAccessCalls)
 	}
 }
 

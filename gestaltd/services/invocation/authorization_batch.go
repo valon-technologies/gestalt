@@ -29,8 +29,8 @@ var ErrBatchedAccessTooLarge = fmt.Errorf("batched authorization check exceeds %
 //
 // It fails closed exactly like CheckResourceAccess: a nil provider, a transport
 // error, or a response the server cannot interpret returns an error and no
-// allow. Callers that must not hide entries on failure are expected to fall
-// back to CheckResourceAccess per entry rather than treat the error as a deny.
+// allow. Listing callers propagate errors instead of treating them as denials
+// or amplifying a failed batch into per-entry requests.
 func CheckResourceAccessMany(
 	ctx context.Context,
 	authorization core.AuthorizationProvider,
@@ -115,10 +115,7 @@ type OperationAccessChecker interface {
 // authorizeOperation, so a tool the caller could not actually call is not
 // listed.
 //
-// When the provider cannot serve the batch - a transport failure, an
-// unimplemented batch RPC, or a response the server cannot interpret - each
-// unresolved question falls back to the single-decision path instead of being
-// reported as denied. Listing then costs more calls, never fewer results.
+// Provider errors propagate without retrying unresolved questions individually.
 func (b *Broker) CheckOperationAccessMany(
 	ctx context.Context,
 	p *principal.Principal,
@@ -194,14 +191,7 @@ func (b *Broker) CheckOperationAccessMany(
 
 	decisions, batchErr := CheckResourceAccessMany(ctx, b.authorization, reqs)
 	if batchErr != nil {
-		for n, i := range pending {
-			decision, singleErr := CheckResourceAccess(ctx, b.authorization, reqs[n])
-			if singleErr != nil {
-				return nil, singleErr
-			}
-			results[i].Err = operationAccessResult(decision, queries[i])
-		}
-		return results, nil
+		return nil, batchErr
 	}
 	for n, i := range pending {
 		results[i].Err = operationAccessResult(decisions[n], queries[i])

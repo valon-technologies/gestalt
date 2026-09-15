@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"sync"
 
@@ -108,15 +107,11 @@ func (c *listingDecisionCache) putModel(typeName string, snapshot mountedUIModel
 // with ONE batched provider call and stores the answers in the request's
 // decision cache.
 //
-// A batch the provider cannot serve is deliberately not an error here. The
-// cache simply stays empty and each entry falls back to the single-decision
-// path that already shipped, so listing degrades to more provider calls and
-// never to fewer visible apps. Whatever the evaluator does answer is enforced
-// identically either way, and invoke-time enforcement is unchanged.
-func (s *Server) prefetchListingDecisions(ctx context.Context, reqs []invocation.ResourceAccessRequest) {
+// Failed batches return an error without amplifying the outage into per-item calls.
+func (s *Server) prefetchListingDecisions(ctx context.Context, reqs []invocation.ResourceAccessRequest) error {
 	cache := listingDecisionCacheFromContext(ctx)
 	if s == nil || s.authorization == nil || cache == nil || len(reqs) == 0 {
-		return
+		return nil
 	}
 
 	keys := make([]listingDecisionKey, 0, len(reqs))
@@ -134,13 +129,12 @@ func (s *Server) prefetchListingDecisions(ctx context.Context, reqs []invocation
 
 	decisions, err := invocation.CheckResourceAccessMany(ctx, s.authorization, unique)
 	if err != nil {
-		slog.WarnContext(ctx, "auth: batched listing decision unavailable; falling back to per-item decisions",
-			"error", err, "requests", len(unique))
-		return
+		return err
 	}
 	for i, decision := range decisions {
 		cache.putDecision(keys[i], decision)
 	}
+	return nil
 }
 
 // operationAccessChecker exposes the broker's batched operation-access

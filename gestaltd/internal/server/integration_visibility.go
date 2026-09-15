@@ -43,16 +43,16 @@ func (s *Server) integrationSettingsAccessibleContext(ctx context.Context, p *pr
 // admin it — with a single batched evaluator call. The per-app handlers
 // below still ask checkResourceAccess; they simply find the answer already
 // cached.
-func (s *Server) prefetchIntegrationListingDecisions(ctx context.Context, p *principal.Principal, appNames []string) {
+func (s *Server) prefetchIntegrationListingDecisions(ctx context.Context, p *principal.Principal, appNames []string) error {
 	if s == nil || s.authorization == nil || p == nil || principal.IsNonUserPrincipal(p) {
-		return
+		return nil
 	}
 	subjectID, err := principal.ResolveAuthorizationSubjectID(ctx, s.credentialUserResolver(), p)
 	if err != nil {
-		return
+		return err
 	}
 	if subjectID = strings.TrimSpace(subjectID); subjectID == "" {
-		return
+		return nil
 	}
 
 	reqs := make([]invocation.ResourceAccessRequest, 0, 3*len(appNames))
@@ -74,7 +74,7 @@ func (s *Server) prefetchIntegrationListingDecisions(ctx context.Context, p *pri
 			})
 		}
 	}
-	s.prefetchListingDecisions(ctx, reqs)
+	return s.prefetchListingDecisions(ctx, reqs)
 }
 
 // mountedUIListingAccessRequest is the exact question

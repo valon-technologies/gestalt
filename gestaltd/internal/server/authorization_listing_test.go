@@ -191,24 +191,31 @@ func TestAppsListingHonorsDefaultRole(t *testing.T) {
 	}
 }
 
-// TestAppsListingFallsBackWhenBatchFails proves the batch is an optimization,
-// never a gate: a provider that cannot serve CheckAccessMany must not cost the
-// caller a single app.
-func TestAppsListingFallsBackWhenBatchFails(t *testing.T) {
+// A failed evaluator batch must surface as an HTTP error without retrying
+// every app individually against the same unavailable dependency.
+func TestAppsListingFailsWithoutPerItemRetries(t *testing.T) {
 	t.Parallel()
-
 	subjectID := principal.UserSubjectID(testCanonicalViewerUserID)
 	authz := &serverTestAuthorizationProvider{
 		relationships:      subjectSetGrant(subjectID, "viewer", "app", "sampleApp"),
-		checkAccessManyErr: errors.New("batch rpc unimplemented"),
+		checkAccessManyErr: context.DeadlineExceeded,
 	}
-
-	integrations := listIntegrationsForTest(t, listingTestServer(t, authz, subjectID))
-	if mountedPath, _ := mountedPathFor(integrations, "sampleApp"); mountedPath == "" {
-		t.Fatalf("granted app hidden after batch failure: %#v", integrations)
+	ts := listingTestServer(t, authz, subjectID)
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(authz.checkAccessRequests) == 0 {
-		t.Fatal("batch failure did not fall back to per-item decisions")
+	req.Header.Set("Authorization", "Bearer listing-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status=%d, want 500", resp.StatusCode)
+	}
+	if len(authz.checkAccessManyRequests) != 1 || len(authz.checkAccessRequests) != 0 {
+		t.Fatalf("failed listing made %d batch calls and %d individual calls", len(authz.checkAccessManyRequests), len(authz.checkAccessRequests))
 	}
 }
 
