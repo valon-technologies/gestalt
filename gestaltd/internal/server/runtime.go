@@ -710,7 +710,6 @@ func startAppRegistryHeartbeatWriter(
 ) (*appregistry.HeartbeatWriter, error) {
 	if cfg == nil || result == nil || result.Services == nil ||
 		result.Services.GestaltdInstanceHeartbeats == nil ||
-		result.Services.AppVersionChangeRequests == nil ||
 		result.AppRuntimeSnapshotter == nil {
 		return nil, nil
 	}
@@ -728,7 +727,6 @@ func startAppRegistryHeartbeatWriter(
 	}
 	writer := appregistry.NewHeartbeatWriter(appregistry.HeartbeatWriterConfig{
 		Heartbeats:     result.Services.GestaltdInstanceHeartbeats,
-		ChangeRequests: result.Services.AppVersionChangeRequests,
 		ConfiguredApps: cfg.Apps,
 		Runtime:        result.AppRuntimeSnapshotter,
 		InstanceID:     appregistry.ResolveInstanceID(),

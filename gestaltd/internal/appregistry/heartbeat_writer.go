@@ -10,16 +10,11 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 type HeartbeatService interface {
 	Upsert(context.Context, *core.GestaltdInstanceHeartbeat) (*core.GestaltdInstanceHeartbeat, error)
 	PruneBefore(context.Context, time.Time) (int, error)
-}
-
-type HeartbeatChangeRequests interface {
-	ListAllKnownVersions(context.Context) ([]*core.AppInstallation, error)
 }
 
 type RuntimeSnapshotter interface {
@@ -28,7 +23,6 @@ type RuntimeSnapshotter interface {
 
 type HeartbeatWriter struct {
 	Heartbeats     HeartbeatService
-	ChangeRequests HeartbeatChangeRequests
 	ConfiguredApps map[string]*config.ProviderEntry
 	Runtime        RuntimeSnapshotter
 	InstanceID     string
@@ -50,7 +44,6 @@ type HeartbeatWriter struct {
 
 type HeartbeatWriterConfig struct {
 	Heartbeats     HeartbeatService
-	ChangeRequests HeartbeatChangeRequests
 	ConfiguredApps map[string]*config.ProviderEntry
 	Runtime        RuntimeSnapshotter
 	InstanceID     string
@@ -65,7 +58,6 @@ type HeartbeatWriterConfig struct {
 func NewHeartbeatWriter(cfg HeartbeatWriterConfig) *HeartbeatWriter {
 	return &HeartbeatWriter{
 		Heartbeats:     cfg.Heartbeats,
-		ChangeRequests: cfg.ChangeRequests,
 		ConfiguredApps: cfg.ConfiguredApps,
 		Runtime:        cfg.Runtime,
 		InstanceID:     strings.TrimSpace(cfg.InstanceID),
@@ -79,7 +71,7 @@ func NewHeartbeatWriter(cfg HeartbeatWriterConfig) *HeartbeatWriter {
 }
 
 func (w *HeartbeatWriter) Start(ctx context.Context) {
-	if w == nil || w.Heartbeats == nil || w.ChangeRequests == nil || w.Runtime == nil {
+	if w == nil || w.Heartbeats == nil || w.Runtime == nil {
 		return
 	}
 	w.startOnce.Do(func() {
@@ -144,7 +136,7 @@ func (w *HeartbeatWriter) writeAndLog(ctx context.Context) {
 }
 
 func (w *HeartbeatWriter) WriteOnce(ctx context.Context) error {
-	if w == nil || w.Heartbeats == nil || w.ChangeRequests == nil || w.Runtime == nil {
+	if w == nil || w.Heartbeats == nil || w.Runtime == nil {
 		return fmt.Errorf("runtime heartbeat writer is not configured")
 	}
 	if w.InstanceID == "" || w.SourceVersion == "" {
@@ -161,23 +153,6 @@ func (w *HeartbeatWriter) WriteOnce(ctx context.Context) error {
 	startedAt := w.startedAt
 	w.stateMu.Unlock()
 
-	known, err := w.ChangeRequests.ListAllKnownVersions(ctx)
-	if err != nil {
-		return fmt.Errorf("list desired app versions: %w", err)
-	}
-	desiredByApp := make(map[string]string)
-	knownByApp := make(map[string][]*core.AppInstallation)
-	for _, installation := range known {
-		if installation == nil {
-			continue
-		}
-		app := strings.TrimSpace(installation.AppName)
-		knownByApp[app] = append(knownByApp[app], installation)
-	}
-	for app, installations := range knownByApp {
-		desiredByApp[app] = coredata.LatestKnownVersion(installations)
-	}
-
 	runtime := w.Runtime.SnapshotRegistryApps()
 	apps := make(map[string]core.GestaltdInstanceAppHeartbeat)
 	for app, entry := range w.ConfiguredApps {
@@ -193,7 +168,6 @@ func (w *HeartbeatWriter) WriteOnce(ctx context.Context) error {
 		}
 		apps[app] = core.GestaltdInstanceAppHeartbeat{
 			State:          observation.State,
-			DesiredVersion: desiredByApp[app],
 			RunningVersion: observation.RunningVersion,
 			ObservedAt:     now,
 			LastError:      observation.LastError,

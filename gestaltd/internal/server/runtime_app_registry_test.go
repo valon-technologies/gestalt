@@ -249,6 +249,7 @@ func TestStartAppRegistryHeartbeatWriterUsesBootstrapReadiness(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	services := testutil.NewStubServices(t)
+	services.AppVersionChangeRequests = nil
 	ready := make(chan struct{})
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{

@@ -74,7 +74,7 @@ const (
 
 type GestaltdInstanceAppHeartbeat struct {
 	State          GestaltdInstanceAppState `json:"state"`
-	DesiredVersion string                   `json:"desired_version,omitempty"`
+	DesiredVersion string                   `json:"desired_version,omitempty"` // Read from older rows; no longer written.
 	RunningVersion string                   `json:"running_version,omitempty"`
 	ObservedAt     time.Time                `json:"observed_at"`
 	LastError      string                   `json:"last_error,omitempty"`
@@ -89,8 +89,7 @@ type GestaltdInstanceHeartbeat struct {
 }
 
 // RegistryAppRuntimeObservation is a coherent, local-only observation of a
-// configured registry app. DesiredVersion and ObservedAt are added by the
-// heartbeat writer because they come from coredata and the writer's clock.
+// configured registry app. The heartbeat writer adds ObservedAt from its clock.
 type RegistryAppRuntimeObservation struct {
 	State          GestaltdInstanceAppState
 	RunningVersion string

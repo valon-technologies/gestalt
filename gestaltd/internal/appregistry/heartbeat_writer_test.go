@@ -49,14 +49,6 @@ func (s *recordingHeartbeatService) counts() (int, int, int) {
 	return s.attempts, len(s.writes), len(s.pruneCuts)
 }
 
-type staticHeartbeatChanges struct {
-	known []*core.AppInstallation
-}
-
-func (s staticHeartbeatChanges) ListAllKnownVersions(context.Context) ([]*core.AppInstallation, error) {
-	return s.known, nil
-}
-
 type staticRuntimeSnapshot map[string]core.RegistryAppRuntimeObservation
 
 func (s staticRuntimeSnapshot) SnapshotRegistryApps() map[string]core.RegistryAppRuntimeObservation {
@@ -88,7 +80,6 @@ func TestHeartbeatWriterWaitsForReadyThenWritesImmediatelyAndPeriodically(t *tes
 	clock := &testHeartbeatClock{now: time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)}
 	writer := NewHeartbeatWriter(HeartbeatWriterConfig{
 		Heartbeats:     service,
-		ChangeRequests: staticHeartbeatChanges{},
 		ConfiguredApps: map[string]*config.ProviderEntry{"app": {Source: config.ProviderSource{Registry: "toolshed"}}},
 		Runtime:        staticRuntimeSnapshot{"app": {State: core.GestaltdInstanceAppStateNotRunning}},
 		InstanceID:     "instance",
@@ -129,7 +120,6 @@ func TestHeartbeatWriterRetriesAfterFailedWriteAndPrunesCoarsely(t *testing.T) {
 	clock := &testHeartbeatClock{now: time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)}
 	writer := NewHeartbeatWriter(HeartbeatWriterConfig{
 		Heartbeats:     service,
-		ChangeRequests: staticHeartbeatChanges{},
 		ConfiguredApps: map[string]*config.ProviderEntry{},
 		Runtime:        staticRuntimeSnapshot{},
 		InstanceID:     "instance",
@@ -163,16 +153,12 @@ func TestHeartbeatWriterRetriesAfterFailedWriteAndPrunesCoarsely(t *testing.T) {
 	}
 }
 
-func TestHeartbeatWriterWritesRegistryAppsWithOneDesiredVersionLoad(t *testing.T) {
+func TestHeartbeatWriterReportsRegistryRuntimeObservations(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	service := &recordingHeartbeatService{}
 	writer := NewHeartbeatWriter(HeartbeatWriterConfig{
 		Heartbeats: service,
-		ChangeRequests: staticHeartbeatChanges{known: []*core.AppInstallation{
-			{AppName: "app", Version: "v1", UpdatedAt: now.Add(-time.Hour)},
-			{AppName: "app", Version: "v2", UpdatedAt: now},
-		}},
 		ConfiguredApps: map[string]*config.ProviderEntry{
 			"app":    {Source: config.ProviderSource{Registry: "toolshed"}},
 			"legacy": {},
@@ -193,7 +179,8 @@ func TestHeartbeatWriterWritesRegistryAppsWithOneDesiredVersionLoad(t *testing.T
 	if len(got.Apps) != 1 {
 		t.Fatalf("apps = %#v, want registry app only", got.Apps)
 	}
-	if got.Apps["app"].DesiredVersion != "v2" || got.Apps["app"].RunningVersion != "v2" {
+	if app := got.Apps["app"]; app.State != core.GestaltdInstanceAppStateRunning ||
+		app.RunningVersion != "v2" || app.DesiredVersion != "" || !app.ObservedAt.Equal(now) {
 		t.Fatalf("app observation = %#v", got.Apps["app"])
 	}
 }
