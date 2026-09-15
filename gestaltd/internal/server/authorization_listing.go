@@ -63,14 +63,14 @@ func listingDecisionCacheFromContext(ctx context.Context) *listingDecisionCache 
 	return cache
 }
 
-func (c *listingDecisionCache) decision(key listingDecisionKey) (invocation.ResourceAccessDecision, error, bool) {
+func (c *listingDecisionCache) decision(key listingDecisionKey) (listingDecisionResult, bool) {
 	if c == nil {
-		return invocation.ResourceAccessDecision{}, nil, false
+		return listingDecisionResult{}, false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	decision, ok := c.decisions[key]
-	return decision.decision, decision.err, ok
+	return decision, ok
 }
 
 func (c *listingDecisionCache) putDecision(key listingDecisionKey, decision invocation.ResourceAccessDecision, err error) {
