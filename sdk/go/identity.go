@@ -21,6 +21,13 @@ type IdentityProvider interface {
 	RevokeGrant(ctx context.Context, req *RevokeGrantRequest) (*RevokeGrantResponse, error)
 }
 
+// FederatedLogoutProvider is the optional identity-provider capability for
+// ending an upstream login session. The provider owns its logout protocol and
+// returns the URL to which the browser should be redirected.
+type FederatedLogoutProvider interface {
+	FederatedLogout(ctx context.Context, req *FederatedLogoutRequest) (*FederatedLogoutResponse, error)
+}
+
 type identityCallContextKey struct{}
 type trustedCallerSubjectKey struct{}
 

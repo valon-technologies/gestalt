@@ -46,6 +46,7 @@ import {
 } from "../../internal/codec/external_credential.ts";
 import {
   toWireAuthorizeRequest as codecToWireAuthorizeRequest,
+  toWireFederatedLogoutRequest as codecToWireFederatedLogoutRequest,
   toWireGetGrantRequest as codecToWireGetGrantRequest,
   toWireIntrospectRequest as codecToWireIntrospectRequest,
   toWireListGrantsRequest as codecToWireListGrantsRequest,
@@ -125,6 +126,7 @@ import type {
 } from "../../external_credential.ts";
 import type {
   AuthorizeRequest as NativeAuthorizeRequest,
+  FederatedLogoutRequest as NativeFederatedLogoutRequest,
   GetGrantRequest as NativeGetGrantRequest,
   IntrospectRequest as NativeIntrospectRequest,
   ListGrantsRequest as NativeListGrantsRequest,
@@ -204,6 +206,7 @@ import type {
 } from "../../internal/gen/v1/external_credential_pb.ts";
 import type {
   AuthorizeRequest,
+  FederatedLogoutRequest,
   GetGrantRequest,
   IntrospectRequest,
   ListGrantsRequest,
@@ -277,6 +280,7 @@ import type {
   PublicExternalCredentialsUpsertCredentialRequest,
   PublicExternalCredentialsValidateCredentialConfigRequest,
   PublicIdentityAuthorizeRequest,
+  PublicIdentityFederatedLogoutRequest,
   PublicIdentityGetGrantRequest,
   PublicIdentityIntrospectRequest,
   PublicIdentityListGrantsRequest,
@@ -491,6 +495,14 @@ export function toWireExchangeExternalCredentialRequest(
 ): ExchangeExternalCredentialRequest {
   return codecToWireExchangeExternalCredentialRequest(
     request as Init<NativeExchangeExternalCredentialRequest>,
+  );
+}
+
+export function toWireFederatedLogoutRequest(
+  request: PublicIdentityFederatedLogoutRequest,
+): FederatedLogoutRequest {
+  return codecToWireFederatedLogoutRequest(
+    request as Init<NativeFederatedLogoutRequest>,
   );
 }
 

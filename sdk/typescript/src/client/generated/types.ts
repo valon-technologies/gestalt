@@ -43,6 +43,7 @@ import type {
 } from "../../external_credential.ts";
 import type {
   AuthorizeRequest,
+  FederatedLogoutRequest,
   GetGrantRequest,
   IntrospectRequest,
   ListGrantsRequest,
@@ -201,6 +202,8 @@ export type PublicExternalCredentialsExchangeCredentialRequest =
   ExchangeExternalCredentialRequest;
 
 export type PublicIdentityAuthorizeRequest = AuthorizeRequest;
+
+export type PublicIdentityFederatedLogoutRequest = FederatedLogoutRequest;
 
 export type PublicIdentityTokenRequest = TokenRequest;
 

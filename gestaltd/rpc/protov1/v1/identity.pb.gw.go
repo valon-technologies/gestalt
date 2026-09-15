@@ -62,6 +62,33 @@ func local_request_Identity_Authorize_0(ctx context.Context, marshaler runtime.M
 	return msg, metadata, err
 }
 
+func request_Identity_FederatedLogout_0(ctx context.Context, marshaler runtime.Marshaler, client IdentityClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq FederatedLogoutRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.FederatedLogout(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_Identity_FederatedLogout_0(ctx context.Context, marshaler runtime.Marshaler, server IdentityServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq FederatedLogoutRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.FederatedLogout(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 func request_Identity_Token_0(ctx context.Context, marshaler runtime.Marshaler, client IdentityClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
 		protoReq TokenRequest
@@ -262,6 +289,26 @@ func RegisterIdentityHandlerServer(ctx context.Context, mux *runtime.ServeMux, s
 		}
 		forward_Identity_Authorize_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_Identity_FederatedLogout_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/gestalt.provider.v1.Identity/FederatedLogout", runtime.WithHTTPPathPattern("/api/v2/identity/federated-logout"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_Identity_FederatedLogout_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_Identity_FederatedLogout_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodPost, pattern_Identity_Token_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -439,6 +486,23 @@ func RegisterIdentityHandlerClient(ctx context.Context, mux *runtime.ServeMux, c
 		}
 		forward_Identity_Authorize_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_Identity_FederatedLogout_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/gestalt.provider.v1.Identity/FederatedLogout", runtime.WithHTTPPathPattern("/api/v2/identity/federated-logout"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_Identity_FederatedLogout_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_Identity_FederatedLogout_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodPost, pattern_Identity_Token_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -545,21 +609,23 @@ func RegisterIdentityHandlerClient(ctx context.Context, mux *runtime.ServeMux, c
 }
 
 var (
-	pattern_Identity_Authorize_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "authorize"}, ""))
-	pattern_Identity_Token_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "token"}, ""))
-	pattern_Identity_Introspect_0  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "introspect"}, ""))
-	pattern_Identity_UserInfo_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "userinfo"}, ""))
-	pattern_Identity_ListGrants_0  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "grants"}, ""))
-	pattern_Identity_GetGrant_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"api", "v2", "identity", "grants", "grant_id"}, ""))
-	pattern_Identity_RevokeGrant_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"api", "v2", "identity", "grants", "grant_id"}, ""))
+	pattern_Identity_Authorize_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "authorize"}, ""))
+	pattern_Identity_FederatedLogout_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "federated-logout"}, ""))
+	pattern_Identity_Token_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "token"}, ""))
+	pattern_Identity_Introspect_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "introspect"}, ""))
+	pattern_Identity_UserInfo_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "userinfo"}, ""))
+	pattern_Identity_ListGrants_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v2", "identity", "grants"}, ""))
+	pattern_Identity_GetGrant_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"api", "v2", "identity", "grants", "grant_id"}, ""))
+	pattern_Identity_RevokeGrant_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"api", "v2", "identity", "grants", "grant_id"}, ""))
 )
 
 var (
-	forward_Identity_Authorize_0   = runtime.ForwardResponseMessage
-	forward_Identity_Token_0       = runtime.ForwardResponseMessage
-	forward_Identity_Introspect_0  = runtime.ForwardResponseMessage
-	forward_Identity_UserInfo_0    = runtime.ForwardResponseMessage
-	forward_Identity_ListGrants_0  = runtime.ForwardResponseMessage
-	forward_Identity_GetGrant_0    = runtime.ForwardResponseMessage
-	forward_Identity_RevokeGrant_0 = runtime.ForwardResponseMessage
+	forward_Identity_Authorize_0       = runtime.ForwardResponseMessage
+	forward_Identity_FederatedLogout_0 = runtime.ForwardResponseMessage
+	forward_Identity_Token_0           = runtime.ForwardResponseMessage
+	forward_Identity_Introspect_0      = runtime.ForwardResponseMessage
+	forward_Identity_UserInfo_0        = runtime.ForwardResponseMessage
+	forward_Identity_ListGrants_0      = runtime.ForwardResponseMessage
+	forward_Identity_GetGrant_0        = runtime.ForwardResponseMessage
+	forward_Identity_RevokeGrant_0     = runtime.ForwardResponseMessage
 )

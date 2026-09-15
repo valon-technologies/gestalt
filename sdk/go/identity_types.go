@@ -24,6 +24,17 @@ type AuthorizeResponse struct {
 	RedirectURI string
 }
 
+// FederatedLogoutRequest asks the provider to end its upstream session and
+// return the browser to ReturnTo when complete.
+type FederatedLogoutRequest struct {
+	ReturnTo string
+}
+
+// FederatedLogoutResponse contains the provider-owned logout redirect.
+type FederatedLogoutResponse struct {
+	RedirectURI string
+}
+
 // TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
 // exchange inputs.
 type TokenRequest struct {
@@ -137,6 +148,20 @@ func authorizeResponseToProto(resp *AuthorizeResponse) *proto.AuthorizeResponse 
 		return nil
 	}
 	return &proto.AuthorizeResponse{RedirectUri: resp.RedirectURI}
+}
+
+func federatedLogoutRequestFromProto(req *proto.FederatedLogoutRequest) *FederatedLogoutRequest {
+	if req == nil {
+		return nil
+	}
+	return &FederatedLogoutRequest{ReturnTo: req.GetReturnTo()}
+}
+
+func federatedLogoutResponseToProto(resp *FederatedLogoutResponse) *proto.FederatedLogoutResponse {
+	if resp == nil {
+		return nil
+	}
+	return &proto.FederatedLogoutResponse{RedirectUri: resp.RedirectURI}
 }
 
 func tokenRequestFromProto(req *proto.TokenRequest) *TokenRequest {

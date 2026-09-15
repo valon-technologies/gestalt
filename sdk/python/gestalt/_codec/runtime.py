@@ -55,6 +55,18 @@ def from_wire_health_check_response(value: Any) -> native.HealthCheckResponse:
     )
 
 
+def to_wire_promote_workers_response(value: native.PromoteWorkersResponse) -> Any:
+    return _runtime_pb2.PromoteWorkersResponse(
+        protocol_version=value.protocol_version,
+    )
+
+
+def from_wire_promote_workers_response(value: Any) -> native.PromoteWorkersResponse:
+    return native.PromoteWorkersResponse(
+        protocol_version=value.protocol_version,
+    )
+
+
 def to_wire_provider_identity(value: native.ProviderIdentity) -> Any:
     return _runtime_pb2.ProviderIdentity(
         kind=to_wire_enum(value.kind),

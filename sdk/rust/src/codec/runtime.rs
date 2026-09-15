@@ -5,8 +5,8 @@
 use crate::codec::support::to_wire_struct;
 use crate::generated::v1;
 use crate::runtime::{
-    ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse, ProviderIdentity,
-    StartRuntimeProviderResponse,
+    ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse,
+    PromoteWorkersResponse, ProviderIdentity, StartRuntimeProviderResponse,
 };
 
 /// Converts a native `ConfigureProviderRequest` to its wire message.
@@ -36,6 +36,15 @@ pub(crate) fn from_wire_health_check_response(
     HealthCheckResponse {
         ready: value.ready,
         message: value.message,
+    }
+}
+
+/// Converts a wire `PromoteWorkersResponse` to its native message.
+pub(crate) fn from_wire_promote_workers_response(
+    value: v1::PromoteWorkersResponse,
+) -> PromoteWorkersResponse {
+    PromoteWorkersResponse {
+        protocol_version: value.protocol_version,
     }
 }
 

@@ -26,6 +26,8 @@ from gestalt import (
     Catalog,
     CatalogOperation,
     DeliverWorkflowProviderEventRequest,
+    FederatedLogoutRequest,
+    FederatedLogoutResponse,
     GetRuntimeSupportRequest,
     GetWorkflowProviderDefinitionRequest,
     GetWorkflowProviderRunEventsRequest,
@@ -88,6 +90,7 @@ s3_pb2_grpc: Any = _s3_pb2_grpc
 struct_pb2: Any = _struct_pb2
 workflow_pb2: Any = _workflow_pb2
 workflow_pb2_grpc: Any = _workflow_pb2_grpc
+
 
 class AbortCalled(RuntimeError):
     pass
@@ -634,6 +637,7 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(catalog.operations[0].id, "private_search")
         self.assertEqual(catalog.operations[0].method, "POST")
         self.assertEqual(list(catalog.operations[0].allowed_roles), ["viewer", "admin"])
+
     def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
         app = App("source-name")
 
@@ -737,6 +741,14 @@ class AuthenticationRuntimeTests(unittest.TestCase):
                     client_id="gestaltd",
                 )
             return identity_pb2.IntrospectResponse(active=False)
+
+        def federated_logout(
+            self, request: FederatedLogoutRequest
+        ) -> FederatedLogoutResponse:
+            self.federated_logout_request = request
+            return FederatedLogoutResponse(
+                redirect_uri=f"https://auth.example.test/logout?return_to={request.return_to}",
+            )
 
         def list_grants(self, request: Any, call: IdentityCallContext) -> Any:
             self.list_grants_request = request
@@ -870,6 +882,21 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         self.assertTrue(introspection.active)
         self.assertEqual(introspection.subject, "user:fixture@example.com")
 
+        logout = auth_servicer.FederatedLogout(
+            identity_pb2.FederatedLogoutRequest(
+                return_to="https://app.example.test/",
+            ),
+            mock.Mock(),
+        )
+        self.assertEqual(
+            logout.redirect_uri,
+            "https://auth.example.test/logout?return_to=https://app.example.test/",
+        )
+        self.assertIsInstance(
+            provider.federated_logout_request,
+            FederatedLogoutRequest,
+        )
+
         grants = auth_servicer.ListGrants(
             identity_pb2.ListGrantsRequest(),
             mock.Mock(
@@ -898,7 +925,9 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             ),
         )
         self.assertEqual(grant.scopes[0].scope, "openid")
-        self.assertEqual(provider.get_grant_call.caller_bearer_token, "caller-bearer-token")
+        self.assertEqual(
+            provider.get_grant_call.caller_bearer_token, "caller-bearer-token"
+        )
 
         revoked = auth_servicer.RevokeGrant(
             identity_pb2.RevokeGrantRequest(grant_id="grant-fixture-1"),
@@ -957,9 +986,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
 
     def test_auth_introspect_inactive_token(self) -> None:
-        servicer = _runtime._identity_servicer(
-            provider=self.StubIdentityProvider()
-        )
+        servicer = _runtime._identity_servicer(provider=self.StubIdentityProvider())
         introspection = servicer.Introspect(
             identity_pb2.IntrospectRequest(token="unknown"),
             mock.Mock(),
@@ -1520,7 +1547,9 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.delete_request.definition_id, "definition-1")
         self.assertEqual(applied.id, "definition-1")
         self.assertEqual(fetched.id, "definition-1")
-        self.assertEqual([definition.id for definition in listed.definitions], ["definition-1"])
+        self.assertEqual(
+            [definition.id for definition in listed.definitions], ["definition-1"]
+        )
         self.assertEqual(definition_paused.id, "definition-1")
         self.assertTrue(definition_paused.paused)
         self.assertEqual(activation_paused.id, "definition-1")

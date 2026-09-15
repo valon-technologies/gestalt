@@ -13,6 +13,7 @@ import * as wire from "./internal/gen/v1/runtime_pb.ts";
 import {
   fromWireConfigureProviderResponse,
   fromWireHealthCheckResponse,
+  fromWirePromoteWorkersResponse,
   fromWireProviderIdentity,
   fromWireStartRuntimeProviderResponse,
   toWireConfigureProviderRequest,
@@ -63,6 +64,14 @@ export interface ConfigureProviderResponse {
 export interface HealthCheckResponse {
   ready: boolean;
   message: string;
+}
+
+/**
+ * PromoteWorkersResponse confirms the protocol version the provider is serving
+ * after explicit worker promotion completes.
+ */
+export interface PromoteWorkersResponse {
+  protocolVersion: number;
 }
 
 /**
@@ -165,5 +174,21 @@ export class ProviderLifecycle {
       this.client.startProvider({}, callOptions(this.timeoutMs)),
     );
     return fromWireStartRuntimeProviderResponse(response);
+  }
+
+  async promoteWorkers(): Promise<number> {
+    const response = fromWirePromoteWorkersResponse(
+      await callUnary(() =>
+        this.client.promoteWorkers({}, callOptions(this.timeoutMs)),
+      ),
+    );
+    return response.protocolVersion;
+  }
+
+  async promoteWorkersRaw(): Promise<PromoteWorkersResponse> {
+    const response = await callUnary(() =>
+      this.client.promoteWorkers({}, callOptions(this.timeoutMs)),
+    );
+    return fromWirePromoteWorkersResponse(response);
   }
 }

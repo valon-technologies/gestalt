@@ -36,6 +36,7 @@ import type {
 } from "../runtime/native-types.ts";
 import type {
   AuthorizeRequest,
+  FederatedLogoutRequest,
   GetGrantRequest,
   IntrospectRequest,
   ListGrantsRequest,
@@ -149,6 +150,8 @@ export type PublicAuthorizationListActiveModelResourceTypesRequest =
   Init<ListActiveModelResourceTypesRequest>;
 
 export type PublicIdentityAuthorizeRequest = Init<AuthorizeRequest>;
+
+export type PublicIdentityFederatedLogoutRequest = Init<FederatedLogoutRequest>;
 
 export type PublicIdentityTokenRequest = Init<TokenRequest>;
 

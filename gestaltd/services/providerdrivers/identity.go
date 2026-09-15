@@ -14,7 +14,6 @@ import (
 type yamlConfig struct {
 	componentprovider.YAMLConfig `yaml:",inline"`
 	CallbackURL                  string `yaml:"callbackUrl"`
-	FederatedLogoutProvider      string `yaml:"federatedLogoutProvider"`
 }
 
 func IdentityFactory(node yaml.Node, deps IdentityDeps) (core.IdentityProvider, error) {
@@ -38,17 +37,16 @@ func IdentityFactory(node yaml.Node, deps IdentityDeps) (core.IdentityProvider, 
 		callbackURL = deps.DefaultCallbackURL
 	}
 	return identityservice.NewExecutable(context.Background(), identityservice.ExecConfig{
-		Command:                 cfg.Command,
-		Args:                    cfg.Args,
-		Workdir:                 cfg.Workdir,
-		Env:                     cfg.Env,
-		Config:                  cfg.Config,
-		Egress:                  cfg.EgressPolicy(""),
-		HostBinary:              cfg.HostBinary,
-		Cleanup:                 prepared.Cleanup,
-		HostServices:            deps.HostServices,
-		Name:                    cfg.Name,
-		CallbackURL:             callbackURL,
-		FederatedLogoutProvider: cfg.FederatedLogoutProvider,
+		Command:      cfg.Command,
+		Args:         cfg.Args,
+		Workdir:      cfg.Workdir,
+		Env:          cfg.Env,
+		Config:       cfg.Config,
+		Egress:       cfg.EgressPolicy(""),
+		HostBinary:   cfg.HostBinary,
+		Cleanup:      prepared.Cleanup,
+		HostServices: deps.HostServices,
+		Name:         cfg.Name,
+		CallbackURL:  callbackURL,
 	})
 }

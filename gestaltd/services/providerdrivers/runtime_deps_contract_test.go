@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -57,6 +58,18 @@ func TestIdentityFactoryForwardsRuntimeDepsToExecutableProvider(t *testing.T) {
 	code := parsed.Query().Get("code")
 	if code == "" {
 		t.Fatal("authorize redirect did not include code")
+	}
+
+	federated, ok := auth.(identityservice.FederatedLogoutProvider)
+	if !ok {
+		t.Fatal("identity provider does not expose federated logout")
+	}
+	logoutURL, err := federated.FederatedLogoutURL(ctx, "https://app.example.test/")
+	if err != nil {
+		t.Fatalf("FederatedLogoutURL: %v", err)
+	}
+	if logoutURL != "https://idp.example.test/logout?return_to=https://app.example.test/" {
+		t.Fatalf("FederatedLogoutURL = %q", logoutURL)
 	}
 
 	tokenResp, err := auth.Token(ctx, &core.TokenRequest{
@@ -204,6 +217,17 @@ func authContractProviderSource(wantCallbackURL string) string {
 	}`, `	if strings.Count(req.Token, ".") == 2 {
 		return &gestalt.IntrospectResponse{Active: false}, nil
 	}`, 1)
+	source += `
+
+func (p *Provider) FederatedLogout(_ context.Context, req *gestalt.FederatedLogoutRequest) (*gestalt.FederatedLogoutResponse, error) {
+	if req == nil || strings.TrimSpace(req.ReturnTo) == "" {
+		return nil, fmt.Errorf("return_to is required")
+	}
+	return &gestalt.FederatedLogoutResponse{
+		RedirectURI: "https://idp.example.test/logout?return_to=" + req.ReturnTo,
+	}, nil
+}
+`
 	return source
 }
 

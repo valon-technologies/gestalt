@@ -441,6 +441,21 @@ export const PUBLIC_METHODS = {
         queryFields: [],
       },
     },
+    federatedLogout: {
+      service: "Identity",
+      method: "FederatedLogout",
+      grpcPath: "/gestalt.provider.v1.Identity/FederatedLogout",
+      fill: [],
+      reject: [],
+      stream: false,
+      http: {
+        verb: "POST",
+        path: "/api/v2/identity/federated-logout",
+        body: "*",
+        pathFields: [],
+        queryFields: [],
+      },
+    },
     getGrant: {
       service: "Identity",
       method: "GetGrant",

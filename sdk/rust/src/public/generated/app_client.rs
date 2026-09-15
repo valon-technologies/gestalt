@@ -46,9 +46,10 @@ use crate::codec::external_credential::{
     to_wire_validate_external_credential_config_request,
 };
 use crate::codec::identity::{
-    from_wire_authorize_response, from_wire_get_grant_response, from_wire_introspect_response,
-    from_wire_list_grants_response, from_wire_revoke_grant_response, from_wire_token_response,
-    from_wire_user_info_response, to_wire_authorize_request, to_wire_get_grant_request,
+    from_wire_authorize_response, from_wire_federated_logout_response,
+    from_wire_get_grant_response, from_wire_introspect_response, from_wire_list_grants_response,
+    from_wire_revoke_grant_response, from_wire_token_response, from_wire_user_info_response,
+    to_wire_authorize_request, to_wire_federated_logout_request, to_wire_get_grant_request,
     to_wire_introspect_request, to_wire_list_grants_request, to_wire_revoke_grant_request,
     to_wire_token_request, to_wire_user_info_request,
 };
@@ -80,9 +81,10 @@ use crate::external_credential::{
     ValidateExternalCredentialConfigRequest,
 };
 use crate::identity::{
-    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
-    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
-    RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
+    AuthorizeRequest, AuthorizeResponse, FederatedLogoutRequest, FederatedLogoutResponse,
+    GetGrantRequest, GetGrantResponse, IntrospectRequest, IntrospectResponse, ListGrantsRequest,
+    ListGrantsResponse, RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse,
+    UserInfoRequest, UserInfoResponse,
 };
 use crate::indexeddb::{
     CountResponse, CreateIndexRequest, CreateObjectStoreRequest, DeleteIndexRequest,
@@ -1230,6 +1232,18 @@ impl<T: UnaryTransport> IdentityClient<T> {
         Ok(from_wire_authorize_response(wire_response))
     }
 
+    pub async fn federated_logout(
+        &self,
+        request: FederatedLogoutRequest,
+    ) -> Result<FederatedLogoutResponse, GestaltError> {
+        let wire = to_wire_federated_logout_request(request);
+        let mut wire_response = crate::generated::v1::FederatedLogoutResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_FEDERATED_LOGOUT, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_federated_logout_response(wire_response))
+    }
+
     pub async fn token(&self, request: TokenRequest) -> Result<TokenResponse, GestaltError> {
         let wire = to_wire_token_request(request);
         let mut wire_response = crate::generated::v1::TokenResponse::default();
@@ -1310,6 +1324,17 @@ impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> IdentityC
         self.transport
             .unary(&METHOD_IDENTITY_AUTHORIZE, &wire, &mut wire_response)?;
         Ok(from_wire_authorize_response(wire_response))
+    }
+
+    pub fn federated_logout_sync(
+        &self,
+        request: FederatedLogoutRequest,
+    ) -> Result<FederatedLogoutResponse, GestaltError> {
+        let wire = to_wire_federated_logout_request(request);
+        let mut wire_response = crate::generated::v1::FederatedLogoutResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_FEDERATED_LOGOUT, &wire, &mut wire_response)?;
+        Ok(from_wire_federated_logout_response(wire_response))
     }
 
     pub fn token_sync(&self, request: TokenRequest) -> Result<TokenResponse, GestaltError> {

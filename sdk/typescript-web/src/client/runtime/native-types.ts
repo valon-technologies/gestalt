@@ -775,6 +775,21 @@ export interface AuthorizeResponse {
 }
 
 /**
+ * FederatedLogoutRequest asks the provider to end its upstream session and
+ * return the browser to return_to when complete.
+ */
+export interface FederatedLogoutRequest {
+  returnTo: string;
+}
+
+/**
+ * FederatedLogoutResponse contains the provider-owned logout redirect.
+ */
+export interface FederatedLogoutResponse {
+  redirectUri: string;
+}
+
+/**
  * GetGrantRequest retrieves one API-token grant by ID.
  */
 export interface GetGrantRequest {

@@ -4,8 +4,8 @@
 
 use crate::codec::runtime::{
     from_wire_configure_provider_response, from_wire_health_check_response,
-    from_wire_provider_identity, from_wire_start_runtime_provider_response,
-    to_wire_configure_provider_request,
+    from_wire_promote_workers_response, from_wire_provider_identity,
+    from_wire_start_runtime_provider_response, to_wire_configure_provider_request,
 };
 use crate::generated::v1;
 use crate::rpc_support::GestaltError;
@@ -81,6 +81,17 @@ pub struct HealthCheckResponse {
     pub ready: bool,
     /// The `message` field.
     pub message: String,
+}
+
+/// PromoteWorkersResponse confirms the protocol version the provider is serving
+/// after explicit worker promotion completes.
+///
+/// Native message type for `gestalt.provider.v1.PromoteWorkersResponse`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromoteWorkersResponse {
+    /// The `protocol_version` field.
+    pub protocol_version: i32,
 }
 
 /// ProviderIdentity describes a provider surface and the protocol versions it
@@ -226,5 +237,30 @@ impl ProviderLifecycle {
         Ok(from_wire_start_runtime_provider_response(
             response.into_inner(),
         ))
+    }
+
+    /// Calls `gestalt.provider.v1.ProviderLifecycle.PromoteWorkers`.
+    pub async fn promote_workers(&mut self) -> Result<i32, GestaltError> {
+        let mut tonic_request = tonic::Request::new(());
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = from_wire_promote_workers_response(
+            self.inner
+                .promote_workers(tonic_request)
+                .await?
+                .into_inner(),
+        );
+        Ok(response.protocol_version)
+    }
+
+    /// Calls `gestalt.provider.v1.ProviderLifecycle.PromoteWorkers` with the full request and response messages.
+    pub async fn promote_workers_raw(&mut self) -> Result<PromoteWorkersResponse, GestaltError> {
+        let mut tonic_request = tonic::Request::new(());
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.promote_workers(tonic_request).await?;
+        Ok(from_wire_promote_workers_response(response.into_inner()))
     }
 }

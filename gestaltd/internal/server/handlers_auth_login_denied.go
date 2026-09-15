@@ -111,7 +111,7 @@ func (s *Server) failBrowserLogin(w http.ResponseWriter, r *http.Request, auth a
 		writeError(w, http.StatusUnauthorized, "login failed")
 		return
 	}
-	if logoutURL, err := s.federatedLogoutURL(auth, deniedURL); err == nil && strings.TrimSpace(logoutURL) != "" {
+	if logoutURL, err := s.federatedLogoutURL(r.Context(), auth, deniedURL); err == nil && strings.TrimSpace(logoutURL) != "" {
 		http.Redirect(w, r, logoutURL, http.StatusFound)
 		return
 	}

@@ -19,6 +19,7 @@ import {
 import * as wire from "./internal/gen/v1/identity_pb.ts";
 import {
   fromWireAuthorizeResponse,
+  fromWireFederatedLogoutResponse,
   fromWireGetGrantResponse,
   fromWireIntrospectResponse,
   fromWireListGrantsResponse,
@@ -26,6 +27,7 @@ import {
   fromWireTokenResponse,
   fromWireUserInfoResponse,
   toWireAuthorizeRequest,
+  toWireFederatedLogoutRequest,
   toWireGetGrantRequest,
   toWireIntrospectRequest,
   toWireListGrantsRequest,
@@ -55,6 +57,21 @@ export interface AuthorizeRequest {
  * response parameters.
  */
 export interface AuthorizeResponse {
+  redirectUri: string;
+}
+
+/**
+ * FederatedLogoutRequest asks the provider to end its upstream session and
+ * return the browser to return_to when complete.
+ */
+export interface FederatedLogoutRequest {
+  returnTo: string;
+}
+
+/**
+ * FederatedLogoutResponse contains the provider-owned logout redirect.
+ */
+export interface FederatedLogoutResponse {
   redirectUri: string;
 }
 
@@ -277,6 +294,29 @@ export class Identity {
       ),
     );
     return fromWireAuthorizeResponse(response);
+  }
+
+  async federatedLogout(returnTo: string): Promise<FederatedLogoutResponse> {
+    const request = { returnTo } satisfies Init<FederatedLogoutRequest>;
+    const response = await callUnary(() =>
+      this.client.federatedLogout(
+        toWireFederatedLogoutRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireFederatedLogoutResponse(response);
+  }
+
+  async federatedLogoutRaw(
+    request: Init<FederatedLogoutRequest>,
+  ): Promise<FederatedLogoutResponse> {
+    const response = await callUnary(() =>
+      this.client.federatedLogout(
+        toWireFederatedLogoutRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireFederatedLogoutResponse(response);
   }
 
   async token(

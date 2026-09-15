@@ -451,6 +451,20 @@ var MethodIdentityAuthorize = Method{
 	Reject:          nil,
 }
 
+var MethodIdentityFederatedLogout = Method{
+	Service:         "gestalt.provider.v1.Identity",
+	Name:            "FederatedLogout",
+	FullMethod:      "/gestalt.provider.v1.Identity/FederatedLogout",
+	HTTPVerb:        "POST",
+	HTTPPath:        "/api/v2/identity/federated-logout",
+	HTTPBody:        "*",
+	HTTPPathFields:  nil,
+	HTTPQueryFields: nil,
+	Stream:          false,
+	Fill:            nil,
+	Reject:          nil,
+}
+
 var MethodIdentityToken = Method{
 	Service:         "gestalt.provider.v1.Identity",
 	Name:            "Token",

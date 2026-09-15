@@ -42,6 +42,22 @@ class AuthorizeResponse:
 
 
 @dataclass(frozen=True, slots=True)
+class FederatedLogoutRequest:
+    """FederatedLogoutRequest asks the provider to end its upstream session and
+    return the browser to return_to when complete.
+    """
+
+    return_to: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class FederatedLogoutResponse:
+    """FederatedLogoutResponse contains the provider-owned logout redirect."""
+
+    redirect_uri: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class GetGrantRequest:
     """GetGrantRequest retrieves one API-token grant by ID."""
 
@@ -275,6 +291,31 @@ class Identity:
             )
         )
         return _codec.from_wire_authorize_response(response)
+
+    @overload
+    def federated_logout(
+        self, request: FederatedLogoutRequest
+    ) -> FederatedLogoutResponse: ...
+
+    @overload
+    def federated_logout(self, *, return_to: str = ...) -> FederatedLogoutResponse: ...
+
+    def federated_logout(
+        self,
+        request: FederatedLogoutRequest | None = None,
+        *,
+        return_to: str | None = None,
+    ) -> FederatedLogoutResponse:
+        if request is None:
+            request = FederatedLogoutRequest(return_to=return_to or "")
+        elif return_to is not None:
+            raise ValueError("pass either request or keyword arguments, not both")
+        response = _support.call_unary(
+            lambda: self._stub.FederatedLogout(
+                _codec.to_wire_federated_logout_request(request), timeout=self._timeout
+            )
+        )
+        return _codec.from_wire_federated_logout_response(response)
 
     @overload
     def token(self, request: TokenRequest) -> TokenResponse: ...

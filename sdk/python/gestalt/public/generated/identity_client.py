@@ -10,6 +10,8 @@ from gestalt._codec import identity as _identity_provider_codec
 from gestalt.identity import (
     AuthorizeRequest,
     AuthorizeResponse,
+    FederatedLogoutRequest,
+    FederatedLogoutResponse,
     GetGrantRequest,
     GetGrantResponse,
     IntrospectRequest,
@@ -27,6 +29,7 @@ from gestalt.identity import (
 from ..._gen.v1 import identity_pb2 as _identity_pb2
 from .metadata import (
     METHOD_IDENTITY_AUTHORIZE,
+    METHOD_IDENTITY_FEDERATED_LOGOUT,
     METHOD_IDENTITY_GET_GRANT,
     METHOD_IDENTITY_INTROSPECT,
     METHOD_IDENTITY_LIST_GRANTS,
@@ -54,6 +57,19 @@ class IdentityClient:
             _identity_pb2.AuthorizeResponse,
         )
         return _identity_provider_codec.from_wire_authorize_response(wire_response)
+
+    def federated_logout(
+        self, request: FederatedLogoutRequest
+    ) -> FederatedLogoutResponse:
+        wire = _identity_provider_codec.to_wire_federated_logout_request(request)
+        wire_response = self._transport.unary(
+            METHOD_IDENTITY_FEDERATED_LOGOUT,
+            wire,
+            _identity_pb2.FederatedLogoutResponse,
+        )
+        return _identity_provider_codec.from_wire_federated_logout_response(
+            wire_response
+        )
 
     def token(self, request: TokenRequest) -> TokenResponse:
         wire = _identity_provider_codec.to_wire_token_request(request)
@@ -114,6 +130,9 @@ class IdentityClientREST(Protocol):
     """REST-backed methods for the public gestalt.provider.v1.Identity surface."""
 
     def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse: ...
+    def federated_logout(
+        self, request: FederatedLogoutRequest
+    ) -> FederatedLogoutResponse: ...
     def token(self, request: TokenRequest) -> TokenResponse: ...
     def introspect(self, request: IntrospectRequest) -> IntrospectResponse: ...
     def user_info(self, request: UserInfoRequest) -> UserInfoResponse: ...
@@ -139,6 +158,19 @@ class AsyncIdentityClient:
             _identity_pb2.AuthorizeResponse,
         )
         return _identity_provider_codec.from_wire_authorize_response(wire_response)
+
+    async def federated_logout(
+        self, request: FederatedLogoutRequest
+    ) -> FederatedLogoutResponse:
+        wire = _identity_provider_codec.to_wire_federated_logout_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_IDENTITY_FEDERATED_LOGOUT,
+            wire,
+            _identity_pb2.FederatedLogoutResponse,
+        )
+        return _identity_provider_codec.from_wire_federated_logout_response(
+            wire_response
+        )
 
     async def token(self, request: TokenRequest) -> TokenResponse:
         wire = _identity_provider_codec.to_wire_token_request(request)
@@ -199,6 +231,9 @@ class AsyncIdentityClientREST(Protocol):
     """REST-backed methods for the public gestalt.provider.v1.Identity surface."""
 
     async def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse: ...
+    async def federated_logout(
+        self, request: FederatedLogoutRequest
+    ) -> FederatedLogoutResponse: ...
     async def token(self, request: TokenRequest) -> TokenResponse: ...
     async def introspect(self, request: IntrospectRequest) -> IntrospectResponse: ...
     async def user_info(self, request: UserInfoRequest) -> UserInfoResponse: ...

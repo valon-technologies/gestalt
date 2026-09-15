@@ -2,9 +2,10 @@ use tonic::codegen::async_trait;
 
 use crate::error::Result;
 use crate::identity::{
-    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
-    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
-    RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
+    AuthorizeRequest, AuthorizeResponse, FederatedLogoutRequest, FederatedLogoutResponse,
+    GetGrantRequest, GetGrantResponse, IntrospectRequest, IntrospectResponse, ListGrantsRequest,
+    ListGrantsResponse, RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse,
+    UserInfoRequest, UserInfoResponse,
 };
 
 pub const CALLER_BEARER_TOKEN_METADATA_KEY: &str = "x-gestalt-caller-bearer-token";
@@ -95,6 +96,16 @@ pub trait IdentityProvider: Send + Sync + 'static {
         call: IdentityCallContext,
         req: RevokeGrantRequest,
     ) -> Result<RevokeGrantResponse>;
+
+    /// Returns a provider-owned redirect that ends the upstream identity session.
+    async fn federated_logout(
+        &self,
+        _req: FederatedLogoutRequest,
+    ) -> Result<FederatedLogoutResponse> {
+        Err(crate::Error::unimplemented(
+            "provider does not support federated logout",
+        ))
+    }
 }
 pub(crate) fn caller_bearer_token_from_metadata(metadata: &tonic::metadata::MetadataMap) -> String {
     metadata

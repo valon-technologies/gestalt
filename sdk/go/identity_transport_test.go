@@ -64,6 +64,15 @@ func (p *fullIdentityProvider) Authorize(_ context.Context, req *gestalt.Authori
 	}, nil
 }
 
+func (p *fullIdentityProvider) FederatedLogout(_ context.Context, req *gestalt.FederatedLogoutRequest) (*gestalt.FederatedLogoutResponse, error) {
+	if req == nil || req.ReturnTo == "" {
+		return nil, status.Error(codes.InvalidArgument, "return_to is required")
+	}
+	return &gestalt.FederatedLogoutResponse{
+		RedirectURI: "https://auth.example.test/logout?return_to=" + req.ReturnTo,
+	}, nil
+}
+
 func (p *fullIdentityProvider) Token(ctx context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
 	p.tokenCallerSubject = gestalt.IdentityCallContextFromContext(ctx).CallerSubjectID
 	if req == nil || req.Code != "auth-code" {
@@ -260,6 +269,16 @@ func TestIdentityProviderRoundTrip(t *testing.T) {
 	}
 	if authorizeResp.GetRedirectUri() != "https://auth.example.test/login?state=xyz" {
 		t.Fatalf("redirect_uri = %q, want %q", authorizeResp.GetRedirectUri(), "https://auth.example.test/login?state=xyz")
+	}
+
+	logoutResp, err := authClient.FederatedLogout(rpcCtx, &proto.FederatedLogoutRequest{
+		ReturnTo: "https://app.example.test/",
+	})
+	if err != nil {
+		t.Fatalf("FederatedLogout: %v", err)
+	}
+	if logoutResp.GetRedirectUri() != "https://auth.example.test/logout?return_to=https://app.example.test/" {
+		t.Fatalf("federated logout redirect_uri = %q", logoutResp.GetRedirectUri())
 	}
 
 	tokenResp, err := authClient.Token(rpcCtx, &proto.TokenRequest{

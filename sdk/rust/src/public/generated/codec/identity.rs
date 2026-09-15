@@ -112,6 +112,72 @@ pub(crate) fn decode_wire_authorize_response_json(
     })
 }
 
+/// Encodes a wire `FederatedLogoutRequest` as protobuf JSON.
+pub(crate) fn encode_wire_federated_logout_request_json(
+    value: &v1::FederatedLogoutRequest,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.return_to.is_empty() {
+        object.insert(
+            "returnTo".into(),
+            serde_json::Value::String(value.return_to.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `FederatedLogoutRequest`.
+pub(crate) fn decode_wire_federated_logout_request_json(
+    value: &serde_json::Value,
+) -> Result<v1::FederatedLogoutRequest, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::FederatedLogoutRequest {
+        return_to: match object.get("returnTo") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `FederatedLogoutResponse` as protobuf JSON.
+pub(crate) fn encode_wire_federated_logout_response_json(
+    value: &v1::FederatedLogoutResponse,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.redirect_uri.is_empty() {
+        object.insert(
+            "redirectUri".into(),
+            serde_json::Value::String(value.redirect_uri.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `FederatedLogoutResponse`.
+pub(crate) fn decode_wire_federated_logout_response_json(
+    value: &serde_json::Value,
+) -> Result<v1::FederatedLogoutResponse, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::FederatedLogoutResponse {
+        redirect_uri: match object.get("redirectUri") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
 /// Encodes a wire `GetGrantRequest` as protobuf JSON.
 pub(crate) fn encode_wire_get_grant_request_json(value: &v1::GetGrantRequest) -> serde_json::Value {
     let mut object = serde_json::Map::new();

@@ -340,9 +340,7 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
     if isinstance(target, (App, AppProviderAdapter)):
         return target
 
-    if resolved_kind == ProviderKind.IDENTITY and isinstance(
-        target, IdentityProvider
-    ):
+    if resolved_kind == ProviderKind.IDENTITY and isinstance(target, IdentityProvider):
         return _identity_runtime_plugin(target)
     if resolved_kind == ProviderKind.AUTHORIZATION and isinstance(
         target, AuthorizationProvider
@@ -460,9 +458,7 @@ def _servable_target(
         return target
 
     kind = _normalized_runtime_kind(runtime_kind)
-    if kind == ProviderKind.IDENTITY and isinstance(
-        target, IdentityProvider
-    ):
+    if kind == ProviderKind.IDENTITY and isinstance(target, IdentityProvider):
         return _identity_runtime_plugin(target)
     if kind == ProviderKind.AUTHORIZATION and isinstance(target, AuthorizationProvider):
         return _authorization_runtime_plugin(target)
@@ -1386,9 +1382,7 @@ def _provider_servicer(*, app: App) -> Any:
             for index, declared in enumerate(app.workflow_definitions()):
                 try:
                     spec = (
-                        declared.to_spec()
-                        if hasattr(declared, "to_spec")
-                        else declared
+                        declared.to_spec() if hasattr(declared, "to_spec") else declared
                     )
                     workflow_definition_specs.append(
                         to_wire_workflow_definition_spec(spec).SerializeToString()
@@ -1581,9 +1575,7 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
     auth_provider = cast(IdentityProvider, provider)
 
-    class IdentityServicer(
-        identity_pb2_grpc.IdentityServicer
-    ):
+    class IdentityServicer(identity_pb2_grpc.IdentityServicer):
         @_grpc_handler("authorize")
         def Authorize(self, request: Any, context: Any) -> Any:
             response = auth_provider.authorize(
@@ -1619,6 +1611,18 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
                     "identity provider returned nil response",
                 )
             return _identity_codec.to_wire_introspect_response(response)
+
+        @_grpc_handler("federated logout")
+        def FederatedLogout(self, request: Any, context: Any) -> Any:
+            response = auth_provider.federated_logout(
+                _identity_codec.from_wire_federated_logout_request(request)
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "identity provider returned nil response",
+                )
+            return _identity_codec.to_wire_federated_logout_response(response)
 
         @_grpc_handler("userinfo")
         def UserInfo(self, request: Any, context: Any) -> Any:
@@ -1762,9 +1766,7 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
         @_grpc_handler("authorization set authorization state")
         def SetAuthorizationState(self, request: Any, context: Any) -> Any:
             response = authorization_provider.set_authorization_state(
-                _authorization_codec.from_wire_set_authorization_state_request(
-                    request
-                )
+                _authorization_codec.from_wire_set_authorization_state_request(request)
             )
             if response is None:
                 return context.abort(
@@ -1783,9 +1785,7 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_codec.to_wire_get_active_model_ref_response(
-                response
-            )
+            return _authorization_codec.to_wire_get_active_model_ref_response(response)
 
         @_grpc_handler("authorization set active model")
         def SetActiveModel(self, request: Any, context: Any) -> Any:
@@ -1811,8 +1811,10 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_codec.to_wire_list_active_model_resource_types_response(
-                response
+            return (
+                _authorization_codec.to_wire_list_active_model_resource_types_response(
+                    response
+                )
             )
 
     return AuthorizationServicer()

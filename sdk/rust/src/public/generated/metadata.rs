@@ -63,10 +63,11 @@ use crate::public::generated::codec::external_credential::{
     encode_wire_validate_external_credential_config_request_json,
 };
 use crate::public::generated::codec::identity::{
-    decode_wire_authorize_response_json, decode_wire_get_grant_response_json,
-    decode_wire_introspect_response_json, decode_wire_list_grants_response_json,
-    decode_wire_revoke_grant_response_json, decode_wire_token_response_json,
-    decode_wire_user_info_response_json, encode_wire_authorize_request_json,
+    decode_wire_authorize_response_json, decode_wire_federated_logout_response_json,
+    decode_wire_get_grant_response_json, decode_wire_introspect_response_json,
+    decode_wire_list_grants_response_json, decode_wire_revoke_grant_response_json,
+    decode_wire_token_response_json, decode_wire_user_info_response_json,
+    encode_wire_authorize_request_json, encode_wire_federated_logout_request_json,
     encode_wire_get_grant_request_json, encode_wire_introspect_request_json,
     encode_wire_list_grants_request_json, encode_wire_revoke_grant_request_json,
     encode_wire_token_request_json, encode_wire_user_info_request_json,
@@ -520,6 +521,17 @@ fn encode_authorize_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
 
 fn decode_authorize_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
     let wire = decode_wire_authorize_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_federated_logout_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::FederatedLogoutRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_federated_logout_request_json(&wire))
+}
+
+fn decode_federated_logout_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_federated_logout_response_json(value)?;
     Ok(wire.encode_to_vec())
 }
 
@@ -1657,6 +1669,21 @@ pub const METHOD_IDENTITY_AUTHORIZE: Method = Method {
     reject: &[],
     encode_request_json: Some(encode_authorize_request_json),
     decode_response_json: Some(decode_authorize_response_json),
+};
+
+pub const METHOD_IDENTITY_FEDERATED_LOGOUT: Method = Method {
+    service: "gestalt.provider.v1.Identity",
+    name: "FederatedLogout",
+    full_method: "/gestalt.provider.v1.Identity/FederatedLogout",
+    http_verb: "POST",
+    http_path: "/api/v2/identity/federated-logout",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_federated_logout_request_json),
+    decode_response_json: Some(decode_federated_logout_response_json),
 };
 
 pub const METHOD_IDENTITY_TOKEN: Method = Method {

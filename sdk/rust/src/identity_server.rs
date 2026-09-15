@@ -6,6 +6,8 @@ use crate::auth::{IdentityCallContext, IdentityProvider, caller_bearer_token_fro
 use crate::generated::v1::identity_server::Identity as IdentityProviderGrpc;
 use crate::generated::v1::{
     AuthorizeRequest as ProtoAuthorizeRequest, AuthorizeResponse as ProtoAuthorizeResponse,
+    FederatedLogoutRequest as ProtoFederatedLogoutRequest,
+    FederatedLogoutResponse as ProtoFederatedLogoutResponse,
     GetGrantRequest as ProtoGetGrantRequest, GetGrantResponse as ProtoGetGrantResponse,
     GrantScope as ProtoGrantScope, IntrospectRequest as ProtoIntrospectRequest,
     IntrospectResponse as ProtoIntrospectResponse, ListGrantsRequest as ProtoListGrantsRequest,
@@ -15,8 +17,8 @@ use crate::generated::v1::{
     UserInfoResponse as ProtoUserInfoResponse,
 };
 use crate::identity::{
-    AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
-    TokenRequest, UserInfoRequest, UserInfoResponse,
+    AuthorizeRequest, FederatedLogoutRequest, GetGrantRequest, IntrospectRequest,
+    ListGrantsRequest, RevokeGrantRequest, TokenRequest, UserInfoRequest, UserInfoResponse,
 };
 use crate::identity::{GetGrantResponse, IntrospectResponse, ListGrantsResponse, TokenResponse};
 use crate::rpc_status::rpc_status;
@@ -235,5 +237,21 @@ where
             .await
             .map_err(|error| rpc_status("revoke grant", error))?;
         Ok(GrpcResponse::new(ProtoRevokeGrantResponse {}))
+    }
+
+    async fn federated_logout(
+        &self,
+        request: GrpcRequest<ProtoFederatedLogoutRequest>,
+    ) -> std::result::Result<GrpcResponse<ProtoFederatedLogoutResponse>, Status> {
+        let response = self
+            .provider
+            .federated_logout(FederatedLogoutRequest {
+                return_to: request.into_inner().return_to,
+            })
+            .await
+            .map_err(|error| rpc_status("federated logout", error))?;
+        Ok(GrpcResponse::new(ProtoFederatedLogoutResponse {
+            redirect_uri: response.redirect_uri,
+        }))
     }
 }

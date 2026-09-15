@@ -150,6 +150,8 @@ _AGENT_HELPER_EXPORTS = (
 _AUTHENTICATION_AUTHORED_EXPORTS = (
     "AuthorizeRequest",
     "AuthorizeResponse",
+    "FederatedLogoutRequest",
+    "FederatedLogoutResponse",
     "GetGrantRequest",
     "GetGrantResponse",
     "GrantScope",
