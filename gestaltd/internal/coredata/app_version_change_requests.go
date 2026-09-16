@@ -86,7 +86,7 @@ func (s *AppVersionChangeRequestService) ListRequestsByApp(ctx context.Context, 
 		return nil, fmt.Errorf("list app version change requests: app is required")
 	}
 	query := idb.Bound(
-		[]any{appName, time.Time{}},
+		[]any{appName},
 		[]any{appName, indexedDBMaxTime},
 		false,
 		false,
