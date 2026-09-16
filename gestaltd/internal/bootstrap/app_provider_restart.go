@@ -77,7 +77,7 @@ func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestart
 }
 
 func (r *AppProviderRestarter) Configured(app string) bool {
-	return r != nil && r.cfg != nil && r.cfg.Apps[app] != nil
+	return r != nil && r.cfg != nil && r.cfg.Apps[app] != nil && r.cfg.Apps[app].Source.IsRegistry()
 }
 
 func (r *AppProviderRestarter) Restartable(app string) (bool, error) {

@@ -8,9 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -222,4 +225,50 @@ func restartTestConfig(openAPIURL string) *config.Config {
 		},
 	}
 	return cfg
+}
+
+func TestCatalogReconciliationPreservesPinnedApp(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	srv := newRestartTestOpenAPIServer(t)
+	result, err := bootstrap.Bootstrap(ctx, restartTestConfig(srv.URL), validFactories())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = result.Close(ctx) })
+	select {
+	case <-result.ProvidersReady:
+	case <-time.After(5 * time.Second):
+		t.Fatal("providers did not become ready")
+	}
+	before, err := result.Providers.Get("restart-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = result.Services.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+		App: "restart-app", FromVersion: "pinned", ToVersion: "registry-version",
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName: "restart-app", Version: "registry-version", Registry: "toolshed",
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	poller := appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
+		ChangeRequests:   result.Services.AppVersionChangeRequests,
+		Materializations: result.Services.AppInstanceMaterializations,
+		Rollouts:         result.Services.AppRollouts,
+		AppRestarter:     result.AppRestarter,
+		InstanceID:       "pinned-revision", DisableRestartDelay: true,
+	})
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	after, err := result.Providers.Get("restart-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatal("registry catalog replaced a config-pinned provider")
+	}
 }
