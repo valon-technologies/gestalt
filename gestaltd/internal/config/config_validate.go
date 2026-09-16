@@ -2950,6 +2950,9 @@ func normalizeAppStaticMounts(cfg *Config) error {
 		if entry == nil || entry.Static == nil {
 			continue
 		}
+		if _, err := json.Marshal(entry.Static.PublicConfig); err != nil {
+			return fmt.Errorf("config validation: apps.%s.static.publicConfig must be a JSON object: %w", name, err)
+		}
 		mount := strings.TrimSpace(entry.Static.Mount)
 		if mount == "" {
 			entry.Static.Mount = "/" + name

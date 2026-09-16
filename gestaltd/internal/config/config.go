@@ -575,6 +575,8 @@ type AppStaticConfig struct {
 	Theme         *UIThemeConfig `yaml:"theme,omitempty"`
 	Public        bool           `yaml:"public,omitempty"`
 	CatalogHidden bool           `yaml:"catalogHidden,omitempty"`
+	// PublicConfig is app-owned, non-secret data served beside the UI bundle.
+	PublicConfig map[string]any `yaml:"publicConfig,omitempty"`
 }
 
 type providerEntryFields ProviderEntry
