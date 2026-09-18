@@ -344,28 +344,37 @@ func FilterCatalogForPrincipal(
 		return cat, nil
 	}
 
-	queries := make([]OperationAccessQuery, len(cat.Operations))
+	queryIndexes := make([]int, 0, len(cat.Operations))
+	queries := make([]OperationAccessQuery, 0, len(cat.Operations))
 	for i := range cat.Operations {
-		queries[i] = OperationAccessQuery{
+		// Browser-session operations are only invocable with the browser
+		// session principal. Filter them before the batched evaluator call so
+		// discovery and invocation agree without adding per-operation lookups.
+		if op := cat.Operations[i]; op.API != nil && op.API.IsBrowserSession() &&
+			(p == nil || p.Source != principal.SourceBrowserSession) {
+			continue
+		}
+		queryIndexes = append(queryIndexes, i)
+		queries = append(queries, OperationAccessQuery{
 			Provider:     provName,
 			Operation:    cat.Operations[i].ID,
 			AllowedRoles: cat.Operations[i].AllowedRoles,
-		}
+		})
 	}
 	results, err := checker.CheckOperationAccessMany(ctx, p, queries)
 	if err != nil {
 		return nil, err
 	}
-	if len(results) != len(queries) {
+	if len(results) != len(queryIndexes) {
 		return nil, ErrMalformedAuthorizationDecision
 	}
 
 	filtered := cat.Clone()
 	operations := make([]catalog.CatalogOperation, 0, len(filtered.Operations))
-	for i := range filtered.Operations {
-		if results[i].Err == nil {
-			filtered.Operations[i].AllowedRoles = slices.Clone(results[i].AllowedRoles)
-			operations = append(operations, filtered.Operations[i])
+	for resultIndex, operationIndex := range queryIndexes {
+		if results[resultIndex].Err == nil {
+			filtered.Operations[operationIndex].AllowedRoles = slices.Clone(results[resultIndex].AllowedRoles)
+			operations = append(operations, filtered.Operations[operationIndex])
 		}
 	}
 	filtered.Operations = operations

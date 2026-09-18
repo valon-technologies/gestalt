@@ -180,7 +180,8 @@ func extractOperations(model *v3high.Document, def *declarative.Definition, allo
 			}
 			opID := op.OperationId
 			var allowedRoles []string
-			var api, mcp *bool
+			var api *catalog.APIExposureMode
+			var mcp *bool
 			tags := catalog.MergeTags(op.Tags)
 			if override := allowedOps[op.OperationId]; override != nil {
 				if override.Description != "" {

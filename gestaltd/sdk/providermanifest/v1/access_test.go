@@ -69,6 +69,7 @@ func TestManifestJSONSchemaAcceptsSupportedSpecFields(t *testing.T) {
 			},
 			"allowedOperations": map[string]any{
 				"chat.postMessage": map[string]any{"api": false, "mcp": false},
+				"browser":          map[string]any{"api": "browserSession", "mcp": false},
 			},
 		},
 	}

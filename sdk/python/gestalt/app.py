@@ -26,6 +26,22 @@ _empty: Any = _empty_pb2
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
+APIExposureMode = int
+
+
+class APIExposureModeValues:
+    """APIExposureMode extends the legacy boolean API exposure override with a
+    browser-session-authenticated public HTTP mode. The legacy api bool remains
+    populated alongside this field for downgrade-safe transport.
+
+    Named values for the open APIExposureMode enum.
+    """
+
+    UNSPECIFIED: APIExposureMode = 0
+    BROWSER_SESSION: APIExposureMode = 1
+
+
+# Open enum: unknown numeric values are preserved, so the type is int.
 ConnectionMode = int
 
 
@@ -141,6 +157,9 @@ class CatalogOperation:
     api: bool | None = None
     #: Public MCP exposure override. Absent means exposed by default.
     mcp: bool | None = None
+    #: Extended API exposure mode. When set, api is also false so older peers
+    #: fail closed instead of treating an unknown mode as public.
+    api_mode: APIExposureMode | None = None
 
 
 @dataclass(frozen=True, slots=True)

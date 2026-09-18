@@ -457,6 +457,55 @@ func TestPreparePublicRequest(t *testing.T) {
 	}
 }
 
+func TestPreparePublicRequestMarksOnlyVerifiedBrowserSession(t *testing.T) {
+	t.Parallel()
+
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := &coretesting.StubAuthProvider{
+		IntrospectFn: func(_ context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			if req == nil || req.Token != "session-token" {
+				return &core.IntrospectResponse{Active: false}, nil
+			}
+			return &core.IntrospectResponse{Active: true, Subject: "user:alice"}, nil
+		},
+	}
+	for _, tc := range []struct {
+		name          string
+		verifiedToken string
+		wantSource    principal.Source
+	}{
+		{name: "verified browser ingress", verifiedToken: "session-token", wantSource: principal.SourceBrowserSession},
+		{name: "forged or mismatched ingress", verifiedToken: "other-token", wantSource: principal.SourceBearer},
+		{name: "no ingress marker", wantSource: principal.SourceBearer},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			transport := NewProviderGatewayTransport()
+			transport.SetPublicMethods(registry)
+			transport.SetIdentityProvider(identity)
+			ctx := publicrpc.WithPublicOrigin(context.Background(), proto.App_Invoke_FullMethodName)
+			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer session-token"))
+			if tc.verifiedToken != "" {
+				ctx = WithVerifiedBrowserSessionToken(ctx, tc.verifiedToken)
+			}
+			_, p, _, err := transport.PreparePublicRequest(ctx, proto.App_Invoke_FullMethodName, &proto.AppInvokeRequest{App: "example", Operation: "sync"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p == nil {
+				t.Fatalf("principal = nil, want source %q", tc.wantSource)
+				return
+			}
+			if p.Source != tc.wantSource {
+				t.Fatalf("source = %q, want %q (principal=%+v)", p.Source, tc.wantSource, p)
+			}
+		})
+	}
+}
+
 func TestPublicResourceIDRequiresWorkflowProvider(t *testing.T) {
 	t.Parallel()
 

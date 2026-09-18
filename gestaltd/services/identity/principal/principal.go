@@ -15,6 +15,9 @@ const (
 	SourceUnknown Source = iota
 	SourceBearer
 	SourceEnv
+	// SourceBrowserSession identifies a session cookie minted by the browser
+	// login callback, distinct from raw bearer credentials.
+	SourceBrowserSession
 )
 
 type Kind string
@@ -62,6 +65,8 @@ func (s Source) String() string {
 		return "bearer"
 	case SourceEnv:
 		return "env"
+	case SourceBrowserSession:
+		return "browserSession"
 	default:
 		return ""
 	}
@@ -73,6 +78,8 @@ func ParseSource(value string) Source {
 		return SourceBearer
 	case SourceEnv.String():
 		return SourceEnv
+	case SourceBrowserSession.String():
+		return SourceBrowserSession
 	default:
 		return SourceUnknown
 	}

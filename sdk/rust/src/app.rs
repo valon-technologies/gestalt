@@ -14,6 +14,21 @@ use crate::generated::v1;
 use crate::invoke_support::{InvokeError, decode_app_result};
 use crate::rpc_support::GestaltError;
 
+/// Open enum for `gestalt.provider.v1.APIExposureMode`; unknown numeric values are preserved.
+pub type APIExposureMode = i32;
+
+/// APIExposureMode extends the legacy boolean API exposure override with a
+/// browser-session-authenticated public HTTP mode. The legacy api bool remains
+/// populated alongside this field for downgrade-safe transport.
+///
+/// Named values of `APIExposureMode`.
+pub mod api_exposure_mode {
+    /// API_EXPOSURE_MODE_UNSPECIFIED.
+    pub const API_EXPOSURE_MODE_UNSPECIFIED: i32 = 0;
+    /// API_EXPOSURE_MODE_BROWSER_SESSION.
+    pub const API_EXPOSURE_MODE_BROWSER_SESSION: i32 = 1;
+}
+
 /// Open enum for `gestalt.provider.v1.ConnectionMode`; unknown numeric values are preserved.
 pub type ConnectionMode = i32;
 
@@ -199,6 +214,11 @@ pub struct CatalogOperation {
     ///
     /// The `mcp` field; None when unset.
     pub mcp: Option<bool>,
+    /// Extended API exposure mode. When set, api is also false so older peers
+    /// fail closed instead of treating an unknown mode as public.
+    ///
+    /// The `api_mode` field; None when unset.
+    pub api_mode: Option<APIExposureMode>,
 }
 
 /// CatalogParameter describes one input parameter surfaced in the generated

@@ -450,20 +450,21 @@ type AuthProviderDisplayName interface {
 	DisplayName() string
 }
 
-func (s *Server) setSessionCookie(w http.ResponseWriter, accessToken string, expiresIn int) {
-	maxAge := int(defaultSessionCookieTTL.Seconds())
-	if expiresIn > 0 {
-		maxAge = expiresIn
+func (s *Server) setSessionCookie(w http.ResponseWriter, accessToken string, expiresIn int) error {
+	encoded, maxAge, err := s.browserSessionCookie(accessToken, expiresIn)
+	if err != nil {
+		return err
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
-		Value:    accessToken,
+		Value:    encoded,
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   s.secureCookies,
 		SameSite: http.SameSiteLaxMode,
 	})
+	return nil
 }
 
 func (s *Server) clearSessionCookie(w http.ResponseWriter) {
@@ -483,11 +484,12 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("login callback failed")
 	auditSubjectID := ""
+	auditAuthSource := principal.SourceBrowserSession.String()
 	auth := s.serverAuthRuntime()
 	defer func() {
 		metricutil.RecordAuthMetrics(r.Context(), startedAt, auth.providerName, "token", auditErr != nil)
 		if auditSubjectID != "" {
-			s.auditHTTPEventWithSubjectID(r.Context(), auditSubjectID, principal.SourceBearer.String(), auth.providerName, "auth.login.complete", auditAllowed, auditErr)
+			s.auditHTTPEventWithSubjectID(r.Context(), auditSubjectID, auditAuthSource, auth.providerName, "auth.login.complete", auditAllowed, auditErr)
 			return
 		}
 		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.complete", auditAllowed, auditErr)
@@ -537,6 +539,9 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mode, cliPort, cliRawState := resolveLoginCallbackMode(r, loginState.State)
+	if mode == loginCallbackCLIGrant {
+		auditAuthSource = principal.SourceBearer.String()
+	}
 	if mode == loginCallbackBounce {
 		redirectCLIAuthorization(w, r, cliPort, code, cliRawState)
 		return
@@ -552,6 +557,11 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	if auth.noAuth || auth.provider == nil {
 		auditErr = errors.New("auth is disabled")
 		writeError(w, http.StatusNotFound, "auth is disabled")
+		return
+	}
+	if mode == loginCallbackBrowser && s.encryptor == nil {
+		auditErr = errBrowserSessionEncryptionUnavailable
+		writeError(w, http.StatusServiceUnavailable, "browser session encryption is not configured")
 		return
 	}
 
@@ -621,7 +631,11 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.setSessionCookie(w, tokenResp.AccessToken, tokenResp.ExpiresIn)
+	if err := s.setSessionCookie(w, tokenResp.AccessToken, tokenResp.ExpiresIn); err != nil {
+		auditErr = err
+		writeError(w, http.StatusServiceUnavailable, "browser session encryption is not configured")
+		return
+	}
 
 	auditAllowed = true
 	auditErr = nil

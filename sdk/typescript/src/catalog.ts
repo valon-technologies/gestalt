@@ -62,6 +62,26 @@ export interface CatalogResponseSpec {
 }
 
 /**
+ * Public API exposure override for a catalog operation. Boolean values retain
+ * the legacy API exposure contract; browserSession requires browser session
+ * authentication at the host edge.
+ */
+export type APIExposureMode = boolean | "browserSession";
+
+/** Validates an API exposure value from an authored catalog or untyped input. */
+export function normalizeAPIExposureMode(
+  value: unknown,
+): APIExposureMode | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "boolean" || value === "browserSession") {
+    return value;
+  }
+  throw new Error("api must be a boolean or \"browserSession\"");
+}
+
+/**
  * Static operation metadata emitted by a provider catalog.
  */
 export interface CatalogOperation {
@@ -77,6 +97,8 @@ export interface CatalogOperation {
    */
   outputSchema?: CatalogSchema;
   response?: CatalogResponseSpec;
+  /** Public API exposure override. Absent means exposed by default. */
+  api?: APIExposureMode;
   annotations?: OperationAnnotations;
   requiredScopes?: string[];
   tags?: string[];
@@ -226,6 +248,10 @@ function toCatalogJsonObject(
       }
       if (operation.response !== undefined) {
         serialized.response = operation.response;
+      }
+      const api = normalizeAPIExposureMode(operation.api);
+      if (api !== undefined) {
+        serialized.api = api;
       }
       if (operation.annotations !== undefined) {
         serialized.annotations = operation.annotations;

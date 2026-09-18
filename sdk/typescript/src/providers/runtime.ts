@@ -51,6 +51,7 @@ import {
   CatalogOperationSchema as ProtoCatalogOperationSchema,
   CatalogParameterSchema as ProtoCatalogParameterSchema,
   CatalogSchema as ProtoCatalogSchema,
+  APIExposureMode as ProtoAPIExposureMode,
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
   InvokeFrameSchema as ProtoInvokeFrameSchema,
@@ -126,7 +127,11 @@ import {
 } from "./authorization.ts";
 import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
-import { catalogToYaml, type Catalog } from "../catalog.ts";
+import {
+  catalogToYaml,
+  normalizeAPIExposureMode,
+  type Catalog,
+} from "../catalog.ts";
 import {
   stringListsFromProto,
   stringListsToProto,
@@ -1172,6 +1177,7 @@ function catalogToProto(catalog: Catalog | Record<string, unknown>) {
     description: typed.description ?? "",
     iconSvg: typed.iconSvg ?? "",
     operations: (typed.operations ?? []).map((op) => {
+      const api = normalizeAPIExposureMode(op.api);
       const protoOp = create(ProtoCatalogOperationSchema, {
         id: op.id,
         method: op.method,
@@ -1190,6 +1196,10 @@ function catalogToProto(catalog: Catalog | Record<string, unknown>) {
         requiredScopes: op.requiredScopes ?? [],
         tags: op.tags ?? [],
         readOnly: op.readOnly ?? false,
+        api: api === "browserSession" ? false : api,
+        apiMode: api === "browserSession"
+          ? ProtoAPIExposureMode.API_EXPOSURE_MODE_BROWSER_SESSION
+          : undefined,
         transport: op.transport ?? "",
         allowedRoles: op.allowedRoles ?? [],
         parameters: (op.parameters ?? []).map((p) =>

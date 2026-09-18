@@ -23,7 +23,7 @@ type createGrantResponse struct {
 }
 
 func (s *Server) callerAuthContext(ctx context.Context, r *http.Request) context.Context {
-	token, err := requestSessionOrBearerToken(r)
+	token, err := s.requestSessionOrBearerToken(r)
 	if err != nil || strings.TrimSpace(token) == "" {
 		return ctx
 	}
@@ -76,7 +76,7 @@ func (s *Server) resolveCLICallerSubject(ctx context.Context, token string) (str
 }
 
 func (s *Server) callerBearerToken(r *http.Request) (string, error) {
-	token, err := requestSessionOrBearerToken(r)
+	token, err := s.requestSessionOrBearerToken(r)
 	if err != nil {
 		return "", err
 	}

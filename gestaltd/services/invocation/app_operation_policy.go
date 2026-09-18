@@ -25,6 +25,11 @@ func (b *Broker) appOperationPolicy(ctx context.Context, app string) (core.AppOp
 // Remote providers still own their role evaluation, but local app-wide removal
 // and caller capabilities are enforced before delegation.
 func (b *Broker) authorizeInvocation(ctx context.Context, p *principal.Principal, prov core.Provider, app string, operation catalog.CatalogOperation) (context.Context, catalog.CatalogOperation, error) {
+	if operation.API != nil && operation.API.IsBrowserSession() {
+		if p == nil || p.Source != principal.SourceBrowserSession {
+			return ctx, operation, fmt.Errorf("%w: %s.%s requires a browser session", ErrAuthorizationDenied, app, operation.ID)
+		}
+	}
 	if !principal.AllowsOperationPermission(p, app, operation.ID) {
 		return ctx, operation, fmt.Errorf("%w: %s.%s", ErrScopeDenied, app, operation.ID)
 	}
@@ -67,7 +72,7 @@ func (b *Broker) authorizeInvocation(ctx context.Context, p *principal.Principal
 }
 
 func privateOperation(operation catalog.CatalogOperation) bool {
-	return operation.API != nil && !*operation.API && operation.MCP != nil && !*operation.MCP
+	return operation.API != nil && *operation.API == catalog.APIExposurePrivate && operation.MCP != nil && !*operation.MCP
 }
 
 func verifiedInternalCaller(ctx context.Context) bool {

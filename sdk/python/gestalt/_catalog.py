@@ -7,9 +7,12 @@ import json
 import pathlib
 from collections.abc import Mapping
 from typing import (
+    TYPE_CHECKING,
     Any,
     Iterable,
+    Literal,
     Protocol,
+    TypeAlias,
     cast,
     runtime_checkable,
 )
@@ -19,6 +22,9 @@ import yaml
 from ._api import Request
 from ._catalog_helpers import catalog_parameters
 from ._operations import OperationDefinition
+
+if TYPE_CHECKING:
+    from ._gen.v1.app_pb2 import APIExposureMode as ProtoAPIExposureMode
 
 json_format: Any = cast(Any, None)
 _struct_pb2: Any = cast(Any, None)
@@ -42,6 +48,8 @@ else:
 struct_pb2: Any = cast(Any, _struct_pb2)
 
 _DEFAULT_UNSET = object()
+
+APIExposureMode: TypeAlias = bool | Literal["browserSession"]
 
 
 @dataclasses.dataclass(slots=True)
@@ -105,6 +113,8 @@ class CatalogOperation:
     visible: bool | None = None
     transport: str = ""
     allowed_roles: list[str] = dataclasses.field(default_factory=list)
+    #: Public API exposure override. ``None`` uses the host default.
+    api: APIExposureMode | None = None
 
 
 @dataclasses.dataclass(slots=True)
@@ -167,6 +177,7 @@ def catalog_to_dict(
         raw = json_format.MessageToDict(
             catalog, preserving_proto_field_name=(field_style == "yaml")
         )
+        _collapse_api_mode_fields(raw)
         if "operations" not in raw:
             raw["operations"] = []
         return raw
@@ -174,6 +185,13 @@ def catalog_to_dict(
         return _catalog_to_mapping(catalog, field_style=field_style)
     if isinstance(catalog, Mapping):
         raw = dict(catalog)
+        operations = raw.get("operations")
+        if isinstance(operations, list):
+            raw["operations"] = list(operations)
+        _collapse_api_mode_fields(raw)
+        for raw_operation in raw.get("operations", []):
+            if isinstance(raw_operation, Mapping):
+                _normalize_api_exposure(raw_operation.get("api"))
         if "operations" not in raw:
             raw["operations"] = []
         return raw
@@ -312,7 +330,58 @@ def _catalog_operation_to_proto(operation: CatalogOperation) -> Any:
     if operation.visible is not None:
         proto_operation.visible = operation.visible
     proto_operation.allowed_roles.extend(operation.allowed_roles)
+    api, api_mode = _api_exposure_to_proto(operation.api)
+    if api is not None:
+        proto_operation.api = api
+    if api_mode is not None:
+        proto_operation.api_mode = api_mode
     return proto_operation
+
+
+def _api_exposure_to_proto(
+    value: APIExposureMode | None,
+) -> tuple[bool | None, ProtoAPIExposureMode | None]:
+    """Map authored API exposure to legacy and extended wire fields."""
+    value = _normalize_api_exposure(value)
+    if value is None:
+        return None, None
+    if value == "browserSession":
+        # Old peers must see this as private; they cannot safely infer the
+        # browser-session authentication requirement from an unknown enum.
+        return False, app_pb2.API_EXPOSURE_MODE_BROWSER_SESSION
+    return value, None
+
+
+def _normalize_api_exposure(value: Any) -> APIExposureMode | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if value == "browserSession":
+        return value
+    raise ValueError("api must be a boolean or 'browserSession'")
+
+
+def _collapse_api_mode_fields(catalog: dict[str, Any]) -> None:
+    """Collapse the wire compatibility fields into the authored ``api`` union."""
+    operations = catalog.get("operations")
+    if not isinstance(operations, list):
+        return
+    for index, raw_operation in enumerate(operations):
+        if not isinstance(raw_operation, Mapping):
+            continue
+        operation = dict(raw_operation)
+        mode_key = "api_mode" if "api_mode" in operation else "apiMode"
+        if mode_key in operation:
+            mode = operation.pop(mode_key)
+            if mode in (1, "API_EXPOSURE_MODE_BROWSER_SESSION"):
+                operation["api"] = "browserSession"
+            elif mode not in (0, "API_EXPOSURE_MODE_UNSPECIFIED"):
+                # Unknown modes must never be treated as public by an older
+                # SDK. Preserve a deny decision while dropping the unknown
+                # discriminator from the authored shape.
+                operation["api"] = False
+        operations[index] = operation
 
 
 def _operation_annotations_to_proto(annotations: OperationAnnotations) -> Any:
@@ -402,6 +471,9 @@ def _catalog_operation_to_mapping(
         raw[_field("allowed_roles", "allowedRoles", field_style)] = list(
             operation.allowed_roles
         )
+    api = _normalize_api_exposure(operation.api)
+    if api is not None:
+        raw["api"] = api
     return raw
 
 
@@ -466,6 +538,10 @@ def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
         icon_svg=data.get("icon_svg", data.get("iconSvg", "")),
     )
     for raw_op in data.get("operations", []):
+        if isinstance(raw_op, Mapping):
+            normalized = [dict(raw_op)]
+            _collapse_api_mode_fields({"operations": normalized})
+            raw_op = normalized[0]
         op = CatalogOperation(
             id=raw_op.get("id", ""),
             method=raw_op.get("method", ""),
@@ -475,6 +551,7 @@ def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
             output_schema=raw_op.get("output_schema", raw_op.get("outputSchema", "")),
             read_only=raw_op.get("read_only", raw_op.get("readOnly", False)),
             transport=raw_op.get("transport", ""),
+            api=_normalize_api_exposure(raw_op.get("api")),
         )
         visible = raw_op.get("visible")
         if visible is not None:

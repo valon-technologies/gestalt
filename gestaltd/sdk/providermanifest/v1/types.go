@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,6 +31,16 @@ const (
 func NormalizeKind(kind string) string {
 	return strings.TrimSpace(strings.ToLower(kind))
 }
+
+// APIExposureMode is the accepted shape for an operation's api override.
+// It preserves legacy boolean JSON/YAML while supporting browserSession.
+type APIExposureMode = catalog.APIExposureMode
+
+const (
+	APIExposurePublic         = catalog.APIExposurePublic
+	APIExposurePrivate        = catalog.APIExposurePrivate
+	APIExposureBrowserSession = catalog.APIExposureBrowserSession
+)
 
 type Manifest struct {
 	Kind          string                 `json:"kind,omitempty" yaml:"kind,omitempty"`
@@ -741,7 +752,7 @@ type ManifestOperationOverride struct {
 	Alias       string                    `json:"alias,omitempty" yaml:"alias,omitempty"`
 	Description string                    `json:"description,omitempty" yaml:"description,omitempty"`
 	Tags        []string                  `json:"tags,omitempty" yaml:"tags,omitempty"`
-	API         *bool                     `json:"api,omitempty" yaml:"api,omitempty"`
+	API         *catalog.APIExposureMode  `json:"api,omitempty" yaml:"api,omitempty"`
 	MCP         *bool                     `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 	Paginate    bool                      `json:"paginate,omitempty" yaml:"paginate,omitempty"`
 	Pagination  *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`

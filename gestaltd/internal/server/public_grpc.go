@@ -32,16 +32,17 @@ import (
 )
 
 type publicGRPCConfig struct {
-	Transport           *providergateway.ProviderGatewayTransport
-	Invoker             invocation.Invoker
-	AgentManager        agentmanager.Service
-	WorkflowManager     workflowmanager.Service
-	FeatureFlags        featureflags.Snapshot
-	Authentication      core.IdentityProvider
-	Authorization       core.AuthorizationProvider
-	IndexedDB           indexeddb.IndexedDB
-	ExternalCredentials core.ExternalCredentialProvider
-	RemoteManagement    proto.RemoteManagementServer
+	Transport                *providergateway.ProviderGatewayTransport
+	ResolveRequestCredential func(*http.Request) (string, bool, error)
+	Invoker                  invocation.Invoker
+	AgentManager             agentmanager.Service
+	WorkflowManager          workflowmanager.Service
+	FeatureFlags             featureflags.Snapshot
+	Authentication           core.IdentityProvider
+	Authorization            core.AuthorizationProvider
+	IndexedDB                indexeddb.IndexedDB
+	ExternalCredentials      core.ExternalCredentialProvider
+	RemoteManagement         proto.RemoteManagementServer
 }
 
 type publicUnarySubjectLabelReporter func(context.Context, *principal.Principal)

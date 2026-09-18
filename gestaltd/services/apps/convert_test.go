@@ -11,7 +11,7 @@ import (
 func TestCatalogProtoRoundTripPreservesOperationExposure(t *testing.T) {
 	t.Parallel()
 
-	api := false
+	api := catalog.APIExposurePrivate
 	mcp := true
 	want := &catalog.Catalog{
 		Name: "wire",
@@ -41,5 +41,36 @@ func TestCatalogProtoRoundTripPreservesOperationExposure(t *testing.T) {
 	op := got.Operations[0]
 	if op.API == nil || *op.API != api || op.MCP == nil || *op.MCP != mcp {
 		t.Fatalf("surface flags = api:%v mcp:%v, want api:%v mcp:%v", op.API, op.MCP, api, mcp)
+	}
+}
+
+func TestCatalogProtoRoundTripPreservesBrowserSessionAndDowngradeDeny(t *testing.T) {
+	t.Parallel()
+	mode := catalog.APIExposureBrowserSession
+	wire := catalogToProto(&catalog.Catalog{Name: "wire", Operations: []catalog.CatalogOperation{{ID: "browser", API: &mode}}})
+	if wire.Operations[0].Api == nil || *wire.Operations[0].Api {
+		t.Fatalf("wire api = %v, want explicit false fallback", wire.Operations[0].Api)
+	}
+	if wire.Operations[0].ApiMode == nil || *wire.Operations[0].ApiMode != proto.APIExposureMode_API_EXPOSURE_MODE_BROWSER_SESSION {
+		t.Fatalf("wire api mode = %v, want browser session", wire.Operations[0].ApiMode)
+	}
+	got, err := catalogFromProto(wire)
+	if err != nil {
+		t.Fatalf("catalogFromProto: %v", err)
+	}
+	if got.Operations[0].API == nil || !got.Operations[0].API.IsBrowserSession() {
+		t.Fatalf("round trip api = %v, want browserSession", got.Operations[0].API)
+	}
+
+	// An older peer ignores api_mode but still sees api=false, which remains
+	// denied by the legacy surface check.
+	legacyWire := gproto.Clone(wire).(*proto.Catalog)
+	legacyWire.Operations[0].ApiMode = nil
+	legacyCat, err := catalogFromProto(legacyWire)
+	if err != nil {
+		t.Fatalf("legacy catalogFromProto: %v", err)
+	}
+	if catalog.OperationExposedOnAPI(legacyCat.Operations[0]) {
+		t.Fatal("legacy api=false fallback was exposed")
 	}
 }

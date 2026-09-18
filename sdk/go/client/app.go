@@ -11,6 +11,21 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+// APIExposureMode is the gestalt.provider.v1.APIExposureMode enum. It is open:
+// numeric values outside the named constants are preserved.
+//
+// APIExposureMode extends the legacy boolean API exposure override with a
+// browser-session-authenticated public HTTP mode. The legacy api bool remains
+// populated alongside this field for downgrade-safe transport.
+type APIExposureMode int32
+
+const (
+	// APIExposureModeApiExposureModeUnspecified is the API_EXPOSURE_MODE_UNSPECIFIED value of APIExposureMode.
+	APIExposureModeApiExposureModeUnspecified APIExposureMode = 0
+	// APIExposureModeApiExposureModeBrowserSession is the API_EXPOSURE_MODE_BROWSER_SESSION value of APIExposureMode.
+	APIExposureModeApiExposureModeBrowserSession APIExposureMode = 1
+)
+
 // ConnectionMode is the gestalt.provider.v1.ConnectionMode enum. It is open:
 // numeric values outside the named constants are preserved.
 //
@@ -124,6 +139,9 @@ type CatalogOperation struct {
 	Api *bool
 	// Public MCP exposure override. Absent means exposed by default.
 	Mcp *bool
+	// Extended API exposure mode. When set, api is also false so older peers
+	// fail closed instead of treating an unknown mode as public.
+	ApiMode *APIExposureMode
 }
 
 // CatalogParameter is the native message type for gestalt.provider.v1.CatalogParameter.

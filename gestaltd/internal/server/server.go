@@ -603,16 +603,17 @@ func New(cfg Config) (*Server, error) {
 	})
 	if cfg.RouteProfile != RouteProfileManagement {
 		publicConfig := publicGRPCConfig{
-			Transport:           cfg.PublicGatewayTransport,
-			Invoker:             cfg.Invoker,
-			AgentManager:        cfg.AgentManager,
-			WorkflowManager:     s.workflowSchedules,
-			FeatureFlags:        cfg.FeatureFlags,
-			Authentication:      cfg.Auth,
-			Authorization:       cfg.Authorization,
-			IndexedDB:           cfg.IndexedDB,
-			ExternalCredentials: externalCredentials,
-			RemoteManagement:    cfg.RemoteManagement,
+			Transport:                cfg.PublicGatewayTransport,
+			ResolveRequestCredential: s.requestBearerTokenPreferringHeader,
+			Invoker:                  cfg.Invoker,
+			AgentManager:             cfg.AgentManager,
+			WorkflowManager:          s.workflowSchedules,
+			FeatureFlags:             cfg.FeatureFlags,
+			Authentication:           cfg.Auth,
+			Authorization:            cfg.Authorization,
+			IndexedDB:                cfg.IndexedDB,
+			ExternalCredentials:      externalCredentials,
+			RemoteManagement:         cfg.RemoteManagement,
 		}
 		conn, restHandler, err := buildPublicGateway(publicConfig)
 		if err != nil {

@@ -184,7 +184,7 @@ func TestAppAccessHandlersUseSessionCatalogBeforeInitializingProfile(t *testing.
 func TestAppAccessAdminBaselineKeepsNonAPIOperations(t *testing.T) {
 	t.Parallel()
 
-	disabled := false
+	disabled := catalog.APIExposurePrivate
 	provider := &coretesting.StubIntegration{
 		N: "example",
 		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{

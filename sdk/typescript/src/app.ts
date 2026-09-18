@@ -36,6 +36,18 @@ import type { Init, JsonInput, JsonObjectInput } from "./rpc_support.ts";
 import { decodeAppResult } from "./invoke_support.ts";
 
 /**
+ * APIExposureMode extends the legacy boolean API exposure override with a
+ * browser-session-authenticated public HTTP mode. The legacy api bool remains
+ * populated alongside this field for downgrade-safe transport.
+ */
+export const APIExposureMode = {
+  API_EXPOSURE_MODE_UNSPECIFIED: 0,
+  API_EXPOSURE_MODE_BROWSER_SESSION: 1,
+} as const;
+
+export type APIExposureMode = number;
+
+/**
  * ConnectionMode describes which credential sources a provider accepts.
  */
 export const ConnectionMode = {
@@ -152,6 +164,11 @@ export interface CatalogOperation {
    * Public MCP exposure override. Absent means exposed by default.
    */
   mcp?: boolean;
+  /**
+   * Extended API exposure mode. When set, api is also false so older peers
+   * fail closed instead of treating an unknown mode as public.
+   */
+  apiMode?: APIExposureMode;
 }
 
 /**

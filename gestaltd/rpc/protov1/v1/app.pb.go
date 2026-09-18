@@ -25,6 +25,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// APIExposureMode extends the legacy boolean API exposure override with a
+// browser-session-authenticated public HTTP mode. The legacy api bool remains
+// populated alongside this field for downgrade-safe transport.
+type APIExposureMode int32
+
+const (
+	APIExposureMode_API_EXPOSURE_MODE_UNSPECIFIED     APIExposureMode = 0
+	APIExposureMode_API_EXPOSURE_MODE_BROWSER_SESSION APIExposureMode = 1
+)
+
+// Enum value maps for APIExposureMode.
+var (
+	APIExposureMode_name = map[int32]string{
+		0: "API_EXPOSURE_MODE_UNSPECIFIED",
+		1: "API_EXPOSURE_MODE_BROWSER_SESSION",
+	}
+	APIExposureMode_value = map[string]int32{
+		"API_EXPOSURE_MODE_UNSPECIFIED":     0,
+		"API_EXPOSURE_MODE_BROWSER_SESSION": 1,
+	}
+)
+
+func (x APIExposureMode) Enum() *APIExposureMode {
+	p := new(APIExposureMode)
+	*p = x
+	return p
+}
+
+func (x APIExposureMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (APIExposureMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_app_proto_enumTypes[0].Descriptor()
+}
+
+func (APIExposureMode) Type() protoreflect.EnumType {
+	return &file_v1_app_proto_enumTypes[0]
+}
+
+func (x APIExposureMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use APIExposureMode.Descriptor instead.
+func (APIExposureMode) EnumDescriptor() ([]byte, []int) {
+	return file_v1_app_proto_rawDescGZIP(), []int{0}
+}
+
 // ConnectionMode describes which credential sources a provider accepts.
 type ConnectionMode int32
 
@@ -59,11 +108,11 @@ func (x ConnectionMode) String() string {
 }
 
 func (ConnectionMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_app_proto_enumTypes[0].Descriptor()
+	return file_v1_app_proto_enumTypes[1].Descriptor()
 }
 
 func (ConnectionMode) Type() protoreflect.EnumType {
-	return &file_v1_app_proto_enumTypes[0]
+	return &file_v1_app_proto_enumTypes[1]
 }
 
 func (x ConnectionMode) Number() protoreflect.EnumNumber {
@@ -72,7 +121,7 @@ func (x ConnectionMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConnectionMode.Descriptor instead.
 func (ConnectionMode) EnumDescriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{0}
+	return file_v1_app_proto_rawDescGZIP(), []int{1}
 }
 
 // CatalogParameter describes one input parameter surfaced in the generated
@@ -430,7 +479,10 @@ type CatalogOperation struct {
 	// Public API exposure override. Absent means exposed by default.
 	Api *bool `protobuf:"varint,16,opt,name=api,proto3,oneof" json:"api,omitempty"`
 	// Public MCP exposure override. Absent means exposed by default.
-	Mcp           *bool `protobuf:"varint,17,opt,name=mcp,proto3,oneof" json:"mcp,omitempty"`
+	Mcp *bool `protobuf:"varint,17,opt,name=mcp,proto3,oneof" json:"mcp,omitempty"`
+	// Extended API exposure mode. When set, api is also false so older peers
+	// fail closed instead of treating an unknown mode as public.
+	ApiMode       *APIExposureMode `protobuf:"varint,18,opt,name=api_mode,json=apiMode,proto3,enum=gestalt.provider.v1.APIExposureMode,oneof" json:"api_mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -575,6 +627,13 @@ func (x *CatalogOperation) GetMcp() bool {
 		return *x.Mcp
 	}
 	return false
+}
+
+func (x *CatalogOperation) GetApiMode() APIExposureMode {
+	if x != nil && x.ApiMode != nil {
+		return *x.ApiMode
+	}
+	return APIExposureMode_API_EXPOSURE_MODE_UNSPECIFIED
 }
 
 // Catalog is the static or request-scoped executable surface exposed by a
@@ -2749,7 +2808,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x15OperationResponseSpec\x12>\n" +
 	"\x05unary\x18\x01 \x01(\v2&.gestalt.provider.v1.UnaryResponseSpecH\x00R\x05unary\x12A\n" +
 	"\x06stream\x18\x02 \x01(\v2'.gestalt.provider.v1.StreamResponseSpecH\x00R\x06streamB\x06\n" +
-	"\x04kind\"\x8c\x05\n" +
+	"\x04kind\"\xdf\x05\n" +
 	"\x10CatalogOperation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x14\n" +
@@ -2769,11 +2828,13 @@ const file_v1_app_proto_rawDesc = "" +
 	"\rallowed_roles\x18\x0e \x03(\tR\fallowedRoles\x12F\n" +
 	"\bresponse\x18\x0f \x01(\v2*.gestalt.provider.v1.OperationResponseSpecR\bresponse\x12\x15\n" +
 	"\x03api\x18\x10 \x01(\bH\x01R\x03api\x88\x01\x01\x12\x15\n" +
-	"\x03mcp\x18\x11 \x01(\bH\x02R\x03mcp\x88\x01\x01B\n" +
+	"\x03mcp\x18\x11 \x01(\bH\x02R\x03mcp\x88\x01\x01\x12D\n" +
+	"\bapi_mode\x18\x12 \x01(\x0e2$.gestalt.provider.v1.APIExposureModeH\x03R\aapiMode\x88\x01\x01B\n" +
 	"\n" +
 	"\b_visibleB\x06\n" +
 	"\x04_apiB\x06\n" +
-	"\x04_mcpJ\x04\b\x06\x10\aR\routput_schema\"\xc4\x01\n" +
+	"\x04_mcpB\v\n" +
+	"\t_api_modeJ\x04\b\x06\x10\aR\routput_schema\"\xc4\x01\n" +
 	"\aCatalog\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
@@ -2996,7 +3057,10 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12)\n" +
 	"\x10protocol_version\x18\x04 \x01(\x05R\x0fprotocolVersion\"B\n" +
 	"\x15StartProviderResponse\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*h\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*[\n" +
+	"\x0fAPIExposureMode\x12!\n" +
+	"\x1dAPI_EXPOSURE_MODE_UNSPECIFIED\x10\x00\x12%\n" +
+	"!API_EXPOSURE_MODE_BROWSER_SESSION\x10\x01*h\n" +
 	"\x0eConnectionMode\x12\x1f\n" +
 	"\x1bCONNECTION_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONNECTION_MODE_NONE\x10\x01\x12\x1b\n" +
@@ -3033,136 +3097,138 @@ func file_v1_app_proto_rawDescGZIP() []byte {
 	return file_v1_app_proto_rawDescData
 }
 
-var file_v1_app_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_v1_app_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_v1_app_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_v1_app_proto_goTypes = []any{
-	(ConnectionMode)(0),                // 0: gestalt.provider.v1.ConnectionMode
-	(*CatalogParameter)(nil),           // 1: gestalt.provider.v1.CatalogParameter
-	(*OperationAnnotations)(nil),       // 2: gestalt.provider.v1.OperationAnnotations
-	(*UnaryResponseSpec)(nil),          // 3: gestalt.provider.v1.UnaryResponseSpec
-	(*StreamResponseSpec)(nil),         // 4: gestalt.provider.v1.StreamResponseSpec
-	(*OperationResponseSpec)(nil),      // 5: gestalt.provider.v1.OperationResponseSpec
-	(*CatalogOperation)(nil),           // 6: gestalt.provider.v1.CatalogOperation
-	(*Catalog)(nil),                    // 7: gestalt.provider.v1.Catalog
-	(*ConnectionParamDef)(nil),         // 8: gestalt.provider.v1.ConnectionParamDef
-	(*ProviderMetadata)(nil),           // 9: gestalt.provider.v1.ProviderMetadata
-	(*OperationResult)(nil),            // 10: gestalt.provider.v1.OperationResult
-	(*InvokeMetadata)(nil),             // 11: gestalt.provider.v1.InvokeMetadata
-	(*InvokeFrame)(nil),                // 12: gestalt.provider.v1.InvokeFrame
-	(*AppInvokeRequest)(nil),           // 13: gestalt.provider.v1.AppInvokeRequest
-	(*AppInvokeGraphQLRequest)(nil),    // 14: gestalt.provider.v1.AppInvokeGraphQLRequest
-	(*SubjectContext)(nil),             // 15: gestalt.provider.v1.SubjectContext
-	(*SubjectPermissionContext)(nil),   // 16: gestalt.provider.v1.SubjectPermissionContext
-	(*AgentToolRef)(nil),               // 17: gestalt.provider.v1.AgentToolRef
-	(*StringList)(nil),                 // 18: gestalt.provider.v1.StringList
-	(*CredentialContext)(nil),          // 19: gestalt.provider.v1.CredentialContext
-	(*AccessContext)(nil),              // 20: gestalt.provider.v1.AccessContext
-	(*HostContext)(nil),                // 21: gestalt.provider.v1.HostContext
-	(*ProviderContext)(nil),            // 22: gestalt.provider.v1.ProviderContext
-	(*InvocationContext)(nil),          // 23: gestalt.provider.v1.InvocationContext
-	(*RequestMetaContext)(nil),         // 24: gestalt.provider.v1.RequestMetaContext
-	(*AgentInvocationContext)(nil),     // 25: gestalt.provider.v1.AgentInvocationContext
-	(*RequestContext)(nil),             // 26: gestalt.provider.v1.RequestContext
-	(*HTTPSubjectRequest)(nil),         // 27: gestalt.provider.v1.HTTPSubjectRequest
-	(*ResolveHTTPSubjectRequest)(nil),  // 28: gestalt.provider.v1.ResolveHTTPSubjectRequest
-	(*ResolveHTTPSubjectResponse)(nil), // 29: gestalt.provider.v1.ResolveHTTPSubjectResponse
-	(*ExecuteRequest)(nil),             // 30: gestalt.provider.v1.ExecuteRequest
-	(*GetSessionCatalogRequest)(nil),   // 31: gestalt.provider.v1.GetSessionCatalogRequest
-	(*GetSessionCatalogResponse)(nil),  // 32: gestalt.provider.v1.GetSessionCatalogResponse
-	(*StartProviderRequest)(nil),       // 33: gestalt.provider.v1.StartProviderRequest
-	(*StartProviderResponse)(nil),      // 34: gestalt.provider.v1.StartProviderResponse
-	nil,                                // 35: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
-	nil,                                // 36: gestalt.provider.v1.OperationResult.HeadersEntry
-	nil,                                // 37: gestalt.provider.v1.InvokeMetadata.HeadersEntry
-	nil,                                // 38: gestalt.provider.v1.AppInvokeRequest.HeadersEntry
-	nil,                                // 39: gestalt.provider.v1.AppInvokeGraphQLRequest.HeadersEntry
-	nil,                                // 40: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
-	nil,                                // 41: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
-	nil,                                // 42: gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
-	nil,                                // 43: gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
-	nil,                                // 44: gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	(*structpb.Value)(nil),             // 45: google.protobuf.Value
-	(*structpb.Struct)(nil),            // 46: google.protobuf.Struct
-	(*emptypb.Empty)(nil),              // 47: google.protobuf.Empty
+	(APIExposureMode)(0),               // 0: gestalt.provider.v1.APIExposureMode
+	(ConnectionMode)(0),                // 1: gestalt.provider.v1.ConnectionMode
+	(*CatalogParameter)(nil),           // 2: gestalt.provider.v1.CatalogParameter
+	(*OperationAnnotations)(nil),       // 3: gestalt.provider.v1.OperationAnnotations
+	(*UnaryResponseSpec)(nil),          // 4: gestalt.provider.v1.UnaryResponseSpec
+	(*StreamResponseSpec)(nil),         // 5: gestalt.provider.v1.StreamResponseSpec
+	(*OperationResponseSpec)(nil),      // 6: gestalt.provider.v1.OperationResponseSpec
+	(*CatalogOperation)(nil),           // 7: gestalt.provider.v1.CatalogOperation
+	(*Catalog)(nil),                    // 8: gestalt.provider.v1.Catalog
+	(*ConnectionParamDef)(nil),         // 9: gestalt.provider.v1.ConnectionParamDef
+	(*ProviderMetadata)(nil),           // 10: gestalt.provider.v1.ProviderMetadata
+	(*OperationResult)(nil),            // 11: gestalt.provider.v1.OperationResult
+	(*InvokeMetadata)(nil),             // 12: gestalt.provider.v1.InvokeMetadata
+	(*InvokeFrame)(nil),                // 13: gestalt.provider.v1.InvokeFrame
+	(*AppInvokeRequest)(nil),           // 14: gestalt.provider.v1.AppInvokeRequest
+	(*AppInvokeGraphQLRequest)(nil),    // 15: gestalt.provider.v1.AppInvokeGraphQLRequest
+	(*SubjectContext)(nil),             // 16: gestalt.provider.v1.SubjectContext
+	(*SubjectPermissionContext)(nil),   // 17: gestalt.provider.v1.SubjectPermissionContext
+	(*AgentToolRef)(nil),               // 18: gestalt.provider.v1.AgentToolRef
+	(*StringList)(nil),                 // 19: gestalt.provider.v1.StringList
+	(*CredentialContext)(nil),          // 20: gestalt.provider.v1.CredentialContext
+	(*AccessContext)(nil),              // 21: gestalt.provider.v1.AccessContext
+	(*HostContext)(nil),                // 22: gestalt.provider.v1.HostContext
+	(*ProviderContext)(nil),            // 23: gestalt.provider.v1.ProviderContext
+	(*InvocationContext)(nil),          // 24: gestalt.provider.v1.InvocationContext
+	(*RequestMetaContext)(nil),         // 25: gestalt.provider.v1.RequestMetaContext
+	(*AgentInvocationContext)(nil),     // 26: gestalt.provider.v1.AgentInvocationContext
+	(*RequestContext)(nil),             // 27: gestalt.provider.v1.RequestContext
+	(*HTTPSubjectRequest)(nil),         // 28: gestalt.provider.v1.HTTPSubjectRequest
+	(*ResolveHTTPSubjectRequest)(nil),  // 29: gestalt.provider.v1.ResolveHTTPSubjectRequest
+	(*ResolveHTTPSubjectResponse)(nil), // 30: gestalt.provider.v1.ResolveHTTPSubjectResponse
+	(*ExecuteRequest)(nil),             // 31: gestalt.provider.v1.ExecuteRequest
+	(*GetSessionCatalogRequest)(nil),   // 32: gestalt.provider.v1.GetSessionCatalogRequest
+	(*GetSessionCatalogResponse)(nil),  // 33: gestalt.provider.v1.GetSessionCatalogResponse
+	(*StartProviderRequest)(nil),       // 34: gestalt.provider.v1.StartProviderRequest
+	(*StartProviderResponse)(nil),      // 35: gestalt.provider.v1.StartProviderResponse
+	nil,                                // 36: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
+	nil,                                // 37: gestalt.provider.v1.OperationResult.HeadersEntry
+	nil,                                // 38: gestalt.provider.v1.InvokeMetadata.HeadersEntry
+	nil,                                // 39: gestalt.provider.v1.AppInvokeRequest.HeadersEntry
+	nil,                                // 40: gestalt.provider.v1.AppInvokeGraphQLRequest.HeadersEntry
+	nil,                                // 41: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
+	nil,                                // 42: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
+	nil,                                // 43: gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
+	nil,                                // 44: gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
+	nil,                                // 45: gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	(*structpb.Value)(nil),             // 46: google.protobuf.Value
+	(*structpb.Struct)(nil),            // 47: google.protobuf.Struct
+	(*emptypb.Empty)(nil),              // 48: google.protobuf.Empty
 }
 var file_v1_app_proto_depIdxs = []int32{
-	45, // 0: gestalt.provider.v1.CatalogParameter.default:type_name -> google.protobuf.Value
-	46, // 1: gestalt.provider.v1.UnaryResponseSpec.schema:type_name -> google.protobuf.Struct
-	46, // 2: gestalt.provider.v1.StreamResponseSpec.item_schema:type_name -> google.protobuf.Struct
-	3,  // 3: gestalt.provider.v1.OperationResponseSpec.unary:type_name -> gestalt.provider.v1.UnaryResponseSpec
-	4,  // 4: gestalt.provider.v1.OperationResponseSpec.stream:type_name -> gestalt.provider.v1.StreamResponseSpec
-	2,  // 5: gestalt.provider.v1.CatalogOperation.annotations:type_name -> gestalt.provider.v1.OperationAnnotations
-	1,  // 6: gestalt.provider.v1.CatalogOperation.parameters:type_name -> gestalt.provider.v1.CatalogParameter
-	5,  // 7: gestalt.provider.v1.CatalogOperation.response:type_name -> gestalt.provider.v1.OperationResponseSpec
-	6,  // 8: gestalt.provider.v1.Catalog.operations:type_name -> gestalt.provider.v1.CatalogOperation
-	0,  // 9: gestalt.provider.v1.ProviderMetadata.connection_mode:type_name -> gestalt.provider.v1.ConnectionMode
-	35, // 10: gestalt.provider.v1.ProviderMetadata.connection_params:type_name -> gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
-	7,  // 11: gestalt.provider.v1.ProviderMetadata.static_catalog:type_name -> gestalt.provider.v1.Catalog
-	36, // 12: gestalt.provider.v1.OperationResult.headers:type_name -> gestalt.provider.v1.OperationResult.HeadersEntry
-	37, // 13: gestalt.provider.v1.InvokeMetadata.headers:type_name -> gestalt.provider.v1.InvokeMetadata.HeadersEntry
-	11, // 14: gestalt.provider.v1.InvokeFrame.metadata:type_name -> gestalt.provider.v1.InvokeMetadata
-	46, // 15: gestalt.provider.v1.AppInvokeRequest.params:type_name -> google.protobuf.Struct
-	26, // 16: gestalt.provider.v1.AppInvokeRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	15, // 17: gestalt.provider.v1.AppInvokeRequest.run_as:type_name -> gestalt.provider.v1.SubjectContext
-	38, // 18: gestalt.provider.v1.AppInvokeRequest.headers:type_name -> gestalt.provider.v1.AppInvokeRequest.HeadersEntry
-	46, // 19: gestalt.provider.v1.AppInvokeGraphQLRequest.variables:type_name -> google.protobuf.Struct
-	26, // 20: gestalt.provider.v1.AppInvokeGraphQLRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	39, // 21: gestalt.provider.v1.AppInvokeGraphQLRequest.headers:type_name -> gestalt.provider.v1.AppInvokeGraphQLRequest.HeadersEntry
-	16, // 22: gestalt.provider.v1.SubjectContext.permissions:type_name -> gestalt.provider.v1.SubjectPermissionContext
-	15, // 23: gestalt.provider.v1.AgentToolRef.run_as:type_name -> gestalt.provider.v1.SubjectContext
-	15, // 24: gestalt.provider.v1.RequestContext.subject:type_name -> gestalt.provider.v1.SubjectContext
-	19, // 25: gestalt.provider.v1.RequestContext.credential:type_name -> gestalt.provider.v1.CredentialContext
-	20, // 26: gestalt.provider.v1.RequestContext.access:type_name -> gestalt.provider.v1.AccessContext
-	46, // 27: gestalt.provider.v1.RequestContext.workflow:type_name -> google.protobuf.Struct
-	21, // 28: gestalt.provider.v1.RequestContext.host:type_name -> gestalt.provider.v1.HostContext
-	15, // 29: gestalt.provider.v1.RequestContext.agent_subject:type_name -> gestalt.provider.v1.SubjectContext
-	22, // 30: gestalt.provider.v1.RequestContext.caller:type_name -> gestalt.provider.v1.ProviderContext
-	23, // 31: gestalt.provider.v1.RequestContext.invocation:type_name -> gestalt.provider.v1.InvocationContext
-	17, // 32: gestalt.provider.v1.RequestContext.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
-	24, // 33: gestalt.provider.v1.RequestContext.request_meta:type_name -> gestalt.provider.v1.RequestMetaContext
-	25, // 34: gestalt.provider.v1.RequestContext.agent:type_name -> gestalt.provider.v1.AgentInvocationContext
-	40, // 35: gestalt.provider.v1.HTTPSubjectRequest.headers:type_name -> gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
-	41, // 36: gestalt.provider.v1.HTTPSubjectRequest.query:type_name -> gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
-	46, // 37: gestalt.provider.v1.HTTPSubjectRequest.params:type_name -> google.protobuf.Struct
-	42, // 38: gestalt.provider.v1.HTTPSubjectRequest.verified_claims:type_name -> gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
-	27, // 39: gestalt.provider.v1.ResolveHTTPSubjectRequest.request:type_name -> gestalt.provider.v1.HTTPSubjectRequest
-	26, // 40: gestalt.provider.v1.ResolveHTTPSubjectRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	15, // 41: gestalt.provider.v1.ResolveHTTPSubjectResponse.subject:type_name -> gestalt.provider.v1.SubjectContext
-	46, // 42: gestalt.provider.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
-	43, // 43: gestalt.provider.v1.ExecuteRequest.connection_params:type_name -> gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
-	26, // 44: gestalt.provider.v1.ExecuteRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	44, // 45: gestalt.provider.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	26, // 46: gestalt.provider.v1.GetSessionCatalogRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	7,  // 47: gestalt.provider.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.provider.v1.Catalog
-	46, // 48: gestalt.provider.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
-	8,  // 49: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.provider.v1.ConnectionParamDef
-	18, // 50: gestalt.provider.v1.OperationResult.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
-	18, // 51: gestalt.provider.v1.InvokeMetadata.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
-	18, // 52: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
-	18, // 53: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry.value:type_name -> gestalt.provider.v1.StringList
-	47, // 54: gestalt.provider.v1.AppProvider.GetMetadata:input_type -> google.protobuf.Empty
-	33, // 55: gestalt.provider.v1.AppProvider.StartProvider:input_type -> gestalt.provider.v1.StartProviderRequest
-	30, // 56: gestalt.provider.v1.AppProvider.Execute:input_type -> gestalt.provider.v1.ExecuteRequest
-	30, // 57: gestalt.provider.v1.AppProvider.ExecuteStream:input_type -> gestalt.provider.v1.ExecuteRequest
-	28, // 58: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:input_type -> gestalt.provider.v1.ResolveHTTPSubjectRequest
-	31, // 59: gestalt.provider.v1.AppProvider.GetSessionCatalog:input_type -> gestalt.provider.v1.GetSessionCatalogRequest
-	13, // 60: gestalt.provider.v1.App.Invoke:input_type -> gestalt.provider.v1.AppInvokeRequest
-	13, // 61: gestalt.provider.v1.App.InvokeStream:input_type -> gestalt.provider.v1.AppInvokeRequest
-	14, // 62: gestalt.provider.v1.App.InvokeGraphQL:input_type -> gestalt.provider.v1.AppInvokeGraphQLRequest
-	9,  // 63: gestalt.provider.v1.AppProvider.GetMetadata:output_type -> gestalt.provider.v1.ProviderMetadata
-	34, // 64: gestalt.provider.v1.AppProvider.StartProvider:output_type -> gestalt.provider.v1.StartProviderResponse
-	10, // 65: gestalt.provider.v1.AppProvider.Execute:output_type -> gestalt.provider.v1.OperationResult
-	12, // 66: gestalt.provider.v1.AppProvider.ExecuteStream:output_type -> gestalt.provider.v1.InvokeFrame
-	29, // 67: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:output_type -> gestalt.provider.v1.ResolveHTTPSubjectResponse
-	32, // 68: gestalt.provider.v1.AppProvider.GetSessionCatalog:output_type -> gestalt.provider.v1.GetSessionCatalogResponse
-	10, // 69: gestalt.provider.v1.App.Invoke:output_type -> gestalt.provider.v1.OperationResult
-	12, // 70: gestalt.provider.v1.App.InvokeStream:output_type -> gestalt.provider.v1.InvokeFrame
-	10, // 71: gestalt.provider.v1.App.InvokeGraphQL:output_type -> gestalt.provider.v1.OperationResult
-	63, // [63:72] is the sub-list for method output_type
-	54, // [54:63] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	46, // 0: gestalt.provider.v1.CatalogParameter.default:type_name -> google.protobuf.Value
+	47, // 1: gestalt.provider.v1.UnaryResponseSpec.schema:type_name -> google.protobuf.Struct
+	47, // 2: gestalt.provider.v1.StreamResponseSpec.item_schema:type_name -> google.protobuf.Struct
+	4,  // 3: gestalt.provider.v1.OperationResponseSpec.unary:type_name -> gestalt.provider.v1.UnaryResponseSpec
+	5,  // 4: gestalt.provider.v1.OperationResponseSpec.stream:type_name -> gestalt.provider.v1.StreamResponseSpec
+	3,  // 5: gestalt.provider.v1.CatalogOperation.annotations:type_name -> gestalt.provider.v1.OperationAnnotations
+	2,  // 6: gestalt.provider.v1.CatalogOperation.parameters:type_name -> gestalt.provider.v1.CatalogParameter
+	6,  // 7: gestalt.provider.v1.CatalogOperation.response:type_name -> gestalt.provider.v1.OperationResponseSpec
+	0,  // 8: gestalt.provider.v1.CatalogOperation.api_mode:type_name -> gestalt.provider.v1.APIExposureMode
+	7,  // 9: gestalt.provider.v1.Catalog.operations:type_name -> gestalt.provider.v1.CatalogOperation
+	1,  // 10: gestalt.provider.v1.ProviderMetadata.connection_mode:type_name -> gestalt.provider.v1.ConnectionMode
+	36, // 11: gestalt.provider.v1.ProviderMetadata.connection_params:type_name -> gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
+	8,  // 12: gestalt.provider.v1.ProviderMetadata.static_catalog:type_name -> gestalt.provider.v1.Catalog
+	37, // 13: gestalt.provider.v1.OperationResult.headers:type_name -> gestalt.provider.v1.OperationResult.HeadersEntry
+	38, // 14: gestalt.provider.v1.InvokeMetadata.headers:type_name -> gestalt.provider.v1.InvokeMetadata.HeadersEntry
+	12, // 15: gestalt.provider.v1.InvokeFrame.metadata:type_name -> gestalt.provider.v1.InvokeMetadata
+	47, // 16: gestalt.provider.v1.AppInvokeRequest.params:type_name -> google.protobuf.Struct
+	27, // 17: gestalt.provider.v1.AppInvokeRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	16, // 18: gestalt.provider.v1.AppInvokeRequest.run_as:type_name -> gestalt.provider.v1.SubjectContext
+	39, // 19: gestalt.provider.v1.AppInvokeRequest.headers:type_name -> gestalt.provider.v1.AppInvokeRequest.HeadersEntry
+	47, // 20: gestalt.provider.v1.AppInvokeGraphQLRequest.variables:type_name -> google.protobuf.Struct
+	27, // 21: gestalt.provider.v1.AppInvokeGraphQLRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	40, // 22: gestalt.provider.v1.AppInvokeGraphQLRequest.headers:type_name -> gestalt.provider.v1.AppInvokeGraphQLRequest.HeadersEntry
+	17, // 23: gestalt.provider.v1.SubjectContext.permissions:type_name -> gestalt.provider.v1.SubjectPermissionContext
+	16, // 24: gestalt.provider.v1.AgentToolRef.run_as:type_name -> gestalt.provider.v1.SubjectContext
+	16, // 25: gestalt.provider.v1.RequestContext.subject:type_name -> gestalt.provider.v1.SubjectContext
+	20, // 26: gestalt.provider.v1.RequestContext.credential:type_name -> gestalt.provider.v1.CredentialContext
+	21, // 27: gestalt.provider.v1.RequestContext.access:type_name -> gestalt.provider.v1.AccessContext
+	47, // 28: gestalt.provider.v1.RequestContext.workflow:type_name -> google.protobuf.Struct
+	22, // 29: gestalt.provider.v1.RequestContext.host:type_name -> gestalt.provider.v1.HostContext
+	16, // 30: gestalt.provider.v1.RequestContext.agent_subject:type_name -> gestalt.provider.v1.SubjectContext
+	23, // 31: gestalt.provider.v1.RequestContext.caller:type_name -> gestalt.provider.v1.ProviderContext
+	24, // 32: gestalt.provider.v1.RequestContext.invocation:type_name -> gestalt.provider.v1.InvocationContext
+	18, // 33: gestalt.provider.v1.RequestContext.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
+	25, // 34: gestalt.provider.v1.RequestContext.request_meta:type_name -> gestalt.provider.v1.RequestMetaContext
+	26, // 35: gestalt.provider.v1.RequestContext.agent:type_name -> gestalt.provider.v1.AgentInvocationContext
+	41, // 36: gestalt.provider.v1.HTTPSubjectRequest.headers:type_name -> gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
+	42, // 37: gestalt.provider.v1.HTTPSubjectRequest.query:type_name -> gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
+	47, // 38: gestalt.provider.v1.HTTPSubjectRequest.params:type_name -> google.protobuf.Struct
+	43, // 39: gestalt.provider.v1.HTTPSubjectRequest.verified_claims:type_name -> gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
+	28, // 40: gestalt.provider.v1.ResolveHTTPSubjectRequest.request:type_name -> gestalt.provider.v1.HTTPSubjectRequest
+	27, // 41: gestalt.provider.v1.ResolveHTTPSubjectRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	16, // 42: gestalt.provider.v1.ResolveHTTPSubjectResponse.subject:type_name -> gestalt.provider.v1.SubjectContext
+	47, // 43: gestalt.provider.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
+	44, // 44: gestalt.provider.v1.ExecuteRequest.connection_params:type_name -> gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
+	27, // 45: gestalt.provider.v1.ExecuteRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	45, // 46: gestalt.provider.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	27, // 47: gestalt.provider.v1.GetSessionCatalogRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	8,  // 48: gestalt.provider.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.provider.v1.Catalog
+	47, // 49: gestalt.provider.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
+	9,  // 50: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.provider.v1.ConnectionParamDef
+	19, // 51: gestalt.provider.v1.OperationResult.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
+	19, // 52: gestalt.provider.v1.InvokeMetadata.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
+	19, // 53: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
+	19, // 54: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry.value:type_name -> gestalt.provider.v1.StringList
+	48, // 55: gestalt.provider.v1.AppProvider.GetMetadata:input_type -> google.protobuf.Empty
+	34, // 56: gestalt.provider.v1.AppProvider.StartProvider:input_type -> gestalt.provider.v1.StartProviderRequest
+	31, // 57: gestalt.provider.v1.AppProvider.Execute:input_type -> gestalt.provider.v1.ExecuteRequest
+	31, // 58: gestalt.provider.v1.AppProvider.ExecuteStream:input_type -> gestalt.provider.v1.ExecuteRequest
+	29, // 59: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:input_type -> gestalt.provider.v1.ResolveHTTPSubjectRequest
+	32, // 60: gestalt.provider.v1.AppProvider.GetSessionCatalog:input_type -> gestalt.provider.v1.GetSessionCatalogRequest
+	14, // 61: gestalt.provider.v1.App.Invoke:input_type -> gestalt.provider.v1.AppInvokeRequest
+	14, // 62: gestalt.provider.v1.App.InvokeStream:input_type -> gestalt.provider.v1.AppInvokeRequest
+	15, // 63: gestalt.provider.v1.App.InvokeGraphQL:input_type -> gestalt.provider.v1.AppInvokeGraphQLRequest
+	10, // 64: gestalt.provider.v1.AppProvider.GetMetadata:output_type -> gestalt.provider.v1.ProviderMetadata
+	35, // 65: gestalt.provider.v1.AppProvider.StartProvider:output_type -> gestalt.provider.v1.StartProviderResponse
+	11, // 66: gestalt.provider.v1.AppProvider.Execute:output_type -> gestalt.provider.v1.OperationResult
+	13, // 67: gestalt.provider.v1.AppProvider.ExecuteStream:output_type -> gestalt.provider.v1.InvokeFrame
+	30, // 68: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:output_type -> gestalt.provider.v1.ResolveHTTPSubjectResponse
+	33, // 69: gestalt.provider.v1.AppProvider.GetSessionCatalog:output_type -> gestalt.provider.v1.GetSessionCatalogResponse
+	11, // 70: gestalt.provider.v1.App.Invoke:output_type -> gestalt.provider.v1.OperationResult
+	13, // 71: gestalt.provider.v1.App.InvokeStream:output_type -> gestalt.provider.v1.InvokeFrame
+	11, // 72: gestalt.provider.v1.App.InvokeGraphQL:output_type -> gestalt.provider.v1.OperationResult
+	64, // [64:73] is the sub-list for method output_type
+	55, // [55:64] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_v1_app_proto_init() }
@@ -3186,7 +3252,7 @@ func file_v1_app_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_app_proto_rawDesc), len(file_v1_app_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   2,

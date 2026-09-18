@@ -284,7 +284,7 @@ func (s *Server) mcpOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		DisplayName:         p.Identity.DisplayName,
 		AvatarURL:           p.Identity.AvatarURL,
 		Scope:               strings.TrimSpace(query.Get("scope")),
-		SubjectToken:        subjectTokenFromRequest(r),
+		SubjectToken:        s.subjectTokenFromRequest(r),
 		CallerSubjectID:     callerSubjectID,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
@@ -542,8 +542,8 @@ func mcpOAuthTokenExchangeNeedsReauthorization(err error) bool {
 	return ok && code == gestalt.CodeUnauthenticated
 }
 
-func subjectTokenFromRequest(r *http.Request) string {
-	token, err := requestSessionOrBearerToken(r)
+func (s *Server) subjectTokenFromRequest(r *http.Request) string {
+	token, err := s.requestSessionOrBearerToken(r)
 	if err != nil {
 		return ""
 	}

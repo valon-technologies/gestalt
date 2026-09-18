@@ -119,6 +119,49 @@ func TestFilterCatalogForPrincipalIssuesOneBatchedCall(t *testing.T) {
 	}
 }
 
+func TestFilterCatalogForPrincipalHidesBrowserSessionOperationsFromBearer(t *testing.T) {
+	t.Parallel()
+
+	browser := catalog.APIExposureBrowserSession
+	cat := &catalog.Catalog{
+		Name: "slack",
+		Operations: []catalog.CatalogOperation{
+			{ID: "browser.session", Method: "GET", Transport: catalog.TransportApp, API: &browser},
+			{ID: "public.list", Method: "GET", Transport: catalog.TransportApp},
+		},
+	}
+	authz := &batchAuthorizationProvider{allow: map[string][]string{
+		"user:u-123|browser.session": {"user"},
+		"user:u-123|public.list":     {"user"},
+	}}
+	broker := batchTestBroker(t, authz)
+	bearer := batchTestPrincipal()
+	bearer.Source = principal.SourceBearer
+
+	filtered, err := FilterCatalogForPrincipal(context.Background(), cat, "slack", bearer, broker)
+	if err != nil {
+		t.Fatalf("FilterCatalogForPrincipal bearer: %v", err)
+	}
+	if len(filtered.Operations) != 1 || filtered.Operations[0].ID != "public.list" {
+		t.Fatalf("bearer operations = %#v, want only public.list", filtered.Operations)
+	}
+	if authz.checkAccessManyCalls != 1 {
+		t.Fatalf("CheckAccessMany calls = %d, want 1", authz.checkAccessManyCalls)
+	}
+
+	sessionAuthz := &batchAuthorizationProvider{allow: authz.allow}
+	sessionBroker := batchTestBroker(t, sessionAuthz)
+	session := *bearer
+	session.Source = principal.SourceBrowserSession
+	filtered, err = FilterCatalogForPrincipal(context.Background(), cat, "slack", &session, sessionBroker)
+	if err != nil {
+		t.Fatalf("FilterCatalogForPrincipal browser session: %v", err)
+	}
+	if len(filtered.Operations) != 2 {
+		t.Fatalf("browser-session operations = %#v, want both operations", filtered.Operations)
+	}
+}
+
 // TestFilterCatalogForPrincipalHidesOnlyDeniedOperations proves an ungranted
 // subject sees nothing while a granted subject keeps its operations, and that
 // an operation's AllowedRoles are applied at listing exactly as at invoke.

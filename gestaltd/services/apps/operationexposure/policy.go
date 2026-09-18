@@ -15,7 +15,7 @@ type OperationOverride struct {
 	Description  string                                       `yaml:"description,omitempty" json:"description,omitempty"`
 	AllowedRoles []string                                     `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
 	Tags         []string                                     `yaml:"tags,omitempty" json:"tags,omitempty"`
-	API          *bool                                        `yaml:"api,omitempty" json:"api,omitempty"`
+	API          *catalog.APIExposureMode                     `yaml:"api,omitempty" json:"api,omitempty"`
 	MCP          *bool                                        `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 	Paginate     bool                                         `yaml:"paginate,omitempty" json:"paginate,omitempty"`
 	Pagination   *providermanifestv1.ManifestPaginationConfig `yaml:"pagination,omitempty" json:"pagination,omitempty"`
@@ -54,7 +54,7 @@ type Policy struct {
 	descriptions      map[string]string
 	allowedRoles      map[string][]string
 	tags              map[string][]string
-	api               map[string]bool
+	api               map[string]catalog.APIExposureMode
 	mcp               map[string]bool
 }
 
@@ -74,6 +74,9 @@ func New(allowed map[string]*OperationOverride) (*Policy, error) {
 	var collisions []string
 
 	for original, override := range allowed {
+		if override != nil && override.API != nil && *override.API != catalog.APIExposurePublic && *override.API != catalog.APIExposurePrivate && *override.API != catalog.APIExposureBrowserSession {
+			return nil, fmt.Errorf("operation %q has invalid api exposure mode %q", original, *override.API)
+		}
 		exposed := original
 		if override != nil && override.Alias != "" {
 			exposed = override.Alias
@@ -106,7 +109,7 @@ func New(allowed map[string]*OperationOverride) (*Policy, error) {
 			}
 			if override.API != nil {
 				if policy.api == nil {
-					policy.api = make(map[string]bool)
+					policy.api = make(map[string]catalog.APIExposureMode)
 				}
 				policy.api[exposed] = *override.API
 			}
@@ -294,7 +297,8 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 			op.Tags = catalog.MergeTags(op.Tags, tags)
 		}
 		if value, ok := p.api[exposed]; ok {
-			op.API = boolPointer(value)
+			api := value
+			op.API = &api
 		}
 		if value, ok := p.mcp[exposed]; ok {
 			op.MCP = boolPointer(value)

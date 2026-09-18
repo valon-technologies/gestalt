@@ -216,6 +216,10 @@ func ToWireCatalogOperation(value *CatalogOperation) *proto.CatalogOperation {
 	for _, item := range value.Parameters {
 		out.Parameters = append(out.Parameters, ToWireCatalogParameter(item))
 	}
+	if value.ApiMode != nil {
+		wireValue := proto.APIExposureMode(*value.ApiMode)
+		out.ApiMode = &wireValue
+	}
 	return out
 }
 
@@ -242,6 +246,10 @@ func FromWireCatalogOperation(value *proto.CatalogOperation) *CatalogOperation {
 	}
 	for _, item := range value.Parameters {
 		out.Parameters = append(out.Parameters, FromWireCatalogParameter(item))
+	}
+	if value.ApiMode != nil {
+		nativeValue := APIExposureMode(*value.ApiMode)
+		out.ApiMode = &nativeValue
 	}
 	return out
 }

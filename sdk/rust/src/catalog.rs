@@ -22,6 +22,19 @@ pub struct Catalog {
     pub operations: Vec<CatalogOperation>,
 }
 
+/// Public API exposure override for a catalog operation. Boolean modes retain
+/// the legacy catalog representation; `BrowserSession` requires browser
+/// session authentication at the host edge.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApiExposureMode {
+    /// Expose the operation on the public API.
+    Public,
+    /// Keep the operation off the public API.
+    Private,
+    /// Expose the operation only with browser session authentication.
+    BrowserSession,
+}
+
 /// One operation exposed by a catalog.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CatalogOperation {
@@ -56,7 +69,7 @@ pub struct CatalogOperation {
     /// The `allowed_roles` field.
     pub allowed_roles: Vec<String>,
     /// Public API exposure override. Absent means exposed by default.
-    pub api: Option<bool>,
+    pub api: Option<ApiExposureMode>,
     /// Public MCP exposure override. Absent means exposed by default.
     pub mcp: Option<bool>,
 }
@@ -248,6 +261,7 @@ fn json_value_to_prost_value(value: JsonValue) -> prost_types::Value {
 }
 
 fn operation_to_proto(operation: &CatalogOperation) -> v1::CatalogOperation {
+    let (api, api_mode) = api_exposure_to_proto(operation.api);
     v1::CatalogOperation {
         id: operation.id.clone(),
         method: operation.method.clone(),
@@ -267,8 +281,21 @@ fn operation_to_proto(operation: &CatalogOperation) -> v1::CatalogOperation {
         visible: operation.visible,
         transport: operation.transport.clone(),
         allowed_roles: operation.allowed_roles.clone(),
-        api: operation.api,
+        api,
         mcp: operation.mcp,
+        api_mode,
+    }
+}
+
+fn api_exposure_to_proto(value: Option<ApiExposureMode>) -> (Option<bool>, Option<i32>) {
+    match value {
+        None => (None, None),
+        Some(ApiExposureMode::Public) => (Some(true), None),
+        Some(ApiExposureMode::Private) => (Some(false), None),
+        Some(ApiExposureMode::BrowserSession) => (
+            Some(false),
+            Some(v1::ApiExposureMode::BrowserSession as i32),
+        ),
     }
 }
 
@@ -347,6 +374,16 @@ fn operation_to_json_value(op: &CatalogOperation) -> JsonValue {
     }
     if let Some(visible) = op.visible {
         obj.insert("visible".to_owned(), json!(visible));
+    }
+    if let Some(api) = op.api {
+        obj.insert(
+            "api".to_owned(),
+            match api {
+                ApiExposureMode::Public => json!(true),
+                ApiExposureMode::Private => json!(false),
+                ApiExposureMode::BrowserSession => json!("browserSession"),
+            },
+        );
     }
     if !op.transport.is_empty() {
         obj.insert("transport".to_owned(), json!(op.transport));
@@ -664,6 +701,39 @@ mod tests {
             .and_then(|v| v.get("stream"))
             .expect("stream variant");
         assert_eq!(stream["mediaType"], "application/x-ndjson");
+    }
+
+    #[test]
+    fn browser_session_exposure_downgrades_to_private_legacy_wire_field() {
+        let op = CatalogOperation {
+            api: Some(ApiExposureMode::BrowserSession),
+            ..Default::default()
+        };
+        let proto = operation_to_proto(&op);
+        assert_eq!(proto.api, Some(false));
+        assert_eq!(
+            proto.api_mode,
+            Some(v1::ApiExposureMode::BrowserSession as i32)
+        );
+    }
+
+    #[test]
+    fn api_exposure_json_uses_legacy_bool_or_browser_session_string() {
+        for (mode, expected) in [
+            (ApiExposureMode::Public, true),
+            (ApiExposureMode::Private, false),
+        ] {
+            let value = operation_to_json_value(&CatalogOperation {
+                api: Some(mode),
+                ..Default::default()
+            });
+            assert_eq!(value["api"], serde_json::json!(expected));
+        }
+        let value = operation_to_json_value(&CatalogOperation {
+            api: Some(ApiExposureMode::BrowserSession),
+            ..Default::default()
+        });
+        assert_eq!(value["api"], serde_json::json!("browserSession"));
     }
 
     #[test]

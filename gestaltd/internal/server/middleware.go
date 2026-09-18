@@ -129,23 +129,25 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 
 var errInvalidAuthorizationHeader = errors.New("invalid authorization header format")
 
-func requestBearerTokenPreferringHeader(r *http.Request) (string, error) {
+// requestBearerTokenPreferringHeader resolves the upstream token and records
+// whether it came from a validated browser-session cookie.
+func (s *Server) requestBearerTokenPreferringHeader(r *http.Request) (string, bool, error) {
 	token, err := requestBearerToken(r)
 	if err == nil && token != "" {
-		return token, nil
+		return token, false, nil
 	}
 	if err != nil && !errors.Is(err, errInvalidAuthorizationHeader) {
-		return "", err
+		return "", false, err
 	}
-	if c, err := r.Cookie(sessionCookieName); err == nil {
-		if token := strings.TrimSpace(c.Value); token != "" {
-			return token, nil
-		}
+	if token, browserSession, present, cookieErr := s.sessionCookieCredential(r); cookieErr != nil {
+		return "", false, principal.ErrInvalidToken
+	} else if present && token != "" {
+		return token, browserSession, nil
 	}
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return "", nil
+	return "", false, nil
 }
 
 func requestBearerToken(r *http.Request) (string, error) {
@@ -160,17 +162,20 @@ func requestBearerToken(r *http.Request) (string, error) {
 	return fields[1], nil
 }
 
-func requestSessionOrBearerToken(r *http.Request) (string, error) {
-	if c, err := r.Cookie(sessionCookieName); err == nil {
-		if token := strings.TrimSpace(c.Value); token != "" {
-			return token, nil
-		}
+func (s *Server) requestSessionOrBearerToken(r *http.Request) (string, error) {
+	if token, _, present, cookieErr := s.sessionCookieCredential(r); cookieErr != nil {
+		return "", cookieErr
+	} else if present && token != "" {
+		return token, nil
 	}
 	return requestBearerToken(r)
 }
 
-func requestedAuthSource(r *http.Request) string {
-	if c, err := r.Cookie(sessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
+func (s *Server) requestedAuthSource(r *http.Request) string {
+	if _, browserSession, present, _ := s.sessionCookieCredential(r); present {
+		if browserSession {
+			return principal.SourceBrowserSession.String()
+		}
 		return principal.SourceBearer.String()
 	}
 	if token, err := requestBearerToken(r); err == nil && token != "" {
@@ -182,10 +187,16 @@ func requestedAuthSource(r *http.Request) string {
 func (s *Server) resolveRequestPrincipalWithResolver(r *http.Request, resolver *principal.Resolver) (*principal.Principal, error) {
 	var lastErr error
 
-	if c, err := r.Cookie(sessionCookieName); err == nil {
-		if token := strings.TrimSpace(c.Value); token != "" {
+	if token, browserSession, present, cookieErr := s.sessionCookieCredential(r); present {
+		if cookieErr != nil {
+			lastErr = principal.ErrInvalidToken
+		} else if token != "" {
 			p, err := resolver.ResolveToken(r.Context(), token)
 			if p != nil && !principal.IsNonUserPrincipal(p) {
+				if browserSession {
+					p = principal.Canonicalized(p)
+					p.Source = principal.SourceBrowserSession
+				}
 				return p, nil
 			}
 			if principal.IsNonUserPrincipal(p) {
@@ -257,7 +268,7 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 		return
 	}
 
-	authSource := requestedAuthSource(r)
+	authSource := s.requestedAuthSource(r)
 	switch {
 	case err == nil:
 		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errors.New("missing authorization"))

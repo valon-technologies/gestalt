@@ -9,6 +9,96 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// APIExposureMode is the value accepted by an operation's api exposure
+// setting. Public and private modes retain the legacy JSON/YAML boolean
+// representation; browserSession is the only extended mode.
+type APIExposureMode string
+
+const (
+	APIExposurePublic         APIExposureMode = "true"
+	APIExposurePrivate        APIExposureMode = "false"
+	APIExposureBrowserSession APIExposureMode = "browserSession"
+)
+
+func (m APIExposureMode) IsBrowserSession() bool { return m == APIExposureBrowserSession }
+
+func (m APIExposureMode) IsPublic() bool {
+	return m == APIExposurePublic || m == APIExposureBrowserSession
+}
+
+func (m APIExposureMode) MarshalJSON() ([]byte, error) {
+	switch m {
+	case APIExposurePublic:
+		return []byte("true"), nil
+	case APIExposurePrivate:
+		return []byte("false"), nil
+	case APIExposureBrowserSession:
+		return json.Marshal(string(m))
+	default:
+		return nil, fmt.Errorf("invalid api exposure mode %q", m)
+	}
+}
+
+func (m *APIExposureMode) UnmarshalJSON(data []byte) error {
+	if m == nil {
+		return fmt.Errorf("api exposure mode is nil")
+	}
+	if string(data) == "null" {
+		return fmt.Errorf("api must be a boolean or %q", APIExposureBrowserSession)
+	}
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		if b {
+			*m = APIExposurePublic
+		} else {
+			*m = APIExposurePrivate
+		}
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil || s != string(APIExposureBrowserSession) {
+		return fmt.Errorf("api must be a boolean or %q", APIExposureBrowserSession)
+	}
+	*m = APIExposureBrowserSession
+	return nil
+}
+
+func (m APIExposureMode) MarshalYAML() (any, error) {
+	switch m {
+	case APIExposurePublic:
+		return true, nil
+	case APIExposurePrivate:
+		return false, nil
+	case APIExposureBrowserSession:
+		return string(m), nil
+	default:
+		return nil, fmt.Errorf("invalid api exposure mode %q", m)
+	}
+}
+
+func (m *APIExposureMode) UnmarshalYAML(value *yaml.Node) error {
+	if m == nil {
+		return fmt.Errorf("api exposure mode is nil")
+	}
+	if value.Tag == "!!bool" {
+		var b bool
+		if err := value.Decode(&b); err != nil {
+			return err
+		}
+		if b {
+			*m = APIExposurePublic
+		} else {
+			*m = APIExposurePrivate
+		}
+		return nil
+	}
+	if value.Tag == "!!str" && value.Value == string(APIExposureBrowserSession) {
+		*m = APIExposureBrowserSession
+		return nil
+	}
+	return fmt.Errorf("api must be a boolean or %q", APIExposureBrowserSession)
+}
+
 var validSegment = regexp.MustCompile(`^[a-zA-Z0-9_]([a-zA-Z0-9_-]*[a-zA-Z0-9_])?$`)
 
 const (
@@ -72,7 +162,7 @@ type CatalogOperation struct {
 	Tags           []string               `yaml:"tags,omitempty"           json:"tags,omitempty"`
 	ReadOnly       bool                   `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
 	Visible        *bool                  `yaml:"visible,omitempty"        json:"visible,omitempty"`
-	API            *bool                  `yaml:"api,omitempty"            json:"api,omitempty"`
+	API            *APIExposureMode       `yaml:"api,omitempty"            json:"api,omitempty"`
 	MCP            *bool                  `yaml:"mcp,omitempty"            json:"mcp,omitempty"`
 	Transport      string                 `yaml:"transport,omitempty"      json:"transport,omitempty"`
 	Query          string                 `yaml:"query,omitempty"          json:"query,omitempty"`
@@ -84,7 +174,7 @@ func OperationVisibleByDefault(op CatalogOperation) bool {
 }
 
 func OperationExposedOnAPI(op CatalogOperation) bool {
-	return OperationVisibleByDefault(op) && (op.API == nil || *op.API)
+	return OperationVisibleByDefault(op) && (op.API == nil || op.API.IsPublic())
 }
 
 func OperationExposedOnMCP(op CatalogOperation) bool {
@@ -156,7 +246,7 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Tags           []string              `yaml:"tags,omitempty"`
 		ReadOnly       bool                  `yaml:"readOnly,omitempty"`
 		Visible        *bool                 `yaml:"visible,omitempty"`
-		API            *bool                 `yaml:"api,omitempty"`
+		API            *APIExposureMode      `yaml:"api,omitempty"`
 		MCP            *bool                 `yaml:"mcp,omitempty"`
 		Transport      string                `yaml:"transport,omitempty"`
 		Query          string                `yaml:"query,omitempty"`
@@ -359,6 +449,9 @@ func isValidAuthStyle(s string) bool {
 func (c *Catalog) ValidateMCPCompat() error {
 	for i := range c.Operations {
 		op := &c.Operations[i]
+		if err := validateAPIExposureMode(c.Name, op); err != nil {
+			return err
+		}
 		seen := make(map[string]struct{}, len(op.Parameters))
 		for _, param := range op.Parameters {
 			if _, dup := seen[param.Name]; dup {
@@ -387,6 +480,9 @@ func (c *Catalog) Validate() error {
 	seen := make(map[string]struct{}, len(c.Operations))
 	for i := range c.Operations {
 		op := &c.Operations[i]
+		if err := validateAPIExposureMode(c.Name, op); err != nil {
+			return err
+		}
 		if strings.TrimSpace(op.ID) == "" {
 			return fmt.Errorf("catalog %q has operation with empty id", c.Name)
 		}
@@ -425,6 +521,13 @@ func (c *Catalog) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+func validateAPIExposureMode(catalogName string, op *CatalogOperation) error {
+	if op != nil && op.API != nil && *op.API != APIExposurePublic && *op.API != APIExposurePrivate && *op.API != APIExposureBrowserSession {
+		return fmt.Errorf("catalog %q operation %q has invalid api exposure mode %q", catalogName, op.ID, *op.API)
+	}
 	return nil
 }
 

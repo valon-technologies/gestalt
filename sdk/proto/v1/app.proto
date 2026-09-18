@@ -49,6 +49,14 @@ message OperationResponseSpec {
   }
 }
 
+// APIExposureMode extends the legacy boolean API exposure override with a
+// browser-session-authenticated public HTTP mode. The legacy api bool remains
+// populated alongside this field for downgrade-safe transport.
+enum APIExposureMode {
+  API_EXPOSURE_MODE_UNSPECIFIED = 0;
+  API_EXPOSURE_MODE_BROWSER_SESSION = 1;
+}
+
 // CatalogOperation is one executable operation exposed by an integration
 // provider.
 message CatalogOperation {
@@ -74,6 +82,9 @@ message CatalogOperation {
   optional bool api = 16;
   // Public MCP exposure override. Absent means exposed by default.
   optional bool mcp = 17;
+  // Extended API exposure mode. When set, api is also false so older peers
+  // fail closed instead of treating an unknown mode as public.
+  optional APIExposureMode api_mode = 18;
 }
 
 // Catalog is the static or request-scoped executable surface exposed by a

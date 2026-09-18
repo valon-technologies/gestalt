@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
@@ -23,6 +24,10 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 		Operations:  make([]catalog.CatalogOperation, 0, len(src.GetOperations())),
 	}
 	for _, op := range src.GetOperations() {
+		api, err := apiExposureModeFromProto(op)
+		if err != nil {
+			return nil, err
+		}
 		catOp := catalog.CatalogOperation{
 			ID:             op.GetId(),
 			Method:         op.GetMethod(),
@@ -36,7 +41,7 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 			Tags:           op.GetTags(),
 			ReadOnly:       op.GetReadOnly(),
 			Visible:        op.Visible,
-			API:            op.Api,
+			API:            api,
 			MCP:            op.Mcp,
 			Transport:      op.GetTransport(),
 		}
@@ -78,6 +83,7 @@ func catalogToProto(cat *catalog.Catalog) *proto.Catalog {
 	}
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
+		api, apiMode := apiExposureModeToProto(op.API)
 		pOp := &proto.CatalogOperation{
 			Id:             op.ID,
 			Method:         op.Method,
@@ -90,7 +96,8 @@ func catalogToProto(cat *catalog.Catalog) *proto.Catalog {
 			Tags:           op.Tags,
 			ReadOnly:       op.ReadOnly,
 			Visible:        op.Visible,
-			Api:            op.API,
+			Api:            api,
+			ApiMode:        apiMode,
 			Mcp:            op.MCP,
 			Transport:      op.Transport,
 		}
@@ -120,6 +127,40 @@ func catalogToProto(cat *catalog.Catalog) *proto.Catalog {
 		out.Operations = append(out.Operations, pOp)
 	}
 	return out
+}
+
+func apiExposureModeFromProto(op *proto.CatalogOperation) (*catalog.APIExposureMode, error) {
+	if op == nil {
+		return nil, nil
+	}
+	if op.ApiMode != nil {
+		if *op.ApiMode != proto.APIExposureMode_API_EXPOSURE_MODE_BROWSER_SESSION {
+			return nil, fmt.Errorf("unknown api exposure mode %d for operation %q", *op.ApiMode, op.GetId())
+		}
+		mode := catalog.APIExposureBrowserSession
+		return &mode, nil
+	}
+	if op.Api == nil {
+		return nil, nil
+	}
+	mode := catalog.APIExposurePrivate
+	if *op.Api {
+		mode = catalog.APIExposurePublic
+	}
+	return &mode, nil
+}
+
+func apiExposureModeToProto(mode *catalog.APIExposureMode) (*bool, *proto.APIExposureMode) {
+	if mode == nil {
+		return nil, nil
+	}
+	if mode.IsBrowserSession() {
+		api := false
+		browser := proto.APIExposureMode_API_EXPOSURE_MODE_BROWSER_SESSION
+		return &api, &browser
+	}
+	api := mode.IsPublic()
+	return &api, nil
 }
 
 func jsonRawFromString(s string) json.RawMessage {

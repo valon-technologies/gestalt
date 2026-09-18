@@ -1318,7 +1318,14 @@
           }
         },
         "api": {
-          "type": "boolean"
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "const": "browserSession"
+            }
+          ]
         },
         "mcp": {
           "type": "boolean"

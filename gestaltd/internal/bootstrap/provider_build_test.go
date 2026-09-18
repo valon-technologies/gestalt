@@ -1013,6 +1013,7 @@ func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) 
 	t.Parallel()
 
 	disabled := false
+	apiDisabled := catalog.APIExposurePrivate
 	prodClient := &recordingRemoteAppClient{}
 	devClient := &recordingRemoteAppClient{}
 	cfg := &config.Config{
@@ -1028,7 +1029,7 @@ func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) 
 				Source: config.ProviderSource{Registry: "toolshed"},
 				Remote: "prod",
 				AllowedOperations: map[string]*config.OperationOverride{
-					" get_schema ": {API: &disabled, MCP: &disabled},
+					" get_schema ": {API: &apiDisabled, MCP: &disabled},
 				},
 			},
 			"other-registry-app": {
@@ -1066,7 +1067,7 @@ func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) 
 				t.Fatalf("provider %q operation[%d] = %#v, want %q app transport", name, i, cat.Operations[i], wantID)
 			}
 			if name == "data-schema-explorer" {
-				if cat.Operations[i].API == nil || *cat.Operations[i].API || cat.Operations[i].MCP == nil || *cat.Operations[i].MCP {
+				if cat.Operations[i].API == nil || *cat.Operations[i].API != catalog.APIExposurePrivate || cat.Operations[i].MCP == nil || *cat.Operations[i].MCP {
 					t.Fatalf("provider %q operation[%d] = %#v, want API and MCP disabled", name, i, cat.Operations[i])
 				}
 			}
@@ -1103,10 +1104,11 @@ func TestRemoteAppRoutingAppliesOperationSurfaceOverrides(t *testing.T) {
 	t.Parallel()
 
 	disabled := false
+	apiDisabled := catalog.APIExposurePrivate
 	entry := remoteRoutingAppEntry(t, "remote-app", "read", "write")
 	entry.Remote = config.DefaultRemoteName
 	entry.AllowedOperations = map[string]*config.OperationOverride{
-		"read": {API: &disabled, MCP: &disabled},
+		"read": {API: &apiDisabled, MCP: &disabled},
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{

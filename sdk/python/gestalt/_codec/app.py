@@ -187,6 +187,7 @@ def to_wire_catalog_operation(value: native.CatalogOperation) -> Any:
         else to_wire_operation_response_spec(value.response),
         api=value.api,
         mcp=value.mcp,
+        api_mode=None if value.api_mode is None else to_wire_enum(value.api_mode),
     )
 
 
@@ -212,6 +213,7 @@ def from_wire_catalog_operation(value: Any) -> native.CatalogOperation:
         else None,
         api=value.api if value.HasField("api") else None,
         mcp=value.mcp if value.HasField("mcp") else None,
+        api_mode=value.api_mode if value.HasField("api_mode") else None,
     )
 
 

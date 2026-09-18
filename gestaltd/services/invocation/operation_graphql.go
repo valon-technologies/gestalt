@@ -34,7 +34,7 @@ func (b *Broker) authorizeGraphQLOperation(
 			continue
 		}
 		if op.Query == "" {
-			if op.API != nil && !*op.API {
+			if op.API != nil && *op.API == catalog.APIExposurePrivate {
 				return fmt.Errorf("%w: restricted graphql operation %q has no execution document", ErrOperationNotFound, op.ID)
 			}
 			continue

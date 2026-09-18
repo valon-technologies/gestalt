@@ -71,8 +71,15 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 		conn.Close()
 		return nil, nil, err
 	}
+	resolveCredential := cfg.ResolveRequestCredential
+	if resolveCredential == nil {
+		resolveCredential = (&Server{}).requestBearerTokenPreferringHeader
+	}
 	return conn, subjectLabelRecorderMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token, err := requestBearerTokenPreferringHeader(r)
+		token, browserSession, err := resolveCredential(r)
+		if browserSession {
+			r = r.WithContext(providergateway.WithVerifiedBrowserSessionToken(r.Context(), token))
+		}
 		if err == nil && token != "" {
 			headerToken, _ := requestBearerToken(r)
 			if headerToken == "" {

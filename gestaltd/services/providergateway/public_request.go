@@ -16,6 +16,21 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
+type browserSessionIngressKey struct{}
+
+// WithVerifiedBrowserSessionToken carries the token selected by the server's
+// HTTP cookie ingress across the custom public REST gateway. It is a context
+// value, never caller-controlled gRPC metadata; PreparePublicRequest also
+// requires an exact match with the token it resolves.
+func WithVerifiedBrowserSessionToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, browserSessionIngressKey{}, strings.TrimSpace(token))
+}
+
+func verifiedBrowserSessionToken(ctx context.Context) string {
+	token, _ := ctx.Value(browserSessionIngressKey{}).(string)
+	return strings.TrimSpace(token)
+}
+
 // PreparePublicRequest authenticates, authorizes, and adapts a public request.
 // Internal/provider-runtime requests should not call this helper.
 func (t *ProviderGatewayTransport) PreparePublicRequest(
@@ -67,6 +82,10 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 			return ctx, nil, nil, err
 		}
 		p = resolved
+		if verified := verifiedBrowserSessionToken(ctx); verified != "" && verified == token {
+			p = principal.Canonicalized(p)
+			p.Source = principal.SourceBrowserSession
+		}
 		if err := t.canonicalizePublicCredentialPrincipal(ctx, fullMethod, p); err != nil {
 			return ctx, nil, nil, err
 		}

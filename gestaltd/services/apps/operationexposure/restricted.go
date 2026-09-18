@@ -19,7 +19,7 @@ type Restricted struct {
 	descriptions map[string]string
 	allowedRoles map[string][]string
 	tags         map[string][]string
-	api          map[string]bool
+	api          map[string]catalog.APIExposureMode
 	mcp          map[string]bool
 }
 
@@ -42,8 +42,9 @@ func WithTags(tags map[string][]string) RestrictedOption {
 }
 
 // WithSurfaceExposure controls whether operations appear on Gestalt's public
-// API and MCP surfaces. Internal invocations are intentionally unaffected.
-func WithSurfaceExposure(api, mcp map[string]bool) RestrictedOption {
+// API and MCP surfaces. The invocation broker enforces browser-session and
+// private-operation authorization requirements on internal calls as well.
+func WithSurfaceExposure(api map[string]catalog.APIExposureMode, mcp map[string]bool) RestrictedOption {
 	return func(r *Restricted) {
 		r.api = api
 		r.mcp = mcp
@@ -167,7 +168,8 @@ func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 				op.Tags = catalog.MergeTags(op.Tags, tags)
 			}
 			if value, ok := r.api[op.ID]; ok {
-				op.API = boolPointer(value)
+				api := value
+				op.API = &api
 			}
 			if value, ok := r.mcp[op.ID]; ok {
 				op.MCP = boolPointer(value)

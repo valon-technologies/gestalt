@@ -72,6 +72,7 @@ export {
   type CatalogOperation,
   type CatalogParameter,
   type CatalogSchema,
+  type APIExposureMode,
   type OperationAnnotations,
 } from "./catalog.ts";
 export {

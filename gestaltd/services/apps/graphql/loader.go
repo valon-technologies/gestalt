@@ -159,7 +159,8 @@ func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, 
 		opName := field.Name
 		var allowedRoles []string
 		var tags []string
-		var api, mcp *bool
+		var api *catalog.APIExposureMode
+		var mcp *bool
 		override := allowedOps[field.Name]
 		if override != nil {
 			if override.Description != "" {

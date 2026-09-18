@@ -240,6 +240,9 @@ export function toWireCatalogOperation(
       : {}),
     ...(value.api !== undefined ? { api: value.api } : {}),
     ...(value.mcp !== undefined ? { mcp: value.mcp } : {}),
+    ...(value.apiMode !== undefined
+      ? { apiMode: value.apiMode as wire.APIExposureMode }
+      : {}),
   });
 }
 
@@ -267,6 +270,7 @@ export function fromWireCatalogOperation(
       : {}),
     ...(value.api !== undefined ? { api: value.api } : {}),
     ...(value.mcp !== undefined ? { mcp: value.mcp } : {}),
+    ...(value.apiMode !== undefined ? { apiMode: value.apiMode } : {}),
   };
 }
 

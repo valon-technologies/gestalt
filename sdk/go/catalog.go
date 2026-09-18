@@ -10,6 +10,61 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// APIExposureMode controls whether a catalog operation is available through
+// the public API. The bool values preserve the legacy catalog representation;
+// BrowserSession additionally requires a browser session at the edge.
+//
+// A nil *APIExposureMode means the operation uses the host default.
+type APIExposureMode string
+
+const (
+	APIExposurePublic         APIExposureMode = "true"
+	APIExposurePrivate        APIExposureMode = "false"
+	APIExposureBrowserSession APIExposureMode = "browserSession"
+)
+
+// MarshalJSON keeps public/private modes compatible with the legacy boolean
+// field while representing browserSession as its string discriminator.
+func (m APIExposureMode) MarshalJSON() ([]byte, error) {
+	switch m {
+	case APIExposurePublic:
+		return []byte("true"), nil
+	case APIExposurePrivate:
+		return []byte("false"), nil
+	case APIExposureBrowserSession:
+		return json.Marshal(string(m))
+	default:
+		return nil, fmt.Errorf("invalid api exposure mode %q", m)
+	}
+}
+
+// UnmarshalJSON accepts the legacy boolean representation and browserSession.
+// Unknown strings are rejected so a future exposure mode cannot accidentally
+// become public in an older SDK.
+func (m *APIExposureMode) UnmarshalJSON(data []byte) error {
+	if m == nil {
+		return fmt.Errorf("api exposure mode is nil")
+	}
+	if strings.TrimSpace(string(data)) == "null" {
+		return fmt.Errorf("api must be a boolean or %q", APIExposureBrowserSession)
+	}
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		if b {
+			*m = APIExposurePublic
+		} else {
+			*m = APIExposurePrivate
+		}
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil || s != string(APIExposureBrowserSession) {
+		return fmt.Errorf("api must be a boolean or %q", APIExposureBrowserSession)
+	}
+	*m = APIExposureBrowserSession
+	return nil
+}
+
 // Catalog describes the operations an app exposes to Gestalt.
 type Catalog struct {
 	Name        string              `json:"name,omitempty"`
@@ -76,6 +131,7 @@ type CatalogOperation struct {
 	Tags           []string               `json:"tags,omitempty"`
 	ReadOnly       bool                   `json:"readOnly,omitempty"`
 	Visible        *bool                  `json:"visible,omitempty"`
+	API            *APIExposureMode       `json:"api,omitempty"`
 	Transport      string                 `json:"transport,omitempty"`
 	AllowedRoles   []string               `json:"allowedRoles,omitempty"`
 }
@@ -434,6 +490,10 @@ func cloneCatalogOperation(src *CatalogOperation) *CatalogOperation {
 		Transport:      src.Transport,
 		AllowedRoles:   append([]string(nil), src.AllowedRoles...),
 	}
+	if src.API != nil {
+		api := *src.API
+		out.API = &api
+	}
 	if src.Visible != nil {
 		visible := *src.Visible
 		out.Visible = &visible
@@ -532,6 +592,12 @@ func catalogOperationToProto(op *CatalogOperation) (*proto.CatalogOperation, err
 		Transport:      op.Transport,
 		AllowedRoles:   append([]string(nil), op.AllowedRoles...),
 	}
+	api, apiMode, err := apiExposureModeToProto(op.API)
+	if err != nil {
+		return nil, err
+	}
+	out.Api = api
+	out.ApiMode = apiMode
 	for i, param := range op.Parameters {
 		pbParam, err := catalogParameterToProto(param)
 		if err != nil {
@@ -540,6 +606,26 @@ func catalogOperationToProto(op *CatalogOperation) (*proto.CatalogOperation, err
 		out.Parameters = append(out.Parameters, pbParam)
 	}
 	return out, nil
+}
+
+func apiExposureModeToProto(mode *APIExposureMode) (*bool, *proto.APIExposureMode, error) {
+	if mode == nil {
+		return nil, nil, nil
+	}
+	switch *mode {
+	case APIExposurePublic:
+		value := true
+		return &value, nil, nil
+	case APIExposurePrivate:
+		value := false
+		return &value, nil, nil
+	case APIExposureBrowserSession:
+		value := false
+		browser := proto.APIExposureMode_API_EXPOSURE_MODE_BROWSER_SESSION
+		return &value, &browser, nil
+	default:
+		return nil, nil, fmt.Errorf("invalid api exposure mode %q", *mode)
+	}
 }
 
 func catalogParameterToProto(param *CatalogParameter) (*proto.CatalogParameter, error) {

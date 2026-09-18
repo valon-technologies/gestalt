@@ -107,9 +107,13 @@ apps:
 ```
 
 Each operation is exposed to the public API and MCP by default. Add
-`api: false` or `mcp: false` to disable that ingress independently. These
-flags affect both catalog discovery and direct invocation; calls from another
-app through the host service remain available.
+`api: false` or `mcp: false` to disable that ingress independently. Set
+`api: browserSession` to require a verified browser-login session. This requirement
+also applies to internal calls; an app caller cannot substitute for the session.
+API tokens, including tokens placed in cookies, do not qualify. Existing raw
+session cookies require a fresh browser login before invoking these operations.
+API/MCP exposure flags affect both catalog discovery and direct invocation;
+`api: false` does not by itself disable internal host-service calls.
 
 When both flags are explicitly `false`, the operation is private. Public
 ingress is rejected, and an internal invocation must be allowed separately for

@@ -50,7 +50,7 @@ func (p *publicRemoteInvocationProvider) CredentialFields() []core.CredentialFie
 func (p *publicRemoteInvocationProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
 func (p *publicRemoteInvocationProvider) ConnectionForOperation(string) string        { return "" }
 func (p *publicRemoteInvocationProvider) Catalog() *catalog.Catalog {
-	apiHidden := false
+	apiHidden := catalog.APIExposurePrivate
 	return &catalog.Catalog{
 		Name: "data-schema-explorer",
 		Operations: []catalog.CatalogOperation{
@@ -141,7 +141,7 @@ func TestDevRemoteAppInvocationUsesPublicGatewayContextAndAllowlist(t *testing.T
 	remoteClient := proto.NewAppClient(remoteConn)
 
 	localRegistry := registry.New()
-	apiHidden := false
+	apiHidden := catalog.APIExposurePrivate
 	remoteProviderProxy := appservice.NewGestaltRemote(remoteClient, appservice.StaticProviderSpec{
 		Name: "data-schema-explorer",
 		Catalog: &catalog.Catalog{

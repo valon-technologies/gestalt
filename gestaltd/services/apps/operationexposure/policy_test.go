@@ -72,7 +72,7 @@ func TestMatchingAllowedOperationsIgnoresUnknown(t *testing.T) {
 func TestPolicyValidateAndApply(t *testing.T) {
 	t.Parallel()
 
-	apiDisabled := false
+	apiDisabled := catalog.APIExposurePrivate
 	mcpDisabled := false
 	policy, err := New(map[string]*OperationOverride{
 		"list_items": {Alias: "items", Description: "Custom description", AllowedRoles: []string{"admin"}, API: &apiDisabled, MCP: &mcpDisabled},

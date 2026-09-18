@@ -363,7 +363,7 @@ The `allowedOperations` map selectively exposes and customizes operations from a
 | `alias`        | string                   | Rename the operation for Gestalt consumers.                                                                                                                                    |
 | `description`  | string                   | Override the operation description.                                                                                                                                            |
 | `allowedRoles` | string[]                 | Restrict the operation to callers whose resolved human role matches one of these values. This only takes effect when the deployment binds the app to `authorizationPolicy`. |
-| `api`          | bool                     | Set to `false` to hide and reject this operation on the public HTTP/gRPC API and CLI. Omitted defaults to `true`. When `mcp` is also explicitly `false`, internal calls require grants for both the original user and verified caller. |
+| `api`          | bool or `browserSession` | Set to `false` to hide and reject this operation on the public HTTP/gRPC API and CLI, or to `browserSession` to require a verified browser-login session, including for internal calls. Omitted defaults to `true`. When `api` and `mcp` are both explicitly `false`, internal calls require grants for both the original user and verified caller. |
 | `mcp`          | bool                     | Set to `false` to hide and reject this operation on MCP. Omitted defaults to `true`. When `api` is also explicitly `false`, internal calls require grants for both the original user and verified caller. |
 | `paginate`     | bool                     | Enable automatic pagination for this operation. Uses the app-level pagination config.                                                                                       |
 | `pagination`   | ManifestPaginationConfig | Per-operation pagination config that overrides the app-level default.                                                                                                       |
@@ -380,6 +380,9 @@ spec:
     tickets.get:
       alias: get_ticket
       allowedRoles: [admin]
+      mcp: false
+    tickets.browser_only:
+      api: browserSession
       mcp: false
 ```
 

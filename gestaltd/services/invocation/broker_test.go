@@ -122,7 +122,8 @@ func TestBrokerInvokeEnforcesPublicOperationSurfaces(t *testing.T) {
 	t.Parallel()
 
 	disabled := false
-	enabled := true
+	apiDisabled := catalog.APIExposurePrivate
+	apiEnabled := catalog.APIExposurePublic
 	tests := []struct {
 		name        string
 		surface     InvocationSurface
@@ -131,11 +132,11 @@ func TestBrokerInvokeEnforcesPublicOperationSurfaces(t *testing.T) {
 		wantDenied  bool
 		wantExecute bool
 	}{
-		{name: "API disabled", surface: InvocationSurfaceHTTP, op: catalog.CatalogOperation{ID: "mutate", API: &disabled}, wantDenied: true},
+		{name: "API disabled", surface: InvocationSurfaceHTTP, op: catalog.CatalogOperation{ID: "mutate", API: &apiDisabled}, wantDenied: true},
 		{name: "MCP disabled", surface: InvocationSurfaceMCP, op: catalog.CatalogOperation{ID: "mutate", MCP: &disabled}, wantDenied: true},
-		{name: "nested app call remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindApp, Name: "caller"}, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, MCP: &disabled}, wantExecute: true},
-		{name: "nested workflow call remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindWorkflow, Name: "caller"}, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, MCP: &disabled}, wantExecute: true},
-		{name: "agent public operation remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindAgent, Name: "assistant"}, op: catalog.CatalogOperation{ID: "mutate", API: &enabled}, wantExecute: true},
+		{name: "nested app call remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindApp, Name: "caller"}, op: catalog.CatalogOperation{ID: "mutate", API: &apiDisabled, MCP: &disabled}, wantExecute: true},
+		{name: "nested workflow call remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindWorkflow, Name: "caller"}, op: catalog.CatalogOperation{ID: "mutate", API: &apiDisabled, MCP: &disabled}, wantExecute: true},
+		{name: "agent public operation remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindAgent, Name: "assistant"}, op: catalog.CatalogOperation{ID: "mutate", API: &apiEnabled}, wantExecute: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -179,13 +180,85 @@ func TestBrokerInvokeEnforcesPublicOperationSurfaces(t *testing.T) {
 	}
 }
 
+func TestBrokerBrowserSessionOperationRequiresBrowserSessionPrincipal(t *testing.T) {
+	t.Parallel()
+
+	browser := catalog.APIExposureBrowserSession
+	executed := false
+	provider := &coretesting.StubIntegration{
+		N:        "example",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Name: "example", Operations: []catalog.CatalogOperation{{
+			ID: "browser", API: &browser,
+		}}},
+		ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+			executed = true
+			return &core.OperationResult{Status: http.StatusOK}, nil
+		},
+	}
+	authorization := &recordingAuthorizationProvider{allowed: true}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+		WithAuthorizationProvider(authorization),
+	)
+
+	// A bearer principal cannot use browserSession even when a trusted app
+	// caller is present; the check is tied to the original principal source.
+	bearer := &principal.Principal{SubjectID: "user:test", Kind: principal.KindUser, Source: principal.SourceBearer}
+	ctx := WithCallerProvider(context.Background(), ProviderKindApp, "dashboard")
+	if _, err := broker.Invoke(ctx, bearer, "example", "", "browser", nil); !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("bearer browser-session invoke error = %v, want ErrAuthorizationDenied", err)
+	}
+	if executed {
+		t.Fatal("browser-session operation executed for bearer principal")
+	}
+
+	session := &principal.Principal{SubjectID: "user:test", Kind: principal.KindUser, Source: principal.SourceBrowserSession}
+	if _, err := broker.Invoke(context.Background(), session, "example", "", "browser", nil); err != nil {
+		t.Fatalf("browser-session invoke = %v, want success", err)
+	}
+	if !executed {
+		t.Fatal("browser-session operation did not execute for browser principal")
+	}
+
+	executed = false
+	authorization.allowed = false
+	if _, err := broker.Invoke(context.Background(), session, "example", "", "browser", nil); !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("browser-session invoke without authorization grant = %v, want ErrAuthorizationDenied", err)
+	}
+	if executed {
+		t.Fatal("browser-session operation executed without an authorization grant")
+	}
+}
+
+func TestBrokerGraphQLBrowserSessionRejectsAliasesForBearerPrincipal(t *testing.T) {
+	t.Parallel()
+
+	browser := catalog.APIExposureBrowserSession
+	provider := &brokerGraphQLProvider{StubIntegration: &coretesting.StubIntegration{
+		N:        "example",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Name: "example", Operations: []catalog.CatalogOperation{{
+			ID: "viewer", Transport: "graphql", Query: "query Viewer { viewer }", API: &browser,
+		}}},
+	}}
+	broker := NewBroker(testutil.NewProviderRegistry(t, provider), nil, nil, WithAuthorizationProvider(&recordingAuthorizationProvider{allowed: true}))
+	request := GraphQLRequest{Document: "query Renamed { ...Fields } fragment Fields on Query { alias: viewer }", OperationName: "Renamed"}
+	if _, err := broker.InvokeGraphQL(context.Background(), &principal.Principal{SubjectID: "user:test", Kind: principal.KindUser, Source: principal.SourceBearer}, "example", "", request); !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("aliased GraphQL browser-session error = %v, want ErrAuthorizationDenied", err)
+	}
+}
+
 func TestBrokerInvokePrivateOperationRequiresUserAndCallerGrants(t *testing.T) {
 	t.Parallel()
 
 	disabled := false
+	apiDisabled := catalog.APIExposurePrivate
 	operation := catalog.CatalogOperation{
 		ID:           "mutate",
-		API:          &disabled,
+		API:          &apiDisabled,
 		MCP:          &disabled,
 		AllowedRoles: []string{"editor"},
 	}
@@ -307,6 +380,7 @@ func TestBrokerInvokeGraphQLPrivateOperationRequiresUserAndCallerGrants(t *testi
 	t.Parallel()
 
 	disabled := false
+	apiDisabled := catalog.APIExposurePrivate
 	provider := &brokerGraphQLProvider{StubIntegration: &coretesting.StubIntegration{
 		N:        "example",
 		ConnMode: core.ConnectionModeNone,
@@ -315,7 +389,7 @@ func TestBrokerInvokeGraphQLPrivateOperationRequiresUserAndCallerGrants(t *testi
 			Transport:     "graphql",
 			Query:         "query Viewer { viewer }",
 			OperationName: "Viewer",
-			API:           &disabled,
+			API:           &apiDisabled,
 			MCP:           &disabled,
 			AllowedRoles:  []string{"editor"},
 		}}},

@@ -170,6 +170,10 @@ pub struct CatalogOperation {
     /// Public MCP exposure override. Absent means exposed by default.
     #[prost(bool, optional, tag = "17")]
     pub mcp: ::core::option::Option<bool>,
+    /// Extended API exposure mode. When set, api is also false so older peers
+    /// fail closed instead of treating an unknown mode as public.
+    #[prost(enumeration = "ApiExposureMode", optional, tag = "18")]
+    pub api_mode: ::core::option::Option<i32>,
 }
 /// Catalog is the static or request-scoped executable surface exposed by a
 /// provider.
@@ -596,6 +600,35 @@ pub struct StartProviderRequest {
 pub struct StartProviderResponse {
     #[prost(int32, tag = "1")]
     pub protocol_version: i32,
+}
+/// APIExposureMode extends the legacy boolean API exposure override with a
+/// browser-session-authenticated public HTTP mode. The legacy api bool remains
+/// populated alongside this field for downgrade-safe transport.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ApiExposureMode {
+    Unspecified = 0,
+    BrowserSession = 1,
+}
+impl ApiExposureMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "API_EXPOSURE_MODE_UNSPECIFIED",
+            Self::BrowserSession => "API_EXPOSURE_MODE_BROWSER_SESSION",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "API_EXPOSURE_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "API_EXPOSURE_MODE_BROWSER_SESSION" => Some(Self::BrowserSession),
+            _ => None,
+        }
+    }
 }
 /// ConnectionMode describes which credential sources a provider accepts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
