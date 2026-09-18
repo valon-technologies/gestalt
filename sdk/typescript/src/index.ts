@@ -177,6 +177,8 @@ export {
   type IdentityProviderOptions,
   type AuthorizeRequest,
   type AuthorizeResponse,
+  type FederatedLogoutRequest,
+  type FederatedLogoutResponse,
   type GrantDetails,
   type GrantScope,
   type IntrospectRequest,

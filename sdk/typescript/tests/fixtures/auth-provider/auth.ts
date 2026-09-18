@@ -42,6 +42,11 @@ export const provider = defineIdentityProvider({
       audience: [configuredIssuer],
     };
   },
+  federatedLogout(request) {
+    const redirect = new URL(`${configuredIssuer}/logout`);
+    redirect.searchParams.set("return_to", request.returnTo);
+    return { redirectUri: redirect.toString() };
+  },
   userInfo(_request, call) {
     if (!call.callerBearerToken || call.callerBearerToken !== fixtureAccessToken) {
       throw new Error("userinfo not found");

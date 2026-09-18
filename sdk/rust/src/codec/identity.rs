@@ -4,10 +4,10 @@
 
 use crate::generated::v1;
 use crate::identity::{
-    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, GrantScope,
-    IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
-    RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest,
-    UserInfoResponse,
+    AuthorizeRequest, AuthorizeResponse, FederatedLogoutRequest, FederatedLogoutResponse,
+    GetGrantRequest, GetGrantResponse, GrantScope, IntrospectRequest, IntrospectResponse,
+    ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest, RevokeGrantResponse, TokenRequest,
+    TokenResponse, UserInfoRequest, UserInfoResponse,
 };
 
 /// Converts a native `AuthorizeRequest` to its wire message.
@@ -24,6 +24,24 @@ pub(crate) fn to_wire_authorize_request(value: AuthorizeRequest) -> v1::Authoriz
 /// Converts a wire `AuthorizeResponse` to its native message.
 pub(crate) fn from_wire_authorize_response(value: v1::AuthorizeResponse) -> AuthorizeResponse {
     AuthorizeResponse {
+        redirect_uri: value.redirect_uri,
+    }
+}
+
+/// Converts a native `FederatedLogoutRequest` to its wire message.
+pub(crate) fn to_wire_federated_logout_request(
+    value: FederatedLogoutRequest,
+) -> v1::FederatedLogoutRequest {
+    v1::FederatedLogoutRequest {
+        return_to: value.return_to,
+    }
+}
+
+/// Converts a wire `FederatedLogoutResponse` to its native message.
+pub(crate) fn from_wire_federated_logout_response(
+    value: v1::FederatedLogoutResponse,
+) -> FederatedLogoutResponse {
+    FederatedLogoutResponse {
         redirect_uri: value.redirect_uri,
     }
 }

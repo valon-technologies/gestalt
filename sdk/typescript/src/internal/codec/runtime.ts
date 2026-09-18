@@ -7,6 +7,7 @@ import type {
   ConfigureProviderRequest,
   ConfigureProviderResponse,
   HealthCheckResponse,
+  PromoteWorkersResponse,
   ProviderIdentity,
   StartRuntimeProviderResponse,
 } from "../../runtime.ts";
@@ -66,6 +67,22 @@ export function fromWireHealthCheckResponse(
   return {
     ready: value.ready,
     message: value.message,
+  };
+}
+
+export function toWirePromoteWorkersResponse(
+  value: Init<PromoteWorkersResponse>,
+): wire.PromoteWorkersResponse {
+  return create(wire.PromoteWorkersResponseSchema, {
+    protocolVersion: value.protocolVersion ?? 0,
+  });
+}
+
+export function fromWirePromoteWorkersResponse(
+  value: wire.PromoteWorkersResponse,
+): PromoteWorkersResponse {
+  return {
+    protocolVersion: value.protocolVersion,
   };
 }
 

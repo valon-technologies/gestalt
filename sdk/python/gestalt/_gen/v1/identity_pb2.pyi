@@ -29,6 +29,18 @@ class AuthorizeResponse(_message.Message):
     redirect_uri: str
     def __init__(self, redirect_uri: _Optional[str] = ...) -> None: ...
 
+class FederatedLogoutRequest(_message.Message):
+    __slots__ = ()
+    RETURN_TO_FIELD_NUMBER: _ClassVar[int]
+    return_to: str
+    def __init__(self, return_to: _Optional[str] = ...) -> None: ...
+
+class FederatedLogoutResponse(_message.Message):
+    __slots__ = ()
+    REDIRECT_URI_FIELD_NUMBER: _ClassVar[int]
+    redirect_uri: str
+    def __init__(self, redirect_uri: _Optional[str] = ...) -> None: ...
+
 class TokenRequest(_message.Message):
     __slots__ = ()
     GRANT_TYPE_FIELD_NUMBER: _ClassVar[int]

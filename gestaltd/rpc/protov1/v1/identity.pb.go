@@ -147,6 +147,97 @@ func (x *AuthorizeResponse) GetRedirectUri() string {
 	return ""
 }
 
+// FederatedLogoutRequest asks the provider to end its upstream session and
+// return the browser to return_to when complete.
+type FederatedLogoutRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ReturnTo      string                 `protobuf:"bytes,1,opt,name=return_to,json=returnTo,proto3" json:"return_to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FederatedLogoutRequest) Reset() {
+	*x = FederatedLogoutRequest{}
+	mi := &file_v1_identity_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FederatedLogoutRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FederatedLogoutRequest) ProtoMessage() {}
+
+func (x *FederatedLogoutRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_identity_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FederatedLogoutRequest.ProtoReflect.Descriptor instead.
+func (*FederatedLogoutRequest) Descriptor() ([]byte, []int) {
+	return file_v1_identity_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *FederatedLogoutRequest) GetReturnTo() string {
+	if x != nil {
+		return x.ReturnTo
+	}
+	return ""
+}
+
+// FederatedLogoutResponse contains the provider-owned logout redirect.
+type FederatedLogoutResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RedirectUri   string                 `protobuf:"bytes,1,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FederatedLogoutResponse) Reset() {
+	*x = FederatedLogoutResponse{}
+	mi := &file_v1_identity_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FederatedLogoutResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FederatedLogoutResponse) ProtoMessage() {}
+
+func (x *FederatedLogoutResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_identity_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FederatedLogoutResponse.ProtoReflect.Descriptor instead.
+func (*FederatedLogoutResponse) Descriptor() ([]byte, []int) {
+	return file_v1_identity_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *FederatedLogoutResponse) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
 // TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
 // exchange inputs.
 type TokenRequest struct {
@@ -184,7 +275,7 @@ type TokenRequest struct {
 
 func (x *TokenRequest) Reset() {
 	*x = TokenRequest{}
-	mi := &file_v1_identity_proto_msgTypes[2]
+	mi := &file_v1_identity_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -196,7 +287,7 @@ func (x *TokenRequest) String() string {
 func (*TokenRequest) ProtoMessage() {}
 
 func (x *TokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[2]
+	mi := &file_v1_identity_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -209,7 +300,7 @@ func (x *TokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenRequest.ProtoReflect.Descriptor instead.
 func (*TokenRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{2}
+	return file_v1_identity_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TokenRequest) GetGrantType() string {
@@ -305,7 +396,7 @@ type TokenResponse struct {
 
 func (x *TokenResponse) Reset() {
 	*x = TokenResponse{}
-	mi := &file_v1_identity_proto_msgTypes[3]
+	mi := &file_v1_identity_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -317,7 +408,7 @@ func (x *TokenResponse) String() string {
 func (*TokenResponse) ProtoMessage() {}
 
 func (x *TokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[3]
+	mi := &file_v1_identity_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -330,7 +421,7 @@ func (x *TokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenResponse.ProtoReflect.Descriptor instead.
 func (*TokenResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{3}
+	return file_v1_identity_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *TokenResponse) GetAccessToken() string {
@@ -387,7 +478,7 @@ type IntrospectRequest struct {
 
 func (x *IntrospectRequest) Reset() {
 	*x = IntrospectRequest{}
-	mi := &file_v1_identity_proto_msgTypes[4]
+	mi := &file_v1_identity_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -399,7 +490,7 @@ func (x *IntrospectRequest) String() string {
 func (*IntrospectRequest) ProtoMessage() {}
 
 func (x *IntrospectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[4]
+	mi := &file_v1_identity_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -412,7 +503,7 @@ func (x *IntrospectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IntrospectRequest.ProtoReflect.Descriptor instead.
 func (*IntrospectRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{4}
+	return file_v1_identity_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *IntrospectRequest) GetToken() string {
@@ -447,7 +538,7 @@ type IntrospectResponse struct {
 
 func (x *IntrospectResponse) Reset() {
 	*x = IntrospectResponse{}
-	mi := &file_v1_identity_proto_msgTypes[5]
+	mi := &file_v1_identity_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -459,7 +550,7 @@ func (x *IntrospectResponse) String() string {
 func (*IntrospectResponse) ProtoMessage() {}
 
 func (x *IntrospectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[5]
+	mi := &file_v1_identity_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -472,7 +563,7 @@ func (x *IntrospectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IntrospectResponse.ProtoReflect.Descriptor instead.
 func (*IntrospectResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{5}
+	return file_v1_identity_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *IntrospectResponse) GetActive() bool {
@@ -519,7 +610,7 @@ type ListGrantsRequest struct {
 
 func (x *ListGrantsRequest) Reset() {
 	*x = ListGrantsRequest{}
-	mi := &file_v1_identity_proto_msgTypes[6]
+	mi := &file_v1_identity_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -531,7 +622,7 @@ func (x *ListGrantsRequest) String() string {
 func (*ListGrantsRequest) ProtoMessage() {}
 
 func (x *ListGrantsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[6]
+	mi := &file_v1_identity_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -544,7 +635,7 @@ func (x *ListGrantsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGrantsRequest.ProtoReflect.Descriptor instead.
 func (*ListGrantsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{6}
+	return file_v1_identity_proto_rawDescGZIP(), []int{8}
 }
 
 // ListGrantsResponse returns caller-visible API-token grant IDs created via
@@ -558,7 +649,7 @@ type ListGrantsResponse struct {
 
 func (x *ListGrantsResponse) Reset() {
 	*x = ListGrantsResponse{}
-	mi := &file_v1_identity_proto_msgTypes[7]
+	mi := &file_v1_identity_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -570,7 +661,7 @@ func (x *ListGrantsResponse) String() string {
 func (*ListGrantsResponse) ProtoMessage() {}
 
 func (x *ListGrantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[7]
+	mi := &file_v1_identity_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -583,7 +674,7 @@ func (x *ListGrantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGrantsResponse.ProtoReflect.Descriptor instead.
 func (*ListGrantsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{7}
+	return file_v1_identity_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListGrantsResponse) GetGrantIds() []string {
@@ -603,7 +694,7 @@ type GetGrantRequest struct {
 
 func (x *GetGrantRequest) Reset() {
 	*x = GetGrantRequest{}
-	mi := &file_v1_identity_proto_msgTypes[8]
+	mi := &file_v1_identity_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -615,7 +706,7 @@ func (x *GetGrantRequest) String() string {
 func (*GetGrantRequest) ProtoMessage() {}
 
 func (x *GetGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[8]
+	mi := &file_v1_identity_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -628,7 +719,7 @@ func (x *GetGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGrantRequest.ProtoReflect.Descriptor instead.
 func (*GetGrantRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{8}
+	return file_v1_identity_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetGrantRequest) GetGrantId() string {
@@ -649,7 +740,7 @@ type GrantScope struct {
 
 func (x *GrantScope) Reset() {
 	*x = GrantScope{}
-	mi := &file_v1_identity_proto_msgTypes[9]
+	mi := &file_v1_identity_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -661,7 +752,7 @@ func (x *GrantScope) String() string {
 func (*GrantScope) ProtoMessage() {}
 
 func (x *GrantScope) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[9]
+	mi := &file_v1_identity_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -674,7 +765,7 @@ func (x *GrantScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantScope.ProtoReflect.Descriptor instead.
 func (*GrantScope) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{9}
+	return file_v1_identity_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GrantScope) GetScope() string {
@@ -705,7 +796,7 @@ type GetGrantResponse struct {
 
 func (x *GetGrantResponse) Reset() {
 	*x = GetGrantResponse{}
-	mi := &file_v1_identity_proto_msgTypes[10]
+	mi := &file_v1_identity_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -717,7 +808,7 @@ func (x *GetGrantResponse) String() string {
 func (*GetGrantResponse) ProtoMessage() {}
 
 func (x *GetGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[10]
+	mi := &file_v1_identity_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -730,7 +821,7 @@ func (x *GetGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGrantResponse.ProtoReflect.Descriptor instead.
 func (*GetGrantResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{10}
+	return file_v1_identity_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetGrantResponse) GetScopes() []*GrantScope {
@@ -771,7 +862,7 @@ type RevokeGrantRequest struct {
 
 func (x *RevokeGrantRequest) Reset() {
 	*x = RevokeGrantRequest{}
-	mi := &file_v1_identity_proto_msgTypes[11]
+	mi := &file_v1_identity_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -783,7 +874,7 @@ func (x *RevokeGrantRequest) String() string {
 func (*RevokeGrantRequest) ProtoMessage() {}
 
 func (x *RevokeGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[11]
+	mi := &file_v1_identity_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -796,7 +887,7 @@ func (x *RevokeGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGrantRequest.ProtoReflect.Descriptor instead.
 func (*RevokeGrantRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{11}
+	return file_v1_identity_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RevokeGrantRequest) GetGrantId() string {
@@ -815,7 +906,7 @@ type RevokeGrantResponse struct {
 
 func (x *RevokeGrantResponse) Reset() {
 	*x = RevokeGrantResponse{}
-	mi := &file_v1_identity_proto_msgTypes[12]
+	mi := &file_v1_identity_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -827,7 +918,7 @@ func (x *RevokeGrantResponse) String() string {
 func (*RevokeGrantResponse) ProtoMessage() {}
 
 func (x *RevokeGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[12]
+	mi := &file_v1_identity_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -840,7 +931,7 @@ func (x *RevokeGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGrantResponse.ProtoReflect.Descriptor instead.
 func (*RevokeGrantResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{12}
+	return file_v1_identity_proto_rawDescGZIP(), []int{14}
 }
 
 // UserInfoRequest is intentionally empty. The caller bearer token is supplied
@@ -853,7 +944,7 @@ type UserInfoRequest struct {
 
 func (x *UserInfoRequest) Reset() {
 	*x = UserInfoRequest{}
-	mi := &file_v1_identity_proto_msgTypes[13]
+	mi := &file_v1_identity_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -865,7 +956,7 @@ func (x *UserInfoRequest) String() string {
 func (*UserInfoRequest) ProtoMessage() {}
 
 func (x *UserInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[13]
+	mi := &file_v1_identity_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -878,7 +969,7 @@ func (x *UserInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserInfoRequest.ProtoReflect.Descriptor instead.
 func (*UserInfoRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{13}
+	return file_v1_identity_proto_rawDescGZIP(), []int{15}
 }
 
 // UserInfoResponse models profile claims about the authenticated end user.
@@ -893,7 +984,7 @@ type UserInfoResponse struct {
 
 func (x *UserInfoResponse) Reset() {
 	*x = UserInfoResponse{}
-	mi := &file_v1_identity_proto_msgTypes[14]
+	mi := &file_v1_identity_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -905,7 +996,7 @@ func (x *UserInfoResponse) String() string {
 func (*UserInfoResponse) ProtoMessage() {}
 
 func (x *UserInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[14]
+	mi := &file_v1_identity_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -918,7 +1009,7 @@ func (x *UserInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserInfoResponse.ProtoReflect.Descriptor instead.
 func (*UserInfoResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{14}
+	return file_v1_identity_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *UserInfoResponse) GetSubjectId() string {
@@ -954,6 +1045,10 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\"6\n" +
 	"\x11AuthorizeResponse\x12!\n" +
+	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"5\n" +
+	"\x16FederatedLogoutRequest\x12\x1b\n" +
+	"\treturn_to\x18\x01 \x01(\tR\breturnTo\"<\n" +
+	"\x17FederatedLogoutResponse\x12!\n" +
 	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\xed\x02\n" +
 	"\fTokenRequest\x12\x1d\n" +
 	"\n" +
@@ -1012,10 +1107,10 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\n" +
 	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name2\x95\n" +
-	"\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name2\xcd\v\n" +
 	"\bIdentity\x12\xcf\x01\n" +
-	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"s\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/api/v2/identity/authorize\x12\x93\x02\n" +
+	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"s\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/api/v2/identity/authorize\x12\xb5\x01\n" +
+	"\x0fFederatedLogout\x12+.gestalt.provider.v1.FederatedLogoutRequest\x1a,.gestalt.provider.v1.FederatedLogoutResponse\"G\x8a\xb5\x18\treturn_to\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02&:\x01*\"!/api/v2/identity/federated-logout\x12\x93\x02\n" +
 	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"\xc2\x01\x8a\xb5\x18\n" +
 	"grant_type\x8a\xb5\x18\x04code\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\xa2\xb5\x18\n" +
 	"expires_in\xa2\xb5\x18\x04name\xa2\xb5\x18\rgrant_subject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/api/v2/identity/token\x12\xaf\x01\n" +
@@ -1040,42 +1135,46 @@ func file_v1_identity_proto_rawDescGZIP() []byte {
 	return file_v1_identity_proto_rawDescData
 }
 
-var file_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_v1_identity_proto_goTypes = []any{
-	(*AuthorizeRequest)(nil),    // 0: gestalt.provider.v1.AuthorizeRequest
-	(*AuthorizeResponse)(nil),   // 1: gestalt.provider.v1.AuthorizeResponse
-	(*TokenRequest)(nil),        // 2: gestalt.provider.v1.TokenRequest
-	(*TokenResponse)(nil),       // 3: gestalt.provider.v1.TokenResponse
-	(*IntrospectRequest)(nil),   // 4: gestalt.provider.v1.IntrospectRequest
-	(*IntrospectResponse)(nil),  // 5: gestalt.provider.v1.IntrospectResponse
-	(*ListGrantsRequest)(nil),   // 6: gestalt.provider.v1.ListGrantsRequest
-	(*ListGrantsResponse)(nil),  // 7: gestalt.provider.v1.ListGrantsResponse
-	(*GetGrantRequest)(nil),     // 8: gestalt.provider.v1.GetGrantRequest
-	(*GrantScope)(nil),          // 9: gestalt.provider.v1.GrantScope
-	(*GetGrantResponse)(nil),    // 10: gestalt.provider.v1.GetGrantResponse
-	(*RevokeGrantRequest)(nil),  // 11: gestalt.provider.v1.RevokeGrantRequest
-	(*RevokeGrantResponse)(nil), // 12: gestalt.provider.v1.RevokeGrantResponse
-	(*UserInfoRequest)(nil),     // 13: gestalt.provider.v1.UserInfoRequest
-	(*UserInfoResponse)(nil),    // 14: gestalt.provider.v1.UserInfoResponse
+	(*AuthorizeRequest)(nil),        // 0: gestalt.provider.v1.AuthorizeRequest
+	(*AuthorizeResponse)(nil),       // 1: gestalt.provider.v1.AuthorizeResponse
+	(*FederatedLogoutRequest)(nil),  // 2: gestalt.provider.v1.FederatedLogoutRequest
+	(*FederatedLogoutResponse)(nil), // 3: gestalt.provider.v1.FederatedLogoutResponse
+	(*TokenRequest)(nil),            // 4: gestalt.provider.v1.TokenRequest
+	(*TokenResponse)(nil),           // 5: gestalt.provider.v1.TokenResponse
+	(*IntrospectRequest)(nil),       // 6: gestalt.provider.v1.IntrospectRequest
+	(*IntrospectResponse)(nil),      // 7: gestalt.provider.v1.IntrospectResponse
+	(*ListGrantsRequest)(nil),       // 8: gestalt.provider.v1.ListGrantsRequest
+	(*ListGrantsResponse)(nil),      // 9: gestalt.provider.v1.ListGrantsResponse
+	(*GetGrantRequest)(nil),         // 10: gestalt.provider.v1.GetGrantRequest
+	(*GrantScope)(nil),              // 11: gestalt.provider.v1.GrantScope
+	(*GetGrantResponse)(nil),        // 12: gestalt.provider.v1.GetGrantResponse
+	(*RevokeGrantRequest)(nil),      // 13: gestalt.provider.v1.RevokeGrantRequest
+	(*RevokeGrantResponse)(nil),     // 14: gestalt.provider.v1.RevokeGrantResponse
+	(*UserInfoRequest)(nil),         // 15: gestalt.provider.v1.UserInfoRequest
+	(*UserInfoResponse)(nil),        // 16: gestalt.provider.v1.UserInfoResponse
 }
 var file_v1_identity_proto_depIdxs = []int32{
-	9,  // 0: gestalt.provider.v1.GetGrantResponse.scopes:type_name -> gestalt.provider.v1.GrantScope
+	11, // 0: gestalt.provider.v1.GetGrantResponse.scopes:type_name -> gestalt.provider.v1.GrantScope
 	0,  // 1: gestalt.provider.v1.Identity.Authorize:input_type -> gestalt.provider.v1.AuthorizeRequest
-	2,  // 2: gestalt.provider.v1.Identity.Token:input_type -> gestalt.provider.v1.TokenRequest
-	4,  // 3: gestalt.provider.v1.Identity.Introspect:input_type -> gestalt.provider.v1.IntrospectRequest
-	13, // 4: gestalt.provider.v1.Identity.UserInfo:input_type -> gestalt.provider.v1.UserInfoRequest
-	6,  // 5: gestalt.provider.v1.Identity.ListGrants:input_type -> gestalt.provider.v1.ListGrantsRequest
-	8,  // 6: gestalt.provider.v1.Identity.GetGrant:input_type -> gestalt.provider.v1.GetGrantRequest
-	11, // 7: gestalt.provider.v1.Identity.RevokeGrant:input_type -> gestalt.provider.v1.RevokeGrantRequest
-	1,  // 8: gestalt.provider.v1.Identity.Authorize:output_type -> gestalt.provider.v1.AuthorizeResponse
-	3,  // 9: gestalt.provider.v1.Identity.Token:output_type -> gestalt.provider.v1.TokenResponse
-	5,  // 10: gestalt.provider.v1.Identity.Introspect:output_type -> gestalt.provider.v1.IntrospectResponse
-	14, // 11: gestalt.provider.v1.Identity.UserInfo:output_type -> gestalt.provider.v1.UserInfoResponse
-	7,  // 12: gestalt.provider.v1.Identity.ListGrants:output_type -> gestalt.provider.v1.ListGrantsResponse
-	10, // 13: gestalt.provider.v1.Identity.GetGrant:output_type -> gestalt.provider.v1.GetGrantResponse
-	12, // 14: gestalt.provider.v1.Identity.RevokeGrant:output_type -> gestalt.provider.v1.RevokeGrantResponse
-	8,  // [8:15] is the sub-list for method output_type
-	1,  // [1:8] is the sub-list for method input_type
+	2,  // 2: gestalt.provider.v1.Identity.FederatedLogout:input_type -> gestalt.provider.v1.FederatedLogoutRequest
+	4,  // 3: gestalt.provider.v1.Identity.Token:input_type -> gestalt.provider.v1.TokenRequest
+	6,  // 4: gestalt.provider.v1.Identity.Introspect:input_type -> gestalt.provider.v1.IntrospectRequest
+	15, // 5: gestalt.provider.v1.Identity.UserInfo:input_type -> gestalt.provider.v1.UserInfoRequest
+	8,  // 6: gestalt.provider.v1.Identity.ListGrants:input_type -> gestalt.provider.v1.ListGrantsRequest
+	10, // 7: gestalt.provider.v1.Identity.GetGrant:input_type -> gestalt.provider.v1.GetGrantRequest
+	13, // 8: gestalt.provider.v1.Identity.RevokeGrant:input_type -> gestalt.provider.v1.RevokeGrantRequest
+	1,  // 9: gestalt.provider.v1.Identity.Authorize:output_type -> gestalt.provider.v1.AuthorizeResponse
+	3,  // 10: gestalt.provider.v1.Identity.FederatedLogout:output_type -> gestalt.provider.v1.FederatedLogoutResponse
+	5,  // 11: gestalt.provider.v1.Identity.Token:output_type -> gestalt.provider.v1.TokenResponse
+	7,  // 12: gestalt.provider.v1.Identity.Introspect:output_type -> gestalt.provider.v1.IntrospectResponse
+	16, // 13: gestalt.provider.v1.Identity.UserInfo:output_type -> gestalt.provider.v1.UserInfoResponse
+	9,  // 14: gestalt.provider.v1.Identity.ListGrants:output_type -> gestalt.provider.v1.ListGrantsResponse
+	12, // 15: gestalt.provider.v1.Identity.GetGrant:output_type -> gestalt.provider.v1.GetGrantResponse
+	14, // 16: gestalt.provider.v1.Identity.RevokeGrant:output_type -> gestalt.provider.v1.RevokeGrantResponse
+	9,  // [9:17] is the sub-list for method output_type
+	1,  // [1:9] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -1093,7 +1192,7 @@ func file_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_identity_proto_rawDesc), len(file_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

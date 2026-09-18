@@ -458,6 +458,19 @@ METHOD_IDENTITY_AUTHORIZE = Method(
     reject=(),
 )
 
+METHOD_IDENTITY_FEDERATED_LOGOUT = Method(
+    service="gestalt.provider.v1.Identity",
+    name="FederatedLogout",
+    full_method="/gestalt.provider.v1.Identity/FederatedLogout",
+    http_verb="POST",
+    http_path="/api/v2/identity/federated-logout",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+)
+
 METHOD_IDENTITY_TOKEN = Method(
     service="gestalt.provider.v1.Identity",
     name="Token",

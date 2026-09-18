@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -740,11 +741,11 @@ func (s *Server) logoutAuthRuntime(returnPath string) authRuntime {
 	return runtime
 }
 
-func (s *Server) federatedLogoutURL(auth authRuntime, returnTo string) (string, error) {
+func (s *Server) federatedLogoutURL(ctx context.Context, auth authRuntime, returnTo string) (string, error) {
 	if auth.noAuth || auth.provider == nil {
 		return "", errors.New("auth is not configured")
 	}
-	return identityservice.FederatedLogoutURL(auth.provider, returnTo)
+	return identityservice.FederatedLogoutURL(ctx, auth.provider, returnTo)
 }
 
 func (s *Server) logoutReturnPath(r *http.Request) (string, error) {
@@ -798,7 +799,7 @@ func (s *Server) logoutBrowser(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-	if logoutURL, err := s.federatedLogoutURL(auth, returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
+	if logoutURL, err := s.federatedLogoutURL(r.Context(), auth, returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
 		http.Redirect(w, r, logoutURL, http.StatusFound)
 		return
 	}
@@ -835,7 +836,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if returnPath, err := s.logoutReturnPath(r); err == nil {
 		auth := s.logoutAuthRuntime(returnPath)
 		if returnTo, err := s.logoutReturnURL(r, returnPath); err == nil {
-			if logoutURL, err := s.federatedLogoutURL(auth, returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
+			if logoutURL, err := s.federatedLogoutURL(r.Context(), auth, returnTo); err == nil && strings.TrimSpace(logoutURL) != "" {
 				resp["redirect"] = logoutURL
 			}
 		}

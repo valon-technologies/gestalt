@@ -37,6 +37,24 @@ func (s *providerServer) Authorize(ctx context.Context, req *proto.AuthorizeRequ
 	return authorizeResponseToProto(resp), nil
 }
 
+func (s *providerServer) FederatedLogout(ctx context.Context, req *proto.FederatedLogoutRequest) (*proto.FederatedLogoutResponse, error) {
+	if err := s.requireProvider(); err != nil {
+		return nil, err
+	}
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	provider, ok := s.provider.(FederatedLogoutProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "federated logout is not supported")
+	}
+	redirectURI, err := provider.FederatedLogoutURL(ctx, req.GetReturnTo())
+	if err != nil {
+		return nil, identityToGRPCError("federated logout", err)
+	}
+	return &proto.FederatedLogoutResponse{RedirectUri: redirectURI}, nil
+}
+
 func (s *providerServer) Token(ctx context.Context, req *proto.TokenRequest) (*proto.TokenResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err

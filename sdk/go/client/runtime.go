@@ -71,6 +71,14 @@ type HealthCheckResponse struct {
 	Message string
 }
 
+// PromoteWorkersResponse is the native message type for gestalt.provider.v1.PromoteWorkersResponse.
+//
+// PromoteWorkersResponse confirms the protocol version the provider is serving
+// after explicit worker promotion completes.
+type PromoteWorkersResponse struct {
+	ProtocolVersion int32
+}
+
 // ProviderIdentity is the native message type for gestalt.provider.v1.ProviderIdentity.
 //
 // ProviderIdentity describes a provider surface and the protocol versions it
@@ -91,14 +99,6 @@ type ProviderIdentity struct {
 // StartRuntimeProviderResponse confirms the protocol version the provider is
 // serving after the optional runtime start phase.
 type StartRuntimeProviderResponse struct {
-	ProtocolVersion int32
-}
-
-// PromoteWorkersResponse is the native message type for gestalt.provider.v1.PromoteWorkersResponse.
-//
-// PromoteWorkersResponse confirms the protocol version the provider is serving
-// after explicit worker promotion completes.
-type PromoteWorkersResponse struct {
 	ProtocolVersion int32
 }
 

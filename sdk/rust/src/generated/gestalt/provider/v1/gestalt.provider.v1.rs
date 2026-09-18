@@ -2219,6 +2219,19 @@ pub struct AuthorizeResponse {
     #[prost(string, tag = "1")]
     pub redirect_uri: ::prost::alloc::string::String,
 }
+/// FederatedLogoutRequest asks the provider to end its upstream session and
+/// return the browser to return_to when complete.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FederatedLogoutRequest {
+    #[prost(string, tag = "1")]
+    pub return_to: ::prost::alloc::string::String,
+}
+/// FederatedLogoutResponse contains the provider-owned logout redirect.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FederatedLogoutResponse {
+    #[prost(string, tag = "1")]
+    pub redirect_uri: ::prost::alloc::string::String,
+}
 /// TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
 /// exchange inputs.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3120,6 +3133,13 @@ pub struct HealthCheckResponse {
 /// serving after the optional runtime start phase.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StartRuntimeProviderResponse {
+    #[prost(int32, tag = "1")]
+    pub protocol_version: i32,
+}
+/// PromoteWorkersResponse confirms the protocol version the provider is serving
+/// after explicit worker promotion completes.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PromoteWorkersResponse {
     #[prost(int32, tag = "1")]
     pub protocol_version: i32,
 }

@@ -28,6 +28,15 @@ func (c *IdentityClient) Authorize(ctx context.Context, request *gestaltclient.A
 	return gestaltclient.FromWireAuthorizeResponse(out), nil
 }
 
+func (c *IdentityClient) FederatedLogout(ctx context.Context, request *gestaltclient.FederatedLogoutRequest) (*gestaltclient.FederatedLogoutResponse, error) {
+	wire := gestaltclient.ToWireFederatedLogoutRequest(request)
+	out := &proto.FederatedLogoutResponse{}
+	if err := c.transport.Unary(ctx, MethodIdentityFederatedLogout, wire, out); err != nil {
+		return nil, toGestaltError(err)
+	}
+	return gestaltclient.FromWireFederatedLogoutResponse(out), nil
+}
+
 func (c *IdentityClient) Token(ctx context.Context, request *gestaltclient.TokenRequest) (*gestaltclient.TokenResponse, error) {
 	wire := gestaltclient.ToWireTokenRequest(request)
 	out := &proto.TokenResponse{}
@@ -85,6 +94,7 @@ func (c *IdentityClient) RevokeGrant(ctx context.Context, request *gestaltclient
 // IdentityClientREST exposes only REST-backed methods for Identity.
 type IdentityClientREST interface {
 	Authorize(ctx context.Context, request *gestaltclient.AuthorizeRequest) (*gestaltclient.AuthorizeResponse, error)
+	FederatedLogout(ctx context.Context, request *gestaltclient.FederatedLogoutRequest) (*gestaltclient.FederatedLogoutResponse, error)
 	Token(ctx context.Context, request *gestaltclient.TokenRequest) (*gestaltclient.TokenResponse, error)
 	Introspect(ctx context.Context, request *gestaltclient.IntrospectRequest) (*gestaltclient.IntrospectResponse, error)
 	UserInfo(ctx context.Context, request *gestaltclient.UserInfoRequest) (*gestaltclient.UserInfoResponse, error)

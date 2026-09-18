@@ -4,9 +4,10 @@
 
 use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
 use crate::codec::identity::{
-    from_wire_authorize_response, from_wire_get_grant_response, from_wire_introspect_response,
-    from_wire_list_grants_response, from_wire_revoke_grant_response, from_wire_token_response,
-    from_wire_user_info_response, to_wire_authorize_request, to_wire_get_grant_request,
+    from_wire_authorize_response, from_wire_federated_logout_response,
+    from_wire_get_grant_response, from_wire_introspect_response, from_wire_list_grants_response,
+    from_wire_revoke_grant_response, from_wire_token_response, from_wire_user_info_response,
+    to_wire_authorize_request, to_wire_federated_logout_request, to_wire_get_grant_request,
     to_wire_introspect_request, to_wire_list_grants_request, to_wire_revoke_grant_request,
     to_wire_token_request, to_wire_user_info_request,
 };
@@ -40,6 +41,27 @@ pub struct AuthorizeRequest {
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthorizeResponse {
+    /// The `redirect_uri` field.
+    pub redirect_uri: String,
+}
+
+/// FederatedLogoutRequest asks the provider to end its upstream session and
+/// return the browser to return_to when complete.
+///
+/// Native message type for `gestalt.provider.v1.FederatedLogoutRequest`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FederatedLogoutRequest {
+    /// The `return_to` field.
+    pub return_to: String,
+}
+
+/// FederatedLogoutResponse contains the provider-owned logout redirect.
+///
+/// Native message type for `gestalt.provider.v1.FederatedLogoutResponse`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FederatedLogoutResponse {
     /// The `redirect_uri` field.
     pub redirect_uri: String,
 }
@@ -328,6 +350,33 @@ impl Identity {
         }
         let response = self.inner.authorize(tonic_request).await?;
         Ok(from_wire_authorize_response(response.into_inner()))
+    }
+
+    /// Calls `gestalt.provider.v1.Identity.FederatedLogout`.
+    pub async fn federated_logout(
+        &mut self,
+        return_to: String,
+    ) -> Result<FederatedLogoutResponse, GestaltError> {
+        let request = FederatedLogoutRequest { return_to };
+        let mut tonic_request = tonic::Request::new(to_wire_federated_logout_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.federated_logout(tonic_request).await?;
+        Ok(from_wire_federated_logout_response(response.into_inner()))
+    }
+
+    /// Calls `gestalt.provider.v1.Identity.FederatedLogout` with the full request and response messages.
+    pub async fn federated_logout_raw(
+        &mut self,
+        request: FederatedLogoutRequest,
+    ) -> Result<FederatedLogoutResponse, GestaltError> {
+        let mut tonic_request = tonic::Request::new(to_wire_federated_logout_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.federated_logout(tonic_request).await?;
+        Ok(from_wire_federated_logout_response(response.into_inner()))
     }
 
     /// Calls `gestalt.provider.v1.Identity.Token`.

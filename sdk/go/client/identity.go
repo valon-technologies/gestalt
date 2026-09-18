@@ -30,6 +30,21 @@ type AuthorizeResponse struct {
 	RedirectUri string
 }
 
+// FederatedLogoutRequest is the native message type for gestalt.provider.v1.FederatedLogoutRequest.
+//
+// FederatedLogoutRequest asks the provider to end its upstream session and
+// return the browser to return_to when complete.
+type FederatedLogoutRequest struct {
+	ReturnTo string
+}
+
+// FederatedLogoutResponse is the native message type for gestalt.provider.v1.FederatedLogoutResponse.
+//
+// FederatedLogoutResponse contains the provider-owned logout redirect.
+type FederatedLogoutResponse struct {
+	RedirectUri string
+}
+
 // GetGrantRequest is the native message type for gestalt.provider.v1.GetGrantRequest.
 //
 // GetGrantRequest retrieves one API-token grant by ID.
@@ -217,6 +232,25 @@ func (c *Identity) AuthorizeRaw(ctx context.Context, request *AuthorizeRequest) 
 		return nil, toGestaltError(err)
 	}
 	return FromWireAuthorizeResponse(response), nil
+}
+
+// FederatedLogout is the ergonomic form of [Identity.FederatedLogoutRaw].
+func (c *Identity) FederatedLogout(ctx context.Context, returnTo string) (*FederatedLogoutResponse, error) {
+	request := &FederatedLogoutRequest{ReturnTo: returnTo}
+	response, err := c.client.FederatedLogout(ctx, ToWireFederatedLogoutRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWireFederatedLogoutResponse(response), nil
+}
+
+// FederatedLogoutRaw is the faithful form of [Identity.FederatedLogout].
+func (c *Identity) FederatedLogoutRaw(ctx context.Context, request *FederatedLogoutRequest) (*FederatedLogoutResponse, error) {
+	response, err := c.client.FederatedLogout(ctx, ToWireFederatedLogoutRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWireFederatedLogoutResponse(response), nil
 }
 
 // IdentityTokenOptions carries the optional parameters of [Identity.Token].

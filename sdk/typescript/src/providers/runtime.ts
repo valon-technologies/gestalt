@@ -25,6 +25,7 @@ import {
 import {
   Identity as IdentityProviderService,
   AuthorizeResponseSchema,
+  FederatedLogoutResponseSchema,
   GetGrantResponseSchema,
   GrantScopeSchema,
   IntrospectResponseSchema,
@@ -811,6 +812,32 @@ export function createIdentityService(
         clientId: response.clientId ?? "",
         audience: [...(response.audience ?? [])],
       });
+    },
+    async federatedLogout(request) {
+      try {
+        const response = await provider.federatedLogout({
+          returnTo: request.returnTo,
+        });
+        if (!response?.redirectUri) {
+          throw new ConnectError(
+            "identity provider returned empty logout redirect URI",
+            Code.Internal,
+          );
+        }
+        return create(FederatedLogoutResponseSchema, {
+          redirectUri: response.redirectUri,
+        });
+      } catch (error) {
+        if (error instanceof ConnectError) {
+          throw error;
+        }
+        const message =
+          error instanceof Error ? error.message : "federated logout failed";
+        if (/not support/i.test(message)) {
+          throw new ConnectError(message, Code.Unimplemented);
+        }
+        throw new ConnectError(message, Code.Internal);
+      }
     },
     async userInfo(request, context) {
       const response = await provider.userInfo(

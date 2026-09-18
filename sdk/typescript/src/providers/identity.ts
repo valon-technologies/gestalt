@@ -31,6 +31,16 @@ export interface AuthorizeResponse {
   redirectUri: string;
 }
 
+/** Request to end the provider-owned upstream identity session. */
+export interface FederatedLogoutRequest {
+  returnTo: string;
+}
+
+/** Redirect returned by a provider that supports upstream logout. */
+export interface FederatedLogoutResponse {
+  redirectUri: string;
+}
+
 /**
  * RFC 6749 token endpoint request parameters.
  */
@@ -107,6 +117,9 @@ export interface IdentityProviderOptions extends ProviderBaseOptions {
   authorize: (request: AuthorizeRequest) => MaybePromise<AuthorizeResponse>;
   token: (request: TokenRequest) => MaybePromise<TokenResponse>;
   introspect: (request: IntrospectRequest) => MaybePromise<IntrospectResponse>;
+  federatedLogout?: (
+    request: FederatedLogoutRequest,
+  ) => MaybePromise<FederatedLogoutResponse>;
   userInfo: (
     request: Record<string, never>,
     call: IdentityCallContext,
@@ -138,6 +151,7 @@ export class IdentityProvider extends ProviderBase {
   private readonly authorizeHandler: IdentityProviderOptions["authorize"];
   private readonly tokenHandler: IdentityProviderOptions["token"];
   private readonly introspectHandler: IdentityProviderOptions["introspect"];
+  private readonly federatedLogoutHandler: IdentityProviderOptions["federatedLogout"];
   private readonly userInfoHandler: IdentityProviderOptions["userInfo"];
   private readonly listGrantsHandler: IdentityProviderOptions["listGrants"];
   private readonly getGrantHandler: IdentityProviderOptions["getGrant"];
@@ -148,6 +162,7 @@ export class IdentityProvider extends ProviderBase {
     this.authorizeHandler = options.authorize;
     this.tokenHandler = options.token;
     this.introspectHandler = options.introspect;
+    this.federatedLogoutHandler = options.federatedLogout;
     this.userInfoHandler = options.userInfo;
     this.listGrantsHandler = options.listGrants;
     this.getGrantHandler = options.getGrant;
@@ -164,6 +179,15 @@ export class IdentityProvider extends ProviderBase {
 
   async introspect(request: IntrospectRequest): Promise<IntrospectResponse> {
     return await this.introspectHandler(request);
+  }
+
+  async federatedLogout(
+    request: FederatedLogoutRequest,
+  ): Promise<FederatedLogoutResponse> {
+    if (!this.federatedLogoutHandler) {
+      throw new Error("provider does not support federated logout");
+    }
+    return await this.federatedLogoutHandler(request);
   }
 
   async userInfo(

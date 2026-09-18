@@ -95,6 +95,7 @@ GET /api/v2/authorization/models/active /gestalt.provider.v1.Authorization/GetAc
 PUT /api/v2/authorization/models/active /gestalt.provider.v1.Authorization/SetActiveModel
 GET /api/v2/authorization/models/active/resource-types /gestalt.provider.v1.Authorization/ListActiveModelResourceTypes
 POST /api/v2/identity/authorize /gestalt.provider.v1.Identity/Authorize
+POST /api/v2/identity/federated-logout /gestalt.provider.v1.Identity/FederatedLogout
 POST /api/v2/identity/token /gestalt.provider.v1.Identity/Token
 POST /api/v2/identity/introspect /gestalt.provider.v1.Identity/Introspect
 GET /api/v2/identity/userinfo /gestalt.provider.v1.Identity/UserInfo

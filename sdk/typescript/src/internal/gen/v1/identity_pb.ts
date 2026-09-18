@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/identity.proto.
  */
 export const file_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("ChF2MS9pZGVudGl0eS5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSJwChBBdXRob3JpemVSZXF1ZXN0EhUKDXJlc3BvbnNlX3R5cGUYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRINCgVzY29wZRgEIAEoCRINCgVzdGF0ZRgFIAEoCSIpChFBdXRob3JpemVSZXNwb25zZRIUCgxyZWRpcmVjdF91cmkYASABKAki+AEKDFRva2VuUmVxdWVzdBISCgpncmFudF90eXBlGAEgASgJEgwKBGNvZGUYAiABKAkSFAoMcmVkaXJlY3RfdXJpGAMgASgJEhEKCWNsaWVudF9pZBgFIAEoCRINCgVzdGF0ZRgGIAEoCRINCgVzY29wZRgHIAEoCRIVCg1zdWJqZWN0X3Rva2VuGAggASgJEhoKEnN1YmplY3RfdG9rZW5fdHlwZRgJIAEoCRISCgpleHBpcmVzX2luGAogASgDEgwKBG5hbWUYCyABKAkSFQoNZ3JhbnRfc3ViamVjdBgMIAEoCUoECAQQBVINcmVmcmVzaF90b2tlbiKFAQoNVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSEgoKdG9rZW5fdHlwZRgCIAEoCRISCgpleHBpcmVzX2luGAMgASgDEhUKDXJlZnJlc2hfdG9rZW4YBCABKAkSDQoFc2NvcGUYBSABKAkSEAoIZ3JhbnRfaWQYBiABKAkiOwoRSW50cm9zcGVjdFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFwoPdG9rZW5fdHlwZV9oaW50GAIgASgJImkKEkludHJvc3BlY3RSZXNwb25zZRIOCgZhY3RpdmUYASABKAgSDwoHc3ViamVjdBgCIAEoCRINCgVzY29wZRgDIAEoCRIRCgljbGllbnRfaWQYBCABKAkSEAoIYXVkaWVuY2UYBSADKAkiEwoRTGlzdEdyYW50c1JlcXVlc3QiJwoSTGlzdEdyYW50c1Jlc3BvbnNlEhEKCWdyYW50X2lkcxgBIAMoCSIjCg9HZXRHcmFudFJlcXVlc3QSEAoIZ3JhbnRfaWQYASABKAkiLQoKR3JhbnRTY29wZRINCgVzY29wZRgBIAEoCRIQCghyZXNvdXJjZRgCIAMoCSJ5ChBHZXRHcmFudFJlc3BvbnNlEi8KBnNjb3BlcxgBIAMoCzIfLmdlc3RhbHQucHJvdmlkZXIudjEuR3JhbnRTY29wZRISCgpjcmVhdGVkX2F0GAIgASgDEhIKCmV4cGlyZXNfYXQYAyABKAMSDAoEbmFtZRgEIAEoCSImChJSZXZva2VHcmFudFJlcXVlc3QSEAoIZ3JhbnRfaWQYASABKAkiFQoTUmV2b2tlR3JhbnRSZXNwb25zZSIRCg9Vc2VySW5mb1JlcXVlc3QiQwoQVXNlckluZm9SZXNwb25zZRISCgpzdWJqZWN0X2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEgwKBG5hbWUYAyABKAkylQoKCElkZW50aXR5Es8BCglBdXRob3JpemUSJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6ZVJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6ZVJlc3BvbnNlInOKtRgNcmVzcG9uc2VfdHlwZYq1GAljbGllbnRfaWSKtRgMcmVkaXJlY3RfdXJpirUYBXNjb3BlirUYBXN0YXRl+tLkkwIIEgZQVUJMSUOC0+STAh86ASoiGi9hcGkvdjIvaWRlbnRpdHkvYXV0aG9yaXplEpMCCgVUb2tlbhIhLmdlc3RhbHQucHJvdmlkZXIudjEuVG9rZW5SZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Ub2tlblJlc3BvbnNlIsIBirUYCmdyYW50X3R5cGWKtRgEY29kZYq1GAxyZWRpcmVjdF91cmmKtRgJY2xpZW50X2lkirUYBXN0YXRlirUYBXNjb3BlirUYDXN1YmplY3RfdG9rZW6KtRgSc3ViamVjdF90b2tlbl90eXBlorUYCmV4cGlyZXNfaW6itRgEbmFtZaK1GA1ncmFudF9zdWJqZWN0+tLkkwIIEgZQVUJMSUOC0+STAhs6ASoiFi9hcGkvdjIvaWRlbnRpdHkvdG9rZW4SrwEKCkludHJvc3BlY3QSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkludHJvc3BlY3RSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5JbnRyb3NwZWN0UmVzcG9uc2UiUIq1GAV0b2tlboq1GA90b2tlbl90eXBlX2hpbnT60uSTAggSBlBVQkxJQ4LT5JMCIDoBKiIbL2FwaS92Mi9pZGVudGl0eS9pbnRyb3NwZWN0EogBCghVc2VySW5mbxIkLmdlc3RhbHQucHJvdmlkZXIudjEuVXNlckluZm9SZXF1ZXN0GiUuZ2VzdGFsdC5wcm92aWRlci52MS5Vc2VySW5mb1Jlc3BvbnNlIi/60uSTAggSBlBVQkxJQ4LT5JMCGxIZL2FwaS92Mi9pZGVudGl0eS91c2VyaW5mbxKMAQoKTGlzdEdyYW50cxImLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEdyYW50c1JlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RHcmFudHNSZXNwb25zZSIt+tLkkwIIEgZQVUJMSUOC0+STAhkSFy9hcGkvdjIvaWRlbnRpdHkvZ3JhbnRzEp0BCghHZXRHcmFudBIkLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0R3JhbnRSZXF1ZXN0GiUuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRHcmFudFJlc3BvbnNlIkSKtRgIZ3JhbnRfaWT60uSTAggSBlBVQkxJQ4LT5JMCJBIiL2FwaS92Mi9pZGVudGl0eS9ncmFudHMve2dyYW50X2lkfRKmAQoLUmV2b2tlR3JhbnQSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJldm9rZUdyYW50UmVxdWVzdBooLmdlc3RhbHQucHJvdmlkZXIudjEuUmV2b2tlR3JhbnRSZXNwb25zZSJEirUYCGdyYW50X2lk+tLkkwIIEgZQVUJMSUOC0+STAiQqIi9hcGkvdjIvaWRlbnRpdHkvZ3JhbnRzL3tncmFudF9pZH0aDIq1GAhpZGVudGl0eWIGcHJvdG8z", [file_google_api_annotations, file_google_api_visibility, file_v1_annotations]);
+  fileDesc("ChF2MS9pZGVudGl0eS5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSJwChBBdXRob3JpemVSZXF1ZXN0EhUKDXJlc3BvbnNlX3R5cGUYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRINCgVzY29wZRgEIAEoCRINCgVzdGF0ZRgFIAEoCSIpChFBdXRob3JpemVSZXNwb25zZRIUCgxyZWRpcmVjdF91cmkYASABKAkiKwoWRmVkZXJhdGVkTG9nb3V0UmVxdWVzdBIRCglyZXR1cm5fdG8YASABKAkiLwoXRmVkZXJhdGVkTG9nb3V0UmVzcG9uc2USFAoMcmVkaXJlY3RfdXJpGAEgASgJIvgBCgxUb2tlblJlcXVlc3QSEgoKZ3JhbnRfdHlwZRgBIAEoCRIMCgRjb2RlGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRIRCgljbGllbnRfaWQYBSABKAkSDQoFc3RhdGUYBiABKAkSDQoFc2NvcGUYByABKAkSFQoNc3ViamVjdF90b2tlbhgIIAEoCRIaChJzdWJqZWN0X3Rva2VuX3R5cGUYCSABKAkSEgoKZXhwaXJlc19pbhgKIAEoAxIMCgRuYW1lGAsgASgJEhUKDWdyYW50X3N1YmplY3QYDCABKAlKBAgEEAVSDXJlZnJlc2hfdG9rZW4ihQEKDVRva2VuUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEhIKCnRva2VuX3R5cGUYAiABKAkSEgoKZXhwaXJlc19pbhgDIAEoAxIVCg1yZWZyZXNoX3Rva2VuGAQgASgJEg0KBXNjb3BlGAUgASgJEhAKCGdyYW50X2lkGAYgASgJIjsKEUludHJvc3BlY3RSZXF1ZXN0Eg0KBXRva2VuGAEgASgJEhcKD3Rva2VuX3R5cGVfaGludBgCIAEoCSJpChJJbnRyb3NwZWN0UmVzcG9uc2USDgoGYWN0aXZlGAEgASgIEg8KB3N1YmplY3QYAiABKAkSDQoFc2NvcGUYAyABKAkSEQoJY2xpZW50X2lkGAQgASgJEhAKCGF1ZGllbmNlGAUgAygJIhMKEUxpc3RHcmFudHNSZXF1ZXN0IicKEkxpc3RHcmFudHNSZXNwb25zZRIRCglncmFudF9pZHMYASADKAkiIwoPR2V0R3JhbnRSZXF1ZXN0EhAKCGdyYW50X2lkGAEgASgJIi0KCkdyYW50U2NvcGUSDQoFc2NvcGUYASABKAkSEAoIcmVzb3VyY2UYAiADKAkieQoQR2V0R3JhbnRSZXNwb25zZRIvCgZzY29wZXMYASADKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdyYW50U2NvcGUSEgoKY3JlYXRlZF9hdBgCIAEoAxISCgpleHBpcmVzX2F0GAMgASgDEgwKBG5hbWUYBCABKAkiJgoSUmV2b2tlR3JhbnRSZXF1ZXN0EhAKCGdyYW50X2lkGAEgASgJIhUKE1Jldm9rZUdyYW50UmVzcG9uc2UiEQoPVXNlckluZm9SZXF1ZXN0IkMKEFVzZXJJbmZvUmVzcG9uc2USEgoKc3ViamVjdF9pZBgBIAEoCRINCgVlbWFpbBgCIAEoCRIMCgRuYW1lGAMgASgJMs0LCghJZGVudGl0eRLPAQoJQXV0aG9yaXplEiUuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemVSZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemVSZXNwb25zZSJzirUYDXJlc3BvbnNlX3R5cGWKtRgJY2xpZW50X2lkirUYDHJlZGlyZWN0X3VyaYq1GAVzY29wZYq1GAVzdGF0ZfrS5JMCCBIGUFVCTElDgtPkkwIfOgEqIhovYXBpL3YyL2lkZW50aXR5L2F1dGhvcml6ZRK1AQoPRmVkZXJhdGVkTG9nb3V0EisuZ2VzdGFsdC5wcm92aWRlci52MS5GZWRlcmF0ZWRMb2dvdXRSZXF1ZXN0GiwuZ2VzdGFsdC5wcm92aWRlci52MS5GZWRlcmF0ZWRMb2dvdXRSZXNwb25zZSJHirUYCXJldHVybl90b/rS5JMCCBIGUFVCTElDgtPkkwImOgEqIiEvYXBpL3YyL2lkZW50aXR5L2ZlZGVyYXRlZC1sb2dvdXQSkwIKBVRva2VuEiEuZ2VzdGFsdC5wcm92aWRlci52MS5Ub2tlblJlcXVlc3QaIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlRva2VuUmVzcG9uc2UiwgGKtRgKZ3JhbnRfdHlwZYq1GARjb2RlirUYDHJlZGlyZWN0X3VyaYq1GAljbGllbnRfaWSKtRgFc3RhdGWKtRgFc2NvcGWKtRgNc3ViamVjdF90b2tlboq1GBJzdWJqZWN0X3Rva2VuX3R5cGWitRgKZXhwaXJlc19pbqK1GARuYW1lorUYDWdyYW50X3N1YmplY3T60uSTAggSBlBVQkxJQ4LT5JMCGzoBKiIWL2FwaS92Mi9pZGVudGl0eS90b2tlbhKvAQoKSW50cm9zcGVjdBImLmdlc3RhbHQucHJvdmlkZXIudjEuSW50cm9zcGVjdFJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkludHJvc3BlY3RSZXNwb25zZSJQirUYBXRva2VuirUYD3Rva2VuX3R5cGVfaGludPrS5JMCCBIGUFVCTElDgtPkkwIgOgEqIhsvYXBpL3YyL2lkZW50aXR5L2ludHJvc3BlY3QSiAEKCFVzZXJJbmZvEiQuZ2VzdGFsdC5wcm92aWRlci52MS5Vc2VySW5mb1JlcXVlc3QaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLlVzZXJJbmZvUmVzcG9uc2UiL/rS5JMCCBIGUFVCTElDgtPkkwIbEhkvYXBpL3YyL2lkZW50aXR5L3VzZXJpbmZvEowBCgpMaXN0R3JhbnRzEiYuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0R3JhbnRzUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEdyYW50c1Jlc3BvbnNlIi360uSTAggSBlBVQkxJQ4LT5JMCGRIXL2FwaS92Mi9pZGVudGl0eS9ncmFudHMSnQEKCEdldEdyYW50EiQuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRHcmFudFJlcXVlc3QaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldEdyYW50UmVzcG9uc2UiRIq1GAhncmFudF9pZPrS5JMCCBIGUFVCTElDgtPkkwIkEiIvYXBpL3YyL2lkZW50aXR5L2dyYW50cy97Z3JhbnRfaWR9EqYBCgtSZXZva2VHcmFudBInLmdlc3RhbHQucHJvdmlkZXIudjEuUmV2b2tlR3JhbnRSZXF1ZXN0GiguZ2VzdGFsdC5wcm92aWRlci52MS5SZXZva2VHcmFudFJlc3BvbnNlIkSKtRgIZ3JhbnRfaWT60uSTAggSBlBVQkxJQ4LT5JMCJCoiL2FwaS92Mi9pZGVudGl0eS9ncmFudHMve2dyYW50X2lkfRoMirUYCGlkZW50aXR5YgZwcm90bzM", [file_google_api_annotations, file_google_api_visibility, file_v1_annotations]);
 
 /**
  * AuthorizeRequest models RFC 6749 authorization endpoint parameters.
@@ -75,6 +75,45 @@ export type AuthorizeResponse = Message<"gestalt.provider.v1.AuthorizeResponse">
  */
 export const AuthorizeResponseSchema: GenMessage<AuthorizeResponse> = /*@__PURE__*/
   messageDesc(file_v1_identity, 1);
+
+/**
+ * FederatedLogoutRequest asks the provider to end its upstream session and
+ * return the browser to return_to when complete.
+ *
+ * @generated from message gestalt.provider.v1.FederatedLogoutRequest
+ */
+export type FederatedLogoutRequest = Message<"gestalt.provider.v1.FederatedLogoutRequest"> & {
+  /**
+   * @generated from field: string return_to = 1;
+   */
+  returnTo: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.FederatedLogoutRequest.
+ * Use `create(FederatedLogoutRequestSchema)` to create a new message.
+ */
+export const FederatedLogoutRequestSchema: GenMessage<FederatedLogoutRequest> = /*@__PURE__*/
+  messageDesc(file_v1_identity, 2);
+
+/**
+ * FederatedLogoutResponse contains the provider-owned logout redirect.
+ *
+ * @generated from message gestalt.provider.v1.FederatedLogoutResponse
+ */
+export type FederatedLogoutResponse = Message<"gestalt.provider.v1.FederatedLogoutResponse"> & {
+  /**
+   * @generated from field: string redirect_uri = 1;
+   */
+  redirectUri: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.FederatedLogoutResponse.
+ * Use `create(FederatedLogoutResponseSchema)` to create a new message.
+ */
+export const FederatedLogoutResponseSchema: GenMessage<FederatedLogoutResponse> = /*@__PURE__*/
+  messageDesc(file_v1_identity, 3);
 
 /**
  * TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
@@ -168,7 +207,7 @@ export type TokenRequest = Message<"gestalt.provider.v1.TokenRequest"> & {
  * Use `create(TokenRequestSchema)` to create a new message.
  */
 export const TokenRequestSchema: GenMessage<TokenRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 2);
+  messageDesc(file_v1_identity, 4);
 
 /**
  * TokenResponse models RFC 6749 token endpoint response fields.
@@ -214,7 +253,7 @@ export type TokenResponse = Message<"gestalt.provider.v1.TokenResponse"> & {
  * Use `create(TokenResponseSchema)` to create a new message.
  */
 export const TokenResponseSchema: GenMessage<TokenResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 3);
+  messageDesc(file_v1_identity, 5);
 
 /**
  * IntrospectRequest models RFC 7662 token introspection parameters.
@@ -240,7 +279,7 @@ export type IntrospectRequest = Message<"gestalt.provider.v1.IntrospectRequest">
  * Use `create(IntrospectRequestSchema)` to create a new message.
  */
 export const IntrospectRequestSchema: GenMessage<IntrospectRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 4);
+  messageDesc(file_v1_identity, 6);
 
 /**
  * IntrospectResponse models RFC 7662 token introspection response fields.
@@ -283,7 +322,7 @@ export type IntrospectResponse = Message<"gestalt.provider.v1.IntrospectResponse
  * Use `create(IntrospectResponseSchema)` to create a new message.
  */
 export const IntrospectResponseSchema: GenMessage<IntrospectResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 5);
+  messageDesc(file_v1_identity, 7);
 
 /**
  * ListGrantsRequest lists API-token grant IDs visible to the caller.
@@ -298,7 +337,7 @@ export type ListGrantsRequest = Message<"gestalt.provider.v1.ListGrantsRequest">
  * Use `create(ListGrantsRequestSchema)` to create a new message.
  */
 export const ListGrantsRequestSchema: GenMessage<ListGrantsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 6);
+  messageDesc(file_v1_identity, 8);
 
 /**
  * ListGrantsResponse returns caller-visible API-token grant IDs created via
@@ -318,7 +357,7 @@ export type ListGrantsResponse = Message<"gestalt.provider.v1.ListGrantsResponse
  * Use `create(ListGrantsResponseSchema)` to create a new message.
  */
 export const ListGrantsResponseSchema: GenMessage<ListGrantsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 7);
+  messageDesc(file_v1_identity, 9);
 
 /**
  * GetGrantRequest retrieves one API-token grant by ID.
@@ -337,7 +376,7 @@ export type GetGrantRequest = Message<"gestalt.provider.v1.GetGrantRequest"> & {
  * Use `create(GetGrantRequestSchema)` to create a new message.
  */
 export const GetGrantRequestSchema: GenMessage<GetGrantRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 8);
+  messageDesc(file_v1_identity, 10);
 
 /**
  * GrantScope describes one authorized scope and optional resources.
@@ -361,7 +400,7 @@ export type GrantScope = Message<"gestalt.provider.v1.GrantScope"> & {
  * Use `create(GrantScopeSchema)` to create a new message.
  */
 export const GrantScopeSchema: GenMessage<GrantScope> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 9);
+  messageDesc(file_v1_identity, 11);
 
 /**
  * GetGrantResponse returns OIDF-shaped grant details.
@@ -397,7 +436,7 @@ export type GetGrantResponse = Message<"gestalt.provider.v1.GetGrantResponse"> &
  * Use `create(GetGrantResponseSchema)` to create a new message.
  */
 export const GetGrantResponseSchema: GenMessage<GetGrantResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 10);
+  messageDesc(file_v1_identity, 12);
 
 /**
  * RevokeGrantRequest revokes one caller-visible API-token grant by ID.
@@ -416,7 +455,7 @@ export type RevokeGrantRequest = Message<"gestalt.provider.v1.RevokeGrantRequest
  * Use `create(RevokeGrantRequestSchema)` to create a new message.
  */
 export const RevokeGrantRequestSchema: GenMessage<RevokeGrantRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 11);
+  messageDesc(file_v1_identity, 13);
 
 /**
  * RevokeGrantResponse acknowledges grant revocation.
@@ -431,7 +470,7 @@ export type RevokeGrantResponse = Message<"gestalt.provider.v1.RevokeGrantRespon
  * Use `create(RevokeGrantResponseSchema)` to create a new message.
  */
 export const RevokeGrantResponseSchema: GenMessage<RevokeGrantResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 12);
+  messageDesc(file_v1_identity, 14);
 
 /**
  * UserInfoRequest is intentionally empty. The caller bearer token is supplied
@@ -447,7 +486,7 @@ export type UserInfoRequest = Message<"gestalt.provider.v1.UserInfoRequest"> & {
  * Use `create(UserInfoRequestSchema)` to create a new message.
  */
 export const UserInfoRequestSchema: GenMessage<UserInfoRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 13);
+  messageDesc(file_v1_identity, 15);
 
 /**
  * UserInfoResponse models profile claims about the authenticated end user.
@@ -476,7 +515,7 @@ export type UserInfoResponse = Message<"gestalt.provider.v1.UserInfoResponse"> &
  * Use `create(UserInfoResponseSchema)` to create a new message.
  */
 export const UserInfoResponseSchema: GenMessage<UserInfoResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 14);
+  messageDesc(file_v1_identity, 16);
 
 /**
  * Identity models the shared Gestalt authentication protocol.
@@ -491,6 +530,14 @@ export const Identity: GenService<{
     methodKind: "unary";
     input: typeof AuthorizeRequestSchema;
     output: typeof AuthorizeResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.Identity.FederatedLogout
+   */
+  federatedLogout: {
+    methodKind: "unary";
+    input: typeof FederatedLogoutRequestSchema;
+    output: typeof FederatedLogoutResponseSchema;
   },
   /**
    * @generated from rpc gestalt.provider.v1.Identity.Token

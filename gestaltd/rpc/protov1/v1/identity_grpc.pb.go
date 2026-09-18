@@ -19,13 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Identity_Authorize_FullMethodName   = "/gestalt.provider.v1.Identity/Authorize"
-	Identity_Token_FullMethodName       = "/gestalt.provider.v1.Identity/Token"
-	Identity_Introspect_FullMethodName  = "/gestalt.provider.v1.Identity/Introspect"
-	Identity_UserInfo_FullMethodName    = "/gestalt.provider.v1.Identity/UserInfo"
-	Identity_ListGrants_FullMethodName  = "/gestalt.provider.v1.Identity/ListGrants"
-	Identity_GetGrant_FullMethodName    = "/gestalt.provider.v1.Identity/GetGrant"
-	Identity_RevokeGrant_FullMethodName = "/gestalt.provider.v1.Identity/RevokeGrant"
+	Identity_Authorize_FullMethodName       = "/gestalt.provider.v1.Identity/Authorize"
+	Identity_FederatedLogout_FullMethodName = "/gestalt.provider.v1.Identity/FederatedLogout"
+	Identity_Token_FullMethodName           = "/gestalt.provider.v1.Identity/Token"
+	Identity_Introspect_FullMethodName      = "/gestalt.provider.v1.Identity/Introspect"
+	Identity_UserInfo_FullMethodName        = "/gestalt.provider.v1.Identity/UserInfo"
+	Identity_ListGrants_FullMethodName      = "/gestalt.provider.v1.Identity/ListGrants"
+	Identity_GetGrant_FullMethodName        = "/gestalt.provider.v1.Identity/GetGrant"
+	Identity_RevokeGrant_FullMethodName     = "/gestalt.provider.v1.Identity/RevokeGrant"
 )
 
 // IdentityClient is the client API for Identity service.
@@ -35,6 +36,7 @@ const (
 // Identity models the shared Gestalt authentication protocol.
 type IdentityClient interface {
 	Authorize(ctx context.Context, in *AuthorizeRequest, opts ...grpc.CallOption) (*AuthorizeResponse, error)
+	FederatedLogout(ctx context.Context, in *FederatedLogoutRequest, opts ...grpc.CallOption) (*FederatedLogoutResponse, error)
 	Token(ctx context.Context, in *TokenRequest, opts ...grpc.CallOption) (*TokenResponse, error)
 	Introspect(ctx context.Context, in *IntrospectRequest, opts ...grpc.CallOption) (*IntrospectResponse, error)
 	UserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfoResponse, error)
@@ -55,6 +57,16 @@ func (c *identityClient) Authorize(ctx context.Context, in *AuthorizeRequest, op
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AuthorizeResponse)
 	err := c.cc.Invoke(ctx, Identity_Authorize_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityClient) FederatedLogout(ctx context.Context, in *FederatedLogoutRequest, opts ...grpc.CallOption) (*FederatedLogoutResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FederatedLogoutResponse)
+	err := c.cc.Invoke(ctx, Identity_FederatedLogout_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +140,7 @@ func (c *identityClient) RevokeGrant(ctx context.Context, in *RevokeGrantRequest
 // Identity models the shared Gestalt authentication protocol.
 type IdentityServer interface {
 	Authorize(context.Context, *AuthorizeRequest) (*AuthorizeResponse, error)
+	FederatedLogout(context.Context, *FederatedLogoutRequest) (*FederatedLogoutResponse, error)
 	Token(context.Context, *TokenRequest) (*TokenResponse, error)
 	Introspect(context.Context, *IntrospectRequest) (*IntrospectResponse, error)
 	UserInfo(context.Context, *UserInfoRequest) (*UserInfoResponse, error)
@@ -146,6 +159,9 @@ type UnimplementedIdentityServer struct{}
 
 func (UnimplementedIdentityServer) Authorize(context.Context, *AuthorizeRequest) (*AuthorizeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Authorize not implemented")
+}
+func (UnimplementedIdentityServer) FederatedLogout(context.Context, *FederatedLogoutRequest) (*FederatedLogoutResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FederatedLogout not implemented")
 }
 func (UnimplementedIdentityServer) Token(context.Context, *TokenRequest) (*TokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Token not implemented")
@@ -200,6 +216,24 @@ func _Identity_Authorize_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(IdentityServer).Authorize(ctx, req.(*AuthorizeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Identity_FederatedLogout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FederatedLogoutRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServer).FederatedLogout(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Identity_FederatedLogout_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServer).FederatedLogout(ctx, req.(*FederatedLogoutRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -322,6 +356,10 @@ var Identity_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Authorize",
 			Handler:    _Identity_Authorize_Handler,
+		},
+		{
+			MethodName: "FederatedLogout",
+			Handler:    _Identity_FederatedLogout_Handler,
 		},
 		{
 			MethodName: "Token",

@@ -36,6 +36,7 @@ import {
 } from "../runtime/internal/codec/authorization.ts";
 import {
   toWireAuthorizeRequest as codecToWireAuthorizeRequest,
+  toWireFederatedLogoutRequest as codecToWireFederatedLogoutRequest,
   toWireGetGrantRequest as codecToWireGetGrantRequest,
   toWireIntrospectRequest as codecToWireIntrospectRequest,
   toWireListGrantsRequest as codecToWireListGrantsRequest,
@@ -94,6 +95,7 @@ import type {
 } from "../runtime/native-types.ts";
 import type {
   AuthorizeRequest as NativeAuthorizeRequest,
+  FederatedLogoutRequest as NativeFederatedLogoutRequest,
   GetGrantRequest as NativeGetGrantRequest,
   IntrospectRequest as NativeIntrospectRequest,
   ListGrantsRequest as NativeListGrantsRequest,
@@ -152,6 +154,7 @@ import type {
 } from "../runtime/internal/gen/v1/authorization_pb.ts";
 import type {
   AuthorizeRequest,
+  FederatedLogoutRequest,
   GetGrantRequest,
   IntrospectRequest,
   ListGrantsRequest,
@@ -206,6 +209,7 @@ import type {
   PublicAuthorizationSetAuthorizationStateRequest,
   PublicAuthorizationWriteRelationshipsRequest,
   PublicIdentityAuthorizeRequest,
+  PublicIdentityFederatedLogoutRequest,
   PublicIdentityGetGrantRequest,
   PublicIdentityIntrospectRequest,
   PublicIdentityListGrantsRequest,
@@ -344,6 +348,14 @@ export function toWireDeleteWorkflowProviderDefinitionRequest(
 ): DeleteWorkflowProviderDefinitionRequest {
   return codecToWireDeleteWorkflowProviderDefinitionRequest(
     request as Init<NativeDeleteWorkflowProviderDefinitionRequest>,
+  );
+}
+
+export function toWireFederatedLogoutRequest(
+  request: PublicIdentityFederatedLogoutRequest,
+): FederatedLogoutRequest {
+  return codecToWireFederatedLogoutRequest(
+    request as Init<NativeFederatedLogoutRequest>,
   );
 }
 

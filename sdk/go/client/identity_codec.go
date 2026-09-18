@@ -54,6 +54,46 @@ func FromWireAuthorizeResponse(value *proto.AuthorizeResponse) *AuthorizeRespons
 	return out
 }
 
+func ToWireFederatedLogoutRequest(value *FederatedLogoutRequest) *proto.FederatedLogoutRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.FederatedLogoutRequest{
+		ReturnTo: value.ReturnTo,
+	}
+	return out
+}
+
+func FromWireFederatedLogoutRequest(value *proto.FederatedLogoutRequest) *FederatedLogoutRequest {
+	if value == nil {
+		return nil
+	}
+	out := &FederatedLogoutRequest{
+		ReturnTo: value.ReturnTo,
+	}
+	return out
+}
+
+func ToWireFederatedLogoutResponse(value *FederatedLogoutResponse) *proto.FederatedLogoutResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.FederatedLogoutResponse{
+		RedirectUri: value.RedirectUri,
+	}
+	return out
+}
+
+func FromWireFederatedLogoutResponse(value *proto.FederatedLogoutResponse) *FederatedLogoutResponse {
+	if value == nil {
+		return nil
+	}
+	out := &FederatedLogoutResponse{
+		RedirectUri: value.RedirectUri,
+	}
+	return out
+}
+
 func ToWireGetGrantRequest(value *GetGrantRequest) *proto.GetGrantRequest {
 	if value == nil {
 		return nil

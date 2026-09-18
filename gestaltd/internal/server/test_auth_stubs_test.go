@@ -456,19 +456,19 @@ type federatedLogoutAuthStub struct {
 	logoutPrefix string
 }
 
-func (s *federatedLogoutAuthStub) FederatedLogoutURL(returnTo string) (string, error) {
+func (s *federatedLogoutAuthStub) FederatedLogoutURL(_ context.Context, returnTo string) (string, error) {
 	prefix := strings.TrimSpace(s.logoutPrefix)
 	if prefix == "" {
-		prefix = "https://idp.example.test/v2/logout"
+		prefix = "https://idp.example.test/logout"
 	}
-	return prefix + "?returnTo=" + url.QueryEscape(returnTo), nil
+	return prefix + "?post_logout_redirect_uri=" + url.QueryEscape(returnTo), nil
 }
 
 func TestLoginCallbackRejectedDomainRedirectsThroughLogout(t *testing.T) {
 	t.Parallel()
 
 	stub := &federatedLogoutAuthStub{
-		StubAuthProvider: coretesting.StubAuthProvider{N: "auth0"},
+		StubAuthProvider: coretesting.StubAuthProvider{N: "oidc"},
 	}
 	stub.TokenFn = func(_ context.Context, _ *core.TokenRequest) (*core.TokenResponse, error) {
 		return nil, fmt.Errorf(`oidc auth: email domain "gmail.com" is not allowed`)
@@ -503,14 +503,14 @@ func TestLoginCallbackRejectedDomainRedirectsThroughLogout(t *testing.T) {
 		t.Fatalf("status = %d, want 302", callbackResp.StatusCode)
 	}
 	location := callbackResp.Header.Get("Location")
-	if !strings.HasPrefix(location, "https://idp.example.test/v2/logout") {
+	if !strings.HasPrefix(location, "https://idp.example.test/logout") {
 		t.Fatalf("Location = %q, want federated logout redirect", location)
 	}
 	parsed, err := url.Parse(location)
 	if err != nil {
 		t.Fatalf("parse Location: %v", err)
 	}
-	returnTo := parsed.Query().Get("returnTo")
+	returnTo := parsed.Query().Get("post_logout_redirect_uri")
 	if !strings.Contains(returnTo, "/api/v1/auth/login/denied") {
 		t.Fatalf("returnTo = %q, want login denied page", returnTo)
 	}
@@ -541,11 +541,11 @@ func TestLoginCallbackOAuthErrorLogsOutStateProvider(t *testing.T) {
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	serverAuth := &federatedLogoutAuthStub{
 		StubAuthProvider: coretesting.StubAuthProvider{N: "server"},
-		logoutPrefix:     "https://server-idp.example.test/v2/logout",
+		logoutPrefix:     "https://server-idp.example.test/logout",
 	}
 	routeAuth := &federatedLogoutAuthStub{
 		StubAuthProvider: coretesting.StubAuthProvider{N: "alt"},
-		logoutPrefix:     "https://route-idp.example.test/v2/logout",
+		logoutPrefix:     "https://route-idp.example.test/logout",
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {

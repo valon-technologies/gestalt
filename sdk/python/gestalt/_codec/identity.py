@@ -42,6 +42,30 @@ def from_wire_authorize_response(value: Any) -> native.AuthorizeResponse:
     )
 
 
+def to_wire_federated_logout_request(value: native.FederatedLogoutRequest) -> Any:
+    return _identity_pb2.FederatedLogoutRequest(
+        return_to=value.return_to,
+    )
+
+
+def from_wire_federated_logout_request(value: Any) -> native.FederatedLogoutRequest:
+    return native.FederatedLogoutRequest(
+        return_to=value.return_to,
+    )
+
+
+def to_wire_federated_logout_response(value: native.FederatedLogoutResponse) -> Any:
+    return _identity_pb2.FederatedLogoutResponse(
+        redirect_uri=value.redirect_uri,
+    )
+
+
+def from_wire_federated_logout_response(value: Any) -> native.FederatedLogoutResponse:
+    return native.FederatedLogoutResponse(
+        redirect_uri=value.redirect_uri,
+    )
+
+
 def to_wire_get_grant_request(value: native.GetGrantRequest) -> Any:
     return _identity_pb2.GetGrantRequest(
         grant_id=value.grant_id,

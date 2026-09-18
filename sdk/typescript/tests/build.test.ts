@@ -17,6 +17,7 @@ import {
 import {
   Identity as IdentityProviderService,
   AuthorizeRequestSchema,
+  FederatedLogoutRequestSchema,
   IntrospectRequestSchema,
   TokenRequestSchema,
 } from "../src/internal/gen/v1/identity_pb.ts";
@@ -307,6 +308,15 @@ test("buildProviderBinary compiles a runnable identity provider executable", asy
       }),
     );
     expect(introspected.active).toBe(true);
+
+    const logout = await auth.federatedLogout(
+      create(FederatedLogoutRequestSchema, {
+        returnTo: "https://app.example.test/",
+      }),
+    );
+    expect(logout.redirectUri).toBe(
+      "https://binary.example.test/logout?return_to=https%3A%2F%2Fapp.example.test%2F",
+    );
   } finally {
     if (child) {
       await stopProcess(child);

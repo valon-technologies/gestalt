@@ -111,6 +111,8 @@ if TYPE_CHECKING:
     from .identity import (
         AuthorizeRequest,
         AuthorizeResponse,
+        FederatedLogoutRequest,
+        FederatedLogoutResponse,
         GetGrantRequest,
         GetGrantResponse,
         IntrospectRequest,
@@ -256,9 +258,7 @@ class Starter(Protocol):
 class MigrationsProvider(Protocol):
     """Optional mixin for providers that run IndexedDB migrations on configure."""
 
-    def migration_options(
-        self, name: str, config: dict[str, Any]
-    ) -> Any:
+    def migration_options(self, name: str, config: dict[str, Any]) -> Any:
         """Return migration revisions or run options for this configure call."""
 
         ...
@@ -334,6 +334,13 @@ class IdentityProvider(AppProvider):
         """Introspect a bearer token via RFC 7662."""
 
         raise NotImplementedError
+
+    def federated_logout(
+        self, request: FederatedLogoutRequest
+    ) -> FederatedLogoutResponse:
+        """Return a redirect that ends the upstream identity session."""
+
+        self._unimplemented("federated_logout")
 
     def user_info(
         self, request: UserInfoRequest, call: IdentityCallContext
@@ -426,7 +433,9 @@ class AuthorizationProvider(AppProvider):
 
         raise NotImplementedError
 
-    def set_active_model(self, request: SetActiveModelRequest) -> SetActiveModelResponse:
+    def set_active_model(
+        self, request: SetActiveModelRequest
+    ) -> SetActiveModelResponse:
         """Set the active authorization model."""
 
         raise NotImplementedError

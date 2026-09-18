@@ -18,6 +18,7 @@ import (
 
 type identityRPCClient interface {
 	Authorize(context.Context, *proto.AuthorizeRequest, ...grpc.CallOption) (*proto.AuthorizeResponse, error)
+	FederatedLogout(context.Context, *proto.FederatedLogoutRequest, ...grpc.CallOption) (*proto.FederatedLogoutResponse, error)
 	Token(context.Context, *proto.TokenRequest, ...grpc.CallOption) (*proto.TokenResponse, error)
 	Introspect(context.Context, *proto.IntrospectRequest, ...grpc.CallOption) (*proto.IntrospectResponse, error)
 	UserInfo(context.Context, *proto.UserInfoRequest, ...grpc.CallOption) (*proto.UserInfoResponse, error)
@@ -27,33 +28,28 @@ type identityRPCClient interface {
 }
 
 type ExecConfig struct {
-	Command                 string
-	Args                    []string
-	Workdir                 string
-	Env                     map[string]string
-	Config                  map[string]any
-	Egress                  egress.Policy
-	HostBinary              string
-	Cleanup                 func()
-	HostServices            []runtimehost.HostService
-	Name                    string
-	CallbackURL             string
-	FederatedLogoutProvider string
-	HostServiceGRPCOptions  []grpc.ServerOption
+	Command                string
+	Args                   []string
+	Workdir                string
+	Env                    map[string]string
+	Config                 map[string]any
+	Egress                 egress.Policy
+	HostBinary             string
+	Cleanup                func()
+	HostServices           []runtimehost.HostService
+	Name                   string
+	CallbackURL            string
+	HostServiceGRPCOptions []grpc.ServerOption
 }
 
 type remoteIdentityProvider struct {
-	runtime                 proto.ProviderLifecycleClient
-	client                  identityRPCClient
-	name                    string
-	displayName             string
-	description             string
-	callbackURL             string
-	oidcIssuerURL           string
-	oidcClientID            string
-	oidcAuth0               bool
-	federatedLogoutProvider string
-	closer                  io.Closer
+	runtime     proto.ProviderLifecycleClient
+	client      identityRPCClient
+	name        string
+	displayName string
+	description string
+	callbackURL string
+	closer      io.Closer
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.IdentityProvider, error) {
@@ -101,11 +97,10 @@ func NewRemote(client proto.IdentityClient, name string) (core.IdentityProvider,
 
 func newRemoteIdentityProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client identityRPCClient, cfg ExecConfig) (*remoteIdentityProvider, error) {
 	provider := &remoteIdentityProvider{
-		runtime:                 runtimeClient,
-		client:                  client,
-		name:                    cfg.Name,
-		callbackURL:             cfg.CallbackURL,
-		federatedLogoutProvider: cfg.FederatedLogoutProvider,
+		runtime:     runtimeClient,
+		client:      client,
+		name:        cfg.Name,
+		callbackURL: cfg.CallbackURL,
 	}
 	if err := provider.configure(ctx, cfg.Name, cfg.Config); err != nil {
 		return nil, err
@@ -114,7 +109,6 @@ func newRemoteIdentityProvider(ctx context.Context, runtimeClient proto.Provider
 }
 
 func (p *remoteIdentityProvider) configure(ctx context.Context, name string, config map[string]any) error {
-	configuredAsAuth0 := strings.EqualFold(strings.TrimSpace(p.federatedLogoutProvider), "auth0")
 	if p.runtime == nil {
 		if strings.TrimSpace(name) != "" {
 			p.name = name
@@ -136,13 +130,21 @@ func (p *remoteIdentityProvider) configure(ctx context.Context, name string, con
 		p.displayName = meta.DisplayName
 		p.description = meta.Description
 	}
-	p.oidcIssuerURL, p.oidcClientID = oidcLogoutConfigFromMap(config)
-	p.oidcAuth0 = configuredAsAuth0
 	return nil
 }
 
-func (p *remoteIdentityProvider) FederatedLogoutURL(returnTo string) (string, error) {
-	return buildOIDCFederatedLogoutURL(p.oidcIssuerURL, p.oidcClientID, returnTo, p.oidcAuth0)
+func (p *remoteIdentityProvider) FederatedLogoutURL(ctx context.Context, returnTo string) (string, error) {
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+
+	resp, err := p.client.FederatedLogout(ctx, &proto.FederatedLogoutRequest{ReturnTo: returnTo})
+	if err != nil {
+		return "", err
+	}
+	if resp == nil {
+		return "", status.Error(codes.Internal, "identity provider returned nil response")
+	}
+	return resp.GetRedirectUri(), nil
 }
 
 func (p *remoteIdentityProvider) DisplayName() string {

@@ -40,6 +40,11 @@ class IdentityStub(object):
                 request_serializer=v1_dot_identity__pb2.AuthorizeRequest.SerializeToString,
                 response_deserializer=v1_dot_identity__pb2.AuthorizeResponse.FromString,
                 _registered_method=True)
+        self.FederatedLogout = channel.unary_unary(
+                '/gestalt.provider.v1.Identity/FederatedLogout',
+                request_serializer=v1_dot_identity__pb2.FederatedLogoutRequest.SerializeToString,
+                response_deserializer=v1_dot_identity__pb2.FederatedLogoutResponse.FromString,
+                _registered_method=True)
         self.Token = channel.unary_unary(
                 '/gestalt.provider.v1.Identity/Token',
                 request_serializer=v1_dot_identity__pb2.TokenRequest.SerializeToString,
@@ -77,6 +82,12 @@ class IdentityServicer(object):
     """
 
     def Authorize(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def FederatedLogout(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -125,6 +136,11 @@ def add_IdentityServicer_to_server(servicer, server):
                     servicer.Authorize,
                     request_deserializer=v1_dot_identity__pb2.AuthorizeRequest.FromString,
                     response_serializer=v1_dot_identity__pb2.AuthorizeResponse.SerializeToString,
+            ),
+            'FederatedLogout': grpc.unary_unary_rpc_method_handler(
+                    servicer.FederatedLogout,
+                    request_deserializer=v1_dot_identity__pb2.FederatedLogoutRequest.FromString,
+                    response_serializer=v1_dot_identity__pb2.FederatedLogoutResponse.SerializeToString,
             ),
             'Token': grpc.unary_unary_rpc_method_handler(
                     servicer.Token,
@@ -185,6 +201,33 @@ class Identity(object):
             '/gestalt.provider.v1.Identity/Authorize',
             v1_dot_identity__pb2.AuthorizeRequest.SerializeToString,
             v1_dot_identity__pb2.AuthorizeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FederatedLogout(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.Identity/FederatedLogout',
+            v1_dot_identity__pb2.FederatedLogoutRequest.SerializeToString,
+            v1_dot_identity__pb2.FederatedLogoutResponse.FromString,
             options,
             channel_credentials,
             insecure,

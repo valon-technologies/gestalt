@@ -31,6 +31,24 @@ func (s *authServer) Authorize(ctx context.Context, req *proto.AuthorizeRequest)
 	return authorizeResponseToProto(resp), nil
 }
 
+func (s *authServer) FederatedLogout(ctx context.Context, req *proto.FederatedLogoutRequest) (*proto.FederatedLogoutResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	provider, ok := s.auth.(FederatedLogoutProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "federated logout is not supported")
+	}
+	resp, err := provider.FederatedLogout(ctx, federatedLogoutRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("federated logout", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
+	}
+	return federatedLogoutResponseToProto(resp), nil
+}
+
 func (s *authServer) Token(ctx context.Context, req *proto.TokenRequest) (*proto.TokenResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")

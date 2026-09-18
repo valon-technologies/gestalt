@@ -6,6 +6,8 @@ import * as wire from "../gen/v1/identity_pb.ts";
 import type {
   AuthorizeRequest,
   AuthorizeResponse,
+  FederatedLogoutRequest,
+  FederatedLogoutResponse,
   GetGrantRequest,
   GetGrantResponse,
   GrantScope,
@@ -57,6 +59,38 @@ export function toWireAuthorizeResponse(
 export function fromWireAuthorizeResponse(
   value: wire.AuthorizeResponse,
 ): AuthorizeResponse {
+  return {
+    redirectUri: value.redirectUri,
+  };
+}
+
+export function toWireFederatedLogoutRequest(
+  value: Init<FederatedLogoutRequest>,
+): wire.FederatedLogoutRequest {
+  return create(wire.FederatedLogoutRequestSchema, {
+    returnTo: value.returnTo ?? "",
+  });
+}
+
+export function fromWireFederatedLogoutRequest(
+  value: wire.FederatedLogoutRequest,
+): FederatedLogoutRequest {
+  return {
+    returnTo: value.returnTo,
+  };
+}
+
+export function toWireFederatedLogoutResponse(
+  value: Init<FederatedLogoutResponse>,
+): wire.FederatedLogoutResponse {
+  return create(wire.FederatedLogoutResponseSchema, {
+    redirectUri: value.redirectUri ?? "",
+  });
+}
+
+export function fromWireFederatedLogoutResponse(
+  value: wire.FederatedLogoutResponse,
+): FederatedLogoutResponse {
   return {
     redirectUri: value.redirectUri,
   };

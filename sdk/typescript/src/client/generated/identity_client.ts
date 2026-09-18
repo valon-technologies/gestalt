@@ -8,6 +8,7 @@
 
 import type {
   AuthorizeResponse,
+  FederatedLogoutResponse,
   GetGrantResponse,
   IntrospectResponse,
   ListGrantsResponse,
@@ -17,6 +18,7 @@ import type {
 } from "../../identity.ts";
 import {
   fromWireAuthorizeResponse,
+  fromWireFederatedLogoutResponse,
   fromWireGetGrantResponse,
   fromWireIntrospectResponse,
   fromWireListGrantsResponse,
@@ -27,6 +29,8 @@ import {
 import {
   AuthorizeRequestSchema,
   AuthorizeResponseSchema,
+  FederatedLogoutRequestSchema,
+  FederatedLogoutResponseSchema,
   GetGrantRequestSchema,
   GetGrantResponseSchema,
   IntrospectRequestSchema,
@@ -42,6 +46,7 @@ import {
 } from "../../internal/gen/v1/identity_pb.ts";
 import {
   toWireAuthorizeRequest,
+  toWireFederatedLogoutRequest,
   toWireGetGrantRequest,
   toWireIntrospectRequest,
   toWireListGrantsRequest,
@@ -52,6 +57,7 @@ import {
 import { PUBLIC_METHODS } from "./methods.ts";
 import type {
   PublicIdentityAuthorizeRequest,
+  PublicIdentityFederatedLogoutRequest,
   PublicIdentityTokenRequest,
   PublicIdentityIntrospectRequest,
   PublicIdentityUserInfoRequest,
@@ -74,6 +80,21 @@ export class IdentityClient {
         toWireAuthorizeRequest(request),
         AuthorizeRequestSchema,
         AuthorizeResponseSchema,
+        callOptions,
+      ),
+    );
+  }
+
+  async federatedLogout(
+    request: PublicIdentityFederatedLogoutRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<FederatedLogoutResponse> {
+    return fromWireFederatedLogoutResponse(
+      await this.transport.unary(
+        PUBLIC_METHODS.identity.federatedLogout,
+        toWireFederatedLogoutRequest(request),
+        FederatedLogoutRequestSchema,
+        FederatedLogoutResponseSchema,
         callOptions,
       ),
     );
@@ -175,6 +196,10 @@ export interface IdentityClientREST {
     request: PublicIdentityAuthorizeRequest,
     callOptions?: PublicUnaryCallOptions,
   ): Promise<AuthorizeResponse>;
+  federatedLogout(
+    request: PublicIdentityFederatedLogoutRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<FederatedLogoutResponse>;
   token(
     request: PublicIdentityTokenRequest,
     callOptions?: PublicUnaryCallOptions,
