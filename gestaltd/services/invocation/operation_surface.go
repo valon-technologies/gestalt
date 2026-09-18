@@ -11,8 +11,6 @@ func operationExposedOnInvocationSurface(ctx context.Context, op catalog.Catalog
 	caller := CallerProviderFromContext(ctx)
 	if isPublicIngress(ctx) {
 		switch InvocationSurfaceFromContext(ctx) {
-		case InvocationSurfaceHTTP:
-			return catalog.OperationExposedOnAPI(op)
 		case InvocationSurfaceMCP:
 			return catalog.OperationExposedOnMCP(op)
 		default:

@@ -53,9 +53,6 @@ func (b *Broker) authorizeInvocation(ctx context.Context, p *principal.Principal
 		}
 	}
 	if !providerDelegatesRemoteAuthorization(prov) || private {
-		// Remote providers evaluate their user grants themselves for public
-		// operations. Private operations are the exception: the host must check
-		// the original user as well as the verified internal caller.
 		ctx, err = b.authorizeOperation(ctx, p, app, operation)
 		if err != nil {
 			return ctx, operation, err

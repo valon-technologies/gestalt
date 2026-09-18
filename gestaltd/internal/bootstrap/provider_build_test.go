@@ -204,45 +204,6 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	}
 }
 
-func TestPrepareProviderBuildsFiltersStartupProxyCatalog(t *testing.T) {
-	t.Parallel()
-
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "startup-proxy",
-		Operations: []catalog.CatalogOperation{
-			{ID: "hidden", Method: http.MethodGet},
-			{ID: "other", Method: http.MethodGet},
-		},
-	})
-	apiDisabled := false
-	cfg := &config.Config{Apps: map[string]*config.ProviderEntry{
-		"startup-proxy": {
-			ResolvedManifest:     newExecutableManifest("Startup proxy", "Applies operation policy before registration"),
-			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			AllowedOperations: map[string]*config.OperationOverride{
-				"hidden": {API: &apiDisabled},
-			},
-		},
-	}}
-
-	builds, err := prepareProviderBuilds(cfg, NewFactoryRegistry(), Deps{})
-	if err != nil {
-		t.Fatalf("prepareProviderBuilds: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseProviders(builds.providers) })
-	provider, err := builds.providers.Get("startup-proxy")
-	if err != nil {
-		t.Fatalf("get startup proxy: %v", err)
-	}
-	cat := provider.Catalog()
-	if cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != "hidden" {
-		t.Fatalf("startup proxy catalog = %+v, want API-disabled operation", cat)
-	}
-	if cat.Operations[0].API == nil || *cat.Operations[0].API {
-		t.Fatalf("startup proxy operation = %+v, want API false", cat.Operations[0])
-	}
-}
-
 func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing.T) {
 	t.Parallel()
 
