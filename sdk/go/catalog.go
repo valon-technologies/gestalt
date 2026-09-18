@@ -17,6 +17,7 @@ import (
 // A nil *APIExposureMode means the operation uses the host default.
 type APIExposureMode string
 
+// Supported operation API exposure modes.
 const (
 	APIExposurePublic         APIExposureMode = "true"
 	APIExposurePrivate        APIExposureMode = "false"
