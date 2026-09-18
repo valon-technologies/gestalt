@@ -103,7 +103,13 @@ apps:
         alias: list_issues
       issues.get:
         alias: get_issue
+        mcp: false
 ```
+
+Each operation is exposed to the public API and MCP by default. Add
+`api: false` or `mcp: false` to disable that ingress independently. These
+flags affect both catalog discovery and direct invocation; calls from another
+app through the host service remain available.
 
 ### `allowedHosts`
 

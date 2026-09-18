@@ -90,6 +90,8 @@ type OperationDef struct {
 	Path          string          `yaml:"path" json:"path"`
 	AllowedRoles  []string        `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
 	Tags          []string        `yaml:"tags,omitempty" json:"tags,omitempty"`
+	API           *bool           `yaml:"api,omitempty" json:"api,omitempty"`
+	MCP           *bool           `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 	Parameters    []ParameterDef  `yaml:"parameters" json:"parameters"`
 	Query         string          `yaml:"query" json:"query"` // GraphQL query/mutation template
 	OperationName string          `yaml:"operationName,omitempty" json:"operationName,omitempty"`

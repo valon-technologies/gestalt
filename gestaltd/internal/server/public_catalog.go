@@ -24,7 +24,7 @@ func (s *Server) publicHTTPOperations(integration string, prov core.Provider, op
 	out := make([]catalog.CatalogOperation, 0, len(ops))
 	for i := range ops {
 		op := ops[i]
-		if !catalog.OperationVisibleByDefault(op) {
+		if !catalog.OperationExposedOnAPI(op) {
 			continue
 		}
 		if invocation.OperationTransport(op) == catalog.TransportMCPPassthrough {
@@ -43,6 +43,14 @@ func (s *Server) publicHTTPOperations(integration string, prov core.Provider, op
 }
 
 func (s *Server) publicCatalog(integration string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
+	return s.publicCatalogWhere(integration, prov, cat, catalog.OperationExposedOnAPI)
+}
+
+func (s *Server) publicMCPCatalog(integration string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
+	return s.publicCatalogWhere(integration, prov, cat, catalog.OperationExposedOnMCP)
+}
+
+func (s *Server) publicCatalogWhere(integration string, prov core.Provider, cat *catalog.Catalog, exposed func(catalog.CatalogOperation) bool) *catalog.Catalog {
 	if cat == nil {
 		return nil
 	}
@@ -51,7 +59,7 @@ func (s *Server) publicCatalog(integration string, prov core.Provider, cat *cata
 	ops := filtered.Operations[:0]
 	for i := range filtered.Operations {
 		op := filtered.Operations[i]
-		if !catalog.OperationVisibleByDefault(op) {
+		if !exposed(op) {
 			continue
 		}
 		projected, ok := s.projectPublicOperation(prov, op, projector, hasProjector)

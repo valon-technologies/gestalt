@@ -153,6 +153,7 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 
 func (s *Server) appAccessCatalog(r *http.Request, app string, prov core.Provider) (*catalog.Catalog, error) {
 	baseline, err := s.appAccessBaselineCatalog(r, app, prov)
+	baseline = s.publicCatalog(app, prov, baseline)
 	if err != nil || s.appAllowedOperations == nil {
 		return baseline, err
 	}
@@ -164,7 +165,7 @@ func (s *Server) appAccessCatalog(r *http.Request, app string, prov core.Provide
 }
 
 func (s *Server) appAccessBaselineCatalog(r *http.Request, app string, prov core.Provider) (*catalog.Catalog, error) {
-	staticCat := appAccessCapabilityCatalog(prov, s.publicCatalog(app, prov, prov.Catalog()))
+	staticCat := appAccessCapabilityCatalog(prov, prov.Catalog())
 	if !core.SupportsSessionCatalog(prov) {
 		return staticCat, nil
 	}
@@ -188,7 +189,7 @@ func (s *Server) appAccessBaselineCatalog(r *http.Request, app string, prov core
 		}
 		return nil, err
 	}
-	return appAccessCapabilityCatalog(prov, s.publicCatalog(app, prov, cat)), nil
+	return appAccessCapabilityCatalog(prov, cat), nil
 }
 
 func appAccessCapabilityCatalog(prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {

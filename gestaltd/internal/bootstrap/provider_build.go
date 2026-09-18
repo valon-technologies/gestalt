@@ -156,8 +156,14 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 			return fmt.Errorf("remote app %q: %w", name, err)
 		}
 		var spec appservice.StaticProviderSpec
+		allowedOperations := entry.EffectiveAllowedOperations()
 		if entry.Source.IsRegistry() {
-			catalog, err := buildRemoteRegistryCatalog(name, entry.AllowedOperations)
+			var err error
+			allowedOperations, err = normalizeRemoteAllowedOperations(name, allowedOperations)
+			if err != nil {
+				return err
+			}
+			catalog, err := buildRemoteRegistryCatalog(name, allowedOperations)
 			if err != nil {
 				return err
 			}
@@ -173,12 +179,34 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		if err != nil {
 			return fmt.Errorf("remote app %q: %w", name, err)
 		}
+		provider, err = applyAllowedOperations(name, allowedOperations, provider)
+		if err != nil {
+			return err
+		}
 		if err := providers.Register(name, provider); err != nil {
 			return fmt.Errorf("remote app %q: %w", name, err)
 		}
 		slog.Debug("registered remote app provider", "provider", name, "remote", config.EntryPlacementRemote(entry))
 	}
 	return nil
+}
+
+func normalizeRemoteAllowedOperations(appName string, allowedOperations map[string]*config.OperationOverride) (map[string]*config.OperationOverride, error) {
+	if allowedOperations == nil {
+		return nil, nil
+	}
+	normalized := make(map[string]*config.OperationOverride, len(allowedOperations))
+	for rawKey, override := range allowedOperations {
+		operationID := strings.TrimSpace(rawKey)
+		if operationID == "" {
+			return nil, fmt.Errorf("remote app %q allowedOperations key %q is blank", appName, rawKey)
+		}
+		if _, exists := normalized[operationID]; exists {
+			return nil, fmt.Errorf("remote app %q allowedOperations key %q normalizes to duplicate operation %q", appName, rawKey, operationID)
+		}
+		normalized[operationID] = override
+	}
+	return normalized, nil
 }
 
 func buildRemoteRegistryCatalog(appName string, allowedOperations map[string]*config.OperationOverride) (*catalog.Catalog, error) {

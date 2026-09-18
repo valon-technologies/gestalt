@@ -1139,7 +1139,14 @@ func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, p
 		}
 	}
 
-	return ResolveOperation(ctx, prov, providerName, b, p, operation, sessionConnections, instance)
+	op, transport, resolvedConnection, err := ResolveOperation(ctx, prov, providerName, b, p, operation, sessionConnections, instance)
+	if err != nil {
+		return catalog.CatalogOperation{}, "", "", err
+	}
+	if !operationExposedOnInvocationSurface(ctx, op) {
+		return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q", ErrOperationNotFound, operation)
+	}
+	return op, transport, resolvedConnection, nil
 }
 
 func (b *Broker) mcpConnection(providerName string) string {

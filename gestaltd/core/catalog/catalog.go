@@ -72,6 +72,8 @@ type CatalogOperation struct {
 	Tags           []string               `yaml:"tags,omitempty"           json:"tags,omitempty"`
 	ReadOnly       bool                   `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
 	Visible        *bool                  `yaml:"visible,omitempty"        json:"visible,omitempty"`
+	API            *bool                  `yaml:"api,omitempty"            json:"api,omitempty"`
+	MCP            *bool                  `yaml:"mcp,omitempty"            json:"mcp,omitempty"`
 	Transport      string                 `yaml:"transport,omitempty"      json:"transport,omitempty"`
 	Query          string                 `yaml:"query,omitempty"          json:"query,omitempty"`
 	OperationName  string                 `yaml:"operationName,omitempty"  json:"operationName,omitempty"`
@@ -79,6 +81,14 @@ type CatalogOperation struct {
 
 func OperationVisibleByDefault(op CatalogOperation) bool {
 	return op.Visible == nil || *op.Visible
+}
+
+func OperationExposedOnAPI(op CatalogOperation) bool {
+	return OperationVisibleByDefault(op) && (op.API == nil || *op.API)
+}
+
+func OperationExposedOnMCP(op CatalogOperation) bool {
+	return OperationVisibleByDefault(op) && (op.MCP == nil || *op.MCP)
 }
 
 func OperationByID(cat *Catalog, id string) (CatalogOperation, bool) {
@@ -146,6 +156,8 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Tags           []string              `yaml:"tags,omitempty"`
 		ReadOnly       bool                  `yaml:"readOnly,omitempty"`
 		Visible        *bool                 `yaml:"visible,omitempty"`
+		API            *bool                 `yaml:"api,omitempty"`
+		MCP            *bool                 `yaml:"mcp,omitempty"`
 		Transport      string                `yaml:"transport,omitempty"`
 		Query          string                `yaml:"query,omitempty"`
 		OperationName  string                `yaml:"operationName,omitempty"`
@@ -211,6 +223,8 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Tags:           aux.Tags,
 		ReadOnly:       aux.ReadOnly,
 		Visible:        aux.Visible,
+		API:            aux.API,
+		MCP:            aux.MCP,
 		Transport:      aux.Transport,
 		Query:          aux.Query,
 		OperationName:  aux.OperationName,
@@ -314,6 +328,14 @@ func (c *Catalog) Clone() *Catalog {
 		if op.Visible != nil {
 			visible := *op.Visible
 			outOp.Visible = &visible
+		}
+		if op.API != nil {
+			api := *op.API
+			outOp.API = &api
+		}
+		if op.MCP != nil {
+			mcp := *op.MCP
+			outOp.MCP = &mcp
 		}
 		outOp.Annotations = CloneCapabilityAnnotations(op.Annotations)
 		out.Operations[i] = outOp

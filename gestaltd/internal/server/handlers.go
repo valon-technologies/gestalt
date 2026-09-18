@@ -867,7 +867,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	if visible, ok := staticCatalogOperationVisibleByDefault(prov, operationName); ok && !visible {
+	if exposed, ok := staticCatalogOperationExposedOnAPI(prov, operationName); ok && !exposed {
 		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
 		return
 	}
@@ -877,7 +877,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
 	}
-	if !catalog.OperationVisibleByDefault(opMeta) {
+	if !catalog.OperationExposedOnAPI(opMeta) {
 		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
 		return
 	}
@@ -1046,7 +1046,7 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 	}
 }
 
-func staticCatalogOperationVisibleByDefault(prov core.Provider, operation string) (bool, bool) {
+func staticCatalogOperationExposedOnAPI(prov core.Provider, operation string) (bool, bool) {
 	if prov == nil {
 		return true, false
 	}
@@ -1054,7 +1054,7 @@ func staticCatalogOperationVisibleByDefault(prov core.Provider, operation string
 	if !ok {
 		return true, false
 	}
-	return catalog.OperationVisibleByDefault(op), true
+	return catalog.OperationExposedOnAPI(op), true
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {

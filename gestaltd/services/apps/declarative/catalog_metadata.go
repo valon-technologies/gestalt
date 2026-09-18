@@ -30,6 +30,8 @@ func CatalogFromDefinition(def *Definition) *catalog.Catalog {
 			Description:   opDef.Description,
 			AllowedRoles:  slices.Clone(opDef.AllowedRoles),
 			Tags:          catalog.MergeTags(opDef.Tags),
+			API:           opDef.API,
+			MCP:           opDef.MCP,
 			Transport:     opDef.Transport,
 			Query:         opDef.Query,
 			OperationName: opDef.OperationName,

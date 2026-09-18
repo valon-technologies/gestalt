@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -63,6 +64,7 @@ func TestPublicPrepareUnaryInterceptorSanitizesBeforeProvider(t *testing.T) {
 	))
 	var handlerMetadata metadata.MD
 	var handlerSubject string
+	var handlerSurface string
 	_, err = publicPrepareUnaryInterceptor(transport, nil)(
 		ctx,
 		&proto.AppInvokeRequest{App: "example", Operation: "sync"},
@@ -70,6 +72,7 @@ func TestPublicPrepareUnaryInterceptorSanitizesBeforeProvider(t *testing.T) {
 		func(ctx context.Context, req any) (any, error) {
 			handlerMetadata, _ = metadata.FromIncomingContext(ctx)
 			handlerSubject = gestalt.TrustedCallerSubjectFromContext(ctx)
+			handlerSurface = req.(*proto.AppInvokeRequest).GetContext().GetInvocation().GetSurface()
 			return req, nil
 		},
 	)
@@ -91,6 +94,9 @@ func TestPublicPrepareUnaryInterceptorSanitizesBeforeProvider(t *testing.T) {
 	}
 	if handlerSubject != "user:alice" {
 		t.Fatalf("handler trusted subject = %q, want user:alice", handlerSubject)
+	}
+	if handlerSurface != string(invocation.InvocationSurfaceHTTP) {
+		t.Fatalf("handler invocation surface = %q, want %q", handlerSurface, invocation.InvocationSurfaceHTTP)
 	}
 }
 

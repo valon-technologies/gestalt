@@ -128,7 +128,7 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 			}
 			return nil, status.Error(codes.Unauthenticated, "bearer token is required")
 		}
-		ctx = stripInternalIdentityMetadata(ctx)
+		ctx = invocation.WithInvocationSurface(stripInternalIdentityMetadata(ctx), invocation.InvocationSurfaceHTTP)
 		msg, ok := req.(gproto.Message)
 		if !ok {
 			return nil, status.Error(codes.Internal, "request type mismatch")
@@ -201,7 +201,7 @@ func (s *publicAuthStream) Context() context.Context {
 	if s.preparedCtx != nil {
 		ctx = s.preparedCtx
 	}
-	ctx = stripInternalIdentityMetadata(ctx)
+	ctx = invocation.WithInvocationSurface(stripInternalIdentityMetadata(ctx), invocation.InvocationSurfaceHTTP)
 	if s.principal != nil {
 		canonical := principal.Canonicalized(s.principal)
 		ctx = principal.WithPrincipal(ctx, canonical)

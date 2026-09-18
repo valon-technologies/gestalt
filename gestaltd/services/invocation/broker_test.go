@@ -117,6 +117,60 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 	}
 }
 
+func TestBrokerInvokeEnforcesPublicOperationSurfaces(t *testing.T) {
+	t.Parallel()
+
+	disabled := false
+	tests := []struct {
+		name        string
+		surface     InvocationSurface
+		caller      CallerProvider
+		op          catalog.CatalogOperation
+		wantDenied  bool
+		wantExecute bool
+	}{
+		{name: "API disabled", surface: InvocationSurfaceHTTP, op: catalog.CatalogOperation{ID: "mutate", API: &disabled}, wantDenied: true},
+		{name: "MCP disabled", surface: InvocationSurfaceMCP, op: catalog.CatalogOperation{ID: "mutate", MCP: &disabled}, wantDenied: true},
+		{name: "nested app call remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindApp, Name: "caller"}, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, MCP: &disabled}, wantExecute: true},
+		{name: "nested workflow call remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindWorkflow, Name: "caller"}, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, MCP: &disabled}, wantExecute: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			executed := false
+			provider := &coretesting.StubIntegration{
+				N:        "example",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name:       "example",
+					Operations: []catalog.CatalogOperation{tt.op},
+				},
+				ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+					executed = true
+					return &core.OperationResult{Status: http.StatusOK}, nil
+				},
+			}
+			broker := NewBroker(testutil.NewProviderRegistry(t, provider), nil, nil)
+			ctx := WithInvocationSurface(context.Background(), tt.surface)
+			if tt.caller != (CallerProvider{}) {
+				ctx = WithCallerProvider(ctx, tt.caller.Kind, tt.caller.Name)
+			}
+			_, err := broker.Invoke(ctx, &principal.Principal{SubjectID: "user:test", Kind: principal.KindUser}, "example", "", "mutate", nil)
+			if tt.wantDenied {
+				if !errors.Is(err, ErrOperationNotFound) {
+					t.Fatalf("Invoke error = %v, want ErrOperationNotFound", err)
+				}
+			} else if err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+			if executed != tt.wantExecute {
+				t.Fatalf("executed = %v, want %v", executed, tt.wantExecute)
+			}
+		})
+	}
+}
+
 func TestBrokerInvokeRejectsExplicitOperationConnectionOverride(t *testing.T) {
 	t.Parallel()
 

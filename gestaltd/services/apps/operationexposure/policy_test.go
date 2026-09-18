@@ -72,8 +72,10 @@ func TestMatchingAllowedOperationsIgnoresUnknown(t *testing.T) {
 func TestPolicyValidateAndApply(t *testing.T) {
 	t.Parallel()
 
+	apiDisabled := false
+	mcpDisabled := false
 	policy, err := New(map[string]*OperationOverride{
-		"list_items": {Alias: "items", Description: "Custom description", AllowedRoles: []string{"admin"}},
+		"list_items": {Alias: "items", Description: "Custom description", AllowedRoles: []string{"admin"}, API: &apiDisabled, MCP: &mcpDisabled},
 		"get_item":   nil,
 	})
 	if err != nil {
@@ -115,5 +117,8 @@ func TestPolicyValidateAndApply(t *testing.T) {
 	}
 	if got := filteredCat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "admin" {
 		t.Fatalf("first catalog AllowedRoles = %#v, want [admin]", got)
+	}
+	if catalog.OperationExposedOnAPI(filteredCat.Operations[0]) || catalog.OperationExposedOnMCP(filteredCat.Operations[0]) {
+		t.Fatalf("first catalog operation should be hidden from API and MCP: %+v", filteredCat.Operations[0])
 	}
 }

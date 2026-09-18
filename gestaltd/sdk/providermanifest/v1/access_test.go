@@ -44,7 +44,7 @@ func TestSpecAccessRoundTripsThroughJSONAndYAML(t *testing.T) {
 	}
 }
 
-func TestManifestJSONSchemaAcceptsSpecAccess(t *testing.T) {
+func TestManifestJSONSchemaAcceptsSupportedSpecFields(t *testing.T) {
 	t.Parallel()
 
 	var schemaDocument any
@@ -67,9 +67,12 @@ func TestManifestJSONSchemaAcceptsSpecAccess(t *testing.T) {
 			"access": map[string]any{
 				"defaultOperations": []any{"conversations.list"},
 			},
+			"allowedOperations": map[string]any{
+				"chat.postMessage": map[string]any{"api": false, "mcp": false},
+			},
 		},
 	}
 	if err := schema.Validate(manifest); err != nil {
-		t.Fatalf("manifest with spec.access failed schema validation: %v", err)
+		t.Fatalf("manifest with supported spec fields failed schema validation: %v", err)
 	}
 }

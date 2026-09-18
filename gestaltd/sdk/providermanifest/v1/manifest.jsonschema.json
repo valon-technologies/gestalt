@@ -1317,6 +1317,12 @@
             "minLength": 1
           }
         },
+        "api": {
+          "type": "boolean"
+        },
+        "mcp": {
+          "type": "boolean"
+        },
         "paginate": {
           "type": "boolean"
         },

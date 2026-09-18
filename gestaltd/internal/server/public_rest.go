@@ -14,6 +14,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -171,7 +172,7 @@ func handleRESTInvoke(
 		protoReq.Operation = v
 	}
 
-	ctx := publicrpc.WithPublicOrigin(r.Context(), invokeFullMethod)
+	ctx := invocation.WithInvocationSurface(publicrpc.WithPublicOrigin(r.Context(), invokeFullMethod), invocation.InvocationSurfaceHTTP)
 	existingMD, _ := metadata.FromIncomingContext(r.Context())
 	ctx = metadata.NewIncomingContext(ctx, metadata.Join(
 		existingMD,

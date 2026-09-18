@@ -15,6 +15,8 @@ type OperationOverride struct {
 	Description  string                                       `yaml:"description,omitempty" json:"description,omitempty"`
 	AllowedRoles []string                                     `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
 	Tags         []string                                     `yaml:"tags,omitempty" json:"tags,omitempty"`
+	API          *bool                                        `yaml:"api,omitempty" json:"api,omitempty"`
+	MCP          *bool                                        `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 	Paginate     bool                                         `yaml:"paginate,omitempty" json:"paginate,omitempty"`
 	Pagination   *providermanifestv1.ManifestPaginationConfig `yaml:"pagination,omitempty" json:"pagination,omitempty"`
 	GraphQL      *providermanifestv1.ManifestGraphQLOperation `yaml:"graphql,omitempty" json:"graphql,omitempty"`
@@ -34,6 +36,8 @@ func FromManifestAllowed(allowed map[string]*providermanifestv1.ManifestOperatio
 			Alias:       override.Alias,
 			Description: override.Description,
 			Tags:        override.Tags,
+			API:         override.API,
+			MCP:         override.MCP,
 			Paginate:    override.Paginate,
 			Pagination:  override.Pagination,
 			GraphQL:     override.GraphQL,
@@ -50,6 +54,8 @@ type Policy struct {
 	descriptions      map[string]string
 	allowedRoles      map[string][]string
 	tags              map[string][]string
+	api               map[string]bool
+	mcp               map[string]bool
 }
 
 func New(allowed map[string]*OperationOverride) (*Policy, error) {
@@ -97,6 +103,18 @@ func New(allowed map[string]*OperationOverride) (*Policy, error) {
 					policy.tags = make(map[string][]string)
 				}
 				policy.tags[exposed] = tags
+			}
+			if override.API != nil {
+				if policy.api == nil {
+					policy.api = make(map[string]bool)
+				}
+				policy.api[exposed] = *override.API
+			}
+			if override.MCP != nil {
+				if policy.mcp == nil {
+					policy.mcp = make(map[string]bool)
+				}
+				policy.mcp[exposed] = *override.MCP
 			}
 		}
 	}
@@ -170,6 +188,9 @@ func (p *Policy) Wrap(prov core.Provider) core.Provider {
 	}
 	if len(p.tags) > 0 {
 		opts = append(opts, WithTags(p.Tags()))
+	}
+	if len(p.api) > 0 || len(p.mcp) > 0 {
+		opts = append(opts, WithSurfaceExposure(p.api, p.mcp))
 	}
 	return NewRestricted(prov, p.RestrictedMap(), opts...)
 }
@@ -272,9 +293,19 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 		if tags, ok := p.tags[exposed]; ok {
 			op.Tags = catalog.MergeTags(op.Tags, tags)
 		}
+		if value, ok := p.api[exposed]; ok {
+			op.API = boolPointer(value)
+		}
+		if value, ok := p.mcp[exposed]; ok {
+			op.MCP = boolPointer(value)
+		}
 		filtered.Operations = append(filtered.Operations, op)
 	}
 	return filtered
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func catalogOperationIDs(cat *catalog.Catalog) map[string]struct{} {

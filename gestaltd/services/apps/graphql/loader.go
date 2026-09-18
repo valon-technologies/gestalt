@@ -159,6 +159,7 @@ func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, 
 		opName := field.Name
 		var allowedRoles []string
 		var tags []string
+		var api, mcp *bool
 		override := allowedOps[field.Name]
 		if override != nil {
 			if override.Description != "" {
@@ -169,12 +170,16 @@ func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, 
 			}
 			allowedRoles = slices.Clone(override.AllowedRoles)
 			tags = catalog.MergeTags(override.Tags)
+			api = override.API
+			mcp = override.MCP
 		}
 
 		opDef := declarative.OperationDef{
 			Description:  declarative.TruncateDescription(desc),
 			AllowedRoles: allowedRoles,
 			Tags:         tags,
+			API:          api,
+			MCP:          mcp,
 			Transport:    "graphql",
 			Query:        generateQuery(schema, field, isMutation),
 		}

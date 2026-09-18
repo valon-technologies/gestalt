@@ -1008,6 +1008,7 @@ func TestBuildRemoteRegistryCatalog(t *testing.T) {
 func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) {
 	t.Parallel()
 
+	disabled := false
 	prodClient := &recordingRemoteAppClient{}
 	devClient := &recordingRemoteAppClient{}
 	cfg := &config.Config{
@@ -1023,7 +1024,7 @@ func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) 
 				Source: config.ProviderSource{Registry: "toolshed"},
 				Remote: "prod",
 				AllowedOperations: map[string]*config.OperationOverride{
-					" get_schema ": nil,
+					" get_schema ": {API: &disabled, MCP: &disabled},
 				},
 			},
 			"other-registry-app": {
@@ -1060,6 +1061,11 @@ func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) 
 			if cat.Operations[i].ID != wantID || cat.Operations[i].Transport != catalog.TransportApp {
 				t.Fatalf("provider %q operation[%d] = %#v, want %q app transport", name, i, cat.Operations[i], wantID)
 			}
+			if name == "data-schema-explorer" {
+				if cat.Operations[i].API == nil || *cat.Operations[i].API || cat.Operations[i].MCP == nil || *cat.Operations[i].MCP {
+					t.Fatalf("provider %q operation[%d] = %#v, want API and MCP disabled", name, i, cat.Operations[i])
+				}
+			}
 		}
 	}
 
@@ -1071,6 +1077,12 @@ func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) 
 	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "other-registry-app", "", "ping", nil); err != nil {
 		t.Fatalf("second configured remote Invoke: %v", err)
 	}
+	for _, surface := range []invocation.InvocationSurface{invocation.InvocationSurfaceHTTP, invocation.InvocationSurfaceMCP} {
+		ctx := invocation.WithInvocationSurface(context.Background(), surface)
+		if _, err := broker.Invoke(ctx, remoteRoutingPrincipal(), "data-schema-explorer", "", "get_schema", nil); !errors.Is(err, invocation.ErrOperationNotFound) {
+			t.Fatalf("%s-disabled Invoke error = %v, want ErrOperationNotFound", surface, err)
+		}
+	}
 	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "data-schema-explorer", "", "not-allowlisted", nil); !errors.Is(err, invocation.ErrOperationNotFound) {
 		t.Fatalf("non-allowlisted error = %v, want ErrOperationNotFound", err)
 	}
@@ -1079,6 +1091,40 @@ func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) 
 	}
 	if got := len(devClient.snapshot()); got != 1 {
 		t.Fatalf("dev remote calls = %d, want one configured call", got)
+	}
+}
+
+func TestRemoteAppRoutingAppliesOperationSurfaceOverrides(t *testing.T) {
+	t.Parallel()
+
+	disabled := false
+	entry := remoteRoutingAppEntry(t, "remote-app", "read", "write")
+	entry.Remote = config.DefaultRemoteName
+	entry.AllowedOperations = map[string]*config.OperationOverride{
+		"read": {API: &disabled, MCP: &disabled},
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Remotes: map[string]*config.RemoteConfig{
+				config.DefaultRemoteName: {URL: "https://remote.test", Token: "remote-token", Default: true},
+			},
+		},
+		Apps: map[string]*config.ProviderEntry{"remote-app": entry},
+	}
+	client := &recordingRemoteAppClient{}
+	broker := newRemoteRoutingBroker(t, cfg, map[string]proto.AppClient{config.DefaultRemoteName: client})
+	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "remote-app", "", "read", nil); err != nil {
+		t.Fatalf("internal Invoke: %v", err)
+	}
+	for _, surface := range []invocation.InvocationSurface{invocation.InvocationSurfaceHTTP, invocation.InvocationSurfaceMCP} {
+		ctx := invocation.WithInvocationSurface(context.Background(), surface)
+		if _, err := broker.Invoke(ctx, remoteRoutingPrincipal(), "remote-app", "", "read", nil); !errors.Is(err, invocation.ErrOperationNotFound) {
+			t.Fatalf("%s-disabled Invoke error = %v, want ErrOperationNotFound", surface, err)
+		}
+	}
+	calls := client.snapshot()
+	if len(calls) != 1 || calls[0].operation != "read" {
+		t.Fatalf("remote calls = %#v, want one internal read call", calls)
 	}
 }
 

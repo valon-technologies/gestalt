@@ -551,7 +551,7 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 		ToolPrefixes:      toolPrefixes,
 		IncludeREST:       includeREST,
 		MCPConnection:     mcpConnection,
-		CatalogProjection: projectionServer.publicCatalog,
+		CatalogProjection: projectionServer.publicMCPCatalog,
 		InvocationValidator: func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error {
 			return projectionServer.validatePublicOperationInvocation(provName, prov, op, params, explicitConnection)
 		},

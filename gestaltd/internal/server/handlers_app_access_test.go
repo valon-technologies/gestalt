@@ -181,6 +181,37 @@ func TestAppAccessHandlersUseSessionCatalogBeforeInitializingProfile(t *testing.
 	}
 }
 
+func TestAppAccessAdminBaselineKeepsNonAPIOperations(t *testing.T) {
+	t.Parallel()
+
+	disabled := false
+	provider := &coretesting.StubIntegration{
+		N: "example",
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+			{ID: "public"},
+			{ID: "mcp-only", API: &disabled},
+		}},
+	}
+	server := &Server{}
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	baseline, err := server.appAccessBaselineCatalog(request, "example", provider)
+	if err != nil {
+		t.Fatalf("appAccessBaselineCatalog: %v", err)
+	}
+	if _, ok := catalog.OperationByID(baseline, "mcp-only"); !ok {
+		t.Fatal("admin baseline omitted MCP-only operation")
+	}
+
+	public, err := server.appAccessCatalog(request, "example", provider)
+	if err != nil {
+		t.Fatalf("appAccessCatalog: %v", err)
+	}
+	if _, ok := catalog.OperationByID(public, "mcp-only"); ok {
+		t.Fatal("public API catalog included API-disabled operation")
+	}
+}
+
 func TestEnsureAppAccessDefaultsCanonicalizesOpaqueCredentialSubject(t *testing.T) {
 	t.Parallel()
 

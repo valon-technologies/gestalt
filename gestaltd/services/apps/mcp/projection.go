@@ -15,7 +15,7 @@ func projectCatalog(cfg Config, provName string, prov core.Provider, cat *catalo
 }
 
 func catalogOperationProjectedToMCP(cfg Config, provName string, op catalog.CatalogOperation) bool {
-	if op.Visible != nil && !*op.Visible {
+	if !catalog.OperationExposedOnMCP(op) {
 		return false
 	}
 	if cfg.IncludeREST != nil {

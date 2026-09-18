@@ -19,6 +19,8 @@ type Restricted struct {
 	descriptions map[string]string
 	allowedRoles map[string][]string
 	tags         map[string][]string
+	api          map[string]bool
+	mcp          map[string]bool
 }
 
 // RestrictedOption configures a Restricted provider.
@@ -37,6 +39,15 @@ func WithAllowedRoles(roles map[string][]string) RestrictedOption {
 // WithTags adds provider-owned search tags keyed by exposed operation name.
 func WithTags(tags map[string][]string) RestrictedOption {
 	return func(r *Restricted) { r.tags = tags }
+}
+
+// WithSurfaceExposure controls whether operations appear on Gestalt's public
+// API and MCP surfaces. Internal invocations are intentionally unaffected.
+func WithSurfaceExposure(api, mcp map[string]bool) RestrictedOption {
+	return func(r *Restricted) {
+		r.api = api
+		r.mcp = mcp
+	}
 }
 
 // Compile-time interface checks.
@@ -155,6 +166,12 @@ func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 			if tags, ok := r.tags[op.ID]; ok {
 				op.Tags = catalog.MergeTags(op.Tags, tags)
 			}
+			if value, ok := r.api[op.ID]; ok {
+				op.API = boolPointer(value)
+			}
+			if value, ok := r.mcp[op.ID]; ok {
+				op.MCP = boolPointer(value)
+			}
 			filtered.Operations = append(filtered.Operations, op)
 		}
 	}
@@ -256,6 +273,20 @@ func (r *Restricted) StaticHeaders() map[string]string {
 		return hp.StaticHeaders()
 	}
 	return nil
+}
+
+// ResolveStaticOperationForRequest preserves static remote operation lookup
+// while ensuring restricted providers cannot fall back to passthrough for an
+// operation outside the exposed catalog.
+func (r *Restricted) ResolveStaticOperationForRequest(_ context.Context, operation string) (catalog.CatalogOperation, bool) {
+	return catalog.OperationByID(r.Catalog(), operation)
+}
+
+// RemoteCredentialDelegated preserves the remote authorization contract when
+// a remotely delegated provider is wrapped with an operation policy.
+func (r *Restricted) RemoteCredentialDelegated() bool {
+	delegated, ok := r.inner.(interface{ RemoteCredentialDelegated() bool })
+	return ok && delegated.RemoteCredentialDelegated()
 }
 
 func (r *Restricted) ConnectionForOperation(operation string) string {
