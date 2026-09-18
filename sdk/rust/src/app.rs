@@ -199,10 +199,6 @@ pub struct CatalogOperation {
     ///
     /// The `mcp` field; None when unset.
     pub mcp: Option<bool>,
-    /// Verified provider refs allowed to invoke this operation internally.
-    ///
-    /// The `internal_callers` field.
-    pub internal_callers: Vec<String>,
 }
 
 /// CatalogParameter describes one input parameter surfaced in the generated

@@ -26,7 +26,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
-	gproto "google.golang.org/protobuf/proto"
 )
 
 type publicRemoteInvocationProvider struct {
@@ -56,7 +55,7 @@ func (p *publicRemoteInvocationProvider) Catalog() *catalog.Catalog {
 		Name: "data-schema-explorer",
 		Operations: []catalog.CatalogOperation{
 			{ID: "get_schema", Transport: catalog.TransportApp},
-			{ID: "public_hidden", Transport: catalog.TransportApp, API: &apiHidden, InternalCallers: []string{"app:dashboard"}},
+			{ID: "public_hidden", Transport: catalog.TransportApp, API: &apiHidden},
 		},
 	}
 }
@@ -93,7 +92,7 @@ func (p *publicRemoteInvocationProvider) snapshot() (int, int, string, invocatio
 	return p.invokeCalls, p.graphQLCalls, p.lastSubject, p.lastCaller
 }
 
-func TestDevRemoteAppInvocationKeepsPublicGatewayPublicAndFailsClosedInternalCallers(t *testing.T) {
+func TestDevRemoteAppInvocationUsesPublicGatewayContextAndAllowlist(t *testing.T) {
 	t.Parallel()
 
 	remoteProvider := &publicRemoteInvocationProvider{}
@@ -136,20 +135,21 @@ func TestDevRemoteAppInvocationKeepsPublicGatewayPublicAndFailsClosedInternalCal
 		publicPrepareUnaryInterceptor(remoteTransport, nil),
 	))
 	publicrpc.RegisterPublicServers(publicServer, publicrpc.Servers{App: appaccessservice.NewServer(remoteBroker)})
-	publicRemoteConn := newBufconnClientConn(t, publicServer, func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	remoteConn := newBufconnClientConn(t, publicServer, func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		return invoker(metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer test-token"), method, req, reply, cc, opts...)
 	})
-	publicRemoteClient := proto.NewAppClient(publicRemoteConn)
+	remoteClient := proto.NewAppClient(remoteConn)
+
 	localRegistry := registry.New()
 	apiHidden := false
-	remoteProviderProxy := appservice.NewGestaltRemote(publicRemoteClient, appservice.StaticProviderSpec{
+	remoteProviderProxy := appservice.NewGestaltRemote(remoteClient, appservice.StaticProviderSpec{
 		Name: "data-schema-explorer",
 		Catalog: &catalog.Catalog{
 			Name: "data-schema-explorer",
 			Operations: []catalog.CatalogOperation{
 				{ID: "get_schema", Transport: catalog.TransportApp},
 				{ID: "graphql", Transport: catalog.TransportApp},
-				{ID: "public_hidden", Transport: catalog.TransportApp, API: &apiHidden, InternalCallers: []string{"app:dashboard"}},
+				{ID: "public_hidden", Transport: catalog.TransportApp, API: &apiHidden},
 			},
 		},
 		ConnectionMode: core.ConnectionModeNone,
@@ -168,8 +168,8 @@ func TestDevRemoteAppInvocationKeepsPublicGatewayPublicAndFailsClosedInternalCal
 	localClient := proto.NewAppClient(localConn)
 
 	callerContext := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:alice", Kind: principal.KindUser})
-	callerContext = invocation.WithCallerProvider(callerContext, invocation.ProviderKindApp, "dashboard")
-	requestContext, err := appaccessservice.RequestContextProto(callerContext, "", invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: "dashboard"})
+	callerContext = invocation.WithCallerProvider(callerContext, invocation.ProviderKindApp, "vds-forge")
+	requestContext, err := appaccessservice.RequestContextProto(callerContext, "", invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: "vds-forge"})
 	if err != nil {
 		t.Fatalf("RequestContextProto: %v", err)
 	}
@@ -184,6 +184,21 @@ func TestDevRemoteAppInvocationKeepsPublicGatewayPublicAndFailsClosedInternalCal
 	}
 	if response.GetStatus() != 200 || string(response.GetBody()) != `{"schema":"current"}` {
 		t.Fatalf("local response = %+v, want current schema", response)
+	}
+	_, err = localClient.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:       "data-schema-explorer",
+		Operation: "public_hidden",
+		Context:   requestContext,
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("private operation through public remote error = %v, want NotFound", err)
+	}
+	_, err = remoteClient.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:       "data-schema-explorer",
+		Operation: "public_hidden",
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("public remote private operation error = %v, want NotFound", err)
 	}
 
 	graphqlResponse, err := localClient.InvokeGraphQL(context.Background(), &proto.AppInvokeGraphQLRequest{
@@ -206,34 +221,7 @@ func TestDevRemoteAppInvocationKeepsPublicGatewayPublicAndFailsClosedInternalCal
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("non-allowlisted error = %v, want NotFound", err)
 	}
-	_, err = localClient.Invoke(context.Background(), &proto.AppInvokeRequest{
-		App:       "data-schema-explorer",
-		Operation: "public_hidden",
-		Context:   requestContext,
-	})
-	if status.Code(err) != codes.NotFound {
-		t.Fatalf("internal caller through public remote error = %v, want NotFound", err)
-	}
-
-	wrongCallerContext := gproto.Clone(requestContext).(*proto.RequestContext)
-	wrongCallerContext.Caller = &proto.ProviderContext{Kind: string(invocation.ProviderKindApp), Name: "wrong"}
-	_, err = localClient.Invoke(context.Background(), &proto.AppInvokeRequest{
-		App:       "data-schema-explorer",
-		Operation: "public_hidden",
-		Context:   wrongCallerContext,
-	})
-	if status.Code(err) != codes.NotFound {
-		t.Fatalf("wrong remote caller error = %v, want NotFound", err)
-	}
-
-	_, err = publicRemoteClient.Invoke(context.Background(), &proto.AppInvokeRequest{
-		App:       "data-schema-explorer",
-		Operation: "public_hidden",
-	})
-	if status.Code(err) != codes.NotFound {
-		t.Fatalf("public gateway caller identity bypassed API policy: %v", err)
-	}
-	emptyRemote := appservice.NewGestaltRemote(publicRemoteClient, appservice.StaticProviderSpec{
+	emptyRemote := appservice.NewGestaltRemote(remoteClient, appservice.StaticProviderSpec{
 		Name:    "empty-remote-app",
 		Catalog: &catalog.Catalog{Name: "empty-remote-app"},
 	})
@@ -244,17 +232,17 @@ func TestDevRemoteAppInvocationKeepsPublicGatewayPublicAndFailsClosedInternalCal
 		t.Fatalf("empty-catalog GraphQL error = %v, want ErrOperationNotFound", err)
 	}
 	if ordinaryRequestWithoutContext.Load() != 3 || graphQLRequestWithoutContext.Load() != 1 {
-		t.Fatalf("public outbound request context counts = ordinary %d graphql %d, want 3 ordinary and 1 graphql", ordinaryRequestWithoutContext.Load(), graphQLRequestWithoutContext.Load())
+		t.Fatalf("outbound request context counts = ordinary %d graphql %d, want 3 ordinary and 1 graphql", ordinaryRequestWithoutContext.Load(), graphQLRequestWithoutContext.Load())
 	}
 	invokeCalls, graphQLCalls, subject, caller := remoteProvider.snapshot()
 	if invokeCalls != 1 || graphQLCalls != 1 {
-		t.Fatalf("remote provider calls = invoke %d graphql %d, want 1 invoke and 1 graphql", invokeCalls, graphQLCalls)
+		t.Fatalf("remote provider calls = invoke %d graphql %d, want 1 each", invokeCalls, graphQLCalls)
 	}
 	if subject != "user:alice" || caller.Kind != invocation.ProviderKindApp || caller.Name != "gestaltd" {
 		t.Fatalf("remote identity = subject %q caller %#v, want user:alice app/gestaltd", subject, caller)
 	}
 
-	_, err = publicRemoteClient.Invoke(context.Background(), &proto.AppInvokeRequest{
+	_, err = remoteClient.Invoke(context.Background(), &proto.AppInvokeRequest{
 		App:       "data-schema-explorer",
 		Operation: "get_schema",
 		Context:   &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:forged"}},

@@ -160,7 +160,6 @@ func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, 
 		var allowedRoles []string
 		var tags []string
 		var api, mcp *bool
-		var internalCallers []string
 		override := allowedOps[field.Name]
 		if override != nil {
 			if override.Description != "" {
@@ -173,18 +172,16 @@ func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, 
 			tags = catalog.MergeTags(override.Tags)
 			api = override.API
 			mcp = override.MCP
-			internalCallers = slices.Clone(override.InternalCallers)
 		}
 
 		opDef := declarative.OperationDef{
-			Description:     declarative.TruncateDescription(desc),
-			AllowedRoles:    allowedRoles,
-			Tags:            tags,
-			API:             api,
-			MCP:             mcp,
-			InternalCallers: internalCallers,
-			Transport:       "graphql",
-			Query:           generateQuery(schema, field, isMutation),
+			Description:  declarative.TruncateDescription(desc),
+			AllowedRoles: allowedRoles,
+			Tags:         tags,
+			API:          api,
+			MCP:          mcp,
+			Transport:    "graphql",
+			Query:        generateQuery(schema, field, isMutation),
 		}
 
 		opDef.Parameters = argsToParams(schema, field.Args)

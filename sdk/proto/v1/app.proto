@@ -74,8 +74,6 @@ message CatalogOperation {
   optional bool api = 16;
   // Public MCP exposure override. Absent means exposed by default.
   optional bool mcp = 17;
-  // Verified provider refs allowed to invoke this operation internally.
-  repeated string internal_callers = 18;
 }
 
 // Catalog is the static or request-scoped executable surface exposed by a

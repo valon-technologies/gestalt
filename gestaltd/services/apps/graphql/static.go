@@ -55,16 +55,15 @@ func staticOperationDefinition(name string, override *operationexposure.Operatio
 		exposedName = override.Alias
 	}
 	return declarative.OperationDef{
-		Description:     declarative.TruncateDescription(override.Description),
-		AllowedRoles:    slices.Clone(override.AllowedRoles),
-		Tags:            catalog.MergeTags(override.Tags),
-		API:             override.API,
-		MCP:             override.MCP,
-		InternalCallers: slices.Clone(override.InternalCallers),
-		Transport:       "graphql",
-		Query:           document,
-		OperationName:   strings.TrimSpace(override.GraphQL.OperationName),
-		Parameters:      parameters,
+		Description:   declarative.TruncateDescription(override.Description),
+		AllowedRoles:  slices.Clone(override.AllowedRoles),
+		Tags:          catalog.MergeTags(override.Tags),
+		API:           override.API,
+		MCP:           override.MCP,
+		Transport:     "graphql",
+		Query:         document,
+		OperationName: strings.TrimSpace(override.GraphQL.OperationName),
+		Parameters:    parameters,
 	}, exposedName, nil
 }
 

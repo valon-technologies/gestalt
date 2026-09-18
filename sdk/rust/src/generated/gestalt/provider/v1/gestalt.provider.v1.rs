@@ -170,9 +170,6 @@ pub struct CatalogOperation {
     /// Public MCP exposure override. Absent means exposed by default.
     #[prost(bool, optional, tag = "17")]
     pub mcp: ::core::option::Option<bool>,
-    /// Verified provider refs allowed to invoke this operation internally.
-    #[prost(string, repeated, tag = "18")]
-    pub internal_callers: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// Catalog is the static or request-scoped executable surface exposed by a
 /// provider.

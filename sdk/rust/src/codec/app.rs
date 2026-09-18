@@ -135,7 +135,6 @@ pub(crate) fn from_wire_catalog_operation(value: v1::CatalogOperation) -> Catalo
         response: value.response.map(from_wire_operation_response_spec),
         api: value.api,
         mcp: value.mcp,
-        internal_callers: value.internal_callers,
     }
 }
 

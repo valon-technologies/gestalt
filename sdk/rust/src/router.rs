@@ -231,7 +231,6 @@ where
             allowed_roles: operation.allowed_roles.clone(),
             api: None,
             mcp: None,
-            internal_callers: Vec::new(),
         });
 
         let handler = Arc::new(handler);

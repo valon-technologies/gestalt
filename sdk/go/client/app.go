@@ -124,8 +124,6 @@ type CatalogOperation struct {
 	Api *bool
 	// Public MCP exposure override. Absent means exposed by default.
 	Mcp *bool
-	// Verified provider refs allowed to invoke this operation internally.
-	InternalCallers []string
 }
 
 // CatalogParameter is the native message type for gestalt.provider.v1.CatalogParameter.

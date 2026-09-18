@@ -11,17 +11,16 @@ import (
 // Restricted wraps a Provider to expose only a subset of its operations,
 // optionally renaming them via aliases.
 type Restricted struct {
-	inner           core.Provider
-	allowed         map[string]struct{}
-	aliases         map[string]string
-	reverseAlias    map[string]string
-	allowedInner    map[string]struct{}
-	descriptions    map[string]string
-	allowedRoles    map[string][]string
-	tags            map[string][]string
-	api             map[string]bool
-	mcp             map[string]bool
-	internalCallers map[string][]string
+	inner        core.Provider
+	allowed      map[string]struct{}
+	aliases      map[string]string
+	reverseAlias map[string]string
+	allowedInner map[string]struct{}
+	descriptions map[string]string
+	allowedRoles map[string][]string
+	tags         map[string][]string
+	api          map[string]bool
+	mcp          map[string]bool
 }
 
 // RestrictedOption configures a Restricted provider.
@@ -49,12 +48,6 @@ func WithSurfaceExposure(api, mcp map[string]bool) RestrictedOption {
 		r.api = api
 		r.mcp = mcp
 	}
-}
-
-// WithInternalCallers restricts internal invocations to verified caller
-// provider refs keyed by exposed operation name.
-func WithInternalCallers(callers map[string][]string) RestrictedOption {
-	return func(r *Restricted) { r.internalCallers = callers }
 }
 
 // Compile-time interface checks.
@@ -178,9 +171,6 @@ func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 			}
 			if value, ok := r.mcp[op.ID]; ok {
 				op.MCP = boolPointer(value)
-			}
-			if callers, ok := r.internalCallers[op.ID]; ok {
-				op.InternalCallers = append([]string(nil), callers...)
 			}
 			filtered.Operations = append(filtered.Operations, op)
 		}

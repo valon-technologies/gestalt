@@ -4,32 +4,38 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/wundergraph/graphql-go-tools/v2/pkg/ast"
 	"github.com/wundergraph/graphql-go-tools/v2/pkg/astparser"
 )
 
 // authorizeGraphQLOperation binds selected root fields to cataloged GraphQL
-// operations before a raw request reaches a provider. It intentionally fails
-// closed on malformed/ambiguous documents and denies a field if any matching
-// configured operation is not exposed to this invocation context.
-func authorizeGraphQLOperation(ctx context.Context, cat *catalog.Catalog, request GraphQLRequest) error {
+// operations before a raw request reaches a provider. Every matched catalog
+// operation goes through authorizeInvocation, so raw GraphQL cannot bypass
+// operation roles, app policies, or private caller authorization with aliases,
+// fragments, or a different operation name.
+func (b *Broker) authorizeGraphQLOperation(
+	ctx context.Context,
+	p *principal.Principal,
+	prov core.Provider,
+	providerName string,
+	request GraphQLRequest,
+) error {
+	cat := prov.Catalog()
 	if cat == nil {
 		return nil
 	}
 	configured := make(map[graphqlRootField][]*catalog.CatalogOperation)
-	unmatchableRestricted := false
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
 		if op.Transport != "graphql" {
 			continue
 		}
 		if op.Query == "" {
-			// A restricted GraphQL operation without its execution document cannot
-			// be safely matched to a raw request, so fail closed rather than let a
-			// field/alias bypass the restriction.
-			if len(op.InternalCallers) > 0 || (op.API != nil && !*op.API) {
-				unmatchableRestricted = true
+			if op.API != nil && !*op.API {
+				return fmt.Errorf("%w: restricted graphql operation %q has no execution document", ErrOperationNotFound, op.ID)
 			}
 			continue
 		}
@@ -40,9 +46,6 @@ func authorizeGraphQLOperation(ctx context.Context, cat *catalog.Catalog, reques
 		for field := range fields {
 			configured[field] = append(configured[field], op)
 		}
-	}
-	if unmatchableRestricted {
-		return fmt.Errorf("%w: restricted graphql operation has no execution document", ErrOperationNotFound)
 	}
 	if len(configured) == 0 {
 		return nil
@@ -57,8 +60,11 @@ func authorizeGraphQLOperation(ctx context.Context, cat *catalog.Catalog, reques
 			return fmt.Errorf("%w: graphql root field %q", ErrOperationNotFound, field.name)
 		}
 		for _, op := range candidates {
-			if !OperationExposedOnInvocationSurface(ctx, *op) {
+			if !operationExposedOnInvocationSurface(ctx, *op) {
 				return fmt.Errorf("%w: %q", ErrOperationNotFound, op.ID)
+			}
+			if _, _, err := b.authorizeInvocation(ctx, p, prov, providerName, *op); err != nil {
+				return err
 			}
 		}
 	}
@@ -109,7 +115,13 @@ func selectGraphQLOperation(doc *ast.Document, operationName string) (int, error
 	return 0, nil
 }
 
-func collectGraphQLSelectionFields(doc *ast.Document, operationType ast.OperationType, selectionSet int, fields map[graphqlRootField]struct{}, visiting map[int]bool) error {
+func collectGraphQLSelectionFields(
+	doc *ast.Document,
+	operationType ast.OperationType,
+	selectionSet int,
+	fields map[graphqlRootField]struct{},
+	visiting map[int]bool,
+) error {
 	if selectionSet < 0 || selectionSet >= len(doc.SelectionSets) {
 		return fmt.Errorf("selection set is invalid")
 	}

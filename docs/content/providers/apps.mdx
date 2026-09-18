@@ -111,29 +111,14 @@ Each operation is exposed to the public API and MCP by default. Add
 flags affect both catalog discovery and direct invocation; calls from another
 app through the host service remain available.
 
-To make a hidden operation available only to one verified internal app, combine
-the surface flags with `internalCallers`. Caller refs use the provider kind and
-name, such as `app:data-platform-dashboard`:
-
-```yaml
-apps:
-  data-platform:
-    allowedOperations:
-      refresh:
-        api: false
-        mcp: false
-        internalCallers:
-          - app:data-platform-dashboard
-```
-
-`internalCallers` must contain at least one ref. When it is set, internal calls
-fail closed unless their verified caller provider exactly matches one of the
-refs. Omitting it preserves unrestricted internal app and workflow calls.
-Public HTTP and MCP requests continue to use the `api` and `mcp` flags.
-
-Caller identity is preserved only across trusted provider and host-service
-hops. Calls routed through another Gestalt deployment's public API fail closed;
-that public hop does not accept caller identity supplied by the client.
+When both flags are explicitly `false`, the operation is private. Public
+ingress is rejected, and an internal invocation must be allowed separately for
+the original user and the verified caller provider by the existing
+`AuthorizationProvider`. The caller is checked as the `kind:name` subject
+(for example, `app:data-platform-dashboard`), and `allowedRoles` is applied to
+each decision; it is not a caller-authorization bypass. Caller identity is
+trusted only across host-managed provider hops, so a request routed through
+another Gestalt deployment's public API fails closed.
 
 ### `allowedHosts`
 

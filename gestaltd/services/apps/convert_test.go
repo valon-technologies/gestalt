@@ -16,11 +16,10 @@ func TestCatalogProtoRoundTripPreservesOperationExposure(t *testing.T) {
 	want := &catalog.Catalog{
 		Name: "wire",
 		Operations: []catalog.CatalogOperation{{
-			ID:              "restricted",
-			Method:          "POST",
-			API:             &api,
-			MCP:             &mcp,
-			InternalCallers: []string{"app:data-platform-dashboard", "workflow:nightly"},
+			ID:     "restricted",
+			Method: "POST",
+			API:    &api,
+			MCP:    &mcp,
 		}},
 	}
 
@@ -42,8 +41,5 @@ func TestCatalogProtoRoundTripPreservesOperationExposure(t *testing.T) {
 	op := got.Operations[0]
 	if op.API == nil || *op.API != api || op.MCP == nil || *op.MCP != mcp {
 		t.Fatalf("surface flags = api:%v mcp:%v, want api:%v mcp:%v", op.API, op.MCP, api, mcp)
-	}
-	if len(op.InternalCallers) != len(want.Operations[0].InternalCallers) || op.InternalCallers[0] != "app:data-platform-dashboard" || op.InternalCallers[1] != "workflow:nightly" {
-		t.Fatalf("internal callers = %v, want %v", op.InternalCallers, want.Operations[0].InternalCallers)
 	}
 }

@@ -178,9 +178,6 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		}
 		var spec appservice.StaticProviderSpec
 		allowedOperations := entry.EffectiveAllowedOperations()
-		if err := operationexposure.ValidateOverrides(allowedOperations); err != nil {
-			return fmt.Errorf("remote app %q allowedOperations: %w", name, err)
-		}
 		if entry.Source.IsRegistry() {
 			var err error
 			allowedOperations, err = normalizeRemoteAllowedOperations(name, allowedOperations)
@@ -561,9 +558,6 @@ func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (appserv
 	if manifest == nil || manifestApp == nil {
 		return appservice.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q must resolve to a provider manifest", name)
 	}
-	if err := operationexposure.ValidateOverrides(entry.EffectiveAllowedOperations()); err != nil {
-		return appservice.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q allowedOperations: %w", name, err)
-	}
 
 	meta := resolveProviderMetadata(entry)
 	spec, plan, err := buildAppStaticSpec(name, entry, manifest, meta)
@@ -684,9 +678,6 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 	}
 
 	allowedOperations := entry.EffectiveAllowedOperations()
-	if err := operationexposure.ValidateOverrides(allowedOperations); err != nil {
-		return nil, fmt.Errorf("integration %q allowedOperations: %w", name, err)
-	}
 
 	switch {
 	case manifestApp.IsSpecLoaded() && manifest.Entrypoint == nil:

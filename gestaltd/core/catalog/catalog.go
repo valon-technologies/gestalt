@@ -56,28 +56,27 @@ func (r *OperationResponseSpec) IsStream() bool {
 }
 
 type CatalogOperation struct {
-	ID              string                 `yaml:"id"                       json:"id"`
-	ProviderID      string                 `yaml:"providerId,omitempty"    json:"providerId,omitempty"`
-	Method          string                 `yaml:"method"                   json:"method"`
-	Path            string                 `yaml:"path"                     json:"path"`
-	Title           string                 `yaml:"title,omitempty"          json:"title,omitempty"`
-	Description     string                 `yaml:"description,omitempty"    json:"description,omitempty"`
-	InputSchema     json.RawMessage        `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
-	OutputSchema    json.RawMessage        `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
-	Response        *OperationResponseSpec `yaml:"response,omitempty"       json:"response,omitempty"`
-	Annotations     CapabilityAnnotations  `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
-	AllowedRoles    []string               `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
-	Parameters      []CatalogParameter     `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
-	RequiredScopes  []string               `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
-	Tags            []string               `yaml:"tags,omitempty"           json:"tags,omitempty"`
-	ReadOnly        bool                   `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
-	Visible         *bool                  `yaml:"visible,omitempty"        json:"visible,omitempty"`
-	API             *bool                  `yaml:"api,omitempty"            json:"api,omitempty"`
-	MCP             *bool                  `yaml:"mcp,omitempty"            json:"mcp,omitempty"`
-	InternalCallers []string               `yaml:"internalCallers,omitempty" json:"internalCallers,omitempty"`
-	Transport       string                 `yaml:"transport,omitempty"      json:"transport,omitempty"`
-	Query           string                 `yaml:"query,omitempty"          json:"query,omitempty"`
-	OperationName   string                 `yaml:"operationName,omitempty"  json:"operationName,omitempty"`
+	ID             string                 `yaml:"id"                       json:"id"`
+	ProviderID     string                 `yaml:"providerId,omitempty"    json:"providerId,omitempty"`
+	Method         string                 `yaml:"method"                   json:"method"`
+	Path           string                 `yaml:"path"                     json:"path"`
+	Title          string                 `yaml:"title,omitempty"          json:"title,omitempty"`
+	Description    string                 `yaml:"description,omitempty"    json:"description,omitempty"`
+	InputSchema    json.RawMessage        `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
+	OutputSchema   json.RawMessage        `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
+	Response       *OperationResponseSpec `yaml:"response,omitempty"       json:"response,omitempty"`
+	Annotations    CapabilityAnnotations  `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
+	AllowedRoles   []string               `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
+	Parameters     []CatalogParameter     `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
+	RequiredScopes []string               `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
+	Tags           []string               `yaml:"tags,omitempty"           json:"tags,omitempty"`
+	ReadOnly       bool                   `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
+	Visible        *bool                  `yaml:"visible,omitempty"        json:"visible,omitempty"`
+	API            *bool                  `yaml:"api,omitempty"            json:"api,omitempty"`
+	MCP            *bool                  `yaml:"mcp,omitempty"            json:"mcp,omitempty"`
+	Transport      string                 `yaml:"transport,omitempty"      json:"transport,omitempty"`
+	Query          string                 `yaml:"query,omitempty"          json:"query,omitempty"`
+	OperationName  string                 `yaml:"operationName,omitempty"  json:"operationName,omitempty"`
 }
 
 func OperationVisibleByDefault(op CatalogOperation) bool {
@@ -141,28 +140,27 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Stream *streamResponseYAML `yaml:"stream,omitempty"`
 	}
 	type catalogOperationYAML struct {
-		ID              string                `yaml:"id"`
-		ProviderID      string                `yaml:"providerId,omitempty"`
-		Method          string                `yaml:"method"`
-		Path            string                `yaml:"path"`
-		Title           string                `yaml:"title,omitempty"`
-		Description     string                `yaml:"description,omitempty"`
-		InputSchema     any                   `yaml:"inputSchema,omitempty"`
-		OutputSchema    any                   `yaml:"outputSchema,omitempty"`
-		Response        *responseYAML         `yaml:"response,omitempty"`
-		Annotations     CapabilityAnnotations `yaml:"annotations,omitempty"`
-		AllowedRoles    []string              `yaml:"allowedRoles,omitempty"`
-		Parameters      []CatalogParameter    `yaml:"parameters,omitempty"`
-		RequiredScopes  []string              `yaml:"requiredScopes,omitempty"`
-		Tags            []string              `yaml:"tags,omitempty"`
-		ReadOnly        bool                  `yaml:"readOnly,omitempty"`
-		Visible         *bool                 `yaml:"visible,omitempty"`
-		API             *bool                 `yaml:"api,omitempty"`
-		MCP             *bool                 `yaml:"mcp,omitempty"`
-		InternalCallers []string              `yaml:"internalCallers,omitempty"`
-		Transport       string                `yaml:"transport,omitempty"`
-		Query           string                `yaml:"query,omitempty"`
-		OperationName   string                `yaml:"operationName,omitempty"`
+		ID             string                `yaml:"id"`
+		ProviderID     string                `yaml:"providerId,omitempty"`
+		Method         string                `yaml:"method"`
+		Path           string                `yaml:"path"`
+		Title          string                `yaml:"title,omitempty"`
+		Description    string                `yaml:"description,omitempty"`
+		InputSchema    any                   `yaml:"inputSchema,omitempty"`
+		OutputSchema   any                   `yaml:"outputSchema,omitempty"`
+		Response       *responseYAML         `yaml:"response,omitempty"`
+		Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"`
+		AllowedRoles   []string              `yaml:"allowedRoles,omitempty"`
+		Parameters     []CatalogParameter    `yaml:"parameters,omitempty"`
+		RequiredScopes []string              `yaml:"requiredScopes,omitempty"`
+		Tags           []string              `yaml:"tags,omitempty"`
+		ReadOnly       bool                  `yaml:"readOnly,omitempty"`
+		Visible        *bool                 `yaml:"visible,omitempty"`
+		API            *bool                 `yaml:"api,omitempty"`
+		MCP            *bool                 `yaml:"mcp,omitempty"`
+		Transport      string                `yaml:"transport,omitempty"`
+		Query          string                `yaml:"query,omitempty"`
+		OperationName  string                `yaml:"operationName,omitempty"`
 	}
 
 	var aux catalogOperationYAML
@@ -209,28 +207,27 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	*o = CatalogOperation{
-		ID:              aux.ID,
-		ProviderID:      aux.ProviderID,
-		Method:          aux.Method,
-		Path:            aux.Path,
-		Title:           aux.Title,
-		Description:     aux.Description,
-		InputSchema:     inputSchema,
-		OutputSchema:    outputSchema,
-		Response:        response,
-		Annotations:     aux.Annotations,
-		AllowedRoles:    aux.AllowedRoles,
-		Parameters:      aux.Parameters,
-		RequiredScopes:  aux.RequiredScopes,
-		Tags:            aux.Tags,
-		ReadOnly:        aux.ReadOnly,
-		Visible:         aux.Visible,
-		API:             aux.API,
-		MCP:             aux.MCP,
-		InternalCallers: append([]string(nil), aux.InternalCallers...),
-		Transport:       aux.Transport,
-		Query:           aux.Query,
-		OperationName:   aux.OperationName,
+		ID:             aux.ID,
+		ProviderID:     aux.ProviderID,
+		Method:         aux.Method,
+		Path:           aux.Path,
+		Title:          aux.Title,
+		Description:    aux.Description,
+		InputSchema:    inputSchema,
+		OutputSchema:   outputSchema,
+		Response:       response,
+		Annotations:    aux.Annotations,
+		AllowedRoles:   aux.AllowedRoles,
+		Parameters:     aux.Parameters,
+		RequiredScopes: aux.RequiredScopes,
+		Tags:           aux.Tags,
+		ReadOnly:       aux.ReadOnly,
+		Visible:        aux.Visible,
+		API:            aux.API,
+		MCP:            aux.MCP,
+		Transport:      aux.Transport,
+		Query:          aux.Query,
+		OperationName:  aux.OperationName,
 	}
 	return nil
 }
@@ -339,9 +336,6 @@ func (c *Catalog) Clone() *Catalog {
 		if op.MCP != nil {
 			mcp := *op.MCP
 			outOp.MCP = &mcp
-		}
-		if op.InternalCallers != nil {
-			outOp.InternalCallers = append([]string(nil), op.InternalCallers...)
 		}
 		outOp.Annotations = CloneCapabilityAnnotations(op.Annotations)
 		out.Operations[i] = outOp

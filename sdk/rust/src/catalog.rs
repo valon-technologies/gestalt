@@ -59,8 +59,6 @@ pub struct CatalogOperation {
     pub api: Option<bool>,
     /// Public MCP exposure override. Absent means exposed by default.
     pub mcp: Option<bool>,
-    /// Verified provider refs allowed to invoke this operation internally.
-    pub internal_callers: Vec<String>,
 }
 
 /// One input parameter surfaced in a generated catalog operation.
@@ -271,7 +269,6 @@ fn operation_to_proto(operation: &CatalogOperation) -> v1::CatalogOperation {
         allowed_roles: operation.allowed_roles.clone(),
         api: operation.api,
         mcp: operation.mcp,
-        internal_callers: operation.internal_callers.clone(),
     }
 }
 

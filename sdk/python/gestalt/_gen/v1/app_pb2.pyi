@@ -87,7 +87,6 @@ class CatalogOperation(_message.Message):
     RESPONSE_FIELD_NUMBER: _ClassVar[int]
     API_FIELD_NUMBER: _ClassVar[int]
     MCP_FIELD_NUMBER: _ClassVar[int]
-    INTERNAL_CALLERS_FIELD_NUMBER: _ClassVar[int]
     id: str
     method: str
     title: str
@@ -104,8 +103,7 @@ class CatalogOperation(_message.Message):
     response: OperationResponseSpec
     api: bool
     mcp: bool
-    internal_callers: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., method: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., input_schema: _Optional[str] = ..., annotations: _Optional[_Union[OperationAnnotations, _Mapping]] = ..., parameters: _Optional[_Iterable[_Union[CatalogParameter, _Mapping]]] = ..., required_scopes: _Optional[_Iterable[str]] = ..., tags: _Optional[_Iterable[str]] = ..., read_only: _Optional[bool] = ..., visible: _Optional[bool] = ..., transport: _Optional[str] = ..., allowed_roles: _Optional[_Iterable[str]] = ..., response: _Optional[_Union[OperationResponseSpec, _Mapping]] = ..., api: _Optional[bool] = ..., mcp: _Optional[bool] = ..., internal_callers: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., method: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., input_schema: _Optional[str] = ..., annotations: _Optional[_Union[OperationAnnotations, _Mapping]] = ..., parameters: _Optional[_Iterable[_Union[CatalogParameter, _Mapping]]] = ..., required_scopes: _Optional[_Iterable[str]] = ..., tags: _Optional[_Iterable[str]] = ..., read_only: _Optional[bool] = ..., visible: _Optional[bool] = ..., transport: _Optional[str] = ..., allowed_roles: _Optional[_Iterable[str]] = ..., response: _Optional[_Union[OperationResponseSpec, _Mapping]] = ..., api: _Optional[bool] = ..., mcp: _Optional[bool] = ...) -> None: ...
 
 class Catalog(_message.Message):
     __slots__ = ()

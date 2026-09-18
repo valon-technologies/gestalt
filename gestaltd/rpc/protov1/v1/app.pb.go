@@ -430,11 +430,9 @@ type CatalogOperation struct {
 	// Public API exposure override. Absent means exposed by default.
 	Api *bool `protobuf:"varint,16,opt,name=api,proto3,oneof" json:"api,omitempty"`
 	// Public MCP exposure override. Absent means exposed by default.
-	Mcp *bool `protobuf:"varint,17,opt,name=mcp,proto3,oneof" json:"mcp,omitempty"`
-	// Verified provider refs allowed to invoke this operation internally.
-	InternalCallers []string `protobuf:"bytes,18,rep,name=internal_callers,json=internalCallers,proto3" json:"internal_callers,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	Mcp           *bool `protobuf:"varint,17,opt,name=mcp,proto3,oneof" json:"mcp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CatalogOperation) Reset() {
@@ -577,13 +575,6 @@ func (x *CatalogOperation) GetMcp() bool {
 		return *x.Mcp
 	}
 	return false
-}
-
-func (x *CatalogOperation) GetInternalCallers() []string {
-	if x != nil {
-		return x.InternalCallers
-	}
-	return nil
 }
 
 // Catalog is the static or request-scoped executable surface exposed by a
@@ -2758,7 +2749,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x15OperationResponseSpec\x12>\n" +
 	"\x05unary\x18\x01 \x01(\v2&.gestalt.provider.v1.UnaryResponseSpecH\x00R\x05unary\x12A\n" +
 	"\x06stream\x18\x02 \x01(\v2'.gestalt.provider.v1.StreamResponseSpecH\x00R\x06streamB\x06\n" +
-	"\x04kind\"\xb7\x05\n" +
+	"\x04kind\"\x8c\x05\n" +
 	"\x10CatalogOperation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x14\n" +
@@ -2778,8 +2769,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\rallowed_roles\x18\x0e \x03(\tR\fallowedRoles\x12F\n" +
 	"\bresponse\x18\x0f \x01(\v2*.gestalt.provider.v1.OperationResponseSpecR\bresponse\x12\x15\n" +
 	"\x03api\x18\x10 \x01(\bH\x01R\x03api\x88\x01\x01\x12\x15\n" +
-	"\x03mcp\x18\x11 \x01(\bH\x02R\x03mcp\x88\x01\x01\x12)\n" +
-	"\x10internal_callers\x18\x12 \x03(\tR\x0finternalCallersB\n" +
+	"\x03mcp\x18\x11 \x01(\bH\x02R\x03mcp\x88\x01\x01B\n" +
 	"\n" +
 	"\b_visibleB\x06\n" +
 	"\x04_apiB\x06\n" +

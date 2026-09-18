@@ -240,7 +240,6 @@ export function toWireCatalogOperation(
       : {}),
     ...(value.api !== undefined ? { api: value.api } : {}),
     ...(value.mcp !== undefined ? { mcp: value.mcp } : {}),
-    internalCallers: value.internalCallers ?? [],
   });
 }
 
@@ -268,7 +267,6 @@ export function fromWireCatalogOperation(
       : {}),
     ...(value.api !== undefined ? { api: value.api } : {}),
     ...(value.mcp !== undefined ? { mcp: value.mcp } : {}),
-    internalCallers: value.internalCallers,
   };
 }
 

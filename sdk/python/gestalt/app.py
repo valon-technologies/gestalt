@@ -141,8 +141,6 @@ class CatalogOperation:
     api: bool | None = None
     #: Public MCP exposure override. Absent means exposed by default.
     mcp: bool | None = None
-    #: Verified provider refs allowed to invoke this operation internally.
-    internal_callers: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

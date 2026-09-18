@@ -152,10 +152,6 @@ export interface CatalogOperation {
    * Public MCP exposure override. Absent means exposed by default.
    */
   mcp?: boolean;
-  /**
-   * Verified provider refs allowed to invoke this operation internally.
-   */
-  internalCallers: string[];
 }
 
 /**

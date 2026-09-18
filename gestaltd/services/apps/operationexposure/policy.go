@@ -11,16 +11,15 @@ import (
 )
 
 type OperationOverride struct {
-	Alias           string                                       `yaml:"alias,omitempty" json:"alias,omitempty"`
-	Description     string                                       `yaml:"description,omitempty" json:"description,omitempty"`
-	AllowedRoles    []string                                     `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
-	Tags            []string                                     `yaml:"tags,omitempty" json:"tags,omitempty"`
-	API             *bool                                        `yaml:"api,omitempty" json:"api,omitempty"`
-	MCP             *bool                                        `yaml:"mcp,omitempty" json:"mcp,omitempty"`
-	InternalCallers []string                                     `yaml:"internalCallers,omitempty" json:"internalCallers,omitempty"`
-	Paginate        bool                                         `yaml:"paginate,omitempty" json:"paginate,omitempty"`
-	Pagination      *providermanifestv1.ManifestPaginationConfig `yaml:"pagination,omitempty" json:"pagination,omitempty"`
-	GraphQL         *providermanifestv1.ManifestGraphQLOperation `yaml:"graphql,omitempty" json:"graphql,omitempty"`
+	Alias        string                                       `yaml:"alias,omitempty" json:"alias,omitempty"`
+	Description  string                                       `yaml:"description,omitempty" json:"description,omitempty"`
+	AllowedRoles []string                                     `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
+	Tags         []string                                     `yaml:"tags,omitempty" json:"tags,omitempty"`
+	API          *bool                                        `yaml:"api,omitempty" json:"api,omitempty"`
+	MCP          *bool                                        `yaml:"mcp,omitempty" json:"mcp,omitempty"`
+	Paginate     bool                                         `yaml:"paginate,omitempty" json:"paginate,omitempty"`
+	Pagination   *providermanifestv1.ManifestPaginationConfig `yaml:"pagination,omitempty" json:"pagination,omitempty"`
+	GraphQL      *providermanifestv1.ManifestGraphQLOperation `yaml:"graphql,omitempty" json:"graphql,omitempty"`
 }
 
 func FromManifestAllowed(allowed map[string]*providermanifestv1.ManifestOperationOverride) map[string]*OperationOverride {
@@ -34,15 +33,14 @@ func FromManifestAllowed(allowed map[string]*providermanifestv1.ManifestOperatio
 			continue
 		}
 		out[name] = &OperationOverride{
-			Alias:           override.Alias,
-			Description:     override.Description,
-			Tags:            override.Tags,
-			API:             override.API,
-			MCP:             override.MCP,
-			InternalCallers: append([]string(nil), override.InternalCallers...),
-			Paginate:        override.Paginate,
-			Pagination:      override.Pagination,
-			GraphQL:         override.GraphQL,
+			Alias:       override.Alias,
+			Description: override.Description,
+			Tags:        override.Tags,
+			API:         override.API,
+			MCP:         override.MCP,
+			Paginate:    override.Paginate,
+			Pagination:  override.Pagination,
+			GraphQL:     override.GraphQL,
 		}
 	}
 	return out
@@ -58,7 +56,6 @@ type Policy struct {
 	tags              map[string][]string
 	api               map[string]bool
 	mcp               map[string]bool
-	internalCallers   map[string][]string
 }
 
 func New(allowed map[string]*OperationOverride) (*Policy, error) {
@@ -100,16 +97,6 @@ func New(allowed map[string]*OperationOverride) (*Policy, error) {
 			policy.allowedRoles[exposed] = append([]string(nil), override.AllowedRoles...)
 		}
 		if override != nil {
-			if override.InternalCallers != nil {
-				if len(override.InternalCallers) == 0 {
-					return nil, fmt.Errorf("allowed operation %q internalCallers cannot be empty; omit the field to allow all internal callers", original)
-				}
-				for i, ref := range override.InternalCallers {
-					if err := validateInternalCallerRef(ref); err != nil {
-						return nil, fmt.Errorf("allowed operation %q internalCallers[%d]: %w", original, i, err)
-					}
-				}
-			}
 			tags := catalog.MergeTags(override.Tags)
 			if len(tags) > 0 {
 				if policy.tags == nil {
@@ -129,12 +116,6 @@ func New(allowed map[string]*OperationOverride) (*Policy, error) {
 				}
 				policy.mcp[exposed] = *override.MCP
 			}
-			if len(override.InternalCallers) > 0 {
-				if policy.internalCallers == nil {
-					policy.internalCallers = make(map[string][]string)
-				}
-				policy.internalCallers[exposed] = append([]string(nil), override.InternalCallers...)
-			}
 		}
 	}
 
@@ -143,33 +124,6 @@ func New(allowed map[string]*OperationOverride) (*Policy, error) {
 	}
 
 	return policy, nil
-}
-
-// ValidateOverrides validates operation override metadata before a loader
-// projects it into a provider definition. This keeps manifest/config parsing
-// from silently dropping invalid internal caller restrictions.
-func ValidateOverrides(allowed map[string]*OperationOverride) error {
-	if allowed == nil {
-		return nil
-	}
-	_, err := New(allowed)
-	return err
-}
-
-func validateInternalCallerRef(ref string) error {
-	if strings.TrimSpace(ref) != ref || strings.ContainsAny(ref, " \t\r\n") {
-		return fmt.Errorf("provider ref %q must not contain whitespace", ref)
-	}
-	kind, name, ok := strings.Cut(ref, ":")
-	if !ok || kind == "" || name == "" || strings.Contains(name, ":") {
-		return fmt.Errorf("provider ref %q must have the form kind:name", ref)
-	}
-	switch kind {
-	case "app", "workflow", "agent":
-		return nil
-	default:
-		return fmt.Errorf("provider ref kind %q is unsupported; use app, workflow, or agent", kind)
-	}
 }
 
 func (p *Policy) Validate(ops []core.Operation) error {
@@ -237,9 +191,6 @@ func (p *Policy) Wrap(prov core.Provider) core.Provider {
 	}
 	if len(p.api) > 0 || len(p.mcp) > 0 {
 		opts = append(opts, WithSurfaceExposure(p.api, p.mcp))
-	}
-	if len(p.internalCallers) > 0 {
-		opts = append(opts, WithInternalCallers(p.InternalCallers()))
 	}
 	return NewRestricted(prov, p.RestrictedMap(), opts...)
 }
@@ -348,24 +299,9 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 		if value, ok := p.mcp[exposed]; ok {
 			op.MCP = boolPointer(value)
 		}
-		if callers, ok := p.internalCallers[exposed]; ok {
-			op.InternalCallers = append([]string(nil), callers...)
-		}
 		filtered.Operations = append(filtered.Operations, op)
 	}
 	return filtered
-}
-
-func (p *Policy) InternalCallers() map[string][]string {
-	if len(p.internalCallers) == 0 {
-		return nil
-	}
-
-	callers := make(map[string][]string, len(p.internalCallers))
-	for exposed, allowed := range p.internalCallers {
-		callers[exposed] = append([]string(nil), allowed...)
-	}
-	return callers
 }
 
 func boolPointer(value bool) *bool {

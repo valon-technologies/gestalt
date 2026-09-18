@@ -1323,14 +1323,6 @@
         "mcp": {
           "type": "boolean"
         },
-        "internalCallers": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string",
-            "pattern": "^(app|workflow|agent):[^:\\s]+$"
-          }
-        },
         "paginate": {
           "type": "boolean"
         },

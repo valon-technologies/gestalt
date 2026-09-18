@@ -204,26 +204,6 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	}
 }
 
-func TestSpecLoadedProviderRejectsInvalidInternalCallersBeforeLoadingSpec(t *testing.T) {
-	t.Parallel()
-
-	manifest := newExecutableManifest("Spec provider", "Validates operation policy before loading the spec")
-	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
-		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "https://example.invalid/openapi.yaml"},
-	}
-	entry := &config.ProviderEntry{
-		ResolvedManifest: manifest,
-		AllowedOperations: map[string]*config.OperationOverride{
-			"restricted": {InternalCallers: []string{}},
-		},
-	}
-
-	_, err := buildProvider(context.Background(), "spec-provider", entry, Deps{})
-	if err == nil || !strings.Contains(err.Error(), "internalCallers cannot be empty") {
-		t.Fatalf("buildProvider error = %v, want invalid internalCallers", err)
-	}
-}
-
 func TestPrepareProviderBuildsFiltersStartupProxyCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -240,7 +220,7 @@ func TestPrepareProviderBuildsFiltersStartupProxyCatalog(t *testing.T) {
 			ResolvedManifest:     newExecutableManifest("Startup proxy", "Applies operation policy before registration"),
 			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			AllowedOperations: map[string]*config.OperationOverride{
-				"hidden": {API: &apiDisabled, InternalCallers: []string{"app:data-platform-dashboard"}},
+				"hidden": {API: &apiDisabled},
 			},
 		},
 	}}
@@ -249,17 +229,17 @@ func TestPrepareProviderBuildsFiltersStartupProxyCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareProviderBuilds: %v", err)
 	}
+	t.Cleanup(func() { _ = CloseProviders(builds.providers) })
 	provider, err := builds.providers.Get("startup-proxy")
 	if err != nil {
 		t.Fatalf("get startup proxy: %v", err)
 	}
 	cat := provider.Catalog()
-	if cat == nil || len(cat.Operations) != 1 {
-		t.Fatalf("startup proxy catalog = %+v, want one operation", cat)
+	if cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != "hidden" {
+		t.Fatalf("startup proxy catalog = %+v, want API-disabled operation", cat)
 	}
-	op := cat.Operations[0]
-	if op.ID != "hidden" || op.API == nil || *op.API || len(op.InternalCallers) != 1 || op.InternalCallers[0] != "app:data-platform-dashboard" {
-		t.Fatalf("startup proxy policy was not applied before registration: %+v", op)
+	if cat.Operations[0].API == nil || *cat.Operations[0].API {
+		t.Fatalf("startup proxy operation = %+v, want API false", cat.Operations[0])
 	}
 }
 
@@ -820,6 +800,10 @@ func localRoutingAppStub(name string) *coretesting.StubIntegration {
 }
 
 func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteClients map[string]proto.AppClient, localApps ...core.Provider) *invocation.Broker {
+	return newRemoteRoutingBrokerWithOptions(t, cfg, remoteClients, nil, localApps...)
+}
+
+func newRemoteRoutingBrokerWithOptions(t *testing.T, cfg *config.Config, remoteClients map[string]proto.AppClient, opts []invocation.BrokerOption, localApps ...core.Provider) *invocation.Broker {
 	t.Helper()
 	reg := registry.New()
 	for _, provider := range localApps {
@@ -835,7 +819,7 @@ func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteClients map[
 		t.Fatalf("registerRemoteApps: %v", err)
 	}
 	svc := testutil.NewStubServices(t)
-	return invocation.NewBroker(&reg.Providers, svc.Users, svc.ExternalCredentials)
+	return invocation.NewBroker(&reg.Providers, svc.Users, svc.ExternalCredentials, opts...)
 }
 
 func remoteRoutingPrincipal(scopes ...string) *principal.Principal {
@@ -1129,8 +1113,9 @@ func TestRemoteRegistryAppRoutingUsesAllowlistAndConfiguredRemote(t *testing.T) 
 	}
 
 	services := testutil.NewStubServices(t)
-	broker := invocation.NewBroker(&reg.Providers, services.Users, services.ExternalCredentials)
-	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "data-schema-explorer", "", "get_schema", nil); err != nil {
+	broker := invocation.NewBroker(&reg.Providers, services.Users, services.ExternalCredentials, invocation.WithAuthorizationProvider(newAllowAllAuthorizationProvider()))
+	internalContext := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "data-platform-dashboard")
+	if _, err := broker.Invoke(internalContext, remoteRoutingPrincipal(), "data-schema-explorer", "", "get_schema", nil); err != nil {
 		t.Fatalf("allowlisted Invoke: %v", err)
 	}
 	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "other-registry-app", "", "ping", nil); err != nil {
@@ -1171,8 +1156,9 @@ func TestRemoteAppRoutingAppliesOperationSurfaceOverrides(t *testing.T) {
 		Apps: map[string]*config.ProviderEntry{"remote-app": entry},
 	}
 	client := &recordingRemoteAppClient{}
-	broker := newRemoteRoutingBroker(t, cfg, map[string]proto.AppClient{config.DefaultRemoteName: client})
-	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "remote-app", "", "read", nil); err != nil {
+	broker := newRemoteRoutingBrokerWithOptions(t, cfg, map[string]proto.AppClient{config.DefaultRemoteName: client}, []invocation.BrokerOption{invocation.WithAuthorizationProvider(newAllowAllAuthorizationProvider())})
+	internalContext := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "data-platform-dashboard")
+	if _, err := broker.Invoke(internalContext, remoteRoutingPrincipal(), "remote-app", "", "read", nil); err != nil {
 		t.Fatalf("internal Invoke: %v", err)
 	}
 	for _, surface := range []invocation.InvocationSurface{invocation.InvocationSurfaceHTTP, invocation.InvocationSurfaceMCP} {

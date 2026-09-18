@@ -187,7 +187,6 @@ def to_wire_catalog_operation(value: native.CatalogOperation) -> Any:
         else to_wire_operation_response_spec(value.response),
         api=value.api,
         mcp=value.mcp,
-        internal_callers=value.internal_callers,
     )
 
 
@@ -213,7 +212,6 @@ def from_wire_catalog_operation(value: Any) -> native.CatalogOperation:
         else None,
         api=value.api if value.HasField("api") else None,
         mcp=value.mcp if value.HasField("mcp") else None,
-        internal_callers=list(value.internal_callers),
     )
 
 

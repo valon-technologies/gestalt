@@ -68,24 +68,11 @@ func TestManifestJSONSchemaAcceptsSupportedSpecFields(t *testing.T) {
 				"defaultOperations": []any{"conversations.list"},
 			},
 			"allowedOperations": map[string]any{
-				"chat.postMessage": map[string]any{"api": false, "mcp": false, "internalCallers": []any{"app:data-platform-dashboard"}},
+				"chat.postMessage": map[string]any{"api": false, "mcp": false},
 			},
 		},
 	}
 	if err := schema.Validate(manifest); err != nil {
 		t.Fatalf("manifest with supported spec fields failed schema validation: %v", err)
-	}
-	emptyCallers := map[string]any{
-		"kind":    "app",
-		"source":  "github.com/acme/apps/slack",
-		"version": "1.0.0",
-		"spec": map[string]any{
-			"allowedOperations": map[string]any{
-				"chat.postMessage": map[string]any{"internalCallers": []any{}},
-			},
-		},
-	}
-	if err := schema.Validate(emptyCallers); err == nil {
-		t.Fatal("manifest with empty internalCallers should fail schema validation")
 	}
 }
