@@ -72,6 +72,26 @@ func FromWireHealthCheckResponse(value *proto.HealthCheckResponse) *HealthCheckR
 	return out
 }
 
+func ToWirePromoteWorkersResponse(value *PromoteWorkersResponse) *proto.PromoteWorkersResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.PromoteWorkersResponse{
+		ProtocolVersion: value.ProtocolVersion,
+	}
+	return out
+}
+
+func FromWirePromoteWorkersResponse(value *proto.PromoteWorkersResponse) *PromoteWorkersResponse {
+	if value == nil {
+		return nil
+	}
+	out := &PromoteWorkersResponse{
+		ProtocolVersion: value.ProtocolVersion,
+	}
+	return out
+}
+
 func ToWireProviderIdentity(value *ProviderIdentity) *proto.ProviderIdentity {
 	if value == nil {
 		return nil
@@ -121,26 +141,6 @@ func FromWireStartRuntimeProviderResponse(value *proto.StartRuntimeProviderRespo
 		return nil
 	}
 	out := &StartRuntimeProviderResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
-}
-
-func ToWirePromoteWorkersResponse(value *PromoteWorkersResponse) *proto.PromoteWorkersResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.PromoteWorkersResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
-}
-
-func FromWirePromoteWorkersResponse(value *proto.PromoteWorkersResponse) *PromoteWorkersResponse {
-	if value == nil {
-		return nil
-	}
-	out := &PromoteWorkersResponse{
 		ProtocolVersion: value.ProtocolVersion,
 	}
 	return out

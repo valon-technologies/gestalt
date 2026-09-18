@@ -70,6 +70,15 @@ class HealthCheckResponse:
 
 
 @dataclass(frozen=True, slots=True)
+class PromoteWorkersResponse:
+    """PromoteWorkersResponse confirms the protocol version the provider is serving
+    after explicit worker promotion completes.
+    """
+
+    protocol_version: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderIdentity:
     """ProviderIdentity describes a provider surface and the protocol versions it
     supports.
@@ -197,3 +206,17 @@ class ProviderLifecycle:
             lambda: self._stub.StartProvider(_empty.Empty(), timeout=self._timeout)
         )
         return _codec.from_wire_start_runtime_provider_response(response)
+
+    def promote_workers(self) -> int:
+        response = _codec.from_wire_promote_workers_response(
+            _support.call_unary(
+                lambda: self._stub.PromoteWorkers(_empty.Empty(), timeout=self._timeout)
+            )
+        )
+        return response.protocol_version
+
+    def promote_workers_raw(self) -> PromoteWorkersResponse:
+        response = _support.call_unary(
+            lambda: self._stub.PromoteWorkers(_empty.Empty(), timeout=self._timeout)
+        )
+        return _codec.from_wire_promote_workers_response(response)

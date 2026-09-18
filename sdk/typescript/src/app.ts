@@ -144,6 +144,18 @@ export interface CatalogOperation {
    * output_schema string; absent is equivalent to unary with no schema.
    */
   response?: OperationResponseSpec;
+  /**
+   * Public API exposure override. Absent means exposed by default.
+   */
+  api?: boolean;
+  /**
+   * Public MCP exposure override. Absent means exposed by default.
+   */
+  mcp?: boolean;
+  /**
+   * Verified provider refs allowed to invoke this operation internally.
+   */
+  internalCallers: string[];
 }
 
 /**

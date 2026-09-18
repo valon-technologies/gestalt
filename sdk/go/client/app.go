@@ -120,6 +120,12 @@ type CatalogOperation struct {
 	// Response mode and schema for this operation. Replaces the former
 	// output_schema string; absent is equivalent to unary with no schema.
 	Response *OperationResponseSpec
+	// Public API exposure override. Absent means exposed by default.
+	Api *bool
+	// Public MCP exposure override. Absent means exposed by default.
+	Mcp *bool
+	// Verified provider refs allowed to invoke this operation internally.
+	InternalCallers []string
 }
 
 // CatalogParameter is the native message type for gestalt.provider.v1.CatalogParameter.

@@ -137,6 +137,12 @@ class CatalogOperation:
     #: Response mode and schema for this operation. Replaces the former
     #: output_schema string; absent is equivalent to unary with no schema.
     response: OperationResponseSpec | None = None
+    #: Public API exposure override. Absent means exposed by default.
+    api: bool | None = None
+    #: Public MCP exposure override. Absent means exposed by default.
+    mcp: bool | None = None
+    #: Verified provider refs allowed to invoke this operation internally.
+    internal_callers: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

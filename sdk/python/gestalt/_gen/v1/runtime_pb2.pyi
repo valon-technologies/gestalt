@@ -90,3 +90,9 @@ class StartRuntimeProviderResponse(_message.Message):
     PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
     protocol_version: int
     def __init__(self, protocol_version: _Optional[int] = ...) -> None: ...
+
+class PromoteWorkersResponse(_message.Message):
+    __slots__ = ()
+    PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
+    protocol_version: int
+    def __init__(self, protocol_version: _Optional[int] = ...) -> None: ...
