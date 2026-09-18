@@ -9,6 +9,8 @@ import (
 )
 
 func TestCatalogProtoRoundTripPreservesOperationExposure(t *testing.T) {
+	t.Parallel()
+
 	api := false
 	mcp := true
 	want := &catalog.Catalog{

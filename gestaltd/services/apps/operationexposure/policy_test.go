@@ -31,6 +31,8 @@ func TestPolicyNewRejectsInvalidInternalCallers(t *testing.T) {
 		{name: "multiple separators", refs: []string{"app:caller:extra"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			if _, err := New(map[string]*OperationOverride{"op": {InternalCallers: tc.refs}}); err == nil {
 				t.Fatal("expected invalid internalCallers to be rejected")
 			}

@@ -93,6 +93,9 @@ impl Provider for TestProvider {
                 visible: None,
                 transport: String::new(),
                 allowed_roles: Vec::new(),
+                api: None,
+                mcp: None,
+                internal_callers: Vec::new(),
             }],
         }))
     }

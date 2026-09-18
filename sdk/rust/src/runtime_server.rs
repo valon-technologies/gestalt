@@ -10,8 +10,8 @@ use crate::cache_provider::CacheProvider;
 use crate::error::Result;
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
 use crate::generated::v1::{
-    ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse, ProviderIdentity,
-    ProviderKind, StartRuntimeProviderResponse,
+    ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse,
+    PromoteWorkersResponse, ProviderIdentity, ProviderKind, StartRuntimeProviderResponse,
 };
 use crate::rpc_status::{require_protocol_version, rpc_error_message, rpc_status};
 use crate::runtime_provider_impl::RuntimeProvider;
@@ -268,6 +268,15 @@ impl ProviderLifecycle for RuntimeServer {
         Ok(GrpcResponse::new(StartRuntimeProviderResponse {
             protocol_version: CURRENT_PROTOCOL_VERSION,
         }))
+    }
+
+    async fn promote_workers(
+        &self,
+        _request: GrpcRequest<()>,
+    ) -> std::result::Result<GrpcResponse<PromoteWorkersResponse>, Status> {
+        Err(Status::unimplemented(
+            "provider does not support explicit worker promotion",
+        ))
     }
 }
 

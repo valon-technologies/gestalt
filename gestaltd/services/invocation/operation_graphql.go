@@ -17,9 +17,10 @@ func authorizeGraphQLOperation(ctx context.Context, cat *catalog.Catalog, reques
 	if cat == nil {
 		return nil
 	}
-	configured := make(map[graphqlRootField][]catalog.CatalogOperation)
+	configured := make(map[graphqlRootField][]*catalog.CatalogOperation)
 	unmatchableRestricted := false
-	for _, op := range cat.Operations {
+	for i := range cat.Operations {
+		op := &cat.Operations[i]
 		if op.Transport != "graphql" {
 			continue
 		}
@@ -56,7 +57,7 @@ func authorizeGraphQLOperation(ctx context.Context, cat *catalog.Catalog, reques
 			return fmt.Errorf("%w: graphql root field %q", ErrOperationNotFound, field.name)
 		}
 		for _, op := range candidates {
-			if !OperationExposedOnInvocationSurface(ctx, op) {
+			if !OperationExposedOnInvocationSurface(ctx, *op) {
 				return fmt.Errorf("%w: %q", ErrOperationNotFound, op.ID)
 			}
 		}

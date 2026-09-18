@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 type publicRemoteInvocationProvider struct {
@@ -214,12 +215,12 @@ func TestDevRemoteAppInvocationKeepsPublicGatewayPublicAndFailsClosedInternalCal
 		t.Fatalf("internal caller through public remote error = %v, want NotFound", err)
 	}
 
-	wrongCallerContext := *requestContext
+	wrongCallerContext := gproto.Clone(requestContext).(*proto.RequestContext)
 	wrongCallerContext.Caller = &proto.ProviderContext{Kind: string(invocation.ProviderKindApp), Name: "wrong"}
 	_, err = localClient.Invoke(context.Background(), &proto.AppInvokeRequest{
 		App:       "data-schema-explorer",
 		Operation: "public_hidden",
-		Context:   &wrongCallerContext,
+		Context:   wrongCallerContext,
 	})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("wrong remote caller error = %v, want NotFound", err)
