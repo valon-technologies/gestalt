@@ -738,14 +738,15 @@ type ManifestPaginationConfig struct {
 }
 
 type ManifestOperationOverride struct {
-	Alias       string                    `json:"alias,omitempty" yaml:"alias,omitempty"`
-	Description string                    `json:"description,omitempty" yaml:"description,omitempty"`
-	Tags        []string                  `json:"tags,omitempty" yaml:"tags,omitempty"`
-	API         *bool                     `json:"api,omitempty" yaml:"api,omitempty"`
-	MCP         *bool                     `json:"mcp,omitempty" yaml:"mcp,omitempty"`
-	Paginate    bool                      `json:"paginate,omitempty" yaml:"paginate,omitempty"`
-	Pagination  *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`
-	GraphQL     *ManifestGraphQLOperation `json:"graphql,omitempty" yaml:"graphql,omitempty"`
+	Alias           string                    `json:"alias,omitempty" yaml:"alias,omitempty"`
+	Description     string                    `json:"description,omitempty" yaml:"description,omitempty"`
+	Tags            []string                  `json:"tags,omitempty" yaml:"tags,omitempty"`
+	API             *bool                     `json:"api,omitempty" yaml:"api,omitempty"`
+	MCP             *bool                     `json:"mcp,omitempty" yaml:"mcp,omitempty"`
+	InternalCallers []string                  `json:"internalCallers,omitempty" yaml:"internalCallers,omitempty"`
+	Paginate        bool                      `json:"paginate,omitempty" yaml:"paginate,omitempty"`
+	Pagination      *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+	GraphQL         *ManifestGraphQLOperation `json:"graphql,omitempty" yaml:"graphql,omitempty"`
 }
 
 type ManifestGraphQLOperation struct {

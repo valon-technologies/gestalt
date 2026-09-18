@@ -204,6 +204,65 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	}
 }
 
+func TestSpecLoadedProviderRejectsInvalidInternalCallersBeforeLoadingSpec(t *testing.T) {
+	t.Parallel()
+
+	manifest := newExecutableManifest("Spec provider", "Validates operation policy before loading the spec")
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "https://example.invalid/openapi.yaml"},
+	}
+	entry := &config.ProviderEntry{
+		ResolvedManifest: manifest,
+		AllowedOperations: map[string]*config.OperationOverride{
+			"restricted": {InternalCallers: []string{}},
+		},
+	}
+
+	_, err := buildProvider(context.Background(), "spec-provider", entry, Deps{})
+	if err == nil || !strings.Contains(err.Error(), "internalCallers cannot be empty") {
+		t.Fatalf("buildProvider error = %v, want invalid internalCallers", err)
+	}
+}
+
+func TestPrepareProviderBuildsFiltersStartupProxyCatalog(t *testing.T) {
+	t.Parallel()
+
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "startup-proxy",
+		Operations: []catalog.CatalogOperation{
+			{ID: "hidden", Method: http.MethodGet},
+			{ID: "other", Method: http.MethodGet},
+		},
+	})
+	apiDisabled := false
+	cfg := &config.Config{Apps: map[string]*config.ProviderEntry{
+		"startup-proxy": {
+			ResolvedManifest:     newExecutableManifest("Startup proxy", "Applies operation policy before registration"),
+			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			AllowedOperations: map[string]*config.OperationOverride{
+				"hidden": {API: &apiDisabled, InternalCallers: []string{"app:data-platform-dashboard"}},
+			},
+		},
+	}}
+
+	builds, err := prepareProviderBuilds(cfg, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("prepareProviderBuilds: %v", err)
+	}
+	provider, err := builds.providers.Get("startup-proxy")
+	if err != nil {
+		t.Fatalf("get startup proxy: %v", err)
+	}
+	cat := provider.Catalog()
+	if cat == nil || len(cat.Operations) != 1 {
+		t.Fatalf("startup proxy catalog = %+v, want one operation", cat)
+	}
+	op := cat.Operations[0]
+	if op.ID != "hidden" || op.API == nil || *op.API || len(op.InternalCallers) != 1 || op.InternalCallers[0] != "app:data-platform-dashboard" {
+		t.Fatalf("startup proxy policy was not applied before registration: %+v", op)
+	}
+}
+
 func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing.T) {
 	t.Parallel()
 
@@ -1125,6 +1184,44 @@ func TestRemoteAppRoutingAppliesOperationSurfaceOverrides(t *testing.T) {
 	calls := client.snapshot()
 	if len(calls) != 1 || calls[0].operation != "read" {
 		t.Fatalf("remote calls = %#v, want one internal read call", calls)
+	}
+}
+
+func TestRemoteAppPlacementAppliesAllowedOperationAliasOnce(t *testing.T) {
+	t.Parallel()
+
+	entry := remoteRoutingAppEntry(t, "remote-app", "read")
+	entry.Remote = config.DefaultRemoteName
+	entry.AllowedOperations = map[string]*config.OperationOverride{
+		"read": {Alias: "read.alias"},
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{Remotes: map[string]*config.RemoteConfig{
+			config.DefaultRemoteName: {URL: "https://remote.test", Token: "remote-token", Default: true},
+		}},
+		Apps: map[string]*config.ProviderEntry{"remote-app": entry},
+	}
+	client := &recordingRemoteAppClient{}
+	reg := registry.New()
+	if err := registerRemoteApps(&reg.Providers, cfg, Deps{RemoteClientSets: remote.ClientSets{config.DefaultRemoteName: {App: client}}}); err != nil {
+		t.Fatalf("registerRemoteApps: %v", err)
+	}
+	provider, err := reg.Providers.Get("remote-app")
+	if err != nil {
+		t.Fatalf("get remote provider: %v", err)
+	}
+	cat := provider.Catalog()
+	if cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != "read.alias" {
+		t.Fatalf("remote catalog = %+v, want one aliased operation", cat)
+	}
+	services := testutil.NewStubServices(t)
+	broker := invocation.NewBroker(&reg.Providers, services.Users, services.ExternalCredentials)
+	if _, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(), "remote-app", "", "read.alias", nil); err != nil {
+		t.Fatalf("Invoke aliased remote operation: %v", err)
+	}
+	calls := client.snapshot()
+	if len(calls) != 1 || calls[0].operation != "read" {
+		t.Fatalf("remote calls = %#v, want one call to original read operation", calls)
 	}
 }
 

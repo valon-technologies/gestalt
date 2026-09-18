@@ -120,6 +120,13 @@ func prepareProviderBuilds(
 			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: entry, sha: sha})
 			continue
 		}
+		spec.Catalog, err = applyAllowedOperationsCatalog(name, entry.EffectiveAllowedOperations(), spec.Catalog)
+		if err != nil {
+			builds.errs = append(builds.errs, err)
+			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: entry, sha: sha})
+			continue
+		}
+		remapStartupOperationRouting(&operationRouting, entry.EffectiveAllowedOperations())
 		var tracker *startupWaitTracker
 		if deps.WorkflowRuntime != nil {
 			tracker = deps.WorkflowRuntime.StartupWaitTracker()
@@ -134,6 +141,20 @@ func prepareProviderBuilds(
 		builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: entry, proxy: proxy, sha: sha})
 	}
 	return builds, nil
+}
+
+func remapStartupOperationRouting(routing *startupOperationRouting, allowed map[string]*config.OperationOverride) {
+	if routing == nil || len(routing.connections) == 0 {
+		return
+	}
+	for original, override := range allowed {
+		if override == nil || strings.TrimSpace(override.Alias) == "" {
+			continue
+		}
+		if connection := routing.connections[original]; connection != "" {
+			routing.connections[override.Alias] = connection
+		}
+	}
 }
 
 func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *config.Config, deps Deps) error {
@@ -157,6 +178,9 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		}
 		var spec appservice.StaticProviderSpec
 		allowedOperations := entry.EffectiveAllowedOperations()
+		if err := operationexposure.ValidateOverrides(allowedOperations); err != nil {
+			return fmt.Errorf("remote app %q allowedOperations: %w", name, err)
+		}
 		if entry.Source.IsRegistry() {
 			var err error
 			allowedOperations, err = normalizeRemoteAllowedOperations(name, allowedOperations)
@@ -516,6 +540,9 @@ func validateProviderConnectionMode(provider string, mode core.ConnectionMode) e
 
 func BuildStartupProviderSpec(name string, entry *config.ProviderEntry) (appservice.StaticProviderSpec, map[string]string, error) {
 	spec, routing, err := buildStartupProviderSpec(name, entry)
+	if err == nil {
+		spec.Catalog, err = applyAllowedOperationsCatalog(name, entry.EffectiveAllowedOperations(), spec.Catalog)
+	}
 	return spec, routing.connections, err
 }
 
@@ -533,6 +560,9 @@ func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (appserv
 	manifestApp := entry.ManifestSpec()
 	if manifest == nil || manifestApp == nil {
 		return appservice.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q must resolve to a provider manifest", name)
+	}
+	if err := operationexposure.ValidateOverrides(entry.EffectiveAllowedOperations()); err != nil {
+		return appservice.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q allowedOperations: %w", name, err)
 	}
 
 	meta := resolveProviderMetadata(entry)
@@ -654,6 +684,9 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 	}
 
 	allowedOperations := entry.EffectiveAllowedOperations()
+	if err := operationexposure.ValidateOverrides(allowedOperations); err != nil {
+		return nil, fmt.Errorf("integration %q allowedOperations: %w", name, err)
+	}
 
 	switch {
 	case manifestApp.IsSpecLoaded() && manifest.Entrypoint == nil:
@@ -1178,6 +1211,21 @@ func applyAllowedOperations(name string, allowedOperations map[string]*config.Op
 		return nil, fmt.Errorf("integration %q plugin: %w", name, err)
 	}
 	return policy.Wrap(pluginProv), nil
+}
+
+func applyAllowedOperationsCatalog(name string, allowedOperations map[string]*config.OperationOverride, cat *catalog.Catalog) (*catalog.Catalog, error) {
+	if cat == nil {
+		return nil, nil
+	}
+	matched := operationexposure.MatchingAllowedOperations(allowedOperations, cat)
+	if matched == nil {
+		return cat.Clone(), nil
+	}
+	policy, err := operationexposure.New(matched)
+	if err != nil {
+		return nil, fmt.Errorf("integration %q startup catalog: %w", name, err)
+	}
+	return policy.ApplyCatalog(cat), nil
 }
 
 func catalogOperationCount(cat *catalog.Catalog) int {

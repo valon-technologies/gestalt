@@ -426,9 +426,15 @@ type CatalogOperation struct {
 	AllowedRoles   []string               `protobuf:"bytes,14,rep,name=allowed_roles,json=allowedRoles,proto3" json:"allowed_roles,omitempty"`
 	// Response mode and schema for this operation. Replaces the former
 	// output_schema string; absent is equivalent to unary with no schema.
-	Response      *OperationResponseSpec `protobuf:"bytes,15,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Response *OperationResponseSpec `protobuf:"bytes,15,opt,name=response,proto3" json:"response,omitempty"`
+	// Public API exposure override. Absent means exposed by default.
+	Api *bool `protobuf:"varint,16,opt,name=api,proto3,oneof" json:"api,omitempty"`
+	// Public MCP exposure override. Absent means exposed by default.
+	Mcp *bool `protobuf:"varint,17,opt,name=mcp,proto3,oneof" json:"mcp,omitempty"`
+	// Verified provider refs allowed to invoke this operation internally.
+	InternalCallers []string `protobuf:"bytes,18,rep,name=internal_callers,json=internalCallers,proto3" json:"internal_callers,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CatalogOperation) Reset() {
@@ -555,6 +561,27 @@ func (x *CatalogOperation) GetAllowedRoles() []string {
 func (x *CatalogOperation) GetResponse() *OperationResponseSpec {
 	if x != nil {
 		return x.Response
+	}
+	return nil
+}
+
+func (x *CatalogOperation) GetApi() bool {
+	if x != nil && x.Api != nil {
+		return *x.Api
+	}
+	return false
+}
+
+func (x *CatalogOperation) GetMcp() bool {
+	if x != nil && x.Mcp != nil {
+		return *x.Mcp
+	}
+	return false
+}
+
+func (x *CatalogOperation) GetInternalCallers() []string {
+	if x != nil {
+		return x.InternalCallers
 	}
 	return nil
 }
@@ -2731,7 +2758,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x15OperationResponseSpec\x12>\n" +
 	"\x05unary\x18\x01 \x01(\v2&.gestalt.provider.v1.UnaryResponseSpecH\x00R\x05unary\x12A\n" +
 	"\x06stream\x18\x02 \x01(\v2'.gestalt.provider.v1.StreamResponseSpecH\x00R\x06streamB\x06\n" +
-	"\x04kind\"\xce\x04\n" +
+	"\x04kind\"\xb7\x05\n" +
 	"\x10CatalogOperation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x14\n" +
@@ -2749,9 +2776,14 @@ const file_v1_app_proto_rawDesc = "" +
 	"\avisible\x18\f \x01(\bH\x00R\avisible\x88\x01\x01\x12\x1c\n" +
 	"\ttransport\x18\r \x01(\tR\ttransport\x12#\n" +
 	"\rallowed_roles\x18\x0e \x03(\tR\fallowedRoles\x12F\n" +
-	"\bresponse\x18\x0f \x01(\v2*.gestalt.provider.v1.OperationResponseSpecR\bresponseB\n" +
+	"\bresponse\x18\x0f \x01(\v2*.gestalt.provider.v1.OperationResponseSpecR\bresponse\x12\x15\n" +
+	"\x03api\x18\x10 \x01(\bH\x01R\x03api\x88\x01\x01\x12\x15\n" +
+	"\x03mcp\x18\x11 \x01(\bH\x02R\x03mcp\x88\x01\x01\x12)\n" +
+	"\x10internal_callers\x18\x12 \x03(\tR\x0finternalCallersB\n" +
 	"\n" +
-	"\b_visibleJ\x04\b\x06\x10\aR\routput_schema\"\xc4\x01\n" +
+	"\b_visibleB\x06\n" +
+	"\x04_apiB\x06\n" +
+	"\x04_mcpJ\x04\b\x06\x10\aR\routput_schema\"\xc4\x01\n" +
 	"\aCatalog\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +

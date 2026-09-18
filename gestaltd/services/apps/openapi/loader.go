@@ -181,6 +181,7 @@ func extractOperations(model *v3high.Document, def *declarative.Definition, allo
 			opID := op.OperationId
 			var allowedRoles []string
 			var api, mcp *bool
+			var internalCallers []string
 			tags := catalog.MergeTags(op.Tags)
 			if override := allowedOps[op.OperationId]; override != nil {
 				if override.Description != "" {
@@ -193,6 +194,7 @@ func extractOperations(model *v3high.Document, def *declarative.Definition, allo
 				tags = catalog.MergeTags(tags, override.Tags)
 				api = override.API
 				mcp = override.MCP
+				internalCallers = slices.Clone(override.InternalCallers)
 			}
 
 			var (
@@ -249,14 +251,15 @@ func extractOperations(model *v3high.Document, def *declarative.Definition, allo
 			}
 
 			def.Operations[opID] = declarative.OperationDef{
-				Description:  desc,
-				Method:       strings.ToUpper(method),
-				Path:         path,
-				AllowedRoles: allowedRoles,
-				Tags:         tags,
-				API:          api,
-				MCP:          mcp,
-				Parameters:   params,
+				Description:     desc,
+				Method:          strings.ToUpper(method),
+				Path:            path,
+				AllowedRoles:    allowedRoles,
+				Tags:            tags,
+				API:             api,
+				MCP:             mcp,
+				InternalCallers: internalCallers,
+				Parameters:      params,
 			}
 		}
 	}

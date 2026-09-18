@@ -121,10 +121,13 @@ func TestBrokerInvokeEnforcesPublicOperationSurfaces(t *testing.T) {
 	t.Parallel()
 
 	disabled := false
+	enabled := true
 	tests := []struct {
 		name        string
 		surface     InvocationSurface
 		caller      CallerProvider
+		entry       Entry
+		meta        *InvocationMeta
 		op          catalog.CatalogOperation
 		wantDenied  bool
 		wantExecute bool
@@ -133,6 +136,14 @@ func TestBrokerInvokeEnforcesPublicOperationSurfaces(t *testing.T) {
 		{name: "MCP disabled", surface: InvocationSurfaceMCP, op: catalog.CatalogOperation{ID: "mutate", MCP: &disabled}, wantDenied: true},
 		{name: "nested app call remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindApp, Name: "caller"}, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, MCP: &disabled}, wantExecute: true},
 		{name: "nested workflow call remains available", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindWorkflow, Name: "caller"}, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, MCP: &disabled}, wantExecute: true},
+		{name: "allowlisted app caller", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindApp, Name: "allowed"}, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, MCP: &disabled, InternalCallers: []string{"app:allowed"}}, wantExecute: true},
+		{name: "nested app call inherits HTTP surface", surface: InvocationSurfaceHTTP, entry: EntryGRPC, meta: &InvocationMeta{Depth: 1}, caller: CallerProvider{Kind: ProviderKindApp, Name: "allowed"}, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, InternalCallers: []string{"app:allowed"}}, wantExecute: true},
+		{name: "wrong app caller denied", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindApp, Name: "wrong"}, op: catalog.CatalogOperation{ID: "mutate", API: &enabled, InternalCallers: []string{"app:allowed"}}, wantDenied: true},
+		{name: "workflow caller denied", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindWorkflow, Name: "nightly"}, op: catalog.CatalogOperation{ID: "mutate", API: &enabled, InternalCallers: []string{"app:allowed"}}, wantDenied: true},
+		{name: "agent caller denied", surface: InvocationSurfaceHTTP, caller: CallerProvider{Kind: ProviderKindAgent, Name: "assistant"}, op: catalog.CatalogOperation{ID: "mutate", API: &enabled, InternalCallers: []string{"app:allowed"}}, wantDenied: true},
+		{name: "missing caller denied", surface: InvocationSurfaceHTTP, caller: CallerProvider{}, op: catalog.CatalogOperation{ID: "mutate", API: &enabled, InternalCallers: []string{"app:allowed"}}, wantDenied: true},
+		{name: "public API flag still applies", surface: InvocationSurfaceHTTP, op: catalog.CatalogOperation{ID: "mutate", API: &disabled, InternalCallers: []string{"app:allowed"}}, wantDenied: true},
+		{name: "public MCP flag still applies", surface: InvocationSurfaceMCP, op: catalog.CatalogOperation{ID: "mutate", MCP: &disabled, InternalCallers: []string{"app:allowed"}}, wantDenied: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -153,6 +164,12 @@ func TestBrokerInvokeEnforcesPublicOperationSurfaces(t *testing.T) {
 			}
 			broker := NewBroker(testutil.NewProviderRegistry(t, provider), nil, nil)
 			ctx := WithInvocationSurface(context.Background(), tt.surface)
+			if tt.entry != "" {
+				ctx = WithEntry(ctx, tt.entry)
+			}
+			if tt.meta != nil {
+				ctx = ContextWithMeta(ctx, tt.meta)
+			}
 			if tt.caller != (CallerProvider{}) {
 				ctx = WithCallerProvider(ctx, tt.caller.Kind, tt.caller.Name)
 			}
@@ -168,6 +185,47 @@ func TestBrokerInvokeEnforcesPublicOperationSurfaces(t *testing.T) {
 				t.Fatalf("executed = %v, want %v", executed, tt.wantExecute)
 			}
 		})
+	}
+}
+
+type graphQLBrokerStub struct {
+	*coretesting.StubIntegration
+	calls int
+}
+
+func (s *graphQLBrokerStub) InvokeGraphQL(context.Context, core.GraphQLRequest, string) (*core.OperationResult, error) {
+	s.calls++
+	return &core.OperationResult{Status: http.StatusOK}, nil
+}
+
+func TestBrokerInvokeGraphQLEnforcesSelectedOperationExposure(t *testing.T) {
+	t.Parallel()
+
+	disabled := false
+	provider := &graphQLBrokerStub{StubIntegration: &coretesting.StubIntegration{
+		N:        "graphql",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Name: "graphql", Operations: []catalog.CatalogOperation{
+			{ID: "query.viewer", Transport: "graphql", Query: "query Viewer { viewer }", OperationName: "Viewer", API: &disabled, InternalCallers: []string{"app:dashboard"}},
+			{ID: "mutation.viewer", Transport: "graphql", Query: "mutation Update { viewer }", OperationName: "Update"},
+		}},
+	}}
+	broker := NewBroker(testutil.NewProviderRegistry(t, provider), nil, nil)
+	publicCtx := WithInvocationSurface(WithEntry(context.Background(), EntryGRPC), InvocationSurfaceHTTP)
+	publicCtx = WithCallerProvider(publicCtx, ProviderKindApp, "dashboard")
+	if _, err := broker.InvokeGraphQL(publicCtx, &principal.Principal{SubjectID: "user:test", Kind: principal.KindUser}, "graphql", "", GraphQLRequest{Document: "query Viewer { viewer }", OperationName: "Viewer"}); !errors.Is(err, ErrOperationNotFound) {
+		t.Fatalf("public restricted graphql error = %v, want ErrOperationNotFound", err)
+	}
+
+	nestedCtx := ContextWithMeta(publicCtx, &InvocationMeta{Depth: 1})
+	if _, err := broker.InvokeGraphQL(nestedCtx, &principal.Principal{SubjectID: "user:test", Kind: principal.KindUser}, "graphql", "", GraphQLRequest{Document: "query Viewer { viewer }", OperationName: "Viewer"}); err != nil {
+		t.Fatalf("nested allowed graphql error = %v", err)
+	}
+	if _, err := broker.InvokeGraphQL(nestedCtx, &principal.Principal{SubjectID: "user:test", Kind: principal.KindUser}, "graphql", "", GraphQLRequest{Document: "mutation Update { viewer }", OperationName: "Update"}); err != nil {
+		t.Fatalf("mutation graphql error = %v", err)
+	}
+	if provider.calls != 2 {
+		t.Fatalf("provider graphql calls = %d, want 2", provider.calls)
 	}
 }
 

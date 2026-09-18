@@ -17,6 +17,27 @@ func TestPolicyNewRejectsEmpty(t *testing.T) {
 	}
 }
 
+func TestPolicyNewRejectsInvalidInternalCallers(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		refs []string
+	}{
+		{name: "explicit empty", refs: []string{}},
+		{name: "blank", refs: []string{""}},
+		{name: "missing name", refs: []string{"app:"}},
+		{name: "unknown kind", refs: []string{"service:caller"}},
+		{name: "multiple separators", refs: []string{"app:caller:extra"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := New(map[string]*OperationOverride{"op": {InternalCallers: tc.refs}}); err == nil {
+				t.Fatal("expected invalid internalCallers to be rejected")
+			}
+		})
+	}
+}
+
 func TestPolicyNewRejectsAliasCollisions(t *testing.T) {
 	t.Parallel()
 
@@ -75,7 +96,7 @@ func TestPolicyValidateAndApply(t *testing.T) {
 	apiDisabled := false
 	mcpDisabled := false
 	policy, err := New(map[string]*OperationOverride{
-		"list_items": {Alias: "items", Description: "Custom description", AllowedRoles: []string{"admin"}, API: &apiDisabled, MCP: &mcpDisabled},
+		"list_items": {Alias: "items", Description: "Custom description", AllowedRoles: []string{"admin"}, API: &apiDisabled, MCP: &mcpDisabled, InternalCallers: []string{"app:data-platform-dashboard"}},
 		"get_item":   nil,
 	})
 	if err != nil {
@@ -120,5 +141,8 @@ func TestPolicyValidateAndApply(t *testing.T) {
 	}
 	if catalog.OperationExposedOnAPI(filteredCat.Operations[0]) || catalog.OperationExposedOnMCP(filteredCat.Operations[0]) {
 		t.Fatalf("first catalog operation should be hidden from API and MCP: %+v", filteredCat.Operations[0])
+	}
+	if got := filteredCat.Operations[0].InternalCallers; len(got) != 1 || got[0] != "app:data-platform-dashboard" {
+		t.Fatalf("first catalog InternalCallers = %#v, want [app:data-platform-dashboard]", got)
 	}
 }

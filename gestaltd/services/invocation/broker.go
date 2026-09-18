@@ -1097,6 +1097,9 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 	setSubjectAttribute(p)
 	ctx = withResolvedPrincipal(ctx, p)
+	if err := authorizeGraphQLOperation(ctx, prov.Catalog(), request); err != nil {
+		return fail(err)
+	}
 	operation, found := catalog.OperationByID(prov.Catalog(), graphQLOperationID)
 	if !found {
 		operation = catalog.CatalogOperation{ID: graphQLOperationID}

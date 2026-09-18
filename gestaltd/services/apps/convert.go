@@ -24,19 +24,22 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 	}
 	for _, op := range src.GetOperations() {
 		catOp := catalog.CatalogOperation{
-			ID:             op.GetId(),
-			Method:         op.GetMethod(),
-			Title:          op.GetTitle(),
-			Description:    op.GetDescription(),
-			InputSchema:    jsonRawFromString(op.GetInputSchema()),
-			Response:       responseSpecFromProto(op.GetResponse()),
-			AllowedRoles:   op.GetAllowedRoles(),
-			OutputSchema:   legacyOutputSchemaFromResponse(op.GetResponse()),
-			RequiredScopes: op.GetRequiredScopes(),
-			Tags:           op.GetTags(),
-			ReadOnly:       op.GetReadOnly(),
-			Visible:        op.Visible,
-			Transport:      op.GetTransport(),
+			ID:              op.GetId(),
+			Method:          op.GetMethod(),
+			Title:           op.GetTitle(),
+			Description:     op.GetDescription(),
+			InputSchema:     jsonRawFromString(op.GetInputSchema()),
+			Response:        responseSpecFromProto(op.GetResponse()),
+			AllowedRoles:    op.GetAllowedRoles(),
+			OutputSchema:    legacyOutputSchemaFromResponse(op.GetResponse()),
+			RequiredScopes:  op.GetRequiredScopes(),
+			Tags:            op.GetTags(),
+			ReadOnly:        op.GetReadOnly(),
+			Visible:         op.Visible,
+			API:             op.Api,
+			MCP:             op.Mcp,
+			InternalCallers: append([]string(nil), op.GetInternalCallers()...),
+			Transport:       op.GetTransport(),
 		}
 		if ann := op.GetAnnotations(); ann != nil {
 			catOp.Annotations = catalog.CapabilityAnnotations{
@@ -77,18 +80,21 @@ func catalogToProto(cat *catalog.Catalog) *proto.Catalog {
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
 		pOp := &proto.CatalogOperation{
-			Id:             op.ID,
-			Method:         op.Method,
-			Title:          op.Title,
-			Description:    op.Description,
-			InputSchema:    string(op.InputSchema),
-			Response:       responseSpecToProto(op.Response, op.OutputSchema),
-			AllowedRoles:   op.AllowedRoles,
-			RequiredScopes: op.RequiredScopes,
-			Tags:           op.Tags,
-			ReadOnly:       op.ReadOnly,
-			Visible:        op.Visible,
-			Transport:      op.Transport,
+			Id:              op.ID,
+			Method:          op.Method,
+			Title:           op.Title,
+			Description:     op.Description,
+			InputSchema:     string(op.InputSchema),
+			Response:        responseSpecToProto(op.Response, op.OutputSchema),
+			AllowedRoles:    op.AllowedRoles,
+			RequiredScopes:  op.RequiredScopes,
+			Tags:            op.Tags,
+			ReadOnly:        op.ReadOnly,
+			Visible:         op.Visible,
+			Api:             op.API,
+			Mcp:             op.MCP,
+			InternalCallers: append([]string(nil), op.InternalCallers...),
+			Transport:       op.Transport,
 		}
 		ann := op.Annotations
 		if ann.ReadOnlyHint != nil || ann.IdempotentHint != nil || ann.DestructiveHint != nil || ann.OpenWorldHint != nil {
