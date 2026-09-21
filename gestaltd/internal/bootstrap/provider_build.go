@@ -425,11 +425,7 @@ func (b *preparedProviderBuilds) Start(
 					b.onInstalled(pending.name, pending.sha)
 				}
 				if deps.AppWorkflowDeclarations != nil {
-					decls := result.WorkflowDeclarations
-					if decls == nil {
-						decls = []*proto.WorkflowDefinitionSpec{}
-					}
-					deps.AppWorkflowDeclarations.Set(pending.name, decls)
+					deps.AppWorkflowDeclarations.Set(pending.name, pending.entry, result.WorkflowDeclarations)
 				}
 				slog.Debug("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
 			}(pending)

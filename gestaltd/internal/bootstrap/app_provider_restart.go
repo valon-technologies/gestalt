@@ -12,7 +12,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
@@ -212,7 +211,7 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
 		r.storeConnectionAuth(app, &ProviderBuildResult{})
 		if r.deps.AppWorkflowDeclarations != nil {
-			r.deps.AppWorkflowDeclarations.Set(app, []*proto.WorkflowDefinitionSpec{})
+			r.deps.AppWorkflowDeclarations.Set(app, entry, nil)
 		}
 		r.releaseLifecycleLease(app)
 		return nil
@@ -240,11 +239,7 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	}
 	r.storeConnectionAuth(app, result)
 	if r.deps.AppWorkflowDeclarations != nil {
-		decls := result.WorkflowDeclarations
-		if decls == nil {
-			decls = []*proto.WorkflowDefinitionSpec{}
-		}
-		r.deps.AppWorkflowDeclarations.Set(app, decls)
+		r.deps.AppWorkflowDeclarations.Set(app, entry, result.WorkflowDeclarations)
 	}
 	r.releaseLifecycleLease(app)
 	return nil
@@ -544,6 +539,6 @@ func (r *AppProviderRestarter) storeConnectionAuth(app string, result *ProviderB
 func (r *AppProviderRestarter) clearRuntimeBindings(app string) {
 	r.storeConnectionAuth(app, &ProviderBuildResult{})
 	if r.deps.AppWorkflowDeclarations != nil {
-		r.deps.AppWorkflowDeclarations.Set(app, []*proto.WorkflowDefinitionSpec{})
+		r.deps.AppWorkflowDeclarations.Set(app, nil, nil)
 	}
 }

@@ -17,19 +17,24 @@ import (
 
 var appWorkflowLocalIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
-// appWorkflowDeclarations tracks workflow definitions reported by integration
-// apps at GetMetadata time. Presence in byApp (even an empty slice) means the
-// app has reported; absence means unknown (not started).
+// appWorkflowDeclarations keeps reported workflows with the configuration used
+// to build their app. Registry installs resolve manifests without mutating the
+// base config, so reconciliation must snapshot both together.
 type appWorkflowDeclarations struct {
 	mu    sync.Mutex
-	byApp map[string][]*proto.WorkflowDefinitionSpec
+	byApp map[string]appWorkflowDeclaration
+}
+
+type appWorkflowDeclaration struct {
+	entry *config.ProviderEntry
+	specs []*proto.WorkflowDefinitionSpec
 }
 
 func newAppWorkflowDeclarations() *appWorkflowDeclarations {
-	return &appWorkflowDeclarations{byApp: map[string][]*proto.WorkflowDefinitionSpec{}}
+	return &appWorkflowDeclarations{byApp: make(map[string]appWorkflowDeclaration)}
 }
 
-func (r *appWorkflowDeclarations) Set(appName string, specs []*proto.WorkflowDefinitionSpec) {
+func (r *appWorkflowDeclarations) Set(appName string, entry *config.ProviderEntry, specs []*proto.WorkflowDefinitionSpec) {
 	if r == nil {
 		return
 	}
@@ -37,37 +42,27 @@ func (r *appWorkflowDeclarations) Set(appName string, specs []*proto.WorkflowDef
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.byApp == nil {
-		r.byApp = map[string][]*proto.WorkflowDefinitionSpec{}
+		r.byApp = make(map[string]appWorkflowDeclaration)
 	}
-	if len(specs) == 0 {
-		r.byApp[appName] = []*proto.WorkflowDefinitionSpec{}
-		return
-	}
-	copied := make([]*proto.WorkflowDefinitionSpec, len(specs))
-	copy(copied, specs)
-	r.byApp[appName] = copied
+	r.byApp[appName] = appWorkflowDeclaration{entry: entry, specs: slices.Clone(specs)}
 }
 
-func (r *appWorkflowDeclarations) Snapshot() map[string][]*proto.WorkflowDefinitionSpec {
-	if r == nil {
-		return nil
+func (r *appWorkflowDeclarations) Snapshot(cfg *config.Config) (*config.Config, map[string][]*proto.WorkflowDefinitionSpec) {
+	if r == nil || cfg == nil {
+		return cfg, nil
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if len(r.byApp) == 0 {
-		return map[string][]*proto.WorkflowDefinitionSpec{}
-	}
+	resolved := *cfg
+	resolved.Apps = maps.Clone(cfg.Apps)
 	out := make(map[string][]*proto.WorkflowDefinitionSpec, len(r.byApp))
-	for appName, specs := range r.byApp {
-		if len(specs) == 0 {
-			out[appName] = []*proto.WorkflowDefinitionSpec{}
-			continue
+	for appName, declaration := range r.byApp {
+		if declaration.entry != nil && cfg.Apps[appName] != nil {
+			resolved.Apps[appName] = declaration.entry
 		}
-		copied := make([]*proto.WorkflowDefinitionSpec, len(specs))
-		copy(copied, specs)
-		out[appName] = copied
+		out[appName] = slices.Clone(declaration.specs)
 	}
-	return out
+	return &resolved, out
 }
 
 func appWorkflowDefinitionID(appName, localID string) string {

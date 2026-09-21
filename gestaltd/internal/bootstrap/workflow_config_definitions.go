@@ -40,10 +40,7 @@ type workflowConfigReconcileOptions struct {
 }
 
 func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, appDecls *appWorkflowDeclarations, includeProvider workflowConfigProviderFilter, opts workflowConfigReconcileOptions) error {
-	var reported map[string][]*proto.WorkflowDefinitionSpec
-	if appDecls != nil {
-		reported = appDecls.Snapshot()
-	}
+	cfg, reported := appDecls.Snapshot(cfg)
 	return reconcileWorkflowConfigDefinitionsFromDeclarations(ctx, cfg, runtime, reported, includeProvider, "", opts)
 }
 
@@ -52,7 +49,7 @@ func reconcileAppWorkflowDefinitions(ctx context.Context, cfg *config.Config, ru
 	if cfg == nil || runtime == nil || appDecls == nil || app == "" {
 		return nil
 	}
-	reported := appDecls.Snapshot()
+	cfg, reported := appDecls.Snapshot(cfg)
 	if _, ok := reported[app]; !ok {
 		return fmt.Errorf("bootstrap: app %q has not reported workflow definitions", app)
 	}
