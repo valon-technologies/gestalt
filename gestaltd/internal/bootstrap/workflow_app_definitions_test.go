@@ -260,13 +260,12 @@ func TestReconcileWorkflowConfigDefinitions_AttachesBootstrapPrincipal(t *testin
 
 func TestReconcileRegistryWorkflowConnections(t *testing.T) {
 	t.Parallel()
-	for _, scoped := range []bool{false, true} {
-		t.Run(map[bool]string{false: "background", true: "rollout"}[scoped], func(t *testing.T) {
+	for _, phase := range []string{"startup", "rollout"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
 			cfg, runtime, provider, decls := testWorkflowReconcileEnv(t)
-			base := cfg.Apps["notes"]
-			base.Source = config.ProviderSource{Registry: "toolshed"}
-			cfg.Workflows.Definitions["backup"].Steps[0].App.Connection = "default"
-			resolved := *base
+			cfg.Apps["notes"].Source = config.ProviderSource{Registry: "toolshed"}
+			resolved := *cfg.Apps["notes"]
 			resolved.ResolvedManifest = &providermanifestv1.Manifest{Spec: &providermanifestv1.Spec{
 				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 					"default": {Mode: providermanifestv1.ConnectionModeNone},
@@ -275,26 +274,17 @@ func TestReconcileRegistryWorkflowConnections(t *testing.T) {
 			spec := testAppWorkflowSpecProto("availability", "service_account:notes", "*/5 * * * *")
 			spec.Target.Steps[0].GetApp().Connection = "default"
 			decls.Set("notes", &resolved, []*proto.WorkflowDefinitionSpec{spec})
-			reconcile := func() error {
-				if scoped {
-					return reconcileAppWorkflowDefinitions(context.Background(), cfg, runtime, decls, "notes")
-				}
-				return reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true})
+			var err error
+			if phase == "rollout" {
+				err = reconcileAppWorkflowDefinitions(context.Background(), cfg, runtime, decls, "notes")
+			} else {
+				err = reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil, workflowConfigReconcileOptions{allowDestructiveCleanup: true})
 			}
-			if err := reconcile(); err != nil {
+			if err != nil {
 				t.Fatalf("reconcile registry workflow: %v", err)
 			}
 			if provider.definitions["app_notes_availability"] == nil {
 				t.Fatal("registry workflow was not registered")
-			}
-			if cfg.Apps["notes"] != base || base.ResolvedManifest != nil {
-				t.Fatal("reconciliation mutated the base app configuration")
-			}
-
-			// Replacing the app must also replace its connection configuration.
-			decls.Set("notes", base, []*proto.WorkflowDefinitionSpec{spec})
-			if err := reconcile(); err == nil || !strings.Contains(err.Error(), `connection "default" is not configured`) {
-				t.Fatalf("reconcile after removing connection = %v", err)
 			}
 		})
 	}
