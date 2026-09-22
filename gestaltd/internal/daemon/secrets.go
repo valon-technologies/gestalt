@@ -156,21 +156,21 @@ func runManagedSecretWrite(args []string, operation string, clientOnce func() (*
 }
 
 func printManagedSecretWriteResponse(w io.Writer, response managedSecretWriteResponse) {
-	fmt.Fprintf(w, "Secret: %s\n", response.Secret.Name)
+	_, _ = fmt.Fprintf(w, "Secret: %s\n", response.Secret.Name)
 	if response.Secret.OwnerApp != "" {
-		fmt.Fprintf(w, "Owner app: %s\n", response.Secret.OwnerApp)
+		_, _ = fmt.Fprintf(w, "Owner app: %s\n", response.Secret.OwnerApp)
 	}
-	fmt.Fprintf(w, "Version: %d\n", response.Version.Version)
-	fmt.Fprintf(w, "Created at: %s\n", response.Version.CreatedAt)
+	_, _ = fmt.Fprintf(w, "Version: %d\n", response.Version.Version)
+	_, _ = fmt.Fprintf(w, "Created at: %s\n", response.Version.CreatedAt)
 	if response.GeneratedValue != "" {
-		fmt.Fprintln(w, "Generated value (shown once):")
-		fmt.Fprintln(w, response.GeneratedValue)
+		_, _ = fmt.Fprintln(w, "Generated value (shown once):")
+		_, _ = fmt.Fprintln(w, response.GeneratedValue)
 	}
 	if response.RolloutRequired {
-		fmt.Fprintln(w, "Rollout required: yes")
-		fmt.Fprintln(w, "Gestalt resolves this secret during startup; roll out the runtime to load the new version.")
+		_, _ = fmt.Fprintln(w, "Rollout required: yes")
+		_, _ = fmt.Fprintln(w, "Gestalt resolves this secret during startup; roll out the runtime to load the new version.")
 	} else {
-		fmt.Fprintln(w, "Rollout required: no")
+		_, _ = fmt.Fprintln(w, "Rollout required: no")
 	}
 }
 
@@ -260,9 +260,9 @@ func runManagedSecretList(args []string, clientOnce func() (*managedSecretClient
 		return fmt.Errorf("failed to list managed secrets: %w", err)
 	}
 	rows := make([]managedSecretSummary, 0, len(all))
-	for _, row := range all {
-		if strings.TrimSpace(*ownerApp) == "" || row.OwnerApp == strings.TrimSpace(*ownerApp) {
-			rows = append(rows, row)
+	for i := range all {
+		if strings.TrimSpace(*ownerApp) == "" || all[i].OwnerApp == strings.TrimSpace(*ownerApp) {
+			rows = append(rows, all[i])
 		}
 	}
 	printManagedSecretRows(os.Stdout, rows)
@@ -294,17 +294,17 @@ func runManagedSecretDescribe(args []string, clientOnce func() (*managedSecretCl
 }
 
 func printManagedSecretDescribeResponse(w io.Writer, response managedSecretDetail) {
-	fmt.Fprintf(w, "Name: %s\n", response.Name)
-	fmt.Fprintf(w, "Owner app: %s\n", response.OwnerApp)
-	fmt.Fprintf(w, "Scope: %s\n", response.Scope)
+	_, _ = fmt.Fprintf(w, "Name: %s\n", response.Name)
+	_, _ = fmt.Fprintf(w, "Owner app: %s\n", response.OwnerApp)
+	_, _ = fmt.Fprintf(w, "Scope: %s\n", response.Scope)
 	if response.Description != "" {
-		fmt.Fprintf(w, "Description: %s\n", response.Description)
+		_, _ = fmt.Fprintf(w, "Description: %s\n", response.Description)
 	}
-	fmt.Fprintf(w, "Current version: %d\n", response.CurrentVersion)
-	fmt.Fprintf(w, "Created at: %s\n", response.CreatedAt)
-	fmt.Fprintf(w, "Updated at: %s\n", response.UpdatedAt)
+	_, _ = fmt.Fprintf(w, "Current version: %d\n", response.CurrentVersion)
+	_, _ = fmt.Fprintf(w, "Created at: %s\n", response.CreatedAt)
+	_, _ = fmt.Fprintf(w, "Updated at: %s\n", response.UpdatedAt)
 	if response.RetiredAt != nil {
-		fmt.Fprintf(w, "Retired at: %s\n", *response.RetiredAt)
+		_, _ = fmt.Fprintf(w, "Retired at: %s\n", *response.RetiredAt)
 	}
 	printManagedSecretAudit(w, response.Audit)
 }
@@ -376,18 +376,18 @@ func printManagedSecretPreflightResponse(w io.Writer, response managedSecretPref
 	if response.OK {
 		status = "PASS"
 	}
-	fmt.Fprintf(w, "Status: %s\n", status)
+	_, _ = fmt.Fprintf(w, "Status: %s\n", status)
 	for _, row := range response.Missing {
-		fmt.Fprintf(w, "Missing: %s\n", row.Name)
+		_, _ = fmt.Fprintf(w, "Missing: %s\n", row.Name)
 		if row.App != "" {
-			fmt.Fprintf(w, "  App: %s\n", row.App)
+			_, _ = fmt.Fprintf(w, "  App: %s\n", row.App)
 		}
 		if row.Field != "" {
-			fmt.Fprintf(w, "  Field: %s\n", row.Field)
+			_, _ = fmt.Fprintf(w, "  Field: %s\n", row.Field)
 		}
 	}
 	for _, row := range response.Unreferenced {
-		fmt.Fprintf(w, "Unreferenced: %s\n", row.Name)
+		_, _ = fmt.Fprintf(w, "Unreferenced: %s\n", row.Name)
 	}
 }
 
@@ -416,7 +416,7 @@ func runManagedSecretRetire(args []string, clientOnce func() (*managedSecretClie
 	if err := client.post(context.Background(), path, map[string]any{"reason": *reason}, &response); err != nil {
 		return fmt.Errorf("failed to retire managed secret %s: %w", name, err)
 	}
-	fmt.Fprintf(os.Stdout, "Retired %s\n", name)
+	_, _ = fmt.Fprintf(os.Stdout, "Retired %s\n", name)
 	return nil
 }
 
@@ -599,12 +599,12 @@ type managedSecretPreflightResponse struct {
 
 func printManagedSecretRows(w io.Writer, rows []managedSecretSummary) {
 	if len(rows) == 0 {
-		fmt.Fprintln(w, "No managed secrets")
+		_, _ = fmt.Fprintln(w, "No managed secrets")
 		return
 	}
-	fmt.Fprintf(w, "%-40s %-30s %-10s %8s\n", "NAME", "OWNER APP", "SCOPE", "VERSION")
-	for _, row := range rows {
-		fmt.Fprintf(w, "%-40s %-30s %-10s %8d\n", row.Name, row.OwnerApp, row.Scope, row.CurrentVersion)
+	_, _ = fmt.Fprintf(w, "%-40s %-30s %-10s %8s\n", "NAME", "OWNER APP", "SCOPE", "VERSION")
+	for i := range rows {
+		_, _ = fmt.Fprintf(w, "%-40s %-30s %-10s %8d\n", rows[i].Name, rows[i].OwnerApp, rows[i].Scope, rows[i].CurrentVersion)
 	}
 }
 
@@ -612,9 +612,9 @@ func printManagedSecretAudit(w io.Writer, rows []managedSecretAuditRow) {
 	if len(rows) == 0 {
 		return
 	}
-	fmt.Fprintln(w, "Audit:")
-	for _, row := range rows {
-		fmt.Fprintf(w, "  %s v%d by %s: %s\n", row.CreatedAt, row.Version, row.Actor, row.Action)
+	_, _ = fmt.Fprintln(w, "Audit:")
+	for i := range rows {
+		_, _ = fmt.Fprintf(w, "  %s v%d by %s: %s\n", rows[i].CreatedAt, rows[i].Version, rows[i].Actor, rows[i].Action)
 	}
 }
 

@@ -241,7 +241,7 @@ func managedSecretWriteRecorder() *managedSecretWriteRecorderClient {
 				return textResponse(http.StatusNotFound, "{}"), nil
 			}
 			if err := json.NewDecoder(r.Body).Decode(&recorder.body); err != nil {
-				return textResponse(http.StatusBadRequest, `{"error":"invalid body"}`), nil
+				return nil, err
 			}
 			encoded, _ := json.Marshal(managedSecretWriteResponse{
 				Secret: managedSecretSummary{Name: "demo-secret", OwnerApp: "demo", Scope: "app"},
