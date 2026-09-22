@@ -25,6 +25,9 @@ const (
 	StoreAppAccessProfiles              = "app_access_profiles"
 	StoreAppAllowedOperations           = "app_allowed_operations"
 	StoreSCIMResources                  = "scim_resources"
+	StoreManagedSecrets                 = "managed_secrets"
+	StoreManagedSecretVersions          = "managed_secret_versions"
+	StoreManagedSecretAuditLogs         = "managed_secret_audit_logs"
 )
 
 var SCIMResourcesSchema = idb.ObjectStoreOptions{
@@ -316,5 +319,67 @@ var AuthorizationDynamicFragmentsSchema = idb.ObjectStoreOptions{
 		{Name: "audit_json", Type: idb.TypeString},
 		{Name: "created_at", Type: idb.TypeTime},
 		{Name: "updated_at", Type: idb.TypeTime},
+	},
+}
+
+var ManagedSecretsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_owner_app", KeyPath: []string{"owner_app"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "name", Type: idb.TypeString, NotNull: true, Unique: true},
+		{Name: "owner_app", Type: idb.TypeString, NotNull: true},
+		{Name: "scope", Type: idb.TypeString, NotNull: true},
+		{Name: "description", Type: idb.TypeString},
+		{Name: "current_ver", Type: idb.TypeInt, NotNull: true},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "created_by", Type: idb.TypeString, NotNull: true},
+		{Name: "updated_by", Type: idb.TypeString, NotNull: true},
+		{Name: "retired_at", Type: idb.TypeTime},
+		{Name: "retired_reason", Type: idb.TypeString},
+	},
+}
+
+var ManagedSecretVersionsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_name_version", KeyPath: []string{"name", "version"}, Unique: true},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "name", Type: idb.TypeString, NotNull: true},
+		{Name: "version", Type: idb.TypeInt, NotNull: true},
+		{Name: "state", Type: idb.TypeString, NotNull: true},
+		{Name: "ciphertext", Type: idb.TypeBytes, NotNull: true},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "created_by", Type: idb.TypeString, NotNull: true},
+		{Name: "reason", Type: idb.TypeString, NotNull: true},
+		{Name: "description", Type: idb.TypeString},
+		{Name: "kms_key", Type: idb.TypeString, NotNull: true},
+		{Name: "kms_key_version", Type: idb.TypeString},
+		{Name: "ciphertext_sha256", Type: idb.TypeString, NotNull: true},
+	},
+}
+
+var ManagedSecretAuditLogsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_name_created", KeyPath: []string{"name", "created_at"}},
+		{Name: "by_name_action", KeyPath: []string{"name", "action"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "name", Type: idb.TypeString, NotNull: true},
+		{Name: "action", Type: idb.TypeString, NotNull: true},
+		{Name: "version", Type: idb.TypeInt, NotNull: true},
+		{Name: "owner_app", Type: idb.TypeString},
+		{Name: "actor", Type: idb.TypeString, NotNull: true},
+		{Name: "reason", Type: idb.TypeString, NotNull: true},
+		{Name: "source", Type: idb.TypeString},
+		{Name: "request_id", Type: idb.TypeString},
+		{Name: "kms_key", Type: idb.TypeString},
+		{Name: "cipher_hash", Type: idb.TypeString},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "result", Type: idb.TypeString, NotNull: true},
 	},
 }

@@ -133,6 +133,8 @@ type Server struct {
 	appAccessProfiles             *coredata.AppAccessProfileService
 	appAllowedOperations          *coredata.AppAllowedOperationsService
 	managedSubjects               *coredata.ManagedSubjectService
+	managedSecrets                *coredata.ManagedSecretService
+	managedSecretCipher           ManagedSecretCipher
 	agent                         bootstrap.AgentControl
 	workflowSchedules             workflowmanager.Service
 	agentRuns                     agentmanager.Service
@@ -247,6 +249,7 @@ type Config struct {
 	UserLookup                    UserLookupRouteConfig
 	AuditSink                     core.AuditSink
 	Services                      *coredata.Services
+	ManagedSecretCipher           ManagedSecretCipher
 	Providers                     *registry.ProviderMap[core.Provider]
 	Agent                         bootstrap.AgentControl
 	AgentManager                  agentmanager.Service
@@ -430,6 +433,8 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
 	managedSubjects := cfg.Services.ManagedSubjects
+	managedSecrets := cfg.Services.ManagedSecrets
+	managedSecretCipher := cfg.ManagedSecretCipher
 	resolver := principal.NewResolverNamed(cfg.SelectedAuthProvider, cfg.Auth)
 	authProviders := make(map[string]core.IdentityProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
@@ -516,6 +521,8 @@ func New(cfg Config) (*Server, error) {
 		appAccessProfiles:             cfg.Services.AppAccessProfiles,
 		appAllowedOperations:          cfg.Services.AppAllowedOperations,
 		managedSubjects:               managedSubjects,
+		managedSecrets:                managedSecrets,
+		managedSecretCipher:           managedSecretCipher,
 		agent:                         cfg.Agent,
 		agentRuns:                     cfg.AgentManager,
 		featureFlags:                  cfg.FeatureFlags,
