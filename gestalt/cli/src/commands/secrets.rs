@@ -49,19 +49,19 @@ fn create_or_rotate(
         return Ok(());
     }
 
-    if let Some(generated) = response.get("generatedValue").and_then(|v| v.as_str()) {
-        if !generated.is_empty() {
-            println!("Generated value (shown once):");
-            println!("{generated}");
-        }
+    if let Some(generated) = response.get("generatedValue").and_then(|v| v.as_str())
+        && !generated.is_empty()
+    {
+        println!("Generated value (shown once):");
+        println!("{generated}");
     }
     let secret = &response["secret"];
     let version = &response["version"];
     println!("Secret: {}", text(secret, "name"));
-    if let Some(owner) = secret.get("ownerApp").and_then(|v| v.as_str()) {
-        if !owner.is_empty() {
-            println!("Owner app: {owner}");
-        }
+    if let Some(owner) = secret.get("ownerApp").and_then(|v| v.as_str())
+        && !owner.is_empty()
+    {
+        println!("Owner app: {owner}");
     }
     println!("Version: {}", number(version, "version"));
     println!("Created at: {}", text(version, "createdAt"));
@@ -94,10 +94,10 @@ fn list(client: &ApiClient, owner_app: Option<&str>, format: Format) -> Result<(
     let headers = ["Name", "Owner app", "Scope", "Version", "Updated"];
     let mut table = Vec::new();
     for row in rows {
-        if let Some(owner) = owner_app {
-            if row.get("ownerApp").and_then(|v| v.as_str()) != Some(owner) {
-                continue;
-            }
+        if let Some(owner) = owner_app
+            && row.get("ownerApp").and_then(|v| v.as_str()) != Some(owner)
+        {
+            continue;
         }
         table.push(vec![
             text(row, "name"),
