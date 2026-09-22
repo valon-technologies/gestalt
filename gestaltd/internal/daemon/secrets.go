@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,6 +15,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"golang.org/x/term"
+
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
@@ -29,7 +30,6 @@ type managedSecretClient struct {
 	BaseURL    string
 	Token      string
 	HTTPClient *http.Client
-	Out        io.Writer
 }
 
 func runSecrets(args []string) error {
@@ -38,24 +38,35 @@ func runSecrets(args []string) error {
 		return flag.ErrHelp
 	}
 
+	var (
+		client *managedSecretClient
+		err    error
+	)
+	clientOnce := func() (*managedSecretClient, error) {
+		if client == nil {
+			client, err = newManagedSecretClient()
+		}
+		return client, err
+	}
+
 	switch args[0] {
 	case "-h", "--help", "help":
 		printSecretsUsage(os.Stdout)
 		return nil
 	case "create":
-		return runManagedSecretWrite(args[1:], "create")
+		return runManagedSecretWrite(args[1:], "create", clientOnce)
 	case "rotate":
-		return runManagedSecretWrite(args[1:], "rotate")
+		return runManagedSecretWrite(args[1:], "rotate", clientOnce)
 	case "list":
-		return runManagedSecretList(args[1:])
+		return runManagedSecretList(args[1:], clientOnce)
 	case "describe":
-		return runManagedSecretDescribe(args[1:])
+		return runManagedSecretDescribe(args[1:], clientOnce)
 	case "audit":
-		return runManagedSecretAudit(args[1:])
+		return runManagedSecretAudit(args[1:], clientOnce)
 	case "preflight":
-		return runManagedSecretPreflight(args[1:])
+		return runManagedSecretPreflight(args[1:], clientOnce)
 	case "retire":
-		return runManagedSecretRetire(args[1:])
+		return runManagedSecretRetire(args[1:], clientOnce)
 	default:
 		return fmt.Errorf("unknown secrets command %q", args[0])
 	}
@@ -89,15 +100,7 @@ type managedSecretWriteArgs struct {
 	generate    bool
 }
 
-func runManagedSecretWrite(args []string, operation string) error {
-	client, err := newManagedSecretClient(os.Stdout)
-	if err != nil {
-		return err
-	}
-	return runManagedSecretWriteWithClient(client, args, operation)
-}
-
-func runManagedSecretWriteWithClient(client *managedSecretClient, args []string, operation string) error {
+func runManagedSecretWrite(args []string, operation string, clientOnce func() (*managedSecretClient, error)) error {
 	fs := flag.NewFlagSet("gestaltd secrets "+operation, flag.ContinueOnError)
 	fs.Usage = func() { printManagedSecretWriteUsage(fs.Output(), operation) }
 	opts := managedSecretWriteArgs{}
@@ -140,11 +143,15 @@ func runManagedSecretWriteWithClient(client *managedSecretClient, args []string,
 		body["value"] = value
 	}
 
+	client, err := clientOnce()
+	if err != nil {
+		return err
+	}
 	var response managedSecretWriteResponse
 	if err := client.post(context.Background(), managedSecretsAdminPath, body, &response); err != nil {
 		return fmt.Errorf("failed to write managed secret: %w", err)
 	}
-	printManagedSecretWriteResponse(client.Out, response)
+	printManagedSecretWriteResponse(os.Stdout, response)
 	return nil
 }
 
@@ -198,18 +205,20 @@ func readManagedSecretValue(opts managedSecretWriteArgs) (string, error) {
 		}
 		return validateManagedSecretValue(raw)
 	}
-	first, err := promptManagedSecretValue("Secret value: ")
-	if err != nil {
-		return "", err
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		first, err := readManagedSecretPassword("Secret value: ")
+		if err != nil {
+			return "", err
+		}
+		second, err := readManagedSecretPassword("Confirm secret value: ")
+		if err != nil {
+			return "", err
+		}
+		if first != second {
+			return "", errors.New("secret values do not match")
+		}
+		return validateManagedSecretValue([]byte(first))
 	}
-	second, err := promptManagedSecretValue("Confirm secret value: ")
-	if err != nil {
-		return "", err
-	}
-	if first != second {
-		return "", errors.New("secret values do not match")
-	}
-	return first, nil
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return "", fmt.Errorf("failed to read secret value from stdin: %w", err)
@@ -231,15 +240,7 @@ func validateManagedSecretValue(raw []byte) (string, error) {
 	return value, nil
 }
 
-func runManagedSecretList(args []string) error {
-	client, err := newManagedSecretClient(os.Stdout)
-	if err != nil {
-		return err
-	}
-	return runManagedSecretListWithClient(client, args)
-}
-
-func runManagedSecretListWithClient(client *managedSecretClient, args []string) error {
+func runManagedSecretList(args []string, clientOnce func() (*managedSecretClient, error)) error {
 	fs := flag.NewFlagSet("gestaltd secrets list", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets list [--owner-app APP]") }
 	ownerApp := fs.String("owner-app", "", "filter by owning app")
@@ -250,6 +251,10 @@ func runManagedSecretListWithClient(client *managedSecretClient, args []string) 
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(positionals, " "))
 	}
 
+	client, err := clientOnce()
+	if err != nil {
+		return err
+	}
 	var all []managedSecretSummary
 	if err := client.get(context.Background(), managedSecretsAdminPath, &all); err != nil {
 		return fmt.Errorf("failed to list managed secrets: %w", err)
@@ -260,11 +265,11 @@ func runManagedSecretListWithClient(client *managedSecretClient, args []string) 
 			rows = append(rows, row)
 		}
 	}
-	printManagedSecretRows(client.Out, rows)
+	printManagedSecretRows(os.Stdout, rows)
 	return nil
 }
 
-func runManagedSecretDescribe(args []string) error {
+func runManagedSecretDescribe(args []string, clientOnce func() (*managedSecretClient, error)) error {
 	fs := flag.NewFlagSet("gestaltd secrets describe", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets describe NAME") }
 	if err := parseInterspersed(fs, args); err != nil {
@@ -276,7 +281,7 @@ func runManagedSecretDescribe(args []string) error {
 	}
 	name := positionals[0]
 
-	client, err := newManagedSecretClient(os.Stdout)
+	client, err := clientOnce()
 	if err != nil {
 		return err
 	}
@@ -284,7 +289,7 @@ func runManagedSecretDescribe(args []string) error {
 	if err := client.get(context.Background(), managedSecretsAdminPath+"/"+url.PathEscape(name), &response); err != nil {
 		return fmt.Errorf("failed to describe managed secret %s: %w", name, err)
 	}
-	printManagedSecretDescribeResponse(client.Out, response)
+	printManagedSecretDescribeResponse(os.Stdout, response)
 	return nil
 }
 
@@ -304,7 +309,7 @@ func printManagedSecretDescribeResponse(w io.Writer, response managedSecretDetai
 	printManagedSecretAudit(w, response.Audit)
 }
 
-func runManagedSecretAudit(args []string) error {
+func runManagedSecretAudit(args []string, clientOnce func() (*managedSecretClient, error)) error {
 	fs := flag.NewFlagSet("gestaltd secrets audit", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets audit NAME [--limit N]") }
 	limit := fs.Int("limit", 50, "maximum audit rows to return")
@@ -320,7 +325,7 @@ func runManagedSecretAudit(args []string) error {
 		return fmt.Errorf("--limit must be between 1 and 200")
 	}
 
-	client, err := newManagedSecretClient(os.Stdout)
+	client, err := clientOnce()
 	if err != nil {
 		return err
 	}
@@ -329,19 +334,11 @@ func runManagedSecretAudit(args []string) error {
 	if err := client.get(context.Background(), path, &rows); err != nil {
 		return fmt.Errorf("failed to list managed secret audit for %s: %w", name, err)
 	}
-	printManagedSecretAudit(client.Out, rows)
+	printManagedSecretAudit(os.Stdout, rows)
 	return nil
 }
 
-func runManagedSecretPreflight(args []string) error {
-	client, err := newManagedSecretClient(os.Stdout)
-	if err != nil {
-		return err
-	}
-	return runManagedSecretPreflightWithClient(client, args)
-}
-
-func runManagedSecretPreflightWithClient(client *managedSecretClient, args []string) error {
+func runManagedSecretPreflight(args []string, clientOnce func() (*managedSecretClient, error)) error {
 	fs := flag.NewFlagSet("gestaltd secrets preflight", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets preflight") }
 	if err := parseInterspersed(fs, args); err != nil {
@@ -359,11 +356,15 @@ func runManagedSecretPreflightWithClient(client *managedSecretClient, args []str
 		return fmt.Errorf("failed to parse preflight references: %w", err)
 	}
 
+	client, err := clientOnce()
+	if err != nil {
+		return err
+	}
 	var response managedSecretPreflightResponse
 	if err := client.post(context.Background(), managedSecretsAdminPath+"/preflight", references, &response); err != nil {
 		return fmt.Errorf("failed to run managed secret preflight: %w", err)
 	}
-	printManagedSecretPreflightResponse(client.Out, response)
+	printManagedSecretPreflightResponse(os.Stdout, response)
 	if !response.OK {
 		return exitCodeError{code: 1}
 	}
@@ -390,7 +391,7 @@ func printManagedSecretPreflightResponse(w io.Writer, response managedSecretPref
 	}
 }
 
-func runManagedSecretRetire(args []string) error {
+func runManagedSecretRetire(args []string, clientOnce func() (*managedSecretClient, error)) error {
 	fs := flag.NewFlagSet("gestaltd secrets retire", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets retire NAME --reason TEXT") }
 	reason := fs.String("reason", "", "why the secret is being retired")
@@ -406,7 +407,7 @@ func runManagedSecretRetire(args []string) error {
 		return fmt.Errorf("--reason is required")
 	}
 
-	client, err := newManagedSecretClient(os.Stdout)
+	client, err := clientOnce()
 	if err != nil {
 		return err
 	}
@@ -415,11 +416,22 @@ func runManagedSecretRetire(args []string) error {
 	if err := client.post(context.Background(), path, map[string]any{"reason": *reason}, &response); err != nil {
 		return fmt.Errorf("failed to retire managed secret %s: %w", name, err)
 	}
-	fmt.Fprintf(client.Out, "Retired %s\n", name)
+	fmt.Fprintf(os.Stdout, "Retired %s\n", name)
 	return nil
 }
 
-func newManagedSecretClient(out io.Writer) (*managedSecretClient, error) {
+func clientLoginSupported(baseURL string) (bool, error) {
+	var payload struct {
+		LoginSupported bool `json:"loginSupported"`
+	}
+	client := &managedSecretClient{BaseURL: strings.TrimRight(baseURL, "/")}
+	if err := client.get(context.Background(), "/api/v1/auth/info", &payload); err != nil {
+		return false, fmt.Errorf("failed to determine authentication mode: %w", err)
+	}
+	return payload.LoginSupported, nil
+}
+
+func newManagedSecretClient() (*managedSecretClient, error) {
 	baseURL, err := config.ResolveGestaltCLIURL()
 	if err != nil {
 		return nil, err
@@ -432,12 +444,17 @@ func newManagedSecretClient(out io.Writer) (*managedSecretClient, error) {
 		return nil, errors.New("gestalt URL is required; set GESTALT_URL or run `gestalt init`")
 	}
 	if strings.TrimSpace(token) == "" {
-		return nil, errors.New("gestalt credentials are required; set GESTALT_API_KEY or run `gestalt auth login`")
+		loginSupported, authErr := clientLoginSupported(baseURL)
+		if authErr != nil {
+			return nil, authErr
+		}
+		if loginSupported {
+			return nil, errors.New("gestalt credentials are required; set GESTALT_API_KEY or run `gestalt auth login`")
+		}
 	}
 	return &managedSecretClient{
 		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		Token:   strings.TrimSpace(token),
-		Out:     out,
 	}, nil
 }
 
@@ -606,15 +623,13 @@ func printSimpleUsage(w io.Writer, usage string) {
 	writeUsageLine(w, "  "+usage)
 }
 
-// promptManagedSecretValue reads a hidden value when stdin is a terminal.
-// When stdin is not a terminal, readManagedSecretValue already consumes piped
-// stdin directly, so this path is only reached interactively.
-func promptManagedSecretValue(label string) (string, error) {
+// readManagedSecretPassword reads a hidden value from a terminal.
+func readManagedSecretPassword(label string) (string, error) {
 	fmt.Fprint(os.Stderr, label)
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	if err != nil && line == "" {
+	value, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
 		return "", err
 	}
-	fmt.Fprintln(os.Stderr)
-	return strings.TrimSuffix(line, "\n"), nil
+	return string(value), nil
 }

@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +33,27 @@ func TestRunSecretsUsage(t *testing.T) {
 	for _, want := range []string{"create", "rotate", "list", "describe", "audit", "preflight", "retire", "GESTALT_URL"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("secrets usage does not contain %q:\n%s", want, output.String())
+		}
+	}
+}
+
+func TestRunSecretsHelpDoesNotRequireConfiguration(t *testing.T) {
+	t.Setenv("GESTALT_URL", "")
+	t.Setenv("GESTALT_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	for _, args := range [][]string{
+		{"--help"},
+		{"create", "--help"},
+		{"rotate", "--help"},
+		{"list", "--help"},
+		{"describe", "--help"},
+		{"audit", "--help"},
+		{"preflight", "--help"},
+		{"retire", "--help"},
+	} {
+		if err := runSecrets(args); err != nil && !errors.Is(err, flag.ErrHelp) {
+			t.Fatalf("runSecrets(%v) error = %v, want help", args, err)
 		}
 	}
 }
@@ -74,7 +97,6 @@ func TestManagedSecretClientRequestsAndResponses(t *testing.T) {
 			encoded, _ := json.Marshal(payload)
 			return textResponse(http.StatusOK, string(encoded)), nil
 		})},
-		Out: io.Discard,
 	}
 
 	var summaries []managedSecretSummary
@@ -126,6 +148,13 @@ func TestManagedSecretClientReturnsAPIError(t *testing.T) {
 func TestRunManagedSecretWriteValidation(t *testing.T) {
 	t.Parallel()
 
+	// No client is constructed, so local argument validation cannot depend
+	// on credentials, configuration, or network reachability.
+	clientOnce := func() (*managedSecretClient, error) {
+		t.Fatal("client should not be constructed during local validation")
+		return nil, nil
+	}
+
 	tests := []struct {
 		name string
 		args []string
@@ -138,11 +167,27 @@ func TestRunManagedSecretWriteValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := runManagedSecretWrite(tt.args, "create")
+			err := runManagedSecretWrite(tt.args, "create", clientOnce)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("runManagedSecretWrite() error = %v, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestRunManagedSecretWriteReadsPipedStdin(t *testing.T) {
+	t.Parallel()
+
+	restoreStdin(t, "piped-value")
+	client := managedSecretWriteRecorder()
+	err := runManagedSecretWrite([]string{"demo-secret", "--reason", "test"}, "create", func() (*managedSecretClient, error) {
+		return client.managedSecretClient, nil
+	})
+	if err != nil {
+		t.Fatalf("runManagedSecretWrite() error = %v", err)
+	}
+	if client.body["value"] != "piped-value" {
+		t.Fatalf("request value = %#v, want piped stdin bytes", client.body["value"])
 	}
 }
 
@@ -160,41 +205,54 @@ func TestValidateManagedSecretValue(t *testing.T) {
 	}
 }
 
-func TestRunManagedSecretWriteUsesFileAndSendsRequest(t *testing.T) {
+func TestRunManagedSecretWriteUsesFile(t *testing.T) {
 	t.Parallel()
 
 	valuePath := filepath.Join(t.TempDir(), "value.txt")
 	if err := os.WriteFile(valuePath, []byte("file-value"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	client := managedSecretWriteRecorder()
+	err := runManagedSecretWrite(
+		[]string{"demo-secret", "--reason", "test", "--owner-app", "demo", "--file", valuePath},
+		"create",
+		func() (*managedSecretClient, error) { return client.managedSecretClient, nil },
+	)
+	if err != nil {
+		t.Fatalf("runManagedSecretWrite() error = %v", err)
+	}
+	if client.body["value"] != "file-value" || client.body["source"] != "gestaltd-cli" || client.body["operation"] != "create" {
+		t.Fatalf("request body = %#v", client.body)
+	}
+}
 
-	var body map[string]any
-	client := &managedSecretClient{
+type managedSecretWriteRecorderClient struct {
+	*managedSecretClient
+	body map[string]any
+}
+
+func managedSecretWriteRecorder() *managedSecretWriteRecorderClient {
+	recorder := &managedSecretWriteRecorderClient{body: map[string]any{}}
+	recorder.managedSecretClient = &managedSecretClient{
 		BaseURL: "https://gestalt.example",
 		Token:   "test-token",
 		HTTPClient: &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			if r.URL.Path != managedSecretsAdminPath {
 				return textResponse(http.StatusNotFound, "{}"), nil
 			}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			if err := json.NewDecoder(r.Body).Decode(&recorder.body); err != nil {
 				return textResponse(http.StatusBadRequest, `{"error":"invalid body"}`), nil
 			}
-			payload := managedSecretWriteResponse{
-				Secret:          managedSecretSummary{Name: "demo-secret", OwnerApp: "demo", Scope: "app"},
-				Version:         managedSecretVersionSummary{Version: 1, CreatedAt: "2026-01-01T00:00:00Z"},
-				RolloutRequired: false,
-			}
-			encoded, _ := json.Marshal(payload)
+			encoded, _ := json.Marshal(managedSecretWriteResponse{
+				Secret: managedSecretSummary{Name: "demo-secret", OwnerApp: "demo", Scope: "app"},
+				Version: managedSecretVersionSummary{
+					Version: 1, CreatedAt: "2026-01-01T00:00:00Z",
+				},
+			})
 			return textResponse(http.StatusOK, string(encoded)), nil
 		})},
-		Out: io.Discard,
 	}
-	if err := runManagedSecretWriteWithClient(client, []string{"demo-secret", "--reason", "test", "--owner-app", "demo", "--file", valuePath}, "create"); err != nil {
-		t.Fatalf("runManagedSecretWriteWithClient() error = %v", err)
-	}
-	if body["value"] != "file-value" || body["source"] != "gestaltd-cli" || body["operation"] != "create" {
-		t.Fatalf("request body = %#v", body)
-	}
+	return recorder
 }
 
 func TestRunManagedSecretPreflightFailsNonZero(t *testing.T) {
@@ -202,34 +260,18 @@ func TestRunManagedSecretPreflightFailsNonZero(t *testing.T) {
 
 	// The public wrapper reads references from stdin. Replace stdin with a
 	// minimal valid references document so the test reaches the API client.
-	original := os.Stdin
-	temp, err := os.CreateTemp(t.TempDir(), "references-*.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := temp.WriteString(`[]`); err != nil {
-		t.Fatal(err)
-	}
-	if err := temp.Close(); err != nil {
-		t.Fatal(err)
-	}
-	replacement, err := os.Open(temp.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdin = replacement
-	defer func() { _ = replacement.Close(); os.Stdin = original }()
+	restoreStdin(t, `[]`)
+	var err error
 
 	client := &managedSecretClient{
 		BaseURL: "https://gestalt.example",
 		Token:   "test-token",
-		HTTPClient: &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		HTTPClient: &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 			encoded, _ := json.Marshal(managedSecretPreflightResponse{Missing: []managedSecretReference{{Name: "missing-secret"}}})
 			return textResponse(http.StatusOK, string(encoded)), nil
 		})},
-		Out: io.Discard,
 	}
-	err = runManagedSecretPreflightWithClient(client, []string{})
+	err = runManagedSecretPreflight([]string{}, func() (*managedSecretClient, error) { return client, nil })
 	var exitErr exitCodeError
 	if !errors.As(err, &exitErr) || exitErr.code != 1 {
 		t.Fatalf("preflight error = %#v, want exit code 1", err)
@@ -241,13 +283,57 @@ func TestNewManagedSecretClientRequiresURLAndToken(t *testing.T) {
 	t.Setenv("GESTALT_API_KEY", "")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	if _, err := newManagedSecretClient(io.Discard); err == nil || !strings.Contains(err.Error(), "URL is required") {
+	if _, err := newManagedSecretClient(); err == nil || !strings.Contains(err.Error(), "URL is required") {
 		t.Fatalf("newManagedSecretClient() error = %v, want URL error", err)
 	}
 	t.Setenv("GESTALT_URL", "https://gestalt.example")
-	if _, err := newManagedSecretClient(io.Discard); err == nil || !strings.Contains(err.Error(), "credentials are required") {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"loginSupported":true}`))
+	}))
+	defer server.Close()
+	t.Setenv("GESTALT_URL", server.URL)
+	if _, err := newManagedSecretClient(); err == nil || !strings.Contains(err.Error(), "credentials are required") {
 		t.Fatalf("newManagedSecretClient() error = %v, want credentials error", err)
 	}
+}
+
+func TestNewManagedSecretClientAllowsAuthDisabledServerWithoutToken(t *testing.T) {
+	t.Setenv("GESTALT_URL", "")
+	t.Setenv("GESTALT_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"loginSupported":false}`))
+	}))
+	defer server.Close()
+	t.Setenv("GESTALT_URL", server.URL)
+
+	client, err := newManagedSecretClient()
+	if err != nil {
+		t.Fatalf("newManagedSecretClient() error = %v", err)
+	}
+	if client.Token != "" {
+		t.Fatalf("client token = %q, want empty", client.Token)
+	}
+}
+
+// restoreStdin replaces os.Stdin for a test and restores it afterward.
+func restoreStdin(t *testing.T, input string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "stdin")
+	if err := os.WriteFile(path, []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := os.Stdin
+	os.Stdin = replacement
+	t.Cleanup(func() {
+		_ = replacement.Close()
+		os.Stdin = original
+	})
 }
 
 func textResponse(status int, body string) *http.Response {
