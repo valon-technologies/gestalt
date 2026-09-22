@@ -223,24 +223,6 @@ func (s *ManagedSecretService) ListVersions(ctx context.Context, name string) ([
 	return out, nil
 }
 
-func (s *ManagedSecretService) findAuditByRequestID(ctx context.Context, name, requestID string) *ManagedSecretAuditLog {
-	if requestID == "" {
-		return nil
-	}
-	recs, err := s.db.ObjectStore(StoreManagedSecretAuditLogs).
-		Index("by_name_request").
-		GetAll(ctx, idb.Only([]any{name, requestID}))
-	if err != nil {
-		return nil
-	}
-	for _, rec := range recs {
-		if row := recordToManagedSecretAuditLog(rec); row != nil && row.Name == name && row.RequestID == requestID && row.Result == "success" {
-			return row
-		}
-	}
-	return nil
-}
-
 func (s *ManagedSecretService) ListAudit(ctx context.Context, name string, limit int) ([]*ManagedSecretAuditLog, error) {
 	if s == nil {
 		return nil, fmt.Errorf("managed secrets service is not configured")
