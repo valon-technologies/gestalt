@@ -53,6 +53,7 @@ type adminManagedSecretAuditRow struct {
 
 type adminManagedSecretWriteRequest struct {
 	Name           string `json:"name"`
+	Operation      string `json:"operation"`
 	OwnerApp       string `json:"ownerApp"`
 	Scope          string `json:"scope"`
 	Description    string `json:"description"`
@@ -197,7 +198,6 @@ func (s *Server) listAdminManagedSecretAudit(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) writeAdminManagedSecret(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimSpace(r.URL.Query().Get("name"))
 	service := s.managedSecretService()
 	cipher := s.managedSecretCipher
 	if service == nil || cipher == nil {
@@ -208,11 +208,14 @@ func (s *Server) writeAdminManagedSecret(w http.ResponseWriter, r *http.Request)
 	if err := decodeManagedSecretRequest(w, r, &req); err != nil {
 		return
 	}
-	if bodyName := strings.TrimSpace(req.Name); bodyName != "" {
-		name = bodyName
-	}
+	name := strings.TrimSpace(req.Name)
 	if err := coredata.ValidateSecretName(name); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	operation := coredata.ManagedSecretOperation(strings.TrimSpace(req.Operation))
+	if operation != coredata.ManagedSecretCreate && operation != coredata.ManagedSecretRotate {
+		writeError(w, http.StatusBadRequest, "operation must be create or rotate")
 		return
 	}
 	actor, ok := s.managedSecretActor(w, r)
@@ -223,8 +226,25 @@ func (s *Server) writeAdminManagedSecret(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "reason is required")
 		return
 	}
-	if strings.TrimSpace(req.OwnerApp) == "" && coredata.NormalizeSecretScope(req.Scope) == "app" {
-		writeError(w, http.StatusBadRequest, "ownerApp is required for app-scoped secrets")
+
+	// Fetch existing metadata before generating a value. Generate must happen
+	// before the transactional Put, and idempotent retries need the original
+	// generated value only if the platform later chooses to store it securely.
+	existing, getErr := service.Get(r.Context(), name)
+	if getErr != nil && !errors.Is(getErr, coredata.ErrSecretNotFound) {
+		writeError(w, http.StatusInternalServerError, "failed to load managed secret")
+		return
+	}
+	if existing == nil && operation == coredata.ManagedSecretRotate {
+		writeError(w, http.StatusNotFound, "managed secret not found")
+		return
+	}
+	if existing != nil && operation == coredata.ManagedSecretCreate {
+		writeError(w, http.StatusConflict, "managed secret already exists")
+		return
+	}
+	if existing != nil && existing.RetiredAt != nil {
+		writeError(w, http.StatusBadRequest, "cannot write retired secret")
 		return
 	}
 
@@ -258,6 +278,7 @@ func (s *Server) writeAdminManagedSecret(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	secret, version, err := service.Put(r.Context(), coredata.PutSecretInput{
+		Operation:     operation,
 		Name:          name,
 		OwnerApp:      req.OwnerApp,
 		Scope:         req.Scope,
@@ -271,6 +292,14 @@ func (s *Server) writeAdminManagedSecret(w http.ResponseWriter, r *http.Request)
 		Ciphertext:    encrypted.Ciphertext,
 	})
 	if err != nil {
+		if errors.Is(err, coredata.ErrSecretExists) {
+			writeError(w, http.StatusConflict, "managed secret already exists")
+			return
+		}
+		if errors.Is(err, coredata.ErrSecretNotFound) {
+			writeError(w, http.StatusNotFound, "managed secret not found")
+			return
+		}
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -351,7 +380,17 @@ func (s *Server) adminManagedSecretPreflight(w http.ResponseWriter, r *http.Requ
 			continue
 		}
 		referenced[name] = struct{}{}
-		if _, ok := existingNames[name]; !ok {
+		secret, ok := existingNames[name]
+		if !ok {
+			missing = append(missing, ref)
+			continue
+		}
+		// Only the relational secrets provider participates in this store.
+		if provider := strings.TrimSpace(ref.Provider); provider != "" && provider != "secrets" {
+			missing = append(missing, ref)
+			continue
+		}
+		if app := strings.TrimSpace(ref.App); app != "" && secret.Scope == "app" && secret.OwnerApp != app {
 			missing = append(missing, ref)
 		}
 	}

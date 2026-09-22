@@ -10,8 +10,8 @@ const MANAGED_SECRET_MAX_BYTES: usize = 64 * 1024;
 
 pub fn dispatch(client: &ApiClient, command: SecretsCommands, format: Format) -> Result<()> {
     match command {
-        SecretsCommands::Create(args) => create_or_rotate(client, args, format),
-        SecretsCommands::Rotate(args) => create_or_rotate(client, args, format),
+        SecretsCommands::Create(args) => create_or_rotate(client, "create", args, format),
+        SecretsCommands::Rotate(args) => create_or_rotate(client, "rotate", args, format),
         SecretsCommands::List { owner_app } => list(client, owner_app.as_deref(), format),
         SecretsCommands::Describe { name } => describe(client, &name, format),
         SecretsCommands::Preflight => preflight(client, format),
@@ -21,6 +21,7 @@ pub fn dispatch(client: &ApiClient, command: SecretsCommands, format: Format) ->
 
 fn create_or_rotate(
     client: &ApiClient,
+    operation: &str,
     args: ManagedSecretWriteArgs,
     format: Format,
 ) -> Result<()> {
@@ -28,8 +29,9 @@ fn create_or_rotate(
     let generate = args.generate;
     let mut body = serde_json::json!({
         "name": args.name,
+        "operation": operation,
         "ownerApp": args.owner_app.unwrap_or_default(),
-        "scope": args.scope.unwrap_or_else(|| "app".to_string()),
+        "scope": args.scope.unwrap_or_default(),
         "description": args.description.unwrap_or_default(),
         "reason": args.reason,
         "source": "cli",
@@ -84,32 +86,36 @@ fn list(client: &ApiClient, owner_app: Option<&str>, format: Format) -> Result<(
     let response = client
         .get(MANAGED_SECRETS_PATH)
         .context("failed to list managed secrets")?;
-    if format == Format::Json {
-        output::print_json(&response);
-        return Ok(());
-    }
-    let Some(rows) = response.as_array() else {
+    let Some(all_rows) = response.as_array() else {
         bail!("managed secret list response was not an array");
     };
-    let headers = ["Name", "Owner app", "Scope", "Version", "Updated"];
-    let mut table = Vec::new();
-    for row in rows {
-        if let Some(owner) = owner_app
-            && row.get("ownerApp").and_then(|v| v.as_str()) != Some(owner)
-        {
-            continue;
-        }
-        table.push(vec![
-            text(row, "name"),
-            text(row, "ownerApp"),
-            text(row, "scope"),
-            row.get("currentVersion")
-                .and_then(|v| v.as_i64())
-                .map(|v| v.to_string())
-                .unwrap_or_else(|| "-".to_string()),
-            text(row, "updatedAt"),
-        ]);
+    let rows: Vec<&serde_json::Value> = all_rows
+        .iter()
+        .filter(|row| {
+            owner_app
+                .is_none_or(|owner| row.get("ownerApp").and_then(|v| v.as_str()) == Some(owner))
+        })
+        .collect();
+    if format == Format::Json {
+        output::print_json(&rows);
+        return Ok(());
     }
+    let headers = ["Name", "Owner app", "Scope", "Version", "Updated"];
+    let table = rows
+        .iter()
+        .map(|row| {
+            vec![
+                text(row, "name"),
+                text(row, "ownerApp"),
+                text(row, "scope"),
+                row.get("currentVersion")
+                    .and_then(|v| v.as_i64())
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "-".to_string()),
+                text(row, "updatedAt"),
+            ]
+        })
+        .collect::<Vec<_>>();
     output::print_table(&headers, &table);
     Ok(())
 }

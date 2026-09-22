@@ -6,7 +6,9 @@ import (
 	"strings"
 )
 
-// ManagedSecretCipher encrypts application secret values. The interface keeps
+// ManagedSecretCipher encrypts application secret values. Deployment wiring
+// owns this implementation because KMS credentials and key selection are
+// environment-specific. The interface keeps
 // the HTTP/admin layer independent of Cloud KMS while preserving the exact
 // contract used by the relationaldb runtime provider: ciphertext is bound to
 // the logical secret name with additional authenticated data.

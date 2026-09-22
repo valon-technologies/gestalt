@@ -366,6 +366,7 @@ var ManagedSecretAuditLogsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_name_created", KeyPath: []string{"name", "created_at"}},
 		{Name: "by_name_action", KeyPath: []string{"name", "action"}},
+		{Name: "by_name_request", KeyPath: []string{"name", "request_id"}, Unique: true},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},

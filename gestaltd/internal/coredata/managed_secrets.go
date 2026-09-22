@@ -17,6 +17,8 @@ import (
 )
 
 var (
+	// ErrSecretExists is returned when Create targets an existing logical secret.
+	ErrSecretExists = errors.New("managed secret already exists")
 	// ErrSecretNotFound distinguishes a missing managed secret from datastore
 	// failures. It is deliberately separate from core.ErrNotFound because the
 	// secret store may be configured while a particular logical name is absent.
@@ -77,6 +79,13 @@ type ManagedSecretAuditLog struct {
 // ManagedSecretService is the authoritative metadata and current-pointer store
 // for database-backed application secrets. It deliberately does not know how to
 // encrypt values; an admin service encrypts and passes ciphertext in.
+//
+// Deployment boundary: the runtime relationaldb provider in
+// gestalt-providers resolves application secret references. This management
+// service stores the same KMS-encrypted ciphertext and immutable versions, but
+// gestaltd itself intentionally does not decrypt application secret values. If
+// runtime resolution is later brought in-process, CurrentCiphertext is the
+// narrow boundary intended for that adapter.
 type ManagedSecretService struct {
 	db indexeddb.IndexedDB
 }
@@ -214,6 +223,24 @@ func (s *ManagedSecretService) ListVersions(ctx context.Context, name string) ([
 	return out, nil
 }
 
+func (s *ManagedSecretService) findAuditByRequestID(ctx context.Context, name, requestID string) *ManagedSecretAuditLog {
+	if requestID == "" {
+		return nil
+	}
+	recs, err := s.db.ObjectStore(StoreManagedSecretAuditLogs).
+		Index("by_name_request").
+		GetAll(ctx, idb.Only([]any{name, requestID}))
+	if err != nil {
+		return nil
+	}
+	for _, rec := range recs {
+		if row := recordToManagedSecretAuditLog(rec); row != nil && row.Name == name && row.RequestID == requestID && row.Result == "success" {
+			return row
+		}
+	}
+	return nil
+}
+
 func (s *ManagedSecretService) ListAudit(ctx context.Context, name string, limit int) ([]*ManagedSecretAuditLog, error) {
 	if s == nil {
 		return nil, fmt.Errorf("managed secrets service is not configured")
@@ -221,22 +248,30 @@ func (s *ManagedSecretService) ListAudit(ctx context.Context, name string, limit
 	if err := ValidateSecretName(name); err != nil {
 		return nil, err
 	}
+	if _, err := s.Get(ctx, name); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 50
 	}
+	// Secret names are valid UTF-8 and cannot contain U+FFFF, so this is a
+	// bounded prefix scan rather than a global lower-bound scan.
 	recs, err := s.db.ObjectStore(StoreManagedSecretAuditLogs).
 		Index("by_name_created").
-		GetAll(ctx, idb.LowerBound([]any{name}, false))
+		GetAll(ctx, idb.Bound([]any{name}, []any{name, "\uffff"}, false, false))
 	if err != nil {
 		if errors.Is(err, idb.ErrNotFound) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("list managed secret audit logs: %w", err)
 	}
-	out := make([]*ManagedSecretAuditLog, 0, len(recs))
+	out := make([]*ManagedSecretAuditLog, 0, min(len(recs), limit))
 	for _, rec := range recs {
 		if row := recordToManagedSecretAuditLog(rec); row != nil && row.Name == name {
 			out = append(out, row)
+			if len(out) == limit {
+				break
+			}
 		}
 	}
 	if len(out) > limit {
@@ -245,7 +280,15 @@ func (s *ManagedSecretService) ListAudit(ctx context.Context, name string, limit
 	return out, nil
 }
 
+type ManagedSecretOperation string
+
+const (
+	ManagedSecretCreate ManagedSecretOperation = "create"
+	ManagedSecretRotate ManagedSecretOperation = "rotate"
+)
+
 type PutSecretInput struct {
+	Operation     ManagedSecretOperation
 	Name          string
 	OwnerApp      string
 	Scope         string
@@ -277,12 +320,8 @@ func (s *ManagedSecretService) Put(ctx context.Context, input PutSecretInput) (*
 	if len(input.Ciphertext) > 2*1024*1024 {
 		return nil, nil, fmt.Errorf("ciphertext exceeds the 2 MiB management limit")
 	}
-	scope := NormalizeSecretScope(input.Scope)
-	if scope == "" {
-		return nil, nil, fmt.Errorf("scope must be app or shared")
-	}
-	if scope == "app" && strings.TrimSpace(input.OwnerApp) == "" {
-		return nil, nil, fmt.Errorf("ownerApp is required for app-scoped secrets")
+	if input.Operation != ManagedSecretCreate && input.Operation != ManagedSecretRotate {
+		return nil, nil, fmt.Errorf("operation must be create or rotate")
 	}
 	if strings.TrimSpace(input.Actor) == "" {
 		return nil, nil, fmt.Errorf("actor is required")
@@ -319,13 +358,65 @@ func (s *ManagedSecretService) Put(ctx context.Context, input PutSecretInput) (*
 		return nil, nil, fmt.Errorf("managed secret write: load current: %w", err)
 	}
 	current := recordToManagedSecret(currentRec)
+	if current == nil && input.Operation == ManagedSecretRotate {
+		return nil, nil, fmt.Errorf("%w: %q", ErrSecretNotFound, input.Name)
+	}
+	if current != nil && input.Operation == ManagedSecretCreate {
+		return nil, nil, fmt.Errorf("%w: %q", ErrSecretExists, input.Name)
+	}
+
+	ownerApp := strings.TrimSpace(input.OwnerApp)
+	scope := NormalizeSecretScope(input.Scope)
+	description := strings.TrimSpace(input.Description)
+	if current != nil {
+		ownerApp = current.OwnerApp
+		scope = current.Scope
+		description = current.Description
+	}
+	if scope == "" {
+		return nil, nil, fmt.Errorf("scope must be app or shared")
+	}
+	if scope == "app" && ownerApp == "" {
+		return nil, nil, fmt.Errorf("ownerApp is required for app-scoped secrets")
+	}
+
+	requestID := strings.TrimSpace(input.RequestID)
+	if requestID != "" {
+		// Idempotency is enforced within the same write transaction. A retried
+		// automation request returns the prior successful audit record instead of
+		// allocating another version.
+		rec, err := audit.Index("by_name_request").Get(ctx, []any{input.Name, requestID})
+		if err == nil {
+			if row := recordToManagedSecretAuditLog(rec); row != nil && row.Result == "success" {
+				if err := tx.Commit(ctx); err != nil {
+					return nil, nil, fmt.Errorf("managed secret write: commit idempotent: %w", err)
+				}
+				committed = true
+				existing, getErr := s.Get(context.WithoutCancel(ctx), input.Name)
+				if getErr != nil {
+					return nil, nil, getErr
+				}
+				return existing, &ManagedSecretVersion{
+					Name:             row.Name,
+					Version:          row.Version,
+					State:            "active",
+					CreatedAt:        row.CreatedAt,
+					CreatedBy:        row.Actor,
+					Reason:           row.Reason,
+					Description:      existing.Description,
+					KMSKey:           row.KMSKey,
+					CiphertextSHA256: row.CipherHash,
+				}, nil
+			}
+		} else if !errors.Is(err, idb.ErrNotFound) {
+			return nil, nil, fmt.Errorf("managed secret write: idempotency check: %w", err)
+		}
+	}
+
 	nextVersion := int64(1)
 	if current != nil {
 		if current.RetiredAt != nil {
 			return nil, nil, fmt.Errorf("cannot write retired secret %q", input.Name)
-		}
-		if current.OwnerApp != strings.TrimSpace(input.OwnerApp) {
-			return nil, nil, fmt.Errorf("ownerApp cannot change after creation")
 		}
 		nextVersion = current.CurrentVer + 1
 	}
@@ -338,7 +429,7 @@ func (s *ManagedSecretService) Put(ctx context.Context, input PutSecretInput) (*
 		CreatedAt:        now,
 		CreatedBy:        strings.TrimSpace(input.Actor),
 		Reason:           strings.TrimSpace(input.Reason),
-		Description:      strings.TrimSpace(input.Description),
+		Description:      description,
 		KMSKey:           strings.TrimSpace(input.KMSKey),
 		KMSKeyVersion:    strings.TrimSpace(input.KMSKeyVersion),
 		CiphertextSHA256: cipherHash,
@@ -349,9 +440,9 @@ func (s *ManagedSecretService) Put(ctx context.Context, input PutSecretInput) (*
 
 	secret := &ManagedSecret{
 		Name:        input.Name,
-		OwnerApp:    strings.TrimSpace(input.OwnerApp),
+		OwnerApp:    ownerApp,
 		Scope:       scope,
-		Description: strings.TrimSpace(input.Description),
+		Description: description,
 		CurrentVer:  nextVersion,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -370,20 +461,16 @@ func (s *ManagedSecretService) Put(ctx context.Context, input PutSecretInput) (*
 	if err != nil {
 		return nil, nil, err
 	}
-	action := "create"
-	if nextVersion > 1 {
-		action = "rotate"
-	}
 	logRow := &ManagedSecretAuditLog{
 		ID:         auditID,
 		Name:       input.Name,
-		Action:     action,
+		Action:     string(input.Operation),
 		Version:    nextVersion,
 		OwnerApp:   secret.OwnerApp,
 		Actor:      strings.TrimSpace(input.Actor),
 		Reason:     strings.TrimSpace(input.Reason),
 		Source:     strings.TrimSpace(input.Source),
-		RequestID:  strings.TrimSpace(input.RequestID),
+		RequestID:  requestID,
 		KMSKey:     version.KMSKey,
 		CipherHash: cipherHash,
 		CreatedAt:  now,
@@ -401,7 +488,7 @@ func (s *ManagedSecretService) Put(ctx context.Context, input PutSecretInput) (*
 }
 
 func (s *ManagedSecretService) Retire(ctx context.Context, name, actor, reason string, now time.Time) (*ManagedSecret, error) {
-	if s == nil {
+	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("managed secrets service is not configured")
 	}
 	if err := ValidateSecretName(name); err != nil {
@@ -413,20 +500,101 @@ func (s *ManagedSecretService) Retire(ctx context.Context, name, actor, reason s
 	if now.IsZero() {
 		now = time.Now().UTC().Truncate(time.Millisecond)
 	}
-	current, err := s.Get(ctx, name)
+
+	tx, err := s.db.Transaction(ctx, []string{
+		StoreManagedSecrets,
+		StoreManagedSecretAuditLogs,
+	}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("retire managed secret: begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+
+	secrets := tx.ObjectStore(StoreManagedSecrets)
+	currentRec, err := secrets.Get(ctx, name)
+	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return nil, ErrSecretNotFound
+		}
+		return nil, fmt.Errorf("retire managed secret: load current: %w", err)
+	}
+	current := recordToManagedSecret(currentRec)
+	if current == nil {
+		return nil, ErrSecretNotFound
 	}
 	if current.RetiredAt != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("retire managed secret: commit already retired: %w", err)
+		}
+		committed = true
 		return current, nil
 	}
+
 	retired := *current
 	retired.RetiredAt = &now
 	retired.RetiredReason = strings.TrimSpace(reason)
-	if err := s.db.ObjectStore(StoreManagedSecrets).Put(ctx, managedSecretRecord(&retired)); err != nil {
-		return nil, fmt.Errorf("retire managed secret: %w", err)
+	retired.UpdatedAt = now
+	retired.UpdatedBy = strings.TrimSpace(actor)
+	if err := secrets.Put(ctx, managedSecretRecord(&retired)); err != nil {
+		return nil, fmt.Errorf("retire managed secret: write: %w", err)
 	}
+
+	auditID, err := NewSecretAuditID()
+	if err != nil {
+		return nil, err
+	}
+	logRow := &ManagedSecretAuditLog{
+		ID:        auditID,
+		Name:      name,
+		Action:    "retire",
+		Version:   retired.CurrentVer,
+		OwnerApp:  retired.OwnerApp,
+		Actor:     strings.TrimSpace(actor),
+		Reason:    strings.TrimSpace(reason),
+		Source:    "api",
+		CreatedAt: now,
+		Result:    "success",
+	}
+	if err := tx.ObjectStore(StoreManagedSecretAuditLogs).Put(ctx, managedSecretAuditLogRecord(logRow)); err != nil {
+		return nil, fmt.Errorf("retire managed secret: audit: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("retire managed secret: commit: %w", err)
+	}
+	committed = true
 	return &retired, nil
+}
+
+// CurrentCiphertext returns the current active version's ciphertext and KMS
+// key resource name. It deliberately does not decrypt the value; it is the only
+// supported boundary for a deployment-specific runtime resolver adapter and
+// must never be exposed through admin HTTP responses.
+func (s *ManagedSecretService) CurrentCiphertext(ctx context.Context, name string) ([]byte, string, error) {
+	if s == nil {
+		return nil, "", fmt.Errorf("managed secrets service is not configured")
+	}
+	secret, err := s.Get(ctx, name)
+	if err != nil {
+		return nil, "", err
+	}
+	if secret.RetiredAt != nil {
+		return nil, "", fmt.Errorf("secret %q is retired", name)
+	}
+	id := fmt.Sprintf("%s:%09d", name, secret.CurrentVer)
+	rec, err := s.db.ObjectStore(StoreManagedSecretVersions).Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return nil, "", ErrSecretNotFound
+		}
+		return nil, "", fmt.Errorf("get managed secret ciphertext: %w", err)
+	}
+	return recBytes(rec, "ciphertext"), recString(rec, "kms_key"), nil
 }
 
 func managedSecretRecord(secret *ManagedSecret) idb.Record {
@@ -451,9 +619,17 @@ func recordToManagedSecret(rec idb.Record) *ManagedSecret {
 		return nil
 	}
 	var retired *time.Time
-	if value, ok := rec["retired_at"].(time.Time); ok && !value.IsZero() {
-		copied := value
-		retired = &copied
+	switch value := rec["retired_at"].(type) {
+	case time.Time:
+		if !value.IsZero() {
+			copied := value
+			retired = &copied
+		}
+	case *time.Time:
+		if value != nil && !value.IsZero() {
+			copied := *value
+			retired = &copied
+		}
 	}
 	return &ManagedSecret{
 		Name:          recString(rec, "name"),

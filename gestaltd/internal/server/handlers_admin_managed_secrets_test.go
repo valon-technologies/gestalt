@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,6 +35,7 @@ func TestAdminManagedSecretRoutes(t *testing.T) {
 
 		create := postManagedSecret(t, ts.URL, map[string]any{
 			"name":        "ai-spend-tracker-claude-limit-key",
+			"operation":   "create",
 			"ownerApp":    "ai-spend-tracker",
 			"scope":       "app",
 			"description": "Claude spend limit key",
@@ -51,12 +53,14 @@ func TestAdminManagedSecretRoutes(t *testing.T) {
 
 		rotate := postManagedSecret(t, ts.URL, map[string]any{
 			"name":      "ai-spend-tracker-claude-limit-key",
-			"ownerApp":  "ai-spend-tracker",
-			"scope":     "app",
+			"operation": "rotate",
 			"reason":    "Quarterly rotation",
 			"requestId": "rotate-1",
 			"value":     "second-value",
 		})
+		if rotate.Secret.Description != "Claude spend limit key" || rotate.Secret.OwnerApp != "ai-spend-tracker" || rotate.Secret.Scope != "app" {
+			t.Fatalf("rotate metadata = %+v", rotate.Secret)
+		}
 		if rotate.Version.Version != 2 || !rotate.RolloutRequired {
 			t.Fatalf("rotate response = %+v", rotate)
 		}
@@ -102,10 +106,11 @@ func TestAdminManagedSecretRoutes(t *testing.T) {
 		t.Parallel()
 		generate := true
 		created := postManagedSecret(t, ts.URL, map[string]any{
-			"name":     "roadmap-pipeline-secret",
-			"ownerApp": "roadmap",
-			"reason":   "New signing key",
-			"generate": &generate,
+			"name":      "roadmap-pipeline-secret",
+			"operation": "create",
+			"ownerApp":  "roadmap",
+			"reason":    "New signing key",
+			"generate":  &generate,
 		})
 		if created.Version.Version != 1 || created.GeneratedValue == "" {
 			t.Fatalf("generated response = %+v", created)
@@ -137,15 +142,17 @@ func TestAdminManagedSecretRoutes(t *testing.T) {
 	t.Run("rejects invalid name and missing reason", func(t *testing.T) {
 		t.Parallel()
 		status, body := postRaw(t, ts.URL+"/admin/api/v1/managed-secrets", map[string]any{
-			"name":  "Bad_Name",
-			"value": "x",
+			"name":      "Bad_Name",
+			"operation": "create",
+			"value":     "x",
 		})
 		if status != http.StatusBadRequest {
 			t.Fatalf("invalid name status = %d body %s", status, body)
 		}
 		status, body = postRaw(t, ts.URL+"/admin/api/v1/managed-secrets", map[string]any{
-			"name":  "good-name",
-			"value": "x",
+			"name":      "good-name",
+			"operation": "create",
+			"value":     "x",
 		})
 		if status != http.StatusBadRequest || !strings.Contains(body, "reason") {
 			t.Fatalf("missing reason status = %d body %s", status, body)
@@ -258,4 +265,91 @@ func postRaw(t *testing.T, url string, body any) (int, string) {
 		t.Fatalf("read response: %v", err)
 	}
 	return resp.StatusCode, buf.String()
+}
+
+func TestAdminManagedSecretOperationContracts(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
+	cipher := server.NewStaticManagedSecretCipher("projects/test/locations/us-east1/keyRings/gestalt-runtime/cryptoKeys/runtime-secrets", "1", func(_ context.Context, name string, plaintext []byte) ([]byte, error) {
+		return []byte(fmt.Sprintf("cipher(%s:%s)", name, plaintext)), nil
+	})
+	ts := managedSecretTestServer(t, cipher, now)
+	testutil.CloseOnCleanup(t, ts)
+
+	created := postManagedSecret(t, ts.URL, map[string]any{
+		"name":      "contract-secret",
+		"operation": "create",
+		"ownerApp":  "ai-spend-tracker",
+		"scope":     "app",
+		"reason":    "initial",
+		"requestId": "request-1",
+		"value":     "one",
+	})
+	if created.Version.Version != 1 || created.GeneratedValue != "" {
+		t.Fatalf("created = %+v", created)
+	}
+
+	status, body := postRaw(t, ts.URL+"/admin/api/v1/managed-secrets", map[string]any{
+		"name":      "contract-secret",
+		"operation": "create",
+		"reason":    "duplicate",
+		"value":     "two",
+	})
+	if status != http.StatusConflict {
+		t.Fatalf("duplicate create status = %d body %s", status, body)
+	}
+
+	status, body = postRaw(t, ts.URL+"/admin/api/v1/managed-secrets", map[string]any{
+		"name":      "missing-secret",
+		"operation": "rotate",
+		"reason":    "missing",
+		"value":     "x",
+	})
+	if status != http.StatusNotFound {
+		t.Fatalf("rotate missing status = %d body %s", status, body)
+	}
+
+	rotated := postManagedSecret(t, ts.URL, map[string]any{
+		"name":      "contract-secret",
+		"operation": "rotate",
+		"reason":    "idempotent rotation",
+		"requestId": "request-1",
+		"value":     "ignored",
+	})
+	if rotated.Version.Version != 1 || rotated.RolloutRequired {
+		t.Fatalf("idempotent rotate = %+v", rotated)
+	}
+
+	retired := postRetireSecret(t, ts.URL, "contract-secret", "No longer used")
+	if retired.RetiredAt == nil || retired.UpdatedBy != "managed-secret-user" {
+		t.Fatalf("retired = %+v", retired)
+	}
+	var audit []server.ManagedSecretAuditRowAlias
+	getJSON(t, ts.URL+"/admin/api/v1/managed-secrets/contract-secret/audit?limit=10", &audit)
+	actions := map[string]int{}
+	for _, row := range audit {
+		actions[row.Action]++
+	}
+	if actions["create"] != 1 || actions["rotate"] != 0 || actions["retire"] != 1 {
+		t.Fatalf("audit actions = %+v rows %+v", actions, audit)
+	}
+
+	status, body = getRaw(t, ts.URL+"/admin/api/v1/managed-secrets/missing-secret/audit?limit=10")
+	if status != http.StatusNotFound {
+		t.Fatalf("missing audit status = %d body %s", status, body)
+	}
+}
+
+func getRaw(t *testing.T, url string) (int, string) {
+	t.Helper()
+	resp, err := managedSecretHTTPClient().Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	buf, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, string(buf)
 }
