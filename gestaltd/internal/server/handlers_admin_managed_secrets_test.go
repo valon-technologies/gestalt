@@ -80,9 +80,16 @@ func TestAdminManagedSecretRoutes(t *testing.T) {
 		}
 
 		var audit []server.ManagedSecretAuditRowAlias
-		getJSON(t, ts.URL+"/admin/api/v1/managed-secrets/ai-spend-tracker-claude-limit-key/audit?limit=1", &audit)
-		if len(audit) != 1 || audit[0].Action != "rotate" {
+		getJSON(t, ts.URL+"/admin/api/v1/managed-secrets/ai-spend-tracker-claude-limit-key/audit?limit=2", &audit)
+		if len(audit) != 2 {
 			t.Fatalf("audit = %+v", audit)
+		}
+		actions := map[string]bool{}
+		for _, row := range audit {
+			actions[row.Action] = true
+		}
+		if !actions["create"] || !actions["rotate"] {
+			t.Fatalf("audit actions = %+v", audit)
 		}
 
 		retired := postRetireSecret(t, ts.URL, "ai-spend-tracker-claude-limit-key", "No longer used")
@@ -189,7 +196,7 @@ func getJSON(t *testing.T, url string, target any) {
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET %s status = %d", url, resp.StatusCode)
 	}
@@ -245,7 +252,7 @@ func postRaw(t *testing.T, url string, body any) (int, string) {
 	if err != nil {
 		t.Fatalf("POST %s: %v", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	buf := new(bytes.Buffer)
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
 		t.Fatalf("read response: %v", err)
