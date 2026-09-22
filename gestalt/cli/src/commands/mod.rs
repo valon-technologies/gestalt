@@ -12,7 +12,6 @@ pub mod config;
 pub mod describe;
 pub mod init;
 pub mod invoke;
-pub mod secrets;
 pub mod tokens;
 mod workflow_target;
 pub mod workflows;

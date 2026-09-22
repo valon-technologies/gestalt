@@ -75,6 +75,8 @@ func run(args []string, version string) error {
 			return flag.ErrHelp
 		case "provider":
 			return runProvider(args[1:])
+		case "secrets":
+			return runSecrets(args[1:])
 		case "app":
 			return runApp(args[1:], version)
 		case "agent":
@@ -568,6 +570,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd app <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
+	writeUsageLine(w, "  gestaltd secrets <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
@@ -576,6 +579,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  lock        Resolve provider metadata and write lock state")
 	writeUsageLine(w, "  sync        Materialize prepared artifacts from lock state")
 	writeUsageLine(w, "  provider    Develop, validate, or build provider release archives")
+	writeUsageLine(w, "  secrets     Manage application secrets without exposing stored values")
 	writeUsageLine(w, "  dev         Start the server with remote URL and token resolved from gestalt CLI config")
 	writeUsageLine(w, "  serve       Start the server (use --locked --no-sync for production)")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")

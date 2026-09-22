@@ -1,6 +1,5 @@
 use clap::{Args, Parser, Subcommand};
 
-use crate::commands::secrets::SecretsCommands;
 use crate::output::Format;
 use crate::params;
 
@@ -61,12 +60,6 @@ pub enum Commands {
     #[command(hide = true)]
     /// Execute an app operation
     Invoke(InvokeArgs),
-
-    /// Manage application secrets without exposing stored values
-    Secrets {
-        #[command(subcommand)]
-        command: SecretsCommands,
-    },
 
     /// Manage workflow resources
     #[command(alias = "workflows")]
