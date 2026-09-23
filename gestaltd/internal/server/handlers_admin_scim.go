@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
@@ -190,7 +189,7 @@ func adminSCIMClientFromCore(client *coredata.SCIMClientRecord) adminSCIMClient 
 	}
 	out := adminSCIMClient{
 		ID:                       client.ID,
-		Credentials:              make([]adminSCIMCredential, 0, len(client.Credentials)),
+		Credentials:              make([]adminSCIMCredential, 0, len(client.CredentialIDs)),
 		AuthoritativeUserDomains: client.AuthoritativeUserDomains,
 		ActiveUserRelationships:  make([]adminSCIMProjection, 0, len(client.ActiveUserRelationships)),
 		Enabled:                  client.Enabled,
@@ -200,12 +199,12 @@ func adminSCIMClientFromCore(client *coredata.SCIMClientRecord) adminSCIMClient 
 		UpdatedAt:                formatAdminTime(client.UpdatedAt),
 		UpdatedBy:                client.UpdatedBy,
 	}
-	for _, credential := range client.Credentials {
-		out.Credentials = append(out.Credentials, adminSCIMCredential{ID: credential.ID})
+	for _, credentialID := range client.CredentialIDs {
+		out.Credentials = append(out.Credentials, adminSCIMCredential{ID: credentialID})
 	}
 	for _, projection := range client.ActiveUserRelationships {
 		out.ActiveUserRelationships = append(out.ActiveUserRelationships, adminSCIMProjection{
-			Relation: projection.Relation, ResourceType: projection.Resource.Type, ResourceID: projection.Resource.ID,
+			Relation: projection.Relation, ResourceType: projection.ResourceType, ResourceID: projection.ResourceID,
 		})
 	}
 	return out
@@ -253,14 +252,14 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 		} else if prior == nil {
 			return nil, nil, fmt.Errorf("credential token is required")
 		}
-		record.Credentials = append(record.Credentials, config.SCIMCredentialConfig{ID: credentialID})
+		record.CredentialIDs = append(record.CredentialIDs, credentialID)
 	}
 	for _, rawDomain := range request.AuthoritativeUserDomains {
 		domain := strings.ToLower(strings.TrimSpace(rawDomain))
 		if domain == "" || domain != rawDomain || strings.Contains(domain, "@") {
 			return nil, nil, fmt.Errorf("authoritativeUserDomains must be normalized domains")
 		}
-		record.SCIMClientConfig.AuthoritativeUserDomains = append(record.SCIMClientConfig.AuthoritativeUserDomains, domain)
+		record.AuthoritativeUserDomains = append(record.AuthoritativeUserDomains, domain)
 	}
 	seenProjections := map[string]struct{}{}
 	for _, projection := range request.ActiveUserRelationships {
@@ -275,9 +274,10 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 			return nil, nil, fmt.Errorf("activeUserRelationships contains a duplicate projection")
 		}
 		seenProjections[key] = struct{}{}
-		record.ActiveUserRelationships = append(record.ActiveUserRelationships, config.SCIMRelationshipConfig{
-			Relation: relation,
-			Resource: config.AuthorizationResourceDef{Type: resourceType, ID: resourceID},
+		record.ActiveUserRelationships = append(record.ActiveUserRelationships, coredata.SCIMRelationshipData{
+			Relation:     relation,
+			ResourceType: resourceType,
+			ResourceID:   resourceID,
 		})
 	}
 	return record, tokens, nil

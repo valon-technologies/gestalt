@@ -2,7 +2,6 @@ package coredata
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -11,7 +10,6 @@ import (
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 var (
@@ -24,7 +22,7 @@ var (
 // Bearer tokens are deliberately absent: encrypted credentials live in
 // scim_secret, keyed by client and credential ID.
 type SCIMClientRecord struct {
-	config.SCIMClientConfig
+	SCIMClientData
 	ID        string
 	Enabled   bool
 	Retained  bool
@@ -32,6 +30,21 @@ type SCIMClientRecord struct {
 	UpdatedAt time.Time
 	UpdatedBy string
 	Revision  int64
+}
+
+// SCIMClientData is the non-secret client configuration shared by config.yaml
+// and runtime storage. It is deliberately independent of internal/config so
+// internal packages can use it without importing service-layer packages.
+type SCIMClientData struct {
+	AuthoritativeUserDomains []string
+	ActiveUserRelationships  []SCIMRelationshipData
+	CredentialIDs            []string
+}
+
+type SCIMRelationshipData struct {
+	Relation     string
+	ResourceType string
+	ResourceID   string
 }
 
 // SCIMClientSecret is one encrypted bearer credential. Ciphertext is opaque to
@@ -94,22 +107,6 @@ func (s *SCIMConfigService) Get(ctx context.Context, clientID string) (*SCIMClie
 		return nil, ErrSCIMConfigNotFound
 	}
 	return client, nil
-}
-
-// Config returns enabled runtime clients without credential tokens. Callers
-// that need to build a live SCIM service should use ResolveConfig.
-func (s *SCIMConfigService) Config(ctx context.Context) (config.ServerSCIMConfig, bool, error) {
-	clients, err := s.List(ctx)
-	if err != nil {
-		return config.ServerSCIMConfig{}, false, err
-	}
-	out := config.ServerSCIMConfig{Clients: make(map[string]config.SCIMClientConfig, len(clients))}
-	for _, client := range clients {
-		if client.Enabled {
-			out.Clients[client.ID] = client.SCIMClientConfig
-		}
-	}
-	return out, len(clients) > 0, nil
 }
 
 type PutSCIMClientInput struct {
@@ -178,7 +175,8 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMClientInput) (
 	}
 
 	seenSecretIDs := map[string]struct{}{}
-	for _, secret := range input.Secrets {
+	for i := range input.Secrets {
+		secret := &input.Secrets[i]
 		if strings.TrimSpace(secret.ClientID) != client.ID {
 			return nil, fmt.Errorf("SCIM secret client id must match the client")
 		}
@@ -196,7 +194,7 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMClientInput) (
 		secret.Revision = client.Revision
 		secret.UpdatedAt = now
 		secret.UpdatedBy = strings.TrimSpace(input.Actor)
-		if err := secrets.Put(ctx, scimSecretRecord(secret)); err != nil {
+		if err := secrets.Put(ctx, scimSecretRecord(*secret)); err != nil {
 			return nil, fmt.Errorf("SCIM secret write: %w", err)
 		}
 	}
@@ -279,65 +277,31 @@ func (s *SCIMConfigService) Secrets(ctx context.Context, clientID string) ([]SCI
 	return out, nil
 }
 
-// ResolveConfig decrypts credentials through the supplied callback and returns
-// the fully populated SCIM config. Plaintext never leaves this function's
-// caller through storage APIs.
-func (s *SCIMConfigService) ResolveConfig(ctx context.Context, decrypt func(SCIMClientSecret) (string, error)) (config.ServerSCIMConfig, bool, error) {
-	clients, err := s.List(ctx)
-	if err != nil {
-		return config.ServerSCIMConfig{}, false, err
+func scimClientRecord(client SCIMClientRecord) idb.Record {
+	return idb.Record{
+		"id":                       client.ID,
+		"client_id":                client.ID,
+		"authoritativeUserDomains": client.AuthoritativeUserDomains,
+		"activeUserRelationships":  scimRelationshipRecords(client.ActiveUserRelationships),
+		"enabled":                  client.Enabled,
+		"retained":                 client.Retained,
+		"created_at":               client.CreatedAt,
+		"updated_at":               client.UpdatedAt,
+		"updated_by":               client.UpdatedBy,
+		"revision":                 client.Revision,
 	}
-	out := config.ServerSCIMConfig{Clients: make(map[string]config.SCIMClientConfig, len(clients))}
-	for _, client := range clients {
-		if !client.Enabled {
-			continue
-		}
-		secrets, err := s.Secrets(ctx, client.ID)
-		if err != nil {
-			return config.ServerSCIMConfig{}, false, err
-		}
-		populated := client.SCIMClientConfig
-		populated.Credentials = make([]config.SCIMCredentialConfig, 0, len(secrets))
-		for _, secret := range secrets {
-			plaintext, err := decrypt(secret)
-			if err != nil {
-				return config.ServerSCIMConfig{}, false, fmt.Errorf("decrypt SCIM credential %s/%s: %w", client.ID, secret.CredentialID, err)
-			}
-			if strings.TrimSpace(plaintext) == "" {
-				return config.ServerSCIMConfig{}, false, fmt.Errorf("SCIM credential %s/%s decrypted to an empty token", client.ID, secret.CredentialID)
-			}
-			populated.Credentials = append(populated.Credentials, config.SCIMCredentialConfig{
-				ID: secret.CredentialID, BearerToken: plaintext,
-			})
-		}
-		if len(populated.Credentials) == 0 {
-			return config.ServerSCIMConfig{}, false, fmt.Errorf("enabled SCIM client %s has no credentials", client.ID)
-		}
-		out.Clients[client.ID] = populated
-	}
-	return out, len(clients) > 0, nil
 }
 
-func scimClientRecord(client SCIMClientRecord) idb.Record {
-	// Strip credential labels and tokens from the embedded config. Credential
-	// metadata is reconstructed from scim_secret for the admin response.
-	sanitized := client.SCIMClientConfig
-	sanitized.Credentials = nil
-	configJSON, err := json.Marshal(sanitized)
-	if err != nil {
-		panic(fmt.Sprintf("marshal SCIM client config: %v", err))
+func scimRelationshipRecords(rels []SCIMRelationshipData) []map[string]string {
+	out := make([]map[string]string, len(rels))
+	for i, rel := range rels {
+		out[i] = map[string]string{
+			"relation":     rel.Relation,
+			"resourceType": rel.ResourceType,
+			"resourceID":   rel.ResourceID,
+		}
 	}
-	return idb.Record{
-		"id":          client.ID,
-		"client_id":   client.ID,
-		"config_json": string(configJSON),
-		"enabled":     client.Enabled,
-		"retained":    client.Retained,
-		"created_at":  client.CreatedAt,
-		"updated_at":  client.UpdatedAt,
-		"updated_by":  client.UpdatedBy,
-		"revision":    client.Revision,
-	}
+	return out
 }
 
 func recordToSCIMClient(rec idb.Record) *SCIMClientRecord {
@@ -356,11 +320,17 @@ func recordToSCIMClient(rec idb.Record) *SCIMClientRecord {
 	if client.ID == "" {
 		return nil
 	}
-	if raw := recJSON(rec, "config_json"); len(raw) > 0 {
-		if err := json.Unmarshal(raw, &client.SCIMClientConfig); err != nil {
-			return nil
+	client.AuthoritativeUserDomains = recStrings(rec, "authoritativeUserDomains")
+	for _, item := range recAnySlice(rec, "activeUserRelationships") {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
 		}
-		client.SCIMClientConfig.Credentials = nil
+		client.ActiveUserRelationships = append(client.ActiveUserRelationships, SCIMRelationshipData{
+			Relation:     strings.TrimSpace(recString(m, "relation")),
+			ResourceType: strings.TrimSpace(recString(m, "resourceType")),
+			ResourceID:   strings.TrimSpace(recString(m, "resourceID")),
+		})
 	}
 	return client
 }

@@ -2753,7 +2753,7 @@ func loadSCIMRuntimeConfiguration(ctx context.Context, svc *coredata.Services, c
 	if svc == nil || svc.SCIMConfig == nil || encryptor == nil {
 		return cfg.Server.SCIM, scimConfigSourceConfig, nil
 	}
-	runtimeCfg, hasRuntimeClients, err := svc.SCIMConfig.ResolveConfig(ctx, decryptSCIMCredential(encryptor))
+	runtimeCfg, hasRuntimeClients, err := scim.ResolveRuntimeConfig(ctx, svc.SCIMConfig, decryptSCIMCredential(encryptor))
 	if err != nil {
 		return config.ServerSCIMConfig{}, "", err
 	}

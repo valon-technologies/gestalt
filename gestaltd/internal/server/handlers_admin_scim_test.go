@@ -60,7 +60,7 @@ func newSCIMAdminTestServer(t *testing.T) (*httptest.Server, *coredata.Services,
 	return ts, svc, runtime
 }
 
-func doSCIMAdmin(t *testing.T, method, url, body string) (*http.Response, string) {
+func doSCIMAdmin(t *testing.T, method, url, body string) (int, string) {
 	t.Helper()
 	var reader io.Reader
 	if body != "" {
@@ -76,18 +76,25 @@ func doSCIMAdmin(t *testing.T, method, url, body string) (*http.Response, string
 	if err != nil {
 		t.Fatalf("do: %v", err)
 	}
-	defer resp.Body.Close()
-	payload, _ := io.ReadAll(resp.Body)
-	return resp, string(payload)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close response: %v", err)
+		}
+	}()
+	payload, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		t.Fatalf("read response: %v", readErr)
+	}
+	return resp.StatusCode, string(payload)
 }
 
 func TestAdminSCIMConfigSourceFallback(t *testing.T) {
 	t.Parallel()
 	ts, svc, _ := newSCIMAdminTestServer(t)
 	_, _ = ts, svc
-	resp, body := doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d: %s", resp.StatusCode, body)
+	status, body := doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d: %s", status, body)
 	}
 }
 
@@ -95,16 +102,16 @@ func TestAdminSCIMClientCRUDAndHotReload(t *testing.T) {
 	t.Parallel()
 	ts, svc, runtime := newSCIMAdminTestServer(t)
 	create := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"}],"authoritativeUserDomains":["valon.com"],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
-	resp, body := doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("create status = %d: %s", resp.StatusCode, body)
+	status, body := doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
+	if status != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", status, body)
 	}
 	if strings.Contains(body, "token-one") {
 		t.Fatalf("token leaked in response: %s", body)
 	}
 	saved, err := svc.SCIMConfig.Get(context.Background(), "rippling")
-	if err != nil || len(saved.Credentials) != 0 {
-		t.Fatalf("saved client unexpectedly retained plaintext credential metadata: saved = %#v, err = %v", saved, err)
+	if err != nil || len(saved.CredentialIDs) != 0 {
+		t.Fatalf("saved client unexpectedly retained credential metadata: saved = %#v, err = %v", saved, err)
 	}
 	secrets, secretErr := svc.SCIMConfig.Secrets(context.Background(), "rippling")
 	if secretErr != nil || len(secrets) != 1 || secrets[0].CredentialID != "current" || len(secrets[0].Ciphertext) == 0 {
@@ -120,9 +127,9 @@ func TestAdminSCIMClientCRUDAndHotReload(t *testing.T) {
 		t.Fatal("new token is not active")
 	}
 	patch := `{"credentials":[{"id":"current","token":"token-two"}],"authoritativeUserDomains":["valon.com"],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true,"revision":1}`
-	resp, body = doSCIMAdmin(t, http.MethodPatch, ts.URL+"/admin/api/v1/scim/clients/rippling", patch)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("patch status = %d: %s", resp.StatusCode, body)
+	status, body = doSCIMAdmin(t, http.MethodPatch, ts.URL+"/admin/api/v1/scim/clients/rippling", patch)
+	if status != http.StatusOK {
+		t.Fatalf("patch status = %d: %s", status, body)
 	}
 	if _, ok := runtime.Service().ClientForToken("token-one"); ok {
 		t.Fatal("old token remains active")
@@ -130,9 +137,9 @@ func TestAdminSCIMClientCRUDAndHotReload(t *testing.T) {
 	if _, ok := runtime.Service().ClientForToken("token-two"); !ok {
 		t.Fatal("new token is not active")
 	}
-	resp, body = doSCIMAdmin(t, http.MethodDelete, ts.URL+"/admin/api/v1/scim/clients/rippling", "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("delete status = %d: %s", resp.StatusCode, body)
+	status, body = doSCIMAdmin(t, http.MethodDelete, ts.URL+"/admin/api/v1/scim/clients/rippling", "")
+	if status != http.StatusOK {
+		t.Fatalf("delete status = %d: %s", status, body)
 	}
 	if _, ok := runtime.Service().ClientForToken("token-two"); ok {
 		t.Fatal("disabled client token remains active")
@@ -146,19 +153,19 @@ func TestAdminSCIMValidationAndConflict(t *testing.T) {
 	t.Parallel()
 	ts, _, _ := newSCIMAdminTestServer(t)
 	create := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"}],"authoritativeUserDomains":["valon.com"],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
-	resp, body := doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("create status = %d: %s", resp.StatusCode, body)
+	status, body := doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
+	if status != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", status, body)
 	}
 	bad := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"}],"authoritativeUserDomains":["valon.com"],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true,"revision":99}`
-	resp, body = doSCIMAdmin(t, http.MethodPatch, ts.URL+"/admin/api/v1/scim/clients/rippling", bad)
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("conflict status = %d: %s", resp.StatusCode, body)
+	status, body = doSCIMAdmin(t, http.MethodPatch, ts.URL+"/admin/api/v1/scim/clients/rippling", bad)
+	if status != http.StatusConflict {
+		t.Fatalf("conflict status = %d: %s", status, body)
 	}
 	badCreate := `{"id":"rippling","credentials":[{"id":"current","token":"token-two"}],"authoritativeUserDomains":["valon.com"],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
-	resp, body = doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", badCreate)
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("duplicate status = %d: %s", resp.StatusCode, body)
+	status, body = doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", badCreate)
+	if status != http.StatusConflict {
+		t.Fatalf("duplicate status = %d: %s", status, body)
 	}
 }
 
@@ -167,9 +174,9 @@ func TestAdminSCIMListsFallbackSourceAndCredentialIDs(t *testing.T) {
 	ts, svc, _ := newSCIMAdminTestServer(t)
 	_ = svc
 
-	resp, body := doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("fallback list status = %d: %s", resp.StatusCode, body)
+	status, body := doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
+	if status != http.StatusOK {
+		t.Fatalf("fallback list status = %d: %s", status, body)
 	}
 	var payload struct {
 		Clients []struct {
@@ -191,13 +198,13 @@ func TestAdminSCIMListsFallbackSourceAndCredentialIDs(t *testing.T) {
 	}
 
 	create := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"}],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
-	resp, body = doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("create status = %d: %s", resp.StatusCode, body)
+	status, body = doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
+	if status != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", status, body)
 	}
-	resp, body = doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("runtime list status = %d: %s", resp.StatusCode, body)
+	status, body = doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
+	if status != http.StatusOK {
+		t.Fatalf("runtime list status = %d: %s", status, body)
 	}
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatalf("decode runtime list: %v", err)
@@ -214,14 +221,14 @@ func TestAdminSCIMRemovedCredentialIsRevoked(t *testing.T) {
 	t.Parallel()
 	ts, svc, runtime := newSCIMAdminTestServer(t)
 	create := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"},{"id":"next","token":"token-two"}],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
-	resp, body := doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("create status = %d: %s", resp.StatusCode, body)
+	status, body := doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
+	if status != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", status, body)
 	}
 	patch := `{"credentials":[{"id":"next"}],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true,"revision":1}`
-	resp, body = doSCIMAdmin(t, http.MethodPatch, ts.URL+"/admin/api/v1/scim/clients/rippling", patch)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("patch status = %d: %s", resp.StatusCode, body)
+	status, body = doSCIMAdmin(t, http.MethodPatch, ts.URL+"/admin/api/v1/scim/clients/rippling", patch)
+	if status != http.StatusOK {
+		t.Fatalf("patch status = %d: %s", status, body)
 	}
 	if _, ok := runtime.Service().ClientForToken("token-one"); ok {
 		t.Fatal("removed credential remains active")

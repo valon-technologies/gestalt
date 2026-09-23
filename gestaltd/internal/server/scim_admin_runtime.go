@@ -118,9 +118,9 @@ func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMClientRecord
 		if err != nil {
 			return nil, "", err
 		}
-		client.Credentials = make([]config.SCIMCredentialConfig, 0, len(secrets))
-		for _, secret := range secrets {
-			client.Credentials = append(client.Credentials, config.SCIMCredentialConfig{ID: secret.CredentialID})
+		client.CredentialIDs = make([]string, 0, len(secrets))
+		for i := range secrets {
+			client.CredentialIDs = append(client.CredentialIDs, secrets[i].CredentialID)
 		}
 	}
 	if len(runtimeClients) > 0 {
@@ -128,10 +128,15 @@ func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMClientRecord
 	}
 	fallbackClients := make([]*coredata.SCIMClientRecord, 0, len(r.fallback.Clients))
 	for clientID, client := range r.fallback.Clients {
+		data := scim.DataFromClientConfig(client)
+		data.CredentialIDs = make([]string, len(client.Credentials))
+		for i, credential := range client.Credentials {
+			data.CredentialIDs[i] = credential.ID
+		}
 		fallbackClients = append(fallbackClients, &coredata.SCIMClientRecord{
-			ID:               clientID,
-			SCIMClientConfig: client,
-			Enabled:          true,
+			SCIMClientData: data,
+			ID:             clientID,
+			Enabled:        true,
 		})
 	}
 	return fallbackClients, "config", nil
@@ -191,13 +196,13 @@ func (r *SCIMRuntime) prepareSecrets(ctx context.Context, client coredata.SCIMCl
 		return nil, err
 	}
 	existingByCredential := make(map[string]coredata.SCIMClientSecret, len(existing))
-	for _, secret := range existing {
-		existingByCredential[secret.CredentialID] = secret
+	for i := range existing {
+		existingByCredential[existing[i].CredentialID] = existing[i]
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	secrets := make([]coredata.SCIMClientSecret, 0, len(client.Credentials))
-	for _, credential := range client.Credentials {
-		credentialID := strings.TrimSpace(credential.ID)
+	secrets := make([]coredata.SCIMClientSecret, 0, len(client.CredentialIDs))
+	for _, credentialID := range client.CredentialIDs {
+		credentialID = strings.TrimSpace(credentialID)
 		if credentialID == "" {
 			return nil, fmt.Errorf("credential id is required")
 		}
@@ -242,25 +247,23 @@ func (r *SCIMRuntime) Disable(ctx context.Context, clientID, actor string, revis
 }
 
 func (r *SCIMRuntime) validateLocked(ctx context.Context, client coredata.SCIMClientRecord, secrets []coredata.SCIMClientSecret) error {
-	cfg, _, err := r.services.SCIMConfig.Config(ctx)
+	cfg, _, err := scim.PostWriteConfig(ctx, r.services.SCIMConfig, client.ID, &client)
 	if err != nil {
 		return err
 	}
 	if cfg.Clients == nil {
 		cfg.Clients = map[string]config.SCIMClientConfig{}
 	}
-	candidate := client.SCIMClientConfig
+	candidate := scim.ClientConfigFromData(client.SCIMClientData)
 	candidate.Credentials = make([]config.SCIMCredentialConfig, 0, len(secrets))
-	for _, secret := range secrets {
-		candidate.Credentials = append(candidate.Credentials, config.SCIMCredentialConfig{ID: secret.CredentialID})
+	for i := range secrets {
+		candidate.Credentials = append(candidate.Credentials, config.SCIMCredentialConfig{ID: secrets[i].CredentialID})
 	}
-	delete(cfg.Clients, client.ID)
-	cfg.Clients[client.ID] = candidate
 	return config.ValidateRuntimeSCIMConfig(ctx, cfg, r.authz)
 }
 
 func (r *SCIMRuntime) publishLocked(ctx context.Context) error {
-	cfg, hasRuntimeClients, err := r.services.SCIMConfig.ResolveConfig(ctx, func(secret coredata.SCIMClientSecret) (string, error) {
+	cfg, hasRuntimeClients, err := scim.ResolveRuntimeConfig(ctx, r.services.SCIMConfig, func(secret coredata.SCIMClientSecret) (string, error) {
 		return r.decrypt(string(secret.Ciphertext))
 	})
 	if err != nil {
@@ -329,8 +332,8 @@ func (r *SCIMRuntime) storeFingerprint(ctx context.Context) ([32]byte, error) {
 		if err != nil {
 			return [32]byte{}, err
 		}
-		for _, secret := range secrets {
-			_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%d", client.ID, secret.CredentialID, secret.Revision)
+		for i := range secrets {
+			_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%d", client.ID, secrets[i].CredentialID, secrets[i].Revision)
 		}
 	}
 	var out [32]byte
