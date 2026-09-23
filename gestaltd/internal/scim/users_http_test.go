@@ -459,7 +459,7 @@ func TestSCIMProjectionFailureLeavesLiveStateForClientRetry(t *testing.T) {
 		t.Fatalf("FindUserByEmail: %v", err)
 	}
 	request := accessRequest(coreUser.ID)
-	if response, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), request); err != nil || response.Allowed {
+	if response, err := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}})).CheckAccess(context.Background(), request); err != nil || response.Allowed {
 		t.Fatalf("provider gap access = %#v, %v", response, err)
 	}
 
@@ -469,7 +469,7 @@ func TestSCIMProjectionFailureLeavesLiveStateForClientRetry(t *testing.T) {
 	if current.Code != http.StatusOK || list.TotalResults != 1 || list.Resources[0].Active {
 		t.Fatalf("post-failure live User representation = %d %#v", current.Code, list)
 	}
-	if response, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), request); err != nil || response.Allowed {
+	if response, err := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}})).CheckAccess(context.Background(), request); err != nil || response.Allowed {
 		t.Fatalf("access remains denied until client retry = %#v, %v", response, err)
 	}
 	if relationship := authorization.relationshipForUser(coreUser.ID); relationship != nil {
@@ -494,7 +494,7 @@ func TestSCIMCreateActiveSemantics(t *testing.T) {
 		"rippling": ripplingClient([]string{"valon.com"}, employeeProjection()),
 	})
 	service, services, handler := newSCIMService(t, nil, authorization, cfg)
-	authorizationGate := scim.WrapAuthorization(authorization, services.Users, service)
+	authorizationGate := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}))
 	omittedResponse := scimRequest(t, handler, http.MethodPost, "/scim/v2/Users", testCurrentToken, map[string]any{
 		"schemas": []string{scim.UserSchemaURN}, "userName": "omitted-active@valon.com",
 	})
@@ -548,7 +548,7 @@ func TestSCIMClientNamespacesDoNotShareEligibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response, err := scim.WrapAuthorization(authorization, services.Users, service).CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || !response.Allowed {
+	if response, err := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}})).CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || !response.Allowed {
 		t.Fatalf("authoritative client projection was affected by other namespace = %#v, %v", response, err)
 	}
 }
@@ -682,7 +682,7 @@ func TestSCIMAuthoritativeDomainGateFollowsCoreEmail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}))
 	if response, err := gate.CheckAccess(context.Background(), accessRequest(coreUser.ID)); err != nil || !response.Allowed {
 		t.Fatalf("active changed-domain access = %#v, %v", response, err)
 	}
@@ -712,7 +712,7 @@ func TestSCIMExternalAuthorizationWritesUpdateSCIMMetadata(t *testing.T) {
 	}
 	projectedCfg := testSCIMConfig(map[string]config.SCIMClientConfig{"rippling": ripplingClient(nil, employeeProjection())})
 	service, _, handler := newSCIMService(t, db, authorization, projectedCfg)
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}))
 	tuple := projectedRelationship(coreUser.ID, proto.SourceLayer_SOURCE_LAYER_RUNTIME).Tuple
 	before := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+user.ID, testCurrentToken, nil))
 	if before.Active {
@@ -758,7 +758,7 @@ func TestSCIMExternalNestedDeleteUpdatesAffectedUserMetadata(t *testing.T) {
 	if len(before.Groups) != 2 {
 		t.Fatalf("nested groups before external delete = %#v", before.Groups)
 	}
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}))
 	nested := &proto.RelationshipTuple{
 		Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &proto.SubjectSet{Resource: &proto.Resource{Type: "group", Id: child.ID}, Relation: "member"}}},
 		Relation: "member", Resource: &proto.Resource{Type: "group", Id: parent.ID},
@@ -812,7 +812,7 @@ func TestSCIMUserIfMatchIgnoresAuthorizationTouch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}))
 	authorization.setOnList(func() {
 		_, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: projectedRelationship(coreUser.ID, proto.SourceLayer_SOURCE_LAYER_RUNTIME)})
 		if err != nil {
@@ -854,7 +854,7 @@ func TestSCIMGroupIfMatchIgnoresAuthorizationTouch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}))
 	tuple := &proto.RelationshipTuple{
 		Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreUser.ID}}},
 		Relation: "member", Resource: &proto.Resource{Type: "group", Id: group.ID},
@@ -1166,7 +1166,7 @@ func TestSCIMAuthorizationBoundary(t *testing.T) {
 		accessRequest(exempt.ID),
 		{Subject: &proto.Subject{Type: "subject", Id: "service-account:sync"}, Action: &proto.Action{Name: "read"}, Resource: &proto.Resource{Type: "app", Id: "docs"}},
 	}
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}))
 	want := []bool{true, false, false, true, true}
 	for i, request := range requests {
 		response, err := gate.CheckAccess(context.Background(), request)
@@ -1230,7 +1230,7 @@ func TestSCIMAuthorizationGateAppliesAtInvocationBroker(t *testing.T) {
 		testutil.NewProviderRegistry(t, provider),
 		services.Users,
 		services.ExternalCredentials,
-		invocation.WithAuthorizationProvider(scim.WrapAuthorization(authorization, services.Users, service)),
+		invocation.WithAuthorizationProvider(scim.WrapAuthorization(authorization, services.Users, scim.NewRuntime(service, config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}))),
 		invocation.WithProviderKinds(map[string]invocation.ProviderKind{"docs": invocation.ProviderKindApp}),
 	)
 	identity := &principal.Principal{

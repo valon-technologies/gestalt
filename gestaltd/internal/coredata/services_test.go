@@ -282,8 +282,8 @@ func TestNew(t *testing.T) {
 			t.Fatalf("coredata.NewWithOptions: %v", err)
 		}
 		contexts := db.createdStoreContexts()
-		if len(contexts) != 12 {
-			t.Fatalf("CreateObjectStore calls = %d, want 12", len(contexts))
+		if len(contexts) != 13 {
+			t.Fatalf("CreateObjectStore calls = %d, want 13", len(contexts))
 		}
 		for _, store := range []string{
 			coredata.StoreAppAutoDeploySettings,
@@ -294,6 +294,7 @@ func TestNew(t *testing.T) {
 			coredata.StoreAppAllowedOperations,
 			coredata.StoreSCIMResources,
 			coredata.StoreSCIMConfig,
+			coredata.StoreSCIMSecrets,
 			coredata.StoreGroups,
 			coredata.StoreManagedSecrets,
 			coredata.StoreManagedSecretVersions,

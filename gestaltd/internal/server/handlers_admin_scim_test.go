@@ -53,6 +53,8 @@ func newSCIMAdminTestServer(t *testing.T) (*httptest.Server, *coredata.Services,
 		cfg.Admin = server.AdminRouteConfig{AuthorizationPolicy: "gestalt", AuthorizationAction: "admin"}
 		cfg.SCIMRuntime = runtime
 		cfg.SCIMConfigFallback = config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}
+		cfg.StateSecret = []byte("0123456789abcdef0123456789abcdef")
+		cfg.SCIMRuntimeWritesEnabled = true
 	})
 	return ts, svc, runtime
 }
@@ -100,8 +102,15 @@ func TestAdminSCIMClientCRUDAndHotReload(t *testing.T) {
 		t.Fatalf("token leaked in response: %s", body)
 	}
 	saved, err := svc.SCIMConfig.Get(context.Background(), "rippling")
-	if err != nil || len(saved.Credentials) != 1 || saved.Credentials[0].BearerToken != "token-one" {
-		t.Fatalf("saved = %#v, err = %v", saved, err)
+	if err != nil || len(saved.Credentials) != 0 {
+		t.Fatalf("saved client unexpectedly retained plaintext credential metadata: saved = %#v, err = %v", saved, err)
+	}
+	secrets, secretErr := svc.SCIMConfig.Secrets(context.Background(), "rippling")
+	if secretErr != nil || len(secrets) != 1 || secrets[0].CredentialID != "current" || len(secrets[0].Ciphertext) == 0 {
+		t.Fatalf("secrets = %#v, err = %v", secrets, secretErr)
+	}
+	if strings.Contains(string(secrets[0].Ciphertext), "token-one") {
+		t.Fatal("SCIM credential ciphertext contains plaintext")
 	}
 	if runtime.Service() == nil || !runtime.Service().Enabled() {
 		t.Fatal("runtime service was not enabled after create")

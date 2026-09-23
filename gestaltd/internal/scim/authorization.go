@@ -15,14 +15,14 @@ import (
 type authorizationGate struct {
 	underlying core.AuthorizationProvider
 	users      *coredata.UserService
-	scim       *Service
+	scim       *Runtime
 }
 
-func WrapAuthorization(underlying core.AuthorizationProvider, users *coredata.UserService, service *Service) core.AuthorizationProvider {
-	if underlying == nil || !service.Enabled() {
+func WrapAuthorization(underlying core.AuthorizationProvider, users *coredata.UserService, runtime *Runtime) core.AuthorizationProvider {
+	if underlying == nil || runtime == nil || !runtime.Enabled() {
 		return underlying
 	}
-	return &authorizationGate{underlying: underlying, users: users, scim: service}
+	return &authorizationGate{underlying: underlying, users: users, scim: runtime}
 }
 
 func (g *authorizationGate) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -94,9 +94,6 @@ func (g *authorizationGate) requestEligible(ctx context.Context, req *proto.Chec
 	if err != nil {
 		return false, err
 	}
-	if g.scim != nil && g.scim.compact != nil {
-		return g.scim.compact.IsEligible(ctx, user.ID, user.Email)
-	}
 	return g.scim.IsEligible(ctx, user.ID, user.Email)
 }
 
@@ -106,6 +103,10 @@ func (g *authorizationGate) ListRelationships(ctx context.Context, req *proto.Li
 
 func (g *authorizationGate) WriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) (*proto.WriteRelationshipsResponse, error) {
 	if req == nil {
+		return g.underlying.WriteRelationships(ctx, req)
+	}
+	service := g.scim.Service()
+	if service == nil || service.compact == nil {
 		return g.underlying.WriteRelationships(ctx, req)
 	}
 	affected := map[string]map[string]struct{}{}
@@ -118,7 +119,7 @@ func (g *authorizationGate) WriteRelationships(ctx context.Context, req *proto.W
 		affectsRuntime := relationship.GetSourceLayer() == proto.SourceLayer_SOURCE_LAYER_RUNTIME
 		if update.Operation == proto.RelationshipUpdate_OPERATION_DELETE && relationship.GetSourceLayer() == proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED {
 			var err error
-			affectsRuntime, err = g.scim.compact.relationshipPresent(ctx, relationship.GetTuple())
+			affectsRuntime, err = service.compact.relationshipPresent(ctx, relationship.GetTuple())
 			if err != nil {
 				return nil, err
 			}
@@ -128,7 +129,7 @@ func (g *authorizationGate) WriteRelationships(ctx context.Context, req *proto.W
 		}
 		runtimeChanges[tupleKey(relationship.GetTuple())] = struct{}{}
 		if update.Operation == proto.RelationshipUpdate_OPERATION_DELETE {
-			if err := g.scim.compact.captureRelationshipAffectedUsers(ctx, relationship.GetTuple(), affected); err != nil {
+			if err := service.compact.captureRelationshipAffectedUsers(ctx, relationship.GetTuple(), affected); err != nil {
 				return nil, err
 			}
 		}
@@ -152,7 +153,7 @@ func (g *authorizationGate) WriteRelationships(ctx context.Context, req *proto.W
 			continue
 		}
 		seen[key] = struct{}{}
-		touch, err := g.scim.compact.relationshipTouchIDs(ctx, tuple)
+		touch, err := service.compact.relationshipTouchIDs(ctx, tuple)
 		if err != nil {
 			return response, err
 		}
@@ -160,10 +161,10 @@ func (g *authorizationGate) WriteRelationships(ctx context.Context, req *proto.W
 			ids[id] = struct{}{}
 		}
 	}
-	if err := g.scim.compact.collectClientCoreUserTouchIDs(ctx, affected, ids); err != nil {
+	if err := service.compact.collectClientCoreUserTouchIDs(ctx, affected, ids); err != nil {
 		return response, err
 	}
-	if err := g.scim.compact.touchRows(ctx, ids); err != nil {
+	if err := service.compact.touchRows(ctx, ids); err != nil {
 		return response, err
 	}
 	return response, nil
@@ -196,18 +197,18 @@ func (g *authorizationGate) DeleteRelationship(ctx context.Context, req *proto.D
 
 func (g *authorizationGate) SetAuthorizationState(ctx context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
 	var before []*proto.Relationship
-	if g.scim != nil && g.scim.compact != nil {
+	if service := g.scim.Service(); service != nil && service.compact != nil {
 		var err error
-		before, err = g.scim.compact.listRelationships(ctx, nil, 100)
+		before, err = service.compact.listRelationships(ctx, nil, 100)
 		if err != nil {
 			return nil, err
 		}
 	}
 	changed := changedRuntimeRelationships(before, req.GetRelationships())
 	affected := map[string]map[string]struct{}{}
-	if g.scim != nil && g.scim.compact != nil {
+	if service := g.scim.Service(); service != nil && service.compact != nil {
 		for _, relationship := range changed.removed {
-			if err := g.scim.compact.captureRelationshipAffectedUsers(ctx, relationship.GetTuple(), affected); err != nil {
+			if err := service.compact.captureRelationshipAffectedUsers(ctx, relationship.GetTuple(), affected); err != nil {
 				return nil, err
 			}
 		}
@@ -216,10 +217,10 @@ func (g *authorizationGate) SetAuthorizationState(ctx context.Context, req *prot
 	if err != nil {
 		return response, err
 	}
-	if g.scim != nil && g.scim.compact != nil {
+	if service := g.scim.Service(); service != nil && service.compact != nil {
 		ids := map[string]struct{}{}
 		for _, relationship := range changed.added {
-			touch, touchErr := g.scim.compact.relationshipTouchIDs(ctx, relationship.GetTuple())
+			touch, touchErr := service.compact.relationshipTouchIDs(ctx, relationship.GetTuple())
 			if touchErr != nil {
 				return response, touchErr
 			}
@@ -228,7 +229,7 @@ func (g *authorizationGate) SetAuthorizationState(ctx context.Context, req *prot
 			}
 		}
 		for _, relationship := range changed.removed {
-			touch, touchErr := g.scim.compact.relationshipTouchIDs(ctx, relationship.GetTuple())
+			touch, touchErr := service.compact.relationshipTouchIDs(ctx, relationship.GetTuple())
 			if touchErr != nil {
 				return response, touchErr
 			}
@@ -236,10 +237,10 @@ func (g *authorizationGate) SetAuthorizationState(ctx context.Context, req *prot
 				ids[id] = struct{}{}
 			}
 		}
-		if touchErr := g.scim.compact.collectClientCoreUserTouchIDs(ctx, affected, ids); touchErr != nil {
+		if touchErr := service.compact.collectClientCoreUserTouchIDs(ctx, affected, ids); touchErr != nil {
 			return response, touchErr
 		}
-		if touchErr := g.scim.compact.touchRows(ctx, ids); touchErr != nil {
+		if touchErr := service.compact.touchRows(ctx, ids); touchErr != nil {
 			return response, touchErr
 		}
 	}

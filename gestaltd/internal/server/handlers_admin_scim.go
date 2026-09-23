@@ -98,7 +98,7 @@ func (s *Server) createAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 	if err := decodeAdminJSONRequest(w, r, &request); err != nil {
 		return
 	}
-	record, err := adminSCIMRecordFromRequest(request, nil)
+	record, tokens, err := adminSCIMRecordFromRequest(request, nil)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -107,7 +107,7 @@ func (s *Server) createAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	saved, err := runtime.Put(r.Context(), record, actor, false, 0)
+	saved, err := runtime.Put(r.Context(), record, tokens, actor, false, 0)
 	if err != nil {
 		writeAdminSCIMError(w, err)
 		return
@@ -141,7 +141,7 @@ func (s *Server) updateAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "SCIM client not found")
 		return
 	}
-	record, err := adminSCIMRecordFromRequest(request, prior)
+	record, tokens, err := adminSCIMRecordFromRequest(request, prior)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -152,7 +152,7 @@ func (s *Server) updateAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	revision := request.Revision
-	saved, err := runtime.Put(r.Context(), record, actor, revision > 0, revision)
+	saved, err := runtime.Put(r.Context(), record, tokens, actor, revision > 0, revision)
 	if err != nil {
 		writeAdminSCIMError(w, err)
 		return
@@ -211,20 +211,20 @@ func adminSCIMClientFromCore(client *coredata.SCIMClientRecord) adminSCIMClient 
 	return out
 }
 
-func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.SCIMClientRecord) (*coredata.SCIMClientRecord, error) {
+func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.SCIMClientRecord) (*coredata.SCIMClientRecord, map[string]string, error) {
 	id := strings.TrimSpace(request.ID)
 	if id == "" && prior != nil {
 		id = prior.ID
 	}
 	if id == "" || id != strings.TrimSpace(id) {
-		return nil, fmt.Errorf("id must be non-empty and trimmed")
+		return nil, nil, fmt.Errorf("id must be non-empty and trimmed")
 	}
 	if len(request.Credentials) < 1 || len(request.Credentials) > 2 {
-		return nil, fmt.Errorf("credentials must contain one or two entries")
+		return nil, nil, fmt.Errorf("credentials must contain one or two entries")
 	}
 	record := &coredata.SCIMClientRecord{
 		ID:       id,
-		Enabled:  request.Enabled == nil || *request.Enabled,
+		Enabled:  adminSCIMEnabled(request.Enabled, prior),
 		Retained: request.Retained != nil && *request.Retained,
 	}
 	if prior != nil {
@@ -233,38 +233,32 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 	}
 	seenIDs := map[string]struct{}{}
 	seenTokens := map[string]struct{}{}
-	priorTokens := map[string]string{}
-	if prior != nil {
-		for _, credential := range prior.Credentials {
-			priorTokens[credential.ID] = credential.BearerToken
-		}
-	}
+	tokens := map[string]string{}
 	for _, credential := range request.Credentials {
 		credentialID := strings.TrimSpace(credential.ID)
 		if credentialID == "" {
-			return nil, fmt.Errorf("credential id is required")
+			return nil, nil, fmt.Errorf("credential id is required")
 		}
 		if _, duplicate := seenIDs[credentialID]; duplicate {
-			return nil, fmt.Errorf("credential id %q duplicates another credential", credentialID)
+			return nil, nil, fmt.Errorf("credential id %q duplicates another credential", credentialID)
 		}
 		seenIDs[credentialID] = struct{}{}
-		tokenRef := priorTokens[credentialID]
 		token := strings.TrimSpace(credential.Token)
 		if token != "" {
 			if _, duplicate := seenTokens[token]; duplicate {
-				return nil, fmt.Errorf("credential token duplicates another credential")
+				return nil, nil, fmt.Errorf("credential token duplicates another credential")
 			}
 			seenTokens[token] = struct{}{}
-			tokenRef = token
-		} else if tokenRef == "" {
-			return nil, fmt.Errorf("credential token is required")
+			tokens[credentialID] = token
+		} else if prior == nil {
+			return nil, nil, fmt.Errorf("credential token is required")
 		}
-		record.Credentials = append(record.Credentials, config.SCIMCredentialConfig{ID: credentialID, BearerToken: tokenRef})
+		record.Credentials = append(record.Credentials, config.SCIMCredentialConfig{ID: credentialID})
 	}
 	for _, rawDomain := range request.AuthoritativeUserDomains {
 		domain := strings.ToLower(strings.TrimSpace(rawDomain))
 		if domain == "" || domain != rawDomain || strings.Contains(domain, "@") {
-			return nil, fmt.Errorf("authoritativeUserDomains must be normalized domains")
+			return nil, nil, fmt.Errorf("authoritativeUserDomains must be normalized domains")
 		}
 		record.SCIMClientConfig.AuthoritativeUserDomains = append(record.SCIMClientConfig.AuthoritativeUserDomains, domain)
 	}
@@ -274,11 +268,11 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 		resourceType := strings.TrimSpace(projection.ResourceType)
 		resourceID := strings.TrimSpace(projection.ResourceID)
 		if relation == "" || resourceType == "" || resourceID == "" {
-			return nil, fmt.Errorf("activeUserRelationships relation, resourceType, and resourceId are required")
+			return nil, nil, fmt.Errorf("activeUserRelationships relation, resourceType, and resourceId are required")
 		}
 		key := resourceType + "\x00" + resourceID + "\x00" + relation
 		if _, duplicate := seenProjections[key]; duplicate {
-			return nil, fmt.Errorf("activeUserRelationships contains a duplicate projection")
+			return nil, nil, fmt.Errorf("activeUserRelationships contains a duplicate projection")
 		}
 		seenProjections[key] = struct{}{}
 		record.ActiveUserRelationships = append(record.ActiveUserRelationships, config.SCIMRelationshipConfig{
@@ -286,7 +280,7 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 			Resource: config.AuthorizationResourceDef{Type: resourceType, ID: resourceID},
 		})
 	}
-	return record, nil
+	return record, tokens, nil
 }
 
 func writeAdminSCIMError(w http.ResponseWriter, err error) {
@@ -302,4 +296,14 @@ func writeAdminSCIMError(w http.ResponseWriter, err error) {
 	default:
 		writeError(w, http.StatusBadRequest, err.Error())
 	}
+}
+
+func adminSCIMEnabled(requested *bool, prior *coredata.SCIMClientRecord) bool {
+	if requested != nil {
+		return *requested
+	}
+	if prior != nil {
+		return prior.Enabled
+	}
+	return true
 }

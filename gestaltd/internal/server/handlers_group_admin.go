@@ -74,12 +74,12 @@ func (s *Server) isScimManagedGroup(groupID string) bool {
 	if s == nil {
 		return false
 	}
-	if s.scimRuntime != nil {
-		_, ok := s.scimRuntime.ManagedGroupIDs()[strings.TrimSpace(groupID)]
-		return ok
-	}
-	if s.scimManagedGroupIDs == nil {
-		return false
+	// s.scimManagedGroupIDs intentionally includes platform subject-set grants
+	// in addition to SCIM projection groups. The runtime snapshot only owns
+	// SCIM projections, so it must add to—not replace—the configured set.
+	managed := s.scimRuntime.ManagedGroupIDs()
+	if _, ok := managed[strings.TrimSpace(groupID)]; ok {
+		return true
 	}
 	_, ok := s.scimManagedGroupIDs[strings.TrimSpace(groupID)]
 	return ok

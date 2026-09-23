@@ -3,7 +3,6 @@ package scim
 import (
 	"context"
 	"net/http"
-	"sync"
 	"sync/atomic"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -41,25 +40,37 @@ func (s *Service) ResolveAuthorizationResourceDisplayName(ctx context.Context, r
 	return s.compact.authorizationResourceDisplayName(ctx, resource)
 }
 
-// Runtime owns the active SCIM handler. Configuration updates replace the
-// entire snapshot atomically, so requests never observe a partial update.
+type runtimeSnapshot struct {
+	service *Service
+	handler *leanHandler
+	cfg     config.ServerSCIMConfig
+	managed map[string]struct{}
+}
+
+// Runtime owns one immutable SCIM snapshot. Consumers see the complete
+// handler, eligibility service, and managed-group set from the same snapshot,
+// eliminating partial-update windows.
 type Runtime struct {
-	inner     *Service
-	cfg       config.ServerSCIMConfig
-	handler   atomic.Pointer[leanHandler]
-	managedMu sync.RWMutex
-	managed   map[string]struct{}
+	current atomic.Pointer[runtimeSnapshot]
 }
 
 func NewRuntime(s *Service, cfg config.ServerSCIMConfig) *Runtime {
-	r := &Runtime{inner: s, cfg: cfg}
+	r := &Runtime{}
+	r.Apply(s, cfg)
+	return r
+}
+
+func newRuntimeSnapshot(s *Service, cfg config.ServerSCIMConfig) *runtimeSnapshot {
 	handler := &leanHandler{}
 	if s != nil {
 		handler = &leanHandler{s: s.compact}
 	}
-	r.handler.Store(handler)
-	r.managed = config.ManagedGroupIDs(cfg)
-	return r
+	return &runtimeSnapshot{
+		service: s,
+		handler: handler,
+		cfg:     cfg,
+		managed: config.ManagedGroupIDs(cfg),
+	}
 }
 
 func (r *Runtime) Handler() http.Handler { return r }
@@ -69,68 +80,81 @@ func (r *Runtime) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		(&leanHandler{}).ServeHTTP(w, request)
 		return
 	}
-	if handler := r.handler.Load(); handler != nil {
-		handler.ServeHTTP(w, request)
+	snapshot := r.current.Load()
+	if snapshot == nil || snapshot.handler == nil {
+		(&leanHandler{}).ServeHTTP(w, request)
 		return
 	}
-	(&leanHandler{}).ServeHTTP(w, request)
+	snapshot.handler.ServeHTTP(w, request)
 }
 
-// Apply atomically replaces the active service. A nil service disables SCIM.
+// Apply atomically publishes a complete SCIM snapshot. A nil service disables
+// authenticated SCIM requests while preserving the runtime container.
 func (r *Runtime) Apply(s *Service, cfg config.ServerSCIMConfig) {
 	if r == nil {
 		return
 	}
-	r.inner = s
-	r.cfg = cfg
-	handler := &leanHandler{}
-	if s != nil {
-		handler = &leanHandler{s: s.compact}
+	r.current.Store(newRuntimeSnapshot(s, cfg))
+}
+
+func (r *Runtime) Enabled() bool {
+	if snapshot := r.snapshot(); snapshot != nil {
+		return snapshot.service.Enabled()
 	}
-	r.handler.Store(handler)
-	managed := config.ManagedGroupIDs(cfg)
-	r.managedMu.Lock()
-	r.managed = managed
-	r.managedMu.Unlock()
+	return false
+}
+
+func (r *Runtime) snapshot() *runtimeSnapshot {
+	if r == nil {
+		return nil
+	}
+	return r.current.Load()
 }
 
 func (r *Runtime) Config() config.ServerSCIMConfig {
-	if r == nil {
-		return config.ServerSCIMConfig{}
+	if snapshot := r.snapshot(); snapshot != nil {
+		return snapshot.cfg
 	}
-	return r.cfg
+	return config.ServerSCIMConfig{}
 }
 
 func (r *Runtime) Service() *Service {
-	if r == nil {
-		return nil
+	if snapshot := r.snapshot(); snapshot != nil {
+		return snapshot.service
 	}
-	return r.inner
+	return nil
 }
 
 func (r *Runtime) ManagedGroupIDs() map[string]struct{} {
-	if r == nil {
+	if snapshot := r.snapshot(); snapshot != nil {
+		return cloneGroupIDs(snapshot.managed)
+	}
+	return nil
+}
+
+func (r *Runtime) IsEligible(ctx context.Context, coreID, email string) (bool, error) {
+	if snapshot := r.snapshot(); snapshot != nil {
+		return snapshot.service.IsEligible(ctx, coreID, email)
+	}
+	return true, nil
+}
+
+func (r *Runtime) ResolveAuthorizationResourceDisplayName(ctx context.Context, resource *proto.Resource) (string, error) {
+	if snapshot := r.snapshot(); snapshot != nil {
+		return snapshot.service.ResolveAuthorizationResourceDisplayName(ctx, resource)
+	}
+	return "", nil
+}
+
+func cloneGroupIDs(ids map[string]struct{}) map[string]struct{} {
+	if ids == nil {
 		return nil
 	}
-	r.managedMu.RLock()
-	defer r.managedMu.RUnlock()
-	if r.managed == nil {
-		return nil
-	}
-	out := make(map[string]struct{}, len(r.managed))
-	for id := range r.managed {
+	out := make(map[string]struct{}, len(ids))
+	for id := range ids {
 		out[id] = struct{}{}
 	}
 	return out
-}
-
-// ResolveAuthorizationResourceDisplayName keeps display-name resolution stable
-// across configuration updates even when the latest service has no clients.
-func (r *Runtime) ResolveAuthorizationResourceDisplayName(ctx context.Context, resource *proto.Resource) (string, error) {
-	if r == nil || r.inner == nil {
-		return "", nil
-	}
-	return r.inner.ResolveAuthorizationResourceDisplayName(ctx, resource)
 }
 
 func ManagedGroupIDs(cfg config.ServerSCIMConfig) map[string]struct{} {
