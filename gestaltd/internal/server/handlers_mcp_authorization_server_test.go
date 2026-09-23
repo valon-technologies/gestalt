@@ -207,12 +207,28 @@ func TestMCPOAuthAuthorizeStoresCanonicalCallerSubject(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	srv.mcpOAuthAuthorize(rec, req)
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want 302; body = %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("authorize status = %d, want 200 (consent page); body = %s", rec.Code, rec.Body.String())
 	}
-	redirect, err := url.Parse(rec.Header().Get("Location"))
+	consentToken := mustExtractConsentToken(t, rec.Body.String())
+
+	consentForm := url.Values{"consent": {consentToken}, "decision": {mcpOAuthConsentDecisionApprove}}
+	consentReq := httptest.NewRequest(http.MethodPost, "/oauth/consent", strings.NewReader(consentForm.Encode()))
+	consentReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	consentReq.Host = "example.test"
+	consentReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: subjectToken})
+	consentRec := httptest.NewRecorder()
+
+	srv.mcpOAuthConsentDecision(consentRec, consentReq)
+	if consentRec.Code != http.StatusFound {
+		t.Fatalf("consent status = %d, want 302; body = %s", consentRec.Code, consentRec.Body.String())
+	}
+	redirect, err := url.Parse(consentRec.Header().Get("Location"))
 	if err != nil {
 		t.Fatalf("parse redirect: %v", err)
+	}
+	if redirect.Query().Get("state") != "client-state" {
+		t.Fatalf("redirect state = %q, want %q", redirect.Query().Get("state"), "client-state")
 	}
 	code, err := decodeMCPOAuthAuthorizationCode(enc, redirect.Query().Get("code"), now)
 	if err != nil {
@@ -223,6 +239,254 @@ func TestMCPOAuthAuthorizeStoresCanonicalCallerSubject(t *testing.T) {
 	}
 	if code.SubjectToken != subjectToken {
 		t.Fatalf("subject token = %q, want original session token", code.SubjectToken)
+	}
+}
+
+// mustExtractConsentToken pulls the hidden "consent" field's value out of the
+// rendered consent page HTML, mirroring what a browser submitting the form
+// would send back.
+func mustExtractConsentToken(t *testing.T, pageHTML string) string {
+	t.Helper()
+	const marker = `name="consent" value="`
+	start := strings.Index(pageHTML, marker)
+	if start == -1 {
+		t.Fatalf("consent page did not contain a consent field: %s", pageHTML)
+	}
+	start += len(marker)
+	end := strings.Index(pageHTML[start:], `"`)
+	if end == -1 {
+		t.Fatalf("consent page had a malformed consent field: %s", pageHTML)
+	}
+	return pageHTML[start : start+end]
+}
+
+func TestMCPOAuthAuthorizeRendersConsentPageWithoutIssuingCode(t *testing.T) {
+	t.Parallel()
+
+	const subjectToken = "subject-token"
+	const canonicalOwner = "user:11111111-1111-1111-1111-111111111111"
+	auth := &coretesting.StubAuthProvider{
+		N: "mcp-oauth",
+		IntrospectFn: func(_ context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			if req != nil && req.Token == subjectToken {
+				return &core.IntrospectResponse{Active: true, Subject: "user:test@example.com"}, nil
+			}
+			return &core.IntrospectResponse{Active: false}, nil
+		},
+	}
+	enc, err := cryptoutil.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("NewAESGCM() error = %v", err)
+	}
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	srv := &Server{
+		auth:          auth,
+		resolver:      principal.NewResolver(auth),
+		users:         boundaryUserStore{usersByEmail: map[string]string{"test@example.com": strings.TrimPrefix(canonicalOwner, "user:")}},
+		encryptor:     enc,
+		publicBaseURL: "http://example.test",
+		now:           func() time.Time { return now },
+	}
+
+	clientID, err := encodeMCPOAuthClientRegistration(enc, mcpOAuthClientRegistrationState{
+		RedirectURIs:            []string{"http://localhost/callback"},
+		ClientName:              "Evil Corp Exfil Tool",
+		TokenEndpointAuthMethod: mcpOAuthTokenAuthMethodNone,
+		ExpiresAt:               now.Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthClientRegistration() error = %v", err)
+	}
+	verifier := "mcp-oauth-consent-page-verifier"
+	query := url.Values{
+		"client_id":             []string{clientID},
+		"redirect_uri":          []string{"http://localhost/callback"},
+		"response_type":         []string{"code"},
+		"code_challenge":        []string{oauth.ComputeS256Challenge(verifier)},
+		"code_challenge_method": []string{"S256"},
+		"scope":                 []string{"mcp:tools mcp:resources"},
+		"state":                 []string{"client-state"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+query.Encode(), nil)
+	req.Host = "example.test"
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: subjectToken})
+	rec := httptest.NewRecorder()
+
+	srv.mcpOAuthAuthorize(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Evil Corp Exfil Tool") {
+		t.Fatalf("consent page did not name the requesting client: %s", body)
+	}
+	if !strings.Contains(body, "mcp:tools") || !strings.Contains(body, "mcp:resources") {
+		t.Fatalf("consent page did not list the requested scopes: %s", body)
+	}
+	if strings.Contains(body, mcpOAuthAuthorizationCodePrefix) {
+		t.Fatalf("consent page leaked an authorization code before approval: %s", body)
+	}
+}
+
+func TestMCPOAuthConsentDenialRedirectsWithAccessDenied(t *testing.T) {
+	t.Parallel()
+
+	const (
+		subjectToken   = "subject-token"
+		canonicalOwner = "user:11111111-1111-1111-1111-111111111111"
+	)
+	enc, err := cryptoutil.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("NewAESGCM() error = %v", err)
+	}
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	auth := &coretesting.StubAuthProvider{
+		N: "mcp-oauth",
+		IntrospectFn: func(_ context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			if req != nil && req.Token == subjectToken {
+				return &core.IntrospectResponse{Active: true, Subject: "user:test@example.com"}, nil
+			}
+			return &core.IntrospectResponse{Active: false}, nil
+		},
+	}
+	srv := &Server{
+		auth:          auth,
+		resolver:      principal.NewResolver(auth),
+		users:         boundaryUserStore{usersByEmail: map[string]string{"test@example.com": strings.TrimPrefix(canonicalOwner, "user:")}},
+		encryptor:     enc,
+		publicBaseURL: "http://example.test",
+		now:           func() time.Time { return now },
+	}
+
+	clientID, err := encodeMCPOAuthClientRegistration(enc, mcpOAuthClientRegistrationState{
+		RedirectURIs:            []string{"http://localhost/callback"},
+		TokenEndpointAuthMethod: mcpOAuthTokenAuthMethodNone,
+		ExpiresAt:               now.Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthClientRegistration() error = %v", err)
+	}
+	consent, err := encodeMCPOAuthConsent(enc, mcpOAuthConsentState{
+		ClientID:            clientID,
+		RedirectURI:         "http://localhost/callback",
+		Email:               "test@example.com",
+		SubjectToken:        subjectToken,
+		CallerSubjectID:     canonicalOwner,
+		CodeChallenge:       oauth.ComputeS256Challenge("verifier"),
+		CodeChallengeMethod: "S256",
+		OAuthState:          "client-state",
+		ExpiresAt:           now.Add(mcpOAuthConsentTTL).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthConsent() error = %v", err)
+	}
+
+	form := url.Values{"consent": {consent}, "decision": {mcpOAuthConsentDecisionDeny}}
+	req := httptest.NewRequest(http.MethodPost, "/oauth/consent", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "example.test"
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: subjectToken})
+	rec := httptest.NewRecorder()
+
+	srv.mcpOAuthConsentDecision(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302; body = %s", rec.Code, rec.Body.String())
+	}
+	redirect, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse redirect: %v", err)
+	}
+	if redirect.Query().Get("error") != "access_denied" {
+		t.Fatalf("redirect error = %q, want access_denied; full redirect = %s", redirect.Query().Get("error"), redirect)
+	}
+	if redirect.Query().Get("code") != "" {
+		t.Fatalf("denied consent must not include a code; redirect = %s", redirect)
+	}
+}
+
+func TestMCPOAuthConsentRejectsSessionMismatch(t *testing.T) {
+	t.Parallel()
+
+	const (
+		grantedToken = "granted-subject-token"
+		otherToken   = "other-subject-token"
+		grantedEmail = "granted@example.com"
+		otherEmail   = "other@example.com"
+		grantedOwner = "user:11111111-1111-1111-1111-111111111111"
+		otherOwner   = "user:22222222-2222-2222-2222-222222222222"
+	)
+	enc, err := cryptoutil.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("NewAESGCM() error = %v", err)
+	}
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	auth := &coretesting.StubAuthProvider{
+		N: "mcp-oauth",
+		IntrospectFn: func(_ context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			switch {
+			case req != nil && req.Token == grantedToken:
+				return &core.IntrospectResponse{Active: true, Subject: "user:" + grantedEmail}, nil
+			case req != nil && req.Token == otherToken:
+				return &core.IntrospectResponse{Active: true, Subject: "user:" + otherEmail}, nil
+			default:
+				return &core.IntrospectResponse{Active: false}, nil
+			}
+		},
+	}
+	srv := &Server{
+		auth:     auth,
+		resolver: principal.NewResolver(auth),
+		users: boundaryUserStore{usersByEmail: map[string]string{
+			grantedEmail: strings.TrimPrefix(grantedOwner, "user:"),
+			otherEmail:   strings.TrimPrefix(otherOwner, "user:"),
+		}},
+		encryptor:     enc,
+		publicBaseURL: "http://example.test",
+		now:           func() time.Time { return now },
+	}
+
+	clientID, err := encodeMCPOAuthClientRegistration(enc, mcpOAuthClientRegistrationState{
+		RedirectURIs:            []string{"http://localhost/callback"},
+		TokenEndpointAuthMethod: mcpOAuthTokenAuthMethodNone,
+		ExpiresAt:               now.Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthClientRegistration() error = %v", err)
+	}
+	consent, err := encodeMCPOAuthConsent(enc, mcpOAuthConsentState{
+		ClientID:            clientID,
+		RedirectURI:         "http://localhost/callback",
+		Email:               "granted@example.com",
+		SubjectToken:        grantedToken,
+		CallerSubjectID:     grantedOwner,
+		CodeChallenge:       oauth.ComputeS256Challenge("verifier"),
+		CodeChallengeMethod: "S256",
+		OAuthState:          "client-state",
+		ExpiresAt:           now.Add(mcpOAuthConsentTTL).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encodeMCPOAuthConsent() error = %v", err)
+	}
+
+	// A different session (e.g. the browser logged out and someone else
+	// logged in) tries to approve the pending consent issued to grantedOwner.
+	form := url.Values{"consent": {consent}, "decision": {mcpOAuthConsentDecisionApprove}}
+	req := httptest.NewRequest(http.MethodPost, "/oauth/consent", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "example.test"
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: otherToken})
+	rec := httptest.NewRecorder()
+
+	srv.mcpOAuthConsentDecision(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401; body = %s", rec.Code, rec.Body.String())
+	}
+	var resp mcpOAuthErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.Error != "invalid_request" {
+		t.Fatalf("error = %q, want invalid_request (session-mismatch rejection, not an unrelated resolution failure)", resp.Error)
 	}
 }
 

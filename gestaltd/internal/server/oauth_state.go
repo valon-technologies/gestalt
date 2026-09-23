@@ -103,11 +103,13 @@ func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*int
 const loginStateTTL = 10 * time.Minute
 const loginStateCookieName = "login_state"
 const mcpOAuthClientRegistrationTTL = 365 * 24 * time.Hour
+const mcpOAuthConsentTTL = 10 * time.Minute
 const mcpOAuthAuthorizationCodeTTL = 5 * time.Minute
 const mcpOAuthRefreshTokenTTL = 30 * 24 * time.Hour
 
 const (
 	mcpOAuthClientIDPrefix          = "gst_mcp_client_"
+	mcpOAuthConsentPrefix           = "gst_mcp_consent_"
 	mcpOAuthAuthorizationCodePrefix = "gst_mcp_code_"
 	mcpOAuthRefreshTokenPrefix      = "gst_mcp_refresh_"
 )
@@ -136,6 +138,26 @@ type mcpOAuthClientRegistrationState struct {
 	ClientName              string   `json:"cn,omitempty"`
 	TokenEndpointAuthMethod string   `json:"tm,omitempty"`
 	ExpiresAt               int64    `json:"exp"`
+}
+
+// mcpOAuthConsentState carries an authorize request across the user-facing
+// consent screen: it holds everything needed to mint the authorization code
+// on approval, without re-deriving any of it from a (potentially different)
+// request.
+type mcpOAuthConsentState struct {
+	ClientID            string `json:"cid"`
+	ClientName          string `json:"cn,omitempty"`
+	RedirectURI         string `json:"ru"`
+	Email               string `json:"em"`
+	DisplayName         string `json:"dn,omitempty"`
+	AvatarURL           string `json:"av,omitempty"`
+	Scope               string `json:"sc,omitempty"`
+	SubjectToken        string `json:"st,omitempty"`
+	CallerSubjectID     string `json:"cs,omitempty"`
+	CodeChallenge       string `json:"cc"`
+	CodeChallengeMethod string `json:"cm,omitempty"`
+	OAuthState          string `json:"ost,omitempty"`
+	ExpiresAt           int64  `json:"exp"`
 }
 
 type mcpOAuthAuthorizationCodeState struct {
@@ -287,6 +309,54 @@ func decodeMCPOAuthClientRegistration(enc *cryptoutil.AESGCMEncryptor, encoded s
 		return nil, err
 	}
 	if err := validateMCPOAuthClientRegistration(state, now); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+func encodeMCPOAuthConsent(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthConsentState) (string, error) {
+	encoded, err := encodeEncryptedState(enc, "mcp oauth consent", state)
+	if err != nil {
+		return "", err
+	}
+	return mcpOAuthConsentPrefix + encoded, nil
+}
+
+func validateMCPOAuthConsent(state *mcpOAuthConsentState, now time.Time) error {
+	if state.ClientID == "" {
+		return fmt.Errorf("mcp oauth consent missing client ID")
+	}
+	if state.RedirectURI == "" {
+		return fmt.Errorf("mcp oauth consent missing redirect URI")
+	}
+	if state.Email == "" {
+		return fmt.Errorf("mcp oauth consent missing email")
+	}
+	if state.CallerSubjectID == "" {
+		return fmt.Errorf("mcp oauth consent missing caller subject")
+	}
+	if state.CodeChallenge == "" {
+		return fmt.Errorf("mcp oauth consent missing code challenge")
+	}
+	if state.ExpiresAt == 0 {
+		return fmt.Errorf("mcp oauth consent missing expiration")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return fmt.Errorf("mcp oauth consent expired")
+	}
+	return nil
+}
+
+func decodeMCPOAuthConsent(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*mcpOAuthConsentState, error) {
+	encoded = strings.TrimSpace(encoded)
+	if !strings.HasPrefix(encoded, mcpOAuthConsentPrefix) {
+		return nil, fmt.Errorf("mcp oauth consent token is malformed")
+	}
+	state, err := decodeEncryptedState[mcpOAuthConsentState](enc, "mcp oauth consent", strings.TrimPrefix(encoded, mcpOAuthConsentPrefix))
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMCPOAuthConsent(state, now); err != nil {
 		return nil, err
 	}
 	return state, nil
