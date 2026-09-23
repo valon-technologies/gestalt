@@ -38,35 +38,24 @@ func runSecrets(args []string) error {
 		return flag.ErrHelp
 	}
 
-	var (
-		client *managedSecretClient
-		err    error
-	)
-	clientOnce := func() (*managedSecretClient, error) {
-		if client == nil {
-			client, err = newManagedSecretClient()
-		}
-		return client, err
-	}
-
 	switch args[0] {
 	case "-h", "--help", "help":
 		printSecretsUsage(os.Stdout)
 		return nil
 	case "create":
-		return runManagedSecretWrite(args[1:], "create", clientOnce)
+		return runManagedSecretWrite(args[1:], "create")
 	case "rotate":
-		return runManagedSecretWrite(args[1:], "rotate", clientOnce)
+		return runManagedSecretWrite(args[1:], "rotate")
 	case "list":
-		return runManagedSecretList(args[1:], clientOnce)
+		return runManagedSecretList(args[1:])
 	case "describe":
-		return runManagedSecretDescribe(args[1:], clientOnce)
+		return runManagedSecretDescribe(args[1:])
 	case "audit":
-		return runManagedSecretAudit(args[1:], clientOnce)
+		return runManagedSecretAudit(args[1:])
 	case "preflight":
-		return runManagedSecretPreflight(args[1:], clientOnce)
+		return runManagedSecretPreflight(args[1:])
 	case "retire":
-		return runManagedSecretRetire(args[1:], clientOnce)
+		return runManagedSecretRetire(args[1:])
 	default:
 		return fmt.Errorf("unknown secrets command %q", args[0])
 	}
@@ -100,7 +89,7 @@ type managedSecretWriteArgs struct {
 	generate    bool
 }
 
-func runManagedSecretWrite(args []string, operation string, clientOnce func() (*managedSecretClient, error)) error {
+func runManagedSecretWrite(args []string, operation string) error {
 	fs := flag.NewFlagSet("gestaltd secrets "+operation, flag.ContinueOnError)
 	fs.Usage = func() { printManagedSecretWriteUsage(fs.Output(), operation) }
 	opts := managedSecretWriteArgs{}
@@ -143,7 +132,7 @@ func runManagedSecretWrite(args []string, operation string, clientOnce func() (*
 		body["value"] = value
 	}
 
-	client, err := clientOnce()
+	client, err := newManagedSecretClient()
 	if err != nil {
 		return err
 	}
@@ -240,7 +229,7 @@ func validateManagedSecretValue(raw []byte) (string, error) {
 	return value, nil
 }
 
-func runManagedSecretList(args []string, clientOnce func() (*managedSecretClient, error)) error {
+func runManagedSecretList(args []string) error {
 	fs := flag.NewFlagSet("gestaltd secrets list", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets list [--owner-app APP]") }
 	ownerApp := fs.String("owner-app", "", "filter by owning app")
@@ -251,7 +240,7 @@ func runManagedSecretList(args []string, clientOnce func() (*managedSecretClient
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(positionals, " "))
 	}
 
-	client, err := clientOnce()
+	client, err := newManagedSecretClient()
 	if err != nil {
 		return err
 	}
@@ -269,7 +258,7 @@ func runManagedSecretList(args []string, clientOnce func() (*managedSecretClient
 	return nil
 }
 
-func runManagedSecretDescribe(args []string, clientOnce func() (*managedSecretClient, error)) error {
+func runManagedSecretDescribe(args []string) error {
 	fs := flag.NewFlagSet("gestaltd secrets describe", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets describe NAME") }
 	if err := parseInterspersed(fs, args); err != nil {
@@ -281,7 +270,7 @@ func runManagedSecretDescribe(args []string, clientOnce func() (*managedSecretCl
 	}
 	name := positionals[0]
 
-	client, err := clientOnce()
+	client, err := newManagedSecretClient()
 	if err != nil {
 		return err
 	}
@@ -309,7 +298,7 @@ func printManagedSecretDescribeResponse(w io.Writer, response managedSecretDetai
 	printManagedSecretAudit(w, response.Audit)
 }
 
-func runManagedSecretAudit(args []string, clientOnce func() (*managedSecretClient, error)) error {
+func runManagedSecretAudit(args []string) error {
 	fs := flag.NewFlagSet("gestaltd secrets audit", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets audit NAME [--limit N]") }
 	limit := fs.Int("limit", 50, "maximum audit rows to return")
@@ -325,7 +314,7 @@ func runManagedSecretAudit(args []string, clientOnce func() (*managedSecretClien
 		return fmt.Errorf("--limit must be between 1 and 200")
 	}
 
-	client, err := clientOnce()
+	client, err := newManagedSecretClient()
 	if err != nil {
 		return err
 	}
@@ -338,7 +327,7 @@ func runManagedSecretAudit(args []string, clientOnce func() (*managedSecretClien
 	return nil
 }
 
-func runManagedSecretPreflight(args []string, clientOnce func() (*managedSecretClient, error)) error {
+func runManagedSecretPreflight(args []string) error {
 	fs := flag.NewFlagSet("gestaltd secrets preflight", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets preflight") }
 	if err := parseInterspersed(fs, args); err != nil {
@@ -356,7 +345,7 @@ func runManagedSecretPreflight(args []string, clientOnce func() (*managedSecretC
 		return fmt.Errorf("failed to parse preflight references: %w", err)
 	}
 
-	client, err := clientOnce()
+	client, err := newManagedSecretClient()
 	if err != nil {
 		return err
 	}
@@ -391,7 +380,7 @@ func printManagedSecretPreflightResponse(w io.Writer, response managedSecretPref
 	}
 }
 
-func runManagedSecretRetire(args []string, clientOnce func() (*managedSecretClient, error)) error {
+func runManagedSecretRetire(args []string) error {
 	fs := flag.NewFlagSet("gestaltd secrets retire", flag.ContinueOnError)
 	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets retire NAME --reason TEXT") }
 	reason := fs.String("reason", "", "why the secret is being retired")
@@ -407,7 +396,7 @@ func runManagedSecretRetire(args []string, clientOnce func() (*managedSecretClie
 		return fmt.Errorf("--reason is required")
 	}
 
-	client, err := clientOnce()
+	client, err := newManagedSecretClient()
 	if err != nil {
 		return err
 	}
@@ -474,7 +463,9 @@ func (c *managedSecretClient) do(ctx context.Context, method, path string, body 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 	if reader != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -544,10 +535,7 @@ type managedSecretSummary struct {
 	CurrentVersion int64   `json:"currentVersion"`
 	CreatedAt      string  `json:"createdAt"`
 	UpdatedAt      string  `json:"updatedAt"`
-	CreatedBy      string  `json:"createdBy"`
-	UpdatedBy      string  `json:"updatedBy"`
 	RetiredAt      *string `json:"retiredAt,omitempty"`
-	RetiredReason  string  `json:"retiredReason,omitempty"`
 }
 
 type managedSecretDetail struct {
@@ -556,25 +544,15 @@ type managedSecretDetail struct {
 }
 
 type managedSecretAuditRow struct {
-	ID        string `json:"id"`
 	Action    string `json:"action"`
 	Version   int64  `json:"version"`
 	Actor     string `json:"actor"`
-	Reason    string `json:"reason"`
-	Source    string `json:"source,omitempty"`
-	RequestID string `json:"requestId,omitempty"`
-	KMSKey    string `json:"kmsKey,omitempty"`
 	CreatedAt string `json:"createdAt"`
-	Result    string `json:"result"`
 }
 
 type managedSecretVersionSummary struct {
 	Version   int64  `json:"version"`
-	State     string `json:"state"`
 	CreatedAt string `json:"createdAt"`
-	CreatedBy string `json:"createdBy"`
-	Reason    string `json:"reason"`
-	KMSKey    string `json:"kmsKey,omitempty"`
 }
 
 type managedSecretWriteResponse struct {
@@ -585,10 +563,9 @@ type managedSecretWriteResponse struct {
 }
 
 type managedSecretReference struct {
-	Provider string `json:"provider"`
-	Name     string `json:"name"`
-	App      string `json:"app,omitempty"`
-	Field    string `json:"field,omitempty"`
+	Name  string `json:"name"`
+	App   string `json:"app,omitempty"`
+	Field string `json:"field,omitempty"`
 }
 
 type managedSecretPreflightResponse struct {
