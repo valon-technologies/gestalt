@@ -25,11 +25,14 @@ const (
 	mcpAuthorizationServerMetadataPath       = "/.well-known/oauth-authorization-server"
 	mcpAuthorizationServerMetadataMCPPath    = "/.well-known/oauth-authorization-server/mcp"
 	mcpAuthorizationEndpointPath             = "/oauth/authorize"
+	mcpConsentEndpointPath                   = "/oauth/consent"
 	mcpTokenEndpointPath                     = "/oauth/token"
 	mcpRegistrationEndpointPath              = "/oauth/register"
 	mcpOAuthTokenAuthMethodNone              = "none"
 	mcpOAuthTokenAuthMethodClientSecretPost  = "client_secret_post"
 	mcpOAuthTokenAuthMethodClientSecretBasic = "client_secret_basic"
+	mcpOAuthConsentDecisionApprove           = "approve"
+	mcpOAuthConsentDecisionDeny              = "deny"
 	mcpOAuthReauthorizationDescription       = "MCP authorization is no longer valid; reauthorization is required"
 )
 
@@ -277,17 +280,108 @@ func (s *Server) mcpOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := encodeMCPOAuthAuthorizationCode(s.encryptor, mcpOAuthAuthorizationCodeState{
+	// prompt=none requests silent reauthorization: a caller using it (e.g. a
+	// hidden iframe) cannot render or click through an interactive consent
+	// page, so it must get an immediate, machine-readable error instead of
+	// html it cannot act on. This server never treats past consent as
+	// standing, so a signed-in caller here always needs a fresh consent.
+	if strings.EqualFold(strings.TrimSpace(query.Get("prompt")), "none") {
+		redirectMCPOAuthError(w, r, redirectURI, state, "consent_required", "user consent is required")
+		return
+	}
+
+	scope := strings.TrimSpace(query.Get("scope"))
+	consent, err := encodeMCPOAuthConsent(s.encryptor, mcpOAuthConsentState{
 		ClientID:            clientID,
+		ClientName:          client.ClientName,
 		RedirectURI:         redirectURI,
 		Email:               p.Identity.Email,
 		DisplayName:         p.Identity.DisplayName,
 		AvatarURL:           p.Identity.AvatarURL,
-		Scope:               strings.TrimSpace(query.Get("scope")),
+		Scope:               scope,
 		SubjectToken:        s.subjectTokenFromRequest(r),
 		CallerSubjectID:     callerSubjectID,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
+		OAuthState:          state,
+		ExpiresAt:           s.now().Add(mcpOAuthConsentTTL).Unix(),
+	})
+	if err != nil {
+		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to prepare consent request")
+		return
+	}
+
+	renderMCPOAuthConsentPage(w, mcpOAuthConsentPageView{
+		ClientName:  client.ClientName,
+		Email:       p.Identity.Email,
+		RedirectURI: redirectURI,
+		Scope:       scope,
+		Consent:     consent,
+	})
+}
+
+// mcpOAuthConsentDecision handles the user's approve/deny choice from the
+// consent page rendered by mcpOAuthAuthorize. It re-resolves the caller so a
+// stale or swapped browser session can't ride a consent token issued to
+// someone else.
+func (s *Server) mcpOAuthConsentDecision(w http.ResponseWriter, r *http.Request) {
+	auth := s.serverAuthRuntime()
+	if auth.noAuth || auth.provider == nil {
+		writeMCPOAuthError(w, http.StatusNotFound, "server_error", "auth is disabled")
+		return
+	}
+	if s.encryptor == nil {
+		writeMCPOAuthError(w, http.StatusServiceUnavailable, "server_error", "MCP OAuth authorization is unavailable")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		writeMCPOAuthError(w, http.StatusBadRequest, "invalid_request", "invalid consent request body")
+		return
+	}
+
+	consent, err := decodeMCPOAuthConsent(s.encryptor, r.Form.Get("consent"), s.now())
+	if err != nil {
+		writeMCPOAuthError(w, http.StatusBadRequest, "invalid_request", "consent request is invalid or expired")
+		return
+	}
+
+	p, err := s.resolveRequestPrincipalWithResolver(r, auth.resolver)
+	if err != nil || p == nil || p.Identity == nil || p.Identity.Email == "" || principal.IsNonUserPrincipal(p) {
+		writeMCPOAuthError(w, http.StatusUnauthorized, "login_required", "user login is required")
+		return
+	}
+	p, err = s.resolvePrincipalUserID(r.Context(), p)
+	if err != nil || p == nil || p.Identity == nil {
+		slog.ErrorContext(r.Context(), "mcp oauth canonical user resolution failed", "error", err)
+		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "MCP OAuth authorization is unavailable")
+		return
+	}
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(p.SubjectID) != consent.CallerSubjectID {
+		writeMCPOAuthError(w, http.StatusUnauthorized, "invalid_request", "consent request does not match the current session")
+		return
+	}
+
+	if decision := strings.TrimSpace(r.Form.Get("decision")); decision != mcpOAuthConsentDecisionApprove {
+		redirectMCPOAuthError(w, r, consent.RedirectURI, consent.OAuthState, "access_denied", "the user denied the authorization request")
+		return
+	}
+
+	s.issueMCPOAuthAuthorizationCode(w, r, *consent)
+}
+
+func (s *Server) issueMCPOAuthAuthorizationCode(w http.ResponseWriter, r *http.Request, consent mcpOAuthConsentState) {
+	code, err := encodeMCPOAuthAuthorizationCode(s.encryptor, mcpOAuthAuthorizationCodeState{
+		ClientID:            consent.ClientID,
+		RedirectURI:         consent.RedirectURI,
+		Email:               consent.Email,
+		DisplayName:         consent.DisplayName,
+		AvatarURL:           consent.AvatarURL,
+		Scope:               consent.Scope,
+		SubjectToken:        consent.SubjectToken,
+		CallerSubjectID:     consent.CallerSubjectID,
+		CodeChallenge:       consent.CodeChallenge,
+		CodeChallengeMethod: consent.CodeChallengeMethod,
 		ExpiresAt:           s.now().Add(mcpOAuthAuthorizationCodeTTL).Unix(),
 	})
 	if err != nil {
@@ -295,9 +389,9 @@ func (s *Server) mcpOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirectMCPOAuthSuccess(w, r, redirectURI, map[string]string{
+	redirectMCPOAuthSuccess(w, r, consent.RedirectURI, map[string]string{
 		"code":  code,
-		"state": state,
+		"state": consent.OAuthState,
 	})
 }
 

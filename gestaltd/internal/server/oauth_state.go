@@ -103,13 +103,29 @@ func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*int
 const loginStateTTL = 10 * time.Minute
 const loginStateCookieName = "login_state"
 const mcpOAuthClientRegistrationTTL = 365 * 24 * time.Hour
+const mcpOAuthConsentTTL = 10 * time.Minute
 const mcpOAuthAuthorizationCodeTTL = 5 * time.Minute
 const mcpOAuthRefreshTokenTTL = 30 * 24 * time.Hour
 
 const (
 	mcpOAuthClientIDPrefix          = "gst_mcp_client_"
+	mcpOAuthConsentPrefix           = "gst_mcp_consent_"
 	mcpOAuthAuthorizationCodePrefix = "gst_mcp_code_"
 	mcpOAuthRefreshTokenPrefix      = "gst_mcp_refresh_"
+)
+
+// mcpOAuthStatePurpose values are authenticated as part of each encrypted
+// state's payload, mirroring browserSessionCookiePurpose: the four mcp oauth
+// state types share most of their fields (a client registration, a pending
+// consent, an authorization code, and a refresh token all carry a client ID,
+// email, and scope), so without a bound purpose a ciphertext for one type
+// that happens to satisfy another type's required fields would decode
+// successfully as that other type once its prefix is swapped.
+const (
+	mcpOAuthClientRegistrationPurpose = "gestalt/mcp-oauth-client-registration"
+	mcpOAuthConsentPurpose            = "gestalt/mcp-oauth-consent"
+	mcpOAuthAuthorizationCodePurpose  = "gestalt/mcp-oauth-authorization-code"
+	mcpOAuthRefreshTokenPurpose       = "gestalt/mcp-oauth-refresh-token"
 )
 
 type loginState struct {
@@ -132,13 +148,36 @@ type pendingConnectionBindingState struct {
 }
 
 type mcpOAuthClientRegistrationState struct {
+	Purpose                 string   `json:"typ"`
 	RedirectURIs            []string `json:"ru"`
 	ClientName              string   `json:"cn,omitempty"`
 	TokenEndpointAuthMethod string   `json:"tm,omitempty"`
 	ExpiresAt               int64    `json:"exp"`
 }
 
+// mcpOAuthConsentState carries an authorize request across the user-facing
+// consent screen: it holds everything needed to mint the authorization code
+// on approval, without re-deriving any of it from a (potentially different)
+// request.
+type mcpOAuthConsentState struct {
+	Purpose             string `json:"typ"`
+	ClientID            string `json:"cid"`
+	ClientName          string `json:"cn,omitempty"`
+	RedirectURI         string `json:"ru"`
+	Email               string `json:"em"`
+	DisplayName         string `json:"dn,omitempty"`
+	AvatarURL           string `json:"av,omitempty"`
+	Scope               string `json:"sc,omitempty"`
+	SubjectToken        string `json:"st,omitempty"`
+	CallerSubjectID     string `json:"cs,omitempty"`
+	CodeChallenge       string `json:"cc"`
+	CodeChallengeMethod string `json:"cm,omitempty"`
+	OAuthState          string `json:"ost,omitempty"`
+	ExpiresAt           int64  `json:"exp"`
+}
+
 type mcpOAuthAuthorizationCodeState struct {
+	Purpose             string `json:"typ"`
 	ClientID            string `json:"cid"`
 	RedirectURI         string `json:"ru"`
 	Email               string `json:"em"`
@@ -153,6 +192,7 @@ type mcpOAuthAuthorizationCodeState struct {
 }
 
 type mcpOAuthRefreshTokenState struct {
+	Purpose         string `json:"typ"`
 	ClientID        string `json:"cid"`
 	Email           string `json:"em"`
 	DisplayName     string `json:"dn,omitempty"`
@@ -257,6 +297,7 @@ func decodePendingConnectionBindingState(enc *cryptoutil.AESGCMEncryptor, encode
 }
 
 func encodeMCPOAuthClientRegistration(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthClientRegistrationState) (string, error) {
+	state.Purpose = mcpOAuthClientRegistrationPurpose
 	encoded, err := encodeEncryptedState(enc, "mcp oauth client registration", state)
 	if err != nil {
 		return "", err
@@ -265,6 +306,9 @@ func encodeMCPOAuthClientRegistration(enc *cryptoutil.AESGCMEncryptor, state mcp
 }
 
 func validateMCPOAuthClientRegistration(state *mcpOAuthClientRegistrationState, now time.Time) error {
+	if state.Purpose != mcpOAuthClientRegistrationPurpose && state.Purpose != "" {
+		return fmt.Errorf("mcp oauth client registration has the wrong purpose")
+	}
 	if len(state.RedirectURIs) == 0 {
 		return fmt.Errorf("mcp oauth client registration missing redirect URIs")
 	}
@@ -292,7 +336,60 @@ func decodeMCPOAuthClientRegistration(enc *cryptoutil.AESGCMEncryptor, encoded s
 	return state, nil
 }
 
+func encodeMCPOAuthConsent(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthConsentState) (string, error) {
+	state.Purpose = mcpOAuthConsentPurpose
+	encoded, err := encodeEncryptedState(enc, "mcp oauth consent", state)
+	if err != nil {
+		return "", err
+	}
+	return mcpOAuthConsentPrefix + encoded, nil
+}
+
+func validateMCPOAuthConsent(state *mcpOAuthConsentState, now time.Time) error {
+	if state.Purpose != mcpOAuthConsentPurpose {
+		return fmt.Errorf("mcp oauth consent has the wrong purpose")
+	}
+	if state.ClientID == "" {
+		return fmt.Errorf("mcp oauth consent missing client ID")
+	}
+	if state.RedirectURI == "" {
+		return fmt.Errorf("mcp oauth consent missing redirect URI")
+	}
+	if state.Email == "" {
+		return fmt.Errorf("mcp oauth consent missing email")
+	}
+	if state.CallerSubjectID == "" {
+		return fmt.Errorf("mcp oauth consent missing caller subject")
+	}
+	if state.CodeChallenge == "" {
+		return fmt.Errorf("mcp oauth consent missing code challenge")
+	}
+	if state.ExpiresAt == 0 {
+		return fmt.Errorf("mcp oauth consent missing expiration")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return fmt.Errorf("mcp oauth consent expired")
+	}
+	return nil
+}
+
+func decodeMCPOAuthConsent(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*mcpOAuthConsentState, error) {
+	encoded = strings.TrimSpace(encoded)
+	if !strings.HasPrefix(encoded, mcpOAuthConsentPrefix) {
+		return nil, fmt.Errorf("mcp oauth consent token is malformed")
+	}
+	state, err := decodeEncryptedState[mcpOAuthConsentState](enc, "mcp oauth consent", strings.TrimPrefix(encoded, mcpOAuthConsentPrefix))
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMCPOAuthConsent(state, now); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
 func encodeMCPOAuthAuthorizationCode(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthAuthorizationCodeState) (string, error) {
+	state.Purpose = mcpOAuthAuthorizationCodePurpose
 	encoded, err := encodeEncryptedState(enc, "mcp oauth authorization code", state)
 	if err != nil {
 		return "", err
@@ -301,6 +398,9 @@ func encodeMCPOAuthAuthorizationCode(enc *cryptoutil.AESGCMEncryptor, state mcpO
 }
 
 func validateMCPOAuthAuthorizationCode(state *mcpOAuthAuthorizationCodeState, now time.Time) error {
+	if state.Purpose != mcpOAuthAuthorizationCodePurpose && state.Purpose != "" {
+		return fmt.Errorf("mcp oauth authorization code has the wrong purpose")
+	}
 	if state.ClientID == "" {
 		return fmt.Errorf("mcp oauth authorization code missing client ID")
 	}
@@ -338,6 +438,7 @@ func decodeMCPOAuthAuthorizationCode(enc *cryptoutil.AESGCMEncryptor, encoded st
 }
 
 func encodeMCPOAuthRefreshToken(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthRefreshTokenState) (string, error) {
+	state.Purpose = mcpOAuthRefreshTokenPurpose
 	encoded, err := encodeEncryptedState(enc, "mcp oauth refresh token", state)
 	if err != nil {
 		return "", err
@@ -346,6 +447,9 @@ func encodeMCPOAuthRefreshToken(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthR
 }
 
 func validateMCPOAuthRefreshToken(state *mcpOAuthRefreshTokenState, now time.Time) error {
+	if state.Purpose != mcpOAuthRefreshTokenPurpose && state.Purpose != "" {
+		return fmt.Errorf("mcp oauth refresh token has the wrong purpose")
+	}
 	if state.ClientID == "" {
 		return fmt.Errorf("mcp oauth refresh token missing client ID")
 	}
