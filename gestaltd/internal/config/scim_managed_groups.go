@@ -2,15 +2,10 @@ package config
 
 import "strings"
 
-// ScimManagedGroupIDs returns Rippling-managed group ids: SCIM user
-// projections plus platform subject-set grants (gestalt/authorization).
-// App subject-set grants stay editable so local roster groups are not locked.
-func ScimManagedGroupIDs(cfg *Config) map[string]struct{} {
+// ManagedGroupIDs returns the group ids managed by SCIM user projections.
+func ManagedGroupIDs(cfg ServerSCIMConfig) map[string]struct{} {
 	ids := map[string]struct{}{}
-	if cfg == nil {
-		return ids
-	}
-	for _, client := range cfg.Server.SCIM.Clients {
+	for _, client := range cfg.Clients {
 		for _, projection := range client.ActiveUserRelationships {
 			if strings.TrimSpace(projection.Resource.Type) != "group" {
 				continue
@@ -20,6 +15,17 @@ func ScimManagedGroupIDs(cfg *Config) map[string]struct{} {
 				ids[id] = struct{}{}
 			}
 		}
+	}
+	return ids
+}
+
+// ScimManagedGroupIDs returns Rippling-managed group ids: SCIM user
+// projections plus platform subject-set grants (gestalt/authorization).
+// App subject-set grants stay editable so local roster groups are not locked.
+func ScimManagedGroupIDs(cfg *Config) map[string]struct{} {
+	ids := ManagedGroupIDs(cfg.Server.SCIM)
+	if cfg == nil {
+		return ids
 	}
 	for i := range cfg.Authorization.Relationships {
 		relationship := &cfg.Authorization.Relationships[i]

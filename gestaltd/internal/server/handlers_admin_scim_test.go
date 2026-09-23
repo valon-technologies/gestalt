@@ -24,7 +24,7 @@ func newSCIMAdminTestServer(t *testing.T) (*httptest.Server, *coredata.Services,
 	t.Helper()
 	svc := testutil.NewStubServices(t)
 	user := seedUserRecord(t, svc, "scim-admin-user", "scim-admin-user@example.test", time.Now())
-	runtime := scim.NewRuntime(nil)
+	runtime := scim.NewRuntime(nil, config.ServerSCIMConfig{})
 	authz := &serverTestAuthorizationProvider{
 		resourceTypes: []*proto.AuthorizationModelResourceType{{
 			Name: "group",

@@ -1,10 +1,8 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -49,7 +47,6 @@ type adminSCIMClientRequest struct {
 	Enabled                  *bool                      `json:"enabled"`
 	Retained                 *bool                      `json:"retained"`
 	Revision                 int64                      `json:"revision"`
-	Reason                   string                     `json:"reason"`
 }
 
 type adminSCIMCredentialInput struct {
@@ -75,12 +72,18 @@ func (s *Server) mountAdminSCIMRoutes(r chi.Router) {
 	r.Delete("/scim/clients/{client}", s.deleteAdminSCIMClient)
 }
 
-func (s *Server) scimRuntimeAdmin() *SCIMRuntime { return s.scimAdminRuntime }
-
-func (s *Server) listAdminSCIMClients(w http.ResponseWriter, r *http.Request) {
-	runtime := s.scimRuntimeAdmin()
+func (s *Server) scimAdminRuntimeOrRespond(w http.ResponseWriter) *SCIMRuntime {
+	runtime := s.scimAdminRuntime
 	if runtime == nil {
 		writeError(w, http.StatusServiceUnavailable, "SCIM configuration is unavailable")
+		return nil
+	}
+	return runtime
+}
+
+func (s *Server) listAdminSCIMClients(w http.ResponseWriter, r *http.Request) {
+	runtime := s.scimAdminRuntimeOrRespond(w)
+	if runtime == nil {
 		return
 	}
 	clients, source, err := runtime.Current(r.Context())
@@ -96,13 +99,12 @@ func (s *Server) listAdminSCIMClients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
-	runtime := s.scimRuntimeAdmin()
+	runtime := s.scimAdminRuntimeOrRespond(w)
 	if runtime == nil {
-		writeError(w, http.StatusServiceUnavailable, "SCIM configuration is unavailable")
 		return
 	}
 	var request adminSCIMClientRequest
-	if err := decodeAdminSCIMRequest(w, r, &request); err != nil {
+	if err := decodeAdminJSONRequest(w, r, &request); err != nil {
 		return
 	}
 	record, err := adminSCIMRecordFromRequest(request, nil)
@@ -110,7 +112,7 @@ func (s *Server) createAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	actor, ok := s.adminSCIMActor(w, r)
+	actor, ok := s.adminActor(w, r)
 	if !ok {
 		return
 	}
@@ -123,14 +125,13 @@ func (s *Server) createAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
-	runtime := s.scimRuntimeAdmin()
+	runtime := s.scimAdminRuntimeOrRespond(w)
 	if runtime == nil {
-		writeError(w, http.StatusServiceUnavailable, "SCIM configuration is unavailable")
 		return
 	}
 	clientID := strings.TrimSpace(chi.URLParam(r, "client"))
 	var request adminSCIMClientRequest
-	if err := decodeAdminSCIMRequest(w, r, &request); err != nil {
+	if err := decodeAdminJSONRequest(w, r, &request); err != nil {
 		return
 	}
 	existing, _, err := runtime.Current(r.Context())
@@ -155,7 +156,7 @@ func (s *Server) updateAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	record.ID = clientID
-	actor, ok := s.adminSCIMActor(w, r)
+	actor, ok := s.adminActor(w, r)
 	if !ok {
 		return
 	}
@@ -169,17 +170,22 @@ func (s *Server) updateAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
-	runtime := s.scimRuntimeAdmin()
+	runtime := s.scimAdminRuntimeOrRespond(w)
 	if runtime == nil {
-		writeError(w, http.StatusServiceUnavailable, "SCIM configuration is unavailable")
 		return
 	}
 	clientID := strings.TrimSpace(chi.URLParam(r, "client"))
-	actor, ok := s.adminSCIMActor(w, r)
+	actor, ok := s.adminActor(w, r)
 	if !ok {
 		return
 	}
-	saved, err := runtime.Delete(r.Context(), clientID, actor)
+	var request adminSCIMClientRequest
+	if r.ContentLength != 0 {
+		if err := decodeAdminJSONRequest(w, r, &request); err != nil {
+			return
+		}
+	}
+	saved, err := runtime.Disable(r.Context(), clientID, actor, request.Revision)
 	if err != nil {
 		writeAdminSCIMError(w, err)
 		return
@@ -291,22 +297,6 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 	return record, nil
 }
 
-func (s *Server) adminSCIMActor(w http.ResponseWriter, r *http.Request) (string, bool) {
-	if p := PrincipalFromContext(r.Context()); p != nil && strings.TrimSpace(p.SubjectID) != "" {
-		return strings.TrimSpace(p.SubjectID), true
-	}
-	return "admin-api", true
-}
-
-func decodeAdminSCIMRequest(w http.ResponseWriter, r *http.Request, target any) error {
-	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
-	if err := dec.Decode(target); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON request")
-		return err
-	}
-	return nil
-}
-
 func writeAdminSCIMError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, coredata.ErrSCIMConfigNotFound):
@@ -314,7 +304,7 @@ func writeAdminSCIMError(w http.ResponseWriter, err error) {
 	case errors.Is(err, coredata.ErrSCIMConfigConflict):
 		writeError(w, http.StatusConflict, "SCIM client was modified concurrently; reload and retry")
 	case errors.Is(err, coredata.ErrSCIMClientExists):
-		writeError(w, http.StatusConflict, "SCIM client was modified concurrently; reload and retry")
+		writeError(w, http.StatusConflict, "SCIM client already exists")
 	case errors.Is(err, ErrSCIMRuntimeUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "SCIM configuration is unavailable")
 	default:

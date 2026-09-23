@@ -205,7 +205,7 @@ func (s *Server) writeAdminManagedSecret(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var req adminManagedSecretWriteRequest
-	if err := decodeManagedSecretRequest(w, r, &req); err != nil {
+	if err := decodeAdminJSONRequest(w, r, &req); err != nil {
 		return
 	}
 	name := strings.TrimSpace(req.Name)
@@ -218,7 +218,7 @@ func (s *Server) writeAdminManagedSecret(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "operation must be create or rotate")
 		return
 	}
-	actor, ok := s.managedSecretActor(w, r)
+	actor, ok := s.adminActor(w, r)
 	if !ok {
 		return
 	}
@@ -330,14 +330,14 @@ func (s *Server) retireAdminManagedSecret(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var req adminManagedSecretRetireRequest
-	if err := decodeManagedSecretRequest(w, r, &req); err != nil {
+	if err := decodeAdminJSONRequest(w, r, &req); err != nil {
 		return
 	}
 	if strings.TrimSpace(req.Reason) == "" {
 		writeError(w, http.StatusBadRequest, "reason is required")
 		return
 	}
-	actor, ok := s.managedSecretActor(w, r)
+	actor, ok := s.adminActor(w, r)
 	if !ok {
 		return
 	}
@@ -360,7 +360,7 @@ func (s *Server) adminManagedSecretPreflight(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var refs []adminManagedSecretReference
-	if err := decodeManagedSecretRequest(w, r, &refs); err != nil {
+	if err := decodeAdminJSONRequest(w, r, &refs); err != nil {
 		return
 	}
 	existing, err := service.List(r.Context())
@@ -412,10 +412,10 @@ func (s *Server) adminManagedSecretPreflight(w http.ResponseWriter, r *http.Requ
 
 const managedSecretUnavailableMessage = "managed secrets service or encryption is unavailable"
 
-func decodeManagedSecretRequest(w http.ResponseWriter, r *http.Request, target any) error {
+func decodeAdminJSONRequest(w http.ResponseWriter, r *http.Request, target any) error {
 	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	if err := dec.Decode(target); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON request body")
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return err
 	}
 	return nil
@@ -441,7 +441,7 @@ func fmtSscan(raw string, target *int) (int, error) {
 	return fmt.Sscan(raw, target)
 }
 
-func (s *Server) managedSecretActor(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (s *Server) adminActor(w http.ResponseWriter, r *http.Request) (string, bool) {
 	p := PrincipalFromContext(r.Context())
 	if p == nil {
 		writeError(w, http.StatusUnauthorized, "authenticated user required")

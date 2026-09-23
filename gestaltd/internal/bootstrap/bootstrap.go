@@ -1307,7 +1307,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, fmt.Errorf("bootstrap: scim: %w", err)
 	}
-	scimRuntime := scim.NewRuntime(scimService)
+	scimRuntime := scim.NewRuntime(scimService, scimRuntimeConfig)
 	if authorizationProvider != nil {
 		wrapped := scim.WrapAuthorization(authorizationProvider, svc.Users, scimService)
 		authorizationProviders[authorizationProviderName] = wrapped

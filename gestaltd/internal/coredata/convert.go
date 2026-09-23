@@ -185,3 +185,25 @@ func recTimePtr(rec idb.Record, key string) *time.Time {
 		return nil
 	}
 }
+
+func recAnySlice(rec idb.Record, key string) []any {
+	raw, ok := rec[key].([]any)
+	if !ok {
+		return nil
+	}
+	return raw
+}
+
+func recStrings(rec idb.Record, key string) []string {
+	raw := recAnySlice(rec, key)
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if text, ok := item.(string); ok {
+			out = append(out, text)
+		}
+	}
+	return out
+}

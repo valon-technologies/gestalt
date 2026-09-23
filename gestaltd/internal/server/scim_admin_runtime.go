@@ -24,20 +24,15 @@ type SCIMRuntime struct {
 	authz    core.AuthorizationProvider
 	runtime  *scim.Runtime
 	baseURL  string
-	source   string
 	fallback config.ServerSCIMConfig
 	mu       sync.Mutex
 }
 
 func NewSCIMRuntime(services *coredata.Services, db indexeddb.IndexedDB, authz core.AuthorizationProvider, runtime *scim.Runtime, baseURL string, fallback config.ServerSCIMConfig) *SCIMRuntime {
 	if runtime == nil {
-		runtime = scim.NewRuntime(nil)
+		runtime = scim.NewRuntime(nil, config.ServerSCIMConfig{})
 	}
-	source := "config"
-	if runtime != nil && runtime.Service() != nil {
-		source = "runtime"
-	}
-	return &SCIMRuntime{services: services, db: db, authz: authz, runtime: runtime, baseURL: baseURL, fallback: fallback, source: source}
+	return &SCIMRuntime{services: services, db: db, authz: authz, runtime: runtime, baseURL: baseURL, fallback: fallback}
 }
 
 func (r *SCIMRuntime) available() error {
@@ -53,9 +48,6 @@ func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMConfigRecord
 	if err := r.available(); err != nil {
 		return nil, "", err
 	}
-	r.mu.Lock()
-	source := r.source
-	r.mu.Unlock()
 	clients, err := r.services.SCIMConfig.List(ctx)
 	if err != nil {
 		return nil, "", err
@@ -64,22 +56,14 @@ func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMConfigRecord
 		// Represent YAML compatibility as synthetic retained records without
 		// persisting ownership on a read.
 		for clientID, client := range r.fallback.Clients {
-			record := coredata.SCIMConfigRecord{
-				ID:                       clientID,
-				Enabled:                  true,
-				Credentials:              make([]coredata.SCIMCredentialRecord, 0, len(client.Credentials)),
-				AuthoritativeUserDomains: client.AuthoritativeUserDomains,
-			}
-			for _, credential := range client.Credentials {
-				record.Credentials = append(record.Credentials, coredata.SCIMCredentialRecord{ID: credential.ID})
-			}
-			for _, projection := range client.ActiveUserRelationships {
-				record.ActiveUserRelationships = append(record.ActiveUserRelationships, coredata.SCIMRelationshipRecord{
-					Relation: projection.Relation, ResourceType: projection.Resource.Type, ResourceID: projection.Resource.ID,
-				})
-			}
+			record := recordFromConfig(clientID, client)
+			record.Credentials = nil
 			clients = append(clients, &record)
 		}
+	}
+	source := "config"
+	if len(clients) > 0 {
+		source = "runtime"
 	}
 	return clients, source, nil
 }
@@ -92,15 +76,15 @@ func (r *SCIMRuntime) Put(ctx context.Context, input *coredata.SCIMConfigRecord,
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if strings.TrimSpace(input.ID) == "" || strings.TrimSpace(input.ID) != input.ID {
+		return nil, fmt.Errorf("SCIM client id must be non-empty and trimmed")
+	}
 	if !requireRevisionSet {
 		if _, err := r.services.SCIMConfig.Get(ctx, input.ID); err == nil {
 			return nil, coredata.ErrSCIMClientExists
 		} else if !errors.Is(err, coredata.ErrSCIMConfigNotFound) {
 			return nil, err
 		}
-	}
-	if strings.TrimSpace(input.ID) == "" || strings.TrimSpace(input.ID) != input.ID {
-		return nil, fmt.Errorf("SCIM client id must be non-empty and trimmed")
 	}
 	if !input.Enabled && !input.Retained {
 		// Disabled via PATCH still retains state; DELETE sets this explicitly.
@@ -123,20 +107,20 @@ func (r *SCIMRuntime) Put(ctx context.Context, input *coredata.SCIMConfigRecord,
 	return saved, nil
 }
 
-func (r *SCIMRuntime) Delete(ctx context.Context, clientID, actor string) (*coredata.SCIMConfigRecord, error) {
+func (r *SCIMRuntime) Disable(ctx context.Context, clientID, actor string, revision int64) (*coredata.SCIMConfigRecord, error) {
 	if err := r.available(); err != nil {
 		return nil, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	deleted, err := r.services.SCIMConfig.Delete(ctx, clientID, actor)
+	current, err := r.services.SCIMConfig.Get(ctx, clientID)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.applyLocked(ctx); err != nil {
-		return nil, err
+	if revision != 0 && current.Revision != revision {
+		return nil, coredata.ErrSCIMConfigConflict
 	}
-	return deleted, nil
+	current.Enabled = false
+	current.Retained = true
+	return r.Put(ctx, current, actor, true, current.Revision)
 }
 
 func (r *SCIMRuntime) validateLocked(ctx context.Context, client coredata.SCIMConfigRecord) error {
@@ -180,8 +164,7 @@ func (r *SCIMRuntime) applyLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r.runtime.Apply(service)
-	r.source = "runtime"
+	r.runtime.Apply(service, cfg)
 	return nil
 }
 
@@ -201,4 +184,23 @@ func configFromRecord(client coredata.SCIMConfigRecord) config.SCIMClientConfig 
 		})
 	}
 	return out
+}
+
+func recordFromConfig(clientID string, client config.SCIMClientConfig) coredata.SCIMConfigRecord {
+	record := coredata.SCIMConfigRecord{
+		ID:                       clientID,
+		Enabled:                  true,
+		AuthoritativeUserDomains: client.AuthoritativeUserDomains,
+	}
+	for _, credential := range client.Credentials {
+		record.Credentials = append(record.Credentials, coredata.SCIMCredentialRecord{
+			ID: credential.ID, TokenRef: credential.BearerToken,
+		})
+	}
+	for _, projection := range client.ActiveUserRelationships {
+		record.ActiveUserRelationships = append(record.ActiveUserRelationships, coredata.SCIMRelationshipRecord{
+			Relation: projection.Relation, ResourceType: projection.Resource.Type, ResourceID: projection.Resource.ID,
+		})
+	}
+	return record
 }

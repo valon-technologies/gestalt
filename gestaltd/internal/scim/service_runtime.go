@@ -45,21 +45,20 @@ func (s *Service) ResolveAuthorizationResourceDisplayName(ctx context.Context, r
 // entire snapshot atomically, so requests never observe a partial update.
 type Runtime struct {
 	inner     *Service
+	cfg       config.ServerSCIMConfig
 	handler   atomic.Pointer[leanHandler]
 	managedMu sync.RWMutex
 	managed   map[string]struct{}
 }
 
-func NewRuntime(s *Service) *Runtime {
-	r := &Runtime{inner: s}
+func NewRuntime(s *Service, cfg config.ServerSCIMConfig) *Runtime {
+	r := &Runtime{inner: s, cfg: cfg}
 	handler := &leanHandler{}
 	if s != nil {
 		handler = &leanHandler{s: s.compact}
 	}
 	r.handler.Store(handler)
-	if s != nil {
-		r.managed = managedGroupIDsFromConfig(scimConfigFromService(s))
-	}
+	r.managed = config.ManagedGroupIDs(cfg)
 	return r
 }
 
@@ -78,23 +77,28 @@ func (r *Runtime) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 }
 
 // Apply atomically replaces the active service. A nil service disables SCIM.
-func (r *Runtime) Apply(s *Service) {
+func (r *Runtime) Apply(s *Service, cfg config.ServerSCIMConfig) {
 	if r == nil {
 		return
 	}
 	r.inner = s
+	r.cfg = cfg
 	handler := &leanHandler{}
 	if s != nil {
 		handler = &leanHandler{s: s.compact}
 	}
 	r.handler.Store(handler)
-	managed := map[string]struct{}{}
-	if s != nil {
-		managed = managedGroupIDsFromConfig(scimConfigFromService(s))
-	}
+	managed := config.ManagedGroupIDs(cfg)
 	r.managedMu.Lock()
 	r.managed = managed
 	r.managedMu.Unlock()
+}
+
+func (r *Runtime) Config() config.ServerSCIMConfig {
+	if r == nil {
+		return config.ServerSCIMConfig{}
+	}
+	return r.cfg
 }
 
 func (r *Runtime) Service() *Service {
@@ -129,7 +133,7 @@ func (r *Runtime) ResolveAuthorizationResourceDisplayName(ctx context.Context, r
 	return r.inner.ResolveAuthorizationResourceDisplayName(ctx, resource)
 }
 
-func managedGroupIDsFromConfig(cfg config.ServerSCIMConfig) map[string]struct{} {
+func ManagedGroupIDs(cfg config.ServerSCIMConfig) map[string]struct{} {
 	out := map[string]struct{}{}
 	for _, client := range cfg.Clients {
 		for _, projection := range client.ActiveUserRelationships {
@@ -139,27 +143,4 @@ func managedGroupIDsFromConfig(cfg config.ServerSCIMConfig) map[string]struct{} 
 		}
 	}
 	return out
-}
-
-// scimConfigFromService reconstructs non-secret configuration metadata from a
-// compact service. Managed-group derivation does not need credential tokens.
-func scimConfigFromService(s *Service) config.ServerSCIMConfig {
-	cfg := config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}
-	if s == nil || s.compact == nil {
-		return cfg
-	}
-	for clientID, client := range s.compact.clients {
-		out := config.SCIMClientConfig{AuthoritativeUserDomains: make([]string, 0, len(client.domains))}
-		for domain := range client.domains {
-			out.AuthoritativeUserDomains = append(out.AuthoritativeUserDomains, domain)
-		}
-		for _, projection := range client.projections {
-			out.ActiveUserRelationships = append(out.ActiveUserRelationships, config.SCIMRelationshipConfig{
-				Relation: projection.relation,
-				Resource: config.AuthorizationResourceDef{Type: projection.resourceType, ID: projection.resourceID},
-			})
-		}
-		cfg.Clients[clientID] = out
-	}
-	return cfg
 }
