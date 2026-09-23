@@ -2746,34 +2746,12 @@ func loadSCIMRuntimeConfiguration(ctx context.Context, svc *coredata.Services, c
 	if svc == nil || svc.SCIMConfig == nil {
 		return cfg.Server.SCIM, scimConfigSourceConfig, nil
 	}
-	clients, err := svc.SCIMConfig.List(ctx)
+	runtimeCfg, hasRuntimeClients, err := svc.SCIMConfig.Config(ctx)
 	if err != nil {
 		return config.ServerSCIMConfig{}, "", err
 	}
-	if len(clients) == 0 {
+	if !hasRuntimeClients {
 		return cfg.Server.SCIM, scimConfigSourceConfig, nil
 	}
-	out := config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}
-	for _, client := range clients {
-		if !client.Enabled {
-			continue
-		}
-		credentials := make([]config.SCIMCredentialConfig, 0, len(client.Credentials))
-		for _, credential := range client.Credentials {
-			credentials = append(credentials, config.SCIMCredentialConfig{ID: credential.ID, BearerToken: credential.TokenRef})
-		}
-		relationships := make([]config.SCIMRelationshipConfig, 0, len(client.ActiveUserRelationships))
-		for _, projection := range client.ActiveUserRelationships {
-			relationships = append(relationships, config.SCIMRelationshipConfig{
-				Relation: projection.Relation,
-				Resource: config.AuthorizationResourceDef{Type: projection.ResourceType, ID: projection.ResourceID},
-			})
-		}
-		out.Clients[client.ID] = config.SCIMClientConfig{
-			Credentials:              credentials,
-			AuthoritativeUserDomains: client.AuthoritativeUserDomains,
-			ActiveUserRelationships:  relationships,
-		}
-	}
-	return out, scimConfigSourceRuntime, nil
+	return runtimeCfg, scimConfigSourceRuntime, nil
 }

@@ -100,7 +100,7 @@ func TestAdminSCIMClientCRUDAndHotReload(t *testing.T) {
 		t.Fatalf("token leaked in response: %s", body)
 	}
 	saved, err := svc.SCIMConfig.Get(context.Background(), "rippling")
-	if err != nil || len(saved.Credentials) != 1 || saved.Credentials[0].TokenRef != "token-one" {
+	if err != nil || len(saved.Credentials) != 1 || saved.Credentials[0].BearerToken != "token-one" {
 		t.Fatalf("saved = %#v, err = %v", saved, err)
 	}
 	if runtime.Service() == nil || !runtime.Service().Enabled() {

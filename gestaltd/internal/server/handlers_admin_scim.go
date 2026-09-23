@@ -8,11 +8,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 type adminSCIMCredential struct {
-	ID string `json:"id"`
+	ID    string `json:"id"`
+	Token string `json:"token,omitempty"`
 }
 
 type adminSCIMProjection struct {
@@ -40,24 +42,13 @@ type adminSCIMListResponse struct {
 }
 
 type adminSCIMClientRequest struct {
-	ID                       string                     `json:"id"`
-	Credentials              []adminSCIMCredentialInput `json:"credentials"`
-	AuthoritativeUserDomains []string                   `json:"authoritativeUserDomains"`
-	ActiveUserRelationships  []adminSCIMProjectionInput `json:"activeUserRelationships"`
-	Enabled                  *bool                      `json:"enabled"`
-	Retained                 *bool                      `json:"retained"`
-	Revision                 int64                      `json:"revision"`
-}
-
-type adminSCIMCredentialInput struct {
-	ID    string `json:"id"`
-	Token string `json:"token"`
-}
-
-type adminSCIMProjectionInput struct {
-	Relation     string `json:"relation"`
-	ResourceType string `json:"resourceType"`
-	ResourceID   string `json:"resourceId"`
+	ID                       string                `json:"id"`
+	Credentials              []adminSCIMCredential `json:"credentials"`
+	AuthoritativeUserDomains []string              `json:"authoritativeUserDomains"`
+	ActiveUserRelationships  []adminSCIMProjection `json:"activeUserRelationships"`
+	Enabled                  *bool                 `json:"enabled"`
+	Retained                 *bool                 `json:"retained"`
+	Revision                 int64                 `json:"revision"`
 }
 
 type adminSCIMClientResponse struct {
@@ -139,7 +130,7 @@ func (s *Server) updateAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 		writeAdminSCIMError(w, err)
 		return
 	}
-	var prior *coredata.SCIMConfigRecord
+	var prior *coredata.SCIMClientRecord
 	for _, client := range existing {
 		if client.ID == clientID {
 			prior = client
@@ -193,7 +184,7 @@ func (s *Server) deleteAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, adminSCIMClientResponse{Client: adminSCIMClientFromCore(saved), Source: "runtime"})
 }
 
-func adminSCIMClientFromCore(client *coredata.SCIMConfigRecord) adminSCIMClient {
+func adminSCIMClientFromCore(client *coredata.SCIMClientRecord) adminSCIMClient {
 	if client == nil {
 		return adminSCIMClient{}
 	}
@@ -214,13 +205,13 @@ func adminSCIMClientFromCore(client *coredata.SCIMConfigRecord) adminSCIMClient 
 	}
 	for _, projection := range client.ActiveUserRelationships {
 		out.ActiveUserRelationships = append(out.ActiveUserRelationships, adminSCIMProjection{
-			Relation: projection.Relation, ResourceType: projection.ResourceType, ResourceID: projection.ResourceID,
+			Relation: projection.Relation, ResourceType: projection.Resource.Type, ResourceID: projection.Resource.ID,
 		})
 	}
 	return out
 }
 
-func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.SCIMConfigRecord) (*coredata.SCIMConfigRecord, error) {
+func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.SCIMClientRecord) (*coredata.SCIMClientRecord, error) {
 	id := strings.TrimSpace(request.ID)
 	if id == "" && prior != nil {
 		id = prior.ID
@@ -231,7 +222,7 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 	if len(request.Credentials) < 1 || len(request.Credentials) > 2 {
 		return nil, fmt.Errorf("credentials must contain one or two entries")
 	}
-	record := &coredata.SCIMConfigRecord{
+	record := &coredata.SCIMClientRecord{
 		ID:       id,
 		Enabled:  request.Enabled == nil || *request.Enabled,
 		Retained: request.Retained != nil && *request.Retained,
@@ -245,7 +236,7 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 	priorTokens := map[string]string{}
 	if prior != nil {
 		for _, credential := range prior.Credentials {
-			priorTokens[credential.ID] = credential.TokenRef
+			priorTokens[credential.ID] = credential.BearerToken
 		}
 	}
 	for _, credential := range request.Credentials {
@@ -268,14 +259,14 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 		} else if tokenRef == "" {
 			return nil, fmt.Errorf("credential token is required")
 		}
-		record.Credentials = append(record.Credentials, coredata.SCIMCredentialRecord{ID: credentialID, TokenRef: tokenRef})
+		record.Credentials = append(record.Credentials, config.SCIMCredentialConfig{ID: credentialID, BearerToken: tokenRef})
 	}
 	for _, rawDomain := range request.AuthoritativeUserDomains {
 		domain := strings.ToLower(strings.TrimSpace(rawDomain))
 		if domain == "" || domain != rawDomain || strings.Contains(domain, "@") {
 			return nil, fmt.Errorf("authoritativeUserDomains must be normalized domains")
 		}
-		record.AuthoritativeUserDomains = append(record.AuthoritativeUserDomains, domain)
+		record.SCIMClientConfig.AuthoritativeUserDomains = append(record.SCIMClientConfig.AuthoritativeUserDomains, domain)
 	}
 	seenProjections := map[string]struct{}{}
 	for _, projection := range request.ActiveUserRelationships {
@@ -290,8 +281,9 @@ func adminSCIMRecordFromRequest(request adminSCIMClientRequest, prior *coredata.
 			return nil, fmt.Errorf("activeUserRelationships contains a duplicate projection")
 		}
 		seenProjections[key] = struct{}{}
-		record.ActiveUserRelationships = append(record.ActiveUserRelationships, coredata.SCIMRelationshipRecord{
-			Relation: relation, ResourceType: resourceType, ResourceID: resourceID,
+		record.ActiveUserRelationships = append(record.ActiveUserRelationships, config.SCIMRelationshipConfig{
+			Relation: relation,
+			Resource: config.AuthorizationResourceDef{Type: resourceType, ID: resourceID},
 		})
 	}
 	return record, nil

@@ -42,9 +42,9 @@ func (r *SCIMRuntime) available() error {
 	return nil
 }
 
-// Current returns the active logical configuration. Disabled retained clients
-// remain visible for audit and re-enable.
-func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMConfigRecord, string, error) {
+// Current returns retained runtime clients, or YAML clients when runtime
+// storage is empty. Disabled retained clients remain visible for re-enable.
+func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMClientRecord, string, error) {
 	if err := r.available(); err != nil {
 		return nil, "", err
 	}
@@ -53,12 +53,12 @@ func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMConfigRecord
 		return nil, "", err
 	}
 	if len(clients) == 0 {
-		// Represent YAML compatibility as synthetic retained records without
-		// persisting ownership on a read.
 		for clientID, client := range r.fallback.Clients {
-			record := recordFromConfig(clientID, client)
-			record.Credentials = nil
-			clients = append(clients, &record)
+			clients = append(clients, &coredata.SCIMClientRecord{
+				ID:               clientID,
+				SCIMClientConfig: client,
+				Enabled:          true,
+			})
 		}
 	}
 	source := "config"
@@ -70,7 +70,7 @@ func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMConfigRecord
 
 // Put validates and atomically stores one client, then applies the resulting
 // configuration to the active SCIM runtime.
-func (r *SCIMRuntime) Put(ctx context.Context, input *coredata.SCIMConfigRecord, actor string, requireRevisionSet bool, requireRevision int64) (*coredata.SCIMConfigRecord, error) {
+func (r *SCIMRuntime) Put(ctx context.Context, input *coredata.SCIMClientRecord, actor string, requireRevisionSet bool, requireRevision int64) (*coredata.SCIMClientRecord, error) {
 	if err := r.available(); err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (r *SCIMRuntime) Put(ctx context.Context, input *coredata.SCIMConfigRecord,
 			return nil, err
 		}
 	}
-	saved, err := r.services.SCIMConfig.Put(ctx, coredata.PutSCIMConfigInput{
+	saved, err := r.services.SCIMConfig.Put(ctx, coredata.PutSCIMClientInput{
 		Client: input, Actor: actor, RequireRevisionSet: requireRevisionSet, RequireRevision: requireRevision,
 	})
 	if err != nil {
@@ -107,7 +107,8 @@ func (r *SCIMRuntime) Put(ctx context.Context, input *coredata.SCIMConfigRecord,
 	return saved, nil
 }
 
-func (r *SCIMRuntime) Disable(ctx context.Context, clientID, actor string, revision int64) (*coredata.SCIMConfigRecord, error) {
+// Disable reuses Put so deletion has the same revision and audit semantics.
+func (r *SCIMRuntime) Disable(ctx context.Context, clientID, actor string, revision int64) (*coredata.SCIMClientRecord, error) {
 	if err := r.available(); err != nil {
 		return nil, err
 	}
@@ -123,42 +124,24 @@ func (r *SCIMRuntime) Disable(ctx context.Context, clientID, actor string, revis
 	return r.Put(ctx, current, actor, true, current.Revision)
 }
 
-func (r *SCIMRuntime) validateLocked(ctx context.Context, client coredata.SCIMConfigRecord) error {
-	all, err := r.services.SCIMConfig.List(ctx)
+func (r *SCIMRuntime) validateLocked(ctx context.Context, client coredata.SCIMClientRecord) error {
+	cfg, _, err := r.services.SCIMConfig.Config(ctx)
 	if err != nil {
 		return err
 	}
-	cfg := config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}
-	for _, existing := range all {
-		if !existing.Enabled || existing.ID == client.ID {
-			continue
-		}
-		cfg.Clients[existing.ID] = configFromRecord(*existing)
+	if cfg.Clients == nil {
+		cfg.Clients = map[string]config.SCIMClientConfig{}
 	}
-	cfg.Clients[client.ID] = configFromRecord(client)
-	if r.authz == nil {
-		for _, candidate := range cfg.Clients {
-			if len(candidate.ActiveUserRelationships) > 0 || len(candidate.AuthoritativeUserDomains) > 0 {
-				return fmt.Errorf("SCIM authorization provider is required when authoritative domains or activeUserRelationships are configured")
-			}
-		}
-	}
-	// NewService performs the full model-aware validation without mutating state.
+	delete(cfg.Clients, client.ID)
+	cfg.Clients[client.ID] = client.SCIMClientConfig
 	_, err = scim.NewService(r.db, r.authz, r.baseURL, cfg)
 	return err
 }
 
 func (r *SCIMRuntime) applyLocked(ctx context.Context) error {
-	clients, err := r.services.SCIMConfig.List(ctx)
+	cfg, _, err := r.services.SCIMConfig.Config(ctx)
 	if err != nil {
 		return err
-	}
-	cfg := config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}
-	for _, client := range clients {
-		if !client.Enabled {
-			continue
-		}
-		cfg.Clients[client.ID] = configFromRecord(*client)
 	}
 	service, err := scim.NewService(r.db, r.authz, r.baseURL, cfg)
 	if err != nil {
@@ -166,41 +149,4 @@ func (r *SCIMRuntime) applyLocked(ctx context.Context) error {
 	}
 	r.runtime.Apply(service, cfg)
 	return nil
-}
-
-func configFromRecord(client coredata.SCIMConfigRecord) config.SCIMClientConfig {
-	out := config.SCIMClientConfig{
-		Credentials:              make([]config.SCIMCredentialConfig, 0, len(client.Credentials)),
-		AuthoritativeUserDomains: client.AuthoritativeUserDomains,
-		ActiveUserRelationships:  make([]config.SCIMRelationshipConfig, 0, len(client.ActiveUserRelationships)),
-	}
-	for _, credential := range client.Credentials {
-		out.Credentials = append(out.Credentials, config.SCIMCredentialConfig{ID: credential.ID, BearerToken: credential.TokenRef})
-	}
-	for _, projection := range client.ActiveUserRelationships {
-		out.ActiveUserRelationships = append(out.ActiveUserRelationships, config.SCIMRelationshipConfig{
-			Relation: projection.Relation,
-			Resource: config.AuthorizationResourceDef{Type: projection.ResourceType, ID: projection.ResourceID},
-		})
-	}
-	return out
-}
-
-func recordFromConfig(clientID string, client config.SCIMClientConfig) coredata.SCIMConfigRecord {
-	record := coredata.SCIMConfigRecord{
-		ID:                       clientID,
-		Enabled:                  true,
-		AuthoritativeUserDomains: client.AuthoritativeUserDomains,
-	}
-	for _, credential := range client.Credentials {
-		record.Credentials = append(record.Credentials, coredata.SCIMCredentialRecord{
-			ID: credential.ID, TokenRef: credential.BearerToken,
-		})
-	}
-	for _, projection := range client.ActiveUserRelationships {
-		record.ActiveUserRelationships = append(record.ActiveUserRelationships, coredata.SCIMRelationshipRecord{
-			Relation: projection.Relation, ResourceType: projection.Resource.Type, ResourceID: projection.Resource.ID,
-		})
-	}
-	return record
 }

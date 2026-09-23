@@ -2,6 +2,7 @@ package coredata
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -10,6 +11,7 @@ import (
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 var (
@@ -18,30 +20,18 @@ var (
 	ErrSCIMClientExists   = errors.New("SCIM client already exists")
 )
 
-// SCIMConfigRecord is one runtime-managed inbound SCIM client. Tokens are
-// opaque to this layer and must be encrypted by the admin service before Put.
-type SCIMConfigRecord struct {
-	ID                       string
-	Credentials              []SCIMCredentialRecord
-	AuthoritativeUserDomains []string
-	ActiveUserRelationships  []SCIMRelationshipRecord
-	Enabled                  bool
-	Retained                 bool
-	CreatedAt                time.Time
-	UpdatedAt                time.Time
-	UpdatedBy                string
-	Revision                 int64
-}
-
-type SCIMCredentialRecord struct {
-	ID       string
-	TokenRef string
-}
-
-type SCIMRelationshipRecord struct {
-	Relation     string
-	ResourceType string
-	ResourceID   string
+// SCIMClientRecord is one runtime-managed inbound SCIM client. It embeds the
+// canonical configuration type so runtime storage and config.yaml share one
+// representation; the remaining fields are runtime ownership metadata.
+type SCIMClientRecord struct {
+	config.SCIMClientConfig
+	ID        string
+	Enabled   bool
+	Retained  bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	UpdatedBy string
+	Revision  int64
 }
 
 type SCIMConfigService struct {
@@ -53,7 +43,7 @@ func NewSCIMConfigService(ds indexeddb.IndexedDB) *SCIMConfigService {
 }
 
 // List returns enabled and retained clients in stable client-ID order.
-func (s *SCIMConfigService) List(ctx context.Context) ([]*SCIMConfigRecord, error) {
+func (s *SCIMConfigService) List(ctx context.Context) ([]*SCIMClientRecord, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("SCIM config service is not configured")
 	}
@@ -61,10 +51,9 @@ func (s *SCIMConfigService) List(ctx context.Context) ([]*SCIMConfigRecord, erro
 	if err != nil {
 		return nil, fmt.Errorf("list SCIM config: %w", err)
 	}
-	out := make([]*SCIMConfigRecord, 0, len(records))
+	out := make([]*SCIMClientRecord, 0, len(records))
 	for _, record := range records {
-		client := recordToSCIMConfig(record)
-		if client != nil {
+		if client := recordToSCIMClient(record); client != nil {
 			out = append(out, client)
 		}
 	}
@@ -72,7 +61,7 @@ func (s *SCIMConfigService) List(ctx context.Context) ([]*SCIMConfigRecord, erro
 	return out, nil
 }
 
-func (s *SCIMConfigService) Get(ctx context.Context, clientID string) (*SCIMConfigRecord, error) {
+func (s *SCIMConfigService) Get(ctx context.Context, clientID string) (*SCIMClientRecord, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("SCIM config service is not configured")
 	}
@@ -80,28 +69,43 @@ func (s *SCIMConfigService) Get(ctx context.Context, clientID string) (*SCIMConf
 	if clientID == "" {
 		return nil, fmt.Errorf("SCIM client id is required")
 	}
-	rec, err := s.store.Get(ctx, scimConfigKey(clientID))
+	rec, err := s.store.Get(ctx, clientID)
 	if err != nil {
 		if errors.Is(err, idb.ErrNotFound) {
 			return nil, ErrSCIMConfigNotFound
 		}
 		return nil, fmt.Errorf("get SCIM config: %w", err)
 	}
-	client := recordToSCIMConfig(rec)
+	client := recordToSCIMClient(rec)
 	if client == nil {
 		return nil, ErrSCIMConfigNotFound
 	}
 	return client, nil
 }
 
-type PutSCIMConfigInput struct {
-	Client             *SCIMConfigRecord
+// Config returns enabled runtime clients in the canonical SCIM config shape.
+func (s *SCIMConfigService) Config(ctx context.Context) (config.ServerSCIMConfig, bool, error) {
+	clients, err := s.List(ctx)
+	if err != nil {
+		return config.ServerSCIMConfig{}, false, err
+	}
+	out := config.ServerSCIMConfig{Clients: make(map[string]config.SCIMClientConfig, len(clients))}
+	for _, client := range clients {
+		if client.Enabled {
+			out.Clients[client.ID] = client.SCIMClientConfig
+		}
+	}
+	return out, len(clients) > 0, nil
+}
+
+type PutSCIMClientInput struct {
+	Client             *SCIMClientRecord
 	Actor              string
 	RequireRevision    int64
 	RequireRevisionSet bool
 }
 
-func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMConfigInput) (*SCIMConfigRecord, error) {
+func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMClientInput) (*SCIMClientRecord, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("SCIM config service is not configured")
 	}
@@ -114,10 +118,10 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMConfigInput) (
 		return nil, fmt.Errorf("SCIM client id is required")
 	}
 	now := time.Now().UTC()
-	existingRec, err := s.store.Get(ctx, scimConfigKey(client.ID))
+	existingRec, err := s.store.Get(ctx, client.ID)
 	switch {
 	case err == nil:
-		existing := recordToSCIMConfig(existingRec)
+		existing := recordToSCIMClient(existingRec)
 		if existing == nil {
 			return nil, fmt.Errorf("SCIM config record is invalid")
 		}
@@ -128,7 +132,7 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMConfigInput) (
 		client.Revision = existing.Revision + 1
 		client.UpdatedAt = now
 		client.UpdatedBy = strings.TrimSpace(input.Actor)
-		if err := s.store.Put(ctx, scimConfigRecord(client)); err != nil {
+		if err := s.store.Put(ctx, scimClientRecord(client)); err != nil {
 			return nil, fmt.Errorf("put SCIM config: %w", err)
 		}
 		return &client, nil
@@ -140,7 +144,7 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMConfigInput) (
 		client.UpdatedAt = now
 		client.UpdatedBy = strings.TrimSpace(input.Actor)
 		client.Revision = 1
-		if err := s.store.Add(ctx, scimConfigRecord(client)); err != nil {
+		if err := s.store.Add(ctx, scimClientRecord(client)); err != nil {
 			return nil, fmt.Errorf("put SCIM config: %w", err)
 		}
 		return &client, nil
@@ -149,73 +153,44 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMConfigInput) (
 	}
 }
 
-func scimConfigKey(clientID string) string { return "client\x00" + clientID }
-
-func scimConfigRecord(client SCIMConfigRecord) idb.Record {
-	credentials := make([]any, 0, len(client.Credentials))
-	for _, credential := range client.Credentials {
-		credentials = append(credentials, map[string]any{"id": credential.ID, "tokenRef": credential.TokenRef})
-	}
-	relationships := make([]any, 0, len(client.ActiveUserRelationships))
-	for _, projection := range client.ActiveUserRelationships {
-		relationships = append(relationships, map[string]any{
-			"relation":     projection.Relation,
-			"resourceType": projection.ResourceType,
-			"resourceID":   projection.ResourceID,
-		})
+func scimClientRecord(client SCIMClientRecord) idb.Record {
+	configJSON, err := json.Marshal(client.SCIMClientConfig)
+	if err != nil {
+		panic(fmt.Sprintf("marshal SCIM client config: %v", err))
 	}
 	return idb.Record{
-		"id":                       scimConfigKey(client.ID),
-		"client_id":                client.ID,
-		"credentials":              credentials,
-		"authoritativeUserDomains": client.AuthoritativeUserDomains,
-		"activeUserRelationships":  relationships,
-		"enabled":                  client.Enabled,
-		"retained":                 client.Retained,
-		"created_at":               client.CreatedAt,
-		"updated_at":               client.UpdatedAt,
-		"updated_by":               client.UpdatedBy,
-		"revision":                 client.Revision,
+		"id":          client.ID,
+		"client_id":   client.ID,
+		"config_json": string(configJSON),
+		"enabled":     client.Enabled,
+		"retained":    client.Retained,
+		"created_at":  client.CreatedAt,
+		"updated_at":  client.UpdatedAt,
+		"updated_by":  client.UpdatedBy,
+		"revision":    client.Revision,
 	}
 }
 
-func recordToSCIMConfig(rec idb.Record) *SCIMConfigRecord {
+func recordToSCIMClient(rec idb.Record) *SCIMClientRecord {
 	if rec == nil {
 		return nil
 	}
-	client := &SCIMConfigRecord{
-		ID:                       strings.TrimSpace(recString(rec, "client_id")),
-		AuthoritativeUserDomains: recStrings(rec, "authoritativeUserDomains"),
-		Enabled:                  recBool(rec, "enabled"),
-		Retained:                 recBool(rec, "retained"),
-		CreatedAt:                recTime(rec, "created_at"),
-		UpdatedAt:                recTime(rec, "updated_at"),
-		UpdatedBy:                recString(rec, "updated_by"),
-		Revision:                 int64(recUint64(rec, "revision")),
-	}
-	for _, item := range recAnySlice(rec, "credentials") {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		client.Credentials = append(client.Credentials, SCIMCredentialRecord{
-			ID:       strings.TrimSpace(recString(m, "id")),
-			TokenRef: strings.TrimSpace(recString(m, "tokenRef")),
-		})
-	}
-	for _, item := range recAnySlice(rec, "activeUserRelationships") {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		client.ActiveUserRelationships = append(client.ActiveUserRelationships, SCIMRelationshipRecord{
-			Relation:     strings.TrimSpace(recString(m, "relation")),
-			ResourceType: strings.TrimSpace(recString(m, "resourceType")),
-			ResourceID:   strings.TrimSpace(recString(m, "resourceID")),
-		})
+	client := &SCIMClientRecord{
+		ID:        strings.TrimSpace(recString(rec, "client_id")),
+		Enabled:   recBool(rec, "enabled"),
+		Retained:  recBool(rec, "retained"),
+		CreatedAt: recTime(rec, "created_at"),
+		UpdatedAt: recTime(rec, "updated_at"),
+		UpdatedBy: recString(rec, "updated_by"),
+		Revision:  int64(recUint64(rec, "revision")),
 	}
 	if client.ID == "" {
 		return nil
+	}
+	if raw := recJSON(rec, "config_json"); len(raw) > 0 {
+		if err := json.Unmarshal(raw, &client.SCIMClientConfig); err != nil {
+			return nil
+		}
 	}
 	return client
 }
