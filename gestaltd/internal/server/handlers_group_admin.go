@@ -71,7 +71,14 @@ func (s *Server) groupResource(groupID string) *proto.Resource {
 }
 
 func (s *Server) isScimManagedGroup(groupID string) bool {
-	if s == nil || s.scimManagedGroupIDs == nil {
+	if s == nil {
+		return false
+	}
+	if s.scimRuntime != nil {
+		_, ok := s.scimRuntime.ManagedGroupIDs()[strings.TrimSpace(groupID)]
+		return ok
+	}
+	if s.scimManagedGroupIDs == nil {
 		return false
 	}
 	_, ok := s.scimManagedGroupIDs[strings.TrimSpace(groupID)]

@@ -275,6 +275,8 @@ type Result struct {
 	PublicHostServices      *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport  *providergateway.ProviderGatewayTransport
 	SCIMHandler             http.Handler
+	SCIMRuntime             *scim.Runtime
+	SCIMConfigSource        string
 	DevSupervisor           *providerdev.Supervisor
 	AppRestarter            interface {
 		Configured(string) bool
@@ -933,6 +935,8 @@ type preparedCore struct {
 	AgentManager         *lazyAgentManager
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 	SCIM                 *scim.Service
+	SCIMRuntime          *scim.Runtime
+	SCIMConfigSource     string
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -1293,11 +1297,17 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	scimService, err := scim.NewService(svc.DB, authorizationProvider, cfg.Server.BaseURL, cfg.Server.SCIM)
+	scimRuntimeConfig, scimConfigSource, err := loadSCIMRuntimeConfiguration(ctx, svc, cfg)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, fmt.Errorf("bootstrap: scim: %w", err)
 	}
+	scimService, err := scim.NewService(svc.DB, authorizationProvider, cfg.Server.BaseURL, scimRuntimeConfig)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, fmt.Errorf("bootstrap: scim: %w", err)
+	}
+	scimRuntime := scim.NewRuntime(scimService)
 	if authorizationProvider != nil {
 		wrapped := scim.WrapAuthorization(authorizationProvider, svc.Users, scimService)
 		authorizationProviders[authorizationProviderName] = wrapped
@@ -1345,6 +1355,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		AgentManager:         agentManager,
 		PublicHostServices:   deps.PublicHostServices,
 		SCIM:                 scimService,
+		SCIMRuntime:          scimRuntime,
+		SCIMConfigSource:     scimConfigSource,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1721,7 +1733,9 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	})
 	appProvidersInitialized := make(chan struct{})
 	var scimHandler http.Handler
-	if prepared.SCIM != nil && prepared.SCIM.Enabled() {
+	if prepared.SCIMRuntime != nil {
+		scimHandler = prepared.SCIMRuntime.Handler()
+	} else if prepared.SCIM != nil && prepared.SCIM.Enabled() {
 		scimHandler = scim.NewHandler(prepared.SCIM)
 	}
 	result := &Result{
@@ -1764,6 +1778,8 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		PublicHostServices:             publicHostServices,
 		PublicGatewayTransport:         publicGatewayTransport,
 		SCIMHandler:                    scimHandler,
+		SCIMRuntime:                    prepared.SCIMRuntime,
+		SCIMConfigSource:               prepared.SCIMConfigSource,
 		scimService:                    prepared.SCIM,
 		DevSupervisor:                  prepared.Deps.DevSupervisor,
 		AppRestarter:                   appRestarter,
@@ -2715,4 +2731,49 @@ func ProviderAuthorizationPolicies(cfg *config.Config) map[string]string {
 		}
 	}
 	return policies
+}
+
+const (
+	scimConfigSourceRuntime = "runtime"
+	scimConfigSourceConfig  = "config"
+)
+
+// loadSCIMRuntimeConfiguration prefers runtime-managed SCIM clients. An empty
+// runtime store keeps existing config.yaml deployments working unchanged.
+// Token references are opaque here; the admin API resolves them to plaintext
+// while applying a configuration update.
+func loadSCIMRuntimeConfiguration(ctx context.Context, svc *coredata.Services, cfg *config.Config) (config.ServerSCIMConfig, string, error) {
+	if svc == nil || svc.SCIMConfig == nil {
+		return cfg.Server.SCIM, scimConfigSourceConfig, nil
+	}
+	clients, err := svc.SCIMConfig.List(ctx)
+	if err != nil {
+		return config.ServerSCIMConfig{}, "", err
+	}
+	if len(clients) == 0 {
+		return cfg.Server.SCIM, scimConfigSourceConfig, nil
+	}
+	out := config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}
+	for _, client := range clients {
+		if !client.Enabled {
+			continue
+		}
+		credentials := make([]config.SCIMCredentialConfig, 0, len(client.Credentials))
+		for _, credential := range client.Credentials {
+			credentials = append(credentials, config.SCIMCredentialConfig{ID: credential.ID, BearerToken: credential.TokenRef})
+		}
+		relationships := make([]config.SCIMRelationshipConfig, 0, len(client.ActiveUserRelationships))
+		for _, projection := range client.ActiveUserRelationships {
+			relationships = append(relationships, config.SCIMRelationshipConfig{
+				Relation: projection.Relation,
+				Resource: config.AuthorizationResourceDef{Type: projection.ResourceType, ID: projection.ResourceID},
+			})
+		}
+		out.Clients[client.ID] = config.SCIMClientConfig{
+			Credentials:              credentials,
+			AuthoritativeUserDomains: client.AuthoritativeUserDomains,
+			ActiveUserRelationships:  relationships,
+		}
+	}
+	return out, scimConfigSourceRuntime, nil
 }

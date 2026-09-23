@@ -25,6 +25,7 @@ const (
 	StoreAppAccessProfiles              = "app_access_profiles"
 	StoreAppAllowedOperations           = "app_allowed_operations"
 	StoreSCIMResources                  = "scim_resources"
+	StoreSCIMConfig                     = "scim_config"
 	StoreManagedSecrets                 = "managed_secrets"
 	StoreManagedSecretVersions          = "managed_secret_versions"
 	StoreManagedSecretAuditLogs         = "managed_secret_audit_logs"
@@ -47,6 +48,25 @@ var SCIMResourcesSchema = idb.ObjectStoreOptions{
 		{Name: "display_name", Type: idb.TypeString},
 		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+	},
+}
+
+var SCIMConfigSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_client_id", KeyPath: []string{"client_id"}, Unique: true},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "client_id", Type: idb.TypeString, NotNull: true},
+		{Name: "credentials", Type: idb.TypeJSON},
+		{Name: "authoritativeUserDomains", Type: idb.TypeJSON},
+		{Name: "activeUserRelationships", Type: idb.TypeJSON},
+		{Name: "enabled", Type: idb.TypeBool, NotNull: true},
+		{Name: "retained", Type: idb.TypeBool, NotNull: true},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_by", Type: idb.TypeString},
+		{Name: "revision", Type: idb.TypeInt, NotNull: true},
 	},
 }
 

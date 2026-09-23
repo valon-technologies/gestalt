@@ -129,6 +129,8 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		CatalogConnection:      httpCatalogConnectionMap(connMaps),
 		MCPConnection:          connMaps.MCPConnection,
 		SCIMHandler:            result.SCIMHandler,
+		SCIMRuntime:            result.SCIMRuntime,
+		SCIMConfigFallback:     cfg.Server.SCIM,
 		ScimManagedGroupIDs:    config.ScimManagedGroupIDs(cfg),
 		ConnectionAuth:         result.ConnectionAuth,
 		ManualConnectionAuth:   result.ManualConnectionAuth,
