@@ -228,3 +228,30 @@ fn sync_rest_transport_operation_result_envelope() {
     });
     let _ = result;
 }
+
+#[test]
+fn sync_rest_transport_send_error_preserves_cause() {
+    // Bind and immediately drop, leaving a port nothing is listening on so the
+    // connect fails deterministically without touching the network.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let addr = listener.local_addr().expect("local addr");
+    drop(listener);
+
+    let transport = SyncRestTransport::new(
+        format!("http://{addr}"),
+        Arc::new(BearerAuth::new("test-token")),
+    );
+    let client = AuthorizationClient::new(transport);
+    let err = client
+        .check_access_sync(CheckAccessRequest::default())
+        .expect_err("connect must fail");
+
+    assert_eq!(err.code, gestalt_error_code::UNAVAILABLE);
+    // reqwest's Display stops at "error sending request for url (...)"; the
+    // actionable cause only appears if the source chain is flattened in.
+    assert!(
+        err.message.to_lowercase().contains("refused"),
+        "cause missing from message: {}",
+        err.message
+    );
+}

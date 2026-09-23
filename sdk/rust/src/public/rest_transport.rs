@@ -65,18 +65,37 @@ impl RestTransport {
     }
 }
 
+/// reqwest's `Display` omits the underlying cause, which hides the actual
+/// failure (TLS verification, DNS, connection refused) behind a bare
+/// "error sending request for url". Flatten the source chain into the message.
+fn describe(err: &reqwest::Error) -> String {
+    let mut message = err.to_string();
+    let mut source = std::error::Error::source(err);
+    while let Some(cause) = source {
+        message.push_str(": ");
+        message.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    message
+}
+
 fn map_send_error(err: reqwest::Error) -> GestaltError {
+    let message = describe(&err);
+    // `is_request` is also true for connect and timeout failures, so those must
+    // be classified first or a dead connection surfaces as INVALID_ARGUMENT.
     if err.is_timeout() {
-        GestaltError::new(gestalt_error_code::DEADLINE_EXCEEDED, err.to_string())
+        GestaltError::new(gestalt_error_code::DEADLINE_EXCEEDED, message)
+    } else if err.is_connect() {
+        GestaltError::new(gestalt_error_code::UNAVAILABLE, message)
     } else if err.is_request() {
-        GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+        GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, message)
     } else {
-        GestaltError::new(gestalt_error_code::UNAVAILABLE, err.to_string())
+        GestaltError::new(gestalt_error_code::UNAVAILABLE, message)
     }
 }
 
 fn map_body_error(err: reqwest::Error) -> GestaltError {
-    GestaltError::new(gestalt_error_code::UNAVAILABLE, err.to_string())
+    GestaltError::new(gestalt_error_code::UNAVAILABLE, describe(&err))
 }
 
 fn finalize_response<Resp>(
