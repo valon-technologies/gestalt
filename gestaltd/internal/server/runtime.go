@@ -131,6 +131,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		SCIMHandler:              result.SCIMHandler,
 		SCIMRuntime:              result.SCIMRuntime,
 		SCIMConfigFallback:       cfg.Server.SCIM,
+		ScimManagedGroupIDs:      config.ScimManagedGroupIDs(cfg),
 		SCIMConfigSource:         result.SCIMConfigSource,
 		SCIMRuntimeWritesEnabled: cfg.Server.RuntimeSCIMWritesEnabled,
 		ConnectionAuth:           result.ConnectionAuth,

@@ -23,10 +23,10 @@ func ManagedGroupIDs(cfg ServerSCIMConfig) map[string]struct{} {
 // projections plus platform subject-set grants (gestalt/authorization).
 // App subject-set grants stay editable so local roster groups are not locked.
 func ScimManagedGroupIDs(cfg *Config) map[string]struct{} {
-	ids := ManagedGroupIDs(cfg.Server.SCIM)
 	if cfg == nil {
-		return ids
+		return map[string]struct{}{}
 	}
+	ids := ManagedGroupIDs(cfg.Server.SCIM)
 	for i := range cfg.Authorization.Relationships {
 		relationship := &cfg.Authorization.Relationships[i]
 		if strings.TrimSpace(relationship.Resource.Type) == "app" {

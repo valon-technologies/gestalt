@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -158,5 +159,75 @@ func TestAdminSCIMValidationAndConflict(t *testing.T) {
 	resp, body = doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", badCreate)
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("duplicate status = %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestAdminSCIMListsFallbackSourceAndCredentialIDs(t *testing.T) {
+	t.Parallel()
+	ts, svc, _ := newSCIMAdminTestServer(t)
+	_ = svc
+
+	resp, body := doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("fallback list status = %d: %s", resp.StatusCode, body)
+	}
+	var payload struct {
+		Clients []struct {
+			ID          string `json:"id"`
+			Credentials []struct {
+				ID string `json:"id"`
+			} `json:"credentials"`
+		} `json:"clients"`
+		Source string `json:"source"`
+	}
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatalf("decode fallback list: %v", err)
+	}
+	if payload.Source != "config" {
+		t.Fatalf("source = %q, want config", payload.Source)
+	}
+	if len(payload.Clients) != 0 {
+		t.Fatalf("fallback clients = %#v, want none", payload.Clients)
+	}
+
+	create := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"}],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
+	resp, body = doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", resp.StatusCode, body)
+	}
+	resp, body = doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("runtime list status = %d: %s", resp.StatusCode, body)
+	}
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatalf("decode runtime list: %v", err)
+	}
+	if payload.Source != "runtime" {
+		t.Fatalf("source = %q, want runtime", payload.Source)
+	}
+	if len(payload.Clients) != 1 || payload.Clients[0].ID != "rippling" || len(payload.Clients[0].Credentials) != 1 || payload.Clients[0].Credentials[0].ID != "current" {
+		t.Fatalf("runtime clients = %#v", payload.Clients)
+	}
+}
+
+func TestAdminSCIMRemovedCredentialIsRevoked(t *testing.T) {
+	t.Parallel()
+	ts, svc, runtime := newSCIMAdminTestServer(t)
+	create := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"},{"id":"next","token":"token-two"}],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
+	resp, body := doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", resp.StatusCode, body)
+	}
+	patch := `{"credentials":[{"id":"next"}],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true,"revision":1}`
+	resp, body = doSCIMAdmin(t, http.MethodPatch, ts.URL+"/admin/api/v1/scim/clients/rippling", patch)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status = %d: %s", resp.StatusCode, body)
+	}
+	if _, ok := runtime.Service().ClientForToken("token-one"); ok {
+		t.Fatal("removed credential remains active")
+	}
+	secrets, err := svc.SCIMConfig.Secrets(context.Background(), "rippling")
+	if err != nil || len(secrets) != 1 || secrets[0].CredentialID != "next" {
+		t.Fatalf("secrets = %#v, err = %v", secrets, err)
 	}
 }

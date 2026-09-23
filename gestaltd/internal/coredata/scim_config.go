@@ -200,23 +200,26 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMClientInput) (
 			return nil, fmt.Errorf("SCIM secret write: %w", err)
 		}
 	}
-	if client.Enabled && len(input.Secrets) == 0 {
-		// Preserve existing ciphertext when an edit omits token input.
-		existingSecrets, err := secrets.GetAll(ctx, nil)
-		if err != nil {
-			return nil, fmt.Errorf("SCIM secret write: load existing: %w", err)
+	// Remove credentials no longer present in the submitted client. This makes
+	// a one-to-two rotation and credential removal revoke old bearer tokens
+	// atomically with the client update.
+	existingRecords, err := secrets.GetAll(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("SCIM secret write: load existing: %w", err)
+	}
+	for _, record := range existingRecords {
+		secret := recordToSCIMSecret(record)
+		if secret == nil || secret.ClientID != client.ID {
+			continue
 		}
-		found := false
-		for _, record := range existingSecrets {
-			secret := recordToSCIMSecret(record)
-			if secret != nil && secret.ClientID == client.ID {
-				found = true
-				break
+		if _, keep := seenSecretIDs[secret.CredentialID]; !keep {
+			if err := secrets.Delete(ctx, scimSecretKey(secret.ClientID, secret.CredentialID)); err != nil {
+				return nil, fmt.Errorf("SCIM secret delete: %w", err)
 			}
 		}
-		if !found {
-			return nil, fmt.Errorf("enabled SCIM client requires at least one credential")
-		}
+	}
+	if client.Enabled && len(input.Secrets) == 0 {
+		return nil, fmt.Errorf("enabled SCIM client requires at least one credential")
 	}
 	if err := clients.Put(ctx, scimClientRecord(client)); err != nil {
 		return nil, fmt.Errorf("SCIM config write: %w", err)
@@ -361,6 +364,8 @@ func recordToSCIMClient(rec idb.Record) *SCIMClientRecord {
 	}
 	return client
 }
+
+func scimSecretKey(clientID, credentialID string) string { return clientID + "\x00" + credentialID }
 
 func scimSecretRecord(secret SCIMClientSecret) idb.Record {
 	return idb.Record{

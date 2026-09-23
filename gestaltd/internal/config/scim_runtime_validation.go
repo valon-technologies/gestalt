@@ -36,8 +36,12 @@ func authorizationResourceTypesFromProvider(ctx context.Context, provider ListAc
 		return nil, fmt.Errorf("authorization provider is required")
 	}
 	out := map[string]AuthorizationResourceTypeDef{}
+	var pageToken string
 	for {
-		response, err := provider.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{PageSize: 200})
+		response, err := provider.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
+			PageSize:  200,
+			PageToken: pageToken,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("list active model resource types: %w", err)
 		}
@@ -51,9 +55,14 @@ func authorizationResourceTypesFromProvider(ctx context.Context, provider ListAc
 			}
 			out[name] = authorizationResourceTypeDefFromProto(resourceType)
 		}
-		if token := strings.TrimSpace(response.GetNextPageToken()); token == "" {
+		nextToken := strings.TrimSpace(response.GetNextPageToken())
+		if nextToken == "" || nextToken == pageToken {
+			if nextToken != "" && nextToken == pageToken {
+				return nil, fmt.Errorf("active model resource types pagination token did not advance")
+			}
 			return out, nil
 		}
+		pageToken = nextToken
 	}
 }
 

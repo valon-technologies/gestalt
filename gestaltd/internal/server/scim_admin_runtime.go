@@ -32,18 +32,19 @@ const scimRuntimePollInterval = 2 * time.Second
 // SCIMRuntime owns runtime SCIM configuration, validation, encryption, and
 // propagation into the single SCIM runtime snapshot.
 type SCIMRuntime struct {
-	services      *coredata.Services
-	db            indexeddb.IndexedDB
-	authz         core.AuthorizationProvider
-	runtime       *scim.Runtime
-	baseURL       string
-	fallback      config.ServerSCIMConfig
-	source        string
-	writesEnabled bool
-	encrypt       func(plaintext string) (string, error)
-	decrypt       func(encoded string) (string, error)
-	gateway       *providergateway.ProviderGatewayTransport
-	mu            sync.Mutex
+	services                *coredata.Services
+	db                      indexeddb.IndexedDB
+	authz                   core.AuthorizationProvider
+	runtime                 *scim.Runtime
+	baseURL                 string
+	fallback                config.ServerSCIMConfig
+	platformManagedGroupIDs map[string]struct{}
+	source                  string
+	writesEnabled           bool
+	encrypt                 func(plaintext string) (string, error)
+	decrypt                 func(encoded string) (string, error)
+	gateway                 *providergateway.ProviderGatewayTransport
+	mu                      sync.Mutex
 }
 
 func NewSCIMRuntime(
@@ -53,6 +54,7 @@ func NewSCIMRuntime(
 	runtime *scim.Runtime,
 	baseURL string,
 	fallback config.ServerSCIMConfig,
+	platformManagedGroupIDs map[string]struct{},
 	stateSecret []byte,
 	source string,
 	writesEnabled bool,
@@ -62,15 +64,16 @@ func NewSCIMRuntime(
 		runtime = scim.NewRuntime(nil, config.ServerSCIMConfig{})
 	}
 	r := &SCIMRuntime{
-		services:      services,
-		db:            db,
-		authz:         authz,
-		runtime:       runtime,
-		baseURL:       baseURL,
-		fallback:      fallback,
-		source:        source,
-		writesEnabled: writesEnabled,
-		gateway:       gateway,
+		services:                services,
+		db:                      db,
+		authz:                   authz,
+		runtime:                 runtime,
+		baseURL:                 baseURL,
+		fallback:                fallback,
+		platformManagedGroupIDs: platformManagedGroupIDs,
+		source:                  source,
+		writesEnabled:           writesEnabled,
+		gateway:                 gateway,
 	}
 	if len(stateSecret) > 0 {
 		r.encrypt = func(plaintext string) (string, error) {
@@ -106,27 +109,32 @@ func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMClientRecord
 	if err := r.available(); err != nil {
 		return nil, "", err
 	}
-	clients, err := r.services.SCIMConfig.List(ctx)
+	runtimeClients, err := r.services.SCIMConfig.List(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	if len(clients) == 0 {
-		for clientID, client := range r.fallback.Clients {
-			clients = append(clients, &coredata.SCIMClientRecord{
-				ID:               clientID,
-				SCIMClientConfig: client,
-				Enabled:          true,
-			})
+	for _, client := range runtimeClients {
+		secrets, err := r.services.SCIMConfig.Secrets(ctx, client.ID)
+		if err != nil {
+			return nil, "", err
+		}
+		client.Credentials = make([]config.SCIMCredentialConfig, 0, len(secrets))
+		for _, secret := range secrets {
+			client.Credentials = append(client.Credentials, config.SCIMCredentialConfig{ID: secret.CredentialID})
 		}
 	}
-	return clients, r.currentSource(len(clients) > 0), nil
-}
-
-func (r *SCIMRuntime) currentSource(hasRuntimeClients bool) string {
-	if hasRuntimeClients {
-		return "runtime"
+	if len(runtimeClients) > 0 {
+		return runtimeClients, "runtime", nil
 	}
-	return "config"
+	fallbackClients := make([]*coredata.SCIMClientRecord, 0, len(r.fallback.Clients))
+	for clientID, client := range r.fallback.Clients {
+		fallbackClients = append(fallbackClients, &coredata.SCIMClientRecord{
+			ID:               clientID,
+			SCIMClientConfig: client,
+			Enabled:          true,
+		})
+	}
+	return fallbackClients, "config", nil
 }
 
 // Put validates, encrypts, persists, and publishes one complete snapshot.
@@ -252,18 +260,23 @@ func (r *SCIMRuntime) validateLocked(ctx context.Context, client coredata.SCIMCl
 }
 
 func (r *SCIMRuntime) publishLocked(ctx context.Context) error {
-	cfg, _, err := r.services.SCIMConfig.ResolveConfig(ctx, func(secret coredata.SCIMClientSecret) (string, error) {
+	cfg, hasRuntimeClients, err := r.services.SCIMConfig.ResolveConfig(ctx, func(secret coredata.SCIMClientSecret) (string, error) {
 		return r.decrypt(string(secret.Ciphertext))
 	})
 	if err != nil {
 		return err
+	}
+	source := "runtime"
+	if !hasRuntimeClients {
+		cfg = r.fallback
+		source = "config"
 	}
 	service, err := scim.NewService(r.db, r.authz, r.baseURL, cfg)
 	if err != nil {
 		return err
 	}
 	r.runtime.Apply(service, cfg)
-	r.source = "runtime"
+	r.source = source
 	if r.gateway != nil {
 		r.gateway.SetScimManagedGroupIDs(r.managedGroupIDs(cfg))
 	}
@@ -274,14 +287,7 @@ func (r *SCIMRuntime) applyCurrentSnapshot(ctx context.Context) {
 	if r == nil || r.services == nil || r.services.SCIMConfig == nil || r.decrypt == nil {
 		return
 	}
-	if err := r.publishLocked(ctx); err == nil {
-		return
-	}
-	// Keep config-sourced SCIM active when runtime storage is empty or unreadable.
-	service, err := scim.NewService(r.db, r.authz, r.baseURL, r.fallback)
-	if err == nil {
-		r.runtime.Apply(service, r.fallback)
-	}
+	_ = r.publishLocked(ctx)
 }
 
 // pollSharedStore converges this replica when another replica writes the
@@ -294,16 +300,18 @@ func (r *SCIMRuntime) pollSharedStore() {
 	defer ticker.Stop()
 	var lastFingerprint [32]byte
 	for range ticker.C {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		fp, err := r.storeFingerprint(ctx)
-		cancel()
+		fingerprintCtx, cancelFingerprint := context.WithTimeout(context.Background(), time.Second)
+		fp, err := r.storeFingerprint(fingerprintCtx)
+		cancelFingerprint()
 		if err != nil || fp == lastFingerprint {
 			continue
 		}
-		lastFingerprint = fp
 		r.mu.Lock()
-		if err := r.publishLocked(ctx); err == nil {
-			r.source = "runtime"
+		publishCtx, cancelPublish := context.WithTimeout(context.Background(), 2*time.Second)
+		publishErr := r.publishLocked(publishCtx)
+		cancelPublish()
+		if publishErr == nil {
+			lastFingerprint = fp
 		}
 		r.mu.Unlock()
 	}
@@ -341,7 +349,11 @@ func (r *SCIMRuntime) ensurePropagationSupported(ctx context.Context) error {
 }
 
 func (r *SCIMRuntime) managedGroupIDs(cfg config.ServerSCIMConfig) map[string]struct{} {
-	return config.ManagedGroupIDs(cfg)
+	ids := config.ManagedGroupIDs(cfg)
+	for id := range r.platformManagedGroupIDs {
+		ids[id] = struct{}{}
+	}
+	return ids
 }
 
 // TokenFingerprint is intentionally unexported and unused externally; retained
