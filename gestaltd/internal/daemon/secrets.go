@@ -50,8 +50,6 @@ func runSecrets(args []string) error {
 		return runManagedSecretList(args[1:])
 	case "describe":
 		return runManagedSecretDescribe(args[1:])
-	case "audit":
-		return runManagedSecretAudit(args[1:])
 	case "preflight":
 		return runManagedSecretPreflight(args[1:])
 	case "retire":
@@ -70,7 +68,6 @@ func printSecretsUsage(w io.Writer) {
 	writeUsageLine(w, "  rotate     Rotate an existing managed secret by creating a new version")
 	writeUsageLine(w, "  list       List managed secret metadata; values are never returned")
 	writeUsageLine(w, "  describe   Show one secret's metadata and recent audit history")
-	writeUsageLine(w, "  audit      Show audit history for one secret")
 	writeUsageLine(w, "  preflight  Check configured references against stored secrets; reads JSON from stdin")
 	writeUsageLine(w, "  retire     Mark a secret retired while retaining history")
 	writeUsageLine(w, "")
@@ -79,14 +76,11 @@ func printSecretsUsage(w io.Writer) {
 }
 
 type managedSecretWriteArgs struct {
-	name        string
-	ownerApp    string
-	scope       string
-	description string
-	reason      string
-	requestID   string
-	valueFile   string
-	generate    bool
+	name     string
+	ownerApp string
+	scope    string
+	reason   string
+	generate bool
 }
 
 func runManagedSecretWrite(args []string, operation string) error {
@@ -95,10 +89,7 @@ func runManagedSecretWrite(args []string, operation string) error {
 	opts := managedSecretWriteArgs{}
 	fs.StringVar(&opts.ownerApp, "owner-app", "", "app that owns this secret")
 	fs.StringVar(&opts.scope, "scope", "", "secret scope: app or shared")
-	fs.StringVar(&opts.description, "description", "", "human-readable description")
 	fs.StringVar(&opts.reason, "reason", "", "why this value is being written")
-	fs.StringVar(&opts.requestID, "request-id", "", "stable request identifier for automation retries")
-	fs.StringVar(&opts.valueFile, "file", "", "read exact value bytes from this file")
 	fs.BoolVar(&opts.generate, "generate", false, "generate a 48-byte base64url secret and print it once")
 	if err := parseInterspersed(fs, args); err != nil {
 		return err
@@ -117,14 +108,12 @@ func runManagedSecretWrite(args []string, operation string) error {
 	}
 
 	body := map[string]any{
-		"name":        opts.name,
-		"operation":   operation,
-		"ownerApp":    opts.ownerApp,
-		"scope":       opts.scope,
-		"description": opts.description,
-		"reason":      opts.reason,
-		"source":      "gestaltd-cli",
-		"requestId":   opts.requestID,
+		"name":      opts.name,
+		"operation": operation,
+		"ownerApp":  opts.ownerApp,
+		"scope":     opts.scope,
+		"reason":    opts.reason,
+		"source":    "gestaltd-cli",
 	}
 	if opts.generate {
 		body["generate"] = true
@@ -165,34 +154,21 @@ func printManagedSecretWriteResponse(w io.Writer, response managedSecretWriteRes
 
 func printManagedSecretWriteUsage(w io.Writer, operation string) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd secrets "+operation+" NAME [--owner-app APP] [--scope app|shared] [--description TEXT] --reason TEXT [--request-id ID] [--file PATH] [--generate]")
+	writeUsageLine(w, "  gestaltd secrets "+operation+" NAME [--owner-app APP] [--scope app|shared] --reason TEXT [--generate]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "The value is read from a file, piped stdin, or a hidden terminal prompt.")
+	writeUsageLine(w, "The value is read from piped stdin or a hidden terminal prompt.")
 	writeUsageLine(w, "It is never accepted as a command-line argument.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --owner-app     App that owns this secret; required for the default app scope")
 	writeUsageLine(w, "  --scope         Secret scope: app or shared")
-	writeUsageLine(w, "  --description   Human-readable description")
 	writeUsageLine(w, "  --reason        Why this value is being written (required)")
-	writeUsageLine(w, "  --request-id    Stable request identifier for automation retries")
-	writeUsageLine(w, "  --file          Read exact value bytes from PATH")
 	writeUsageLine(w, "  --generate      Generate a 48-byte base64url secret and print it once")
 }
 
 func readManagedSecretValue(opts managedSecretWriteArgs) (string, error) {
 	if opts.generate {
-		if opts.valueFile != "" {
-			return "", errors.New("--generate and --file are mutually exclusive")
-		}
 		return "", nil
-	}
-	if opts.valueFile != "" {
-		raw, err := os.ReadFile(opts.valueFile)
-		if err != nil {
-			return "", fmt.Errorf("failed to read %s: %w", opts.valueFile, err)
-		}
-		return validateManagedSecretValue(raw)
 	}
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		first, err := readManagedSecretPassword("Secret value: ")
@@ -231,8 +207,7 @@ func validateManagedSecretValue(raw []byte) (string, error) {
 
 func runManagedSecretList(args []string) error {
 	fs := flag.NewFlagSet("gestaltd secrets list", flag.ContinueOnError)
-	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets list [--owner-app APP]") }
-	ownerApp := fs.String("owner-app", "", "filter by owning app")
+	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets list") }
 	if err := parseInterspersed(fs, args); err != nil {
 		return err
 	}
@@ -248,13 +223,7 @@ func runManagedSecretList(args []string) error {
 	if err := client.get(context.Background(), managedSecretsAdminPath, &all); err != nil {
 		return fmt.Errorf("failed to list managed secrets: %w", err)
 	}
-	rows := make([]managedSecretSummary, 0, len(all))
-	for i := range all {
-		if strings.TrimSpace(*ownerApp) == "" || all[i].OwnerApp == strings.TrimSpace(*ownerApp) {
-			rows = append(rows, all[i])
-		}
-	}
-	printManagedSecretRows(os.Stdout, rows)
+	printManagedSecretRows(os.Stdout, all)
 	return nil
 }
 
@@ -296,35 +265,6 @@ func printManagedSecretDescribeResponse(w io.Writer, response managedSecretDetai
 		_, _ = fmt.Fprintf(w, "Retired at: %s\n", *response.RetiredAt)
 	}
 	printManagedSecretAudit(w, response.Audit)
-}
-
-func runManagedSecretAudit(args []string) error {
-	fs := flag.NewFlagSet("gestaltd secrets audit", flag.ContinueOnError)
-	fs.Usage = func() { printSimpleUsage(fs.Output(), "gestaltd secrets audit NAME [--limit N]") }
-	limit := fs.Int("limit", 50, "maximum audit rows to return")
-	if err := parseInterspersed(fs, args); err != nil {
-		return err
-	}
-	positionals := fs.Args()
-	if len(positionals) != 1 {
-		return fmt.Errorf("secret name is required")
-	}
-	name := positionals[0]
-	if *limit < 1 || *limit > 200 {
-		return fmt.Errorf("--limit must be between 1 and 200")
-	}
-
-	client, err := newManagedSecretClient()
-	if err != nil {
-		return err
-	}
-	path := fmt.Sprintf("%s/%s/audit?limit=%d", managedSecretsAdminPath, url.PathEscape(name), *limit)
-	var rows []managedSecretAuditRow
-	if err := client.get(context.Background(), path, &rows); err != nil {
-		return fmt.Errorf("failed to list managed secret audit for %s: %w", name, err)
-	}
-	printManagedSecretAudit(os.Stdout, rows)
-	return nil
 }
 
 func runManagedSecretPreflight(args []string) error {

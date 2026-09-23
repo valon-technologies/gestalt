@@ -30,7 +30,7 @@ func TestRunSecretsUsage(t *testing.T) {
 
 	var output bytes.Buffer
 	printSecretsUsage(&output)
-	for _, want := range []string{"create", "rotate", "list", "describe", "audit", "preflight", "retire", "GESTALT_URL"} {
+	for _, want := range []string{"create", "rotate", "list", "describe", "preflight", "retire", "GESTALT_URL"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("secrets usage does not contain %q:\n%s", want, output.String())
 		}
@@ -48,7 +48,6 @@ func TestRunSecretsHelpDoesNotRequireConfiguration(t *testing.T) {
 		{"rotate", "--help"},
 		{"list", "--help"},
 		{"describe", "--help"},
-		{"audit", "--help"},
 		{"preflight", "--help"},
 		{"retire", "--help"},
 	} {
@@ -176,7 +175,6 @@ func TestRunManagedSecretWriteValidation(t *testing.T) {
 	}{
 		{name: "requires name", args: []string{"--reason", "test"}, want: "secret name is required"},
 		{name: "requires reason", args: []string{"demo-secret"}, want: "--reason is required"},
-		{name: "rejects generate with file", args: []string{"demo-secret", "--reason", "test", "--generate", "--file", "/tmp/value"}, want: "--generate and --file are mutually exclusive"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -216,18 +214,27 @@ func TestRunManagedSecretWriteReadsPipedStdin(t *testing.T) {
 	}
 }
 
-func TestRunManagedSecretWriteUsesFile(t *testing.T) {
+func TestRunManagedSecretWriteUsesStdinFile(t *testing.T) {
 
 	valuePath := filepath.Join(t.TempDir(), "value.txt")
 	if err := os.WriteFile(valuePath, []byte("file-value"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	stdin, err := os.Open(valuePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = stdin.Close() }()
+	original := os.Stdin
+	os.Stdin = stdin
+	t.Cleanup(func() { os.Stdin = original })
+
 	server := managedSecretWriteServer(t)
 	t.Setenv("GESTALT_URL", server.URL)
 	t.Setenv("GESTALT_API_KEY", "test-token")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	if err := runManagedSecretWrite([]string{"demo-secret", "--reason", "test", "--owner-app", "demo", "--file", valuePath}, "create"); err != nil {
+	if err := runManagedSecretWrite([]string{"demo-secret", "--reason", "test", "--owner-app", "demo"}, "create"); err != nil {
 		t.Fatalf("runManagedSecretWrite() error = %v", err)
 	}
 }
