@@ -46,6 +46,7 @@ func renderMCPOAuthConsentPage(w http.ResponseWriter, view mcpOAuthConsentPageVi
 		scopeItems.WriteString("<li>" + html.EscapeString(item) + "</li>")
 	}
 
+	setMCPOAuthNoStoreHeaders(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html>

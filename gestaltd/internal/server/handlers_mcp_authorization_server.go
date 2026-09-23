@@ -280,6 +280,16 @@ func (s *Server) mcpOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// prompt=none requests silent reauthorization: a caller using it (e.g. a
+	// hidden iframe) cannot render or click through an interactive consent
+	// page, so it must get an immediate, machine-readable error instead of
+	// html it cannot act on. This server never treats past consent as
+	// standing, so a signed-in caller here always needs a fresh consent.
+	if strings.EqualFold(strings.TrimSpace(query.Get("prompt")), "none") {
+		redirectMCPOAuthError(w, r, redirectURI, state, "consent_required", "user consent is required")
+		return
+	}
+
 	scope := strings.TrimSpace(query.Get("scope"))
 	consent, err := encodeMCPOAuthConsent(s.encryptor, mcpOAuthConsentState{
 		ClientID:            clientID,
