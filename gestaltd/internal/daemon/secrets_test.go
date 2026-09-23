@@ -192,8 +192,9 @@ func TestValidateManagedSecretValue(t *testing.T) {
 	if _, err := validateManagedSecretValue([]byte("value")); err != nil {
 		t.Fatalf("valid value error = %v", err)
 	}
-	if _, err := validateManagedSecretValue([]byte("")); err == nil || !strings.Contains(err.Error(), "required") {
-		t.Fatalf("empty value error = %v", err)
+	value, err := validateManagedSecretValue([]byte(""))
+	if err != nil || value != "" {
+		t.Fatalf("empty value = (%q, %v), want no error", value, err)
 	}
 	if _, err := validateManagedSecretValue(bytes.Repeat([]byte("a"), managedSecretMaxBytes+1)); err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("oversized value error = %v", err)
@@ -204,6 +205,31 @@ func TestRunManagedSecretWriteReadsPipedStdin(t *testing.T) {
 
 	restoreStdin(t, "piped-value")
 	server := managedSecretWriteServer(t)
+	t.Setenv("GESTALT_URL", server.URL)
+	t.Setenv("GESTALT_API_KEY", "test-token")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	if err := runManagedSecretWrite([]string{"demo-secret", "--reason", "test"}, "create"); err != nil {
+		t.Fatalf("runManagedSecretWrite() error = %v", err)
+	}
+}
+
+func TestRunManagedSecretWriteGeneratesWithoutValue(t *testing.T) {
+	restoreStdin(t, "")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		if body["value"] != nil || body["generate"] != true {
+			t.Errorf("generate body = %#v, want generate=true without value", body)
+			http.Error(w, "invalid generate request", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"secret":{"name":"demo-secret","scope":"app"},"version":{"version":1,"createdAt":"2026-01-01T00:00:00Z"},"generatedValue":"generated-secret","rolloutRequired":false}`))
+	}))
+	defer server.Close()
 	t.Setenv("GESTALT_URL", server.URL)
 	t.Setenv("GESTALT_API_KEY", "test-token")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -249,11 +275,6 @@ func managedSecretWriteServer(t *testing.T) *httptest.Server {
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid body", http.StatusBadRequest)
-			return
-		}
-		if body["value"] == nil {
-			t.Errorf("write body missing value: %#v", body)
-			http.Error(w, "missing value", http.StatusBadRequest)
 			return
 		}
 		if body["value"] == nil && body["generate"] != true {

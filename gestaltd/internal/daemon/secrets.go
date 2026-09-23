@@ -187,9 +187,6 @@ func validateManagedSecretValue(raw []byte) (string, error) {
 	if !utf8.ValidString(value) {
 		return "", errors.New("secret value must be valid UTF-8")
 	}
-	if value == "" {
-		return "", errors.New("secret value is required")
-	}
 	return value, nil
 }
 
