@@ -30,7 +30,7 @@ func TestRunSecretsUsage(t *testing.T) {
 
 	var output bytes.Buffer
 	printSecretsUsage(&output)
-	for _, want := range []string{"create", "rotate", "list", "describe", "preflight", "retire", "GESTALT_URL"} {
+	for _, want := range []string{"create", "rotate", "list", "describe", "retire", "GESTALT_URL"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("secrets usage does not contain %q:\n%s", want, output.String())
 		}
@@ -48,7 +48,6 @@ func TestRunSecretsHelpDoesNotRequireConfiguration(t *testing.T) {
 		{"rotate", "--help"},
 		{"list", "--help"},
 		{"describe", "--help"},
-		{"preflight", "--help"},
 		{"retire", "--help"},
 	} {
 		if err := runSecrets(args); err != nil && !errors.Is(err, flag.ErrHelp) {
@@ -257,6 +256,11 @@ func managedSecretWriteServer(t *testing.T) *httptest.Server {
 			http.Error(w, "missing value", http.StatusBadRequest)
 			return
 		}
+		if body["value"] == nil && body["generate"] != true {
+			t.Errorf("write body must provide value or generate: %#v", body)
+			http.Error(w, "missing value", http.StatusBadRequest)
+			return
+		}
 		if got := body["source"]; got != "gestaltd-cli" {
 			t.Errorf("write source = %#v", got)
 			http.Error(w, "invalid source", http.StatusBadRequest)
@@ -264,29 +268,6 @@ func managedSecretWriteServer(t *testing.T) *httptest.Server {
 		}
 		_, _ = w.Write([]byte(`{"secret":{"name":"demo-secret","ownerApp":"demo","scope":"app"},"version":{"version":1,"createdAt":"2026-01-01T00:00:00Z"}}`))
 	}))
-}
-
-func TestRunManagedSecretPreflightFailsNonZero(t *testing.T) {
-
-	restoreStdin(t, `[]`)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != managedSecretsAdminPath+"/preflight" {
-			t.Errorf("preflight path = %q", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_, _ = w.Write([]byte(`{"ok":false,"missing":[{"name":"missing-secret"}]}`))
-	}))
-	defer server.Close()
-	t.Setenv("GESTALT_URL", server.URL)
-	t.Setenv("GESTALT_API_KEY", "test-token")
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	err := runManagedSecretPreflight(nil)
-	var exitErr exitCodeError
-	if !errors.As(err, &exitErr) || exitErr.code != 1 {
-		t.Fatalf("preflight error = %#v, want exit code 1", err)
-	}
 }
 
 func TestNewManagedSecretClientRequiresURLAndToken(t *testing.T) {
