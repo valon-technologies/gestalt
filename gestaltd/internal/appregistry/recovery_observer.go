@@ -246,7 +246,7 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 		if !stable || now.Sub(healthySince) < o.StabilityWindow {
 			continue
 		}
-		_, recorded, err := o.Observations.RecordIfCurrentFailed(ctx, &core.AppVersionRecoveryObservation{
+		result, recorded, err := o.Observations.RecordIfCurrentFailed(ctx, &core.AppVersionRecoveryObservation{
 			ID:                      changeRequestID,
 			App:                     app,
 			Version:                 desiredVersion,
@@ -262,7 +262,16 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 		o.reset(app)
 		if recorded {
 			o.markCompleted(changeRequestID)
-			metricutil.RecordAppRolloutRecovery(ctx, app, outcome.FailedAt, now)
+			// RecordIfCurrentFailed returns recorded=true for a duplicate
+			// hit too (a concurrent replica already wrote this recovery),
+			// echoing back that first writer's observation. Only the
+			// winner's own RecoveredAt survives the round trip, so this is
+			// the one place that distinguishes "this call created the row"
+			// from "this call found it already there" without changing the
+			// store's documented, already-tested contract.
+			if result != nil && result.RecoveredAt.Equal(now.UTC().Truncate(time.Millisecond)) {
+				metricutil.RecordAppRolloutRecovery(ctx, app, outcome.FailedAt, now)
+			}
 		}
 	}
 	o.resetUnseen(seen)
