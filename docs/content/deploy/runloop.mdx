@@ -1,0 +1,191 @@
+import { Callout } from 'nextra/components'
+
+# Runloop.ai
+
+Runloop.ai is a good fit when you want to run Gestalt in an isolated remote
+Devbox for demos, integration tests, agent development, or short-lived review
+environments. Runloop Devboxes can run Docker, expose HTTP services through
+tunnels, and suspend or shut down when idle.
+
+<Callout type="info">
+  This guide runs the `gestaltd` server image inside a Runloop Devbox. It is
+  not a Gestalt runtime provider for running plugins inside Runloop.
+</Callout>
+
+For durable production hosting, prefer [Docker](/deploy/docker),
+[Helm](/deploy/helm), or another container platform with a stable hostname,
+managed TLS, and a production datastore. Treat Devbox-local disk as preview
+state unless you explicitly preserve it with Runloop snapshot or suspend
+workflows.
+
+## Prerequisites
+
+- A Runloop API key in `RUNLOOP_API_KEY`.
+- The Runloop Python SDK installed locally.
+- A Gestalt config file that works with the Docker image.
+
+```sh
+export RUNLOOP_API_KEY=<your-runloop-api-key>
+
+python3 -m venv .runloop-venv
+source .runloop-venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install runloop_api_client
+```
+
+Runloop tunnels require services inside the Devbox to listen on `0.0.0.0`.
+Gestalt's public listener already defaults to `0.0.0.0:8080`, but keep that
+binding if you override `server.public`.
+
+## Minimal preview config
+
+Create a local `config.yaml` for a throwaway preview:
+
+```yaml
+apiVersion: gestaltd.config/v3
+
+server:
+  public:
+    host: 0.0.0.0
+    port: 8080
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source:
+        githubRelease:
+          repo: valon-technologies/gestalt-providers
+          tag: indexeddb/relationaldb/v0.0.1-alpha.4
+          asset: provider-release.yaml
+      config:
+        dsn: sqlite:///data/gestalt.db
+
+plugins: {}
+```
+
+For OAuth callbacks, MCP clients, or any URL-sensitive integration, set
+`server.baseUrl` to the Runloop tunnel URL and restart the container after the
+tunnel has been created. OAuth callback providers cannot attach a Runloop
+tunnel bearer token, so use an open tunnel or a proxy that handles access
+control for callback-based flows.
+
+## Start Gestalt in a Devbox
+
+Use a Docker-in-Docker Runloop blueprint, upload the config, run the published
+Gestalt image, then print the tunnel URL for port `8080`:
+
+The preview command overrides the image default and uses unlocked `serve` so the
+Devbox can resolve provider artifacts on first start. Use `gestaltd init` plus
+`serve --locked` for reproducible shared environments.
+
+```python
+import asyncio
+import secrets
+from pathlib import Path
+
+from runloop_api_client import AsyncRunloopSDK
+
+runloop = AsyncRunloopSDK()
+
+
+async def main():
+    config = Path("config.yaml").read_text()
+    encryption_key = secrets.token_hex(32)
+
+    devbox = await runloop.devbox.create(
+        name="gestalt-preview",
+        blueprint_name="runloop/universal-ubuntu-24.04-x86_64-dnd",
+        launch_parameters={
+            "keep_alive_time_seconds": 3600,
+        },
+    )
+    await devbox.await_running()
+
+    await devbox.cmd.exec(command="mkdir -p /tmp/gestalt")
+    await devbox.file.write(
+        file_path="/tmp/gestalt/config.yaml",
+        contents=config,
+    )
+
+    command = f"""
+docker rm -f gestalt >/dev/null 2>&1 || true
+docker run -d --name gestalt \\
+  -p 0.0.0.0:8080:8080 \\
+  -e GESTALT_ENCRYPTION_KEY={encryption_key} \\
+  -v /tmp/gestalt/config.yaml:/etc/gestalt/config.yaml:ro \\
+  -v gestalt-data:/data \\
+  valontechnologies/gestaltd:latest \\
+  serve --config /etc/gestalt/config.yaml --artifacts-dir /data
+"""
+    result = await devbox.cmd.exec(command=command)
+    if result.exit_code != 0:
+        raise RuntimeError(await result.stderr())
+
+    tunnel = await devbox.net.enable_tunnel(auth_mode="authenticated")
+    tunnel_url = await devbox.get_tunnel_url(8080)
+
+    print(f"Gestalt URL: {tunnel_url}")
+    if tunnel.auth_token:
+        print("Authenticated tunnel token:")
+        print(tunnel.auth_token)
+    print(f"Devbox ID: {devbox.id}")
+
+
+asyncio.run(main())
+```
+
+Authenticated tunnels require callers to send `Authorization: Bearer <token>`.
+For a browser demo or OAuth callback flow, change `enable_tunnel` to
+`auth_mode="open"`. Treat open tunnel URLs as public endpoints.
+
+## Persistent deployments
+
+The preview above stores SQLite state in a Docker volume inside the Devbox. That
+is fine for short-lived previews, but it is not a durable production topology.
+For anything shared or persistent:
+
+- Use a stable `GESTALT_ENCRYPTION_KEY` stored outside the Devbox.
+- Use a networked IndexedDB provider such as Postgres, MySQL, DynamoDB, or
+  MongoDB instead of Devbox-local SQLite.
+- Set `server.baseUrl` to the externally reachable URL that clients and OAuth
+  providers will use.
+- Run `gestaltd init` in CI and start with `gestaltd serve --locked` so provider
+  artifacts are pinned before the Devbox starts.
+- Prefer an authenticated tunnel, private networking, or an upstream reverse
+  proxy for access control.
+
+If you need to preserve Devbox disk state between work sessions, suspend or
+snapshot the Devbox instead of shutting it down. Processes do not survive
+suspend/resume automatically, so restart the Gestalt container after resuming.
+
+## Useful checks
+
+Check container logs:
+
+```sh
+docker logs gestalt
+```
+
+Check readiness from inside the Devbox:
+
+```sh
+curl -fsS http://127.0.0.1:8080/ready
+```
+
+Shut the preview down when you are done:
+
+```python
+devbox = runloop.devbox.from_id("<devbox-id>")
+await devbox.shutdown()
+```
+
+## Runloop references
+
+- [Runloop Devbox overview](https://docs.runloop.ai/docs/devboxes/overview)
+- [Docker-in-Docker on a Devbox](https://docs.runloop.ai/docs/devboxes/capabilities/docker-in-docker)
+- [Devbox tunnels](https://docs.runloop.ai/docs/devboxes/tunnels)
+- [Devbox lifecycle](https://docs.runloop.ai/docs/devboxes/lifecycle)
+- [Devbox lifetime management](https://docs.runloop.ai/docs/devboxes/start-stop)
