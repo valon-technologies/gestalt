@@ -1,0 +1,78 @@
+import { Callout } from 'nextra/components'
+
+# Vercel
+
+Use Vercel for static documentation, custom frontends, or other web apps that
+talk to a `gestaltd` server running somewhere else. Vercel is not a deployment
+target for the `gestaltd` server itself.
+
+<Callout type="warning">
+  Vercel does not support deploying Docker images directly. `gestaltd` is a
+  long-running server process with a config file, encrypted state, prepared
+  provider artifacts, health endpoints, and a datastore. Deploy it with
+  [Docker](/deploy/docker), [Helm](/deploy/helm), or another container platform,
+  then point Vercel-hosted web apps at that server.
+</Callout>
+
+## Recommended topology
+
+1. Deploy `gestaltd` on container-capable infrastructure such as Kubernetes,
+   Google Cloud Run, Fly.io, Render, Railway, AWS ECS, or another platform that
+   can run the published Docker image.
+2. Set `server.baseUrl` in the Gestalt config to the public HTTPS origin of that
+   server, for example `https://gestalt.example.com`.
+3. Deploy the static frontend or documentation site to Vercel.
+4. Configure the frontend with the Gestalt server URL expected by that app.
+   Keep OAuth callback routes, MCP routes, and API routes on the real Gestalt
+   server unless one transparent reverse-proxy layer owns every route for the
+   public origin.
+
+## Deploying the documentation site
+
+The repository's `docs/` app is a static Next.js export, so it can be deployed
+to Vercel as a frontend-only project.
+
+| Setting | Value |
+| --- | --- |
+| Root Directory | `docs` |
+| Framework Preset | `Next.js` |
+| Install Command | Auto-detected, or override to `npm ci` |
+| Build Command | Auto-detected from `package.json` as `npm run build` |
+| Output Directory | Auto-detected for Next.js. The local static export is `out`. |
+
+If you run the Vercel CLI from the repository root, pass the docs directory as
+the project root:
+
+```sh
+vercel --cwd docs
+vercel --cwd docs --prod
+```
+
+`vercel` creates a Preview Deployment. `vercel --prod` creates a Production
+Deployment for the project's configured production domains.
+
+To check the static export locally before deploying:
+
+```sh
+cd docs
+npm ci
+npm run build
+```
+
+## Environment variables
+
+Set frontend configuration in Vercel Project Settings under Environment
+Variables. Values apply only to new deployments, so redeploy after changing
+them.
+
+Only put browser-safe values in variables that your frontend exposes to the
+client, such as Next.js `NEXT_PUBLIC_*` values. Keep Gestalt secrets such as
+`server.encryptionKey`, database URLs, and provider credentials in the
+`gestaltd` deployment environment, not in the Vercel frontend project.
+
+## References
+
+- [Vercel: Docker deployments](https://vercel.com/guides/does-vercel-support-docker-deployments)
+- [Vercel: Configure a build](https://vercel.com/docs/builds/configure-a-build)
+- [Vercel: Environment variables](https://vercel.com/docs/environment-variables)
+- [Vercel CLI: deploy](https://vercel.com/docs/cli/deploy)
