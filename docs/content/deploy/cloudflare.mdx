@@ -1,0 +1,226 @@
+# Cloudflare
+
+Deploy Gestalt on Cloudflare with [Cloudflare Containers](https://developers.cloudflare.com/containers/). Containers run behind a Worker, so the Worker receives public traffic and forwards each request to a `gestaltd` container instance. Cloudflare Containers require a Workers Paid plan.
+
+Cloudflare Pages and plain Workers cannot run the `gestaltd` server image directly. If you already run Gestalt on a VM, Kubernetes, or another container host, use [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) instead and keep the normal [Docker](/deploy/docker) or [Helm](/deploy/helm) deployment model.
+
+## Production constraints
+
+Cloudflare Container disk is [ephemeral](https://developers.cloudflare.com/containers/faq/#is-disk-persistent-what-happens-to-my-disk-when-my-container-sleeps), so do not use SQLite or `/data` for production state. Use a networked IndexedDB provider such as Postgres, MySQL, DynamoDB, or MongoDB, and bake prepared lock state into the image.
+
+Cloudflare Container images must run on [`linux/amd64`](https://developers.cloudflare.com/containers/get-started/#the-container-image). Prepare Gestalt's locked provider artifacts from a `linux/amd64` environment too; if you run `gestaltd init` directly on macOS or another host platform and then copy `.gestaltd/` into the image, you can package provider binaries for the wrong OS.
+
+Use this pattern:
+
+1. Keep `config.yaml` free of literal secrets.
+2. Run `gestaltd init` from a `linux/amd64` environment locally or in CI to create `deploy/gestalt.lock.json` and prepared artifacts.
+3. Build a small derived image that copies `deploy/` into the image.
+4. Pass runtime secrets from Worker Secrets or Cloudflare Secrets Store into the container environment.
+
+Wrangler builds the image from the Dockerfile during deploy, so Docker or a Docker-compatible local engine must be available wherever `wrangler deploy` runs.
+
+## Files
+
+Create a Cloudflare Worker project with these files:
+
+```
+cloudflare/
+  Dockerfile
+  deploy/
+    config.yaml
+    gestalt.lock.json
+    .gestaltd/
+  package.json
+  src/index.ts
+  wrangler.toml
+```
+
+## Gestalt config
+
+Use an external database. This example uses the first-party RelationalDB IndexedDB provider with a DSN supplied at runtime:
+
+`deploy/config.yaml`:
+
+```yaml
+server:
+  public:
+    port: 8080
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+```
+
+Prepare the lockfile and provider artifacts before deploying. For a new deployment, generate one root key; for a redeploy, export the existing root key instead.
+
+```sh
+export GESTALT_BASE_URL=https://gestalt.example.com
+export GESTALT_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export DATABASE_URL="postgres://user:password@host:5432/gestalt?sslmode=require"
+
+docker run --rm --platform linux/amd64 \
+  -v "$PWD/deploy:/workspace/deploy" \
+  -w /workspace \
+  -e GESTALT_BASE_URL \
+  -e GESTALT_ENCRYPTION_KEY \
+  -e DATABASE_URL \
+  valontechnologies/gestaltd:latest-alpine \
+  init --config deploy/config.yaml --artifacts-dir deploy --platform linux/amd64
+```
+
+The env vars are needed because Gestalt expands `${VAR}` placeholders before validation. Keep `GESTALT_ENCRYPTION_KEY` and `DATABASE_URL` out of the YAML file and store the same values as Cloudflare secrets before deploying.
+
+If your CI runner already runs on `linux/amd64`, the equivalent native command is:
+
+```sh
+gestaltd init --config deploy/config.yaml --artifacts-dir deploy --platform linux/amd64
+```
+
+Commit or otherwise package the generated `deploy/` directory with your Cloudflare Worker project. For strict offline startup, include the generated `.gestaltd/` artifacts as well as `gestalt.lock.json`.
+
+## Container image
+
+Build a derived image that includes the prepared config and lock state:
+
+`Dockerfile`:
+
+```dockerfile
+FROM --platform=linux/amd64 valontechnologies/gestaltd:latest-alpine
+
+COPY deploy/ /app/
+
+CMD ["serve", "--locked", "--config", "/app/config.yaml", "--artifacts-dir", "/tmp/gestaltd"]
+```
+
+The image starts in locked mode. Runtime writes go to `/tmp/gestaltd`, which is safe for transient extraction and bookkeeping but not persistent application state.
+
+## Wrangler config
+
+Configure one container-backed Durable Object and expose the Worker on your public route:
+
+`wrangler.toml`:
+
+```toml
+name = "gestalt"
+main = "src/index.ts"
+compatibility_date = "2026-04-27"
+
+[[containers]]
+class_name = "GestaltContainer"
+image = "./Dockerfile"
+max_instances = 1
+instance_type = "basic"
+
+[[durable_objects.bindings]]
+name = "GESTALT_CONTAINER"
+class_name = "GestaltContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GestaltContainer"]
+
+[vars]
+GESTALT_BASE_URL = "https://gestalt.example.com"
+
+# Optional: publish on the same origin configured as GESTALT_BASE_URL.
+# [[routes]]
+# pattern = "gestalt.example.com"
+# custom_domain = true
+
+[secrets]
+required = ["GESTALT_ENCRYPTION_KEY", "DATABASE_URL"]
+
+[observability]
+enabled = true
+```
+
+Set `GESTALT_BASE_URL` to the exact public URL that users and OAuth providers will use. For a custom domain, configure the route or custom domain in Cloudflare and use that HTTPS origin.
+
+## Worker
+
+Forward all requests to a stable container instance name. The Container class passes Worker vars and secrets into the container environment on each start, and `container.fetch()` handles startup and request forwarding.
+
+`src/index.ts`:
+
+```ts
+import { env as workerEnv } from "cloudflare:workers";
+import { Container, getContainer } from "@cloudflare/containers";
+
+export class GestaltContainer extends Container {
+  defaultPort = 8080;
+  requiredPorts = [8080];
+  sleepAfter = "30m";
+  pingEndpoint = "localhost/ready";
+  envVars = {
+    GESTALT_BASE_URL: workerEnv.GESTALT_BASE_URL,
+    GESTALT_ENCRYPTION_KEY: workerEnv.GESTALT_ENCRYPTION_KEY,
+    DATABASE_URL: workerEnv.DATABASE_URL,
+  };
+}
+
+type Env = {
+  GESTALT_CONTAINER: DurableObjectNamespace<GestaltContainer>;
+};
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    return getContainer(env.GESTALT_CONTAINER, "primary").fetch(request);
+  },
+};
+```
+
+Install the container package:
+
+```sh
+npm install @cloudflare/containers
+npm install --save-dev wrangler
+npx wrangler types
+```
+
+## Secrets
+
+Store the same values that you used while running `gestaltd init`:
+
+```sh
+npx wrangler secret put GESTALT_ENCRYPTION_KEY
+npx wrangler secret put DATABASE_URL
+```
+
+When Wrangler prompts for values, use the current `GESTALT_ENCRYPTION_KEY` and `DATABASE_URL`. Keep the same `GESTALT_ENCRYPTION_KEY` for the lifetime of the deployment. Changing it makes existing encrypted tokens unreadable.
+
+## Deploy
+
+Deploy with Wrangler:
+
+```sh
+npx wrangler deploy
+npx wrangler containers list
+npx wrangler containers images list
+```
+
+The first deploy can take several minutes while Cloudflare builds, pushes, and provisions the container image. After it is ready, check:
+
+```sh
+curl https://gestalt.example.com/health
+curl https://gestalt.example.com/ready
+```
+
+## Scaling
+
+The sample routes every request to the `"primary"` container instance. That is the simplest fit for a single public Gestalt deployment.
+
+For higher availability, run multiple named instances or use Cloudflare's stateless routing helpers, but only after all host state is externalized:
+
+- use the same `GESTALT_ENCRYPTION_KEY` for every instance
+- use a networked IndexedDB provider
+- avoid SQLite and local filesystem persistence
+- keep OAuth callback URLs pinned to one public `server.baseUrl`
+
+Cloudflare Containers are still managed through Workers and Durable Objects, so scaling behavior is controlled in Worker code rather than by Docker Compose or Kubernetes replica settings.
