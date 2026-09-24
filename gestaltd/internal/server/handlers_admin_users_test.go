@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -18,6 +19,7 @@ func TestAdminDirectoryRequiresPlatformAdmin(t *testing.T) {
 	for _, endpoint := range []struct{ method, path, body string }{
 		{http.MethodGet, "/users", ""},
 		{http.MethodPost, "/users/lookup-emails", `{"userIds":[]}`},
+		{http.MethodPost, "/users", `{"emails":[]}`},
 	} {
 		for _, scenario := range []struct {
 			name                       string
@@ -123,4 +125,75 @@ func TestAdminDirectoryRejectsInvalidLookupPayload(t *testing.T) {
 			t.Fatalf("status=%d", resp.StatusCode)
 		}
 	}
+}
+
+func TestAdminDirectoryCreatesUsersBeforeFirstLogin(t *testing.T) {
+	t.Parallel()
+	svc := testutil.NewStubServices(t)
+	ts := newTestServer(t, func(cfg *server.Config) { cfg.Services = svc })
+	testutil.CloseOnCleanup(t, ts)
+
+	created := postAdminUserEmails(t, ts.URL, `{"emails":["New.User@example.test","other@example.test"]}`)
+	if len(created) != 2 {
+		t.Fatalf("unexpected users: %#v", created)
+	}
+	id := created["new.user@example.test"]
+	if id == "" {
+		t.Fatalf("email was not normalized: %#v", created)
+	}
+
+	// The record must be reused on the next resolution, otherwise authorization
+	// tuples written against it would orphan when the user first signs in.
+	again := postAdminUserEmails(t, ts.URL, `{"emails":["new.user@example.test","NEW.USER@example.test"]}`)
+	if len(again) != 1 || again["new.user@example.test"] != id {
+		t.Fatalf("id not stable: first=%s again=%#v", id, again)
+	}
+
+	resolved, err := svc.Users.FindOrCreateUser(context.Background(), "new.user@example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.ID != id {
+		t.Fatalf("login would mint a second user: %s != %s", resolved.ID, id)
+	}
+}
+
+func TestAdminDirectoryRejectsInvalidCreatePayload(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer(t)
+	testutil.CloseOnCleanup(t, ts)
+	tooMany, err := json.Marshal(map[string]any{"emails": make([]string, 1001)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{"{", string(tooMany), `{"emails":["not-an-email"]}`, `{"emails":["user@"]}`} {
+		resp, err := http.Post(ts.URL+"/admin/api/v1/users", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("body=%s status=%d", body, resp.StatusCode)
+		}
+	}
+}
+
+func postAdminUserEmails(t *testing.T, baseURL, body string) map[string]string {
+	t.Helper()
+	resp, err := http.Post(baseURL+"/admin/api/v1/users", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d: %s", resp.StatusCode, raw)
+	}
+	var payload struct {
+		Users map[string]string `json:"users"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload.Users
 }
