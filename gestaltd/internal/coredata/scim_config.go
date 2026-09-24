@@ -284,7 +284,7 @@ func stringSliceToAny(values []string) []any {
 func scimRelationshipRecords(rels []SCIMRelationshipData) []any {
 	out := make([]any, len(rels))
 	for i, rel := range rels {
-		out[i] = map[string]string{
+		out[i] = map[string]any{
 			"relation":     rel.Relation,
 			"resourceType": rel.ResourceType,
 			"resourceID":   rel.ResourceID,
