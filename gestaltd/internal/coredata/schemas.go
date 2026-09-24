@@ -59,7 +59,8 @@ var SCIMConfigSchema = idb.ObjectStoreOptions{
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "client_id", Type: idb.TypeString, NotNull: true},
-		{Name: "config_json", Type: idb.TypeJSON, NotNull: true},
+		{Name: "authoritativeUserDomains", Type: idb.TypeJSON, NotNull: true},
+		{Name: "activeUserRelationships", Type: idb.TypeJSON, NotNull: true},
 		{Name: "enabled", Type: idb.TypeBool, NotNull: true},
 		{Name: "retained", Type: idb.TypeBool, NotNull: true},
 		{Name: "created_at", Type: idb.TypeTime, NotNull: true},

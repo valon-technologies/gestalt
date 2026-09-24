@@ -259,7 +259,7 @@ func scimClientRecord(client SCIMClientRecord) idb.Record {
 	return idb.Record{
 		"id":                       client.ID,
 		"client_id":                client.ID,
-		"authoritativeUserDomains": client.AuthoritativeUserDomains,
+		"authoritativeUserDomains": stringSliceToAny(client.AuthoritativeUserDomains),
 		"activeUserRelationships":  scimRelationshipRecords(client.ActiveUserRelationships),
 		"enabled":                  client.Enabled,
 		"retained":                 client.Retained,
@@ -270,8 +270,19 @@ func scimClientRecord(client SCIMClientRecord) idb.Record {
 	}
 }
 
-func scimRelationshipRecords(rels []SCIMRelationshipData) []map[string]string {
-	out := make([]map[string]string, len(rels))
+func stringSliceToAny(values []string) []any {
+	if values == nil {
+		return []any{}
+	}
+	out := make([]any, len(values))
+	for i, value := range values {
+		out[i] = value
+	}
+	return out
+}
+
+func scimRelationshipRecords(rels []SCIMRelationshipData) []any {
+	out := make([]any, len(rels))
 	for i, rel := range rels {
 		out[i] = map[string]string{
 			"relation":     rel.Relation,
@@ -300,14 +311,24 @@ func recordToSCIMClient(rec idb.Record) *SCIMClientRecord {
 	}
 	client.AuthoritativeUserDomains = recStrings(rec, "authoritativeUserDomains")
 	for _, item := range recAnySlice(rec, "activeUserRelationships") {
-		m, ok := item.(map[string]any)
-		if !ok {
+		var fields map[string]string
+		switch typed := item.(type) {
+		case map[string]any:
+			fields = make(map[string]string, len(typed))
+			for key, value := range typed {
+				if text, ok := value.(string); ok {
+					fields[key] = text
+				}
+			}
+		case map[string]string:
+			fields = typed
+		default:
 			continue
 		}
 		client.ActiveUserRelationships = append(client.ActiveUserRelationships, SCIMRelationshipData{
-			Relation:     strings.TrimSpace(recString(m, "relation")),
-			ResourceType: strings.TrimSpace(recString(m, "resourceType")),
-			ResourceID:   strings.TrimSpace(recString(m, "resourceID")),
+			Relation:     strings.TrimSpace(fields["relation"]),
+			ResourceType: strings.TrimSpace(fields["resourceType"]),
+			ResourceID:   strings.TrimSpace(fields["resourceID"]),
 		})
 	}
 	return client
