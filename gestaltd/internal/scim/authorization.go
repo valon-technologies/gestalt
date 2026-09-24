@@ -19,9 +19,12 @@ type authorizationGate struct {
 }
 
 func WrapAuthorization(underlying core.AuthorizationProvider, users *coredata.UserService, runtime *Runtime) core.AuthorizationProvider {
-	if underlying == nil || runtime == nil || !runtime.Enabled() {
+	if underlying == nil || runtime == nil {
 		return underlying
 	}
+	// The gate is always installed so admin-created SCIM clients affect
+	// authorization without a restart. Runtime.IsEligible allows all users
+	// while the active snapshot is disabled.
 	return &authorizationGate{underlying: underlying, users: users, scim: runtime}
 }
 
@@ -305,3 +308,5 @@ func (g *authorizationGate) ListActiveModelResourceTypes(ctx context.Context, re
 
 func (g *authorizationGate) Ping(ctx context.Context) error { return g.underlying.Ping(ctx) }
 func (g *authorizationGate) Close() error                   { return g.underlying.Close() }
+
+func (g *authorizationGate) Unwrap() core.AuthorizationProvider { return g.underlying }

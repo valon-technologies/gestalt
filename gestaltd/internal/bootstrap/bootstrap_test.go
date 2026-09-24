@@ -1989,8 +1989,17 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	if provider.setAuthorizationState == nil {
 		t.Fatal("authorization provider did not receive SetAuthorizationState")
 	}
-	if result.Authorization["authz"] != provider {
-		t.Fatal("bootstrapped authorization provider is not the runtime authorization provider")
+	wrappedGate, ok := result.Authorization["authz"].(interface {
+		Unwrap() core.AuthorizationProvider
+	})
+	if !ok {
+		t.Fatalf("bootstrapped authorization provider is %T, want SCIM authorization gate", result.Authorization["authz"])
+	}
+	if underlying := wrappedGate.Unwrap(); underlying != provider {
+		t.Fatal("wrapped authorization gate does not wrap the bootstrapped provider")
+	}
+	if result.SCIMRuntime == nil {
+		t.Fatal("SCIM runtime was not installed for the wrapped authorization provider")
 	}
 	relationships := provider.setAuthorizationState.GetRelationships()
 	if got, want := len(relationships), 1; got != want {
