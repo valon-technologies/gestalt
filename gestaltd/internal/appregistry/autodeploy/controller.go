@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 const Actor = "system:auto-deploy"
@@ -217,6 +218,13 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 				}
 				return nil
 			})
+			if updateErr == nil {
+				if healthy {
+					metricutil.RecordAppAutoDeployResumed(ctx, appName, metricutil.AutoDeployResumeTriggerHealthCheck)
+				} else {
+					metricutil.RecordAppAutoDeployPaused(ctx, appName)
+				}
+			}
 			return updateErr
 		}
 	}

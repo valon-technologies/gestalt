@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 type RecoveryChangeRequests interface {
@@ -261,6 +262,7 @@ func (o *RecoveryObserver) ObserveOnce(ctx context.Context) error {
 		o.reset(app)
 		if recorded {
 			o.markCompleted(changeRequestID)
+			metricutil.RecordAppRolloutRecovery(ctx, app, outcome.FailedAt, now)
 		}
 	}
 	o.resetUnseen(seen)

@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 type appAdminRegistryResponse struct {
@@ -406,7 +407,9 @@ func (s *Server) updateAppAdminRegistryAutoDeploy(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "enabled is required")
 		return
 	}
+	wasPaused := false
 	settings, err := s.autoDeploySettings.Update(r.Context(), app.name, func(settings *core.AppAutoDeploySettings) error {
+		wasPaused = settings.Paused
 		settings.Enabled = *request.Enabled
 		settings.Paused = false
 		settings.PauseReason = ""
@@ -419,6 +422,9 @@ func (s *Server) updateAppAdminRegistryAutoDeploy(w http.ResponseWriter, r *http
 		}
 		return nil
 	})
+	if err == nil && wasPaused {
+		metricutil.RecordAppAutoDeployResumed(r.Context(), app.name, metricutil.AutoDeployResumeTriggerToggle)
+	}
 	if err != nil {
 		slog.Error("app admin auto-deploy update failed", "app", app.name, "error", err)
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
@@ -705,6 +711,8 @@ func (s *Server) selectAppAdminRegistryVersion(w http.ResponseWriter, r *http.Re
 				return nil
 			}); settingsErr != nil {
 				slog.Error("clear app auto-deploy pause after manual retry failed", "app", app.name, "error", settingsErr)
+			} else {
+				metricutil.RecordAppAutoDeployResumed(r.Context(), app.name, metricutil.AutoDeployResumeTriggerManualRetry)
 			}
 		} else if settingsErr != nil && !errors.Is(settingsErr, core.ErrNotFound) {
 			slog.Error("load app auto-deploy settings after manual retry failed", "app", app.name, "error", settingsErr)

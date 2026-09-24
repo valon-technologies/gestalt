@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 const (
@@ -789,6 +790,11 @@ func (p *CatalogPoller) recordRolloutOutcome(ctx context.Context, rollout *core.
 	if completedAt.IsZero() && failedAt.IsZero() {
 		return
 	}
+	terminalAt := completedAt
+	if terminalAt.IsZero() {
+		terminalAt = failedAt
+	}
+	metricutil.RecordAppRolloutOutcome(ctx, rollout.App, string(rollout.Mode), !failedAt.IsZero(), rollout.CreatedAt, terminalAt)
 	changeRequestID, err := p.ChangeRequests.LatestRevisionIDForVersion(ctx, rollout.App, rollout.Version)
 	if err != nil || changeRequestID == "" {
 		slog.Warn("record rollout outcome: change request not found",
