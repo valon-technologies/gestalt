@@ -245,6 +245,30 @@ func (r *SCIMRuntime) Disable(ctx context.Context, clientID, actor string, revis
 	return r.Put(ctx, current, nil, actor, true, current.Revision)
 }
 
+// Delete removes a disabled retained client and its encrypted credentials.
+// It does not remove SCIM resources or authorization relationships.
+func (r *SCIMRuntime) Delete(ctx context.Context, clientID, actor string, revision int64) error {
+	if err := r.available(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current, err := r.services.SCIMConfig.Get(ctx, clientID)
+	if err != nil {
+		return err
+	}
+	if current.Enabled {
+		return fmt.Errorf("disable the SCIM client before deleting it")
+	}
+	if revision != 0 && current.Revision != revision {
+		return coredata.ErrSCIMConfigConflict
+	}
+	if err := r.services.SCIMConfig.Delete(ctx, clientID, current.Revision); err != nil {
+		return err
+	}
+	return r.publishLocked(ctx)
+}
+
 func (r *SCIMRuntime) validateLocked(ctx context.Context, client coredata.SCIMClientRecord, secrets []coredata.SCIMClientSecret) error {
 	cfg, _, err := scim.PostWriteConfig(ctx, r.services.SCIMConfig, client.ID, &client)
 	if err != nil {

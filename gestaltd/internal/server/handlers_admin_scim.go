@@ -175,6 +175,14 @@ func (s *Server) deleteAdminSCIMClient(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if request.Retained != nil && !*request.Retained {
+		if err := runtime.Delete(r.Context(), clientID, actor, request.Revision); err != nil {
+			writeAdminSCIMError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		return
+	}
 	saved, err := runtime.Disable(r.Context(), clientID, actor, request.Revision)
 	if err != nil {
 		writeAdminSCIMError(w, err)

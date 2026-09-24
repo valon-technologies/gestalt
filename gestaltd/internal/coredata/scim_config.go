@@ -229,6 +229,67 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMClientInput) (
 	return &client, nil
 }
 
+// Delete removes a retained client record and its encrypted credentials in one
+// transaction. It is intended for cleanup of test records and future explicit
+// deletion; ordinary Admin removal remains disable-and-retain.
+func (s *SCIMConfigService) Delete(ctx context.Context, clientID string, revision int64) error {
+	if s == nil || s.db == nil || s.store == nil {
+		return fmt.Errorf("SCIM config service is not configured")
+	}
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		return fmt.Errorf("SCIM client id is required")
+	}
+	tx, err := s.db.Transaction(ctx, []string{StoreSCIMConfig, StoreSCIMSecrets}, idb.TransactionReadwrite, idb.TransactionOptions{})
+	if err != nil {
+		return fmt.Errorf("SCIM config delete: begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+
+	clients := tx.ObjectStore(StoreSCIMConfig)
+	secrets := tx.ObjectStore(StoreSCIMSecrets)
+	rec, err := clients.Get(ctx, clientID)
+	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return ErrSCIMConfigNotFound
+		}
+		return fmt.Errorf("SCIM config delete: load current: %w", err)
+	}
+	current := recordToSCIMClient(rec)
+	if current == nil {
+		return ErrSCIMConfigNotFound
+	}
+	if revision != 0 && current.Revision != revision {
+		return ErrSCIMConfigConflict
+	}
+	if err := clients.Delete(ctx, clientID); err != nil {
+		return fmt.Errorf("SCIM config delete: %w", err)
+	}
+	allSecrets, err := secrets.GetAll(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("SCIM config delete: load secrets: %w", err)
+	}
+	for _, secretRecord := range allSecrets {
+		secret := recordToSCIMSecret(secretRecord)
+		if secret == nil || secret.ClientID != clientID {
+			continue
+		}
+		if err := secrets.Delete(ctx, scimSecretKey(secret.ClientID, secret.CredentialID)); err != nil {
+			return fmt.Errorf("SCIM secret delete: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("SCIM config delete: commit: %w", err)
+	}
+	committed = true
+	return nil
+}
+
 // Secrets returns encrypted credentials for one client. It never returns
 // plaintext because this service does not possess the encryption key.
 func (s *SCIMConfigService) Secrets(ctx context.Context, clientID string) ([]SCIMClientSecret, error) {
