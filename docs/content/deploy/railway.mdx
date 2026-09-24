@@ -1,0 +1,144 @@
+# Railway
+
+[Railway](https://railway.com/) can run Gestalt as a Dockerfile-backed service. The recommended pattern is to prepare Gestalt's lock state before deployment, bake the prepared `deploy/` directory into a small derived image, then let Railway provide runtime variables and public routing.
+
+Do not deploy `valontechnologies/gestaltd:latest` directly unless you also provide a config file in the image. The stock image expects `/etc/gestalt/config.yaml` and starts with `serve --locked`.
+
+## Prepare the deployment
+
+Create `deploy/config.yaml` in the repository you connect to Railway:
+
+```yaml
+server:
+  public:
+    host: 0.0.0.0
+    port: ${PORT}
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+```
+
+This example uses Railway PostgreSQL through `DATABASE_URL`. Add a Railway PostgreSQL service, reference its `DATABASE_URL`, then add authentication providers, plugins, UIs, and other host providers to the same config before you initialize the deployment. The provider URL is a pinned RelationalDB release; replace it with the release URL for the datastore provider and version you intend to operate. See [Configuration](/configuration) for the full config model.
+
+Generate and keep a stable encryption key:
+
+```sh
+openssl rand -hex 32
+```
+
+Run `gestaltd init` before building the Railway image so provider artifacts and the lockfile are pinned:
+
+```sh
+export PORT=8080
+export GESTALT_BASE_URL=https://gestalt.example.com
+export GESTALT_ENCRYPTION_KEY=<64-character-hex-key>
+export DATABASE_URL=postgres://user:password@host:5432/gestalt
+
+gestaltd init --config deploy/config.yaml --platform linux/amd64
+```
+
+`PORT=8080` is only needed for local initialization so the config can be parsed. Railway injects `PORT` at runtime and uses the same value for healthchecks.
+
+Commit the full prepared `deploy/` directory, including `gestalt.lock.json` and `.gestaltd/`. This guide uses the vendored pattern so Railway starts without fetching providers or writing provider artifacts at runtime.
+
+## Dockerfile
+
+Add a `Dockerfile` next to the `deploy/` directory:
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest-alpine
+COPY deploy/ /app/
+CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+```
+
+Railway [detects a root `Dockerfile`](https://docs.railway.com/builds/dockerfiles) automatically. If your Dockerfile lives somewhere else, configure `RAILWAY_DOCKERFILE_PATH` or set the Dockerfile path in Railway config as code.
+
+## Railway config
+
+Add [`railway.json`](https://docs.railway.com/config-as-code/reference) to keep the deployment behavior with the repo:
+
+```json
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE"
+  },
+  "deploy": {
+    "healthcheckPath": "/ready",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
+```
+
+`/ready` returns `200` only after providers and the datastore are ready. Use `/health` instead if you only need process liveness. Railway uses this healthcheck to decide when a new deployment becomes active; it is not continuous uptime monitoring.
+
+## Railway variables
+
+Set these [service variables](https://docs.railway.com/variables) in Railway:
+
+| Variable | Value |
+| --- | --- |
+| `GESTALT_BASE_URL` | `https://<your Railway public domain or custom domain>` |
+| `GESTALT_ENCRYPTION_KEY` | The same 64-character hex key used during `gestaltd init` |
+| `DATABASE_URL` | The Railway PostgreSQL connection string, or another networked datastore DSN |
+
+Set any plugin, OIDC, or upstream API secrets referenced by `${VAR}` placeholders in the config as additional Railway variables. After changing variables in Railway, review and deploy the staged changes.
+
+Do not set `PORT` manually when using the config above. Railway injects `PORT`, Gestalt listens on it, and Railway uses it for healthchecks. Set `PORT=8080` only if you intentionally replace `${PORT}` with a fixed `8080` in `deploy/config.yaml`.
+
+`GESTALT_BASE_URL` must match the public HTTPS origin exactly. Gestalt uses it to derive OAuth callbacks when provider-specific redirect URLs are omitted.
+
+After assigning a Railway public domain, you can set `GESTALT_BASE_URL` with Railway's reference syntax, for example `https://${{RAILWAY_PUBLIC_DOMAIN}}`.
+
+## Storage options
+
+For production, prefer Railway PostgreSQL or another networked datastore and keep `providers.indexeddb.main.config.dsn: ${DATABASE_URL}`.
+
+For a single-instance demo, SQLite can use a [Railway volume](https://docs.railway.com/volumes):
+
+```yaml
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: sqlite:///data/gestalt.db
+```
+
+Mount the Railway volume at `/data`. Because the Alpine image runs as a non-root user and Railway volumes are mounted as root, set [`RAILWAY_RUN_UID=0`](https://docs.railway.com/reference/variables) for SQLite-on-volume deployments unless you build a custom image that fixes the volume ownership.
+
+Do not use SQLite with multiple replicas or multi-region deployments. Railway volumes cannot be used with replicas, and a service with an attached volume can have a short downtime during redeploys even with a healthcheck. Use a networked datastore instead.
+
+## Deploy
+
+Create a Railway service from the GitHub repository or run:
+
+```sh
+railway up
+```
+
+After the first deploy, assign a Railway public domain or custom domain, set `GESTALT_BASE_URL` to that exact `https://` URL, and redeploy. If you use platform authentication or plugin OAuth, register the derived callback URLs with the upstream identity providers:
+
+- platform login: `${GESTALT_BASE_URL}/api/v1/auth/login/callback`
+- plugin connections: `${GESTALT_BASE_URL}/api/v1/auth/callback`
+
+## Updates
+
+When you change Gestalt config or provider versions, rerun:
+
+```sh
+export PORT=8080
+gestaltd init --config deploy/config.yaml --platform linux/amd64
+```
+
+Use the same local `GESTALT_BASE_URL`, `GESTALT_ENCRYPTION_KEY`, `DATABASE_URL`, and other config variables from the preparation step. Commit the updated config, lockfile, and prepared artifacts together. Do not rely on a Railway [pre-deploy command](https://docs.railway.com/deployments/pre-deploy-command) for `gestaltd init`: Railway pre-deploy commands run in a separate container, and volume writes are not available there.
