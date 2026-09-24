@@ -203,7 +203,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 			if healthErr != nil {
 				return healthErr
 			}
-			_, _, updateErr := c.Settings.UpdateForRollout(ctx, rollout, func(current *core.AppAutoDeploySettings) error {
+			_, applied, updateErr := c.Settings.UpdateForRollout(ctx, rollout, func(current *core.AppAutoDeploySettings) error {
 				current.PendingVersion = ""
 				current.LastSeenVersion = ""
 				current.LastFailedRolloutAt = failedAt
@@ -218,7 +218,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 				}
 				return nil
 			})
-			if updateErr == nil {
+			if updateErr == nil && applied {
 				if healthy {
 					metricutil.RecordAppAutoDeployResumed(ctx, appName, metricutil.AutoDeployResumeTriggerHealthCheck)
 				} else {
