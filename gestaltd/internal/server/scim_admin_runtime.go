@@ -36,9 +36,7 @@ type SCIMRuntime struct {
 	authz                   core.AuthorizationProvider
 	runtime                 *scim.Runtime
 	baseURL                 string
-	fallback                config.ServerSCIMConfig
 	platformManagedGroupIDs map[string]struct{}
-	source                  string
 	writesEnabled           bool
 	encrypt                 func(plaintext string) (string, error)
 	decrypt                 func(encoded string) (string, error)
@@ -52,10 +50,8 @@ func NewSCIMRuntime(
 	authz core.AuthorizationProvider,
 	runtime *scim.Runtime,
 	baseURL string,
-	fallback config.ServerSCIMConfig,
 	platformManagedGroupIDs map[string]struct{},
 	stateSecret []byte,
-	source string,
 	writesEnabled bool,
 	gateway *providergateway.ProviderGatewayTransport,
 ) *SCIMRuntime {
@@ -68,9 +64,7 @@ func NewSCIMRuntime(
 		authz:                   authz,
 		runtime:                 runtime,
 		baseURL:                 baseURL,
-		fallback:                fallback,
 		platformManagedGroupIDs: platformManagedGroupIDs,
-		source:                  source,
 		writesEnabled:           writesEnabled,
 		gateway:                 gateway,
 	}
@@ -125,20 +119,7 @@ func (r *SCIMRuntime) Current(ctx context.Context) ([]*coredata.SCIMClientRecord
 	if len(runtimeClients) > 0 {
 		return runtimeClients, "runtime", nil
 	}
-	fallbackClients := make([]*coredata.SCIMClientRecord, 0, len(r.fallback.Clients))
-	for clientID, client := range r.fallback.Clients {
-		data := scim.DataFromClientConfig(client)
-		data.CredentialIDs = make([]string, len(client.Credentials))
-		for i, credential := range client.Credentials {
-			data.CredentialIDs[i] = credential.ID
-		}
-		fallbackClients = append(fallbackClients, &coredata.SCIMClientRecord{
-			SCIMClientData: data,
-			ID:             clientID,
-			Enabled:        true,
-		})
-	}
-	return fallbackClients, "config", nil
+	return nil, "runtime", nil
 }
 
 // Put validates, encrypts, persists, and publishes one complete snapshot.
@@ -254,23 +235,17 @@ func (r *SCIMRuntime) validateLocked(ctx context.Context, client coredata.SCIMCl
 }
 
 func (r *SCIMRuntime) publishLocked(ctx context.Context) error {
-	cfg, hasRuntimeClients, err := scim.ResolveRuntimeConfig(ctx, r.services.SCIMConfig, func(secret coredata.SCIMClientSecret) (string, error) {
+	cfg, _, err := scim.ResolveRuntimeConfig(ctx, r.services.SCIMConfig, func(secret coredata.SCIMClientSecret) (string, error) {
 		return r.decrypt(string(secret.Ciphertext))
 	})
 	if err != nil {
 		return err
-	}
-	source := "runtime"
-	if !hasRuntimeClients {
-		cfg = r.fallback
-		source = "config"
 	}
 	service, err := scim.NewService(r.db, r.authz, r.baseURL, cfg)
 	if err != nil {
 		return err
 	}
 	r.runtime.Apply(service, cfg)
-	r.source = source
 	if r.gateway != nil {
 		r.gateway.SetScimManagedGroupIDs(r.managedGroupIDs(cfg))
 	}
@@ -343,7 +318,7 @@ func (r *SCIMRuntime) ensurePropagationSupported(ctx context.Context) error {
 }
 
 func (r *SCIMRuntime) managedGroupIDs(cfg config.ServerSCIMConfig) map[string]struct{} {
-	ids := config.ManagedGroupIDs(cfg)
+	ids := scim.ManagedGroupIDs(cfg)
 	for id := range r.platformManagedGroupIDs {
 		ids[id] = struct{}{}
 	}

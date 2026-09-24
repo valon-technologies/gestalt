@@ -3,6 +3,7 @@ package scim
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync/atomic"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -67,7 +68,7 @@ func newRuntimeSnapshot(s *Service, cfg config.ServerSCIMConfig) *runtimeSnapsho
 	return &runtimeSnapshot{
 		service: s,
 		handler: handler,
-		managed: config.ManagedGroupIDs(cfg),
+		managed: ManagedGroupIDs(cfg),
 	}
 }
 
@@ -139,4 +140,18 @@ func cloneGroupIDs(ids map[string]struct{}) map[string]struct{} {
 		out[id] = struct{}{}
 	}
 	return out
+}
+
+func ManagedGroupIDs(cfg config.ServerSCIMConfig) map[string]struct{} {
+	ids := map[string]struct{}{}
+	for _, client := range cfg.Clients {
+		for _, projection := range client.ActiveUserRelationships {
+			if strings.TrimSpace(projection.Resource.Type) == "group" {
+				if id := strings.TrimSpace(projection.Resource.ID); id != "" {
+					ids[id] = struct{}{}
+				}
+			}
+		}
+	}
+	return ids
 }

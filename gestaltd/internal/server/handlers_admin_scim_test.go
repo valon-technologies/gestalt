@@ -53,7 +53,6 @@ func newSCIMAdminTestServer(t *testing.T) (*httptest.Server, *coredata.Services,
 		cfg.Authorization = authz
 		cfg.Admin = server.AdminRouteConfig{AuthorizationPolicy: "gestalt", AuthorizationAction: "admin"}
 		cfg.SCIMRuntime = runtime
-		cfg.SCIMConfigFallback = config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{}}
 		cfg.StateSecret = []byte("0123456789abcdef0123456789abcdef")
 		cfg.SCIMRuntimeWritesEnabled = true
 	})
@@ -86,16 +85,6 @@ func doSCIMAdmin(t *testing.T, method, url, body string) (int, string) {
 		t.Fatalf("read response: %v", readErr)
 	}
 	return resp.StatusCode, string(payload)
-}
-
-func TestAdminSCIMConfigSourceFallback(t *testing.T) {
-	t.Parallel()
-	ts, svc, _ := newSCIMAdminTestServer(t)
-	_, _ = ts, svc
-	status, body := doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
-	if status != http.StatusOK {
-		t.Fatalf("status = %d: %s", status, body)
-	}
 }
 
 func TestAdminSCIMClientCRUDAndHotReload(t *testing.T) {
@@ -169,14 +158,18 @@ func TestAdminSCIMValidationAndConflict(t *testing.T) {
 	}
 }
 
-func TestAdminSCIMListsFallbackSourceAndCredentialIDs(t *testing.T) {
+func TestAdminSCIMListsCredentialIDs(t *testing.T) {
 	t.Parallel()
-	ts, svc, _ := newSCIMAdminTestServer(t)
-	_ = svc
+	ts, _, _ := newSCIMAdminTestServer(t)
 
-	status, body := doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
+	create := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"}],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
+	status, body := doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
+	if status != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", status, body)
+	}
+	status, body = doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
 	if status != http.StatusOK {
-		t.Fatalf("fallback list status = %d: %s", status, body)
+		t.Fatalf("runtime list status = %d: %s", status, body)
 	}
 	var payload struct {
 		Clients []struct {
@@ -185,32 +178,9 @@ func TestAdminSCIMListsFallbackSourceAndCredentialIDs(t *testing.T) {
 				ID string `json:"id"`
 			} `json:"credentials"`
 		} `json:"clients"`
-		Source string `json:"source"`
-	}
-	if err := json.Unmarshal([]byte(body), &payload); err != nil {
-		t.Fatalf("decode fallback list: %v", err)
-	}
-	if payload.Source != "config" {
-		t.Fatalf("source = %q, want config", payload.Source)
-	}
-	if len(payload.Clients) != 0 {
-		t.Fatalf("fallback clients = %#v, want none", payload.Clients)
-	}
-
-	create := `{"id":"rippling","credentials":[{"id":"current","token":"token-one"}],"activeUserRelationships":[{"relation":"member","resourceType":"group","resourceId":"employees"}],"enabled":true}`
-	status, body = doSCIMAdmin(t, http.MethodPost, ts.URL+"/admin/api/v1/scim/clients", create)
-	if status != http.StatusCreated {
-		t.Fatalf("create status = %d: %s", status, body)
-	}
-	status, body = doSCIMAdmin(t, http.MethodGet, ts.URL+"/admin/api/v1/scim/clients", "")
-	if status != http.StatusOK {
-		t.Fatalf("runtime list status = %d: %s", status, body)
 	}
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatalf("decode runtime list: %v", err)
-	}
-	if payload.Source != "runtime" {
-		t.Fatalf("source = %q, want runtime", payload.Source)
 	}
 	if len(payload.Clients) != 1 || payload.Clients[0].ID != "rippling" || len(payload.Clients[0].Credentials) != 1 || payload.Clients[0].Credentials[0].ID != "current" {
 		t.Fatalf("runtime clients = %#v", payload.Clients)
