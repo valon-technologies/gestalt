@@ -265,13 +265,11 @@ func (r *SCIMRuntime) MigrateConfig(ctx context.Context, actor string) ([]*cored
 			return nil, err
 		}
 		tokens := make(map[string]string, len(client.Credentials))
-		credentialIDs := make([]string, 0, len(client.Credentials))
 		for _, credential := range client.Credentials {
 			credentialID := strings.TrimSpace(credential.ID)
 			if credentialID == "" || strings.TrimSpace(credential.BearerToken) == "" {
 				return nil, fmt.Errorf("configured SCIM client %q has an incomplete credential", clientID)
 			}
-			credentialIDs = append(credentialIDs, credentialID)
 			tokens[credentialID] = credential.BearerToken
 		}
 		record := &coredata.SCIMClientRecord{
