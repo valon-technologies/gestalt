@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -251,14 +250,6 @@ func (r *SCIMRuntime) validateLocked(ctx context.Context, client coredata.SCIMCl
 	if err != nil {
 		return err
 	}
-	if cfg.Clients == nil {
-		cfg.Clients = map[string]config.SCIMClientConfig{}
-	}
-	candidate := scim.ClientConfigFromData(client.SCIMClientData)
-	candidate.Credentials = make([]config.SCIMCredentialConfig, 0, len(secrets))
-	for i := range secrets {
-		candidate.Credentials = append(candidate.Credentials, config.SCIMCredentialConfig{ID: secrets[i].CredentialID})
-	}
 	return config.ValidateRuntimeSCIMConfig(ctx, cfg, r.authz)
 }
 
@@ -357,11 +348,4 @@ func (r *SCIMRuntime) managedGroupIDs(cfg config.ServerSCIMConfig) map[string]st
 		ids[id] = struct{}{}
 	}
 	return ids
-}
-
-// TokenFingerprint is intentionally unexported and unused externally; retained
-// here only to document that plaintext tokens are never persisted or logged.
-func (r *SCIMRuntime) TokenFingerprint(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return base64.RawStdEncoding.EncodeToString(sum[:])
 }

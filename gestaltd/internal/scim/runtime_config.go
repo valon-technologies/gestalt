@@ -58,17 +58,54 @@ func PostWriteConfig(ctx context.Context, service *coredata.SCIMConfigService, c
 	if err != nil {
 		return config.ServerSCIMConfig{}, false, err
 	}
-	out := config.ServerSCIMConfig{Clients: make(map[string]config.SCIMClientConfig, len(clients))}
-	for _, client := range clients {
-		if client.Enabled {
-			out.Clients[client.ID] = ClientConfigFromData(client.SCIMClientData)
+	replaced := false
+	for i, client := range clients {
+		if client.ID == clientID {
+			if next != nil {
+				clients[i] = next
+				replaced = true
+			} else {
+				clients = append(clients[:i], clients[i+1:]...)
+			}
+			break
 		}
 	}
-	delete(out.Clients, clientID)
-	if next != nil && next.Enabled {
-		out.Clients[next.ID] = ClientConfigFromData(next.SCIMClientData)
+	if next != nil && !replaced {
+		clients = append(clients, next)
 	}
-	return out, len(out.Clients) > 0, nil
+	out, err := runtimeConfig(clients, credentialIDsFromRecord)
+	if err != nil {
+		return config.ServerSCIMConfig{}, false, err
+	}
+	return out, len(clients) > 0, nil
+}
+
+func credentialIDsFromRecord(client *coredata.SCIMClientRecord) ([]config.SCIMCredentialConfig, error) {
+	credentials := make([]config.SCIMCredentialConfig, len(client.CredentialIDs))
+	for i, id := range client.CredentialIDs {
+		credentials[i] = config.SCIMCredentialConfig{ID: id}
+	}
+	return credentials, nil
+}
+
+// runtimeConfig returns the enabled clients represented by service records.
+// Credential values come from the supplied callback so pre-write validation
+// can use candidate IDs while publication uses decrypted secrets.
+func runtimeConfig(clients []*coredata.SCIMClientRecord, credentials func(*coredata.SCIMClientRecord) ([]config.SCIMCredentialConfig, error)) (config.ServerSCIMConfig, error) {
+	out := config.ServerSCIMConfig{Clients: make(map[string]config.SCIMClientConfig, len(clients))}
+	for _, client := range clients {
+		if !client.Enabled {
+			continue
+		}
+		populated := ClientConfigFromData(client.SCIMClientData)
+		creds, err := credentials(client)
+		if err != nil {
+			return config.ServerSCIMConfig{}, err
+		}
+		populated.Credentials = creds
+		out.Clients[client.ID] = populated
+	}
+	return out, nil
 }
 
 // ResolveRuntimeConfig decrypts credentials through the supplied callback and
@@ -79,34 +116,30 @@ func ResolveRuntimeConfig(ctx context.Context, service *coredata.SCIMConfigServi
 	if err != nil {
 		return config.ServerSCIMConfig{}, false, err
 	}
-	out := config.ServerSCIMConfig{Clients: make(map[string]config.SCIMClientConfig, len(clients))}
-	for _, client := range clients {
-		if !client.Enabled {
-			continue
-		}
+	out, err := runtimeConfig(clients, func(client *coredata.SCIMClientRecord) ([]config.SCIMCredentialConfig, error) {
 		secrets, err := service.Secrets(ctx, client.ID)
 		if err != nil {
-			return config.ServerSCIMConfig{}, false, err
+			return nil, err
 		}
-		populated := ClientConfigFromData(client.SCIMClientData)
-		populated.Credentials = make([]config.SCIMCredentialConfig, 0, len(secrets))
+		credentials := make([]config.SCIMCredentialConfig, 0, len(secrets))
 		for i := range secrets {
 			secret := &secrets[i]
 			plaintext, err := decrypt(*secret)
 			if err != nil {
-				return config.ServerSCIMConfig{}, false, fmt.Errorf("decrypt SCIM credential %s/%s: %w", client.ID, secret.CredentialID, err)
+				return nil, fmt.Errorf("decrypt SCIM credential %s/%s: %w", client.ID, secret.CredentialID, err)
 			}
 			if strings.TrimSpace(plaintext) == "" {
-				return config.ServerSCIMConfig{}, false, fmt.Errorf("SCIM credential %s/%s decrypted to an empty token", client.ID, secret.CredentialID)
+				return nil, fmt.Errorf("SCIM credential %s/%s decrypted to an empty token", client.ID, secret.CredentialID)
 			}
-			populated.Credentials = append(populated.Credentials, config.SCIMCredentialConfig{
-				ID: secret.CredentialID, BearerToken: plaintext,
-			})
+			credentials = append(credentials, config.SCIMCredentialConfig{ID: secret.CredentialID, BearerToken: plaintext})
 		}
-		if len(populated.Credentials) == 0 {
-			return config.ServerSCIMConfig{}, false, fmt.Errorf("enabled SCIM client %s has no credentials", client.ID)
+		if len(credentials) == 0 {
+			return nil, fmt.Errorf("enabled SCIM client %s has no credentials", client.ID)
 		}
-		out.Clients[client.ID] = populated
+		return credentials, nil
+	})
+	if err != nil {
+		return config.ServerSCIMConfig{}, false, err
 	}
 	return out, len(clients) > 0, nil
 }

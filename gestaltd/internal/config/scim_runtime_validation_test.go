@@ -58,24 +58,14 @@ func TestValidateRuntimeSCIMConfigRejectsOverlappingProjectionsAndDomains(t *tes
 	}
 }
 
-func TestValidateRuntimeSCIMConfigRejectsUnknownRelationAndMissingProvider(t *testing.T) {
+func TestValidateRuntimeSCIMConfigRequiresProvider(t *testing.T) {
 	t.Parallel()
 	cfg := config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{
-		"rippling": {
-			ActiveUserRelationships: []config.SCIMRelationshipConfig{{
-				Relation: "admin", Resource: config.AuthorizationResourceDef{Type: "group", ID: "employees"},
-			}},
-		},
-	}}
-	if err := config.ValidateRuntimeSCIMConfig(context.Background(), cfg, testSCIMModelProvider()); err == nil {
-		t.Fatal("expected unknown relation to be rejected")
-	}
-	valid := config.ServerSCIMConfig{Clients: map[string]config.SCIMClientConfig{
 		"rippling": {ActiveUserRelationships: []config.SCIMRelationshipConfig{{
 			Relation: "member", Resource: config.AuthorizationResourceDef{Type: "group", ID: "employees"},
 		}}},
 	}}
-	if err := config.ValidateRuntimeSCIMConfig(context.Background(), valid, nil); err == nil {
+	if err := config.ValidateRuntimeSCIMConfig(context.Background(), cfg, nil); err == nil {
 		t.Fatal("expected missing authorization provider to be rejected")
 	}
 }

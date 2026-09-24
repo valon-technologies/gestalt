@@ -43,7 +43,6 @@ func (s *Service) ResolveAuthorizationResourceDisplayName(ctx context.Context, r
 type runtimeSnapshot struct {
 	service *Service
 	handler *leanHandler
-	cfg     config.ServerSCIMConfig
 	managed map[string]struct{}
 }
 
@@ -68,7 +67,6 @@ func newRuntimeSnapshot(s *Service, cfg config.ServerSCIMConfig) *runtimeSnapsho
 	return &runtimeSnapshot{
 		service: s,
 		handler: handler,
-		cfg:     cfg,
 		managed: config.ManagedGroupIDs(cfg),
 	}
 }
@@ -111,13 +109,6 @@ func (r *Runtime) snapshot() *runtimeSnapshot {
 	return r.current.Load()
 }
 
-func (r *Runtime) Config() config.ServerSCIMConfig {
-	if snapshot := r.snapshot(); snapshot != nil {
-		return snapshot.cfg
-	}
-	return config.ServerSCIMConfig{}
-}
-
 func (r *Runtime) Service() *Service {
 	if snapshot := r.snapshot(); snapshot != nil {
 		return snapshot.service
@@ -139,13 +130,6 @@ func (r *Runtime) IsEligible(ctx context.Context, coreID, email string) (bool, e
 	return true, nil
 }
 
-func (r *Runtime) ResolveAuthorizationResourceDisplayName(ctx context.Context, resource *proto.Resource) (string, error) {
-	if snapshot := r.snapshot(); snapshot != nil {
-		return snapshot.service.ResolveAuthorizationResourceDisplayName(ctx, resource)
-	}
-	return "", nil
-}
-
 func cloneGroupIDs(ids map[string]struct{}) map[string]struct{} {
 	if ids == nil {
 		return nil
@@ -153,18 +137,6 @@ func cloneGroupIDs(ids map[string]struct{}) map[string]struct{} {
 	out := make(map[string]struct{}, len(ids))
 	for id := range ids {
 		out[id] = struct{}{}
-	}
-	return out
-}
-
-func ManagedGroupIDs(cfg config.ServerSCIMConfig) map[string]struct{} {
-	out := map[string]struct{}{}
-	for _, client := range cfg.Clients {
-		for _, projection := range client.ActiveUserRelationships {
-			if projection.Resource.Type == "group" {
-				out[projection.Resource.ID] = struct{}{}
-			}
-		}
 	}
 	return out
 }

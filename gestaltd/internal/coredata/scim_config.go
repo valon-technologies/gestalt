@@ -229,28 +229,6 @@ func (s *SCIMConfigService) Put(ctx context.Context, input PutSCIMClientInput) (
 	return &client, nil
 }
 
-// DisableWithSecrets atomically disables and retains a client, preserving its
-// encrypted credentials. It shares Put's revision semantics.
-func (s *SCIMConfigService) DisableWithSecrets(ctx context.Context, clientID, actor string, revision int64) (*SCIMClientRecord, error) {
-	current, err := s.Get(ctx, clientID)
-	if err != nil {
-		return nil, err
-	}
-	if revision != 0 && current.Revision != revision {
-		return nil, ErrSCIMConfigConflict
-	}
-	current.Enabled = false
-	current.Retained = true
-	secrets, err := s.Secrets(ctx, clientID)
-	if err != nil {
-		return nil, err
-	}
-	return s.Put(ctx, PutSCIMClientInput{
-		Client: current, Secrets: secrets, Actor: actor,
-		RequireRevisionSet: true, RequireRevision: current.Revision,
-	})
-}
-
 // Secrets returns encrypted credentials for one client. It never returns
 // plaintext because this service does not possess the encryption key.
 func (s *SCIMConfigService) Secrets(ctx context.Context, clientID string) ([]SCIMClientSecret, error) {
