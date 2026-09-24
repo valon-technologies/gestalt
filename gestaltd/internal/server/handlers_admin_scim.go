@@ -56,6 +56,7 @@ type adminSCIMClientResponse struct {
 }
 
 func (s *Server) mountAdminSCIMRoutes(r chi.Router) {
+	r.Post("/scim/migrate-config", s.migrateAdminSCIMConfig)
 	r.Get("/scim/clients", s.listAdminSCIMClients)
 	r.Post("/scim/clients", s.createAdminSCIMClient)
 	r.Patch("/scim/clients/{client}", s.updateAdminSCIMClient)
@@ -86,6 +87,27 @@ func (s *Server) listAdminSCIMClients(w http.ResponseWriter, r *http.Request) {
 		out = append(out, adminSCIMClientFromCore(client))
 	}
 	writeJSON(w, http.StatusOK, adminSCIMListResponse{Clients: out, Source: source})
+}
+
+func (s *Server) migrateAdminSCIMConfig(w http.ResponseWriter, r *http.Request) {
+	runtime := s.scimAdminRuntimeOrRespond(w)
+	if runtime == nil {
+		return
+	}
+	actor, ok := s.adminActor(w, r)
+	if !ok {
+		return
+	}
+	clients, err := runtime.MigrateConfig(r.Context(), actor)
+	if err != nil {
+		writeAdminSCIMError(w, err)
+		return
+	}
+	out := make([]adminSCIMClient, 0, len(clients))
+	for _, client := range clients {
+		out = append(out, adminSCIMClientFromCore(client))
+	}
+	writeJSON(w, http.StatusOK, adminSCIMListResponse{Clients: out, Source: "runtime"})
 }
 
 func (s *Server) createAdminSCIMClient(w http.ResponseWriter, r *http.Request) {

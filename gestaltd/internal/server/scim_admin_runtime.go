@@ -245,6 +245,49 @@ func (r *SCIMRuntime) Disable(ctx context.Context, clientID, actor string, revis
 	return r.Put(ctx, current, nil, actor, true, current.Revision)
 }
 
+// MigrateConfig creates runtime records for every configured YAML client that
+// does not already exist. It reuses the plaintext bearer token already
+// resolved in-process, so the secret never crosses an API boundary.
+func (r *SCIMRuntime) MigrateConfig(ctx context.Context, actor string) ([]*coredata.SCIMClientRecord, error) {
+	if err := r.available(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.ensurePropagationSupported(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]*coredata.SCIMClientRecord, 0, len(r.fallback.Clients))
+	for clientID, client := range r.fallback.Clients {
+		if _, err := r.services.SCIMConfig.Get(ctx, clientID); err == nil {
+			continue
+		} else if !errors.Is(err, coredata.ErrSCIMConfigNotFound) {
+			return nil, err
+		}
+		tokens := make(map[string]string, len(client.Credentials))
+		credentialIDs := make([]string, 0, len(client.Credentials))
+		for _, credential := range client.Credentials {
+			credentialID := strings.TrimSpace(credential.ID)
+			if credentialID == "" || strings.TrimSpace(credential.BearerToken) == "" {
+				return nil, fmt.Errorf("configured SCIM client %q has an incomplete credential", clientID)
+			}
+			credentialIDs = append(credentialIDs, credentialID)
+			tokens[credentialID] = credential.BearerToken
+		}
+		record := &coredata.SCIMClientRecord{
+			SCIMClientData: scim.DataFromClientConfig(client),
+			ID:             clientID,
+			Enabled:        true,
+		}
+		saved, err := r.Put(ctx, record, tokens, actor, false, 0)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, saved)
+	}
+	return out, nil
+}
+
 // Delete removes a disabled retained client and its encrypted credentials.
 // It does not remove SCIM resources or authorization relationships.
 func (r *SCIMRuntime) Delete(ctx context.Context, clientID, actor string, revision int64) error {
