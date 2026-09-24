@@ -118,7 +118,7 @@ func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
 		t.Fatalf("projected Group membership = %#v", projected)
 	}
 	secondService, _, _ := newSCIMService(t, services.DB, authorization, cfg)
-	if _, err := scim.WrapAuthorization(authorization, services.Users, secondService).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: projected}); err != nil {
+	if _, err := scim.WrapAuthorization(authorization, services.Users, scimRuntimeFor(secondService)).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: projected}); err != nil {
 		t.Fatalf("ordinary add to SCIM-managed Group: %v", err)
 	}
 	coreBob, err := services.Users.FindUserByEmail(context.Background(), "bob@valon.com")
@@ -128,7 +128,7 @@ func TestSCIMGroupsCRUDAndUserGroups(t *testing.T) {
 	groupBeforeExternal := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+created.ID, testCurrentToken, nil))
 	bobBeforeExternal := decodeResponse[scim.User](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Users/"+bob.ID, testCurrentToken, nil))
 	external := &proto.Relationship{Tuple: &proto.RelationshipTuple{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreBob.ID}}}, Relation: "member", Resource: &proto.Resource{Type: "group", Id: created.ID}}, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}
-	if _, err := scim.WrapAuthorization(authorization, services.Users, secondService).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: external}); err != nil {
+	if _, err := scim.WrapAuthorization(authorization, services.Users, scimRuntimeFor(secondService)).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: external}); err != nil {
 		t.Fatalf("ordinary add to SCIM Group: %v", err)
 	}
 	groupAfterExternal := decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+created.ID, testCurrentToken, nil))
@@ -215,7 +215,7 @@ func TestSCIMGroupsSupportNestedMembershipAndNamespaceIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	childTuple := &proto.RelationshipTuple{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreUser.ID}}}, Relation: "member", Resource: &proto.Resource{Type: "group", Id: child.ID}}
-	if _, err := scim.WrapAuthorization(authorization, services.Users, service).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: childTuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}}); err != nil {
+	if _, err := scim.WrapAuthorization(authorization, services.Users, scimRuntimeFor(service)).AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: childTuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}}); err != nil {
 		t.Fatal(err)
 	}
 	child = decodeResponse[scim.Group](t, scimRequest(t, handler, http.MethodGet, "/scim/v2/Groups/"+child.ID, testCurrentToken, nil))
@@ -237,7 +237,7 @@ func TestSCIMGroupsSupportNestedMembershipAndNamespaceIsolation(t *testing.T) {
 		}
 	}
 	parentTuple := &proto.RelationshipTuple{Target: &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:" + coreUser.ID}}}, Relation: "member", Resource: &proto.Resource{Type: "group", Id: parent.ID}}
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scimRuntimeFor(service))
 	if _, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: &proto.Relationship{Tuple: parentTuple, SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}}); err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +323,7 @@ func TestSCIMGroupsExposeOnlyRuntimeMembership(t *testing.T) {
 	}
 	staticRelationship := runtimeGroupMember(coreUser.ID, group.ID)
 	staticRelationship.SourceLayer = proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scimRuntimeFor(service))
 	if _, err := gate.AddRelationship(context.Background(), &proto.AddRelationshipRequest{Relationship: staticRelationship}); err != nil {
 		t.Fatalf("add static relationship = %v", err)
 	}

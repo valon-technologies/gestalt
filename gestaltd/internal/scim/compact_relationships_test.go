@@ -201,7 +201,7 @@ func TestSCIMExternalRelationshipBatchUsesOneWriterAndUpdatesSCIMResources(t *te
 	authorization.mu.Lock()
 	writesBefore := len(authorization.writes)
 	authorization.mu.Unlock()
-	gate := scim.WrapAuthorization(authorization, services.Users, service)
+	gate := scim.WrapAuthorization(authorization, services.Users, scimRuntimeFor(service))
 	if _, err := gate.WriteRelationships(context.Background(), &proto.WriteRelationshipsRequest{Updates: updates}); err != nil {
 		t.Fatalf("external WriteRelationships = %v", err)
 	}

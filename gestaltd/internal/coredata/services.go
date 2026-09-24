@@ -26,6 +26,7 @@ type Services struct {
 	ConnectionInstancePreferences  *ConnectionInstancePreferenceService
 	AppAccessProfiles              *AppAccessProfileService
 	AppAllowedOperations           *AppAllowedOperationsService
+	SCIMConfig                     *SCIMConfigService
 	ManagedSecrets                 *ManagedSecretService
 	DB                             indexeddb.IndexedDB
 }
@@ -104,6 +105,12 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreSCIMResources, SCIMResourcesSchema); err != nil {
 			return nil, fmt.Errorf("create scim_resources store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreSCIMConfig, SCIMConfigSchema); err != nil {
+			return nil, fmt.Errorf("create scim_config store: %w", err)
+		}
+		if _, err := ds.CreateObjectStore(ctx, StoreSCIMSecrets, SCIMSecretsSchema); err != nil {
+			return nil, fmt.Errorf("create scim_secrets store: %w", err)
+		}
 		if _, err := ds.CreateObjectStore(ctx, StoreManagedSecrets, ManagedSecretsSchema); err != nil {
 			return nil, fmt.Errorf("create managed_secrets store: %w", err)
 		}
@@ -139,6 +146,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	connectionInstancePreferences := NewConnectionInstancePreferenceService(ds)
 	appAccessProfiles := NewAppAccessProfileService(ds)
 	appAllowedOperations := NewAppAllowedOperationsService(ds)
+	scimConfig := NewSCIMConfigService(ds)
 	managedSecrets := NewManagedSecretService(ds)
 	return &Services{
 		ExternalCredentials:            nil,
@@ -158,6 +166,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		ConnectionInstancePreferences:  connectionInstancePreferences,
 		AppAccessProfiles:              appAccessProfiles,
 		AppAllowedOperations:           appAllowedOperations,
+		SCIMConfig:                     scimConfig,
 		ManagedSecrets:                 managedSecrets,
 		DB:                             ds,
 	}, nil
@@ -179,6 +188,12 @@ func ensureManagedSecretStores(ctx context.Context, ds indexeddb.IndexedDB) erro
 func ensureSCIMStores(ctx context.Context, ds indexeddb.IndexedDB) error {
 	if _, err := ds.CreateObjectStore(ctx, StoreSCIMResources, SCIMResourcesSchema); err != nil {
 		return fmt.Errorf("ensure scim_resources store: %w", err)
+	}
+	if _, err := ds.CreateObjectStore(ctx, StoreSCIMConfig, SCIMConfigSchema); err != nil {
+		return fmt.Errorf("ensure scim_config store: %w", err)
+	}
+	if _, err := ds.CreateObjectStore(ctx, StoreSCIMSecrets, SCIMSecretsSchema); err != nil {
+		return fmt.Errorf("ensure scim_secrets store: %w", err)
 	}
 	return nil
 }

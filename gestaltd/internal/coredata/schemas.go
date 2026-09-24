@@ -25,6 +25,8 @@ const (
 	StoreAppAccessProfiles              = "app_access_profiles"
 	StoreAppAllowedOperations           = "app_allowed_operations"
 	StoreSCIMResources                  = "scim_resources"
+	StoreSCIMConfig                     = "scim_config"
+	StoreSCIMSecrets                    = "scim_secrets"
 	StoreManagedSecrets                 = "managed_secrets"
 	StoreManagedSecretVersions          = "managed_secret_versions"
 	StoreManagedSecretAuditLogs         = "managed_secret_audit_logs"
@@ -47,6 +49,41 @@ var SCIMResourcesSchema = idb.ObjectStoreOptions{
 		{Name: "display_name", Type: idb.TypeString},
 		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+	},
+}
+
+var SCIMConfigSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_client_id", KeyPath: []string{"client_id"}, Unique: true},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "client_id", Type: idb.TypeString, NotNull: true},
+		{Name: "authoritativeUserDomains", Type: idb.TypeJSON, NotNull: true},
+		{Name: "activeUserRelationships", Type: idb.TypeJSON, NotNull: true},
+		{Name: "enabled", Type: idb.TypeBool, NotNull: true},
+		{Name: "retained", Type: idb.TypeBool, NotNull: true},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_by", Type: idb.TypeString},
+		{Name: "revision", Type: idb.TypeInt, NotNull: true},
+	},
+}
+
+var SCIMSecretsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_client", KeyPath: []string{"client_id"}},
+		{Name: "by_client_credential", KeyPath: []string{"client_id", "credential_id"}, Unique: true},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "client_id", Type: idb.TypeString, NotNull: true},
+		{Name: "credential_id", Type: idb.TypeString, NotNull: true},
+		{Name: "ciphertext", Type: idb.TypeBytes, NotNull: true},
+		{Name: "revision", Type: idb.TypeInt, NotNull: true},
+		{Name: "created_at", Type: idb.TypeTime},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "updated_by", Type: idb.TypeString},
 	},
 }
 

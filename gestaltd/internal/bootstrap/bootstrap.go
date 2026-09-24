@@ -275,6 +275,9 @@ type Result struct {
 	PublicHostServices      *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport  *providergateway.ProviderGatewayTransport
 	SCIMHandler             http.Handler
+	SCIMRuntime             *scim.Runtime
+	SCIMConfigSource        string
+	StateSecret             []byte
 	DevSupervisor           *providerdev.Supervisor
 	AppRestarter            interface {
 		Configured(string) bool
@@ -933,6 +936,9 @@ type preparedCore struct {
 	AgentManager         *lazyAgentManager
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 	SCIM                 *scim.Service
+	SCIMRuntime          *scim.Runtime
+	SCIMConfigSource     string
+	StateSecret          []byte
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -1065,7 +1071,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	gatewayTransport := providergateway.NewProviderGatewayTransport()
 	gatewayTransport.SetPublicMethods(registry)
-	gatewayTransport.SetScimManagedGroupIDs(config.ScimManagedGroupIDs(cfg))
 
 	if err := ResolveConfigSecrets(ctx, cfg, factories); err != nil {
 		return nil, err
@@ -1096,6 +1101,10 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	encKey := crypto.DeriveKey(cfg.Server.EncryptionKey)
 	if requireEncryptionKey && encKey == nil {
 		return nil, fmt.Errorf("bootstrap: server.encryption_key is required")
+	}
+	scimEncryptor, err := crypto.NewAESGCM(encKey)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: scim credentials: %w", err)
 	}
 	agentToolIDs, err := agenttoolid.NewCodec(encKey)
 	if err != nil {
@@ -1293,13 +1302,19 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	scimService, err := scim.NewService(svc.DB, authorizationProvider, cfg.Server.BaseURL, cfg.Server.SCIM)
+	scimRuntimeConfig, scimConfigSource, err := loadSCIMRuntimeConfiguration(ctx, svc, cfg, scimEncryptor)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, fmt.Errorf("bootstrap: scim: %w", err)
 	}
+	scimService, err := scim.NewService(svc.DB, authorizationProvider, cfg.Server.BaseURL, scimRuntimeConfig)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, fmt.Errorf("bootstrap: scim: %w", err)
+	}
+	scimRuntime := scim.NewRuntime(scimService, scimRuntimeConfig)
 	if authorizationProvider != nil {
-		wrapped := scim.WrapAuthorization(authorizationProvider, svc.Users, scimService)
+		wrapped := scim.WrapAuthorization(authorizationProvider, svc.Users, scimRuntime)
 		authorizationProviders[authorizationProviderName] = wrapped
 		deps.Authorization = wrapped
 	}
@@ -1345,6 +1360,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		AgentManager:         agentManager,
 		PublicHostServices:   deps.PublicHostServices,
 		SCIM:                 scimService,
+		SCIMRuntime:          scimRuntime,
+		SCIMConfigSource:     scimConfigSource,
+		StateSecret:          encKey,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1721,7 +1739,9 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	})
 	appProvidersInitialized := make(chan struct{})
 	var scimHandler http.Handler
-	if prepared.SCIM != nil && prepared.SCIM.Enabled() {
+	if prepared.SCIMRuntime != nil {
+		scimHandler = prepared.SCIMRuntime.Handler()
+	} else if prepared.SCIM != nil && prepared.SCIM.Enabled() {
 		scimHandler = scim.NewHandler(prepared.SCIM)
 	}
 	result := &Result{
@@ -1764,6 +1784,9 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		PublicHostServices:             publicHostServices,
 		PublicGatewayTransport:         publicGatewayTransport,
 		SCIMHandler:                    scimHandler,
+		SCIMRuntime:                    prepared.SCIMRuntime,
+		SCIMConfigSource:               prepared.SCIMConfigSource,
+		StateSecret:                    prepared.StateSecret,
 		scimService:                    prepared.SCIM,
 		DevSupervisor:                  prepared.Deps.DevSupervisor,
 		AppRestarter:                   appRestarter,
@@ -2715,4 +2738,37 @@ func ProviderAuthorizationPolicies(cfg *config.Config) map[string]string {
 		}
 	}
 	return policies
+}
+
+const (
+	scimConfigSourceRuntime = "runtime"
+	scimConfigSourceConfig  = "config"
+)
+
+// loadSCIMRuntimeConfiguration prefers runtime-managed SCIM clients. An empty
+// runtime store keeps existing config.yaml deployments working unchanged.
+// Token references are opaque here; the admin API resolves them to plaintext
+// while applying a configuration update.
+func loadSCIMRuntimeConfiguration(ctx context.Context, svc *coredata.Services, cfg *config.Config, encryptor *crypto.AESGCMEncryptor) (config.ServerSCIMConfig, string, error) {
+	if svc == nil || svc.SCIMConfig == nil || encryptor == nil {
+		return cfg.Server.SCIM, scimConfigSourceConfig, nil
+	}
+	runtimeCfg, hasRuntimeClients, err := scim.ResolveRuntimeConfig(ctx, svc.SCIMConfig, decryptSCIMCredential(encryptor))
+	if err != nil {
+		return config.ServerSCIMConfig{}, "", err
+	}
+	if !hasRuntimeClients {
+		return cfg.Server.SCIM, scimConfigSourceConfig, nil
+	}
+	return runtimeCfg, scimConfigSourceRuntime, nil
+}
+
+func decryptSCIMCredential(encryptor *crypto.AESGCMEncryptor) func(coredata.SCIMClientSecret) (string, error) {
+	return func(secret coredata.SCIMClientSecret) (string, error) {
+		plaintext, err := encryptor.Decrypt(string(secret.Ciphertext))
+		if err != nil {
+			return "", err
+		}
+		return plaintext, nil
+	}
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/featureflags"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	"github.com/valon-technologies/gestalt/server/internal/scim"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -173,6 +174,8 @@ type Server struct {
 	prometheusMetrics             http.Handler
 	mcpHandler                    http.Handler
 	scimHandler                   http.Handler
+	scimAdminRuntime              *SCIMRuntime
+	scimRuntime                   *scim.Runtime
 	hostServiceRelayTokens        *runtimehost.HostServiceRelayTokenManager
 	hostServiceMu                 sync.Mutex
 	hostServiceHandlers           map[uint64]http.Handler
@@ -275,6 +278,10 @@ type Config struct {
 	PrometheusMetrics             http.Handler
 	MCPHandler                    http.Handler
 	SCIMHandler                   http.Handler
+	SCIMRuntime                   *scim.Runtime
+	SCIMConfigFallback            config.ServerSCIMConfig
+	SCIMConfigSource              string
+	SCIMRuntimeWritesEnabled      bool
 	ScimManagedGroupIDs           map[string]struct{}
 	PublicHostServices            *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport        *providergateway.ProviderGatewayTransport
@@ -556,6 +563,8 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:             cfg.PrometheusMetrics,
 		mcpHandler:                    cfg.MCPHandler,
 		scimHandler:                   cfg.SCIMHandler,
+		scimRuntime:                   cfg.SCIMRuntime,
+		scimAdminRuntime:              NewSCIMRuntime(cfg.Services, indexedDBForSCIM(cfg), cfg.Authorization, cfg.SCIMRuntime, cfg.PublicBaseURL, cfg.SCIMConfigFallback, cfg.ScimManagedGroupIDs, cfg.StateSecret, cfg.SCIMConfigSource, cfg.SCIMRuntimeWritesEnabled, cfg.PublicGatewayTransport),
 		scimManagedGroupIDs:           cfg.ScimManagedGroupIDs,
 		hostServiceRelayTokens:        hostServiceRelayTokens,
 		publicHostServices:            cfg.PublicHostServices,
@@ -687,4 +696,11 @@ func withRequestTelemetryProviders(next http.Handler, meterProvider metric.Meter
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func indexedDBForSCIM(cfg Config) indexeddb.IndexedDB {
+	if cfg.Services == nil {
+		return nil
+	}
+	return cfg.Services.DB
 }

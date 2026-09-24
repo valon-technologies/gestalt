@@ -2035,6 +2035,10 @@ type ServerConfig struct {
 	// UIReadiness gates startup admission on local mounted-UI qualification and
 	// exposes instance-scoped fleet readiness reports for Plan 11 milestone 2.
 	UIReadiness *UIReadinessConfig `yaml:"uiReadiness,omitempty"`
+	// RuntimeSCIMWritesEnabled opts this deployment into runtime SCIM writes.
+	// It is safe only where a single writer replica serves admin API traffic;
+	// other replicas still converge by polling the shared stores.
+	RuntimeSCIMWritesEnabled bool `yaml:"runtimeScimWritesEnabled,omitempty"`
 	// Dev is set programmatically when gestaltd is launched via the dev
 	// subcommand. It gates CLI config resolution and reverse-tunnel startup.
 	Dev bool `yaml:"-"`
