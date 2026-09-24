@@ -1,0 +1,285 @@
+# Token Pile sync workflows
+#
+# Replaces the GitHub Actions cron jobs in valon-technologies/token-pile with
+# native Gestalt workflow schedules. Each schedule uses an agent target that
+# reads from a source plugin (slack, github, gong, gmail) and writes entries
+# to the tokenPile plugin via addText.
+#
+# Sources:
+#   - Slack         (every 5 min)   — public channel messages + threads
+#   - GitHub        (every 5 min)   — merged PR activity across the org
+#   - GitHub Repos  (5x/day)        — repo snapshots (README, CODEOWNERS, contributors)
+#   - Gong          (hourly)        — call transcripts (replaces the old Gong->Notion pipeline)
+#   - Google Groups (every 5 min)   — email threads from implementation groups
+#
+# Refine is event-triggered: fires after sync completion to extract structured
+# features (clients, people, systems, product areas) via LLM.
+#
+# Auth: Gestalt connections handle credentials for every source plugin,
+# so no API keys are needed in the workflow config.
+#
+# Available plugin operations (verified via /api/v1/integrations/*/operations):
+#   tokenPile:  addText, queryEntries, getEntry, getEntryContent
+#   slack:      conversations.list, conversations.history, conversations.replies, users.info
+#   github:     GraphQL transport (repos, pulls, commits, contents via query)
+#   gong:       list_calls, get_call, get_call_transcripts
+#   gmail:      messages.list, threads.get
+#
+# Usage: merge this overlay with the base gestalt config:
+#   gestaltd serve --config config.yaml --config config/overlays/token-pile-sync.yaml
+
+workflows:
+  schedules:
+    # ── Slack ──────────────────────────────────────────────────────────
+    # Lists public channels, fetches messages since last sync, resolves
+    # user names, renders channel-per-day markdown, writes to tokenPile.
+    token_pile_sync_slack:
+      cron: "*/5 * * * *"
+      timezone: America/New_York
+      target:
+        agent:
+          model: fast
+          prompt: |
+            Sync recent Slack messages into the token pile. For each public
+            channel (skip archived, private, and channels matching these
+            exclude patterns: *-alerts*, *-code-review*, testing-*, *hiring*,
+            *recruiting*, general, random, valon, soc-*, pet-*, board-games,
+            veggiepals, gym-*, nyc, dmv, remoties, women-in-valon-tech,
+            praise, vscode, soc-free-solo):
+
+            1. Call slack/conversations.list to get all public channels
+            2. For each included channel, call slack/conversations.history
+               with oldest set to 5 minutes ago
+            3. For messages with replies, call slack/conversations.replies
+            4. Resolve user IDs to names via slack/users.info
+            5. Group messages by channel and date (YYYY-MM-DD)
+            6. For each channel-date group, render markdown with:
+               - YAML frontmatter: channel, channel_id, date, source: Slack, people list
+               - Message body: **Name** (HH:MM UTC): text, with thread replies indented
+            7. Call tokenPile/addText with:
+               - sourceOrg: "Valon (Internal)"
+               - source: "Slack"
+               - date: the message date
+               - title: channel name (dashes replaced with spaces)
+               - externalId: "slack:{channelId}:{date}"
+               - content: the rendered markdown
+               - people: list of participant names
+          tools:
+            - plugin: slack
+              operation: conversations.list
+            - plugin: slack
+              operation: conversations.history
+            - plugin: slack
+              operation: conversations.replies
+            - plugin: slack
+              operation: users.info
+            - plugin: tokenPile
+              operation: addText
+
+    # ── GitHub activity ───────────────────────────────────────────────
+    # Fetches merged PRs across the valon-technologies org, groups by
+    # repo+date, renders with reviews/comments/stats.
+    token_pile_sync_github_activity:
+      cron: "*/5 * * * *"
+      timezone: America/New_York
+      target:
+        agent:
+          model: fast
+          prompt: |
+            Sync recent GitHub merged PR activity into the token pile.
+
+            1. Query github for repositories in the valon-technologies org
+               (skip archived, forks, and repos matching: archived_*,
+               *-interview*, *-data-room, sample, vercel-test-*)
+            2. For repos pushed in the last 5 minutes, fetch merged PRs
+               including: author, mergedBy, reviews (with states),
+               comments, additions, deletions, changedFiles
+            3. Group PRs by repo name + merge date
+            4. For each group render markdown with:
+               - Frontmatter: repo, org, date, source: GitHub, prs_merged count, people
+               - Each PR: ## PR #N: title, author, merge time, reviewers, stats, body, discussion
+            5. Call tokenPile/addText with:
+               - sourceOrg: "Valon (Internal)"
+               - source: "GitHub"
+               - date: merge date
+               - title: "{repoName} activity"
+               - externalId: "github-activity:{owner/repo}:{date}"
+               - originUrl: repo URL
+               - content: rendered markdown
+               - people: authors, reviewers, commenters
+          tools:
+            - plugin: github
+              operation: repos.list
+            - plugin: github
+              operation: pulls.list
+            - plugin: tokenPile
+              operation: addText
+
+    # ── GitHub repo snapshots ─────────────────────────────────────────
+    # Snapshots every repo: README, CODEOWNERS, top contributors (90d).
+    # Runs 5x/day on weekdays (6am, 10am, 1pm, 4pm ET).
+    token_pile_sync_github_repos:
+      cron: "0 10,14,17,20 * * 1-5"
+      timezone: America/New_York
+      target:
+        agent:
+          model: fast
+          prompt: |
+            Snapshot all valon-technologies GitHub repos into the token pile.
+
+            1. List repos in the valon-technologies org (skip archived, forks,
+               and repos matching: archived_*, *-interview*, *-data-room,
+               sample, vercel-test-*)
+            2. For each repo fetch: README (truncate to 3000 chars),
+               CODEOWNERS (.github/ or root), recent contributors (90 days)
+            3. Render markdown with:
+               - Frontmatter: repo, org, full_name, description, language,
+                 topics, last_pushed, contributors_90d, source: GitHub Repos
+               - Sections: Description, README, CODEOWNERS, Top Contributors
+            4. Call tokenPile/addText with:
+               - sourceOrg: "Valon (Internal)"
+               - source: "GitHub Repos"
+               - date: today (YYYY-MM-DD)
+               - title: repo name
+               - externalId: "github-repo:{owner/repo}"
+               - originUrl: https://github.com/{owner/repo}
+               - content: rendered markdown
+               - people: contributor logins
+          tools:
+            - plugin: github
+              operation: repos.list
+            - plugin: github
+              operation: repos.get
+            - plugin: tokenPile
+              operation: addText
+
+    # ── Gong ──────────────────────────────────────────────────────────
+    # Fetches call recordings with transcripts directly from Gong.
+    # Replaces the old Gong->Notion pipeline — no Notion intermediary.
+    token_pile_sync_gong:
+      cron: "0 * * * *"
+      timezone: America/New_York
+      target:
+        agent:
+          model: fast
+          prompt: |
+            Sync recent Gong calls into the token pile. This replaces the
+            old Gong->Notion pipeline with direct Gong access.
+
+            1. Call gong/list_calls to find calls from the last hour
+            2. For each call, call gong/get_call to get metadata (title,
+               date, participants, duration, direction)
+            3. Call gong/get_call_transcripts to get the full transcript
+            4. Render markdown with:
+               - Frontmatter: title, source: Gong, date, call_type,
+                 participants, duration, gong_url
+               - ## Summary section (from call highlights if available)
+               - ## Transcript section with speaker-attributed text:
+                 **Speaker Name:** their words
+            5. Extract people from participant names and transcript speakers
+            6. Call tokenPile/addText with:
+               - sourceOrg: "Valon (Internal)"
+               - source: "Gong"
+               - date: call date (YYYY-MM-DD)
+               - title: call title
+               - externalId: "gong:{callId}"
+               - originUrl: Gong call URL
+               - content: rendered markdown
+               - people: participant names
+          tools:
+            - plugin: gong
+              operation: list_calls
+            - plugin: gong
+              operation: get_call
+            - plugin: gong
+              operation: get_call_transcripts
+            - plugin: tokenPile
+              operation: addText
+
+    # ── Google Groups ─────────────────────────────────────────────────
+    # Fetches email threads from implementation groups via Gmail search.
+    # One entry per thread, organized by source org.
+    token_pile_sync_google_groups:
+      cron: "*/5 * * * *"
+      timezone: America/New_York
+      target:
+        agent:
+          model: fast
+          prompt: |
+            Sync recent Google Groups email threads into the token pile.
+            Process these groups:
+              - ocean-implementation (sourceOrg: servicemac)
+              - athena-implementation (sourceOrg: newrez)
+              - vesper-implementation (sourceOrg: "Valon (Internal)")
+
+            For each group:
+            1. Call gmail/messages.list with q: "to:{group}@valon.com"
+               and filter to messages from the last 5 minutes
+            2. Collect unique thread IDs from results
+            3. For each thread, call gmail/threads.get to get full content
+            4. Parse messages: extract headers (date, from, to, cc, subject),
+               decode body (prefer plain text, strip HTML as fallback)
+            5. Normalize subject (remove Re:/Fwd: prefixes)
+            6. Render markdown with:
+               - # Thread subject
+               - Thread header: group name, message count
+               - Each message: ### sender, date, subject, to, cc, body
+            7. Extract people from from/to/cc headers (names, not emails)
+            8. Call tokenPile/addText with:
+               - sourceOrg: the group's configured sourceOrg
+               - source: "Google Groups/{groupName}"
+               - date: first message date
+               - title: normalized subject
+               - externalId: "google-group:{groupName}:{threadId}"
+               - tags: ["google-group:{groupName}"]
+               - content: rendered markdown
+               - people: extracted names
+          tools:
+            - plugin: gmail
+              operation: messages.list
+            - plugin: gmail
+              operation: threads.get
+            - plugin: tokenPile
+              operation: addText
+
+  eventTriggers:
+    # ── Refine ────────────────────────────────────────────────────────
+    # Fires when any sync completes. Runs LLM feature extraction on new
+    # entries: clients, people, systems, product areas, topics.
+    # Replaces the 15-min polling cron — only runs when there's new data.
+    #
+    # NOTE: This requires each sync agent to publish a
+    # token-pile.sync.completed event after writing entries. If the
+    # workflow provider doesn't support agent-initiated event publishing,
+    # this can be converted to a cron schedule as a fallback.
+    token_pile_refine:
+      match:
+        type: token-pile.sync.completed
+        source: token-pile
+      target:
+        agent:
+          model: deep
+          prompt: |
+            New entries were just synced into the token pile. Query for
+            recent unrefined entries and extract structured features.
+
+            1. Call tokenPile/queryEntries to find entries from today
+            2. For each entry, call tokenPile/getEntryContent to read it
+            3. Extract these features from the content:
+               - clients (closed vocab): valon mortgage, newrez, carrington,
+                 servicemac, loancare, rocket, loandepot, chase, us bank
+               - people (open, lowercased names)
+               - systems (open, lowercased)
+               - product_areas (closed vocab): banking, cloud infra, consumer,
+                 cx, data platform, delinquency - recovery,
+                 delinquency - retention, escrow, finance admin, foundations,
+                 io, payments, special loans products, collateral management,
+                 reporting billing, treasury, work orchestration, valon labs
+               - topics (open, lowercased)
+            4. Report the extracted features (storage to Postgres is handled
+               by the token-pile application separately)
+          tools:
+            - plugin: tokenPile
+              operation: queryEntries
+            - plugin: tokenPile
+              operation: getEntryContent
