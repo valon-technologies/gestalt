@@ -271,6 +271,20 @@ pub enum AuthorizationAppsCommands {
         #[command(subcommand)]
         command: AuthorizationAppsAllowedOperationsCommands,
     },
+    /// Show the operations a user allowed on their app operations page
+    Access(AuthorizationAppsAccessArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationAppsAccessArgs {
+    /// App name
+    pub app: String,
+    /// Member subject id, such as user:<uuid>
+    #[arg(long = "subject-id")]
+    pub subject_id: Option<String>,
+    /// Member email address
+    #[arg(long = "email")]
+    pub email: Option<String>,
 }
 
 #[derive(Subcommand)]
