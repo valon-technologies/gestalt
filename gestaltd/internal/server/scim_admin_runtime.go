@@ -148,7 +148,10 @@ func (r *SCIMRuntime) Put(ctx context.Context, input *coredata.SCIMClientRecord,
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.putLocked(ctx, input, plaintextTokens, actor, requireRevisionSet, requireRevision)
+}
 
+func (r *SCIMRuntime) putLocked(ctx context.Context, input *coredata.SCIMClientRecord, plaintextTokens map[string]string, actor string, requireRevisionSet bool, requireRevision int64) (*coredata.SCIMClientRecord, error) {
 	if err := r.ensurePropagationSupported(ctx); err != nil {
 		return nil, err
 	}
@@ -277,7 +280,7 @@ func (r *SCIMRuntime) MigrateConfig(ctx context.Context, actor string) ([]*cored
 			ID:             clientID,
 			Enabled:        true,
 		}
-		saved, err := r.Put(ctx, record, tokens, actor, false, 0)
+		saved, err := r.putLocked(ctx, record, tokens, actor, false, 0)
 		if err != nil {
 			return nil, err
 		}
