@@ -5,9 +5,9 @@ use std::collections::HashMap;
 
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::{
-    AuthorizationAppsAllowedOperationsCommands, AuthorizationAppsAllowedOperationsListArgs,
-    AuthorizationAppsAllowedOperationsSetArgs, AuthorizationAppsCommands,
-    AuthorizationAppsMembersCommands, AuthorizationAppsMembersListArgs,
+    AuthorizationAppsAccessArgs, AuthorizationAppsAllowedOperationsCommands,
+    AuthorizationAppsAllowedOperationsListArgs, AuthorizationAppsAllowedOperationsSetArgs,
+    AuthorizationAppsCommands, AuthorizationAppsMembersCommands, AuthorizationAppsMembersListArgs,
     AuthorizationAppsMembersRemoveArgs, AuthorizationAppsMembersSetArgs,
 };
 use crate::output::{self, Format};
@@ -43,7 +43,69 @@ pub fn dispatch(
                 set_allowed_operations(api, &args, format)
             }
         },
+        AuthorizationAppsCommands::Access(args) => show_access(api, &args, format),
     }
+}
+
+// An app access profile is per-user state its owner edits on the app's
+// operations page. Only the owner can read it over the user API, so a denial
+// caused by one is otherwise invisible while debugging.
+fn show_access(api: &ApiClient, args: &AuthorizationAppsAccessArgs, format: Format) -> Result<()> {
+    let app = require_app_name(&args.app)?;
+    let subject_id = trimmed_option(args.subject_id.as_deref());
+    let email = trimmed_option(args.email.as_deref());
+    let query = match (subject_id, email) {
+        (Some(subject_id), _) => format!("subject_id={}", encode_path_segment(subject_id)),
+        (None, Some(email)) => format!("email={}", encode_path_segment(email)),
+        (None, None) => bail!("--subject-id or --email is required"),
+    };
+    let resp = api
+        .get(&format!(
+            "/api/v1/apps/{}/admin/access?{query}",
+            encode_path_segment(&app)
+        ))
+        .with_context(|| format!("failed to read app access for {app}"))?;
+    match format {
+        Format::Json => output::print_json(&resp),
+        Format::Table => {
+            let exists = resp
+                .get("profileExists")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if !exists {
+                output::print_success(&format!(
+                    "No saved operation access for {app}; every operation is allowed."
+                ));
+                return Ok(());
+            }
+            let rows = vec![
+                vec![
+                    "Enabled".to_string(),
+                    joined_operations(&resp, "enabledOperations"),
+                ],
+                vec![
+                    "Denied".to_string(),
+                    joined_operations(&resp, "deniedOperations"),
+                ],
+            ];
+            println!("{}", output::render_table(&["Access", "Operations"], &rows));
+        }
+    }
+    Ok(())
+}
+
+fn joined_operations(value: &Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default()
 }
 
 fn list_apps(api: &ApiClient, format: Format) -> Result<()> {

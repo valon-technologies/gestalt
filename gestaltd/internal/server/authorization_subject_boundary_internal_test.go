@@ -68,6 +68,17 @@ func (b boundaryUserStore) FindOrCreateUser(_ context.Context, email string) (*c
 	return &core.User{ID: id, Email: email}, nil
 }
 
+func (b boundaryUserStore) FindUserByEmail(_ context.Context, email string) (*core.User, error) {
+	if b.err != nil {
+		return nil, b.err
+	}
+	id, ok := b.usersByEmail[email]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	return &core.User{ID: id, Email: email}, nil
+}
+
 func (b boundaryUserStore) GetUser(_ context.Context, id string) (*core.User, error) {
 	if b.err != nil {
 		return nil, b.err
