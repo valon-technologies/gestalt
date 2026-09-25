@@ -6180,68 +6180,6 @@ authorization:
 	}
 }
 
-func TestLoadPathsSCIMValidatesAgainstSeedFileAndInlineResourcePolicy(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "authorization"), 0o755); err != nil {
-		t.Fatalf("mkdir authorization: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "authorization", "seed.json"), []byte(`{
-  "model": {
-    "resourceTypes": [
-      {
-        "name": "group",
-        "relations": [
-          {
-            "name": "member",
-            "allowedTargets": [
-              {"subjectType": "subject"},
-              {"subjectSetType": {"resourceType": "group", "relation": "member"}}
-            ]
-          }
-        ]
-      }
-    ]
-  }
-}`), 0o644); err != nil {
-		t.Fatalf("write seed: %v", err)
-	}
-	configPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte(`
-apiVersion: gestaltd.config/v8
-server:
-  scim:
-    clients:
-      rippling:
-        credentials:
-          - id: current
-            bearerToken: token
-        activeUserRelationships:
-          - relation: member
-            resource:
-              type: group
-              id: valon-employees
-providers:
-  authorization:
-    indexeddb:
-      source:
-        path: /tmp/authorization/manifest.yaml
-authorization:
-  seedFile: authorization/seed.json
-  resourceTypes:
-    group:
-      dynamic:
-        allowAdditionalRelationships: true
-`), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	if _, err := Load(configPath); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-}
-
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {
 	t.Parallel()
 

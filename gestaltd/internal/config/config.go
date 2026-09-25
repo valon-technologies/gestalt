@@ -1932,26 +1932,26 @@ type AuthorizationResourceDef struct {
 	Properties map[string]string `yaml:"properties,omitempty"`
 }
 
-// ServerSCIMConfig configures inbound SCIM provisioning clients. Credential
-// IDs are local audit/rotation labels; only BearerToken is sent by clients.
+// ServerSCIMConfig is the in-memory SCIM service configuration shape. It is
+// no longer YAML-configurable; runtime storage owns persisted clients.
 type ServerSCIMConfig struct {
-	Clients map[string]SCIMClientConfig `yaml:"clients,omitempty"`
+	Clients map[string]SCIMClientConfig `json:"clients,omitempty"`
 }
 
 type SCIMClientConfig struct {
-	Credentials              []SCIMCredentialConfig   `yaml:"credentials,omitempty"`
-	AuthoritativeUserDomains []string                 `yaml:"authoritativeUserDomains,omitempty"`
-	ActiveUserRelationships  []SCIMRelationshipConfig `yaml:"activeUserRelationships,omitempty"`
+	Credentials              []SCIMCredentialConfig   `json:"credentials,omitempty"`
+	AuthoritativeUserDomains []string                 `json:"authoritativeUserDomains,omitempty"`
+	ActiveUserRelationships  []SCIMRelationshipConfig `json:"activeUserRelationships,omitempty"`
 }
 
 type SCIMCredentialConfig struct {
-	ID          string `yaml:"id"`
-	BearerToken string `yaml:"bearerToken"`
+	ID          string `json:"id"`
+	BearerToken string `json:"bearerToken,omitempty"`
 }
 
 type SCIMRelationshipConfig struct {
-	Relation string                   `yaml:"relation"`
-	Resource AuthorizationResourceDef `yaml:"resource"`
+	Relation string                   `json:"relation"`
+	Resource AuthorizationResourceDef `json:"resource"`
 }
 
 type AuthorizationRelationshipTargetDef struct {
@@ -2022,7 +2022,6 @@ type ServerConfig struct {
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 	UserLookup    UserLookupConfig         `yaml:"userLookup,omitempty"`
-	SCIM          ServerSCIMConfig         `yaml:"scim,omitempty"`
 	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
 	// PromoteSharedStateOnActivate gates whether POST /activate may promote

@@ -280,8 +280,6 @@ type Config struct {
 	MCPHandler                    http.Handler
 	SCIMHandler                   http.Handler
 	SCIMRuntime                   *scim.Runtime
-	SCIMConfigFallback            config.ServerSCIMConfig
-	SCIMConfigSource              string
 	SCIMRuntimeWritesEnabled      bool
 	ScimManagedGroupIDs           map[string]struct{}
 	PublicHostServices            *runtimehost.PublicHostServiceRegistry
@@ -565,7 +563,7 @@ func New(cfg Config) (*Server, error) {
 		mcpHandler:                    cfg.MCPHandler,
 		scimHandler:                   cfg.SCIMHandler,
 		scimRuntime:                   cfg.SCIMRuntime,
-		scimAdminRuntime:              NewSCIMRuntime(cfg.Services, indexedDBForSCIM(cfg), cfg.Authorization, cfg.SCIMRuntime, cfg.PublicBaseURL, cfg.SCIMConfigFallback, cfg.ScimManagedGroupIDs, cfg.StateSecret, cfg.SCIMConfigSource, cfg.SCIMRuntimeWritesEnabled, cfg.PublicGatewayTransport),
+		scimAdminRuntime:              NewSCIMRuntime(cfg.Services, indexedDBForSCIM(cfg), cfg.Authorization, cfg.SCIMRuntime, cfg.PublicBaseURL, cfg.ScimManagedGroupIDs, cfg.StateSecret, cfg.SCIMRuntimeWritesEnabled, cfg.PublicGatewayTransport),
 		scimManagedGroupIDs:           cfg.ScimManagedGroupIDs,
 		hostServiceRelayTokens:        hostServiceRelayTokens,
 		publicHostServices:            cfg.PublicHostServices,
