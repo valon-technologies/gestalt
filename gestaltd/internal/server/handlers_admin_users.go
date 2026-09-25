@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -10,6 +11,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+)
+
+const (
+	maxAdminUserBatch    = 1000
+	adminUserMaxBodySize = 1 << 20
 )
 
 type adminUserSummary struct {
@@ -21,7 +28,58 @@ type adminUserSummary struct {
 // directory must not depend on membership in a particular console app.
 func (s *Server) mountAdminUsersRoutes(r chi.Router) {
 	r.Get("/users", s.listAdminUsers)
+	r.Post("/users", s.createAdminUsers)
 	r.Post("/users/lookup-emails", s.lookupAdminUserEmails)
+}
+
+// createAdminUsers persists user records ahead of first login so authorization
+// tuples can be written for people who have not signed in yet. Resolution is by
+// normalized email, so a record created here is the one returned when the user
+// eventually authenticates rather than a second record with a fresh ID.
+func (s *Server) createAdminUsers(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Emails []string `json:"emails"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, adminUserMaxBodySize))
+	if err := decoder.Decode(&request); err != nil || len(request.Emails) > maxAdminUserBatch {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("provide up to %d emails", maxAdminUserBatch))
+		return
+	}
+	if s.users == nil {
+		writeError(w, http.StatusServiceUnavailable, "user directory is unavailable")
+		return
+	}
+	// The whole batch is validated before anything is written so a rejected
+	// request leaves the directory untouched, rather than persisting the records
+	// that happened to precede the offending address and reporting none of them.
+	emails := make([]string, 0, len(request.Emails))
+	seen := make(map[string]bool, len(request.Emails))
+	for _, rawEmail := range request.Emails {
+		email := strings.ToLower(strings.TrimSpace(rawEmail))
+		if principal.ClassifyUserSubjectValue(email) != principal.UserSubjectFormEmail {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid email %q", rawEmail))
+			return
+		}
+		if seen[email] {
+			continue
+		}
+		seen[email] = true
+		emails = append(emails, email)
+	}
+
+	users := make(map[string]string, len(emails))
+	for _, email := range emails {
+		user, err := s.users.FindOrCreateUser(r.Context(), email)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "user directory is unavailable")
+			return
+		}
+		users[email] = user.ID
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, struct {
+		Users map[string]string `json:"users"`
+	}{Users: users})
 }
 
 func (s *Server) listAdminUsers(w http.ResponseWriter, r *http.Request) {
