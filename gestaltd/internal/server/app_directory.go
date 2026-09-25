@@ -526,7 +526,7 @@ func (s *Server) appSourceTreeURLs(ctx context.Context, snapshot *tenantAppDirec
 			continue
 		}
 		if registry := strings.TrimSpace(plugin.Source.Registry); registry != "" {
-			registryApps[entry.Name] = configuredRegistryApp{name: entry.Name, registry: registry}
+			registryApps[entry.Name] = configuredRegistryApp{name: entry.Name, registry: registry, registryApp: plugin.Source.RegistryAppName(entry.Name)}
 		}
 	}
 	if len(registryApps) == 0 || s.appVersionChanges == nil {
@@ -575,7 +575,7 @@ func (s *Server) legacyRegistryAppSourceTreeURL(ctx context.Context, app configu
 	if err != nil {
 		return ""
 	}
-	entry, err := s.appRegistryReader.FetchEntry(ctx, publicRoot, app.name, version)
+	entry, err := s.appRegistryReader.FetchEntry(ctx, publicRoot, app.registryApp, version)
 	if err != nil || entry == nil {
 		return ""
 	}

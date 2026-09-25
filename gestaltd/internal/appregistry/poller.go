@@ -619,7 +619,7 @@ func (p *CatalogPoller) desiredVersionMaterialized(ctx context.Context, instance
 		return false, nil
 	}
 	path := MaterializedPath(p.AppMaterializer.ArtifactsDir, appName, version)
-	return installedPackageReady(path, appName, version), nil
+	return installedPackageReady(path, p.AppMaterializer.registryAppName(appName), version), nil
 }
 
 func findInstallation(installations []*core.AppInstallation, version string) *core.AppInstallation {

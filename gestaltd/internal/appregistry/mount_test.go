@@ -70,6 +70,35 @@ func TestResolveInstalledApp_returns_isolated_provider_entry(t *testing.T) {
 	}
 }
 
+func TestRegistryAliasMaterializesUnderRuntimeAppID(t *testing.T) {
+	t.Parallel()
+	fixture := registrytest.NewInstallFixture(t)
+	artifactsDir := t.TempDir()
+	entry := &config.ProviderEntry{Source: config.ProviderSource{Registry: "toolshed", RegistryApp: "g-issues"}}
+	materializer := &appregistry.Materializer{
+		Registries:   map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		ConfigApps:   map[string]*config.ProviderEntry{"legacyRuntimeID": entry},
+		Reader:       fixture.Reader,
+		ArtifactsDir: artifactsDir,
+	}
+	_, err := materializer.Ensure(context.Background(), &core.AppInstallation{
+		AppName: "legacyRuntimeID", Version: fixture.Version, Registry: "toolshed",
+	})
+	if err != nil {
+		t.Fatalf("Ensure aliased package: %v", err)
+	}
+	resolved, err := appregistry.ResolveInstalledAppIfPresent("legacyRuntimeID", entry, artifactsDir, fixture.Version)
+	if err != nil {
+		t.Fatalf("resolve aliased package: %v", err)
+	}
+	if resolved == entry || resolved.ResolvedManifest == nil || resolved.ResolvedManifest.Version != fixture.Version {
+		t.Fatalf("aliased package not mounted under runtime ID: %#v", resolved)
+	}
+	if resolved.Source.RegistryApp != "g-issues" {
+		t.Fatalf("registry alias was lost: %#v", resolved.Source)
+	}
+}
+
 func TestResolveInstalledAppIfPresent_uses_deploy_entry_when_install_missing(t *testing.T) {
 	t.Parallel()
 

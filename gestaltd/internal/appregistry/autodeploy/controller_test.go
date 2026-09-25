@@ -52,6 +52,31 @@ func TestControllerDetectsAndAdmitsNewestVersion(t *testing.T) {
 	}
 }
 
+func TestControllerReadsAliasButInstallsRuntimeApp(t *testing.T) {
+	t.Parallel()
+	services := testutil.NewStubServices(t)
+	enableAutoDeploy(t, services, "ciWorkqueue")
+	reader := &fakeReader{results: []*appregistry.AppIndexFetchResult{
+		{Index: testIndex("ci-workqueue", "v2"), ETag: `"v2"`},
+	}}
+	installer := &fakeInstaller{}
+	controller := New(
+		services.AutoDeploySettings, services.AppRollouts, services.AppVersionChangeRequests,
+		reader, installer, fakeFleetHealthReader{},
+		map[string]AppConfig{"ciWorkqueue": {Registry: "toolshed", PublicRoot: "https://registry.test", RegistryApp: "ci-workqueue"}},
+		time.Minute,
+	)
+	if err := controller.Reconcile(t.Context(), "ciWorkqueue"); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(reader.apps) != 1 || reader.apps[0] != "ci-workqueue" {
+		t.Fatalf("registry lookups = %#v", reader.apps)
+	}
+	if len(installer.inputs) != 1 || installer.inputs[0].App != "ciWorkqueue" {
+		t.Fatalf("installer inputs = %#v", installer.inputs)
+	}
+}
+
 func TestControllerKeepsPendingVersionWhileRuntimeDeployPauseIsActive(t *testing.T) {
 	t.Parallel()
 
@@ -361,13 +386,15 @@ type fakeReader struct {
 	results     []*appregistry.AppIndexFetchResult
 	errs        []error
 	ifNoneMatch []string
+	apps        []string
 }
 
 func (r *fakeReader) FetchAppIndexConditional(
 	_ context.Context,
-	_, _ string,
+	_ string, app string,
 	ifNoneMatch string,
 ) (*appregistry.AppIndexFetchResult, error) {
+	r.apps = append(r.apps, app)
 	r.ifNoneMatch = append(r.ifNoneMatch, ifNoneMatch)
 	index := len(r.ifNoneMatch) - 1
 	if index < len(r.errs) && r.errs[index] != nil {

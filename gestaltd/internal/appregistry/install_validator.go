@@ -307,7 +307,11 @@ func (v *InstallValidator) fetchPublishedEntry(ctx context.Context, registryName
 	if registryName == "" {
 		return nil, fmt.Errorf("registry is required")
 	}
-	source, err := fetchConfiguredRegistryEntry(ctx, v.Registries, v.reader(), registryName, appName, version)
+	registryApp := appName
+	if entry := v.ConfigApps[appName]; entry != nil {
+		registryApp = entry.Source.RegistryAppName(appName)
+	}
+	source, err := fetchConfiguredRegistryEntry(ctx, v.Registries, v.reader(), registryName, registryApp, version)
 	if err != nil {
 		return nil, err
 	}

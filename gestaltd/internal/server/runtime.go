@@ -319,6 +319,7 @@ func registryAppStartup(cfg *config.Config, result *bootstrap.Result, reader *ap
 		}
 		materializer := &appregistry.Materializer{
 			Registries:   cfg.AppRegistries,
+			ConfigApps:   cfg.Apps,
 			ArtifactsDir: cfg.Server.ArtifactsDir,
 			Reader:       reader,
 		}
@@ -660,6 +661,7 @@ func startAppRegistryCatalogPoller(
 		if artifactsDir != "" {
 			materializer = &appregistry.Materializer{
 				Registries:   cfg.AppRegistries,
+				ConfigApps:   cfg.Apps,
 				ArtifactsDir: artifactsDir,
 				Reader:       reader,
 			}
@@ -817,8 +819,9 @@ func startAppRegistryAutoDeployController(
 			return nil, fmt.Errorf("configure app registry auto-deploy for %s: %w", name, err)
 		}
 		apps[name] = autodeploy.AppConfig{
-			Registry:   registryName,
-			PublicRoot: publicRoot,
+			Registry:    registryName,
+			PublicRoot:  publicRoot,
+			RegistryApp: entry.Source.RegistryAppName(name),
 		}
 	}
 	if len(apps) == 0 {

@@ -20,6 +20,7 @@ import (
 // replica before catalog-driven restarts bring an app down.
 type Materializer struct {
 	Registries   map[string]config.AppRegistryConfig
+	ConfigApps   map[string]*config.ProviderEntry
 	Reader       *RegistryReader
 	ArtifactsDir string
 	mu           sync.Mutex
@@ -45,6 +46,7 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 		return nil, fmt.Errorf("installation is required")
 	}
 	appName := strings.TrimSpace(installation.AppName)
+	registryApp := m.registryAppName(appName)
 	version := strings.TrimSpace(installation.Version)
 	registryName := strings.TrimSpace(installation.Registry)
 	if appName == "" || version == "" {
@@ -62,7 +64,7 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	}
 
 	destDir := MaterializedPath(artifactsDir, appName, version)
-	if installedPackageReady(destDir, appName, version) {
+	if installedPackageReady(destDir, registryApp, version) {
 		return &MaterializationResult{Path: destDir}, nil
 	}
 	if err := removePartialMaterializedPackage(destDir); err != nil {
@@ -73,7 +75,7 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	if reader == nil {
 		reader = &RegistryReader{}
 	}
-	source, err := fetchConfiguredRegistryEntry(ctx, m.Registries, reader, registryName, appName, version)
+	source, err := fetchConfiguredRegistryEntry(ctx, m.Registries, reader, registryName, registryApp, version)
 	if err != nil {
 		return nil, err
 	}
@@ -97,10 +99,19 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 		return nil, fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, artifact.SHA256)
 	}
 
-	if err := materializePublishedPackage(ctx, download.LocalPath, destDir, appName); err != nil {
+	if err := materializePublishedPackage(ctx, download.LocalPath, destDir, registryApp); err != nil {
 		return nil, fmt.Errorf("materialize app artifact: %w", err)
 	}
 	return &MaterializationResult{Path: destDir, Changed: true}, nil
+}
+
+func (m *Materializer) registryAppName(runtimeApp string) string {
+	if m != nil {
+		if entry := m.ConfigApps[runtimeApp]; entry != nil {
+			return entry.Source.RegistryAppName(runtimeApp)
+		}
+	}
+	return runtimeApp
 }
 
 // PruneSuperseded removes all locally materialized versions for an app except
