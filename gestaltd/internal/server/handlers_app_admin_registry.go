@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -202,6 +203,9 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		case errors.Is(err, principal.ErrOpaqueCredentialSubject):
+			if os.Getenv("GESTALTD_DEBUG_APP_ADMIN_AUTHZ") == "true" {
+				slog.WarnContext(r.Context(), "app admin authorization rejected opaque subject", "app", chi.URLParam(r, "app"), "subject", p.SubjectID, "user_id", p.UserID)
+			}
 			writeError(w, http.StatusForbidden, "app access denied")
 			return
 		case err != nil:
@@ -220,6 +224,11 @@ func (s *Server) appAdminAuthorizationMiddleware(next http.Handler) http.Handler
 			return
 		}
 		if !allowed {
+			if os.Getenv("GESTALTD_DEBUG_APP_ADMIN_AUTHZ") == "true" {
+				resource := s.authorizationResource(appName)
+				check, checkErr := s.authorization.CheckAccess(r.Context(), invocation.SubjectAccessRequest(subjectID, appName, resource))
+				slog.WarnContext(r.Context(), "app admin authorization denied", "app", appName, "subject", subjectID, "resource_type", resource.GetType(), "resource_id", resource.GetId(), "check", check, "check_error", checkErr)
+			}
 			writeError(w, http.StatusForbidden, "app access denied")
 			return
 		}
