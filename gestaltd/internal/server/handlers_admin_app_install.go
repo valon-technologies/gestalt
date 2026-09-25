@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 )
 
 type adminAppInstallationInfo struct {
@@ -79,7 +78,7 @@ func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "app is required")
 		return
 	}
-	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+	if !s.validRuntimeAppName(appName) {
 		writeError(w, http.StatusBadRequest, "invalid app name")
 		return
 	}
@@ -126,7 +125,7 @@ func (s *Server) changeAdminAppRegistryApp(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "app is required")
 		return
 	}
-	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+	if !s.validRuntimeAppName(appName) {
 		writeError(w, http.StatusBadRequest, "invalid app name")
 		return
 	}

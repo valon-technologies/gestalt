@@ -31,6 +31,10 @@ func (m *MountService) ResolveInstalledApp(name string, entry *config.ProviderEn
 // ResolveInstalledAppIfPresent returns an entry backed by a materialized
 // registry package when one exists. It never mutates entry.
 func ResolveInstalledAppIfPresent(name string, entry *config.ProviderEntry, artifactsDir, version string) (*config.ProviderEntry, error) {
+	registryApp := name
+	if entry != nil {
+		registryApp = entry.Source.RegistryAppName(name)
+	}
 	if strings.TrimSpace(version) == "" || strings.TrimSpace(artifactsDir) == "" {
 		return entry, nil
 	}
@@ -41,7 +45,7 @@ func ResolveInstalledAppIfPresent(name string, entry *config.ProviderEntry, arti
 		}
 		return nil, fmt.Errorf("stat registry installed app %q@%s: %w", name, version, err)
 	}
-	if err := operator.ValidateInstalledPublishedPackage(destDir, name, version); err != nil {
+	if err := operator.ValidateInstalledPublishedPackage(destDir, registryApp, version); err != nil {
 		return nil, fmt.Errorf("validate registry installed app %q@%s: %w", name, version, err)
 	}
 	return ResolveInstalledApp(name, entry, destDir, version)
@@ -65,7 +69,7 @@ func ResolveInstalledApp(name string, entry *config.ProviderEntry, destDir, vers
 	if version == "" {
 		return nil, fmt.Errorf("app %q registry install version is required", name)
 	}
-	if err := operator.ValidateInstalledPublishedPackage(destDir, name, version); err != nil {
+	if err := operator.ValidateInstalledPublishedPackage(destDir, entry.Source.RegistryAppName(name), version); err != nil {
 		return nil, fmt.Errorf("validate registry installed app %q@%s: %w", name, version, err)
 	}
 	install, err := inspectInstalledApp(destDir)

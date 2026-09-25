@@ -97,10 +97,6 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if version == "" {
 		return nil, fmt.Errorf("version is required")
 	}
-	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
-		return nil, fmt.Errorf("invalid app name: %w", err)
-	}
-
 	if i.Locks != nil {
 		lockHolder := uuid.NewString()
 		if err := i.Locks.Acquire(ctx, appName, version, lockHolder, coredata.DefaultAppVersionInstallLockTTL); err != nil {
@@ -138,6 +134,13 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if configEntry != nil && configEntry.Source.IsRegistry() &&
 		strings.TrimSpace(configEntry.Source.Registry) != registryName {
 		return nil, ErrRegistrySourceMismatch
+	}
+	registryApp := appName
+	if configEntry != nil {
+		registryApp = configEntry.Source.RegistryAppName(appName)
+	}
+	if err := providerregistry.ValidateRepositoryName(registryApp); err != nil {
+		return nil, fmt.Errorf("invalid registry app name: %w", err)
 	}
 	currentDesired := coredata.LatestKnownVersion(knownVersions)
 	var fromVersion string
@@ -224,7 +227,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 	if err != nil {
 		return nil, fmt.Errorf("resolve registry public URL: %w", err)
 	}
-	retentionIndex, err := reader.FetchRetentionIndex(installCtx, publicRoot, appName)
+	retentionIndex, err := reader.FetchRetentionIndex(installCtx, publicRoot, registryApp)
 	if err != nil {
 		return nil, fmt.Errorf("fetch retention index: %w", err)
 	}
@@ -242,7 +245,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		return nil, fmt.Errorf("retry version %q is not the current desired version", version)
 	}
 
-	source, err := fetchConfiguredRegistryEntry(installCtx, i.Registries, reader, registryName, appName, version)
+	source, err := fetchConfiguredRegistryEntry(installCtx, i.Registries, reader, registryName, registryApp, version)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +255,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		return nil, err
 	}
 
-	entryURL := PublicURL(source.PublicRoot, AppVersionEntryPath(appName, version))
+	entryURL := PublicURL(source.PublicRoot, AppVersionEntryPath(registryApp, version))
 	checksums := artifactChecksumsFromEntry(*entry)
 
 	requestedAt := i.now()
@@ -316,7 +319,7 @@ func (i *Installer) install(ctx context.Context, input InstallInput, mode instal
 		_, _ = i.Rollouts.MarkFailed(context.WithoutCancel(installCtx), appName, version, i.now())
 		return nil, fmt.Errorf("append change request: %w", err)
 	}
-	i.mirrorRetentionTransition(installCtx, registryName, appName, fromVersion, version, policy, requestedAt)
+	i.mirrorRetentionTransition(installCtx, registryName, registryApp, fromVersion, version, policy, requestedAt)
 
 	return &InstallOutput{
 		Installation: coredata.InstallationFromChangeRequest(addedRequest),

@@ -864,6 +864,14 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsRegistry() && kind != "app" {
 		return fmt.Errorf("config validation: %s %q source.registry is only supported on apps", kind, name)
 	}
+	if src.RegistryApp != "" {
+		if !src.IsRegistry() {
+			return fmt.Errorf("config validation: %s %q source.registryApp requires source.registry", kind, name)
+		}
+		if err := providerregistry.ValidateRepositoryName(src.RegistryApp); err != nil {
+			return fmt.Errorf("config validation: %s %q source.registryApp: %w", kind, name, err)
+		}
+	}
 	if src.IsLocalMetadataPath() {
 		if path.Base(filepath.ToSlash(src.MetadataPath())) != "provider-release.yaml" {
 			return fmt.Errorf("config validation: %s %q source.path must reference provider-release.yaml metadata", kind, name)

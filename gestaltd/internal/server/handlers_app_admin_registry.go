@@ -17,7 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -283,22 +282,22 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 	if reader == nil {
 		reader = &appregistry.RegistryReader{}
 	}
-	index, err := reader.FetchAppIndex(r.Context(), publicRoot, app.name)
+	index, err := reader.FetchAppIndex(r.Context(), publicRoot, app.registryApp)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry index")
 		return
 	}
-	pendingIndex, err := reader.FetchPendingIndex(r.Context(), publicRoot, app.name)
+	pendingIndex, err := reader.FetchPendingIndex(r.Context(), publicRoot, app.registryApp)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry pending catalog")
 		return
 	}
-	failedIndex, err := reader.FetchFailedIndex(r.Context(), publicRoot, app.name)
+	failedIndex, err := reader.FetchFailedIndex(r.Context(), publicRoot, app.registryApp)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry failed catalog")
 		return
 	}
-	retentionIndex, err := reader.FetchRetentionIndex(r.Context(), publicRoot, app.name)
+	retentionIndex, err := reader.FetchRetentionIndex(r.Context(), publicRoot, app.registryApp)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry retention catalog")
 		return
@@ -309,9 +308,9 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	publishedKeys := appregistry.PublishedVersionKeys(index, app.name)
+	publishedKeys := appregistry.PublishedVersionKeys(index, app.registryApp)
 	pendingKeys := appregistry.PendingVersionKeys(pendingIndex)
-	summaries := appregistry.VersionsFromIndex(index, app.name)
+	summaries := appregistry.VersionsFromIndex(index, app.registryApp)
 	published := make([]appAdminPublishedVersion, 0, len(summaries))
 	desiredVersion := coredata.LatestKnownVersion(known)
 	for i := range summaries {
@@ -566,12 +565,12 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 	if reader == nil {
 		reader = &appregistry.RegistryReader{}
 	}
-	index, err := reader.FetchAppIndex(r.Context(), publicRoot, app.name)
+	index, err := reader.FetchAppIndex(r.Context(), publicRoot, app.registryApp)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry index")
 		return
 	}
-	retentionIndex, err := reader.FetchRetentionIndex(r.Context(), publicRoot, app.name)
+	retentionIndex, err := reader.FetchRetentionIndex(r.Context(), publicRoot, app.registryApp)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch app registry retention catalog")
 		return
@@ -593,7 +592,7 @@ func (s *Server) getAppAdminRegistryHistory(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusServiceUnavailable, "app registry installation services are unavailable")
 		return
 	}
-	publishedByVersion := publishedVersionSummaryMap(index, app.name)
+	publishedByVersion := publishedVersionSummaryMap(index, app.registryApp)
 	now := time.Now().UTC()
 
 	var rollout *core.AppRollout
@@ -734,7 +733,7 @@ func (s *Server) selectAppAdminRegistryVersion(w http.ResponseWriter, r *http.Re
 
 func (s *Server) appAdminRegistryConfig(w http.ResponseWriter, r *http.Request) (configuredRegistryApp, config.AppRegistryConfig, bool) {
 	appName := strings.TrimSpace(chi.URLParam(r, "app"))
-	if appName == "" || providerregistry.ValidateRepositoryName(appName) != nil {
+	if appName == "" || !s.validRuntimeAppName(appName) {
 		writeError(w, http.StatusNotFound, "registry app not found")
 		return configuredRegistryApp{}, config.AppRegistryConfig{}, false
 	}

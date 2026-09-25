@@ -18,8 +18,9 @@ import (
 const Actor = "system:auto-deploy"
 
 type AppConfig struct {
-	Registry   string
-	PublicRoot string
+	Registry    string
+	PublicRoot  string
+	RegistryApp string
 }
 
 type RegistryReader interface {
@@ -179,6 +180,10 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 	if !ok {
 		return nil
 	}
+	registryApp := strings.TrimSpace(app.RegistryApp)
+	if registryApp == "" {
+		registryApp = appName
+	}
 	settings, err := c.Settings.Get(ctx, appName)
 	if errors.Is(err, core.ErrNotFound) {
 		return nil
@@ -236,7 +241,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 	result, err := c.Reader.FetchAppIndexConditional(
 		ctx,
 		app.PublicRoot,
-		appName,
+		registryApp,
 		ifNoneMatch,
 	)
 	if err != nil {
@@ -244,7 +249,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 	}
 	if !result.NotModified {
 		c.etags[appName] = result.ETag
-		versions := appregistry.VersionsFromIndex(result.Index, appName)
+		versions := appregistry.VersionsFromIndex(result.Index, registryApp)
 		if len(versions) > 0 {
 			newest := versions[0].Version
 			settings, err = c.Settings.Update(ctx, appName, func(current *core.AppAutoDeploySettings) error {
@@ -364,8 +369,9 @@ func cloneApps(apps map[string]AppConfig) map[string]AppConfig {
 	out := make(map[string]AppConfig, len(apps))
 	for name, app := range apps {
 		out[strings.TrimSpace(name)] = AppConfig{
-			Registry:   strings.TrimSpace(app.Registry),
-			PublicRoot: strings.TrimRight(strings.TrimSpace(app.PublicRoot), "/"),
+			Registry:    strings.TrimSpace(app.Registry),
+			PublicRoot:  strings.TrimRight(strings.TrimSpace(app.PublicRoot), "/"),
+			RegistryApp: strings.TrimSpace(app.RegistryApp),
 		}
 	}
 	return out

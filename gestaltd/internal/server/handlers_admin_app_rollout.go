@@ -193,7 +193,7 @@ func (s *Server) getAdminRegistryApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "app is required")
 		return
 	}
-	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+	if !s.validRuntimeAppName(appName) {
 		writeError(w, http.StatusBadRequest, "invalid app name")
 		return
 	}
@@ -237,7 +237,7 @@ func (s *Server) listAdminAppRollouts(w http.ResponseWriter, r *http.Request) {
 	}
 	appFilter := strings.TrimSpace(r.URL.Query().Get("app"))
 	if appFilter != "" {
-		if err := providerregistry.ValidateRepositoryName(appFilter); err != nil {
+		if !s.validRuntimeAppName(appFilter) {
 			writeError(w, http.StatusBadRequest, "invalid app name")
 			return
 		}
@@ -281,7 +281,7 @@ func (s *Server) listAdminAppRolloutMaterializations(w http.ResponseWriter, r *h
 		writeError(w, http.StatusBadRequest, "app is required")
 		return
 	}
-	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+	if !s.validRuntimeAppName(appName) {
 		writeError(w, http.StatusBadRequest, "invalid app name")
 		return
 	}
@@ -336,8 +336,17 @@ func (s *Server) listAdminAppRolloutMaterializations(w http.ResponseWriter, r *h
 }
 
 type configuredRegistryApp struct {
-	name     string
-	registry string
+	name        string
+	registry    string
+	registryApp string
+}
+
+func (s *Server) validRuntimeAppName(name string) bool {
+	if providerregistry.ValidateRepositoryName(name) == nil {
+		return true
+	}
+	_, ok := s.registryApp(name)
+	return ok
 }
 
 func (s *Server) configuredRegistryApps() []configuredRegistryApp {
@@ -350,7 +359,7 @@ func (s *Server) configuredRegistryApps() []configuredRegistryApp {
 		if registry == "" {
 			continue
 		}
-		out = append(out, configuredRegistryApp{name: name, registry: registry})
+		out = append(out, configuredRegistryApp{name: name, registry: registry, registryApp: entry.Source.RegistryAppName(name)})
 	}
 	slices.SortFunc(out, func(a, b configuredRegistryApp) int {
 		return strings.Compare(a.name, b.name)
@@ -533,11 +542,11 @@ func (s *Server) latestPublishedVersion(r *http.Request, app configuredRegistryA
 	if reader == nil {
 		reader = &appregistry.RegistryReader{}
 	}
-	index, err := reader.FetchAppIndex(r.Context(), publicRoot, app.name)
+	index, err := reader.FetchAppIndex(r.Context(), publicRoot, app.registryApp)
 	if err != nil {
 		return nil
 	}
-	versions := appregistry.VersionsFromIndex(index, app.name)
+	versions := appregistry.VersionsFromIndex(index, app.registryApp)
 	if len(versions) == 0 {
 		return nil
 	}
