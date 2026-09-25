@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -275,8 +276,14 @@ func (r *SCIMRuntime) MigrateConfig(ctx context.Context, actor string) ([]*cored
 			}
 			tokens[credentialID] = credential.BearerToken
 		}
+		data := scim.DataFromClientConfig(client)
+		data.CredentialIDs = make([]string, 0, len(tokens))
+		for credentialID := range tokens {
+			data.CredentialIDs = append(data.CredentialIDs, credentialID)
+		}
+		sort.Strings(data.CredentialIDs)
 		record := &coredata.SCIMClientRecord{
-			SCIMClientData: scim.DataFromClientConfig(client),
+			SCIMClientData: data,
 			ID:             clientID,
 			Enabled:        true,
 		}
