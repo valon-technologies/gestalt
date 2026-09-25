@@ -177,22 +177,6 @@
 
   --shell-code-fg: oklch(87.87% 0.0181 92.7); /* #dbd7ca, vitesse-dark */
 
-  /* Code surfaces sit flat on dark-100 (the alpha mix the shell derives
-     reads darker than the cards here). */
-  --shell-code-surface: var(--gst-color-dark-100);
-
-  /* Dark cards rest just above the page; hover/pressed step the ramp. */
-  --shell-card-bg: var(--gst-color-dark-100);
-  --shell-control-bg-hover: var(--gst-color-dark-150);
-  --shell-control-bg-active: var(--gst-color-dark-200);
-  --shell-pill-bg: rgba(var(--gst-color-fg-rgb), 0.075);
-
-  /* Secondary buttons rest one step above the cards (Primer-style) so the
-     fill, not just the hairline, separates them from static tiles. */
-  --shell-button-bg: var(--gst-color-dark-150);
-  --shell-button-bg-hover: var(--gst-color-dark-200);
-  --shell-button-bg-active: var(--gst-color-dark-250);
-
   --shell-icon-caret: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%23dfe1e4" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/></svg>');
 
   --shell-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.34);
@@ -259,6 +243,24 @@
 }
 
 .dark {
+  /* Component surfaces override the :root tier above, so they must come
+     after it: at equal specificity, an earlier .dark loses to :root. */
+  /* Code surfaces sit flat on dark-100 (the alpha mix the shell derives
+     reads darker than the cards here). */
+  --shell-code-surface: var(--gst-color-dark-100);
+
+  /* Dark cards rest just above the page; hover/pressed step the ramp. */
+  --shell-card-bg: var(--gst-color-dark-100);
+  --shell-control-bg-hover: var(--gst-color-dark-150);
+  --shell-control-bg-active: var(--gst-color-dark-200);
+  --shell-pill-bg: rgba(var(--gst-color-fg-rgb), 0.075);
+
+  /* Secondary buttons rest one step above the cards (Primer-style) so the
+     fill, not just the hairline, separates them from static tiles. */
+  --shell-button-bg: var(--gst-color-dark-150);
+  --shell-button-bg-hover: var(--gst-color-dark-200);
+  --shell-button-bg-active: var(--gst-color-dark-250);
+
   --shell-link-current: var(--gst-color-accent-300); /* on the dark surface */
   --shell-link-hover: var(--gst-color-accent-200); /* brighter than current */
   --shell-link-pressed: var(--gst-color-accent-300); /* one step darker than hover */
