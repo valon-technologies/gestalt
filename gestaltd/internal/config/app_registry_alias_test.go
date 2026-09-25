@@ -3,6 +3,7 @@ package config
 import "testing"
 
 func TestRegistryAppAliasSurvivesConfigLoadAndMarshal(t *testing.T) {
+	t.Parallel()
 	path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v8
 appRegistries:
