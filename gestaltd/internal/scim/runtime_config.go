@@ -53,10 +53,10 @@ func relationshipsData(rels []config.SCIMRelationshipConfig) []coredata.SCIMRela
 
 // PostWriteConfig returns the validation snapshot after clientID is replaced
 // by next. It leaves credential decryption to ResolveRuntimeConfig.
-func PostWriteConfig(ctx context.Context, service *coredata.SCIMConfigService, clientID string, next *coredata.SCIMClientRecord) (config.ServerSCIMConfig, bool, error) {
+func PostWriteConfig(ctx context.Context, service *coredata.SCIMConfigService, clientID string, next *coredata.SCIMClientRecord) (config.ServerSCIMConfig, error) {
 	clients, err := service.List(ctx)
 	if err != nil {
-		return config.ServerSCIMConfig{}, false, err
+		return config.ServerSCIMConfig{}, err
 	}
 	replaced := false
 	for i, client := range clients {
@@ -75,9 +75,9 @@ func PostWriteConfig(ctx context.Context, service *coredata.SCIMConfigService, c
 	}
 	out, err := runtimeConfig(clients, credentialIDsFromRecord)
 	if err != nil {
-		return config.ServerSCIMConfig{}, false, err
+		return config.ServerSCIMConfig{}, err
 	}
-	return out, len(clients) > 0, nil
+	return out, nil
 }
 
 func credentialIDsFromRecord(client *coredata.SCIMClientRecord) ([]config.SCIMCredentialConfig, error) {
@@ -111,10 +111,10 @@ func runtimeConfig(clients []*coredata.SCIMClientRecord, credentials func(*cored
 // ResolveRuntimeConfig decrypts credentials through the supplied callback and
 // returns the live runtime SCIM config. Plaintext never leaves this
 // function's caller through storage APIs.
-func ResolveRuntimeConfig(ctx context.Context, service *coredata.SCIMConfigService, decrypt func(coredata.SCIMClientSecret) (string, error)) (config.ServerSCIMConfig, bool, error) {
+func ResolveRuntimeConfig(ctx context.Context, service *coredata.SCIMConfigService, decrypt func(coredata.SCIMClientSecret) (string, error)) (config.ServerSCIMConfig, error) {
 	clients, err := service.List(ctx)
 	if err != nil {
-		return config.ServerSCIMConfig{}, false, err
+		return config.ServerSCIMConfig{}, err
 	}
 	out, err := runtimeConfig(clients, func(client *coredata.SCIMClientRecord) ([]config.SCIMCredentialConfig, error) {
 		secrets, err := service.Secrets(ctx, client.ID)
@@ -139,7 +139,7 @@ func ResolveRuntimeConfig(ctx context.Context, service *coredata.SCIMConfigServi
 		return credentials, nil
 	})
 	if err != nil {
-		return config.ServerSCIMConfig{}, false, err
+		return config.ServerSCIMConfig{}, err
 	}
-	return out, len(clients) > 0, nil
+	return out, nil
 }

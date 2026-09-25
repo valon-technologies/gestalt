@@ -132,9 +132,9 @@ func validateSCIMClients(clients map[string]SCIMClientConfig, resourceTypes map[
 	domainOwners := map[string]string{}
 	projectionOwners := map[string]string{}
 	for clientID, client := range clients {
-		path := "server.scim.clients." + clientID
+		path := "runtime SCIM client " + clientID
 		if strings.TrimSpace(clientID) == "" || strings.TrimSpace(clientID) != clientID {
-			return fmt.Errorf("server.scim.clients keys must be non-empty and trimmed")
+			return fmt.Errorf("runtime SCIM client id must be non-empty and trimmed")
 		}
 		if len(client.Credentials) > 2 {
 			return fmt.Errorf("%s.credentials must contain at most two credentials", path)
