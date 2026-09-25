@@ -49,16 +49,26 @@ func (s *Server) createAdminUsers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "user directory is unavailable")
 		return
 	}
-	users := make(map[string]string, len(request.Emails))
+	// The whole batch is validated before anything is written so a rejected
+	// request leaves the directory untouched, rather than persisting the records
+	// that happened to precede the offending address and reporting none of them.
+	emails := make([]string, 0, len(request.Emails))
+	seen := make(map[string]bool, len(request.Emails))
 	for _, rawEmail := range request.Emails {
 		email := strings.ToLower(strings.TrimSpace(rawEmail))
 		if principal.ClassifyUserSubjectValue(email) != principal.UserSubjectFormEmail {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid email %q", rawEmail))
 			return
 		}
-		if _, done := users[email]; done {
+		if seen[email] {
 			continue
 		}
+		seen[email] = true
+		emails = append(emails, email)
+	}
+
+	users := make(map[string]string, len(emails))
+	for _, email := range emails {
 		user, err := s.users.FindOrCreateUser(r.Context(), email)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "user directory is unavailable")

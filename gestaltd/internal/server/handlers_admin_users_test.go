@@ -197,3 +197,28 @@ func postAdminUserEmails(t *testing.T, baseURL, body string) map[string]string {
 	}
 	return payload.Users
 }
+
+func TestAdminDirectoryCreateIsAllOrNothing(t *testing.T) {
+	t.Parallel()
+	svc := testutil.NewStubServices(t)
+	ts := newTestServer(t, func(cfg *server.Config) { cfg.Services = svc })
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Post(ts.URL+"/admin/api/v1/users", "application/json",
+		strings.NewReader(`{"emails":["valid@example.test","not-an-email"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status=%d want=400", resp.StatusCode)
+	}
+
+	users, err := svc.Users.ListUsers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 0 {
+		t.Fatalf("rejected batch persisted %d record(s): %#v", len(users), users)
+	}
+}
