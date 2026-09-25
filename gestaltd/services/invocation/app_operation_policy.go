@@ -33,8 +33,16 @@ func (b *Broker) authorizeInvocation(ctx context.Context, p *principal.Principal
 	if !principal.AllowsOperationPermission(p, app, operation.ID) {
 		return ctx, operation, fmt.Errorf("%w: %s.%s", ErrScopeDenied, app, operation.ID)
 	}
-	if err := b.checkAppAccess(ctx, p, app, operation.ID); err != nil {
-		return ctx, operation, err
+	// An app access profile lists the operations a user allowed from their app's
+	// operation page, which only ever offers API-exposed operations. A private
+	// operation can never be listed there, so enforcing the profile against one
+	// denies every user who has ever saved that page. App-to-app reach into
+	// private operations is decided by the verified internal caller and the
+	// authorization checks below.
+	if !privateOperation(operation) {
+		if err := b.checkAppAccess(ctx, p, app, operation.ID); err != nil {
+			return ctx, operation, err
+		}
 	}
 	policy, err := b.appOperationPolicy(ctx, app)
 	if err != nil {

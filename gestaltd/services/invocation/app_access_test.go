@@ -227,3 +227,68 @@ func TestBrokerAppAccessProfileAllowsGraphQLCapability(t *testing.T) {
 		t.Fatal("GraphQL provider was not called")
 	}
 }
+
+// A private operation is never offered on the app's operation page, so a saved
+// profile cannot list it. Enforcing the profile against one denied every user
+// who had ever saved that page, while users without a profile were allowed.
+func TestBrokerAppAccessProfileDoesNotGatePrivateOperations(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	private := catalog.APIExposurePrivate
+	mcpDisabled := false
+	executed := make(map[string]bool)
+	provider := &coretesting.StubIntegration{
+		N:        "front-porch",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "front-porch",
+			Operations: []catalog.CatalogOperation{
+				{ID: "versions", Method: "GET"},
+				{ID: "setVersion", Method: "POST"},
+				{ID: "unsafeSetVersion", Method: "POST", API: &private, MCP: &mcpDisabled},
+			},
+		},
+		ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+			executed[operation] = true
+			return &core.OperationResult{Status: 200}, nil
+		},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		nil,
+		WithAppAccessProfiles(svc.AppAccessProfiles),
+		WithAuthorizationProvider(&recordingAuthorizationProvider{allowed: true}),
+	)
+	const userID = "9a1c2d3e-4f5b-46c7-8d9e-0a1b2c3d4e5f"
+	// The profile a user can actually save: API-exposed operations only.
+	if _, err := svc.AppAccessProfiles.EnsureAppAccessDefaults(
+		context.Background(),
+		principal.UserSubjectID(userID),
+		"front-porch",
+		[]string{"versions"},
+	); err != nil {
+		t.Fatalf("EnsureAppAccessDefaults: %v", err)
+	}
+	p := &principal.Principal{
+		SubjectID: principal.UserSubjectID(userID),
+		UserID:    userID,
+		Kind:      principal.KindUser,
+	}
+	ctx := WithCallerProvider(context.Background(), ProviderKindApp, "dashboard")
+
+	if _, err := broker.Invoke(ctx, p, "front-porch", "", "unsafeSetVersion", nil); err != nil {
+		t.Fatalf("private operation invoke = %v, want allowed", err)
+	}
+	if !executed["unsafeSetVersion"] {
+		t.Fatal("private operation did not reach the provider")
+	}
+	// An API-exposed operation the user left out of the profile stays denied.
+	if _, err := broker.Invoke(ctx, p, "front-porch", "", "setVersion", nil); !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("omitted public operation invoke = %v, want ErrAuthorizationDenied", err)
+	}
+	if executed["setVersion"] {
+		t.Fatal("omitted public operation reached the provider")
+	}
+}
