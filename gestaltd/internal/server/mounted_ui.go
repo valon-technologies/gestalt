@@ -181,6 +181,14 @@ func (s *Server) authorizeMountedResource(
 		return r.Context(), true
 	}
 
+	// An in-process readiness probe has no user principal and cannot obtain one,
+	// so authorizing it would fail for every app UI that is not public. Admit it
+	// on the same terms as a public mount: the probe only establishes that the UI
+	// is mounted and renders, and the marker is unreachable from the network.
+	if isReadinessProbe(r.Context()) {
+		return r.Context(), true
+	}
+
 	auth, err := s.mountedUIAuthRuntime(mounted)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve auth provider")
