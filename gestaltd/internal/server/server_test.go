@@ -2596,6 +2596,7 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 			AuthorizationPolicy: "brandPolicy",
 			Handler:             handler,
 			ThemeStylesheet:     filepath.Join(themeDir, "tenant.css"),
+			PublicConfig:        map[string]any{"title": "Workspace"},
 		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -2603,6 +2604,14 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 	noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
+	configResp, err := noRedirect.Get(ts.URL + "/brand/public-config.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = configResp.Body.Close()
+	if configResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated public config status = %d, want 401", configResp.StatusCode)
+	}
 	resp, err := noRedirect.Get(ts.URL + "/brand/theme.css")
 	if err != nil {
 		t.Fatalf("GET theme.css unauthenticated: %v", err)
@@ -2645,6 +2654,21 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 	}
 	if got := resp.Header.Get("Content-Type"); got != "text/css; charset=utf-8" {
 		t.Fatalf("authorized theme.css Content-Type = %q, want text/css; charset=utf-8", got)
+	}
+
+	configReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/brand/public-config.json", nil)
+	configReq.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	configResp, err = http.DefaultClient.Do(configReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configBody, err := io.ReadAll(configResp.Body)
+	_ = configResp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configResp.StatusCode != http.StatusOK || string(configBody) != `{"title":"Workspace"}` {
+		t.Fatalf("authorized config: %d %s", configResp.StatusCode, configBody)
 	}
 }
 
