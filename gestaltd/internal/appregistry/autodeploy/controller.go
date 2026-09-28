@@ -164,7 +164,7 @@ func (c *Controller) ReconcileAll(ctx context.Context) error {
 		if setting == nil {
 			continue
 		}
-		if err := c.Reconcile(ctx, setting.App); err != nil {
+		if err := c.reconcile(ctx, setting.App, setting); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", setting.App, err))
 		}
 	}
@@ -176,8 +176,7 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 		return err
 	}
 	appName = strings.TrimSpace(appName)
-	app, ok := c.Apps[appName]
-	if !ok {
+	if _, ok := c.Apps[appName]; !ok {
 		return nil
 	}
 	registryApp := strings.TrimSpace(app.RegistryApp)
@@ -191,15 +190,21 @@ func (c *Controller) Reconcile(ctx context.Context, appName string) error {
 	if err != nil {
 		return err
 	}
+	return c.reconcile(ctx, appName, settings)
+}
+
+func (c *Controller) reconcile(ctx context.Context, appName string, settings *core.AppAutoDeploySettings) error {
+	appName = strings.TrimSpace(appName)
+	app, ok := c.Apps[appName]
+	if !ok || settings == nil {
+		return nil
+	}
+	if !settings.Enabled || settings.Paused {
+		return nil
+	}
 	rollout, err := c.Rollouts.Get(ctx, appName)
 	if err != nil && !errors.Is(err, core.ErrNotFound) {
 		return err
-	}
-	if !settings.Enabled {
-		return nil
-	}
-	if settings.Paused {
-		return nil
 	}
 	if rollout != nil && rollout.State == core.AppRolloutStateFailed {
 		failedAt := rollout.FailedAt.UTC().Truncate(time.Millisecond)
