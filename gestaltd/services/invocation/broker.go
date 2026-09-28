@@ -1416,29 +1416,40 @@ func nonNilCredentials(credentials []*core.ExternalCredential) []*core.ExternalC
 // chosenCredentialInstance leaves instance empty so callers surface
 // ambiguity the same way as local resolve.
 func (b *Broker) resolveChosenInstance(ctx context.Context, subjectID, connectionID, instance string) (string, error) {
+	instance, _, _, err := b.resolveChosenInstanceCredentials(ctx, subjectID, connectionID, instance)
+	return instance, err
+}
+
+// resolveChosenInstanceCredentials is resolveChosenInstance that also hands
+// back what it learned from the store: listed is true when the subject's
+// credentials for connectionID were listed (instance was empty) and
+// credentials is that list. A caller about to do expensive work on the
+// subject's behalf can then tell "nothing stored" from "instance was given"
+// without a second store round trip.
+func (b *Broker) resolveChosenInstanceCredentials(ctx context.Context, subjectID, connectionID, instance string) (chosen string, credentials []*core.ExternalCredential, listed bool, err error) {
 	instance = strings.TrimSpace(instance)
 	if instance != "" {
-		return instance, nil
+		return instance, nil, false, nil
 	}
 	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
-		return "", fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
+		return "", nil, false, fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
 	}
 	credentials, listErr := b.externalCreds.ListCredentials(ctx, subjectID, connectionID)
 	if listErr != nil {
-		return "", fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
+		return "", nil, false, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
 	}
 	preferred := ""
 	if b.connectionInstancePreferences != nil {
 		var prefErr error
 		preferred, prefErr = b.connectionInstancePreferences.PreferredInstance(ctx, subjectID, connectionID)
 		if prefErr != nil {
-			return "", fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
+			return "", credentials, true, fmt.Errorf("%w: resolving preferred instance: %v", ErrInternal, prefErr)
 		}
 	}
 	if chosen, ok := chosenCredentialInstance(credentials, preferred); ok {
-		return chosen, nil
+		return chosen, credentials, true, nil
 	}
-	return "", nil
+	return "", credentials, true, nil
 }
 
 func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principal, providerName string, targets []CatalogResolutionTarget) ([]CatalogResolutionTarget, error) {
@@ -1604,7 +1615,7 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	}
 
 	connectionID := b.connectionID(providerName, connection)
-	instance, err := b.resolveChosenInstance(ctx, subjectID, connectionID, instance)
+	instance, listedCredentials, listed, err := b.resolveChosenInstanceCredentials(ctx, subjectID, connectionID, instance)
 	if err != nil {
 		return ctx, ConnectionRuntimeCredential{}, err
 	}
@@ -1628,6 +1639,19 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	}
 
 	authConfig := runtimeInfo.AuthConfig
+	if runtimeInfo.AuthConfigResolver != nil && listed && len(nonNilCredentials(listedCredentials)) == 0 {
+		// The resolver exists to refresh a stored grant: for mcp_oauth it
+		// discovers the upstream's token endpoint and registered client, two
+		// or three HTTP round trips to a third party. The store was just listed
+		// for this subject and connection and holds nothing, so there is no
+		// grant to refresh and ResolveCredential below could only report
+		// ErrNotFound. Give that answer now instead of paying for discovery
+		// first: a front-door search asks this of every configured app on
+		// every query, and most of them the caller has never connected. When
+		// the list is non-empty -- even ambiguous -- fall through so the
+		// existing ResolveCredential errors and refresh path are unchanged.
+		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
+	}
 	if runtimeInfo.AuthConfigResolver != nil {
 		resolved, resolverErr := runtimeInfo.AuthConfigResolver(ctx)
 		if resolverErr != nil {
