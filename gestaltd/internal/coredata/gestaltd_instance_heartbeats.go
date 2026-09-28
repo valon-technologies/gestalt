@@ -124,13 +124,15 @@ func (s *GestaltdInstanceHeartbeatService) Delete(ctx context.Context, instanceI
 	return nil
 }
 
+// PruneBefore removes stale instance heartbeats and their per-instance
+// materialization state atomically.
 func (s *GestaltdInstanceHeartbeatService) PruneBefore(ctx context.Context, cutoff time.Time) (int, error) {
 	if s == nil || s.db == nil {
 		return 0, fmt.Errorf("prune gestaltd instance heartbeats: service is not configured")
 	}
 	tx, err := s.db.Transaction(
 		ctx,
-		[]string{StoreGestaltdInstanceHeartbeats},
+		[]string{StoreGestaltdInstanceHeartbeats, StoreAppInstanceMaterializations},
 		idb.TransactionReadwrite,
 		idb.TransactionOptions{},
 	)
@@ -153,6 +155,20 @@ func (s *GestaltdInstanceHeartbeatService) PruneBefore(ctx context.Context, cuto
 		instanceID := recString(rec, "instance_id")
 		if instanceID == "" {
 			continue
+		}
+		materializations, err := tx.ObjectStore(StoreAppInstanceMaterializations).
+			Index("by_instance").GetAll(ctx, instanceID)
+		if err != nil {
+			return pruned, fmt.Errorf("prune gestaltd instance heartbeats: list materializations for %q: %w", instanceID, err)
+		}
+		for _, materialization := range materializations {
+			id := recString(materialization, "id")
+			if id == "" {
+				continue
+			}
+			if err := tx.ObjectStore(StoreAppInstanceMaterializations).Delete(ctx, id); err != nil && !errors.Is(err, idb.ErrNotFound) {
+				return pruned, fmt.Errorf("prune gestaltd instance heartbeats: delete materialization %q: %w", id, err)
+			}
 		}
 		if err := store.Delete(ctx, instanceID); err != nil && !errors.Is(err, idb.ErrNotFound) {
 			return pruned, fmt.Errorf("prune gestaltd instance heartbeats: delete %q: %w", instanceID, err)
