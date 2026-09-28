@@ -11,6 +11,20 @@ import (
 
 const uiReadinessIncompleteReason = "ui readiness incomplete"
 
+// readinessProbeContextKey marks a request as an in-process UI readiness probe.
+// UIReadinessMonitor synthesizes these requests and serves them straight through
+// the handler chain, so the marker cannot be set by a network caller and grants
+// nothing that is reachable from outside the process.
+type readinessProbeContextKey struct{}
+
+func withReadinessProbe(ctx context.Context) context.Context {
+	return context.WithValue(ctx, readinessProbeContextKey{}, struct{}{})
+}
+
+func isReadinessProbe(ctx context.Context) bool {
+	return ctx != nil && ctx.Value(readinessProbeContextKey{}) != nil
+}
+
 type UIProbeResult struct {
 	Mount      string  `json:"mount"`
 	Ready      bool    `json:"ready"`
@@ -221,6 +235,7 @@ func mountedUIProbePaths(mounted MountedUI) []string {
 
 func probeMountedUI(handler http.Handler, path string, bearer string) UIProbeResult {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req = req.WithContext(withReadinessProbe(req.Context()))
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}

@@ -242,3 +242,37 @@ func TestUIReadinessProbesUseBoundedConcurrencyAndWaitForEveryResult(t *testing.
 		}
 	}
 }
+
+// An app UI that is not public requires a user principal that a readiness probe
+// can never present. Before the probe was marked as in-process, every such mount
+// answered 401 and startup admission could never complete.
+func TestUIReadinessProbeIsAdmittedToNonPublicAppUI(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/private-app/", func(w http.ResponseWriter, r *http.Request) {
+		if !isReadinessProbe(r.Context()) {
+			http.Error(w, "missing authorization", http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	result := probeMountedUI(mux, "/private-app/", "")
+	if !result.Ready {
+		t.Fatalf("probe of non-public app UI = %+v, want ready", result)
+	}
+}
+
+func TestReadinessProbeMarkerIsAbsentOnOrdinaryRequests(t *testing.T) {
+	t.Parallel()
+	req := httptest.NewRequest(http.MethodGet, "/private-app/", nil)
+	if isReadinessProbe(req.Context()) {
+		t.Fatal("ordinary request is marked as a readiness probe")
+	}
+	if !isReadinessProbe(withReadinessProbe(req.Context())) {
+		t.Fatal("marked context is not recognized as a readiness probe")
+	}
+	if isReadinessProbe(context.Background()) {
+		t.Fatal("background context is marked as a readiness probe")
+	}
+}
