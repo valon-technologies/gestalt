@@ -125,12 +125,13 @@ argsOverride: []
 startupProbe: {}
 
 # Optional PodDisruptionBudget protecting the Deployment during node
-# upgrades and drains. Requires at least one of minAvailable or
-# maxUnavailable when enabled.
+# upgrades and drains. Set maxUnavailable instead of minAvailable to budget
+# by unavailable pods; maxUnavailable: 0 blocks all voluntary disruptions.
+# Leave both unset only when the budget is disabled.
 podDisruptionBudget:
   enabled: false
   minAvailable: 1
-  maxUnavailable: null
+  # maxUnavailable: 1
 
 # Optional pod-level annotations and labels, merged into the pod template
 # alongside the chart's config checksum annotation and standard labels.
