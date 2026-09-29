@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -274,5 +275,67 @@ func TestReadinessProbeMarkerIsAbsentOnOrdinaryRequests(t *testing.T) {
 	}
 	if isReadinessProbe(context.Background()) {
 		t.Fatal("background context is marked as a readiness probe")
+	}
+}
+
+func unreadyProbe(mount string, status int, message string) UIProbeResult {
+	result := UIProbeResult{Mount: mount, Ready: false}
+	if status != 0 {
+		result.StatusCode = &status
+	}
+	if message != "" {
+		result.Error = &message
+	}
+	return result
+}
+
+func TestSummarizeUnreadyMountsNamesTheFailingMount(t *testing.T) {
+	t.Parallel()
+	results := []UIProbeResult{
+		{Mount: "/g-issues/", Ready: true},
+		unreadyProbe("/scenario-library/", http.StatusServiceUnavailable, "app unavailable\n"),
+	}
+	unready := unreadyMounts(results)
+	if len(unready) != 1 {
+		t.Fatalf("unreadyMounts = %d entries, want 1", len(unready))
+	}
+	got := summarizeUnreadyMounts(unready)
+	want := "/scenario-library/ (503 app unavailable)"
+	if got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+}
+
+func TestSummarizeUnreadyMountsHandlesAMissingResponse(t *testing.T) {
+	t.Parallel()
+	got := summarizeUnreadyMounts([]UIProbeResult{unreadyProbe("/atlas/", 0, "")})
+	want := "/atlas/ (no response)"
+	if got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+}
+
+func TestSummarizeUnreadyMountsTruncatesALongError(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("e", unreadyProbeErrorLimit+20)
+	got := summarizeUnreadyMounts([]UIProbeResult{unreadyProbe("/a/", 500, long)})
+	want := fmt.Sprintf("/a/ (500 %s...)", strings.Repeat("e", unreadyProbeErrorLimit))
+	if got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+}
+
+func TestSummarizeUnreadyMountsBoundsTheList(t *testing.T) {
+	t.Parallel()
+	unready := make([]UIProbeResult, 0, unreadyMountLogLimit+3)
+	for i := range unreadyMountLogLimit + 3 {
+		unready = append(unready, unreadyProbe(fmt.Sprintf("/app%d/", i), 503, ""))
+	}
+	got := summarizeUnreadyMounts(unready)
+	if strings.Count(got, "/app") != unreadyMountLogLimit {
+		t.Fatalf("summary lists %d mounts, want %d: %s", strings.Count(got, "/app"), unreadyMountLogLimit, got)
+	}
+	if !strings.HasSuffix(got, " and 3 more") {
+		t.Fatalf("summary = %q, want a remainder suffix", got)
 	}
 }

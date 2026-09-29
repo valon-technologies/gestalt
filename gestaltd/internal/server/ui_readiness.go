@@ -2,14 +2,25 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
 const uiReadinessIncompleteReason = "ui readiness incomplete"
+
+// An instance that cannot admit itself reports which mounts held it back. The
+// candidate is unreachable while it fails its startup probe -- no traffic, no
+// URL -- so this log is the only account of why, and /ready alone cannot say.
+const (
+	unreadyMountLogLimit   = 10
+	unreadyProbeErrorLimit = 80
+)
 
 // readinessProbeContextKey marks a request as an in-process UI readiness probe.
 // UIReadinessMonitor synthesizes these requests and serves them straight through
@@ -198,10 +209,18 @@ func (m *UIReadinessMonitor) evaluate() {
 		}()
 	}
 	workers.Wait()
-	ready := true
-	for _, result := range results {
-		if !result.Ready {
-			ready = false
+	unready := unreadyMounts(results)
+	ready := len(unready) == 0
+	if len(results) > 0 {
+		if ready {
+			slog.Info("ui readiness complete", "mounts", len(results))
+		} else {
+			slog.Warn(
+				uiReadinessIncompleteReason,
+				"ready", len(results)-len(unready),
+				"mounts", len(results),
+				"unready", summarizeUnreadyMounts(unready),
+			)
 		}
 	}
 
@@ -218,6 +237,48 @@ func (m *UIReadinessMonitor) evaluate() {
 	m.report = report
 	m.ready = ready && len(results) > 0
 	m.mu.Unlock()
+}
+
+func unreadyMounts(results []UIProbeResult) []UIProbeResult {
+	unready := make([]UIProbeResult, 0, len(results))
+	for _, result := range results {
+		if !result.Ready {
+			unready = append(unready, result)
+		}
+	}
+	return unready
+}
+
+func summarizeUnreadyMounts(unready []UIProbeResult) string {
+	shown := unready
+	suffix := ""
+	if len(shown) > unreadyMountLogLimit {
+		shown = shown[:unreadyMountLogLimit]
+		suffix = fmt.Sprintf(" and %d more", len(unready)-unreadyMountLogLimit)
+	}
+	described := make([]string, 0, len(shown))
+	for _, result := range shown {
+		described = append(described, describeUnreadyMount(result))
+	}
+	return strings.Join(described, ", ") + suffix
+}
+
+func describeUnreadyMount(result UIProbeResult) string {
+	status := "no response"
+	if result.StatusCode != nil {
+		status = strconv.Itoa(*result.StatusCode)
+	}
+	message := ""
+	if result.Error != nil {
+		message = strings.Join(strings.Fields(*result.Error), " ")
+		if runes := []rune(message); len(runes) > unreadyProbeErrorLimit {
+			message = string(runes[:unreadyProbeErrorLimit]) + "..."
+		}
+	}
+	if message == "" {
+		return fmt.Sprintf("%s (%s)", result.Mount, status)
+	}
+	return fmt.Sprintf("%s (%s %s)", result.Mount, status, message)
 }
 
 func mountedUIProbePaths(mounted MountedUI) []string {
