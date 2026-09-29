@@ -142,6 +142,76 @@ public/management deployment, also set `config.server.management.baseUrl`.
 | `lockedServe.enabled` | Adds `--locked` to the main container without running the chart preparation containers. |
 | `ingress` | Public ingress settings. |
 | `managementService` | Optional internal Service for the management listener. |
+| `argsOverride` | Replaces the rendered serve arguments entirely. |
+| `readOnlyRootFilesystem` | Container-level writable-root setting; must be `false` in parity mode. |
+| `startupProbe` | Optional startup probe, recommended as `/ready` for slow cold starts. |
+| `podDisruptionBudget` | Optional PodDisruptionBudget for node upgrades and drains. |
+| `service.annotations` | Service annotations, used to enable GKE container-native load balancing. |
+| `podAnnotations` / `podLabels` | Extra pod template metadata. |
+| `terminationGracePeriodSeconds` | Pod drain window; set generously for agent sessions. |
+
+## Parity mode (image-baked runtime)
+
+When the image already contains everything the process needs — a layered
+config, `gestalt.lock.json`, and a prepared artifacts directory (for example
+a runtime image built by `gestaltd lock` + `gestaltd sync --locked` at build
+time) — the chart should not mount `/data` or own the serve arguments:
+
+```yaml
+persistence:
+  enabled: false
+  # Do not shadow the image's baked /data with an emptyDir.
+  emptyDir: false
+
+# Registry-installed apps materialize under /data at runtime.
+readOnlyRootFilesystem: false
+
+argsOverride:
+  - serve
+  - --locked
+  - --no-sync
+  - --lockfile
+  - /app/deploy/gestalt.lock.json
+  - --config
+  - /app/deploy/config.yaml
+  - --artifacts-dir
+  - /data
+
+startupProbe:
+  httpGet:
+    path: /ready
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 240
+
+terminationGracePeriodSeconds: 600
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+service:
+  annotations:
+    # GKE maintains standalone zonal NEGs named after the Service for
+    # container-native load balancing behind a Google Cloud load balancer.
+    cloud.google.com/neg: '{"ingress": true}'
+```
+
+The image entrypoint is always taken from the image; the chart never sets the
+container `command`. The chart continues to render its own ConfigMap, but the
+parity arguments ignore it.
+
+For Google Kubernetes Engine, pair the workload-identity annotation on the
+chart's ServiceAccount with an `roles/iam.workloadIdentityUser` binding on the
+Google service account the runtime already uses:
+
+```yaml
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: gestalt-runtime@example-project.iam.gserviceaccount.com
+```
+
 
 ## Lock state
 

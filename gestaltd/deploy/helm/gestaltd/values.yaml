@@ -30,6 +30,12 @@ serviceAccount:
 service:
   type: ClusterIP
   port: 8080
+  # Annotations applied to the public Service. For container-native load
+  # balancing behind a Google Cloud load balancer, set:
+  #   cloud.google.com/neg: '{"ingress": true}'
+  # GKE then maintains standalone zonal NEGs named after the Service that a
+  # backend service can reference.
+  annotations: {}
 
 managementService:
   enabled: false
@@ -68,10 +74,73 @@ autoscaling:
 
 persistence:
   enabled: true
+  # When persistence is disabled, an emptyDir still mounts /data so a
+  # chart-rendered config keeps working. Set emptyDir to false to run without
+  # any /data volume and use artifacts baked into the image (parity mode:
+  # the image already contains a prepared artifacts dir at /data and the
+  # serve arguments below reference it).
+  emptyDir: true
   storageClass: ""
   accessModes:
     - ReadWriteOnce
   size: 1Gi
+
+# Container-level readOnlyRootFilesystem. The chart default keeps the root
+# filesystem read-only because all state lives in /data or /tmp. Parity
+# deployments whose image bakes a prepared artifacts dir into /data still
+# write runtime state (for example registry-installed apps) under /data, so
+# they must set this to false. The container always runs as non-root (65534).
+readOnlyRootFilesystem: true
+
+# Fully replace the rendered container arguments. Leave empty to use the
+# chart-rendered serve arguments. Parity deployments whose image bakes its
+# own layered --config/--lockfile/--artifacts-dir command set this to the
+# image's CMD, for example:
+#   argsOverride:
+#     - serve
+#     - --locked
+#     - --no-sync
+#     - --lockfile
+#     - /app/deploy/gestalt.lock.json
+#     - --config
+#     - /app/deploy/config.yaml
+#     - --artifacts-dir
+#     - /data
+# The image entrypoint (ENTRYPOINT) is always taken from the image; the
+# chart never overrides the container command.
+argsOverride: []
+
+# Optional startup probe. Kubernetes runs it to exclusion of liveness and
+# readiness probes until the container first reports success, which keeps a
+# slow cold start (large registry materialization) from being killed by the
+# liveness probe. Mirror of the Cloud Run startup probe used by the
+# production deploys:
+#   startupProbe:
+#     httpGet:
+#       path: /ready
+#       port: http
+#     periodSeconds: 5
+#     timeoutSeconds: 3
+#     failureThreshold: 240
+startupProbe: {}
+
+# Optional PodDisruptionBudget protecting the Deployment during node
+# upgrades and drains. Requires at least one of minAvailable or
+# maxUnavailable when enabled.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: null
+
+# Optional pod-level annotations and labels, merged into the pod template
+# alongside the chart's config checksum annotation and standard labels.
+podAnnotations: {}
+podLabels: {}
+
+# Optional termination grace period in seconds. Parity deployments should
+# set this generously (for example 600) so in-flight agent sessions and
+# workflow activities drain before the pod is stopped.
+terminationGracePeriodSeconds: null
 
 updateStrategy:
   type: Recreate

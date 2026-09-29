@@ -426,3 +426,14 @@ jobs:
       - name: Validate Kubernetes schemas (preparation)
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: kubeconform -strict -summary /tmp/rendered-preparation.yaml
+
+      - name: Helm template (parity)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+        run: |
+          helm template test-release gestaltd/deploy/helm/gestaltd \
+            -f gestaltd/deploy/helm/gestaltd/ci-values-parity.yaml \
+            > /tmp/rendered-parity.yaml
+
+      - name: Validate Kubernetes schemas (parity)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+        run: kubeconform -strict -summary /tmp/rendered-parity.yaml

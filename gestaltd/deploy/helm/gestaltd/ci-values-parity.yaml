@@ -1,0 +1,47 @@
+# Parity mode: the image bakes its own layered config, lockfile, and prepared
+# artifacts under /data, so the chart mounts neither a /data volume nor a
+# rendered config on that path, and the serve arguments come from the image.
+config:
+  server:
+    public:
+      port: 8080
+
+fullnameOverride: gestaltd-ci
+readOnlyRootFilesystem: false
+persistence:
+  enabled: false
+  emptyDir: false
+argsOverride:
+  - serve
+  - --locked
+  - --no-sync
+  - --lockfile
+  - /app/deploy/gestalt.lock.json
+  - --config
+  - /app/deploy/config.yaml
+  - --artifacts-dir
+  - /data
+startupProbe:
+  httpGet:
+    path: /ready
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 240
+terminationGracePeriodSeconds: 600
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+service:
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: gestalt-runtime@example-project.iam.gserviceaccount.com
+extraEnv:
+  - name: GESTALTD_DEPLOYMENT_HOSTS
+    value: "deploy.example.com"
+podAnnotations:
+  valon.tools/parity: "ci"
+image:
+  tag: "ci-test"

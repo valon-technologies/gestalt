@@ -37,15 +37,24 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "gestaltd.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "gestaltd.serviceAccountName" . }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -123,7 +132,7 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             runAsNonRoot: true
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: {{ .Values.readOnlyRootFilesystem }}
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -133,6 +142,9 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
+            {{- if .Values.argsOverride }}
+            {{- toYaml .Values.argsOverride | nindent 12 }}
+            {{- else }}
             - serve
             {{- if or .Values.preparation.enabled .Values.lockedServe.enabled }}
             - --locked
@@ -147,6 +159,7 @@ spec:
             {{- else }}
             - /etc/gestaltd/config.yaml
             {{- end }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ get $public "port" | default 8080 }}
@@ -156,6 +169,10 @@ spec:
               containerPort: {{ get $management "port" }}
               protocol: TCP
             {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
@@ -189,14 +206,17 @@ spec:
               subPath: config.yaml
               readOnly: true
             {{- end }}
+            {{- if or .Values.persistence.enabled .Values.persistence.emptyDir }}
             - name: data
               mountPath: /data
+            {{- end }}
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: config
           configMap:
             name: {{ include "gestaltd.fullname" . }}-config
+        {{- if or .Values.persistence.enabled .Values.persistence.emptyDir }}
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
@@ -204,6 +224,7 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- end }}
         - name: tmp
           emptyDir: {}
         {{- if .Values.preparation.enabled }}
