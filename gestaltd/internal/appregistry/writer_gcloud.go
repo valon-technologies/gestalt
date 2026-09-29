@@ -129,8 +129,11 @@ func gcloudObjectNotFound(err error) bool {
 		return false
 	}
 	text := strings.ToLower(err.Error())
+	// "gcloud storage rm" words a missing target differently from the read
+	// paths: "the following URLs matched no objects or files".
 	return strings.Contains(text, "not found") ||
 		strings.Contains(text, "no urls matched") ||
+		strings.Contains(text, "matched no objects") ||
 		strings.Contains(text, "404") ||
 		os.IsNotExist(err)
 }

@@ -340,3 +340,8 @@ func isCatalogPreconditionFailed(err error) bool {
 func CatalogPreconditionFailed(err error) bool {
 	return isCatalogPreconditionFailed(err)
 }
+
+// ObjectNotFound reports whether err means the object is already absent.
+func ObjectNotFound(err error) bool {
+	return gcloudObjectNotFound(err)
+}
