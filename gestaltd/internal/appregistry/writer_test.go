@@ -381,6 +381,9 @@ func TestGcloudObjectNotFound(t *testing.T) {
 		{name: "404", err: errors.New("404 Not Found"), want: true},
 		{name: "not found", err: errors.New("object not found"), want: true},
 		{name: "no urls matched", err: errors.New("ERROR: (gcloud.storage.objects.describe) no urls matched"), want: true},
+		// The wording "gcloud storage rm" uses, which retention prune hits
+		// whenever a catalog row outlives the object it names.
+		{name: "rm matched no objects", err: errors.New("ERROR: (gcloud.storage.rm) The following URLs matched no objects or files:\ngs://bucket/apps/home/versions/0.0.0-snapshot.g219c9fcc.json"), want: true},
 		{name: "other", err: errors.New("permission denied"), want: false},
 	}
 	for _, tc := range tests {
@@ -391,5 +394,20 @@ func TestGcloudObjectNotFound(t *testing.T) {
 				t.Fatalf("gcloudObjectNotFound(%q) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestObjectNotFoundIsExportedForCallersOutsideThePackage(t *testing.T) {
+	t.Parallel()
+
+	rmMissing := errors.New("ERROR: (gcloud.storage.rm) The following URLs matched no objects or files:")
+	if !ObjectNotFound(rmMissing) {
+		t.Fatal("ObjectNotFound does not recognize a missing rm target")
+	}
+	if ObjectNotFound(errors.New("permission denied")) {
+		t.Fatal("ObjectNotFound treats a permission error as a missing object")
+	}
+	if ObjectNotFound(nil) {
+		t.Fatal("ObjectNotFound treats nil as a missing object")
 	}
 }

@@ -286,13 +286,24 @@ func freshRetentionEntryForPrune(retentionURL, version string) (appregistry.Rete
 	return entry, ok, nil
 }
 
+// A retention row can outlive the objects it names: an operator can remove an
+// artifact by hand, and a prune interrupted after deleting can leave the row
+// behind. gcloud fails when its target is already gone, and prune walks apps
+// in one pass, so treating that as an error stops every app behind the stale
+// row. Deleting what is already deleted is the outcome prune wanted.
 func deleteAppRegistryObject(storageURL string) error {
 	_, err := runProviderPublishCommand("gcloud", "storage", "rm", storageURL)
+	if appregistry.ObjectNotFound(err) {
+		return nil
+	}
 	return err
 }
 
 func deleteAppRegistryPrefix(prefix string) error {
 	_, err := runProviderPublishCommand("gcloud", "storage", "rm", "--recursive", prefix+"/**")
+	if appregistry.ObjectNotFound(err) {
+		return nil
+	}
 	return err
 }
 
