@@ -5253,6 +5253,223 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 	}
 }
 
+func TestListIntegrations_ExposesDeclaredSurfacesWithTheirConnections(t *testing.T) {
+	t.Parallel()
+
+	const (
+		restAndMCPApp = "notion"
+		mcpOnlyApp    = "excalidraw"
+		mcpURL        = "https://example.com/mcp"
+	)
+	bearerConnection := func() *providermanifestv1.ManifestConnectionDef {
+		return &providermanifestv1.ManifestConnectionDef{
+			Mode: providermanifestv1.ConnectionModeSubject,
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		}
+	}
+	entry := func(surfaces *providermanifestv1.ProviderSurfaces) *config.ProviderEntry {
+		return &config.ProviderEntry{
+			Source: config.NewMetadataSource("https://example.invalid/acme/v1.0.0/provider-release.yaml"),
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: surfaces,
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"ApiKey": bearerConnection(),
+						"MCP":    bearerConnection(),
+					},
+				},
+			},
+		}
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t,
+			&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: restAndMCPApp, DN: "Notion"}},
+			&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: mcpOnlyApp, DN: "Excalidraw+"}},
+		)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			restAndMCPApp: entry(&providermanifestv1.ProviderSurfaces{
+				OpenAPI: &providermanifestv1.OpenAPISurface{Document: "https://example.com/openapi.json", Connection: "ApiKey"},
+				MCP:     &providermanifestv1.MCPSurface{Connection: "MCP", URL: mcpURL},
+			}),
+			mcpOnlyApp: entry(&providermanifestv1.ProviderSurfaces{
+				MCP: &providermanifestv1.MCPSurface{Connection: "MCP", URL: mcpURL},
+			}),
+		}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/apps")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name     string `json:"name"`
+		Surfaces []struct {
+			Kind       string `json:"kind"`
+			Connection string `json:"connection"`
+		} `json:"surfaces"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+
+	type surface struct{ Kind, Connection string }
+	got := map[string][]surface{}
+	for _, integration := range integrations {
+		for _, s := range integration.Surfaces {
+			got[integration.Name] = append(got[integration.Name], surface{s.Kind, s.Connection})
+		}
+	}
+	want := map[string][]surface{
+		restAndMCPApp: {{"openapi", "ApiKey"}, {"mcp", "MCP"}},
+		mcpOnlyApp:    {{"mcp", "MCP"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("surfaces = %+v, want %+v", got, want)
+	}
+}
+
+func TestListIntegrations_SurfacesCoverEveryKindAliasAndEmptyApps(t *testing.T) {
+	t.Parallel()
+
+	const (
+		fullApp  = "everything"
+		bareApp  = "bare"
+		aliasApp = "aliased"
+		url      = "https://example.com"
+	)
+	connections := map[string]*providermanifestv1.ManifestConnectionDef{
+		"ApiKey": {Mode: providermanifestv1.ConnectionModeSubject, Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer}},
+		"MCP":    {Mode: providermanifestv1.ConnectionModeSubject, Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer}},
+	}
+	entry := func(connections map[string]*providermanifestv1.ManifestConnectionDef, surfaces *providermanifestv1.ProviderSurfaces) *config.ProviderEntry {
+		return &config.ProviderEntry{
+			Source: config.NewMetadataSource("https://example.invalid/acme/v1.0.0/provider-release.yaml"),
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{Surfaces: surfaces, Connections: connections},
+			},
+		}
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t,
+			&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: fullApp, DN: "Everything"}},
+			&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: bareApp, DN: "Bare"}},
+			&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: aliasApp, DN: "Aliased"}},
+		)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			fullApp: entry(connections, &providermanifestv1.ProviderSurfaces{
+				MCP:     &providermanifestv1.MCPSurface{Connection: "MCP", URL: url + "/mcp"},
+				GraphQL: &providermanifestv1.GraphQLSurface{Connection: "ApiKey", URL: url + "/graphql"},
+				REST:    &providermanifestv1.RESTSurface{Connection: "ApiKey", BaseURL: url},
+				OpenAPI: &providermanifestv1.OpenAPISurface{Connection: "ApiKey", Document: url + "/openapi.json"},
+			}),
+			bareApp: entry(connections, nil),
+			aliasApp: entry(
+				map[string]*providermanifestv1.ManifestConnectionDef{
+					config.AppConnectionName: {Mode: providermanifestv1.ConnectionModeSubject, Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer}},
+				},
+				&providermanifestv1.ProviderSurfaces{
+					OpenAPI: &providermanifestv1.OpenAPISurface{Connection: config.AppConnectionName, Document: url + "/openapi.json"},
+				},
+			),
+		}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	type surface struct{ Kind, Connection string }
+	want := map[string][]surface{
+		fullApp:  {{"openapi", "ApiKey"}, {"rest", "ApiKey"}, {"graphql", "ApiKey"}, {"mcp", "MCP"}},
+		bareApp:  {},
+		aliasApp: {{"openapi", config.AppConnectionAlias}},
+	}
+	for _, path := range []string{"/api/v1/apps", "/api/v1/catalog/apps"} {
+		var apps []struct {
+			Name     string `json:"name"`
+			Surfaces *[]struct {
+				Kind       string `json:"kind"`
+				Connection string `json:"connection"`
+			} `json:"surfaces"`
+		}
+		if err := json.Unmarshal(getJSONPath(t, ts, path, http.StatusOK, ""), &apps); err != nil {
+			t.Fatalf("%s: decoding: %v", path, err)
+		}
+		got := map[string][]surface{}
+		for _, app := range apps {
+			if app.Surfaces == nil {
+				t.Fatalf("%s: app %q has no surfaces field, want an array", path, app.Name)
+			}
+			got[app.Name] = []surface{}
+			for _, s := range *app.Surfaces {
+				got[app.Name] = append(got[app.Name], surface{s.Kind, s.Connection})
+			}
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: surfaces = %+v, want %+v", path, got, want)
+		}
+	}
+}
+
+func TestListIntegrations_SurfacesFollowInPlaceManifestEdits(t *testing.T) {
+	t.Parallel()
+
+	const app = "editable"
+	bearer := &providermanifestv1.ManifestConnectionDef{
+		Mode: providermanifestv1.ConnectionModeSubject,
+		Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+	}
+	spec := &providermanifestv1.Spec{
+		Connections: map[string]*providermanifestv1.ManifestConnectionDef{"ApiKey": bearer, "MCP": bearer},
+		Surfaces: &providermanifestv1.ProviderSurfaces{
+			MCP: &providermanifestv1.MCPSurface{Connection: "MCP", URL: "https://example.com/mcp"},
+		},
+	}
+	entry := &config.ProviderEntry{
+		Source:           config.NewMetadataSource("https://example.invalid/acme/v1.0.0/provider-release.yaml"),
+		ResolvedManifest: &providermanifestv1.Manifest{Spec: spec},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t,
+			&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: app, DN: "Editable"}},
+		)
+		cfg.AppDefs = map[string]*config.ProviderEntry{app: entry}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	surfaceKinds := func() []string {
+		var apps []struct {
+			Surfaces []struct {
+				Kind string `json:"kind"`
+			} `json:"surfaces"`
+		}
+		if err := json.Unmarshal(getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, ""), &apps); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		var kinds []string
+		for _, s := range apps[0].Surfaces {
+			kinds = append(kinds, s.Kind)
+		}
+		return kinds
+	}
+
+	if got, want := surfaceKinds(), []string{"mcp"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("before edit: surfaces = %v, want %v", got, want)
+	}
+	spec.Surfaces.OpenAPI = &providermanifestv1.OpenAPISurface{Connection: "ApiKey", Document: "https://example.com/openapi.json"}
+	if got, want := surfaceKinds(), []string{"openapi", "mcp"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("after in-place edit: surfaces = %v, want %v", got, want)
+	}
+}
+
 func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGenericField(t *testing.T) {
 	t.Parallel()
 

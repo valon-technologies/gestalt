@@ -34,6 +34,7 @@ type tenantAppDirectoryEntry struct {
 	Prompts          []appPromptInfo
 	Advertised       []advertisedConnection
 	ConnectionSchema []connectionSchemaInfo
+	Surfaces         []appSurfaceInfo
 	Loaded           bool
 }
 
@@ -67,6 +68,7 @@ type appDirectoryEntry struct {
 	SourceTreeURL    string
 	Advertised       []advertisedConnection
 	ConnectionSchema []connectionSchemaInfo
+	Surfaces         []appSurfaceInfo
 	Loaded           bool
 }
 
@@ -90,6 +92,7 @@ type appCatalogEntry struct {
 	Prompts        []appPromptInfo        `json:"prompts,omitempty"`
 	SourceTreeURL  string                 `json:"sourceTreeUrl,omitempty"`
 	Connections    []connectionSchemaInfo `json:"connections"`
+	Surfaces       []appSurfaceInfo       `json:"surfaces"`
 }
 
 type appConnectionStatus struct {
@@ -163,6 +166,7 @@ func (entry appDirectoryEntry) catalogJSON() appCatalogEntry {
 		Prompts:        entry.Prompts,
 		SourceTreeURL:  entry.SourceTreeURL,
 		Connections:    connections,
+		Surfaces:       nonNilSurfaces(entry.Surfaces),
 	}
 	if strings.TrimSpace(entry.IconSVG) != "" {
 		out.IconURL = appCatalogIconURL(entry.Name)
@@ -194,6 +198,7 @@ func viewerDirectoryEntry(entry tenantAppDirectoryEntry, mountedPath, management
 		Prompts:          entry.Prompts,
 		Advertised:       entry.Advertised,
 		ConnectionSchema: entry.ConnectionSchema,
+		Surfaces:         entry.Surfaces,
 		Loaded:           entry.Loaded,
 	}
 }
@@ -335,12 +340,21 @@ func (s *Server) pluginDirectoryFingerprint() string {
 				plugin.SourceTreeURL(),
 			)
 			appendConnectionSchemaFingerprint(&b, s.connectionSchemasFromAdvertised(name, s.advertisedConnectionsForPlugin(name, plugin)))
+			appendSurfacesFingerprint(&b, appSurfacesForPlugin(name, plugin))
 		}
 		for _, prompt := range s.appPrompts[name] {
 			fmt.Fprintf(&b, "#%s=%s", prompt.ID, prompt.Text)
 		}
 	}
 	return b.String()
+}
+
+// appendSurfacesFingerprint hashes the same list the directory serves, so an
+// in-place surface edit invalidates the cached snapshot.
+func appendSurfacesFingerprint(b *strings.Builder, surfaces []appSurfaceInfo) {
+	for _, surface := range surfaces {
+		fmt.Fprintf(b, "~%s=%s", surface.Kind, surface.Connection)
+	}
 }
 
 func appendConnectionSchemaFingerprint(b *strings.Builder, schemas []connectionSchemaInfo) {
@@ -682,6 +696,7 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 			Prompts:         entry.Prompts,
 			SourceTreeURL:   entry.SourceTreeURL,
 			Connections:     []connectionDefInfo{},
+			Surfaces:        nonNilSurfaces(entry.Surfaces),
 			Status:          connectionStatusUnknown,
 			CredentialState: credentialStateUnknown,
 			HealthState:     healthStateUnknown,
