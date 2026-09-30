@@ -22,6 +22,7 @@ import (
 // Members / Identities projections. Field names match the Members UI contract.
 type appAdminMemberRow struct {
 	Email         string                    `json:"email,omitempty"`
+	DisplayName   string                    `json:"displayName,omitempty"`
 	Role          string                    `json:"role"`
 	Source        string                    `json:"source"`
 	Mutable       bool                      `json:"mutable"`
@@ -38,6 +39,7 @@ type appAdminMemberRow struct {
 // from leaking into platform-admin responses that reuse the internal mapper.
 type appAdminMemberResponse struct {
 	Email         string                    `json:"email,omitempty"`
+	DisplayName   string                    `json:"displayName,omitempty"`
 	Role          string                    `json:"role"`
 	Source        string                    `json:"source"`
 	Mutable       bool                      `json:"mutable"`
@@ -253,24 +255,24 @@ func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
 }
 
 // projectAppAdminHumanMemberRows is the human/group projection of the shared
-// grant roster. Email enrichment belongs here — not in the shared mapper —
-// so identities listing does not resolve user emails it will discard.
+// grant roster. Identity enrichment belongs here — not in the shared mapper —
+// so identities listing does not resolve users it will discard.
 //
-// Turning a subject ID into an email is user lookup, so it is gated on the
-// explicit employee operator role rather than on the app-scoped admin grant
-// that reached this handler. An app administrator without that role still sees
-// the full grant roster - which subjects and groups hold which roles on their
-// own app - but cannot use it to enumerate the directory.
+// Every row reaching this projection belongs to a roster the caller already
+// administers, so naming the people on it (email and display name) discloses
+// nothing the caller cannot already manage. That is deliberately different from
+// directory lookup (userLookupAllowed), which stays gated on the employee
+// operator role: a roster admin can see who holds a grant on their own
+// resource, but cannot use it to search or enumerate other people.
 func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow) []appAdminMemberRow {
-	allowLookup := s.userLookupAllowed(ctx)
 	out := make([]appAdminMemberRow, 0, len(rows))
 	for i := range rows {
 		row := rows[i]
 		if isAppAdminServiceAccountRow(row) {
 			continue
 		}
-		if allowLookup && row.SelectorKind == "subject_id" && row.SubjectID != "" {
-			row.Email = s.resolveAppAdminMemberEmail(ctx, row.SubjectID)
+		if row.SelectorKind == "subject_id" && row.SubjectID != "" {
+			row.Email, row.DisplayName = s.resolveAppAdminMemberIdentity(ctx, row.SubjectID)
 		}
 		out = append(out, row)
 	}
@@ -548,17 +550,17 @@ func appAdminMemberSource(layer proto.SourceLayer) (source string, mutable bool)
 	}
 }
 
-func (s *Server) resolveAppAdminMemberEmail(ctx context.Context, subjectID string) string {
+func (s *Server) resolveAppAdminMemberIdentity(ctx context.Context, subjectID string) (email, displayName string) {
 	kind, id, ok := core.ParseSubjectID(subjectID)
 	if !ok || kind != string(principal.KindUser) || s.users == nil {
-		return ""
+		return "", ""
 	}
 	if strings.Contains(id, "@") {
-		return id
+		return id, ""
 	}
 	user, err := s.users.GetUser(ctx, id)
 	if err != nil || user == nil {
-		return ""
+		return "", ""
 	}
-	return strings.TrimSpace(user.Email)
+	return strings.TrimSpace(user.Email), strings.TrimSpace(user.DisplayName)
 }

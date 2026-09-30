@@ -1,43 +1,63 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
+	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-type memberEmailRow struct {
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	SubjectID string `json:"subjectId"`
+type memberIdentityRow struct {
+	Email       string `json:"email"`
+	DisplayName string `json:"displayName"`
+	Role        string `json:"role"`
+	SubjectID   string `json:"subjectId"`
 }
 
-// userLookupMembersRows fetches the app-admin member roster for an admin that
-// holds app-scoped admin plus, optionally, the employee operator role.
-func userLookupMembersRows(t *testing.T, withOperatorRole bool) []memberEmailRow {
+func memberIdentityFor(t *testing.T, rows []memberIdentityRow, subjectID string) memberIdentityRow {
 	t.Helper()
+	for _, row := range rows {
+		if row.SubjectID == subjectID {
+			return row
+		}
+	}
+	t.Fatalf("member %s missing: %#v", subjectID, rows)
+	return memberIdentityRow{}
+}
+
+// TestRosterAdminSeesRosterMemberIdentity: an admin who does not hold the
+// employee operator role still sees the name and email of the people on the
+// roster they administer, so the roster never falls back to raw subject IDs.
+func TestRosterAdminSeesRosterMemberIdentity(t *testing.T) {
+	t.Parallel()
 
 	services := testutil.NewStubServices(t)
-	member := seedUser(t, services, "bob@valon.com")
+	member, err := services.Users.FindOrCreateUserWithName(context.Background(), "bob@valon.com", "Bob Builder")
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
 	memberSubject := principal.UserSubjectID(member.ID)
 	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
+	const groupID = "berkadia-staff"
 
-	relationships := []*proto.Relationship{
+	authz := &serverTestAuthorizationProvider{relationships: []*proto.Relationship{
 		testAuthorizationRelationship(adminSubject, "admin", "app", "g-issues"),
 		testAuthorizationRelationship(memberSubject, "viewer", "app", "g-issues"),
-	}
-	if withOperatorRole {
-		relationships = append(relationships,
-			testAuthorizationRelationship(adminSubject, testUserLookupRole, testUserLookupResource, testUserLookupResource))
-	}
-	authz := &serverTestAuthorizationProvider{relationships: relationships}
-
+		testAuthorizationRelationship(adminSubject, "admin", "group", groupID),
+		testAuthorizationRelationship(memberSubject, "member", "group", groupID),
+	}}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("admin-token", adminSubject, "")
 		cfg.Authorization = authz
@@ -46,68 +66,128 @@ func userLookupMembersRows(t *testing.T, withOperatorRole bool) []memberEmailRow
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/members", nil)
+	for name, path := range map[string]string{
+		"app members":   "/api/v1/apps/g-issues/admin/members",
+		"group members": "/api/v1/groups/" + groupID + "/admin/members",
+	} {
+		t.Run(name, func(t *testing.T) {
+			request, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+			request.Header.Set("Authorization", "Bearer admin-token")
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatalf("GET %s: %v", path, err)
+			}
+			defer func() { _ = response.Body.Close() }()
+			if response.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(response.Body)
+				t.Fatalf("GET %s status = %d: %s", path, response.StatusCode, body)
+			}
+			var rows []memberIdentityRow
+			if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
+				t.Fatalf("decode members: %v", err)
+			}
+			got := memberIdentityFor(t, rows, memberSubject)
+			if got.Email != "bob@valon.com" || got.DisplayName != "Bob Builder" {
+				t.Fatalf("member identity = %#v, want bob@valon.com / Bob Builder", got)
+			}
+		})
+	}
+}
+
+// registryDeployedBy returns how registry history labels a user who deployed
+// an app. That label is directory lookup: it resolves a subject ID the caller
+// has no roster relationship with, so it stays gated on the operator role.
+func registryDeployedBy(
+	t *testing.T,
+	extra []*proto.Relationship,
+	resourceTypes []*proto.AuthorizationModelResourceType,
+) string {
+	t.Helper()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	deployer := seedUser(t, services, "bob@valon.com")
+	deployerSubject := principal.UserSubjectID(deployer.ID)
+	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
+
+	relationships := append([]*proto.Relationship{
+		testAuthorizationRelationship(adminSubject, "admin", "app", "g-issues"),
+	}, extra...)
+	authz := &serverTestAuthorizationProvider{relationships: relationships, resourceTypes: resourceTypes}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("admin-token", adminSubject, "")
+		cfg.Authorization = authz
+		cfg.Services = services
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		}
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+		cfg.AppRegistryReader = fixture.Reader
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: appregistry.FirstInstallFromVersion,
+		ToVersion:   fixture.Version,
+		Actor:       deployerSubject,
+		Timestamp:   time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC),
+		Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
+			AppName:   "g-issues",
+			Version:   fixture.Version,
+			SourceRef: "abc123def456abc123def456abc123def456abcd",
+			Registry:  "toolshed",
+		}),
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry/history", nil)
 	request.Header.Set("Authorization", "Bearer admin-token")
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		t.Fatalf("GET members: %v", err)
+		t.Fatalf("GET history: %v", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET members status = %d: %s", response.StatusCode, body)
+		t.Fatalf("GET history status = %d: %s", response.StatusCode, body)
 	}
-	var rows []memberEmailRow
-	if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
-		t.Fatalf("decode members: %v", err)
+	var history struct {
+		Revisions []struct {
+			DeployedBy string `json:"deployedBy"`
+		} `json:"revisions"`
 	}
-	return rows
+	if err := json.NewDecoder(response.Body).Decode(&history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(history.Revisions) != 1 {
+		t.Fatalf("revisions = %#v, want 1", history.Revisions)
+	}
+	return history.Revisions[0].DeployedBy
 }
 
-func memberEmailFor(rows []memberEmailRow, subjectID string) (string, bool) {
-	for _, row := range rows {
-		if row.SubjectID == subjectID {
-			return row.Email, true
-		}
-	}
-	return "", false
+func operatorGrant() *proto.Relationship {
+	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
+	return testAuthorizationRelationship(adminSubject, testUserLookupRole, testUserLookupResource, testUserLookupResource)
 }
 
-// TestAppAdminAloneCannotEnumerateUsers is the restriction the plan asks for:
-// administering an app must not, on its own, turn the admin surface into a
-// directory. The roster still lists the grants; only the identity lookup is
-// withheld.
+// TestAppAdminAloneCannotEnumerateUsers: administering an app must not, on its
+// own, resolve people the admin has no roster relationship with.
 func TestAppAdminAloneCannotEnumerateUsers(t *testing.T) {
 	t.Parallel()
 
-	rows := userLookupMembersRows(t, false)
-	if len(rows) != 2 {
-		t.Fatalf("members = %#v, want 2 rows", rows)
-	}
-	for _, row := range rows {
-		if row.Email != "" {
-			t.Fatalf("app-scoped admin resolved an email without the operator role: %#v", row)
-		}
+	got := registryDeployedBy(t, nil, nil)
+	if got == "bob@valon.com" {
+		t.Fatalf("app-scoped admin resolved an email without the operator role: %q", got)
 	}
 }
 
-// TestEmployeeOperatorRoleAllowsUserLookup is the positive half: the explicit
-// operator role, and only it, restores identity resolution.
 func TestEmployeeOperatorRoleAllowsUserLookup(t *testing.T) {
 	t.Parallel()
 
-	rows := userLookupMembersRows(t, true)
-	if len(rows) != 2 {
-		t.Fatalf("members = %#v, want 2 rows", rows)
-	}
-	found := false
-	for _, row := range rows {
-		if row.Email == "bob@valon.com" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("operator role did not resolve member email: %#v", rows)
+	if got := registryDeployedBy(t, []*proto.Relationship{operatorGrant()}, nil); got != "bob@valon.com" {
+		t.Fatalf("operator role did not resolve email: %q", got)
 	}
 }
 
@@ -116,44 +196,10 @@ func TestEmployeeOperatorRoleAllowsUserLookup(t *testing.T) {
 func TestUserLookupHonorsGroupDerivedOperatorRole(t *testing.T) {
 	t.Parallel()
 
-	services := testutil.NewStubServices(t)
-	member := seedUser(t, services, "bob@valon.com")
-	memberSubject := principal.UserSubjectID(member.ID)
 	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
-
-	relationships := []*proto.Relationship{
-		testAuthorizationRelationship(adminSubject, "admin", "app", "g-issues"),
-		testAuthorizationRelationship(memberSubject, "viewer", "app", "g-issues"),
-	}
-	relationships = append(relationships,
-		subjectSetGrant(adminSubject, testUserLookupRole, testUserLookupResource, testUserLookupResource)...)
-	authz := &serverTestAuthorizationProvider{relationships: relationships}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = authStubWithSessionTokenIntrospect("admin-token", adminSubject, "")
-		cfg.Authorization = authz
-		cfg.Services = services
-		cfg.AppDefs = appAdminTestAppDefs()
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/members", nil)
-	request.Header.Set("Authorization", "Bearer admin-token")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("GET members: %v", err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	var rows []memberEmailRow
-	if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
-		t.Fatalf("decode members: %v", err)
-	}
-	email, ok := memberEmailFor(rows, memberSubject)
-	if !ok {
-		t.Fatalf("member row missing: %#v", rows)
-	}
-	if email != "bob@valon.com" {
-		t.Fatalf("group-derived operator role did not resolve email: %#v", rows)
+	extra := subjectSetGrant(adminSubject, testUserLookupRole, testUserLookupResource, testUserLookupResource)
+	if got := registryDeployedBy(t, extra, nil); got != "bob@valon.com" {
+		t.Fatalf("group-derived operator role did not resolve email: %q", got)
 	}
 }
 
@@ -163,54 +209,13 @@ func TestUserLookupHonorsGroupDerivedOperatorRole(t *testing.T) {
 func TestUserLookupDeniesWhenModelDeclaresNoMatchingAction(t *testing.T) {
 	t.Parallel()
 
-	services := testutil.NewStubServices(t)
-	member := seedUser(t, services, "bob@valon.com")
-	memberSubject := principal.UserSubjectID(member.ID)
-	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
-
-	authz := &serverTestAuthorizationProvider{
-		relationships: []*proto.Relationship{
-			testAuthorizationRelationship(adminSubject, "admin", "app", "g-issues"),
-			testAuthorizationRelationship(memberSubject, "viewer", "app", "g-issues"),
-			testAuthorizationRelationship(adminSubject, testUserLookupRole, testUserLookupResource, testUserLookupResource),
-		},
-		// The app type answers actions; the user-lookup type deliberately does
-		// not answer its requested action.
-		resourceTypes: []*proto.AuthorizationModelResourceType{
-			{Name: "app", Actions: []*proto.ModelAction{{Name: "*"}}},
-			{Name: testUserLookupResource},
-		},
+	// The app type answers actions; the user-lookup type deliberately does not
+	// answer its requested action.
+	resourceTypes := []*proto.AuthorizationModelResourceType{
+		{Name: "app", Actions: []*proto.ModelAction{{Name: "*"}}},
+		{Name: testUserLookupResource},
 	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = authStubWithSessionTokenIntrospect("admin-token", adminSubject, "")
-		cfg.Authorization = authz
-		cfg.Services = services
-		cfg.AppDefs = appAdminTestAppDefs()
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/members", nil)
-	request.Header.Set("Authorization", "Bearer admin-token")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("GET members: %v", err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET members status = %d: %s", response.StatusCode, body)
-	}
-	var rows []memberEmailRow
-	if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
-		t.Fatalf("decode members: %v", err)
-	}
-
-	email, ok := memberEmailFor(rows, memberSubject)
-	if !ok {
-		t.Fatalf("member row missing: %#v", rows)
-	}
-	if email != "" {
-		t.Fatalf("direct operator relationship bypassed the evaluator denial: %#v", rows)
+	if got := registryDeployedBy(t, []*proto.Relationship{operatorGrant()}, resourceTypes); got == "bob@valon.com" {
+		t.Fatalf("direct operator relationship bypassed the evaluator denial: %q", got)
 	}
 }
