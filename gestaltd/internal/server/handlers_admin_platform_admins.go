@@ -65,6 +65,6 @@ func (s *Server) listAdminPlatformAdmins(w http.ResponseWriter, r *http.Request)
 			ID:   resource.GetId(),
 		},
 		Role:    role,
-		Members: s.projectAppAdminHumanMemberRows(r.Context(), filtered),
+		Members: s.projectAppAdminHumanMemberRows(r.Context(), filtered, s.rosterIdentityDisclosure(r.Context())),
 	})
 }

@@ -15,13 +15,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 // appAdminMemberRow is the shared authorization grant roster row used before
 // Members / Identities projections. Field names match the Members UI contract.
 type appAdminMemberRow struct {
 	Email         string                    `json:"email,omitempty"`
+	DisplayName   string                    `json:"displayName,omitempty"`
 	Role          string                    `json:"role"`
 	Source        string                    `json:"source"`
 	Mutable       bool                      `json:"mutable"`
@@ -38,6 +38,7 @@ type appAdminMemberRow struct {
 // from leaking into platform-admin responses that reuse the internal mapper.
 type appAdminMemberResponse struct {
 	Email         string                    `json:"email,omitempty"`
+	DisplayName   string                    `json:"displayName,omitempty"`
 	Role          string                    `json:"role"`
 	Source        string                    `json:"source"`
 	Mutable       bool                      `json:"mutable"`
@@ -113,7 +114,7 @@ func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	// Members is the human/group access roster. Service-account grants are
 	// owned by GET /apps/{app}/admin/identities.
-	writeJSON(w, http.StatusOK, projectAppAdminMemberResponses(s.projectAppAdminHumanMemberRows(r.Context(), rows)))
+	writeJSON(w, http.StatusOK, projectAppAdminMemberResponses(s.projectAppAdminHumanMemberRows(r.Context(), rows, s.rosterIdentityDisclosure(r.Context()))))
 }
 
 func (s *Server) setAppAdminMember(w http.ResponseWriter, r *http.Request) {
@@ -253,24 +254,28 @@ func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
 }
 
 // projectAppAdminHumanMemberRows is the human/group projection of the shared
-// grant roster. Email enrichment belongs here — not in the shared mapper —
-// so identities listing does not resolve user emails it will discard.
+// grant roster. Identity enrichment belongs here — not in the shared mapper —
+// so identities listing does not resolve users it will discard.
 //
-// Turning a subject ID into an email is user lookup, so it is gated on the
-// explicit employee operator role rather than on the app-scoped admin grant
-// that reached this handler. An app administrator without that role still sees
-// the full grant roster - which subjects and groups hold which roles on their
-// own app - but cannot use it to enumerate the directory.
-func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow) []appAdminMemberRow {
-	allowLookup := s.userLookupAllowed(ctx)
+// disclosure says how much identity the caller may see on this roster. It is
+// the handler's decision about the caller's relationship to the roster: an admin
+// of a roster may see who its members are, but resolving arbitrary emails is
+// directory lookup and stays with the employee operator role.
+func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow, disclosure identityDisclosure) []appAdminMemberRow {
 	out := make([]appAdminMemberRow, 0, len(rows))
+	identities := make(map[string]userIdentity)
 	for i := range rows {
 		row := rows[i]
 		if isAppAdminServiceAccountRow(row) {
 			continue
 		}
-		if allowLookup && row.SelectorKind == "subject_id" && row.SubjectID != "" {
-			row.Email = s.resolveAppAdminMemberEmail(ctx, row.SubjectID)
+		if disclosure > discloseNothing && row.SelectorKind == "subject_id" && row.SubjectID != "" {
+			identity, ok := identities[row.SubjectID]
+			if !ok {
+				identity = s.resolveUserIdentity(ctx, row.SubjectID, disclosure >= discloseDirectory)
+				identities[row.SubjectID] = identity
+			}
+			row.Email, row.DisplayName = identity.Email, identity.DisplayName
 		}
 		out = append(out, row)
 	}
@@ -546,19 +551,4 @@ func appAdminMemberSource(layer proto.SourceLayer) (source string, mutable bool)
 		// Static config and unspecified (legacy) grants are treated as locked policy.
 		return "static", false
 	}
-}
-
-func (s *Server) resolveAppAdminMemberEmail(ctx context.Context, subjectID string) string {
-	kind, id, ok := core.ParseSubjectID(subjectID)
-	if !ok || kind != string(principal.KindUser) || s.users == nil {
-		return ""
-	}
-	if strings.Contains(id, "@") {
-		return id
-	}
-	user, err := s.users.GetUser(ctx, id)
-	if err != nil || user == nil {
-		return ""
-	}
-	return strings.TrimSpace(user.Email)
 }

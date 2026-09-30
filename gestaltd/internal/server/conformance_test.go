@@ -422,13 +422,13 @@ func (h *conformanceHarness) mountedPaths(t *testing.T, cred conformanceCredenti
 
 // members reads an app's admin member roster, which is both the app-admin gate
 // and the paginated relationship read.
-func (h *conformanceHarness) members(t *testing.T, appName string, cred conformanceCredential) (int, []memberEmailRow) {
+func (h *conformanceHarness) members(t *testing.T, appName string, cred conformanceCredential) (int, []memberIdentityRow) {
 	t.Helper()
 	status, body := h.get(t, "/api/v1/apps/"+appName+"/admin/members", cred)
 	if status != http.StatusOK {
 		return status, nil
 	}
-	var rows []memberEmailRow
+	var rows []memberIdentityRow
 	if err := json.Unmarshal([]byte(body), &rows); err != nil {
 		t.Fatalf("decode members: %v (body=%s)", err, body)
 	}
@@ -1161,67 +1161,6 @@ func TestConformanceExternalAppAdminIsIsolated(t *testing.T) {
 	if ops := harness.mcpSearchOperations(t, cred, "items", conformanceMountedApp); len(ops) != 0 {
 		t.Fatalf("gestalt_search exposed %v to an admin of a different app", ops)
 	}
-}
-
-// TestConformanceUserLookupNeedsTheEmployeeOperatorRole proves app-scoped
-// administration does not become a user directory: the roster still lists the
-// grants, but identities resolve only for the explicit operator role, which may
-// itself be held through a group.
-func TestConformanceUserLookupNeedsTheEmployeeOperatorRole(t *testing.T) {
-	t.Parallel()
-
-	admin := conformanceSubject(conformanceAdminUserID)
-
-	rosterEmails := func(t *testing.T, extra ...*proto.Relationship) []memberEmailRow {
-		t.Helper()
-		harness := newConformanceHarness(t, conformanceConfig{spec: conformanceSpec{
-			ResourceTypes: conformanceModel(""),
-		}})
-		member := seedUser(t, harness.services, "member@valon.com")
-		harness.authz.grant(t, conformanceDirectGrant(admin, "admin", "app", conformanceAdminApp))
-		harness.authz.grant(t, conformanceDirectGrant(
-			conformanceSubject(member.ID), "viewer", "app", conformanceAdminApp,
-		))
-		for _, relationship := range extra {
-			harness.authz.grant(t, relationship)
-		}
-		status, rows := harness.members(t, conformanceAdminApp, conformanceBearer(conformanceAdminToken))
-		if status != http.StatusOK {
-			t.Fatalf("members status = %d, want 200", status)
-		}
-		if len(rows) != 2 {
-			t.Fatalf("members = %#v, want 2 rows", rows)
-		}
-		return rows
-	}
-
-	t.Run("app admin alone cannot enumerate users", func(t *testing.T) {
-		t.Parallel()
-
-		for _, row := range rosterEmails(t) {
-			if row.Email != "" {
-				t.Fatalf("app-scoped admin resolved an email without the operator role: %#v", row)
-			}
-		}
-	})
-
-	t.Run("group derived operator role restores lookup", func(t *testing.T) {
-		t.Parallel()
-
-		rows := rosterEmails(t,
-			conformanceGroupMember(admin, conformanceGroup),
-			conformanceGroupGrant(conformanceGroup, testUserLookupRole, testUserLookupResource, testUserLookupResource),
-		)
-		found := false
-		for _, row := range rows {
-			if row.Email == "member@valon.com" {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("operator role did not resolve member email: %#v", rows)
-		}
-	})
 }
 
 // --- credential surfaces ----------------------------------------------------

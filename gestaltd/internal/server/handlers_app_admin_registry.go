@@ -1068,15 +1068,9 @@ func (s *Server) resolveSubjectDisplayLabelForLookup(ctx context.Context, subjec
 	}
 	switch kind {
 	case string(principal.KindUser):
-		if strings.Contains(id, "@") {
-			return id
-		}
-		if allowLookup && s.users != nil {
-			user, err := s.users.GetUser(ctx, id)
-			if err == nil && user != nil {
-				if email := strings.TrimSpace(user.Email); email != "" {
-					return email
-				}
+		if allowLookup {
+			if email := s.resolveUserIdentity(ctx, subjectID, true).Email; email != "" {
+				return email
 			}
 		}
 		return id
