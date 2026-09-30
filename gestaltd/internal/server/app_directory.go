@@ -340,12 +340,21 @@ func (s *Server) pluginDirectoryFingerprint() string {
 				plugin.SourceTreeURL(),
 			)
 			appendConnectionSchemaFingerprint(&b, s.connectionSchemasFromAdvertised(name, s.advertisedConnectionsForPlugin(name, plugin)))
+			appendSurfacesFingerprint(&b, appSurfacesForPlugin(name, plugin))
 		}
 		for _, prompt := range s.appPrompts[name] {
 			fmt.Fprintf(&b, "#%s=%s", prompt.ID, prompt.Text)
 		}
 	}
 	return b.String()
+}
+
+// appendSurfacesFingerprint hashes the same list the directory serves, so an
+// in-place surface edit invalidates the cached snapshot.
+func appendSurfacesFingerprint(b *strings.Builder, surfaces []appSurfaceInfo) {
+	for _, surface := range surfaces {
+		fmt.Fprintf(b, "~%s=%s", surface.Kind, surface.Connection)
+	}
 }
 
 func appendConnectionSchemaFingerprint(b *strings.Builder, schemas []connectionSchemaInfo) {

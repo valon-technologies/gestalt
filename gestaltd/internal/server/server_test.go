@@ -5418,6 +5418,58 @@ func TestListIntegrations_SurfacesCoverEveryKindAliasAndEmptyApps(t *testing.T) 
 	}
 }
 
+func TestListIntegrations_SurfacesFollowInPlaceManifestEdits(t *testing.T) {
+	t.Parallel()
+
+	const app = "editable"
+	bearer := &providermanifestv1.ManifestConnectionDef{
+		Mode: providermanifestv1.ConnectionModeSubject,
+		Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+	}
+	spec := &providermanifestv1.Spec{
+		Connections: map[string]*providermanifestv1.ManifestConnectionDef{"ApiKey": bearer, "MCP": bearer},
+		Surfaces: &providermanifestv1.ProviderSurfaces{
+			MCP: &providermanifestv1.MCPSurface{Connection: "MCP", URL: "https://example.com/mcp"},
+		},
+	}
+	entry := &config.ProviderEntry{
+		Source:           config.NewMetadataSource("https://example.invalid/acme/v1.0.0/provider-release.yaml"),
+		ResolvedManifest: &providermanifestv1.Manifest{Spec: spec},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t,
+			&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: app, DN: "Editable"}},
+		)
+		cfg.AppDefs = map[string]*config.ProviderEntry{app: entry}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	surfaceKinds := func() []string {
+		var apps []struct {
+			Surfaces []struct {
+				Kind string `json:"kind"`
+			} `json:"surfaces"`
+		}
+		if err := json.Unmarshal(getJSONPath(t, ts, "/api/v1/catalog/apps", http.StatusOK, ""), &apps); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		var kinds []string
+		for _, s := range apps[0].Surfaces {
+			kinds = append(kinds, s.Kind)
+		}
+		return kinds
+	}
+
+	if got, want := surfaceKinds(), []string{"mcp"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("before edit: surfaces = %v, want %v", got, want)
+	}
+	spec.Surfaces.OpenAPI = &providermanifestv1.OpenAPISurface{Connection: "ApiKey", Document: "https://example.com/openapi.json"}
+	if got, want := surfaceKinds(), []string{"openapi", "mcp"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("after in-place edit: surfaces = %v, want %v", got, want)
+	}
+}
+
 func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGenericField(t *testing.T) {
 	t.Parallel()
 
