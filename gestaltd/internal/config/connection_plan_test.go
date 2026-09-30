@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -57,5 +58,63 @@ func TestBuildStaticConnectionPlan_RejectsConnectionExposure(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "deploy exposure is not supported") {
 		t.Fatalf("BuildStaticConnectionPlan() deploy exposure error = %v", err)
+	}
+}
+
+func TestStaticConnectionPlan_DeclaredSurfaces(t *testing.T) {
+	t.Parallel()
+
+	connections := map[string]*providermanifestv1.ManifestConnectionDef{
+		"ApiKey": {Mode: providermanifestv1.ConnectionModeSubject},
+		"MCP":    {Mode: providermanifestv1.ConnectionModeSubject},
+	}
+	tests := []struct {
+		name     string
+		surfaces *providermanifestv1.ProviderSurfaces
+		want     []DeclaredSurface
+	}{
+		{
+			name:     "no surfaces",
+			surfaces: nil,
+			want:     []DeclaredSurface{},
+		},
+		{
+			name: "MCP only",
+			surfaces: &providermanifestv1.ProviderSurfaces{
+				MCP: &providermanifestv1.MCPSurface{Connection: "MCP", URL: "https://example.com/mcp"},
+			},
+			want: []DeclaredSurface{{SurfaceKindMCP, "MCP"}},
+		},
+		{
+			name: "every surface in stable order",
+			surfaces: &providermanifestv1.ProviderSurfaces{
+				MCP:     &providermanifestv1.MCPSurface{Connection: "MCP", URL: "https://example.com/mcp"},
+				GraphQL: &providermanifestv1.GraphQLSurface{Connection: "ApiKey", URL: "https://example.com/graphql"},
+				REST:    &providermanifestv1.RESTSurface{Connection: "ApiKey", BaseURL: "https://example.com"},
+				OpenAPI: &providermanifestv1.OpenAPISurface{Connection: "ApiKey", Document: "https://example.com/openapi.json"},
+			},
+			want: []DeclaredSurface{
+				{SurfaceKindOpenAPI, "ApiKey"},
+				{SurfaceKindREST, "ApiKey"},
+				{SurfaceKindGraphQL, "ApiKey"},
+				{SurfaceKindMCP, "MCP"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			plan, err := BuildStaticConnectionPlan(&ProviderEntry{}, &providermanifestv1.Spec{
+				Connections: connections,
+				Surfaces:    tt.surfaces,
+			})
+			if err != nil {
+				t.Fatalf("BuildStaticConnectionPlan() error = %v", err)
+			}
+			got := plan.DeclaredSurfaces()
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("DeclaredSurfaces() = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }

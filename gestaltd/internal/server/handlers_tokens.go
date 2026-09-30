@@ -175,7 +175,7 @@ func (s *Server) attachDirectoryConnections(entry *tenantAppDirectoryEntry, plug
 	}
 	entry.Advertised = s.advertisedConnectionsForPlugin(entry.Name, plugin)
 	entry.ConnectionSchema = s.connectionSchemasFromAdvertised(entry.Name, entry.Advertised)
-	entry.Surfaces = appSurfacesForPlugin(plugin)
+	entry.Surfaces = appSurfacesForPlugin(entry.Name, plugin)
 }
 
 type advertisedConnection struct {

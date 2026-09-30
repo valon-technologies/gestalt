@@ -20,14 +20,22 @@ type StaticConnectionPlan struct {
 	defaultConnection string
 }
 
-// SurfaceKindREST names the declarative REST surface. The spec-document
-// surfaces (openapi, graphql, mcp) are the SpecSurface values.
-const SurfaceKindREST = "rest"
+// SurfaceKind names a surface a provider can declare. The spec-document kinds
+// match SpecSurface; REST is the declarative operations surface.
+type SurfaceKind string
+
+const (
+	SurfaceKindOpenAPI SurfaceKind = SurfaceKind(SpecSurfaceOpenAPI)
+	SurfaceKindREST    SurfaceKind = "rest"
+	SurfaceKindGraphQL SurfaceKind = SurfaceKind(SpecSurfaceGraphQL)
+	SurfaceKindMCP     SurfaceKind = SurfaceKind(SpecSurfaceMCP)
+)
 
 // DeclaredSurface is one surface a provider's manifest declares, with the
-// connection it authenticates with.
+// connection it authenticates with. For REST this is the default: individual
+// operations may bind a different connection.
 type DeclaredSurface struct {
-	Kind           string
+	Kind           SurfaceKind
 	ConnectionName string
 }
 
@@ -224,17 +232,17 @@ func (plan StaticConnectionPlan) ResolvedSurface(surface SpecSurface) (ResolvedS
 // openapi, rest, graphql, mcp.
 func (plan StaticConnectionPlan) DeclaredSurfaces() []DeclaredSurface {
 	declared := make([]DeclaredSurface, 0, len(OrderedSpecSurfaces)+1)
-	appendSpec := func(surface SpecSurface) {
+	appendSpec := func(surface SpecSurface, kind SurfaceKind) {
 		if resolved, ok := plan.ResolvedSurface(surface); ok {
-			declared = append(declared, DeclaredSurface{Kind: string(surface), ConnectionName: resolved.ConnectionName})
+			declared = append(declared, DeclaredSurface{Kind: kind, ConnectionName: resolved.ConnectionName})
 		}
 	}
-	appendSpec(SpecSurfaceOpenAPI)
+	appendSpec(SpecSurfaceOpenAPI, SurfaceKindOpenAPI)
 	if plan.restDeclared {
 		declared = append(declared, DeclaredSurface{Kind: SurfaceKindREST, ConnectionName: plan.RESTConnection()})
 	}
-	appendSpec(SpecSurfaceGraphQL)
-	appendSpec(SpecSurfaceMCP)
+	appendSpec(SpecSurfaceGraphQL, SurfaceKindGraphQL)
+	appendSpec(SpecSurfaceMCP, SurfaceKindMCP)
 	return declared
 }
 
