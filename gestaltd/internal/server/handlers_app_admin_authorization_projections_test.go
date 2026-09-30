@@ -16,7 +16,7 @@ func TestAppAdminGrantRosterPartition(t *testing.T) {
 	}
 
 	s := &Server{}
-	humans := s.projectAppAdminHumanMemberRows(t.Context(), rows)
+	humans := s.projectAppAdminHumanMemberRows(t.Context(), rows, discloseNothing)
 	identities := s.projectAppAdminIdentityRows(t.Context(), rows)
 
 	if len(humans) != 3 {

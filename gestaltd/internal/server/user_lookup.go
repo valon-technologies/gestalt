@@ -104,40 +104,61 @@ type userIdentity struct {
 	DisplayName string
 }
 
-// resolveUserIdentity resolves a user subject through the workspace directory.
-// Callers must first establish that their surface is allowed to reveal identity.
-func (s *Server) resolveUserIdentity(ctx context.Context, subjectID string) userIdentity {
+// identityDisclosure is how much of a roster's member identity a response may
+// reveal. It is decided by each handler from the caller's relationship to that
+// roster, never inferred by the projection.
+type identityDisclosure int
+
+const (
+	// discloseNothing returns subject IDs only.
+	discloseNothing identityDisclosure = iota
+	// discloseRosterMembers resolves the user IDs a roster already holds, so an
+	// admin of that roster sees who its members are.
+	discloseRosterMembers
+	// discloseDirectory also resolves email-shaped subjects through the
+	// directory. That is user lookup, reserved for the employee operator role:
+	// a roster admin can add any email, so resolving it would let them probe who
+	// exists.
+	discloseDirectory
+)
+
+// rosterIdentityDisclosure is the disclosure for a roster the caller already
+// administers: members by ID, plus directory resolution for operators.
+func (s *Server) rosterIdentityDisclosure(ctx context.Context) identityDisclosure {
+	if s.userLookupAllowed(ctx) {
+		return discloseDirectory
+	}
+	return discloseRosterMembers
+}
+
+// resolveUserIdentity resolves a user subject. An email-shaped subject already
+// carries its email; the directory is consulted for it only when searchByEmail
+// is set. Callers must first establish that their surface may reveal identity.
+func (s *Server) resolveUserIdentity(ctx context.Context, subjectID string, searchByEmail bool) userIdentity {
 	kind, id, ok := core.ParseSubjectID(strings.TrimSpace(subjectID))
 	if !ok || kind != string(principal.KindUser) {
 		return userIdentity{}
 	}
-
-	var user *core.User
 	if strings.Contains(id, "@") {
 		identity := userIdentity{Email: id}
-		if s == nil || s.users == nil {
+		if !searchByEmail || s == nil || s.users == nil {
 			return identity
 		}
-		user, _ = s.users.FindUserByEmail(ctx, id)
-		if user == nil {
-			return identity
+		if user, _ := s.users.FindUserByEmail(ctx, id); user != nil {
+			identity.Email = strings.TrimSpace(user.Email)
+			identity.DisplayName = strings.TrimSpace(user.DisplayName)
 		}
-	} else {
-		if s == nil || s.users == nil {
-			return userIdentity{}
-		}
-		user, _ = s.users.GetUser(ctx, id)
-		if user == nil {
-			return userIdentity{}
-		}
+		return identity
 	}
-
-	identity := userIdentity{
+	if s == nil || s.users == nil {
+		return userIdentity{}
+	}
+	user, _ := s.users.GetUser(ctx, id)
+	if user == nil {
+		return userIdentity{}
+	}
+	return userIdentity{
 		Email:       strings.TrimSpace(user.Email),
 		DisplayName: strings.TrimSpace(user.DisplayName),
 	}
-	if identity.Email == "" && strings.Contains(id, "@") {
-		identity.Email = id
-	}
-	return identity
 }

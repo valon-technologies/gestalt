@@ -279,6 +279,34 @@ func (s *Server) canViewGroupAdminGroup(ctx context.Context, subjectID, _ string
 	return s.canListGroupAdminGroups(ctx, subjectID)
 }
 
+// groupRosterDisclosure decides how much member identity a caller sees on one
+// group's roster. Listing groups is broader than administering this one (an
+// admin of any group may open any group's roster), so identity follows the
+// caller's relationship to THIS group: its admin, or platform-level authorization
+// and Gestalt admins and viewers, see who the members are. Everyone else who can
+// open the roster gets subject IDs only. Email resolution through the directory
+// stays with the employee operator role.
+func (s *Server) groupRosterDisclosure(ctx context.Context, subjectID, groupID string) (identityDisclosure, error) {
+	if s.userLookupAllowed(ctx) {
+		return discloseDirectory, nil
+	}
+	for _, check := range []func() (bool, error){
+		func() (bool, error) { return s.hasAuthorizationViewer(ctx, subjectID) },
+		func() (bool, error) { return s.hasAuthorizationAdmin(ctx, subjectID) },
+		func() (bool, error) { return s.hasGestaltAdmin(ctx, subjectID) },
+		func() (bool, error) { return s.hasExplicitGroupAdmin(ctx, subjectID, groupID) },
+	} {
+		ok, err := check()
+		if err != nil {
+			return discloseNothing, err
+		}
+		if ok {
+			return discloseRosterMembers, nil
+		}
+	}
+	return discloseNothing, nil
+}
+
 func (s *Server) hasAnyGroupAdmin(ctx context.Context, subjectID string) (bool, error) {
 	groupIDs, err := s.listGroupIDs(ctx)
 	if err != nil {
@@ -646,6 +674,15 @@ func (s *Server) listGroupAdminMembers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "group is required")
 		return
 	}
+	subjectID, ok := s.resolveGroupAdminSubjectID(w, r)
+	if !ok {
+		return
+	}
+	disclosure, err := s.groupRosterDisclosure(r.Context(), subjectID, groupID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
+		return
+	}
 	rows, err := s.listAuthorizationMemberRows(r.Context(), s.groupResource(groupID))
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
@@ -658,7 +695,7 @@ func (s *Server) listGroupAdminMembers(w http.ResponseWriter, r *http.Request) {
 		}
 		filtered = append(filtered, rows[i])
 	}
-	writeJSON(w, http.StatusOK, s.projectAppAdminHumanMemberRows(r.Context(), filtered))
+	writeJSON(w, http.StatusOK, s.projectAppAdminHumanMemberRows(r.Context(), filtered, disclosure))
 }
 
 func (s *Server) setGroupAdminMember(w http.ResponseWriter, r *http.Request) {

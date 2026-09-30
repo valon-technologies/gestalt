@@ -114,7 +114,7 @@ func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	// Members is the human/group access roster. Service-account grants are
 	// owned by GET /apps/{app}/admin/identities.
-	writeJSON(w, http.StatusOK, projectAppAdminMemberResponses(s.projectAppAdminHumanMemberRows(r.Context(), rows)))
+	writeJSON(w, http.StatusOK, projectAppAdminMemberResponses(s.projectAppAdminHumanMemberRows(r.Context(), rows, s.rosterIdentityDisclosure(r.Context()))))
 }
 
 func (s *Server) setAppAdminMember(w http.ResponseWriter, r *http.Request) {
@@ -257,12 +257,11 @@ func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
 // grant roster. Identity enrichment belongs here — not in the shared mapper —
 // so identities listing does not resolve users it will discard.
 //
-// Every row reaching this projection belongs to a roster the caller is allowed
-// to list, so the caller may see the names and emails of its human members.
-// That is deliberately different from directory lookup (userLookupAllowed),
-// which stays gated on the employee operator role: a roster lister can see who
-// holds a grant on that resource, but cannot use it to search other people.
-func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow) []appAdminMemberRow {
+// disclosure says how much identity the caller may see on this roster. It is
+// the handler's decision about the caller's relationship to the roster: an admin
+// of a roster may see who its members are, but resolving arbitrary emails is
+// directory lookup and stays with the employee operator role.
+func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow, disclosure identityDisclosure) []appAdminMemberRow {
 	out := make([]appAdminMemberRow, 0, len(rows))
 	identities := make(map[string]userIdentity)
 	for i := range rows {
@@ -270,10 +269,10 @@ func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appA
 		if isAppAdminServiceAccountRow(row) {
 			continue
 		}
-		if row.SelectorKind == "subject_id" && row.SubjectID != "" {
+		if disclosure > discloseNothing && row.SelectorKind == "subject_id" && row.SubjectID != "" {
 			identity, ok := identities[row.SubjectID]
 			if !ok {
-				identity = s.resolveUserIdentity(ctx, row.SubjectID)
+				identity = s.resolveUserIdentity(ctx, row.SubjectID, disclosure >= discloseDirectory)
 				identities[row.SubjectID] = identity
 			}
 			row.Email, row.DisplayName = identity.Email, identity.DisplayName
