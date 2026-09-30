@@ -112,6 +112,7 @@ type integrationInfo struct {
 	Prompts         []appPromptInfo     `json:"prompts,omitempty"`
 	SourceTreeURL   string              `json:"sourceTreeUrl,omitempty"`
 	Connections     []connectionDefInfo `json:"connections"`
+	Surfaces        []appSurfaceInfo    `json:"surfaces"`
 	Status          string              `json:"status"`
 	CredentialState string              `json:"credentialState"`
 	HealthState     string              `json:"healthState"`

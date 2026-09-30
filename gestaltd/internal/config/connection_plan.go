@@ -15,8 +15,20 @@ type StaticConnectionPlan struct {
 	appConnection     ResolvedConnectionDef
 	namedConnections  map[string]ResolvedConnectionDef
 	surfaces          map[SpecSurface]ResolvedSpecSurface
+	restDeclared      bool
 	restConnection    string
 	defaultConnection string
+}
+
+// SurfaceKindREST names the declarative REST surface. The spec-document
+// surfaces (openapi, graphql, mcp) are the SpecSurface values.
+const SurfaceKindREST = "rest"
+
+// DeclaredSurface is one surface a provider's manifest declares, with the
+// connection it authenticates with.
+type DeclaredSurface struct {
+	Kind           string
+	ConnectionName string
 }
 
 type ConfigSource string
@@ -99,6 +111,7 @@ func BuildStaticConnectionPlan(app *ProviderEntry, manifestApp *providermanifest
 	}
 
 	if manifestApp != nil && manifestApp.Surfaces != nil && manifestApp.Surfaces.REST != nil {
+		plan.restDeclared = true
 		plan.restConnection = plan.resolveSurfaceConnectionName(manifestApp.Surfaces.REST.Connection)
 		if plan.restConnection != "" {
 			if _, err := plan.connectionDef(plan.restConnection); err != nil {
@@ -205,6 +218,24 @@ func (plan StaticConnectionPlan) ConfiguredSpecSurface() (ResolvedSpecSurface, b
 func (plan StaticConnectionPlan) ResolvedSurface(surface SpecSurface) (ResolvedSpecSurface, bool) {
 	resolved, ok := plan.surfaces[surface]
 	return resolved, ok
+}
+
+// DeclaredSurfaces lists the surfaces the manifest declares in a stable order:
+// openapi, rest, graphql, mcp.
+func (plan StaticConnectionPlan) DeclaredSurfaces() []DeclaredSurface {
+	declared := make([]DeclaredSurface, 0, len(OrderedSpecSurfaces)+1)
+	appendSpec := func(surface SpecSurface) {
+		if resolved, ok := plan.ResolvedSurface(surface); ok {
+			declared = append(declared, DeclaredSurface{Kind: string(surface), ConnectionName: resolved.ConnectionName})
+		}
+	}
+	appendSpec(SpecSurfaceOpenAPI)
+	if plan.restDeclared {
+		declared = append(declared, DeclaredSurface{Kind: SurfaceKindREST, ConnectionName: plan.RESTConnection()})
+	}
+	appendSpec(SpecSurfaceGraphQL)
+	appendSpec(SpecSurfaceMCP)
+	return declared
 }
 
 func (plan StaticConnectionPlan) AuthDefaultConnection() string {
