@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 // appAdminMemberRow is the shared authorization grant roster row used before
@@ -258,21 +257,26 @@ func isAppAdminServiceAccountRow(row appAdminMemberRow) bool {
 // grant roster. Identity enrichment belongs here — not in the shared mapper —
 // so identities listing does not resolve users it will discard.
 //
-// Every row reaching this projection belongs to a roster the caller already
-// administers, so naming the people on it (email and display name) discloses
-// nothing the caller cannot already manage. That is deliberately different from
-// directory lookup (userLookupAllowed), which stays gated on the employee
-// operator role: a roster admin can see who holds a grant on their own
-// resource, but cannot use it to search or enumerate other people.
+// Every row reaching this projection belongs to a roster the caller is allowed
+// to list, so the caller may see the names and emails of its human members.
+// That is deliberately different from directory lookup (userLookupAllowed),
+// which stays gated on the employee operator role: a roster lister can see who
+// holds a grant on that resource, but cannot use it to search other people.
 func (s *Server) projectAppAdminHumanMemberRows(ctx context.Context, rows []appAdminMemberRow) []appAdminMemberRow {
 	out := make([]appAdminMemberRow, 0, len(rows))
+	identities := make(map[string]userIdentity)
 	for i := range rows {
 		row := rows[i]
 		if isAppAdminServiceAccountRow(row) {
 			continue
 		}
 		if row.SelectorKind == "subject_id" && row.SubjectID != "" {
-			row.Email, row.DisplayName = s.resolveAppAdminMemberIdentity(ctx, row.SubjectID)
+			identity, ok := identities[row.SubjectID]
+			if !ok {
+				identity = s.resolveUserIdentity(ctx, row.SubjectID)
+				identities[row.SubjectID] = identity
+			}
+			row.Email, row.DisplayName = identity.Email, identity.DisplayName
 		}
 		out = append(out, row)
 	}
@@ -548,19 +552,4 @@ func appAdminMemberSource(layer proto.SourceLayer) (source string, mutable bool)
 		// Static config and unspecified (legacy) grants are treated as locked policy.
 		return "static", false
 	}
-}
-
-func (s *Server) resolveAppAdminMemberIdentity(ctx context.Context, subjectID string) (email, displayName string) {
-	kind, id, ok := core.ParseSubjectID(subjectID)
-	if !ok || kind != string(principal.KindUser) || s.users == nil {
-		return "", ""
-	}
-	if strings.Contains(id, "@") {
-		return id, ""
-	}
-	user, err := s.users.GetUser(ctx, id)
-	if err != nil || user == nil {
-		return "", ""
-	}
-	return strings.TrimSpace(user.Email), strings.TrimSpace(user.DisplayName)
 }

@@ -49,17 +49,31 @@ func TestRosterAdminSeesRosterMemberIdentity(t *testing.T) {
 		t.Fatalf("seed user: %v", err)
 	}
 	memberSubject := principal.UserSubjectID(member.ID)
+	memberEmailSubject := principal.UserSubjectID(member.Email)
 	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
+	listerSubject := principal.UserSubjectID(testCanonicalViewerUserID)
 	const groupID = "berkadia-staff"
 
 	authz := &serverTestAuthorizationProvider{relationships: []*proto.Relationship{
 		testAuthorizationRelationship(adminSubject, "admin", "app", "g-issues"),
 		testAuthorizationRelationship(memberSubject, "viewer", "app", "g-issues"),
+		testAuthorizationRelationship(memberEmailSubject, "viewer", "app", "g-issues"),
 		testAuthorizationRelationship(adminSubject, "admin", "group", groupID),
 		testAuthorizationRelationship(memberSubject, "member", "group", groupID),
+		testAuthorizationRelationship(memberEmailSubject, "member", "group", groupID),
+		testAuthorizationRelationship(listerSubject, "viewer", "authorization", "authorization"),
 	}}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = authStubWithSessionTokenIntrospect("admin-token", adminSubject, "")
+		cfg.Auth = testAuthStubWithIntrospect(func(_ context.Context, token string) (*core.IntrospectResponse, error) {
+			switch token {
+			case "admin-token":
+				return testIntrospectActive(adminSubject, ""), nil
+			case "lister-token":
+				return testIntrospectActive(listerSubject, ""), nil
+			default:
+				return &core.IntrospectResponse{Active: false}, nil
+			}
+		})
 		cfg.Authorization = authz
 		cfg.Services = services
 		cfg.AppDefs = appAdminTestAppDefs()
@@ -71,6 +85,7 @@ func TestRosterAdminSeesRosterMemberIdentity(t *testing.T) {
 		"group members": "/api/v1/groups/" + groupID + "/admin/members",
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			request, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
 			request.Header.Set("Authorization", "Bearer admin-token")
 			response, err := http.DefaultClient.Do(request)
@@ -90,8 +105,35 @@ func TestRosterAdminSeesRosterMemberIdentity(t *testing.T) {
 			if got.Email != "bob@valon.com" || got.DisplayName != "Bob Builder" {
 				t.Fatalf("member identity = %#v, want bob@valon.com / Bob Builder", got)
 			}
+			got = memberIdentityFor(t, rows, memberEmailSubject)
+			if got.Email != "bob@valon.com" || got.DisplayName != "Bob Builder" {
+				t.Fatalf("email-subject identity = %#v, want bob@valon.com / Bob Builder", got)
+			}
 		})
 	}
+
+	t.Run("group lister sees roster identity", func(t *testing.T) {
+		t.Parallel()
+		request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/groups/"+groupID+"/admin/members", nil)
+		request.Header.Set("Authorization", "Bearer lister-token")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("GET group members as lister: %v", err)
+		}
+		defer func() { _ = response.Body.Close() }()
+		if response.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(response.Body)
+			t.Fatalf("GET group members as lister status = %d: %s", response.StatusCode, body)
+		}
+		var rows []memberIdentityRow
+		if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
+			t.Fatalf("decode group members as lister: %v", err)
+		}
+		got := memberIdentityFor(t, rows, memberSubject)
+		if got.Email != "bob@valon.com" || got.DisplayName != "Bob Builder" {
+			t.Fatalf("group lister identity = %#v, want bob@valon.com / Bob Builder", got)
+		}
+	})
 }
 
 // registryDeployedBy returns how registry history labels a user who deployed

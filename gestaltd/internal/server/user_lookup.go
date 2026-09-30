@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -96,4 +97,47 @@ func (s *Server) userLookupAllowed(ctx context.Context) bool {
 		return false
 	}
 	return decision.Allowed
+}
+
+type userIdentity struct {
+	Email       string
+	DisplayName string
+}
+
+// resolveUserIdentity resolves a user subject through the workspace directory.
+// Callers must first establish that their surface is allowed to reveal identity.
+func (s *Server) resolveUserIdentity(ctx context.Context, subjectID string) userIdentity {
+	kind, id, ok := core.ParseSubjectID(strings.TrimSpace(subjectID))
+	if !ok || kind != string(principal.KindUser) {
+		return userIdentity{}
+	}
+
+	var user *core.User
+	if strings.Contains(id, "@") {
+		identity := userIdentity{Email: id}
+		if s == nil || s.users == nil {
+			return identity
+		}
+		user, _ = s.users.FindUserByEmail(ctx, id)
+		if user == nil {
+			return identity
+		}
+	} else {
+		if s == nil || s.users == nil {
+			return userIdentity{}
+		}
+		user, _ = s.users.GetUser(ctx, id)
+		if user == nil {
+			return userIdentity{}
+		}
+	}
+
+	identity := userIdentity{
+		Email:       strings.TrimSpace(user.Email),
+		DisplayName: strings.TrimSpace(user.DisplayName),
+	}
+	if identity.Email == "" && strings.Contains(id, "@") {
+		identity.Email = id
+	}
+	return identity
 }
