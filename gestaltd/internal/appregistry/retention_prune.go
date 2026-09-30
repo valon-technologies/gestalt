@@ -100,7 +100,17 @@ func ApplyRetentionPruneAction(index *Index, retention *RetentionIndex, appName 
 		if appVersions, ok := index.Apps[appName]; ok {
 			if _, exists := appVersions.Versions[action.Version]; exists {
 				delete(appVersions.Versions, action.Version)
-				index.Apps[appName] = appVersions
+				if len(appVersions.Versions) == 0 {
+					// An app entry with no remaining versions fails index
+					// validation, which makes the whole index undecodable and
+					// blocks every later read -- including the pending marker
+					// a republish needs. Remove the app entry instead: the
+					// index stays valid and the app returns to the
+					// not-in-registry state that publish treats as new.
+					delete(index.Apps, appName)
+				} else {
+					index.Apps[appName] = appVersions
+				}
 				changed = true
 			}
 		}

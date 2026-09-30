@@ -1,6 +1,7 @@
 package appregistry_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -32,6 +33,59 @@ func TestEvaluateRetentionPrune(t *testing.T) {
 	if len(actions) < 2 {
 		t.Fatalf("actions = %#v", actions)
 	}
+}
+
+func TestApplyRetentionPruneActionLeavesDecodableIndex(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	action := appregistry.RetentionPruneAction{Version: "v-only", Kind: appregistry.RetentionPruneDeleteUnused}
+
+	prunedToEmpty := appregistry.NewEmptyIndex()
+	prunedToEmpty.Apps["g-issues"] = appregistry.AppVersions{
+		Versions: map[string]appregistry.IndexVersion{
+			"v-only": {PublishedAt: now},
+		},
+	}
+	retention := appregistry.NewEmptyRetentionIndex()
+	appregistry.UpsertPublishedRetention(retention, "v-only", now, appregistry.RetentionPolicy{})
+
+	if !appregistry.ApplyRetentionPruneAction(prunedToEmpty, retention, "g-issues", action, now) {
+		t.Fatal("expected the prune action to apply")
+	}
+	if _, ok := prunedToEmpty.Apps["g-issues"]; ok {
+		t.Fatal("expected the pruned-to-empty app entry to be removed from the index")
+	}
+	if _, err := appregistry.DecodeIndex(mustMarshal(t, prunedToEmpty)); err != nil {
+		t.Fatalf("pruned index no longer decodes: %v", err)
+	}
+
+	keptVersion := appregistry.NewEmptyIndex()
+	keptVersion.Apps["g-issues"] = appregistry.AppVersions{
+		Versions: map[string]appregistry.IndexVersion{
+			"v-only": {PublishedAt: now},
+			"v-kept": {PublishedAt: now},
+		},
+	}
+	if !appregistry.ApplyRetentionPruneAction(keptVersion, appregistry.NewEmptyRetentionIndex(), "g-issues", action, now) {
+		t.Fatal("expected the prune action to apply")
+	}
+	appVersions, ok := keptVersion.Apps["g-issues"]
+	if !ok {
+		t.Fatal("expected the app entry with a remaining version to stay in the index")
+	}
+	if _, ok := appVersions.Versions["v-kept"]; !ok {
+		t.Fatal("expected the unpruned version to remain")
+	}
+}
+
+func mustMarshal(t *testing.T, index *appregistry.Index) []byte {
+	t.Helper()
+	data, err := json.Marshal(index)
+	if err != nil {
+		t.Fatalf("marshal index: %v", err)
+	}
+	return data
 }
 
 func TestShouldApplyRetentionPruneActionRace(t *testing.T) {
