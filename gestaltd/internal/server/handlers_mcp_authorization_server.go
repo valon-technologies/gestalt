@@ -600,6 +600,10 @@ func (s *Server) writeMCPOAuthTokenResponse(w http.ResponseWriter, r *http.Reque
 		SubjectTokenType: core.SubjectTokenTypeAccessToken,
 		Scope:            strings.TrimSpace(scope),
 		ClientID:         core.DefaultOAuthClientID,
+		// A zero expiry hint lets the provider apply its 24-hour session
+		// default, so MCP-issued API tokens expire a day after connect.
+		// Request the maximum supported lifetime instead.
+		ExpiresIn: core.MaxTokenExpiresInSeconds,
 	})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "mcp oauth provider token exchange failed", "status", status.Code(err), "error", err)
