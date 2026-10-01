@@ -38,20 +38,20 @@ func TestCallerAuthContextAttachesCanonicalSubject(t *testing.T) {
 func TestTokenExpiresIn(t *testing.T) {
 	t.Parallel()
 
-	t.Run("nil omits hint", func(t *testing.T) {
+	t.Run("nil defaults to max", func(t *testing.T) {
 		t.Parallel()
 		got, err := tokenExpiresIn(nil)
-		if err != nil || got != 0 {
-			t.Fatalf("tokenExpiresIn(nil) = (%d, %v), want (0, nil)", got, err)
+		if err != nil || got != core.MaxTokenExpiresInSeconds {
+			t.Fatalf("tokenExpiresIn(nil) = (%d, %v), want (%d, nil)", got, err, core.MaxTokenExpiresInSeconds)
 		}
 	})
 
-	t.Run("zero omits hint", func(t *testing.T) {
+	t.Run("zero defaults to max", func(t *testing.T) {
 		t.Parallel()
 		zero := int64(0)
 		got, err := tokenExpiresIn(&zero)
-		if err != nil || got != 0 {
-			t.Fatalf("tokenExpiresIn(0) = (%d, %v), want (0, nil)", got, err)
+		if err != nil || got != core.MaxTokenExpiresInSeconds {
+			t.Fatalf("tokenExpiresIn(0) = (%d, %v), want (%d, nil)", got, err, core.MaxTokenExpiresInSeconds)
 		}
 	})
 

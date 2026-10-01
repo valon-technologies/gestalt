@@ -128,7 +128,7 @@ func TestCreateAPITokenForwardsExpiresIn(t *testing.T) {
 	}
 }
 
-func TestCreateAPITokenOmitsExpiresInWhenUnset(t *testing.T) {
+func TestCreateAPITokenDefaultsOmittedExpiresInToMax(t *testing.T) {
 	t.Parallel()
 
 	stub := newGrantTrackingAuthStub()
@@ -156,8 +156,8 @@ func TestCreateAPITokenOmitsExpiresInWhenUnset(t *testing.T) {
 	if stub.lastTokenExchangeReq == nil {
 		t.Fatal("token exchange request was not captured")
 	}
-	if stub.lastTokenExchangeReq.ExpiresIn != 0 {
-		t.Fatalf("ExpiresIn = %d, want 0 when omitted", stub.lastTokenExchangeReq.ExpiresIn)
+	if stub.lastTokenExchangeReq.ExpiresIn != core.MaxTokenExpiresInSeconds {
+		t.Fatalf("ExpiresIn = %d, want %d when omitted", stub.lastTokenExchangeReq.ExpiresIn, core.MaxTokenExpiresInSeconds)
 	}
 }
 
