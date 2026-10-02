@@ -128,10 +128,6 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 	response.Operations = make([]appAccessOperationInfo, 0, len(cat.Operations))
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
-		readOnly := op.ReadOnly
-		if op.Annotations.ReadOnlyHint != nil {
-			readOnly = readOnly || *op.Annotations.ReadOnlyHint
-		}
 		_, isEnabled := enabledSet[op.ID]
 		_, isDefault := defaultSet[op.ID]
 		response.Operations = append(response.Operations, appAccessOperationInfo{
@@ -140,7 +136,7 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 			Description: op.Description,
 			Method:      op.Method,
 			Tags:        append([]string(nil), op.Tags...),
-			ReadOnly:    readOnly,
+			ReadOnly:    catalog.OperationIsReadOnly(*op),
 			Enabled:     isEnabled,
 			Default:     isDefault,
 		})
