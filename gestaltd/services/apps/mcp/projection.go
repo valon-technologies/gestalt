@@ -63,7 +63,7 @@ func toolName(prefixes map[string]string, provider, operation string) string {
 
 func isWorkspaceFrontDoorToolName(name string) bool {
 	switch name {
-	case SearchToolName, DescribeToolName, InvokeToolName:
+	case SearchToolName, DescribeToolName, InvokeToolName, ReadOnlyInvokeToolName:
 		return true
 	default:
 		return false

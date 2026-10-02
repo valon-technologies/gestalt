@@ -282,8 +282,8 @@ func TestListToolsDoesNotReadAppCatalogs(t *testing.T) {
 	if rpcErr != nil {
 		t.Fatalf("tools/list error: %v", rpcErr)
 	}
-	if len(names) != 3 {
-		t.Fatalf("tools = %v, want 3 front-door tools", names)
+	if len(names) != 4 {
+		t.Fatalf("tools = %v, want 4 front-door tools", names)
 	}
 }
 
@@ -295,7 +295,7 @@ func TestListToolsHidesNothingFromUngrantedSubject(t *testing.T) {
 	if rpcErr != nil {
 		t.Fatalf("tools/list error: %v", rpcErr)
 	}
-	if len(names) != 3 {
+	if len(names) != 4 {
 		t.Fatalf("ungranted subject saw tools %v, want the front door", names)
 	}
 }

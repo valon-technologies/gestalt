@@ -172,7 +172,7 @@ func (h *StatelessHTTPHandler) handleMessage(ctx context.Context, headers http.H
 // listTools answers the MCP handshake. Hosts mark the server connected only
 // after this returns, so it never walks app catalogs or asks the evaluator.
 // Workspace operations are found through gestalt_search / gestalt_describe
-// and authorized on gestalt_invoke (and on leftover flattened tool names).
+// and authorized on gestalt_invoke or gestalt_invoke_read_only.
 func (h *StatelessHTTPHandler) listTools(_ context.Context, req mcpgo.ListToolsRequest) (mcpgo.ListToolsResult, error) {
 	if strings.TrimSpace(string(req.Params.Cursor)) != "" {
 		return mcpgo.ListToolsResult{}, fmt.Errorf("tools/list cursor is not supported")
@@ -188,6 +188,8 @@ func (h *StatelessHTTPHandler) callTool(ctx context.Context, req mcpgo.CallToolR
 		return h.callDescribe(ctx, req)
 	case InvokeToolName:
 		return h.callInvoke(ctx, req)
+	case ReadOnlyInvokeToolName:
+		return h.callInvokeReadOnly(ctx, req)
 	default:
 		return h.callAppTool(ctx, req)
 	}
@@ -202,10 +204,10 @@ func (h *StatelessHTTPHandler) callAppTool(ctx context.Context, req mcpgo.CallTo
 	if provName == "" {
 		return nil, fmt.Errorf("%w: %q", invocation.ErrOperationNotFound, req.Params.Name)
 	}
-	return h.callResolvedAppTool(ctx, req, statelessToolRef{provider: provName})
+	return h.callResolvedAppTool(ctx, req, statelessToolRef{provider: provName}, false)
 }
 
-func (h *StatelessHTTPHandler) callResolvedAppTool(ctx context.Context, req mcpgo.CallToolRequest, ref statelessToolRef) (*mcpgo.CallToolResult, error) {
+func (h *StatelessHTTPHandler) callResolvedAppTool(ctx context.Context, req mcpgo.CallToolRequest, ref statelessToolRef, requireReadOnly bool) (*mcpgo.CallToolResult, error) {
 	p := principal.FromContext(ctx)
 	if p == nil {
 		return mcpgo.NewToolResultError("not authenticated"), nil
@@ -248,6 +250,9 @@ func (h *StatelessHTTPHandler) callResolvedAppTool(ctx context.Context, req mcpg
 	projectedOp, ok := invocation.CatalogOperation(projectedCat, ref.operation)
 	if !ok || !catalogOperationProjectedToMCP(h.cfg, provName, projectedOp) {
 		return mcpgo.NewToolResultError("requested instance is unavailable for this tool"), nil
+	}
+	if requireReadOnly && !catalogOperationIsReadOnly(rawOp) {
+		return mcpgo.NewToolResultError(fmt.Sprintf("operation %q on app %q is not marked read-only", ref.operation, provName)), nil
 	}
 	if err := validateProjectedCatalogInvocation(rawOp, projectedOp, args); err != nil {
 		return mcpgo.NewToolResultError(err.Error()), nil
@@ -339,6 +344,13 @@ func validateProjectedCatalogInvocation(rawOp, projectedOp catalog.CatalogOperat
 		}
 	}
 	return nil
+}
+
+func catalogOperationIsReadOnly(op catalog.CatalogOperation) bool {
+	if op.ReadOnly {
+		return true
+	}
+	return op.Annotations.ReadOnlyHint != nil && *op.Annotations.ReadOnlyHint
 }
 
 func hiddenSessionCatalogArguments(rawOp catalog.CatalogOperation, projectedOp catalog.CatalogOperation) []string {
