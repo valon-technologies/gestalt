@@ -265,6 +265,7 @@ type Result struct {
 	ConnectionAuth          func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth    func() map[string]map[string]ManualTokenExchanger
 	Invoker                 invocation.Invoker
+	AppAccess               *invocation.AppAccessResolver
 	AppInvocation           invocation.Invoker
 	InvocationRecords       observability.InvocationRecordReader
 	CapabilityLister        invocation.CapabilityLister
@@ -1491,12 +1492,14 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	kinds := ProviderAuthorizationKinds(cfg)
 	authorizationPolicies := ProviderAuthorizationPolicies(cfg)
 	invocationRecords := observability.NewInvocationRecordStore(observability.DefaultInvocationRecordCapacity)
+	appAccess := invocation.NewAppAccessResolver(nil)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithConnectionInstancePreferences(prepared.Services.ConnectionInstancePreferences),
 		invocation.WithAppAccessProfiles(prepared.Services.AppAccessProfiles),
+		invocation.WithAppAccessResolver(appAccess),
 		invocation.WithAppOperationPolicies(prepared.Services.AppAllowedOperations),
 		invocation.WithAuthorizationProvider(authorizationProvider),
 		invocation.WithProviderKinds(kinds),
@@ -1771,6 +1774,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		ConnectionAuth:                 connAuthResolver,
 		ManualConnectionAuth:           manualConnAuthResolver,
 		Invoker:                        sharedInvoker,
+		AppAccess:                      appAccess,
 		AppInvocation:                  pluginInvoker,
 		InvocationRecords:              invocationRecords,
 		CapabilityLister:               sharedInvoker,

@@ -66,10 +66,10 @@ func (s *AppAccessProfileService) GetAppAccessProfile(ctx context.Context, subje
 	return profile, nil
 }
 
-// EnsureAppAccessDefaults creates the initial profile only when it does not
-// already exist. Existing profiles are returned unchanged, including an
-// intentionally empty allow list.
-func (s *AppAccessProfileService) EnsureAppAccessDefaults(ctx context.Context, subjectID, app string, operations []string) (*core.AppAccessProfile, error) {
+// EnsureAppAccessDefaults creates an empty profile, meaning "follow the app's
+// defaults", only when none exists. Existing profiles are returned unchanged,
+// including every choice the user made.
+func (s *AppAccessProfileService) EnsureAppAccessDefaults(ctx context.Context, subjectID, app string) (*core.AppAccessProfile, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("ensure app access defaults: service is not configured")
 	}
@@ -83,7 +83,6 @@ func (s *AppAccessProfileService) EnsureAppAccessDefaults(ctx context.Context, s
 	profile := &core.AppAccessProfile{
 		SubjectID:           subjectID,
 		App:                 app,
-		EnabledOperations:   normalizeAppAccessOperations(operations),
 		DefaultsInitialized: true,
 		UpdatedAt:           time.Now().UTC().Truncate(time.Millisecond),
 	}
@@ -101,9 +100,12 @@ func (s *AppAccessProfileService) EnsureAppAccessDefaults(ctx context.Context, s
 	return existing, nil
 }
 
-func (s *AppAccessProfileService) SetAppAccessOperations(ctx context.Context, subjectID, app string, operations []string) (*core.AppAccessProfile, error) {
+// SetAppAccessOverrides replaces the user's decisions. A save always writes
+// the current format, so a legacy profile is converted the first time its
+// owner saves.
+func (s *AppAccessProfileService) SetAppAccessOverrides(ctx context.Context, subjectID, app string, disabled, extra []string) (*core.AppAccessProfile, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("set app access operations: service is not configured")
+		return nil, fmt.Errorf("set app access overrides: service is not configured")
 	}
 	_, subjectID, app, err := validateAppAccessProfileKey(subjectID, app)
 	if err != nil {
@@ -112,18 +114,16 @@ func (s *AppAccessProfileService) SetAppAccessOperations(ctx context.Context, su
 	if err := s.EnsureStore(ctx); err != nil {
 		return nil, err
 	}
-	profile, err := s.GetAppAccessProfile(ctx, subjectID, app)
-	if err != nil && !errors.Is(err, core.ErrNotFound) {
-		return nil, err
+	profile := &core.AppAccessProfile{
+		SubjectID:           subjectID,
+		App:                 app,
+		DisabledOperations:  normalizeAppAccessOperations(disabled),
+		ExtraOperations:     normalizeAppAccessOperations(extra),
+		DefaultsInitialized: true,
+		UpdatedAt:           time.Now().UTC().Truncate(time.Millisecond),
 	}
-	if profile == nil {
-		profile = &core.AppAccessProfile{SubjectID: subjectID, App: app}
-	}
-	profile.EnabledOperations = normalizeAppAccessOperations(operations)
-	profile.DefaultsInitialized = true
-	profile.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
 	if err := s.store.Put(ctx, appAccessProfileRecord(profile)); err != nil {
-		return nil, fmt.Errorf("set app access operations: write: %w", err)
+		return nil, fmt.Errorf("set app access overrides: write: %w", err)
 	}
 	return profile, nil
 }
@@ -158,31 +158,66 @@ func normalizeAppAccessOperations(operations []string) []string {
 	return out
 }
 
+// appAccessPayloadVersion marks the decisions-relative-to-defaults format.
+// Records written before it hold a bare JSON array of enabled operations in the
+// same column, which recordToAppAccessProfile still reads, so no schema
+// migration is needed.
+//
+// Rollback consequence: an older binary reading a new-format row fails to
+// decode it and denies access until the fleet runs the new version. Deploys are
+// zero-gap (no-traffic, then promote), so this skew window is short.
+const appAccessPayloadVersion = 1
+
+type appAccessPayload struct {
+	Version  int      `json:"v"`
+	Disabled []string `json:"disabled,omitempty"`
+	Extra    []string `json:"extra,omitempty"`
+}
+
 func appAccessProfileRecord(profile *core.AppAccessProfile) idb.Record {
-	operations, _ := json.Marshal(normalizeAppAccessOperations(profile.EnabledOperations))
+	payload, _ := json.Marshal(appAccessPayload{
+		Version:  appAccessPayloadVersion,
+		Disabled: normalizeAppAccessOperations(profile.DisabledOperations),
+		Extra:    normalizeAppAccessOperations(profile.ExtraOperations),
+	})
 	return idb.Record{
 		"id":                   strings.TrimSpace(profile.SubjectID) + appAccessProfileKeySep + strings.TrimSpace(profile.App),
 		"subject_id":           strings.TrimSpace(profile.SubjectID),
 		"app":                  strings.TrimSpace(profile.App),
-		"enabled_operations":   string(operations),
+		"enabled_operations":   string(payload),
 		"defaults_initialized": profile.DefaultsInitialized,
 		"updated_at":           profile.UpdatedAt.UTC().Truncate(time.Millisecond),
 	}
 }
 
 func recordToAppAccessProfile(rec idb.Record) (*core.AppAccessProfile, error) {
-	var operations []string
-	if raw := recString(rec, "enabled_operations"); raw != "" {
-		if err := json.Unmarshal([]byte(raw), &operations); err != nil {
-			return nil, fmt.Errorf("decode enabled operations: %w", err)
+	subjectID := recString(rec, "subject_id")
+	app := recString(rec, "app")
+	updatedAt := recTime(rec, "updated_at")
+	raw := strings.TrimSpace(recString(rec, "enabled_operations"))
+	var profile *core.AppAccessProfile
+	if strings.HasPrefix(raw, "{") {
+		var payload appAccessPayload
+		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+			return nil, fmt.Errorf("decode app access payload: %w", err)
 		}
+		if payload.Version != appAccessPayloadVersion {
+			// An unknown version may carry decisions this build cannot read.
+			// Failing closed keeps a rollback from silently widening access.
+			return nil, fmt.Errorf("decode app access payload: unsupported version %d", payload.Version)
+		}
+		profile = core.NewRelativeAppAccessProfile(subjectID, app, payload.Disabled, payload.Extra, updatedAt)
+	} else {
+		var operations []string
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &operations); err != nil {
+				return nil, fmt.Errorf("decode enabled operations: %w", err)
+			}
+		}
+		profile = core.NewLegacyAppAccessProfile(subjectID, app, operations, updatedAt)
 	}
-	initialized, _ := rec["defaults_initialized"].(bool)
-	return &core.AppAccessProfile{
-		SubjectID:           recString(rec, "subject_id"),
-		App:                 recString(rec, "app"),
-		EnabledOperations:   normalizeAppAccessOperations(operations),
-		DefaultsInitialized: initialized,
-		UpdatedAt:           recTime(rec, "updated_at"),
-	}, nil
+	if err := profile.Validate(); err != nil {
+		return nil, err
+	}
+	return profile, nil
 }

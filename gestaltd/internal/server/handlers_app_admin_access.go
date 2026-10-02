@@ -3,7 +3,6 @@ package server
 import (
 	"errors"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -15,13 +14,15 @@ import (
 // appAdminAccessResponse is the read model for GET /apps/{app}/admin/access.
 // An app access profile is per-user state that only its owner can read or
 // write, which leaves an admin debugging a denial with no way to see the
-// record causing it. ProfileExists separates "allowed everything because no
+// record causing it. Legacy is true when the profile is still enforced as the
+// old allow-list because it could not be converted exactly. ProfileExists separates "allowed everything because no
 // record exists" from "allowed exactly this list".
 type appAdminAccessResponse struct {
 	App                 string   `json:"app"`
 	SubjectID           string   `json:"subjectId"`
 	Email               string   `json:"email,omitempty"`
 	ProfileExists       bool     `json:"profileExists"`
+	Legacy              bool     `json:"legacy"`
 	DefaultsInitialized bool     `json:"defaultsInitialized"`
 	EnabledOperations   []string `json:"enabledOperations"`
 	DeniedOperations    []string `json:"deniedOperations"`
@@ -69,20 +70,19 @@ func (s *Server) getAppAdminAccess(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, response)
 		return
 	}
+	profile = s.appAccess.Resolve(r.Context(), prov, profile)
 	response.ProfileExists = true
+	response.Legacy = profile.Legacy
 	response.DefaultsInitialized = profile.DefaultsInitialized
-	response.EnabledOperations = append(response.EnabledOperations, profile.EnabledOperations...)
+	cat := prov.Catalog()
+	defaults := core.AppAccessDefaultsFor(prov)
+	response.EnabledOperations = append(response.EnabledOperations, profile.EnabledOperations(cat, defaults)...)
 	if !profile.UpdatedAt.IsZero() {
 		response.UpdatedAt = profile.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	// Every operation the record withholds, including the private ones the
 	// owner's own page never offers them.
-	for _, operation := range catOperations(prov.Catalog()) {
-		if !slices.Contains(profile.EnabledOperations, operation) {
-			response.DeniedOperations = append(response.DeniedOperations, operation)
-		}
-	}
-	slices.Sort(response.DeniedOperations)
+	response.DeniedOperations = append(response.DeniedOperations, profile.DeniedOperations(cat, defaults)...)
 	writeJSON(w, http.StatusOK, response)
 }
 

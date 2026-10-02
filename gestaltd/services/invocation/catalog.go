@@ -359,6 +359,7 @@ func FilterCatalogForPrincipal(
 			Provider:     provName,
 			Operation:    cat.Operations[i].ID,
 			AllowedRoles: cat.Operations[i].AllowedRoles,
+			Metadata:     &cat.Operations[i],
 		})
 	}
 	results, err := checker.CheckOperationAccessMany(ctx, p, queries)

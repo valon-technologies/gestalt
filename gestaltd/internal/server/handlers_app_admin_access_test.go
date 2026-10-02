@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -62,13 +63,16 @@ func TestAppAdminAccessReportsSavedProfile(t *testing.T) {
 
 	server, services := appAdminAccessTestServer(t)
 	user := seedAppAccessTestUser(t, services, "saver@example.com")
-	if _, err := services.AppAccessProfiles.SetAppAccessOperations(
+	// Opt out of everything but versions, including the private operation an
+	// admin cannot otherwise see withheld.
+	if _, err := services.AppAccessProfiles.SetAppAccessOverrides(
 		context.Background(),
 		principal.UserSubjectID(user.ID),
 		"front-porch",
-		[]string{"versions"},
+		[]string{"setVersion", "unsafeSetVersion"},
+		nil,
 	); err != nil {
-		t.Fatalf("SetAppAccessOperations: %v", err)
+		t.Fatalf("SetAppAccessOverrides: %v", err)
 	}
 
 	body := decodeAppAdminAccess(t, serveAppAdminAccessRequest(t, server, "email=saver@example.com"))
@@ -90,6 +94,30 @@ func TestAppAdminAccessReportsSavedProfile(t *testing.T) {
 		if body.DeniedOperations[i] != operation {
 			t.Fatalf("deniedOperations = %#v, want %#v", body.DeniedOperations, want)
 		}
+	}
+}
+
+func TestAppAdminAccessIgnoresDefaultOnOperationsAddedAfterOptOut(t *testing.T) {
+	t.Parallel()
+
+	server, services := appAdminAccessTestServer(t)
+	user := seedAppAccessTestUser(t, services, "optout@example.com")
+	if _, err := services.AppAccessProfiles.SetAppAccessOverrides(
+		context.Background(),
+		principal.UserSubjectID(user.ID),
+		"front-porch",
+		[]string{"removedOperation", "unsafeSetVersion"},
+		nil,
+	); err != nil {
+		t.Fatalf("SetAppAccessOverrides: %v", err)
+	}
+
+	body := decodeAppAdminAccess(t, serveAppAdminAccessRequest(t, server, "email=optout@example.com"))
+	if !slices.Equal(body.EnabledOperations, []string{"setVersion", "versions"}) {
+		t.Fatalf("enabledOperations = %#v, want every current default-on operation", body.EnabledOperations)
+	}
+	if !slices.Equal(body.DeniedOperations, []string{"unsafeSetVersion"}) {
+		t.Fatalf("deniedOperations = %#v, want only the opted-out operation", body.DeniedOperations)
 	}
 }
 

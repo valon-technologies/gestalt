@@ -252,8 +252,8 @@ func TestAppOperationPolicyCannotBypassTokenScopeOrAppAccessProfile(t *testing.T
 	}
 
 	unscoped := appOperationPolicyPrincipal()
-	if _, err := svc.AppAccessProfiles.SetAppAccessOperations(ctx, unscoped.SubjectID, "workspace", []string{"other.op"}); err != nil {
-		t.Fatalf("SetAppAccessOperations: %v", err)
+	if _, err := svc.AppAccessProfiles.SetAppAccessOverrides(ctx, unscoped.SubjectID, "workspace", []string{"unary.op"}, nil); err != nil {
+		t.Fatalf("SetAppAccessOverrides: %v", err)
 	}
 	if _, err := broker.Invoke(ctx, unscoped, "workspace", "", "unary.op", nil); !errors.Is(err, ErrAuthorizationDenied) {
 		t.Fatalf("Invoke outside app access profile = %v, want ErrAuthorizationDenied", err)

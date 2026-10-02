@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -79,10 +80,15 @@ func CheckResourceAccessMany(
 
 // OperationAccessQuery is one operation-listing question: may this principal
 // invoke this operation on this app.
+//
+// Metadata is the operation as the caller resolved it (the session catalog the
+// page and the invoke path see). When set, app access is judged against it; when
+// nil, the provider's static catalog is consulted instead.
 type OperationAccessQuery struct {
 	Provider     string
 	Operation    string
 	AllowedRoles []string
+	Metadata     *catalog.CatalogOperation
 }
 
 // OperationAccessDecision carries the effective roles used for authorization,
@@ -126,6 +132,7 @@ func (b *Broker) CheckOperationAccessMany(
 	type providerAccess struct {
 		policy          core.AppOperationPolicy
 		profile         *core.AppAccessProfile
+		scope           appAccessScope
 		profileErr      error
 		delegatesRemote bool
 		resource        *proto.Resource
@@ -144,12 +151,13 @@ func (b *Broker) CheckOperationAccessMany(
 				return nil, err
 			}
 			access.profile, access.profileErr = b.appAccessProfile(ctx, p, query.Provider)
+			access.scope = b.appAccessScope(ctx, query.Provider)
 			access.delegatesRemote = b.providerDelegatesRemoteAuthorization(ctx, query.Provider)
 			accessByProvider[query.Provider] = access
 		}
 		roles, allowed := access.policy.Resolve(query.Operation, query.AllowedRoles)
 		results[i].AllowedRoles = roles
-		if !allowed || access.profileErr != nil || !appAccessProfileAllows(access.profile, query.Operation) {
+		if !allowed || access.profileErr != nil || !access.scope.allows(access.profile, query.Operation, query.Metadata) {
 			results[i].Err = operationAccessDenied(query)
 			continue
 		}

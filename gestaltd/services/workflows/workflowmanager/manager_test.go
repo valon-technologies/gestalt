@@ -130,6 +130,18 @@ func (allowAllAuthz) CheckAccess(context.Context, *proto.CheckAccessRequest) (*p
 	return &proto.CheckAccessResponse{Allowed: true}, nil
 }
 
+func (a allowAllAuthz) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	resp := &proto.CheckAccessManyResponse{}
+	for _, question := range req.GetRequests() {
+		decision, err := a.CheckAccess(ctx, question)
+		if err != nil {
+			return nil, err
+		}
+		resp.Decisions = append(resp.Decisions, decision)
+	}
+	return resp, nil
+}
+
 type runAsGrantAuthz struct {
 	core.AuthorizationProvider
 	grants map[string]struct{}
@@ -168,6 +180,18 @@ func (a *runAsGrantAuthz) grantKey(subjectID, providerName, operation string) st
 func (a *runAsGrantAuthz) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	_, ok := a.grants[a.grantKey(req.GetSubject().GetId(), req.GetResource().GetId(), req.GetAction().GetName())]
 	return &proto.CheckAccessResponse{Allowed: ok}, nil
+}
+
+func (a *runAsGrantAuthz) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	resp := &proto.CheckAccessManyResponse{}
+	for _, question := range req.GetRequests() {
+		decision, err := a.CheckAccess(ctx, question)
+		if err != nil {
+			return nil, err
+		}
+		resp.Decisions = append(resp.Decisions, decision)
+	}
+	return resp, nil
 }
 
 func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T) {
@@ -935,5 +959,47 @@ func TestCloneWorkflowRunStatusCountsDoesNotCopyLocks(t *testing.T) {
 	}
 	if cloneWorkflowRunStatusCounts(nil) != nil {
 		t.Fatal("nil clone should stay nil")
+	}
+}
+
+type failingSessionCatalogApp struct {
+	*coretesting.StubIntegration
+}
+
+func (failingSessionCatalogApp) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
+	return nil, core.ErrSessionCatalogUnavailable
+}
+
+func TestCheckOperationAccessDeniesWhenSessionCatalogCannotResolve(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{
+		N:          "github",
+		ConnMode:   core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Name: "github", Operations: []catalog.CatalogOperation{{ID: "issues.triage", Method: "POST"}}},
+	}
+	tests := []struct {
+		name       string
+		provider   core.Provider
+		operation  string
+		wantDenied bool
+	}{
+		{"unresolved session catalog operation", failingSessionCatalogApp{StubIntegration: stub}, "dynamic.mcp", true},
+		{"static catalog operation", stub, "issues.triage", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			providers := testutil.NewProviderRegistry(t, tt.provider)
+			manager := New(Config{
+				Providers: providers,
+				Workflow:  testWorkflowControl{provider: newTestWorkflowProvider()},
+				Invoker:   testWorkflowManagerBroker(t, providers, allowAllAuthz{}),
+			})
+			err := manager.checkOperationAccess(context.Background(), testWorkflowManagerPrincipal(), coreworkflow.AppCall{Name: "github", Operation: tt.operation})
+			if denied := errors.Is(err, invocation.ErrAuthorizationDenied); denied != tt.wantDenied {
+				t.Fatalf("err = %v, want denied=%v", err, tt.wantDenied)
+			}
+		})
 	}
 }

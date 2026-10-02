@@ -164,9 +164,9 @@ func TestAppOperationPermissionsHTTPContractAcrossInstances(t *testing.T) {
 
 	accessPath := "/api/v1/apps/" + app + "/access"
 	request(1, "GET", accessPath, conformanceAdminToken, "", 200)
-	for _, body := range []string{`{`, `{"enabledOperations":["missing"]}`} {
-		request(1, "PUT", accessPath, conformanceAdminToken, body, 400)
-	}
+	request(1, "PUT", accessPath, conformanceAdminToken, `{`, 400)
+	// An id the catalog does not list is dropped, not rejected.
+	request(1, "PUT", accessPath, conformanceAdminToken, `{"enabledOperations":["missing"]}`, 200)
 	savedAccess := request(0, "PUT", accessPath, conformanceAdminToken,
 		`{"enabledOperations":["items.retrieve"]}`, 200)
 	policyRecord, err := services.DB.ObjectStore(coredata.StoreAppAllowedOperations).Get(ctx, app)
