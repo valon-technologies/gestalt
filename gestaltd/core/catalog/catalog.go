@@ -181,6 +181,15 @@ func OperationExposedOnMCP(op CatalogOperation) bool {
 	return OperationVisibleByDefault(op) && (op.MCP == nil || *op.MCP)
 }
 
+// OperationIsReadOnly reports whether the catalog marks the operation
+// read-only, via the readOnly field or the readOnlyHint annotation.
+func OperationIsReadOnly(op CatalogOperation) bool {
+	if op.ReadOnly {
+		return true
+	}
+	return op.Annotations.ReadOnlyHint != nil && *op.Annotations.ReadOnlyHint
+}
+
 func OperationByID(cat *Catalog, id string) (CatalogOperation, bool) {
 	if cat == nil || strings.TrimSpace(id) == "" {
 		return CatalogOperation{}, false

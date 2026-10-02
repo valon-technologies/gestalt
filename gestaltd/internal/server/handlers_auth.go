@@ -608,9 +608,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 			SubjectToken:     tokenResp.AccessToken,
 			SubjectTokenType: core.SubjectTokenTypeAccessToken,
 			ClientID:         core.DefaultOAuthClientID,
-			// A zero expiry hint lets the provider apply its 24-hour session
-			// default, which silently kills CLI-issued API tokens a day after
-			// login. Request the maximum supported lifetime instead.
+			// A zero hint would fall back to the provider's 24-hour session default.
 			ExpiresIn: core.MaxTokenExpiresInSeconds,
 		})
 		if exchangeErr != nil || apiGrant == nil || strings.TrimSpace(apiGrant.AccessToken) == "" || strings.TrimSpace(apiGrant.GrantID) == "" {

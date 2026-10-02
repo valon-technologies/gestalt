@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -62,10 +63,5 @@ func toolName(prefixes map[string]string, provider, operation string) string {
 }
 
 func isWorkspaceFrontDoorToolName(name string) bool {
-	switch name {
-	case SearchToolName, DescribeToolName, InvokeToolName, ReadOnlyInvokeToolName:
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(WorkspaceFrontDoorToolNames(), name)
 }

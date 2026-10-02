@@ -1,7 +1,7 @@
 package config
 
 import (
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -112,7 +112,7 @@ func TestStaticConnectionPlan_DeclaredSurfaces(t *testing.T) {
 				t.Fatalf("BuildStaticConnectionPlan() error = %v", err)
 			}
 			got := plan.DeclaredSurfaces()
-			if !reflect.DeepEqual(got, tt.want) {
+			if !slices.Equal(got, tt.want) {
 				t.Fatalf("DeclaredSurfaces() = %+v, want %+v", got, tt.want)
 			}
 		})

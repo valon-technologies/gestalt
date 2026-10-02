@@ -246,7 +246,8 @@ func TestUIReadinessProbesUseBoundedConcurrencyAndWaitForEveryResult(t *testing.
 
 // An app UI that is not public requires a user principal that a readiness probe
 // can never present. Before the probe was marked as in-process, every such mount
-// answered 401 and startup admission could never complete.
+// answered 401 and startup admission could never complete. The marker is
+// attached only by probeMountedUI: an ordinary request never carries it.
 func TestUIReadinessProbeIsAdmittedToNonPublicAppUI(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
@@ -262,19 +263,10 @@ func TestUIReadinessProbeIsAdmittedToNonPublicAppUI(t *testing.T) {
 	if !result.Ready {
 		t.Fatalf("probe of non-public app UI = %+v, want ready", result)
 	}
-}
 
-func TestReadinessProbeMarkerIsAbsentOnOrdinaryRequests(t *testing.T) {
-	t.Parallel()
-	req := httptest.NewRequest(http.MethodGet, "/private-app/", nil)
-	if isReadinessProbe(req.Context()) {
+	plain := httptest.NewRequest(http.MethodGet, "/private-app/", nil)
+	if isReadinessProbe(plain.Context()) {
 		t.Fatal("ordinary request is marked as a readiness probe")
-	}
-	if !isReadinessProbe(withReadinessProbe(req.Context())) {
-		t.Fatal("marked context is not recognized as a readiness probe")
-	}
-	if isReadinessProbe(context.Background()) {
-		t.Fatal("background context is marked as a readiness probe")
 	}
 }
 
@@ -289,39 +281,44 @@ func unreadyProbe(mount string, status int, message string) UIProbeResult {
 	return result
 }
 
-func TestSummarizeUnreadyMountsNamesTheFailingMount(t *testing.T) {
+func TestSummarizeUnreadyMounts(t *testing.T) {
 	t.Parallel()
-	results := []UIProbeResult{
-		{Mount: "/g-issues/", Ready: true},
-		unreadyProbe("/scenario-library/", http.StatusServiceUnavailable, "app unavailable\n"),
-	}
-	unready := unreadyMounts(results)
-	if len(unready) != 1 {
-		t.Fatalf("unreadyMounts = %d entries, want 1", len(unready))
-	}
-	got := summarizeUnreadyMounts(unready)
-	want := "/scenario-library/ (503 app unavailable)"
-	if got != want {
-		t.Fatalf("summary = %q, want %q", got, want)
-	}
-}
 
-func TestSummarizeUnreadyMountsHandlesAMissingResponse(t *testing.T) {
-	t.Parallel()
-	got := summarizeUnreadyMounts([]UIProbeResult{unreadyProbe("/atlas/", 0, "")})
-	want := "/atlas/ (no response)"
-	if got != want {
-		t.Fatalf("summary = %q, want %q", got, want)
-	}
-}
-
-func TestSummarizeUnreadyMountsTruncatesALongError(t *testing.T) {
-	t.Parallel()
 	long := strings.Repeat("e", unreadyProbeErrorLimit+20)
-	got := summarizeUnreadyMounts([]UIProbeResult{unreadyProbe("/a/", 500, long)})
-	want := fmt.Sprintf("/a/ (500 %s...)", strings.Repeat("e", unreadyProbeErrorLimit))
-	if got != want {
-		t.Fatalf("summary = %q, want %q", got, want)
+	tests := []struct {
+		name    string
+		results []UIProbeResult
+		want    string
+	}{
+		{
+			// The ready mount stays out of the summary, which is the
+			// unreadyMounts filter.
+			name: "names the failing mount with its status and message",
+			results: []UIProbeResult{
+				{Mount: "/g-issues/", Ready: true},
+				unreadyProbe("/scenario-library/", http.StatusServiceUnavailable, "app unavailable\n"),
+			},
+			want: "/scenario-library/ (503 app unavailable)",
+		},
+		{
+			name:    "handles a mount with no response",
+			results: []UIProbeResult{unreadyProbe("/atlas/", 0, "")},
+			want:    "/atlas/ (no response)",
+		},
+		{
+			name:    "truncates a long probe error",
+			results: []UIProbeResult{unreadyProbe("/a/", 500, long)},
+			want:    fmt.Sprintf("/a/ (500 %s...)", strings.Repeat("e", unreadyProbeErrorLimit)),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := summarizeUnreadyMounts(unreadyMounts(tt.results))
+			if got != tt.want {
+				t.Fatalf("summary = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

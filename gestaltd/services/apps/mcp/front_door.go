@@ -338,15 +338,7 @@ func (h *StatelessHTTPHandler) callDescribe(ctx context.Context, req mcpgo.CallT
 	}), nil
 }
 
-func (h *StatelessHTTPHandler) callInvoke(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	return h.callInvokeWithReadOnlyPolicy(ctx, req, false)
-}
-
-func (h *StatelessHTTPHandler) callInvokeReadOnly(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	return h.callInvokeWithReadOnlyPolicy(ctx, req, true)
-}
-
-func (h *StatelessHTTPHandler) callInvokeWithReadOnlyPolicy(ctx context.Context, req mcpgo.CallToolRequest, requireReadOnly bool) (*mcpgo.CallToolResult, error) {
+func (h *StatelessHTTPHandler) callInvoke(ctx context.Context, req mcpgo.CallToolRequest, requireReadOnly bool) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 	app := stringArg(args, "app")
 	operation := stringArg(args, "operation")

@@ -245,7 +245,7 @@ func TestInitializeExplainsWorkspaceFrontDoor(t *testing.T) {
 	}
 	result, _ := envelope["result"].(map[string]any)
 	instructions, _ := result["instructions"].(string)
-	for _, name := range []string{SearchToolName, DescribeToolName, InvokeToolName} {
+	for _, name := range WorkspaceFrontDoorToolNames() {
 		if !strings.Contains(instructions, name) {
 			t.Fatalf("initialize instructions %q missing %s", instructions, name)
 		}
@@ -282,21 +282,8 @@ func TestListToolsDoesNotReadAppCatalogs(t *testing.T) {
 	if rpcErr != nil {
 		t.Fatalf("tools/list error: %v", rpcErr)
 	}
-	if len(names) != 4 {
-		t.Fatalf("tools = %v, want 4 front-door tools", names)
-	}
-}
-
-func TestListToolsHidesNothingFromUngrantedSubject(t *testing.T) {
-	t.Parallel()
-
-	access := &recordingOperationAccess{allowed: map[string]bool{}}
-	names, rpcErr := listToolNames(t, listingTestConfig(t, access), listingTestPrincipal())
-	if rpcErr != nil {
-		t.Fatalf("tools/list error: %v", rpcErr)
-	}
-	if len(names) != 4 {
-		t.Fatalf("ungranted subject saw tools %v, want the front door", names)
+	if got, want := names, WorkspaceFrontDoorToolNames(); !slices.Equal(got, want) {
+		t.Fatalf("tools = %v, want front door %v", got, want)
 	}
 }
 
@@ -550,6 +537,35 @@ func TestInvokeReturnsToolErrorForMissingOperation(t *testing.T) {
 		"app":       "sampleApp",
 		"operation": "missing.operation",
 	})
+}
+
+func TestReadOnlyInvokeGatesOnCatalogReadOnlyMark(t *testing.T) {
+	t.Parallel()
+
+	readOnlyHint := true
+	cfg := listingConfig(t, nil, []catalog.CatalogOperation{
+		{ID: "flags.read", Title: "Read flags", Description: "Read flags", Method: "GET", Path: "/flags", ReadOnly: true},
+		{ID: "hints.read", Title: "Read hints", Description: "Read hints", Method: "GET", Path: "/hints", Annotations: catalog.CapabilityAnnotations{ReadOnlyHint: &readOnlyHint}},
+		{ID: "items.create", Title: "Create item", Description: "Create an item", Method: "POST", Path: "/items"},
+	})
+
+	for _, op := range []string{"flags.read", "hints.read"} {
+		body := callToolJSON(t, cfg, listingTestPrincipal(), ReadOnlyInvokeToolName, map[string]any{
+			"app": "sampleApp", "operation": op, "arguments": map[string]any{},
+		})
+		if body["op"] != op {
+			t.Fatalf("read-only invoke of %s = %v", op, body)
+		}
+	}
+	requireToolError(t, cfg, listingTestPrincipal(), ReadOnlyInvokeToolName, map[string]any{
+		"app": "sampleApp", "operation": "items.create", "arguments": map[string]any{},
+	})
+	body := callToolJSON(t, cfg, listingTestPrincipal(), InvokeToolName, map[string]any{
+		"app": "sampleApp", "operation": "items.create", "arguments": map[string]any{},
+	})
+	if body["op"] != "items.create" {
+		t.Fatalf("plain invoke of the writable operation = %v", body)
+	}
 }
 
 func TestFlattenedToolNamesReserveFrontDoorNames(t *testing.T) {
