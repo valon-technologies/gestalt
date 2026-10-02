@@ -77,3 +77,34 @@ func TestManifestJSONSchemaAcceptsSupportedSpecFields(t *testing.T) {
 		t.Fatalf("manifest with supported spec fields failed schema validation: %v", err)
 	}
 }
+
+func TestManifestJSONSchemaAcceptsSurfaceTimeout(t *testing.T) {
+	t.Parallel()
+
+	var schemaDocument any
+	if err := json.Unmarshal(providermanifestv1.ManifestJSONSchema, &schemaDocument); err != nil {
+		t.Fatalf("decode embedded schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("manifest.schema.json", schemaDocument); err != nil {
+		t.Fatalf("add schema resource: %v", err)
+	}
+	schema, err := compiler.Compile("manifest.schema.json")
+	if err != nil {
+		t.Fatalf("compile embedded schema: %v", err)
+	}
+	for name, surfaces := range map[string]map[string]any{
+		"graphql": {"graphql": map[string]any{"url": "https://example.com/graphql", "timeout": "60s"}},
+		"openapi": {"openapi": map[string]any{"document": "openapi.json", "timeout": "30s"}},
+	} {
+		manifest := map[string]any{
+			"kind":    "app",
+			"source":  "github.com/acme/apps/example",
+			"version": "1.0.0",
+			"spec":    map[string]any{"surfaces": surfaces},
+		}
+		if err := schema.Validate(manifest); err != nil {
+			t.Errorf("%s surface with timeout failed schema validation: %v", name, err)
+		}
+	}
+}

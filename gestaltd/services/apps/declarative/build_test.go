@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -1139,5 +1140,51 @@ func TestBuildAuthMappingFromConfig(t *testing.T) {
 	}
 	if resp["app_key"] != "k2" {
 		t.Errorf("X-App-Key = %v, want k2", resp["app_key"])
+	}
+}
+
+func TestBuildHTTPTimeout(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	newDef := func() *Definition {
+		return &Definition{
+			Provider: "slow",
+			BaseURL:  srv.URL,
+			Auth:     AuthDef{Type: "manual"},
+			Operations: map[string]OperationDef{
+				"list": {Description: "List", Method: http.MethodGet, Path: "/list"},
+			},
+		}
+	}
+	tests := []struct {
+		name    string
+		opts    []BuildOption
+		wantErr bool
+	}{
+		{name: "short override times out", opts: []BuildOption{WithHTTPTimeout(50 * time.Millisecond)}, wantErr: true},
+		{name: "long override succeeds", opts: []BuildOption{WithHTTPTimeout(5 * time.Second)}},
+		{name: "unset keeps default", opts: nil},
+		{name: "non-positive keeps default", opts: []BuildOption{WithHTTPTimeout(0)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			prov, err := Build(newDef(), ConnectionDef{}, tt.opts...)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			_, err = prov.Execute(context.Background(), "list", nil, "")
+			if gotErr := err != nil; gotErr != tt.wantErr {
+				t.Fatalf("Execute error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

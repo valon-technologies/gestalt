@@ -5,6 +5,7 @@ import (
 	"maps"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -88,6 +89,28 @@ type ResolvedSpecSurface struct {
 	URL            string
 	ConnectionName string
 	Connection     ConnectionDef
+	// Timeout overrides the upstream request timeout for openapi and graphql
+	// surfaces. Zero means the surface builder's default applies.
+	Timeout time.Duration
+}
+
+const (
+	maxSurfaceTimeout = 5 * time.Minute
+)
+
+func parseSurfaceTimeout(surface SpecSurface, manifestApp *providermanifestv1.Spec) (time.Duration, error) {
+	raw := strings.TrimSpace(manifestApp.SurfaceTimeout(string(surface)))
+	if raw == "" {
+		return 0, nil
+	}
+	timeout, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s surface timeout %q is not a valid duration: %w", surface, raw, err)
+	}
+	if timeout <= 0 || timeout > maxSurfaceTimeout {
+		return 0, fmt.Errorf("%s surface timeout %q must be greater than 0 and at most %s", surface, raw, maxSurfaceTimeout)
+	}
+	return timeout, nil
 }
 
 func BuildStaticConnectionPlan(app *ProviderEntry, manifestApp *providermanifestv1.Spec) (StaticConnectionPlan, error) {
@@ -143,6 +166,11 @@ func BuildStaticConnectionPlan(app *ProviderEntry, manifestApp *providermanifest
 			return StaticConnectionPlan{}, fmt.Errorf("%s references undeclared connection %q", surface.ConnectionField(), resolved.ConnectionName)
 		}
 		resolved.Connection = conn.ConnectionDef()
+		timeout, err := parseSurfaceTimeout(surface, manifestApp)
+		if err != nil {
+			return StaticConnectionPlan{}, err
+		}
+		resolved.Timeout = timeout
 		plan.surfaces[surface] = resolved
 	}
 	if err := plan.validateConnectionModes(); err != nil {

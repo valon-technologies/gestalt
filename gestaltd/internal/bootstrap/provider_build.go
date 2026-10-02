@@ -1116,6 +1116,9 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved conf
 func buildConfiguredSpecProvider(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *declarative.Definition, error) {
 	var buildOpts []declarative.BuildOption
 	buildOpts = append(buildOpts, declarative.WithEgressCheck(deps.Egress.CheckFunc(cfg.allowedHosts)))
+	if resolved.Timeout > 0 {
+		buildOpts = append(buildOpts, declarative.WithHTTPTimeout(resolved.Timeout))
+	}
 	if cfg.providerBuildOptions != nil {
 		buildOpts = append(buildOpts, cfg.providerBuildOptions(resolved.Connection)...)
 	}

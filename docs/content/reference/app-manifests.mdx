@@ -148,6 +148,7 @@ Surfaces load operation catalogs from external specifications. They are configur
 | ------------ | ------ | --------------------------------------- |
 | `document`   | string | Path to a bundled OpenAPI document.     |
 | `connection` | string | Connection name used for OpenAPI calls. |
+| `timeout`    | string | Upstream request timeout as a Go duration, for example `60s`. Must be greater than 0 and at most `5m`. Defaults to `10s`. |
 
 #### `spec.surfaces.graphql`
 
@@ -155,6 +156,7 @@ Surfaces load operation catalogs from external specifications. They are configur
 | ------------ | ------ | --------------------------------------- |
 | `url`        | string | URL of the upstream GraphQL endpoint.   |
 | `connection` | string | Connection name used for GraphQL calls. |
+| `timeout`    | string | Upstream request timeout as a Go duration, for example `60s`. Must be greater than 0 and at most `5m`. Defaults to `10s`. |
 
 GraphQL surfaces expose a raw GraphQL passthrough immediately. When `allowedOperations` entries include GraphQL documents, Gestalt builds a static catalog from those documents without introspecting the upstream schema. GraphQL surfaces without document-backed operations still resolve generated catalogs lazily from the upstream schema when a real request runs under that surface's connection.
 

@@ -856,6 +856,11 @@
         "baseUrl": {
           "type": "string",
           "minLength": 1
+        },
+        "timeout": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Upstream request timeout as a Go duration (for example \"60s\"). Must be greater than 0 and at most 5m. Defaults to 10s."
         }
       }
     },
@@ -873,6 +878,11 @@
         "url": {
           "type": "string",
           "minLength": 1
+        },
+        "timeout": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Upstream request timeout as a Go duration (for example \"60s\"). Must be greater than 0 and at most 5m. Defaults to 10s."
         }
       }
     },

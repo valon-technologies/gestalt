@@ -19,9 +19,12 @@ import (
 // BuildOption configures optional aspects of provider construction.
 type BuildOption func(*buildOptions)
 
+const defaultHTTPTimeout = 10 * time.Second
+
 type buildOptions struct {
 	authOverride AuthHandler
 	egressCheck  func(string) error
+	httpTimeout  time.Duration
 }
 
 // WithAuthHandler injects a pre-built auth handler, bypassing buildAuth.
@@ -32,6 +35,12 @@ func WithAuthHandler(h AuthHandler) BuildOption {
 // WithEgressCheck injects a host-level egress check function.
 func WithEgressCheck(fn func(string) error) BuildOption {
 	return func(o *buildOptions) { o.egressCheck = fn }
+}
+
+// WithHTTPTimeout overrides the default upstream request timeout. Non-positive
+// values keep the default.
+func WithHTTPTimeout(d time.Duration) BuildOption {
+	return func(o *buildOptions) { o.httpTimeout = d }
 }
 
 // Build constructs a provider from a spec Definition and a ConnectionDef that
@@ -74,7 +83,11 @@ func Build(def *Definition, conn ConnectionDef, opts ...BuildOption) (core.Provi
 
 	baseURL := def.BaseURL
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	timeout := defaultHTTPTimeout
+	if bo.httpTimeout > 0 {
+		timeout = bo.httpTimeout
+	}
+	client := &http.Client{Timeout: timeout}
 
 	var auth AuthHandler
 	var err error

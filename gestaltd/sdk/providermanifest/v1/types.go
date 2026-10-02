@@ -610,6 +610,25 @@ func (s *Spec) GraphQLURL() string {
 	return s.Surfaces.GraphQL.URL
 }
 
+// SurfaceTimeout returns the raw upstream request timeout configured for an
+// openapi or graphql surface, or "" when none is set.
+func (s *Spec) SurfaceTimeout(surface string) string {
+	if s == nil || s.Surfaces == nil {
+		return ""
+	}
+	switch surface {
+	case "openapi":
+		if s.Surfaces.OpenAPI != nil {
+			return s.Surfaces.OpenAPI.Timeout
+		}
+	case "graphql":
+		if s.Surfaces.GraphQL != nil {
+			return s.Surfaces.GraphQL.Timeout
+		}
+	}
+	return ""
+}
+
 func (s *Spec) MCPURL() string {
 	if s == nil || s.Surfaces == nil || s.Surfaces.MCP == nil {
 		return ""
@@ -695,11 +714,13 @@ type OpenAPISurface struct {
 	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
 	Document   string `json:"document" yaml:"document"`
 	BaseURL    string `json:"baseUrl,omitempty" yaml:"baseUrl,omitempty"`
+	Timeout    string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 type GraphQLSurface struct {
 	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
 	URL        string `json:"url" yaml:"url"`
+	Timeout    string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 type MCPSurface struct {
