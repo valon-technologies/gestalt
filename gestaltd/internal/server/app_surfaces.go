@@ -38,10 +38,3 @@ func appSurfacesForPlugin(integration string, app *config.ProviderEntry) []appSu
 	}
 	return surfaces
 }
-
-func nonNilSurfaces(surfaces []appSurfaceInfo) []appSurfaceInfo {
-	if surfaces == nil {
-		return []appSurfaceInfo{}
-	}
-	return surfaces
-}
