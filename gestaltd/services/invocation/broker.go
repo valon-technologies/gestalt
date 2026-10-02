@@ -142,6 +142,7 @@ type Broker struct {
 	mcpMapper                     ConnectionMapper
 	connectionRuntime             ConnectionRuntimeResolver
 	appAccessProfiles             core.AppAccessProfileStore
+	operationHistory              core.OperationHistory
 	appOperationPolicies          core.AppOperationPolicyStore
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]ProviderKind
@@ -181,6 +182,12 @@ func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption
 // checked in the broker so every invocation surface shares the same decision.
 func WithAppAccessProfiles(store core.AppAccessProfileStore) BrokerOption {
 	return func(b *Broker) { b.appAccessProfiles = store }
+}
+
+// WithOperationHistory lets the broker convert legacy app access profiles
+// exactly. Without it, legacy allow-lists stay authoritative.
+func WithOperationHistory(history core.OperationHistory) BrokerOption {
+	return func(b *Broker) { b.operationHistory = history }
 }
 
 // WithAppOperationPolicies reads app-admin permissions at the shared request
@@ -1257,6 +1264,9 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 			}
 		}
 	}
+	if err := b.checkUnlistedSessionOperation(ctx, p, prov, providerName, operationID); err != nil {
+		return err
+	}
 	_, _, err := b.authorizeInvocation(ctx, p, prov, providerName, operation)
 	return err
 }
@@ -1297,7 +1307,29 @@ func (b *Broker) appAccessProfile(ctx context.Context, p *principal.Principal, p
 		}
 		return nil, err
 	}
-	return profile, nil
+	if !profile.Legacy {
+		return profile, nil
+	}
+	prov, err := b.providers.GetWithContext(ctx, providerName)
+	if err != nil || prov == nil {
+		return profile, nil
+	}
+	upgraded, err := UpgradeLegacyAppAccessProfile(ctx, b.operationHistory, prov, profile)
+	if err != nil {
+		b.log().WarnContext(ctx, "app access profile conversion failed; keeping legacy allow-list", "app", providerName, "error", err)
+	}
+	return upgraded, nil
+}
+
+// UpgradeLegacyAppAccessProfile is the read-time view of a legacy profile,
+// never persisted. Apps whose operations come from a session catalog are left
+// alone because the static catalog would silently drop decisions about them.
+// On error it returns the legacy profile, which only ever denies.
+func UpgradeLegacyAppAccessProfile(ctx context.Context, history core.OperationHistory, prov core.Provider, profile *core.AppAccessProfile) (*core.AppAccessProfile, error) {
+	if profile == nil || !profile.Legacy || prov == nil || core.SupportsSessionCatalog(prov) {
+		return profile, nil
+	}
+	return core.ResolveLegacyAppAccessProfile(ctx, history, profile, prov.Catalog(), core.AppAccessDefaultsFor(prov))
 }
 
 // appAccessCatalog returns what is needed to judge an app's operations against

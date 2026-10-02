@@ -368,6 +368,18 @@ func (p *managerServerAuthorizationProvider) CheckAccess(_ context.Context, req 
 	return &proto.CheckAccessResponse{Allowed: allowed}, nil
 }
 
+func (p *managerServerAuthorizationProvider) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	resp := &proto.CheckAccessManyResponse{}
+	for _, question := range req.GetRequests() {
+		decision, err := p.CheckAccess(ctx, question)
+		if err != nil {
+			return nil, err
+		}
+		resp.Decisions = append(resp.Decisions, decision)
+	}
+	return resp, nil
+}
+
 func (p *managerServerAuthorizationProvider) Requests() []*proto.CheckAccessRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()

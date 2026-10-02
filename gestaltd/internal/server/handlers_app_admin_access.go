@@ -69,6 +69,7 @@ func (s *Server) getAppAdminAccess(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, response)
 		return
 	}
+	profile = s.upgradeAppAccessProfile(r.Context(), prov, profile)
 	response.ProfileExists = true
 	response.DefaultsInitialized = profile.DefaultsInitialized
 	cat := prov.Catalog()

@@ -198,6 +198,7 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 					Provider:     provName,
 					Operation:    op.ID,
 					AllowedRoles: op.AllowedRoles,
+					Metadata:     &op,
 				},
 			})
 		}
@@ -318,6 +319,7 @@ func (h *StatelessHTTPHandler) callDescribe(ctx context.Context, req mcpgo.CallT
 		Provider:     app,
 		Operation:    operation,
 		AllowedRoles: op.AllowedRoles,
+		Metadata:     &op,
 	}})
 	if accessErr != nil {
 		return accessErr, nil

@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -74,6 +76,7 @@ func (s *Server) appAccessHandler(w http.ResponseWriter, r *http.Request) {
 			s.writeAppAccessError(w, err)
 			return
 		}
+		existing = s.upgradeAppAccessProfile(r.Context(), prov, existing)
 		keptDisabled, keptExtra := existing.OverridesOutside(cat)
 		disabled = mergeAppAccessIDs(disabled, keptDisabled)
 		extra = mergeAppAccessIDs(extra, keptExtra)
@@ -88,6 +91,17 @@ func (s *Server) appAccessHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+// upgradeAppAccessProfile resolves a stored profile the way the broker does, so
+// the page, the admin view and enforcement agree. Nothing is persisted. A
+// failed conversion leaves the legacy allow-list in force.
+func (s *Server) upgradeAppAccessProfile(ctx context.Context, prov core.Provider, profile *core.AppAccessProfile) *core.AppAccessProfile {
+	upgraded, err := invocation.UpgradeLegacyAppAccessProfile(ctx, s.operationHistory, prov, profile)
+	if err != nil {
+		slog.WarnContext(ctx, "app access profile conversion failed; keeping legacy allow-list", "app", prov.Name(), "error", err)
+	}
+	return upgraded
 }
 
 func mergeAppAccessIDs(a, b []string) []string {
@@ -111,8 +125,8 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 	if s.appAccessProfiles != nil {
 		stored, err := s.appAccessProfiles.GetAppAccessProfile(r.Context(), subjectID, app)
 		if err == nil {
-			profile = stored
-			initialized = stored.DefaultsInitialized
+			profile = s.upgradeAppAccessProfile(r.Context(), prov, stored)
+			initialized = profile.DefaultsInitialized
 		} else if !errors.Is(err, core.ErrNotFound) {
 			return nil, err
 		}
