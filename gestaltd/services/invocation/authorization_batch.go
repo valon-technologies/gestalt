@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -126,6 +127,8 @@ func (b *Broker) CheckOperationAccessMany(
 	type providerAccess struct {
 		policy          core.AppOperationPolicy
 		profile         *core.AppAccessProfile
+		defaults        core.AppAccessDefaults
+		operations      map[string]catalog.CatalogOperation
 		profileErr      error
 		delegatesRemote bool
 		resource        *proto.Resource
@@ -144,12 +147,17 @@ func (b *Broker) CheckOperationAccessMany(
 				return nil, err
 			}
 			access.profile, access.profileErr = b.appAccessProfile(ctx, p, query.Provider)
+			access.defaults, access.operations = b.appAccessCatalog(ctx, query.Provider)
 			access.delegatesRemote = b.providerDelegatesRemoteAuthorization(ctx, query.Provider)
 			accessByProvider[query.Provider] = access
 		}
 		roles, allowed := access.policy.Resolve(query.Operation, query.AllowedRoles)
 		results[i].AllowedRoles = roles
-		if !allowed || access.profileErr != nil || !appAccessProfileAllows(access.profile, query.Operation) {
+		operation, listed := access.operations[query.Operation]
+		if !listed {
+			operation = catalog.CatalogOperation{ID: query.Operation}
+		}
+		if !allowed || access.profileErr != nil || !access.profile.Allows(operation, access.defaults) {
 			results[i].Err = operationAccessDenied(query)
 			continue
 		}

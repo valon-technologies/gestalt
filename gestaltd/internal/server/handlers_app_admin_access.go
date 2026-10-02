@@ -71,15 +71,20 @@ func (s *Server) getAppAdminAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	response.ProfileExists = true
 	response.DefaultsInitialized = profile.DefaultsInitialized
-	response.EnabledOperations = append(response.EnabledOperations, profile.EnabledOperations...)
+	cat := prov.Catalog()
+	defaults := core.AppAccessDefaultsFor(prov)
+	response.EnabledOperations = append(response.EnabledOperations, profile.EnabledOperations(cat, defaults)...)
 	if !profile.UpdatedAt.IsZero() {
 		response.UpdatedAt = profile.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	// Every operation the record withholds, including the private ones the
 	// owner's own page never offers them.
-	for _, operation := range catOperations(prov.Catalog()) {
-		if !slices.Contains(profile.EnabledOperations, operation) {
-			response.DeniedOperations = append(response.DeniedOperations, operation)
+	if cat != nil {
+		for i := range cat.Operations {
+			operation := cat.Operations[i]
+			if !profile.Allows(operation, defaults) {
+				response.DeniedOperations = append(response.DeniedOperations, operation.ID)
+			}
 		}
 	}
 	slices.Sort(response.DeniedOperations)

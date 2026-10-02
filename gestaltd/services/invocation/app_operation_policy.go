@@ -40,7 +40,7 @@ func (b *Broker) authorizeInvocation(ctx context.Context, p *principal.Principal
 	// private operations is decided by the verified internal caller and the
 	// authorization checks below.
 	if !privateOperation(operation) {
-		if err := b.checkAppAccess(ctx, p, app, operation.ID); err != nil {
+		if err := b.checkAppAccess(ctx, p, prov, app, operation); err != nil {
 			return ctx, operation, err
 		}
 	}

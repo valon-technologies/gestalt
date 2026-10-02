@@ -41,9 +41,17 @@ func TestBrokerAppAccessProfileIsSharedByInvocationAndListing(t *testing.T) {
 		context.Background(),
 		principal.UserSubjectID(userID),
 		"slack",
-		[]string{"conversations.list"},
 	); err != nil {
 		t.Fatalf("EnsureAppAccessDefaults: %v", err)
+	}
+	if _, err := svc.AppAccessProfiles.SetAppAccessOverrides(
+		context.Background(),
+		principal.UserSubjectID(userID),
+		"slack",
+		[]string{"chat.postMessage"},
+		nil,
+	); err != nil {
+		t.Fatalf("SetAppAccessOverrides: %v", err)
 	}
 	p := &principal.Principal{
 		SubjectID: principal.UserSubjectID(userID),
@@ -76,6 +84,7 @@ func TestBrokerAppAccessProfileResolvesOpaqueSubjectToCanonicalUser(t *testing.T
 		ConnMode: core.ConnectionModeNone,
 		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
 			{ID: "conversations.list", Method: "GET"},
+			{ID: "chat.postMessage", Method: "POST"},
 		}},
 	}
 	broker := NewBroker(
@@ -84,13 +93,14 @@ func TestBrokerAppAccessProfileResolvesOpaqueSubjectToCanonicalUser(t *testing.T
 		nil,
 		WithAppAccessProfiles(svc.AppAccessProfiles),
 	)
-	if _, err := svc.AppAccessProfiles.EnsureAppAccessDefaults(
+	if _, err := svc.AppAccessProfiles.SetAppAccessOverrides(
 		context.Background(),
 		principal.UserSubjectID(user.ID),
 		"slack",
-		[]string{"conversations.list"},
+		[]string{"chat.postMessage"},
+		nil,
 	); err != nil {
-		t.Fatalf("EnsureAppAccessDefaults: %v", err)
+		t.Fatalf("SetAppAccessOverrides: %v", err)
 	}
 
 	p := &principal.Principal{
@@ -101,6 +111,9 @@ func TestBrokerAppAccessProfileResolvesOpaqueSubjectToCanonicalUser(t *testing.T
 	}
 	if err := broker.CheckOperationAccess(context.Background(), p, "slack", "conversations.list"); err != nil {
 		t.Fatalf("opaque subject access = %v, want allowed after canonicalization", err)
+	}
+	if err := broker.CheckOperationAccess(context.Background(), p, "slack", "chat.postMessage"); !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("opaque subject opted-out operation = %v, want ErrAuthorizationDenied after canonicalization", err)
 	}
 	withoutVerifiedIdentity := &principal.Principal{
 		SubjectID: principal.UserSubjectID("auth0|opaque-user"),
@@ -149,13 +162,14 @@ func TestBrokerAppAccessProfileCoversEveryInvocationMode(t *testing.T) {
 		nil,
 		WithAppAccessProfiles(svc.AppAccessProfiles),
 	)
-	if _, err := svc.AppAccessProfiles.EnsureAppAccessDefaults(
+	if _, err := svc.AppAccessProfiles.SetAppAccessOverrides(
 		context.Background(),
 		principal.UserSubjectID(userID),
 		"slack",
-		[]string{"allowed.operation"},
+		[]string{"chat.postMessage", "events.watch", core.GraphQLCapabilityID},
+		nil,
 	); err != nil {
-		t.Fatalf("EnsureAppAccessDefaults: %v", err)
+		t.Fatalf("SetAppAccessOverrides: %v", err)
 	}
 	p := &principal.Principal{
 		SubjectID: principal.UserSubjectID(userID),
@@ -207,13 +221,14 @@ func TestBrokerAppAccessProfileAllowsGraphQLCapability(t *testing.T) {
 		WithAppAccessProfiles(svc.AppAccessProfiles),
 	)
 	const userID = "4f1d2e3c-5b6a-47c8-9d0e-1f2a3b4c5d6e"
-	if _, err := svc.AppAccessProfiles.EnsureAppAccessDefaults(
+	if _, err := svc.AppAccessProfiles.SetAppAccessOverrides(
 		context.Background(),
 		principal.UserSubjectID(userID),
 		"slack",
-		[]string{core.GraphQLCapabilityID},
+		[]string{"conversations.list"},
+		nil,
 	); err != nil {
-		t.Fatalf("EnsureAppAccessDefaults: %v", err)
+		t.Fatalf("SetAppAccessOverrides: %v", err)
 	}
 	p := &principal.Principal{
 		SubjectID: principal.UserSubjectID(userID),
@@ -225,6 +240,9 @@ func TestBrokerAppAccessProfileAllowsGraphQLCapability(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("GraphQL provider was not called")
+	}
+	if err := broker.CheckOperationAccess(context.Background(), p, "slack", "conversations.list"); !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("opted-out operation access = %v, want ErrAuthorizationDenied", err)
 	}
 }
 
@@ -263,13 +281,14 @@ func TestBrokerAppAccessProfileDoesNotGatePrivateOperations(t *testing.T) {
 	)
 	const userID = "9a1c2d3e-4f5b-46c7-8d9e-0a1b2c3d4e5f"
 	// The profile a user can actually save: API-exposed operations only.
-	if _, err := svc.AppAccessProfiles.EnsureAppAccessDefaults(
+	if _, err := svc.AppAccessProfiles.SetAppAccessOverrides(
 		context.Background(),
 		principal.UserSubjectID(userID),
 		"front-porch",
-		[]string{"versions"},
+		[]string{"setVersion"},
+		nil,
 	); err != nil {
-		t.Fatalf("EnsureAppAccessDefaults: %v", err)
+		t.Fatalf("SetAppAccessOverrides: %v", err)
 	}
 	p := &principal.Principal{
 		SubjectID: principal.UserSubjectID(userID),
@@ -284,7 +303,7 @@ func TestBrokerAppAccessProfileDoesNotGatePrivateOperations(t *testing.T) {
 	if !executed["unsafeSetVersion"] {
 		t.Fatal("private operation did not reach the provider")
 	}
-	// An API-exposed operation the user left out of the profile stays denied.
+	// An API-exposed operation the user opted out of stays denied.
 	if _, err := broker.Invoke(ctx, p, "front-porch", "", "setVersion", nil); !errors.Is(err, ErrAuthorizationDenied) {
 		t.Fatalf("omitted public operation invoke = %v, want ErrAuthorizationDenied", err)
 	}

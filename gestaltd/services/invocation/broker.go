@@ -1261,15 +1261,15 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 	return err
 }
 
-func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, prov core.Provider, providerName string, operation catalog.CatalogOperation) error {
 	profile, err := b.appAccessProfile(ctx, p, providerName)
 	if err != nil {
-		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operation.ID, err)
 	}
-	if appAccessProfileAllows(profile, operationID) {
+	if profile.Allows(operation, core.AppAccessDefaultsFor(prov)) {
 		return nil
 	}
-	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
 }
 
 func (b *Broker) appAccessProfile(ctx context.Context, p *principal.Principal, providerName string) (*core.AppAccessProfile, error) {
@@ -1300,16 +1300,27 @@ func (b *Broker) appAccessProfile(ctx context.Context, p *principal.Principal, p
 	return profile, nil
 }
 
-func appAccessProfileAllows(profile *core.AppAccessProfile, operationID string) bool {
-	if profile == nil {
-		return true
+// appAccessCatalog returns what is needed to judge an app's operations against
+// a user's access profile: the app's defaults and its operations by id. An
+// operation the catalog does not list, such as the GraphQL capability, is
+// judged as default-on, like any operation with no visibility override.
+func (b *Broker) appAccessCatalog(ctx context.Context, providerName string) (core.AppAccessDefaults, map[string]catalog.CatalogOperation) {
+	if b == nil || b.providers == nil {
+		return core.AppAccessDefaults{}, nil
 	}
-	for _, enabled := range profile.EnabledOperations {
-		if strings.TrimSpace(enabled) == strings.TrimSpace(operationID) {
-			return true
-		}
+	prov, err := b.providers.GetWithContext(ctx, providerName)
+	if err != nil || prov == nil {
+		return core.AppAccessDefaults{}, nil
 	}
-	return false
+	cat := prov.Catalog()
+	if cat == nil {
+		return core.AppAccessDefaultsFor(prov), nil
+	}
+	operations := make(map[string]catalog.CatalogOperation, len(cat.Operations))
+	for i := range cat.Operations {
+		operations[cat.Operations[i].ID] = cat.Operations[i]
+	}
+	return core.AppAccessDefaultsFor(prov), operations
 }
 
 func legacyAppAccessSubjectID(p *principal.Principal) string {
