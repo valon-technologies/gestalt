@@ -1313,11 +1313,17 @@ func (b *Broker) appAccessProfile(ctx context.Context, p *principal.Principal, p
 	if !profile.Legacy {
 		return profile, nil
 	}
+	return b.resolveLegacyProfile(ctx, providerName, profile), nil
+}
+
+// resolveLegacyProfile keeps the stored legacy profile when its provider is
+// unavailable, so the caller still enforces the opt-in list.
+func (b *Broker) resolveLegacyProfile(ctx context.Context, providerName string, profile *core.AppAccessProfile) *core.AppAccessProfile {
 	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil || prov == nil {
-		return profile, nil
+		return profile
 	}
-	return b.appAccess.Resolve(ctx, prov, profile), nil
+	return b.appAccess.Resolve(ctx, prov, profile)
 }
 
 // ResolveAppAccessProfile reads a stored profile the way enforcement does.

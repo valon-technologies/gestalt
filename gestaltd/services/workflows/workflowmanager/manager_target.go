@@ -345,8 +345,8 @@ func (m *Manager) resolvedOperation(ctx context.Context, p *principal.Principal,
 	if m == nil || m.providers == nil {
 		return nil, nil
 	}
-	prov, err := m.providers.GetWithContext(ctx, call.Name)
-	if err != nil || prov == nil {
+	prov := m.lookupProvider(ctx, call.Name)
+	if prov == nil {
 		return nil, nil
 	}
 	var resolver invocation.TokenResolver
@@ -356,13 +356,13 @@ func (m *Manager) resolvedOperation(ctx context.Context, p *principal.Principal,
 	connection := core.ResolveConnectionAlias(strings.TrimSpace(call.Connection))
 	sessionConnections := m.catalogSelectorConfig().SessionCatalogConnections(call.Name, connection)
 	op, _, _, err := invocation.ResolveOperation(ctx, prov, call.Name, resolver, p, call.Operation, sessionConnections, strings.TrimSpace(call.Instance))
-	if err != nil {
-		if core.SupportsSessionCatalog(prov) {
-			return nil, err
-		}
-		return nil, nil
+	if err == nil {
+		return &op, nil
 	}
-	return &op, nil
+	if core.SupportsSessionCatalog(prov) {
+		return nil, err
+	}
+	return nil, nil
 }
 
 func (m *Manager) checkProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
@@ -509,4 +509,14 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 		}
 	}
 	return nil
+}
+
+// lookupProvider returns nil when the app cannot be loaded, leaving the
+// caller on the static catalog decision.
+func (m *Manager) lookupProvider(ctx context.Context, name string) core.Provider {
+	prov, err := m.providers.GetWithContext(ctx, name)
+	if err != nil {
+		return nil
+	}
+	return prov
 }

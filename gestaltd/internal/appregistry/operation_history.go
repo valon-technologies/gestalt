@@ -88,8 +88,8 @@ func (h *OperationHistory) OperationsAt(ctx context.Context, app string, at time
 	if !ok {
 		return nil, false, nil
 	}
-	publicRoot, err := registry.PublicURL()
-	if err != nil {
+	publicRoot, ok := registryPublicRoot(registry)
+	if !ok {
 		return nil, false, nil
 	}
 
@@ -178,4 +178,11 @@ func (h *OperationHistory) changeRequests(ctx context.Context, app string) ([]*c
 	}
 	h.requests.put(app, changeList{requests: requests, err: err}, ttl)
 	return requests, err
+}
+
+// registryPublicRoot reports false for a registry without a usable public URL,
+// which leaves its history unknown rather than failing the caller.
+func registryPublicRoot(registry config.AppRegistryConfig) (string, bool) {
+	root, err := registry.PublicURL()
+	return root, err == nil
 }

@@ -133,6 +133,7 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 	boom := errors.New("boom")
 
 	t.Run("converts using history and ignores whitespace", func(t *testing.T) {
+		t.Parallel()
 		legacy := legacyProfile()
 		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: existed, known: true}, legacy, cat, AppAccessDefaults{})
 		if err != nil || got.Legacy {
@@ -149,6 +150,7 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 		}
 	})
 	t.Run("carries enabled ids outside the catalog", func(t *testing.T) {
+		t.Parallel()
 		legacy := &AppAccessProfile{Legacy: true, LegacyEnabledOperations: []string{"kept", "retired"}}
 		got := ConvertLegacyAppAccessProfile(legacy, cat, AppAccessDefaults{}, []string{"kept"})
 		if !slices.Equal(got.ExtraOperations, []string{"retired"}) {
@@ -156,12 +158,14 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 		}
 	})
 	t.Run("graphql absent from the list becomes an opt-out", func(t *testing.T) {
+		t.Parallel()
 		got := ConvertLegacyAppAccessProfile(legacyProfile(), cat, AppAccessDefaults{}, existed)
 		if got.Allows(accessOp(GraphQLCapabilityID, nil), AppAccessDefaults{}) || !slices.Contains(got.DisabledOperations, GraphQLCapabilityID) {
 			t.Fatalf("graphql must stay denied, got %#v", got)
 		}
 	})
 	t.Run("graphql in the list needs no decision", func(t *testing.T) {
+		t.Parallel()
 		legacy := &AppAccessProfile{Legacy: true, LegacyEnabledOperations: []string{"kept", GraphQLCapabilityID}}
 		got := ConvertLegacyAppAccessProfile(legacy, cat, AppAccessDefaults{}, existed)
 		if slices.Contains(got.DisabledOperations, GraphQLCapabilityID) || !got.Allows(accessOp(GraphQLCapabilityID, nil), AppAccessDefaults{}) {
@@ -169,6 +173,7 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 		}
 	})
 	t.Run("history missing an enabled catalog operation keeps legacy", func(t *testing.T) {
+		t.Parallel()
 		legacy := legacyProfile()
 		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: []string{"kept", "dropped"}, known: true}, legacy, cat, AppAccessDefaults{})
 		if err != nil || got != legacy {
@@ -176,6 +181,7 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 		}
 	})
 	t.Run("unknown history keeps legacy", func(t *testing.T) {
+		t.Parallel()
 		legacy := legacyProfile()
 		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{}, legacy, cat, AppAccessDefaults{})
 		if err != nil || got != legacy {
@@ -183,6 +189,7 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 		}
 	})
 	t.Run("history error keeps legacy and reports it", func(t *testing.T) {
+		t.Parallel()
 		legacy := legacyProfile()
 		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{known: true, err: boom}, legacy, cat, AppAccessDefaults{})
 		if !errors.Is(err, boom) || got != legacy {
@@ -190,6 +197,7 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 		}
 	})
 	t.Run("nil history or catalog keeps legacy", func(t *testing.T) {
+		t.Parallel()
 		legacy := legacyProfile()
 		if got, _, err := ResolveLegacyAppAccessProfile(context.Background(), nil, legacy, cat, AppAccessDefaults{}); err != nil || got != legacy {
 			t.Fatalf("nil history: got %#v err=%v", got, err)
@@ -199,6 +207,7 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 		}
 	})
 	t.Run("current profile untouched", func(t *testing.T) {
+		t.Parallel()
 		current := &AppAccessProfile{App: "app", DisabledOperations: []string{"dropped"}}
 		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: existed, known: true}, current, cat, AppAccessDefaults{})
 		if err != nil || got != current {

@@ -73,6 +73,8 @@ func registryApps() map[string]*config.ProviderEntry {
 }
 
 func TestOperationHistoryResolvesVersionLiveAtTime(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	changes := fakeChanges{requests: []*core.AppVersionChangeRequest{
 		changeTo("1.0.0", base),
@@ -96,6 +98,7 @@ func TestOperationHistoryResolvesVersionLiveAtTime(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ids, known, err := h.OperationsAt(context.Background(), historyApp, tc.at)
 			if err != nil || !known || !slices.Equal(ids, tc.want) {
 				t.Fatalf("got %v known=%v err=%v, want %v", ids, known, err, tc.want)
@@ -105,6 +108,8 @@ func TestOperationHistoryResolvesVersionLiveAtTime(t *testing.T) {
 }
 
 func TestOperationHistoryUnknownCases(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	live := fakeChanges{requests: []*core.AppVersionChangeRequest{changeTo("1.0.0", base)}}
 	cases := []struct {
@@ -123,6 +128,7 @@ func TestOperationHistoryUnknownCases(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			fetcher := &fakeFetcher{entries: map[string]*Entry{"1.0.0": tc.entry}}
 			h := newHistory(t, fetcher, tc.changes, tc.apps)
 			ids, known, err := h.OperationsAt(context.Background(), historyApp, tc.at)
@@ -134,17 +140,21 @@ func TestOperationHistoryUnknownCases(t *testing.T) {
 }
 
 func TestOperationHistoryReturnsErrors(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	live := fakeChanges{requests: []*core.AppVersionChangeRequest{changeTo("1.0.0", base)}}
 	boom := errors.New("boom")
 
 	t.Run("fetch", func(t *testing.T) {
+		t.Parallel()
 		h := newHistory(t, &fakeFetcher{err: boom}, live, registryApps())
 		if _, known, err := h.OperationsAt(context.Background(), historyApp, base.Add(time.Hour)); !errors.Is(err, boom) || known {
 			t.Fatalf("known=%v err=%v, want fetch error", known, err)
 		}
 	})
 	t.Run("list", func(t *testing.T) {
+		t.Parallel()
 		h := newHistory(t, &fakeFetcher{}, fakeChanges{err: boom}, registryApps())
 		if _, known, err := h.OperationsAt(context.Background(), historyApp, base.Add(time.Hour)); !errors.Is(err, boom) || known {
 			t.Fatalf("known=%v err=%v, want list error", known, err)
@@ -153,6 +163,8 @@ func TestOperationHistoryReturnsErrors(t *testing.T) {
 }
 
 func TestOperationHistoryCachesPerVersion(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	changes := fakeChanges{requests: []*core.AppVersionChangeRequest{
 		changeTo("1.0.0", base),
@@ -193,6 +205,8 @@ type testClock struct{ now time.Time }
 func (c *testClock) Now() time.Time { return c.now }
 
 func TestOperationHistoryUsesEarliestFromVersionBeforeRecordedHistory(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	first := changeTo("2.0.0", base)
 	first.FromVersion = "1.0.0"
@@ -206,6 +220,8 @@ func TestOperationHistoryUsesEarliestFromVersionBeforeRecordedHistory(t *testing
 }
 
 func TestOperationHistoryUnknownSaveTimeIsUnknown(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	first := changeTo("2.0.0", base)
 	first.FromVersion = "1.0.0"
@@ -219,6 +235,8 @@ func TestOperationHistoryUnknownSaveTimeIsUnknown(t *testing.T) {
 }
 
 func TestOperationHistoryUsesVersionRequestedByTheSaveTime(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	next := base.Add(24 * time.Hour)
 	changes := fakeChanges{requests: []*core.AppVersionChangeRequest{changeTo("1.0.0", base), changeTo("2.0.0", next)}}
@@ -235,6 +253,7 @@ func TestOperationHistoryUsesVersionRequestedByTheSaveTime(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ids, known, err := h.OperationsAt(context.Background(), historyApp, tc.at)
 			if err != nil || !known || !slices.Equal(ids, tc.want) {
 				t.Fatalf("got %v known=%v err=%v, want %v", ids, known, err, tc.want)
@@ -244,6 +263,8 @@ func TestOperationHistoryUsesVersionRequestedByTheSaveTime(t *testing.T) {
 }
 
 func TestOperationHistoryCachesChangeRequestsWithTTL(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	changes := &countingChanges{requests: []*core.AppVersionChangeRequest{changeTo("1.0.0", base)}}
 	h := newHistory(t, &fakeFetcher{entries: map[string]*Entry{"1.0.0": entryWithOps("read")}}, changes, registryApps())
@@ -269,10 +290,13 @@ func TestOperationHistoryCachesChangeRequestsWithTTL(t *testing.T) {
 }
 
 func TestOperationHistoryNegativeCachesFailures(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	boom := errors.New("boom")
 
 	t.Run("list error", func(t *testing.T) {
+		t.Parallel()
 		changes := &countingChanges{err: boom}
 		h := newHistory(t, &fakeFetcher{}, changes, registryApps())
 		clock := &testClock{now: base}
@@ -293,6 +317,7 @@ func TestOperationHistoryNegativeCachesFailures(t *testing.T) {
 	})
 
 	t.Run("fetch error", func(t *testing.T) {
+		t.Parallel()
 		fetcher := &fakeFetcher{err: boom}
 		live := fakeChanges{requests: []*core.AppVersionChangeRequest{changeTo("1.0.0", base)}}
 		h := newHistory(t, fetcher, live, registryApps())
@@ -315,6 +340,8 @@ func TestOperationHistoryNegativeCachesFailures(t *testing.T) {
 }
 
 func TestOperationHistoryRequestTimestampBoundaries(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	later := base.Add(24 * time.Hour)
 	entries := map[string]*Entry{"1.0.0": entryWithOps("read"), "2.0.0": entryWithOps("read", "write"), "3.0.0": entryWithOps("admin")}
@@ -356,6 +383,7 @@ func TestOperationHistoryRequestTimestampBoundaries(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			h := newHistory(t, &fakeFetcher{entries: entries}, fakeChanges{requests: tc.requests}, registryApps())
 			ids, known, err := h.OperationsAt(context.Background(), historyApp, tc.at)
 			if err != nil || !known || !slices.Equal(ids, tc.want) {
@@ -366,6 +394,8 @@ func TestOperationHistoryRequestTimestampBoundaries(t *testing.T) {
 }
 
 func TestOperationHistoryReadsRealChangeRequestService(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	services := testutil.NewStubServices(t)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -398,6 +428,7 @@ func TestOperationHistoryReadsRealChangeRequestService(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ids, known, err := h.OperationsAt(ctx, historyApp, tc.at)
 			if err != nil || !known || !slices.Equal(ids, tc.want) {
 				t.Fatalf("got %v known=%v err=%v, want %v", ids, known, err, tc.want)
