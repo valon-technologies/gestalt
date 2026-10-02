@@ -22,14 +22,15 @@ import (
 // tools/list to finish before they mark the server connected, so this set is
 // static and does not walk app catalogs.
 const (
-	SearchToolName   = "gestalt_search"
-	DescribeToolName = "gestalt_describe"
-	InvokeToolName   = "gestalt_invoke"
+	SearchToolName         = "gestalt_search"
+	DescribeToolName       = "gestalt_describe"
+	InvokeToolName         = "gestalt_invoke"
+	ReadOnlyInvokeToolName = "gestalt_invoke_read_only"
 )
 
 // workspaceFrontDoorInstructions is returned on initialize so hosts do not
-// treat the three handshake tools as an inventory of app operations.
-const workspaceFrontDoorInstructions = "tools/list is the connect handshake: gestalt_search, gestalt_describe, and gestalt_invoke. Search to find operations you may use, describe for one operation's schema, then invoke with app, operation, and arguments. App operations are not listed; these three names are reserved for the workspace front door."
+// treat the handshake tools as an inventory of app operations.
+const workspaceFrontDoorInstructions = "tools/list is the connect handshake: gestalt_search, gestalt_describe, gestalt_invoke, and gestalt_invoke_read_only. Search to find operations you may use and describe for an operation's schema. Use gestalt_invoke for any authorized operation; gestalt_invoke_read_only accepts only operations with readOnly: true or annotations.readOnlyHint: true in the app catalog. App operations are not listed; these names are reserved for the workspace front door."
 
 const (
 	defaultSearchLimit = 20
@@ -80,14 +81,17 @@ var (
 )
 
 func WorkspaceFrontDoorToolNames() []string {
-	return []string{DescribeToolName, InvokeToolName, SearchToolName}
+	return []string{DescribeToolName, InvokeToolName, ReadOnlyInvokeToolName, SearchToolName}
 }
 
 func workspaceFrontDoorTools() []mcpgo.Tool {
+	readOnlyInvoke := mcpgo.NewToolWithRawSchema(ReadOnlyInvokeToolName, "Invoke a workspace app operation only when its catalog marks it read-only. Pass app, operation, and arguments.", invokeToolSchema)
+	readOnlyInvoke.Annotations.ReadOnlyHint = mcpgo.ToBoolPtr(true)
 	return []mcpgo.Tool{
 		mcpgo.NewToolWithRawSchema(DescribeToolName, "Return one workspace operation's schema. Use this before gestalt_invoke when you need argument names.", describeToolSchema),
 		mcpgo.NewToolWithRawSchema(InvokeToolName, "Invoke a workspace app operation. Pass app, operation, and arguments. Authorization is enforced on this call.", invokeToolSchema),
-		mcpgo.NewToolWithRawSchema(SearchToolName, "Search workspace apps and operations the caller may use. Pass query, app, or both. Then call gestalt_describe or gestalt_invoke.", searchToolSchema),
+		readOnlyInvoke,
+		mcpgo.NewToolWithRawSchema(SearchToolName, "Search workspace apps and operations the caller may use. Pass query, app, or both. Then call gestalt_describe, gestalt_invoke, or gestalt_invoke_read_only.", searchToolSchema),
 	}
 }
 
@@ -333,6 +337,14 @@ func (h *StatelessHTTPHandler) callDescribe(ctx context.Context, req mcpgo.CallT
 }
 
 func (h *StatelessHTTPHandler) callInvoke(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	return h.callInvokeWithReadOnlyPolicy(ctx, req, false)
+}
+
+func (h *StatelessHTTPHandler) callInvokeReadOnly(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	return h.callInvokeWithReadOnlyPolicy(ctx, req, true)
+}
+
+func (h *StatelessHTTPHandler) callInvokeWithReadOnlyPolicy(ctx context.Context, req mcpgo.CallToolRequest, requireReadOnly bool) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 	app := stringArg(args, "app")
 	operation := stringArg(args, "operation")
@@ -350,7 +362,7 @@ func (h *StatelessHTTPHandler) callInvoke(ctx context.Context, req mcpgo.CallToo
 	}
 	inner := req
 	inner.Params.Arguments = nested
-	result, err := h.callResolvedAppTool(ctx, inner, statelessToolRef{provider: app, operation: operation})
+	result, err := h.callResolvedAppTool(ctx, inner, statelessToolRef{provider: app, operation: operation}, requireReadOnly)
 	if errors.Is(err, core.ErrNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
 		return mcpgo.NewToolResultError(err.Error()), nil
 	}
