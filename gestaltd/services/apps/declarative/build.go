@@ -8,12 +8,12 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 // BuildOption configures optional aspects of provider construction.
@@ -74,7 +74,7 @@ func Build(def *Definition, conn ConnectionDef, opts ...BuildOption) (core.Provi
 
 	baseURL := def.BaseURL
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: runtimehost.ProviderRPCTimeout}
 
 	var auth AuthHandler
 	var err error

@@ -6,7 +6,6 @@ import (
 	"maps"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -14,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/paraminterp"
 	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 var (
@@ -153,7 +153,7 @@ func (b *Base) httpClient() *http.Client {
 	if b.HTTPClient != nil {
 		return b.HTTPClient
 	}
-	return &http.Client{Timeout: 10 * time.Second}
+	return &http.Client{Timeout: runtimehost.ProviderRPCTimeout}
 }
 
 func (b *Base) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
