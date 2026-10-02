@@ -3,8 +3,8 @@ package server_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -44,10 +44,7 @@ func TestRosterAdminSeesRosterMemberIdentity(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
-	member, err := services.Users.FindOrCreateUserWithName(context.Background(), "bob@valon.com", "Bob Builder")
-	if err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
+	member := seedUserWithName(t, services, "bob@valon.com", "Bob Builder")
 	memberSubject := principal.UserSubjectID(member.ID)
 	memberEmailSubject := principal.UserSubjectID(member.Email)
 	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
@@ -86,21 +83,7 @@ func TestRosterAdminSeesRosterMemberIdentity(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			request, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
-			request.Header.Set("Authorization", "Bearer admin-token")
-			response, err := http.DefaultClient.Do(request)
-			if err != nil {
-				t.Fatalf("GET %s: %v", path, err)
-			}
-			defer func() { _ = response.Body.Close() }()
-			if response.StatusCode != http.StatusOK {
-				body, _ := io.ReadAll(response.Body)
-				t.Fatalf("GET %s status = %d: %s", path, response.StatusCode, body)
-			}
-			var rows []memberIdentityRow
-			if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
-				t.Fatalf("decode members: %v", err)
-			}
+			rows := getMembers(t, ts, path, "Bearer admin-token")
 			got := memberIdentityFor(t, rows, memberSubject)
 			if got.Email != "bob@valon.com" || got.DisplayName != "Bob Builder" {
 				t.Fatalf("member identity = %#v, want bob@valon.com / Bob Builder", got)
@@ -116,21 +99,7 @@ func TestRosterAdminSeesRosterMemberIdentity(t *testing.T) {
 
 	t.Run("group lister sees roster identity", func(t *testing.T) {
 		t.Parallel()
-		request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/groups/"+groupID+"/admin/members", nil)
-		request.Header.Set("Authorization", "Bearer lister-token")
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			t.Fatalf("GET group members as lister: %v", err)
-		}
-		defer func() { _ = response.Body.Close() }()
-		if response.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(response.Body)
-			t.Fatalf("GET group members as lister status = %d: %s", response.StatusCode, body)
-		}
-		var rows []memberIdentityRow
-		if err := json.NewDecoder(response.Body).Decode(&rows); err != nil {
-			t.Fatalf("decode group members as lister: %v", err)
-		}
+		rows := getMembers(t, ts, "/api/v1/groups/"+groupID+"/admin/members", "Bearer lister-token")
 		got := memberIdentityFor(t, rows, memberSubject)
 		if got.Email != "bob@valon.com" || got.DisplayName != "Bob Builder" {
 			t.Fatalf("group lister identity = %#v, want bob@valon.com / Bob Builder", got)
@@ -186,23 +155,13 @@ func registryDeployedBy(
 		t.Fatalf("AppendRequest: %v", err)
 	}
 
-	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/registry/history", nil)
-	request.Header.Set("Authorization", "Bearer admin-token")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("GET history: %v", err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET history status = %d: %s", response.StatusCode, body)
-	}
+	body := getJSONPath(t, ts, "/api/v1/apps/g-issues/admin/registry/history", http.StatusOK, "Bearer admin-token")
 	var history struct {
 		Revisions []struct {
 			DeployedBy string `json:"deployedBy"`
 		} `json:"revisions"`
 	}
-	if err := json.NewDecoder(response.Body).Decode(&history); err != nil {
+	if err := json.Unmarshal(body, &history); err != nil {
 		t.Fatalf("decode history: %v", err)
 	}
 	if len(history.Revisions) != 1 {
@@ -266,35 +225,18 @@ func TestUserLookupDeniesWhenModelDeclaresNoMatchingAction(t *testing.T) {
 	}
 }
 
-func getMembers(t *testing.T, url, token string) []memberIdentityRow {
+// getMembers fetches a member roster in either response shape: a bare array
+// (app and group members) or the wrapped {members: [...]} envelope.
+func getMembers(t *testing.T, ts *httptest.Server, path, authorization string) []memberIdentityRow {
 	t.Helper()
-	request, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	if token != "" {
-		request.Header.Set("Authorization", "Bearer "+token)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("GET %s: %v", url, err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET %s status = %d: %s", url, response.StatusCode, body)
-	}
-	var payload json.RawMessage
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode %s: %v", url, err)
-	}
+	payload := getJSONPath(t, ts, path, http.StatusOK, authorization)
 	var rows []memberIdentityRow
 	if err := json.Unmarshal(payload, &rows); err != nil {
 		var wrapped struct {
 			Members []memberIdentityRow `json:"members"`
 		}
 		if err := json.Unmarshal(payload, &wrapped); err != nil {
-			t.Fatalf("decode members from %s: %v", url, err)
+			t.Fatalf("decode members from %s: %v", path, err)
 		}
 		rows = wrapped.Members
 	}
@@ -307,10 +249,7 @@ func TestGroupRosterIdentityFollowsTheGroupTheCallerAdministers(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
-	member, err := services.Users.FindOrCreateUserWithName(context.Background(), "bob@valon.com", "Bob Builder")
-	if err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
+	member := seedUserWithName(t, services, "bob@valon.com", "Bob Builder")
 	memberSubject := principal.UserSubjectID(member.ID)
 	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
 	const ownGroup, otherGroup = "own-group", "other-group"
@@ -327,11 +266,11 @@ func TestGroupRosterIdentityFollowsTheGroupTheCallerAdministers(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	own := memberIdentityFor(t, getMembers(t, ts.URL+"/api/v1/groups/"+ownGroup+"/admin/members", "admin-token"), memberSubject)
+	own := memberIdentityFor(t, getMembers(t, ts, "/api/v1/groups/"+ownGroup+"/admin/members", "Bearer admin-token"), memberSubject)
 	if own.Email != "bob@valon.com" || own.DisplayName != "Bob Builder" {
 		t.Fatalf("own group identity = %#v, want bob@valon.com / Bob Builder", own)
 	}
-	other := memberIdentityFor(t, getMembers(t, ts.URL+"/api/v1/groups/"+otherGroup+"/admin/members", "admin-token"), memberSubject)
+	other := memberIdentityFor(t, getMembers(t, ts, "/api/v1/groups/"+otherGroup+"/admin/members", "Bearer admin-token"), memberSubject)
 	if other.Email != "" || other.DisplayName != "" {
 		t.Fatalf("other group identity leaked to an admin of a different group: %#v", other)
 	}
@@ -343,10 +282,7 @@ func TestOperatorResolvesEmailSubjectsOnARoster(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
-	member, err := services.Users.FindOrCreateUserWithName(context.Background(), "bob@valon.com", "Bob Builder")
-	if err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
+	member := seedUserWithName(t, services, "bob@valon.com", "Bob Builder")
 	emailSubject := principal.UserSubjectID(member.Email)
 	adminSubject := principal.UserSubjectID(testCanonicalAdminUserID)
 
@@ -363,7 +299,7 @@ func TestOperatorResolvesEmailSubjectsOnARoster(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	got := memberIdentityFor(t, getMembers(t, ts.URL+"/api/v1/apps/g-issues/admin/members", "admin-token"), emailSubject)
+	got := memberIdentityFor(t, getMembers(t, ts, "/api/v1/apps/g-issues/admin/members", "Bearer admin-token"), emailSubject)
 	if got.Email != "bob@valon.com" || got.DisplayName != "Bob Builder" {
 		t.Fatalf("operator identity = %#v, want bob@valon.com / Bob Builder", got)
 	}
@@ -375,10 +311,7 @@ func TestPlatformAdminRosterShowsMemberIdentity(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
-	member, err := services.Users.FindOrCreateUserWithName(context.Background(), "bob@valon.com", "Bob Builder")
-	if err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
+	member := seedUserWithName(t, services, "bob@valon.com", "Bob Builder")
 	memberSubject := principal.UserSubjectID(member.ID)
 	authz := &serverTestAuthorizationProvider{relationships: []*proto.Relationship{
 		testAuthorizationRelationship(memberSubject, "admin", "gestalt", "gestalt"),
@@ -389,7 +322,7 @@ func TestPlatformAdminRosterShowsMemberIdentity(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	got := memberIdentityFor(t, getMembers(t, ts.URL+"/admin/api/v1/platform-admins", ""), memberSubject)
+	got := memberIdentityFor(t, getMembers(t, ts, "/admin/api/v1/platform-admins", ""), memberSubject)
 	if got.Email != "bob@valon.com" || got.DisplayName != "Bob Builder" {
 		t.Fatalf("platform admin identity = %#v, want bob@valon.com / Bob Builder", got)
 	}

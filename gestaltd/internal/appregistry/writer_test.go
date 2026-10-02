@@ -370,7 +370,7 @@ func TestGcloudPreconditionFailed(t *testing.T) {
 	}
 }
 
-func TestGcloudObjectNotFound(t *testing.T) {
+func TestObjectNotFound(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -385,29 +385,15 @@ func TestGcloudObjectNotFound(t *testing.T) {
 		// whenever a catalog row outlives the object it names.
 		{name: "rm matched no objects", err: errors.New("ERROR: (gcloud.storage.rm) The following URLs matched no objects or files:\ngs://bucket/apps/home/versions/0.0.0-snapshot.g219c9fcc.json"), want: true},
 		{name: "other", err: errors.New("permission denied"), want: false},
+		{name: "nil", err: nil, want: false},
 	}
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := gcloudObjectNotFound(tc.err); got != tc.want {
-				t.Fatalf("gcloudObjectNotFound(%q) = %v, want %v", tc.err, got, tc.want)
+			if got := ObjectNotFound(tc.err); got != tc.want {
+				t.Fatalf("ObjectNotFound(%q) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
-	}
-}
-
-func TestObjectNotFoundIsExportedForCallersOutsideThePackage(t *testing.T) {
-	t.Parallel()
-
-	rmMissing := errors.New("ERROR: (gcloud.storage.rm) The following URLs matched no objects or files:")
-	if !ObjectNotFound(rmMissing) {
-		t.Fatal("ObjectNotFound does not recognize a missing rm target")
-	}
-	if ObjectNotFound(errors.New("permission denied")) {
-		t.Fatal("ObjectNotFound treats a permission error as a missing object")
-	}
-	if ObjectNotFound(nil) {
-		t.Fatal("ObjectNotFound treats nil as a missing object")
 	}
 }

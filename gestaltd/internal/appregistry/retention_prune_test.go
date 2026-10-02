@@ -56,7 +56,11 @@ func TestApplyRetentionPruneActionLeavesDecodableIndex(t *testing.T) {
 	if _, ok := prunedToEmpty.Apps["g-issues"]; ok {
 		t.Fatal("expected the pruned-to-empty app entry to be removed from the index")
 	}
-	if _, err := appregistry.DecodeIndex(mustMarshal(t, prunedToEmpty)); err != nil {
+	data, err := json.Marshal(prunedToEmpty)
+	if err != nil {
+		t.Fatalf("marshal index: %v", err)
+	}
+	if _, err := appregistry.DecodeIndex(data); err != nil {
 		t.Fatalf("pruned index no longer decodes: %v", err)
 	}
 
@@ -77,15 +81,6 @@ func TestApplyRetentionPruneActionLeavesDecodableIndex(t *testing.T) {
 	if _, ok := appVersions.Versions["v-kept"]; !ok {
 		t.Fatal("expected the unpruned version to remain")
 	}
-}
-
-func mustMarshal(t *testing.T, index *appregistry.Index) []byte {
-	t.Helper()
-	data, err := json.Marshal(index)
-	if err != nil {
-		t.Fatalf("marshal index: %v", err)
-	}
-	return data
 }
 
 func TestShouldApplyRetentionPruneActionRace(t *testing.T) {

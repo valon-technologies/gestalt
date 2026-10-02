@@ -99,17 +99,13 @@ func ApplyRetentionPruneAction(index *Index, retention *RetentionIndex, appName 
 	if index != nil {
 		if appVersions, ok := index.Apps[appName]; ok {
 			if _, exists := appVersions.Versions[action.Version]; exists {
+				// Versions is a map, so the delete mutates the index in place.
 				delete(appVersions.Versions, action.Version)
 				if len(appVersions.Versions) == 0 {
-					// An app entry with no remaining versions fails index
-					// validation, which makes the whole index undecodable and
-					// blocks every later read -- including the pending marker
-					// a republish needs. Remove the app entry instead: the
-					// index stays valid and the app returns to the
-					// not-in-registry state that publish treats as new.
+					// An app entry with no versions fails index validation,
+					// making the whole index undecodable. Drop the entry:
+					// publish then treats the app as new.
 					delete(index.Apps, appName)
-				} else {
-					index.Apps[appName] = appVersions
 				}
 				changed = true
 			}
