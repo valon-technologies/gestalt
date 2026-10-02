@@ -133,7 +133,7 @@ type Server struct {
 	externalCredentials           core.ExternalCredentialProvider
 	connectionInstancePreferences *coredata.ConnectionInstancePreferenceService
 	appAccessProfiles             *coredata.AppAccessProfileService
-	operationHistory              core.OperationHistory
+	appAccess                     *invocation.AppAccessResolver
 	appAllowedOperations          *coredata.AppAllowedOperationsService
 	managedSubjects               *coredata.ManagedSubjectService
 	managedSecrets                *coredata.ManagedSecretService
@@ -291,7 +291,7 @@ type Config struct {
 	Admin                         AdminRouteConfig
 	AppRegistries                 map[string]config.AppRegistryConfig
 	AppRegistryReader             *appregistry.RegistryReader
-	OperationHistory              core.OperationHistory
+	AppAccessResolver             *invocation.AppAccessResolver
 	AppRegistryPublish            *appregistry.StatelessPublishService
 	AppRegistryPublishAllowedApps map[string]struct{}
 	AppFleetProjector             *appregistry.FleetProjector
@@ -527,7 +527,7 @@ func New(cfg Config) (*Server, error) {
 		externalCredentials:           externalCredentials,
 		connectionInstancePreferences: connectionInstancePreferences,
 		appAccessProfiles:             cfg.Services.AppAccessProfiles,
-		operationHistory:              cfg.OperationHistory,
+		appAccess:                     cfg.AppAccessResolver,
 		appAllowedOperations:          cfg.Services.AppAllowedOperations,
 		managedSubjects:               managedSubjects,
 		managedSecrets:                managedSecrets,

@@ -142,7 +142,7 @@ type Broker struct {
 	mcpMapper                     ConnectionMapper
 	connectionRuntime             ConnectionRuntimeResolver
 	appAccessProfiles             core.AppAccessProfileStore
-	operationHistory              core.OperationHistory
+	appAccess                     *AppAccessResolver
 	appOperationPolicies          core.AppOperationPolicyStore
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]ProviderKind
@@ -184,10 +184,10 @@ func WithAppAccessProfiles(store core.AppAccessProfileStore) BrokerOption {
 	return func(b *Broker) { b.appAccessProfiles = store }
 }
 
-// WithOperationHistory lets the broker convert legacy app access profiles
-// exactly. Without it, legacy allow-lists stay authoritative.
-func WithOperationHistory(history core.OperationHistory) BrokerOption {
-	return func(b *Broker) { b.operationHistory = history }
+// WithAppAccessResolver shares the resolver that reads legacy app access
+// profiles, so other surfaces judge a profile exactly as the broker does.
+func WithAppAccessResolver(resolver *AppAccessResolver) BrokerOption {
+	return func(b *Broker) { b.appAccess = resolver }
 }
 
 // WithAppOperationPolicies reads app-admin permissions at the shared request
@@ -220,6 +220,9 @@ func NewBroker(providers *registry.ProviderMap[core.Provider], users UserStore, 
 	b := &Broker{providers: providers, users: users, externalCreds: externalCreds}
 	for _, o := range opts {
 		o(b)
+	}
+	if b.appAccess == nil {
+		b.appAccess = NewAppAccessResolver(b.logger)
 	}
 	return b
 }
@@ -1264,7 +1267,7 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 			}
 		}
 	}
-	if err := b.checkUnlistedSessionOperation(ctx, p, prov, providerName, operationID); err != nil {
+	if err := b.checkUnlistedSessionOperation(ctx, p, providerName, operationID, b.appAccessScope(ctx, providerName)); err != nil {
 		return err
 	}
 	_, _, err := b.authorizeInvocation(ctx, p, prov, providerName, operation)
@@ -1314,45 +1317,15 @@ func (b *Broker) appAccessProfile(ctx context.Context, p *principal.Principal, p
 	if err != nil || prov == nil {
 		return profile, nil
 	}
-	upgraded, err := UpgradeLegacyAppAccessProfile(ctx, b.operationHistory, prov, profile)
-	if err != nil {
-		b.log().WarnContext(ctx, "app access profile conversion failed; keeping legacy allow-list", "app", providerName, "error", err)
-	}
-	return upgraded, nil
+	return b.appAccess.Resolve(ctx, prov, profile), nil
 }
 
-// UpgradeLegacyAppAccessProfile is the read-time view of a legacy profile,
-// never persisted. Apps whose operations come from a session catalog are left
-// alone because the static catalog would silently drop decisions about them.
-// On error it returns the legacy profile, which only ever denies.
-func UpgradeLegacyAppAccessProfile(ctx context.Context, history core.OperationHistory, prov core.Provider, profile *core.AppAccessProfile) (*core.AppAccessProfile, error) {
-	if profile == nil || !profile.Legacy || prov == nil || core.SupportsSessionCatalog(prov) {
-		return profile, nil
+// ResolveAppAccessProfile reads a stored profile the way enforcement does.
+func (b *Broker) ResolveAppAccessProfile(ctx context.Context, prov core.Provider, profile *core.AppAccessProfile) *core.AppAccessProfile {
+	if b == nil {
+		return profile
 	}
-	return core.ResolveLegacyAppAccessProfile(ctx, history, profile, prov.Catalog(), core.AppAccessDefaultsFor(prov))
-}
-
-// appAccessCatalog returns what is needed to judge an app's operations against
-// a user's access profile: the app's defaults and its operations by id. An
-// operation the catalog does not list, such as the GraphQL capability, is
-// judged as default-on, like any operation with no visibility override.
-func (b *Broker) appAccessCatalog(ctx context.Context, providerName string) (core.AppAccessDefaults, map[string]catalog.CatalogOperation) {
-	if b == nil || b.providers == nil {
-		return core.AppAccessDefaults{}, nil
-	}
-	prov, err := b.providers.GetWithContext(ctx, providerName)
-	if err != nil || prov == nil {
-		return core.AppAccessDefaults{}, nil
-	}
-	cat := prov.Catalog()
-	if cat == nil {
-		return core.AppAccessDefaultsFor(prov), nil
-	}
-	operations := make(map[string]catalog.CatalogOperation, len(cat.Operations))
-	for i := range cat.Operations {
-		operations[cat.Operations[i].ID] = cat.Operations[i]
-	}
-	return core.AppAccessDefaultsFor(prov), operations
+	return b.appAccess.Resolve(ctx, prov, profile)
 }
 
 func legacyAppAccessSubjectID(p *principal.Principal) string {

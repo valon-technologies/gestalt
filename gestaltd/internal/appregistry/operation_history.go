@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -28,21 +27,20 @@ type VersionChangeLister interface {
 	ListRequestsByApp(ctx context.Context, appName string) ([]*core.AppVersionChangeRequest, error)
 }
 
-type changesCacheEntry struct {
-	requests []*core.AppVersionChangeRequest
-	err      error
-	expires  time.Time
-}
-
-type entryFailure struct {
-	err     error
-	expires time.Time
-}
-
 type operationHistoryKey struct {
 	registryApp string
 	publicRoot  string
 	version     string
+}
+
+type changeList struct {
+	requests []*core.AppVersionChangeRequest
+	err      error
+}
+
+type versionOperations struct {
+	ids   []string
+	known bool
 }
 
 // OperationHistory answers core.OperationHistory for registry-sourced apps by
@@ -56,25 +54,26 @@ type OperationHistory struct {
 
 	now func() time.Time
 
-	mu       sync.Mutex
-	cache    map[operationHistoryKey][]string
-	failures map[operationHistoryKey]entryFailure
-	requests map[string]changesCacheEntry
+	requests *ttlCache[string, changeList]
+	entries  *ttlCache[operationHistoryKey, versionOperations]
+	failures *ttlCache[operationHistoryKey, error]
 }
 
 var _ core.OperationHistory = (*OperationHistory)(nil)
 
 func NewOperationHistory(fetcher EntryFetcher, registries map[string]config.AppRegistryConfig, apps map[string]*config.ProviderEntry, changes VersionChangeLister) *OperationHistory {
-	return &OperationHistory{
+	h := &OperationHistory{
 		fetcher:    fetcher,
 		registries: registries,
 		apps:       apps,
 		changes:    changes,
 		now:        time.Now,
-		cache:      make(map[operationHistoryKey][]string),
-		failures:   make(map[operationHistoryKey]entryFailure),
-		requests:   make(map[string]changesCacheEntry),
 	}
+	clock := func() time.Time { return h.now() }
+	h.requests = newTTLCache[string, changeList](operationHistoryCacheLimit, clock)
+	h.entries = newTTLCache[operationHistoryKey, versionOperations](operationHistoryCacheLimit, clock)
+	h.failures = newTTLCache[operationHistoryKey, error](operationHistoryCacheLimit, clock)
+	return h
 }
 
 func (h *OperationHistory) OperationsAt(ctx context.Context, app string, at time.Time) ([]string, bool, error) {
@@ -107,16 +106,22 @@ func (h *OperationHistory) OperationsAt(ctx context.Context, app string, at time
 	}
 
 	key := operationHistoryKey{registryApp: entry.Source.RegistryAppName(app), publicRoot: publicRoot, version: version}
-	if ids, ok := h.cached(key); ok {
-		return ids, len(ids) > 0, nil
+	return h.operationsOf(ctx, key)
+}
+
+// operationsOf returns the operations a version published. An empty
+// interface means "no static catalog, history unavailable", so known is false.
+func (h *OperationHistory) operationsOf(ctx context.Context, key operationHistoryKey) ([]string, bool, error) {
+	if cached, ok := h.entries.get(key); ok {
+		return cached.ids, cached.known, nil
 	}
-	if err := h.failed(key); err != nil {
+	if err, ok := h.failures.get(key); ok {
 		return nil, false, err
 	}
 	fetched, err := h.fetcher.FetchEntry(ctx, key.publicRoot, key.registryApp, key.version)
 	if err != nil {
 		err = fmt.Errorf("fetch %q version %q: %w", key.registryApp, key.version, err)
-		h.storeFailure(key, err)
+		h.failures.put(key, err, historyNegativeTTL)
 		return nil, false, err
 	}
 	var ids []string
@@ -126,8 +131,9 @@ func (h *OperationHistory) OperationsAt(ctx context.Context, app string, at time
 		}
 		slices.Sort(ids)
 	}
-	h.store(key, ids)
-	return ids, len(ids) > 0, nil
+	known := len(ids) > 0
+	h.entries.put(key, versionOperations{ids: ids, known: known}, noExpiry)
+	return ids, known, nil
 }
 
 // versionLiveAt returns the version live at the given time. A positive time
@@ -136,37 +142,33 @@ func (h *OperationHistory) OperationsAt(ctx context.Context, app string, at time
 // Matching on request time errs toward a larger existed set, which only adds
 // opt-outs.
 func versionLiveAt(requests []*core.AppVersionChangeRequest, at time.Time) string {
-	var earliest *core.AppVersionChangeRequest
+	ordered := make([]*core.AppVersionChangeRequest, 0, len(requests))
 	for _, req := range requests {
-		if req != nil && (earliest == nil || req.Timestamp.Before(earliest.Timestamp)) {
-			earliest = req
+		if req != nil {
+			ordered = append(ordered, req)
 		}
 	}
-	if earliest == nil {
+	if len(ordered) == 0 {
 		return ""
 	}
-	if at.Before(earliest.Timestamp) {
-		return strings.TrimSpace(earliest.FromVersion)
+	slices.SortStableFunc(ordered, func(a, b *core.AppVersionChangeRequest) int {
+		return a.Timestamp.Compare(b.Timestamp)
+	})
+	if at.Before(ordered[0].Timestamp) {
+		return strings.TrimSpace(ordered[0].FromVersion)
 	}
-	var (
-		version string
-		latest  time.Time
-	)
-	for _, req := range requests {
-		if req == nil || req.Timestamp.After(at) || req.Timestamp.Before(latest) {
-			continue
+	version := strings.TrimSpace(ordered[0].ToVersion)
+	for _, req := range ordered {
+		if req.Timestamp.After(at) {
+			break
 		}
-		latest = req.Timestamp
 		version = strings.TrimSpace(req.ToVersion)
 	}
 	return version
 }
 
 func (h *OperationHistory) changeRequests(ctx context.Context, app string) ([]*core.AppVersionChangeRequest, error) {
-	h.mu.Lock()
-	cached, ok := h.requests[app]
-	h.mu.Unlock()
-	if ok && h.now().Before(cached.expires) {
+	if cached, ok := h.requests.get(app); ok {
 		return cached.requests, cached.err
 	}
 	requests, err := h.changes.ListRequestsByApp(ctx, app)
@@ -174,47 +176,6 @@ func (h *OperationHistory) changeRequests(ctx context.Context, app string) ([]*c
 	if err != nil {
 		ttl = historyNegativeTTL
 	}
-	h.mu.Lock()
-	h.requests[app] = changesCacheEntry{requests: requests, err: err, expires: h.now().Add(ttl)}
-	h.mu.Unlock()
+	h.requests.put(app, changeList{requests: requests, err: err}, ttl)
 	return requests, err
-}
-
-func (h *OperationHistory) failed(key operationHistoryKey) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	failure, ok := h.failures[key]
-	if !ok {
-		return nil
-	}
-	if !h.now().Before(failure.expires) {
-		delete(h.failures, key)
-		return nil
-	}
-	return failure.err
-}
-
-func (h *OperationHistory) storeFailure(key operationHistoryKey, err error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if len(h.failures) >= operationHistoryCacheLimit {
-		clear(h.failures)
-	}
-	h.failures[key] = entryFailure{err: err, expires: h.now().Add(historyNegativeTTL)}
-}
-
-func (h *OperationHistory) cached(key operationHistoryKey) ([]string, bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	ids, ok := h.cache[key]
-	return ids, ok
-}
-
-func (h *OperationHistory) store(key operationHistoryKey, ids []string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if len(h.cache) >= operationHistoryCacheLimit {
-		clear(h.cache)
-	}
-	h.cache[key] = ids
 }

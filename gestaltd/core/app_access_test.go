@@ -134,7 +134,7 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 
 	t.Run("converts using history and ignores whitespace", func(t *testing.T) {
 		legacy := legacyProfile()
-		got, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: existed, known: true}, legacy, cat, AppAccessDefaults{})
+		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: existed, known: true}, legacy, cat, AppAccessDefaults{})
 		if err != nil || got.Legacy {
 			t.Fatalf("got %#v err=%v, want converted", got, err)
 		}
@@ -170,39 +170,66 @@ func TestResolveLegacyAppAccessProfile(t *testing.T) {
 	})
 	t.Run("history missing an enabled catalog operation keeps legacy", func(t *testing.T) {
 		legacy := legacyProfile()
-		got, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: []string{"kept", "dropped"}, known: true}, legacy, cat, AppAccessDefaults{})
+		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: []string{"kept", "dropped"}, known: true}, legacy, cat, AppAccessDefaults{})
 		if err != nil || got != legacy {
 			t.Fatalf("got %#v err=%v, want unchanged", got, err)
 		}
 	})
 	t.Run("unknown history keeps legacy", func(t *testing.T) {
 		legacy := legacyProfile()
-		got, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{}, legacy, cat, AppAccessDefaults{})
+		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{}, legacy, cat, AppAccessDefaults{})
 		if err != nil || got != legacy {
 			t.Fatalf("got %#v err=%v, want unchanged", got, err)
 		}
 	})
 	t.Run("history error keeps legacy and reports it", func(t *testing.T) {
 		legacy := legacyProfile()
-		got, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{known: true, err: boom}, legacy, cat, AppAccessDefaults{})
+		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{known: true, err: boom}, legacy, cat, AppAccessDefaults{})
 		if !errors.Is(err, boom) || got != legacy {
 			t.Fatalf("got %#v err=%v, want unchanged with error", got, err)
 		}
 	})
 	t.Run("nil history or catalog keeps legacy", func(t *testing.T) {
 		legacy := legacyProfile()
-		if got, err := ResolveLegacyAppAccessProfile(context.Background(), nil, legacy, cat, AppAccessDefaults{}); err != nil || got != legacy {
+		if got, _, err := ResolveLegacyAppAccessProfile(context.Background(), nil, legacy, cat, AppAccessDefaults{}); err != nil || got != legacy {
 			t.Fatalf("nil history: got %#v err=%v", got, err)
 		}
-		if got, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: existed, known: true}, legacy, nil, AppAccessDefaults{}); err != nil || got != legacy {
+		if got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: existed, known: true}, legacy, nil, AppAccessDefaults{}); err != nil || got != legacy {
 			t.Fatalf("nil catalog: got %#v err=%v", got, err)
 		}
 	})
 	t.Run("current profile untouched", func(t *testing.T) {
 		current := &AppAccessProfile{App: "app", DisabledOperations: []string{"dropped"}}
-		got, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: existed, known: true}, current, cat, AppAccessDefaults{})
+		got, _, err := ResolveLegacyAppAccessProfile(context.Background(), fakeOperationHistory{ids: existed, known: true}, current, cat, AppAccessDefaults{})
 		if err != nil || got != current {
 			t.Fatalf("got %#v err=%v, want same profile", got, err)
 		}
 	})
+}
+
+func TestOverridesOutsideOptsOutStaticOperationsALegacyListDidNotEnable(t *testing.T) {
+	t.Parallel()
+
+	static := &catalog.Catalog{Operations: []catalog.CatalogOperation{
+		accessOp("listed", nil),
+		accessOp("enabled-hidden", nil),
+		accessOp("off-hidden", nil),
+		accessOp("off-hidden-not-default", boolPtr(false)),
+	}}
+	page := &catalog.Catalog{Operations: []catalog.CatalogOperation{accessOp("listed", nil)}}
+
+	legacy := NewLegacyAppAccessProfile("u", "app", []string{"listed", "enabled-hidden", "retired"}, time.Time{})
+	disabled, extra := legacy.OverridesOutside(page, static)
+	if want := []string{"off-hidden", "off-hidden-not-default"}; !slices.Equal(disabled, want) {
+		t.Fatalf("legacy disabled = %v, want %v", disabled, want)
+	}
+	if want := []string{"enabled-hidden", "retired"}; !slices.Equal(extra, want) {
+		t.Fatalf("legacy extra = %v, want %v", extra, want)
+	}
+
+	relative := NewRelativeAppAccessProfile("u", "app", []string{"off-hidden"}, []string{"enabled-hidden"}, time.Time{})
+	disabled, extra = relative.OverridesOutside(page, static)
+	if !slices.Equal(disabled, []string{"off-hidden"}) || !slices.Equal(extra, []string{"enabled-hidden"}) {
+		t.Fatalf("relative outside = %v %v, want its own decisions only", disabled, extra)
+	}
 }

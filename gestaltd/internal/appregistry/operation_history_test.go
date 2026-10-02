@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 const (
@@ -311,4 +312,96 @@ func TestOperationHistoryNegativeCachesFailures(t *testing.T) {
 			t.Fatalf("fetches after negative TTL = %d, want 2", got)
 		}
 	})
+}
+
+func TestOperationHistoryRequestTimestampBoundaries(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	later := base.Add(24 * time.Hour)
+	entries := map[string]*Entry{"1.0.0": entryWithOps("read"), "2.0.0": entryWithOps("read", "write"), "3.0.0": entryWithOps("admin")}
+
+	cases := []struct {
+		name     string
+		requests []*core.AppVersionChangeRequest
+		at       time.Time
+		want     []string
+	}{
+		{
+			name:     "save time equals the only request",
+			requests: []*core.AppVersionChangeRequest{changeTo("2.0.0", base)},
+			at:       base,
+			want:     []string{"read", "write"},
+		},
+		{
+			name:     "same timestamp resolves to the later listed request",
+			requests: []*core.AppVersionChangeRequest{changeTo("1.0.0", base), changeTo("2.0.0", base)},
+			at:       base.Add(time.Hour),
+			want:     []string{"read", "write"},
+		},
+		{
+			name:     "unsorted input resolves by timestamp",
+			requests: []*core.AppVersionChangeRequest{changeTo("3.0.0", later.Add(24*time.Hour)), changeTo("1.0.0", base), changeTo("2.0.0", later)},
+			at:       later.Add(time.Hour),
+			want:     []string{"read", "write"},
+		},
+		{
+			name: "rollback is a new request",
+			requests: []*core.AppVersionChangeRequest{
+				changeTo("1.0.0", base),
+				changeTo("2.0.0", later),
+				{App: historyApp, FromVersion: "2.0.0", ToVersion: "1.0.0", Timestamp: later.Add(24 * time.Hour)},
+			},
+			at:   later.Add(25 * time.Hour),
+			want: []string{"read"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHistory(t, &fakeFetcher{entries: entries}, fakeChanges{requests: tc.requests}, registryApps())
+			ids, known, err := h.OperationsAt(context.Background(), historyApp, tc.at)
+			if err != nil || !known || !slices.Equal(ids, tc.want) {
+				t.Fatalf("got %v known=%v err=%v, want %v", ids, known, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestOperationHistoryReadsRealChangeRequestService(t *testing.T) {
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	appended := []*core.AppVersionChangeRequest{
+		{App: historyApp, FromVersion: "2.0.0", ToVersion: "1.0.0", Timestamp: base.Add(48 * time.Hour)},
+		{App: historyApp, FromVersion: "0.9.0", ToVersion: "1.0.0", Timestamp: base},
+		{App: historyApp, FromVersion: "1.0.0", ToVersion: "2.0.0", Timestamp: base.Add(24 * time.Hour)},
+	}
+	for _, req := range appended {
+		if _, err := services.AppVersionChangeRequests.AppendRequest(ctx, req); err != nil {
+			t.Fatalf("AppendRequest: %v", err)
+		}
+	}
+	fetcher := &fakeFetcher{entries: map[string]*Entry{
+		"0.9.0": entryWithOps("legacy"),
+		"1.0.0": entryWithOps("read"),
+		"2.0.0": entryWithOps("read", "write"),
+	}}
+	h := newHistory(t, fetcher, services.AppVersionChangeRequests, registryApps())
+
+	cases := []struct {
+		name string
+		at   time.Time
+		want []string
+	}{
+		{"before recorded history", base.Add(-time.Hour), []string{"legacy"}},
+		{"first version", base.Add(time.Hour), []string{"read"}},
+		{"second version", base.Add(30 * time.Hour), []string{"read", "write"}},
+		{"after rollback", base.Add(72 * time.Hour), []string{"read"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ids, known, err := h.OperationsAt(ctx, historyApp, tc.at)
+			if err != nil || !known || !slices.Equal(ids, tc.want) {
+				t.Fatalf("got %v known=%v err=%v, want %v", ids, known, err, tc.want)
+			}
+		})
+	}
 }

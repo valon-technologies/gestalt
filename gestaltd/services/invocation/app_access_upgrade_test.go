@@ -84,12 +84,14 @@ func newLegacyUpgradeStore(enabled ...string) *memoryAppAccessStore {
 func newUpgradeBroker(t *testing.T, store core.AppAccessProfileStore, history core.OperationHistory, provider core.Provider) *Broker {
 	t.Helper()
 	svc := testutil.NewStubServices(t)
+	resolver := NewAppAccessResolver(nil)
+	resolver.SetOperationHistory(history)
 	return NewBroker(
 		testutil.NewProviderRegistry(t, provider),
 		svc.Users,
 		nil,
 		WithAppAccessProfiles(store),
-		WithOperationHistory(history),
+		WithAppAccessResolver(resolver),
 	)
 }
 
@@ -186,4 +188,48 @@ func TestBrokerUserSaveAfterReadTimeConversionWins(t *testing.T) {
 	if stored := store.stored(); stored.Legacy || !slices.Equal(stored.DisabledOperations, []string{upgradeListOp}) {
 		t.Fatalf("stored = %#v, want the user's save in the new format", stored)
 	}
+}
+
+func TestBrokerKeepsNewDefaultOperationDeniedWhenHistoryOmitsAnEnabledOperation(t *testing.T) {
+	t.Parallel()
+
+	store := newLegacyUpgradeStore(upgradeListOp, upgradePostOp)
+	history := &fakeOperationHistory{ops: []string{upgradeListOp}, known: true}
+	broker := newUpgradeBroker(t, store, history, upgradeProvider())
+	p := appAccessDefaultsPrincipal()
+
+	requireInvokeAllowed(t, broker, p, upgradeListOp)
+	requireInvokeAllowed(t, broker, p, upgradePostOp)
+	requireInvokeDenied(t, broker, p, upgradeLaterOp)
+}
+
+func TestBrokerConvertsLegacyProfileEnablingOperationOutsideCatalog(t *testing.T) {
+	t.Parallel()
+
+	store := newLegacyUpgradeStore(upgradeListOp, "removed.operation")
+	history := &fakeOperationHistory{ops: []string{upgradeListOp, upgradePostOp}, known: true}
+	broker := newUpgradeBroker(t, store, history, upgradeProvider())
+	p := appAccessDefaultsPrincipal()
+
+	requireInvokeAllowed(t, broker, p, upgradeListOp)
+	requireInvokeDenied(t, broker, p, upgradePostOp)
+	requireInvokeAllowed(t, broker, p, upgradeLaterOp)
+}
+
+type failingAppAccessStore struct{ *memoryAppAccessStore }
+
+var errUnsupportedProfileVersion = errors.New("unsupported app access profile version")
+
+func (failingAppAccessStore) GetAppAccessProfile(context.Context, string, string) (*core.AppAccessProfile, error) {
+	return nil, errUnsupportedProfileVersion
+}
+
+func TestBrokerDeniesWhenStoredProfileCannotBeDecoded(t *testing.T) {
+	t.Parallel()
+
+	broker := newUpgradeBroker(t, failingAppAccessStore{&memoryAppAccessStore{}}, nil, upgradeProvider())
+	p := appAccessDefaultsPrincipal()
+
+	requireInvokeDenied(t, broker, p, upgradeListOp)
+	requireInvokeDenied(t, broker, p, upgradeLaterOp)
 }

@@ -162,6 +162,10 @@ func normalizeAppAccessOperations(operations []string) []string {
 // Records written before it hold a bare JSON array of enabled operations in the
 // same column, which recordToAppAccessProfile still reads, so no schema
 // migration is needed.
+//
+// Rollback consequence: an older binary reading a new-format row fails to
+// decode it and denies access until the fleet runs the new version. Deploys are
+// zero-gap (no-traffic, then promote), so this skew window is short.
 const appAccessPayloadVersion = 1
 
 type appAccessPayload struct {
@@ -187,14 +191,11 @@ func appAccessProfileRecord(profile *core.AppAccessProfile) idb.Record {
 }
 
 func recordToAppAccessProfile(rec idb.Record) (*core.AppAccessProfile, error) {
-	initialized, _ := rec["defaults_initialized"].(bool)
-	profile := &core.AppAccessProfile{
-		SubjectID:           recString(rec, "subject_id"),
-		App:                 recString(rec, "app"),
-		DefaultsInitialized: initialized,
-		UpdatedAt:           recTime(rec, "updated_at"),
-	}
+	subjectID := recString(rec, "subject_id")
+	app := recString(rec, "app")
+	updatedAt := recTime(rec, "updated_at")
 	raw := strings.TrimSpace(recString(rec, "enabled_operations"))
+	var profile *core.AppAccessProfile
 	if strings.HasPrefix(raw, "{") {
 		var payload appAccessPayload
 		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
@@ -205,17 +206,18 @@ func recordToAppAccessProfile(rec idb.Record) (*core.AppAccessProfile, error) {
 			// Failing closed keeps a rollback from silently widening access.
 			return nil, fmt.Errorf("decode app access payload: unsupported version %d", payload.Version)
 		}
-		profile.DisabledOperations = normalizeAppAccessOperations(payload.Disabled)
-		profile.ExtraOperations = normalizeAppAccessOperations(payload.Extra)
-		return profile, nil
-	}
-	var operations []string
-	if raw != "" {
-		if err := json.Unmarshal([]byte(raw), &operations); err != nil {
-			return nil, fmt.Errorf("decode enabled operations: %w", err)
+		profile = core.NewRelativeAppAccessProfile(subjectID, app, payload.Disabled, payload.Extra, updatedAt)
+	} else {
+		var operations []string
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &operations); err != nil {
+				return nil, fmt.Errorf("decode enabled operations: %w", err)
+			}
 		}
+		profile = core.NewLegacyAppAccessProfile(subjectID, app, operations, updatedAt)
 	}
-	profile.Legacy = true
-	profile.LegacyEnabledOperations = normalizeAppAccessOperations(operations)
+	if err := profile.Validate(); err != nil {
+		return nil, err
+	}
 	return profile, nil
 }

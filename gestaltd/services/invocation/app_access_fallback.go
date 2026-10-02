@@ -3,7 +3,6 @@ package invocation
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -11,56 +10,73 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-func (b *Broker) providerSupportsSessionCatalog(ctx context.Context, providerName string) bool {
+// appAccessScope is what an app contributes to judging a user's access
+// profile: its defaults, its static operations by id, and whether its real
+// operation list only exists per session.
+type appAccessScope struct {
+	defaults       core.AppAccessDefaults
+	operations     map[string]catalog.CatalogOperation
+	sessionCatalog bool
+}
+
+func (b *Broker) appAccessScope(ctx context.Context, providerName string) appAccessScope {
 	if b == nil || b.providers == nil {
-		return false
+		return appAccessScope{}
 	}
 	prov, err := b.providers.GetWithContext(ctx, providerName)
 	if err != nil || prov == nil {
-		return false
+		return appAccessScope{}
 	}
-	return core.SupportsSessionCatalog(prov)
+	scope := appAccessScope{defaults: core.AppAccessDefaultsFor(prov), sessionCatalog: core.SupportsSessionCatalog(prov)}
+	if cat := prov.Catalog(); cat != nil {
+		scope.operations = make(map[string]catalog.CatalogOperation, len(cat.Operations))
+		for i := range cat.Operations {
+			scope.operations[cat.Operations[i].ID] = cat.Operations[i]
+		}
+	}
+	return scope
 }
 
-// sessionOperationUnprovable reports whether an operation of a session-catalog
-// app is absent from the static catalog, so its default-on status cannot be
-// proven without the caller's session catalog.
-func sessionOperationUnprovable(sessionCatalog bool, static map[string]catalog.CatalogOperation, operationID string) bool {
-	if !sessionCatalog || operationID == core.GraphQLCapabilityID {
+// unlistedSession reports whether an operation belongs to a session-catalog
+// app but is absent from its static catalog, so its default cannot be proven
+// without the caller's session catalog. The graphql capability is judged as
+// default-on and is never unlisted.
+func (s appAccessScope) unlistedSession(operationID string) bool {
+	if !s.sessionCatalog || operationID == core.GraphQLCapabilityID {
 		return false
 	}
-	_, listed := static[operationID]
+	_, listed := s.operations[operationID]
 	return !listed
 }
 
-// profileAllowsUnprovableOperation allows an operation of unknown default only
-// when the user explicitly switched it on.
-func profileAllowsUnprovableOperation(profile *core.AppAccessProfile, operationID string) bool {
-	if profile == nil {
-		return true
+// allows is the one decision for whether a profile permits an operation.
+// Caller metadata is used only when it describes the operation being asked
+// about; otherwise the profile could be judged on a different operation.
+func (s appAccessScope) allows(profile *core.AppAccessProfile, operationID string, metadata *catalog.CatalogOperation) bool {
+	if metadata != nil && strings.TrimSpace(metadata.ID) == operationID {
+		return profile.Allows(*metadata, s.defaults)
 	}
-	id := strings.TrimSpace(operationID)
-	if profile.Legacy {
-		return slices.Contains(profile.LegacyEnabledOperations, id)
+	if operation, listed := s.operations[operationID]; listed {
+		return profile.Allows(operation, s.defaults)
 	}
-	return slices.Contains(profile.ExtraOperations, id)
+	if s.unlistedSession(operationID) {
+		return profile.AllowsUnlisted(operationID)
+	}
+	return profile.Allows(catalog.CatalogOperation{ID: operationID}, s.defaults)
 }
 
 // checkUnlistedSessionOperation denies an operation of a session-catalog app
 // that the static catalog does not list unless the profile explicitly allows it.
-func (b *Broker) checkUnlistedSessionOperation(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operationID string) error {
-	if prov == nil || !core.SupportsSessionCatalog(prov) || operationID == core.GraphQLCapabilityID {
-		return nil
-	}
-	if _, listed := catalog.OperationByID(prov.Catalog(), operationID); listed {
+func (b *Broker) checkUnlistedSessionOperation(ctx context.Context, p *principal.Principal, providerName, operationID string, scope appAccessScope) error {
+	if !scope.unlistedSession(operationID) {
 		return nil
 	}
 	profile, err := b.appAccessProfile(ctx, p, providerName)
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
 	}
-	if profileAllowsUnprovableOperation(profile, operationID) {
-		return nil
+	if !scope.allows(profile, operationID, nil) {
+		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
-	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+	return nil
 }

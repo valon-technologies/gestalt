@@ -10,6 +10,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
@@ -166,5 +167,91 @@ func TestAppAccessProfileFollowsNewDefaultOperations(t *testing.T) {
 	}
 	if !profile.Allows(catalog.CatalogOperation{ID: "b"}, defaults) {
 		t.Fatal("newly added default-on operation b is denied")
+	}
+}
+
+func seedAppAccessPayload(t *testing.T, db *coretesting.StubIndexedDB, payload string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := db.ObjectStore(coredata.StoreAppAccessProfiles).Put(ctx, idb.Record{
+		"id":                   testAppAccessSubject + appAccessKeySep + testAppAccessApp,
+		"subject_id":           testAppAccessSubject,
+		"app":                  testAppAccessApp,
+		"enabled_operations":   payload,
+		"defaults_initialized": true,
+	}); err != nil {
+		t.Fatalf("seed payload %q: %v", payload, err)
+	}
+}
+
+func TestAppAccessProfileUnreadablePayloadFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for name, payload := range map[string]string{
+		"unknown future version": `{"v":2,"disabled":["x"]}`,
+		"missing version":        `{"disabled":["x"]}`,
+		"malformed":              `{`,
+		"malformed legacy array": `["x"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			svc, db := newTestServicesWithDB(t)
+			if err := svc.AppAccessProfiles.EnsureStore(ctx); err != nil {
+				t.Fatalf("EnsureStore: %v", err)
+			}
+			seedAppAccessPayload(t, db, payload)
+
+			profile, err := svc.AppAccessProfiles.GetAppAccessProfile(ctx, testAppAccessSubject, testAppAccessApp)
+			if err == nil {
+				t.Fatalf("GetAppAccessProfile(%s) = %#v, want error", payload, profile)
+			}
+			if errors.Is(err, core.ErrNotFound) {
+				t.Fatalf("unreadable payload reported as not found: %v", err)
+			}
+		})
+	}
+}
+
+func TestAppAccessProfileBareArrayIsLegacy(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc, db := newTestServicesWithDB(t)
+	if err := svc.AppAccessProfiles.EnsureStore(ctx); err != nil {
+		t.Fatalf("EnsureStore: %v", err)
+	}
+	seedAppAccessPayload(t, db, `["b.op","a.op"]`)
+
+	profile, err := svc.AppAccessProfiles.GetAppAccessProfile(ctx, testAppAccessSubject, testAppAccessApp)
+	if err != nil {
+		t.Fatalf("GetAppAccessProfile: %v", err)
+	}
+	if !profile.Legacy || !slices.Equal(profile.LegacyEnabledOperations, []string{"a.op", "b.op"}) {
+		t.Fatalf("profile = %#v, want legacy with a.op,b.op", profile)
+	}
+	if len(profile.DisabledOperations) != 0 || len(profile.ExtraOperations) != 0 {
+		t.Fatalf("legacy profile carries decisions: %#v", profile)
+	}
+}
+
+func TestAppAccessProfileDecisionsRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc, _ := newTestServicesWithDB(t)
+	if _, err := svc.AppAccessProfiles.SetAppAccessOverrides(ctx, testAppAccessSubject, testAppAccessApp,
+		[]string{"chat.delete"}, []string{"files.upload"}); err != nil {
+		t.Fatalf("SetAppAccessOverrides: %v", err)
+	}
+
+	loaded, err := svc.AppAccessProfiles.GetAppAccessProfile(ctx, testAppAccessSubject, testAppAccessApp)
+	if err != nil {
+		t.Fatalf("GetAppAccessProfile: %v", err)
+	}
+	if loaded.Legacy ||
+		!slices.Equal(loaded.DisabledOperations, []string{"chat.delete"}) ||
+		!slices.Equal(loaded.ExtraOperations, []string{"files.upload"}) {
+		t.Fatalf("loaded = %#v, want decisions preserved", loaded)
 	}
 }

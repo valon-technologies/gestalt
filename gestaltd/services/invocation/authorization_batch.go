@@ -3,7 +3,6 @@ package invocation
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -133,9 +132,7 @@ func (b *Broker) CheckOperationAccessMany(
 	type providerAccess struct {
 		policy          core.AppOperationPolicy
 		profile         *core.AppAccessProfile
-		defaults        core.AppAccessDefaults
-		operations      map[string]catalog.CatalogOperation
-		sessionCatalog  bool
+		scope           appAccessScope
 		profileErr      error
 		delegatesRemote bool
 		resource        *proto.Resource
@@ -154,17 +151,13 @@ func (b *Broker) CheckOperationAccessMany(
 				return nil, err
 			}
 			access.profile, access.profileErr = b.appAccessProfile(ctx, p, query.Provider)
-			access.defaults, access.operations = b.appAccessCatalog(ctx, query.Provider)
-			access.sessionCatalog = b.providerSupportsSessionCatalog(ctx, query.Provider)
+			access.scope = b.appAccessScope(ctx, query.Provider)
 			access.delegatesRemote = b.providerDelegatesRemoteAuthorization(ctx, query.Provider)
 			accessByProvider[query.Provider] = access
 		}
 		roles, allowed := access.policy.Resolve(query.Operation, query.AllowedRoles)
 		results[i].AllowedRoles = roles
-		operation, fromMetadata := resolvedAccessOperation(query, access.operations)
-		unprovable := !fromMetadata && sessionOperationUnprovable(access.sessionCatalog, access.operations, query.Operation) &&
-			!profileAllowsUnprovableOperation(access.profile, query.Operation)
-		if !allowed || access.profileErr != nil || unprovable || !access.profile.Allows(operation, access.defaults) {
+		if !allowed || access.profileErr != nil || !access.scope.allows(access.profile, query.Operation, query.Metadata) {
 			results[i].Err = operationAccessDenied(query)
 			continue
 		}
@@ -216,19 +209,6 @@ func (b *Broker) CheckOperationAccessMany(
 		}
 	}
 	return results, nil
-}
-
-// resolvedAccessOperation prefers the caller's metadata, but only when it
-// describes the operation being authorized; otherwise the profile could be
-// judged on a different operation.
-func resolvedAccessOperation(query OperationAccessQuery, static map[string]catalog.CatalogOperation) (catalog.CatalogOperation, bool) {
-	if query.Metadata != nil && strings.TrimSpace(query.Metadata.ID) == query.Operation {
-		return *query.Metadata, true
-	}
-	if operation, listed := static[query.Operation]; listed {
-		return operation, false
-	}
-	return catalog.CatalogOperation{ID: query.Operation}, false
 }
 
 func operationAccessResult(decision ResourceAccessDecision, query OperationAccessQuery) error {

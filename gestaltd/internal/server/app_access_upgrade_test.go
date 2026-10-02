@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 const appAccessUpgradeAliceEmail = "alice@example.com"
@@ -25,6 +27,12 @@ type fakeOperationHistory struct {
 
 func (h *fakeOperationHistory) OperationsAt(context.Context, string, time.Time) ([]string, bool, error) {
 	return h.ops, h.known, h.err
+}
+
+func (f *appAccessCatalogFixture) useOperationHistory(history core.OperationHistory) {
+	resolver := invocation.NewAppAccessResolver(nil)
+	resolver.SetOperationHistory(history)
+	f.server.appAccess = resolver
 }
 
 func (f *appAccessCatalogFixture) adminView(t *testing.T) appAdminAccessResponse {
@@ -51,7 +59,7 @@ func TestAppAccessUpgradesLegacyProfileAtReadTimeWithoutPersisting(t *testing.T)
 	t.Parallel()
 
 	f := newAppAccessCatalogFixture(t)
-	f.server.operationHistory = &fakeOperationHistory{known: true, ops: []string{appAccessPostMessageOp, appAccessConversationsOp}}
+	f.useOperationHistory(&fakeOperationHistory{known: true, ops: []string{appAccessPostMessageOp, appAccessConversationsOp}})
 	f.writeLegacyProfile(t, []string{appAccessConversationsOp})
 	f.addOperation(appAccessNewOp)
 
@@ -64,6 +72,9 @@ func TestAppAccessUpgradesLegacyProfileAtReadTimeWithoutPersisting(t *testing.T)
 		t.Fatalf("stored profile was rewritten by a read, want it left legacy")
 	}
 	admin := f.adminView(t)
+	if admin.Legacy {
+		t.Fatalf("admin view legacy = true, want false once the profile reads as converted")
+	}
 	if !slices.Equal(admin.EnabledOperations, want) || !slices.Equal(admin.DeniedOperations, []string{appAccessPostMessageOp}) {
 		t.Fatalf("admin view = %#v, want enabled %v and denied [%s]", admin, want, appAccessPostMessageOp)
 	}
@@ -73,7 +84,7 @@ func TestAppAccessAdminViewConvertsLegacyProfileWithoutWriting(t *testing.T) {
 	t.Parallel()
 
 	f := newAppAccessCatalogFixture(t)
-	f.server.operationHistory = &fakeOperationHistory{known: true, ops: []string{appAccessPostMessageOp, appAccessConversationsOp}}
+	f.useOperationHistory(&fakeOperationHistory{known: true, ops: []string{appAccessPostMessageOp, appAccessConversationsOp}})
 	f.writeLegacyProfile(t, []string{appAccessConversationsOp})
 	f.addOperation(appAccessNewOp)
 
@@ -97,7 +108,7 @@ func TestAppAccessKeepsLegacyListWhenHistoryCannotAnswer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			f := newAppAccessCatalogFixture(t)
-			f.server.operationHistory = history
+			f.useOperationHistory(history)
 			f.writeLegacyProfile(t, []string{appAccessConversationsOp})
 			f.addOperation(appAccessNewOp)
 
@@ -107,8 +118,9 @@ func TestAppAccessKeepsLegacyListWhenHistoryCannotAnswer(t *testing.T) {
 			if !f.storedProfile(t).Legacy {
 				t.Fatalf("stored profile was rewritten, want it left legacy")
 			}
-			if got := f.adminView(t).EnabledOperations; !slices.Equal(got, []string{appAccessConversationsOp}) {
-				t.Fatalf("admin enabled = %v, want exactly the legacy list", got)
+			admin := f.adminView(t)
+			if !slices.Equal(admin.EnabledOperations, []string{appAccessConversationsOp}) || !admin.Legacy {
+				t.Fatalf("admin = %#v, want exactly the legacy list flagged legacy", admin)
 			}
 		})
 	}
@@ -118,7 +130,7 @@ func TestAppAccessPutOnLegacyProfileKeepsUnlistedDecisions(t *testing.T) {
 	t.Parallel()
 
 	f := newAppAccessCatalogFixture(t)
-	f.server.operationHistory = &fakeOperationHistory{known: true, ops: []string{appAccessPostMessageOp, appAccessConversationsOp}}
+	f.useOperationHistory(&fakeOperationHistory{known: true, ops: []string{appAccessPostMessageOp, appAccessConversationsOp}})
 	f.writeLegacyProfile(t, []string{appAccessConversationsOp})
 
 	f.put(t, []string{appAccessConversationsOp, appAccessPostMessageOp})
@@ -133,7 +145,7 @@ func TestAppAccessUserSaveAfterReadTimeConversionWins(t *testing.T) {
 	t.Parallel()
 
 	f := newAppAccessCatalogFixture(t)
-	f.server.operationHistory = &fakeOperationHistory{known: true, ops: []string{appAccessPostMessageOp, appAccessConversationsOp}}
+	f.useOperationHistory(&fakeOperationHistory{known: true, ops: []string{appAccessPostMessageOp, appAccessConversationsOp}})
 	f.writeLegacyProfile(t, []string{appAccessConversationsOp})
 
 	if got := f.get(t).EnabledOperations; !slices.Equal(got, []string{appAccessConversationsOp}) {
@@ -144,5 +156,39 @@ func TestAppAccessUserSaveAfterReadTimeConversionWins(t *testing.T) {
 	stored := f.storedProfile(t)
 	if stored.Legacy || !slices.Equal(stored.DisabledOperations, []string{appAccessConversationsOp, core.GraphQLCapabilityID}) {
 		t.Fatalf("stored = %#v, want the user's save in the new format", stored)
+	}
+}
+
+func TestAppAccessConcurrentSavesLastWriteWins(t *testing.T) {
+	t.Parallel()
+
+	f := newAppAccessCatalogFixture(t)
+	f.put(t, []string{appAccessConversationsOp})
+	f.put(t, []string{appAccessPostMessageOp})
+
+	stored := f.storedProfile(t)
+	if !slices.Contains(stored.DisabledOperations, appAccessConversationsOp) || slices.Contains(stored.DisabledOperations, appAccessPostMessageOp) {
+		t.Fatalf("stored = %#v, want the later save to replace the earlier one: the store has no compare-and-swap", stored)
+	}
+}
+
+func TestAppAccessPutOnUnconvertedLegacyProfileKeepsHiddenOperationOff(t *testing.T) {
+	t.Parallel()
+
+	f := newAppAccessCatalogFixture(t)
+	f.useOperationHistory(nil)
+	f.writeLegacyProfile(t, []string{appAccessConversationsOp})
+	private := catalog.APIExposurePrivate
+	f.provider.CatalogVal.Operations[0].API = &private
+
+	f.put(t, []string{appAccessConversationsOp})
+
+	stored := f.storedProfile(t)
+	if stored.Legacy || !slices.Contains(stored.DisabledOperations, appAccessPostMessageOp) {
+		t.Fatalf("stored = %#v, want %s opted out", stored, appAccessPostMessageOp)
+	}
+	f.provider.CatalogVal.Operations[0].API = nil
+	if got := f.get(t).EnabledOperations; !slices.Equal(got, []string{appAccessConversationsOp}) {
+		t.Fatalf("enabled after the operation reappears = %v, want it to stay off", got)
 	}
 }

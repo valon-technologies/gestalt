@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -53,13 +54,16 @@ type AppAccessDefaults struct {
 	// empty. Otherwise every operation that is visible by default is on.
 	Configured bool
 	Listed     []string
+	// listedSet is built by AppAccessDefaultsFor; literals that set only Listed
+	// fall back to a scan.
+	listedSet map[string]struct{}
 }
 
 // AppAccessDefaultsFor reads the defaults an app publishes.
 func AppAccessDefaultsFor(prov Provider) AppAccessDefaults {
 	if provider, ok := prov.(AppAccessDefaultsProvider); ok {
 		if listed, configured := provider.DefaultAppAccessOperations(); configured {
-			return AppAccessDefaults{Configured: true, Listed: listed}
+			return AppAccessDefaults{Configured: true, Listed: listed, listedSet: trimmedSet(listed)}
 		}
 	}
 	return AppAccessDefaults{}
@@ -68,7 +72,12 @@ func AppAccessDefaultsFor(prov Provider) AppAccessDefaults {
 // Includes reports whether the operation is on for a user with no choice.
 func (d AppAccessDefaults) Includes(op catalog.CatalogOperation) bool {
 	if d.Configured {
-		return slices.ContainsFunc(d.Listed, func(id string) bool { return strings.TrimSpace(id) == strings.TrimSpace(op.ID) })
+		id := strings.TrimSpace(op.ID)
+		if d.listedSet != nil {
+			_, ok := d.listedSet[id]
+			return ok
+		}
+		return slices.ContainsFunc(d.Listed, func(listed string) bool { return strings.TrimSpace(listed) == id })
 	}
 	return catalog.OperationVisibleByDefault(op)
 }
@@ -94,30 +103,106 @@ func (p *AppAccessProfile) Allows(op catalog.CatalogOperation, defaults AppAcces
 	if p == nil {
 		return true
 	}
-	id := strings.TrimSpace(op.ID)
+	return p.allowsID(strings.TrimSpace(op.ID), defaults.Includes(op))
+}
+
+// AllowsUnlisted is Allows for an operation the catalog does not list, whose
+// default cannot be proven: only an explicit choice turns it on.
+func (p *AppAccessProfile) AllowsUnlisted(id string) bool {
+	if p == nil {
+		return true
+	}
+	return p.allowsID(strings.TrimSpace(id), false)
+}
+
+func (p *AppAccessProfile) allowsID(id string, defaultOn bool) bool {
 	if p.Legacy {
 		return slices.Contains(p.LegacyEnabledOperations, id)
 	}
 	if slices.Contains(p.ExtraOperations, id) {
 		return true
 	}
-	return defaults.Includes(op) && !slices.Contains(p.DisabledOperations, id)
+	return defaultOn && !slices.Contains(p.DisabledOperations, id)
+}
+
+// Validate enforces that a profile is either legacy (only an enabled list) or
+// relative (only disabled and extra decisions).
+func (p *AppAccessProfile) Validate() error {
+	if p == nil {
+		return nil
+	}
+	if p.Legacy {
+		if len(p.DisabledOperations) > 0 || len(p.ExtraOperations) > 0 {
+			return errors.New("legacy app access profile must not hold disabled or extra operations")
+		}
+		return nil
+	}
+	if len(p.LegacyEnabledOperations) > 0 {
+		return errors.New("relative app access profile must not hold legacy enabled operations")
+	}
+	return nil
+}
+
+// NewRelativeAppAccessProfile builds a profile of decisions relative to the
+// app's defaults.
+func NewRelativeAppAccessProfile(subjectID, app string, disabled, extra []string, updatedAt time.Time) *AppAccessProfile {
+	return &AppAccessProfile{
+		SubjectID:           subjectID,
+		App:                 app,
+		DisabledOperations:  MergeAppAccessIDs(disabled, nil),
+		ExtraOperations:     MergeAppAccessIDs(extra, nil),
+		DefaultsInitialized: true,
+		UpdatedAt:           updatedAt,
+	}
+}
+
+// NewLegacyAppAccessProfile builds a profile holding a full enabled list.
+func NewLegacyAppAccessProfile(subjectID, app string, enabled []string, updatedAt time.Time) *AppAccessProfile {
+	return &AppAccessProfile{
+		SubjectID:               subjectID,
+		App:                     app,
+		LegacyEnabledOperations: MergeAppAccessIDs(enabled, nil),
+		Legacy:                  true,
+		DefaultsInitialized:     true,
+		UpdatedAt:               updatedAt,
+	}
+}
+
+// MergeAppAccessIDs returns the trimmed, sorted, deduplicated union of a and b.
+func MergeAppAccessIDs(a, b []string) []string {
+	merged := make([]string, 0, len(a)+len(b))
+	for _, id := range slices.Concat(a, b) {
+		if id = strings.TrimSpace(id); id != "" {
+			merged = append(merged, id)
+		}
+	}
+	return sortedUnique(merged)
 }
 
 // EnabledOperations returns the ids of the catalog operations the user has
 // switched on, sorted.
 func (p *AppAccessProfile) EnabledOperations(cat *catalog.Catalog, defaults AppAccessDefaults) []string {
+	return p.catalogOperations(cat, defaults, true)
+}
+
+// DeniedOperations returns the ids of the catalog operations the user has not
+// switched on, sorted.
+func (p *AppAccessProfile) DeniedOperations(cat *catalog.Catalog, defaults AppAccessDefaults) []string {
+	return p.catalogOperations(cat, defaults, false)
+}
+
+func (p *AppAccessProfile) catalogOperations(cat *catalog.Catalog, defaults AppAccessDefaults, allowed bool) []string {
 	if cat == nil {
 		return nil
 	}
-	enabled := make([]string, 0, len(cat.Operations))
+	ids := make([]string, 0, len(cat.Operations))
 	for i := range cat.Operations {
-		if p.Allows(cat.Operations[i], defaults) {
-			enabled = append(enabled, cat.Operations[i].ID)
+		if p.Allows(cat.Operations[i], defaults) == allowed {
+			ids = append(ids, cat.Operations[i].ID)
 		}
 	}
-	slices.Sort(enabled)
-	return enabled
+	slices.Sort(ids)
+	return ids
 }
 
 // AppAccessOverrides turns the operations a user wants on into decisions
@@ -149,9 +234,13 @@ func AppAccessOverrides(enabled []string, cat *catalog.Catalog, defaults AppAcce
 // catalog does not list right now. A save only sees the operations the page
 // offered, so carrying these forward keeps an opt-out from reverting to the
 // default when its operation is temporarily absent (a failed session-catalog
-// fetch, an admin hiding it) and comes back. A legacy profile's enabled ids
-// carry forward as extras, which keeps them on.
-func (p *AppAccessProfile) OverridesOutside(cat *catalog.Catalog) (disabled, extra []string) {
+// fetch, an admin hiding it) and comes back.
+//
+// A legacy profile's enabled ids carry forward as extras, which keeps them on.
+// Every other operation of the static catalog that the page does not list was
+// off under the legacy list, so it is recorded as an opt-out; otherwise it
+// would fall back to its default and turn on.
+func (p *AppAccessProfile) OverridesOutside(cat, static *catalog.Catalog) (disabled, extra []string) {
 	if p == nil {
 		return nil, nil
 	}
@@ -170,8 +259,20 @@ func (p *AppAccessProfile) OverridesOutside(cat *catalog.Catalog) (disabled, ext
 		}
 		return kept
 	}
-	if p.Legacy {
-		return nil, outside(p.LegacyEnabledOperations)
+	if !p.Legacy {
+		return outside(p.DisabledOperations), outside(p.ExtraOperations)
 	}
-	return outside(p.DisabledOperations), outside(p.ExtraOperations)
+	extra = outside(p.LegacyEnabledOperations)
+	if static != nil {
+		staticIDs := make([]string, 0, len(static.Operations))
+		for i := range static.Operations {
+			staticIDs = append(staticIDs, static.Operations[i].ID)
+		}
+		for _, id := range outside(staticIDs) {
+			if !slices.Contains(p.LegacyEnabledOperations, id) {
+				disabled = append(disabled, id)
+			}
+		}
+	}
+	return disabled, extra
 }
