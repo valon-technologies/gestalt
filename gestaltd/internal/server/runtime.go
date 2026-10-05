@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -31,6 +32,26 @@ const (
 	runtimeShutdownTimeout        = 15 * time.Second
 	readinessIndexedDBPingTimeout = 2 * time.Second
 )
+
+// legacyAppAccessConversionEnv opts an instance back in to reading legacy app
+// access allow-lists as decisions relative to the app's current defaults.
+//
+// Conversion turns on every operation an app made default-on after the user's
+// list was saved. On valon.tools that moved a Slack thread-read operation from
+// a handful of calls to roughly 100 a minute, past the upstream per-method
+// limit, and the public REST surface reports those upstream rejections as 5xx.
+// Unbinding the history leaves the stored allow-list authoritative, which is
+// how instances behaved before the conversion landed, and leaves profiles
+// already saved in the relative format readable.
+//
+// Re-enable only once a provider-side limit keeps the extra calls in bounds.
+const legacyAppAccessConversionEnv = "GESTALTD_LEGACY_APP_ACCESS_CONVERSION"
+
+// legacyAppAccessConversionEnabled reports whether this instance converts
+// legacy allow-lists. Off unless legacyAppAccessConversionEnv is set.
+func legacyAppAccessConversionEnabled() bool {
+	return os.Getenv(legacyAppAccessConversionEnv) != ""
+}
 
 func httpCatalogConnectionMap(connMaps bootstrap.ConnectionMaps) map[string]string {
 	return connMaps.APIConnection
@@ -97,11 +118,13 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err != nil {
 		return fmt.Errorf("resolve app registry heartbeat TTL: %w", err)
 	}
-	operationHistory := appregistry.NewOperationHistory(appRegistryReader, cfg.AppRegistries, cfg.Apps, result.Services.AppVersionChangeRequests)
-	if result.AppAccess != nil {
-		result.AppAccess.SetOperationHistory(operationHistory)
-	} else {
+	switch {
+	case result.AppAccess == nil:
 		slog.ErrorContext(ctx, "app access resolver is not configured; legacy app access profiles stay unconverted")
+	case !legacyAppAccessConversionEnabled():
+		slog.InfoContext(ctx, "legacy app access conversion is off; stored allow-lists stay authoritative", "enable_with", legacyAppAccessConversionEnv)
+	default:
+		result.AppAccess.SetOperationHistory(appregistry.NewOperationHistory(appRegistryReader, cfg.AppRegistries, cfg.Apps, result.Services.AppVersionChangeRequests))
 	}
 	fleetProjector := &appregistry.FleetProjector{
 		ChangeRequests: result.Services.AppVersionChangeRequests,
