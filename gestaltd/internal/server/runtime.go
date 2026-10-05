@@ -97,6 +97,12 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err != nil {
 		return fmt.Errorf("resolve app registry heartbeat TTL: %w", err)
 	}
+	operationHistory := appregistry.NewOperationHistory(appRegistryReader, cfg.AppRegistries, cfg.Apps, result.Services.AppVersionChangeRequests)
+	if result.AppAccess != nil {
+		result.AppAccess.SetOperationHistory(operationHistory)
+	} else {
+		slog.ErrorContext(ctx, "app access resolver is not configured; legacy app access profiles stay unconverted")
+	}
 	fleetProjector := &appregistry.FleetProjector{
 		ChangeRequests: result.Services.AppVersionChangeRequests,
 		SourceVersions: result.Services.GestaltdSourceVersionState,
@@ -177,6 +183,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		OperationAccessChecker:  operationAccessChecker(result.Invoker),
 		AppRegistries:           cfg.AppRegistries,
 		AppRegistryReader:       appRegistryReader,
+		AppAccessResolver:       result.AppAccess,
 		AppFleetProjector:       fleetProjector,
 		AppRegistryHeartbeatTTL: heartbeatTTL,
 		AppRegistryRolloutMode:  cfg.Server.AppRegistry.RolloutMode,

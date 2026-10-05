@@ -142,6 +142,7 @@ type Broker struct {
 	mcpMapper                     ConnectionMapper
 	connectionRuntime             ConnectionRuntimeResolver
 	appAccessProfiles             core.AppAccessProfileStore
+	appAccess                     *AppAccessResolver
 	appOperationPolicies          core.AppOperationPolicyStore
 	authorization                 core.AuthorizationProvider
 	providerKinds                 map[string]ProviderKind
@@ -183,6 +184,12 @@ func WithAppAccessProfiles(store core.AppAccessProfileStore) BrokerOption {
 	return func(b *Broker) { b.appAccessProfiles = store }
 }
 
+// WithAppAccessResolver shares the resolver that reads legacy app access
+// profiles, so other surfaces judge a profile exactly as the broker does.
+func WithAppAccessResolver(resolver *AppAccessResolver) BrokerOption {
+	return func(b *Broker) { b.appAccess = resolver }
+}
+
 // WithAppOperationPolicies reads app-admin permissions at the shared request
 // boundary. Provider instances and catalogs contain definitions, not policy.
 func WithAppOperationPolicies(store core.AppOperationPolicyStore) BrokerOption {
@@ -213,6 +220,9 @@ func NewBroker(providers *registry.ProviderMap[core.Provider], users UserStore, 
 	b := &Broker{providers: providers, users: users, externalCreds: externalCreds}
 	for _, o := range opts {
 		o(b)
+	}
+	if b.appAccess == nil {
+		b.appAccess = NewAppAccessResolver(b.logger)
 	}
 	return b
 }
@@ -1257,19 +1267,22 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 			}
 		}
 	}
+	if err := b.checkUnlistedSessionOperation(ctx, p, providerName, operationID, b.appAccessScope(ctx, providerName)); err != nil {
+		return err
+	}
 	_, _, err := b.authorizeInvocation(ctx, p, prov, providerName, operation)
 	return err
 }
 
-func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+func (b *Broker) checkAppAccess(ctx context.Context, p *principal.Principal, prov core.Provider, providerName string, operation catalog.CatalogOperation) error {
 	profile, err := b.appAccessProfile(ctx, p, providerName)
 	if err != nil {
-		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operation.ID, err)
 	}
-	if appAccessProfileAllows(profile, operationID) {
+	if profile.Allows(operation, core.AppAccessDefaultsFor(prov)) {
 		return nil
 	}
-	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+	return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation.ID)
 }
 
 func (b *Broker) appAccessProfile(ctx context.Context, p *principal.Principal, providerName string) (*core.AppAccessProfile, error) {
@@ -1297,19 +1310,28 @@ func (b *Broker) appAccessProfile(ctx context.Context, p *principal.Principal, p
 		}
 		return nil, err
 	}
-	return profile, nil
+	if !profile.Legacy {
+		return profile, nil
+	}
+	return b.resolveLegacyProfile(ctx, providerName, profile), nil
 }
 
-func appAccessProfileAllows(profile *core.AppAccessProfile, operationID string) bool {
-	if profile == nil {
-		return true
+// resolveLegacyProfile keeps the stored legacy profile when its provider is
+// unavailable, so the caller still enforces the opt-in list.
+func (b *Broker) resolveLegacyProfile(ctx context.Context, providerName string, profile *core.AppAccessProfile) *core.AppAccessProfile {
+	prov, err := b.providers.GetWithContext(ctx, providerName)
+	if err != nil || prov == nil {
+		return profile
 	}
-	for _, enabled := range profile.EnabledOperations {
-		if strings.TrimSpace(enabled) == strings.TrimSpace(operationID) {
-			return true
-		}
+	return b.appAccess.Resolve(ctx, prov, profile)
+}
+
+// ResolveAppAccessProfile reads a stored profile the way enforcement does.
+func (b *Broker) ResolveAppAccessProfile(ctx context.Context, prov core.Provider, profile *core.AppAccessProfile) *core.AppAccessProfile {
+	if b == nil {
+		return profile
 	}
-	return false
+	return b.appAccess.Resolve(ctx, prov, profile)
 }
 
 func legacyAppAccessSubjectID(p *principal.Principal) string {

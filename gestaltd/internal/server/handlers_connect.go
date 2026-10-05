@@ -881,15 +881,7 @@ func (s *Server) ensureAppAccessDefaults(ctx context.Context, tm credentialMater
 	if app == "" {
 		return nil
 	}
-	staticCat := s.publicCatalog(app, prov, prov.Catalog())
-	if core.SupportsSessionCatalog(prov) {
-		// Session catalogs are resolved with the connected user's credential at
-		// request time. Do not turn an empty static catalog into a permanent
-		// empty allow list before those operations are discoverable.
-		return nil
-	}
-	cat := appAccessCapabilityCatalog(prov, staticCat)
-	_, err = s.appAccessProfiles.EnsureAppAccessDefaults(ctx, subjectID, app, defaultAppAccessOperationsForProvider(prov, cat))
+	_, err = s.appAccessProfiles.EnsureAppAccessDefaults(ctx, subjectID, app)
 	return err
 }
 

@@ -59,22 +59,26 @@ func (s *Server) appAccessHandler(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
-		valid := make(map[string]struct{})
-		if cat != nil {
-			for i := range cat.Operations {
-				valid[cat.Operations[i].ID] = struct{}{}
-			}
-		}
-		enabled, invalid := normalizeRequestedAppAccess(req.EnabledOperations, valid)
-		if len(invalid) > 0 {
-			writeError(w, http.StatusBadRequest, "that app operation is not available; choose an operation from the list and try again")
-			return
-		}
 		if s.appAccessProfiles == nil {
 			writeError(w, http.StatusServiceUnavailable, "app access settings are unavailable")
 			return
 		}
-		if _, err := s.appAccessProfiles.SetAppAccessOperations(r.Context(), subjectID, name, enabled); err != nil {
+		// Ids the catalog no longer lists are dropped rather than rejected: the
+		// page echoes back the user's saved list, which can name an operation
+		// the app has since removed, and that must not block every later save.
+		disabled, extra := core.AppAccessOverrides(req.EnabledOperations, cat, core.AppAccessDefaultsFor(prov))
+		// The save replaces every decision, but the page only offered the
+		// operations in cat. Keep the user's choices about the rest.
+		existing, err := s.appAccessProfiles.GetAppAccessProfile(r.Context(), subjectID, name)
+		if err != nil && !errors.Is(err, core.ErrNotFound) {
+			s.writeAppAccessError(w, err)
+			return
+		}
+		existing = s.appAccess.Resolve(r.Context(), prov, existing)
+		keptDisabled, keptExtra := existing.OverridesOutside(cat, prov.Catalog())
+		disabled = core.MergeAppAccessIDs(disabled, keptDisabled)
+		extra = core.MergeAppAccessIDs(extra, keptExtra)
+		if _, err := s.appAccessProfiles.SetAppAccessOverrides(r.Context(), subjectID, name, disabled, extra); err != nil {
 			s.writeAppAccessError(w, err)
 			return
 		}
@@ -96,30 +100,23 @@ func (s *Server) resolveAppAccessSubject(r *http.Request) (string, error) {
 }
 
 func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov core.Provider, cat *catalog.Catalog) (*appAccessResponse, error) {
-	defaults := defaultAppAccessOperationsForProvider(prov, cat)
-	enabled := defaults
+	defaults := core.AppAccessDefaultsFor(prov)
+	var profile *core.AppAccessProfile
 	initialized := false
 	if s.appAccessProfiles != nil {
-		profile, err := s.appAccessProfiles.GetAppAccessProfile(r.Context(), subjectID, app)
+		stored, err := s.appAccessProfiles.GetAppAccessProfile(r.Context(), subjectID, app)
 		if err == nil {
-			enabled = profile.EnabledOperations
+			profile = s.appAccess.Resolve(r.Context(), prov, stored)
 			initialized = profile.DefaultsInitialized
 		} else if !errors.Is(err, core.ErrNotFound) {
 			return nil, err
 		}
 	}
-	enabledSet := make(map[string]struct{}, len(enabled))
-	for _, operation := range enabled {
-		enabledSet[operation] = struct{}{}
-	}
-	defaultSet := make(map[string]struct{}, len(defaults))
-	for _, operation := range defaults {
-		defaultSet[operation] = struct{}{}
-	}
+	enabled := profile.EnabledOperations(cat, defaults)
 	response := &appAccessResponse{
 		App:                 app,
 		Operations:          make([]appAccessOperationInfo, 0),
-		EnabledOperations:   append([]string(nil), enabled...),
+		EnabledOperations:   enabled,
 		DefaultsInitialized: initialized,
 	}
 	if cat == nil {
@@ -128,8 +125,8 @@ func (s *Server) appAccessResponse(r *http.Request, subjectID, app string, prov 
 	response.Operations = make([]appAccessOperationInfo, 0, len(cat.Operations))
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
-		_, isEnabled := enabledSet[op.ID]
-		_, isDefault := defaultSet[op.ID]
+		isEnabled := profile.Allows(*op, defaults)
+		isDefault := defaults.Includes(*op)
 		response.Operations = append(response.Operations, appAccessOperationInfo{
 			ID:          op.ID,
 			Title:       appAccessOperationTitle(op.ID, op.Title),
@@ -218,37 +215,6 @@ func appAccessCapabilityCatalog(prov core.Provider, cat *catalog.Catalog) *catal
 	return cat
 }
 
-func defaultAppAccessOperationsForProvider(prov core.Provider, cat *catalog.Catalog) []string {
-	operations := catOperations(cat)
-	if provider, ok := prov.(core.AppAccessDefaultsProvider); ok {
-		defaults, configured := provider.DefaultAppAccessOperations()
-		if configured {
-			valid := make(map[string]struct{}, len(operations))
-			for _, operation := range operations {
-				valid[operation] = struct{}{}
-			}
-			filtered, _ := normalizeRequestedAppAccess(defaults, valid)
-			return filtered
-		}
-	}
-	return operations
-}
-
-func catOperations(cat *catalog.Catalog) []string {
-	if cat == nil {
-		return nil
-	}
-	operations := make([]string, 0, len(cat.Operations))
-	for i := range cat.Operations {
-		operation := &cat.Operations[i]
-		if catalog.OperationVisibleByDefault(*operation) {
-			operations = append(operations, operation.ID)
-		}
-	}
-	slices.Sort(operations)
-	return operations
-}
-
 func appAccessOperationTitle(id, title string) string {
 	if title = strings.TrimSpace(title); title != "" {
 		return title
@@ -279,30 +245,6 @@ func appAccessOperationTitle(id, title string) string {
 	}
 	flush()
 	return strings.Join(words, " ")
-}
-
-func normalizeRequestedAppAccess(operations []string, valid map[string]struct{}) ([]string, []string) {
-	seen := make(map[string]struct{}, len(operations))
-	var normalized []string
-	var invalid []string
-	for _, operation := range operations {
-		operation = strings.TrimSpace(operation)
-		if operation == "" {
-			continue
-		}
-		if _, ok := valid[operation]; !ok {
-			invalid = append(invalid, operation)
-			continue
-		}
-		if _, ok := seen[operation]; ok {
-			continue
-		}
-		seen[operation] = struct{}{}
-		normalized = append(normalized, operation)
-	}
-	slices.Sort(normalized)
-	slices.Sort(invalid)
-	return normalized, invalid
 }
 
 func (s *Server) writeAppAccessError(w http.ResponseWriter, err error) {

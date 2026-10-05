@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -308,12 +309,60 @@ func (m *Manager) authorizeRunAsTarget(ctx context.Context, p *principal.Princip
 	return workflowTargetAuthorizationError{failure: decision.failure}
 }
 
-func (m *Manager) checkOperationAccess(ctx context.Context, p *principal.Principal, providerName, operation string) error {
+func (m *Manager) checkOperationAccess(ctx context.Context, p *principal.Principal, call coreworkflow.AppCall) error {
 	checker, ok := m.invoker.(targetAccessChecker)
 	if !ok {
 		return fmt.Errorf("%w: workflow target access checker is not configured", invocation.ErrInternal)
 	}
-	return checker.CheckOperationAccess(ctx, p, providerName, operation)
+	resolved, err := m.resolvedOperation(ctx, p, call)
+	if err != nil {
+		return fmt.Errorf("%w: %s.%s: %v", invocation.ErrAuthorizationDenied, call.Name, call.Operation, err)
+	}
+	batch, ok := m.invoker.(invocation.OperationAccessChecker)
+	if resolved == nil || !ok {
+		return checker.CheckOperationAccess(ctx, p, call.Name, call.Operation)
+	}
+	results, err := batch.CheckOperationAccessMany(ctx, p, []invocation.OperationAccessQuery{{
+		Provider:     call.Name,
+		Operation:    call.Operation,
+		AllowedRoles: resolved.AllowedRoles,
+		Metadata:     resolved,
+	}})
+	if err != nil {
+		return err
+	}
+	if len(results) != 1 {
+		return invocation.ErrMalformedAuthorizationDecision
+	}
+	return results[0].Err
+}
+
+// resolvedOperation returns the operation as the invoke path resolves it, or
+// nil when it cannot be resolved here so the caller falls back to the static
+// catalog decision. A session-catalog app that fails to resolve returns the
+// error instead, because the static catalog cannot prove the operation's default.
+func (m *Manager) resolvedOperation(ctx context.Context, p *principal.Principal, call coreworkflow.AppCall) (*catalog.CatalogOperation, error) {
+	if m == nil || m.providers == nil {
+		return nil, nil
+	}
+	prov := m.lookupProvider(ctx, call.Name)
+	if prov == nil {
+		return nil, nil
+	}
+	var resolver invocation.TokenResolver
+	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
+		resolver = tr
+	}
+	connection := core.ResolveConnectionAlias(strings.TrimSpace(call.Connection))
+	sessionConnections := m.catalogSelectorConfig().SessionCatalogConnections(call.Name, connection)
+	op, _, _, err := invocation.ResolveOperation(ctx, prov, call.Name, resolver, p, call.Operation, sessionConnections, strings.TrimSpace(call.Instance))
+	if err == nil {
+		return &op, nil
+	}
+	if core.SupportsSessionCatalog(prov) {
+		return nil, err
+	}
+	return nil, nil
 }
 
 func (m *Manager) checkProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
@@ -367,7 +416,7 @@ func (m *Manager) checkWorkflowStepAppAuthorization(ctx context.Context, p *prin
 	if operation == "" {
 		return targetAuthorizationDenied(component, targetAuthorizationReasonMissingAppOperation, appName, "", -1)
 	}
-	if err := m.checkOperationAccess(ctx, p, appName, operation); err != nil {
+	if err := m.checkOperationAccess(ctx, p, coreworkflow.AppCall{Name: appName, Operation: operation, Connection: app.Connection, Instance: app.Instance}); err != nil {
 		return targetAuthorizationDenied(component, targetAuthorizationReasonPrincipalOperationPermissionDenied, appName, operation, -1)
 	}
 	return targetAuthorizationAllowed()
@@ -397,7 +446,7 @@ func (m *Manager) checkWorkflowAgentToolAuthorization(ctx context.Context, p *pr
 		}
 		return targetAuthorizationAllowed()
 	}
-	return m.checkWorkflowStepAppAuthorization(ctx, p, &coreworkflow.AppCall{Name: appName, Operation: operation}, targetAuthorizationComponentAgentToolRef)
+	return m.checkWorkflowStepAppAuthorization(ctx, p, &coreworkflow.AppCall{Name: appName, Operation: operation, Connection: tool.Connection, Instance: tool.Instance}, targetAuthorizationComponentAgentToolRef)
 }
 
 func targetAuthorizationAllowed() targetAuthorizationDecision {
@@ -460,4 +509,14 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 		}
 	}
 	return nil
+}
+
+// lookupProvider returns nil when the app cannot be loaded, leaving the
+// caller on the static catalog decision.
+func (m *Manager) lookupProvider(ctx context.Context, name string) core.Provider {
+	prov, err := m.providers.GetWithContext(ctx, name)
+	if err != nil {
+		return nil
+	}
+	return prov
 }

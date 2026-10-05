@@ -370,3 +370,92 @@ type truncatingAuthorizationProvider struct {
 func (p *truncatingAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
 	return &proto.CheckAccessManyResponse{Decisions: []*proto.CheckAccessResponse{{Allowed: true}}}, nil
 }
+
+type unlistedSessionProvider struct {
+	*coretesting.StubIntegration
+}
+
+func (unlistedSessionProvider) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
+	return nil, core.ErrSessionCatalogUnavailable
+}
+
+func newUnlistedSessionBroker(t *testing.T, enabled core.AppAccessProfile) (*Broker, *principal.Principal) {
+	t.Helper()
+	svc := testutil.NewStubServices(t)
+	provider := unlistedSessionProvider{newAppAccessDefaultsProvider(
+		catalog.CatalogOperation{ID: "conversations.list", Method: "GET"},
+	)}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		nil,
+		WithAppAccessProfiles(svc.AppAccessProfiles),
+	)
+	p := appAccessDefaultsPrincipal()
+	if _, err := svc.AppAccessProfiles.SetAppAccessOverrides(
+		context.Background(), p.SubjectID, appAccessDefaultsApp, enabled.DisabledOperations, enabled.ExtraOperations,
+	); err != nil {
+		t.Fatalf("SetAppAccessOverrides: %v", err)
+	}
+	return broker, p
+}
+
+func TestCheckOperationAccessFailsClosedForUnlistedSessionOperation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		unlisted = "dynamic.mcp"
+		extra    = "dynamic.extra"
+	)
+	broker, p := newUnlistedSessionBroker(t, core.AppAccessProfile{
+		DisabledOperations: []string{"conversations.list"},
+		ExtraOperations:    []string{extra},
+	})
+
+	for _, operation := range []string{unlisted, extra, core.GraphQLCapabilityID} {
+		wantAllowed := operation != unlisted
+		single := broker.CheckOperationAccess(context.Background(), p, appAccessDefaultsApp, operation)
+		if (single == nil) != wantAllowed {
+			t.Fatalf("CheckOperationAccess %s = %v, want allowed=%v", operation, single, wantAllowed)
+		}
+		if got := listedAllowed(t, broker, p, operation); (len(got) == 1) != wantAllowed {
+			t.Fatalf("batch %s allowed = %v, want allowed=%v", operation, got, wantAllowed)
+		}
+	}
+	if err := broker.CheckOperationAccess(context.Background(), p, appAccessDefaultsApp, unlisted); !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("unlisted err = %v, want ErrAuthorizationDenied", err)
+	}
+}
+
+func TestCheckOperationAccessManyIgnoresMetadataForDifferentOperation(t *testing.T) {
+	t.Parallel()
+
+	broker, p := newUnlistedSessionBroker(t, core.AppAccessProfile{DisabledOperations: []string{"conversations.list"}})
+	decisions, err := broker.CheckOperationAccessMany(context.Background(), p, []OperationAccessQuery{
+		{Provider: appAccessDefaultsApp, Operation: "dynamic.mcp", Metadata: &catalog.CatalogOperation{ID: "other.default"}},
+		{Provider: appAccessDefaultsApp, Operation: "conversations.list", Metadata: &catalog.CatalogOperation{ID: "other.default"}},
+	})
+	if err != nil {
+		t.Fatalf("CheckOperationAccessMany: %v", err)
+	}
+	for i, decision := range decisions {
+		if !errors.Is(decision.Err, ErrAuthorizationDenied) {
+			t.Fatalf("query %d err = %v, want ErrAuthorizationDenied", i, decision.Err)
+		}
+	}
+}
+
+func TestCheckOperationAccessManyHonorsMatchingMetadata(t *testing.T) {
+	t.Parallel()
+
+	broker, p := newUnlistedSessionBroker(t, core.AppAccessProfile{DisabledOperations: []string{"conversations.list"}})
+	decisions, err := broker.CheckOperationAccessMany(context.Background(), p, []OperationAccessQuery{
+		{Provider: appAccessDefaultsApp, Operation: "dynamic.mcp", Metadata: &catalog.CatalogOperation{ID: " dynamic.mcp "}},
+	})
+	if err != nil {
+		t.Fatalf("CheckOperationAccessMany: %v", err)
+	}
+	if decisions[0].Err != nil {
+		t.Fatalf("matching metadata for default-on op denied: %v", decisions[0].Err)
+	}
+}
