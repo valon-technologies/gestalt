@@ -97,7 +97,13 @@ type appAdminMemberRemoveResponse struct {
 }
 
 func (s *Server) listAppAdminMembers(w http.ResponseWriter, r *http.Request) {
-	appName := strings.TrimSpace(chi.URLParam(r, "app"))
+	s.writeAppAdminMembers(w, r, strings.TrimSpace(chi.URLParam(r, "app")))
+}
+
+// writeAppAdminMembers writes the human/group access roster for one app. It is
+// shared by the app-admin route and the platform-admin route, which differ only
+// in who may call them.
+func (s *Server) writeAppAdminMembers(w http.ResponseWriter, r *http.Request, appName string) {
 	if appName == "" {
 		writeError(w, http.StatusBadRequest, "app is required")
 		return

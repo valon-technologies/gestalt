@@ -203,6 +203,7 @@ func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 			s.mountAdminAppRolloutRoutes(r)
 			s.mountAdminMetricsRoutes(r)
 			s.mountAdminPlatformAdminsRoutes(r)
+			s.mountAdminAppMembersRoutes(r)
 			s.mountAdminUsersRoutes(r)
 			s.mountAdminManagedSecretRoutes(r)
 			s.mountAdminSCIMRoutes(r)
