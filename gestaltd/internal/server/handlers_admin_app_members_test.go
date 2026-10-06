@@ -58,3 +58,39 @@ func TestAdminAppMembersListShowsNames(t *testing.T) {
 		t.Fatalf("POST status = %d, want 405: the platform route is read-only", write.StatusCode)
 	}
 }
+
+// TestAdminAppMembersRequiresPlatformAdmin: the roster route sits behind the
+// platform-admin gate, so an app admin or any other signed-in user is refused.
+func TestAdminAppMembersRequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		grantAdmin bool
+		wantStatus int
+	}{
+		"signed-in user without platform admin": {grantAdmin: false, wantStatus: http.StatusForbidden},
+		"platform admin":                        {grantAdmin: true, wantStatus: http.StatusOK},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ts := newAuthorizedAdminTestServer(t, tc.grantAdmin)
+			testutil.CloseOnCleanup(t, ts)
+
+			req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/apps/g-issues/members", nil)
+			if err != nil {
+				t.Fatalf("NewRequest: %v", err)
+			}
+			req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("GET admin app members: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != tc.wantStatus {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status = %d, want %d: %s", resp.StatusCode, tc.wantStatus, body)
+			}
+		})
+	}
+}
