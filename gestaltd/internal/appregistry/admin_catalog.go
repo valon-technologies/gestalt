@@ -12,11 +12,11 @@ func PendingVersionsForAdmin(pending *PendingIndex, published map[string]struct{
 		return nil
 	}
 	out := make([]PendingVersion, 0, len(pending.Pending))
-	for version, entry := range pending.Pending {
+	for version := range pending.Pending {
 		if _, ok := published[version]; ok {
 			continue
 		}
-		out = append(out, entry)
+		out = append(out, pending.Pending[version])
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].StartedAt.Equal(out[j].StartedAt) {
@@ -34,14 +34,14 @@ func FailedVersionsForAdmin(failed *FailedIndex, published, pending map[string]s
 		return nil
 	}
 	out := make([]FailedVersion, 0, len(failed.Failed))
-	for version, entry := range failed.Failed {
+	for version := range failed.Failed {
 		if _, ok := published[version]; ok {
 			continue
 		}
 		if _, ok := pending[version]; ok {
 			continue
 		}
-		out = append(out, entry)
+		out = append(out, failed.Failed[version])
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].FailedAt.Equal(out[j].FailedAt) {

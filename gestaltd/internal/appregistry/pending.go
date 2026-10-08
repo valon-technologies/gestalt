@@ -119,8 +119,8 @@ func validatePendingIndex(index *PendingIndex) error {
 	if index.Pending == nil {
 		return fmt.Errorf("pending index pending map is required")
 	}
-	for version, entry := range index.Pending {
-		if err := validatePendingVersion(index.App, version, entry); err != nil {
+	for version := range index.Pending {
+		if err := validatePendingVersion(index.App, version, index.Pending[version]); err != nil {
 			return fmt.Errorf("pending index version %q: %w", version, err)
 		}
 	}
