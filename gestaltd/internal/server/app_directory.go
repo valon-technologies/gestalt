@@ -558,7 +558,7 @@ func (s *Server) appSourceTreeURLs(ctx context.Context, snapshot *tenantAppDirec
 			continue
 		}
 		if sourceRepository := strings.TrimSpace(installation.SourceRepository); sourceRepository != "" {
-			urls[name] = appregistry.SourceTreeURLForApp(sourceRepository, installation.AppName, installation.SourceRef)
+			urls[name] = appregistry.SourceTreeURLForApp(sourceRepository, installation.AppName, installation.SourceRef, installation.SourceDir)
 			continue
 		}
 		urls[name] = s.legacyRegistryAppSourceTreeURL(ctx, app, installation.Version)

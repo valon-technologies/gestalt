@@ -610,3 +610,61 @@ func TestEntry_OmitsZeroPublishStartedAt(t *testing.T) {
 		t.Fatalf("entry JSON should omit publishStartedAt: %s", data)
 	}
 }
+
+func TestPendingAndFailedIndexesRejectASourceDirOfAnotherApp(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 24, 19, 0, 0, 0, time.UTC)
+	const repository = "github.com/valon-technologies/toolshed"
+	const sourceRef = "abc123def456abc123def456abc123def456abcd"
+	const version = "0.0.0-snapshot.gabc123"
+	for _, sourceDir := range []string{"valon-tools/apps/other", "../evil/apps/traffic-cop"} {
+		pendingData, err := json.Marshal(&PendingIndex{
+			SchemaVersion: PendingIndexSchemaVersion,
+			App:           "traffic-cop",
+			Pending: map[string]PendingVersion{version: {
+				Version: version, SourceRef: sourceRef, Repository: repository, SourceDir: sourceDir,
+				StartedAt: now, UpdatedAt: now, Phase: PendingPhasePublishing,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("marshal pending: %v", err)
+		}
+		if _, err := DecodePendingIndex(pendingData); err == nil {
+			t.Fatalf("DecodePendingIndex accepted sourceDir %q", sourceDir)
+		}
+		failedData, err := json.Marshal(&FailedIndex{
+			SchemaVersion: FailedIndexSchemaVersion,
+			App:           "traffic-cop",
+			Failed: map[string]FailedVersion{version: {
+				Version: version, SourceRef: sourceRef, Repository: repository, SourceDir: sourceDir,
+				StartedAt: now, FailedAt: now, Reason: FailedReasonStale,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("marshal failed: %v", err)
+		}
+		if _, err := DecodeFailedIndex(failedData); err == nil {
+			t.Fatalf("DecodeFailedIndex accepted sourceDir %q", sourceDir)
+		}
+	}
+}
+
+func TestFailedVersionKeepsSourceDirOfPendingVersion(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	pending := PendingVersion{
+		Version:    "0.0.0-snapshot.gabc123",
+		SourceRef:  "abc123def456abc123def456abc123def456abcd",
+		Repository: "github.com/valon-technologies/toolshed",
+		SourceDir:  "valon-tools/apps/traffic-cop",
+		StartedAt:  now,
+		UpdatedAt:  now,
+		Phase:      PendingPhasePublishing,
+	}
+	updated, _ := RecordFailedVersion(NewEmptyFailedIndex("traffic-cop"), "traffic-cop", pending, now, FailedReasonWorkflowFailed)
+	if got := updated.Failed[pending.Version].SourceDir; got != "valon-tools/apps/traffic-cop" {
+		t.Fatalf("failed sourceDir = %q", got)
+	}
+}

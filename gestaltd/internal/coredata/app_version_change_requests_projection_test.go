@@ -33,6 +33,7 @@ func TestInstallationFromChangeRequestPreservesSourceIdentity(t *testing.T) {
 			AppName:          "g-issues",
 			Version:          "1.2.3",
 			SourceRepository: " github.com/valon-technologies/valon-tools ",
+			SourceDir:        " valon-tools/apps/g-issues ",
 			SourceRef:        " abc123 ",
 		}),
 	}
@@ -40,6 +41,9 @@ func TestInstallationFromChangeRequestPreservesSourceIdentity(t *testing.T) {
 	installation := coredata.InstallationFromChangeRequest(request)
 	if installation.SourceRepository != "github.com/valon-technologies/valon-tools" {
 		t.Fatalf("SourceRepository = %q", installation.SourceRepository)
+	}
+	if installation.SourceDir != "valon-tools/apps/g-issues" {
+		t.Fatalf("SourceDir = %q", installation.SourceDir)
 	}
 	if installation.SourceRef != "abc123" {
 		t.Fatalf("SourceRef = %q", installation.SourceRef)

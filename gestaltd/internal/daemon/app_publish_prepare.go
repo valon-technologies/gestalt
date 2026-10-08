@@ -59,7 +59,11 @@ func prepareAppPublishRelease(input prepareAppPublishReleaseInput) (preparedAppP
 	if resolve == nil {
 		resolve = func(name string) (string, string, error) {
 			path, err := resolveAppPublishManifest(name)
-			return path, "", err
+			if err != nil {
+				return "", "", err
+			}
+			rel, err := gitRelativePath(path)
+			return path, rel, err
 		}
 	}
 	manifestPath, relManifestPath, err := resolve(appName)
@@ -77,6 +81,11 @@ func prepareAppPublishRelease(input prepareAppPublishReleaseInput) (preparedAppP
 		}
 		if manifestApp != expectedApp {
 			return zero, fmt.Errorf("%s: manifest source app %q does not match --app %q; update manifest source or pass the matching --app name", manifestPath, manifestApp, expectedApp)
+		}
+	}
+	if relManifestPath != "" {
+		if err := appregistry.ValidateManifestLocation(sourceManifest.Source, relManifestPath); err != nil {
+			return zero, fmt.Errorf("%s: %w", manifestPath, err)
 		}
 	}
 	if err := validateProviderPublishManifest(sourceManifest, releaseManifest, releaseVersion, version); err != nil {

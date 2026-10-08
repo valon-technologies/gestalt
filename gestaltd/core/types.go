@@ -28,6 +28,7 @@ type AppInstallation struct {
 	AppName            string
 	Version            string
 	SourceRepository   string
+	SourceDir          string
 	SourceRef          string
 	Registry           string
 	ProviderReleaseURL string

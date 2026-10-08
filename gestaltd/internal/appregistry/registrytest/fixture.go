@@ -37,8 +37,22 @@ type CatalogDocuments struct {
 	FailedJSON  []byte
 }
 
+const defaultFixtureRepository = "github.com/valon-technologies/valon-tools"
+
 // NewInstallFixture builds a mock GCS registry with one installable app version.
 func NewInstallFixture(t *testing.T) InstallFixture {
+	t.Helper()
+	return newInstallFixture(t, defaultFixtureRepository, "")
+}
+
+// NewInstallFixtureInSourceDir is NewInstallFixture for an app that lives in
+// sourceDir, a folder of repository other than apps/g-issues.
+func NewInstallFixtureInSourceDir(t *testing.T, repository, sourceDir string) InstallFixture {
+	t.Helper()
+	return newInstallFixture(t, repository, sourceDir)
+}
+
+func newInstallFixture(t *testing.T, repository, sourceDir string) InstallFixture {
 	t.Helper()
 
 	version := "0.0.0-snapshot.gabc123"
@@ -60,9 +74,13 @@ func NewInstallFixture(t *testing.T) InstallFixture {
 		t.Fatalf("FileSHA256: %v", err)
 	}
 
+	manifestSourceDir := sourceDir
+	if manifestSourceDir == "" {
+		manifestSourceDir = "apps/g-issues"
+	}
 	manifest := &providermanifestv1.Manifest{
 		Kind:    providermanifestv1.KindApp,
-		Source:  "github.com/valon-technologies/valon-tools/apps/g-issues",
+		Source:  repository + "/" + manifestSourceDir,
 		Version: version,
 		Spec:    &providermanifestv1.Spec{},
 		Entrypoint: &providermanifestv1.Entrypoint{
@@ -107,7 +125,8 @@ func NewInstallFixture(t *testing.T) InstallFixture {
 		Version:       version,
 		SourceRef:     sourceRef,
 		ManifestPath:  "valon-tools/apps/g-issues/manifest.yaml",
-		Repository:    "github.com/valon-technologies/valon-tools",
+		Repository:    repository,
+		SourceDir:     sourceDir,
 		Publication: &appregistry.Publication{
 			WorkflowRunURL: "https://github.com/valon-technologies/valon-tools/actions/runs/123456789",
 			TriggerPullRequest: &appregistry.PublicationPullRequest{
@@ -140,6 +159,7 @@ func NewInstallFixture(t *testing.T) InstallFixture {
 						PublishedAt: entry.PublishedAt,
 						SourceRef:   entry.SourceRef,
 						Repository:  entry.Repository,
+						SourceDir:   entry.SourceDir,
 						Publication: entry.Publication,
 					},
 				},

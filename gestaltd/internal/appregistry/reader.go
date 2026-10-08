@@ -235,6 +235,7 @@ type VersionSummary struct {
 	PublishStartedAt *time.Time   `json:"publishStartedAt,omitempty"`
 	SourceRef        string       `json:"sourceRef,omitempty"`
 	Repository       string       `json:"repository,omitempty"`
+	SourceDir        string       `json:"sourceDir,omitempty"`
 	Publication      *Publication `json:"publication,omitempty"`
 }
 
@@ -258,6 +259,7 @@ func VersionsFromIndex(index *Index, appName string) []VersionSummary {
 			PublishStartedAt: cloneTimePtr(summary.PublishStartedAt),
 			SourceRef:        summary.SourceRef,
 			Repository:       summary.Repository,
+			SourceDir:        summary.SourceDir,
 			Publication:      clonePublication(summary.Publication),
 		})
 	}

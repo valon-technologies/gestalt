@@ -64,6 +64,50 @@ func TestBuildEntryRecordsPublicationMetadata(t *testing.T) {
 	}
 }
 
+func TestBuildEntryRecordsSourceDirForAppInRepositorySubdirectory(t *testing.T) {
+	t.Parallel()
+
+	manifest := testPublishManifest(t)
+	manifest.Source = "github.com/valon-technologies/toolshed/valon-tools/apps/traffic-cop"
+	entry, err := BuildEntry(BuildEntryInput{
+		Manifest:        manifest,
+		Version:         "0.0.1",
+		SourceRef:       "651a5c30feb995c9364c38f63d0d5c3880bc2055",
+		ManifestPath:    "valon-tools/apps/traffic-cop/manifest.yaml",
+		PublicationKind: PublicationKindGitHub,
+		Release:         testPublishReleaseMetadata(),
+		Artifacts: []PublishArtifact{{
+			Target:     "linux/amd64",
+			StorageURL: "gs://bucket/apps/traffic-cop/artifacts/0.0.1/linux-amd64.tar.gz",
+			PublicURL:  "https://example.com/linux-amd64.tar.gz",
+			SHA256:     "deadbeef",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BuildEntry() = %v", err)
+	}
+	if entry.Repository != "github.com/valon-technologies/toolshed" || entry.SourceDir != "valon-tools/apps/traffic-cop" {
+		t.Fatalf("repository = %q, sourceDir = %q", entry.Repository, entry.SourceDir)
+	}
+	const wantURL = "https://github.com/valon-technologies/toolshed/tree/651a5c30feb995c9364c38f63d0d5c3880bc2055/valon-tools/apps/traffic-cop"
+	if got := entry.SourceTreeURL(); got != wantURL {
+		t.Fatalf("SourceTreeURL = %q, want %q", got, wantURL)
+	}
+	indexVersion := indexVersionFromEntry(entry, "m.json")
+	if indexVersion.SourceDir != "valon-tools/apps/traffic-cop" {
+		t.Fatalf("index version sourceDir = %q", indexVersion.SourceDir)
+	}
+
+	indexVersion.SourceDir = "valon-tools/apps/other"
+	if err := validateIndexVersionSourceRef("traffic-cop", "0.0.1", indexVersion); err == nil {
+		t.Fatalf("index validation accepted a sourceDir for a different app")
+	}
+	entry.SourceDir = "valon-tools/apps/other"
+	if err := validateEntry(&entry); err == nil {
+		t.Fatalf("validateEntry accepted a sourceDir for a different app")
+	}
+}
+
 func testPublishReleaseMetadata() *providerrelease.Metadata {
 	return &providerrelease.Metadata{
 		StaticValidation: &providerrelease.StaticValidation{},
