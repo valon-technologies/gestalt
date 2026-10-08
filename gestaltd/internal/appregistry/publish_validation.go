@@ -178,18 +178,18 @@ func validateEntryRepositoryField(entry *Entry) error {
 }
 
 // validateSourceDir requires a recorded source directory to be the
-// [{dir}/]apps/{app} path of the named app inside its repository.
+// [{dir}/]apps/{app} path of the named app inside its repository. The default
+// apps/{app} is recorded as empty, never spelled out.
 func validateSourceDir(repository, appName, sourceDir string) error {
-	sourceDir = strings.TrimSpace(sourceDir)
 	if sourceDir == "" {
 		return nil
 	}
-	parsedApp, _, parsedDir, err := parseAppSourceDir(strings.TrimSpace(repository) + "/" + sourceDir)
+	parsed, err := ParseAppSource(strings.TrimSpace(repository) + "/" + sourceDir)
 	if err != nil {
 		return err
 	}
-	if parsedApp != appName || parsedDir != sourceDir {
-		return fmt.Errorf("must be the apps/%s directory of the repository", appName)
+	if parsed.App != appName || parsed.SourceDir != sourceDir {
+		return fmt.Errorf("must be a folder other than %s that ends in %s", defaultSourceDir(appName), defaultSourceDir(appName))
 	}
 	return nil
 }

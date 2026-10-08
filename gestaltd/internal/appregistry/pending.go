@@ -167,6 +167,9 @@ func validatePendingVersion(appName, mapKey string, entry PendingVersion) error 
 			return fmt.Errorf("repository: %w", err)
 		}
 	}
+	if err := validateSourceDir(entry.Repository, appName, entry.SourceDir); err != nil {
+		return fmt.Errorf("sourceDir: %w", err)
+	}
 	if entry.StartedAt.IsZero() {
 		return fmt.Errorf("startedAt is required")
 	}
@@ -200,6 +203,9 @@ func validateFailedVersion(appName, mapKey string, entry FailedVersion) error {
 		if err := validateEntryRepository(repository, appName); err != nil {
 			return fmt.Errorf("repository: %w", err)
 		}
+	}
+	if err := validateSourceDir(entry.Repository, appName, entry.SourceDir); err != nil {
+		return fmt.Errorf("sourceDir: %w", err)
 	}
 	if entry.StartedAt.IsZero() {
 		return fmt.Errorf("startedAt is required")
@@ -328,7 +334,6 @@ func UpsertPendingVersion(index *PendingIndex, appName string, version PendingVe
 	version.Version = strings.TrimSpace(version.Version)
 	version.SourceRef = strings.ToLower(strings.TrimSpace(version.SourceRef))
 	version.Repository = strings.TrimSpace(version.Repository)
-	version.SourceDir = strings.TrimSpace(version.SourceDir)
 	version.Phase = PendingPhasePublishing
 	version.UpdatedAt = now
 	if existing, ok := index.Pending[version.Version]; ok {

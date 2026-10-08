@@ -33,7 +33,7 @@ func ChangeRequestMetadata(installation *core.AppInstallation) map[string]any {
 	metadata := map[string]any{
 		appVersionChangeRequestMetaRegistry:           strings.TrimSpace(installation.Registry),
 		appVersionChangeRequestMetaSourceRepository:   strings.TrimSpace(installation.SourceRepository),
-		appVersionChangeRequestMetaSourceDir:          strings.TrimSpace(installation.SourceDir),
+		appVersionChangeRequestMetaSourceDir:          installation.SourceDir,
 		appVersionChangeRequestMetaSourceRef:          strings.TrimSpace(installation.SourceRef),
 		appVersionChangeRequestMetaProviderReleaseURL: strings.TrimSpace(installation.ProviderReleaseURL),
 	}

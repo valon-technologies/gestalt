@@ -26,7 +26,8 @@ const (
 	IndexSchemaVersion  = 1
 	EntrySchemaVersion  = 1
 	IndexFileName       = "index.json"
-	appSourcePathPrefix = "apps/"
+	appSourceDirName    = "apps"
+	appSourcePathPrefix = appSourceDirName + "/"
 )
 
 var (
@@ -107,9 +108,9 @@ func SourceTreeURLForApp(repositoryLocation, appName, sourceRef, sourceDir strin
 	if ref == "" || appName == "" {
 		return ""
 	}
-	appDir := strings.TrimSpace(sourceDir)
+	appDir := sourceDir
 	if appDir == "" {
-		appDir = path.Join(appSourcePathPrefix, appName)
+		appDir = defaultSourceDir(appName)
 	}
 	return (config.GitSourceIdentity{
 		Repo:   repository,
@@ -176,47 +177,69 @@ type PublishArtifact struct {
 	SHA256     string
 }
 
-func parseAppSource(raw string) (appName, repository string, err error) {
-	appName, repository, _, err = parseAppSourceDir(raw)
-	return appName, repository, err
+// AppSource is the identity a manifest source declares: the app, the
+// repository that holds it, and the folder inside that repository. SourceDir
+// is empty for the default apps/{app} layout.
+type AppSource struct {
+	App        string
+	Repository string
+	SourceDir  string
 }
 
-// parseAppSourceDir accepts a source path of [{dir}/]apps/{app}, so an app can
-// live under a subdirectory of its repository. appDir is the full path.
-func parseAppSourceDir(raw string) (appName, repository, appDir string, err error) {
+// ParseAppSource parses a manifest source of the form
+// host/owner/repo/[{dir}/]apps/{app}.
+func ParseAppSource(raw string) (AppSource, error) {
 	src, err := source.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return "", "", "", err
+		return AppSource{}, err
 	}
 	segments := strings.Split(src.Path, "/")
 	invalid := fmt.Errorf("app source path must be [{dir}/]apps/{app}, got %q", src.Path)
 	if len(segments) < 2 {
-		return "", "", "", invalid
+		return AppSource{}, invalid
 	}
 	for _, segment := range segments {
 		if strings.TrimSpace(segment) == "" || segment == "." || segment == ".." {
-			return "", "", "", invalid
+			return AppSource{}, invalid
 		}
 	}
-	if segments[len(segments)-2]+"/" != appSourcePathPrefix {
-		return "", "", "", invalid
+	if segments[len(segments)-2] != appSourceDirName {
+		return AppSource{}, invalid
 	}
-	appName = strings.TrimSpace(segments[len(segments)-1])
-	repository = src.Host + "/" + src.Owner + "/" + src.Repo
-	return appName, repository, src.Path, nil
+	parsed := AppSource{
+		App:        strings.TrimSpace(segments[len(segments)-1]),
+		Repository: src.Host + "/" + src.Owner + "/" + src.Repo,
+	}
+	if src.Path != defaultSourceDir(parsed.App) {
+		parsed.SourceDir = src.Path
+	}
+	return parsed, nil
 }
 
-// SourceDirFromManifestSource is the app directory a manifest source records
-// when it is not the default apps/{app}. Empty means the default.
-func SourceDirFromManifestSource(manifestSource string) (string, error) {
-	appName, _, appDir, err := parseAppSourceDir(manifestSource)
+func parseAppSource(raw string) (appName, repository string, err error) {
+	parsed, err := ParseAppSource(raw)
+	return parsed.App, parsed.Repository, err
+}
+
+func defaultSourceDir(appName string) string {
+	return appSourceDirName + "/" + appName
+}
+
+// ValidateManifestLocation requires a manifest that declares a source folder to
+// actually live there. manifestRelPath is the manifest file path relative to the
+// repository root, with forward slashes.
+func ValidateManifestLocation(manifestSource, manifestRelPath string) error {
+	parsed, err := ParseAppSource(manifestSource)
 	if err != nil {
-		return "", err
+		return err
 	}
-	if appDir == appSourcePathPrefix+appName {
-		return "", nil
+	if parsed.SourceDir == "" {
+		return nil
 	}
-	return appDir, nil
+	if dir := path.Dir(manifestRelPath); dir != parsed.SourceDir {
+		return fmt.Errorf("manifest source declares folder %q but the manifest is in %q", parsed.SourceDir, dir)
+	}
+	return nil
 }
 
 func AppSourceAddress(repository, appName string) string {
@@ -277,14 +300,11 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 	if input.Release == nil {
 		return Entry{}, fmt.Errorf("provider release metadata is required")
 	}
-	appName, repository, err := parseAppSource(input.Manifest.Source)
+	appSource, err := ParseAppSource(input.Manifest.Source)
 	if err != nil {
 		return Entry{}, err
 	}
-	sourceDir, err := SourceDirFromManifestSource(input.Manifest.Source)
-	if err != nil {
-		return Entry{}, err
-	}
+	appName, repository := appSource.App, appSource.Repository
 	artifacts, err := buildArtifacts(input.Artifacts)
 	if err != nil {
 		return Entry{}, err
@@ -302,7 +322,7 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		SourceRef:         strings.ToLower(strings.TrimSpace(input.SourceRef)),
 		ManifestPath:      strings.TrimSpace(input.ManifestPath),
 		Repository:        repository,
-		SourceDir:         sourceDir,
+		SourceDir:         appSource.SourceDir,
 		Publication:       clonePublication(input.Publication),
 		PublicationKind:   input.PublicationKind,
 		PublishID:         strings.TrimSpace(input.PublishID),
@@ -626,7 +646,7 @@ func indexVersionFromEntry(entry Entry, metadataPath string) IndexVersion {
 		PublishedAt:       entry.PublishedAt.UTC(),
 		SourceRef:         strings.TrimSpace(entry.SourceRef),
 		Repository:        strings.TrimSpace(entry.Repository),
-		SourceDir:         strings.TrimSpace(entry.SourceDir),
+		SourceDir:         entry.SourceDir,
 		Publication:       clonePublication(entry.Publication),
 		PublicationKind:   entry.PublicationKind,
 		PublishID:         strings.TrimSpace(entry.PublishID),
