@@ -13,6 +13,7 @@ import (
 const (
 	appVersionChangeRequestMetaRegistry           = "registry"
 	appVersionChangeRequestMetaSourceRepository   = "source_repository"
+	appVersionChangeRequestMetaSourceDir          = "source_dir"
 	appVersionChangeRequestMetaSourceRef          = "source_ref"
 	appVersionChangeRequestMetaProviderReleaseURL = "provider_release_url"
 	appVersionChangeRequestMetaArtifactChecksums  = "artifact_checksums"
@@ -32,6 +33,7 @@ func ChangeRequestMetadata(installation *core.AppInstallation) map[string]any {
 	metadata := map[string]any{
 		appVersionChangeRequestMetaRegistry:           strings.TrimSpace(installation.Registry),
 		appVersionChangeRequestMetaSourceRepository:   strings.TrimSpace(installation.SourceRepository),
+		appVersionChangeRequestMetaSourceDir:          strings.TrimSpace(installation.SourceDir),
 		appVersionChangeRequestMetaSourceRef:          strings.TrimSpace(installation.SourceRef),
 		appVersionChangeRequestMetaProviderReleaseURL: strings.TrimSpace(installation.ProviderReleaseURL),
 	}
@@ -170,6 +172,7 @@ func installationFromChangeRequest(request *core.AppVersionChangeRequest) *core.
 	if metadata := request.Metadata; metadata != nil {
 		installation.Registry = stringMeta(metadata, appVersionChangeRequestMetaRegistry)
 		installation.SourceRepository = stringMeta(metadata, appVersionChangeRequestMetaSourceRepository)
+		installation.SourceDir = stringMeta(metadata, appVersionChangeRequestMetaSourceDir)
 		installation.SourceRef = stringMeta(metadata, appVersionChangeRequestMetaSourceRef)
 		installation.ProviderReleaseURL = stringMeta(metadata, appVersionChangeRequestMetaProviderReleaseURL)
 		installation.ArtifactChecksums = stringMapMeta(metadata, appVersionChangeRequestMetaArtifactChecksums)

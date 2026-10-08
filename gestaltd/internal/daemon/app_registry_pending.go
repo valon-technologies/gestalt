@@ -103,11 +103,17 @@ func runAppRegistryPendingSet(args []string) error {
 		return fmt.Errorf("%s: invalid manifest source: %w", manifestPath, err)
 	}
 
+	sourceDir, err := appregistry.SourceDirFromManifestSource(sourceManifest.Source)
+	if err != nil {
+		return fmt.Errorf("%s: invalid manifest source: %w", manifestPath, err)
+	}
+
 	now := time.Now().UTC()
 	pendingVersion := appregistry.PendingVersion{
 		Version:     *flags.version,
 		SourceRef:   sourceRef,
 		Repository:  repository,
+		SourceDir:   sourceDir,
 		Publication: publication,
 	}
 

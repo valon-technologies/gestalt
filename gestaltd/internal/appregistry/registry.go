@@ -52,6 +52,7 @@ type IndexVersion struct {
 	PublishStartedAt  *time.Time        `json:"publishStartedAt,omitempty"`
 	SourceRef         string            `json:"sourceRef,omitempty"`
 	Repository        string            `json:"repository,omitempty"`
+	SourceDir         string            `json:"sourceDir,omitempty"`
 	Publication       *Publication      `json:"publication,omitempty"`
 	PublicationKind   PublicationKind   `json:"publicationKind,omitempty"`
 	PublishID         string            `json:"publishId,omitempty"`
@@ -67,6 +68,7 @@ type Entry struct {
 	SourceRef         string              `json:"sourceRef,omitempty"`
 	ManifestPath      string              `json:"manifestPath"`
 	Repository        string              `json:"repository,omitempty"`
+	SourceDir         string              `json:"sourceDir,omitempty"`
 	Publication       *Publication        `json:"publication,omitempty"`
 	PublicationKind   PublicationKind     `json:"publicationKind,omitempty"`
 	PublishID         string              `json:"publishId,omitempty"`
@@ -82,18 +84,16 @@ type Entry struct {
 }
 
 // SourceTreeURL is the GitHub tree for the source that produced this
-// published app. Registry app sources are validated as apps/{app}, so the
-// app name is sufficient to project the source directory from the immutable
-// repository and source ref recorded in the entry.
+// published app. The source directory is apps/{app} unless the entry records
+// a SourceDir for an app that lives under a subdirectory of its repository.
 func (e Entry) SourceTreeURL() string {
-	return SourceTreeURLForApp(e.Repository, e.App, e.SourceRef)
+	return SourceTreeURLForApp(e.Repository, e.App, e.SourceRef, e.SourceDir)
 }
 
 // SourceTreeURLForApp projects the source directory for a published app from
-// the source identity captured at publication time. The registry contract
-// fixes app sources under apps/{app}, so callers only need the repository,
-// application name, and immutable source ref from the installation record.
-func SourceTreeURLForApp(repositoryLocation, appName, sourceRef string) string {
+// the source identity captured at publication time. An empty sourceDir means
+// the default apps/{app} directory at the repository root.
+func SourceTreeURLForApp(repositoryLocation, appName, sourceRef, sourceDir string) string {
 	repositoryLocation = strings.TrimSpace(repositoryLocation)
 	if strings.HasPrefix(strings.ToLower(repositoryLocation), "github.com/") {
 		repositoryLocation = "https://" + repositoryLocation
@@ -107,10 +107,14 @@ func SourceTreeURLForApp(repositoryLocation, appName, sourceRef string) string {
 	if ref == "" || appName == "" {
 		return ""
 	}
+	appDir := strings.TrimSpace(sourceDir)
+	if appDir == "" {
+		appDir = path.Join(appSourcePathPrefix, appName)
+	}
 	return (config.GitSourceIdentity{
 		Repo:   repository,
 		Ref:    ref,
-		AppDir: path.Join(appSourcePathPrefix, appName),
+		AppDir: appDir,
 	}).TreeURL()
 }
 
@@ -173,19 +177,46 @@ type PublishArtifact struct {
 }
 
 func parseAppSource(raw string) (appName, repository string, err error) {
+	appName, repository, _, err = parseAppSourceDir(raw)
+	return appName, repository, err
+}
+
+// parseAppSourceDir accepts a source path of [{dir}/]apps/{app}, so an app can
+// live under a subdirectory of its repository. appDir is the full path.
+func parseAppSourceDir(raw string) (appName, repository, appDir string, err error) {
 	src, err := source.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	if !strings.HasPrefix(src.Path, appSourcePathPrefix) {
-		return "", "", fmt.Errorf("app source path must be apps/{app}, got %q", src.Path)
+	segments := strings.Split(src.Path, "/")
+	invalid := fmt.Errorf("app source path must be [{dir}/]apps/{app}, got %q", src.Path)
+	if len(segments) < 2 {
+		return "", "", "", invalid
 	}
-	appName = strings.TrimSpace(strings.TrimPrefix(src.Path, appSourcePathPrefix))
-	if appName == "" || strings.Contains(appName, "/") {
-		return "", "", fmt.Errorf("app source path must be apps/{app}, got %q", src.Path)
+	for _, segment := range segments {
+		if strings.TrimSpace(segment) == "" || segment == "." || segment == ".." {
+			return "", "", "", invalid
+		}
 	}
+	if segments[len(segments)-2]+"/" != appSourcePathPrefix {
+		return "", "", "", invalid
+	}
+	appName = strings.TrimSpace(segments[len(segments)-1])
 	repository = src.Host + "/" + src.Owner + "/" + src.Repo
-	return appName, repository, nil
+	return appName, repository, src.Path, nil
+}
+
+// SourceDirFromManifestSource is the app directory a manifest source records
+// when it is not the default apps/{app}. Empty means the default.
+func SourceDirFromManifestSource(manifestSource string) (string, error) {
+	appName, _, appDir, err := parseAppSourceDir(manifestSource)
+	if err != nil {
+		return "", err
+	}
+	if appDir == appSourcePathPrefix+appName {
+		return "", nil
+	}
+	return appDir, nil
 }
 
 func AppSourceAddress(repository, appName string) string {
@@ -250,6 +281,10 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
+	sourceDir, err := SourceDirFromManifestSource(input.Manifest.Source)
+	if err != nil {
+		return Entry{}, err
+	}
 	artifacts, err := buildArtifacts(input.Artifacts)
 	if err != nil {
 		return Entry{}, err
@@ -267,6 +302,7 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		SourceRef:         strings.ToLower(strings.TrimSpace(input.SourceRef)),
 		ManifestPath:      strings.TrimSpace(input.ManifestPath),
 		Repository:        repository,
+		SourceDir:         sourceDir,
 		Publication:       clonePublication(input.Publication),
 		PublicationKind:   input.PublicationKind,
 		PublishID:         strings.TrimSpace(input.PublishID),
@@ -587,6 +623,7 @@ func indexVersionFromEntry(entry Entry, metadataPath string) IndexVersion {
 		PublishedAt:       entry.PublishedAt.UTC(),
 		SourceRef:         strings.TrimSpace(entry.SourceRef),
 		Repository:        strings.TrimSpace(entry.Repository),
+		SourceDir:         strings.TrimSpace(entry.SourceDir),
 		Publication:       clonePublication(entry.Publication),
 		PublicationKind:   entry.PublicationKind,
 		PublishID:         strings.TrimSpace(entry.PublishID),

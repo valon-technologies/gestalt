@@ -36,6 +36,7 @@ type PendingVersion struct {
 	Version     string       `json:"version"`
 	SourceRef   string       `json:"sourceRef"`
 	Repository  string       `json:"repository,omitempty"`
+	SourceDir   string       `json:"sourceDir,omitempty"`
 	StartedAt   time.Time    `json:"startedAt"`
 	UpdatedAt   time.Time    `json:"updatedAt"`
 	Phase       string       `json:"phase"`
@@ -52,6 +53,7 @@ type FailedVersion struct {
 	Version     string       `json:"version"`
 	SourceRef   string       `json:"sourceRef"`
 	Repository  string       `json:"repository,omitempty"`
+	SourceDir   string       `json:"sourceDir,omitempty"`
 	StartedAt   time.Time    `json:"startedAt"`
 	FailedAt    time.Time    `json:"failedAt"`
 	Reason      string       `json:"reason"`
@@ -291,6 +293,7 @@ func failedVersionFromPending(entry PendingVersion, failedAt time.Time, reason s
 		Version:     entry.Version,
 		SourceRef:   entry.SourceRef,
 		Repository:  entry.Repository,
+		SourceDir:   entry.SourceDir,
 		StartedAt:   entry.StartedAt.UTC(),
 		FailedAt:    failedAt.UTC(),
 		Reason:      reason,
@@ -325,6 +328,7 @@ func UpsertPendingVersion(index *PendingIndex, appName string, version PendingVe
 	version.Version = strings.TrimSpace(version.Version)
 	version.SourceRef = strings.ToLower(strings.TrimSpace(version.SourceRef))
 	version.Repository = strings.TrimSpace(version.Repository)
+	version.SourceDir = strings.TrimSpace(version.SourceDir)
 	version.Phase = PendingPhasePublishing
 	version.UpdatedAt = now
 	if existing, ok := index.Pending[version.Version]; ok {
