@@ -140,7 +140,8 @@ func validateFailedIndex(index *FailedIndex) error {
 	if index.Failed == nil {
 		return fmt.Errorf("failed index failed map is required")
 	}
-	for version, entry := range index.Failed {
+	for version := range index.Failed {
+		entry := index.Failed[version]
 		if err := validateFailedVersion(index.App, version, entry); err != nil {
 			return fmt.Errorf("failed index version %q: %w", version, err)
 		}
@@ -254,7 +255,8 @@ func PrunePendingIndex(pending *PendingIndex, failed *FailedIndex, published *In
 	now = now.UTC()
 	pendingChanged := false
 	failedChanged := false
-	for version, entry := range pending.Pending {
+	for version := range pending.Pending {
+		entry := pending.Pending[version]
 		if version == exceptVersion {
 			continue
 		}
@@ -280,7 +282,8 @@ func PruneFailedIndex(failed *FailedIndex, published *Index, now time.Time) bool
 	}
 	now = now.UTC()
 	changed := false
-	for version, entry := range failed.Failed {
+	for version := range failed.Failed {
+		entry := failed.Failed[version]
 		if IndexContainsVersion(published, failed.App, version) {
 			delete(failed.Failed, version)
 			changed = true
