@@ -502,6 +502,9 @@ func validateEntry(entry *Entry) error {
 	if err := validateEntryRepositoryField(entry); err != nil {
 		return fmt.Errorf("registry entry repository: %w", err)
 	}
+	if err := validateSourceDir(entry.Repository, entry.App, entry.SourceDir); err != nil {
+		return fmt.Errorf("registry entry sourceDir: %w", err)
+	}
 	if err := validatePublication(entry.Publication); err != nil {
 		return fmt.Errorf("registry entry publication: %w", err)
 	}

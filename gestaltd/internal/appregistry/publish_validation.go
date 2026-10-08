@@ -177,6 +177,23 @@ func validateEntryRepositoryField(entry *Entry) error {
 	return validateEntryRepository(repository, entry.App)
 }
 
+// validateSourceDir requires a recorded source directory to be the
+// [{dir}/]apps/{app} path of the named app inside its repository.
+func validateSourceDir(repository, appName, sourceDir string) error {
+	sourceDir = strings.TrimSpace(sourceDir)
+	if sourceDir == "" {
+		return nil
+	}
+	parsedApp, _, parsedDir, err := parseAppSourceDir(strings.TrimSpace(repository) + "/" + sourceDir)
+	if err != nil {
+		return err
+	}
+	if parsedApp != appName || parsedDir != sourceDir {
+		return fmt.Errorf("must be the apps/%s directory of the repository", appName)
+	}
+	return nil
+}
+
 func validateEntryPublicationMetadata(entry *Entry) error {
 	if err := validatePublicationKind(entry.PublicationKind); err != nil {
 		return fmt.Errorf("registry entry publicationKind: %w", err)
@@ -202,6 +219,9 @@ func validateIndexVersionSourceRef(appName, version string, release IndexVersion
 		if err := validateEntryRepository(repository, appName); err != nil {
 			return fmt.Errorf("app registry index app %q version %q repository: %w", appName, version, err)
 		}
+	}
+	if err := validateSourceDir(repository, appName, release.SourceDir); err != nil {
+		return fmt.Errorf("app registry index app %q version %q sourceDir: %w", appName, version, err)
 	}
 	if release.PublicationKind == PublicationKindGitHub && sourceRef == "" {
 		return fmt.Errorf("app registry index app %q version %q sourceRef is required", appName, version)
