@@ -18,6 +18,8 @@ const (
 	StoreAppAutoDeploySettings          = "app_auto_deploy_settings"
 	StoreAppVersionRolloutOutcomes      = "app_version_rollout_outcomes"
 	StoreGestaltdInstanceHeartbeats     = "gestaltd_instance_heartbeats"
+	StoreAppInvocationBuckets           = "app_invocation_buckets"
+	StoreAppRecentInvocations           = "app_recent_invocations"
 	StoreAppVersionRecoveryObservations = "app_version_recovery_observations"
 	StoreRemoteRegistrations            = "remote_registrations"
 	StoreRemoteProviders                = "remote_providers"
@@ -266,6 +268,45 @@ var GestaltdInstanceHeartbeatsSchema = idb.ObjectStoreOptions{
 		{Name: "started_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "heartbeat_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "apps", Type: idb.TypeJSON, NotNull: true},
+	},
+}
+
+// AppInvocationBucketsSchema holds per-process request tallies in time
+// buckets. Every row has one writer (instance + boot), so processes never
+// contend for a row and readers sum across rows.
+var AppInvocationBucketsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_provider_bucket_start", KeyPath: []string{"provider", "bucket_start"}},
+		{Name: "by_bucket_start", KeyPath: []string{"bucket_start"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "instance_id", Type: idb.TypeString, NotNull: true},
+		{Name: "boot_id", Type: idb.TypeString, NotNull: true},
+		{Name: "provider", Type: idb.TypeString, NotNull: true},
+		{Name: "operation", Type: idb.TypeString, NotNull: true},
+		{Name: "bucket_start", Type: idb.TypeTime, NotNull: true},
+		{Name: "requests", Type: idb.TypeInt, NotNull: true},
+		{Name: "errors", Type: idb.TypeInt, NotNull: true},
+		{Name: "duration_ns", Type: idb.TypeInt, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
+	},
+}
+
+// AppRecentInvocationsSchema holds each writer's most recent invocations per
+// app. Readers merge the writers' lists.
+var AppRecentInvocationsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_provider", KeyPath: []string{"provider"}},
+		{Name: "by_updated_at", KeyPath: []string{"updated_at"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "instance_id", Type: idb.TypeString, NotNull: true},
+		{Name: "boot_id", Type: idb.TypeString, NotNull: true},
+		{Name: "provider", Type: idb.TypeString, NotNull: true},
+		{Name: "records", Type: idb.TypeJSON, NotNull: true},
+		{Name: "updated_at", Type: idb.TypeTime, NotNull: true},
 	},
 }
 

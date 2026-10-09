@@ -21,6 +21,7 @@ type Services struct {
 	AutoDeploySettings             *AutoDeploySettingsService
 	AppVersionRolloutOutcomes      *AppVersionRolloutOutcomeService
 	GestaltdInstanceHeartbeats     *GestaltdInstanceHeartbeatService
+	AppInvocationStats             *AppInvocationStatsService
 	AppVersionRecoveryObservations *AppVersionRecoveryObservationService
 	RemoteRegistrations            *RemoteRegistrationService
 	ConnectionInstancePreferences  *ConnectionInstancePreferenceService
@@ -84,6 +85,12 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreGestaltdInstanceHeartbeats, GestaltdInstanceHeartbeatsSchema); err != nil {
 			return nil, fmt.Errorf("create gestaltd_instance_heartbeats store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppInvocationBuckets, AppInvocationBucketsSchema); err != nil {
+			return nil, fmt.Errorf("create app_invocation_buckets store: %w", err)
+		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppRecentInvocations, AppRecentInvocationsSchema); err != nil {
+			return nil, fmt.Errorf("create app_recent_invocations store: %w", err)
+		}
 		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionRecoveryObservations, AppVersionRecoveryObservationsSchema); err != nil {
 			return nil, fmt.Errorf("create app_version_recovery_observations store: %w", err)
 		}
@@ -141,6 +148,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	autoDeploySettings := NewAutoDeploySettingsService(ds)
 	appVersionRolloutOutcomes := NewAppVersionRolloutOutcomeService(ds)
 	gestaltdInstanceHeartbeats := NewGestaltdInstanceHeartbeatService(ds)
+	appInvocationStats := NewAppInvocationStatsService(ds)
 	appVersionRecoveryObservations := NewAppVersionRecoveryObservationService(ds)
 	remoteRegistrations := NewRemoteRegistrationService(ds)
 	connectionInstancePreferences := NewConnectionInstancePreferenceService(ds)
@@ -161,6 +169,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		AutoDeploySettings:             autoDeploySettings,
 		AppVersionRolloutOutcomes:      appVersionRolloutOutcomes,
 		GestaltdInstanceHeartbeats:     gestaltdInstanceHeartbeats,
+		AppInvocationStats:             appInvocationStats,
 		AppVersionRecoveryObservations: appVersionRecoveryObservations,
 		RemoteRegistrations:            remoteRegistrations,
 		ConnectionInstancePreferences:  connectionInstancePreferences,
@@ -223,6 +232,9 @@ func ensureDeferredAppRegistryStores(ctx context.Context, ds indexeddb.IndexedDB
 	if err := ensureGestaltdInstanceHeartbeatsStore(ctx, ds); err != nil {
 		return err
 	}
+	if err := ensureAppInvocationStatsStores(ctx, ds); err != nil {
+		return err
+	}
 	if err := ensureAppVersionRecoveryObservationsStore(ctx, ds); err != nil {
 		return err
 	}
@@ -259,6 +271,16 @@ func ensureAppAutoDeploySettingsStore(ctx context.Context, ds indexeddb.IndexedD
 func ensureGestaltdInstanceHeartbeatsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
 	if _, err := ds.CreateObjectStore(ctx, StoreGestaltdInstanceHeartbeats, GestaltdInstanceHeartbeatsSchema); err != nil {
 		return fmt.Errorf("ensure gestaltd_instance_heartbeats store: %w", err)
+	}
+	return nil
+}
+
+func ensureAppInvocationStatsStores(ctx context.Context, ds indexeddb.IndexedDB) error {
+	if _, err := ds.CreateObjectStore(ctx, StoreAppInvocationBuckets, AppInvocationBucketsSchema); err != nil {
+		return fmt.Errorf("ensure app_invocation_buckets store: %w", err)
+	}
+	if _, err := ds.CreateObjectStore(ctx, StoreAppRecentInvocations, AppRecentInvocationsSchema); err != nil {
+		return fmt.Errorf("ensure app_recent_invocations store: %w", err)
 	}
 	return nil
 }

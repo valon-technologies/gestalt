@@ -46,7 +46,20 @@ type appAdminMetricsResponse struct {
 	DurationSecondsCount float64                   `json:"durationSecondsCount"`
 	Operations           []appAdminOperationMetric `json:"operations"`
 	RecentRequests       []appAdminRequestSample   `json:"recentRequests"`
+	// Scope says whose traffic the numbers cover: every server ("fleet") or
+	// only the one that answered ("instance").
+	Scope string `json:"scope"`
+	// WindowSeconds is the span fleet statistics cover; zero for instance scope,
+	// which counts since the process started.
+	WindowSeconds int64 `json:"windowSeconds,omitempty"`
+	// InstancesReporting is how many servers recorded requests in the window.
+	InstancesReporting int `json:"instancesReporting,omitempty"`
 }
+
+const (
+	appMetricsScopeFleet    = "fleet"
+	appMetricsScopeInstance = "instance"
+)
 
 type appAdminRequestSample struct {
 	ID         uint64                          `json:"id"`
@@ -169,6 +182,7 @@ func summarizeAppMetrics(app string, samples []prometheusSample) appAdminMetrics
 		App:            app,
 		Available:      true,
 		RecentRequests: make([]appAdminRequestSample, 0),
+		Scope:          appMetricsScopeInstance,
 	}
 	for _, sample := range samples {
 		if math.IsNaN(sample.value) || !isAppOperationMetric(sample.name) {
