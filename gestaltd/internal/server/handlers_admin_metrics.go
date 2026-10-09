@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 )
 
 type captureResponseWriter struct {
@@ -92,6 +94,10 @@ func (s *Server) getAppAdminMetrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "app is required")
 		return
 	}
+	if s.appInvocationStats != nil {
+		s.writeFleetAppMetrics(w, r, appName)
+		return
+	}
 	body, status, _, ok := s.scrapePrometheus(r)
 	if !ok {
 		writeError(w, http.StatusServiceUnavailable, "prometheus metrics are unavailable because telemetry metrics are disabled")
@@ -119,6 +125,53 @@ func (s *Server) getAppAdminMetrics(w http.ResponseWriter, r *http.Request) {
 				Timestamp:  record.Timestamp,
 			})
 		}
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+// writeFleetAppMetrics answers from the shared store, so the numbers cover
+// every server instead of only the one handling this request.
+func (s *Server) writeFleetAppMetrics(w http.ResponseWriter, r *http.Request, appName string) {
+	window := observability.DefaultAppInvocationWindow
+	summary, err := s.appInvocationStats.AppInvocationStats(
+		r.Context(), appName, time.Now().Add(-window), observability.DefaultAppInvocationRecentLimit,
+	)
+	if err != nil {
+		slog.Error("app invocation stats read failed", "app", appName, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "app request statistics are unavailable")
+		return
+	}
+	response := appAdminMetricsResponse{
+		App:                  appName,
+		Available:            true,
+		Requests:             float64(summary.Requests),
+		Errors:               float64(summary.Errors),
+		DurationSecondsSum:   summary.DurationSum.Seconds(),
+		DurationSecondsCount: float64(summary.Requests),
+		Operations:           make([]appAdminOperationMetric, 0, len(summary.Operations)),
+		RecentRequests:       make([]appAdminRequestSample, 0, len(summary.Recent)),
+		Scope:                appMetricsScopeFleet,
+		WindowSeconds:        int64(window / time.Second),
+		InstancesReporting:   summary.Instances,
+	}
+	for _, op := range summary.Operations {
+		response.Operations = append(response.Operations, appAdminOperationMetric{
+			Operation:            op.Operation,
+			Requests:             float64(op.Requests),
+			Errors:               float64(op.Errors),
+			DurationSecondsSum:   op.DurationSum.Seconds(),
+			DurationSecondsCount: float64(op.Requests),
+		})
+	}
+	for _, record := range summary.Recent {
+		response.RecentRequests = append(response.RecentRequests, appAdminRequestSample{
+			ID:         record.ID,
+			Operation:  record.Operation,
+			Outcome:    record.Outcome,
+			Status:     record.Status,
+			DurationMs: float64(record.Duration) / float64(time.Millisecond),
+			Timestamp:  record.Timestamp,
+		})
 	}
 	writeJSON(w, http.StatusOK, response)
 }

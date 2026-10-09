@@ -153,6 +153,7 @@ type Server struct {
 	invoker                       invocation.Invoker
 	pluginInvoker                 invocation.Invoker
 	invocationRecords             observability.InvocationRecordReader
+	appInvocationStats            observability.AppInvocationStatsSource
 	appPrompts                    map[string][]appPromptInfo
 	apiRouteTimeout               time.Duration
 	defaultConnection             map[string]string
@@ -264,6 +265,7 @@ type Config struct {
 	Invoker                       invocation.Invoker
 	AppInvocation                 invocation.Invoker
 	InvocationRecords             observability.InvocationRecordReader
+	AppInvocationStats            observability.AppInvocationStatsSource
 	DefaultConnection             map[string]string
 	CatalogConnection             map[string]string
 	MCPConnection                 map[string]string
@@ -544,6 +546,7 @@ func New(cfg Config) (*Server, error) {
 		invoker:                       cfg.Invoker,
 		pluginInvoker:                 pluginInvoker,
 		invocationRecords:             cfg.InvocationRecords,
+		appInvocationStats:            cfg.AppInvocationStats,
 		appPrompts:                    appPrompts,
 		apiRouteTimeout:               apiRouteTimeout,
 		defaultConnection:             cfg.DefaultConnection,

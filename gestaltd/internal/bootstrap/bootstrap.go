@@ -268,6 +268,7 @@ type Result struct {
 	AppAccess               *invocation.AppAccessResolver
 	AppInvocation           invocation.Invoker
 	InvocationRecords       observability.InvocationRecordReader
+	InvocationStats         *observability.AppInvocationAccumulator
 	CapabilityLister        invocation.CapabilityLister
 	AuditSink               core.AuditSink
 	SecretManager           core.SecretManager
@@ -1492,6 +1493,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	kinds := ProviderAuthorizationKinds(cfg)
 	authorizationPolicies := ProviderAuthorizationPolicies(cfg)
 	invocationRecords := observability.NewInvocationRecordStore(observability.DefaultInvocationRecordCapacity)
+	invocationStats := observability.NewAppInvocationAccumulator()
 	appAccess := invocation.NewAppAccessResolver(nil)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
@@ -1504,7 +1506,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		invocation.WithAuthorizationProvider(authorizationProvider),
 		invocation.WithProviderKinds(kinds),
 		invocation.WithAuthorizationPolicies(authorizationPolicies),
-		invocation.WithInvocationRecorder(invocationRecords),
+		invocation.WithInvocationRecorder(observability.NewMultiInvocationRecorder(invocationRecords, invocationStats)),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
@@ -1777,6 +1779,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		AppAccess:                      appAccess,
 		AppInvocation:                  pluginInvoker,
 		InvocationRecords:              invocationRecords,
+		InvocationStats:                invocationStats,
 		CapabilityLister:               sharedInvoker,
 		AuditSink:                      audit,
 		SecretManager:                  prepared.SecretManager,
