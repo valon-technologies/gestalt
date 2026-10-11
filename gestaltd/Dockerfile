@@ -5,7 +5,7 @@ ARG GESTALT_SOURCE=https://github.com/valon-technologies/gestalt
 ARG GESTALT_DOCUMENTATION=https://gestaltd.ai
 ARG GESTALT_URL=https://hub.docker.com/r/valontechnologies/gestaltd
 
-FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine3.23@sha256:622e56dbc11a8cfe87cafa2331e9a201877271cbff918af53d3be315f3da88cc AS build-binary
+FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine3.23@sha256:d9e2f2f07b10cc922da3e80e035c3058810b328d5aef82d2c63680967c5e2ec9 AS build-binary
 WORKDIR /build
 COPY gestaltd/go.mod gestaltd/go.sum gestaltd/
 COPY gestaltd/rpc/go.mod gestaltd/rpc/go.sum gestaltd/rpc/
