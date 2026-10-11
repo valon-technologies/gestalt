@@ -1,0 +1,280 @@
+import { Callout } from 'nextra/components'
+
+# Hetzner Cloud
+
+Hetzner Cloud is a good fit for a small Gestalt deployment when you want one
+VM, persistent local storage, and TLS at the edge. This guide uses Docker
+Compose on a single server, Caddy for HTTPS, and SQLite on a mounted data
+directory.
+
+For horizontally scaled deployments, use [Helm](/deploy/helm) on Kubernetes or
+replace SQLite with a networked IndexedDB provider before adding more replicas.
+
+## Prerequisites
+
+- A Hetzner Cloud project.
+- A domain name that can point to the server.
+- Docker Engine with the Docker Compose plugin installed on the server. Follow
+  Docker's [Ubuntu installation guide](https://docs.docker.com/engine/install/ubuntu/)
+  and make sure `docker compose version` works before starting Gestalt.
+- Optional: the [`hcloud` CLI](https://github.com/hetznercloud/cli) configured
+  with a Hetzner Cloud API token if you want to create resources from your
+  terminal instead of the console.
+- Inbound firewall rules for `22/tcp` from your IP address and `80/tcp` plus
+  `443/tcp` from the internet.
+
+Do not expose port `8080` publicly. It should only be reachable by the reverse
+proxy on the Docker network.
+
+## Create The Server
+
+Create a [Hetzner Cloud firewall](https://docs.hetzner.com/cloud/firewalls/getting-started/creating-a-firewall)
+first, either in the console or with the
+[`hcloud` CLI](https://github.com/hetznercloud/cli):
+
+```sh
+hcloud firewall create --name gestalt-web
+hcloud firewall add-rule gestalt-web \
+  --direction in \
+  --protocol tcp \
+  --port 22 \
+  --source-ips <your-ip>/32
+hcloud firewall add-rule gestalt-web \
+  --direction in \
+  --protocol tcp \
+  --port 80 \
+  --source-ips 0.0.0.0/0 \
+  --source-ips ::/0
+hcloud firewall add-rule gestalt-web \
+  --direction in \
+  --protocol tcp \
+  --port 443 \
+  --source-ips 0.0.0.0/0 \
+  --source-ips ::/0
+```
+
+Then [create an Ubuntu server](https://docs.hetzner.com/cloud/servers/getting-started/creating-a-server)
+and attach that firewall:
+
+```sh
+hcloud location list
+hcloud server-type list
+
+hcloud server create \
+  --name gestalt-1 \
+  --image ubuntu-24.04 \
+  --type cx22 \
+  --location <location> \
+  --ssh-key <ssh-key-name> \
+  --firewall gestalt-web
+```
+
+The example uses `cx22` as a small AMD64 server type. Pick another AMD64 or
+ARM64 type if your workload needs more CPU, memory, or disk.
+
+After the server is ready, create an `A` record for your hostname pointing to
+the server's IPv4 address. Add an `AAAA` record too if you enabled IPv6. Caddy
+needs the DNS record in place before it can issue a certificate.
+
+## Prepare The Host
+
+SSH to the server, install Docker Engine and the Compose plugin, then create a
+deployment directory:
+
+```sh
+sudo mkdir -p /opt/gestalt/data /opt/gestalt/secrets
+sudo chown -R "$USER":"$USER" /opt/gestalt
+cd /opt/gestalt
+
+openssl rand -hex 32 > secrets/gestalt-encryption-key
+chmod 600 secrets/gestalt-encryption-key
+```
+
+Keep `secrets/gestalt-encryption-key` stable. Changing it after the first boot
+will make encrypted server state unreadable.
+
+## Add Gestalt Config
+
+Create `/opt/gestalt/config.yaml` and set `server.baseUrl` to the public HTTPS
+URL for this server:
+
+<Callout type="warning">
+  The config below has no platform authentication. Use it only to prove the
+  deployment path. Configure `providers.authentication`, authorization, and
+  admin access before storing real credentials or exposing real operations.
+</Callout>
+
+```yaml
+apiVersion: gestaltd.config/v3
+server:
+  public:
+    port: 8080
+  baseUrl: https://gestalt.example.com
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: sqlite:///data/gestalt.db
+
+plugins: {}
+```
+
+This is intentionally minimal. Add authentication, plugins, authorization, and
+observability in the same config file once the base deployment is reachable.
+
+## Add The Reverse Proxy
+
+Create `/opt/gestalt/Caddyfile`:
+
+```
+gestalt.example.com {
+  reverse_proxy gestalt:8080
+}
+```
+
+Caddy will listen on ports `80` and `443`, request and renew a certificate
+automatically, redirect HTTP to HTTPS, and forward traffic to the internal
+Gestalt container.
+
+## Add Docker Compose
+
+Create `/opt/gestalt/compose.yaml`:
+
+```yaml
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - gestalt
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  gestalt:
+    image: valontechnologies/gestaltd:latest
+    restart: unless-stopped
+    command:
+      - serve
+      - --locked
+      - --config
+      - /etc/gestalt/config.yaml
+      - --artifacts-dir
+      - /data
+      - --lockfile
+      - /data/gestalt.lock.json
+    environment:
+      GESTALT_ENCRYPTION_KEY_FILE: /run/secrets/gestalt-encryption-key
+    secrets:
+      - gestalt-encryption-key
+    volumes:
+      - ./config.yaml:/etc/gestalt/config.yaml:ro
+      - ./data:/data
+
+  gestalt-init:
+    image: valontechnologies/gestaltd:latest
+    profiles:
+      - init
+    command:
+      - init
+      - --config
+      - /etc/gestalt/config.yaml
+      - --artifacts-dir
+      - /data
+      - --lockfile
+      - /data/gestalt.lock.json
+    environment:
+      GESTALT_ENCRYPTION_KEY_FILE: /run/secrets/gestalt-encryption-key
+    secrets:
+      - gestalt-encryption-key
+    volumes:
+      - ./config.yaml:/etc/gestalt/config.yaml:ro
+      - ./data:/data
+
+secrets:
+  gestalt-encryption-key:
+    file: ./secrets/gestalt-encryption-key
+
+volumes:
+  caddy-data:
+  caddy-config:
+```
+
+The `gestalt-init` service resolves provider packages and writes lock state.
+The long-running `gestalt` service then starts with `serve --locked`.
+
+## Start Gestalt
+
+Run the init service once, then start the stack:
+
+```sh
+docker compose pull
+docker compose run --rm gestalt-init
+docker compose up -d
+```
+
+Check that the server is running:
+
+```sh
+docker compose ps
+curl -fsS https://gestalt.example.com/health
+curl -fsS https://gestalt.example.com/ready
+```
+
+The admin UI is available at `https://gestalt.example.com/admin`.
+
+## Upgrade
+
+Pin `valontechnologies/gestaltd` and `caddy` to release tags for production
+instead of using floating tags like `latest` or `2`. To upgrade after changing
+an image tag or config:
+
+```sh
+docker compose pull
+docker compose run --rm gestalt-init
+docker compose up -d
+```
+
+If `gestalt-init` fails, keep the existing container running, fix the config or
+provider source, and rerun the init command before restarting.
+
+## Backups
+
+Back up `/opt/gestalt/config.yaml`, `/opt/gestalt/secrets/`, and
+`/opt/gestalt/data/`. The `data` directory contains SQLite state, prepared
+provider artifacts, and the deployment lock file. For manual file-level
+backups, stop the stack first or use a SQLite-safe backup process so the
+database copy is consistent.
+
+For a production single-VM deployment, enable
+[Hetzner backups or snapshots](https://docs.hetzner.com/cloud/servers/backups-snapshots/overview/)
+and consider mounting a
+[Hetzner Volume](https://docs.hetzner.com/cloud/volumes/overview/) at
+`/opt/gestalt/data`. Server backups and snapshots do not include attached
+Volumes, so back up the Volume separately if you put Gestalt data there. Do not
+run multiple Gestalt containers against the same SQLite database.
+
+## Production Checklist
+
+- Restrict SSH to known source IPs in the Hetzner Cloud firewall.
+- Keep only ports `80` and `443` public; leave `8080` private.
+- Set `server.baseUrl` to the exact public HTTPS origin.
+- Configure platform authentication before storing real credentials or exposing
+  real operations.
+- Pin both container images to explicit release tags.
+- Persist and back up `secrets/gestalt-encryption-key`.
+- Run `gestalt-init` before every config or image rollout.
+- Use a networked datastore provider before adding additional replicas.
+
+See [Docker](/deploy/docker) for the base image behavior and
+[Configuration](/configuration) for authentication, secrets, lockfiles, and
+provider setup.
