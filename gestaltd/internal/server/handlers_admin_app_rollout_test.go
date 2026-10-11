@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +21,30 @@ import (
 
 func TestAdminRegistryApps(t *testing.T) {
 	t.Parallel()
+	t.Run("empty list remains available when fleet storage is unavailable", func(t *testing.T) {
+		t.Parallel()
+		db := &coretesting.StubIndexedDB{}
+		services, err := coredata.New(db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		testutil.AttachStubExternalCredentials(services)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Services = services
+			cfg.AppDefs = map[string]*config.ProviderEntry{}
+		})
+		defer ts.Close()
+		db.Err = errors.New("fleet storage unavailable")
+		resp, err := http.Get(ts.URL + "/admin/api/v1/registry-apps")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil || resp.StatusCode != http.StatusOK || string(body) != "[]\n" {
+			t.Fatalf("empty registry response: status=%d body=%s error=%v", resp.StatusCode, body, err)
+		}
+	})
 
 	t.Run("lists registry managed apps", func(t *testing.T) {
 		t.Parallel()
@@ -31,7 +56,10 @@ func TestAdminRegistryApps(t *testing.T) {
 		acknowledgeMaterializationWithSource(t, services, "replica-old", "source-old", rollout, start.Add(10*time.Second), false)
 		acknowledgeMaterialization(t, services, "replica-late", rollout, rollout.EnrollmentEndsAt.Add(time.Second), false)
 
-		ts := newRegistryObservabilityTestServer(t, services)
+		var ticks atomic.Int64
+		ts := newRegistryObservabilityTestServerWithClock(t, services, func() time.Time {
+			return start.Add(time.Duration(ticks.Add(1)) * time.Second)
+		})
 		resp, err := http.Get(ts.URL + "/admin/api/v1/registry-apps")
 		if err != nil {
 			t.Fatalf("GET registry apps: %v", err)
@@ -45,7 +73,10 @@ func TestAdminRegistryApps(t *testing.T) {
 			App            string `json:"app"`
 			Registry       string `json:"registry"`
 			DesiredVersion string `json:"desiredVersion"`
-			Rollout        struct {
+			FleetState     struct {
+				EvaluatedAt string `json:"evaluatedAt"`
+			} `json:"fleetState"`
+			Rollout struct {
 				State               string `json:"state"`
 				TargetSourceVersion string `json:"targetSourceVersion"`
 			} `json:"rollout"`
@@ -63,6 +94,9 @@ func TestAdminRegistryApps(t *testing.T) {
 		}
 		if payload[0].App != "g-empty" || payload[0].DesiredVersion != "" {
 			t.Fatalf("empty registry app = %#v", payload[0])
+		}
+		if payload[0].FleetState.EvaluatedAt == "" || payload[0].FleetState.EvaluatedAt != payload[1].FleetState.EvaluatedAt {
+			t.Fatalf("registry rows use different fleet observations: %v, %v", payload[0].FleetState, payload[1].FleetState)
 		}
 		got := payload[1]
 		if got.App != "g-issues" || got.Registry != "toolshed" || got.DesiredVersion != "1.2.3" {
