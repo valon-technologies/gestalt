@@ -13,7 +13,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
-	github.com/hashicorp/yamux v0.1.1
+	github.com/hashicorp/yamux v0.1.2
 	github.com/landlock-lsm/go-landlock v0.8.1
 	github.com/mark3labs/mcp-go v0.54.0
 	github.com/pb33f/libopenapi v0.36.4
