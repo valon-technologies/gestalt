@@ -615,7 +615,7 @@ func (r *renderer) renderClient(svc *model.Service) {
 	r.features.grpc = true
 	r.features.proto = true
 
-	ctxField := contextFieldOf(svc)
+	ctxField := model.ContextField(svc)
 	doc := fmt.Sprintf("%s is the generated client for %s.\nEvery transport error is converted to *GestaltError.", name, svc.FullName)
 	r.writeIdentDoc("", doc, svc.Doc)
 	if ctxField != nil {
@@ -682,7 +682,7 @@ func (r *renderer) methodRequest(m *model.Method) (param, arg string, prep []str
 		return "", "&emptypb.Empty{}", nil
 	}
 	requestType := r.messageType(m.Input.FullName)
-	if !r.publicClient && findField(m.Input, "context") != nil {
+	if !r.publicClient && model.FindField(m.Input, "context") != nil {
 		prep = []string{
 			"\tif request.Context == nil && c.context != nil {",
 			"\t\tshallow := *request",
@@ -692,29 +692,6 @@ func (r *renderer) methodRequest(m *model.Method) (param, arg string, prep []str
 		}
 	}
 	return ", request *" + requestType, toWireFunc(requestType) + "(request)", prep
-}
-
-// contextFieldOf returns a service's first request context field, which
-// determines whether the client carries a default RequestContext.
-func contextFieldOf(svc *model.Service) *model.Field {
-	for _, m := range svc.Methods {
-		if m.Input == nil {
-			continue
-		}
-		if f := findField(m.Input, "context"); f != nil {
-			return f
-		}
-	}
-	return nil
-}
-
-func findField(m *model.Message, protoName string) *model.Field {
-	for _, f := range m.Fields {
-		if f.Name == protoName {
-			return f
-		}
-	}
-	return nil
 }
 
 // collapsed describes how an annotated response collapses at the API
@@ -740,8 +717,8 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 	// returns the decoded payload and surfaces envelope failures as
 	// *InvokeError beside transport *GestaltError.
 	if jr := m.JsonResult; jr != nil {
-		status := findField(m.Output, jr.Status)
-		body := findField(m.Output, jr.Body)
+		status := model.FindField(m.Output, jr.Status)
+		body := model.FindField(m.Output, jr.Body)
 		return &collapsed{
 			types: []string{"any"},
 			zero:  []string{"nil"},
@@ -757,8 +734,8 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 	// optional_result collapses to Go's comma-ok form: (value T, ok bool,
 	// err error). The value is meaningful only when ok is true.
 	if or := m.Output.OptionalResult; or != nil {
-		guard := findField(m.Output, or.Guard)
-		value := findField(m.Output, or.Value)
+		guard := model.FindField(m.Output, or.Guard)
+		value := model.FindField(m.Output, or.Value)
 		valueZero := zeroValue(value)
 		return &collapsed{
 			types: []string{r.fieldType(value), "bool"},
@@ -774,11 +751,11 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if k := m.Output.Keyed; k != nil {
-		entries := findField(m.Output, k.Entries)
+		entries := model.FindField(m.Output, k.Entries)
 		entry := r.idx.messages[entries.Elem.Message]
-		key := findField(entry, k.Key)
-		present := findField(entry, k.Present)
-		value := findField(entry, k.Value)
+		key := model.FindField(entry, k.Key)
+		present := model.FindField(entry, k.Present)
+		value := model.FindField(entry, k.Value)
 		mapType := "map[" + goScalarType(key.Scalar) + "]" + r.fieldType(value)
 		return &collapsed{
 			types: []string{mapType},
@@ -797,7 +774,7 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if m.Output.Unwrap != "" {
-		field := findField(m.Output, m.Output.Unwrap)
+		field := model.FindField(m.Output, m.Output.Unwrap)
 		return &collapsed{
 			types: []string{r.fieldType(field)},
 			zero:  []string{zeroValue(field)},
@@ -815,7 +792,7 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 // declares it, an empty string otherwise.
 func jsonResultContext(m *model.Method, name string) string {
 	if m.Input != nil {
-		if f := findField(m.Input, name); f != nil {
+		if f := model.FindField(m.Input, name); f != nil {
 			return "request." + fieldGoName(f)
 		}
 	}
@@ -857,7 +834,7 @@ func (r *renderer) renderErgonomicServerStream(svcName string, m *model.Method) 
 		var decls, fields []string
 		inSignature := false
 		for _, name := range m.Signature {
-			f := findField(m.Input, name)
+			f := model.FindField(m.Input, name)
 			param := goParamName(f.JSONName)
 			decls = append(decls, param+" "+r.fieldType(f))
 			fields = append(fields, fieldGoName(f)+": "+param)
@@ -868,12 +845,12 @@ func (r *renderer) renderErgonomicServerStream(svcName string, m *model.Method) 
 			decls = append(decls, "opts *"+optionsType)
 			requestLines = append(requestLines, fmt.Sprintf("\tif opts == nil {\n\t\topts = &%s{}\n\t}\n", optionsType))
 			for _, name := range m.OptionalSignature {
-				f := findField(m.Input, name)
+				f := model.FindField(m.Input, name)
 				fields = append(fields, fieldGoName(f)+": opts."+fieldGoName(f))
 				inSignature = true
 			}
 		}
-		if ctxF := findField(m.Input, "context"); ctxF != nil && !inSignature {
+		if ctxF := model.FindField(m.Input, "context"); ctxF != nil && !inSignature {
 			fields = append(fields, fieldGoName(ctxF)+": c.context")
 			prep = nil
 		}
@@ -910,7 +887,7 @@ func (r *renderer) renderOptionsStruct(svcName string, m *model.Method) string {
 		if omitted[fieldName] {
 			continue
 		}
-		f := findField(m.Input, fieldName)
+		f := model.FindField(m.Input, fieldName)
 		r.writeDoc("\t", f.Doc)
 		fmt.Fprintf(&r.body, "\t%s %s\n", fieldGoName(f), r.fieldType(f))
 	}
@@ -939,7 +916,7 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 				continue
 			}
 			inSignature = inSignature || name == "context"
-			f := findField(m.Input, name)
+			f := model.FindField(m.Input, name)
 			param := goParamName(f.JSONName)
 			decls = append(decls, param+" "+r.fieldType(f))
 			fields = append(fields, fieldGoName(f)+": "+param)
@@ -953,13 +930,13 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 					continue
 				}
 				inSignature = inSignature || name == "context"
-				f := findField(m.Input, name)
+				f := model.FindField(m.Input, name)
 				fields = append(fields, fieldGoName(f)+": opts."+fieldGoName(f))
 			}
 		}
 		// The flattened form has no context parameter, so the literal takes
 		// the client default directly when the field is part of the public API.
-		if ctxF := findField(m.Input, "context"); ctxF != nil && !inSignature && !omitted["context"] {
+		if ctxF := model.FindField(m.Input, "context"); ctxF != nil && !inSignature && !omitted["context"] {
 			fields = append(fields, fieldGoName(ctxF)+": c.context")
 			prep = nil
 		}
@@ -1015,7 +992,7 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 // *GestaltError rather than a surprising zero header.
 func (r *renderer) renderFramedRead(svcName string, m *model.Method) {
 	frames := m.Output
-	header := findField(frames, m.Initial.HeaderField)
+	header := model.FindField(frames, m.Initial.HeaderField)
 	oneof := frames.Oneofs[header.OneofIndex]
 	unionName := oneofTypeName(r.messageType(frames.FullName), oneof)
 	dataStream := svcName + m.Name + "DataStream"
@@ -1050,7 +1027,7 @@ func (r *renderer) renderFramedRead(svcName string, m *model.Method) {
 // handed back.
 func (r *renderer) renderFramedWrite(svcName string, m *model.Method) {
 	frames := m.Input
-	header := findField(frames, m.Initial.HeaderField)
+	header := model.FindField(frames, m.Initial.HeaderField)
 	oneof := frames.Oneofs[header.OneofIndex]
 	frameType := r.messageType(frames.FullName)
 	unionName := oneofTypeName(frameType, oneof)
@@ -1078,7 +1055,7 @@ func (r *renderer) renderFramedStreamWrapper(svcName string, m *model.Method) {
 	switch m.Stream {
 	case model.ServerStream:
 		frames := m.Output
-		chunk := findField(frames, m.Initial.ChunkField)
+		chunk := model.FindField(frames, m.Initial.ChunkField)
 		oneof := frames.Oneofs[chunk.OneofIndex]
 		unionName := oneofTypeName(r.messageType(frames.FullName), oneof)
 		fmt.Fprintf(&r.body, "// %s is the stream of %s payloads returned by\n", dataStream, chunk.JSONName)
@@ -1106,7 +1083,7 @@ func (r *renderer) renderFramedStreamWrapper(svcName string, m *model.Method) {
 		}
 	case model.ClientStream:
 		frames := m.Input
-		chunk := findField(frames, m.Initial.ChunkField)
+		chunk := model.FindField(frames, m.Initial.ChunkField)
 		oneof := frames.Oneofs[chunk.OneofIndex]
 		frameType := r.messageType(frames.FullName)
 		unionName := oneofTypeName(frameType, oneof)

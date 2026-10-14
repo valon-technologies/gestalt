@@ -500,7 +500,7 @@ func (r *renderer) renderClient(svc *model.Service) {
 
 	// Optional properties carry an explicit `| undefined` so callers holding
 	// `T | undefined` can pass them through under exactOptionalPropertyTypes.
-	ctxField := contextFieldOf(svc)
+	ctxField := model.ContextField(svc)
 	optionsType := "{ timeoutMs?: number | undefined }"
 	if ctxField != nil {
 		optionsType = fmt.Sprintf("{ context?: %s | undefined; timeoutMs?: number | undefined }", r.fieldType(ctxField))
@@ -541,33 +541,10 @@ func (r *renderer) renderClient(svc *model.Service) {
 // requestExpr names an outgoing request value, merging the client's default
 // context when the message carries a context field the caller left unset.
 func requestExpr(m *model.Message, expr string) string {
-	if findField(m, "context") == nil {
+	if model.FindField(m, "context") == nil {
 		return expr
 	}
 	return "{ ..." + expr + ", ...(" + expr + ".context === undefined && this.context !== undefined ? { context: this.context } : {}) }"
-}
-
-// contextFieldOf returns a service's first request context field, which
-// determines whether the client carries a default RequestContext.
-func contextFieldOf(svc *model.Service) *model.Field {
-	for _, m := range svc.Methods {
-		if m.Input == nil {
-			continue
-		}
-		if f := findField(m.Input, "context"); f != nil {
-			return f
-		}
-	}
-	return nil
-}
-
-func findField(m *model.Message, protoName string) *model.Field {
-	for _, f := range m.Fields {
-		if f.Name == protoName {
-			return f
-		}
-	}
-	return nil
 }
 
 // collapsed describes how an annotated response collapses at the API
@@ -591,8 +568,8 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 	// returns the decoded payload and surfaces envelope failures as
 	// InvokeError beside transport GestaltError.
 	if jr := m.JsonResult; jr != nil {
-		status := findField(m.Output, jr.Status)
-		body := findField(m.Output, jr.Body)
+		status := model.FindField(m.Output, jr.Status)
+		body := model.FindField(m.Output, jr.Body)
 		r.useInvoke("decodeAppResult")
 		resultExpr := "response"
 		if status.JSONName != "status" || body.JSONName != "body" {
@@ -609,8 +586,8 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if or := m.Output.OptionalResult; or != nil {
-		guard := findField(m.Output, or.Guard)
-		value := findField(m.Output, or.Value)
+		guard := model.FindField(m.Output, or.Guard)
+		value := model.FindField(m.Output, or.Value)
 		return &collapsed{
 			returnType: r.fieldType(value) + " | undefined",
 			lines: []string{
@@ -619,11 +596,11 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if k := m.Output.Keyed; k != nil {
-		entries := findField(m.Output, k.Entries)
+		entries := model.FindField(m.Output, k.Entries)
 		entry := r.idx.messages[entries.Elem.Message]
-		key := findField(entry, k.Key)
-		present := findField(entry, k.Present)
-		value := findField(entry, k.Value)
+		key := model.FindField(entry, k.Key)
+		present := model.FindField(entry, k.Present)
+		value := model.FindField(entry, k.Value)
 		mapType := "{ [key: " + scalarType(key.Scalar) + "]: " + r.fieldType(value) + " }"
 		return &collapsed{
 			returnType: mapType,
@@ -641,7 +618,7 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if m.Output.Unwrap != "" {
-		field := findField(m.Output, m.Output.Unwrap)
+		field := model.FindField(m.Output, m.Output.Unwrap)
 		returnType := r.fieldType(field)
 		if field.Presence == model.ExplicitPresence {
 			returnType += " | undefined"
@@ -661,7 +638,7 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 // proto default.
 func jsonResultContext(m *model.Method, name string) string {
 	if m.Input != nil {
-		if f := findField(m.Input, name); f != nil {
+		if f := model.FindField(m.Input, name); f != nil {
 			if len(m.Signature) == 0 && len(m.OptionalSignature) == 0 {
 				return "request." + f.JSONName + " ?? " + tsDefaultExpr(f)
 			}
@@ -708,7 +685,7 @@ func (r *renderer) renderErgonomicServerStream(m *model.Method) {
 		listed := map[string]bool{}
 		for _, name := range m.Signature {
 			listed[name] = true
-			f := findField(m.Input, name)
+			f := model.FindField(m.Input, name)
 			param := f.JSONName
 			prop := f.JSONName
 			if param == "options" {
@@ -728,7 +705,7 @@ func (r *renderer) renderErgonomicServerStream(m *model.Method) {
 			var optionDecls []string
 			for _, name := range m.OptionalSignature {
 				listed[name] = true
-				f := findField(m.Input, name)
+				f := model.FindField(m.Input, name)
 				optionDecls = append(optionDecls, fmt.Sprintf("%s?: %s | undefined", f.JSONName, r.flattenedType(f)))
 				if f.Presence == model.ExplicitPresence {
 					spreads = append(spreads, fmt.Sprintf("...(options?.%s !== undefined ? { %s: options.%s } : {})", f.JSONName, f.JSONName, f.JSONName))
@@ -747,7 +724,7 @@ func (r *renderer) renderErgonomicServerStream(m *model.Method) {
 		for _, o := range m.Input.Oneofs {
 			props = append(props, oneofProp(o)+": { case: undefined }")
 		}
-		if findField(m.Input, "context") != nil {
+		if model.FindField(m.Input, "context") != nil {
 			spreads = append(spreads, "...(this.context !== undefined ? { context: this.context } : {})")
 		}
 		params = strings.Join(decls, ", ")
@@ -788,7 +765,7 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 		listed := map[string]bool{}
 		for _, name := range m.Signature {
 			listed[name] = true
-			f := findField(m.Input, name)
+			f := model.FindField(m.Input, name)
 			// A request field literally named "options" would shadow the
 			// trailing options object, so its parameter is renamed.
 			param := f.JSONName
@@ -810,7 +787,7 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 			var optionDecls []string
 			for _, name := range m.OptionalSignature {
 				listed[name] = true
-				f := findField(m.Input, name)
+				f := model.FindField(m.Input, name)
 				optionDecls = append(optionDecls, fmt.Sprintf("%s?: %s | undefined", f.JSONName, r.flattenedType(f)))
 				if f.Presence == model.ExplicitPresence {
 					spreads = append(spreads, fmt.Sprintf("...(options?.%s !== undefined ? { %s: options.%s } : {})", f.JSONName, f.JSONName, f.JSONName))
@@ -831,7 +808,7 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 		for _, o := range m.Input.Oneofs {
 			props = append(props, oneofProp(o)+": { case: undefined }")
 		}
-		if findField(m.Input, "context") != nil {
+		if model.FindField(m.Input, "context") != nil {
 			spreads = append(spreads, "...(this.context !== undefined ? { context: this.context } : {})")
 		}
 		params = strings.Join(decls, ", ")
@@ -883,10 +860,10 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 func (r *renderer) renderFramedRead(m *model.Method) {
 	methodName := lowerFirst(m.Name)
 	frames := m.Output
-	oneof := frames.Oneofs[findField(frames, m.Initial.HeaderField).OneofIndex]
+	oneof := frames.Oneofs[model.FindField(frames, m.Initial.HeaderField).OneofIndex]
 	prop := oneofProp(oneof)
-	header := findField(frames, m.Initial.HeaderField)
-	chunk := findField(frames, m.Initial.ChunkField)
+	header := model.FindField(frames, m.Initial.HeaderField)
+	chunk := model.FindField(frames, m.Initial.ChunkField)
 
 	requestParam := ""
 	requestArg := "{}"
@@ -925,9 +902,9 @@ func (r *renderer) renderFramedRead(m *model.Method) {
 func (r *renderer) renderFramedWrite(m *model.Method) {
 	methodName := lowerFirst(m.Name)
 	frames := m.Input
-	prop := oneofProp(frames.Oneofs[findField(frames, m.Initial.HeaderField).OneofIndex])
-	header := findField(frames, m.Initial.HeaderField)
-	chunk := findField(frames, m.Initial.ChunkField)
+	prop := oneofProp(frames.Oneofs[model.FindField(frames, m.Initial.HeaderField).OneofIndex])
+	header := model.FindField(frames, m.Initial.HeaderField)
+	chunk := model.FindField(frames, m.Initial.ChunkField)
 	toWire := r.convRef(frames.ProtoFile, toWireFunc(frames.FullName))
 
 	r.use("callUnary", false)

@@ -129,8 +129,8 @@ func (r *renderer) renderServiceClientDecodedMethod(clientName string, m *model.
 	}
 	r.features.gestaltclient = true
 	requestType := r.messageType(m.Input.FullName)
-	status := findField(m.Output, m.JsonResult.Status)
-	body := findField(m.Output, m.JsonResult.Body)
+	status := model.FindField(m.Output, m.JsonResult.Status)
+	body := model.FindField(m.Output, m.JsonResult.Body)
 	appExpr := jsonResultContext(m, "app")
 	opExpr := jsonResultContext(m, "operation")
 
@@ -200,8 +200,8 @@ func (r *renderer) renderInvokeGraphQLDecodedMethod(clientName string, m *model.
 	}
 	r.features.gestaltclient = true
 	requestType := r.messageType(m.Input.FullName)
-	status := findField(m.Output, "status")
-	body := findField(m.Output, "body")
+	status := model.FindField(m.Output, "status")
+	body := model.FindField(m.Output, "body")
 	appExpr := jsonResultContext(m, "app")
 
 	fmt.Fprintf(&r.body, "func (c *%s) InvokeGraphQLDecoded(ctx context.Context, request *%s) (any, error) {\n",
