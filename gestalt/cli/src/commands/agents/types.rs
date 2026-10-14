@@ -282,9 +282,6 @@ pub(crate) struct AgentTurnDisplayInfo {
     pub(crate) label: String,
     #[serde(default, rename = "ref")]
     pub(crate) display_ref: String,
-    #[allow(dead_code)]
-    #[serde(default)]
-    pub(crate) parent_ref: String,
     #[serde(default)]
     pub(crate) input: Option<Value>,
     #[serde(default)]
@@ -335,7 +332,6 @@ impl AgentTurnDisplayInfo {
             text: take_string_field(&mut data, "text"),
             label: take_string_field(&mut data, "label"),
             display_ref: take_string_field(&mut data, "ref"),
-            parent_ref: take_string_field(&mut data, "parentRef"),
             input: data.remove("input"),
             output: data.remove("output"),
             error: data.remove("error"),

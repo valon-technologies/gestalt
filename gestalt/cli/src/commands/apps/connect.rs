@@ -611,7 +611,6 @@ fn format_auth_types(auth_types: &[String]) -> String {
         .iter()
         .map(|auth_type| match auth_type.as_str() {
             "oauth" => "OAuth",
-            "manual" => "manual",
             _ => auth_type.as_str(),
         })
         .collect::<Vec<_>>()
