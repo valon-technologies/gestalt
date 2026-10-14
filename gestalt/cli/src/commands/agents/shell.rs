@@ -150,7 +150,7 @@ pub(crate) fn run_shell_interactive(
         if trimmed.is_empty() {
             continue;
         }
-        if handle_agent_slash_command(&mut shell, trimmed)? {
+        if handle_agent_slash_command(&mut shell, trimmed) {
             continue;
         }
         shell.submit_turn(client, vec![line], &interrupts)?;
@@ -169,9 +169,9 @@ fn print_resume_command(session_id: &str, timeout_seconds: Option<i32>) -> Resul
     Ok(())
 }
 
-fn handle_agent_slash_command(shell: &mut AgentShell, trimmed: &str) -> Result<bool> {
+fn handle_agent_slash_command(shell: &mut AgentShell, trimmed: &str) -> bool {
     let Some((command, args)) = parse_agent_slash_command(trimmed) else {
-        return Ok(false);
+        return false;
     };
     match command {
         "help" => {
@@ -189,9 +189,9 @@ fn handle_agent_slash_command(shell: &mut AgentShell, trimmed: &str) -> Result<b
                 eprintln!("{line}");
             }
         }
-        _ => return Ok(false),
+        _ => return false,
     }
-    Ok(true)
+    true
 }
 
 fn parse_agent_slash_command(input: &str) -> Option<(&str, &str)> {
