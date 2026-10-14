@@ -3,14 +3,12 @@
 package indexeddbtransport
 
 import (
-	"fmt"
 	"net"
 	"os"
-	"path/filepath"
-	"strings"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/relaytest"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/transporttest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"google.golang.org/grpc"
@@ -31,7 +29,7 @@ type Options struct {
 // Supported forms are a plain Unix socket path, unix:///path, or tcp://host:port.
 // The server starts empty; tests seed data through the SDK client.
 func Start(target string, opts Options) (*Server, error) {
-	network, address, err := parseTarget(target)
+	network, address, err := transporttest.ParseTarget("indexeddb", target)
 	if err != nil {
 		return nil, err
 	}
@@ -56,33 +54,8 @@ func Start(target string, opts Options) (*Server, error) {
 func (s *Server) Stop() {
 	s.srv.GracefulStop()
 	_ = s.lis.Close()
-	network, address, err := parseTarget(s.target)
+	network, address, err := transporttest.ParseTarget("indexeddb", s.target)
 	if err == nil && network == "unix" {
 		_ = os.Remove(address)
-	}
-}
-
-func parseTarget(raw string) (network string, address string, err error) {
-	target := strings.TrimSpace(raw)
-	if target == "" {
-		return "", "", fmt.Errorf("indexeddb transport target is required")
-	}
-	switch {
-	case strings.HasPrefix(target, "tcp://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tcp://"))
-		if address == "" {
-			return "", "", fmt.Errorf("indexeddb tcp target %q is missing host:port", raw)
-		}
-		return "tcp", address, nil
-	case strings.HasPrefix(target, "unix://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "unix://"))
-		if address == "" {
-			return "", "", fmt.Errorf("indexeddb unix target %q is missing a socket path", raw)
-		}
-		return "unix", address, nil
-	case strings.Contains(target, "://"):
-		return "", "", fmt.Errorf("unsupported indexeddb transport target %q", raw)
-	default:
-		return "unix", filepath.Clean(target), nil
 	}
 }
