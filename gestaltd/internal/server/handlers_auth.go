@@ -338,9 +338,8 @@ func absoluteLoginRedirectAllowed(raw, allowedBase string) bool {
 	switch {
 	case basePath == "":
 		return strings.HasPrefix(nextPath, "/")
-	case nextPath == basePath:
-		return true
-	case strings.HasPrefix(nextPath, basePath+"/"):
+	case nextPath == basePath,
+		strings.HasPrefix(nextPath, basePath+"/"):
 		return true
 	default:
 		return false

@@ -963,9 +963,8 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusUnauthorized, "not authenticated")
 	case errors.Is(err, invocation.ErrAuthorizationUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "operation permissions are unavailable; retry shortly")
-	case errors.Is(err, invocation.ErrAuthorizationDenied):
-		writeError(w, http.StatusForbidden, err.Error())
-	case errors.Is(err, invocation.ErrScopeDenied):
+	case errors.Is(err, invocation.ErrAuthorizationDenied),
+		errors.Is(err, invocation.ErrScopeDenied):
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, invocation.ErrNoCredential):
 		writeTypedError(

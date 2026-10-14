@@ -24,12 +24,6 @@ func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 		return s.Audit
 	case HostProviderKindIndexedDB:
 		return s.IndexedDB
-	case HostProviderKindCache:
-		return ""
-	case HostProviderKindWorkflow:
-		return ""
-	case HostProviderKindAgent:
-		return ""
 	default:
 		return ""
 	}

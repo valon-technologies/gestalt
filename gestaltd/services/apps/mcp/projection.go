@@ -47,13 +47,10 @@ func toolName(prefixes map[string]string, provider, operation string) string {
 	raw := prefixes[provider] + provider + toolNameSep + operation
 	name := strings.Map(func(r rune) rune {
 		switch {
-		case r >= 'a' && r <= 'z':
-			return r
-		case r >= 'A' && r <= 'Z':
-			return r
-		case r >= '0' && r <= '9':
-			return r
-		case r == '_' || r == '-' || r == ':':
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '_' || r == '-' || r == ':':
 			return r
 		default:
 			return '_'

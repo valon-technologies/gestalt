@@ -187,11 +187,9 @@ func (s *Server) changeAdminAppRegistryApp(w http.ResponseWriter, r *http.Reques
 		case errors.Is(err, appregistry.ErrAppAlreadyAdded):
 			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppNotAdded),
-			errors.Is(err, appregistry.ErrRegistrySourceMismatch):
-			status = http.StatusBadRequest
-		case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled):
-			status = http.StatusBadRequest
-		case errors.Is(err, appregistry.ErrInstallValidationFailed):
+			errors.Is(err, appregistry.ErrRegistrySourceMismatch),
+			errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled),
+			errors.Is(err, appregistry.ErrInstallValidationFailed):
 			status = http.StatusBadRequest
 		case errors.Is(err, context.DeadlineExceeded):
 			status = http.StatusGatewayTimeout

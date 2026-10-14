@@ -9,21 +9,14 @@ import (
 // ValueIsSet reports whether value selects any value kind.
 func ValueIsSet(value Value) bool {
 	switch {
-	case value.LiteralSet:
-		return true
-	case value.Object != nil:
-		return true
-	case value.Array != nil:
-		return true
-	case value.Template != nil:
-		return true
-	case strings.TrimSpace(value.Input) != "":
-		return true
-	case strings.TrimSpace(value.Signal) != "":
-		return true
-	case value.StepOutput != nil:
-		return true
-	case value.StepInput != nil:
+	case value.LiteralSet,
+		value.Object != nil,
+		value.Array != nil,
+		value.Template != nil,
+		strings.TrimSpace(value.Input) != "",
+		strings.TrimSpace(value.Signal) != "",
+		value.StepOutput != nil,
+		value.StepInput != nil:
 		return true
 	default:
 		return false
