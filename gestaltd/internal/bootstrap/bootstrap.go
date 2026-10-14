@@ -634,13 +634,13 @@ func (r *Result) Close(ctx context.Context) error {
 		authCloseErr,
 		authorizationCloseErr,
 		externalCredentialsCloseErr,
-		closeWorkflows(r.ExtraWorkflows...),
-		closeAgents(r.ExtraAgents...),
+		closeResources(r.ExtraWorkflows...),
+		closeResources(r.ExtraAgents...),
 		CloseProviders(r.Providers),
 		r.Services.Close(),
-		closeIndexedDBs(r.ExtraIndexedDBs...),
-		closeCaches(r.ExtraCaches...),
-		closeS3s(r.ExtraS3s...),
+		closeResources(r.ExtraIndexedDBs...),
+		closeResources(r.ExtraCaches...),
+		closeResources(r.ExtraS3s...),
 		closeSecretManager(r.SecretManager),
 		closeRuntimeRegistry(r.runtimeRegistry),
 	)
@@ -665,52 +665,13 @@ func closeIfPossible(values ...any) {
 	}
 }
 
-func closeIndexedDBs(stores ...indexeddb.IndexedDB) error {
+func closeResources[T interface{ Close() error }](values ...T) error {
 	var errs []error
-	for _, store := range stores {
-		if store == nil {
+	for _, value := range values {
+		if any(value) == nil {
 			continue
 		}
-		if err := store.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func closeS3s(clients ...s3sdk.S3) error {
-	var errs []error
-	for _, client := range clients {
-		if client == nil {
-			continue
-		}
-		if err := client.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func closeWorkflows(providers ...coreworkflow.Provider) error {
-	var errs []error
-	for _, provider := range providers {
-		if provider == nil {
-			continue
-		}
-		if err := provider.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func closeAgents(providers ...coreagent.Provider) error {
-	var errs []error
-	for _, provider := range providers {
-		if provider == nil {
-			continue
-		}
-		if err := provider.Close(); err != nil {
+		if err := value.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -1206,7 +1167,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		ds, err := buildIndexedDB(cfg, name, entry, factories, deps)
 		if err != nil {
 			_ = svc.Close()
-			_ = closeIndexedDBs(extraIndexedDBs...)
+			_ = closeResources(extraIndexedDBs...)
 			return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
 		}
 		ds = metricutil.InstrumentIndexedDB(ds, name)
@@ -1220,7 +1181,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			_ = svc.Close()
 		}
 		if closeExtraStores {
-			_ = closeIndexedDBs(extraIndexedDBs...)
+			_ = closeResources(extraIndexedDBs...)
 		}
 	}()
 
@@ -1232,7 +1193,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 		value, err := buildCache(entry, factories)
 		if err != nil {
-			_ = closeCaches(extraCaches...)
+			_ = closeResources(extraCaches...)
 			return nil, fmt.Errorf("bootstrap: cache from resource %q: %w", name, err)
 		}
 		hostCaches[name] = value
@@ -1241,7 +1202,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeExtraCaches := true
 	defer func() {
 		if closeExtraCaches {
-			_ = closeCaches(extraCaches...)
+			_ = closeResources(extraCaches...)
 		}
 	}()
 
@@ -1253,7 +1214,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 		client, err := buildS3(name, entry, factories)
 		if err != nil {
-			_ = closeS3s(extraS3s...)
+			_ = closeResources(extraS3s...)
 			return nil, fmt.Errorf("bootstrap: s3 from resource %q: %w", name, err)
 		}
 		hostS3s[name] = client
@@ -1262,7 +1223,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeExtraS3s := true
 	defer func() {
 		if closeExtraS3s {
-			_ = closeS3s(extraS3s...)
+			_ = closeResources(extraS3s...)
 		}
 	}()
 
@@ -1401,9 +1362,9 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		externalCredentialsCloseErr,
 		p.Deps.RemoteClientSets.Close(),
 		p.Services.Close(),
-		closeIndexedDBs(p.ExtraIndexedDBs...),
-		closeCaches(p.ExtraCaches...),
-		closeS3s(p.ExtraS3s...),
+		closeResources(p.ExtraIndexedDBs...),
+		closeResources(p.ExtraCaches...),
+		closeResources(p.ExtraS3s...),
 		closeSecretManager(p.SecretManager),
 		closeRuntimeRegistry(p.runtimeRegistry),
 	)
@@ -1554,20 +1515,20 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps, flags)
 	if err != nil {
-		_ = closeWorkflows(extraWorkflows...)
-		_ = closeAgents(extraAgents...)
+		_ = closeResources(extraWorkflows...)
+		_ = closeResources(extraAgents...)
 		return nil, err
 	}
 	closeWorkflowsOnError := true
 	defer func() {
 		if closeWorkflowsOnError {
-			_ = closeWorkflows(extraWorkflows...)
+			_ = closeResources(extraWorkflows...)
 		}
 	}()
 	closeAgentsOnError := true
 	defer func() {
 		if closeAgentsOnError {
-			_ = closeAgents(extraAgents...)
+			_ = closeResources(extraAgents...)
 		}
 	}()
 	storedSHAs := readAppSHAs(ctx, prepared.Services.DB)
@@ -1903,14 +1864,14 @@ func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories 
 			for _, name := range workflowResult.publishedNames {
 				deps.WorkflowRuntime.UnpublishProvider(name)
 			}
-			err = errors.Join(err, closeWorkflows(workflowResult.providers...))
+			err = errors.Join(err, closeResources(workflowResult.providers...))
 			workflowResult.providers = nil
 		}
 		if workflowResult.err != nil && deps.AgentRuntime != nil {
 			for _, name := range agentResult.publishedNames {
 				deps.AgentRuntime.UnpublishProvider(name)
 			}
-			err = errors.Join(err, closeAgents(agentResult.providers...))
+			err = errors.Join(err, closeResources(agentResult.providers...))
 			agentResult.providers = nil
 		}
 		return workflowResult.providers, agentResult.providers, err
@@ -2044,7 +2005,7 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 				deps.WorkflowRuntime.FailPendingProviders(err)
 			}
 		},
-		closeWorkflows,
+		closeResources,
 		func(name string, err error) error {
 			return fmt.Errorf("bootstrap: workflow from resource %q: %w", name, err)
 		},
@@ -2076,7 +2037,7 @@ func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 				deps.AgentRuntime.FailPendingProviders(err)
 			}
 		},
-		closeAgents,
+		closeResources,
 		func(name string, err error) error {
 			return fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
 		},

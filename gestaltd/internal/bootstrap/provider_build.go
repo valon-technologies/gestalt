@@ -17,7 +17,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -2324,19 +2323,6 @@ func chainCleanup(cleanups ...func()) func() {
 			combined[i]()
 		}
 	}
-}
-
-func closeCaches(values ...corecache.Cache) error {
-	var errs []error
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		if err := value.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
 }
 
 func clonePluginEnv(src map[string]string) map[string]string {
