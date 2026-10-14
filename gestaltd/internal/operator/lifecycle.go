@@ -1071,9 +1071,6 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, 
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, err
 	}
-	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
-		return nil, nil, err
-	}
 	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationServe, Phase: LifecyclePhaseComplete, Status: LifecycleProgressCompleted, Subject: "serve"})
 	return cfg, nil, nil
 }
@@ -1095,9 +1092,6 @@ func (l *Lifecycle) LoadForValidationAtPaths(configPaths []string, lockfilePath,
 		return nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
-		return nil, err
-	}
-	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
 	return cfg, nil
