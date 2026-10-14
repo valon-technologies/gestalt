@@ -1,9 +1,10 @@
 package workflow
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 )
 
 // ValueIsSet reports whether value selects any value kind.
@@ -32,12 +33,7 @@ func ValueIsSet(value Value) bool {
 
 // IsScalarJSON reports whether value is representable as a scalar JSON value.
 func IsScalarJSON(value any) bool {
-	switch value.(type) {
-	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, json.Number:
-		return true
-	default:
-		return false
-	}
+	return jsonvalue.IsScalar(value)
 }
 
 // ValidateValueMapRefs validates step references in a value map.
