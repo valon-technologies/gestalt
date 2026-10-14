@@ -307,14 +307,7 @@ func byteRangeToProto(r *s3.ByteRange) *proto.ByteRange {
 	if r == nil {
 		return nil
 	}
-	out := &proto.ByteRange{}
-	if r.Start != nil {
-		out.Start = r.Start
-	}
-	if r.End != nil {
-		out.End = r.End
-	}
-	return out
+	return &proto.ByteRange{Start: r.Start, End: r.End}
 }
 
 func byteRangeFromProto(r *proto.ByteRange) *s3.ByteRange {

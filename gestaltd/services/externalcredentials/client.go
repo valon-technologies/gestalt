@@ -93,8 +93,8 @@ func externalCredentialProviderCapabilities(ctx context.Context, getCapabilities
 		return externalCredentialCapabilities{}
 	}
 	return externalCredentialCapabilities{
-		PersistsAccountKey:        caps != nil && caps.GetPersistsAccountKey(),
-		SupportsConditionalUpsert: caps != nil && caps.GetSupportsConditionalUpsert(),
+		PersistsAccountKey:        caps.GetPersistsAccountKey(),
+		SupportsConditionalUpsert: caps.GetSupportsConditionalUpsert(),
 	}
 }
 

@@ -241,21 +241,19 @@ func (s *CompactService) findGroup(ctx context.Context, clientID, id string) (st
 	return stored(r), nil
 }
 func (s *CompactService) emailFor(u persistedUser) (string, error) {
-	if len(u.Emails) > 0 {
-		for _, e := range u.Emails {
-			if e.Primary && strings.EqualFold(strings.TrimSpace(e.Type), "work") {
-				return normalize(e.Value), nil
-			}
+	for _, e := range u.Emails {
+		if e.Primary && strings.EqualFold(strings.TrimSpace(e.Type), "work") {
+			return normalize(e.Value), nil
 		}
-		for _, e := range u.Emails {
-			if e.Primary && strings.TrimSpace(e.Value) != "" {
-				return normalize(e.Value), nil
-			}
+	}
+	for _, e := range u.Emails {
+		if e.Primary && strings.TrimSpace(e.Value) != "" {
+			return normalize(e.Value), nil
 		}
-		for _, e := range u.Emails {
-			if strings.EqualFold(strings.TrimSpace(e.Type), "work") && strings.TrimSpace(e.Value) != "" {
-				return normalize(e.Value), nil
-			}
+	}
+	for _, e := range u.Emails {
+		if strings.EqualFold(strings.TrimSpace(e.Type), "work") && strings.TrimSpace(e.Value) != "" {
+			return normalize(e.Value), nil
 		}
 	}
 	if m, err := mail.ParseAddress(u.UserName); err == nil && normalize(m.Address) == normalize(u.UserName) {

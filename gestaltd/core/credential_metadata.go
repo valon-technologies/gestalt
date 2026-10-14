@@ -55,9 +55,6 @@ func ConnectionParamsFromMetadataJSON(metadataJSON string) (map[string]string, e
 	if err := json.Unmarshal([]byte(metadataJSON), &params); err != nil {
 		return nil, fmt.Errorf("corrupt MetadataJSON: %w", err)
 	}
-	if len(params) == 0 {
-		return nil, nil
-	}
 	delete(params, AccountIdentityMetadataKey)
 	delete(params, AccountKeyMetadataKey)
 	if len(params) == 0 {
