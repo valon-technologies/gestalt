@@ -146,7 +146,7 @@ func (s *AppServer) InvokeStream(req *proto.AppInvokeRequest, stream proto.App_I
 	for {
 		frame, err := reader.Recv()
 		if err != nil {
-			finalizeStreamReader(reader, err)
+			invocation.FinalizeStream(reader, err)
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
@@ -154,16 +154,10 @@ func (s *AppServer) InvokeStream(req *proto.AppInvokeRequest, stream proto.App_I
 		}
 		for _, pf := range invokeFrameToProto(frame) {
 			if err := stream.Send(pf); err != nil {
-				finalizeStreamReader(reader, err)
+				invocation.FinalizeStream(reader, err)
 				return err
 			}
 		}
-	}
-}
-
-func finalizeStreamReader(reader core.StreamReader, err error) {
-	if finalizer, ok := reader.(invocation.StreamFinalizer); ok {
-		finalizer.FinalizeStream(err)
 	}
 }
 
