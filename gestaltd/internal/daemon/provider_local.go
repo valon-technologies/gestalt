@@ -708,24 +708,13 @@ func derivedPluginKey(manifest *providermanifestv1.Manifest, manifestPath string
 }
 
 func defaultProviderLocalMountPath(manifest *providermanifestv1.Manifest, manifestPath, fallbackKey string) string {
-	if slug := derivedProviderLocalMountSlug(manifest, manifestPath); slug != "" {
+	if slug := derivedPluginKey(manifest, manifestPath); slug != "" {
 		return "/" + slug
 	}
 	if slug := sanitizeProviderLocalMountSlug(fallbackKey); slug != "" {
 		return "/" + slug
 	}
 	return "/" + fallbackKey
-}
-
-func derivedProviderLocalMountSlug(manifest *providermanifestv1.Manifest, manifestPath string) string {
-	if manifest != nil {
-		if src, err := source.Parse(manifest.Source); err == nil {
-			if slug := strings.TrimSpace(src.AppName()); slug != "" {
-				return slug
-			}
-		}
-	}
-	return sanitizeProviderLocalMountSlug(filepath.Base(filepath.Dir(manifestPath)))
 }
 
 func sanitizeProviderLocalMountSlug(value string) string {

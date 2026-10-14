@@ -391,7 +391,7 @@ func inspectMaterializedCacheFiles(root string) ([]materializedCacheFile, int64,
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("materialized cache does not support non-regular file %s", rel)
 		}
-		digest, err := fileSHA256Hex(path)
+		digest, err := FileSHA256(path)
 		if err != nil {
 			return err
 		}
@@ -542,7 +542,7 @@ func validateMaterializedFile(source string, file materializedCacheFile) error {
 	if err != nil {
 		return err
 	}
-	got, err := fileSHA256Hex(source)
+	got, err := FileSHA256(source)
 	if err != nil {
 		return err
 	}
@@ -588,7 +588,8 @@ func validateMaterializedCachePath(path string) (string, error) {
 	return clean, nil
 }
 
-func fileSHA256Hex(path string) (string, error) {
+// FileSHA256 returns the lowercase hex SHA-256 digest of a file.
+func FileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
