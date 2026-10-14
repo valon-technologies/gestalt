@@ -544,20 +544,11 @@ func loopbackBaseURLWithPort(raw string, port int) string {
 		return ""
 	}
 	host := parsed.Hostname()
-	if !actionableLoopbackHost(host) {
+	if !config.ActionableLoopbackHost(host) {
 		return ""
 	}
 	parsed.Host = net.JoinHostPort("localhost", strconv.Itoa(port))
 	return strings.TrimRight(parsed.String(), "/")
-}
-
-func actionableLoopbackHost(host string) bool {
-	switch strings.TrimSpace(host) {
-	case "", "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
-	}
 }
 
 func printMainUsage(w io.Writer) {

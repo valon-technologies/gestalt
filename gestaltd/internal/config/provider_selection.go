@@ -140,33 +140,27 @@ func (c *Config) EffectiveAppIndexedDB(pluginName string, entry *ProviderEntry) 
 }
 
 func (c *Config) EffectiveWorkflowProvider(providerName string) (string, *ProviderEntry, error) {
-	if c == nil {
-		return "", nil, nil
-	}
-	providerName = strings.TrimSpace(providerName)
-	if providerName != "" {
-		entry := c.Providers.Workflow[providerName]
-		if entry == nil {
-			return "", nil, fmt.Errorf("config validation: providers.workflow references unknown workflow %q", providerName)
-		}
-		return providerName, entry, nil
-	}
-	return c.SelectedWorkflowProvider()
+	return c.effectiveHostProvider(HostProviderKindWorkflow, providerName)
 }
 
 func (c *Config) EffectiveAgentProvider(providerName string) (string, *ProviderEntry, error) {
+	return c.effectiveHostProvider(HostProviderKindAgent, providerName)
+}
+
+func (c *Config) effectiveHostProvider(kind HostProviderKind, providerName string) (string, *ProviderEntry, error) {
 	if c == nil {
 		return "", nil, nil
 	}
 	providerName = strings.TrimSpace(providerName)
+	entries := c.HostProviderEntries(kind)
 	if providerName != "" {
-		entry := c.Providers.Agent[providerName]
+		entry := entries[providerName]
 		if entry == nil {
-			return "", nil, fmt.Errorf("config validation: providers.agent references unknown agent %q", providerName)
+			return "", nil, fmt.Errorf("config validation: providers.%s references unknown %s %q", kind, kind, providerName)
 		}
 		return providerName, entry, nil
 	}
-	return c.SelectedAgentProvider()
+	return ResolveSelectedHostProvider(kind, "", entries)
 }
 
 func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveIndexedDBBinding, error) {

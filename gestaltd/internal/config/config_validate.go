@@ -1092,15 +1092,11 @@ func shouldUseCloudRunIAM(rawURL string) bool {
 	if err != nil || parsed.Host == "" {
 		return false
 	}
-	switch parsed.Scheme {
-	case "https":
-		return !actionableLoopbackHost(parsed.Hostname())
-	default:
-		return false
-	}
+	return parsed.Scheme == "https" && !ActionableLoopbackHost(parsed.Hostname())
 }
 
-func actionableLoopbackHost(host string) bool {
+// ActionableLoopbackHost reports whether host is empty or a recognized loopback name or address.
+func ActionableLoopbackHost(host string) bool {
 	switch strings.TrimSpace(host) {
 	case "", "localhost", "127.0.0.1", "::1":
 		return true
