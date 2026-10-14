@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
@@ -125,11 +126,11 @@ func agentSessionFromProto(session *proto.AgentSession) (*coreagent.Session, err
 		Model:              session.GetModel(),
 		ClientRef:          session.GetClientRef(),
 		State:              state,
-		Metadata:           mapFromStruct(session.GetMetadata()),
+		Metadata:           protoutil.MapFromStruct(session.GetMetadata()),
 		CreatedBySubjectID: strings.TrimSpace(session.GetCreatedBySubjectId()),
-		CreatedAt:          timeFromProto(session.GetCreatedAt()),
-		UpdatedAt:          timeFromProto(session.GetUpdatedAt()),
-		LastTurnAt:         timeFromProto(session.GetLastTurnAt()),
+		CreatedAt:          protoutil.TimeFromProto(session.GetCreatedAt()),
+		UpdatedAt:          protoutil.TimeFromProto(session.GetUpdatedAt()),
+		LastTurnAt:         protoutil.TimeFromProto(session.GetLastTurnAt()),
 	}, nil
 }
 
@@ -151,9 +152,9 @@ func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
 		Output:             agentTurnOutputFromProto(turn),
 		StatusMessage:      turn.GetStatusMessage(),
 		CreatedBySubjectID: strings.TrimSpace(turn.GetCreatedBySubjectId()),
-		CreatedAt:          timeFromProto(turn.GetCreatedAt()),
-		StartedAt:          timeFromProto(turn.GetStartedAt()),
-		CompletedAt:        timeFromProto(turn.GetCompletedAt()),
+		CreatedAt:          protoutil.TimeFromProto(turn.GetCreatedAt()),
+		StartedAt:          protoutil.TimeFromProto(turn.GetStartedAt()),
+		CompletedAt:        protoutil.TimeFromProto(turn.GetCompletedAt()),
 		ExecutionRef:       turn.GetExecutionRef(),
 	}, nil
 }
@@ -168,7 +169,7 @@ func setAgentTurnOutputProto(turn *proto.AgentTurn, output coreagent.TurnOutput)
 		return fmt.Errorf("exactly one of output.text or output.structured is required")
 	}
 	if output.Structured != nil {
-		value, err := structFromMap(output.Structured.Value)
+		value, err := protoutil.StructFromMap(output.Structured.Value)
 		if err != nil {
 			return err
 		}
@@ -191,7 +192,7 @@ func agentTurnOutputFromProto(turn *proto.AgentTurn) coreagent.TurnOutput {
 		return coreagent.TurnOutput{
 			Structured: &coreagent.TurnStructuredOutput{
 				Text:  structured.GetText(),
-				Value: mapFromStruct(structured.GetValue()),
+				Value: protoutil.MapFromStruct(structured.GetValue()),
 			},
 		}
 	}
@@ -212,8 +213,8 @@ func agentTurnEventFromProto(event *proto.AgentTurnEvent) *coreagent.TurnEvent {
 		Type:       event.GetType(),
 		Source:     event.GetSource(),
 		Visibility: event.GetVisibility(),
-		Data:       mapFromStruct(event.GetData()),
-		CreatedAt:  timeFromProto(event.GetCreatedAt()),
+		Data:       protoutil.MapFromStruct(event.GetData()),
+		CreatedAt:  protoutil.TimeFromProto(event.GetCreatedAt()),
 		Display:    agentTurnDisplayFromProto(event.GetDisplay()),
 	}
 }
@@ -240,9 +241,9 @@ func agentTurnDisplayFromProto(display *proto.AgentTurnDisplay) *coreagent.TurnD
 		Label:     display.GetLabel(),
 		Ref:       display.GetRef(),
 		ParentRef: display.GetParentRef(),
-		Input:     protoValueToAny(display.GetInput()),
-		Output:    protoValueToAny(display.GetOutput()),
-		Error:     protoValueToAny(display.GetError()),
+		Input:     protoutil.ValueToAny(display.GetInput()),
+		Output:    protoutil.ValueToAny(display.GetOutput()),
+		Error:     protoutil.ValueToAny(display.GetError()),
 		Action:    display.GetAction(),
 		Format:    display.GetFormat(),
 		Language:  display.GetLanguage(),
@@ -253,15 +254,15 @@ func agentTurnDisplayToProto(display *coreagent.TurnDisplay) (*proto.AgentTurnDi
 	if display == nil {
 		return nil, nil
 	}
-	input, err := protoValueFromAny(display.Input)
+	input, err := protoutil.ValueFromAny(display.Input)
 	if err != nil {
 		return nil, fmt.Errorf("agent turn display input: %w", err)
 	}
-	output, err := protoValueFromAny(display.Output)
+	output, err := protoutil.ValueFromAny(display.Output)
 	if err != nil {
 		return nil, fmt.Errorf("agent turn display output: %w", err)
 	}
-	displayErr, err := protoValueFromAny(display.Error)
+	displayErr, err := protoutil.ValueFromAny(display.Error)
 	if err != nil {
 		return nil, fmt.Errorf("agent turn display error: %w", err)
 	}
@@ -285,7 +286,7 @@ func agentSessionToProto(session *coreagent.Session) (*proto.AgentSession, error
 	if session == nil {
 		return nil, nil
 	}
-	metadata, err := structFromMap(session.Metadata)
+	metadata, err := protoutil.StructFromMap(session.Metadata)
 	if err != nil {
 		return nil, fmt.Errorf("agent session metadata: %w", err)
 	}
@@ -297,9 +298,9 @@ func agentSessionToProto(session *coreagent.Session) (*proto.AgentSession, error
 		State:              agentSessionStateToProto(session.State),
 		Metadata:           metadata,
 		CreatedBySubjectId: strings.TrimSpace(session.CreatedBySubjectID),
-		CreatedAt:          timeToProto(session.CreatedAt),
-		UpdatedAt:          timeToProto(session.UpdatedAt),
-		LastTurnAt:         timeToProto(session.LastTurnAt),
+		CreatedAt:          protoutil.TimeToProto(session.CreatedAt),
+		UpdatedAt:          protoutil.TimeToProto(session.UpdatedAt),
+		LastTurnAt:         protoutil.TimeToProto(session.LastTurnAt),
 	}, nil
 }
 
@@ -320,9 +321,9 @@ func agentTurnToProto(turn *coreagent.Turn) (*proto.AgentTurn, error) {
 		Messages:           messages,
 		StatusMessage:      turn.StatusMessage,
 		CreatedBySubjectId: strings.TrimSpace(turn.CreatedBySubjectID),
-		CreatedAt:          timeToProto(turn.CreatedAt),
-		StartedAt:          timeToProto(turn.StartedAt),
-		CompletedAt:        timeToProto(turn.CompletedAt),
+		CreatedAt:          protoutil.TimeToProto(turn.CreatedAt),
+		StartedAt:          protoutil.TimeToProto(turn.StartedAt),
+		CompletedAt:        protoutil.TimeToProto(turn.CompletedAt),
 		ExecutionRef:       turn.ExecutionRef,
 	}
 	if err := setAgentTurnOutputProto(out, turn.Output); err != nil {
@@ -340,7 +341,7 @@ func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
 		if value == nil {
 			continue
 		}
-		data, err := structFromMap(value.Data)
+		data, err := protoutil.StructFromMap(value.Data)
 		if err != nil {
 			slog.Warn("omit invalid agent turn event data during proto conversion", "turn_id", value.TurnID, "event_id", value.ID, "type", value.Type, "error", err)
 			data = nil
@@ -358,7 +359,7 @@ func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
 			Source:     value.Source,
 			Visibility: value.Visibility,
 			Data:       data,
-			CreatedAt:  timeToProto(value.CreatedAt),
+			CreatedAt:  protoutil.TimeToProto(value.CreatedAt),
 			Display:    display,
 		})
 	}
@@ -463,10 +464,10 @@ func agentInteractionFromProto(value *proto.AgentInteraction) (*coreagent.Intera
 		State:      state,
 		Title:      value.GetTitle(),
 		Prompt:     value.GetPrompt(),
-		Request:    mapFromStruct(value.GetRequest()),
-		Resolution: mapFromStruct(value.GetResolution()),
-		CreatedAt:  timeFromProto(value.GetCreatedAt()),
-		ResolvedAt: timeFromProto(value.GetResolvedAt()),
+		Request:    protoutil.MapFromStruct(value.GetRequest()),
+		Resolution: protoutil.MapFromStruct(value.GetResolution()),
+		CreatedAt:  protoutil.TimeFromProto(value.GetCreatedAt()),
+		ResolvedAt: protoutil.TimeFromProto(value.GetResolvedAt()),
 	}, nil
 }
 
@@ -489,11 +490,11 @@ func agentInteractionToProto(value *coreagent.Interaction) (*proto.AgentInteract
 	if value == nil {
 		return nil, nil
 	}
-	request, err := structFromMap(value.Request)
+	request, err := protoutil.StructFromMap(value.Request)
 	if err != nil {
 		return nil, fmt.Errorf("agent interaction request: %w", err)
 	}
-	resolution, err := structFromMap(value.Resolution)
+	resolution, err := protoutil.StructFromMap(value.Resolution)
 	if err != nil {
 		return nil, fmt.Errorf("agent interaction resolution: %w", err)
 	}
@@ -507,8 +508,8 @@ func agentInteractionToProto(value *coreagent.Interaction) (*proto.AgentInteract
 		Prompt:     value.Prompt,
 		Request:    request,
 		Resolution: resolution,
-		CreatedAt:  timeToProto(value.CreatedAt),
-		ResolvedAt: timeToProto(value.ResolvedAt),
+		CreatedAt:  protoutil.TimeToProto(value.CreatedAt),
+		ResolvedAt: protoutil.TimeToProto(value.ResolvedAt),
 	}, nil
 }
 

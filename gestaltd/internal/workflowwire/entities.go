@@ -3,13 +3,11 @@ package workflowwire
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func EventToProto(event coreworkflow.Event) (*proto.WorkflowEvent, error) {
@@ -38,7 +36,7 @@ func EventToProto(event coreworkflow.Event) (*proto.WorkflowEvent, error) {
 		SpecVersion:     event.SpecVersion,
 		Type:            event.Type,
 		Subject:         event.Subject,
-		Time:            TimeToProto(event.Time),
+		Time:            protoutil.TimeToProto(event.Time),
 		Datacontenttype: event.DataContentType,
 		Data:            data,
 		Extensions:      extensions,
@@ -55,7 +53,7 @@ func EventFromProto(event *proto.WorkflowEvent) (coreworkflow.Event, error) {
 		SpecVersion:     event.GetSpecVersion(),
 		Type:            event.GetType(),
 		Subject:         event.GetSubject(),
-		Time:            TimeFromProto(event.GetTime()),
+		Time:            protoutil.TimeFromProto(event.GetTime()),
 		DataContentType: event.GetDatacontenttype(),
 		Data:            protoutil.MapFromStruct(event.GetData()),
 		Extensions:      workflowExtensionsFromProto(event.GetExtensions()),
@@ -185,9 +183,9 @@ func RunFromProto(run *proto.WorkflowRun) (*coreworkflow.Run, error) {
 		Steps:                steps,
 		Trigger:              trigger,
 		RunAs:                strings.TrimSpace(run.GetRunAs()),
-		CreatedAt:            TimeFromProto(run.GetCreatedAt()),
-		StartedAt:            TimeFromProto(run.GetStartedAt()),
-		CompletedAt:          TimeFromProto(run.GetCompletedAt()),
+		CreatedAt:            protoutil.TimeFromProto(run.GetCreatedAt()),
+		StartedAt:            protoutil.TimeFromProto(run.GetStartedAt()),
+		CompletedAt:          protoutil.TimeFromProto(run.GetCompletedAt()),
 		StatusMessage:        run.GetStatusMessage(),
 		Output:               protoutil.ValueToAny(run.GetOutput()),
 	}, nil
@@ -222,9 +220,9 @@ func RunToProto(run *coreworkflow.Run) (*proto.WorkflowRun, error) {
 		Status:               RunStatusToProto(run.Status),
 		Target:               target,
 		Trigger:              trigger,
-		CreatedAt:            TimeToProto(run.CreatedAt),
-		StartedAt:            TimeToProto(run.StartedAt),
-		CompletedAt:          TimeToProto(run.CompletedAt),
+		CreatedAt:            protoutil.TimeToProto(run.CreatedAt),
+		StartedAt:            protoutil.TimeToProto(run.StartedAt),
+		CompletedAt:          protoutil.TimeToProto(run.CompletedAt),
 		StatusMessage:        run.StatusMessage,
 		Output:               output,
 		WorkflowKey:          run.WorkflowKey,
@@ -289,8 +287,8 @@ func DefinitionFromProto(definition *proto.WorkflowDefinition) (*coreworkflow.De
 		Target:       TargetFromProto(definition.GetTarget()),
 		Activations:  activations,
 		Paused:       definition.GetPaused(),
-		CreatedAt:    TimeFromProto(definition.GetCreatedAt()),
-		UpdatedAt:    TimeFromProto(definition.GetUpdatedAt()),
+		CreatedAt:    protoutil.TimeFromProto(definition.GetCreatedAt()),
+		UpdatedAt:    protoutil.TimeFromProto(definition.GetUpdatedAt()),
 		ProviderName: definition.GetProvider(),
 		RunAs:        strings.TrimSpace(definition.GetRunAs()),
 	}, nil
@@ -314,8 +312,8 @@ func DefinitionToProto(definition *coreworkflow.Definition) (*proto.WorkflowDefi
 		Target:      target,
 		Activations: activations,
 		Paused:      definition.Paused,
-		CreatedAt:   TimeToProto(definition.CreatedAt),
-		UpdatedAt:   TimeToProto(definition.UpdatedAt),
+		CreatedAt:   protoutil.TimeToProto(definition.CreatedAt),
+		UpdatedAt:   protoutil.TimeToProto(definition.UpdatedAt),
 		Provider:    definition.ProviderName,
 		RunAs:       strings.TrimSpace(definition.RunAs),
 	}, nil
@@ -432,8 +430,8 @@ func StepExecutionToProto(step coreworkflow.StepExecution) (*proto.WorkflowStepE
 		Output:        output,
 		StatusMessage: step.StatusMessage,
 		SkipReason:    step.SkipReason,
-		StartedAt:     TimeToProto(step.StartedAt),
-		CompletedAt:   TimeToProto(step.CompletedAt),
+		StartedAt:     protoutil.TimeToProto(step.StartedAt),
+		CompletedAt:   protoutil.TimeToProto(step.CompletedAt),
 	}, nil
 }
 
@@ -472,8 +470,8 @@ func StepExecutionFromProto(value *proto.WorkflowStepExecution) (coreworkflow.St
 		Output:        protoutil.ValueToAny(value.GetOutput()),
 		StatusMessage: value.GetStatusMessage(),
 		SkipReason:    value.GetSkipReason(),
-		StartedAt:     TimeFromProto(value.GetStartedAt()),
-		CompletedAt:   TimeFromProto(value.GetCompletedAt()),
+		StartedAt:     protoutil.TimeFromProto(value.GetStartedAt()),
+		CompletedAt:   protoutil.TimeFromProto(value.GetCompletedAt()),
 	}, nil
 }
 
@@ -508,8 +506,8 @@ func StepAttemptToProto(attempt coreworkflow.StepAttempt) (*proto.WorkflowStepAt
 		Input:          input,
 		Output:         output,
 		StatusMessage:  attempt.StatusMessage,
-		StartedAt:      TimeToProto(attempt.StartedAt),
-		CompletedAt:    TimeToProto(attempt.CompletedAt),
+		StartedAt:      protoutil.TimeToProto(attempt.StartedAt),
+		CompletedAt:    protoutil.TimeToProto(attempt.CompletedAt),
 	}, nil
 }
 
@@ -543,8 +541,8 @@ func StepAttemptFromProto(value *proto.WorkflowStepAttempt) (coreworkflow.StepAt
 		Input:          protoutil.ValueToAny(value.GetInput()),
 		Output:         protoutil.ValueToAny(value.GetOutput()),
 		StatusMessage:  value.GetStatusMessage(),
-		StartedAt:      TimeFromProto(value.GetStartedAt()),
-		CompletedAt:    TimeFromProto(value.GetCompletedAt()),
+		StartedAt:      protoutil.TimeFromProto(value.GetStartedAt()),
+		CompletedAt:    protoutil.TimeFromProto(value.GetCompletedAt()),
 	}, nil
 }
 
@@ -562,7 +560,7 @@ func SignalToProto(signal coreworkflow.Signal) (*proto.WorkflowSignal, error) {
 		Name:           signal.Name,
 		Payload:        payload,
 		Metadata:       metadata,
-		CreatedAt:      TimeToProto(signal.CreatedAt),
+		CreatedAt:      protoutil.TimeToProto(signal.CreatedAt),
 		IdempotencyKey: signal.IdempotencyKey,
 		Sequence:       signal.Sequence,
 	}, nil
@@ -577,7 +575,7 @@ func SignalFromProto(signal *proto.WorkflowSignal) coreworkflow.Signal {
 		Name:           signal.GetName(),
 		Payload:        protoutil.MapFromStruct(signal.GetPayload()),
 		Metadata:       protoutil.MapFromStruct(signal.GetMetadata()),
-		CreatedAt:      TimeFromProto(signal.GetCreatedAt()),
+		CreatedAt:      protoutil.TimeFromProto(signal.GetCreatedAt()),
 		IdempotencyKey: signal.GetIdempotencyKey(),
 		Sequence:       signal.GetSequence(),
 	}
@@ -613,7 +611,7 @@ func RunTriggerFromProto(trigger *proto.WorkflowRunTrigger) (coreworkflow.RunTri
 		return coreworkflow.RunTrigger{
 			Schedule: &coreworkflow.ScheduleTrigger{
 				ActivationID: kind.Schedule.GetActivationId(),
-				ScheduledFor: TimeFromProto(kind.Schedule.GetScheduledFor()),
+				ScheduledFor: protoutil.TimeFromProto(kind.Schedule.GetScheduledFor()),
 			},
 		}, nil
 	case *proto.WorkflowRunTrigger_Event:
@@ -642,7 +640,7 @@ func RunTriggerToProto(trigger coreworkflow.RunTrigger) (*proto.WorkflowRunTrigg
 			Kind: &proto.WorkflowRunTrigger_Schedule{
 				Schedule: &proto.WorkflowScheduleTrigger{
 					ActivationId: trigger.Schedule.ActivationID,
-					ScheduledFor: TimeToProto(trigger.Schedule.ScheduledFor),
+					ScheduledFor: protoutil.TimeToProto(trigger.Schedule.ScheduledFor),
 				},
 			},
 		}, nil
@@ -703,19 +701,4 @@ func workflowExtensionsFromProto(values map[string]*structpb.Value) map[string]a
 		out[key] = value.AsInterface()
 	}
 	return out
-}
-
-func TimeToProto(t *time.Time) *timestamppb.Timestamp {
-	if t == nil {
-		return nil
-	}
-	return timestamppb.New(*t)
-}
-
-func TimeFromProto(t *timestamppb.Timestamp) *time.Time {
-	if t == nil {
-		return nil
-	}
-	value := t.AsTime()
-	return &value
 }
