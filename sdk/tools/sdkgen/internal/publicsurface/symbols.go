@@ -25,66 +25,20 @@ func manifestSymbols(pm PublicMethod) ManifestSymbols {
 	return ManifestSymbols{
 		Go: ManifestSymbol{
 			Service: serviceLocal + "Client",
-			Method:  goManifestMethod(pm),
+			Method:  pm.Method,
 		},
 		Python: ManifestSymbol{
 			Service: serviceLocal + "Client",
-			Method:  pythonManifestMethod(pm),
+			Method:  snakeCase(pm.Method),
 		},
 		Rust: ManifestSymbol{
 			Service: serviceLocal + "Client",
-			Method:  rustManifestMethod(pm),
+			Method:  snakeCase(pm.Method),
 		},
 		TypeScript: ManifestSymbol{
-			Service: typescriptServiceClient(pm.Service),
-			Method:  typescriptManifestMethod(pm),
+			Service: serviceLocal + "Client",
+			Method:  lowerFirst(pm.Method),
 		},
-	}
-}
-
-func goManifestMethod(pm PublicMethod) string {
-	if pm.JSONResult != nil {
-		return pm.Method
-	}
-	return pm.Method
-}
-
-func pythonManifestMethod(pm PublicMethod) string {
-	if pm.JSONResult != nil {
-		return snakeCase(pm.Method)
-	}
-	if pm.Method == "InvokeGraphQL" {
-		return "invoke_graphql"
-	}
-	return snakeCase(pm.Method)
-}
-
-func rustManifestMethod(pm PublicMethod) string {
-	if pm.JSONResult != nil {
-		return snakeCase(pm.Method)
-	}
-	if pm.Method == "InvokeGraphQL" {
-		return "invoke_graphql"
-	}
-	return snakeCase(pm.Method)
-}
-
-func typescriptManifestMethod(pm PublicMethod) string {
-	if pm.JSONResult != nil {
-		return lowerFirst(pm.Method)
-	}
-	return lowerFirst(pm.Method)
-}
-
-func typescriptServiceClient(serviceFullName string) string {
-	local := ServiceLocalName(serviceFullName)
-	switch local {
-	case "ExternalCredentials":
-		return "ExternalCredentialsClient"
-	case "IndexedDB":
-		return "IndexedDBClient"
-	default:
-		return local + "Client"
 	}
 }
 
@@ -109,11 +63,7 @@ func snakeCase(s string) string {
 		}
 		b.WriteRune(unicode.ToLower(r))
 	}
-	out := b.String()
-	if out == "invoke_graphql" {
-		return "invoke_graphql"
-	}
-	return out
+	return b.String()
 }
 
 // MarshalAvailabilityDoc renders human-readable API availability from a manifest.
