@@ -1393,9 +1393,6 @@ func normalizeProviderEntryHarnessInstall(install *ProviderEntryHarnessInstallCo
 }
 
 func trimStringSlice(values []string) []string {
-	if values == nil {
-		return nil
-	}
 	out := values[:0]
 	for _, value := range values {
 		value = strings.TrimSpace(value)
@@ -4044,9 +4041,6 @@ func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir stri
 }
 
 func resolveRelativeStringField(fields map[string]any, key, baseDir string) {
-	if fields == nil {
-		return
-	}
 	value, ok := fields[key].(string)
 	if !ok {
 		return
@@ -4055,9 +4049,6 @@ func resolveRelativeStringField(fields map[string]any, key, baseDir string) {
 }
 
 func nestedMap(root map[string]any, key string) map[string]any {
-	if root == nil {
-		return nil
-	}
 	current, _ := root[key].(map[string]any)
 	return current
 }

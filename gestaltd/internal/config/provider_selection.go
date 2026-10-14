@@ -145,8 +145,8 @@ func (c *Config) EffectiveWorkflowProvider(providerName string) (string, *Provid
 	}
 	providerName = strings.TrimSpace(providerName)
 	if providerName != "" {
-		entry, ok := c.Providers.Workflow[providerName]
-		if !ok || entry == nil {
+		entry := c.Providers.Workflow[providerName]
+		if entry == nil {
 			return "", nil, fmt.Errorf("config validation: providers.workflow references unknown workflow %q", providerName)
 		}
 		return providerName, entry, nil
@@ -160,8 +160,8 @@ func (c *Config) EffectiveAgentProvider(providerName string) (string, *ProviderE
 	}
 	providerName = strings.TrimSpace(providerName)
 	if providerName != "" {
-		entry, ok := c.Providers.Agent[providerName]
-		if !ok || entry == nil {
+		entry := c.Providers.Agent[providerName]
+		if entry == nil {
 			return "", nil, fmt.Errorf("config validation: providers.agent references unknown agent %q", providerName)
 		}
 		return providerName, entry, nil
@@ -207,8 +207,8 @@ func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selec
 		return EffectiveIndexedDBBinding{}, nil
 	}
 
-	provider, ok := entries[providerName]
-	if !ok || provider == nil {
+	provider := entries[providerName]
+	if provider == nil {
 		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.idb.provider references unknown indexeddb %q", pluginName, providerName)
 	}
 
@@ -232,47 +232,26 @@ func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selec
 }
 
 func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveIndexedDBBinding, error) {
-	if entry == nil || entry.IndexedDB == nil {
-		return EffectiveIndexedDBBinding{}, nil
-	}
-
-	providerName := strings.TrimSpace(entry.IndexedDB.Provider)
-	if providerName == "" {
-		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.idb.provider is required", name)
-	}
-
-	provider, ok := entries[providerName]
-	if !ok || provider == nil {
-		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.idb.provider references unknown indexeddb %q", name, providerName)
-	}
-
-	dbName := strings.TrimSpace(entry.IndexedDB.DB)
-	if dbName == "" {
-		dbName = name
-	}
-
-	return EffectiveIndexedDBBinding{
-		Enabled:      true,
-		ProviderName: providerName,
-		Provider:     provider,
-		DB:           dbName,
-		ObjectStores: slices.Clone(entry.IndexedDB.ObjectStores),
-	}, nil
+	return resolveEffectiveHostIndexedDB("workflow", name, entry, entries)
 }
 
 func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveIndexedDBBinding, error) {
+	return resolveEffectiveHostIndexedDB("agent", name, entry, entries)
+}
+
+func resolveEffectiveHostIndexedDB(kind, name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveIndexedDBBinding, error) {
 	if entry == nil || entry.IndexedDB == nil {
 		return EffectiveIndexedDBBinding{}, nil
 	}
 
 	providerName := strings.TrimSpace(entry.IndexedDB.Provider)
 	if providerName == "" {
-		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.idb.provider is required", name)
+		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.%s.%s.idb.provider is required", kind, name)
 	}
 
-	provider, ok := entries[providerName]
-	if !ok || provider == nil {
-		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.idb.provider references unknown indexeddb %q", name, providerName)
+	provider := entries[providerName]
+	if provider == nil {
+		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.%s.%s.idb.provider references unknown indexeddb %q", kind, name, providerName)
 	}
 
 	dbName := strings.TrimSpace(entry.IndexedDB.DB)
@@ -306,9 +285,8 @@ func ResolveEffectiveRuntimePlacement(configPath string, entry *ProviderEntry, s
 
 	var provider *RuntimeProviderEntry
 	if providerName != "" {
-		var ok bool
-		provider, ok = entries[providerName]
-		if !ok || provider == nil {
+		provider = entries[providerName]
+		if provider == nil {
 			return EffectiveRuntimePlacement{}, fmt.Errorf("config validation: %s.%s.provider references unknown runtime %q", configPath, runtimePath, providerName)
 		}
 	}
@@ -335,8 +313,8 @@ func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries
 	}
 	explicit = strings.TrimSpace(explicit)
 	if explicit != "" {
-		entry, ok := entries[explicit]
-		if !ok || entry == nil {
+		entry := entries[explicit]
+		if entry == nil {
 			return "", nil, fmt.Errorf("config validation: server.providers.%s references unknown provider %q", kind, explicit)
 		}
 		return explicit, entry, nil
@@ -373,17 +351,11 @@ func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries
 func ResolveSelectedRuntimeProvider(explicit string, entries map[string]*RuntimeProviderEntry) (string, *RuntimeProviderEntry, error) {
 	explicit = strings.TrimSpace(explicit)
 	if explicit != "" {
-		if len(entries) == 0 {
-			return "", nil, fmt.Errorf("config validation: server.runtime.defaultProvider references unknown runtime %q", explicit)
-		}
-		entry, ok := entries[explicit]
-		if !ok || entry == nil {
+		entry := entries[explicit]
+		if entry == nil {
 			return "", nil, fmt.Errorf("config validation: server.runtime.defaultProvider references unknown runtime %q", explicit)
 		}
 		return explicit, entry, nil
-	}
-	if len(entries) == 0 {
-		return "", nil, nil
 	}
 
 	defaultNames := make([]string, 0, len(entries))
