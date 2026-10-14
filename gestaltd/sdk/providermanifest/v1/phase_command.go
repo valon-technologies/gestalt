@@ -204,16 +204,15 @@ func syncLegacyPhaseFields(command *[]string, workdir *string, env *map[string]s
 	}
 	*command = append([]string(nil), commands[0].Command...)
 	*workdir = commands[0].Workdir
-	if commands[0].Env != nil {
-		*env = commands[0].Env
-	} else {
-		*env = nil
-	}
+	*env = commands[0].Env
 	*inputs = append([]string(nil), commands[0].Inputs...)
 	*readyTimeout = commands[0].ReadyTimeout
 }
 
-func marshalPhaseCommandListJSONValue(commands []SourcePhaseCommand, allowed map[string]struct{}) []any {
+func phaseCommandsWire(commands []SourcePhaseCommand, wire phaseWireForm) any {
+	if wire != phaseWireCommandList && len(commands) == 1 {
+		return sourcePhaseCommandWire(commands[0])
+	}
 	out := make([]any, 0, len(commands))
 	for _, cmd := range commands {
 		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" && cmd.Role == "" {
@@ -223,20 +222,4 @@ func marshalPhaseCommandListJSONValue(commands []SourcePhaseCommand, allowed map
 		out = append(out, sourcePhaseCommandWire(cmd))
 	}
 	return out
-}
-
-func marshalPhaseCommandListJSON(commands []SourcePhaseCommand, allowed map[string]struct{}) ([]byte, error) {
-	return json.Marshal(marshalPhaseCommandListJSONValue(commands, allowed))
-}
-
-func marshalPhaseCommandListYAML(commands []SourcePhaseCommand, allowed map[string]struct{}) ([]any, error) {
-	out := make([]any, 0, len(commands))
-	for _, cmd := range commands {
-		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" && cmd.Role == "" {
-			out = append(out, append([]string(nil), cmd.Command...))
-			continue
-		}
-		out = append(out, sourcePhaseCommandWire(cmd))
-	}
-	return out, nil
 }

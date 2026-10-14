@@ -161,20 +161,7 @@ func (b SourceBuild) MarshalJSON() ([]byte, error) {
 		}
 		return json.Marshal(commands[0].Command)
 	}
-	switch b.WireForm {
-	case phaseWirePrepareOnlySequence:
-		if len(commands) != 1 {
-			return nil, fmt.Errorf("prepare-only build must have exactly one command")
-		}
-		return json.Marshal(commands[0].Command)
-	case phaseWireCommandList:
-		return marshalPhaseCommandListJSON(commands, sourceBuildWireFields)
-	default:
-		if len(commands) != 1 {
-			return marshalPhaseCommandListJSON(commands, sourceBuildWireFields)
-		}
-		return json.Marshal(sourcePhaseCommandWire(commands[0]))
-	}
+	return json.Marshal(phaseCommandsWire(commands, b.WireForm))
 }
 
 func (b *SourceBuild) UnmarshalYAML(value *yaml.Node) error {
@@ -217,20 +204,7 @@ func (b SourceBuild) MarshalYAML() (any, error) {
 		}
 		return append([]string(nil), commands[0].Command...), nil
 	}
-	switch b.WireForm {
-	case phaseWirePrepareOnlySequence:
-		if len(commands) != 1 {
-			return nil, fmt.Errorf("prepare-only build must have exactly one command")
-		}
-		return append([]string(nil), commands[0].Command...), nil
-	case phaseWireCommandList:
-		return marshalPhaseCommandListYAML(commands, sourceBuildWireFields)
-	default:
-		if len(commands) != 1 {
-			return marshalPhaseCommandListYAML(commands, sourceBuildWireFields)
-		}
-		return sourcePhaseCommandWire(commands[0]), nil
-	}
+	return phaseCommandsWire(commands, b.WireForm), nil
 }
 
 // SourceInstall declares a pre-build dependency-install command. It is a peer
@@ -303,15 +277,7 @@ func (i *SourceInstall) UnmarshalJSON(data []byte) error {
 
 func (i SourceInstall) MarshalJSON() ([]byte, error) {
 	commands := i.PhaseCommands()
-	switch i.WireForm {
-	case phaseWireCommandList:
-		return marshalPhaseCommandListJSON(commands, sourceInstallWireFields)
-	default:
-		if len(commands) != 1 {
-			return marshalPhaseCommandListJSON(commands, sourceInstallWireFields)
-		}
-		return json.Marshal(sourcePhaseCommandWire(commands[0]))
-	}
+	return json.Marshal(phaseCommandsWire(commands, i.WireForm))
 }
 
 func (i *SourceInstall) UnmarshalYAML(value *yaml.Node) error {
@@ -344,15 +310,7 @@ func (i *SourceInstall) UnmarshalYAML(value *yaml.Node) error {
 
 func (i SourceInstall) MarshalYAML() (any, error) {
 	commands := i.PhaseCommands()
-	switch i.WireForm {
-	case phaseWireCommandList:
-		return marshalPhaseCommandListYAML(commands, sourceInstallWireFields)
-	default:
-		if len(commands) != 1 {
-			return marshalPhaseCommandListYAML(commands, sourceInstallWireFields)
-		}
-		return sourcePhaseCommandWire(commands[0]), nil
-	}
+	return phaseCommandsWire(commands, i.WireForm), nil
 }
 
 // SourceRun declares how a local-source provider is executed from source.
@@ -422,15 +380,7 @@ func (r *SourceRun) UnmarshalJSON(data []byte) error {
 
 func (r SourceRun) MarshalJSON() ([]byte, error) {
 	commands := r.PhaseCommands()
-	switch r.WireForm {
-	case phaseWireCommandList:
-		return marshalPhaseCommandListJSON(commands, sourceRunWireFields)
-	default:
-		if len(commands) != 1 {
-			return marshalPhaseCommandListJSON(commands, sourceRunWireFields)
-		}
-		return json.Marshal(sourcePhaseCommandWire(commands[0]))
-	}
+	return json.Marshal(phaseCommandsWire(commands, r.WireForm))
 }
 
 func (r *SourceRun) UnmarshalYAML(value *yaml.Node) error {
@@ -463,15 +413,7 @@ func (r *SourceRun) UnmarshalYAML(value *yaml.Node) error {
 
 func (r SourceRun) MarshalYAML() (any, error) {
 	commands := r.PhaseCommands()
-	switch r.WireForm {
-	case phaseWireCommandList:
-		return marshalPhaseCommandListYAML(commands, sourceRunWireFields)
-	default:
-		if len(commands) != 1 {
-			return marshalPhaseCommandListYAML(commands, sourceRunWireFields)
-		}
-		return sourcePhaseCommandWire(commands[0]), nil
-	}
+	return phaseCommandsWire(commands, r.WireForm), nil
 }
 
 // Spec is a union type validated per kind. For auth/indexeddb/secrets only
@@ -1026,11 +968,7 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 }
 
 func (s Spec) MarshalJSON() ([]byte, error) {
-	wire, err := s.canonicalWire()
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(wire)
+	return json.Marshal(s.canonicalWire())
 }
 
 func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
@@ -1077,10 +1015,10 @@ func (s *Spec) MarshalYAML() (any, error) {
 	if s == nil {
 		return nil, nil
 	}
-	return s.canonicalWire()
+	return s.canonicalWire(), nil
 }
 
-func (s Spec) canonicalWire() (specWire, error) {
+func (s Spec) canonicalWire() specWire {
 	return specWire{
 		ConfigSchemaPath:  s.ConfigSchemaPath,
 		Auth:              s.RouteAuth,
@@ -1098,7 +1036,7 @@ func (s Spec) canonicalWire() (specWire, error) {
 		Access:            cloneProviderAccess(s.Access),
 		Requires:          s.Requires,
 		AssetRoot:         s.AssetRoot,
-	}, nil
+	}
 }
 
 func cloneProviderAccess(src *ProviderAccess) *ProviderAccess {
