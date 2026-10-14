@@ -11,44 +11,11 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func agentExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent.ExecutionStatus, error) {
-	switch status {
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED:
-		return "", nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING:
-		return coreagent.ExecutionStatusPending, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING:
-		return coreagent.ExecutionStatusRunning, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED:
-		return coreagent.ExecutionStatusSucceeded, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED:
-		return coreagent.ExecutionStatusFailed, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED:
-		return coreagent.ExecutionStatusCanceled, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT:
-		return coreagent.ExecutionStatusWaitingForInput, nil
-	default:
-		return "", fmt.Errorf("unknown agent execution status %v", status)
-	}
-}
-
-func agentMessagesToProto(messages []coreagent.Message) ([]*proto.AgentMessage, error) {
-	return agentwire.MessagesToProto(messages)
-}
-
-func agentMessagesFromProto(messages []*proto.AgentMessage) []coreagent.Message {
-	return agentwire.MessagesFromProto(messages)
-}
-
 func subjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
 	if subject == (core.RunAsSubject{}) {
 		return nil
 	}
 	return agentwire.RunAsSubjectToProto(&subject)
-}
-
-func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
-	return agentwire.ToolSourceModeFromProto(mode)
 }
 
 func agentToolSourceModesFromProto(modes []proto.AgentToolSourceMode) []coreagent.ToolSourceMode {
@@ -57,7 +24,7 @@ func agentToolSourceModesFromProto(modes []proto.AgentToolSourceMode) []coreagen
 	}
 	out := make([]coreagent.ToolSourceMode, 0, len(modes))
 	for _, mode := range modes {
-		if converted := agentToolSourceModeFromProto(mode); converted != coreagent.ToolSourceModeUnspecified {
+		if converted := agentwire.ToolSourceModeFromProto(mode); converted != coreagent.ToolSourceModeUnspecified {
 			out = append(out, converted)
 		}
 	}
@@ -85,19 +52,6 @@ func agentExecutionStatusToProto(status coreagent.ExecutionStatus) proto.AgentEx
 	}
 }
 
-func agentSessionStateFromProto(state proto.AgentSessionState) (coreagent.SessionState, error) {
-	switch state {
-	case proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED:
-		return "", nil
-	case proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:
-		return coreagent.SessionStateActive, nil
-	case proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED:
-		return coreagent.SessionStateArchived, nil
-	default:
-		return "", fmt.Errorf("unknown agent session state %v", state)
-	}
-}
-
 func agentSessionStateToProto(state coreagent.SessionState) proto.AgentSessionState {
 	switch state {
 	case "":
@@ -115,7 +69,7 @@ func agentSessionFromProto(session *proto.AgentSession) (*coreagent.Session, err
 	if session == nil {
 		return nil, nil
 	}
-	state, err := agentSessionStateFromProto(session.GetState())
+	state, err := agentwire.SessionStateFromProto(session.GetState())
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +91,7 @@ func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
 	if turn == nil {
 		return nil, nil
 	}
-	status, err := agentExecutionStatusFromProto(turn.GetStatus())
+	status, err := agentwire.ExecutionStatusFromProto(turn.GetStatus())
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +101,7 @@ func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
 		ProviderName:       turn.GetProviderName(),
 		Model:              turn.GetModel(),
 		Status:             status,
-		Messages:           agentMessagesFromProto(turn.GetMessages()),
+		Messages:           agentwire.MessagesFromProto(turn.GetMessages()),
 		Output:             agentTurnOutputFromProto(turn),
 		StatusMessage:      turn.GetStatusMessage(),
 		CreatedBySubjectID: strings.TrimSpace(turn.GetCreatedBySubjectId()),
@@ -307,7 +261,7 @@ func agentTurnToProto(turn *coreagent.Turn) (*proto.AgentTurn, error) {
 	if turn == nil {
 		return nil, nil
 	}
-	messages, err := agentMessagesToProto(turn.Messages)
+	messages, err := agentwire.MessagesToProto(turn.Messages)
 	if err != nil {
 		return nil, fmt.Errorf("agent turn messages: %w", err)
 	}

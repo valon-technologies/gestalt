@@ -42,9 +42,6 @@ func MessagesToProto(messages []coreagent.Message) ([]*proto.AgentMessage, error
 }
 
 func MessageFromProto(message *proto.AgentMessage) coreagent.Message {
-	if message == nil {
-		return coreagent.Message{}
-	}
 	return coreagent.Message{
 		Role:     message.GetRole(),
 		Text:     message.GetText(),
@@ -65,9 +62,6 @@ func MessagesFromProto(messages []*proto.AgentMessage) []coreagent.Message {
 }
 
 func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
-	if ref == nil {
-		return coreagent.ToolRef{}
-	}
 	return coreagent.ToolRef{
 		System:         ref.GetSystem(),
 		App:            ref.GetApp(),
@@ -262,9 +256,6 @@ func MessagePartsToProto(parts []coreagent.MessagePart) ([]*proto.AgentMessagePa
 }
 
 func MessagePartFromProto(part *proto.AgentMessagePart) coreagent.MessagePart {
-	if part == nil {
-		return coreagent.MessagePart{}
-	}
 	partType, _ := MessagePartTypeFromProto(part.GetType())
 	var toolCall *coreagent.ToolCallPart
 	if value := part.GetToolCall(); value != nil {
@@ -309,4 +300,40 @@ func MessagePartsFromProto(parts []*proto.AgentMessagePart) []coreagent.MessageP
 		out = append(out, MessagePartFromProto(part))
 	}
 	return out
+}
+
+// ExecutionStatusFromProto converts a protobuf enum and rejects unknown values.
+func ExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent.ExecutionStatus, error) {
+	switch status {
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED:
+		return "", nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING:
+		return coreagent.ExecutionStatusPending, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING:
+		return coreagent.ExecutionStatusRunning, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED:
+		return coreagent.ExecutionStatusSucceeded, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED:
+		return coreagent.ExecutionStatusFailed, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED:
+		return coreagent.ExecutionStatusCanceled, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT:
+		return coreagent.ExecutionStatusWaitingForInput, nil
+	default:
+		return "", fmt.Errorf("unknown agent execution status %v", status)
+	}
+}
+
+// SessionStateFromProto converts a protobuf enum and rejects unknown values.
+func SessionStateFromProto(state proto.AgentSessionState) (coreagent.SessionState, error) {
+	switch state {
+	case proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED:
+		return "", nil
+	case proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:
+		return coreagent.SessionStateActive, nil
+	case proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED:
+		return coreagent.SessionStateArchived, nil
+	default:
+		return "", fmt.Errorf("unknown agent session state %v", state)
+	}
 }

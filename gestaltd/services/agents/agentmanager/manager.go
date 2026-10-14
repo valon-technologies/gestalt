@@ -345,40 +345,6 @@ func sessionStartConfigToProto(value *coreagent.SessionStartConfig) *proto.Agent
 	return out
 }
 
-func agentSessionStateFromProto(state proto.AgentSessionState) (coreagent.SessionState, error) {
-	switch state {
-	case proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED:
-		return "", nil
-	case proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:
-		return coreagent.SessionStateActive, nil
-	case proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED:
-		return coreagent.SessionStateArchived, nil
-	default:
-		return "", fmt.Errorf("unknown agent session state %v", state)
-	}
-}
-
-func agentExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent.ExecutionStatus, error) {
-	switch status {
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED:
-		return "", nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING:
-		return coreagent.ExecutionStatusPending, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING:
-		return coreagent.ExecutionStatusRunning, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED:
-		return coreagent.ExecutionStatusSucceeded, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED:
-		return coreagent.ExecutionStatusFailed, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED:
-		return coreagent.ExecutionStatusCanceled, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT:
-		return coreagent.ExecutionStatusWaitingForInput, nil
-	default:
-		return "", fmt.Errorf("unknown agent execution status %v", status)
-	}
-}
-
 func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) (tools []coreagent.Tool, err error) {
 	ctx, finish := startAgentOperation(ctx, "resolve_tools")
 	defer func() { finish(err) }()
@@ -571,7 +537,7 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 	if req == nil {
 		req = &proto.ListAgentProviderSessionsRequest{}
 	}
-	state, err := agentSessionStateFromProto(req.GetState())
+	state, err := agentwire.SessionStateFromProto(req.GetState())
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", invocation.ErrInvalidInvocation, err)
 	}
@@ -703,7 +669,7 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	if req == nil {
 		req = &proto.UpdateAgentProviderSessionRequest{}
 	}
-	state, err := agentSessionStateFromProto(req.GetState())
+	state, err := agentwire.SessionStateFromProto(req.GetState())
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", invocation.ErrInvalidInvocation, err)
 	}
@@ -914,7 +880,7 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req *pr
 	if req == nil {
 		req = &proto.ListAgentProviderTurnsRequest{}
 	}
-	statusFilter, err := agentExecutionStatusFromProto(req.GetStatus())
+	statusFilter, err := agentwire.ExecutionStatusFromProto(req.GetStatus())
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", invocation.ErrInvalidInvocation, err)
 	}
