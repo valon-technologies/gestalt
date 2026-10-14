@@ -25,7 +25,7 @@ pub(crate) fn fallback_turn_event_data_summary(value: &Value) -> String {
     {
         return String::new();
     }
-    serde_json::to_string(&value["data"]).unwrap_or_else(|_| "-".to_string())
+    value["data"].to_string()
 }
 
 pub(crate) fn turn_event_data_summary(event: &AgentTurnEventInfo) -> Option<String> {
@@ -62,9 +62,12 @@ fn generic_event_data_summary(event: &AgentTurnEventInfo) -> String {
     if event.data.is_empty() {
         format!("{}{}", event.event_type, suffix)
     } else {
-        super::super::fields::compact_json(&Value::Object(event.data.clone()))
-            .map(|data| format!("{}{} {data}", event.event_type, suffix))
-            .unwrap_or_else(|_| format!("{}{}", event.event_type, suffix))
+        format!(
+            "{}{} {}",
+            event.event_type,
+            suffix,
+            Value::Object(event.data.clone())
+        )
     }
 }
 
@@ -109,12 +112,9 @@ pub(crate) fn turn_event_display_summary(
             }
         }
         "error" => {
-            let text = display_text(display).map(ToString::to_string).or_else(|| {
-                display
-                    .error
-                    .as_ref()
-                    .and_then(|value| display_value_text(value).ok())
-            })?;
+            let text = display_text(display)
+                .map(ToString::to_string)
+                .or_else(|| display.error.as_ref().map(display_value_text))?;
             let label = display_label(display).unwrap_or("error");
             match display.phase.trim() {
                 "failed" if label == "turn" => Some(format!("turn failed: {text}")),
@@ -159,13 +159,11 @@ pub(crate) fn tool_display_summary(display: &AgentTurnDisplayInfo) -> Option<Str
         summary.push_str(&format!(" ({status})"));
     }
     if let Some(error) = display_tool_error(display) {
-        summary.push_str(&format!(": {}", display_value_text(error).ok()?));
-    } else if let Some(output) = display_tool_output(display) {
+        summary.push_str(&format!(": {}", display_value_text(error)));
+    } else if let Some(value) = display_tool_output(display).or_else(|| display_tool_input(display))
+    {
         summary.push(' ');
-        summary.push_str(&super::super::fields::compact_json(output).ok()?);
-    } else if let Some(input) = display_tool_input(display) {
-        summary.push(' ');
-        summary.push_str(&super::super::fields::compact_json(input).ok()?);
+        summary.push_str(&value.to_string());
     }
     Some(summary)
 }
