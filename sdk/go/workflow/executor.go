@@ -331,9 +331,7 @@ func workflowAgentSessionsFromOutputs(target *gestalt.BoundWorkflowTarget, stepI
 	if target == nil || stepIndex <= 0 {
 		return sessions, nil
 	}
-	if stepIndex > len(target.Steps) {
-		stepIndex = len(target.Steps)
-	}
+	stepIndex = min(stepIndex, len(target.Steps))
 	for i := 0; i < stepIndex; i++ {
 		step := target.Steps[i]
 		if step.Agent == nil {

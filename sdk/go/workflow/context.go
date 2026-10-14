@@ -280,10 +280,7 @@ func WorkflowSignalsContext(signals []gestalt.WorkflowSignal) []map[string]any {
 	if len(signals) == 0 {
 		return nil
 	}
-	limit := len(signals)
-	if limit > workflowSignalContextMaxSignals {
-		limit = workflowSignalContextMaxSignals
-	}
+	limit := min(len(signals), workflowSignalContextMaxSignals)
 	out := make([]map[string]any, 0, limit)
 	for i := 0; i < limit; i++ {
 		signal := &signals[i]
@@ -428,10 +425,7 @@ func compactWorkflowJSONValue(value any, depth int) any {
 		}
 		return out
 	case []any:
-		limit := len(typed)
-		if limit > workflowSignalContextMaxItems {
-			limit = workflowSignalContextMaxItems
-		}
+		limit := min(len(typed), workflowSignalContextMaxItems)
 		out := make([]any, 0, limit)
 		for i := 0; i < limit; i++ {
 			out = append(out, compactWorkflowJSONValue(typed[i], depth-1))
