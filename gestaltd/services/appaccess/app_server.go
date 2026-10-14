@@ -78,15 +78,9 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 		return nil, err
 	}
 
-	invokeCtx, instance, err := prepareInvocationSelectors(ctx, callCtx, req.GetConnection(), req.GetInstance())
-	if err != nil {
-		return nil, err
-	}
+	invokeCtx, instance := prepareInvocationSelectors(ctx, callCtx, req.GetConnection(), req.GetInstance())
 	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
-	params := map[string]any{}
-	if raw := req.GetParams(); raw != nil {
-		params = raw.AsMap()
-	}
+	params := req.GetParams().AsMap()
 	invokePrincipal := callCtx.principal
 	invokeCtx, invokePrincipal = invocation.ApplyDelegation(
 		invokeCtx,
@@ -119,15 +113,9 @@ func (s *AppServer) InvokeStream(req *proto.AppInvokeRequest, stream proto.App_I
 	if err != nil {
 		return err
 	}
-	invokeCtx, instance, err := prepareInvocationSelectors(stream.Context(), callCtx, req.GetConnection(), req.GetInstance())
-	if err != nil {
-		return err
-	}
+	invokeCtx, instance := prepareInvocationSelectors(stream.Context(), callCtx, req.GetConnection(), req.GetInstance())
 	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
-	params := map[string]any{}
-	if raw := req.GetParams(); raw != nil {
-		params = raw.AsMap()
-	}
+	params := req.GetParams().AsMap()
 	invokePrincipal := callCtx.principal
 	invokeCtx, invokePrincipal = invocation.ApplyDelegation(
 		invokeCtx,
@@ -185,15 +173,9 @@ func (s *AppServer) InvokeMaybeStream(ctx context.Context, req *proto.AppInvokeR
 	if err != nil {
 		return nil, err
 	}
-	invokeCtx, instance, err := prepareInvocationSelectors(ctx, callCtx, req.GetConnection(), req.GetInstance())
-	if err != nil {
-		return nil, err
-	}
+	invokeCtx, instance := prepareInvocationSelectors(ctx, callCtx, req.GetConnection(), req.GetInstance())
 	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
-	params := map[string]any{}
-	if raw := req.GetParams(); raw != nil {
-		params = raw.AsMap()
-	}
+	params := req.GetParams().AsMap()
 	invokePrincipal := callCtx.principal
 	invokeCtx, invokePrincipal = invocation.ApplyDelegation(
 		invokeCtx,
@@ -270,17 +252,11 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 		return nil, status.Error(codes.Unimplemented, "app graphql invocation is not available")
 	}
 
-	invokeCtx, instance, err := prepareInvocationSelectors(ctx, callCtx, req.GetConnection(), req.GetInstance())
-	if err != nil {
-		return nil, err
-	}
+	invokeCtx, instance := prepareInvocationSelectors(ctx, callCtx, req.GetConnection(), req.GetInstance())
 	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
 	invokeCtx = invocation.WithInvokeRequestHeaders(invokeCtx, req.GetHeaders())
 
-	variables := map[string]any{}
-	if raw := req.GetVariables(); raw != nil {
-		variables = raw.AsMap()
-	}
+	variables := req.GetVariables().AsMap()
 	result, err := graphQLInvoker.InvokeGraphQL(invokeCtx, callCtx.principal, targetApp, instance, invocation.GraphQLRequest{
 		Document:  document,
 		Variables: variables,
@@ -494,16 +470,16 @@ func appInvokeCredentialMode(raw string) (core.ConnectionMode, error) {
 	}
 }
 
-func prepareInvocationSelectors(ctx context.Context, callCtx requestInvocationContext, rawConnection, rawInstance string) (context.Context, string, error) {
+func prepareInvocationSelectors(ctx context.Context, callCtx requestInvocationContext, rawConnection, rawInstance string) (context.Context, string) {
 	if callCtx.authorizedSelectors {
-		return restoreRequestInvocationContext(ctx, callCtx, callCtx.authorizedConnection), callCtx.authorizedInstance, nil
+		return restoreRequestInvocationContext(ctx, callCtx, callCtx.authorizedConnection), callCtx.authorizedInstance
 	}
 	connection := strings.TrimSpace(rawConnection)
 	instance := strings.TrimSpace(rawInstance)
 	if instance == "" && connection == "" {
 		instance = callCtx.credential.Instance
 	}
-	return restoreRequestInvocationContext(ctx, callCtx, connection), instance, nil
+	return restoreRequestInvocationContext(ctx, callCtx, connection), instance
 }
 
 func restoreRequestInvocationContext(ctx context.Context, callCtx requestInvocationContext, connectionOverride string) context.Context {
