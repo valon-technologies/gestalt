@@ -137,23 +137,6 @@ type workflowTextInfo struct {
 	Template string `json:"template,omitempty"`
 }
 
-type workflowStepWhenInfo struct {
-	Value     any
-	Equals    any
-	EqualsSet bool
-}
-
-func (i workflowStepWhenInfo) MarshalJSON() ([]byte, error) {
-	out := map[string]any{}
-	if i.Value != nil {
-		out["value"] = i.Value
-	}
-	if i.EqualsSet {
-		out["equals"] = i.Equals
-	}
-	return json.Marshal(out)
-}
-
 func (s *Server) resolveWorkflowActor(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
 	p := principal.Canonicalized(PrincipalFromContext(r.Context()))
 	if p == nil {
@@ -211,17 +194,6 @@ func workflowValueFromRequest(value workflowValueRequest) coreworkflow.Value {
 		out.StepInput = &coreworkflow.StepInputSource{StepID: strings.TrimSpace(value.StepInput.StepID), Path: strings.TrimSpace(value.StepInput.Path)}
 	}
 	return out
-}
-
-func workflowStepWhenInfoFromCore(when *coreworkflow.StepWhen) *workflowStepWhenInfo {
-	if when == nil {
-		return nil
-	}
-	return &workflowStepWhenInfo{
-		Value:     workflowValueInfoFromCore(when.Value),
-		Equals:    when.Equals,
-		EqualsSet: when.EqualsSet,
-	}
 }
 
 func workflowTextInfoFromCore(text coreworkflow.Text) *workflowTextInfo {

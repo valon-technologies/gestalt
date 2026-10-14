@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"reflect"
-	"strings"
 	"testing"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
@@ -58,23 +57,6 @@ func TestWorkflowValueRequestPreservesExplicitEmptyCollections(t *testing.T) {
 		t.Fatalf("info explicit array = %#v, want map", object["explicitArray"])
 	} else if inner, ok := nested["array"].([]any); !ok || len(inner) != 0 {
 		t.Fatalf("info explicit array payload = %#v, want empty array", nested["array"])
-	}
-}
-
-func TestWorkflowStepWhenInfoPreservesNullEquals(t *testing.T) {
-	t.Parallel()
-
-	info := workflowStepWhenInfoFromCore(&coreworkflow.StepWhen{
-		Value:     coreworkflow.Value{Literal: true, LiteralSet: true},
-		Equals:    nil,
-		EqualsSet: true,
-	})
-	payload, err := json.Marshal(info)
-	if err != nil {
-		t.Fatalf("MarshalJSON: %v", err)
-	}
-	if !strings.Contains(string(payload), `"equals":null`) {
-		t.Fatalf("payload = %s, want explicit equals null", payload)
 	}
 }
 
