@@ -100,7 +100,7 @@ func (p *executableProvider) ListSessions(ctx context.Context, req *proto.ListRu
 		return nil, fmt.Errorf("list runtime sessions: %w", err)
 	}
 	for _, protoSession := range resp.GetSessions() {
-		if protoSession == nil || protoSession.GetId() == "" {
+		if protoSession.GetId() == "" {
 			continue
 		}
 		p.trackSession(protoSession)
@@ -168,7 +168,7 @@ func (p *executableProvider) Close() error {
 }
 
 func (p *executableProvider) trackSession(session *proto.RuntimeSession) {
-	if p == nil || session == nil || session.GetId() == "" {
+	if p == nil || session.GetId() == "" {
 		return
 	}
 	p.mu.Lock()

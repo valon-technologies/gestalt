@@ -97,17 +97,11 @@ func appScopedRelationshipActionFromMethod(fullMethod string) string {
 }
 
 func isAppBootstrapRelationshipTuple(tuple *proto.RelationshipTuple) bool {
-	if tuple == nil {
-		return false
-	}
 	return strings.TrimSpace(tuple.GetResource().GetType()) == appAuthorizationResourceType &&
 		strings.TrimSpace(tuple.GetRelation()) == appAdminRelation
 }
 
 func isAppScopedRelationshipTuple(tuple *proto.RelationshipTuple) bool {
-	if tuple == nil {
-		return false
-	}
 	return strings.TrimSpace(tuple.GetResource().GetType()) == appAuthorizationResourceType
 }
 
@@ -120,9 +114,6 @@ func relationshipTupleFromAuthorizationRequest(fullMethod string, req gproto.Mes
 }
 
 func relationshipTuplesFromAuthorizationRequest(fullMethod string, req gproto.Message) []*proto.RelationshipTuple {
-	if req == nil {
-		return nil
-	}
 	_, method := splitFullMethod(fullMethod)
 	switch method {
 	case "AddRelationship":
@@ -144,7 +135,7 @@ func relationshipTuplesFromAuthorizationRequest(fullMethod string, req gproto.Me
 		}
 		tuples := make([]*proto.RelationshipTuple, 0, len(writeReq.GetUpdates()))
 		for _, update := range writeReq.GetUpdates() {
-			if update == nil || update.GetRelationship() == nil || update.GetRelationship().GetTuple() == nil {
+			if update.GetRelationship().GetTuple() == nil {
 				continue
 			}
 			tuples = append(tuples, update.GetRelationship().GetTuple())
@@ -181,7 +172,7 @@ func (t *ProviderGatewayTransport) allowsGroupScopedRelationshipMutation(
 	subjectID string,
 	tuple *proto.RelationshipTuple,
 ) (bool, error) {
-	if t == nil || t.authorization == nil || tuple == nil || !isGroupMemberRelationshipTuple(tuple) {
+	if t == nil || t.authorization == nil || !isGroupMemberRelationshipTuple(tuple) {
 		return false, nil
 	}
 	if !relationshipTupleHasDirectSubjectTarget(tuple) {
@@ -207,9 +198,6 @@ func (t *ProviderGatewayTransport) allowsGroupScopedRelationshipMutation(
 }
 
 func isGroupMemberRelationshipTuple(tuple *proto.RelationshipTuple) bool {
-	if tuple == nil {
-		return false
-	}
 	return strings.TrimSpace(tuple.GetResource().GetType()) == groupAuthorizationResourceType &&
 		strings.TrimSpace(tuple.GetRelation()) == groupMemberRelation
 }
@@ -220,7 +208,7 @@ func allowsAppScopedRelationshipMutation(
 	subjectID string,
 	tuple *proto.RelationshipTuple,
 ) (bool, error) {
-	if authorization == nil || tuple == nil {
+	if authorization == nil {
 		return false, nil
 	}
 	if strings.TrimSpace(tuple.GetResource().GetType()) != appAuthorizationResourceType {

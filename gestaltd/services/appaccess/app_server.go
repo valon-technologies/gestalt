@@ -378,7 +378,7 @@ func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, reqCtx *
 }
 
 func rejectRequestRunAsForSpecialCallers(callCtx requestInvocationContext, requestRunAs *proto.SubjectContext) error {
-	if requestRunAs == nil || strings.TrimSpace(requestRunAs.GetId()) == "" {
+	if strings.TrimSpace(requestRunAs.GetId()) == "" {
 		return nil
 	}
 	switch callCtx.callerProviderKind {
@@ -563,9 +563,6 @@ func restoreRequestInvocationContext(ctx context.Context, callCtx requestInvocat
 
 func credentialFromRequestContext(reqCtx *proto.RequestContext) invocation.CredentialContext {
 	credential := reqCtx.GetCredential()
-	if credential == nil {
-		return invocation.CredentialContext{}
-	}
 	return invocation.CredentialContext{
 		Mode:       core.ConnectionMode(credential.GetMode()),
 		SubjectID:  credential.GetSubjectId(),
@@ -582,9 +579,6 @@ func workflowFromRequestContext(reqCtx *proto.RequestContext) map[string]any {
 }
 
 func agentFromRequestContext(reqCtx *proto.RequestContext) invocation.AgentInvocationContext {
-	if reqCtx == nil || reqCtx.GetAgent() == nil {
-		return invocation.AgentInvocationContext{}
-	}
 	return invocation.AgentInvocationContext{
 		ProviderName: strings.TrimSpace(reqCtx.GetAgent().GetProviderName()),
 		SessionID:    strings.TrimSpace(reqCtx.GetAgent().GetSessionId()),
@@ -606,9 +600,6 @@ func invocationMetaFromRequestContext(reqCtx *proto.RequestContext) *invocation.
 
 func requestMetaFromRequestContext(reqCtx *proto.RequestContext) invocation.RequestMeta {
 	meta := reqCtx.GetRequestMeta()
-	if meta == nil {
-		return invocation.RequestMeta{}
-	}
 	return invocation.RequestMeta{
 		ClientIP:   meta.GetClientIp(),
 		RemoteAddr: meta.GetRemoteAddr(),

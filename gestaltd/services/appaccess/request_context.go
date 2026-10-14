@@ -340,9 +340,6 @@ func (c ProviderRequestContext) Restore(ctx context.Context, connectionOverride 
 // SubjectIDFromRequestContext returns the caller subject ID carried on a
 // provider request context.
 func SubjectIDFromRequestContext(reqCtx *proto.RequestContext) string {
-	if reqCtx == nil {
-		return ""
-	}
 	if p := PrincipalFromSubjectContext(reqCtx.GetSubject()); p != nil {
 		return strings.TrimSpace(p.SubjectID)
 	}
@@ -354,9 +351,6 @@ func principalFromRequestContext(ctx context.Context, reqCtx *proto.RequestConte
 		if canonical := principal.Canonicalized(p); canonical != nil && strings.TrimSpace(canonical.SubjectID) != "" {
 			return canonical
 		}
-	}
-	if reqCtx == nil {
-		return nil
 	}
 	return PrincipalFromSubjectContext(reqCtx.GetSubject())
 }
@@ -435,9 +429,6 @@ func subjectDisplayName(p *principal.Principal) string {
 }
 
 func requestMetaFromProviderRequestContext(meta *proto.RequestMetaContext) invocation.RequestMeta {
-	if meta == nil {
-		return invocation.RequestMeta{}
-	}
 	return invocation.RequestMeta{
 		ClientIP:   meta.GetClientIp(),
 		RemoteAddr: meta.GetRemoteAddr(),
@@ -453,9 +444,6 @@ func workflowFromProviderRequestContext(workflow *structpb.Struct) map[string]an
 }
 
 func agentFromProviderRequestContext(agent *proto.AgentInvocationContext) invocation.AgentInvocationContext {
-	if agent == nil {
-		return invocation.AgentInvocationContext{}
-	}
 	return invocation.AgentInvocationContext{
 		ProviderName: strings.TrimSpace(agent.GetProviderName()),
 		SessionID:    strings.TrimSpace(agent.GetSessionId()),
@@ -464,9 +452,6 @@ func agentFromProviderRequestContext(agent *proto.AgentInvocationContext) invoca
 }
 
 func mergeSubjectScopes(subject *proto.SubjectContext) []string {
-	if subject == nil {
-		return nil
-	}
 	scopes := cloneStrings(subject.GetScopes())
 	if len(scopes) > 0 {
 		return scopes

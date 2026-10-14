@@ -42,9 +42,6 @@ func MessagesToProto(messages []coreagent.Message) ([]*proto.AgentMessage, error
 }
 
 func MessageFromProto(message *proto.AgentMessage) coreagent.Message {
-	if message == nil {
-		return coreagent.Message{}
-	}
 	return coreagent.Message{
 		Role:     message.GetRole(),
 		Text:     message.GetText(),
@@ -65,9 +62,6 @@ func MessagesFromProto(messages []*proto.AgentMessage) []coreagent.Message {
 }
 
 func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
-	if ref == nil {
-		return coreagent.ToolRef{}
-	}
 	return coreagent.ToolRef{
 		System:         ref.GetSystem(),
 		App:            ref.GetApp(),
@@ -251,9 +245,6 @@ func MessagePartsToProto(parts []coreagent.MessagePart) ([]*proto.AgentMessagePa
 }
 
 func MessagePartFromProto(part *proto.AgentMessagePart) coreagent.MessagePart {
-	if part == nil {
-		return coreagent.MessagePart{}
-	}
 	partType, _ := MessagePartTypeFromProto(part.GetType())
 	var toolCall *coreagent.ToolCallPart
 	if value := part.GetToolCall(); value != nil {

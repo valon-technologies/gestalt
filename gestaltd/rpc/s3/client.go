@@ -251,9 +251,6 @@ func objectRefToProto(ref s3.ObjectRef) *proto.S3ObjectRef {
 }
 
 func objectMetaFromProto(meta *proto.S3ObjectMeta) s3.ObjectMeta {
-	if meta == nil {
-		return s3.ObjectMeta{}
-	}
 	out := s3.ObjectMeta{
 		Ref: s3.ObjectRef{
 			Key:       meta.GetRef().GetKey(),

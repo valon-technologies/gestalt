@@ -21,9 +21,6 @@ func TargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarget, erro
 }
 
 func TargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Target {
-	if target == nil {
-		return coreworkflow.Target{}
-	}
 	return coreworkflow.Target{Steps: workflowStepsFromProto(target.GetSteps())}
 }
 
@@ -212,9 +209,6 @@ func workflowAgentOutputToProto(output coreagent.Output) (*proto.AgentOutput, er
 }
 
 func workflowAgentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
-	if output == nil {
-		return coreagent.Output{}
-	}
 	if structured := output.GetStructured(); structured != nil {
 		return coreagent.Output{
 			Structured: &coreagent.StructuredOutput{Schema: protoutil.MapFromStruct(structured.GetSchema())},
@@ -272,9 +266,6 @@ func workflowTextToProto(text coreworkflow.Text) *proto.WorkflowText {
 }
 
 func workflowTextFromProto(text *proto.WorkflowText) coreworkflow.Text {
-	if text == nil {
-		return coreworkflow.Text{}
-	}
 	return coreworkflow.Text{Template: text.GetTemplate()}
 }
 
@@ -410,9 +401,6 @@ func workflowValueToProto(value coreworkflow.Value) (*proto.WorkflowValue, error
 }
 
 func workflowValueFromProto(value *proto.WorkflowValue) coreworkflow.Value {
-	if value == nil {
-		return coreworkflow.Value{}
-	}
 	switch typed := value.GetKind().(type) {
 	case *proto.WorkflowValue_Literal:
 		return coreworkflow.Value{Literal: protoutil.ValueToAny(typed.Literal), LiteralSet: true}

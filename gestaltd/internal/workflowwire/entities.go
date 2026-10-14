@@ -46,9 +46,6 @@ func EventToProto(event coreworkflow.Event) (*proto.WorkflowEvent, error) {
 }
 
 func EventFromProto(event *proto.WorkflowEvent) (coreworkflow.Event, error) {
-	if event == nil {
-		return coreworkflow.Event{}, nil
-	}
 	return coreworkflow.Event{
 		ID:              event.GetId(),
 		Source:          event.GetSource(),
@@ -71,9 +68,6 @@ func EventMatchToProto(match coreworkflow.EventMatch) *proto.WorkflowEventMatch 
 }
 
 func EventMatchFromProto(match *proto.WorkflowEventMatch) coreworkflow.EventMatch {
-	if match == nil {
-		return coreworkflow.EventMatch{}
-	}
 	return coreworkflow.EventMatch{
 		Type:    match.GetType(),
 		Source:  match.GetSource(),
@@ -569,9 +563,6 @@ func SignalToProto(signal coreworkflow.Signal) (*proto.WorkflowSignal, error) {
 }
 
 func SignalFromProto(signal *proto.WorkflowSignal) coreworkflow.Signal {
-	if signal == nil {
-		return coreworkflow.Signal{}
-	}
 	return coreworkflow.Signal{
 		ID:             signal.GetId(),
 		Name:           signal.GetName(),
@@ -600,9 +591,6 @@ func SignalRunResponseFromProto(resp *proto.SignalWorkflowRunResponse) (*corewor
 }
 
 func RunTriggerFromProto(trigger *proto.WorkflowRunTrigger) (coreworkflow.RunTrigger, error) {
-	if trigger == nil {
-		return coreworkflow.RunTrigger{}, nil
-	}
 	switch kind := trigger.GetKind().(type) {
 	case *proto.WorkflowRunTrigger_Manual:
 		return coreworkflow.RunTrigger{Manual: kind.Manual != nil}, nil
@@ -696,10 +684,6 @@ func workflowExtensionsFromProto(values map[string]*structpb.Value) map[string]a
 	}
 	out := make(map[string]any, len(values))
 	for key, value := range values {
-		if value == nil {
-			out[key] = nil
-			continue
-		}
 		out[key] = value.AsInterface()
 	}
 	return out
