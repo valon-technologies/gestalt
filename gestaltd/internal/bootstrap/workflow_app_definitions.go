@@ -160,13 +160,7 @@ func desiredAppWorkflowDefinitions(cfg *config.Config, decls map[string][]*proto
 			if !ok || kind != "service_account" || subjectID == "" {
 				return nil, fmt.Errorf("bootstrap: app %q workflow definition %q: workflow run_as must be service_account:<id>", appName, localID)
 			}
-			spec, err := workflowwire.DefinitionSpecFromProto(specProto)
-			if err != nil {
-				return nil, fmt.Errorf("bootstrap: app %q workflow definition %q: %w", appName, localID, err)
-			}
-			if spec == nil {
-				return nil, fmt.Errorf("bootstrap: app %q workflow definition %q: spec is required", appName, localID)
-			}
+			spec := workflowwire.DefinitionSpecFromProto(specProto)
 			spec.ID = appWorkflowDefinitionID(appName, localID)
 			storedID := spec.ID
 			if owner := coreworkflow.DefinitionOwnerApp(storedID, knownApps); owner != appName {

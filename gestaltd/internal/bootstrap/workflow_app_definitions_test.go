@@ -24,10 +24,7 @@ type fakeWorkflowProvider struct {
 
 func (p *fakeWorkflowProvider) ApplyDefinition(_ context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	p.appliedDefinitions = append(p.appliedDefinitions, gproto.Clone(req).(*proto.ApplyWorkflowProviderDefinitionRequest))
-	spec, err := workflowwire.DefinitionSpecFromProto(req.GetSpec())
-	if err != nil {
-		return nil, err
-	}
+	spec := workflowwire.DefinitionSpecFromProto(req.GetSpec())
 	if p.definitions == nil {
 		p.definitions = map[string]*coreworkflow.Definition{}
 	}

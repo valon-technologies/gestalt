@@ -554,10 +554,7 @@ func newTestWorkflowProvider() *testWorkflowProvider {
 
 func (p *testWorkflowProvider) ApplyDefinition(_ context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	p.applyRequests = append(p.applyRequests, gproto.Clone(req).(*proto.ApplyWorkflowProviderDefinitionRequest))
-	spec, err := workflowwire.DefinitionSpecFromProto(req.GetSpec())
-	if err != nil {
-		return nil, err
-	}
+	spec := workflowwire.DefinitionSpecFromProto(req.GetSpec())
 	if spec == nil {
 		spec = &coreworkflow.DefinitionSpec{}
 	}

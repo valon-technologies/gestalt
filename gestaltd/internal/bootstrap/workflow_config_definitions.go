@@ -105,10 +105,7 @@ func reconcileWorkflowConfigDefinitionsFromDeclarations(ctx context.Context, cfg
 		existingProto, err := provider.GetDefinition(providerCtx, &proto.GetWorkflowProviderDefinitionRequest{Provider: desiredEntry.ProviderName, DefinitionId: desiredEntry.DefinitionID})
 		switch {
 		case err == nil:
-			existing, existingErr := workflowwire.DefinitionFromProto(existingProto)
-			if existingErr != nil {
-				return fmt.Errorf("bootstrap: decode workflow definition %q for app %q: %w", desiredEntry.DefinitionID, appName, existingErr)
-			}
+			existing := workflowwire.DefinitionFromProto(existingProto)
 			if !isManagedWorkflowDefinitionOwned(existing, desiredEntry.DefinitionID) {
 				return fmt.Errorf("bootstrap: workflow definition %q for app %q conflicts with existing unmanaged definition id %q", desiredEntry.DefinitionKey, appName, desiredEntry.DefinitionID)
 			}
@@ -257,10 +254,7 @@ func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, cfg *config.Co
 			continue
 		}
 		for _, definitionProto := range resp.GetDefinitions() {
-			definition, err := workflowwire.DefinitionFromProto(definitionProto)
-			if err != nil {
-				return fmt.Errorf("bootstrap: decode workflow definition from provider %q: %w", providerName, err)
-			}
+			definition := workflowwire.DefinitionFromProto(definitionProto)
 			if definition == nil || !isManagedWorkflowDefinitionOwned(definition, definition.ID) {
 				continue
 			}
