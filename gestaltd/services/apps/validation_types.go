@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -60,41 +59,11 @@ func (p *ValidationApp) surfaceURL(spec *providermanifestv1.Spec, surface SpecSu
 			return url, true
 		}
 	}
-	url := manifestProviderSurfaceURL(spec, surface)
+	url := packageio.ManifestProviderSurfaceURL(spec, string(surface))
 	if url == "" {
 		return "", false
 	}
-	return resolveManifestRelativeSpecURL(p.ManifestPath, url), true
-}
-
-func manifestProviderSurfaceURL(provider *providermanifestv1.Spec, surface SpecSurface) string {
-	switch surface {
-	case SpecSurfaceOpenAPI:
-		return provider.OpenAPIDocument()
-	case SpecSurfaceGraphQL:
-		return provider.GraphQLURL()
-	case SpecSurfaceMCP:
-		return provider.MCPURL()
-	default:
-		return ""
-	}
-}
-
-func resolveManifestRelativeSpecURL(manifestPath, raw string) string {
-	if manifestPath == "" || raw == "" {
-		return raw
-	}
-	if filepath.IsAbs(raw) || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-		return raw
-	}
-	if strings.HasPrefix(raw, "file://") {
-		path := strings.TrimPrefix(raw, "file://")
-		if filepath.IsAbs(path) {
-			return raw
-		}
-		return "file://" + filepath.Clean(filepath.Join(filepath.Dir(manifestPath), path))
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(manifestPath), raw))
+	return packageio.ResolveManifestRelativeSpecURL(p.ManifestPath, url), true
 }
 
 func staticCatalogRequired(manifest *providermanifestv1.Manifest) bool {

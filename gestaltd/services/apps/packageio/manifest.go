@@ -820,3 +820,17 @@ func ManifestEqual(a, b *providermanifestv1.Manifest) bool {
 	}
 	return bytes.Equal(aj, bj)
 }
+
+// ManifestProviderSurfaceURL returns the document or endpoint URL for a manifest surface.
+func ManifestProviderSurfaceURL(provider *providermanifestv1.Spec, surface string) string {
+	switch surface {
+	case "openapi":
+		return provider.OpenAPIDocument()
+	case "graphql":
+		return provider.GraphQLURL()
+	case "mcp":
+		return provider.MCPURL()
+	default:
+		return ""
+	}
+}
