@@ -216,7 +216,7 @@ func AddHTTPAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
 	if labeler, ok := otelhttp.LabelerFromContext(ctx); ok {
 		addMissingHTTPAttributes(labeler, attrs...)
 	}
-	addSpanAttributes(ctx, attrs...)
+	SetSpanAttributes(ctx, attrs...)
 }
 
 func addMissingHTTPAttributes(labeler *otelhttp.Labeler, attrs ...attribute.KeyValue) {
@@ -236,7 +236,8 @@ func addMissingHTTPAttributes(labeler *otelhttp.Labeler, attrs ...attribute.KeyV
 	}
 }
 
-func addSpanAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
+// SetSpanAttributes adds attributes to the current span when it is recording.
+func SetSpanAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
 	if len(attrs) == 0 {
 		return
 	}
