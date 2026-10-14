@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -117,12 +118,12 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	sharedLocal := map[string]bool{}
 	sharedCodecFn := map[string]bool{}
 	for fullName := range plan.SharedMessages {
-		sharedLocal[localName(fullName)] = true
+		sharedLocal[naming.LocalName(fullName)] = true
 		sharedCodecFn[toWireFunc(fullName)] = true
 		sharedCodecFn[fromWireFunc(fullName)] = true
 	}
 	for _, e := range plan.ReachableEnums {
-		sharedLocal[enumName(e)] = true
+		sharedLocal[naming.EnumName(e)] = true
 	}
 
 	markConversionNeeds(idx, plan.Filtered.Services)
@@ -405,7 +406,7 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 	}
 
 	for _, pm := range methods {
-		wireName := localName(pm.Service)
+		wireName := naming.LocalName(pm.Service)
 		constName := fmt.Sprintf("METHOD_%s_%s", screamingSnake(wireName), methodConstSuffix(pm.Method))
 		encodeShim, decodeShim := wireJSONShimNames(pm.Method)
 		fmt.Fprintf(&r.body, "pub const %s: Method = Method {\n", constName)

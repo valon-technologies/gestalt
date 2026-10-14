@@ -5,14 +5,15 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
 
 func encodeWireJSONFunc(messageFullName string) string {
-	return "encode_wire_" + publicSnake(localName(messageFullName)) + "_json"
+	return "encode_wire_" + publicSnake(naming.LocalName(messageFullName)) + "_json"
 }
 
 func decodeWireJSONFunc(messageFullName string) string {
-	return "decode_wire_" + publicSnake(localName(messageFullName)) + "_json"
+	return "decode_wire_" + publicSnake(naming.LocalName(messageFullName)) + "_json"
 }
 
 func (r *renderer) wireJSONEncodeRef(protoFile, messageFullName string) string {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -97,7 +98,7 @@ func renderWebNativeTypes(idx *index, messages []*model.Message, enums []*model.
 }
 
 func (r *renderer) renderWebNativeType(m *model.Message) {
-	name := localName(m.FullName)
+	name := naming.LocalName(m.FullName)
 	for _, o := range m.Oneofs {
 		fmt.Fprintf(&r.body, "export type %s =\n", oneofTypeName(m, o))
 		for _, f := range oneofFields(m, o) {

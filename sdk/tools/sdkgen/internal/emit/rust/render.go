@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
 
 // moduleKind selects which of the two generated modules per proto file is
@@ -160,11 +161,11 @@ func (r *renderer) convRef(protoFile, name string) string {
 }
 
 func (r *renderer) messageType(fullName string) string {
-	return r.typeRef(r.idx.messages[fullName].ProtoFile, localName(fullName))
+	return r.typeRef(r.idx.messages[fullName].ProtoFile, naming.LocalName(fullName))
 }
 
 func (r *renderer) enumType(fullName string) string {
-	return r.typeRef(r.idx.enums[fullName].ProtoFile, enumName(r.idx.enums[fullName]))
+	return r.typeRef(r.idx.enums[fullName].ProtoFile, naming.EnumName(r.idx.enums[fullName]))
 }
 
 // fnToWire returns the converter function for reference kinds converted by a
@@ -377,7 +378,7 @@ func isUnitVariant(f *model.Field) bool {
 }
 
 func (r *renderer) renderEnum(e *model.Enum) {
-	name := enumName(e)
+	name := naming.EnumName(e)
 	// Open enum: unknown numeric values are preserved, so the type is i32.
 	fmt.Fprintf(&r.body, "/// Open enum for `%s`; unknown numeric values are preserved.\n", e.FullName)
 	fmt.Fprintf(&r.body, "pub type %s = i32;\n\n", name)
@@ -393,7 +394,7 @@ func (r *renderer) renderEnum(e *model.Enum) {
 }
 
 func (r *renderer) renderMessage(m *model.Message) {
-	name := localName(m.FullName)
+	name := naming.LocalName(m.FullName)
 	for _, o := range m.Oneofs {
 		fmt.Fprintf(&r.body, "/// Values of the `%s` oneof in `%s`; the message field is None when unset.\n", o.Name, name)
 		r.body.WriteString("#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]\n")
@@ -447,7 +448,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 func (r *renderer) renderConversions(m *model.Message) {
 	needTo := r.idx.needToWire[m.FullName]
 	needFrom := r.idx.needFromWire[m.FullName]
- 	isShared := r.publicClient && r.shared != nil && r.shared[localName(m.FullName)]
+	isShared := r.publicClient && r.shared != nil && r.shared[naming.LocalName(m.FullName)]
  	if isShared {
  		needTo = false
  		needFrom = false
@@ -461,7 +462,7 @@ func (r *renderer) renderConversions(m *model.Message) {
 	if r.publicClient {
 		needFrom = false
 	}
-	name := r.typeRef(m.ProtoFile, localName(m.FullName))
+	name := r.typeRef(m.ProtoFile, naming.LocalName(m.FullName))
 	wireName := wireTypeName(m.FullName)
 	r.features.v1 = true
 	param := "value"
@@ -606,7 +607,7 @@ type streamWrapper struct {
 }
 
 func (r *renderer) renderClient(svc *model.Service) {
-	wireName := localName(svc.FullName)
+	wireName := naming.LocalName(svc.FullName)
 	name := wireName
 	r.features.v1 = true
 	r.useType("GestaltError")
@@ -896,7 +897,7 @@ func (r *renderer) renderMethod(svc *model.Service, m *model.Method) ([]streamWr
 // optionsTypeName names the per-method struct carrying a method's
 // optional_signature fields.
 func optionsTypeName(svc *model.Service, m *model.Method) string {
-	return localName(svc.FullName) + m.Name + "Options"
+	return naming.LocalName(svc.FullName) + m.Name + "Options"
 }
 
 // renderOptionsStruct renders the options struct a method with an
@@ -904,7 +905,7 @@ func optionsTypeName(svc *model.Service, m *model.Method) string {
 // the client that takes it.
 func (r *renderer) renderOptionsStruct(svc *model.Service, m *model.Method) {
 	fmt.Fprintf(&r.body, "/// Optional parameters of [`%s::%s`]; the default value leaves every\n/// option unset.\n",
-		localName(svc.FullName), escapeIdent(publicSnake(m.Name)))
+		naming.LocalName(svc.FullName), escapeIdent(publicSnake(m.Name)))
 	r.body.WriteString("#[derive(Clone, Debug, Default)]\n")
 	fmt.Fprintf(&r.body, "pub struct %s {\n", optionsTypeName(svc, m))
 	for _, fieldName := range m.OptionalSignature {
@@ -1082,8 +1083,8 @@ func (r *renderer) renderFramedRead(svc *model.Service, m *model.Method) framedR
 	oneof := frames.Oneofs[header.OneofIndex]
 	enumName := r.typeRef(frames.ProtoFile, oneofTypeName(frames, oneof))
 	wrapper := framedReadWrapper{
-		name:         localName(svc.FullName) + m.Name + "Data",
-		service:      localName(svc.FullName),
+		name:         naming.LocalName(svc.FullName) + m.Name + "Data",
+		service:      naming.LocalName(svc.FullName),
 		method:       methodName,
 		wireFrame:    wireTypeName(frames.FullName),
 		fromFn:       r.convRef(frames.ProtoFile, fromWireFunc(frames.FullName)),
@@ -1231,7 +1232,7 @@ func (r *renderer) renderFaithfulMethod(svc *model.Service, m *model.Method, raw
 	case model.ServerStream, model.Bidi:
 		responseType := r.messageType(m.Output.FullName)
 		wrapper := streamWrapper{
-			name:      localName(svc.FullName) + m.Name + "Stream",
+			name:      naming.LocalName(svc.FullName) + m.Name + "Stream",
 			doc:       m.Doc,
 			wireFrame: wireTypeName(m.Output.FullName),
 			native:    responseType,

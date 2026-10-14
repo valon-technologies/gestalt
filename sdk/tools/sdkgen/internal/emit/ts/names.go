@@ -6,37 +6,8 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
-
-func upperFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToLower(s[:1]) + s[1:]
-}
-
-// localName returns the unqualified message or enum name. Names are unique
-// within the provider package, so generated identifiers drop the package.
-func localName(fullName string) string {
-	if i := strings.LastIndex(fullName, "."); i >= 0 {
-		return fullName[i+1:]
-	}
-	return fullName
-}
-
-func enumName(e *model.Enum) string {
-	if e.GeneratedName != "" {
-		return e.GeneratedName
-	}
-	return localName(e.FullName)
-}
 
 // generatedFileBase derives the generated module base from a proto file path:
 // sdk/proto/v1/indexeddb.proto becomes "indexeddb".
@@ -54,7 +25,7 @@ func protoGenImportBase(protoFile string) string {
 }
 
 func publicRequestTypeName(svc *model.Service, m *model.Method) string {
-	return "Public" + localName(svc.FullName) + m.Name + "Request"
+	return "Public" + naming.LocalName(svc.FullName) + m.Name + "Request"
 }
 
 // screamingSnake converts a CamelCase identifier to SCREAMING_SNAKE_CASE,
@@ -236,15 +207,15 @@ func (r *renderer) initType(messageFullName string) string {
 }
 
 func oneofTypeName(message *model.Message, oneof *model.Oneof) string {
-	return localName(message.FullName) + upperFirst(oneof.Name)
+	return naming.LocalName(message.FullName) + naming.UpperFirst(oneof.Name)
 }
 
 func toWireFunc(messageFullName string) string {
-	return "toWire" + localName(messageFullName)
+	return "toWire" + naming.LocalName(messageFullName)
 }
 
 func fromWireFunc(messageFullName string) string {
-	return "fromWire" + localName(messageFullName)
+	return "fromWire" + naming.LocalName(messageFullName)
 }
 
 // tsDefaultExpr renders the proto default value of a non-presence field for

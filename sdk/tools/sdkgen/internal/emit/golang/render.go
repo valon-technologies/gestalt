@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -52,7 +53,7 @@ func newRenderer(idx *index) *renderer {
 func (r *renderer) messageType(fullName string) string {
 	if r.publicClient && r.shared[fullName] {
  		r.features.gestaltclient = true
-		return gestaltClientAlias + localName(fullName)
+		return gestaltClientAlias + naming.LocalName(fullName)
 	}
 	return goTypeName(fullName, r.idx.messages[fullName].ProtoFile)
 }
@@ -60,33 +61,33 @@ func (r *renderer) messageType(fullName string) string {
 func (r *renderer) enumType(fullName string) string {
  	if r.publicClient {
  		r.features.gestaltclient = true
-		return gestaltClientAlias + enumName(r.idx.enums[fullName])
+		return gestaltClientAlias + naming.EnumName(r.idx.enums[fullName])
 	}
-	return enumName(r.idx.enums[fullName])
+	return naming.EnumName(r.idx.enums[fullName])
 }
 
 // wireMessage renders the wire-stub type name for a message; renames never
 // apply to the wire package.
 func wireMessage(fullName string) string {
-	return "proto." + localName(fullName)
+	return "proto." + naming.LocalName(fullName)
 }
 
 func (r *renderer) wireEnum(fullName string) string {
 	e := r.idx.enums[fullName]
 	if e == nil {
-		return "proto." + localName(fullName)
+		return "proto." + naming.LocalName(fullName)
 	}
 	parent := fullName[:strings.LastIndex(fullName, ".")]
 	if _, ok := r.idx.messages[parent]; ok {
-		return "proto." + localName(parent) + "_" + e.Name
+		return "proto." + naming.LocalName(parent) + "_" + e.Name
 	}
-	return "proto." + enumName(e)
+	return "proto." + naming.EnumName(e)
 }
 
 func (r *renderer) toWireFuncName(fullName string) string {
 	if r.publicClient && r.shared[fullName] {
  		r.features.gestaltclient = true
-		return gestaltClientAlias + toWireFunc(localName(fullName))
+		return gestaltClientAlias + toWireFunc(naming.LocalName(fullName))
 	}
 	return toWireFunc(r.messageType(fullName))
 }
@@ -94,7 +95,7 @@ func (r *renderer) toWireFuncName(fullName string) string {
 func (r *renderer) fromWireFuncName(fullName string) string {
 	if r.publicClient && r.shared[fullName] {
  		r.features.gestaltclient = true
-		return gestaltClientAlias + fromWireFunc(localName(fullName))
+		return gestaltClientAlias + fromWireFunc(naming.LocalName(fullName))
 	}
 	return fromWireFunc(r.messageType(fullName))
 }
@@ -102,9 +103,9 @@ func (r *renderer) fromWireFuncName(fullName string) string {
 func (r *renderer) codecHelper(name string) string {
 	if r.publicClient {
  		r.features.gestaltclient = true
-		return gestaltClientAlias + upperFirst(name)
+		return gestaltClientAlias + naming.UpperFirst(name)
 	}
-	return upperFirst(name)
+	return naming.UpperFirst(name)
 }
 
 // valueType renders the native Go type of a singular value: a repeated
@@ -569,8 +570,8 @@ func (r *renderer) writeOneofToWire(m *model.Message, o *model.Oneof) {
 	prop := oneofGoName(o)
 	fmt.Fprintf(&r.body, "\tswitch variant := value.%s.(type) {\n", prop)
 	for _, f := range oneofFields(m, o) {
-		wireWrapper := wireMessage(m.FullName) + "_" + upperFirst(f.JSONName)
-		wireField := upperFirst(f.JSONName)
+		wireWrapper := wireMessage(m.FullName) + "_" + naming.UpperFirst(f.JSONName)
+		wireField := naming.UpperFirst(f.JSONName)
 		var payload string
 		switch f.Kind {
 		case model.KindJSONNull:
@@ -594,8 +595,8 @@ func (r *renderer) writeOneofFromWire(m *model.Message, o *model.Oneof) {
 	prop := oneofGoName(o)
 	fmt.Fprintf(&r.body, "\tswitch variant := value.%s.(type) {\n", prop)
 	for _, f := range oneofFields(m, o) {
-		wireWrapper := wireMessage(m.FullName) + "_" + upperFirst(f.JSONName)
-		wireField := upperFirst(f.JSONName)
+		wireWrapper := wireMessage(m.FullName) + "_" + naming.UpperFirst(f.JSONName)
+		wireField := naming.UpperFirst(f.JSONName)
 		fmt.Fprintf(&r.body, "\tcase *%s:\n", wireWrapper)
 		switch f.Kind {
 		case model.KindJSONNull, model.KindUnit:
@@ -609,7 +610,7 @@ func (r *renderer) writeOneofFromWire(m *model.Message, o *model.Oneof) {
 }
 
 func (r *renderer) renderClient(svc *model.Service) {
-	wireName := localName(svc.FullName)
+	wireName := naming.LocalName(svc.FullName)
 	name := wireName
 	r.features.context = true
 	r.features.grpc = true

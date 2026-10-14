@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -42,7 +43,7 @@ func (r *renderer) renderServiceClient(svc *model.Service) {
 		r.features.context = true
 		r.features.proto = true
 	}
-	clientName := localName(svc.FullName) + "Client"
+	clientName := naming.LocalName(svc.FullName) + "Client"
 	r.body.WriteString("// " + clientName + " is the transport-neutral client for the public " + svc.Name + " surface.\n")
 	fmt.Fprintf(&r.body, "type %s struct {\n", clientName)
 	r.body.WriteString("\ttransport Transport\n")
@@ -52,7 +53,7 @@ func (r *renderer) renderServiceClient(svc *model.Service) {
 	fmt.Fprintf(&r.body, "\treturn &%s{transport: transport}\n", clientName)
 	r.body.WriteString("}\n\n")
 
-	wireName := localName(svc.FullName)
+	wireName := naming.LocalName(svc.FullName)
 	for _, m := range svc.Methods {
 		r.renderServiceClientMethod(clientName, wireName, m)
 	}
@@ -300,7 +301,7 @@ func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {
 	r.body.WriteString("}\n\n")
 
 	for _, pm := range methods {
-		wireName := localName(pm.Service)
+		wireName := naming.LocalName(pm.Service)
 		constName := fmt.Sprintf("Method%s%s", wireName, pm.Method)
 		r.body.WriteString("var " + constName + " = Method{\n")
 		fmt.Fprintf(&r.body, "\tService: %q,\n", pm.Service)

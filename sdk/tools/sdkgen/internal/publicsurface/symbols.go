@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
 
 // ManifestSymbols records the generated client symbol names for one method.
@@ -37,16 +39,9 @@ func manifestSymbols(pm PublicMethod) ManifestSymbols {
 		},
 		TypeScript: ManifestSymbol{
 			Service: serviceLocal + "Client",
-			Method:  lowerFirst(pm.Method),
+			Method:  naming.LowerFirst(pm.Method),
 		},
 	}
-}
-
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToLower(s[:1]) + s[1:]
 }
 
 func snakeCase(s string) string {

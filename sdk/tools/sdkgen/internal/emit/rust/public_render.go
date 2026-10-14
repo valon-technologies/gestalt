@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
 
 // methodKeyword returns the fn keyword for async ("pub async fn") or sync ("pub fn").
@@ -35,7 +36,7 @@ func (r *renderer) assembleGenerated() string {
 }
 
 func (r *renderer) renderAppClient(svc *model.Service) {
-	wireName := localName(svc.FullName)
+	wireName := naming.LocalName(svc.FullName)
 	clientName := wireName + "Client"
 	r.features.unaryTransport = true
 	r.features.restMetadata = true
@@ -143,8 +144,8 @@ func (r *renderer) renderAppClientStreamMethod(svc *model.Service, m *model.Meth
 	}
 	constName := appClientMethodConst(svc, m)
 	methodName := publicSnake(m.Name)
-	requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
-	streamType := localName(m.Output.FullName) + "Stream"
+	requestType := r.typeRef(m.Input.ProtoFile, naming.LocalName(m.Input.FullName))
+	streamType := naming.LocalName(m.Output.FullName) + "Stream"
 	toWire := r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
 	streamMethodName := methodName
 	if sync {
@@ -167,12 +168,12 @@ func (r *renderer) renderAppClientStreamTypes(methods []*model.Method) {
 		if m.InputIsEmpty || m.OutputIsEmpty || m.Input == nil || m.Output == nil {
 			continue
 		}
-		streamType := localName(m.Output.FullName) + "Stream"
+		streamType := naming.LocalName(m.Output.FullName) + "Stream"
 		if seen[streamType] {
 			continue
 		}
 		seen[streamType] = true
-		outputType := r.typeRef(m.Output.ProtoFile, localName(m.Output.FullName))
+		outputType := r.typeRef(m.Output.ProtoFile, naming.LocalName(m.Output.FullName))
 		fromWire := r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
 		fmt.Fprintf(&r.body, "/// %s is the server-stream iterator for %s.\n", streamType, m.Name)
 		fmt.Fprintf(&r.body, "pub struct %s {\n", streamType)
@@ -204,7 +205,7 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 		return
 	}
 	if m.InputIsEmpty {
-		outputType := r.typeRef(m.Output.ProtoFile, localName(m.Output.FullName))
+		outputType := r.typeRef(m.Output.ProtoFile, naming.LocalName(m.Output.FullName))
 		wireResponseType := wireTypeName(m.Output.FullName)
 		fromWire := r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
 		fmt.Fprintf(&r.body, "    %s %s(&self) -> Result<%s, GestaltError> {\n", methodKeyword(sync), methodName, outputType)
@@ -216,7 +217,7 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 		return
 	}
 	if m.OutputIsEmpty {
-		requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
+		requestType := r.typeRef(m.Input.ProtoFile, naming.LocalName(m.Input.FullName))
 		toWire := r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
 		fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<(), GestaltError> {\n", methodKeyword(sync), methodName, requestType)
 		fmt.Fprintf(&r.body, "        let wire = %s(request);\n", toWire)
@@ -228,8 +229,8 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 	if m.Input == nil || m.Output == nil {
 		return
 	}
-	requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
-	outputType := r.typeRef(m.Output.ProtoFile, localName(m.Output.FullName))
+	requestType := r.typeRef(m.Input.ProtoFile, naming.LocalName(m.Input.FullName))
+	outputType := r.typeRef(m.Output.ProtoFile, naming.LocalName(m.Output.FullName))
 	wireResponseType := wireTypeName(m.Output.FullName)
 	toWire := r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
 	fromWire := r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
@@ -246,7 +247,7 @@ func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName strin
 	if m.Input == nil || m.Output == nil || m.JsonResult == nil {
 		return
 	}
-	requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
+	requestType := r.typeRef(m.Input.ProtoFile, naming.LocalName(m.Input.FullName))
 	r.useInvoke("decode_app_result")
 	r.useInvoke("InvokeError")
 
@@ -282,8 +283,8 @@ func (r *renderer) renderAppClientGraphQLRawAlias(m *model.Method, methodName st
 	if m.Input == nil || m.Output == nil {
 		return
 	}
-	requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
-	outputType := r.typeRef(m.Output.ProtoFile, localName(m.Output.FullName))
+	requestType := r.typeRef(m.Input.ProtoFile, naming.LocalName(m.Input.FullName))
+	outputType := r.typeRef(m.Output.ProtoFile, naming.LocalName(m.Output.FullName))
 	r.body.WriteString("    /// `invoke_graphql_raw` is an alias for [`Self::invoke_graphql`].\n")
 	fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<%s, GestaltError> {\n",
 		methodKeyword(sync), syncSuffix(methodName+"_raw", sync), requestType, outputType)
@@ -295,7 +296,7 @@ func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodNa
 	if m.Input == nil || m.Output == nil {
 		return
 	}
-	requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
+	requestType := r.typeRef(m.Input.ProtoFile, naming.LocalName(m.Input.FullName))
 	r.useInvoke("decode_graphql_result")
 	r.useInvoke("InvokeError")
 
@@ -319,6 +320,6 @@ func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodNa
 }
 
 func appClientMethodConst(svc *model.Service, m *model.Method) string {
-	wireName := localName(svc.FullName)
+	wireName := naming.LocalName(svc.FullName)
 	return fmt.Sprintf("METHOD_%s_%s", screamingSnake(wireName), methodConstSuffix(m.Name))
 }

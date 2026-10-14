@@ -1,10 +1,9 @@
 package golang
 
 import (
-	"strings"
-
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -90,13 +89,6 @@ func serviceClientBase(serviceName string) string {
 	case "ExternalCredentials":
 		return "external_credentials"
 	default:
-		return lowerFirst(serviceName)
+		return naming.LowerFirst(serviceName)
 	}
-}
-
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToLower(s[:1]) + s[1:]
 }

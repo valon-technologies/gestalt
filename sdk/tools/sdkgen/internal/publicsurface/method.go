@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
 
 // BodyBinding classifies the google.api.http body field.
@@ -35,10 +36,7 @@ type RESTRule struct {
 
 // ServiceLocalName returns the unqualified service name from a full name.
 func ServiceLocalName(fullName string) string {
-	if i := strings.LastIndex(fullName, "."); i >= 0 {
-		return fullName[i+1:]
-	}
-	return fullName
+	return naming.LocalName(fullName)
 }
 
 // FieldNames returns the protobuf field names from a list of public fields.
