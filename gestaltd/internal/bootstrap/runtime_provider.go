@@ -128,3 +128,9 @@ func closeRuntimeRegistry(registry *runtimeRegistry) error {
 	}
 	return registry.Close()
 }
+
+func closeOwnedRuntime(provider runtimeprovider.Provider, owned bool) {
+	if owned {
+		_ = provider.Close()
+	}
+}

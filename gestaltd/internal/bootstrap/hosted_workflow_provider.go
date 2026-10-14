@@ -67,9 +67,7 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedProv
 	name := launch.name
 	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindWorkflow, name, launch.runtimeConfig))
 	if err != nil {
-		if closeRuntime {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, closeRuntime)
 		if cleanup != nil {
 			cleanup()
 		}
