@@ -250,33 +250,6 @@ func manifestLangCases() []langCase {
 	}
 }
 
-func publicSnake(name string) string {
-	switch name {
-	case "InvokeGraphQL":
-		return "invoke_graphql"
-	default:
-		var b strings.Builder
-		for i, r := range name {
-			if i > 0 && r >= 'A' && r <= 'Z' {
-				b.WriteByte('_')
-			}
-			if r >= 'A' && r <= 'Z' {
-				b.WriteByte(byte(r - 'A' + 'a'))
-			} else {
-				b.WriteRune(r)
-			}
-		}
-		return b.String()
-	}
-}
-
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToLower(s[:1]) + s[1:]
-}
-
 func TestManifestGoldenShape(t *testing.T) {
 	t.Parallel()
 	manifest := loadManifestGolden(t)

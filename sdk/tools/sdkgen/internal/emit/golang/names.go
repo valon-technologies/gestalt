@@ -235,17 +235,3 @@ func goStringList(values []string) string {
 	}
 	return "[]string{" + strings.Join(parts, ", ") + "}"
 }
-
-func goFillList(m *model.Method) string {
-	if m.PublicPolicy == nil {
-		return "nil"
-	}
-	return goStringList(m.PublicPolicy.Fill)
-}
-
-func goRejectList(m *model.Method) string {
-	if m.PublicPolicy == nil {
-		return "nil"
-	}
-	return goStringList(m.PublicPolicy.Reject)
-}
