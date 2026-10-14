@@ -33,12 +33,12 @@ func Apply(
 	if model == nil {
 		model = &proto.AuthorizationModel{}
 	}
-	runtimeResourceTypes, err := listRuntimeModelResourceTypes(ctx, provider)
+	runtimeResourceTypes, err := ListRuntimeModelResourceTypes(ctx, provider)
 	if err != nil {
 		return nil, err
 	}
-	model.ResourceTypes = mergeModelResourceTypes(model.GetResourceTypes(), runtimeResourceTypes)
-	if err := stampModel(model, time.Now()); err != nil {
+	model.ResourceTypes = MergeModelResourceTypes(model.GetResourceTypes(), runtimeResourceTypes)
+	if err := StampModel(model, time.Now()); err != nil {
 		return nil, err
 	}
 	if err := ensureRelationships(ctx, provider, req.GetRelationships()); err != nil {
@@ -104,7 +104,8 @@ func listAllRelationships(ctx context.Context, provider core.AuthorizationProvid
 	}
 }
 
-func listRuntimeModelResourceTypes(ctx context.Context, provider core.AuthorizationProvider) ([]*proto.AuthorizationModelResourceType, error) {
+// ListRuntimeModelResourceTypes lists cloned runtime resource types from every active-model page.
+func ListRuntimeModelResourceTypes(ctx context.Context, provider core.AuthorizationProvider) ([]*proto.AuthorizationModelResourceType, error) {
 	var out []*proto.AuthorizationModelResourceType
 	pageToken := ""
 	for {
@@ -134,7 +135,8 @@ func listRuntimeModelResourceTypes(ctx context.Context, provider core.Authorizat
 	}
 }
 
-func mergeModelResourceTypes(static, runtime []*proto.AuthorizationModelResourceType) []*proto.AuthorizationModelResourceType {
+// MergeModelResourceTypes combines static and runtime types, preferring static names.
+func MergeModelResourceTypes(static, runtime []*proto.AuthorizationModelResourceType) []*proto.AuthorizationModelResourceType {
 	out := make([]*proto.AuthorizationModelResourceType, 0, len(static)+len(runtime))
 	staticNames := make(map[string]struct{}, len(static))
 	for _, resourceType := range static {
@@ -152,7 +154,8 @@ func mergeModelResourceTypes(static, runtime []*proto.AuthorizationModelResource
 	return out
 }
 
-func stampModel(model *proto.AuthorizationModel, now time.Time) error {
+// StampModel sets the model content hash and timestamp version.
+func StampModel(model *proto.AuthorizationModel, now time.Time) error {
 	id, err := modelContentHash(model)
 	if err != nil {
 		return err

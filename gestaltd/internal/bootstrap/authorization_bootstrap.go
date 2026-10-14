@@ -2,8 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,12 +13,11 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/authorizationstate"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -86,12 +83,12 @@ func bootstrapAuthorizationProviderState(
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
-	runtimeResourceTypes, err := listRuntimeAuthorizationModelResourceTypes(ctx, provider)
+	runtimeResourceTypes, err := authorizationstate.ListRuntimeModelResourceTypes(ctx, provider)
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
-	model.ResourceTypes = mergedAuthorizationModelResourceTypes(model.GetResourceTypes(), runtimeResourceTypes)
-	if err := stampAuthorizationModel(model, time.Now()); err != nil {
+	model.ResourceTypes = authorizationstate.MergeModelResourceTypes(model.GetResourceTypes(), runtimeResourceTypes)
+	if err := authorizationstate.StampModel(model, time.Now()); err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
 	staticRelationships, err := staticAuthorizationRelationships(ctx, cfg.Authorization, users)
@@ -153,46 +150,6 @@ func staticAuthorizationModel(cfg *config.Config) (*proto.AuthorizationModel, er
 		}
 	}
 	return model, nil
-}
-
-func stampAuthorizationModel(model *proto.AuthorizationModel, now time.Time) error {
-	id, err := authorizationModelContentHash(model)
-	if err != nil {
-		return err
-	}
-	model.Id = id
-	model.Version = strconv.FormatInt(now.Unix(), 10)
-	return nil
-}
-
-func authorizationModelContentHash(model *proto.AuthorizationModel) (string, error) {
-	content := gproto.Clone(model).(*proto.AuthorizationModel)
-	content.Id = ""
-	content.Version = ""
-	data, err := gproto.MarshalOptions{Deterministic: true}.Marshal(content)
-	if err != nil {
-		return "", fmt.Errorf("hash authorization model content: %w", err)
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]), nil
-}
-
-func mergedAuthorizationModelResourceTypes(staticResourceTypes, runtimeResourceTypes []*proto.AuthorizationModelResourceType) []*proto.AuthorizationModelResourceType {
-	out := make([]*proto.AuthorizationModelResourceType, 0, len(staticResourceTypes)+len(runtimeResourceTypes))
-	staticNames := make(map[string]struct{}, len(staticResourceTypes))
-	for _, resourceType := range staticResourceTypes {
-		name := strings.TrimSpace(resourceType.GetName())
-		staticNames[name] = struct{}{}
-		out = append(out, resourceType)
-	}
-	for _, resourceType := range runtimeResourceTypes {
-		name := strings.TrimSpace(resourceType.GetName())
-		if _, ok := staticNames[name]; ok {
-			continue
-		}
-		out = append(out, resourceType)
-	}
-	return out
 }
 
 func defaultRole(def config.AuthorizationResourceTypeDef) string {
@@ -459,36 +416,6 @@ func listRuntimeAuthorizationRelationships(ctx context.Context, provider core.Au
 				continue
 			}
 			out = append(out, gproto.Clone(relationship).(*proto.Relationship))
-		}
-		pageToken = strings.TrimSpace(resp.GetNextPageToken())
-		if pageToken == "" {
-			return out, nil
-		}
-	}
-}
-
-func listRuntimeAuthorizationModelResourceTypes(ctx context.Context, provider core.AuthorizationProvider) ([]*proto.AuthorizationModelResourceType, error) {
-	var out []*proto.AuthorizationModelResourceType
-	pageToken := ""
-	for {
-		resp, err := provider.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
-			Filter: &proto.AuthorizationModelResourceTypeFilter{
-				SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
-			},
-			PageSize:  500,
-			PageToken: pageToken,
-		})
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return out, nil
-			}
-			return nil, fmt.Errorf("list runtime model resource types: %w", err)
-		}
-		for _, resourceType := range resp.GetResourceTypes() {
-			if resourceType.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
-				continue
-			}
-			out = append(out, gproto.Clone(resourceType).(*proto.AuthorizationModelResourceType))
 		}
 		pageToken = strings.TrimSpace(resp.GetNextPageToken())
 		if pageToken == "" {
