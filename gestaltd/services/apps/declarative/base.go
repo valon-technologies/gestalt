@@ -89,9 +89,6 @@ func (b *Base) StaticHeaders() map[string]string {
 func (b *Base) Description() string { return b.IntegrationDesc }
 
 func (b *Base) ConnectionMode() core.ConnectionMode {
-	if b.ConnMode == "" {
-		return core.ConnectionModeSubject
-	}
 	return core.NormalizeConnectionMode(b.ConnMode)
 }
 

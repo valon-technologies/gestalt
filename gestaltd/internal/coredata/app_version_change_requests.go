@@ -151,11 +151,7 @@ func (s *AppVersionChangeRequestService) LatestDesiredRevisionID(ctx context.Con
 }
 
 func (s *AppVersionChangeRequestService) LatestRevisionIDForVersion(ctx context.Context, appName, version string) (string, error) {
-	requests, err := s.ListRequestsByApp(ctx, appName)
-	if err != nil {
-		return "", err
-	}
-	return latestDesiredRevisionID(requests, version), nil
+	return s.LatestDesiredRevisionID(ctx, appName, version)
 }
 
 func latestDesiredRevisionID(requests []*core.AppVersionChangeRequest, desiredVersion string) string {

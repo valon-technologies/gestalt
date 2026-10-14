@@ -272,9 +272,6 @@ func (s *StubIntegration) DisplayName() string { return s.DN }
 func (s *StubIntegration) Description() string { return s.Desc }
 
 func (s *StubIntegration) ConnectionMode() core.ConnectionMode {
-	if s.ConnMode == "" {
-		return core.ConnectionModeSubject
-	}
 	return core.NormalizeConnectionMode(s.ConnMode)
 }
 func (s *StubIntegration) AuthTypes() []string { return nil }
