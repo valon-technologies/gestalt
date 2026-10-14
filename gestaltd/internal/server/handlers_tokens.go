@@ -501,17 +501,10 @@ func resolvedAuthTypes(combined []string) []string {
 
 func connectionAuthTypes(auth config.ConnectionAuthDef, integrationAuthTypes []string) []string {
 	if auth.Type == "" {
-		if len(integrationAuthTypes) == 0 {
-			return nil
-		}
 		return append([]string(nil), integrationAuthTypes...)
 	}
 
-	authTypes := userFacingAuthTypes([]string{string(auth.Type)})
-	if len(authTypes) == 0 {
-		return nil
-	}
-	return authTypes
+	return userFacingAuthTypes([]string{string(auth.Type)})
 }
 
 func authTypesContain(authTypes []string, want string) bool {
@@ -524,9 +517,6 @@ func authTypesContain(authTypes []string, want string) bool {
 }
 
 func userFacingAuthTypes(authTypes []string) []string {
-	if len(authTypes) == 0 {
-		return nil
-	}
 	var out []string
 	for _, authType := range authTypes {
 		normalized, ok := userFacingAuthType(authType)

@@ -2294,9 +2294,6 @@ func closeAuth(provider core.IdentityProvider) error {
 }
 
 func closeAuthProviders(providers map[string]core.IdentityProvider) error {
-	if len(providers) == 0 {
-		return nil
-	}
 	var errs []error
 	for _, provider := range providers {
 		if provider == nil {
@@ -2308,9 +2305,6 @@ func closeAuthProviders(providers map[string]core.IdentityProvider) error {
 }
 
 func closeAuthorizationProviders(providers map[string]core.AuthorizationProvider) error {
-	if len(providers) == 0 {
-		return nil
-	}
 	var errs []error
 	for _, provider := range providers {
 		if provider == nil {

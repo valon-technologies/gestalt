@@ -246,9 +246,6 @@ func NewClientSets(ctx context.Context, configs map[string]Config) (ClientSets, 
 
 // Close releases every underlying gRPC connection.
 func (sets ClientSets) Close() error {
-	if len(sets) == 0 {
-		return nil
-	}
 	var first error
 	for name, clients := range sets {
 		if clients == nil {
@@ -263,8 +260,5 @@ func (sets ClientSets) Close() error {
 
 // Get returns the client set for a named remote.
 func (sets ClientSets) Get(name string) *ClientSet {
-	if len(sets) == 0 {
-		return nil
-	}
 	return sets[strings.TrimSpace(name)]
 }

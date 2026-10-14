@@ -105,9 +105,6 @@ func (r *PublicHostServiceRegistry) Snapshot() []PublicHostService {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if len(r.services) == 0 {
-		return nil
-	}
 	return append([]PublicHostService(nil), r.services...)
 }
 
