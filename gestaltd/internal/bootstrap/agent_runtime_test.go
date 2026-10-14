@@ -671,16 +671,13 @@ func TestAgentRuntimePingChecksConfiguredProvidersInParallel(t *testing.T) {
 func TestAgentRuntimePingReportsPendingStartupProvidersUnavailable(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := newAgentRuntime(&config.Config{
+	runtime := newAgentRuntime(&config.Config{
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"managed": {},
 			},
 		},
 	}, nil)
-	if err != nil {
-		t.Fatalf("newAgentRuntime: %v", err)
-	}
 
 	done := make(chan error, 1)
 	go func() {

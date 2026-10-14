@@ -156,10 +156,7 @@ func testWorkflowReconcileEnv(t *testing.T) (*config.Config, *workflowRuntime, *
 			},
 		},
 	}
-	runtime, err := newWorkflowRuntime(cfg)
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
+	runtime := newWorkflowRuntime(cfg)
 	runtime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	provider := &fakeWorkflowProvider{}
 	runtime.PublishProvider("temporal", provider)

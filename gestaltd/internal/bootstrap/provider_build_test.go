@@ -100,15 +100,9 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 			},
 		},
 	}
-	workflowRuntime, err := newWorkflowRuntime(cfg)
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
+	workflowRuntime := newWorkflowRuntime(cfg)
 	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
-	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
-	if err != nil {
-		t.Fatalf("newAgentRuntime: %v", err)
-	}
+	agentRuntime := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
 	agentManager := newLazyAgentManager()
 	deps := Deps{
 		AgentManager:    agentManager,
@@ -250,15 +244,9 @@ func TestBuildWorkflowsAndAgentsClosesSuccessesOnCrossGroupFailure(t *testing.T)
 			},
 		},
 	}
-	workflowRuntime, err := newWorkflowRuntime(cfg)
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
+	workflowRuntime := newWorkflowRuntime(cfg)
 	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
-	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
-	if err != nil {
-		t.Fatalf("newAgentRuntime: %v", err)
-	}
+	agentRuntime := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
 	deps := Deps{
 		WorkflowRuntime: workflowRuntime,
 		AgentRuntime:    agentRuntime,
@@ -376,16 +364,13 @@ func TestBuildConfiguredProvidersLeavesLateSuccessUnpublishedAfterFailure(t *tes
 func TestAgentRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := newAgentRuntime(&config.Config{
+	runtime := newAgentRuntime(&config.Config{
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"managed": {},
 			},
 		},
 	}, nil)
-	if err != nil {
-		t.Fatalf("newAgentRuntime: %v", err)
-	}
 	runtime.FailPendingProviders(errors.New("boom"))
 	runtime.PublishProvider("managed", providerBuildOrderingAgentProvider{})
 	if _, _, err := runtime.ResolveProvider(context.Background(), "managed"); err == nil {
@@ -396,16 +381,13 @@ func TestAgentRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T) {
 func TestAgentRuntimeFailStartupProviderKeepsPublishedProvider(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := newAgentRuntime(&config.Config{
+	runtime := newAgentRuntime(&config.Config{
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				" managed ": {},
 			},
 		},
 	}, nil)
-	if err != nil {
-		t.Fatalf("newAgentRuntime: %v", err)
-	}
 	original := &providerBuildOrderingAgentProvider{}
 	runtime.PublishProvider("managed", original)
 	runtime.FailStartupProvider(" managed ", errors.New("boom"))
@@ -421,16 +403,13 @@ func TestAgentRuntimeFailStartupProviderKeepsPublishedProvider(t *testing.T) {
 func TestAgentRuntimeSkipsConfiguredProviderPublishAfterStartupFailure(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := newAgentRuntime(&config.Config{
+	runtime := newAgentRuntime(&config.Config{
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"managed": {},
 			},
 		},
 	}, nil)
-	if err != nil {
-		t.Fatalf("newAgentRuntime: %v", err)
-	}
 	runtime.FailStartupProvider("managed", errors.New("boom"))
 	runtime.PublishProvider("managed", providerBuildOrderingAgentProvider{})
 	if _, _, err := runtime.ResolveProvider(context.Background(), "managed"); err == nil {
@@ -448,10 +427,7 @@ func TestWorkflowRuntimeFailStartupProviderKeepsPublishedProvider(t *testing.T) 
 			},
 		},
 	}
-	runtime, err := newWorkflowRuntime(cfg)
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
+	runtime := newWorkflowRuntime(cfg)
 	runtime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	original := &startupTestWorkflowProvider{}
 	runtime.PublishProvider("temporal", original)
@@ -475,10 +451,7 @@ func TestWorkflowRuntimeSkipsConfiguredProviderPublishAfterStartupFailure(t *tes
 			},
 		},
 	}
-	runtime, err := newWorkflowRuntime(cfg)
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
+	runtime := newWorkflowRuntime(cfg)
 	runtime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	runtime.FailStartupProvider("temporal", errors.New("boom"))
 	runtime.PublishProvider("temporal", startupTestWorkflowProvider{})

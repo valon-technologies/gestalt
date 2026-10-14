@@ -1167,16 +1167,10 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		deps.DevSupervisor = factories.DevSupervisor
 	}
 
-	workflowRuntime, err := newWorkflowRuntime(cfg)
-	if err != nil {
-		return nil, err
-	}
+	workflowRuntime := newWorkflowRuntime(cfg)
 	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	deps.WorkflowRuntime = workflowRuntime
-	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
-	if err != nil {
-		return nil, err
-	}
+	agentRuntime := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
 	deps.AgentRuntime = agentRuntime
 
 	selectedIndexedDBName, def, err := cfg.SelectedIndexedDBProvider()

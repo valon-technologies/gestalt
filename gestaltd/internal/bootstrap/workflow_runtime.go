@@ -23,7 +23,7 @@ type workflowRuntime struct {
 	startupWaits           *startupWaitTracker
 }
 
-func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
+func newWorkflowRuntime(cfg *config.Config) *workflowRuntime {
 	runtime := &workflowRuntime{
 		configuredProviders:    map[string]struct{}{},
 		startupFailedProviders: map[string]struct{}{},
@@ -37,7 +37,7 @@ func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 			runtime.defaultProviderName = strings.TrimSpace(selectedProviderName)
 		}
 	}
-	return runtime, nil
+	return runtime
 }
 
 func (r *workflowRuntime) InitProviderPlaceholders(defs map[string]*config.ProviderEntry) {

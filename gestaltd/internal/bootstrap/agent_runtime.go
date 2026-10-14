@@ -25,7 +25,7 @@ type agentRuntime struct {
 	startupWaits           *startupWaitTracker
 }
 
-func newAgentRuntime(cfg *config.Config, startupWaits *startupWaitTracker) (*agentRuntime, error) {
+func newAgentRuntime(cfg *config.Config, startupWaits *startupWaitTracker) *agentRuntime {
 	if startupWaits == nil {
 		startupWaits = newStartupWaitTracker()
 	}
@@ -50,7 +50,7 @@ func newAgentRuntime(cfg *config.Config, startupWaits *startupWaitTracker) (*age
 			runtime.pendingProviders[name] = newAgentProviderHandle(name, startupWaits)
 		}
 	}
-	return runtime, nil
+	return runtime
 }
 
 func newAgentProviderHandle(name string, tracker *startupWaitTracker) *startupProviderHandle[coreagent.Provider] {
