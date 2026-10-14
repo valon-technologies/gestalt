@@ -21,6 +21,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/pathutil"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
@@ -2932,11 +2933,7 @@ func pathWithinRoot(root, target string) bool {
 	if strings.TrimSpace(root) == "" || strings.TrimSpace(target) == "" {
 		return false
 	}
-	rel, err := filepath.Rel(root, target)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+	return pathutil.IsWithin(root, target)
 }
 
 func localLockEntryFromPreparedInstall(paths lifecyclePaths, kind, name string, app *config.ProviderEntry, install *preparedInstall) (LockEntry, error) {
