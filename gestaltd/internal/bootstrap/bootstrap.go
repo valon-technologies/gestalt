@@ -24,6 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/featureflags"
+	"github.com/valon-technologies/gestalt/server/internal/providerutil"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/scim"
@@ -624,7 +625,7 @@ func (r *Result) Close(ctx context.Context) error {
 		r.DevSupervisor = nil
 	}
 	var errs []error
-	authCloseErr := closeAuth(r.Auth)
+	authCloseErr := providerutil.Close(r.Auth)
 	if len(r.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(r.AuthProviders)
 	}
@@ -1389,7 +1390,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	}
 
 	var errs []error
-	authCloseErr := closeAuth(p.Auth)
+	authCloseErr := providerutil.Close(p.Auth)
 	if len(p.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(p.AuthProviders)
 	}
@@ -2285,14 +2286,6 @@ func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.Provid
 	return mapToYAMLNode(providerCfg)
 }
 
-func closeAuth(provider core.IdentityProvider) error {
-	closer, ok := provider.(interface{ Close() error })
-	if !ok {
-		return nil
-	}
-	return closer.Close()
-}
-
 func closeAuthProviders(providers map[string]core.IdentityProvider) error {
 	if len(providers) == 0 {
 		return nil
@@ -2302,7 +2295,7 @@ func closeAuthProviders(providers map[string]core.IdentityProvider) error {
 		if provider == nil {
 			continue
 		}
-		errs = append(errs, closeAuth(provider))
+		errs = append(errs, providerutil.Close(provider))
 	}
 	return errors.Join(errs...)
 }
@@ -2325,15 +2318,7 @@ func closeExternalCredentialProviderCandidate(services *coredata.Services) error
 	if services == nil || core.ExternalCredentialProviderMissing(services.ExternalCredentials) {
 		return nil
 	}
-	return closeExternalCredentialProvider(services.ExternalCredentials)
-}
-
-func closeExternalCredentialProvider(provider core.ExternalCredentialProvider) error {
-	closer, ok := provider.(interface{ Close() error })
-	if !ok {
-		return nil
-	}
-	return closer.Close()
+	return providerutil.Close(services.ExternalCredentials)
 }
 
 func closeSecretManager(sm core.SecretManager) error {

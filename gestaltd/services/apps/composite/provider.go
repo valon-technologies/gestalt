@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/providerutil"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
@@ -151,16 +152,16 @@ func (p *Provider) ConnectionForOperation(operation string) string {
 
 func (p *Provider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
 	if p.staticOperationOwner(operation) == operationOwnerMCP {
-		return resolveProviderConnection(p.mcp, operation, params)
+		return providerutil.ResolveConnection(p.mcp, operation, params)
 	}
-	return resolveProviderConnection(p.api, operation, params)
+	return providerutil.ResolveConnection(p.api, operation, params)
 }
 
 func (p *Provider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
 	if p.staticOperationOwner(operation) == operationOwnerMCP {
-		return providerConnectionOverrideAllowed(p.mcp, operation, params)
+		return providerutil.ConnectionOverrideAllowed(p.mcp, operation, params)
 	}
-	return providerConnectionOverrideAllowed(p.api, operation, params)
+	return providerutil.ConnectionOverrideAllowed(p.api, operation, params)
 }
 
 func (p *Provider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
@@ -290,20 +291,6 @@ func (p *Provider) staticOperationOwner(operation string) operationOwner {
 		return operationOwnerMCP
 	}
 	return operationOwnerNone
-}
-
-func resolveProviderConnection(prov core.Provider, operation string, params map[string]any) (string, error) {
-	if resolver, ok := prov.(core.OperationConnectionResolver); ok {
-		return resolver.ResolveConnectionForOperation(operation, params)
-	}
-	return prov.ConnectionForOperation(operation), nil
-}
-
-func providerConnectionOverrideAllowed(prov core.Provider, operation string, params map[string]any) bool {
-	if policy, ok := prov.(core.OperationConnectionOverridePolicy); ok {
-		return policy.OperationConnectionOverrideAllowed(operation, params)
-	}
-	return false
 }
 
 func sessionProviderForOperation(ctx context.Context, providers []core.Provider, operation, token string) (core.Provider, error) {
