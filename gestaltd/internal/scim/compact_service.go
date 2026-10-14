@@ -969,7 +969,7 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 	if start > len(matching)+1 {
 		start = len(matching) + 1
 	}
-	end := pageMin(start-1+count, len(matching))
+	end := min(start-1+count, len(matching))
 	page := matching[start-1 : end]
 	var hydration *scimHydration
 	if len(page) > 0 {
@@ -987,12 +987,6 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 		out = append(out, u)
 	}
 	return listResponse[User]{Schemas: []string{ListSchemaURN}, TotalResults: len(matching), StartIndex: start, ItemsPerPage: len(out), Resources: out}, nil
-}
-func pageMin(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 func (s *CompactService) mutateUser(ctx context.Context, clientID, id, ifMatch string, requestedActive *bool, u persistedUser) (*User, error) {
 	unlock := s.lock(id)

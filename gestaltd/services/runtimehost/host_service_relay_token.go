@@ -180,11 +180,7 @@ func (m *HostServiceRelayTokenManager) signClaims(claims *hostServiceRelayTokenC
 
 func (m *HostServiceRelayTokenManager) tokenTTL(req HostServiceRelayTokenRequest) time.Duration {
 	if req.TTL > 0 {
-		ttl := req.TTL
-		if ttl > m.maxTTL {
-			return m.maxTTL
-		}
-		return ttl
+		return min(req.TTL, m.maxTTL)
 	}
 	if req.Caller != nil {
 		return DefaultInvocationCapabilityTTL
