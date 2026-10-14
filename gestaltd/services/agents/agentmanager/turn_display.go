@@ -39,9 +39,6 @@ func cloneTurnEventForDisplay(event *coreagent.TurnEvent) *coreagent.TurnEvent {
 }
 
 func synthesizeTurnDisplay(event *coreagent.TurnEvent) *coreagent.TurnDisplay {
-	if event == nil {
-		return nil
-	}
 	switch strings.TrimSpace(event.Type) {
 	case "agent.message.delta", "assistant.delta":
 		text := displayStringField(event.Data, "text", "delta", "content")
@@ -110,9 +107,6 @@ func synthesizeTurnDisplay(event *coreagent.TurnEvent) *coreagent.TurnDisplay {
 }
 
 func normalizeTurnDisplay(event *coreagent.TurnEvent) {
-	if event == nil || event.Display == nil {
-		return
-	}
 	display := event.Display
 	display.Kind = strings.TrimSpace(display.Kind)
 	display.Phase = strings.TrimSpace(display.Phase)
@@ -153,7 +147,7 @@ func knownAssistantTextEvent(eventType string) bool {
 
 func displayToolLabel(data map[string]any) string {
 	label := displayStringField(data, "tool_name", "toolName", "name", "operation", "tool_id", "toolId")
-	if strings.TrimSpace(label) == "" {
+	if label == "" {
 		return "tool"
 	}
 	return label
@@ -170,41 +164,23 @@ func displayStatusText(data map[string]any) string {
 	if status := displayStringField(data, "status", "state"); status != "" {
 		return status
 	}
-	if status := displayValueField(data, "statusCode", "status_code"); status != nil {
-		return fmt.Sprint(status)
-	}
-	return ""
+	return displayErrorText(displayValueField(data, "statusCode", "status_code"))
 }
 
 func displayErrorText(value any) string {
 	if value == nil {
 		return ""
 	}
-	if text, ok := value.(string); ok {
-		return text
-	}
 	return fmt.Sprint(value)
 }
 
 func displayStringField(data map[string]any, keys ...string) string {
-	for _, key := range keys {
-		value, ok := data[key]
-		if !ok || value == nil {
-			continue
-		}
-		switch typed := value.(type) {
-		case string:
-			return strings.TrimSpace(typed)
-		default:
-			return strings.TrimSpace(fmt.Sprint(typed))
-		}
-	}
-	return ""
+	return strings.TrimSpace(displayErrorText(displayValueField(data, keys...)))
 }
 
 func displayValueField(data map[string]any, keys ...string) any {
 	for _, key := range keys {
-		if value, ok := data[key]; ok && value != nil {
+		if value := data[key]; value != nil {
 			return value
 		}
 	}
