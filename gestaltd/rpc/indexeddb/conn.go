@@ -6,6 +6,7 @@ import (
 	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	"github.com/valon-technologies/gestalt/server/rpc/internal/contextutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -31,22 +32,9 @@ func NewConn(conn grpc.ClientConnInterface, opts Options) idb.Database {
 	return NewClient(proto.NewIndexedDBClient(conn), opts)
 }
 
-func attachTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout <= 0 {
-		if ctx == nil {
-			return context.Background(), func() {}
-		}
-		return ctx, func() {}
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithTimeout(ctx, timeout)
-}
-
 func (db *clientDB) callCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	if binding := strings.TrimSpace(db.opts.Binding); binding != "" {
 		ctx = metadata.AppendToOutgoingContext(ctx, hostServiceBindingHeader, binding)
 	}
-	return attachTimeout(ctx, db.opts.UnaryTimeout)
+	return contextutil.WithOptionalTimeout(ctx, db.opts.UnaryTimeout)
 }
