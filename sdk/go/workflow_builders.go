@@ -749,21 +749,18 @@ func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.Workflo
 	}, nil
 }
 
-func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) (WorkflowDefinitionSpec, error) {
+func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) WorkflowDefinitionSpec {
 	if value == nil {
-		return WorkflowDefinitionSpec{}, nil
+		return WorkflowDefinitionSpec{}
 	}
-	activations, err := workflowActivationsFromProto(value.GetActivations())
-	if err != nil {
-		return WorkflowDefinitionSpec{}, err
-	}
+	activations := workflowActivationsFromProto(value.GetActivations())
 	return WorkflowDefinitionSpec{
 		ID:          value.GetId(),
 		Target:      workflowTargetInputPtrFromTarget(value.GetTarget()),
 		Activations: activations,
 		Paused:      value.GetPaused(),
 		RunAs:       strings.TrimSpace(value.GetRunAs()),
-	}, nil
+	}
 }
 
 func workflowDefinitionToProto(input WorkflowDefinition) (*proto.WorkflowDefinition, error) {
@@ -827,9 +824,9 @@ func workflowActivationToProto(input WorkflowActivation) (*proto.WorkflowActivat
 	return out, nil
 }
 
-func workflowActivationsFromProto(values []*proto.WorkflowActivation) ([]WorkflowActivation, error) {
+func workflowActivationsFromProto(values []*proto.WorkflowActivation) []WorkflowActivation {
 	if len(values) == 0 {
-		return nil, nil
+		return nil
 	}
 	out := make([]WorkflowActivation, 0, len(values))
 	for _, value := range values {
@@ -838,7 +835,7 @@ func workflowActivationsFromProto(values []*proto.WorkflowActivation) ([]Workflo
 		}
 		out = append(out, workflowActivationFromProto(value))
 	}
-	return out, nil
+	return out
 }
 
 func workflowActivationFromProto(value *proto.WorkflowActivation) WorkflowActivation {

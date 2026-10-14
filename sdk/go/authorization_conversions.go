@@ -423,21 +423,18 @@ func authorizationModelResourceTypeFromProto(in *proto.AuthorizationModelResourc
 	}
 }
 
-func protoAuthorizationModelResourceType(in *AuthorizationModelResourceType) (*proto.AuthorizationModelResourceType, error) {
+func protoAuthorizationModelResourceType(in *AuthorizationModelResourceType) *proto.AuthorizationModelResourceType {
 	if in == nil {
-		return nil, nil
+		return nil
 	}
-	allowedRelations, err := protoModelRelations(in.Relations)
-	if err != nil {
-		return nil, err
-	}
+	allowedRelations := protoModelRelations(in.Relations)
 	return &proto.AuthorizationModelResourceType{
 		Name:        in.Name,
 		Relations:   allowedRelations,
 		Actions:     protoModelActions(in.Actions),
 		SourceLayer: proto.SourceLayer(in.SourceLayer),
 		DefaultRole: in.DefaultRole,
-	}, nil
+	}
 }
 
 func authorizationModelResourceTypesFromProto(in []*proto.AuthorizationModelResourceType) []*AuthorizationModelResourceType {
@@ -448,16 +445,13 @@ func authorizationModelResourceTypesFromProto(in []*proto.AuthorizationModelReso
 	return out
 }
 
-func protoAuthorizationModelResourceTypes(in []*AuthorizationModelResourceType) ([]*proto.AuthorizationModelResourceType, error) {
+func protoAuthorizationModelResourceTypes(in []*AuthorizationModelResourceType) []*proto.AuthorizationModelResourceType {
 	out := make([]*proto.AuthorizationModelResourceType, 0, len(in))
-	for i, item := range in {
-		resourceType, err := protoAuthorizationModelResourceType(item)
-		if err != nil {
-			return nil, fmt.Errorf("resource_types[%d]: %w", i, err)
-		}
+	for _, item := range in {
+		resourceType := protoAuthorizationModelResourceType(item)
 		out = append(out, resourceType)
 	}
-	return out, nil
+	return out
 }
 
 func modelRelationsFromProto(in []*proto.ModelRelation) []*ModelRelation {
@@ -472,20 +466,17 @@ func modelRelationsFromProto(in []*proto.ModelRelation) []*ModelRelation {
 	return out
 }
 
-func protoModelRelations(in []*ModelRelation) ([]*proto.ModelRelation, error) {
+func protoModelRelations(in []*ModelRelation) []*proto.ModelRelation {
 	out := make([]*proto.ModelRelation, 0, len(in))
-	for i, item := range in {
+	for _, item := range in {
 		if item == nil {
 			out = append(out, nil)
 			continue
 		}
-		allowedTargets, err := protoModelAllowedTargets(item.AllowedTargets)
-		if err != nil {
-			return nil, fmt.Errorf("relations[%d].allowed_targets: %w", i, err)
-		}
+		allowedTargets := protoModelAllowedTargets(item.AllowedTargets)
 		out = append(out, &proto.ModelRelation{Name: item.Name, AllowedTargets: allowedTargets})
 	}
-	return out, nil
+	return out
 }
 
 func modelActionsFromProto(in []*proto.ModelAction) []*ModelAction {
@@ -533,12 +524,12 @@ func modelAllowedTargetsFromProto(in []*proto.ModelAllowedTarget) []*ModelAllowe
 	return out
 }
 
-func protoModelAllowedTargets(in []*ModelAllowedTarget) ([]*proto.ModelAllowedTarget, error) {
+func protoModelAllowedTargets(in []*ModelAllowedTarget) []*proto.ModelAllowedTarget {
 	out := make([]*proto.ModelAllowedTarget, 0, len(in))
 	for _, item := range in {
 		out = append(out, protoModelAllowedTarget(item))
 	}
-	return out, nil
+	return out
 }
 
 func protoModelAllowedTarget(in *ModelAllowedTarget) *proto.ModelAllowedTarget {
@@ -589,17 +580,14 @@ func authorizationModelResourceTypeFilterFromProto(in *proto.AuthorizationModelR
 	return &AuthorizationModelResourceTypeFilter{Name: in.GetName(), SourceLayer: SourceLayer(in.GetSourceLayer())}
 }
 
-func protoListActiveModelResourceTypesResponse(in *ListActiveModelResourceTypesResponse) (*proto.ListActiveModelResourceTypesResponse, error) {
+func protoListActiveModelResourceTypesResponse(in *ListActiveModelResourceTypesResponse) *proto.ListActiveModelResourceTypesResponse {
 	if in == nil {
-		return nil, nil
+		return nil
 	}
-	resourceTypes, err := protoAuthorizationModelResourceTypes(in.ResourceTypes)
-	if err != nil {
-		return nil, err
-	}
+	resourceTypes := protoAuthorizationModelResourceTypes(in.ResourceTypes)
 	return &proto.ListActiveModelResourceTypesResponse{
 		ResourceTypes: resourceTypes,
 		NextPageToken: in.NextPageToken,
 		ModelId:       in.ModelId,
-	}, nil
+	}
 }
