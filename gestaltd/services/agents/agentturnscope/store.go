@@ -62,9 +62,6 @@ func (s *Store) PutSession(scope Scope) error {
 		return fmt.Errorf("agent session scope requires provider and session")
 	}
 	scope.TurnID = ""
-	if scope.ToolRefsSet || len(scope.ToolRefs) > 0 {
-		scope.ToolRefsSet = true
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.sessionScopes == nil {
@@ -253,9 +250,7 @@ func (s *Store) BindProviderTurnID(providerName, sessionID, turnID, providerTurn
 		return fmt.Errorf("agent turn binding was not found")
 	}
 	binding.ProviderTurnID = strings.TrimSpace(providerTurnID)
-	if aliasKey != key {
-		s.turnBindings[aliasKey] = binding
-	}
+	s.turnBindings[aliasKey] = binding
 	return nil
 }
 
