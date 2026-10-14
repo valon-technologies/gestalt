@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -53,7 +54,7 @@ func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycl
 		return nil, err
 	}
 
-	cfgStruct, err := structFromMap(config)
+	cfgStruct, err := protoutil.StructFromMap(config)
 	if err != nil {
 		return nil, fmt.Errorf("encode provider config: %w", err)
 	}
