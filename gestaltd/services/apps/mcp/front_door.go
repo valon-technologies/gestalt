@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -143,9 +144,7 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 	if limit < 1 {
 		limit = defaultSearchLimit
 	}
-	if limit > maxSearchLimit {
-		limit = maxSearchLimit
-	}
+	limit = min(limit, maxSearchLimit)
 	if instance != "" && appFilter == "" {
 		return mcpgo.NewToolResultError("app is required when _instance is set"), nil
 	}
@@ -346,11 +345,8 @@ func (h *StatelessHTTPHandler) callInvoke(ctx context.Context, req mcpgo.CallToo
 		return mcpgo.NewToolResultError("app and operation are required"), nil
 	}
 	nested := map[string]any{}
-	if raw, ok := args["arguments"].(map[string]any); ok {
-		for key, value := range raw {
-			nested[key] = value
-		}
-	}
+	raw, _ := args["arguments"].(map[string]any)
+	maps.Copy(nested, raw)
 	if inst, ok := args["_instance"]; ok {
 		nested["_instance"] = inst
 	}
@@ -384,26 +380,15 @@ func searchTextMatches(query string, parts ...string) bool {
 }
 
 func stringArg(args map[string]any, key string) string {
-	if args == nil {
+	raw := args[key]
+	if raw == nil {
 		return ""
-	}
-	raw, ok := args[key]
-	if !ok || raw == nil {
-		return ""
-	}
-	if value, ok := raw.(string); ok {
-		return strings.TrimSpace(value)
 	}
 	return strings.TrimSpace(fmt.Sprint(raw))
 }
 
 func intArg(args map[string]any, key string, fallback int) int {
-	if args == nil {
-		return fallback
-	}
 	switch value := args[key].(type) {
-	case nil:
-		return fallback
 	case int:
 		return value
 	case int32:

@@ -335,8 +335,8 @@ func validateProjectedCatalogInvocation(rawOp, projectedOp catalog.CatalogOperat
 	}
 	enums := sessionCatalogSchemaEnums(projectedOp.InputSchema)
 	for name, values := range enums {
-		raw, ok := args[name]
-		if !ok || raw == nil {
+		raw := args[name]
+		if raw == nil {
 			continue
 		}
 		if _, allowed := values[fmt.Sprint(raw)]; !allowed {
@@ -431,7 +431,7 @@ func schemaProperties(raw json.RawMessage) map[string]map[string]any {
 
 func normalizedSessionCatalogInstance(value any) string {
 	raw := strings.TrimSpace(fmt.Sprint(value))
-	if value == nil || raw == "" || raw == "<nil>" {
+	if raw == "<nil>" {
 		return ""
 	}
 	return raw
