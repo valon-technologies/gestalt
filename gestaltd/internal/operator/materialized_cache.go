@@ -166,11 +166,7 @@ func (c materializedCache) Restore(req materializedCacheRequest) (*materializedC
 	} else if !os.IsNotExist(err) {
 		fallback = materializedCacheInvalid
 	}
-	return materializedCacheRestoreResult(key, fallback)
-}
-
-func materializedCacheRestoreResult(key materializedCacheKey, result materializedCacheLookupResult) (*materializedCacheRestore, error) {
-	return &materializedCacheRestore{Result: result, Key: key}, nil
+	return &materializedCacheRestore{Result: fallback, Key: key}, nil
 }
 
 func (c materializedCache) Put(ctx context.Context, req materializedCacheRequest, sourceDir string) (materializedCachePutResult, error) {
