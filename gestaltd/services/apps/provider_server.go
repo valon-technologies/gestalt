@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -114,7 +115,7 @@ func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) *core.HTTPSubjec
 		RawBody:         append([]byte(nil), req.GetRawBody()...),
 		SecurityScheme:  req.GetSecurityScheme(),
 		VerifiedSubject: req.GetVerifiedSubject(),
-		VerifiedClaims:  cloneStringMap(req.GetVerifiedClaims()),
+		VerifiedClaims:  maputil.CloneNonEmpty(req.GetVerifiedClaims()),
 	}
 }
 

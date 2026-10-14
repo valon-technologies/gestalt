@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"sync/atomic"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -94,7 +94,7 @@ func (p *LocalProvider) StartSession(_ context.Context, req *proto.StartRuntimeS
 		id:       sessionID,
 		rootDir:  rootDir,
 		state:    SessionStateReady,
-		metadata: cloneStringMap(req.GetMetadata()),
+		metadata: maputil.CloneNonEmpty(req.GetMetadata()),
 	}
 	if session.metadata == nil {
 		session.metadata = map[string]string{}
@@ -283,7 +283,7 @@ func (p *LocalProvider) StartApp(ctx context.Context, req *proto.StartHostedAppR
 	rootDir := session.rootDir
 	p.mu.Unlock()
 
-	env := cloneStringMap(req.GetEnv())
+	env := maputil.CloneNonEmpty(req.GetEnv())
 	if env == nil {
 		env = map[string]string{}
 	}
@@ -493,13 +493,6 @@ func cloneSession(session *localSession) *proto.RuntimeSession {
 	return &proto.RuntimeSession{
 		Id:       session.id,
 		State:    session.state,
-		Metadata: cloneStringMap(session.metadata),
+		Metadata: maputil.CloneNonEmpty(session.metadata),
 	}
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	return maps.Clone(values)
 }

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -105,11 +104,4 @@ func (s *Server) listAdminAppRegistryAppVersions(w http.ResponseWriter, r *http.
 		App:      appName,
 		Versions: appregistry.VersionsFromIndex(index, appName),
 	})
-}
-
-func cloneAppRegistryConfig(src map[string]config.AppRegistryConfig) map[string]config.AppRegistryConfig {
-	if len(src) == 0 {
-		return nil
-	}
-	return maps.Clone(src)
 }

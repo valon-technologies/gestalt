@@ -2,10 +2,10 @@ package plugins
 
 import (
 	"context"
-	"maps"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
@@ -82,13 +82,6 @@ func httpSubjectRequestProto(req *core.HTTPSubjectResolveRequest) (*proto.HTTPSu
 		RawBody:         append([]byte(nil), req.RawBody...),
 		SecurityScheme:  req.SecurityScheme,
 		VerifiedSubject: req.VerifiedSubject,
-		VerifiedClaims:  cloneStringMap(req.VerifiedClaims),
+		VerifiedClaims:  maputil.CloneNonEmpty(req.VerifiedClaims),
 	}, nil
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	return maps.Clone(values)
 }

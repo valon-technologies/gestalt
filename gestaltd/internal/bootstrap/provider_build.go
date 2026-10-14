@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -1232,7 +1233,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	command := entry.Command
 	args := entry.Args
 	workdir := ""
-	env := clonePluginEnv(entry.Env)
+	env := maputil.CloneNonEmpty(entry.Env)
 	var cleanup func()
 	defer func() {
 		if cleanup != nil {
@@ -2337,13 +2338,6 @@ func closeCaches(values ...corecache.Cache) error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-func clonePluginEnv(src map[string]string) map[string]string {
-	if len(src) == 0 {
-		return nil
-	}
-	return maps.Clone(src)
 }
 
 func buildAppStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (appservice.StaticProviderSpec, config.StaticConnectionPlan, error) {

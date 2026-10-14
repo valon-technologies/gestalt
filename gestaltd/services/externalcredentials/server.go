@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -142,7 +143,7 @@ func (s *externalCredentialProviderServer) ValidateCredentialConfig(ctx context.
 		ConnectionID:     strings.TrimSpace(req.GetConnectionId()),
 		Mode:             core.NormalizeConnectionMode(core.ConnectionMode(req.GetMode())),
 		Auth:             externalCredentialAuthConfigFromProto(req.GetAuth()),
-		ConnectionParams: cloneStringMap(req.GetConnectionParams()),
+		ConnectionParams: maputil.CloneNonEmpty(req.GetConnectionParams()),
 	})
 	if err != nil {
 		return nil, externalCredentialToGRPCError("validate external credential config", err)
@@ -163,7 +164,7 @@ func (s *externalCredentialProviderServer) ResolveCredential(ctx context.Context
 		ActorSubjectID:      strings.TrimSpace(req.GetActorSubjectId()),
 		Instance:            strings.TrimSpace(req.GetInstance()),
 		Auth:                externalCredentialAuthConfigFromProto(req.GetAuth()),
-		ConnectionParams:    cloneStringMap(req.GetConnectionParams()),
+		ConnectionParams:    maputil.CloneNonEmpty(req.GetConnectionParams()),
 	})
 	if err != nil {
 		return nil, externalCredentialToGRPCError("resolve external credential", err)
@@ -175,7 +176,7 @@ func (s *externalCredentialProviderServer) ResolveCredential(ctx context.Context
 		Token:        resp.Token,
 		ExpiresAt:    timeToProto(resp.ExpiresAt),
 		MetadataJson: resp.MetadataJSON,
-		Params:       cloneStringMap(resp.Params),
+		Params:       maputil.CloneNonEmpty(resp.Params),
 		Credential:   externalCredentialToProto(resp.Credential),
 	}, nil
 }
@@ -193,7 +194,7 @@ func (s *externalCredentialProviderServer) ExchangeCredential(ctx context.Contex
 		Instance:            strings.TrimSpace(req.GetInstance()),
 		Auth:                externalCredentialAuthConfigFromProto(req.GetAuth()),
 		CredentialJSON:      req.GetCredentialJson(),
-		ConnectionParams:    cloneStringMap(req.GetConnectionParams()),
+		ConnectionParams:    maputil.CloneNonEmpty(req.GetConnectionParams()),
 	})
 	if err != nil {
 		return nil, externalCredentialToGRPCError("exchange external credential", err)

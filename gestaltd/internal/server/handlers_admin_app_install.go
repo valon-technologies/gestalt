@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 )
 
 type adminAppInstallationInfo struct {
@@ -238,7 +239,7 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		reader = &appregistry.RegistryReader{}
 	}
 	return &appregistry.Installer{
-		Registries:       cloneAppRegistryConfig(cfg.AppRegistries),
+		Registries:       maputil.CloneNonEmpty(cfg.AppRegistries),
 		ConfigApps:       cfg.AppDefs,
 		Reader:           reader,
 		ChangeRequests:   cfg.Services.AppVersionChangeRequests,
@@ -256,5 +257,5 @@ func appregistryRetentionCatalog(registries map[string]config.AppRegistryConfig)
 	if len(registries) == 0 {
 		return nil
 	}
-	return appregistry.NewGCSCatalogStore(cloneAppRegistryConfig(registries))
+	return appregistry.NewGCSCatalogStore(maputil.CloneNonEmpty(registries))
 }
