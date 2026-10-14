@@ -22,17 +22,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type dialedHostedAppConn struct {
-	conn      *grpc.ClientConn
-	lifecycle proto.ProviderLifecycleClient
-}
-
-type dialedHostedAgentConn struct {
-	conn      *grpc.ClientConn
-	lifecycle proto.ProviderLifecycleClient
-}
-
-type dialedHostedWorkflowConn struct {
+type dialedHostedConn struct {
 	conn      *grpc.ClientConn
 	lifecycle proto.ProviderLifecycleClient
 }
@@ -90,32 +80,18 @@ func DialHostedApp(ctx context.Context, target string, opts ...DialOption) (Host
 	if err != nil {
 		return nil, err
 	}
-	return &dialedHostedAppConn{
+	return &dialedHostedConn{
 		conn:      conn,
 		lifecycle: proto.NewProviderLifecycleClient(conn),
 	}, nil
 }
 
 func DialHostedAgent(ctx context.Context, target string, opts ...DialOption) (HostedAgentConn, error) {
-	conn, err := dialHostedConn(ctx, target, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &dialedHostedAgentConn{
-		conn:      conn,
-		lifecycle: proto.NewProviderLifecycleClient(conn),
-	}, nil
+	return DialHostedApp(ctx, target, opts...)
 }
 
 func DialHostedWorkflow(ctx context.Context, target string, opts ...DialOption) (HostedWorkflowConn, error) {
-	conn, err := dialHostedConn(ctx, target, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &dialedHostedWorkflowConn{
-		conn:      conn,
-		lifecycle: proto.NewProviderLifecycleClient(conn),
-	}, nil
+	return DialHostedApp(ctx, target, opts...)
 }
 
 func dialHostedConn(ctx context.Context, target string, opts ...DialOption) (*grpc.ClientConn, error) {
@@ -133,7 +109,7 @@ func dialHostedConn(ctx context.Context, target string, opts ...DialOption) (*gr
 	var conn *grpc.ClientConn
 	switch network {
 	case "unix":
-		conn, err = dialUnixTarget(ctx, address, cfg)
+		conn, err = dialUnixTarget(address, cfg)
 	case "tcp":
 		conn, err = dialTCPTarget(address, cfg)
 	case "tls":
@@ -144,6 +120,7 @@ func dialHostedConn(ctx context.Context, target string, opts ...DialOption) (*gr
 	if err != nil {
 		return nil, err
 	}
+	conn.Connect()
 	if err := waitForHostedGRPCReady(ctx, conn); err != nil {
 		_ = conn.Close()
 		return nil, err
@@ -175,63 +152,21 @@ func waitForHostedGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 	}
 }
 
-func (c *dialedHostedAppConn) Lifecycle() proto.ProviderLifecycleClient {
+func (c *dialedHostedConn) Lifecycle() proto.ProviderLifecycleClient {
 	if c == nil {
 		return nil
 	}
 	return c.lifecycle
 }
 
-func (c *dialedHostedAppConn) Close() error {
+func (c *dialedHostedConn) Close() error {
 	if c == nil || c.conn == nil {
 		return nil
 	}
 	return c.conn.Close()
 }
 
-func (c *dialedHostedAppConn) Conn() grpc.ClientConnInterface {
-	if c == nil || c.conn == nil {
-		return nil
-	}
-	return c.conn
-}
-
-func (c *dialedHostedAgentConn) Lifecycle() proto.ProviderLifecycleClient {
-	if c == nil {
-		return nil
-	}
-	return c.lifecycle
-}
-
-func (c *dialedHostedAgentConn) Close() error {
-	if c == nil || c.conn == nil {
-		return nil
-	}
-	return c.conn.Close()
-}
-
-func (c *dialedHostedAgentConn) Conn() grpc.ClientConnInterface {
-	if c == nil || c.conn == nil {
-		return nil
-	}
-	return c.conn
-}
-
-func (c *dialedHostedWorkflowConn) Lifecycle() proto.ProviderLifecycleClient {
-	if c == nil {
-		return nil
-	}
-	return c.lifecycle
-}
-
-func (c *dialedHostedWorkflowConn) Close() error {
-	if c == nil || c.conn == nil {
-		return nil
-	}
-	return c.conn.Close()
-}
-
-func (c *dialedHostedWorkflowConn) Conn() grpc.ClientConnInterface {
+func (c *dialedHostedConn) Conn() grpc.ClientConnInterface {
 	if c == nil || c.conn == nil {
 		return nil
 	}
@@ -274,8 +209,8 @@ func dialTarget(raw string) (network string, address string, err error) {
 	return "unix", filepath.Clean(raw), nil
 }
 
-func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.ClientConn, error) {
-	conn, err := grpc.NewClient(
+func dialUnixTarget(socket string, cfg dialConfig) (*grpc.ClientConn, error) {
+	return grpc.NewClient(
 		"passthrough:///localhost",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpcutil.InternalClientDialOption(),
@@ -286,25 +221,15 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 		}),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
-	if err != nil {
-		return nil, err
-	}
-	conn.Connect()
-	return conn, nil
 }
 
 func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
-	conn, err := grpc.NewClient(
+	return grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpcutil.InternalClientDialOption(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
-	if err != nil {
-		return nil, err
-	}
-	conn.Connect()
-	return conn, nil
 }
 
 func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
@@ -312,7 +237,7 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse hosted app tls dial target %q: %w", address, err)
 	}
-	conn, err := grpc.NewClient(
+	return grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			MinVersion: tls.VersionTLS12,
@@ -322,11 +247,6 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 		grpcutil.InternalClientDialOption(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
-	if err != nil {
-		return nil, err
-	}
-	conn.Connect()
-	return conn, nil
 }
 
 func hostedAppGRPCOptions(cfg dialConfig) []otelgrpc.Option {
