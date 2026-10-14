@@ -20,20 +20,20 @@ func bindProviderConnection(prov core.Provider, connection string) core.Provider
 	}
 	if core.SupportsSessionCatalog(prov) {
 		wrapped = &connectedSessionCatalogProvider{
-			Provider:      wrapped,
-			sessionSource: prov,
+			connectedProviderForwarder: connectedProviderForwarder{Provider: wrapped},
+			sessionSource:              prov,
 		}
 	}
 	if graphQL, ok := prov.(core.GraphQLSurfaceInvoker); ok {
 		wrapped = &connectedGraphQLProvider{
-			Provider: wrapped,
-			graphQL:  graphQL,
+			connectedProviderForwarder: connectedProviderForwarder{Provider: wrapped},
+			graphQL:                    graphQL,
 		}
 	}
 	if auth, ok := prov.(core.OAuthProvider); ok {
 		wrapped = &connectedOAuthProvider{
-			Provider: wrapped,
-			auth:     auth,
+			connectedProviderForwarder: connectedProviderForwarder{Provider: wrapped},
+			auth:                       auth,
 		}
 	}
 	return wrapped
@@ -102,34 +102,54 @@ func (p *connectedProvider) Close() error {
 	return providerutil.Close(p.inner)
 }
 
-type connectedSessionCatalogProvider struct {
+type connectedProviderForwarder struct {
 	core.Provider
+}
+
+func (p *connectedProviderForwarder) SupportsSessionCatalog() bool {
+	return core.SupportsSessionCatalog(p.Provider)
+}
+
+func (p *connectedProviderForwarder) SupportsHTTPSubject() bool {
+	return core.SupportsHTTPSubject(p.Provider)
+}
+
+func (p *connectedProviderForwarder) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
+	return subject, err
+}
+
+func (p *connectedProviderForwarder) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	return providerutil.ResolveConnection(p.Provider, operation, params)
+}
+
+func (p *connectedProviderForwarder) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	return providerutil.ConnectionOverrideAllowed(p.Provider, operation, params)
+}
+
+func (p *connectedProviderForwarder) StaticHeaders() map[string]string {
+	return providerStaticHeaders(p.Provider)
+}
+
+func (p *connectedProviderForwarder) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	cat, scoped, err := core.CatalogForRequest(ctx, p.Provider, token)
+	if !scoped {
+		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", p.Name()))
+	}
+	return cat, err
+}
+
+func (p *connectedProviderForwarder) Close() error {
+	return providerutil.Close(p.Provider)
+}
+
+type connectedSessionCatalogProvider struct {
+	connectedProviderForwarder
 	sessionSource core.Provider
 }
 
 func (p *connectedSessionCatalogProvider) SupportsSessionCatalog() bool {
 	return core.SupportsSessionCatalog(p.sessionSource)
-}
-
-func (p *connectedSessionCatalogProvider) SupportsHTTPSubject() bool {
-	return core.SupportsHTTPSubject(p.Provider)
-}
-
-func (p *connectedSessionCatalogProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
-	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
-	return subject, err
-}
-
-func (p *connectedSessionCatalogProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
-	return providerutil.ResolveConnection(p.Provider, operation, params)
-}
-
-func (p *connectedSessionCatalogProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
-	return providerutil.ConnectionOverrideAllowed(p.Provider, operation, params)
-}
-
-func (p *connectedSessionCatalogProvider) StaticHeaders() map[string]string {
-	return providerStaticHeaders(p.Provider)
 }
 
 func (p *connectedSessionCatalogProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
@@ -140,84 +160,18 @@ func (p *connectedSessionCatalogProvider) CatalogForRequest(ctx context.Context,
 	return cat, err
 }
 
-func (p *connectedSessionCatalogProvider) Close() error {
-	return providerutil.Close(p.Provider)
-}
-
 type connectedGraphQLProvider struct {
-	core.Provider
+	connectedProviderForwarder
 	graphQL core.GraphQLSurfaceInvoker
-}
-
-func (p *connectedGraphQLProvider) SupportsSessionCatalog() bool {
-	return core.SupportsSessionCatalog(p.Provider)
-}
-
-func (p *connectedGraphQLProvider) SupportsHTTPSubject() bool {
-	return core.SupportsHTTPSubject(p.Provider)
-}
-
-func (p *connectedGraphQLProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
-	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
-	return subject, err
-}
-
-func (p *connectedGraphQLProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
-	return providerutil.ResolveConnection(p.Provider, operation, params)
-}
-
-func (p *connectedGraphQLProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
-	return providerutil.ConnectionOverrideAllowed(p.Provider, operation, params)
-}
-
-func (p *connectedGraphQLProvider) StaticHeaders() map[string]string {
-	return providerStaticHeaders(p.Provider)
 }
 
 func (p *connectedGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
 	return p.graphQL.InvokeGraphQL(ctx, request, token)
 }
 
-func (p *connectedGraphQLProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	cat, scoped, err := core.CatalogForRequest(ctx, p.Provider, token)
-	if !scoped {
-		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", p.Name()))
-	}
-	return cat, err
-}
-
-func (p *connectedGraphQLProvider) Close() error {
-	return providerutil.Close(p.Provider)
-}
-
 type connectedOAuthProvider struct {
-	core.Provider
+	connectedProviderForwarder
 	auth core.OAuthProvider
-}
-
-func (p *connectedOAuthProvider) SupportsSessionCatalog() bool {
-	return core.SupportsSessionCatalog(p.Provider)
-}
-
-func (p *connectedOAuthProvider) SupportsHTTPSubject() bool {
-	return core.SupportsHTTPSubject(p.Provider)
-}
-
-func (p *connectedOAuthProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
-	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
-	return subject, err
-}
-
-func (p *connectedOAuthProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
-	return providerutil.ResolveConnection(p.Provider, operation, params)
-}
-
-func (p *connectedOAuthProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
-	return providerutil.ConnectionOverrideAllowed(p.Provider, operation, params)
-}
-
-func (p *connectedOAuthProvider) StaticHeaders() map[string]string {
-	return providerStaticHeaders(p.Provider)
 }
 
 func (p *connectedOAuthProvider) AuthorizationURL(state string, scopes []string) string {
@@ -232,24 +186,12 @@ func (p *connectedOAuthProvider) RefreshToken(ctx context.Context, refreshToken 
 	return p.auth.RefreshToken(ctx, refreshToken)
 }
 
-func (p *connectedOAuthProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	cat, scoped, err := core.CatalogForRequest(ctx, p.Provider, token)
-	if !scoped {
-		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", p.Name()))
-	}
-	return cat, err
-}
-
 func (p *connectedOAuthProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
 	invoker, ok := p.Provider.(core.GraphQLSurfaceInvoker)
 	if !ok {
 		return nil, fmt.Errorf("graphql surface is not available")
 	}
 	return invoker.InvokeGraphQL(ctx, request, token)
-}
-
-func (p *connectedOAuthProvider) Close() error {
-	return providerutil.Close(p.Provider)
 }
 
 func providerStaticHeaders(prov core.Provider) map[string]string {
