@@ -31,7 +31,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -224,17 +223,6 @@ func startAgentOperation(ctx context.Context, operation string) (context.Context
 		observability.EndSpan(span, err)
 		observability.RecordAgentOperation(ctx, startedAt, err != nil, attrs...)
 	}
-}
-
-func cloneAgentRequest[T interface {
-	gproto.Message
-	comparable
-}](req T, empty T) T {
-	var zero T
-	if req == zero {
-		return empty
-	}
-	return gproto.Clone(req).(T)
 }
 
 func agentCaller(ctx context.Context, reqCtx *proto.RequestContext, providerName string) (invocation.ProviderKind, string) {
@@ -501,7 +489,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 			return nil, err
 		}
 	}
-	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.CreateAgentProviderSessionRequest{})
 	providerReq.IdempotencyKey = idempotencyKey
 	providerReq.ProviderName = providerName
 	providerReq.Model = strings.TrimSpace(req.GetModel())
@@ -725,7 +713,7 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 		return nil, fmt.Errorf("agent session metadata: %w", err)
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
-	providerReq := cloneAgentRequest(req, &proto.UpdateAgentProviderSessionRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.UpdateAgentProviderSessionRequest{})
 	providerReq.SessionId = strings.TrimSpace(req.GetSessionId())
 	providerReq.ProviderName = owned.providerName
 	providerReq.ClientRef = strings.TrimSpace(req.GetClientRef())
@@ -839,7 +827,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 			m.turnScopes.DeleteTurnBinding(ownedSession.providerName, ownedSession.session.ID, turnID)
 		}
 	}()
-	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.CreateAgentProviderTurnRequest{})
 	providerReq.TurnId = turnID
 	providerReq.SessionId = ownedSession.session.ID
 	providerReq.ProviderName = ownedSession.providerName
@@ -1005,7 +993,7 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
-	providerReq := cloneAgentRequest(req, &proto.CancelAgentProviderTurnRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.CancelAgentProviderTurnRequest{})
 	providerReq.TurnId = strings.TrimSpace(req.GetTurnId())
 	providerReq.ProviderName = owned.providerName
 	providerReq.Reason = strings.TrimSpace(req.GetReason())
@@ -1136,7 +1124,7 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	if interactionID == "" {
 		return nil, ErrAgentInteractionRequired
 	}
-	providerReq := cloneAgentRequest(req, &proto.ResolveAgentProviderInteractionRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.ResolveAgentProviderInteractionRequest{})
 	providerReq.InteractionId = interactionID
 	providerReq.TurnId = owned.turn.ID
 	providerReq.ProviderName = owned.providerName

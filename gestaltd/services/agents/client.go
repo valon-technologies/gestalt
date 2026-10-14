@@ -108,7 +108,7 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreagent.Provider, error
 func (r *remoteAgent) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderSessionCreateContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.CreateAgentProviderSessionRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (r *remoteAgent) CreateSession(ctx context.Context, req *proto.CreateAgentP
 func (r *remoteAgent) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.GetAgentProviderSessionRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.GetAgentProviderSessionRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (r *remoteAgent) GetSession(ctx context.Context, req *proto.GetAgentProvide
 func (r *remoteAgent) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.ListAgentProviderSessionsRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.ListAgentProviderSessionsRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (r *remoteAgent) ListSessions(ctx context.Context, req *proto.ListAgentProv
 func (r *remoteAgent) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.UpdateAgentProviderSessionRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.UpdateAgentProviderSessionRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func (r *remoteAgent) UpdateSession(ctx context.Context, req *proto.UpdateAgentP
 func (r *remoteAgent) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.CreateAgentProviderTurnRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req *proto.CreateAgentProv
 func (r *remoteAgent) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.GetAgentProviderTurnRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.GetAgentProviderTurnRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (r *remoteAgent) GetTurn(ctx context.Context, req *proto.GetAgentProviderTu
 func (r *remoteAgent) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.ListAgentProviderTurnsRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.ListAgentProviderTurnsRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (r *remoteAgent) ListTurns(ctx context.Context, req *proto.ListAgentProvide
 func (r *remoteAgent) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.CancelAgentProviderTurnRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.CancelAgentProviderTurnRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func (r *remoteAgent) CancelTurn(ctx context.Context, req *proto.CancelAgentProv
 func (r *remoteAgent) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.ListAgentProviderTurnEventsRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.ListAgentProviderTurnEventsRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func (r *remoteAgent) ListTurnEvents(ctx context.Context, req *proto.ListAgentPr
 func (r *remoteAgent) GetInteraction(ctx context.Context, req *proto.GetAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.GetAgentProviderInteractionRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.GetAgentProviderInteractionRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (r *remoteAgent) GetInteraction(ctx context.Context, req *proto.GetAgentPro
 func (r *remoteAgent) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.ListAgentProviderInteractionsRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.ListAgentProviderInteractionsRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -278,7 +278,7 @@ func (r *remoteAgent) ListInteractions(ctx context.Context, req *proto.ListAgent
 func (r *remoteAgent) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	providerReq := cloneAgentRequest(req, &proto.ResolveAgentProviderInteractionRequest{})
+	providerReq := protoutil.CloneOrDefault(req, &proto.ResolveAgentProviderInteractionRequest{})
 	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
@@ -292,7 +292,7 @@ func (r *remoteAgent) ResolveInteraction(ctx context.Context, req *proto.Resolve
 func (r *remoteAgent) GetCapabilities(ctx context.Context, req *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetCapabilities(ctx, cloneAgentRequest(req, &proto.GetAgentProviderCapabilitiesRequest{}))
+	resp, err := r.client.GetCapabilities(ctx, protoutil.CloneOrDefault(req, &proto.GetAgentProviderCapabilitiesRequest{}))
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			return &coreagent.ProviderCapabilities{}, nil
@@ -300,17 +300,6 @@ func (r *remoteAgent) GetCapabilities(ctx context.Context, req *proto.GetAgentPr
 		return nil, err
 	}
 	return agentProviderCapabilitiesFromProto(resp), nil
-}
-
-func cloneAgentRequest[T interface {
-	gproto.Message
-	comparable
-}](req T, empty T) T {
-	var zero T
-	if req == zero {
-		return empty
-	}
-	return gproto.Clone(req).(T)
 }
 
 func attachAgentProviderRequestContext(ctx context.Context, req gproto.Message, providerName string) error {
