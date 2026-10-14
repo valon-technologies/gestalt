@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -3176,13 +3177,13 @@ func normalizeConfigValue(value any) (any, error) {
 
 func mergeConfigValues(base, overlay any) any {
 	if overlay == nil {
-		return cloneConfigValue(base)
+		return jsonvalue.Clone(base)
 	}
 
 	baseMap, baseIsMap := base.(map[string]any)
 	overlayMap, overlayIsMap := overlay.(map[string]any)
 	if baseIsMap && overlayIsMap {
-		out := cloneConfigValue(baseMap).(map[string]any)
+		out := jsonvalue.Clone(baseMap).(map[string]any)
 		for key, value := range overlayMap {
 			if value == nil {
 				delete(out, key)
@@ -3193,26 +3194,7 @@ func mergeConfigValues(base, overlay any) any {
 		return out
 	}
 
-	return cloneConfigValue(overlay)
-}
-
-func cloneConfigValue(value any) any {
-	switch current := value.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(current))
-		for key, child := range current {
-			out[key] = cloneConfigValue(child)
-		}
-		return out
-	case []any:
-		out := make([]any, len(current))
-		for i, child := range current {
-			out[i] = cloneConfigValue(child)
-		}
-		return out
-	default:
-		return current
-	}
+	return jsonvalue.Clone(overlay)
 }
 
 const (
