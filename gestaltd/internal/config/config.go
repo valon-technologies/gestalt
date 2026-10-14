@@ -227,7 +227,7 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.ScalarNode {
 		scalar := strings.TrimSpace(value.Value)
 		switch {
-		case looksLikeMetadataURL(scalar):
+		case IsRemoteMetadataLocation(scalar):
 			s.metadataURL = scalar
 		case looksLikeUnsupportedScalarSource(scalar):
 			s.unsupported = scalar
@@ -3616,7 +3616,7 @@ func normalizeProviderSource(kind string, source *ProviderSource) {
 	switch {
 	case isBuiltinScalarSource(kind, source.scalar):
 		source.Builtin = source.scalar
-	case looksLikeMetadataURL(source.scalar):
+	case IsRemoteMetadataLocation(source.scalar):
 		source.metadataURL = source.scalar
 	case looksLikeUnsupportedScalarSource(source.scalar):
 		source.unsupported = source.scalar
@@ -3653,7 +3653,8 @@ func isBuiltinScalarSource(kind, source string) bool {
 	return false
 }
 
-func looksLikeMetadataURL(value string) bool {
+// IsRemoteMetadataLocation reports whether value is an HTTP(S) URI with a host.
+func IsRemoteMetadataLocation(value string) bool {
 	parsed, err := url.ParseRequestURI(strings.TrimSpace(value))
 	if err != nil {
 		return false
@@ -4037,7 +4038,7 @@ func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir stri
 		return
 	}
 	sourceValue = strings.TrimSpace(sourceValue)
-	if sourceValue == "" || isBuiltinScalarSource(kind, sourceValue) || looksLikeMetadataURL(sourceValue) || looksLikeUnsupportedScalarSource(sourceValue) {
+	if sourceValue == "" || isBuiltinScalarSource(kind, sourceValue) || IsRemoteMetadataLocation(sourceValue) || looksLikeUnsupportedScalarSource(sourceValue) {
 		return
 	}
 	entry["source"] = resolveRelativeConfigValue(baseDir, sourceValue)
