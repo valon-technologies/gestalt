@@ -71,7 +71,7 @@ func (s authorizationProviderServer) SetActiveModel(ctx context.Context, req *pr
 
 func (s authorizationProviderServer) ListActiveModelResourceTypes(ctx context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
 	resp, err := s.provider.ListActiveModelResourceTypes(ctx, listActiveModelResourceTypesRequestFromProto(req))
-	return authorizationProtoResponseErr(resp, protoListActiveModelResourceTypesResponse, "authorization list active model resource types", err)
+	return authorizationProtoResponse(resp, protoListActiveModelResourceTypesResponse, "authorization list active model resource types", err)
 }
 
 func authorizationProtoResponse[SDK any, PB any](resp *SDK, convert func(*SDK) *PB, operation string, err error) (*PB, error) {

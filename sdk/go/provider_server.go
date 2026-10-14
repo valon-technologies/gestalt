@@ -252,7 +252,7 @@ func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) HTTPSubjectReque
 		RawBody:         append([]byte(nil), req.GetRawBody()...),
 		SecurityScheme:  req.GetSecurityScheme(),
 		VerifiedSubject: req.GetVerifiedSubject(),
-		VerifiedClaims:  cloneVerifiedClaims(req.GetVerifiedClaims()),
+		VerifiedClaims:  cloneStringMap(req.GetVerifiedClaims()),
 	}
 }
 
@@ -287,17 +287,6 @@ func urlValuesFromProto(values map[string]*proto.StringList) url.Values {
 	out := make(url.Values, len(values))
 	for key, value := range values {
 		out[key] = append([]string(nil), value.GetValues()...)
-	}
-	return out
-}
-
-func cloneVerifiedClaims(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(values))
-	for key, value := range values {
-		out[key] = value
 	}
 	return out
 }

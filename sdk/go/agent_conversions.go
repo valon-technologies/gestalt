@@ -497,7 +497,7 @@ func agentSessionStartHookFromProto(value *proto.AgentSessionStartHook) AgentSes
 		Command: append([]string(nil), value.GetCommand()...),
 		Cwd:     value.GetCwd(),
 		Timeout: value.GetTimeout(),
-		Env:     cloneAgentStringMap(value.GetEnv()),
+		Env:     cloneStringMap(value.GetEnv()),
 		Output:  agentSessionStartHookOutputFromProto(value.GetOutput()),
 	}
 }
@@ -908,15 +908,4 @@ func optionalValueFromAny(value any) (*structpb.Value, error) {
 		return nil, nil
 	}
 	return valueFromAny(value)
-}
-
-func cloneAgentStringMap(value map[string]string) map[string]string {
-	if len(value) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(value))
-	for key, item := range value {
-		out[key] = item
-	}
-	return out
 }

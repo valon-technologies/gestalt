@@ -24,10 +24,7 @@ type workflowProviderServer struct {
 
 func (s workflowProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	ctx = withRequestContext(ctx, req.GetContext())
-	input, err := applyWorkflowProviderDefinitionRequestFromProto(req)
-	if err != nil {
-		return nil, providerRPCError("workflow apply definition", err)
-	}
+	input := applyWorkflowProviderDefinitionRequestFromProto(req)
 	definition, err := s.provider.ApplyDefinition(ctx, input)
 	if err != nil {
 		return nil, providerRPCError("workflow apply definition", err)
@@ -224,22 +221,19 @@ func (s workflowProviderServer) DeliverEvent(ctx context.Context, req *proto.Del
 	return event, providerRPCError("workflow deliver event", err)
 }
 
-func applyWorkflowProviderDefinitionRequestFromProto(req *proto.ApplyWorkflowProviderDefinitionRequest) (*ApplyWorkflowProviderDefinitionRequest, error) {
+func applyWorkflowProviderDefinitionRequestFromProto(req *proto.ApplyWorkflowProviderDefinitionRequest) *ApplyWorkflowProviderDefinitionRequest {
 	if req == nil {
-		return &ApplyWorkflowProviderDefinitionRequest{}, nil
+		return &ApplyWorkflowProviderDefinitionRequest{}
 	}
 	var spec *WorkflowDefinitionSpec
 	if req.GetSpec() != nil {
-		input, err := workflowDefinitionSpecFromProto(req.GetSpec())
-		if err != nil {
-			return nil, err
-		}
+		input := workflowDefinitionSpecFromProto(req.GetSpec())
 		spec = &input
 	}
 	return &ApplyWorkflowProviderDefinitionRequest{
 		Spec:           spec,
 		IdempotencyKey: req.GetIdempotencyKey(),
-	}, nil
+	}
 }
 
 func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRunRequest) *StartWorkflowProviderRunRequest {
