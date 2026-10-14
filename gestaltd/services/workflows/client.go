@@ -8,17 +8,14 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/egress"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -388,7 +385,7 @@ func workflowProtoTargetKind(target *proto.BoundWorkflowTarget) string {
 }
 
 func workflowProviderRequestContext(ctx context.Context, req gproto.Message, providerName string) (context.Context, context.CancelFunc, error) {
-	if err := attachWorkflowProviderRequestContext(ctx, req, providerName); err != nil {
+	if err := appaccessservice.AttachProviderRequestContext(ctx, req, providerName); err != nil {
 		cancelCtx, cancel := context.WithCancel(ctx)
 		return cancelCtx, cancel, err
 	}
@@ -401,36 +398,6 @@ func cloneWorkflowRequest(req gproto.Message, empty gproto.Message) gproto.Messa
 		return empty
 	}
 	return gproto.Clone(req)
-}
-
-func attachWorkflowProviderRequestContext(ctx context.Context, req gproto.Message, providerName string) error {
-	if req == nil {
-		return nil
-	}
-	protoutil.SetProviderNameIfEmpty(req, providerName)
-	reqCtx, err := appaccessservice.RequestContextProto(ctx, "", invocation.CallerProvider{})
-	if err != nil {
-		return err
-	}
-	if reqCtx == nil {
-		return nil
-	}
-	msg := req.ProtoReflect()
-	field := msg.Descriptor().Fields().ByName(protoreflect.Name("context"))
-	if field == nil || field.Kind() != protoreflect.MessageKind {
-		return nil
-	}
-	if msg.Has(field) {
-		existing, ok := msg.Get(field).Message().Interface().(*proto.RequestContext)
-		if !ok {
-			return nil
-		}
-		merged := appaccessservice.MergeRequestContext(existing, reqCtx)
-		msg.Set(field, protoreflect.ValueOfMessage(merged.ProtoReflect()))
-		return nil
-	}
-	msg.Set(field, protoreflect.ValueOfMessage(reqCtx.ProtoReflect()))
-	return nil
 }
 
 func workflowRunStatusMetric(run *proto.WorkflowRun) string {
