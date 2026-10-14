@@ -35,9 +35,6 @@ func (s SpecSurface) ConnectionField() string {
 }
 
 func ManifestProviderSurfaceURL(provider *providermanifestv1.Spec, surface SpecSurface) string {
-	if provider == nil {
-		return ""
-	}
 	switch surface {
 	case SpecSurfaceOpenAPI:
 		return provider.OpenAPIDocument()
@@ -51,9 +48,6 @@ func ManifestProviderSurfaceURL(provider *providermanifestv1.Spec, surface SpecS
 }
 
 func ManifestProviderSurfaceConnectionName(provider *providermanifestv1.Spec, surface SpecSurface) string {
-	if provider == nil {
-		return ""
-	}
 	return provider.SurfaceConnectionName(string(surface))
 }
 
@@ -89,9 +83,6 @@ func EffectiveProviderSpecBaseURL(entry *ProviderEntry, provider *providermanife
 				return baseURL
 			}
 		}
-	}
-	if provider == nil {
-		return ""
 	}
 	return provider.SpecBaseURL()
 }

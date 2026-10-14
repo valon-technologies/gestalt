@@ -68,9 +68,6 @@ func (p *ValidationApp) surfaceURL(spec *providermanifestv1.Spec, surface SpecSu
 }
 
 func manifestProviderSurfaceURL(provider *providermanifestv1.Spec, surface SpecSurface) string {
-	if provider == nil {
-		return ""
-	}
 	switch surface {
 	case SpecSurfaceOpenAPI:
 		return provider.OpenAPIDocument()

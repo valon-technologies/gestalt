@@ -829,26 +829,14 @@ const (
 )
 
 func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
-	normalized := normalizeConnectionModeValue(mode)
-	switch normalized {
-	case "", ConnectionModeSubject:
+	normalized := NormalizeOptionalConnectionMode(mode)
+	if normalized == "" {
 		return ConnectionModeSubject
-	case ConnectionModeNone:
-		return ConnectionModeNone
-	default:
-		return normalized
 	}
+	return normalized
 }
 
 func NormalizeOptionalConnectionMode(mode ConnectionMode) ConnectionMode {
-	normalized := normalizeConnectionModeValue(mode)
-	if normalized == "" {
-		return ""
-	}
-	return NormalizeConnectionMode(normalized)
-}
-
-func normalizeConnectionModeValue(mode ConnectionMode) ConnectionMode {
 	return ConnectionMode(strings.ToLower(strings.TrimSpace(string(mode))))
 }
 
