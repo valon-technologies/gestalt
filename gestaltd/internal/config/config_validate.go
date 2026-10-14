@@ -21,6 +21,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
+	"github.com/valon-technologies/gestalt/server/internal/ptrutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -453,7 +454,7 @@ func normalizeConnectionBindings(cfg *Config) error {
 				return fmt.Errorf("config validation: %s.%s.connections.%s.exposure is not supported", kind, name, localName)
 			}
 			if binding.CredentialRefresh != nil {
-				resolved.CredentialRefresh = cloneCredentialRefreshDef(binding.CredentialRefresh)
+				resolved.CredentialRefresh = ptrutil.Clone(binding.CredentialRefresh)
 			}
 			entry.Connections[localName] = &resolved
 		}
@@ -524,16 +525,8 @@ func cloneConnectionDef(src ConnectionDef) ConnectionDef {
 	dst := src
 	dst.Auth = cloneConnectionAuthDef(src.Auth)
 	dst.ConnectionParams = maps.Clone(src.ConnectionParams)
-	dst.CredentialRefresh = cloneCredentialRefreshDef(src.CredentialRefresh)
+	dst.CredentialRefresh = ptrutil.Clone(src.CredentialRefresh)
 	return dst
-}
-
-func cloneCredentialRefreshDef(src *CredentialRefreshDef) *CredentialRefreshDef {
-	if src == nil {
-		return nil
-	}
-	dst := *src
-	return &dst
 }
 
 func cloneConnectionAuthDef(src ConnectionAuthDef) ConnectionAuthDef {

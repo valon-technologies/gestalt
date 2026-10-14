@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
+	"github.com/valon-technologies/gestalt/server/internal/ptrutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
@@ -272,7 +273,7 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		PublishID:         strings.TrimSpace(input.PublishID),
 		BuilderVersion:    strings.TrimSpace(input.BuilderVersion),
 		DeclarationDigest: strings.TrimSpace(input.DeclarationDigest),
-		LocalSource:       cloneLocalSourceState(input.LocalSource),
+		LocalSource:       ptrutil.Clone(input.LocalSource),
 		Artifacts:         artifacts,
 		Interface:         InterfaceFromRelease(input.Release),
 		Requires:          requires,
@@ -592,7 +593,7 @@ func indexVersionFromEntry(entry Entry, metadataPath string) IndexVersion {
 		PublishID:         strings.TrimSpace(entry.PublishID),
 		BuilderVersion:    strings.TrimSpace(entry.BuilderVersion),
 		DeclarationDigest: strings.TrimSpace(entry.DeclarationDigest),
-		LocalSource:       cloneLocalSourceState(entry.LocalSource),
+		LocalSource:       ptrutil.Clone(entry.LocalSource),
 	}
 	if entry.PublishStartedAt != nil && !entry.PublishStartedAt.IsZero() {
 		startedAt := entry.PublishStartedAt.UTC()

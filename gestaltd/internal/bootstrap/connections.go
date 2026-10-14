@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/ptrutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
@@ -239,7 +240,7 @@ func staticConnectionRuntimeInfo(_, _ string, conn config.ConnectionDef, _ egres
 		AuthConfig:        authConfig,
 		AuthMapping:       config.CloneAuthMapping(conn.Auth.AuthMapping),
 		Params:            connectionParamDefaults(conn.ConnectionParams),
-		CredentialRefresh: cloneCredentialRefreshConfig(conn.CredentialRefresh),
+		CredentialRefresh: ptrutil.Clone(conn.CredentialRefresh),
 	}
 	return info, nil
 }
@@ -255,14 +256,6 @@ func applyConnectionRuntimeAuthOverlay(auth core.ExternalCredentialAuthConfig, p
 		auth.ClientSecret = sec
 	}
 	return auth
-}
-
-func cloneCredentialRefreshConfig(src *providermanifestv1.CredentialRefreshConfig) *providermanifestv1.CredentialRefreshConfig {
-	if src == nil {
-		return nil
-	}
-	dst := *src
-	return &dst
 }
 
 func ExternalCredentialAuthConfig(auth config.ConnectionAuthDef) core.ExternalCredentialAuthConfig {

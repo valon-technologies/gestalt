@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/ptrutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1123,7 +1124,7 @@ func cloneManifestConnections(src map[string]*ManifestConnectionDef) map[string]
 		copyDef := *def
 		copyDef.Params = maps.Clone(def.Params)
 		copyDef.Discovery = cloneProviderDiscovery(def.Discovery)
-		copyDef.CredentialRefresh = cloneCredentialRefreshConfig(def.CredentialRefresh)
+		copyDef.CredentialRefresh = ptrutil.Clone(def.CredentialRefresh)
 		cloned[name] = &copyDef
 	}
 	return cloned
@@ -1135,14 +1136,6 @@ func cloneProviderDiscovery(src *ProviderDiscovery) *ProviderDiscovery {
 	}
 	dst := *src
 	dst.Metadata = maps.Clone(src.Metadata)
-	return &dst
-}
-
-func cloneCredentialRefreshConfig(src *CredentialRefreshConfig) *CredentialRefreshConfig {
-	if src == nil {
-		return nil
-	}
-	dst := *src
 	return &dst
 }
 
@@ -1162,15 +1155,7 @@ func cloneHTTPSecurityScheme(src *HTTPSecurityScheme) *HTTPSecurityScheme {
 		return nil
 	}
 	cloned := *src
-	cloned.Secret = cloneHTTPSecretRef(src.Secret)
-	return &cloned
-}
-
-func cloneHTTPSecretRef(src *HTTPSecretRef) *HTTPSecretRef {
-	if src == nil {
-		return nil
-	}
-	cloned := *src
+	cloned.Secret = ptrutil.Clone(src.Secret)
 	return &cloned
 }
 
@@ -1202,17 +1187,9 @@ func cloneHTTPRequestBody(src *HTTPRequestBody) *HTTPRequestBody {
 	if src.Content != nil {
 		cloned.Content = make(map[string]*HTTPMediaType, len(src.Content))
 		for name, mediaType := range src.Content {
-			cloned.Content[name] = cloneHTTPMediaType(mediaType)
+			cloned.Content[name] = ptrutil.Clone(mediaType)
 		}
 	}
-	return &cloned
-}
-
-func cloneHTTPMediaType(src *HTTPMediaType) *HTTPMediaType {
-	if src == nil {
-		return nil
-	}
-	cloned := *src
 	return &cloned
 }
 

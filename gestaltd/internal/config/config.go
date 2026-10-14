@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/ptrutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -1509,18 +1510,10 @@ func cloneHTTPSecuritySchemes(src map[string]*HTTPSecurityScheme) map[string]*HT
 			continue
 		}
 		copyScheme := *scheme
-		copyScheme.Secret = cloneHTTPSecretRef(scheme.Secret)
+		copyScheme.Secret = ptrutil.Clone(scheme.Secret)
 		cloned[name] = &copyScheme
 	}
 	return cloned
-}
-
-func cloneHTTPSecretRef(src *providermanifestv1.HTTPSecretRef) *providermanifestv1.HTTPSecretRef {
-	if src == nil {
-		return nil
-	}
-	cloned := *src
-	return &cloned
 }
 
 func cloneHTTPBindings(src map[string]*HTTPBinding) map[string]*HTTPBinding {
@@ -1603,7 +1596,7 @@ func mergeHTTPSecurityScheme(base, override *HTTPSecurityScheme) *HTTPSecuritySc
 		merged.Scheme = override.Scheme
 	}
 	if override.Secret != nil {
-		merged.Secret = cloneHTTPSecretRef(override.Secret)
+		merged.Secret = ptrutil.Clone(override.Secret)
 	}
 	return &merged
 }
@@ -2460,7 +2453,7 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 		dst.ConnectionParams = maps.Clone(src.ConnectionParams)
 	}
 	if src.CredentialRefresh != nil {
-		dst.CredentialRefresh = cloneCredentialRefreshDef(src.CredentialRefresh)
+		dst.CredentialRefresh = ptrutil.Clone(src.CredentialRefresh)
 	}
 	if src.Discovery != nil {
 		dst.Discovery = src.Discovery

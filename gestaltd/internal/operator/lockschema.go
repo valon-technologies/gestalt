@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
+	"github.com/valon-technologies/gestalt/server/internal/ptrutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -167,7 +168,7 @@ func canonicalLockEntries(entries map[string]LockEntry, kind string) map[string]
 			Kind:               lockEntryKind(entry, kind),
 			Runtime:            lockEntryRuntime(entry, kind),
 			Source:             source,
-			SourceRef:          cloneLockSourceRef(entry.SourceRef),
+			SourceRef:          ptrutil.Clone(entry.SourceRef),
 			Version:            entry.Version,
 			Archives:           normalizeLockArchives(entry.Archives),
 			ValidationManifest: entry.ValidationManifest,
@@ -190,7 +191,7 @@ func normalizeRuntimeLockEntries(entries map[string]LockEntry) map[string]LockEn
 			entry.Source = entry.Package
 		}
 		entry.Kind = providermanifestv1.NormalizeKind(entry.Kind)
-		entry.SourceRef = cloneLockSourceRef(entry.SourceRef)
+		entry.SourceRef = ptrutil.Clone(entry.SourceRef)
 		entry.Archives = normalizeLockArchives(entry.Archives)
 		runtimeEntries[name] = entry
 	}
@@ -212,12 +213,4 @@ func normalizeLockArchives(archives map[string]LockArchive) map[string]LockArchi
 		normalized[platform] = archive
 	}
 	return normalized
-}
-
-func cloneLockSourceRef(src *LockSourceRef) *LockSourceRef {
-	if src == nil {
-		return nil
-	}
-	cloned := *src
-	return &cloned
 }
