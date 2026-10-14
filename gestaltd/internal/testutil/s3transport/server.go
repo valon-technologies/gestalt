@@ -3,7 +3,6 @@
 package s3transport
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -11,13 +10,10 @@ import (
 	"strings"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/relaytest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 )
 
 // Server wraps a gRPC server backed by StubS3 on a transport target.
@@ -56,48 +52,13 @@ func Start(target string, opts Options) (*Server, error) {
 		return nil, err
 	}
 	srv := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(requireRelayTokenUnary(opts.ExpectRelayToken)),
-		grpc.ChainStreamInterceptor(requireRelayTokenStream(opts.ExpectRelayToken)),
+		grpc.ChainUnaryInterceptor(relaytest.RequireRelayTokenUnary(opts.ExpectRelayToken)),
+		grpc.ChainStreamInterceptor(relaytest.RequireRelayTokenStream(opts.ExpectRelayToken)),
 	)
 	proto.RegisterS3Server(srv, s3.NewServer(stub, ""))
 	proto.RegisterS3ObjectAccessServer(srv, s3.NewObjectAccessServer(accessURLs, "sdk-test", "default"))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, target: target}, nil
-}
-
-func requireRelayTokenUnary(expected string) grpc.UnaryServerInterceptor {
-	expected = strings.TrimSpace(expected)
-	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if err := validateRelayToken(ctx, expected); err != nil {
-			return nil, err
-		}
-		return handler(ctx, req)
-	}
-}
-
-func requireRelayTokenStream(expected string) grpc.StreamServerInterceptor {
-	expected = strings.TrimSpace(expected)
-	return func(srv any, stream grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if err := validateRelayToken(stream.Context(), expected); err != nil {
-			return err
-		}
-		return handler(srv, stream)
-	}
-}
-
-func validateRelayToken(ctx context.Context, expected string) error {
-	if expected == "" {
-		return nil
-	}
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return status.Error(codes.Unauthenticated, "missing relay token metadata")
-	}
-	values := md.Get(runtimehost.HostServiceRelayTokenHeader)
-	if len(values) == 0 || strings.TrimSpace(values[0]) != expected {
-		return status.Error(codes.Unauthenticated, "invalid relay token metadata")
-	}
-	return nil
 }
 
 // Stop gracefully shuts down the server.

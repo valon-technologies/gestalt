@@ -3,7 +3,6 @@
 package cachetransport
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -11,13 +10,10 @@ import (
 	"strings"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/relaytest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 )
 
 // Server wraps a gRPC server backed by StubCache on a transport target.
@@ -47,36 +43,11 @@ func Start(target string, opts Options) (*Server, error) {
 	}
 	stub := coretesting.NewStubCache()
 	srv := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(requireRelayTokenUnary(opts.ExpectRelayToken)),
+		grpc.ChainUnaryInterceptor(relaytest.RequireRelayTokenUnary(opts.ExpectRelayToken)),
 	)
 	proto.RegisterCacheServer(srv, cacheservice.NewServer(stub, ""))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, target: target}, nil
-}
-
-func requireRelayTokenUnary(expected string) grpc.UnaryServerInterceptor {
-	expected = strings.TrimSpace(expected)
-	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if err := validateRelayToken(ctx, expected); err != nil {
-			return nil, err
-		}
-		return handler(ctx, req)
-	}
-}
-
-func validateRelayToken(ctx context.Context, expected string) error {
-	if expected == "" {
-		return nil
-	}
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return status.Error(codes.Unauthenticated, "missing relay token metadata")
-	}
-	values := md.Get(runtimehost.HostServiceRelayTokenHeader)
-	if len(values) == 0 || strings.TrimSpace(values[0]) != expected {
-		return status.Error(codes.Unauthenticated, "invalid relay token metadata")
-	}
-	return nil
 }
 
 // Stop gracefully shuts down the server.
