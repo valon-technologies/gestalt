@@ -103,20 +103,17 @@ export function agentOutputToProto(
       },
     };
   }
-  if (structuredSet) {
-    if (output.structured.schema === undefined) {
-      throw new Error("output.structured.schema is required");
-    }
-    return {
-      kind: {
-        case: "structured",
-        value: create(AgentStructuredOutputSchema, {
-          schema: optionalStruct(output.structured.schema),
-        }),
-      },
-    };
+  if (output.structured!.schema === undefined) {
+    throw new Error("output.structured.schema is required");
   }
-  throw new Error("exactly one of output.text or output.structured is required");
+  return {
+    kind: {
+      case: "structured",
+      value: create(AgentStructuredOutputSchema, {
+        schema: optionalStruct(output.structured!.schema),
+      }),
+    },
+  };
 }
 
 export function agentTurnOutputFromProto(
@@ -156,16 +153,13 @@ export function agentTurnOutputToProto(
       }),
     };
   }
-  if (structuredSet) {
-    return {
-      case: "structured",
-      value: create(AgentTurnStructuredOutputSchema, {
-        text: output.structured.text ?? "",
-        value: optionalStruct(output.structured.value),
-      }),
-    };
-  }
-  throw new Error("exactly one of output.text or output.structured is required");
+  return {
+    case: "structured",
+    value: create(AgentTurnStructuredOutputSchema, {
+      text: output.structured!.text ?? "",
+      value: optionalStruct(output.structured!.value),
+    }),
+  };
 }
 
 export function agentMessageFromProto(message: ProtoAgentMessage): AgentMessage {

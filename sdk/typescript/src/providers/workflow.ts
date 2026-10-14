@@ -1205,8 +1205,8 @@ export function workflowStepWhenFromProto(input?: ProtoWorkflowStepWhen): Workfl
 
 export function workflowStepToProto(input: WorkflowStep): ProtoWorkflowStep {
   const step = workflowStep(input);
-  const app = step.app ?? (step.action?.case === "app" ? step.action.value : undefined);
-  const agent = step.agent ?? (step.action?.case === "agent" ? step.action.value : undefined);
+  const app = step.app;
+  const agent = step.agent;
   return create(WorkflowStepSchema, {
     id: step.id ?? "",
     inputs: mapValues(step.inputs ?? {}, (value) => workflowValueToProto(value)!),

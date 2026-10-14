@@ -156,9 +156,7 @@ export function sanitizeJsonValue(value: Init<JsonInput>): JsonValue {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((item) =>
-      item === undefined ? null : sanitizeJsonValue(item),
-    );
+    return value.map((item) => sanitizeJsonValue(item));
   }
   const out: Record<string, JsonValue> = {};
   for (const [key, entry] of Object.entries(value)) {

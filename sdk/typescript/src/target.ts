@@ -7,7 +7,7 @@
  * @module target
  */
 import { readFileSync } from "node:fs";
-import { isAbsolute, normalize, resolve } from "node:path";
+import { normalize, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -144,9 +144,6 @@ export function defaultProviderName(root: string): string {
  */
 export function resolveProviderModulePath(root: string, target: ProviderTarget | ModuleTarget): string {
   const absolute = resolve(root, target.modulePath);
-  if (!isAbsolute(absolute)) {
-    throw new Error("provider module path did not resolve to an absolute path");
-  }
   return normalize(absolute);
 }
 

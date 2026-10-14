@@ -193,7 +193,7 @@ function decodeAppBody(
     });
   }
 
-  if (isRecord(parsed) && typeof parsed.status === "string") {
+  if (isRecord(parsed)) {
     if (parsed.status === "error") {
       const fields = extractInvokeErrorFields(parsed);
       throw new InvokeError({
