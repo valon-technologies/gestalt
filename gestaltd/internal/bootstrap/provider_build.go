@@ -1244,30 +1244,22 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	}
 	runtimeSupport, err := runtimeProvider.Support(ctx)
 	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
 	runtimePlan := buildRuntimePlan(entry, deps, runtimeSupport)
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig), deps); err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 		return nil, err
 	}
 	if command == "" && !hostedRuntimeUsesImageEntrypoint(runtimeConfig) {
 		if entry.ResolvedManifestPath == "" {
-			if runtimeOwned {
-				_ = runtimeProvider.Close()
-			}
+			closeOwnedRuntime(runtimeProvider, runtimeOwned)
 			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
 		}
 		execution, err := providerpkg.SourceRunCommand(entry.ResolvedManifestPath)
 		if err != nil {
-			if runtimeOwned {
-				_ = runtimeProvider.Close()
-			}
+			closeOwnedRuntime(runtimeProvider, runtimeOwned)
 			return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
 		}
 		command = execution.Command
@@ -1282,9 +1274,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	}
 	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindApp, name, entry, command, args, cleanup, runtimeConfig)
 	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 		return nil, err
 	}
 	cleanup = nil
@@ -1298,9 +1288,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	args = launch.args
 	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindApp, name, runtimeConfig))
 	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 		return nil, fmt.Errorf("start runtime session: %w", err)
 	}
 	sessionID := session.GetId()
@@ -1310,9 +1298,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 			return
 		}
 		_ = stopRuntimeSession(runtimeProvider, sessionID)
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 	}()
 	if _, err := waitForRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
 		return nil, fmt.Errorf("wait for runtime session %q ready: %w", sessionID, err)
@@ -1609,9 +1595,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedProvide
 	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindAgent, name, launch.runtimeConfig))
 	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_start", phaseStarted, err)
 	if err != nil {
-		if closeRuntime {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, closeRuntime)
 		if cleanup != nil {
 			cleanup()
 		}

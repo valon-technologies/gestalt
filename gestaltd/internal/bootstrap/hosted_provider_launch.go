@@ -45,24 +45,18 @@ func prepareHostedProviderLaunch(ctx context.Context, kind, name string, entry *
 	}
 	runtimeSupport, err := runtimeProvider.Support(ctx)
 	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
 	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, runtimeRequiresHostnameEgress(entry, deps))
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig), deps); err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 		return nil, err
 	}
 
 	cfg, err := componentprovider.DecodeYAMLConfig(node, kind+" provider")
 	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 		return nil, err
 	}
 	cleanup := func() {}
@@ -74,9 +68,7 @@ func prepareHostedProviderLaunch(ctx context.Context, kind, name string, entry *
 			Config:               cfg,
 		})
 		if err != nil {
-			if runtimeOwned {
-				_ = runtimeProvider.Close()
-			}
+			closeOwnedRuntime(runtimeProvider, runtimeOwned)
 			return nil, err
 		}
 		cfg = prepared.YAMLConfig
@@ -90,9 +82,7 @@ func prepareHostedProviderLaunch(ctx context.Context, kind, name string, entry *
 
 	launch, err := prepareHostedProcessLaunch(kind, name, entry, cfg.Command, cfg.Args, cleanup, runtimeConfig)
 	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
+		closeOwnedRuntime(runtimeProvider, runtimeOwned)
 		return nil, err
 	}
 	cleanup = launch.cleanup
