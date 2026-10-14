@@ -154,7 +154,7 @@ func RequestContextProto(ctx context.Context, publicBaseURL string, caller invoc
 		out.AgentSubject = agentwire.RunAsSubjectToProto(audit.AgentSubject)
 	}
 
-	if out.Invocation != nil && out.Invocation.RequestId == "" && out.Invocation.Depth == 0 && len(out.Invocation.CallChain) == 0 && out.Invocation.Surface == "" && !out.Invocation.InternalConnectionAccess && out.Invocation.Connection == "" {
+	if out.Invocation.RequestId == "" && out.Invocation.Depth == 0 && len(out.Invocation.CallChain) == 0 && out.Invocation.Surface == "" && !out.Invocation.InternalConnectionAccess && out.Invocation.Connection == "" {
 		out.Invocation = nil
 	}
 	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Agent == nil && !out.ToolRefsSet && len(out.ToolRefs) == 0 && out.Host == nil && out.AgentSubject == nil && out.Caller == nil && out.Invocation == nil && out.RequestMeta == nil {
@@ -165,15 +165,9 @@ func RequestContextProto(ctx context.Context, publicBaseURL string, caller invoc
 
 func MergeRequestContext(existing, fallback *proto.RequestContext) *proto.RequestContext {
 	if existing == nil {
-		if fallback == nil {
-			return nil
-		}
-		return gproto.Clone(fallback).(*proto.RequestContext)
+		return gproto.CloneOf(fallback)
 	}
-	if fallback == nil {
-		return gproto.Clone(existing).(*proto.RequestContext)
-	}
-	merged := gproto.Clone(existing).(*proto.RequestContext)
+	merged := gproto.CloneOf(existing)
 	if merged.GetSubject().GetId() == "" && fallback.GetSubject() != nil {
 		merged.Subject = fallback.GetSubject()
 	}
@@ -182,32 +176,32 @@ func MergeRequestContext(existing, fallback *proto.RequestContext) *proto.Reques
 			merged.Caller = fallback.GetCaller()
 		}
 	}
-	if merged.GetCredential() == nil && fallback.GetCredential() != nil {
+	if merged.GetCredential() == nil {
 		merged.Credential = fallback.GetCredential()
 	}
-	if merged.GetAccess() == nil && fallback.GetAccess() != nil {
+	if merged.GetAccess() == nil {
 		merged.Access = fallback.GetAccess()
 	}
-	if merged.GetWorkflow() == nil && fallback.GetWorkflow() != nil {
+	if merged.GetWorkflow() == nil {
 		merged.Workflow = fallback.GetWorkflow()
 	}
-	if merged.GetAgent() == nil && fallback.GetAgent() != nil {
+	if merged.GetAgent() == nil {
 		merged.Agent = fallback.GetAgent()
 	}
 	if !merged.GetToolRefsSet() && fallback.GetToolRefsSet() {
 		merged.ToolRefs = append([]*proto.AgentToolRef(nil), fallback.GetToolRefs()...)
 		merged.ToolRefsSet = true
 	}
-	if merged.GetHost() == nil && fallback.GetHost() != nil {
+	if merged.GetHost() == nil {
 		merged.Host = fallback.GetHost()
 	}
-	if merged.GetAgentSubject() == nil && fallback.GetAgentSubject() != nil {
+	if merged.GetAgentSubject() == nil {
 		merged.AgentSubject = fallback.GetAgentSubject()
 	}
-	if merged.GetInvocation() == nil && fallback.GetInvocation() != nil {
+	if merged.GetInvocation() == nil {
 		merged.Invocation = fallback.GetInvocation()
 	}
-	if merged.GetRequestMeta() == nil && fallback.GetRequestMeta() != nil {
+	if merged.GetRequestMeta() == nil {
 		merged.RequestMeta = fallback.GetRequestMeta()
 	}
 	return merged
