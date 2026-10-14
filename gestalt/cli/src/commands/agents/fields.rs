@@ -127,7 +127,6 @@ pub(crate) fn rendered_display_text(display: &AgentTurnDisplayInfo) -> Option<St
     Some(display_markdown::plain_text_for_format(
         text,
         display_format(display),
-        display_language(display),
     ))
 }
 
