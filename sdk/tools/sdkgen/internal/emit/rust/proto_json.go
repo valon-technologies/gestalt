@@ -403,7 +403,7 @@ func (r *renderer) renderWireJSONEncodeOneof(message *model.Message, o *model.On
 	wireKind := wireOneofKind(message, o)
 	fmt.Fprintf(&r.body, "    if let Some(active) = &%s {\n", expr)
 	r.body.WriteString("        match active {\n")
-	for _, f := range oneofFields(message, o) {
+	for _, f := range model.OneofFields(message, o) {
 		wireVariant := upperCamel(f.Name)
 		if isUnitVariant(f) {
 			fmt.Fprintf(&r.body, "            %s::%s(_) => {\n", wireKind, wireVariant)
@@ -424,7 +424,7 @@ func (r *renderer) renderWireJSONDecodeOneof(message *model.Message, o *model.On
 	wireKind := wireOneofKind(message, o)
 	r.body.WriteString("        " + ident + ": {\n")
 	r.body.WriteString("            let mut active = None;\n")
-	for _, f := range oneofFields(message, o) {
+	for _, f := range model.OneofFields(message, o) {
 		fmt.Fprintf(&r.body, "            if let Some(value) = object.get(%q) {\n", f.JSONName)
 		wireVariant := upperCamel(f.Name)
 		if isUnitVariant(f) {
@@ -513,7 +513,7 @@ func (r *renderer) ensureWireProtoJSON(fullName string) {
 		}
 	}
 	for _, o := range wire.Oneofs {
-		for _, f := range oneofFields(wire, o) {
+		for _, f := range model.OneofFields(wire, o) {
 			visitRef(fieldRef(f))
 		}
 	}

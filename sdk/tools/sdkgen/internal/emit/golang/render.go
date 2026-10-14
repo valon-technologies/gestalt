@@ -350,7 +350,7 @@ func (r *renderer) renderOneofTypes(m *model.Message, o *model.Oneof) {
 	fmt.Fprintf(&r.body, "// %s selects one variant of the %s oneof of %s.\n", unionName, o.Name, name)
 	r.body.WriteString("// A nil value means unset.\n")
 	fmt.Fprintf(&r.body, "type %s interface {\n\tis%s()\n}\n\n", unionName, unionName)
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		wrapper := variantTypeName(unionName, f)
 		switch f.Kind {
 		case model.KindJSONNull, model.KindUnit:
@@ -568,7 +568,7 @@ func (r *renderer) writeOneofToWire(m *model.Message, o *model.Oneof) {
 	unionName := oneofTypeName(name, o)
 	prop := oneofGoName(o)
 	fmt.Fprintf(&r.body, "\tswitch variant := value.%s.(type) {\n", prop)
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		wireWrapper := wireMessage(m.FullName) + "_" + upperFirst(f.JSONName)
 		wireField := upperFirst(f.JSONName)
 		var payload string
@@ -593,7 +593,7 @@ func (r *renderer) writeOneofFromWire(m *model.Message, o *model.Oneof) {
 	unionName := oneofTypeName(name, o)
 	prop := oneofGoName(o)
 	fmt.Fprintf(&r.body, "\tswitch variant := value.%s.(type) {\n", prop)
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		wireWrapper := wireMessage(m.FullName) + "_" + upperFirst(f.JSONName)
 		wireField := upperFirst(f.JSONName)
 		fmt.Fprintf(&r.body, "\tcase *%s:\n", wireWrapper)

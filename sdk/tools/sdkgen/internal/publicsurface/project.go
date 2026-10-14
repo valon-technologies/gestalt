@@ -127,7 +127,7 @@ func Reachable(
 			}
 		}
 		for _, o := range m.Oneofs {
-			for _, f := range oneofFields(m, o) {
+			for _, f := range model.OneofFields(m, o) {
 				visitRef(fieldRef(f))
 			}
 		}
@@ -235,16 +235,4 @@ func fieldRef(f *model.Field) *model.TypeRef {
 		Message: f.Message,
 		Enum:    f.Enum,
 	}
-}
-
-func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
-	var out []*model.Field
-	for _, number := range o.FieldNumbers {
-		for _, f := range m.Fields {
-			if f.Number == number {
-				out = append(out, f)
-			}
-		}
-	}
-	return out
 }

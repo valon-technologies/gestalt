@@ -209,7 +209,7 @@ func (r *renderer) variantClassName(m *model.Message, o *model.Oneof, f *model.F
 }
 
 func (r *renderer) oneofQualified(m *model.Message, o *model.Oneof) bool {
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		if r.idx.taken[localName(m.FullName)+pascalCase(f.Name)] {
 			return true
 		}

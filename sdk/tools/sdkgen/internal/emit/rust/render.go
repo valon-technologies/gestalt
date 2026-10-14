@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -358,18 +359,6 @@ func sanitizeDocLine(line string) string {
 	return b.String()
 }
 
-func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
-	var out []*model.Field
-	for _, number := range o.FieldNumbers {
-		for _, f := range m.Fields {
-			if f.Number == number {
-				out = append(out, f)
-			}
-		}
-	}
-	return out
-}
-
 // isUnitVariant reports whether a oneof member carries no payload in the
 // native enum: google.protobuf.NullValue and google.protobuf.Empty members.
 func isUnitVariant(f *model.Field) bool {
@@ -399,7 +388,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 		r.body.WriteString("#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]\n")
  		r.body.WriteString("#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]\n")
 		fmt.Fprintf(&r.body, "pub enum %s {\n", oneofTypeName(m, o))
-		for _, f := range oneofFields(m, o) {
+		for _, f := range model.OneofFields(m, o) {
 			r.docComment("    ", f.Doc)
 			fmt.Fprintf(&r.body, "    /// The `%s` variant.\n", f.Name)
 			if isUnitVariant(f) {
@@ -560,7 +549,7 @@ func (r *renderer) renderOneofToWire(m *model.Message, o *model.Oneof) {
 
 	fmt.Fprintf(&r.body, "pub(crate) fn %s(value: %s) -> %s {\n", oneofToWireFunc(m, o), unionName, wireKind)
 	r.body.WriteString("    match value {\n")
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		variant := heckUpperCamel(f.Name)
 		if isUnitVariant(f) {
 			fmt.Fprintf(&r.body, "        %s::%s => %s::%s(%s),\n", unionName, variant, wireKind, variant, unitWirePayload(f))
@@ -577,7 +566,7 @@ func (r *renderer) renderOneofFromWire(m *model.Message, o *model.Oneof) {
 
 	fmt.Fprintf(&r.body, "pub(crate) fn %s(value: %s) -> %s {\n", oneofFromWireFunc(m, o), wireKind, unionName)
 	r.body.WriteString("    match value {\n")
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		variant := heckUpperCamel(f.Name)
 		if isUnitVariant(f) {
 			fmt.Fprintf(&r.body, "        %s::%s(_) => %s::%s,\n", wireKind, variant, unionName, variant)
@@ -1334,45 +1323,45 @@ func (r *renderer) assemble() string {
 	if r.publicClient && r.features.unaryTransport {
 		uses = append(uses, "use crate::public::generated::unary_transport::UnaryTransport;")
 	}
-	for _, base := range sortedKeys2(r.features.crossPublic) {
-		names := sortedKeys(r.features.crossPublic[base])
+	for _, base := range emit.SortedKeys(r.features.crossPublic) {
+		names := emit.SortedKeys(r.features.crossPublic[base])
 		if r.publicClient {
 			uses = append(uses, fmt.Sprintf("use crate::public::generated::%s::{%s};", base, strings.Join(names, ", ")))
 		} else {
 			uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
 		}
 	}
- 	for _, base := range sortedKeys2(r.features.crossShared) {
- 		names := sortedKeys(r.features.crossShared[base])
+	for _, base := range emit.SortedKeys(r.features.crossShared) {
+		names := emit.SortedKeys(r.features.crossShared[base])
  		uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
  	}
-	for _, base := range sortedKeys2(r.features.crossCodec) {
-		names := sortedKeys(r.features.crossCodec[base])
+	for _, base := range emit.SortedKeys(r.features.crossCodec) {
+		names := emit.SortedKeys(r.features.crossCodec[base])
 		if r.publicClient {
 			uses = append(uses, fmt.Sprintf("use crate::public::generated::codec::%s::{%s};", base, strings.Join(names, ", ")))
 		} else {
 			uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
 		}
 	}
- 	for _, base := range sortedKeys2(r.features.crossSharedCodec) {
- 		names := sortedKeys(r.features.crossSharedCodec[base])
+	for _, base := range emit.SortedKeys(r.features.crossSharedCodec) {
+		names := emit.SortedKeys(r.features.crossSharedCodec[base])
  		uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
  	}
 	if len(r.features.supportFns) > 0 {
- 		uses = append(uses, fmt.Sprintf("use crate::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
+		uses = append(uses, fmt.Sprintf("use crate::codec::support::{%s};", strings.Join(emit.SortedKeys(r.features.supportFns), ", ")))
 	}
 	if len(r.features.supportTypes) > 0 {
 		rpcPath := "crate::rpc_support"
 		if r.publicClient {
 			rpcPath = "crate::public::generated::rpc_support"
 		}
-		uses = append(uses, fmt.Sprintf("use %s::{%s};", rpcPath, strings.Join(sortedKeys(r.features.supportTypes), ", ")))
+		uses = append(uses, fmt.Sprintf("use %s::{%s};", rpcPath, strings.Join(emit.SortedKeys(r.features.supportTypes), ", ")))
 	}
 	if len(r.features.invokeUses) > 0 {
 		if r.publicClient {
-			uses = append(uses, fmt.Sprintf("use crate::public::generated::invoke_support::{%s};", strings.Join(sortedKeys(r.features.invokeUses), ", ")))
+			uses = append(uses, fmt.Sprintf("use crate::public::generated::invoke_support::{%s};", strings.Join(emit.SortedKeys(r.features.invokeUses), ", ")))
 		} else {
-			uses = append(uses, fmt.Sprintf("use crate::invoke_support::{%s};", strings.Join(sortedKeys(r.features.invokeUses), ", ")))
+			uses = append(uses, fmt.Sprintf("use crate::invoke_support::{%s};", strings.Join(emit.SortedKeys(r.features.invokeUses), ", ")))
 		}
 	}
 	if r.features.streamExt {
@@ -1396,22 +1385,4 @@ func (r *renderer) assemble() string {
 
 	b.WriteString(r.body.String())
 	return strings.TrimRight(b.String(), "\n") + "\n"
-}
-
-func sortedKeys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func sortedKeys2(m map[string]map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

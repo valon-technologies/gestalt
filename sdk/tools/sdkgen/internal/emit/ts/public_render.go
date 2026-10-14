@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
@@ -144,8 +145,8 @@ func renderPublicTypes(view *publicsurface.View, paths PublicImports) string {
 		}
 	}
 
-	for _, base := range sortedPublicKeys(imports) {
-		names := sortedPublicKeys(imports[base])
+	for _, base := range emit.SortedKeys(imports) {
+		names := emit.SortedKeys(imports[base])
 		fmt.Fprintf(&b, "import type { %s } from %s;\n", strings.Join(names, ", "), paths.nativeTypeImportQuoted(base))
 	}
 	if useSparseInit {
@@ -209,7 +210,7 @@ func renderPublicConverters(view *publicsurface.View, paths PublicImports) strin
 	}
 
 	var blocks []string
-	for _, key := range sortedPublicKeys(converters) {
+	for _, key := range emit.SortedKeys(converters) {
 		conv := converters[key]
 		native := localName(conv.input.FullName)
 		codecName := toWireFunc(conv.input.FullName)
@@ -232,7 +233,7 @@ func renderPublicConverters(view *publicsurface.View, paths PublicImports) strin
 			typeImports[typeName] = true
 		}
 
-		requestTypes := sortedPublicKeys(conv.requestTypesSet())
+		requestTypes := emit.SortedKeys(conv.requestTypesSet())
 		blocks = append(blocks, fmt.Sprintf(
 			"export function %s(request: %s): %s {\n  return %s(request as Init<%s>);\n}",
 			codecName,
@@ -243,26 +244,26 @@ func renderPublicConverters(view *publicsurface.View, paths PublicImports) strin
 		))
 	}
 
-	for _, protoFile := range sortedPublicKeys(codecImports) {
-		names := sortedPublicKeys(codecImports[protoFile])
+	for _, protoFile := range emit.SortedKeys(codecImports) {
+		names := emit.SortedKeys(codecImports[protoFile])
 		var importNames []string
 		for _, name := range names {
 			importNames = append(importNames, name+" as codec"+upperFirst(name))
 		}
 		fmt.Fprintf(&b, "import {\n  %s,\n} from %q;\n", strings.Join(importNames, ",\n  "), paths.codecModulePath(protoFile))
 	}
-	for _, protoFile := range sortedPublicKeys(nativeImports) {
-		names := sortedPublicKeys(nativeImports[protoFile])
+	for _, protoFile := range emit.SortedKeys(nativeImports) {
+		names := emit.SortedKeys(nativeImports[protoFile])
 		fmt.Fprintf(&b, "import type { %s } from %q;\n", strings.Join(names, ", "), paths.nativeModulePath(protoFile))
 	}
-	for _, protoFile := range sortedPublicKeys(wireImports) {
-		names := sortedPublicKeys(wireImports[protoFile])
+	for _, protoFile := range emit.SortedKeys(wireImports) {
+		names := emit.SortedKeys(wireImports[protoFile])
 		fmt.Fprintf(&b, "import type { %s } from %s;\n", strings.Join(names, ", "), paths.genModuleQuoted(protoFile))
 	}
 	b.WriteString("import type { Init } from " + paths.supportModuleQuoted("rpc_support.ts") + ";\n")
 	if len(blocks) > 0 {
 		b.WriteString("import type {\n")
-		for _, typeName := range sortedPublicKeys(typeImports) {
+		for _, typeName := range emit.SortedKeys(typeImports) {
 			fmt.Fprintf(&b, "  %s,\n", typeName)
 		}
 		b.WriteString("} from \"./types.ts\";\n\n")
@@ -397,18 +398,18 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 		b.WriteString("import { create } from \"@bufbuild/protobuf\";\n")
 		b.WriteString("import { EmptySchema } from \"@bufbuild/protobuf/wkt\";\n")
 	}
-	for _, protoFile := range sortedPublicKeys(nativeImports) {
+	for _, protoFile := range emit.SortedKeys(nativeImports) {
 		names := nativeImports[protoFile]
-		typeNames := sortedPublicKeys(names)
+		typeNames := emit.SortedKeys(names)
 		fmt.Fprintf(&b, "import type { %s } from %q;\n", strings.Join(typeNames, ", "), paths.nativeModulePath(protoFile))
 	}
-	for _, protoFile := range sortedPublicKeys(codecImports) {
+	for _, protoFile := range emit.SortedKeys(codecImports) {
 		names := codecImports[protoFile]
-		funcNames := sortedPublicKeys(names)
+		funcNames := emit.SortedKeys(names)
 		fmt.Fprintf(&b, "import { %s } from %q;\n", strings.Join(funcNames, ", "), paths.codecModulePath(protoFile))
 	}
-	for _, protoFile := range sortedPublicKeys(schemaImports) {
-		names := sortedPublicKeys(schemaImports[protoFile])
+	for _, protoFile := range emit.SortedKeys(schemaImports) {
+		names := emit.SortedKeys(schemaImports[protoFile])
 		fmt.Fprintf(&b, "import {\n  %s,\n} from %s;\n",
 			strings.Join(names, ",\n  "), paths.genModuleQuoted(protoFile))
 	}
@@ -423,7 +424,7 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 		b.WriteString("import { " + strings.Join(invokeSupportImports, ", ") + " } from " + paths.supportModuleQuoted("invoke_support.ts") + ";\n")
 	}
 	b.WriteString("import {\n")
-	for _, name := range sortedPublicKeys(converterImports) {
+	for _, name := range emit.SortedKeys(converterImports) {
 		fmt.Fprintf(&b, "  %s,\n", name)
 	}
 	b.WriteString("} from \"./converters.ts\";\n")
@@ -688,15 +689,6 @@ func tsPublicFieldList(fields []publicsurface.PublicField) string {
 		parts[i] = fmt.Sprintf("{ name: %q, jsonName: %q }", f.Name, f.JSONName)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
-}
-
-func sortedPublicKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 func renderPublicGatewayError(imports PublicImports) string {

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
@@ -362,18 +363,6 @@ func (r *renderer) writeDocComment(indent, doc string) {
 	}
 }
 
-func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
-	var out []*model.Field
-	for _, number := range o.FieldNumbers {
-		for _, f := range m.Fields {
-			if f.Number == number {
-				out = append(out, f)
-			}
-		}
-	}
-	return out
-}
-
 func oneofToWireFunc(m *model.Message, o *model.Oneof) string {
 	return "to_wire_" + snakeCase(oneofTypeName(m, o))
 }
@@ -459,7 +448,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 	r.features.dataclass = true
 
 	for _, o := range m.Oneofs {
-		for _, f := range oneofFields(m, o) {
+		for _, f := range model.OneofFields(m, o) {
 			fmt.Fprintf(&r.body, "@dataclass(frozen=True, slots=True)\nclass %s:\n", r.variantClassName(m, o, f))
 			if f.Kind == model.KindJSONNull || f.Kind == model.KindUnit {
 				r.body.WriteString("    pass\n\n\n")
@@ -468,7 +457,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 			}
 		}
 		fmt.Fprintf(&r.body, "%s = (\n", oneofTypeName(m, o))
-		for i, f := range oneofFields(m, o) {
+		for i, f := range model.OneofFields(m, o) {
 			if i == 0 {
 				fmt.Fprintf(&r.body, "    %s\n", r.variantClassName(m, o, f))
 			} else {
@@ -591,7 +580,7 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 	r.features.anyType = true
 
 	fmt.Fprintf(&r.body, "def %s(value: %s) -> dict[str, Any]:\n", oneofToWireFunc(m, o), unionName)
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		fmt.Fprintf(&r.body, "    if isinstance(value, %s):\n", r.nativeRef(r.variantClassName(m, o, f)))
 		switch f.Kind {
 		case model.KindJSONNull, model.KindUnit:
@@ -604,7 +593,7 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 
 	fmt.Fprintf(&r.body, "def %s(value: Any) -> %s:\n", oneofFromWireFunc(m, o), unionName)
 	fmt.Fprintf(&r.body, "    case = value.WhichOneof(%q)\n", o.Name)
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		fmt.Fprintf(&r.body, "    if case == %q:\n", f.Name)
 		switch f.Kind {
 		case model.KindJSONNull, model.KindUnit:
@@ -1192,16 +1181,16 @@ func (r *renderer) localImports() string {
 			fmt.Fprintf(&b, "from %s_gen.v1 import %s_pb2 as _%s_pb2\n", r.genImportDots(), r.wireBase, r.wireBase)
 		}
 		if len(r.features.crossCodec) > 0 {
-			fmt.Fprintf(&b, "from . import %s\n", strings.Join(sortedKeys(r.features.crossCodec), ", "))
+			fmt.Fprintf(&b, "from . import %s\n", strings.Join(emit.SortedKeys(r.features.crossCodec), ", "))
 		}
- 		for _, base := range sortedKeys(r.features.crossSharedCodec) {
+		for _, base := range emit.SortedKeys(r.features.crossSharedCodec) {
  			fmt.Fprintf(&b, "from gestalt._codec import %s as _%s_provider_codec\n", base, base)
  		}
 		if len(r.features.support) > 0 {
  			if r.publicClient {
- 				b.WriteString(fromImport("gestalt._codec.support", sortedKeys(r.features.support)))
+				b.WriteString(fromImport("gestalt._codec.support", emit.SortedKeys(r.features.support)))
  			} else {
- 				b.WriteString(fromImport(".support", sortedKeys(r.features.support)))
+				b.WriteString(fromImport(".support", emit.SortedKeys(r.features.support)))
  			}
 		}
 		return b.String()
@@ -1220,7 +1209,7 @@ func (r *renderer) localImports() string {
 			codecModules["support"] = "_support"
 		}
 	}
- 	for _, base := range sortedKeys(r.features.crossSharedCodec) {
+	for _, base := range emit.SortedKeys(r.features.crossSharedCodec) {
  		fmt.Fprintf(&b, "from gestalt._codec import %s as _%s_provider_codec\n", base, base)
  	}
 	type localImport struct {
@@ -1230,7 +1219,7 @@ func (r *renderer) localImports() string {
 	var locals []localImport
 	if len(codecModules) > 0 {
 		var lines strings.Builder
-		for _, name := range sortedKeys2(codecModules) {
+		for _, name := range emit.SortedKeys(codecModules) {
 			fmt.Fprintf(&lines, "from ._codec import %s as %s\n", name, codecModules[name])
 		}
 		locals = append(locals, localImport{module: "._codec", lines: lines.String()})
@@ -1258,16 +1247,16 @@ func (r *renderer) localImports() string {
 		})
 	}
 	for base, names := range r.features.crossNative {
-		locals = append(locals, localImport{module: "." + base, lines: fromImport("."+base, sortedKeys(names))})
+		locals = append(locals, localImport{module: "." + base, lines: fromImport("."+base, emit.SortedKeys(names))})
 	}
  	for base, names := range r.features.crossShared {
- 		locals = append(locals, localImport{module: "gestalt." + base, lines: fromImport("gestalt."+base, sortedKeys(names))})
+		locals = append(locals, localImport{module: "gestalt." + base, lines: fromImport("gestalt."+base, emit.SortedKeys(names))})
  	}
 	if len(r.features.invokeNames) > 0 {
-		locals = append(locals, localImport{module: r.invokeImportModule(), lines: fromImport(r.invokeImportModule(), sortedKeys(r.features.invokeNames))})
+		locals = append(locals, localImport{module: r.invokeImportModule(), lines: fromImport(r.invokeImportModule(), emit.SortedKeys(r.features.invokeNames))})
 	}
 	if len(r.features.metadataMethods) > 0 {
-		locals = append(locals, localImport{module: ".metadata", lines: fromImport(".metadata", sortedKeys(r.features.metadataMethods))})
+		locals = append(locals, localImport{module: ".metadata", lines: fromImport(".metadata", emit.SortedKeys(r.features.metadataMethods))})
 	}
 	if r.features.unaryTransport || r.features.asyncTransport || r.features.serverStream {
 		var names []string
@@ -1292,7 +1281,7 @@ func (r *renderer) localImports() string {
 		b.WriteString("from google.protobuf import json_format\n")
 	}
 	if len(r.features.rpcTypes) > 0 {
-		locals = append(locals, localImport{module: r.supportImportModule(), lines: fromImport(r.supportImportModule(), sortedKeys(r.features.rpcTypes))})
+		locals = append(locals, localImport{module: r.supportImportModule(), lines: fromImport(r.supportImportModule(), emit.SortedKeys(r.features.rpcTypes))})
 	}
 	sort.Slice(locals, func(i, j int) bool { return locals[i].module < locals[j].module })
 	for _, imp := range locals {
@@ -1412,22 +1401,4 @@ func (r *renderer) assemble() string {
 	}
 	b.WriteString(r.body.String())
 	return strings.TrimRight(b.String(), "\n") + "\n"
-}
-
-func sortedKeys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func sortedKeys2(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
