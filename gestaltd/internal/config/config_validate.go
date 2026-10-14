@@ -52,7 +52,8 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeAppStaticMounts(cfg); err != nil {
 		return err
 	}
-	return canonicalizeRemotes(cfg)
+	canonicalizeRemotes(cfg)
+	return nil
 }
 
 // ValidateCanonicalStructure checks config shape assuming canonicalization has
@@ -1019,9 +1020,7 @@ func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string, dev bool
 			cfg.Server.RemoteToken = remoteToken
 		}
 	}
-	if err := canonicalizeRemotes(cfg); err != nil {
-		return err
-	}
+	canonicalizeRemotes(cfg)
 	// Resolve a missing default-remote token from the environment or stored
 	// credentials, but only when the default is actually referenced — an
 	// unreferenced default needs no token. This runs for both serve and dev;
@@ -1071,9 +1070,7 @@ func ApplyServeRemotePreviewOverrides(cfg *Config, previewURL, remoteToken strin
 		Default:     true,
 		CloudRunIAM: shouldUseCloudRunIAM(previewURL),
 	}
-	if err := canonicalizeRemotes(cfg); err != nil {
-		return err
-	}
+	canonicalizeRemotes(cfg)
 	stampDefaultRemote(cfg.Apps, DefaultRemoteName, false)
 	for _, entries := range []map[string]*ProviderEntry{
 		cfg.Providers.Identity,

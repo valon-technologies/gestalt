@@ -12,7 +12,6 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
-	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
@@ -83,7 +82,6 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 	if cfg == nil {
 		return runtime, nil
 	}
-	egressDeps := newEgressDeps(cfg)
 
 	addProviderRuntime := func(kind, name string, entry *config.ProviderEntry) error {
 		if entry == nil {
@@ -104,28 +102,12 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 		if err != nil {
 			return fmt.Errorf("%s %q config: %w", kind, name, err)
 		}
-		policy := egressDeps.ProviderPolicy(entry)
-		addRuntimeInfo := func(connName string, conn *config.ConnectionDef) error {
-			info, err := connectionRuntimeInfo(name, connName, conn, policy, providerConfig)
-			if err != nil {
-				return err
-			}
-			if _, ok := runtime[name]; !ok {
-				runtime[name] = map[string]invocation.ConnectionRuntimeInfo{}
-			}
-			runtime[name][connName] = info
-			return nil
-		}
-
-		pluginConn := plan.AppConnection()
-		if err := addRuntimeInfo(config.AppConnectionName, &pluginConn); err != nil {
-			return err
+		runtime[name] = map[string]invocation.ConnectionRuntimeInfo{
+			config.AppConnectionName: staticConnectionRuntimeInfo(plan.AppConnection(), providerConfig),
 		}
 		for _, connName := range plan.NamedConnectionNames() {
 			conn, _ := plan.NamedConnectionDef(connName)
-			if err := addRuntimeInfo(connName, &conn); err != nil {
-				return err
-			}
+			runtime[name][connName] = staticConnectionRuntimeInfo(conn, providerConfig)
 		}
 		return nil
 	}
@@ -219,17 +201,13 @@ func ValidateConnectionRuntimeCredentials(ctx context.Context, provider core.Ext
 	return nil
 }
 
-func connectionRuntimeInfo(integration, connection string, conn *config.ConnectionDef, policy egress.Policy, providerConfig map[string]any) (invocation.ConnectionRuntimeInfo, error) {
-	return staticConnectionRuntimeInfo(integration, connection, *conn, policy, providerConfig)
-}
-
-// StaticConnectionRuntimeInfo validates and materializes deployment-owned
+// StaticConnectionRuntimeInfo materializes deployment-owned
 // connection material using the same rules as invocation bootstrap.
 func StaticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
-	return staticConnectionRuntimeInfo(integration, connection, conn, egress.Policy{DefaultAction: egress.PolicyAllow}, nil)
+	return staticConnectionRuntimeInfo(conn, nil), nil
 }
 
-func staticConnectionRuntimeInfo(_, _ string, conn config.ConnectionDef, _ egress.Policy, providerConfig map[string]any) (invocation.ConnectionRuntimeInfo, error) {
+func staticConnectionRuntimeInfo(conn config.ConnectionDef, providerConfig map[string]any) invocation.ConnectionRuntimeInfo {
 	mode := config.ConnectionModeForConnection(conn)
 	authConfig := applyConnectionRuntimeAuthOverlay(ExternalCredentialAuthConfig(conn.Auth), providerConfig)
 	info := invocation.ConnectionRuntimeInfo{
@@ -241,7 +219,7 @@ func staticConnectionRuntimeInfo(_, _ string, conn config.ConnectionDef, _ egres
 		Params:            connectionParamDefaults(conn.ConnectionParams),
 		CredentialRefresh: cloneCredentialRefreshConfig(conn.CredentialRefresh),
 	}
-	return info, nil
+	return info
 }
 
 func applyConnectionRuntimeAuthOverlay(auth core.ExternalCredentialAuthConfig, providerConfig map[string]any) core.ExternalCredentialAuthConfig {

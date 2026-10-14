@@ -106,11 +106,8 @@ func policyForMethod(md protoreflect.MethodDescriptor) (PublicMethodPolicy, bool
 
 	policy := PublicMethodPolicy{FullMethod: fullMethod, Streaming: md.IsStreamingServer()}
 	if hasPublicPolicy {
-		fill, reject, err := readPublicPolicy(opts)
-		if err != nil {
-			return PublicMethodPolicy{}, false, err
-		}
-		fill, reject, err = normalizePolicyFields(fullMethod, md.Input(), fill, reject)
+		fill, reject := readPublicPolicy(opts)
+		fill, reject, err := normalizePolicyFields(fullMethod, md.Input(), fill, reject)
 		if err != nil {
 			return PublicMethodPolicy{}, false, err
 		}
@@ -138,10 +135,10 @@ func hasPublicVisibility(opts protoreflect.Message) bool {
 	return false
 }
 
-func readPublicPolicy(opts protoreflect.Message) (fill, reject []string, err error) {
+func readPublicPolicy(opts protoreflect.Message) (fill, reject []string) {
 	ext := gestaltproto.E_Public.TypeDescriptor()
 	if ext == nil || !opts.Has(ext) {
-		return nil, nil, nil
+		return nil, nil
 	}
 	policy := opts.Get(ext).Message()
 	fillField := policy.Descriptor().Fields().ByName("fill")
@@ -152,7 +149,7 @@ func readPublicPolicy(opts protoreflect.Message) (fill, reject []string, err err
 	if rejectField != nil {
 		reject = repeatedStringValues(policy.Get(rejectField).List())
 	}
-	return fill, reject, nil
+	return fill, reject
 }
 
 func repeatedStringValues(list protoreflect.List) []string {

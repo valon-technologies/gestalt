@@ -103,13 +103,13 @@ func (cfg *Config) DefaultRemoteEntry() (name string, remote *RemoteConfig, ok b
 	return "", nil, false
 }
 
-func canonicalizeLegacyRemoteConfig(cfg *Config) error {
+func canonicalizeLegacyRemoteConfig(cfg *Config) {
 	if cfg == nil {
-		return nil
+		return
 	}
 	legacyURL := strings.TrimSpace(cfg.Server.Remote)
 	if legacyURL == "" {
-		return nil
+		return
 	}
 	hadNamedRemotes := len(cfg.Server.Remotes) > 0
 	if cfg.Server.Remotes == nil {
@@ -128,7 +128,7 @@ func canonicalizeLegacyRemoteConfig(cfg *Config) error {
 				existing.Token = strings.TrimSpace(cfg.Server.RemoteToken)
 			}
 		}
-		return nil
+		return
 	}
 	cfg.Server.Remotes[DefaultRemoteName] = &RemoteConfig{
 		URL:     legacyURL,
@@ -146,7 +146,6 @@ func canonicalizeLegacyRemoteConfig(cfg *Config) error {
 	} {
 		stampDefaultRemote(entries, DefaultRemoteName, dev)
 	}
-	return nil
 }
 
 // stampDefaultRemote sets remote to defaultName on every entry that does not
@@ -172,13 +171,11 @@ func stampDefaultRemote(entries map[string]*ProviderEntry, defaultName string, d
 // backfills the default remote's token from server.remoteToken, and trims
 // scalar fields. Called from CanonicalizeStructure so every consumer
 // (Load, bootstrap, serve) sees placement-ready remotes.
-func canonicalizeRemotes(cfg *Config) error {
+func canonicalizeRemotes(cfg *Config) {
 	if cfg == nil {
-		return nil
+		return
 	}
-	if err := canonicalizeLegacyRemoteConfig(cfg); err != nil {
-		return err
-	}
+	canonicalizeLegacyRemoteConfig(cfg)
 	if _, defaultRemote, ok := cfg.DefaultRemoteEntry(); ok && defaultRemote != nil {
 		if strings.TrimSpace(defaultRemote.Token) == "" {
 			defaultRemote.Token = strings.TrimSpace(cfg.Server.RemoteToken)
@@ -196,7 +193,6 @@ func canonicalizeRemotes(cfg *Config) error {
 	cfg.Server.Remotes = trimmed
 	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
 	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
-	return nil
 }
 
 // validateRemotesConfig validates the canonicalized remotes config: required
