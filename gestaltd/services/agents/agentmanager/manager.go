@@ -457,7 +457,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
-	if !m.allowsAgentProvider(ctx, p, providerName) {
+	if !principal.AllowsProviderPermission(p, providerName) {
 		return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
 	}
 	metadata := protoutil.MapFromStruct(req.GetMetadata())
@@ -1276,7 +1276,7 @@ func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal
 	}
 	authorized := make([]namedAgentProvider, 0, len(candidates))
 	for _, candidate := range candidates {
-		if m.allowsAgentProvider(ctx, p, candidate.name) {
+		if principal.AllowsProviderPermission(p, candidate.name) {
 			authorized = append(authorized, candidate)
 		}
 	}
@@ -1314,7 +1314,7 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 	var found *accessibleAgentSession
 	authDenied := false
 	for _, candidate := range candidates {
-		if !m.allowsAgentProvider(ctx, p, candidate.name) {
+		if !principal.AllowsProviderPermission(p, candidate.name) {
 			authDenied = true
 			continue
 		}
@@ -1384,7 +1384,7 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 	var found *accessibleAgentTurn
 	authDenied := false
 	for _, candidate := range candidates {
-		if !m.allowsAgentProvider(ctx, p, candidate.name) {
+		if !principal.AllowsProviderPermission(p, candidate.name) {
 			authDenied = true
 			continue
 		}
@@ -1490,7 +1490,7 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 	var found *ownedAgentSession
 	authDenied := false
 	for _, candidate := range candidates {
-		if !m.allowsAgentProvider(ctx, p, candidate.name) {
+		if !principal.AllowsProviderPermission(p, candidate.name) {
 			authDenied = true
 			continue
 		}
@@ -2249,9 +2249,6 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if operation == "" {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent tool operation is required", invocation.ErrOperationNotFound)
 	}
-	if !m.allowProvider(ctx, p, appName) || !m.allowOperation(ctx, p, appName, operation) {
-		return coreagent.Tool{}, invocation.ErrAuthorizationDenied
-	}
 
 	connection := strings.TrimSpace(ref.Connection)
 	if connection != "" && !core.SafeConnectionValue(connection) {
@@ -2273,7 +2270,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		return coreagent.Tool{}, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 
-	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, appName))
+	ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{})
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
@@ -2469,9 +2466,6 @@ func (m *Manager) visitToolSearchCandidates(
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		if !m.allowProvider(ctx, p, appName) {
-			continue
-		}
 		searchRefs := scope.refsForProvider(appName)
 		for i := range searchRefs {
 			searchRef := searchRefs[i]
@@ -2513,7 +2507,7 @@ func (m *Manager) visitToolSearchCandidates(
 					if strings.TrimSpace(searchRef.Operation) == "" && !catalog.OperationVisibleByDefault(op) {
 						continue
 					}
-					if !m.allowOperation(ctx, p, appName, operation) || !principal.AllowsOperationPermission(p, appName, operation) {
+					if !principal.AllowsOperationPermission(p, appName, operation) {
 						continue
 					}
 					ref := searchCatalog.ref
@@ -2713,7 +2707,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	catalogCtx := invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, appName))
+	catalogCtx := invocation.WithAccessContext(ctx, invocation.AccessContext{})
 	targets := m.catalogSelectorConfig().SessionCatalogTargets(appName, connection, instance)
 	if !shouldExpandAgentToolSearchCatalogTargets(ref, credentialMode) {
 		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
@@ -2921,7 +2915,7 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		if !m.allowsAgentProvider(ctx, p, appName) {
+		if !principal.AllowsProviderPermission(p, appName) {
 			return fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, appName)
 		}
 		connection := strings.TrimSpace(ref.Connection)
@@ -2934,22 +2928,6 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 		}
 	}
 	return nil
-}
-
-func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
-	return true
-}
-
-func (m *Manager) allowsAgentProvider(ctx context.Context, p *principal.Principal, provider string) bool {
-	return m.allowProvider(ctx, p, provider) && principal.AllowsProviderPermission(p, provider)
-}
-
-func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	return true
-}
-
-func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
-	return invocation.AccessContext{}
 }
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
