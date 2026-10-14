@@ -182,8 +182,6 @@ func MessagePartTypeFromProto(partType proto.AgentMessagePartType) (coreagent.Me
 
 func MessagePartTypeToProto(partType coreagent.MessagePartType) proto.AgentMessagePartType {
 	switch partType {
-	case "":
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
 	case coreagent.MessagePartTypeText:
 		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT
 	case coreagent.MessagePartTypeJSON:

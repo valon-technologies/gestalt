@@ -293,8 +293,6 @@ func (p *DeclarativeProvider) AuthTypes() []string {
 		return []string{"oauth"}
 	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual:
 		return []string{"manual"}
-	case providermanifestv1.AuthTypeNone:
-		return nil
 	default:
 		return nil
 	}

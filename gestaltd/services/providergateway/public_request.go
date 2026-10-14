@@ -307,8 +307,6 @@ func fieldSet(msg protoreflect.Message, name string) bool {
 		return msg.Get(fd).Map().Len() > 0
 	}
 	switch fd.Kind() {
-	case protoreflect.MessageKind, protoreflect.GroupKind:
-		return msg.Has(fd)
 	case protoreflect.StringKind, protoreflect.BytesKind:
 		return msg.Has(fd) && strings.TrimSpace(msg.Get(fd).String()) != ""
 	default:
