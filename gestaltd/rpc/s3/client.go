@@ -307,14 +307,7 @@ func byteRangeToProto(r *s3.ByteRange) *proto.ByteRange {
 	if r == nil {
 		return nil
 	}
-	out := &proto.ByteRange{}
-	if r.Start != nil {
-		out.Start = r.Start
-	}
-	if r.End != nil {
-		out.End = r.End
-	}
-	return out
+	return &proto.ByteRange{Start: r.Start, End: r.End}
 }
 
 func byteRangeFromProto(r *proto.ByteRange) *s3.ByteRange {
@@ -448,7 +441,7 @@ func presignRequestFromProto(req *proto.PresignObjectRequest) s3.PresignRequest 
 	}
 	return s3.PresignRequest{
 		Ref:                objectRefFromProto(req.GetRef()),
-		Method:             presignMethodFromProto(req.GetMethod()),
+		Method:             presignMethodFromProto(req.GetMethod(), ""),
 		Expires:            time.Duration(req.GetExpiresSeconds()) * time.Second,
 		ContentType:        req.GetContentType(),
 		ContentDisposition: req.GetContentDisposition(),
@@ -478,7 +471,7 @@ func objectAccessURLRequestToProto(req s3.PresignRequest) *proto.CreateObjectAcc
 	}
 }
 
-func presignMethodFromProto(method proto.PresignMethod) s3.PresignMethod {
+func presignMethodFromProto(method proto.PresignMethod, fallback s3.PresignMethod) s3.PresignMethod {
 	switch method {
 	case proto.PresignMethod_PRESIGN_METHOD_GET:
 		return s3.PresignMethodGet
@@ -489,7 +482,7 @@ func presignMethodFromProto(method proto.PresignMethod) s3.PresignMethod {
 	case proto.PresignMethod_PRESIGN_METHOD_HEAD:
 		return s3.PresignMethodHead
 	default:
-		return ""
+		return fallback
 	}
 }
 
@@ -509,13 +502,9 @@ func presignResultFromProto(resp *proto.PresignObjectResponse, requested s3.Pres
 	if resp == nil {
 		return s3.PresignResult{}
 	}
-	method := presignMethodFromProto(resp.GetMethod())
-	if method == "" {
-		method = requested
-	}
 	out := s3.PresignResult{
 		URL:     resp.GetUrl(),
-		Method:  method,
+		Method:  presignMethodFromProto(resp.GetMethod(), requested),
 		Headers: s3.CloneStringMap(resp.GetHeaders()),
 	}
 	if ts := resp.GetExpiresAt(); ts != nil {
@@ -528,13 +517,9 @@ func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, request
 	if resp == nil {
 		return s3.PresignResult{}
 	}
-	method := presignMethodFromProto(resp.GetMethod())
-	if method == "" {
-		method = requested
-	}
 	out := s3.PresignResult{
 		URL:     resp.GetUrl(),
-		Method:  method,
+		Method:  presignMethodFromProto(resp.GetMethod(), requested),
 		Headers: s3.CloneStringMap(resp.GetHeaders()),
 	}
 	if ts := resp.GetExpiresAt(); ts != nil {
