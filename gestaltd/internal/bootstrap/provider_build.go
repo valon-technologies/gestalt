@@ -41,7 +41,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
-	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
@@ -1568,7 +1567,7 @@ type closerFunc func() error
 func (f closerFunc) Close() error { return f() }
 
 func buildHostedAgentProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error) {
-	launch, err := prepareHostedAgentProviderLaunch(ctx, name, entry, node, deps)
+	launch, err := prepareHostedProviderLaunch(ctx, providermanifestv1.KindAgent, name, entry, node, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -1587,18 +1586,6 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 	return newHostedAgentProviderPool(ctx, launch, hostServices, deps, policy)
 }
 
-type hostedAgentProviderLaunch struct {
-	name            string
-	runtimeConfig   config.EffectiveRuntimePlacement
-	runtimeProvider runtimeprovider.Provider
-	runtimeOwned    bool
-	runtimePlan     RuntimePlacementPlan
-	cfg             componentprovider.YAMLConfig
-	allowedHosts    []string
-	launch          hostedProcessLaunch
-	cleanup         func()
-}
-
 type hostedAgentProviderInstance struct {
 	provider         coreagent.Provider
 	runtimeProvider  runtimeprovider.Provider
@@ -1606,97 +1593,7 @@ type hostedAgentProviderInstance struct {
 	runtimeSession   *proto.RuntimeSession
 }
 
-func (p *hostedAgentProviderLaunch) close() {
-	if p == nil {
-		return
-	}
-	if p.runtimeOwned && p.runtimeProvider != nil {
-		_ = p.runtimeProvider.Close()
-	}
-	if p.cleanup != nil {
-		p.cleanup()
-		p.cleanup = nil
-	}
-}
-
-func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, deps Deps) (*hostedAgentProviderLaunch, error) {
-	runtimeConfig, runtimeProvider, runtimeOwned, err := effectiveConfiguredHostedRuntime(ctx, "providers.agent."+name, entry, deps)
-	if err != nil {
-		return nil, err
-	}
-	if runtimeProvider == nil {
-		return nil, fmt.Errorf("agent provider: runtime is required")
-	}
-	runtimeSupport, err := runtimeProvider.Support(ctx)
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
-	}
-	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, runtimeRequiresHostnameEgress(entry, deps))
-	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig), deps); err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, err
-	}
-
-	cfg, err := componentprovider.DecodeYAMLConfig(node, "agent provider")
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, err
-	}
-	cleanup := func() {}
-	if !hostedRuntimeUsesImageEntrypoint(runtimeConfig) {
-		prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
-			Kind:                 providermanifestv1.KindAgent,
-			Subject:              "agent provider",
-			SourceMissingMessage: "no Go, Rust, Python, or TypeScript agent provider source package found",
-			Config:               cfg,
-		})
-		if err != nil {
-			if runtimeOwned {
-				_ = runtimeProvider.Close()
-			}
-			return nil, err
-		}
-		cfg = prepared.YAMLConfig
-		cleanup = prepared.Cleanup
-	}
-	defer func() {
-		if cleanup != nil {
-			cleanup()
-		}
-	}()
-
-	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindAgent, name, entry, cfg.Command, cfg.Args, cleanup, runtimeConfig)
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, err
-	}
-	cleanup = launch.cleanup
-
-	preparedLaunch := &hostedAgentProviderLaunch{
-		name:            name,
-		runtimeConfig:   runtimeConfig,
-		runtimeProvider: runtimeProvider,
-		runtimeOwned:    runtimeOwned,
-		runtimePlan:     runtimePlan,
-		cfg:             cfg,
-		allowedHosts:    entry.EffectiveAllowedHosts(),
-		launch:          launch,
-		cleanup:         cleanup,
-	}
-	cleanup = nil
-	return preparedLaunch, nil
-}
-
-func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []runtimehost.HostService, deps Deps, closeRuntime bool, cleanup func()) (*hostedAgentProviderInstance, error) {
+func startHostedAgentProviderInstance(ctx context.Context, launch *hostedProviderLaunch, hostServices []runtimehost.HostService, deps Deps, closeRuntime bool, cleanup func()) (*hostedAgentProviderInstance, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted agent launch is required")
 	}

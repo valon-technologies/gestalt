@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -538,7 +537,7 @@ func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hostedAgentProviderPool{
 		name: "simple",
-		launch: &hostedAgentProviderLaunch{
+		launch: &hostedProviderLaunch{
 			name: "simple",
 			runtimeConfig: config.EffectiveRuntimePlacement{
 				Workspace: &config.RuntimePlacementWorkspaceConfig{
@@ -2577,46 +2576,6 @@ func TestAgentRuntimeConfigUsesPublicHostServiceRelayBinding(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
-	t.Parallel()
-
-	runtimeProvider := newCapturingBundleRuntime()
-	entry := &config.ProviderEntry{
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Kind: providermanifestv1.KindAgent,
-			Entrypoint: &providermanifestv1.Entrypoint{
-				ArtifactPath: "bin/gestalt-agent-simple",
-				Args:         []string{"--serve"},
-			},
-		},
-		Runtime: &config.RuntimePlacementConfig{
-			Image: "ghcr.io/example/simple-agent@sha256:abc123",
-			ImagePullAuth: &config.RuntimePlacementImagePullAuth{
-				DockerConfigJSON: `{"auths":{"ghcr.io":{"username":"ghcr-user","password":" ghcr-token "}}}`,
-			},
-		},
-	}
-
-	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
-		"name": "simple",
-	}), Deps{
-		BaseURL:       "https://gestalt.example.test",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-		Runtime:       runtimeProvider,
-	})
-	if err != nil {
-		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
-	}
-	defer launch.close()
-
-	if launch.launch.command != "./bin/gestalt-agent-simple" {
-		t.Fatalf("agent command = %q, want manifest image entrypoint", launch.launch.command)
-	}
-	if !slices.Equal(launch.launch.args, []string{"--serve"}) {
-		t.Fatalf("agent args = %#v, want manifest image args", launch.launch.args)
-	}
-}
-
 func TestAgentRuntimeProviderEntryRuntimePlacementConfigIncludesImagePullAuth(t *testing.T) {
 	t.Parallel()
 
@@ -2641,98 +2600,6 @@ func TestAgentRuntimeProviderEntryRuntimePlacementConfigIncludesImagePullAuth(t 
 	entry.Runtime.ImagePullAuth.DockerConfigJSON = `{"auths":{"ghcr.io":{"username":"mutated","password":"mutated"}}}`
 	if runtimeConfig.ImagePullAuth.DockerConfigJSON != dockerConfigJSON {
 		t.Fatalf("ImagePullAuth.DockerConfigJSON aliasing original config = %q, want opaque Docker config JSON preserved", runtimeConfig.ImagePullAuth.DockerConfigJSON)
-	}
-}
-
-func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
-	t.Parallel()
-
-	runtimeProvider := newCapturingBundleRuntime()
-	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
-		return runtimeProvider, nil
-	}
-	cfg := &config.Config{
-		Runtime: config.RuntimeConfig{
-			Providers: map[string]*config.RuntimeProviderEntry{
-				"hosted": {
-					Driver: config.RuntimeProviderDriver("capture"),
-				},
-			},
-		},
-	}
-	entry := &config.ProviderEntry{
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Kind: providermanifestv1.KindAgent,
-			Entrypoint: &providermanifestv1.Entrypoint{
-				ArtifactPath: "bin/gestalt-agent-simple",
-				Args:         []string{"--serve"},
-			},
-		},
-		Runtime: &config.RuntimePlacementConfig{
-			Provider: "hosted",
-			Template: "python-runtime",
-		},
-	}
-
-	deps := Deps{
-		BaseURL:       "https://gestalt.example.test",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-	}
-	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-
-	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
-		"name":    "simple",
-		"command": "/host/only/agent",
-		"args":    []string{"host-arg"},
-	}), deps)
-	if err != nil {
-		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
-	}
-	defer launch.close()
-
-	if launch.launch.command != "./bin/gestalt-agent-simple" {
-		t.Fatalf("agent command = %q, want manifest template entrypoint", launch.launch.command)
-	}
-	if !slices.Equal(launch.launch.args, []string{"--serve"}) {
-		t.Fatalf("agent args = %#v, want manifest template args", launch.launch.args)
-	}
-}
-
-func TestAgentRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T) {
-	t.Parallel()
-
-	entry := &config.ProviderEntry{
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Kind: providermanifestv1.KindAgent,
-			Entrypoint: &providermanifestv1.Entrypoint{
-				ArtifactPath: "bin/gestalt-agent-simple",
-				Args:         []string{"--serve"},
-			},
-		},
-		Runtime: &config.RuntimePlacementConfig{
-			Image: "ghcr.io/example/simple-agent@sha256:abc123",
-		},
-	}
-
-	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
-		"name":    "simple",
-		"command": "/host/only/agent",
-		"args":    []string{"host-arg"},
-	}), Deps{
-		BaseURL:       "https://gestalt.example.test",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-	})
-	if err != nil {
-		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
-	}
-	defer launch.close()
-
-	if launch.launch.command != "/host/only/agent" {
-		t.Fatalf("agent command = %q, want configured command", launch.launch.command)
-	}
-	if !slices.Equal(launch.launch.args, []string{"host-arg"}) {
-		t.Fatalf("agent args = %#v, want configured args", launch.launch.args)
 	}
 }
 

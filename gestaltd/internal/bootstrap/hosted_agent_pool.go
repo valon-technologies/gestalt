@@ -71,7 +71,7 @@ func (t realHostedAgentPoolTicker) Stop() {
 
 type hostedAgentProviderPool struct {
 	name         string
-	launch       *hostedAgentProviderLaunch
+	launch       *hostedProviderLaunch
 	hostServices []runtimehost.HostService
 	deps         Deps
 	policy       config.RuntimePlacementLifecyclePolicy
@@ -112,7 +112,7 @@ type hostedAgentPoolBackend struct {
 	closed           bool
 }
 
-func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.RuntimePlacementLifecyclePolicy) (coreagent.Provider, error) {
+func newHostedAgentProviderPool(ctx context.Context, launch *hostedProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.RuntimePlacementLifecyclePolicy) (coreagent.Provider, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted agent launch is required")
 	}
