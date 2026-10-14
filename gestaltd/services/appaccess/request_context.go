@@ -435,9 +435,6 @@ func subjectDisplayName(p *principal.Principal) string {
 }
 
 func requestMetaFromProviderRequestContext(meta *proto.RequestMetaContext) invocation.RequestMeta {
-	if meta == nil {
-		return invocation.RequestMeta{}
-	}
 	return invocation.RequestMeta{
 		ClientIP:   meta.GetClientIp(),
 		RemoteAddr: meta.GetRemoteAddr(),
@@ -453,9 +450,6 @@ func workflowFromProviderRequestContext(workflow *structpb.Struct) map[string]an
 }
 
 func agentFromProviderRequestContext(agent *proto.AgentInvocationContext) invocation.AgentInvocationContext {
-	if agent == nil {
-		return invocation.AgentInvocationContext{}
-	}
 	return invocation.AgentInvocationContext{
 		ProviderName: strings.TrimSpace(agent.GetProviderName()),
 		SessionID:    strings.TrimSpace(agent.GetSessionId()),

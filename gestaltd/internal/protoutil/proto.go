@@ -55,9 +55,6 @@ func StringListsFromProto[V ~map[string]*proto.StringList](values V) map[string]
 }
 
 func ValueToAny(v *structpb.Value) any {
-	if v == nil {
-		return nil
-	}
 	return v.AsInterface()
 }
 

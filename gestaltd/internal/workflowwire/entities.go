@@ -569,9 +569,6 @@ func SignalToProto(signal coreworkflow.Signal) (*proto.WorkflowSignal, error) {
 }
 
 func SignalFromProto(signal *proto.WorkflowSignal) coreworkflow.Signal {
-	if signal == nil {
-		return coreworkflow.Signal{}
-	}
 	return coreworkflow.Signal{
 		ID:             signal.GetId(),
 		Name:           signal.GetName(),
@@ -696,10 +693,6 @@ func workflowExtensionsFromProto(values map[string]*structpb.Value) map[string]a
 	}
 	out := make(map[string]any, len(values))
 	for key, value := range values {
-		if value == nil {
-			out[key] = nil
-			continue
-		}
 		out[key] = value.AsInterface()
 	}
 	return out
