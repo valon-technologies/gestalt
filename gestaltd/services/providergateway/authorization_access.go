@@ -47,21 +47,6 @@ func authorizationMethodEnforcementPolicy(fullMethod string) (authorizationEnfor
 	}
 }
 
-func authorizationMethodAccessClass(fullMethod string) (read bool, write bool, ok bool) {
-	policy, ok := authorizationMethodEnforcementPolicy(fullMethod)
-	if !ok {
-		return false, false, false
-	}
-	switch policy {
-	case authorizationPolicyGlobalRead:
-		return true, false, true
-	case authorizationPolicyGlobalAdminWrite, authorizationPolicyRelationshipWrite:
-		return false, true, true
-	default:
-		return false, false, false
-	}
-}
-
 func (t *ProviderGatewayTransport) enforceAuthorizationPublicAccess(
 	ctx context.Context,
 	subjectID, fullMethod string,

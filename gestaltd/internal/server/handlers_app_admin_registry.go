@@ -1038,18 +1038,6 @@ func (s *Server) resolveRevisionActorLabels(ctx context.Context, requests []*cor
 	return labels
 }
 
-func (s *Server) resolveRevisionActorLabel(ctx context.Context, actor string) string {
-	return s.resolveSubjectDisplayLabel(ctx, actor)
-}
-
-// resolveSubjectDisplayLabel owns subject presentation labels for admin
-// surfaces (registry revision actors, agent identities, etc.). It resolves the
-// user-lookup gate itself; callers labeling many subjects should resolve the
-// gate once and call resolveSubjectDisplayLabelForLookup instead.
-func (s *Server) resolveSubjectDisplayLabel(ctx context.Context, subjectID string) string {
-	return s.resolveSubjectDisplayLabelForLookup(ctx, subjectID, s.userLookupAllowed(ctx))
-}
-
 // resolveSubjectDisplayLabelForLookup labels a subject, resolving a user
 // subject to their email only when the caller holds the employee operator role
 // that permits user lookup. Without it the subject ID is shown as-is, so an

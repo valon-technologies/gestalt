@@ -73,10 +73,6 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 	}, nil
 }
 
-func externalCredentialProviderPersistsAccountKey(ctx context.Context, getCapabilities func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error)) bool {
-	return externalCredentialProviderCapabilities(ctx, getCapabilities).PersistsAccountKey
-}
-
 type externalCredentialCapabilities struct {
 	PersistsAccountKey        bool
 	SupportsConditionalUpsert bool

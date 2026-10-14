@@ -12,8 +12,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -82,23 +80,6 @@ func TestExternalCredentialConditionalUpsertRoundTripsExpectedID(t *testing.T) {
 	}
 	if err := remote.UpsertCredentialIfID(ctx, updated, "stale-id"); !errors.Is(err, core.ErrAlreadyExists) {
 		t.Fatalf("stale conditional upsert error = %v, want conflict", err)
-	}
-}
-
-func TestExternalCredentialCapabilityDiscoveryFallsBackToLegacyOnFailure(t *testing.T) {
-	t.Parallel()
-
-	for _, code := range []codes.Code{codes.Unimplemented, codes.Unavailable, codes.DeadlineExceeded} {
-		code := code
-		t.Run(code.String(), func(t *testing.T) {
-			t.Parallel()
-			got := externalCredentialProviderPersistsAccountKey(context.Background(), func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ExternalCredentialCapabilities, error) {
-				return nil, status.Error(code, "capability service unavailable")
-			})
-			if got {
-				t.Fatalf("capability fallback = true for %s, want legacy false", code)
-			}
-		})
 	}
 }
 
