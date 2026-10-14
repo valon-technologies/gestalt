@@ -101,7 +101,7 @@ func (r *renderer) renderWebNativeType(m *model.Message) {
 	name := localName(m.FullName)
 	for _, o := range m.Oneofs {
 		fmt.Fprintf(&r.body, "export type %s =\n", oneofTypeName(m, o))
-		for _, f := range oneofFields(m, o) {
+		for _, f := range model.OneofFields(m, o) {
 			fmt.Fprintf(&r.body, "  | { case: %q; value: %s }\n", f.JSONName, r.fieldType(f))
 		}
 		r.body.WriteString("  | { case: undefined; value?: undefined };\n\n")

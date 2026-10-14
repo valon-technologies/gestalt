@@ -205,18 +205,6 @@ func variantTypeName(oneofUnionName string, f *model.Field) string {
 	return oneofUnionName + upperFirst(f.JSONName)
 }
 
-func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
-	var out []*model.Field
-	for _, number := range o.FieldNumbers {
-		for _, f := range m.Fields {
-			if f.Number == number {
-				out = append(out, f)
-			}
-		}
-	}
-	return out
-}
-
 func toWireFunc(messageGoName string) string {
 	return "ToWire" + messageGoName
 }

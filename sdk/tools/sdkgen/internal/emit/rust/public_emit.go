@@ -280,7 +280,7 @@ func markConversionNeeds(idx *index, services []*model.Service) {
 			}
 		}
 		for _, o := range m.Oneofs {
-			for _, f := range oneofFields(m, o) {
+			for _, f := range model.OneofFields(m, o) {
 				visitRef(fieldRef(f))
 			}
 		}
@@ -323,7 +323,7 @@ func markPublicWireJSONFromMessages(idx *index, messages []*model.Message) {
 			}
 		}
 		for _, o := range m.Oneofs {
-			for _, f := range oneofFields(m, o) {
+			for _, f := range model.OneofFields(m, o) {
 				visitRef(fieldRef(f))
 			}
 		}
@@ -347,9 +347,9 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 	for _, pm := range methods {
 		collectWireJSONCodecImports(pm, codecImports)
 	}
- 	for _, base := range sortedKeys2(codecImports) {
+	for _, base := range emit.SortedKeys(codecImports) {
  		var shared, projected []string
- 		for _, name := range sortedKeys(codecImports[base]) {
+		for _, name := range emit.SortedKeys(codecImports[base]) {
  			if r.sharedCodec != nil && r.sharedCodec[name] {
  				shared = append(shared, name)
  			} else {

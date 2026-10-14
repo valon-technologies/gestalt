@@ -2,9 +2,9 @@ package ts
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -344,18 +344,6 @@ func oneofProp(o *model.Oneof) string {
 	return lowerFirst(strings.Join(parts, ""))
 }
 
-func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
-	var out []*model.Field
-	for _, number := range o.FieldNumbers {
-		for _, f := range m.Fields {
-			if f.Number == number {
-				out = append(out, f)
-			}
-		}
-	}
-	return out
-}
-
 func (r *renderer) renderEnum(e *model.Enum) {
 	name := enumName(e)
 	members := enumMemberNames(e)
@@ -376,7 +364,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 	// and variant docs have no TypeScript position inside a union literal.
 	for _, o := range m.Oneofs {
 		fmt.Fprintf(&r.body, "export type %s =\n", oneofTypeName(m, o))
-		for _, f := range oneofFields(m, o) {
+		for _, f := range model.OneofFields(m, o) {
 			fmt.Fprintf(&r.body, "  | { case: %q; value: %s }\n", f.JSONName, r.fieldType(f))
 		}
 		r.body.WriteString("  | { case: undefined; value?: undefined };\n\n")
@@ -407,7 +395,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 // Unit and JSON-null variants carry no information and take no argument.
 func (r *renderer) renderOneofFactories(m *model.Message, o *model.Oneof) {
 	unionName := oneofTypeName(m, o)
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		factory := lowerFirst(unionName) + upperFirst(f.JSONName)
 		switch f.Kind {
 		case model.KindUnit:
@@ -489,7 +477,7 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 	r.use("Init", true)
 	fmt.Fprintf(&r.body, "export function %s(value: Init<%s>): wire.%s[%q] {\n", oneofToWireFunc(m, o), unionName, name, prop)
 	r.body.WriteString("  switch (value.case) {\n")
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		fmt.Fprintf(&r.body, "    case %q:\n", f.JSONName)
 		fmt.Fprintf(&r.body, "      return { case: %q, value: %s };\n", f.JSONName, r.toWireExpr(fieldRef(f), "value.value"))
 	}
@@ -497,7 +485,7 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 
 	fmt.Fprintf(&r.body, "export function %s(value: wire.%s[%q]): %s {\n", oneofFromWireFunc(m, o), name, prop, unionName)
 	r.body.WriteString("  switch (value.case) {\n")
-	for _, f := range oneofFields(m, o) {
+	for _, f := range model.OneofFields(m, o) {
 		fmt.Fprintf(&r.body, "    case %q:\n", f.JSONName)
 		fmt.Fprintf(&r.body, "      return { case: %q, value: %s };\n", f.JSONName, r.fromWireExpr(fieldRef(f), "value.value"))
 	}
@@ -1066,8 +1054,8 @@ func (r *renderer) assemble() string {
 	if r.kind == moduleCodec && r.imports != nil && r.imports.FixedNativeModule != "" {
 		var allNames []string
 		seen := map[string]bool{}
-		for _, base := range sortedKeys2(r.features.crossPublic) {
-			for _, name := range sortedKeys(r.features.crossPublic[base]) {
+		for _, base := range emit.SortedKeys(r.features.crossPublic) {
+			for _, name := range emit.SortedKeys(r.features.crossPublic[base]) {
 				if !seen[name] {
 					seen[name] = true
 					allNames = append(allNames, name)
@@ -1078,16 +1066,16 @@ func (r *renderer) assemble() string {
 			fmt.Fprintf(&b, "import type { %s } from \"%s/%s\";\n", strings.Join(allNames, ", "), r.imports.SupportPrefix, r.imports.FixedNativeModule)
 		}
 	} else {
-		for _, base := range sortedKeys2(r.features.crossPublic) {
+		for _, base := range emit.SortedKeys(r.features.crossPublic) {
 			names := r.features.crossPublic[base]
 			if r.kind == moduleCodec {
 				// Codec modules import native types type-only so the statement is
 				// erased and the value-level public -> codec edge stays acyclic.
-				fmt.Fprintf(&b, "import type { %s } from \"%s/%s.ts\";\n", strings.Join(sortedKeys(names), ", "), r.publicDir(), base)
+				fmt.Fprintf(&b, "import type { %s } from \"%s/%s.ts\";\n", strings.Join(emit.SortedKeys(names), ", "), r.publicDir(), base)
 				continue
 			}
 			var specs []string
-			for _, name := range sortedKeys(names) {
+			for _, name := range emit.SortedKeys(names) {
 				if names[name] {
 					specs = append(specs, "type "+name)
 				} else {
@@ -1098,17 +1086,17 @@ func (r *renderer) assemble() string {
 		}
 	}
 
-	for _, base := range sortedKeys2(r.features.crossCodec) {
-		fmt.Fprintf(&b, "import { %s } from \"%s/%s.ts\";\n", strings.Join(sortedKeys(r.features.crossCodec[base]), ", "), r.codecDir(), base)
+	for _, base := range emit.SortedKeys(r.features.crossCodec) {
+		fmt.Fprintf(&b, "import { %s } from \"%s/%s.ts\";\n", strings.Join(emit.SortedKeys(r.features.crossCodec[base]), ", "), r.codecDir(), base)
 	}
 
-	if names := sortedKeys(r.features.supportValues); len(names) > 0 {
+	if names := emit.SortedKeys(r.features.supportValues); len(names) > 0 {
 		fmt.Fprintf(&b, "import { %s } from \"%s/support.ts\";\n", strings.Join(names, ", "), r.codecDir())
 	}
-	if names := sortedKeys(r.features.supportTypes); len(names) > 0 {
+	if names := emit.SortedKeys(r.features.supportTypes); len(names) > 0 {
 		fmt.Fprintf(&b, "import type { %s } from \"%s/rpc_support.ts\";\n", strings.Join(names, ", "), r.publicDir())
 	}
-	if names := sortedKeys(r.features.invokeValues); len(names) > 0 {
+	if names := emit.SortedKeys(r.features.invokeValues); len(names) > 0 {
 		fmt.Fprintf(&b, "import { %s } from \"%s/invoke_support.ts\";\n", strings.Join(names, ", "), r.publicDir())
 	}
 
@@ -1144,22 +1132,4 @@ func (r *renderer) codecDir() string {
 		return "."
 	}
 	return "./internal/codec"
-}
-
-func sortedKeys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func sortedKeys2(m map[string]map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
