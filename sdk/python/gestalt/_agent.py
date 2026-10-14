@@ -1347,17 +1347,11 @@ def agent_message_part_to_dict(part: Any) -> dict[str, Any]:
         value["json"] = struct_to_dict(part.json)
     elif getattr(part, "json", None) is not None:
         value["json"] = part.json
-    if has_field(part, "tool_call"):
+    if getattr(part, "tool_call", None) is not None:
         value["tool_call"] = _tool_call_to_dict(part.tool_call)
-    elif getattr(part, "tool_call", None) is not None:
-        value["tool_call"] = _tool_call_to_dict(part.tool_call)
-    if has_field(part, "tool_result"):
+    if getattr(part, "tool_result", None) is not None:
         value["tool_result"] = _tool_result_to_dict(part.tool_result)
-    elif getattr(part, "tool_result", None) is not None:
-        value["tool_result"] = _tool_result_to_dict(part.tool_result)
-    if has_field(part, "image_ref"):
-        value["image_ref"] = _image_ref_to_dict(part.image_ref)
-    elif getattr(part, "image_ref", None) is not None:
+    if getattr(part, "image_ref", None) is not None:
         value["image_ref"] = _image_ref_to_dict(part.image_ref)
     return value
 
@@ -1473,10 +1467,7 @@ def _agent_workspace_value(value: Any | None) -> Any | None:
 def _message_fields(message: Any, fields: tuple[str, ...]) -> dict[str, Any]:
     value: dict[str, Any] = {}
     for field_name in fields:
-        if isinstance(message, Mapping):
-            current = message.get(field_name)
-        else:
-            current = getattr(message, field_name, None)
+        current = _message_value(message, field_name)
         if current is not None and current != "":
             value[field_name] = current
     return value

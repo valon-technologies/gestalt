@@ -3086,8 +3086,6 @@ def _path_segments(path: str) -> list[str | int]:
 
 
 def _format_workflow_time(value: Any | None) -> str:
-    if value is None:
-        return ""
     if isinstance(value, _timestamp_pb2.Timestamp):
         value = datetime_from_timestamp(value)
     if not isinstance(value, _dt.datetime):
