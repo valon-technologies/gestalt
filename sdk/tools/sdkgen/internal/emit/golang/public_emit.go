@@ -3,6 +3,7 @@ package golang
 import (
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
@@ -44,10 +45,10 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		return nil, err
 	}
 
-	for _, g := range groupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
+	for _, g := range emit.GroupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
  		types := newPublicRenderer(idx, plan.SharedMessages)
  		hasProjected := false
-		for _, m := range g.messages {
+		for _, m := range g.Messages {
  			if plan.SharedMessages[m.FullName] {
  				continue
  			}
@@ -55,7 +56,7 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
  			hasProjected = true
 		}
  		if hasProjected {
- 			if err := set.Add("generated/"+g.base+".go", []byte(types.assembleGenerated())); err != nil {
+			if err := set.Add("generated/"+g.Base+".go", []byte(types.assembleGenerated())); err != nil {
  				return nil, err
  			}
  		}
@@ -63,11 +64,11 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 			continue
 		}
  		codec := newPublicRenderer(idx, plan.SharedMessages)
-		for _, m := range g.messages {
+		for _, m := range g.Messages {
 			codec.renderConversions(m)
 		}
  		if codec.body.Len() > 0 {
- 			if err := set.Add("generated/"+g.base+"_codec.go", []byte(codec.assembleGenerated())); err != nil {
+			if err := set.Add("generated/"+g.Base+"_codec.go", []byte(codec.assembleGenerated())); err != nil {
  				return nil, err
  			}
 		}

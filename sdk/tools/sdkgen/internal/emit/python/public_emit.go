@@ -3,6 +3,7 @@ package python
 import (
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
@@ -58,13 +59,13 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		return nil, err
 	}
 
-	for _, g := range groupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
- 		public := newRenderer(idx, g.base, g.base, modulePublic)
+	for _, g := range emit.GroupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
+		public := newRenderer(idx, g.Base, g.Base, modulePublic)
 		public.publicClient = true
  		public.shared = sharedLocal
  		public.sharedCodec = sharedCodecFn
  		hasProjected := false
-		for _, m := range g.messages {
+		for _, m := range g.Messages {
  			if plan.SharedMessages[m.FullName] {
  				continue
  			}
@@ -72,22 +73,22 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
  			hasProjected = true
 		}
  		if hasProjected {
- 			if err := set.Add("generated/"+g.base+".py", []byte(public.assembleGenerated())); err != nil {
+			if err := set.Add("generated/"+g.Base+".py", []byte(public.assembleGenerated())); err != nil {
  				return nil, err
  			}
 		}
  		if !hasProjected {
 			continue
 		}
- 		codec := newRenderer(idx, g.base, g.base, moduleCodec)
+		codec := newRenderer(idx, g.Base, g.Base, moduleCodec)
 		codec.publicClient = true
  		codec.shared = sharedLocal
  		codec.sharedCodec = sharedCodecFn
-		for _, m := range g.messages {
+		for _, m := range g.Messages {
 			codec.renderConversions(m)
 		}
  		if codec.body.Len() > 0 {
- 			if err := set.Add("generated/_codec/"+g.base+".py", []byte(codec.assembleGenerated())); err != nil {
+			if err := set.Add("generated/_codec/"+g.Base+".py", []byte(codec.assembleGenerated())); err != nil {
  				return nil, err
  			}
 		}

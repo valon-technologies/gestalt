@@ -38,16 +38,16 @@ func EmitWebRuntime(plan *publicsurface.EmitPlan) (*fileset.FileSet, error) {
 	}
 
 	codecImports := WebRuntimeImports()
-	for _, g := range groupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
-		if len(g.messages) == 0 {
+	for _, g := range emit.GroupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
+		if len(g.Messages) == 0 {
 			continue
 		}
-		codec := newRenderer(idx, g.base, g.base, moduleCodec)
+		codec := newRenderer(idx, g.Base, g.Base, moduleCodec)
 		codec.imports = &codecImports
-		for _, m := range g.messages {
+		for _, m := range g.Messages {
 			codec.renderConversions(m)
 		}
-		if err := set.Add("internal/codec/"+g.base+".ts", []byte(codec.assemble())); err != nil {
+		if err := set.Add("internal/codec/"+g.Base+".ts", []byte(codec.assemble())); err != nil {
 			return nil, err
 		}
 	}
@@ -62,10 +62,10 @@ func EmitWebRuntime(plan *publicsurface.EmitPlan) (*fileset.FileSet, error) {
 func renderWebNativeTypes(idx *index, messages []*model.Message, enums []*model.Enum, imports PublicImports) string {
 	supportTypes := map[string]bool{}
 	var body strings.Builder
-	groups := groupFiles(nil, messages, enums)
+	groups := emit.GroupFiles(nil, messages, enums)
 	for _, g := range groups {
-		for _, e := range g.enums {
-			r := newRenderer(idx, g.base, g.base, modulePublic)
+		for _, e := range g.Enums {
+			r := newRenderer(idx, g.Base, g.Base, modulePublic)
 			r.imports = &imports
 			r.renderEnum(e)
 			body.WriteString(r.body.String())
@@ -73,8 +73,8 @@ func renderWebNativeTypes(idx *index, messages []*model.Message, enums []*model.
 				supportTypes[name] = true
 			}
 		}
-		for _, m := range g.messages {
-			r := newRenderer(idx, g.base, g.base, modulePublic)
+		for _, m := range g.Messages {
+			r := newRenderer(idx, g.Base, g.Base, modulePublic)
 			r.imports = &imports
 			r.renderWebNativeType(m)
 			body.WriteString(r.body.String())

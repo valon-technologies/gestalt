@@ -152,10 +152,10 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	}
 
  	codecModules := []string{}
-	for _, g := range groupFiles(plan.Filtered.Services, reachableMessages, enums) {
- 		public := newRenderer(idx, g.base, g.base, modulePublic, true, sharedLocal, sharedCodecFn)
+	for _, g := range emit.GroupFiles(plan.Filtered.Services, reachableMessages, enums) {
+		public := newRenderer(idx, g.Base, g.Base, modulePublic, true, sharedLocal, sharedCodecFn)
  		hasProjected := false
-		for _, m := range g.messages {
+		for _, m := range g.Messages {
  			if plan.SharedMessages[m.FullName] {
  				continue
  			}
@@ -163,13 +163,13 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
  			hasProjected = true
 		}
 		if hasProjected {
-			if err := set.Add("generated/"+g.base+".rs", []byte(public.assembleGenerated())); err != nil {
+			if err := set.Add("generated/"+g.Base+".rs", []byte(public.assembleGenerated())); err != nil {
 				return nil, err
 			}
 		}
  		needCodec := hasProjected
  		if !needCodec {
- 			for _, m := range g.messages {
+			for _, m := range g.Messages {
  				if idx.needWireJSON[m.FullName] {
  					needCodec = true
  					break
@@ -179,15 +179,15 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
  		if !needCodec {
  			continue
  		}
-		codec := newRenderer(idx, g.base, g.base, moduleCodec, true, sharedLocal, sharedCodecFn)
-		for _, m := range g.messages {
+		codec := newRenderer(idx, g.Base, g.Base, moduleCodec, true, sharedLocal, sharedCodecFn)
+		for _, m := range g.Messages {
 			codec.renderConversions(m)
 		}
  		if codec.body.Len() > 0 {
- 			if err := set.Add("generated/codec/"+g.base+".rs", []byte(codec.assembleGenerated())); err != nil {
+			if err := set.Add("generated/codec/"+g.Base+".rs", []byte(codec.assembleGenerated())); err != nil {
  				return nil, err
  			}
- 			codecModules = append(codecModules, g.base)
+			codecModules = append(codecModules, g.Base)
 		}
 	}
 	if err := set.Add("generated/codec.rs", []byte(renderPublicCodecIndex(codecModules))); err != nil {
@@ -207,16 +207,16 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if emit.HasJSONResult(plan.Filtered.Services) {
 		modules = append(modules, "invoke_support")
 	}
-	for _, g := range groupFiles(plan.Filtered.Services, reachableMessages, enums) {
+	for _, g := range emit.GroupFiles(plan.Filtered.Services, reachableMessages, enums) {
  		hasProjected := false
- 		for _, m := range g.messages {
+		for _, m := range g.Messages {
  			if !plan.SharedMessages[m.FullName] {
  				hasProjected = true
  				break
  			}
  		}
  		if hasProjected {
- 			modules = append(modules, g.base)
+			modules = append(modules, g.Base)
  		}
 	}
 	if err := set.Add("generated/mod.rs", []byte(renderGeneratedMod(modules))); err != nil {
