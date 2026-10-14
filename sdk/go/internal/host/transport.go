@@ -26,12 +26,6 @@ type SharedTransport[C any] struct {
 	client  C
 }
 
-// ManagerClient returns the shared client for an unbound (manager-level)
-// host service, dialing it on first use.
-func ManagerClient[C any](ctx context.Context, serviceName, target, token string, transport *SharedTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {
-	return ServiceClient(ctx, serviceName, target, token, "", transport, newClient)
-}
-
 // ServiceClient returns the shared client for a host service binding,
 // dialing it on first use and redialing when the dial identity changes.
 func ServiceClient[C any](ctx context.Context, serviceName, target, token, binding string, transport *SharedTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {

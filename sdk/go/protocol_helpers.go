@@ -26,9 +26,6 @@ func structFromMap(value map[string]any) (*structpb.Struct, error) {
 	if err != nil {
 		return nil, err
 	}
-	if normalized == nil {
-		return nil, nil
-	}
 	return structpb.NewStruct(normalized)
 }
 
@@ -72,9 +69,6 @@ func valueFromAny(value any) (*structpb.Value, error) {
 
 // anyFromValue converts a protobuf Value into its Go representation.
 func anyFromValue(value *structpb.Value) any {
-	if value == nil {
-		return nil
-	}
 	return value.AsInterface()
 }
 
@@ -101,10 +95,6 @@ func mapFromValues(values map[string]*structpb.Value) map[string]any {
 	}
 	out := make(map[string]any, len(values))
 	for key, value := range values {
-		if value == nil {
-			out[key] = nil
-			continue
-		}
 		out[key] = value.AsInterface()
 	}
 	return out
@@ -216,9 +206,6 @@ func normalizeJSONValue(value reflect.Value, path string, seen map[uintptr]strin
 	case reflect.Map:
 		return normalizeJSONMap(value, path, seen)
 	case reflect.Slice, reflect.Array:
-		if value.Kind() == reflect.Slice && value.IsNil() {
-			return nil, nil
-		}
 		if value.Type().Elem().Kind() == reflect.Uint8 {
 			return nil, fmt.Errorf("%s: []byte is not JSON-compatible", path)
 		}
@@ -242,13 +229,10 @@ func implementsJSONMarshaler(valueType reflect.Type) bool {
 	if valueType.Implements(jsonMarshalerType) {
 		return true
 	}
-	return valueType.Kind() != reflect.Pointer && reflect.PointerTo(valueType).Implements(jsonMarshalerType)
+	return reflect.PointerTo(valueType).Implements(jsonMarshalerType)
 }
 
 func normalizeJSONMap(value reflect.Value, path string, seen map[uintptr]string) (map[string]any, error) {
-	if value.IsNil() {
-		return map[string]any{}, nil
-	}
 	if value.Type().Key().Kind() != reflect.String {
 		return nil, fmt.Errorf("%s: map keys must be strings", path)
 	}

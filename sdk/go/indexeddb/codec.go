@@ -7,10 +7,6 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
 )
 
-func typedValueFromAny(v any) (*client.TypedValue, error) {
-	return TypedValueFromAny(v)
-}
-
 // TypedValueFromAny encodes one value for RPC requests.
 func TypedValueFromAny(v any) (*client.TypedValue, error) {
 	wire, err := indexeddbcodec.TypedValueFromAny(v)
@@ -20,20 +16,12 @@ func TypedValueFromAny(v any) (*client.TypedValue, error) {
 	return client.FromWireTypedValue(wire), nil
 }
 
-func anyFromTypedValue(v *client.TypedValue) (any, error) {
-	return AnyFromTypedValue(v)
-}
-
 // AnyFromTypedValue decodes one typed value.
 func AnyFromTypedValue(v *client.TypedValue) (any, error) {
 	if v == nil {
 		return nil, nil
 	}
 	return indexeddbcodec.AnyFromTypedValue(client.ToWireTypedValue(v))
-}
-
-func anyFromTypedValues(values []*client.TypedValue) ([]any, error) {
-	return AnyFromTypedValues(values)
 }
 
 // AnyFromTypedValues decodes typed values.
@@ -49,10 +37,6 @@ func AnyFromTypedValues(values []*client.TypedValue) ([]any, error) {
 	return out, nil
 }
 
-func recordToProto(record Record) (*client.Record, error) {
-	return RecordToProto(record)
-}
-
 // RecordToProto encodes a record.
 func RecordToProto(record Record) (*client.Record, error) {
 	wire, err := indexeddbcodec.RecordToProto(record)
@@ -62,20 +46,12 @@ func RecordToProto(record Record) (*client.Record, error) {
 	return client.FromWireRecord(wire), nil
 }
 
-func recordFromProto(record *client.Record) (Record, error) {
-	return RecordFromProto(record)
-}
-
 // RecordFromProto decodes a record.
 func RecordFromProto(record *client.Record) (Record, error) {
 	if record == nil {
 		return nil, fmt.Errorf("record is required")
 	}
 	return indexeddbcodec.RecordFromProto(client.ToWireRecord(record))
-}
-
-func recordsFromProto(records []*client.Record) ([]Record, error) {
-	return RecordsFromProto(records)
 }
 
 // RecordsFromProto decodes records.
@@ -91,10 +67,6 @@ func RecordsFromProto(records []*client.Record) ([]Record, error) {
 	return out, nil
 }
 
-func recordsToProto(records []Record) ([]*client.Record, error) {
-	return RecordsToProto(records)
-}
-
 // RecordsToProto encodes records.
 func RecordsToProto(records []Record) ([]*client.Record, error) {
 	wire, err := indexeddbcodec.RecordsToProto(records)
@@ -106,10 +78,6 @@ func RecordsToProto(records []Record) ([]*client.Record, error) {
 		out[i] = client.FromWireRecord(r)
 	}
 	return out, nil
-}
-
-func keyValuesToAny(kvs []*client.KeyValue) ([]any, error) {
-	return KeyValuesToAny(kvs)
 }
 
 // KeyValuesToAny decodes key values.
@@ -125,20 +93,12 @@ func KeyValuesToAny(kvs []*client.KeyValue) ([]any, error) {
 	return out, nil
 }
 
-func keyValueToAny(kv *client.KeyValue) (any, error) {
-	return KeyValueToAny(kv)
-}
-
 // KeyValueToAny decodes one key value.
 func KeyValueToAny(kv *client.KeyValue) (any, error) {
 	if kv == nil {
 		return nil, nil
 	}
 	return indexeddbcodec.KeyValueToAny(client.ToWireKeyValue(kv))
-}
-
-func anyToKeyValue(v any) (*client.KeyValue, error) {
-	return AnyToKeyValue(v)
 }
 
 // AnyToKeyValue encodes a key for RPC requests.
@@ -148,10 +108,6 @@ func AnyToKeyValue(v any) (*client.KeyValue, error) {
 		return nil, err
 	}
 	return client.FromWireKeyValue(wire), nil
-}
-
-func cursorKeyToProto(key any) (*client.KeyValue, error) {
-	return CursorKeyToProto(key)
 }
 
 // CursorKeyToProto encodes a cursor key.

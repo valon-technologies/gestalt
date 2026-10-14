@@ -1155,14 +1155,6 @@ func workflowSubjectID(value *Subject) string {
 	return strings.TrimSpace(value.ID)
 }
 
-func workflowSubjectFromID(value string) *Subject {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	return &Subject{ID: value}
-}
-
 // WorkflowRefInput references a run-input path in a workflow definition.
 func WorkflowRefInput(path string) WorkflowValue {
 	return WorkflowValue{Input: strings.TrimSpace(path)}
