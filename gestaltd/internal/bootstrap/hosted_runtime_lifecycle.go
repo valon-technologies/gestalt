@@ -33,9 +33,6 @@ func runtimeSessionRetirementReason(session *proto.RuntimeSession, drainAt *time
 
 func runtimeSessionDrainAt(session *proto.RuntimeSession, now time.Time, policy config.RuntimePlacementLifecyclePolicy) *time.Time {
 	lifecycle := session.GetLifecycle()
-	if lifecycle == nil {
-		return nil
-	}
 	var drainAt *time.Time
 	if lifecycle.GetRecommendedDrainAt() != nil {
 		recommended := lifecycle.GetRecommendedDrainAt().AsTime().UTC()
