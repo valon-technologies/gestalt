@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
 
 // pythonKeywords mirrors the stdlib keyword.kwlist for Python 3.10+. Proto
@@ -40,22 +41,6 @@ func wireFieldExpr(name string) string {
 		return fmt.Sprintf("getattr(value, %q)", name)
 	}
 	return "value." + name
-}
-
-// localName returns the unqualified message or enum name. Names are unique
-// within the provider package, so generated identifiers drop the package.
-func localName(fullName string) string {
-	if i := strings.LastIndex(fullName, "."); i >= 0 {
-		return fullName[i+1:]
-	}
-	return fullName
-}
-
-func enumName(e *model.Enum) string {
-	if e.GeneratedName != "" {
-		return e.GeneratedName
-	}
-	return localName(e.FullName)
 }
 
 // generatedFileBase derives the generated module base from a proto file path:
@@ -193,7 +178,7 @@ func (r *renderer) fieldType(f *model.Field) string {
 }
 
 func oneofTypeName(message *model.Message, oneof *model.Oneof) string {
-	return localName(message.FullName) + pascalCase(oneof.Name)
+	return naming.LocalName(message.FullName) + pascalCase(oneof.Name)
 }
 
 // variantClassName names the dataclass for one oneof variant:
@@ -205,12 +190,12 @@ func (r *renderer) variantClassName(m *model.Message, o *model.Oneof, f *model.F
 	if r.oneofQualified(m, o) {
 		return oneofTypeName(m, o) + pascalCase(f.Name)
 	}
-	return localName(m.FullName) + pascalCase(f.Name)
+	return naming.LocalName(m.FullName) + pascalCase(f.Name)
 }
 
 func (r *renderer) oneofQualified(m *model.Message, o *model.Oneof) bool {
 	for _, f := range oneofFields(m, o) {
-		if r.idx.taken[localName(m.FullName)+pascalCase(f.Name)] {
+		if r.idx.taken[naming.LocalName(m.FullName)+pascalCase(f.Name)] {
 			return true
 		}
 	}
@@ -218,18 +203,18 @@ func (r *renderer) oneofQualified(m *model.Message, o *model.Oneof) bool {
 }
 
 func enumValuesClassName(e *model.Enum) string {
-	return enumName(e) + "Values"
+	return naming.EnumName(e) + "Values"
 }
 
 // Converter functions live in the generated _codec package, which is already
 // internal by the SDK's underscore convention (like _gen), so their names
 // carry no leading underscore.
 func toWireFunc(messageFullName string) string {
-	return "to_wire_" + snakeCase(localName(messageFullName))
+	return "to_wire_" + snakeCase(naming.LocalName(messageFullName))
 }
 
 func fromWireFunc(messageFullName string) string {
-	return "from_wire_" + snakeCase(localName(messageFullName))
+	return "from_wire_" + snakeCase(naming.LocalName(messageFullName))
 }
 
 func pythonStringTuple(values []string) string {

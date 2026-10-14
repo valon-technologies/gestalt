@@ -6,30 +6,8 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
-
-func upperFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-// localName returns the unqualified message or enum name. Names are unique
-// within the provider package, so generated identifiers drop the package.
-func localName(fullName string) string {
-	if i := strings.LastIndex(fullName, "."); i >= 0 {
-		return fullName[i+1:]
-	}
-	return fullName
-}
-
-func enumName(e *model.Enum) string {
-	if e.GeneratedName != "" {
-		return e.GeneratedName
-	}
-	return localName(e.FullName)
-}
 
 // generatedFileBase derives the generated file base from a proto file path:
 // sdk/proto/v1/indexeddb.proto becomes "indexeddb".
@@ -42,7 +20,7 @@ func generatedFileBase(protoFile string) string {
 // are unique within the provider package) map through directly.
 func goTypeName(fullName, protoFile string) string {
 	_ = protoFile
-	return localName(fullName)
+	return naming.LocalName(fullName)
 }
 
 func goScalarType(s model.ScalarType) string {
@@ -72,7 +50,7 @@ func goScalarType(s model.ScalarType) string {
 func pascalCase(s string) string {
 	parts := strings.Split(s, "_")
 	for i, part := range parts {
-		parts[i] = upperFirst(strings.ToLower(part))
+		parts[i] = naming.UpperFirst(strings.ToLower(part))
 	}
 	return strings.Join(parts, "")
 }
@@ -99,7 +77,7 @@ func enumValueConst(goEnumName, protoEnumName, valueName string) string {
 
 // fieldGoName renders the exported Go field name for a proto field.
 func fieldGoName(f *model.Field) string {
-	return upperFirst(f.JSONName)
+	return naming.UpperFirst(f.JSONName)
 }
 
 // reservedParamNames are identifiers a flattened signature parameter must not
@@ -202,7 +180,7 @@ func oneofTypeName(messageGoName string, o *model.Oneof) string {
 
 // variantTypeName renders the wrapper struct name for one oneof variant.
 func variantTypeName(oneofUnionName string, f *model.Field) string {
-	return oneofUnionName + upperFirst(f.JSONName)
+	return oneofUnionName + naming.UpperFirst(f.JSONName)
 }
 
 func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {

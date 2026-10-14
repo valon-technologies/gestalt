@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -111,7 +112,7 @@ func (r *renderer) renderAppClientFlavor(svc *model.Service, isAsync bool) {
 	r.features.unaryTransport = true
 	r.features.wire = true
 	r.features.asyncTransport = r.features.asyncTransport || isAsync
-	clientName := asyncClientName(localName(svc.FullName)+"Client", isAsync)
+	clientName := asyncClientName(naming.LocalName(svc.FullName)+"Client", isAsync)
 	fmt.Fprintf(&r.body, "class %s:\n", clientName)
 	doc := fmt.Sprintf("Transport-neutral client for the public %s surface.", svc.FullName)
 	if isAsync {
@@ -143,7 +144,7 @@ func (r *renderer) renderAppClientFlavor(svc *model.Service, isAsync bool) {
 }
 
 func (r *renderer) renderAppRESTClientProtocol(svc *model.Service, isAsync bool) {
-	clientName := asyncClientName(localName(svc.FullName)+"Client", isAsync)
+	clientName := asyncClientName(naming.LocalName(svc.FullName)+"Client", isAsync)
 	protocolName := clientName + "REST"
 	var restMethods []*model.Method
 	for _, m := range svc.Methods {
@@ -196,7 +197,7 @@ func (r *renderer) renderAppClientStreamMethod(svc *model.Service, m *model.Meth
 	r.features.serverStream = true
 	requestType := r.messageType(m.Input.FullName)
 	outputType := r.messageType(m.Output.FullName)
-	wireOutputType := r.wireModule() + "." + localName(m.Output.FullName)
+	wireOutputType := r.wireModule() + "." + naming.LocalName(m.Output.FullName)
 	toWire := r.codecRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
 	if isAsync {
 		fmt.Fprintf(&r.body, "    async def %s(self, request: %s) -> ServerStreamRecv:\n", methodName, requestType)
@@ -241,7 +242,7 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 	}
 	if m.InputIsEmpty {
 		outputType := r.messageType(m.Output.FullName)
-		wireOutputType := r.wireModule() + "." + localName(m.Output.FullName)
+		wireOutputType := r.wireModule() + "." + naming.LocalName(m.Output.FullName)
 		fromWire := r.codecRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
 		fmt.Fprintf(&r.body, "    %s %s(self) -> %s:\n", kw, methodName, outputType)
 		r.writeMethodDoc(m)
@@ -272,7 +273,7 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 	}
 	requestType := r.messageType(m.Input.FullName)
 	outputType := r.messageType(m.Output.FullName)
-	wireOutputType := r.wireModule() + "." + localName(m.Output.FullName)
+	wireOutputType := r.wireModule() + "." + naming.LocalName(m.Output.FullName)
 	toWire := r.codecRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
 	fromWire := r.codecRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
 
@@ -407,7 +408,7 @@ func (r *renderer) renderAppRESTProtocolSignature(m *model.Method, methodName st
 }
 
 func appClientMethodConst(svc *model.Service, m *model.Method) string {
-	wireName := localName(svc.FullName)
+	wireName := naming.LocalName(svc.FullName)
 	return fmt.Sprintf("METHOD_%s_%s", screamingSnake(wireName), screamingSnake(m.Name))
 }
 
@@ -431,7 +432,7 @@ func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {
 	r.body.WriteString("    json_name: str\n\n")
 
 	for _, pm := range methods {
-		wireName := localName(pm.Service)
+		wireName := naming.LocalName(pm.Service)
 		constName := fmt.Sprintf("METHOD_%s_%s", screamingSnake(wireName), screamingSnake(pm.Method))
 		fmt.Fprintf(&r.body, "%s = Method(\n", constName)
 		fmt.Fprintf(&r.body, "    service=%q,\n", pm.Service)

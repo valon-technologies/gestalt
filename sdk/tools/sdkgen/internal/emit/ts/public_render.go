@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -34,7 +35,7 @@ func renderPublicMethods(methods []publicsurface.PublicMethod) string {
 	byService := map[string][]publicsurface.PublicMethod{}
 	var serviceOrder []string
 	for _, pm := range methods {
-		serviceKey := lowerFirst(publicsurface.ServiceLocalName(pm.Service))
+		serviceKey := naming.LowerFirst(publicsurface.ServiceLocalName(pm.Service))
 		if _, ok := byService[serviceKey]; !ok {
 			serviceOrder = append(serviceOrder, serviceKey)
 		}
@@ -46,7 +47,7 @@ func renderPublicMethods(methods []publicsurface.PublicMethod) string {
 		sort.Slice(group, func(i, j int) bool { return group[i].Method < group[j].Method })
 		fmt.Fprintf(&b, "  %s: {\n", serviceKey)
 		for mi, pm := range group {
-			fmt.Fprintf(&b, "    %s: %s", lowerFirst(pm.Method), renderPublicMethodEntry(pm))
+			fmt.Fprintf(&b, "    %s: %s", naming.LowerFirst(pm.Method), renderPublicMethodEntry(pm))
 			if mi < len(group)-1 {
 				b.WriteString(",")
 			}
@@ -121,7 +122,7 @@ func renderPublicTypes(view *publicsurface.View, paths PublicImports) string {
 				continue
 			}
 			omit := publicOmittedFieldNames(m)
-			native := localName(m.Input.FullName)
+			native := naming.LocalName(m.Input.FullName)
 			typeName := publicRequestTypeName(svc.Service, m)
 			base := generatedFileBase(m.Input.ProtoFile)
 			if imports[base] == nil {
@@ -211,9 +212,9 @@ func renderPublicConverters(view *publicsurface.View, paths PublicImports) strin
 	var blocks []string
 	for _, key := range sortedPublicKeys(converters) {
 		conv := converters[key]
-		native := localName(conv.input.FullName)
+		native := naming.LocalName(conv.input.FullName)
 		codecName := toWireFunc(conv.input.FullName)
-		codecAlias := "codec" + upperFirst(codecName)
+		codecAlias := "codec" + naming.UpperFirst(codecName)
 		protoFile := conv.input.ProtoFile
 		if codecImports[protoFile] == nil {
 			codecImports[protoFile] = map[string]bool{}
@@ -247,7 +248,7 @@ func renderPublicConverters(view *publicsurface.View, paths PublicImports) strin
 		names := sortedPublicKeys(codecImports[protoFile])
 		var importNames []string
 		for _, name := range names {
-			importNames = append(importNames, name+" as codec"+upperFirst(name))
+			importNames = append(importNames, name+" as codec"+naming.UpperFirst(name))
 		}
 		fmt.Fprintf(&b, "import {\n  %s,\n} from %q;\n", strings.Join(importNames, ",\n  "), paths.codecModulePath(protoFile))
 	}
@@ -327,12 +328,12 @@ export interface Transport {
 }
 
 func publicServiceClientFile(serviceName string) string {
-	return lowerFirst(serviceName) + "_client.ts"
+	return naming.LowerFirst(serviceName) + "_client.ts"
 }
 
 func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 	var b strings.Builder
-	clientName := localName(svc.FullName) + "Client"
+	clientName := naming.LocalName(svc.FullName) + "Client"
 	fmt.Fprintf(&b, "/**\n * Transport-neutral %s client.\n *\n * @module client/generated/%s\n */\n\n",
 		svc.Name, publicServiceClientFile(svc.Name))
 
@@ -348,8 +349,8 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 			needsEmpty = true
 		}
 		if m.Input != nil && m.Output != nil {
-			inputNative := localName(m.Input.FullName)
-			outputNative := localName(m.Output.FullName)
+			inputNative := naming.LocalName(m.Input.FullName)
+			outputNative := naming.LocalName(m.Output.FullName)
 			if schemaImports[m.Input.ProtoFile] == nil {
 				schemaImports[m.Input.ProtoFile] = map[string]bool{}
 			}
@@ -369,7 +370,7 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 			requestTypes = append(requestTypes, publicRequestTypeName(svc, m))
 			converterImports["toWire"+inputNative] = true
 		} else if m.Input != nil && !m.InputIsEmpty {
-			inputNative := localName(m.Input.FullName)
+			inputNative := naming.LocalName(m.Input.FullName)
 			if schemaImports[m.Input.ProtoFile] == nil {
 				schemaImports[m.Input.ProtoFile] = map[string]bool{}
 			}
@@ -377,7 +378,7 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 			requestTypes = append(requestTypes, publicRequestTypeName(svc, m))
 			converterImports["toWire"+inputNative] = true
 		} else if m.Output != nil && !m.OutputIsEmpty {
-			outputNative := localName(m.Output.FullName)
+			outputNative := naming.LocalName(m.Output.FullName)
 			if schemaImports[m.Output.ProtoFile] == nil {
 				schemaImports[m.Output.ProtoFile] = map[string]bool{}
 			}
@@ -435,7 +436,7 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 
 	fmt.Fprintf(&b, "export class %s {\n", clientName)
 	b.WriteString("  constructor(private readonly transport: Transport) {}\n\n")
-	serviceKey := lowerFirst(svc.Name)
+	serviceKey := naming.LowerFirst(svc.Name)
 	for _, m := range svc.Methods {
 		renderPublicServiceClientMethod(&b, svc, m, serviceKey, paths)
 	}
@@ -445,7 +446,7 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 }
 
 func renderPublicServiceRESTInterface(b *strings.Builder, svc *model.Service) {
-	clientName := localName(svc.FullName) + "Client"
+	clientName := naming.LocalName(svc.FullName) + "Client"
 	ifaceName := clientName + "REST"
 	var restMethods []*model.Method
 	for _, m := range svc.Methods {
@@ -464,7 +465,7 @@ func renderPublicServiceRESTInterface(b *strings.Builder, svc *model.Service) {
 }
 
 func renderPublicServiceClientMethod(b *strings.Builder, svc *model.Service, m *model.Method, serviceKey string, paths PublicImports) {
-	methodKey := lowerFirst(m.Name)
+	methodKey := naming.LowerFirst(m.Name)
 	methodRef := fmt.Sprintf("PUBLIC_METHODS.%s.%s", serviceKey, methodKey)
 
 	if m.Stream == model.ServerStream && m.Input != nil && m.Output != nil {
@@ -529,41 +530,41 @@ func publicServiceClientReturnType(m *model.Method) string {
 	if m.OutputIsEmpty {
 		return "void"
 	}
-	return localName(m.Output.FullName)
+	return naming.LocalName(m.Output.FullName)
 }
 
 func publicServiceWireRequestExpr(m *model.Method) string {
 	if m.InputIsEmpty {
 		return "create(EmptySchema, {})"
 	}
-	return "toWire" + localName(m.Input.FullName) + "(request)"
+	return "toWire" + naming.LocalName(m.Input.FullName) + "(request)"
 }
 
 func publicServiceInputSchema(m *model.Method) string {
 	if m.InputIsEmpty {
 		return "EmptySchema"
 	}
-	return localName(m.Input.FullName) + "Schema"
+	return naming.LocalName(m.Input.FullName) + "Schema"
 }
 
 func publicServiceOutputSchema(m *model.Method) string {
 	if m.OutputIsEmpty {
 		return "EmptySchema"
 	}
-	return localName(m.Output.FullName) + "Schema"
+	return naming.LocalName(m.Output.FullName) + "Schema"
 }
 
 func publicServiceFromWireExpr(m *model.Method) string {
 	if m.OutputIsEmpty {
 		return ""
 	}
-	return "fromWire" + localName(m.Output.FullName)
+	return "fromWire" + naming.LocalName(m.Output.FullName)
 }
 
 func renderPublicServiceClientJsonMethod(b *strings.Builder, svc *model.Service, m *model.Method, methodKey, methodRef string, paths PublicImports) {
 	typeName := publicRequestTypeName(svc, m)
-	inputNative := localName(m.Input.FullName)
-	outputNative := localName(m.Output.FullName)
+	inputNative := naming.LocalName(m.Input.FullName)
+	outputNative := naming.LocalName(m.Output.FullName)
 
 	fmt.Fprintf(b, "  async %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n",
 		methodKey, typeName, outputNative)
@@ -582,8 +583,8 @@ func renderPublicServiceClientJsonMethod(b *strings.Builder, svc *model.Service,
 
 func renderPublicServiceClientGraphQLRawMethod(b *strings.Builder, svc *model.Service, m *model.Method, methodKey, methodRef string) {
 	typeName := publicRequestTypeName(svc, m)
-	inputNative := localName(m.Input.FullName)
-	outputNative := localName(m.Output.FullName)
+	inputNative := naming.LocalName(m.Input.FullName)
+	outputNative := naming.LocalName(m.Output.FullName)
 	sig := renderPublicServiceClientMethodSignature(svc, m, methodKey)
 	fmt.Fprintf(b, "  async %s%s: Promise<%s> {\n", sig.prefix, sig.suffix, outputNative)
 	fmt.Fprintf(b, "    return fromWire%s(\n      await this.transport.unary(\n        %s,\n        toWire%s(request),\n        %sSchema,\n        %sSchema,\n        callOptions,\n      ),\n    );\n  }\n\n",
@@ -593,7 +594,7 @@ func renderPublicServiceClientGraphQLRawMethod(b *strings.Builder, svc *model.Se
 
 func renderPublicServiceClientGraphQLRawAlias(b *strings.Builder, svc *model.Service, m *model.Method) {
 	typeName := publicRequestTypeName(svc, m)
-	outputNative := localName(m.Output.FullName)
+	outputNative := naming.LocalName(m.Output.FullName)
 	b.WriteString("  /** Alias for invokeGraphQL. */\n")
 	fmt.Fprintf(b, "  async invokeGraphQLRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n",
 		typeName, outputNative)
@@ -614,7 +615,7 @@ func renderPublicServiceClientGraphQLDecodedMethod(b *strings.Builder, svc *mode
 // transport's serverStream through the per-frame fromWire codec.
 func renderPublicServiceClientStreamMethod(b *strings.Builder, svc *model.Service, m *model.Method, methodKey, methodRef string) {
 	typeName := publicRequestTypeName(svc, m)
-	outputNative := localName(m.Output.FullName)
+	outputNative := naming.LocalName(m.Output.FullName)
 	fromWire := publicServiceFromWireExpr(m)
 	wireExpr := publicServiceWireRequestExpr(m)
 	inputSchema := publicServiceInputSchema(m)
@@ -631,23 +632,23 @@ func renderPublicServiceClientStreamMethod(b *strings.Builder, svc *model.Servic
 func renderPublicRESTInterfaceMethod(b *strings.Builder, svc *model.Service, m *model.Method) {
 	if m.Stream == model.ServerStream && m.Input != nil && m.Output != nil {
 		typeName := publicRequestTypeName(svc, m)
-		outputNative := localName(m.Output.FullName)
+		outputNative := naming.LocalName(m.Output.FullName)
 		fmt.Fprintf(b, "  %s(request: %s, callOptions?: PublicUnaryCallOptions): AsyncIterable<%s>;\n",
-			lowerFirst(m.Name), typeName, outputNative)
+			naming.LowerFirst(m.Name), typeName, outputNative)
 		return
 	}
 	if m.JsonResult != nil && m.Input != nil && m.Output != nil {
 		typeName := publicRequestTypeName(svc, m)
-		outputNative := localName(m.Output.FullName)
+		outputNative := naming.LocalName(m.Output.FullName)
 		fmt.Fprintf(b, "  %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s>;\n",
-			lowerFirst(m.Name), typeName, outputNative)
+			naming.LowerFirst(m.Name), typeName, outputNative)
 		fmt.Fprintf(b, "  %s<T = unknown>(request: %s, callOptions?: PublicUnaryCallOptions): Promise<T>;\n",
-			lowerFirst(m.Name), typeName)
+			naming.LowerFirst(m.Name), typeName)
 		return
 	}
 	if m.Name == "InvokeGraphQL" && m.Input != nil && m.Output != nil {
 		typeName := publicRequestTypeName(svc, m)
-		outputNative := localName(m.Output.FullName)
+		outputNative := naming.LocalName(m.Output.FullName)
 		fmt.Fprintf(b, "  invokeGraphQL(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s>;\n",
 			typeName, outputNative)
 		fmt.Fprintf(b, "  invokeGraphQLRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s>;\n",
@@ -655,7 +656,7 @@ func renderPublicRESTInterfaceMethod(b *strings.Builder, svc *model.Service, m *
 		b.WriteString("  invokeGraphQLDecoded<T = unknown>(request: PublicAppInvokeGraphQLRequest, callOptions?: PublicUnaryCallOptions): Promise<T>;\n")
 		return
 	}
-	sig := renderPublicServiceClientMethodSignature(svc, m, lowerFirst(m.Name))
+	sig := renderPublicServiceClientMethodSignature(svc, m, naming.LowerFirst(m.Name))
 	returnType := publicServiceClientReturnType(m)
 	if m.OutputIsEmpty {
 		fmt.Fprintf(b, "  %s%s: Promise<void>;\n", sig.prefix, sig.suffix)

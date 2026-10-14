@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -205,11 +206,11 @@ func (r *renderer) codecRef(protoFile, name string) string {
 }
 
 func (r *renderer) messageType(fullName string) string {
-	return r.crossRef(r.idx.messages[fullName].ProtoFile, localName(fullName))
+	return r.crossRef(r.idx.messages[fullName].ProtoFile, naming.LocalName(fullName))
 }
 
 func (r *renderer) enumType(fullName string) string {
-	return r.crossRef(r.idx.enums[fullName].ProtoFile, enumName(r.idx.enums[fullName]))
+	return r.crossRef(r.idx.enums[fullName].ProtoFile, naming.EnumName(r.idx.enums[fullName]))
 }
 
 // toWireExpr renders the wire-bound conversion of a singular value.
@@ -406,7 +407,7 @@ func enumMemberNames(e *model.Enum) []string {
 }
 
 func (r *renderer) renderEnum(e *model.Enum) {
-	name := enumName(e)
+	name := naming.EnumName(e)
 	r.body.WriteString("# Open enum: unknown numeric values are preserved, so the type is int.\n")
 	fmt.Fprintf(&r.body, "%s = int\n\n\n", name)
 	fmt.Fprintf(&r.body, "class %s:\n", enumValuesClassName(e))
@@ -455,7 +456,7 @@ func (r *renderer) fieldDecl(f *model.Field) (string, string) {
 }
 
 func (r *renderer) renderMessage(m *model.Message) {
-	name := localName(m.FullName)
+	name := naming.LocalName(m.FullName)
 	r.features.dataclass = true
 
 	for _, o := range m.Oneofs {
@@ -510,10 +511,10 @@ func (r *renderer) renderMessage(m *model.Message) {
 }
 
 func (r *renderer) renderConversions(m *model.Message) {
- 	if r.publicClient && r.shared != nil && r.shared[localName(m.FullName)] {
+	if r.publicClient && r.shared != nil && r.shared[naming.LocalName(m.FullName)] {
  		return
  	}
-	name := localName(m.FullName)
+	name := naming.LocalName(m.FullName)
 	nativeName := r.nativeRef(name)
 	r.features.anyType = true
 	r.features.wire = true
@@ -617,7 +618,7 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 }
 
 func (r *renderer) renderClient(svc *model.Service) {
-	wireName := localName(svc.FullName)
+	wireName := naming.LocalName(svc.FullName)
 	name := wireName
 	r.features.grpc = true
 	r.features.wireGrpc = true

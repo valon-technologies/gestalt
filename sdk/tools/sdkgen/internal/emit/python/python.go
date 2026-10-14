@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/toolchain"
 )
 
@@ -126,13 +127,13 @@ func hasJsonResult(services []*model.Service) bool {
 func takenNames(messages []*model.Message, enums []*model.Enum) map[string]bool {
 	taken := map[string]bool{}
 	for _, m := range messages {
-		taken[localName(m.FullName)] = true
+		taken[naming.LocalName(m.FullName)] = true
 		for _, o := range m.Oneofs {
 			taken[oneofTypeName(m, o)] = true
 		}
 	}
 	for _, e := range enums {
-		taken[enumName(e)] = true
+		taken[naming.EnumName(e)] = true
 		taken[enumValuesClassName(e)] = true
 	}
 	return taken

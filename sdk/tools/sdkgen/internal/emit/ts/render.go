@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
 
 // moduleKind selects which of the two generated modules per proto file is
@@ -128,12 +129,12 @@ func (r *renderer) convRef(protoFile, name string) string {
 }
 
 func (r *renderer) messageType(fullName string) string {
-	return r.typeRef(r.idx.messages[fullName].ProtoFile, localName(fullName), true)
+	return r.typeRef(r.idx.messages[fullName].ProtoFile, naming.LocalName(fullName), true)
 }
 
 func (r *renderer) enumType(fullName string) string {
 	// Enum constants are value references (and types via the same name).
-	return r.typeRef(r.idx.enums[fullName].ProtoFile, enumName(r.idx.enums[fullName]), false)
+	return r.typeRef(r.idx.enums[fullName].ProtoFile, naming.EnumName(r.idx.enums[fullName]), false)
 }
 
 // fnToWire returns the converter function for reference kinds converted by a
@@ -224,7 +225,7 @@ func (r *renderer) fromWireExpr(ref *model.TypeRef, expr string) string {
 func (r *renderer) wireEnum(fullName string) string {
 	e := r.idx.enums[fullName]
 	if e == nil {
-		return localName(fullName)
+		return naming.LocalName(fullName)
 	}
 	parentFullName := fullName[:strings.LastIndex(fullName, ".")]
 	if _, ok := r.idx.messages[parentFullName]; !ok {
@@ -232,7 +233,7 @@ func (r *renderer) wireEnum(fullName string) string {
 	}
 	parents := []string{e.Name}
 	for parent := parentFullName; ; {
-		messageName := localName(parent)
+		messageName := naming.LocalName(parent)
 		parents = append(parents, messageName)
 		parentIndex := strings.LastIndex(parent, ".")
 		if parentIndex < 0 {
@@ -339,9 +340,9 @@ func (r *renderer) writeDoc(doc, indent string) {
 func oneofProp(o *model.Oneof) string {
 	parts := strings.Split(o.Name, "_")
 	for i := 1; i < len(parts); i++ {
-		parts[i] = upperFirst(parts[i])
+		parts[i] = naming.UpperFirst(parts[i])
 	}
-	return lowerFirst(strings.Join(parts, ""))
+	return naming.LowerFirst(strings.Join(parts, ""))
 }
 
 func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
@@ -357,7 +358,7 @@ func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
 }
 
 func (r *renderer) renderEnum(e *model.Enum) {
-	name := enumName(e)
+	name := naming.EnumName(e)
 	members := enumMemberNames(e)
 	r.writeDoc(e.Doc, "")
 	fmt.Fprintf(&r.body, "export const %s = {\n", name)
@@ -371,7 +372,7 @@ func (r *renderer) renderEnum(e *model.Enum) {
 }
 
 func (r *renderer) renderMessage(m *model.Message) {
-	name := localName(m.FullName)
+	name := naming.LocalName(m.FullName)
 	// Oneof union aliases carry no JSDoc: the model has no oneof-level comment,
 	// and variant docs have no TypeScript position inside a union literal.
 	for _, o := range m.Oneofs {
@@ -408,7 +409,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 func (r *renderer) renderOneofFactories(m *model.Message, o *model.Oneof) {
 	unionName := oneofTypeName(m, o)
 	for _, f := range oneofFields(m, o) {
-		factory := lowerFirst(unionName) + upperFirst(f.JSONName)
+		factory := naming.LowerFirst(unionName) + naming.UpperFirst(f.JSONName)
 		switch f.Kind {
 		case model.KindUnit:
 			fmt.Fprintf(&r.body, "export function %s(): %s {\n", factory, unionName)
@@ -424,7 +425,7 @@ func (r *renderer) renderOneofFactories(m *model.Message, o *model.Oneof) {
 }
 
 func (r *renderer) renderConversions(m *model.Message) {
-	name := localName(m.FullName)
+	name := naming.LocalName(m.FullName)
 	nativeName := r.typeRef(m.ProtoFile, name, true)
 	r.features.create = true
 	r.features.wire = true
@@ -482,7 +483,7 @@ func oneofFromWireFunc(m *model.Message, o *model.Oneof) string {
 }
 
 func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
-	name := localName(m.FullName)
+	name := naming.LocalName(m.FullName)
 	unionName := r.typeRef(m.ProtoFile, oneofTypeName(m, o), true)
 	prop := oneofProp(o)
 
@@ -505,7 +506,7 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 }
 
 func (r *renderer) renderClient(svc *model.Service) {
-	wireName := localName(svc.FullName)
+	wireName := naming.LocalName(svc.FullName)
 	name := wireName
 	r.features.client = true
 	r.features.wire = true
@@ -707,7 +708,7 @@ func (r *renderer) renderMethod(m *model.Method) {
 // parameters, a trailing options object from optional_signature, and an
 // AsyncIterable<Output> return piped through mapRecv.
 func (r *renderer) renderErgonomicServerStream(m *model.Method) {
-	methodName := lowerFirst(m.Name)
+	methodName := naming.LowerFirst(m.Name)
 	params := ""
 	requestArg := "{}"
 	var requestLines []string
@@ -777,7 +778,7 @@ func (r *renderer) renderErgonomicServerStream(m *model.Method) {
 	for _, line := range requestLines {
 		r.body.WriteString(line + "\n")
 	}
-	fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", lowerFirst(m.Name), requestArg, r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+	fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", naming.LowerFirst(m.Name), requestArg, r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 	r.body.WriteString("  }\n\n")
 }
 
@@ -786,7 +787,7 @@ func (r *renderer) renderErgonomicServerStream(m *model.Method) {
 // object from the optional_signature annotation, and a collapsed return from
 // the response annotations.
 func (r *renderer) renderErgonomicUnary(m *model.Method) {
-	methodName := lowerFirst(m.Name)
+	methodName := naming.LowerFirst(m.Name)
 	params := ""
 	requestArg := "{}"
 	var requestLines []string
@@ -893,7 +894,7 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 // renderFramedRead renders a server-streaming method with the framing
 // annotation: the header frame and a native payload stream replace raw frames.
 func (r *renderer) renderFramedRead(m *model.Method) {
-	methodName := lowerFirst(m.Name)
+	methodName := naming.LowerFirst(m.Name)
 	frames := m.Output
 	oneof := frames.Oneofs[findField(frames, m.Initial.HeaderField).OneofIndex]
 	prop := oneofProp(oneof)
@@ -935,7 +936,7 @@ func (r *renderer) renderFramedRead(m *model.Method) {
 // renderFramedWrite renders a client-streaming method with the framing
 // annotation: the header and a native payload stream replace raw frames.
 func (r *renderer) renderFramedWrite(m *model.Method) {
-	methodName := lowerFirst(m.Name)
+	methodName := naming.LowerFirst(m.Name)
 	frames := m.Input
 	prop := oneofProp(frames.Oneofs[findField(frames, m.Initial.HeaderField).OneofIndex])
 	header := findField(frames, m.Initial.HeaderField)
@@ -970,7 +971,7 @@ func (r *renderer) renderFramedWrite(m *model.Method) {
 // suffix so both remain available.
 func (r *renderer) renderFaithfulMethod(m *model.Method, rawSuffix bool) {
 	r.writeDoc(m.Doc, "  ")
-	methodName := lowerFirst(m.Name)
+	methodName := naming.LowerFirst(m.Name)
 	if rawSuffix {
 		methodName += "Raw"
 	}
@@ -999,18 +1000,18 @@ func (r *renderer) renderFaithfulMethod(m *model.Method, rawSuffix bool) {
 		responseType := r.messageType(m.Output.FullName)
 		r.use("mapRecv", false)
 		fmt.Fprintf(&r.body, "  %s(%s): AsyncIterable<%s> {\n", methodName, requestParam, responseType)
-		fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", lowerFirst(m.Name), requestArg, r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+		fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", naming.LowerFirst(m.Name), requestArg, r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 		r.body.WriteString("  }\n\n")
 	default:
 		r.use("callUnary", false)
 		if m.OutputIsEmpty {
 			fmt.Fprintf(&r.body, "  async %s(%s): Promise<void> {\n", methodName, requestParam)
-			fmt.Fprintf(&r.body, "    await callUnary(() => this.client.%s(%s));\n", lowerFirst(m.Name), requestArg)
+			fmt.Fprintf(&r.body, "    await callUnary(() => this.client.%s(%s));\n", naming.LowerFirst(m.Name), requestArg)
 			r.body.WriteString("  }\n\n")
 		} else {
 			responseType := r.messageType(m.Output.FullName)
 			fmt.Fprintf(&r.body, "  async %s(%s): Promise<%s> {\n", methodName, requestParam, responseType)
-			fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(%s));\n", lowerFirst(m.Name), requestArg)
+			fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(%s));\n", naming.LowerFirst(m.Name), requestArg)
 			fmt.Fprintf(&r.body, "    return %s(response);\n", r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 			r.body.WriteString("  }\n\n")
 		}

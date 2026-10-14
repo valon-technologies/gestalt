@@ -7,23 +7,8 @@ import (
 	"unicode"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
-
-// localName returns the unqualified message or enum name. Names are unique
-// within the provider package, so generated identifiers drop the package.
-func localName(fullName string) string {
-	if i := strings.LastIndex(fullName, "."); i >= 0 {
-		return fullName[i+1:]
-	}
-	return fullName
-}
-
-func enumName(e *model.Enum) string {
-	if e.GeneratedName != "" {
-		return e.GeneratedName
-	}
-	return localName(e.FullName)
-}
 
 // generatedFileBase derives the generated module base from a proto file path:
 // sdk/proto/v1/indexeddb.proto becomes "indexeddb".
@@ -169,7 +154,7 @@ func (r *renderer) fieldType(f *model.Field) string {
 }
 
 func oneofTypeName(message *model.Message, oneof *model.Oneof) string {
-	return localName(message.FullName) + upperCamel(oneof.Name)
+	return naming.LocalName(message.FullName) + upperCamel(oneof.Name)
 }
 
 // publicSnake names generated Rust surfaces: heck's scheme with compound
@@ -210,11 +195,11 @@ func screamingSnake(name string) string {
 }
 
 func toWireFunc(messageFullName string) string {
-	return "to_wire_" + publicSnake(localName(messageFullName))
+	return "to_wire_" + publicSnake(naming.LocalName(messageFullName))
 }
 
 func fromWireFunc(messageFullName string) string {
-	return "from_wire_" + publicSnake(localName(messageFullName))
+	return "from_wire_" + publicSnake(naming.LocalName(messageFullName))
 }
 
 func oneofToWireFunc(m *model.Message, o *model.Oneof) string {
@@ -228,26 +213,26 @@ func oneofFromWireFunc(m *model.Message, o *model.Oneof) string {
 // wireTypeName returns the prost ident of a message in the v1 wire module,
 // e.g. HttpSubjectRequest for HTTPSubjectRequest.
 func wireTypeName(fullName string) string {
-	return heckUpperCamel(localName(fullName))
+	return heckUpperCamel(naming.LocalName(fullName))
 }
 
 // wireOneofKind returns the wire path of a oneof's prost enum, e.g.
 // v1::typed_value::Kind.
 func wireOneofKind(m *model.Message, o *model.Oneof) string {
-	return "v1::" + heckSnake(localName(m.FullName)) + "::" + heckUpperCamel(o.Name)
+	return "v1::" + heckSnake(naming.LocalName(m.FullName)) + "::" + heckUpperCamel(o.Name)
 }
 
 // wireClientModule returns the tonic client module for a service, e.g.
 // s3_object_access_client. Tonic snake-cases service modules and method
 // names with heck, just like prost.
 func wireClientModule(svc *model.Service) string {
-	return heckSnake(localName(svc.FullName)) + "_client"
+	return heckSnake(naming.LocalName(svc.FullName)) + "_client"
 }
 
 // wireClientType returns the tonic client type inside wireClientModule, e.g.
 // IndexedDbClient.
 func wireClientType(svc *model.Service) string {
-	return heckUpperCamel(localName(svc.FullName)) + "Client"
+	return heckUpperCamel(naming.LocalName(svc.FullName)) + "Client"
 }
 
 // wireFieldDefault renders the prost wire default for a field omitted from the

@@ -5,6 +5,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
@@ -25,12 +26,12 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
  	sharedLocal := map[string]bool{}
  	sharedCodecFn := map[string]bool{}
  	for fullName := range plan.SharedMessages {
- 		sharedLocal[localName(fullName)] = true
+		sharedLocal[naming.LocalName(fullName)] = true
  		sharedCodecFn[toWireFunc(fullName)] = true
  		sharedCodecFn[fromWireFunc(fullName)] = true
  	}
  	for _, e := range plan.ReachableEnums {
- 		sharedLocal[localName(e.FullName)] = true
+		sharedLocal[naming.LocalName(e.FullName)] = true
  	}
 
 	idx := &index{
