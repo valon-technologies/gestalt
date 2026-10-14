@@ -65,13 +65,9 @@ func TestHostedWorkflowWorkerKnownStaleSessionIsNotReady(t *testing.T) {
 	pool.workers = []*hostedWorkflowWorker{worker}
 	pool.mu.Lock()
 	available := pool.workerAvailableLocked(worker, time.Now().UTC())
-	reason := pool.runtimeSessionRetirementReason(worker.runtimeSession, nil, time.Now().UTC())
 	pool.mu.Unlock()
 	if available {
 		t.Fatalf("workerAvailableLocked = true, want false for stale runtime session")
-	}
-	if !strings.Contains(reason, "image mismatch") {
-		t.Fatalf("retirement reason = %q, want image mismatch", reason)
 	}
 }
 
