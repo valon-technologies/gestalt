@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/featureflags"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/scim"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -576,11 +577,11 @@ func New(cfg Config) (*Server, error) {
 		mountedHTTPBindings:           mountedHTTPBindings,
 		mountedUIs:                    mountedUIs,
 		adminRoute:                    adminRoute,
-		appRegistries:                 cloneAppRegistryConfig(cfg.AppRegistries),
+		appRegistries:                 maputil.CloneNonEmpty(cfg.AppRegistries),
 		appRegistryReader:             cfg.AppRegistryReader,
 		appRegistryInstaller:          newAppRegistryInstaller(cfg),
 		appRegistryPublish:            cfg.AppRegistryPublish,
-		appRegistryPublishAllowedApps: cloneStringSet(cfg.AppRegistryPublishAllowedApps),
+		appRegistryPublishAllowedApps: maputil.CloneNonEmpty(cfg.AppRegistryPublishAllowedApps),
 		appFleetProjector:             fleetProjector,
 		appVersionChanges:             cfg.Services.AppVersionChangeRequests,
 		gestaltdSourceVersions:        cfg.Services.GestaltdSourceVersionState,
@@ -671,13 +672,6 @@ func (s *Server) Close() {
 		s.publicGRPCServer.Stop()
 		s.publicGRPCServer = nil
 	}
-}
-
-func cloneStringSet(src map[string]struct{}) map[string]struct{} {
-	if len(src) == 0 {
-		return nil
-	}
-	return maps.Clone(src)
 }
 
 func withRequestTelemetryProviders(next http.Handler, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) http.Handler {

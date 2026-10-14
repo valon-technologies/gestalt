@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -299,7 +299,7 @@ func externalCredentialToProto(credential *core.ExternalCredential) *proto.Exter
 		}}
 	case credential.Opaque != nil:
 		out.Credential = &proto.ExternalCredential_Opaque{Opaque: &proto.ExternalCredentialOpaque{
-			Fields: cloneStringMap(credential.Opaque.Fields),
+			Fields: maputil.CloneNonEmpty(credential.Opaque.Fields),
 		}}
 	}
 	return out
@@ -315,7 +315,7 @@ func validateCredentialConfigToProto(req *core.ValidateExternalCredentialConfigR
 		ConnectionId:     strings.TrimSpace(req.ConnectionID),
 		Mode:             string(core.NormalizeConnectionMode(req.Mode)),
 		Auth:             externalCredentialAuthConfigToProto(req.Auth),
-		ConnectionParams: cloneStringMap(req.ConnectionParams),
+		ConnectionParams: maputil.CloneNonEmpty(req.ConnectionParams),
 	}
 }
 
@@ -332,7 +332,7 @@ func resolveCredentialRequestToProto(req *core.ResolveExternalCredentialRequest)
 		ActorSubjectId:      strings.TrimSpace(req.ActorSubjectID),
 		Instance:            strings.TrimSpace(req.Instance),
 		Auth:                externalCredentialAuthConfigToProto(req.Auth),
-		ConnectionParams:    cloneStringMap(req.ConnectionParams),
+		ConnectionParams:    maputil.CloneNonEmpty(req.ConnectionParams),
 	}
 }
 
@@ -344,7 +344,7 @@ func resolveCredentialResponseFromProto(resp *proto.ResolveExternalCredentialRes
 		Token:        resp.GetToken(),
 		ExpiresAt:    timeFromProto(resp.GetExpiresAt()),
 		MetadataJSON: resp.GetMetadataJson(),
-		Params:       cloneStringMap(resp.GetParams()),
+		Params:       maputil.CloneNonEmpty(resp.GetParams()),
 		Credential:   externalCredentialFromProto(resp.GetCredential()),
 	}
 }
@@ -362,7 +362,7 @@ func exchangeCredentialRequestToProto(req *core.ExchangeExternalCredentialReques
 		Instance:            strings.TrimSpace(req.Instance),
 		Auth:                externalCredentialAuthConfigToProto(req.Auth),
 		CredentialJson:      req.CredentialJSON,
-		ConnectionParams:    cloneStringMap(req.ConnectionParams),
+		ConnectionParams:    maputil.CloneNonEmpty(req.ConnectionParams),
 	}
 }
 
@@ -425,7 +425,7 @@ func externalCredentialAuthConfigToProto(auth core.ExternalCredentialAuthConfig)
 			Scopes:          append([]string(nil), driver.Scopes...),
 			LifetimeSeconds: int32(driver.LifetimeSeconds),
 			Endpoint:        driver.Endpoint,
-			Params:          cloneStringMap(driver.Params),
+			Params:          maputil.CloneNonEmpty(driver.Params),
 		})
 	}
 	return &proto.ExternalCredentialAuthConfig{
@@ -442,8 +442,8 @@ func externalCredentialAuthConfigToProto(auth core.ExternalCredentialAuthConfig)
 		Scopes:               append([]string(nil), auth.Scopes...),
 		ScopeParam:           auth.ScopeParam,
 		ScopeSeparator:       auth.ScopeSeparator,
-		TokenParams:          cloneStringMap(auth.TokenParams),
-		RefreshParams:        cloneStringMap(auth.RefreshParams),
+		TokenParams:          maputil.CloneNonEmpty(auth.TokenParams),
+		RefreshParams:        maputil.CloneNonEmpty(auth.RefreshParams),
 		AcceptHeader:         auth.AcceptHeader,
 		AccessTokenPath:      auth.AccessTokenPath,
 		TokenExchangeDrivers: drivers,
@@ -465,7 +465,7 @@ func externalCredentialAuthConfigFromProto(auth *proto.ExternalCredentialAuthCon
 			Scopes:          append([]string(nil), driver.GetScopes()...),
 			LifetimeSeconds: int(driver.GetLifetimeSeconds()),
 			Endpoint:        driver.GetEndpoint(),
-			Params:          cloneStringMap(driver.GetParams()),
+			Params:          maputil.CloneNonEmpty(driver.GetParams()),
 		})
 	}
 	return core.ExternalCredentialAuthConfig{
@@ -482,19 +482,12 @@ func externalCredentialAuthConfigFromProto(auth *proto.ExternalCredentialAuthCon
 		Scopes:               append([]string(nil), auth.GetScopes()...),
 		ScopeParam:           auth.GetScopeParam(),
 		ScopeSeparator:       auth.GetScopeSeparator(),
-		TokenParams:          cloneStringMap(auth.GetTokenParams()),
-		RefreshParams:        cloneStringMap(auth.GetRefreshParams()),
+		TokenParams:          maputil.CloneNonEmpty(auth.GetTokenParams()),
+		RefreshParams:        maputil.CloneNonEmpty(auth.GetRefreshParams()),
 		AcceptHeader:         auth.GetAcceptHeader(),
 		AccessTokenPath:      auth.GetAccessTokenPath(),
 		TokenExchangeDrivers: drivers,
 	}
-}
-
-func cloneStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	return maps.Clone(in)
 }
 
 func externalCredentialFromProto(credential *proto.ExternalCredential) *core.ExternalCredential {
@@ -529,7 +522,7 @@ func externalCredentialFromProto(credential *proto.ExternalCredential) *core.Ext
 		}
 	case *proto.ExternalCredential_Opaque:
 		out.Opaque = &core.ExternalCredentialOpaque{
-			Fields: cloneStringMap(value.Opaque.GetFields()),
+			Fields: maputil.CloneNonEmpty(value.Opaque.GetFields()),
 		}
 	}
 	return out
