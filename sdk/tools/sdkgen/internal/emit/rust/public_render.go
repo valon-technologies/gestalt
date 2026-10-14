@@ -251,20 +251,20 @@ func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName strin
 	r.useInvoke("InvokeError")
 
 	fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<serde_json::Value, InvokeError> {\n", methodKeyword(sync), syncSuffix(methodName, sync), requestType)
-	if f := findField(m.Input, "app"); f != nil {
+	if f := model.FindField(m.Input, "app"); f != nil {
 		fmt.Fprintf(&r.body, "        let invoke_app = request.%s.clone();\n", escapeIdent(f.Name))
 	}
-	if f := findField(m.Input, "operation"); f != nil {
+	if f := model.FindField(m.Input, "operation"); f != nil {
 		fmt.Fprintf(&r.body, "        let invoke_operation = request.%s.clone();\n", escapeIdent(f.Name))
 	}
 	fmt.Fprintf(&r.body, "        let response = self.%s(request)%s?;\n", syncSuffix(methodName+"_raw", sync), awaitSuffix(sync))
-	status := findField(m.Output, m.JsonResult.Status)
-	body := findField(m.Output, m.JsonResult.Body)
+	status := model.FindField(m.Output, m.JsonResult.Status)
+	body := model.FindField(m.Output, m.JsonResult.Body)
 	appExpr, opExpr := `""`, `""`
-	if findField(m.Input, "app") != nil {
+	if model.FindField(m.Input, "app") != nil {
 		appExpr = "invoke_app.as_str()"
 	}
-	if findField(m.Input, "operation") != nil {
+	if model.FindField(m.Input, "operation") != nil {
 		opExpr = "invoke_operation.as_str()"
 	}
 	fmt.Fprintf(
@@ -301,13 +301,13 @@ func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodNa
 
 	fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<serde_json::Value, InvokeError> {\n", methodKeyword(sync), syncSuffix(methodName, sync), requestType)
 	appExpr := `""`
-	if f := findField(m.Input, "app"); f != nil {
+	if f := model.FindField(m.Input, "app"); f != nil {
 		fmt.Fprintf(&r.body, "        let invoke_app = request.%s.clone();\n", escapeIdent(f.Name))
 		appExpr = "invoke_app.as_str()"
 	}
 	fmt.Fprintf(&r.body, "        let response = self.%s(request)%s?;\n", syncSuffix("invoke_graphql", sync), awaitSuffix(sync))
-	status := findField(m.Output, "status")
-	body := findField(m.Output, "body")
+	status := model.FindField(m.Output, "status")
+	body := model.FindField(m.Output, "body")
 	fmt.Fprintf(
 		&r.body,
 		"        decode_graphql_result(%s, response.%s, &response.%s).map_err(InvokeError::from)\n",

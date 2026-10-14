@@ -680,15 +680,6 @@ func (r *renderer) renderClient(svc *model.Service) {
 	r.body.WriteString("\n")
 }
 
-func findField(m *model.Message, protoName string) *model.Field {
-	for _, f := range m.Fields {
-		if f.Name == protoName {
-			return f
-		}
-	}
-	return nil
-}
-
 // collapsed describes how an annotated response collapses at the API
 // boundary: the ergonomic return type, one generated doc line describing the
 // collapse, and the statements that derive the return value from the
@@ -709,8 +700,8 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 	// returns the decoded payload and surfaces envelope failures as
 	// InvokeError.
 	if jr := m.JsonResult; jr != nil {
-		status := findField(m.Output, jr.Status)
-		body := findField(m.Output, jr.Body)
+		status := model.FindField(m.Output, jr.Status)
+		body := model.FindField(m.Output, jr.Body)
 		r.features.anyType = true
 		return &collapsed{
 			returnType: "Any",
@@ -725,8 +716,8 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if or := m.Output.OptionalResult; or != nil {
-		guard := findField(m.Output, or.Guard)
-		value := findField(m.Output, or.Value)
+		guard := model.FindField(m.Output, or.Guard)
+		value := model.FindField(m.Output, or.Value)
 		return &collapsed{
 			returnType: r.fieldType(value) + " | None",
 			lines: []string{
@@ -735,11 +726,11 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if k := m.Output.Keyed; k != nil {
-		entries := findField(m.Output, k.Entries)
+		entries := model.FindField(m.Output, k.Entries)
 		entry := r.idx.messages[entries.Elem.Message]
-		key := findField(entry, k.Key)
-		present := findField(entry, k.Present)
-		value := findField(entry, k.Value)
+		key := model.FindField(entry, k.Key)
+		present := model.FindField(entry, k.Present)
+		value := model.FindField(entry, k.Value)
 		mapType := "dict[" + scalarType(key.Scalar) + ", " + r.fieldType(value) + "]"
 		return &collapsed{
 			returnType: mapType,
@@ -753,7 +744,7 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if m.Output.Unwrap != "" {
-		field := findField(m.Output, m.Output.Unwrap)
+		field := model.FindField(m.Output, m.Output.Unwrap)
 		returnType := r.fieldType(field)
 		// A presence-bearing unwrapped field is absent-capable: the native
 		// dataclass declares it `T | None`, so the collapse does too.
@@ -773,7 +764,7 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 // declares it, an empty string otherwise.
 func jsonResultContext(m *model.Method, name string) string {
 	if m.Input != nil {
-		if f := findField(m.Input, name); f != nil {
+		if f := model.FindField(m.Input, name); f != nil {
 			return "request." + pyName(f.Name)
 		}
 	}
@@ -834,7 +825,7 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 		names := r.effectiveOptionalFields(m)
 		var stubDecls, implDecls, guards, args []string
 		for _, name := range names {
-			f := findField(m.Input, name)
+			f := model.FindField(m.Input, name)
 			param := pyName(f.Name)
 			typ := r.fieldType(f)
 			arg := param + "=" + param
@@ -930,8 +921,8 @@ func (r *renderer) writeLines(lines []string) {
 func (r *renderer) renderFramedRead(m *model.Method) {
 	methodName := pyName(snakeCase(m.Name))
 	frames := m.Output
-	header := findField(frames, m.Initial.HeaderField)
-	chunk := findField(frames, m.Initial.ChunkField)
+	header := model.FindField(frames, m.Initial.HeaderField)
+	chunk := model.FindField(frames, m.Initial.ChunkField)
 	oneof := frames.Oneofs[header.OneofIndex]
 	prop := pyName(oneof.Name)
 	headerClass := r.crossRef(frames.ProtoFile, r.variantClassName(frames, oneof, header))
@@ -973,8 +964,8 @@ func (r *renderer) renderFramedRead(m *model.Method) {
 func (r *renderer) renderFramedWrite(m *model.Method) {
 	methodName := pyName(snakeCase(m.Name))
 	frames := m.Input
-	header := findField(frames, m.Initial.HeaderField)
-	chunk := findField(frames, m.Initial.ChunkField)
+	header := model.FindField(frames, m.Initial.HeaderField)
+	chunk := model.FindField(frames, m.Initial.ChunkField)
 	oneof := frames.Oneofs[header.OneofIndex]
 	prop := pyName(oneof.Name)
 	framesType := r.messageType(frames.FullName)
@@ -1088,17 +1079,8 @@ func (r *renderer) contextFieldOf(svc *model.Service) *model.Field {
 	if r.publicClient {
 		return nil
 	}
-	for _, m := range svc.Methods {
-		if m.Input == nil {
-			continue
-		}
-		if f := findField(m.Input, "context"); f != nil {
-			return f
-		}
-	}
-	return nil
+	return model.ContextField(svc)
 }
-
 // contextLines renders the default-context injection for a request-bearing
 // method, or nil when the request has no context field. Public clients never
 // inject context; it is server-filled via the public policy.
@@ -1106,7 +1088,7 @@ func (r *renderer) contextLines(m *model.Method) []string {
 	if r.publicClient {
 		return nil
 	}
-	if m.InputIsEmpty || findField(m.Input, "context") == nil {
+	if m.InputIsEmpty || model.FindField(m.Input, "context") == nil {
 		return nil
 	}
 	r.features.dcReplace = true

@@ -306,8 +306,8 @@ func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName strin
 	}
 	r.writeDocstring("        ", doc)
 	fmt.Fprintf(&r.body, "        response = %sself.%s_raw(request)\n", await, methodName)
-	status := findField(m.Output, m.JsonResult.Status)
-	body := findField(m.Output, m.JsonResult.Body)
+	status := model.FindField(m.Output, m.JsonResult.Status)
+	body := model.FindField(m.Output, m.JsonResult.Body)
 	fmt.Fprintf(
 		&r.body,
 		"        return decode_app_result(%s, %s, response.%s, response.%s)\n\n",
@@ -348,8 +348,8 @@ func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodNa
 	}
 	r.writeDocstring("        ", doc)
 	fmt.Fprintf(&r.body, "        response = %sself.invoke_graphql(request)\n", await)
-	status := findField(m.Output, "status")
-	body := findField(m.Output, "body")
+	status := model.FindField(m.Output, "status")
+	body := model.FindField(m.Output, "body")
 	fmt.Fprintf(
 		&r.body,
 		"        return decode_graphql_result(%s, response.%s, response.%s)\n\n",

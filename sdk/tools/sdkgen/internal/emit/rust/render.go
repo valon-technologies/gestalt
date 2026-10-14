@@ -687,21 +687,12 @@ func (r *renderer) contextFieldOf(svc *model.Service) *model.Field {
 	if r.publicClient {
 		return nil
 	}
-	for _, m := range svc.Methods {
-		if m.Input == nil {
-			continue
-		}
-		if f := findField(m.Input, "context"); f != nil {
-			return f
-		}
-	}
-	return nil
+	return model.ContextField(svc)
 }
-
 // contextPrep renders the default-context injection lines of a method that
 // takes a single owned request.
 func (r *renderer) contextPrep(m *model.Method) []string {
-	if m.InputIsEmpty || findField(m.Input, "context") == nil {
+	if m.InputIsEmpty || model.FindField(m.Input, "context") == nil {
 		return nil
 	}
 	return []string{
@@ -710,15 +701,6 @@ func (r *renderer) contextPrep(m *model.Method) []string {
 		"            request.context = self.context.clone();",
 		"        }",
 	}
-}
-
-func findField(m *model.Message, protoName string) *model.Field {
-	for _, f := range m.Fields {
-		if f.Name == protoName {
-			return f
-		}
-	}
-	return nil
 }
 
 // timeoutPrep renders the unary request wrap applying the client-level
@@ -772,14 +754,14 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 	}
 	if r.publicClient {
 		if jr := m.JsonResult; jr != nil {
-			status := findField(m.Output, jr.Status)
-			body := findField(m.Output, jr.Body)
+			status := model.FindField(m.Output, jr.Status)
+			body := model.FindField(m.Output, jr.Body)
 			appClone, opClone := `String::new()`, `String::new()`
 			if m.Input != nil {
-				if f := findField(m.Input, "app"); f != nil {
+				if f := model.FindField(m.Input, "app"); f != nil {
 					appClone = fmt.Sprintf("request.%s.clone()", escapeIdent(f.Name))
 				}
-				if f := findField(m.Input, "operation"); f != nil {
+				if f := model.FindField(m.Input, "operation"); f != nil {
 					opClone = fmt.Sprintf("request.%s.clone()", escapeIdent(f.Name))
 				}
 			}
@@ -800,8 +782,8 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if or := m.Output.OptionalResult; or != nil {
-		guard := findField(m.Output, or.Guard)
-		value := findField(m.Output, or.Value)
+		guard := model.FindField(m.Output, or.Guard)
+		value := model.FindField(m.Output, or.Value)
 		valueExpr := "Some(response." + escapeIdent(value.Name) + ")"
 		if value.Presence == model.ExplicitPresence {
 			valueExpr = "response." + escapeIdent(value.Name)
@@ -817,11 +799,11 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if k := m.Output.Keyed; k != nil {
-		entries := findField(m.Output, k.Entries)
+		entries := model.FindField(m.Output, k.Entries)
 		entry := r.idx.messages[entries.Elem.Message]
-		key := findField(entry, k.Key)
-		present := findField(entry, k.Present)
-		value := findField(entry, k.Value)
+		key := model.FindField(entry, k.Key)
+		present := model.FindField(entry, k.Present)
+		value := model.FindField(entry, k.Value)
 		presentExpr := "entry." + escapeIdent(present.Name)
 		if present.Presence == model.ExplicitPresence {
 			presentExpr += ".unwrap_or_default()"
@@ -849,7 +831,7 @@ func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 		}
 	}
 	if m.Output.Unwrap != "" {
-		field := findField(m.Output, m.Output.Unwrap)
+		field := model.FindField(m.Output, m.Output.Unwrap)
 		returnType := r.fieldType(field)
 		// Presence-bearing unwraps surface the field's optionality directly.
 		if field.Presence == model.ExplicitPresence {
@@ -897,7 +879,7 @@ func (r *renderer) renderOptionsStruct(svc *model.Service, m *model.Method) {
 	r.body.WriteString("#[derive(Clone, Debug, Default)]\n")
 	fmt.Fprintf(&r.body, "pub struct %s {\n", optionsTypeName(svc, m))
 	for _, fieldName := range m.OptionalSignature {
-		f := findField(m.Input, fieldName)
+		f := model.FindField(m.Input, fieldName)
 		r.docComment("    ", f.Doc)
 		if f.Presence == model.ExplicitPresence {
 			fmt.Fprintf(&r.body, "    /// The `%s` field; None when unset.\n", f.Name)
@@ -927,7 +909,7 @@ func (r *renderer) renderErgonomicUnary(svc *model.Service, m *model.Method) {
 			covered := map[string]bool{}
 			var inits []string
 			for _, name := range m.Signature {
-				f := findField(m.Input, name)
+				f := model.FindField(m.Input, name)
 				covered[f.Name] = true
 				ident := escapeIdent(f.Name)
 				paramType := r.fieldType(f)
@@ -942,7 +924,7 @@ func (r *renderer) renderErgonomicUnary(svc *model.Service, m *model.Method) {
 			if len(m.OptionalSignature) > 0 {
 				params += ", options: " + optionsTypeName(svc, m)
 				for _, name := range m.OptionalSignature {
-					f := findField(m.Input, name)
+					f := model.FindField(m.Input, name)
 					covered[f.Name] = true
 					ident := escapeIdent(f.Name)
 					inits = append(inits, ident+": options."+ident)
@@ -950,7 +932,7 @@ func (r *renderer) renderErgonomicUnary(svc *model.Service, m *model.Method) {
 			}
 			// The flattened form has no context parameter, so the literal
 			// takes the client default directly.
-			if ctxF := findField(m.Input, "context"); ctxF != nil && !covered[ctxF.Name] {
+			if ctxF := model.FindField(m.Input, "context"); ctxF != nil && !covered[ctxF.Name] {
 				covered[ctxF.Name] = true
 				inits = append(inits, escapeIdent(ctxF.Name)+": self.context.clone()")
 			}
@@ -1023,17 +1005,17 @@ func (r *renderer) renderJsonResultBody(m *model.Method, methodName, wireName, p
 	r.useInvoke("decode_app_result")
 	appExpr, opExpr := `""`, `""`
 	if m.Input != nil {
-		if f := findField(m.Input, "app"); f != nil {
+		if f := model.FindField(m.Input, "app"); f != nil {
 			requestLines = append(requestLines, "        let invoke_context_app = request."+escapeIdent(f.Name)+".clone();")
 			appExpr = "&invoke_context_app"
 		}
-		if f := findField(m.Input, "operation"); f != nil {
+		if f := model.FindField(m.Input, "operation"); f != nil {
 			requestLines = append(requestLines, "        let invoke_context_operation = request."+escapeIdent(f.Name)+".clone();")
 			opExpr = "&invoke_context_operation"
 		}
 	}
-	status := findField(m.Output, m.JsonResult.Status)
-	body := findField(m.Output, m.JsonResult.Body)
+	status := model.FindField(m.Output, m.JsonResult.Status)
+	body := model.FindField(m.Output, m.JsonResult.Body)
 	fmt.Fprintf(&r.body, "    pub async fn %s(%s) -> Result<serde_json::Value, InvokeError> {\n", methodName, params)
 	for _, line := range requestLines {
 		r.body.WriteString(line + "\n")
@@ -1066,8 +1048,8 @@ type framedReadWrapper struct {
 func (r *renderer) renderFramedRead(svc *model.Service, m *model.Method) framedReadWrapper {
 	methodName := escapeIdent(publicSnake(m.Name))
 	frames := m.Output
-	header := findField(frames, m.Initial.HeaderField)
-	chunk := findField(frames, m.Initial.ChunkField)
+	header := model.FindField(frames, m.Initial.HeaderField)
+	chunk := model.FindField(frames, m.Initial.ChunkField)
 	oneof := frames.Oneofs[header.OneofIndex]
 	enumName := r.typeRef(frames.ProtoFile, oneofTypeName(frames, oneof))
 	wrapper := framedReadWrapper{
@@ -1148,8 +1130,8 @@ func (r *renderer) renderFramedReadWrapper(w framedReadWrapper) {
 func (r *renderer) renderFramedWrite(svc *model.Service, m *model.Method) {
 	methodName := escapeIdent(publicSnake(m.Name))
 	frames := m.Input
-	header := findField(frames, m.Initial.HeaderField)
-	chunk := findField(frames, m.Initial.ChunkField)
+	header := model.FindField(frames, m.Initial.HeaderField)
+	chunk := model.FindField(frames, m.Initial.ChunkField)
 	oneof := frames.Oneofs[header.OneofIndex]
 	frameType := r.messageType(frames.FullName)
 	enumName := r.typeRef(frames.ProtoFile, oneofTypeName(frames, oneof))

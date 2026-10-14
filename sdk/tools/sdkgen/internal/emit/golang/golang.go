@@ -107,7 +107,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 func requestContextType(idx *index, services []*model.Service) (string, error) {
 	contextType := ""
 	for _, svc := range services {
-		f := contextFieldOf(svc)
+		f := model.ContextField(svc)
 		if f == nil {
 			continue
 		}
