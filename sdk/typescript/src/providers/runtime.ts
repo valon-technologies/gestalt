@@ -1271,9 +1271,6 @@ function catalogSchemaToJsonObject(schema: unknown): JsonObject | undefined {
     return undefined;
   }
   if (typeof schema === "string") {
-    if (schema.trim() === "") {
-      return undefined;
-    }
     try {
       return JSON.parse(schema) as JsonObject;
     } catch {

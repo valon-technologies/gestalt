@@ -9,7 +9,6 @@ import {
   TransactionMode as ProtoTransactionMode,
   TransactionDurabilityHint as ProtoTransactionDurabilityHint,
   IndexedDBQuerySchema,
-  KeyRangeSchema as ProtoKeyRangeSchema,
   KeyValueSchema as ProtoKeyValueSchema,
 } from "../internal/gen/v1/indexeddb_pb.ts";
 import {
@@ -239,16 +238,12 @@ class CursorImpl implements Cursor {
   private _value: Record | undefined = undefined;
   private _done = false;
 
-  private _indexCursor = false;
-
   private constructor(
     sendQueue: AsyncQueue<any>,
     responseIterator: AsyncIterator<any>,
-    indexCursor: boolean = false,
   ) {
     this.sendQueue = sendQueue;
     this.responseIterator = responseIterator;
-    this._indexCursor = indexCursor;
   }
 
   /**
@@ -283,8 +278,7 @@ class CursorImpl implements Cursor {
     const responses = client.openCursor(sendQueue);
     const responseIterator = responses[Symbol.asyncIterator]();
 
-    const isIndex = !!options?.index;
-    const cursor = new CursorImpl(sendQueue, responseIterator, isIndex);
+    const cursor = new CursorImpl(sendQueue, responseIterator);
     // Read the open ack to surface creation errors synchronously.
     await cursor.recvOpenAck();
     return cursor;
@@ -1916,15 +1910,6 @@ function toProtoKeyValue(v: unknown): MessageInitShape<typeof ProtoKeyValueSchem
 
 function toProtoCursorKey(key: Key): MessageInitShape<typeof ProtoKeyValueSchema> {
   return toProtoKeyValue(key);
-}
-
-function keyRangeToProto(kr: KeyRange): MessageInitShape<typeof ProtoKeyRangeSchema> {
-  return {
-    ...(kr.lower !== undefined ? { lower: toProtoKeyValue(kr.lower) } : {}),
-    ...(kr.upper !== undefined ? { upper: toProtoKeyValue(kr.upper) } : {}),
-    lowerOpen: kr.lowerOpen,
-    upperOpen: kr.upperOpen,
-  };
 }
 
 function toProtoRecord(record: Record): any {
