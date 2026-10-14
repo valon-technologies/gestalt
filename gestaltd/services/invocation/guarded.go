@@ -75,50 +75,9 @@ func NewGuarded(inner Invoker, lister CapabilityLister, source string, audit cor
 }
 
 func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
-	ctx, meta := ensureMeta(ctx)
-
-	if p == nil {
-		p = principal.FromContext(ctx)
-	}
-	if p == nil {
-		p = &principal.Principal{}
-	}
-
-	entry := buildAuditEntry(ctx, p, g.source, providerName, operation, meta)
-	ctx = withAuditEntry(ctx, &entry)
-
-	if err := g.check(meta, providerName, instance, operation); err != nil {
-		entry.Allowed = false
-		entry.Error = err.Error()
-		g.logAudit(ctx, entry)
-		return nil, err
-	}
-
-	entry.Allowed = true
-	defer func() {
-		g.logAudit(ctx, entry)
-	}()
-
-	chainInstance := instance
-	if chainInstance == "" {
-		chainInstance = "default"
-	}
-	chainKey := providerName + "/" + chainInstance + "/" + operation
-	next := &InvocationMeta{
-		RequestID: meta.RequestID,
-		Depth:     meta.Depth + 1,
-		CallChain: append(append([]string(nil), meta.CallChain...), chainKey),
-	}
-	ctx = ContextWithMeta(ctx, next)
-
-	result, err := g.inner.Invoke(ctx, p, providerName, instance, operation, params)
-	if err != nil {
-		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
-			entry.Allowed = false
-		}
-	}
-	return result, err
+	return invokeGuarded(ctx, g, p, providerName, instance, operation, func(ctx context.Context, p *principal.Principal) (*core.OperationResult, error) {
+		return g.inner.Invoke(ctx, p, providerName, instance, operation, params)
+	})
 }
 
 func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (*core.OperationResult, error) {
@@ -127,50 +86,9 @@ func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Princip
 		return nil, fmt.Errorf("plugin invoker is not available")
 	}
 
-	ctx, meta := ensureMeta(ctx)
-
-	if p == nil {
-		p = principal.FromContext(ctx)
-	}
-	if p == nil {
-		p = &principal.Principal{}
-	}
-
-	entry := buildAuditEntry(ctx, p, g.source, providerName, "graphql", meta)
-	ctx = withAuditEntry(ctx, &entry)
-
-	if err := g.check(meta, providerName, instance, "graphql"); err != nil {
-		entry.Allowed = false
-		entry.Error = err.Error()
-		g.logAudit(ctx, entry)
-		return nil, err
-	}
-
-	entry.Allowed = true
-	defer func() {
-		g.logAudit(ctx, entry)
-	}()
-
-	chainInstance := instance
-	if chainInstance == "" {
-		chainInstance = "default"
-	}
-	chainKey := providerName + "/" + chainInstance + "/graphql"
-	next := &InvocationMeta{
-		RequestID: meta.RequestID,
-		Depth:     meta.Depth + 1,
-		CallChain: append(append([]string(nil), meta.CallChain...), chainKey),
-	}
-	ctx = ContextWithMeta(ctx, next)
-
-	result, err := graphqlInvoker.InvokeGraphQL(ctx, p, providerName, instance, request)
-	if err != nil {
-		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
-			entry.Allowed = false
-		}
-	}
-	return result, err
+	return invokeGuarded(ctx, g, p, providerName, instance, "graphql", func(ctx context.Context, p *principal.Principal) (*core.OperationResult, error) {
+		return graphqlInvoker.InvokeGraphQL(ctx, p, providerName, instance, request)
+	})
 }
 
 func (g *GuardedInvoker) InvokeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error) {
@@ -178,44 +96,9 @@ func (g *GuardedInvoker) InvokeStream(ctx context.Context, p *principal.Principa
 	if !ok {
 		return nil, fmt.Errorf("plugin invoker is not available")
 	}
-	ctx, meta := ensureMeta(ctx)
-	if p == nil {
-		p = principal.FromContext(ctx)
-	}
-	if p == nil {
-		p = &principal.Principal{}
-	}
-	entry := buildAuditEntry(ctx, p, g.source, providerName, operation, meta)
-	ctx = withAuditEntry(ctx, &entry)
-	if err := g.check(meta, providerName, instance, operation); err != nil {
-		entry.Allowed = false
-		entry.Error = err.Error()
-		g.logAudit(ctx, entry)
-		return nil, err
-	}
-	entry.Allowed = true
-	defer func() {
-		g.logAudit(ctx, entry)
-	}()
-	chainInstance := instance
-	if chainInstance == "" {
-		chainInstance = "default"
-	}
-	chainKey := providerName + "/" + chainInstance + "/" + operation
-	next := &InvocationMeta{
-		RequestID: meta.RequestID,
-		Depth:     meta.Depth + 1,
-		CallChain: append(append([]string(nil), meta.CallChain...), chainKey),
-	}
-	ctx = ContextWithMeta(ctx, next)
-	reader, err := streamInvoker.InvokeStream(ctx, p, providerName, instance, operation, params)
-	if err != nil {
-		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
-			entry.Allowed = false
-		}
-	}
-	return reader, err
+	return invokeGuarded(ctx, g, p, providerName, instance, operation, func(ctx context.Context, p *principal.Principal) (core.StreamReader, error) {
+		return streamInvoker.InvokeStream(ctx, p, providerName, instance, operation, params)
+	})
 }
 
 func (g *GuardedInvoker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*InvokeOutcome, error) {
@@ -223,25 +106,37 @@ func (g *GuardedInvoker) InvokeMaybeStream(ctx context.Context, p *principal.Pri
 	if !ok {
 		return nil, fmt.Errorf("plugin invoker is not available")
 	}
+	return invokeGuarded(ctx, g, p, providerName, instance, operation, func(ctx context.Context, p *principal.Principal) (*InvokeOutcome, error) {
+		return maybeInvoker.InvokeMaybeStream(ctx, p, providerName, instance, operation, params)
+	})
+}
+
+func invokeGuarded[T any](ctx context.Context, g *GuardedInvoker, p *principal.Principal, providerName, instance, operation string, invoke func(context.Context, *principal.Principal) (T, error)) (T, error) {
 	ctx, meta := ensureMeta(ctx)
+
 	if p == nil {
 		p = principal.FromContext(ctx)
 	}
 	if p == nil {
 		p = &principal.Principal{}
 	}
+
 	entry := buildAuditEntry(ctx, p, g.source, providerName, operation, meta)
 	ctx = withAuditEntry(ctx, &entry)
+
 	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false
 		entry.Error = err.Error()
 		g.logAudit(ctx, entry)
-		return nil, err
+		var zero T
+		return zero, err
 	}
+
 	entry.Allowed = true
 	defer func() {
 		g.logAudit(ctx, entry)
 	}()
+
 	chainInstance := instance
 	if chainInstance == "" {
 		chainInstance = "default"
@@ -253,14 +148,15 @@ func (g *GuardedInvoker) InvokeMaybeStream(ctx context.Context, p *principal.Pri
 		CallChain: append(append([]string(nil), meta.CallChain...), chainKey),
 	}
 	ctx = ContextWithMeta(ctx, next)
-	outcome, err := maybeInvoker.InvokeMaybeStream(ctx, p, providerName, instance, operation, params)
+
+	result, err := invoke(ctx, p)
 	if err != nil {
 		entry.Error = err.Error()
 		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
 			entry.Allowed = false
 		}
 	}
-	return outcome, err
+	return result, err
 }
 
 func (g *GuardedInvoker) ListCapabilities() []core.Capability {
