@@ -1026,10 +1026,7 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 		return coreworkflow.Event{}, err
 	}
 	if deliveredProto != nil {
-		delivered, err := workflowwire.EventFromProto(deliveredProto)
-		if err != nil {
-			return coreworkflow.Event{}, err
-		}
+		delivered := workflowwire.EventFromProto(deliveredProto)
 		return delivered, nil
 	}
 	return event, nil

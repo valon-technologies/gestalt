@@ -64,10 +64,7 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	if err != nil {
 		return nil, err
 	}
-	definition, err := workflowwire.DefinitionFromProto(definitionProto)
-	if err != nil {
-		return nil, err
-	}
+	definition := workflowwire.DefinitionFromProto(definitionProto)
 	return &ManagedDefinition{ProviderName: providerName, Definition: definition, provider: provider}, nil
 }
 
@@ -101,18 +98,13 @@ func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal, p
 		if definitionProto == nil {
 			continue
 		}
-		definition, err := workflowwire.DefinitionFromProto(definitionProto)
-		if err != nil {
-			return nil, err
-		}
+		definition := workflowwire.DefinitionFromProto(definitionProto)
 		managed := &ManagedDefinition{
 			ProviderName: strings.TrimSpace(providerName),
 			Definition:   definition,
 			provider:     provider,
 		}
-		if managed != nil && managed.Definition != nil {
-			out = append(out, managed)
-		}
+		out = append(out, managed)
 	}
 	return &ListDefinitionsResponse{Definitions: out}, nil
 }
@@ -149,10 +141,7 @@ func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principa
 	if err != nil {
 		return nil, err
 	}
-	definition, err := workflowwire.DefinitionFromProto(definitionProto)
-	if err != nil {
-		return nil, err
-	}
+	definition := workflowwire.DefinitionFromProto(definitionProto)
 	return &ManagedDefinition{ProviderName: existing.ProviderName, Definition: definition, provider: existing.provider}, nil
 }
 
@@ -189,10 +178,7 @@ func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principa
 	if err != nil {
 		return nil, err
 	}
-	definition, err := workflowwire.DefinitionFromProto(definitionProto)
-	if err != nil {
-		return nil, err
-	}
+	definition := workflowwire.DefinitionFromProto(definitionProto)
 	return &ManagedDefinition{ProviderName: existing.ProviderName, Definition: definition, provider: existing.provider}, nil
 }
 
@@ -321,10 +307,7 @@ func (m *Manager) findDefinition(ctx context.Context, p *principal.Principal, de
 	if err != nil {
 		return nil, err
 	}
-	definition, err := workflowwire.DefinitionFromProto(definitionProto)
-	if err != nil {
-		return nil, err
-	}
+	definition := workflowwire.DefinitionFromProto(definitionProto)
 	return &ManagedDefinition{ProviderName: strings.TrimSpace(providerName), Definition: definition, provider: provider}, nil
 }
 

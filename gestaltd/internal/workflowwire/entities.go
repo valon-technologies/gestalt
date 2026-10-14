@@ -43,10 +43,7 @@ func EventToProto(event coreworkflow.Event) (*proto.WorkflowEvent, error) {
 	}, nil
 }
 
-func EventFromProto(event *proto.WorkflowEvent) (coreworkflow.Event, error) {
-	if event == nil {
-		return coreworkflow.Event{}, nil
-	}
+func EventFromProto(event *proto.WorkflowEvent) coreworkflow.Event {
 	return coreworkflow.Event{
 		ID:              event.GetId(),
 		Source:          event.GetSource(),
@@ -57,7 +54,7 @@ func EventFromProto(event *proto.WorkflowEvent) (coreworkflow.Event, error) {
 		DataContentType: event.GetDatacontenttype(),
 		Data:            protoutil.MapFromStruct(event.GetData()),
 		Extensions:      workflowExtensionsFromProto(event.GetExtensions()),
-	}, nil
+	}
 }
 
 func EventMatchToProto(match coreworkflow.EventMatch) *proto.WorkflowEventMatch {
@@ -69,9 +66,6 @@ func EventMatchToProto(match coreworkflow.EventMatch) *proto.WorkflowEventMatch 
 }
 
 func EventMatchFromProto(match *proto.WorkflowEventMatch) coreworkflow.EventMatch {
-	if match == nil {
-		return coreworkflow.EventMatch{}
-	}
 	return coreworkflow.EventMatch{
 		Type:    match.GetType(),
 		Source:  match.GetSource(),
@@ -163,10 +157,7 @@ func RunFromProto(run *proto.WorkflowRun) (*coreworkflow.Run, error) {
 	if err != nil {
 		return nil, err
 	}
-	trigger, err := RunTriggerFromProto(run.GetTrigger())
-	if err != nil {
-		return nil, err
-	}
+	trigger := RunTriggerFromProto(run.GetTrigger())
 	steps, err := StepExecutionsFromProto(run.GetSteps())
 	if err != nil {
 		return nil, err
@@ -235,21 +226,18 @@ func RunToProto(run *coreworkflow.Run) (*proto.WorkflowRun, error) {
 	}, nil
 }
 
-func DefinitionSpecFromProto(definition *proto.WorkflowDefinitionSpec) (*coreworkflow.DefinitionSpec, error) {
+func DefinitionSpecFromProto(definition *proto.WorkflowDefinitionSpec) *coreworkflow.DefinitionSpec {
 	if definition == nil {
-		return nil, nil
+		return nil
 	}
-	activations, err := ActivationsFromProto(definition.GetActivations())
-	if err != nil {
-		return nil, err
-	}
+	activations := ActivationsFromProto(definition.GetActivations())
 	return &coreworkflow.DefinitionSpec{
 		ID:          definition.GetId(),
 		Target:      TargetFromProto(definition.GetTarget()),
 		Activations: activations,
 		Paused:      definition.GetPaused(),
 		RunAs:       strings.TrimSpace(definition.GetRunAs()),
-	}, nil
+	}
 }
 
 func DefinitionSpecToProto(definition *coreworkflow.DefinitionSpec) (*proto.WorkflowDefinitionSpec, error) {
@@ -273,14 +261,11 @@ func DefinitionSpecToProto(definition *coreworkflow.DefinitionSpec) (*proto.Work
 	}, nil
 }
 
-func DefinitionFromProto(definition *proto.WorkflowDefinition) (*coreworkflow.Definition, error) {
+func DefinitionFromProto(definition *proto.WorkflowDefinition) *coreworkflow.Definition {
 	if definition == nil {
-		return nil, nil
+		return nil
 	}
-	activations, err := ActivationsFromProto(definition.GetActivations())
-	if err != nil {
-		return nil, err
-	}
+	activations := ActivationsFromProto(definition.GetActivations())
 	return &coreworkflow.Definition{
 		ID:           definition.GetId(),
 		Generation:   definition.GetGeneration(),
@@ -291,7 +276,7 @@ func DefinitionFromProto(definition *proto.WorkflowDefinition) (*coreworkflow.De
 		UpdatedAt:    protoutil.TimeFromProto(definition.GetUpdatedAt()),
 		ProviderName: definition.GetProvider(),
 		RunAs:        strings.TrimSpace(definition.GetRunAs()),
-	}, nil
+	}
 }
 
 func DefinitionToProto(definition *coreworkflow.Definition) (*proto.WorkflowDefinition, error) {
@@ -362,9 +347,9 @@ func ActivationToProto(activation coreworkflow.Activation) (*proto.WorkflowActiv
 	return out, nil
 }
 
-func ActivationsFromProto(values []*proto.WorkflowActivation) ([]coreworkflow.Activation, error) {
+func ActivationsFromProto(values []*proto.WorkflowActivation) []coreworkflow.Activation {
 	if len(values) == 0 {
-		return nil, nil
+		return nil
 	}
 	out := make([]coreworkflow.Activation, 0, len(values))
 	for _, value := range values {
@@ -373,7 +358,7 @@ func ActivationsFromProto(values []*proto.WorkflowActivation) ([]coreworkflow.Ac
 		}
 		out = append(out, ActivationFromProto(value))
 	}
-	return out, nil
+	return out
 }
 
 func ActivationFromProto(value *proto.WorkflowActivation) coreworkflow.Activation {
@@ -597,39 +582,33 @@ func SignalRunResponseFromProto(resp *proto.SignalWorkflowRunResponse) (*corewor
 	}, nil
 }
 
-func RunTriggerFromProto(trigger *proto.WorkflowRunTrigger) (coreworkflow.RunTrigger, error) {
-	if trigger == nil {
-		return coreworkflow.RunTrigger{}, nil
-	}
+func RunTriggerFromProto(trigger *proto.WorkflowRunTrigger) coreworkflow.RunTrigger {
 	switch kind := trigger.GetKind().(type) {
 	case *proto.WorkflowRunTrigger_Manual:
-		return coreworkflow.RunTrigger{Manual: kind.Manual != nil}, nil
+		return coreworkflow.RunTrigger{Manual: kind.Manual != nil}
 	case *proto.WorkflowRunTrigger_Schedule:
 		if kind.Schedule == nil {
-			return coreworkflow.RunTrigger{}, nil
+			return coreworkflow.RunTrigger{}
 		}
 		return coreworkflow.RunTrigger{
 			Schedule: &coreworkflow.ScheduleTrigger{
 				ActivationID: kind.Schedule.GetActivationId(),
 				ScheduledFor: protoutil.TimeFromProto(kind.Schedule.GetScheduledFor()),
 			},
-		}, nil
+		}
 	case *proto.WorkflowRunTrigger_Event:
 		if kind.Event == nil {
-			return coreworkflow.RunTrigger{}, nil
+			return coreworkflow.RunTrigger{}
 		}
-		event, err := EventFromProto(kind.Event.GetEvent())
-		if err != nil {
-			return coreworkflow.RunTrigger{}, err
-		}
+		event := EventFromProto(kind.Event.GetEvent())
 		return coreworkflow.RunTrigger{
 			Event: &coreworkflow.EventTriggerInvocation{
 				ActivationID: kind.Event.GetActivationId(),
 				Event:        event,
 			},
-		}, nil
+		}
 	default:
-		return coreworkflow.RunTrigger{}, nil
+		return coreworkflow.RunTrigger{}
 	}
 }
 

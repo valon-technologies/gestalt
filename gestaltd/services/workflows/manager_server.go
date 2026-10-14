@@ -142,10 +142,7 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 	if s.manager == nil {
 		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
-	spec, err := workflowwire.DefinitionSpecFromProto(req.GetSpec())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "definition spec: %v", err)
-	}
+	spec := workflowwire.DefinitionSpecFromProto(req.GetSpec())
 	managed, err := s.manager.ApplyDefinition(s.managerContext(ctx, authCtx), p, workflowmanager.DefinitionApply{
 		ProviderName:   providerName,
 		Spec:           *spec,
@@ -530,10 +527,7 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	if err != nil {
 		return nil, err
 	}
-	event, err := workflowwire.EventFromProto(req.GetEvent())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
-	}
+	event := workflowwire.EventFromProto(req.GetEvent())
 	appName := authCtx.CallerName()
 	delivered, err := s.manager.DeliverEvent(s.managerContext(ctx, authCtx), p, workflowmanager.EventDeliver{
 		AppName:      appName,

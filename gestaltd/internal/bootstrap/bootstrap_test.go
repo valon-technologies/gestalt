@@ -1041,10 +1041,7 @@ func (p *recordingWorkflowProvider) ApplyDefinition(_ context.Context, req *prot
 	if p.applyDefinitionErr != nil {
 		return nil, p.applyDefinitionErr
 	}
-	spec, err := workflowwire.DefinitionSpecFromProto(req.GetSpec())
-	if err != nil {
-		return nil, err
-	}
+	spec := workflowwire.DefinitionSpecFromProto(req.GetSpec())
 	if spec == nil {
 		spec = &coreworkflow.DefinitionSpec{}
 	}
