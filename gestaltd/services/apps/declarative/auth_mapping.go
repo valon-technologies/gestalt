@@ -73,8 +73,8 @@ func resolveAuthValue(value AuthValueDef, token string, tokenData *map[string]an
 		*tokenData = parsed
 	}
 	fieldName := value.ValueFrom.CredentialFieldRef.Name
-	val, ok := (*tokenData)[fieldName]
-	if !ok || val == nil {
+	val := (*tokenData)[fieldName]
+	if val == nil {
 		return "", fmt.Errorf("token field %q is missing or null", fieldName)
 	}
 	return fmt.Sprintf("%v", val), nil

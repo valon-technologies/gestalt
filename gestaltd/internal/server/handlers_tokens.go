@@ -398,8 +398,8 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 }
 
 func (s *Server) effectiveConnectionDef(integration, connection string) (config.ConnectionDef, bool) {
-	entry, ok := s.pluginDefs[integration]
-	if !ok || entry == nil {
+	entry := s.pluginDefs[integration]
+	if entry == nil {
 		return config.ConnectionDef{}, false
 	}
 	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())

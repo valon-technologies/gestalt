@@ -72,8 +72,8 @@ func (s *Server) appAdminUIObservabilityMiddleware(next http.Handler) http.Handl
 }
 
 func recordAppAdminUITargetSubject(ctx context.Context, subjectID string) {
-	target, ok := ctx.Value(appAdminUITargetSubjectKey{}).(*appAdminUITargetSubject)
-	if !ok || target == nil {
+	target, _ := ctx.Value(appAdminUITargetSubjectKey{}).(*appAdminUITargetSubject)
+	if target == nil {
 		return
 	}
 	subjectID = strings.TrimSpace(subjectID)
