@@ -99,7 +99,7 @@ func TypedValueFromAny(v any) (*proto.TypedValue, error) {
 
 // AnyFromTypedValue converts a wire TypedValue to its native value.
 func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
-	if v == nil || v.GetKind() == nil {
+	if v.GetKind() == nil {
 		return nil, nil
 	}
 
@@ -125,9 +125,6 @@ func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
 	case *proto.TypedValue_BytesValue:
 		return append([]byte(nil), kind.BytesValue...), nil
 	case *proto.TypedValue_JsonValue:
-		if kind.JsonValue == nil {
-			return nil, nil
-		}
 		return kind.JsonValue.AsInterface(), nil
 	default:
 		return nil, fmt.Errorf("unmarshal typed value: unsupported kind %T", kind)

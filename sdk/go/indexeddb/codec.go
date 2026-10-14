@@ -26,9 +26,6 @@ func anyFromTypedValue(v *client.TypedValue) (any, error) {
 
 // AnyFromTypedValue decodes one typed value.
 func AnyFromTypedValue(v *client.TypedValue) (any, error) {
-	if v == nil {
-		return nil, nil
-	}
 	return indexeddbcodec.AnyFromTypedValue(client.ToWireTypedValue(v))
 }
 
@@ -170,9 +167,6 @@ func CompareKeys(a, b any) int {
 
 // KeyInRange reports whether key satisfies kr. A nil range includes all keys.
 func KeyInRange(key any, kr *client.KeyRange) (bool, error) {
-	if kr == nil {
-		return true, nil
-	}
 	return indexeddbcodec.KeyInRange(key, client.ToWireKeyRange(kr))
 }
 

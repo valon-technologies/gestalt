@@ -53,7 +53,7 @@ export function structFromJsonObject(value: JsonObject = {}): JsonObject {
 
 /** Converts a protobuf Struct-compatible field value back to a JSON object. */
 export function jsonObjectFromStruct(value?: JsonObject | undefined): JsonObject {
-  return value === undefined ? {} : { ...value };
+  return { ...value };
 }
 
 /** Converts a JSON-compatible native value into a protobuf Value message. */

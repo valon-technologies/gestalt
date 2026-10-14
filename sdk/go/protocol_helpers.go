@@ -40,9 +40,6 @@ func structFromMap(value map[string]any) (*structpb.Struct, error) {
 // Anonymous embedded fields must have an explicit json tag name; embedded
 // fields are not flattened.
 func structFromAny(value any) (*structpb.Struct, error) {
-	if value == nil {
-		return nil, nil
-	}
 	normalized, err := normalizeJSONObject(value, "struct")
 	if err != nil {
 		return nil, err
