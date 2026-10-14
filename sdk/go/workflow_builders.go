@@ -106,9 +106,6 @@ func boundWorkflowTargetToProto(input BoundWorkflowTarget) (*proto.BoundWorkflow
 // boundWorkflowTargetFromProto converts an existing protocol target into
 // builder input.
 func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflowTarget {
-	if value == nil {
-		return BoundWorkflowTarget{}
-	}
 	return BoundWorkflowTarget{Steps: workflowStepsFromProto(value.GetSteps())}
 }
 
@@ -321,9 +318,6 @@ func workflowTextToProto(input WorkflowText) *proto.WorkflowText {
 }
 
 func workflowTextFromProto(value *proto.WorkflowText) WorkflowText {
-	if value == nil {
-		return WorkflowText{}
-	}
 	return WorkflowText{Template: value.GetTemplate()}
 }
 
@@ -455,23 +449,13 @@ func workflowValueToProto(input WorkflowValue) (*proto.WorkflowValue, error) {
 }
 
 func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
-	if value == nil {
-		return WorkflowValue{}
-	}
 	switch typed := value.GetKind().(type) {
 	case *proto.WorkflowValue_Literal:
 		return WorkflowValue{Literal: anyFromValue(typed.Literal), LiteralSet: true}
 	case *proto.WorkflowValue_Object:
-		var fields map[string]*proto.WorkflowValue
-		if typed.Object != nil {
-			fields = typed.Object.GetFields()
-		}
-		return WorkflowValue{Object: workflowValueMapFromProto(fields)}
+		return WorkflowValue{Object: workflowValueMapFromProto(typed.Object.GetFields())}
 	case *proto.WorkflowValue_Array:
-		var values []*proto.WorkflowValue
-		if typed.Array != nil {
-			values = typed.Array.GetValues()
-		}
+		values := typed.Array.GetValues()
 		out := make([]WorkflowValue, 0, len(values))
 		for _, value := range values {
 			out = append(out, workflowValueFromProto(value))
@@ -485,17 +469,11 @@ func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
 	case *proto.WorkflowValue_Signal:
 		return WorkflowValue{Signal: workflowPathSourcePath(typed.Signal)}
 	case *proto.WorkflowValue_StepOutput:
-		if typed.StepOutput == nil {
-			return WorkflowValue{StepOutput: &WorkflowStepOutputSource{}}
-		}
 		return WorkflowValue{StepOutput: &WorkflowStepOutputSource{
 			StepID: typed.StepOutput.GetStepId(),
 			Path:   typed.StepOutput.GetPath(),
 		}}
 	case *proto.WorkflowValue_StepInput:
-		if typed.StepInput == nil {
-			return WorkflowValue{StepInput: &WorkflowStepInputSource{}}
-		}
 		return WorkflowValue{StepInput: &WorkflowStepInputSource{
 			StepID: typed.StepInput.GetStepId(),
 			Path:   typed.StepInput.GetPath(),
@@ -506,9 +484,6 @@ func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
 }
 
 func workflowPathSourcePath(value *proto.WorkflowPathSource) string {
-	if value == nil {
-		return ""
-	}
 	return value.GetPath()
 }
 
@@ -683,9 +658,6 @@ func workflowRunTriggerToProto(input WorkflowRunTrigger) (*proto.WorkflowRunTrig
 // workflowRunTriggerFromProto converts an existing protocol trigger into
 // builder input.
 func workflowRunTriggerFromProto(value *proto.WorkflowRunTrigger) (WorkflowRunTrigger, error) {
-	if value == nil {
-		return WorkflowRunTrigger{}, nil
-	}
 	switch kind := value.GetKind().(type) {
 	case *proto.WorkflowRunTrigger_Manual:
 		return WorkflowRunTrigger{Manual: true}, nil
@@ -799,9 +771,6 @@ func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.Workflo
 }
 
 func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) (WorkflowDefinitionSpec, error) {
-	if value == nil {
-		return WorkflowDefinitionSpec{}, nil
-	}
 	activations, err := workflowActivationsFromProto(value.GetActivations())
 	if err != nil {
 		return WorkflowDefinitionSpec{}, err
