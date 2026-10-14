@@ -459,11 +459,7 @@ func (a *appManaged) frontendHandler() http.Handler {
 			serveNotReady(w)
 			return
 		}
-		proxy, err := a.reverseProxy()
-		if err != nil {
-			http.Error(w, "dev server unavailable", http.StatusBadGateway)
-			return
-		}
+		proxy := a.reverseProxy()
 		ensureBasePathPrefix(r, a.target.BasePath)
 		proxy.ServeHTTP(w, r)
 	})
@@ -488,19 +484,18 @@ func ensureBasePathPrefix(r *http.Request, basePath string) {
 	r.URL.Path = base + "/" + rest
 }
 
-func (a *appManaged) reverseProxy() (*httputil.ReverseProxy, error) {
+func (a *appManaged) reverseProxy() *httputil.ReverseProxy {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.proxy != nil && a.proxyPort == a.port {
-		return a.proxy, nil
+		return a.proxy
 	}
-	upstream, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", a.port))
-	if err != nil {
-		return nil, err
-	}
-	a.proxy = newReverseProxy(upstream)
+	a.proxy = newReverseProxy(&url.URL{
+		Scheme: "http",
+		Host:   fmt.Sprintf("127.0.0.1:%d", a.port),
+	})
 	a.proxyPort = a.port
-	return a.proxy, nil
+	return a.proxy
 }
 
 func devAppCommandEnv(port int, target AppTarget, manifestEnv map[string]string) []string {
