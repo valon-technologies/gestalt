@@ -189,12 +189,7 @@ func (s *Supervisor) runProc(ctx context.Context, proc *managedProc) {
 			return
 		case <-timer.C:
 		}
-		if backoff < devRestartBackoffMax {
-			backoff *= 2
-			if backoff > devRestartBackoffMax {
-				backoff = devRestartBackoffMax
-			}
-		}
+		backoff = min(backoff*2, devRestartBackoffMax)
 	}
 }
 

@@ -201,10 +201,7 @@ func (w *HeartbeatWriter) pruneDue(now time.Time) bool {
 	if cadence <= 0 || cadence > time.Hour {
 		cadence = time.Hour
 	}
-	if cadence < w.interval() {
-		cadence = w.interval()
-	}
-	w.nextPrune = now.Add(cadence)
+	w.nextPrune = now.Add(max(cadence, w.interval()))
 	return true
 }
 
