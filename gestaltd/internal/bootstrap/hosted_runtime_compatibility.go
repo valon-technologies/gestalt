@@ -17,9 +17,6 @@ const (
 )
 
 func hostedRuntimeSessionCompatibilityReason(session *proto.RuntimeSession) string {
-	if session == nil || len(session.GetMetadata()) == 0 {
-		return ""
-	}
 	metadata := session.GetMetadata()
 	actual := strings.TrimSpace(metadata[hostedRuntimeMetadataActualImage])
 	current := strings.TrimSpace(metadata[hostedRuntimeMetadataCurrentImage])

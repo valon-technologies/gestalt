@@ -1872,9 +1872,6 @@ func effectiveRuntime(ctx context.Context, name string, entry *config.ProviderEn
 }
 
 func providerEntryRuntimePlacementConfig(entry *config.ProviderEntry) config.EffectiveRuntimePlacement {
-	if entry == nil {
-		return config.EffectiveRuntimePlacement{}
-	}
 	runtimeCfg := entry.RuntimePlacementConfig()
 	if runtimeCfg == nil {
 		return config.EffectiveRuntimePlacement{Enabled: entry.UsesRuntimePlacement()}

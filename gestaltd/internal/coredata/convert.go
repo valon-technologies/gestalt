@@ -8,10 +8,7 @@ import (
 )
 
 func recString(rec idb.Record, key string) string {
-	v, ok := rec[key]
-	if !ok || v == nil {
-		return ""
-	}
+	v := rec[key]
 	switch s := v.(type) {
 	case string:
 		return s
@@ -23,10 +20,7 @@ func recString(rec idb.Record, key string) string {
 }
 
 func recTime(rec idb.Record, key string) time.Time {
-	v, ok := rec[key]
-	if !ok || v == nil {
-		return time.Time{}
-	}
+	v := rec[key]
 	switch t := v.(type) {
 	case time.Time:
 		return t
@@ -59,8 +53,8 @@ func recAnyMap(rec idb.Record, key string) map[string]any {
 }
 
 func recJSON(rec idb.Record, key string) []byte {
-	v, ok := rec[key]
-	if !ok || v == nil {
+	v := rec[key]
+	if v == nil {
 		return nil
 	}
 	switch raw := v.(type) {
@@ -86,9 +80,6 @@ func recJSON(rec idb.Record, key string) []byte {
 }
 
 func jsonValue(v any) any {
-	if v == nil {
-		return nil
-	}
 	switch value := v.(type) {
 	case map[string]string:
 		if len(value) == 0 {
@@ -114,10 +105,7 @@ func jsonValue(v any) any {
 }
 
 func recUint64(rec idb.Record, key string) uint64 {
-	v, ok := rec[key]
-	if !ok || v == nil {
-		return 0
-	}
+	v := rec[key]
 	switch n := v.(type) {
 	case uint64:
 		return n
@@ -142,10 +130,7 @@ func recUint64(rec idb.Record, key string) uint64 {
 }
 
 func recBytes(rec idb.Record, key string) []byte {
-	v, ok := rec[key]
-	if !ok || v == nil {
-		return nil
-	}
+	v := rec[key]
 	switch b := v.(type) {
 	case []byte:
 		return append([]byte(nil), b...)
@@ -157,10 +142,7 @@ func recBytes(rec idb.Record, key string) []byte {
 }
 
 func recTimePtr(rec idb.Record, key string) *time.Time {
-	v, ok := rec[key]
-	if !ok || v == nil {
-		return nil
-	}
+	v := rec[key]
 	switch t := v.(type) {
 	case time.Time:
 		if t.IsZero() {

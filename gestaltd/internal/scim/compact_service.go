@@ -62,7 +62,7 @@ type CompactService struct {
 }
 
 func (s *CompactService) authorizationResourceDisplayName(ctx context.Context, resource *proto.Resource) (string, error) {
-	if resource == nil || !strings.EqualFold(strings.TrimSpace(resource.GetType()), "group") || strings.TrimSpace(resource.GetId()) == "" {
+	if !strings.EqualFold(strings.TrimSpace(resource.GetType()), "group") || strings.TrimSpace(resource.GetId()) == "" {
 		return "", nil
 	}
 	record, err := s.db.ObjectStore(coredata.StoreSCIMResources).Get(ctx, strings.TrimSpace(resource.GetId()))
@@ -431,7 +431,7 @@ func (s *CompactService) relationshipPresent(ctx context.Context, tuple *proto.R
 
 func (s *CompactService) relationshipTouchIDs(ctx context.Context, tuple *proto.RelationshipTuple) (map[string]struct{}, error) {
 	touch := map[string]struct{}{}
-	if tuple == nil || tuple.GetTarget() == nil {
+	if tuple.GetTarget() == nil {
 		return touch, nil
 	}
 	if subject := tuple.GetTarget().GetSubject(); subject != nil && strings.HasPrefix(subject.GetId(), "user:") {
@@ -548,7 +548,7 @@ func (s *CompactService) clientHasGroup(ctx context.Context, clientID, resourceT
 
 func (s *CompactService) affectedGroupMemberUsers(ctx context.Context, tuple *proto.RelationshipTuple) ([]string, error) {
 	groupTarget := tuple.GetTarget().GetSubjectSet()
-	if groupTarget == nil || groupTarget.GetResource().GetType() != "group" {
+	if groupTarget.GetResource().GetType() != "group" {
 		if subject := tuple.GetTarget().GetSubject(); subject != nil && strings.HasPrefix(subject.GetId(), "user:") {
 			return []string{strings.TrimPrefix(subject.GetId(), "user:")}, nil
 		}
@@ -654,7 +654,7 @@ func (s *CompactService) apply(ctx context.Context, from, to []*proto.Relationsh
 			continue
 		}
 		tuple := change.tuple
-		if tuple == nil || tuple.GetTarget().GetSubjectSet() == nil {
+		if tuple.GetTarget().GetSubjectSet() == nil {
 			continue
 		}
 		captured[change.logicalKey] = struct{}{}
@@ -725,7 +725,7 @@ func (s *CompactService) collectClientCoreUserTouchIDs(ctx context.Context, affe
 // provider state replacement runs. The provider is canonical, so this is
 // deliberately an in-memory set used only for timestamp maintenance.
 func (s *CompactService) captureRelationshipAffectedUsers(ctx context.Context, tuple *proto.RelationshipTuple, affected map[string]map[string]struct{}) error {
-	if tuple == nil || tuple.GetTarget() == nil || tuple.GetResource() == nil {
+	if tuple.GetTarget() == nil || tuple.GetResource() == nil {
 		return nil
 	}
 	mark := func(clientID, coreID string) {
@@ -758,7 +758,7 @@ func (s *CompactService) captureRelationshipAffectedUsers(ctx context.Context, t
 		}
 		return nil
 	}
-	if subjectSet := tuple.GetTarget().GetSubjectSet(); subjectSet == nil || subjectSet.GetResource() == nil || subjectSet.GetResource().GetType() != "group" {
+	if subjectSet := tuple.GetTarget().GetSubjectSet(); subjectSet.GetResource().GetType() != "group" {
 		return nil
 	}
 	coreIDs, err := s.affectedGroupMemberUsers(ctx, tuple)
@@ -1313,7 +1313,7 @@ func (s *CompactService) userGroupsNestedWithHydration(ctx context.Context, cid,
 			continue
 		}
 		target := tuple.GetTarget().GetSubject()
-		if target == nil || target.GetId() != "user:"+coreID {
+		if target.GetId() != "user:"+coreID {
 			continue
 		}
 		groupID := tuple.GetResource().GetId()

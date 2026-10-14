@@ -752,7 +752,7 @@ func (c *rpcCursor) Advance(count int) bool {
 
 // Key returns the current cursor key.
 func (c *rpcCursor) Key() any {
-	if c.entry == nil || c.entry.GetKey() == nil {
+	if c.entry.GetKey() == nil {
 		return nil
 	}
 	key, err := idb.KeyValueToAny(sdkclient.FromWireKeyValue(c.entry.GetKey()))
@@ -765,9 +765,6 @@ func (c *rpcCursor) Key() any {
 
 // PrimaryKey returns the current record's primary key.
 func (c *rpcCursor) PrimaryKey() string {
-	if c.entry == nil {
-		return ""
-	}
 	return c.entry.GetPrimaryKey()
 }
 
@@ -776,7 +773,7 @@ func (c *rpcCursor) Value() (idb.Record, error) {
 	if c.keysOnly {
 		return nil, idb.ErrKeysOnly
 	}
-	if c.entry == nil || c.entry.GetRecord() == nil {
+	if c.entry.GetRecord() == nil {
 		return nil, idb.ErrNotFound
 	}
 	return idb.RecordFromProto(sdkclient.FromWireRecord(c.entry.GetRecord()))
@@ -1091,7 +1088,7 @@ func toWireQuery(q any) *proto.IndexedDBQuery {
 }
 
 func rpcStatusErr(st *rpcstatus.Status) error {
-	if st == nil || st.GetCode() == int32(codes.OK) {
+	if st.GetCode() == int32(codes.OK) {
 		return nil
 	}
 	return grpcErr(status.Error(codes.Code(st.GetCode()), st.GetMessage()))

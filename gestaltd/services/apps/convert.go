@@ -175,9 +175,6 @@ func jsonRawFromString(s string) json.RawMessage {
 // inspect CatalogOperation.OutputSchema (MCP, appregistry, agent tools)
 // continue to see the schema after the output_schema → response migration.
 func legacyOutputSchemaFromResponse(resp *proto.OperationResponseSpec) json.RawMessage {
-	if resp == nil {
-		return nil
-	}
 	if u := resp.GetUnary(); u != nil {
 		return structToJSONRaw(u.GetSchema())
 	}
