@@ -6,6 +6,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/valon-technologies/gestalt/server/internal/ptrutil"
 )
 
 var scpGitURLPattern = regexp.MustCompile(`^[^@\s/\\]+@([^:\s]+):(.+)$`)
@@ -23,10 +25,7 @@ func CloneWorkspace(src *Workspace) *Workspace {
 }
 
 func ClonePreparedWorkspace(src *PreparedWorkspace) *PreparedWorkspace {
-	if src == nil {
-		return nil
-	}
-	return &PreparedWorkspace{Root: src.Root, CWD: src.CWD}
+	return ptrutil.Clone(src)
 }
 
 func NormalizeWorkspace(src *Workspace) (*Workspace, error) {
