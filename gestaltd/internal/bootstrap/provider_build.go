@@ -2343,11 +2343,7 @@ func clonePluginEnv(src map[string]string) map[string]string {
 	if len(src) == 0 {
 		return nil
 	}
-	dst := make(map[string]string, len(src))
-	for key, value := range src {
-		dst[key] = value
-	}
-	return dst
+	return maps.Clone(src)
 }
 
 func buildAppStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (appservice.StaticProviderSpec, config.StaticConnectionPlan, error) {

@@ -677,11 +677,7 @@ func cloneStringSet(src map[string]struct{}) map[string]struct{} {
 	if len(src) == 0 {
 		return nil
 	}
-	out := make(map[string]struct{}, len(src))
-	for key := range src {
-		out[key] = struct{}{}
-	}
-	return out
+	return maps.Clone(src)
 }
 
 func withRequestTelemetryProviders(next http.Handler, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) http.Handler {

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -110,9 +111,5 @@ func cloneAppRegistryConfig(src map[string]config.AppRegistryConfig) map[string]
 	if len(src) == 0 {
 		return nil
 	}
-	out := make(map[string]config.AppRegistryConfig, len(src))
-	for name, registry := range src {
-		out[name] = registry
-	}
-	return out
+	return maps.Clone(src)
 }

@@ -2,6 +2,7 @@ package scim
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -119,7 +120,7 @@ func (r *Runtime) Service() *Service {
 
 func (r *Runtime) ManagedGroupIDs() map[string]struct{} {
 	if snapshot := r.snapshot(); snapshot != nil {
-		return cloneGroupIDs(snapshot.managed)
+		return maps.Clone(snapshot.managed)
 	}
 	return nil
 }
@@ -129,17 +130,6 @@ func (r *Runtime) IsEligible(ctx context.Context, coreID, email string) (bool, e
 		return snapshot.service.IsEligible(ctx, coreID, email)
 	}
 	return true, nil
-}
-
-func cloneGroupIDs(ids map[string]struct{}) map[string]struct{} {
-	if ids == nil {
-		return nil
-	}
-	out := make(map[string]struct{}, len(ids))
-	for id := range ids {
-		out[id] = struct{}{}
-	}
-	return out
 }
 
 func ManagedGroupIDs(cfg config.ServerSCIMConfig) map[string]struct{} {
