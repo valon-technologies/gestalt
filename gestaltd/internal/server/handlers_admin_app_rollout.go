@@ -467,10 +467,7 @@ func adminFleetReplicaFromCore(
 	cutoff time.Time,
 	evaluatedAt time.Time,
 ) adminFleetReplicaInfo {
-	age := evaluatedAt.Sub(heartbeat.HeartbeatAt.UTC())
-	if age < 0 {
-		age = 0
-	}
+	age := max(evaluatedAt.Sub(heartbeat.HeartbeatAt.UTC()), 0)
 	sourceStatus := adminFleetReplicaSourceStatusFor(heartbeat.SourceVersion, currentSource)
 	out := adminFleetReplicaInfo{
 		InstanceID:          heartbeat.InstanceID,

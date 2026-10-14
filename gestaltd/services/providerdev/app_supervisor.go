@@ -284,10 +284,7 @@ func (s *Supervisor) runAppCommand(ctx context.Context, proc *appCommandProc, co
 		case <-timer.C:
 		}
 		if backoff < devRestartBackoffMax {
-			backoff *= 2
-			if backoff > devRestartBackoffMax {
-				backoff = devRestartBackoffMax
-			}
+			backoff = min(backoff*2, devRestartBackoffMax)
 		}
 	}
 }
@@ -442,9 +439,7 @@ func (p *appCommandProc) currentOutput() *childOutput {
 func maxReadyTimeout(commands []AppCommand) time.Duration {
 	timeout := defaultReadyTimeout
 	for _, command := range commands {
-		if command.ReadyTimeout > timeout {
-			timeout = command.ReadyTimeout
-		}
+		timeout = max(timeout, command.ReadyTimeout)
 	}
 	return timeout
 }

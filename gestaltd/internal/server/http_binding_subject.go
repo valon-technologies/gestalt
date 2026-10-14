@@ -44,10 +44,7 @@ func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding Mounte
 	if err != nil {
 		var resolveErr *core.HTTPSubjectResolveError
 		if errors.As(err, &resolveErr) {
-			status := resolveErr.Status
-			if status < http.StatusBadRequest {
-				status = http.StatusBadRequest
-			}
+			status := max(resolveErr.Status, http.StatusBadRequest)
 			return nil, newHTTPBindingRequestError(status, resolveErr.Message, err)
 		}
 		return nil, newHTTPBindingRequestError(http.StatusInternalServerError, "failed to resolve http subject", err)

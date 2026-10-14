@@ -96,9 +96,7 @@ func paginateSortedSessionIDs(sessionIDs []string, req *proto.ListRuntimeSession
 			pageSize = defaultListSessionsPageSize
 		}
 	}
-	if pageSize > maxListSessionsPageSize {
-		pageSize = maxListSessionsPageSize
-	}
+	pageSize = min(pageSize, maxListSessionsPageSize)
 	if rawToken != "" && token.PageSize != pageSize {
 		return nil, "", fmt.Errorf("%w: page_token does not match page_size", ErrInvalidListSessionsPagination)
 	}
@@ -112,10 +110,7 @@ func paginateSortedSessionIDs(sessionIDs []string, req *proto.ListRuntimeSession
 	if start >= len(sessionIDs) {
 		return nil, "", nil
 	}
-	end := start + pageSize
-	if end > len(sessionIDs) {
-		end = len(sessionIDs)
-	}
+	end := min(start+pageSize, len(sessionIDs))
 	nextPageToken := ""
 	if end < len(sessionIDs) {
 		var err error

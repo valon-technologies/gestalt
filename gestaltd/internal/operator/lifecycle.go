@@ -122,13 +122,8 @@ type SyncOptions struct {
 }
 
 func DefaultSyncParallelism() int {
-	parallelism := runtime.GOMAXPROCS(0)
-	if parallelism > 4 {
-		parallelism = 4
-	}
-	if parallelism < 1 {
-		parallelism = 1
-	}
+	parallelism := min(runtime.GOMAXPROCS(0), 4)
+	parallelism = max(parallelism, 1)
 	return parallelism
 }
 

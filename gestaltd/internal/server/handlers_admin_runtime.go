@@ -162,9 +162,7 @@ func adminRuntimeSessionListRequestFromQuery(w http.ResponseWriter, r *http.Requ
 	if pageSize == 0 {
 		pageSize = defaultAdminRuntimeSessionPageSize
 	}
-	if pageSize > maxAdminRuntimeSessionPageSize {
-		pageSize = maxAdminRuntimeSessionPageSize
-	}
+	pageSize = min(pageSize, maxAdminRuntimeSessionPageSize)
 	return &proto.ListRuntimeSessionsRequest{
 		PageSize:  int32(pageSize),
 		PageToken: pageToken,

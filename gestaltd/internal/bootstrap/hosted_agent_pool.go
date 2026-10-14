@@ -1837,10 +1837,7 @@ func (p *hostedAgentProviderPool) pingBackend(backend *hostedAgentPoolBackend) e
 		recordHostedAgentRuntimeHealthCheck(p.ctx, p.name, startedAt, err)
 		return err
 	}
-	timeout := p.policy.HealthCheckInterval
-	if timeout > 10*time.Second {
-		timeout = 10 * time.Second
-	}
+	timeout := min(p.policy.HealthCheckInterval, 10*time.Second)
 	ctx, cancel := context.WithTimeout(p.ctx, timeout)
 	defer cancel()
 	err := backend.provider.Ping(ctx)

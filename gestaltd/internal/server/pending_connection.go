@@ -205,10 +205,7 @@ func (s *Server) setPendingConnectionCookie(w http.ResponseWriter, state *pendin
 	if err != nil {
 		return
 	}
-	maxAge := int(time.Until(time.Unix(state.ExpiresAt, 0)).Seconds())
-	if maxAge < 0 {
-		maxAge = 0
-	}
+	maxAge := max(int(time.Until(time.Unix(state.ExpiresAt, 0)).Seconds()), 0)
 	http.SetCookie(w, &http.Cookie{
 		Name:     pendingConnectionCookieName,
 		Value:    encoded,

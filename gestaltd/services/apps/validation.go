@@ -28,9 +28,7 @@ type catalogResolutionCache struct {
 }
 
 func newCatalogResolutionCache(size int) *catalogResolutionCache {
-	if size < 0 {
-		size = 0
-	}
+	size = max(size, 0)
 	return &catalogResolutionCache{entries: make(map[string]resolvedDependencyCatalog, size)}
 }
 

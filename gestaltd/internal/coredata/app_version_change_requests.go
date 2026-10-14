@@ -116,9 +116,7 @@ func (s *AppVersionChangeRequestService) ListRequestsByAppPage(ctx context.Conte
 	if limit <= 0 {
 		limit = DefaultAppVersionChangeRequestPageLimit
 	}
-	if limit > MaxAppVersionChangeRequestPageLimit {
-		limit = MaxAppVersionChangeRequestPageLimit
-	}
+	limit = min(limit, MaxAppVersionChangeRequestPageLimit)
 
 	filtered := make([]*core.AppVersionChangeRequest, 0, len(requests))
 	for _, request := range requests {
