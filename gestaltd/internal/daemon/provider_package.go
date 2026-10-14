@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -406,7 +405,7 @@ func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, 
 		return nil
 	}
 
-	assetRoot, err := normalizeReleasePath(assetRootValue)
+	assetRoot, err := providerpkg.NormalizeReleasePath(assetRootValue)
 	if err != nil {
 		return err
 	}
@@ -440,18 +439,6 @@ func pathWithinBase(path, base string) (bool, error) {
 		return false, err
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))), nil
-}
-
-func normalizeReleasePath(rel string) (string, error) {
-	if rel == "" {
-		return "", nil
-	}
-
-	cleanPath := path.Clean(strings.ReplaceAll(rel, "\\", "/"))
-	if path.IsAbs(cleanPath) || cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
-		return "", fmt.Errorf("release path %q must stay within app root", rel)
-	}
-	return cleanPath, nil
 }
 
 func printProviderPackageUsage(w io.Writer) {

@@ -113,7 +113,7 @@ func ResolveInstalledApp(name string, entry *config.ProviderEntry, destDir, vers
 		if _, err := os.Stat(install.executablePath); err != nil {
 			return nil, fmt.Errorf("registry installed executable for provider %q not found at %s: %w", name, install.executablePath, err)
 		}
-		args, err := providerEntrypointArgs(manifest)
+		args, err := providerpkg.EntrypointArgs(manifest.Entrypoint, "provider")
 		if err != nil {
 			return nil, fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
 		}
@@ -164,12 +164,4 @@ func inspectInstalledApp(destDir string) (*installedAppLayout, error) {
 		install.assetRootPath = filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
 	}
 	return install, nil
-}
-
-func providerEntrypointArgs(manifest *providermanifestv1.Manifest) ([]string, error) {
-	entry := manifest.Entrypoint
-	if entry == nil {
-		return nil, fmt.Errorf("manifest does not define a provider entrypoint")
-	}
-	return append([]string(nil), entry.Args...), nil
 }

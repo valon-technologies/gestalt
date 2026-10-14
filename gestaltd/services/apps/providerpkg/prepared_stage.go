@@ -607,7 +607,7 @@ func copyPreparedInstallSupportFiles(manifest *providermanifestv1.Manifest, sour
 			return nil
 		}
 
-		cleanRel, err := normalizePreparedInstallPath(rel)
+		cleanRel, err := NormalizeReleasePath(rel)
 		if err != nil {
 			return err
 		}
@@ -671,7 +671,8 @@ func copyPreparedInstallSupportFiles(manifest *providermanifestv1.Manifest, sour
 	return nil
 }
 
-func normalizePreparedInstallPath(rel string) (string, error) {
+// NormalizeReleasePath cleans a relative release path and rejects app-root traversal.
+func NormalizeReleasePath(rel string) (string, error) {
 	if rel == "" {
 		return "", nil
 	}
