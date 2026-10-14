@@ -47,6 +47,7 @@ from ._providers import (
     MetadataProvider,
     ProviderKind,
     ProviderMetadata,
+    RegisterServices,
     RuntimeProvider,
     S3InvalidRangeError,
     S3NotFoundError,
@@ -198,25 +199,19 @@ def _grpc_handler(label: str):
 
 
 def _grpc_status_from_http_status(status: int) -> Any:
-    if status == HTTPStatus.BAD_REQUEST:
-        return grpc.StatusCode.INVALID_ARGUMENT
-    if status == HTTPStatus.UNAUTHORIZED:
-        return grpc.StatusCode.UNAUTHENTICATED
-    if status == HTTPStatus.FORBIDDEN:
-        return grpc.StatusCode.PERMISSION_DENIED
-    if status == HTTPStatus.NOT_FOUND:
-        return grpc.StatusCode.NOT_FOUND
-    if status == HTTPStatus.CONFLICT:
-        return grpc.StatusCode.ALREADY_EXISTS
-    if status == HTTPStatus.PRECONDITION_FAILED:
-        return grpc.StatusCode.FAILED_PRECONDITION
-    if status == HTTPStatus.NOT_IMPLEMENTED:
-        return grpc.StatusCode.UNIMPLEMENTED
-    if status == HTTPStatus.SERVICE_UNAVAILABLE:
-        return grpc.StatusCode.UNAVAILABLE
-    if status == HTTPStatus.INTERNAL_SERVER_ERROR:
-        return grpc.StatusCode.INTERNAL
-    return grpc.StatusCode.UNKNOWN
+    status_names: dict[int, str] = {
+        HTTPStatus.BAD_REQUEST: "INVALID_ARGUMENT",
+        HTTPStatus.UNAUTHORIZED: "UNAUTHENTICATED",
+        HTTPStatus.FORBIDDEN: "PERMISSION_DENIED",
+        HTTPStatus.NOT_FOUND: "NOT_FOUND",
+        HTTPStatus.CONFLICT: "ALREADY_EXISTS",
+        HTTPStatus.PRECONDITION_FAILED: "FAILED_PRECONDITION",
+        HTTPStatus.NOT_IMPLEMENTED: "UNIMPLEMENTED",
+        HTTPStatus.SERVICE_UNAVAILABLE: "UNAVAILABLE",
+        HTTPStatus.INTERNAL_SERVER_ERROR: "INTERNAL",
+    }
+    status_name = status_names.get(status, "UNKNOWN")
+    return getattr(grpc.StatusCode, status_name)
 
 
 def _abort_if_protocol_version_mismatch(
@@ -340,26 +335,9 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
     if isinstance(target, (App, AppProviderAdapter)):
         return target
 
-    if resolved_kind == ProviderKind.IDENTITY and isinstance(
-        target, IdentityProvider
-    ):
-        return _identity_runtime_plugin(target)
-    if resolved_kind == ProviderKind.AUTHORIZATION and isinstance(
-        target, AuthorizationProvider
-    ):
-        return _authorization_runtime_plugin(target)
-    if resolved_kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
-        return _cache_runtime_plugin(target)
-    if resolved_kind == ProviderKind.S3 and isinstance(target, S3Provider):
-        return _s3_runtime_plugin(target)
-    if resolved_kind == ProviderKind.AGENT and isinstance(target, AgentProvider):
-        return _agent_runtime_app(target)
-    if resolved_kind == ProviderKind.RUNTIME and isinstance(target, RuntimeProvider):
-        return _runtime_provider_runtime_app(target)
-    if resolved_kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
-        return _workflow_runtime_adapter(target)
-    if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
-        return _secrets_runtime_plugin(target)
+    adapter = _provider_runtime_adapter(target, resolved_kind)
+    if adapter is not None:
+        return adapter
     if isinstance(target, AppProvider):
         raise RuntimeError(
             "providers must be wrapped in gestalt.AppProviderAdapter unless runtime_kind is authorization, authentication, cache, s3, agent, runtime, workflow, or secrets"
@@ -460,34 +438,36 @@ def _servable_target(
         return target
 
     kind = _normalized_runtime_kind(runtime_kind)
-    if kind == ProviderKind.IDENTITY and isinstance(
-        target, IdentityProvider
-    ):
-        return _identity_runtime_plugin(target)
-    if kind == ProviderKind.AUTHORIZATION and isinstance(target, AuthorizationProvider):
-        return _authorization_runtime_plugin(target)
-    if kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
-        return _cache_runtime_plugin(target)
-    if kind == ProviderKind.S3 and isinstance(target, S3Provider):
-        return _s3_runtime_plugin(target)
-    if kind == ProviderKind.AGENT and isinstance(target, AgentProvider):
-        return _agent_runtime_app(target)
-    if kind == ProviderKind.RUNTIME and isinstance(target, RuntimeProvider):
-        return _runtime_provider_runtime_app(target)
-    if kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
-        return _workflow_runtime_adapter(target)
-    if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
-        return _secrets_runtime_plugin(target)
+    adapter = _provider_runtime_adapter(target, kind)
+    if adapter is not None:
+        return adapter
     raise RuntimeError("unsupported runtime target")
 
 
-def _identity_runtime_plugin(
-    provider: IdentityProvider,
-) -> AppProviderAdapter:
+def _provider_runtime_adapter(
+    target: object,
+    kind: ProviderKind,
+) -> AppProviderAdapter | None:
+    adapters: dict[ProviderKind, tuple[type[AppProvider], RegisterServices]] = {
+        ProviderKind.IDENTITY: (IdentityProvider, _register_identity_services),
+        ProviderKind.AUTHORIZATION: (
+            AuthorizationProvider,
+            _register_authorization_services,
+        ),
+        ProviderKind.CACHE: (CacheProvider, _register_cache_services),
+        ProviderKind.S3: (S3Provider, _register_s3_services),
+        ProviderKind.AGENT: (AgentProvider, _register_agent_services),
+        ProviderKind.RUNTIME: (RuntimeProvider, _register_runtime_provider_services),
+        ProviderKind.WORKFLOW: (WorkflowProvider, _register_workflow_services),
+        ProviderKind.SECRETS: (SecretsProvider, _register_secrets_services),
+    }
+    adapter = adapters.get(kind)
+    if adapter is None or not isinstance(target, adapter[0]):
+        return None
     return AppProviderAdapter(
-        kind=ProviderKind.IDENTITY,
-        provider=provider,
-        register_services=_register_identity_services,
+        kind=kind,
+        provider=target,
+        register_services=adapter[1],
     )
 
 
@@ -503,16 +483,6 @@ def _register_identity_services(server: Any, provider: AppProvider) -> None:
     )
 
 
-def _authorization_runtime_plugin(
-    provider: AuthorizationProvider,
-) -> AppProviderAdapter:
-    return AppProviderAdapter(
-        kind=ProviderKind.AUTHORIZATION,
-        provider=provider,
-        register_services=_register_authorization_services,
-    )
-
-
 def _register_authorization_services(server: Any, provider: AppProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
@@ -522,14 +492,6 @@ def _register_authorization_services(server: Any, provider: AppProvider) -> None
     authorization_pb2_grpc.add_AuthorizationServicer_to_server(
         _authorization_servicer(provider=provider),
         server,
-    )
-
-
-def _s3_runtime_plugin(provider: S3Provider) -> AppProviderAdapter:
-    return AppProviderAdapter(
-        kind=ProviderKind.S3,
-        provider=provider,
-        register_services=_register_s3_services,
     )
 
 
@@ -735,14 +697,6 @@ def _s3_ensure_bytes(value: Any) -> bytes:
     raise TypeError("s3: body chunks must be bytes")
 
 
-def _agent_runtime_app(provider: AgentProvider) -> AppProviderAdapter:
-    return AppProviderAdapter(
-        kind=ProviderKind.AGENT,
-        provider=provider,
-        register_services=_register_agent_services,
-    )
-
-
 def _register_agent_services(server: Any, provider: AppProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
@@ -755,16 +709,6 @@ def _register_agent_services(server: Any, provider: AppProvider) -> None:
     )
 
 
-def _runtime_provider_runtime_app(
-    provider: RuntimeProvider,
-) -> AppProviderAdapter:
-    return AppProviderAdapter(
-        kind=ProviderKind.RUNTIME,
-        provider=provider,
-        register_services=_register_runtime_provider_services,
-    )
-
-
 def _register_runtime_provider_services(server: Any, provider: AppProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
@@ -774,14 +718,6 @@ def _register_runtime_provider_services(server: Any, provider: AppProvider) -> N
     runtime_provider_pb2_grpc.add_RuntimeServicer_to_server(
         _runtime_provider_servicer(provider),
         server,
-    )
-
-
-def _workflow_runtime_adapter(provider: WorkflowProvider) -> AppProviderAdapter:
-    return AppProviderAdapter(
-        kind=ProviderKind.WORKFLOW,
-        provider=provider,
-        register_services=_register_workflow_services,
     )
 
 
@@ -1283,14 +1219,6 @@ def _workflow_provider_servicer(provider: AppProvider) -> Any:
     return WorkflowServicer(provider)
 
 
-def _secrets_runtime_plugin(provider: SecretsProvider) -> AppProviderAdapter:
-    return AppProviderAdapter(
-        kind=ProviderKind.SECRETS,
-        provider=provider,
-        register_services=_register_secrets_services,
-    )
-
-
 def _register_secrets_services(server: Any, provider: AppProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
@@ -1300,14 +1228,6 @@ def _register_secrets_services(server: Any, provider: AppProvider) -> None:
     secrets_pb2_grpc.add_SecretsServicer_to_server(
         _secrets_servicer(provider=provider),
         server,
-    )
-
-
-def _cache_runtime_plugin(provider: CacheProvider) -> AppProviderAdapter:
-    return AppProviderAdapter(
-        kind=ProviderKind.CACHE,
-        provider=provider,
-        register_services=_register_cache_services,
     )
 
 

@@ -242,7 +242,7 @@ def _json_from_native(value: Any, *, path: str, seen: set[int]) -> JsonValue:
         return _json_object_from_items(
             value.items(), path=path, seen=seen, container=value
         )
-    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+    if isinstance(value, Sequence):
         obj_id = id(value)
         if obj_id in seen:
             raise TypeError(f"{path} contains a cycle")
