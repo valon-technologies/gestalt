@@ -1,10 +1,10 @@
 package config
 
 import (
-	"path/filepath"
 	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
 
 type SpecSurface string
@@ -35,16 +35,7 @@ func (s SpecSurface) ConnectionField() string {
 }
 
 func ManifestProviderSurfaceURL(provider *providermanifestv1.Spec, surface SpecSurface) string {
-	switch surface {
-	case SpecSurfaceOpenAPI:
-		return provider.OpenAPIDocument()
-	case SpecSurfaceGraphQL:
-		return provider.GraphQLURL()
-	case SpecSurfaceMCP:
-		return provider.MCPURL()
-	default:
-		return ""
-	}
+	return packageio.ManifestProviderSurfaceURL(provider, string(surface))
 }
 
 func ManifestProviderSurfaceConnectionName(provider *providermanifestv1.Spec, surface SpecSurface) string {
@@ -88,18 +79,8 @@ func EffectiveProviderSpecBaseURL(entry *ProviderEntry, provider *providermanife
 }
 
 func ResolveManifestRelativeSpecURL(entry *ProviderEntry, raw string) string {
-	if entry == nil || entry.ResolvedManifestPath == "" || raw == "" {
+	if entry == nil {
 		return raw
 	}
-	if filepath.IsAbs(raw) || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-		return raw
-	}
-	if strings.HasPrefix(raw, "file://") {
-		path := strings.TrimPrefix(raw, "file://")
-		if filepath.IsAbs(path) {
-			return raw
-		}
-		return "file://" + filepath.Clean(filepath.Join(filepath.Dir(entry.ResolvedManifestPath), path))
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(entry.ResolvedManifestPath), raw))
+	return packageio.ResolveManifestRelativeSpecURL(entry.ResolvedManifestPath, raw)
 }

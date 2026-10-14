@@ -3,6 +3,7 @@ package packageio
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -60,4 +61,22 @@ func validateSourceEntrypointDecl(manifest *providermanifestv1.Manifest, _ strin
 		return nil
 	}
 	return fmt.Errorf("%s", sourceEntrypointReject)
+}
+
+// ResolveManifestRelativeSpecURL resolves a relative spec path beside its manifest.
+func ResolveManifestRelativeSpecURL(manifestPath, raw string) string {
+	if manifestPath == "" || raw == "" {
+		return raw
+	}
+	if filepath.IsAbs(raw) || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	if strings.HasPrefix(raw, "file://") {
+		path := strings.TrimPrefix(raw, "file://")
+		if filepath.IsAbs(path) {
+			return raw
+		}
+		return "file://" + filepath.Clean(filepath.Join(filepath.Dir(manifestPath), path))
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(manifestPath), raw))
 }
