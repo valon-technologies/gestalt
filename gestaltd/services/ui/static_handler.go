@@ -65,14 +65,12 @@ type handler struct {
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resolution := h.resolve(strings.TrimPrefix(r.URL.Path, "/"))
 	switch {
-	case resolution.serveIndex:
+	case resolution.servePath == "":
 		serveIndex(w, r, h.readIndex)
-	case resolution.servePath != "" && isNavigationHTML(resolution.servePath):
+	case resolution.navigation:
 		serveFile(w, r, h.fs, resolution.servePath)
-	case resolution.servePath != "":
-		serve(h.fileServer, w, r, resolution.servePath)
 	default:
-		serveIndex(w, r, h.readIndex)
+		serve(h.fileServer, w, r, resolution.servePath)
 	}
 }
 
@@ -84,7 +82,6 @@ func (h *handler) NavigationPathForRequest(requestPath string) (string, bool) {
 type requestResolution struct {
 	navigation bool
 	routePath  string
-	serveIndex bool
 	servePath  string
 }
 
@@ -94,45 +91,39 @@ func (h *handler) resolve(path string) requestResolution {
 		return requestResolution{
 			navigation: true,
 			routePath:  "/",
-			serveIndex: true,
 		}
 	}
 
 	if info, err := fs.Stat(h.fs, path); err == nil && !info.IsDir() {
 		if routePath, ok := navigationRoutePath(path); ok {
 			if path == "index.html" {
-				return requestResolution{navigation: true, routePath: routePath, serveIndex: true}
+				return requestResolution{navigation: true, routePath: routePath}
 			}
 			return requestResolution{navigation: true, routePath: routePath, servePath: "/" + path}
 		}
 		return requestResolution{servePath: "/" + path}
 	}
 
-	routePath := strings.TrimRight(path, "/")
-	if routePath == "" {
-		routePath = "index.html"
-	}
-	if !strings.Contains(routePath, ".") {
-		if _, err := fs.Stat(h.fs, routePath+".html"); err == nil {
+	if !strings.Contains(path, ".") {
+		if _, err := fs.Stat(h.fs, path+".html"); err == nil {
 			return requestResolution{
 				navigation: true,
-				routePath:  cleanRoutePath("/" + routePath),
-				servePath:  "/" + routePath + ".html",
+				routePath:  stdpath.Clean("/" + path),
+				servePath:  "/" + path + ".html",
 			}
 		}
-		if _, err := fs.Stat(h.fs, routePath+"/index.html"); err == nil {
+		if _, err := fs.Stat(h.fs, path+"/index.html"); err == nil {
 			return requestResolution{
 				navigation: true,
-				routePath:  cleanRoutePath("/" + routePath),
-				servePath:  "/" + routePath + "/index.html",
+				routePath:  stdpath.Clean("/" + path),
+				servePath:  "/" + path + "/index.html",
 			}
 		}
 	}
 
 	return requestResolution{
 		navigation: true,
-		routePath:  cleanRoutePath("/" + path),
-		serveIndex: true,
+		routePath:  stdpath.Clean("/" + path),
 	}
 }
 
@@ -141,17 +132,12 @@ func navigationRoutePath(path string) (string, bool) {
 	case path == "index.html":
 		return "/", true
 	case strings.HasSuffix(path, "/index.html"):
-		return cleanRoutePath("/" + strings.TrimSuffix(path, "/index.html")), true
+		return stdpath.Clean("/" + strings.TrimSuffix(path, "/index.html")), true
 	case strings.HasSuffix(path, ".html"):
-		return cleanRoutePath("/" + strings.TrimSuffix(path, ".html")), true
+		return stdpath.Clean("/" + strings.TrimSuffix(path, ".html")), true
 	default:
 		return "", false
 	}
-}
-
-func isNavigationHTML(path string) bool {
-	_, ok := navigationRoutePath(strings.TrimPrefix(path, "/"))
-	return ok
 }
 
 func cleanStaticPath(path string) (string, bool) {
@@ -180,14 +166,6 @@ func hasParentPathElement(path string) bool {
 		}
 	}
 	return false
-}
-
-func cleanRoutePath(path string) string {
-	path = stdpath.Clean(path)
-	if path == "." {
-		return "/"
-	}
-	return path
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request, readIndex func() ([]byte, error)) {
