@@ -692,10 +692,7 @@ func (p *hostedWorkflowWorkerPool) workerAvailableLocked(worker *hostedWorkflowW
 	if hostedRuntimeSessionCompatibilityReason(worker.runtimeSession) != "" {
 		return false
 	}
-	if worker.forceCloseAt != nil && !now.Before(*worker.forceCloseAt) {
-		return false
-	}
-	return true
+	return worker.forceCloseAt == nil || now.Before(*worker.forceCloseAt)
 }
 
 func (p *hostedWorkflowWorkerPool) acquireWorker(worker *hostedWorkflowWorker) bool {

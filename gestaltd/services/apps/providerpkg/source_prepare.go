@@ -33,13 +33,7 @@ func prepareSourceManifestForPreparedInstallWithOptions(manifestPath string, opt
 // from the packaged entrypoint instead. Manifest-backed apps keep checked-in
 // catalog.yaml because generateSourceStaticCatalog does not run for them.
 func explicitRunStaleCatalog(manifest *providermanifestv1.Manifest) bool {
-	if !HasExplicitSourceRun(manifest) {
-		return false
-	}
-	if manifest != nil && manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
-		return false
-	}
-	return true
+	return HasExplicitSourceRun(manifest) && !manifest.Spec.IsManifestBacked()
 }
 
 func prepareSourceManifest(manifestPath string, packaging bool, buildOpts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {

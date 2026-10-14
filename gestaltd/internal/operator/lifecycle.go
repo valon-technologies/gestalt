@@ -2774,10 +2774,7 @@ func lockEntryMetadataMatches(paths lifecyclePaths, kind, name string, providerE
 	if !lockEntrySourceMatchesProvider(paths, providerEntry, entry) {
 		return false
 	}
-	if entry.Kind != "" && entry.Kind != kind {
-		return false
-	}
-	return true
+	return entry.Kind == "" || entry.Kind == kind
 }
 
 // LockEntryMetadataMatchesProvider checks whether a lock entry still matches a
@@ -2797,10 +2794,7 @@ func preparedManifestMatchesLock(entry LockEntry, manifest *providermanifestv1.M
 	if expectedPackage := lockEntryPackage(entry); expectedPackage != "" && manifest.Source != expectedPackage {
 		return false
 	}
-	if entry.Version != "" && manifest.Version != entry.Version {
-		return false
-	}
-	return true
+	return entry.Version == "" || manifest.Version == entry.Version
 }
 
 func preparedInstallMatchesLockForMode(kind, name string, provider *config.ProviderEntry, entry LockEntry, install *preparedInstall, mode artifactMode) bool {

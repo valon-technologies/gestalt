@@ -323,10 +323,7 @@ func staleFilter(expected map[string]bool, scope func(rel string) bool) func(rel
 		if expected[rel] {
 			return false
 		}
-		if scope != nil && !scope(rel) {
-			return false
-		}
-		return true
+		return scope == nil || scope(rel)
 	}
 }
 

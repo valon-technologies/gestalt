@@ -475,10 +475,7 @@ func (plan StaticConnectionPlan) shouldAdvertiseAppConnection() bool {
 	if plan.RESTConnection() == AppConnectionName {
 		return true
 	}
-	if plan.MCPConnection() == AppConnectionName {
-		return true
-	}
-	return false
+	return plan.MCPConnection() == AppConnectionName
 }
 
 func (plan StaticConnectionPlan) connectionDef(name string) (ResolvedConnectionDef, error) {
