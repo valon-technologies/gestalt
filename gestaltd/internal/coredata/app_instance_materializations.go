@@ -171,54 +171,23 @@ func (s *AppInstanceMaterializationService) acknowledge(ctx context.Context, mat
 }
 
 func acknowledgedAtForRollout(requested, rolloutCreatedAt time.Time) time.Time {
-	acknowledgedAt := normalizedMaterializationTime(requested)
+	acknowledgedAt := normalizedRecordTime(requested)
 	if rolloutCreatedAt.IsZero() || !acknowledgedAt.Before(rolloutCreatedAt) {
 		return acknowledgedAt
 	}
 	return rolloutCreatedAt.UTC().Truncate(time.Millisecond)
 }
 
-func normalizedMaterializationTime(value time.Time) time.Time {
-	if value.IsZero() {
-		value = time.Now()
-	}
-	return value.UTC().Truncate(time.Millisecond)
-}
-
 func (s *AppInstanceMaterializationService) MarkMaterialized(ctx context.Context, instanceID, app, version string, materializedAt time.Time) (*core.AppInstanceMaterialization, error) {
-	return s.updateTimestamps(ctx, instanceID, app, version, func(rec idb.Record) idb.Record {
-		if materializedAt.IsZero() {
-			materializedAt = time.Now().UTC().Truncate(time.Millisecond)
-		} else {
-			materializedAt = materializedAt.UTC().Truncate(time.Millisecond)
-		}
-		rec["materialized_at"] = materializedAt
-		return rec
-	})
+	return s.updateTimestamp(ctx, instanceID, app, version, "materialized_at", materializedAt)
 }
 
 func (s *AppInstanceMaterializationService) MarkStopped(ctx context.Context, instanceID, app, version string, stoppedAt time.Time) (*core.AppInstanceMaterialization, error) {
-	return s.updateTimestamps(ctx, instanceID, app, version, func(rec idb.Record) idb.Record {
-		if stoppedAt.IsZero() {
-			stoppedAt = time.Now().UTC().Truncate(time.Millisecond)
-		} else {
-			stoppedAt = stoppedAt.UTC().Truncate(time.Millisecond)
-		}
-		rec["stopped_at"] = stoppedAt
-		return rec
-	})
+	return s.updateTimestamp(ctx, instanceID, app, version, "stopped_at", stoppedAt)
 }
 
 func (s *AppInstanceMaterializationService) MarkRestarted(ctx context.Context, instanceID, app, version string, restartedAt time.Time) (*core.AppInstanceMaterialization, error) {
-	return s.updateTimestamps(ctx, instanceID, app, version, func(rec idb.Record) idb.Record {
-		if restartedAt.IsZero() {
-			restartedAt = time.Now().UTC().Truncate(time.Millisecond)
-		} else {
-			restartedAt = restartedAt.UTC().Truncate(time.Millisecond)
-		}
-		rec["restarted_at"] = restartedAt
-		return rec
-	})
+	return s.updateTimestamp(ctx, instanceID, app, version, "restarted_at", restartedAt)
 }
 
 func (s *AppInstanceMaterializationService) RecordFailure(ctx context.Context, instanceID, app, version string, failedAt time.Time, message string) (*core.AppInstanceMaterialization, error) {
@@ -246,10 +215,7 @@ func (s *AppInstanceMaterializationService) RecordFailure(ctx context.Context, i
 	}
 	rec := recs[0]
 	rec["attempt_count"] = recordInt(rec, "attempt_count") + 1
-	if failedAt.IsZero() {
-		failedAt = time.Now()
-	}
-	rec["last_error_at"] = failedAt.UTC().Truncate(time.Millisecond)
+	rec["last_error_at"] = normalizedRecordTime(failedAt)
 	rec["last_error_message"] = strings.TrimSpace(message)
 	if err := store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("record app instance materialization failure: %w", err)
@@ -261,10 +227,11 @@ func (s *AppInstanceMaterializationService) RecordFailure(ctx context.Context, i
 	return recordToAppInstanceMaterialization(rec), nil
 }
 
-func (s *AppInstanceMaterializationService) updateTimestamps(
+func (s *AppInstanceMaterializationService) updateTimestamp(
 	ctx context.Context,
 	instanceID, app, version string,
-	mutate func(idb.Record) idb.Record,
+	field string,
+	at time.Time,
 ) (*core.AppInstanceMaterialization, error) {
 	if s == nil {
 		return nil, fmt.Errorf("update app instance materialization: service is not configured")
@@ -273,7 +240,7 @@ func (s *AppInstanceMaterializationService) updateTimestamps(
 	if err != nil {
 		return nil, fmt.Errorf("update app instance materialization: %w", err)
 	}
-	rec = mutate(rec)
+	rec[field] = normalizedRecordTime(at)
 	if err := s.store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("update app instance materialization: %w", err)
 	}

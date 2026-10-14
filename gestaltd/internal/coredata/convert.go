@@ -207,3 +207,11 @@ func recStrings(rec idb.Record, key string) []string {
 	}
 	return out
 }
+
+// normalizedRecordTime defaults an omitted timestamp to now and uses UTC milliseconds.
+func normalizedRecordTime(value time.Time) time.Time {
+	if value.IsZero() {
+		value = time.Now()
+	}
+	return value.UTC().Truncate(time.Millisecond)
+}

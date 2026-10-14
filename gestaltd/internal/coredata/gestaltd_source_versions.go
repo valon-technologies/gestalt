@@ -180,7 +180,7 @@ func (s *GestaltdSourceVersionService) ActivateWithRolloutMode(
 	if sourceVersion == "" {
 		return nil, fmt.Errorf("activate gestaltd source version: source version is required")
 	}
-	at = normalizedSourceVersionTime(at)
+	at = normalizedRecordTime(at)
 	if enrollmentWindow <= 0 || rolloutTimeout <= enrollmentWindow {
 		return nil, fmt.Errorf("activate gestaltd source version: invalid rollout windows")
 	}
@@ -296,13 +296,6 @@ func (s *GestaltdSourceVersionService) ActivateWithRolloutMode(
 	return state, nil
 }
 
-func normalizedSourceVersionTime(value time.Time) time.Time {
-	if value.IsZero() {
-		value = time.Now()
-	}
-	return value.UTC().Truncate(time.Millisecond)
-}
-
 func (s *GestaltdSourceVersionService) AcquireAppDeployPause(
 	ctx context.Context,
 	owner string,
@@ -387,9 +380,9 @@ func gestaltdSourceVersionStateRecord(state *core.GestaltdSourceVersionState) id
 		"id":                        gestaltdSourceVersionStateID,
 		"current_source_version":    strings.TrimSpace(state.CurrentSourceVersion),
 		"minimum_healthy_instances": state.MinimumHealthyInstances,
-		"updated_at":                normalizedSourceVersionTime(state.UpdatedAt),
+		"updated_at":                normalizedRecordTime(state.UpdatedAt),
 		"temporal_workers_promoted_source_version": strings.TrimSpace(state.TemporalWorkersPromotedSourceVersion),
-		"temporal_workers_promoted_at":             normalizedSourceVersionTime(state.TemporalWorkersPromotedAt),
+		"temporal_workers_promoted_at":             normalizedRecordTime(state.TemporalWorkersPromotedAt),
 		"app_deploy_pause_owner":                   strings.TrimSpace(state.AppDeployPauseOwner),
 		"app_deploy_pause_token":                   strings.TrimSpace(state.AppDeployPauseToken),
 	}
@@ -441,7 +434,7 @@ func (s *GestaltdSourceVersionService) MarkTemporalWorkersPromoted(
 	if sourceVersion == "" {
 		return nil, fmt.Errorf("mark temporal workers promoted: source version is required")
 	}
-	at = normalizedSourceVersionTime(at)
+	at = normalizedRecordTime(at)
 
 	tx, err := s.db.Transaction(
 		ctx,
