@@ -52,7 +52,7 @@ func (s workflowProviderServer) ListDefinitions(ctx context.Context, req *proto.
 	if err != nil {
 		return nil, providerRPCError("workflow list definitions", err)
 	}
-	definitions, err := workflowDefinitionInputsToProto(resp.GetDefinitions())
+	definitions, err := convertProtoSliceErr(resp.GetDefinitions(), workflowDefinitionToProto)
 	if err != nil {
 		return nil, providerRPCError("workflow list definitions", err)
 	}
@@ -124,7 +124,7 @@ func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWor
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
 	}
-	runs, err := workflowRunInputsToProto(resp.GetRuns())
+	runs, err := convertProtoSliceErr(resp.GetRuns(), workflowRunToProto)
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
 	}
@@ -153,7 +153,7 @@ func (s workflowProviderServer) GetRunEvents(ctx context.Context, req *proto.Get
 	if err != nil {
 		return nil, providerRPCError("workflow get run events", err)
 	}
-	events, err := workflowRunEventsToProto(resp.GetEvents())
+	events, err := convertProtoSliceErr(resp.GetEvents(), workflowRunEventToProto)
 	if err != nil {
 		return nil, providerRPCError("workflow get run events", err)
 	}
@@ -315,51 +315,6 @@ func workflowDefinitionInputToProto(input *WorkflowDefinition) (*proto.WorkflowD
 		return nil, nil
 	}
 	return workflowDefinitionToProto(*input)
-}
-
-func workflowDefinitionInputsToProto(values []WorkflowDefinition) ([]*proto.WorkflowDefinition, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowDefinition, 0, len(values))
-	for _, value := range values {
-		definition, err := workflowDefinitionToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, definition)
-	}
-	return out, nil
-}
-
-func workflowRunInputsToProto(values []WorkflowRun) ([]*proto.WorkflowRun, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowRun, 0, len(values))
-	for _, value := range values {
-		run, err := workflowRunToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, run)
-	}
-	return out, nil
-}
-
-func workflowRunEventsToProto(values []WorkflowRunEvent) ([]*proto.WorkflowRunEvent, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowRunEvent, 0, len(values))
-	for _, value := range values {
-		event, err := workflowRunEventToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, event)
-	}
-	return out, nil
 }
 
 func workflowSignalInputToProto(input *WorkflowSignal) (*proto.WorkflowSignal, error) {

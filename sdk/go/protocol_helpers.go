@@ -341,3 +341,19 @@ func convertProtoSlice[Input, Output any](values []Input, convert func(Input) Ou
 	}
 	return out
 }
+
+// convertProtoSliceErr stops at the first conversion error and discards partial results.
+func convertProtoSliceErr[Input, Output any](values []Input, convert func(Input) (Output, error)) ([]Output, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]Output, 0, len(values))
+	for _, value := range values {
+		converted, err := convert(value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
