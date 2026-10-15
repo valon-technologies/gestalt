@@ -129,7 +129,7 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	reachableMessages := plan.ReachableMessages
 	enums := plan.ReachableEnums
 	methods := plan.Methods
- 	for _, m := range schema.Messages {
+	for _, m := range schema.Messages {
 		idx.wireMessages[m.FullName] = m
 	}
 	markPublicWireJSONFromMessages(idx, reachableMessages)
@@ -144,56 +144,56 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/unary_transport.rs", []byte(publicUnaryTransportFile)); err != nil {
 		return nil, err
 	}
- 	meta := newRenderer(idx, "metadata", "metadata", modulePublic, true, sharedLocal, sharedCodecFn)
+	meta := newRenderer(idx, "metadata", "metadata", modulePublic, true, sharedLocal, sharedCodecFn)
 	meta.renderPublicMetadata(methods)
 	if err := set.Add("generated/metadata.rs", []byte(meta.assembleGenerated())); err != nil {
 		return nil, err
 	}
 
- 	codecModules := []string{}
+	codecModules := []string{}
 	for _, g := range groupFiles(plan.Filtered.Services, reachableMessages, enums) {
- 		public := newRenderer(idx, g.base, g.base, modulePublic, true, sharedLocal, sharedCodecFn)
- 		hasProjected := false
+		public := newRenderer(idx, g.base, g.base, modulePublic, true, sharedLocal, sharedCodecFn)
+		hasProjected := false
 		for _, m := range g.messages {
- 			if plan.SharedMessages[m.FullName] {
- 				continue
- 			}
- 			public.renderMessage(m)
- 			hasProjected = true
+			if plan.SharedMessages[m.FullName] {
+				continue
+			}
+			public.renderMessage(m)
+			hasProjected = true
 		}
 		if hasProjected {
 			if err := set.Add("generated/"+g.base+".rs", []byte(public.assembleGenerated())); err != nil {
 				return nil, err
 			}
 		}
- 		needCodec := hasProjected
- 		if !needCodec {
- 			for _, m := range g.messages {
- 				if idx.needWireJSON[m.FullName] {
- 					needCodec = true
- 					break
- 				}
- 			}
- 		}
- 		if !needCodec {
- 			continue
- 		}
+		needCodec := hasProjected
+		if !needCodec {
+			for _, m := range g.messages {
+				if idx.needWireJSON[m.FullName] {
+					needCodec = true
+					break
+				}
+			}
+		}
+		if !needCodec {
+			continue
+		}
 		codec := newRenderer(idx, g.base, g.base, moduleCodec, true, sharedLocal, sharedCodecFn)
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}
- 		if codec.body.Len() > 0 {
- 			if err := set.Add("generated/codec/"+g.base+".rs", []byte(codec.assembleGenerated())); err != nil {
- 				return nil, err
- 			}
- 			codecModules = append(codecModules, g.base)
+		if codec.body.Len() > 0 {
+			if err := set.Add("generated/codec/"+g.base+".rs", []byte(codec.assembleGenerated())); err != nil {
+				return nil, err
+			}
+			codecModules = append(codecModules, g.base)
 		}
 	}
 	if err := set.Add("generated/codec.rs", []byte(renderPublicCodecIndex(codecModules))); err != nil {
 		return nil, err
 	}
 
- 	client := newRenderer(idx, "app_client", "app", modulePublic, true, sharedLocal, sharedCodecFn)
+	client := newRenderer(idx, "app_client", "app", modulePublic, true, sharedLocal, sharedCodecFn)
 	client.docIntro = "Generated transport-neutral App client for the public gestaltd surface."
 	for _, svc := range plan.Filtered.Services {
 		client.renderAppClient(svc)
@@ -207,16 +207,16 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		modules = append(modules, "invoke_support")
 	}
 	for _, g := range groupFiles(plan.Filtered.Services, reachableMessages, enums) {
- 		hasProjected := false
- 		for _, m := range g.messages {
- 			if !plan.SharedMessages[m.FullName] {
- 				hasProjected = true
- 				break
- 			}
- 		}
- 		if hasProjected {
- 			modules = append(modules, g.base)
- 		}
+		hasProjected := false
+		for _, m := range g.messages {
+			if !plan.SharedMessages[m.FullName] {
+				hasProjected = true
+				break
+			}
+		}
+		if hasProjected {
+			modules = append(modules, g.base)
+		}
 	}
 	if err := set.Add("generated/mod.rs", []byte(renderGeneratedMod(modules))); err != nil {
 		return nil, err
@@ -357,21 +357,21 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 	for _, pm := range methods {
 		collectWireJSONCodecImports(pm, codecImports)
 	}
- 	for _, base := range sortedKeys2(codecImports) {
- 		var shared, projected []string
- 		for _, name := range sortedKeys(codecImports[base]) {
- 			if r.sharedCodec != nil && r.sharedCodec[name] {
- 				shared = append(shared, name)
- 			} else {
- 				projected = append(projected, name)
- 			}
- 		}
- 		if len(shared) > 0 {
- 			fmt.Fprintf(&r.body, "use crate::codec::%s::{%s};\n", base, strings.Join(shared, ", "))
- 		}
- 		if len(projected) > 0 {
- 			fmt.Fprintf(&r.body, "use crate::public::generated::codec::%s::{%s};\n", base, strings.Join(projected, ", "))
- 		}
+	for _, base := range sortedKeys2(codecImports) {
+		var shared, projected []string
+		for _, name := range sortedKeys(codecImports[base]) {
+			if r.sharedCodec[name] {
+				shared = append(shared, name)
+			} else {
+				projected = append(projected, name)
+			}
+		}
+		if len(shared) > 0 {
+			fmt.Fprintf(&r.body, "use crate::codec::%s::{%s};\n", base, strings.Join(shared, ", "))
+		}
+		if len(projected) > 0 {
+			fmt.Fprintf(&r.body, "use crate::public::generated::codec::%s::{%s};\n", base, strings.Join(projected, ", "))
+		}
 	}
 	r.body.WriteString("\n")
 
@@ -456,17 +456,11 @@ func wireJSONShimNames(method string) (encode, decode string) {
 func collectWireJSONCodecImports(pm publicsurface.PublicMethod, codecImports map[string]map[string]bool) {
 	if pm.Input != nil {
 		codecBase := generatedFileBase(pm.Input.ProtoFile)
-		if codecImports[codecBase] == nil {
-			codecImports[codecBase] = map[string]bool{}
-		}
-		codecImports[codecBase][encodeWireJSONFunc(pm.Input.FullName)] = true
+		recordReference(codecImports, codecBase, encodeWireJSONFunc(pm.Input.FullName))
 	}
 	if pm.Output != nil {
 		codecBase := generatedFileBase(pm.Output.ProtoFile)
-		if codecImports[codecBase] == nil {
-			codecImports[codecBase] = map[string]bool{}
-		}
-		codecImports[codecBase][decodeWireJSONFunc(pm.Output.FullName)] = true
+		recordReference(codecImports, codecBase, decodeWireJSONFunc(pm.Output.FullName))
 	}
 }
 
