@@ -329,10 +329,15 @@ func convertProtoMap[Input, Output any](values map[string]Input, convert func(In
 	return out, nil
 }
 
-// convertAllocatedProtoSlice preserves allocated empty results and element order.
-func convertAllocatedProtoSlice[Input, Output any](values []Input, convert func(Input) Output) []Output {
-	out := make([]Output, 0, len(values))
+// convertAllocatedProtoSlice preserves allocated empty results and nil entries.
+// convert receives only non-nil elements.
+func convertAllocatedProtoSlice[Input, Output any](values []*Input, convert func(*Input) *Output) []*Output {
+	out := make([]*Output, 0, len(values))
 	for _, value := range values {
+		if value == nil {
+			out = append(out, nil)
+			continue
+		}
 		out = append(out, convert(value))
 	}
 	return out
