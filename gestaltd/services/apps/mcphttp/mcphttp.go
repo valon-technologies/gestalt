@@ -193,18 +193,14 @@ func reservedHTTPParamName(name string) bool {
 }
 
 func schemaExposesReservedHTTPParams(root, schema any, seenRefs map[string]struct{}) bool {
-	obj, ok := schema.(map[string]any)
-	if !ok {
-		return false
-	}
-	if rawProps, ok := obj["properties"].(map[string]any); ok {
-		for name := range rawProps {
-			if reservedHTTPParamName(name) {
-				return true
-			}
+	obj, _ := schema.(map[string]any)
+	rawProps, _ := obj["properties"].(map[string]any)
+	for name := range rawProps {
+		if reservedHTTPParamName(name) {
+			return true
 		}
 	}
-	if rawRef, ok := obj["$ref"].(string); ok && strings.TrimSpace(rawRef) != "" {
+	if rawRef, _ := obj["$ref"].(string); strings.TrimSpace(rawRef) != "" {
 		ref := strings.TrimSpace(rawRef)
 		if _, seen := seenRefs[ref]; seen {
 			return false
@@ -217,10 +213,7 @@ func schemaExposesReservedHTTPParams(root, schema any, seenRefs map[string]struc
 		return schemaExposesReservedHTTPParams(root, target, seenRefs)
 	}
 	for _, keyword := range []string{"allOf", "anyOf", "oneOf"} {
-		branches, ok := obj[keyword].([]any)
-		if !ok {
-			continue
-		}
+		branches, _ := obj[keyword].([]any)
 		for _, branch := range branches {
 			if schemaExposesReservedHTTPParams(root, branch, seenRefs) {
 				return true

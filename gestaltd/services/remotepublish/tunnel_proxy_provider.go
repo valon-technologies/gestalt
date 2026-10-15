@@ -85,12 +85,8 @@ func NewTunnelProxyProvider(ctx context.Context, cfg TunnelProxyConfig) (core.Pr
 // declared as overridable. Values are intentionally omitted from publication
 // metadata because only the names are needed for invocation validation.
 func StaticHeadersFromDefinition(definition map[string]any) map[string]string {
-	raw, ok := definition["staticHeaders"]
-	if !ok {
-		return nil
-	}
 	var names []string
-	switch values := raw.(type) {
+	switch values := definition["staticHeaders"].(type) {
 	case []string:
 		names = values
 	case []any:
