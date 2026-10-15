@@ -246,23 +246,7 @@ func identityFromWire(ref *model.TypeRef) bool {
 
 // fieldToWire renders the conversion of a whole field value.
 func (r *renderer) fieldToWire(f *model.Field, expr string) string {
-	switch f.Kind {
-	case model.KindRepeated:
-		if identityToWire(f.Elem) {
-			return expr
-		}
-		if fn := r.fnToWire(f.Elem); fn != "" {
-			return expr + ".map(" + fn + ")"
-		}
-		return expr + ".map((item) => " + r.toWireExpr(f.Elem, "item") + ")"
-	case model.KindMap:
-		if identityToWire(f.MapValue) {
-			return expr
-		}
-		return "Object.fromEntries(Object.entries(" + expr + ").map(([key, item]) => [key, " + r.toWireExpr(f.MapValue, "item") + "]))"
-	default:
-		return r.toWireExpr(fieldRef(f), expr)
-	}
+	return fieldConversion(f, expr, identityToWire, r.fnToWire, r.toWireExpr, "%s")
 }
 
 // fieldToWireInit renders the conversion of a non-presence field read from a
@@ -283,22 +267,26 @@ func (r *renderer) fieldToWireInit(f *model.Field, expr string) string {
 }
 
 func (r *renderer) fieldFromWire(f *model.Field, expr string) string {
+	return fieldConversion(f, expr, identityFromWire, r.fnFromWire, r.fromWireExpr, "(%s)")
+}
+
+func fieldConversion(f *model.Field, expr string, identity func(*model.TypeRef) bool, converterFunc func(*model.TypeRef) string, convertExpr func(*model.TypeRef, string) string, itemFormat string) string {
 	switch f.Kind {
 	case model.KindRepeated:
-		if identityFromWire(f.Elem) {
+		if identity(f.Elem) {
 			return expr
 		}
-		if fn := r.fnFromWire(f.Elem); fn != "" {
+		if fn := converterFunc(f.Elem); fn != "" {
 			return expr + ".map(" + fn + ")"
 		}
-		return expr + ".map((item) => (" + r.fromWireExpr(f.Elem, "item") + "))"
+		return expr + ".map((item) => " + fmt.Sprintf(itemFormat, convertExpr(f.Elem, "item")) + ")"
 	case model.KindMap:
-		if identityFromWire(f.MapValue) {
+		if identity(f.MapValue) {
 			return expr
 		}
-		return "Object.fromEntries(Object.entries(" + expr + ").map(([key, item]) => [key, " + r.fromWireExpr(f.MapValue, "item") + "]))"
+		return "Object.fromEntries(Object.entries(" + expr + ").map(([key, item]) => [key, " + convertExpr(f.MapValue, "item") + "]))"
 	default:
-		return r.fromWireExpr(fieldRef(f), expr)
+		return convertExpr(fieldRef(f), expr)
 	}
 }
 
