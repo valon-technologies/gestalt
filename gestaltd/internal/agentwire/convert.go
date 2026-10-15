@@ -115,17 +115,7 @@ func RunAsSubjectToProto(subject *core.RunAsSubject) *proto.SubjectContext {
 }
 
 func ToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]coreagent.ToolRef, 0, len(refs))
-	for _, ref := range refs {
-		if ref == nil {
-			continue
-		}
-		out = append(out, ToolRefFromProto(ref))
-	}
-	return out
+	return protoutil.ConvertNonNilSlice(refs, ToolRefFromProto)
 }
 
 func ToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
