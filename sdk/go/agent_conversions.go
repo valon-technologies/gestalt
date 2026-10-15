@@ -311,9 +311,6 @@ func agentToolRefsToProto(values []AgentToolRef) []*proto.AgentToolRef {
 }
 
 func agentToolConfigFromProto(value *proto.AgentToolConfig) AgentToolConfig {
-	if value == nil {
-		return nil
-	}
 	switch source := value.GetSource().(type) {
 	case *proto.AgentToolConfig_None:
 		return &AgentNoTools{}

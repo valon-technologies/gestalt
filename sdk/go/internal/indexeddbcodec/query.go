@@ -9,9 +9,6 @@ import (
 // MatchQuery reports whether key satisfies query. A nil or unset query matches
 // all keys, matching W3C undefined/null query arguments.
 func MatchQuery(key any, query *proto.IndexedDBQuery) (bool, error) {
-	if query == nil {
-		return true, nil
-	}
 	switch q := query.GetQuery().(type) {
 	case *proto.IndexedDBQuery_Key:
 		target, err := KeyValueToAny(q.Key)
