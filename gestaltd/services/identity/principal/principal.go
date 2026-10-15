@@ -160,22 +160,12 @@ func CompilePermissions(perms []core.AccessPermission) PermissionSet {
 			ops[op] = struct{}{}
 		}
 	}
-	if len(set) == 0 {
-		return PermissionSet{}
-	}
 	return set
 }
 
 func PermissionsFromScopeString(scopes string) PermissionSet {
-	if strings.TrimSpace(scopes) == "" {
-		return nil
-	}
 	perms := make([]core.AccessPermission, 0, len(strings.Fields(scopes)))
 	for _, scope := range strings.Fields(scopes) {
-		scope = strings.TrimSpace(scope)
-		if scope == "" {
-			continue
-		}
 		perms = append(perms, core.AccessPermission{App: scope})
 	}
 	return CompilePermissions(perms)
@@ -209,9 +199,6 @@ func IntersectPermissions(a, b PermissionSet) PermissionSet {
 				out[plugin] = ops
 			}
 		}
-	}
-	if len(out) == 0 {
-		return PermissionSet{}
 	}
 	return out
 }
