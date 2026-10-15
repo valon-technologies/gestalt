@@ -217,19 +217,15 @@ func (s *indexedDBServer) Clear(ctx context.Context, req *proto.ObjectStoreNameR
 
 func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.RecordsResponse, error) {
 	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) ([]idb.Record, error) {
-		if req.Count != nil && *req.Count > 0 {
-			return store.GetAll(ctx, req.GetQuery(), *req.Count)
-		}
-		return store.GetAll(ctx, req.GetQuery())
+		counts := optionalCountArgs(req.Count)
+		return store.GetAll(ctx, req.GetQuery(), counts...)
 	}, recordsResponseFromRecords)
 }
 
 func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.KeysResponse, error) {
 	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) ([]string, error) {
-		if req.Count != nil && *req.Count > 0 {
-			return store.GetAllKeys(ctx, req.GetQuery(), *req.Count)
-		}
-		return store.GetAllKeys(ctx, req.GetQuery())
+		counts := optionalCountArgs(req.Count)
+		return store.GetAllKeys(ctx, req.GetQuery(), counts...)
 	}, keysResponseFromKeys)
 }
 
@@ -520,12 +516,8 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx id
 		if err != nil {
 			return nil, err
 		}
-		var recs []idb.Record
-		if body.GetAll.Count != nil && *body.GetAll.Count > 0 {
-			recs, err = store.GetAll(ctx, body.GetAll.GetQuery(), *body.GetAll.Count)
-		} else {
-			recs, err = store.GetAll(ctx, body.GetAll.GetQuery())
-		}
+		counts := optionalCountArgs(body.GetAll.Count)
+		recs, err := store.GetAll(ctx, body.GetAll.GetQuery(), counts...)
 		if err != nil {
 			return nil, err
 		}
@@ -539,12 +531,8 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx id
 		if err != nil {
 			return nil, err
 		}
-		var keys []string
-		if body.GetAllKeys.Count != nil && *body.GetAllKeys.Count > 0 {
-			keys, err = store.GetAllKeys(ctx, body.GetAllKeys.GetQuery(), *body.GetAllKeys.Count)
-		} else {
-			keys, err = store.GetAllKeys(ctx, body.GetAllKeys.GetQuery())
-		}
+		counts := optionalCountArgs(body.GetAllKeys.Count)
+		keys, err := store.GetAllKeys(ctx, body.GetAllKeys.GetQuery(), counts...)
 		if err != nil {
 			return nil, err
 		}
@@ -648,16 +636,19 @@ func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx 
 		return nil, err
 	}
 	query := indexGetAllQuery(req)
-	var recs []idb.Record
-	if req.Count != nil && *req.Count > 0 {
-		recs, err = idx.GetAll(ctx, query, *req.Count)
-	} else {
-		recs, err = idx.GetAll(ctx, query)
-	}
+	counts := optionalCountArgs(req.Count)
+	recs, err := idx.GetAll(ctx, query, counts...)
 	if err != nil {
 		return nil, err
 	}
 	return recordsResponseFromRecords(recs)
+}
+
+func optionalCountArgs(count *uint32) []uint32 {
+	if count != nil && *count > 0 {
+		return []uint32{*count}
+	}
+	return nil
 }
 
 func indexGetAllQuery(req *proto.IndexQueryRequest) any {
@@ -677,10 +668,8 @@ func (s *indexedDBServer) executeTransactionIndexGetAllKeys(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	if req.Count != nil && *req.Count > 0 {
-		return idx.GetAllKeys(ctx, req.GetQuery(), *req.Count)
-	}
-	return idx.GetAllKeys(ctx, req.GetQuery())
+	counts := optionalCountArgs(req.Count)
+	return idx.GetAllKeys(ctx, req.GetQuery(), counts...)
 }
 
 func (s *indexedDBServer) executeTransactionIndexCount(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
