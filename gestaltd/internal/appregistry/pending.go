@@ -105,36 +105,26 @@ func DecodeFailedIndex(data []byte) (*FailedIndex, error) {
 }
 
 func validatePendingIndex(index *PendingIndex) error {
-	if index.SchemaVersion != PendingIndexSchemaVersion {
-		return fmt.Errorf("unsupported pending index schema version %d", index.SchemaVersion)
-	}
-	if strings.TrimSpace(index.App) == "" {
-		return fmt.Errorf("pending index app is required")
-	}
-	if index.Pending == nil {
-		return fmt.Errorf("pending index pending map is required")
-	}
-	for version, entry := range index.Pending {
-		if err := validatePendingVersion(index.App, version, entry); err != nil {
-			return fmt.Errorf("pending index version %q: %w", version, err)
-		}
-	}
-	return nil
+	return validateVersionIndex("pending", index.SchemaVersion, PendingIndexSchemaVersion, index.App, index.Pending, validatePendingVersion)
 }
 
 func validateFailedIndex(index *FailedIndex) error {
-	if index.SchemaVersion != FailedIndexSchemaVersion {
-		return fmt.Errorf("unsupported failed index schema version %d", index.SchemaVersion)
+	return validateVersionIndex("failed", index.SchemaVersion, FailedIndexSchemaVersion, index.App, index.Failed, validateFailedVersion)
+}
+
+func validateVersionIndex[T any](kind string, schemaVersion, expectedSchemaVersion int, app string, versions map[string]T, validate func(string, string, T) error) error {
+	if schemaVersion != expectedSchemaVersion {
+		return fmt.Errorf("unsupported %s index schema version %d", kind, schemaVersion)
 	}
-	if strings.TrimSpace(index.App) == "" {
-		return fmt.Errorf("failed index app is required")
+	if strings.TrimSpace(app) == "" {
+		return fmt.Errorf("%s index app is required", kind)
 	}
-	if index.Failed == nil {
-		return fmt.Errorf("failed index failed map is required")
+	if versions == nil {
+		return fmt.Errorf("%s index %s map is required", kind, kind)
 	}
-	for version, entry := range index.Failed {
-		if err := validateFailedVersion(index.App, version, entry); err != nil {
-			return fmt.Errorf("failed index version %q: %w", version, err)
+	for version, entry := range versions {
+		if err := validate(app, version, entry); err != nil {
+			return fmt.Errorf("%s index version %q: %w", kind, version, err)
 		}
 	}
 	return nil
