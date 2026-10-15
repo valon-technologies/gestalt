@@ -141,15 +141,8 @@ func clientInvocationContext(invocation *proto.InvocationContext) *client.Invoca
 }
 
 func clientAgentToolRefs(refs []*proto.AgentToolRef) []*client.AgentToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]*client.AgentToolRef, 0, len(refs))
-	for _, ref := range refs {
-		if ref == nil {
-			continue
-		}
-		out = append(out, &client.AgentToolRef{
+	return convertProtoNonNilSlice(refs, func(ref *proto.AgentToolRef) *client.AgentToolRef {
+		return &client.AgentToolRef{
 			App:            ref.GetApp(),
 			Operation:      ref.GetOperation(),
 			Connection:     ref.GetConnection(),
@@ -159,9 +152,8 @@ func clientAgentToolRefs(refs []*proto.AgentToolRef) []*client.AgentToolRef {
 			CredentialMode: ref.GetCredentialMode(),
 			System:         ref.GetSystem(),
 			RunAs:          clientSubjectContext(ref.GetRunAs()),
-		})
-	}
-	return out
+		}
+	})
 }
 
 func clientRequestMetaContext(meta *proto.RequestMetaContext) *client.RequestMetaContext {
