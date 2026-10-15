@@ -63,10 +63,7 @@ func (v *InstallValidator) Validate(ctx context.Context, input ValidateInput) er
 	if err := validateDeclaredDependencies(ctx, v, input, knownByApp); err != nil {
 		return err
 	}
-	if err := validateReverseDependents(ctx, v, input, knownByApp); err != nil {
-		return err
-	}
-	return nil
+	return validateReverseDependents(ctx, v, input, knownByApp)
 }
 
 func (v *InstallValidator) gestaltdVersion() string {

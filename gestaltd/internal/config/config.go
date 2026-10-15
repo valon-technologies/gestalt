@@ -2659,10 +2659,7 @@ func normalizeConfigShapeForPartialLoad(cfg *Config) error {
 	if err := normalizeAdminConfig(cfg); err != nil {
 		return err
 	}
-	if err := normalizeUserLookupConfig(cfg); err != nil {
-		return err
-	}
-	return nil
+	return normalizeUserLookupConfig(cfg)
 }
 
 func normalizeServerRuntimeConfig(cfg *Config) {

@@ -537,10 +537,7 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 		if expectedCredentialID != "" && existing.ID != expectedCredentialID {
 			return credentialTargetMismatch(candidate.Qualifier)
 		}
-		if err := s.upsertCredentialAtInstance(ctx, candidate, existing, expectedCredentialID); err != nil {
-			return err
-		}
-		return nil
+		return s.upsertCredentialAtInstance(ctx, candidate, existing, expectedCredentialID)
 	}
 	if !errors.Is(err, core.ErrNotFound) {
 		return fmt.Errorf("get credential at instance %q: %w", candidate.Qualifier, err)
@@ -566,10 +563,7 @@ func (s *Server) storeCredentialAtInstance(ctx context.Context, candidate *core.
 	if expectedCredentialID != "" && existing.ID != expectedCredentialID {
 		return credentialTargetMismatch(candidate.Qualifier)
 	}
-	if err := s.upsertCredentialAtInstance(ctx, candidate, existing, expectedCredentialID); err != nil {
-		return err
-	}
-	return nil
+	return s.upsertCredentialAtInstance(ctx, candidate, existing, expectedCredentialID)
 }
 
 func credentialAudience(integration, connection, connectionID string) string {

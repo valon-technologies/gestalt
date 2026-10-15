@@ -26,17 +26,11 @@ func (tx *stubTransaction) ObjectStore(name string) idb.TransactionObjectStore {
 }
 
 func (tx *stubTransaction) Commit(context.Context) error {
-	if err := tx.finish(true); err != nil {
-		return err
-	}
-	return nil
+	return tx.finish(true)
 }
 
 func (tx *stubTransaction) Abort(context.Context) error {
-	if err := tx.finish(false); err != nil {
-		return err
-	}
-	return nil
+	return tx.finish(false)
 }
 
 func (tx *stubTransaction) finish(commit bool) error {

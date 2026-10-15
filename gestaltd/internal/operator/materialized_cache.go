@@ -531,10 +531,7 @@ func copyMaterializedFile(source, dest string, file materializedCacheFile) error
 	if got != want {
 		return fmt.Errorf("materialized cache file %s digest mismatch", file.Path)
 	}
-	if err := os.Chmod(dest, os.FileMode(file.Mode)&0o777); err != nil {
-		return err
-	}
-	return nil
+	return os.Chmod(dest, os.FileMode(file.Mode)&0o777)
 }
 
 func validateMaterializedFile(source string, file materializedCacheFile) error {

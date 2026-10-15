@@ -337,10 +337,7 @@ func uploadAppRegistryCatalogDocument(storageURL, sourceRef string, generation i
 		return err
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
-	if err := uploadAppRegistryIndexFile(tmpPath, storageURL, sourceRef, generation); err != nil {
-		return err
-	}
-	return nil
+	return uploadAppRegistryIndexFile(tmpPath, storageURL, sourceRef, generation)
 }
 
 func printAppRegistryPendingUsage(w io.Writer) {

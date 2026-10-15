@@ -1862,10 +1862,7 @@ func waitRuntimeWorkflowProviderReady(ctx context.Context, runtime *workflowRunt
 	if !ok {
 		return nil
 	}
-	if err := workerProvider.WaitRuntimeWorkersReady(ctx); err != nil {
-		return err
-	}
-	return nil
+	return workerProvider.WaitRuntimeWorkersReady(ctx)
 }
 
 type configuredProviderBuilds[T any] struct {
