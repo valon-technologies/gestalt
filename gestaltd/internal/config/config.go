@@ -363,17 +363,11 @@ func (s ProviderSource) UnsupportedURL() string {
 }
 
 func (s ProviderSource) GitHubReleaseLocation() string {
-	if s.GitHubRelease == nil {
-		return ""
-	}
-	return s.GitHubRelease.Location()
+	return withOptionalConfig(s.GitHubRelease, (*GitHubReleaseSourceDef).Location)
 }
 
 func (s ProviderSource) GitLocation() string {
-	if s.Git == nil {
-		return ""
-	}
-	return s.Git.Location()
+	return withOptionalConfig(s.Git, (*GitSourceDef).Location)
 }
 
 func NewMetadataSource(rawURL string) ProviderSource {
@@ -1620,7 +1614,8 @@ func mergeHTTPBinding(base, override *HTTPBinding) *HTTPBinding {
 }
 
 func (e *ProviderEntry) HasMetadataSource() bool {
-	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease() || e.Source.IsPackage())
+	source := providerEntrySource(e)
+	return source.IsMetadataURL() || source.IsGitHubRelease() || source.IsPackage()
 }
 
 func (e *ProviderEntry) HasReleaseMetadataSource() bool {
@@ -1636,15 +1631,15 @@ func (e *ProviderEntry) HasRemoteReleaseSource() bool {
 }
 
 func (e *ProviderEntry) HasLocalSource() bool {
-	return e != nil && e.Source.IsLocal()
+	return providerEntrySource(e).IsLocal()
 }
 
 func (e *ProviderEntry) HasLocalReleaseSource() bool {
-	return e != nil && e.Source.IsLocalMetadataPath()
+	return providerEntrySource(e).IsLocalMetadataPath()
 }
 
 func (e *ProviderEntry) HasGitSource() bool {
-	return e != nil && e.Source.IsGit()
+	return providerEntrySource(e).IsGit()
 }
 
 // SourceTreeURL is the GitHub website tree for this app's checkout identity.
@@ -1658,51 +1653,48 @@ func (e *ProviderEntry) SourceTreeURL() string {
 }
 
 func (e *ProviderEntry) SourceMetadataURL() string {
-	return withOptionalConfig(e, func(e *ProviderEntry) string {
-		if e.Source.IsPackage() {
-			return e.Source.ResolvedPackageMetadataURL()
-		}
-		return e.Source.MetadataURL()
-	})
+	source := providerEntrySource(e)
+	if source.IsPackage() {
+		return source.ResolvedPackageMetadataURL()
+	}
+	return source.MetadataURL()
 }
 
 func (e *ProviderEntry) SourceRemoteLocation() string {
-	return withOptionalConfig(e, func(e *ProviderEntry) string {
-		if e.Source.IsMetadataURL() {
-			return e.Source.MetadataURL()
-		}
-		if e.Source.IsGitHubRelease() {
-			return e.Source.GitHubReleaseLocation()
-		}
-		if e.Source.IsPackage() {
-			return e.Source.ResolvedPackageMetadataURL()
-		}
-		if e.Source.IsGit() {
-			return e.Source.GitLocation()
-		}
-		return ""
-	})
+	source := providerEntrySource(e)
+	if source.IsMetadataURL() {
+		return source.MetadataURL()
+	}
+	if source.IsGitHubRelease() {
+		return source.GitHubReleaseLocation()
+	}
+	if source.IsPackage() {
+		return source.ResolvedPackageMetadataURL()
+	}
+	if source.IsGit() {
+		return source.GitLocation()
+	}
+	return ""
 }
 
 func (e *ProviderEntry) SourceReleaseLocation() string {
-	return withOptionalConfig(e, func(e *ProviderEntry) string {
-		if e.Source.IsMetadataURL() {
-			return e.Source.MetadataURL()
-		}
-		if e.Source.IsGitHubRelease() {
-			return e.Source.GitHubReleaseLocation()
-		}
-		if e.Source.IsLocalMetadataPath() {
-			return e.Source.MetadataPath()
-		}
-		if e.Source.IsPackage() {
-			return e.Source.ResolvedPackageMetadataURL()
-		}
-		if e.Source.IsGit() {
-			return e.Source.GitLocation()
-		}
-		return ""
-	})
+	source := providerEntrySource(e)
+	if source.IsMetadataURL() {
+		return source.MetadataURL()
+	}
+	if source.IsGitHubRelease() {
+		return source.GitHubReleaseLocation()
+	}
+	if source.IsLocalMetadataPath() {
+		return source.MetadataPath()
+	}
+	if source.IsPackage() {
+		return source.ResolvedPackageMetadataURL()
+	}
+	if source.IsGit() {
+		return source.GitLocation()
+	}
+	return ""
 }
 
 func (e *ProviderEntry) SourcePath() string {
@@ -4083,4 +4075,10 @@ func visitConfiguredProviders(cfg *Config, visit func(string, *ProviderEntry)) {
 			visit(providermanifestv1.KindRuntime, &entry.ProviderEntry)
 		})
 	}
+}
+
+func providerEntrySource(entry *ProviderEntry) ProviderSource {
+	return withOptionalConfig(entry, func(entry *ProviderEntry) ProviderSource {
+		return entry.Source
+	})
 }
