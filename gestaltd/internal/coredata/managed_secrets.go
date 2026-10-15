@@ -123,9 +123,7 @@ func NormalizeSecretScope(scope string) string {
 
 func NewSecretAuditID() (string, error) {
 	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", fmt.Errorf("generate audit id: %w", err)
-	}
+	_, _ = rand.Read(raw[:])
 	return hex.EncodeToString(raw[:]), nil
 }
 
@@ -142,9 +140,7 @@ func GenerateSecretValue(byteCount int) (string, []byte, error) {
 		return "", nil, fmt.Errorf("generated secret must not exceed 64 KiB")
 	}
 	raw := make([]byte, byteCount)
-	if _, err := rand.Read(raw); err != nil {
-		return "", nil, fmt.Errorf("generate secret value: %w", err)
-	}
+	_, _ = rand.Read(raw)
 	value := base64.RawURLEncoding.EncodeToString(raw)
 	return value, []byte(value), nil
 }
