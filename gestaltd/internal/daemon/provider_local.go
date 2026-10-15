@@ -390,9 +390,6 @@ func resolveProviderPluginKey(configPaths []string, targetManifestPath string, m
 	}
 
 	if name := derivedPluginKey(manifest, targetManifestPath); name != "" {
-		if _, ok := plugins[name]; ok {
-			return name, nil
-		}
 		return name, nil
 	}
 	return "", fmt.Errorf("unable to derive an app key for %s; set a manifest source app name or rename the directory", targetManifestPath)

@@ -25,9 +25,6 @@ func releaseRequiresBuildForKind(manifest *providermanifestv1.Manifest, kind str
 	if SourceBuildProducesOutput(manifest) {
 		return false
 	}
-	if HasExplicitSourceRun(manifest) {
-		return true
-	}
 	return true
 }
 

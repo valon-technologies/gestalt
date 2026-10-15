@@ -269,9 +269,6 @@ func agentRequestContext(ctx context.Context, p *principal.Principal, existing *
 	if existing != nil {
 		return appaccessservice.MergeRequestContext(existing, base), nil
 	}
-	if callerKind == "" || callerName == "" {
-		return base, nil
-	}
 	return base, nil
 }
 
@@ -4126,9 +4123,6 @@ func agentProviderCapabilitiesSupportToolSource(caps *coreagent.ProviderCapabili
 		if normalizeAgentToolSource(supported) == source {
 			return true
 		}
-	}
-	if len(caps.SupportedToolSources) > 0 {
-		return false
 	}
 	return false
 }
