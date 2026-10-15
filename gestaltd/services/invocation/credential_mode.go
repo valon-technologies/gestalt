@@ -1,6 +1,7 @@
 package invocation
 
 import (
+	"cmp"
 	"context"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -17,10 +18,7 @@ func WithCredentialModeOverride(ctx context.Context, mode core.ConnectionMode) c
 }
 
 func CredentialModeOverrideFromContext(ctx context.Context) core.ConnectionMode {
-	if ctx == nil {
-		return ""
-	}
-	mode, _ := ctx.Value(credentialModeOverrideCtxKey{}).(core.ConnectionMode)
+	mode, _ := cmp.Or(ctx, context.Background()).Value(credentialModeOverrideCtxKey{}).(core.ConnectionMode)
 	return normalizeCredentialModeOverride(mode)
 }
 

@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"cmp"
+	"context"
+)
 
 // CatalogSurface scopes session catalog discovery for composite providers.
 // An empty value means all surfaces, preserving legacy behavior.
@@ -21,9 +24,6 @@ func WithCatalogSurface(ctx context.Context, surface CatalogSurface) context.Con
 }
 
 func CatalogSurfaceFromContext(ctx context.Context) CatalogSurface {
-	if ctx == nil {
-		return CatalogSurfaceAll
-	}
-	surface, _ := ctx.Value(catalogSurfaceContextKey{}).(CatalogSurface)
+	surface, _ := cmp.Or(ctx, context.Background()).Value(catalogSurfaceContextKey{}).(CatalogSurface)
 	return surface
 }

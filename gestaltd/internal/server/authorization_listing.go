@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"strings"
 	"sync"
@@ -56,10 +57,7 @@ func withListingDecisionCache(ctx context.Context) (context.Context, *listingDec
 }
 
 func listingDecisionCacheFromContext(ctx context.Context) *listingDecisionCache {
-	if ctx == nil {
-		return nil
-	}
-	cache, _ := ctx.Value(listingDecisionCacheContextKey{}).(*listingDecisionCache)
+	cache, _ := cmp.Or(ctx, context.Background()).Value(listingDecisionCacheContextKey{}).(*listingDecisionCache)
 	return cache
 }
 
