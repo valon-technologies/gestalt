@@ -109,7 +109,7 @@ func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflo
 	if value == nil {
 		return BoundWorkflowTarget{}
 	}
-	return BoundWorkflowTarget{Steps: workflowStepsFromProto(value.GetSteps())}
+	return BoundWorkflowTarget{Steps: convertProtoNonNilSlice(value.GetSteps(), workflowStepFromProto)}
 }
 
 func workflowStepsToProto(steps []WorkflowStep) ([]*proto.WorkflowStep, error) {
@@ -125,20 +125,6 @@ func workflowStepsToProto(steps []WorkflowStep) ([]*proto.WorkflowStep, error) {
 		out = append(out, step)
 	}
 	return out, nil
-}
-
-func workflowStepsFromProto(steps []*proto.WorkflowStep) []WorkflowStep {
-	if len(steps) == 0 {
-		return nil
-	}
-	out := make([]WorkflowStep, 0, len(steps))
-	for _, step := range steps {
-		if step == nil {
-			continue
-		}
-		out = append(out, workflowStepFromProto(step))
-	}
-	return out
 }
 
 func workflowStepToProto(step WorkflowStep) (*proto.WorkflowStep, error) {
@@ -296,21 +282,13 @@ func workflowAgentMessagesToProto(values []WorkflowAgentMessage) ([]*proto.Workf
 }
 
 func workflowAgentMessagesFromProto(values []*proto.WorkflowAgentMessage) []WorkflowAgentMessage {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]WorkflowAgentMessage, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, WorkflowAgentMessage{
+	return convertProtoNonNilSlice(values, func(value *proto.WorkflowAgentMessage) WorkflowAgentMessage {
+		return WorkflowAgentMessage{
 			Role:     value.GetRole(),
 			Text:     workflowTextFromProto(value.GetText()),
 			Metadata: mapFromStruct(value.GetMetadata()),
-		})
-	}
-	return out
+		}
+	})
 }
 
 func workflowTextToProto(input WorkflowText) *proto.WorkflowText {
@@ -753,7 +731,7 @@ func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) Workfl
 	if value == nil {
 		return WorkflowDefinitionSpec{}
 	}
-	activations := workflowActivationsFromProto(value.GetActivations())
+	activations := convertProtoNonNilSlice(value.GetActivations(), workflowActivationFromProto)
 	return WorkflowDefinitionSpec{
 		ID:          value.GetId(),
 		Target:      workflowTargetInputPtrFromTarget(value.GetTarget()),
@@ -822,20 +800,6 @@ func workflowActivationToProto(input WorkflowActivation) (*proto.WorkflowActivat
 		return nil, fmt.Errorf("activation must set schedule or event")
 	}
 	return out, nil
-}
-
-func workflowActivationsFromProto(values []*proto.WorkflowActivation) []WorkflowActivation {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]WorkflowActivation, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, workflowActivationFromProto(value))
-	}
-	return out
 }
 
 func workflowActivationFromProto(value *proto.WorkflowActivation) WorkflowActivation {
