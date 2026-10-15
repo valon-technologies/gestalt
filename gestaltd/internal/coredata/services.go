@@ -80,11 +80,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		}...); err != nil {
 			return nil, err
 		}
-	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
-		return nil, err
-	} else if err := ensureSCIMStores(ctx, ds); err != nil {
-		return nil, err
-	} else if err := ensureManagedSecretStores(ctx, ds); err != nil {
+	} else if err := ensureDeferredStores(ctx, ds); err != nil {
 		return nil, err
 	}
 	if err := ensureGroupsStore(ctx, ds); err != nil {
@@ -154,14 +150,6 @@ func ensureManagedSecretStores(ctx context.Context, ds indexeddb.IndexedDB) erro
 	)
 }
 
-func ensureSCIMStores(ctx context.Context, ds indexeddb.IndexedDB) error {
-	return createObjectStores(ctx, ds, "ensure",
-		objectStoreSpec{StoreSCIMResources, &SCIMResourcesSchema},
-		objectStoreSpec{StoreSCIMConfig, &SCIMConfigSchema},
-		objectStoreSpec{StoreSCIMSecrets, &SCIMSecretsSchema},
-	)
-}
-
 func ensureGroupsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
 	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreGroups, &GroupsSchema})
 }
@@ -174,7 +162,7 @@ func (s *Services) Close() error {
 	return s.DB.Close()
 }
 
-func ensureDeferredAppRegistryStores(ctx context.Context, ds indexeddb.IndexedDB) error {
+func ensureDeferredStores(ctx context.Context, ds indexeddb.IndexedDB) error {
 	return createObjectStores(ctx, ds, "ensure",
 		objectStoreSpec{StoreAppAutoDeploySettings, &AppAutoDeploySettingsSchema},
 		objectStoreSpec{StoreAppVersionRolloutOutcomes, &AppVersionRolloutOutcomesSchema},
@@ -182,6 +170,12 @@ func ensureDeferredAppRegistryStores(ctx context.Context, ds indexeddb.IndexedDB
 		objectStoreSpec{StoreAppVersionRecoveryObservations, &AppVersionRecoveryObservationsSchema},
 		objectStoreSpec{StoreAppAccessProfiles, &AppAccessProfilesSchema},
 		objectStoreSpec{StoreAppAllowedOperations, &AppAllowedOperationsSchema},
+		objectStoreSpec{StoreSCIMResources, &SCIMResourcesSchema},
+		objectStoreSpec{StoreSCIMConfig, &SCIMConfigSchema},
+		objectStoreSpec{StoreSCIMSecrets, &SCIMSecretsSchema},
+		objectStoreSpec{StoreManagedSecrets, &ManagedSecretsSchema},
+		objectStoreSpec{StoreManagedSecretVersions, &ManagedSecretVersionsSchema},
+		objectStoreSpec{StoreManagedSecretAuditLogs, &ManagedSecretAuditLogsSchema},
 	)
 }
 
