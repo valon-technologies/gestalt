@@ -6,6 +6,7 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -691,18 +692,12 @@ func SignalRunResponseToProto(resp *coreworkflow.SignalRunResponse) (*proto.Sign
 }
 
 func workflowExtensionsFromProto(values map[string]*structpb.Value) map[string]any {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(values))
-	for key, value := range values {
+	return maputil.ConvertNonEmpty(values, func(value *structpb.Value) any {
 		if value == nil {
-			out[key] = nil
-			continue
+			return nil
 		}
-		out[key] = value.AsInterface()
-	}
-	return out
+		return value.AsInterface()
+	})
 }
 
 func TimeToProto(t *time.Time) *timestamppb.Timestamp {

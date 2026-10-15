@@ -8,6 +8,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
@@ -323,14 +324,7 @@ func workflowValueMapToProto(values map[string]coreworkflow.Value) (map[string]*
 }
 
 func workflowValueMapFromProto(values map[string]*proto.WorkflowValue) map[string]coreworkflow.Value {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]coreworkflow.Value, len(values))
-	for key, value := range values {
-		out[key] = workflowValueFromProto(value)
-	}
-	return out
+	return maputil.ConvertNonEmpty(values, workflowValueFromProto)
 }
 
 func workflowValueToProto(value coreworkflow.Value) (*proto.WorkflowValue, error) {
