@@ -138,7 +138,7 @@ func (b *SourceBuild) UnmarshalJSON(data []byte) error {
 			b.setCommands([]SourcePhaseCommand{{Command: command}}, phaseWirePrepareOnlySequence, true)
 			return nil
 		}
-		commands, err := parsePhaseCommandListFromJSON(trimmed, sourceBuildWireFields, "build", false)
+		commands, err := parsePhaseCommandListFromJSON(trimmed, sourceBuildWireFields, "build")
 		if err != nil {
 			return err
 		}
@@ -251,28 +251,7 @@ func (i *SourceInstall) setCommands(commands []SourcePhaseCommand, wire phaseWir
 }
 
 func (i *SourceInstall) UnmarshalJSON(data []byte) error {
-	if i == nil {
-		return nil
-	}
-	trimmed := bytes.TrimSpace(data)
-	if bytes.Equal(trimmed, []byte("null")) {
-		*i = SourceInstall{}
-		return nil
-	}
-	if len(trimmed) > 0 && trimmed[0] == '[' {
-		commands, err := parsePhaseCommandListFromJSON(trimmed, sourceInstallWireFields, "install", false)
-		if err != nil {
-			return err
-		}
-		i.setCommands(commands, phaseWireCommandList)
-		return nil
-	}
-	cmd, err := parsePhaseCommandFromJSON(trimmed, sourceInstallWireFields, "install")
-	if err != nil {
-		return err
-	}
-	i.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
-	return nil
+	return unmarshalSourcePhaseJSON(i, data, sourceInstallWireFields, "install", i.setCommands)
 }
 
 func (i SourceInstall) MarshalJSON() ([]byte, error) {
@@ -281,31 +260,7 @@ func (i SourceInstall) MarshalJSON() ([]byte, error) {
 }
 
 func (i *SourceInstall) UnmarshalYAML(value *yaml.Node) error {
-	if i == nil {
-		return nil
-	}
-	if value == nil {
-		*i = SourceInstall{}
-		return nil
-	}
-	switch value.Kind {
-	case yaml.SequenceNode:
-		commands, err := parsePhaseCommandListFromYAML(value, sourceInstallWireFields, "install", false)
-		if err != nil {
-			return err
-		}
-		i.setCommands(commands, phaseWireCommandList)
-		return nil
-	case yaml.MappingNode:
-		cmd, err := parsePhaseCommandFromYAML(value, sourceInstallWireFields, "install")
-		if err != nil {
-			return err
-		}
-		i.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
-		return nil
-	default:
-		return fmt.Errorf("install must be a sequence or mapping")
-	}
+	return unmarshalSourcePhaseYAML(i, value, sourceInstallWireFields, "install", i.setCommands)
 }
 
 func (i SourceInstall) MarshalYAML() (any, error) {
@@ -354,28 +309,7 @@ func (r *SourceRun) setCommands(commands []SourcePhaseCommand, wire phaseWireFor
 }
 
 func (r *SourceRun) UnmarshalJSON(data []byte) error {
-	if r == nil {
-		return nil
-	}
-	trimmed := bytes.TrimSpace(data)
-	if bytes.Equal(trimmed, []byte("null")) {
-		*r = SourceRun{}
-		return nil
-	}
-	if len(trimmed) > 0 && trimmed[0] == '[' {
-		commands, err := parsePhaseCommandListFromJSON(trimmed, sourceRunWireFields, "run", false)
-		if err != nil {
-			return err
-		}
-		r.setCommands(commands, phaseWireCommandList)
-		return nil
-	}
-	cmd, err := parsePhaseCommandFromJSON(trimmed, sourceRunWireFields, "run")
-	if err != nil {
-		return err
-	}
-	r.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
-	return nil
+	return unmarshalSourcePhaseJSON(r, data, sourceRunWireFields, "run", r.setCommands)
 }
 
 func (r SourceRun) MarshalJSON() ([]byte, error) {
@@ -384,31 +318,7 @@ func (r SourceRun) MarshalJSON() ([]byte, error) {
 }
 
 func (r *SourceRun) UnmarshalYAML(value *yaml.Node) error {
-	if r == nil {
-		return nil
-	}
-	if value == nil {
-		*r = SourceRun{}
-		return nil
-	}
-	switch value.Kind {
-	case yaml.SequenceNode:
-		commands, err := parsePhaseCommandListFromYAML(value, sourceRunWireFields, "run", false)
-		if err != nil {
-			return err
-		}
-		r.setCommands(commands, phaseWireCommandList)
-		return nil
-	case yaml.MappingNode:
-		cmd, err := parsePhaseCommandFromYAML(value, sourceRunWireFields, "run")
-		if err != nil {
-			return err
-		}
-		r.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
-		return nil
-	default:
-		return fmt.Errorf("run must be a sequence or mapping")
-	}
+	return unmarshalSourcePhaseYAML(r, value, sourceRunWireFields, "run", r.setCommands)
 }
 
 func (r SourceRun) MarshalYAML() (any, error) {
