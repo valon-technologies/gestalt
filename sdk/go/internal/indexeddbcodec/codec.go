@@ -269,9 +269,6 @@ func KeyValueArrayParts(v any) ([]any, bool) {
 		return nil, false
 	}
 	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return nil, false
-	}
 	switch rv.Kind() {
 	case reflect.Slice, reflect.Array:
 	default:

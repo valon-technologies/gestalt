@@ -89,11 +89,7 @@ func KeyInRange(key any, kr *proto.KeyRange) (bool, error) {
 }
 
 func keyKindOf(v any) (keyKind, bool) {
-	if v == nil {
-		return 0, false
-	}
-	if parts, ok := KeyValueArrayParts(v); ok {
-		_ = parts
+	if _, ok := KeyValueArrayParts(v); ok {
 		return keyKindArray, true
 	}
 	switch v.(type) {
