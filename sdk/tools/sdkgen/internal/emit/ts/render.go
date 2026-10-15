@@ -139,47 +139,32 @@ func (r *renderer) enumType(fullName string) string {
 // fnToWire returns the converter function for reference kinds converted by a
 // unary function, or "" when conversion is identity or inline.
 func (r *renderer) fnToWire(ref *model.TypeRef) string {
-	switch ref.Kind {
-	case model.KindMessage:
-		return r.convRef(r.idx.messages[ref.Message].ProtoFile, toWireFunc(ref.Message))
-	case model.KindTimestamp:
-		r.use("toWireTimestamp", false)
-		return "toWireTimestamp"
-	case model.KindDuration:
-		r.use("toWireDuration", false)
-		return "toWireDuration"
-
-	case model.KindJSONValue:
-		r.use("toWireValue", false)
-		return "toWireValue"
-	case model.KindRPCStatus:
-		r.use("toWireStatus", false)
-		return "toWireStatus"
-	default:
-		return ""
-	}
+	return r.converterFunc(ref, "toWire", toWireFunc)
 }
 
 func (r *renderer) fnFromWire(ref *model.TypeRef) string {
+	return r.converterFunc(ref, "fromWire", fromWireFunc)
+}
+
+func (r *renderer) converterFunc(ref *model.TypeRef, prefix string, messageFunc func(string) string) string {
+	var name string
 	switch ref.Kind {
 	case model.KindMessage:
-		return r.convRef(r.idx.messages[ref.Message].ProtoFile, fromWireFunc(ref.Message))
+		return r.convRef(r.idx.messages[ref.Message].ProtoFile, messageFunc(ref.Message))
 	case model.KindTimestamp:
-		r.use("fromWireTimestamp", false)
-		return "fromWireTimestamp"
+		name = "Timestamp"
 	case model.KindDuration:
-		r.use("fromWireDuration", false)
-		return "fromWireDuration"
-
+		name = "Duration"
 	case model.KindJSONValue:
-		r.use("fromWireValue", false)
-		return "fromWireValue"
+		name = "Value"
 	case model.KindRPCStatus:
-		r.use("fromWireStatus", false)
-		return "fromWireStatus"
+		name = "Status"
 	default:
 		return ""
 	}
+	name = prefix + name
+	r.use(name, false)
+	return name
 }
 
 // toWireExpr renders the wire-bound conversion of a singular value.
