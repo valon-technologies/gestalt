@@ -24,9 +24,8 @@ const (
 	// do not provide their own deadline.
 	ProviderSessionCreateTimeout = 5 * time.Minute
 	providerStartTimeout         = 2 * time.Minute
+	providerConfigureTimeout     = 30 * time.Second
 )
-
-var providerConfigureTimeout = 30 * time.Second
 
 type RuntimeProviderMetadata struct {
 	Kind        proto.ProviderKind
@@ -179,11 +178,7 @@ func ProviderCallContext(parent context.Context) (context.Context, context.Cance
 // ProviderSessionCreateContext returns a child context for agent CreateSession RPCs.
 // It preserves caller deadlines when present and otherwise applies a bounded fallback.
 func ProviderSessionCreateContext(parent context.Context) (context.Context, context.CancelFunc) {
-	parent = cmp.Or(parent, context.Background())
-	if _, ok := parent.Deadline(); ok {
-		return context.WithCancel(parent)
-	}
-	return context.WithTimeout(parent, ProviderSessionCreateTimeout)
+	return providerContextWithFallback(parent, ProviderSessionCreateTimeout)
 }
 
 func providerStartContext(parent context.Context) (context.Context, context.CancelFunc) {
@@ -192,17 +187,17 @@ func providerStartContext(parent context.Context) (context.Context, context.Canc
 }
 
 func providerPromotionContext(parent context.Context) (context.Context, context.CancelFunc) {
-	parent = cmp.Or(parent, context.Background())
-	if _, ok := parent.Deadline(); ok {
-		return context.WithCancel(parent)
-	}
-	return context.WithTimeout(parent, providerStartTimeout)
+	return providerContextWithFallback(parent, providerStartTimeout)
 }
 
 func providerConfigureContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return providerContextWithFallback(parent, providerConfigureTimeout)
+}
+
+func providerContextWithFallback(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	parent = cmp.Or(parent, context.Background())
 	if _, ok := parent.Deadline(); ok {
 		return context.WithCancel(parent)
 	}
-	return context.WithTimeout(parent, providerConfigureTimeout)
+	return context.WithTimeout(parent, timeout)
 }
