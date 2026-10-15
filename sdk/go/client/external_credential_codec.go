@@ -7,537 +7,499 @@ import (
 )
 
 func ToWireCreateExternalCredentialRequest(value *CreateExternalCredentialRequest) *proto.CreateExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateExternalCredentialRequest{
-		Credential: ToWireExternalCredential(value.Credential),
-	}
-	return out
+	return convertMessage(value, func(value *CreateExternalCredentialRequest) *proto.CreateExternalCredentialRequest {
+		out := &proto.CreateExternalCredentialRequest{
+			Credential: ToWireExternalCredential(value.Credential),
+		}
+		return out
+	})
 }
 
 func FromWireCreateExternalCredentialRequest(value *proto.CreateExternalCredentialRequest) *CreateExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CreateExternalCredentialRequest{
-		Credential: FromWireExternalCredential(value.Credential),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CreateExternalCredentialRequest) *CreateExternalCredentialRequest {
+		out := &CreateExternalCredentialRequest{
+			Credential: FromWireExternalCredential(value.Credential),
+		}
+		return out
+	})
 }
 
 func ToWireDeleteExternalCredentialRequest(value *DeleteExternalCredentialRequest) *proto.DeleteExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteExternalCredentialRequest{
-		Id: value.Id,
-	}
-	return out
+	return convertMessage(value, func(value *DeleteExternalCredentialRequest) *proto.DeleteExternalCredentialRequest {
+		out := &proto.DeleteExternalCredentialRequest{
+			Id: value.Id,
+		}
+		return out
+	})
 }
 
 func FromWireDeleteExternalCredentialRequest(value *proto.DeleteExternalCredentialRequest) *DeleteExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteExternalCredentialRequest{
-		Id: value.Id,
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeleteExternalCredentialRequest) *DeleteExternalCredentialRequest {
+		out := &DeleteExternalCredentialRequest{
+			Id: value.Id,
+		}
+		return out
+	})
 }
 
 func ToWireExchangeExternalCredentialRequest(value *ExchangeExternalCredentialRequest) *proto.ExchangeExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExchangeExternalCredentialRequest{
-		Provider:            value.Provider,
-		Connection:          value.Connection,
-		ConnectionId:        value.ConnectionId,
-		CredentialSubjectId: value.CredentialSubjectId,
-		ActorSubjectId:      value.ActorSubjectId,
-		Instance:            value.Instance,
-		Auth:                ToWireExternalCredentialAuthConfig(value.Auth),
-		CredentialJson:      value.CredentialJson,
-		ConnectionParams:    value.ConnectionParams,
-	}
-	return out
+	return convertMessage(value, func(value *ExchangeExternalCredentialRequest) *proto.ExchangeExternalCredentialRequest {
+		out := &proto.ExchangeExternalCredentialRequest{
+			Provider:            value.Provider,
+			Connection:          value.Connection,
+			ConnectionId:        value.ConnectionId,
+			CredentialSubjectId: value.CredentialSubjectId,
+			ActorSubjectId:      value.ActorSubjectId,
+			Instance:            value.Instance,
+			Auth:                ToWireExternalCredentialAuthConfig(value.Auth),
+			CredentialJson:      value.CredentialJson,
+			ConnectionParams:    value.ConnectionParams,
+		}
+		return out
+	})
 }
 
 func FromWireExchangeExternalCredentialRequest(value *proto.ExchangeExternalCredentialRequest) *ExchangeExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ExchangeExternalCredentialRequest{
-		Provider:            value.Provider,
-		Connection:          value.Connection,
-		ConnectionId:        value.ConnectionId,
-		CredentialSubjectId: value.CredentialSubjectId,
-		ActorSubjectId:      value.ActorSubjectId,
-		Instance:            value.Instance,
-		Auth:                FromWireExternalCredentialAuthConfig(value.Auth),
-		CredentialJson:      value.CredentialJson,
-		ConnectionParams:    value.ConnectionParams,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExchangeExternalCredentialRequest) *ExchangeExternalCredentialRequest {
+		out := &ExchangeExternalCredentialRequest{
+			Provider:            value.Provider,
+			Connection:          value.Connection,
+			ConnectionId:        value.ConnectionId,
+			CredentialSubjectId: value.CredentialSubjectId,
+			ActorSubjectId:      value.ActorSubjectId,
+			Instance:            value.Instance,
+			Auth:                FromWireExternalCredentialAuthConfig(value.Auth),
+			CredentialJson:      value.CredentialJson,
+			ConnectionParams:    value.ConnectionParams,
+		}
+		return out
+	})
 }
 
 func ToWireExchangeExternalCredentialResponse(value *ExchangeExternalCredentialResponse) *proto.ExchangeExternalCredentialResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExchangeExternalCredentialResponse{
-		TokenResponse: ToWireExternalCredentialTokenResponse(value.TokenResponse),
-	}
-	return out
+	return convertMessage(value, func(value *ExchangeExternalCredentialResponse) *proto.ExchangeExternalCredentialResponse {
+		out := &proto.ExchangeExternalCredentialResponse{
+			TokenResponse: ToWireExternalCredentialTokenResponse(value.TokenResponse),
+		}
+		return out
+	})
 }
 
 func FromWireExchangeExternalCredentialResponse(value *proto.ExchangeExternalCredentialResponse) *ExchangeExternalCredentialResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ExchangeExternalCredentialResponse{
-		TokenResponse: FromWireExternalCredentialTokenResponse(value.TokenResponse),
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExchangeExternalCredentialResponse) *ExchangeExternalCredentialResponse {
+		out := &ExchangeExternalCredentialResponse{
+			TokenResponse: FromWireExternalCredentialTokenResponse(value.TokenResponse),
+		}
+		return out
+	})
 }
 
 func ToWireExternalCredential(value *ExternalCredential) *proto.ExternalCredential {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExternalCredential{
-		Id:           value.Id,
-		Subject:      value.Subject,
-		Audience:     value.Audience,
-		Qualifier:    value.Qualifier,
-		MetadataJson: value.MetadataJson,
-		CreatedAt:    ToWireTimestamp(value.CreatedAt),
-		UpdatedAt:    ToWireTimestamp(value.UpdatedAt),
-		AccountKey:   value.AccountKey,
-	}
-	switch variant := value.Credential.(type) {
-	case *ExternalCredentialCredentialGrant:
-		out.Credential = &proto.ExternalCredential_Grant{Grant: ToWireExternalCredentialGrant(variant.Value)}
-	case *ExternalCredentialCredentialClient:
-		out.Credential = &proto.ExternalCredential_Client{Client: ToWireExternalCredentialClientInfo(variant.Value)}
-	case *ExternalCredentialCredentialOpaque:
-		out.Credential = &proto.ExternalCredential_Opaque{Opaque: ToWireExternalCredentialOpaque(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *ExternalCredential) *proto.ExternalCredential {
+		out := &proto.ExternalCredential{
+			Id:           value.Id,
+			Subject:      value.Subject,
+			Audience:     value.Audience,
+			Qualifier:    value.Qualifier,
+			MetadataJson: value.MetadataJson,
+			CreatedAt:    ToWireTimestamp(value.CreatedAt),
+			UpdatedAt:    ToWireTimestamp(value.UpdatedAt),
+			AccountKey:   value.AccountKey,
+		}
+		switch variant := value.Credential.(type) {
+		case *ExternalCredentialCredentialGrant:
+			out.Credential = &proto.ExternalCredential_Grant{Grant: ToWireExternalCredentialGrant(variant.Value)}
+		case *ExternalCredentialCredentialClient:
+			out.Credential = &proto.ExternalCredential_Client{Client: ToWireExternalCredentialClientInfo(variant.Value)}
+		case *ExternalCredentialCredentialOpaque:
+			out.Credential = &proto.ExternalCredential_Opaque{Opaque: ToWireExternalCredentialOpaque(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireExternalCredential(value *proto.ExternalCredential) *ExternalCredential {
-	if value == nil {
-		return nil
-	}
-	out := &ExternalCredential{
-		Id:           value.Id,
-		Subject:      value.Subject,
-		Audience:     value.Audience,
-		Qualifier:    value.Qualifier,
-		MetadataJson: value.MetadataJson,
-		CreatedAt:    FromWireTimestamp(value.CreatedAt),
-		UpdatedAt:    FromWireTimestamp(value.UpdatedAt),
-		AccountKey:   value.AccountKey,
-	}
-	switch variant := value.Credential.(type) {
-	case *proto.ExternalCredential_Grant:
-		out.Credential = &ExternalCredentialCredentialGrant{Value: FromWireExternalCredentialGrant(variant.Grant)}
-	case *proto.ExternalCredential_Client:
-		out.Credential = &ExternalCredentialCredentialClient{Value: FromWireExternalCredentialClientInfo(variant.Client)}
-	case *proto.ExternalCredential_Opaque:
-		out.Credential = &ExternalCredentialCredentialOpaque{Value: FromWireExternalCredentialOpaque(variant.Opaque)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExternalCredential) *ExternalCredential {
+		out := &ExternalCredential{
+			Id:           value.Id,
+			Subject:      value.Subject,
+			Audience:     value.Audience,
+			Qualifier:    value.Qualifier,
+			MetadataJson: value.MetadataJson,
+			CreatedAt:    FromWireTimestamp(value.CreatedAt),
+			UpdatedAt:    FromWireTimestamp(value.UpdatedAt),
+			AccountKey:   value.AccountKey,
+		}
+		switch variant := value.Credential.(type) {
+		case *proto.ExternalCredential_Grant:
+			out.Credential = &ExternalCredentialCredentialGrant{Value: FromWireExternalCredentialGrant(variant.Grant)}
+		case *proto.ExternalCredential_Client:
+			out.Credential = &ExternalCredentialCredentialClient{Value: FromWireExternalCredentialClientInfo(variant.Client)}
+		case *proto.ExternalCredential_Opaque:
+			out.Credential = &ExternalCredentialCredentialOpaque{Value: FromWireExternalCredentialOpaque(variant.Opaque)}
+		}
+		return out
+	})
 }
 
 func ToWireExternalCredentialAuthConfig(value *ExternalCredentialAuthConfig) *proto.ExternalCredentialAuthConfig {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExternalCredentialAuthConfig{
-		Type:            value.Type,
-		Token:           value.Token,
-		TokenPrefix:     value.TokenPrefix,
-		GrantType:       value.GrantType,
-		TokenUrl:        value.TokenUrl,
-		ClientId:        value.ClientId,
-		ClientSecret:    value.ClientSecret,
-		ClientAuth:      value.ClientAuth,
-		TokenExchange:   value.TokenExchange,
-		Scopes:          value.Scopes,
-		ScopeParam:      value.ScopeParam,
-		ScopeSeparator:  value.ScopeSeparator,
-		TokenParams:     value.TokenParams,
-		RefreshParams:   value.RefreshParams,
-		AcceptHeader:    value.AcceptHeader,
-		AccessTokenPath: value.AccessTokenPath,
-		RefreshToken:    value.RefreshToken,
-	}
-	appendMessageSlice(&out.TokenExchangeDrivers, value.TokenExchangeDrivers, ToWireExternalCredentialTokenExchangeDriver)
-	return out
+	return convertMessage(value, func(value *ExternalCredentialAuthConfig) *proto.ExternalCredentialAuthConfig {
+		out := &proto.ExternalCredentialAuthConfig{
+			Type:            value.Type,
+			Token:           value.Token,
+			TokenPrefix:     value.TokenPrefix,
+			GrantType:       value.GrantType,
+			TokenUrl:        value.TokenUrl,
+			ClientId:        value.ClientId,
+			ClientSecret:    value.ClientSecret,
+			ClientAuth:      value.ClientAuth,
+			TokenExchange:   value.TokenExchange,
+			Scopes:          value.Scopes,
+			ScopeParam:      value.ScopeParam,
+			ScopeSeparator:  value.ScopeSeparator,
+			TokenParams:     value.TokenParams,
+			RefreshParams:   value.RefreshParams,
+			AcceptHeader:    value.AcceptHeader,
+			AccessTokenPath: value.AccessTokenPath,
+			RefreshToken:    value.RefreshToken,
+		}
+		appendMessageSlice(&out.TokenExchangeDrivers, value.TokenExchangeDrivers, ToWireExternalCredentialTokenExchangeDriver)
+		return out
+	})
 }
 
 func FromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthConfig) *ExternalCredentialAuthConfig {
-	if value == nil {
-		return nil
-	}
-	out := &ExternalCredentialAuthConfig{
-		Type:            value.Type,
-		Token:           value.Token,
-		TokenPrefix:     value.TokenPrefix,
-		GrantType:       value.GrantType,
-		TokenUrl:        value.TokenUrl,
-		ClientId:        value.ClientId,
-		ClientSecret:    value.ClientSecret,
-		ClientAuth:      value.ClientAuth,
-		TokenExchange:   value.TokenExchange,
-		Scopes:          value.Scopes,
-		ScopeParam:      value.ScopeParam,
-		ScopeSeparator:  value.ScopeSeparator,
-		TokenParams:     value.TokenParams,
-		RefreshParams:   value.RefreshParams,
-		AcceptHeader:    value.AcceptHeader,
-		AccessTokenPath: value.AccessTokenPath,
-		RefreshToken:    value.RefreshToken,
-	}
-	appendMessageSlice(&out.TokenExchangeDrivers, value.TokenExchangeDrivers, FromWireExternalCredentialTokenExchangeDriver)
-	return out
+	return convertMessage(value, func(value *proto.ExternalCredentialAuthConfig) *ExternalCredentialAuthConfig {
+		out := &ExternalCredentialAuthConfig{
+			Type:            value.Type,
+			Token:           value.Token,
+			TokenPrefix:     value.TokenPrefix,
+			GrantType:       value.GrantType,
+			TokenUrl:        value.TokenUrl,
+			ClientId:        value.ClientId,
+			ClientSecret:    value.ClientSecret,
+			ClientAuth:      value.ClientAuth,
+			TokenExchange:   value.TokenExchange,
+			Scopes:          value.Scopes,
+			ScopeParam:      value.ScopeParam,
+			ScopeSeparator:  value.ScopeSeparator,
+			TokenParams:     value.TokenParams,
+			RefreshParams:   value.RefreshParams,
+			AcceptHeader:    value.AcceptHeader,
+			AccessTokenPath: value.AccessTokenPath,
+			RefreshToken:    value.RefreshToken,
+		}
+		appendMessageSlice(&out.TokenExchangeDrivers, value.TokenExchangeDrivers, FromWireExternalCredentialTokenExchangeDriver)
+		return out
+	})
 }
 
 func ToWireExternalCredentialCapabilities(value *ExternalCredentialCapabilities) *proto.ExternalCredentialCapabilities {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExternalCredentialCapabilities{
-		PersistsAccountKey:        value.PersistsAccountKey,
-		SupportsConditionalUpsert: value.SupportsConditionalUpsert,
-	}
-	return out
+	return convertMessage(value, func(value *ExternalCredentialCapabilities) *proto.ExternalCredentialCapabilities {
+		out := &proto.ExternalCredentialCapabilities{
+			PersistsAccountKey:        value.PersistsAccountKey,
+			SupportsConditionalUpsert: value.SupportsConditionalUpsert,
+		}
+		return out
+	})
 }
 
 func FromWireExternalCredentialCapabilities(value *proto.ExternalCredentialCapabilities) *ExternalCredentialCapabilities {
-	if value == nil {
-		return nil
-	}
-	out := &ExternalCredentialCapabilities{
-		PersistsAccountKey:        value.PersistsAccountKey,
-		SupportsConditionalUpsert: value.SupportsConditionalUpsert,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExternalCredentialCapabilities) *ExternalCredentialCapabilities {
+		out := &ExternalCredentialCapabilities{
+			PersistsAccountKey:        value.PersistsAccountKey,
+			SupportsConditionalUpsert: value.SupportsConditionalUpsert,
+		}
+		return out
+	})
 }
 
 func ToWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *proto.ExternalCredentialClientInfo {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExternalCredentialClientInfo{
-		ClientId:              value.ClientId,
-		ClientSecret:          value.ClientSecret,
-		ClientSecretExpiresAt: ToWireTimestamp(value.ClientSecretExpiresAt),
-	}
-	return out
+	return convertMessage(value, func(value *ExternalCredentialClientInfo) *proto.ExternalCredentialClientInfo {
+		out := &proto.ExternalCredentialClientInfo{
+			ClientId:              value.ClientId,
+			ClientSecret:          value.ClientSecret,
+			ClientSecretExpiresAt: ToWireTimestamp(value.ClientSecretExpiresAt),
+		}
+		return out
+	})
 }
 
 func FromWireExternalCredentialClientInfo(value *proto.ExternalCredentialClientInfo) *ExternalCredentialClientInfo {
-	if value == nil {
-		return nil
-	}
-	out := &ExternalCredentialClientInfo{
-		ClientId:              value.ClientId,
-		ClientSecret:          value.ClientSecret,
-		ClientSecretExpiresAt: FromWireTimestamp(value.ClientSecretExpiresAt),
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExternalCredentialClientInfo) *ExternalCredentialClientInfo {
+		out := &ExternalCredentialClientInfo{
+			ClientId:              value.ClientId,
+			ClientSecret:          value.ClientSecret,
+			ClientSecretExpiresAt: FromWireTimestamp(value.ClientSecretExpiresAt),
+		}
+		return out
+	})
 }
 
 func ToWireExternalCredentialGrant(value *ExternalCredentialGrant) *proto.ExternalCredentialGrant {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExternalCredentialGrant{
-		AccessToken:       value.AccessToken,
-		RefreshToken:      value.RefreshToken,
-		Scope:             value.Scope,
-		ExpiresAt:         ToWireTimestamp(value.ExpiresAt),
-		LastRefreshedAt:   ToWireTimestamp(value.LastRefreshedAt),
-		RefreshErrorCount: value.RefreshErrorCount,
-	}
-	return out
+	return convertMessage(value, func(value *ExternalCredentialGrant) *proto.ExternalCredentialGrant {
+		out := &proto.ExternalCredentialGrant{
+			AccessToken:       value.AccessToken,
+			RefreshToken:      value.RefreshToken,
+			Scope:             value.Scope,
+			ExpiresAt:         ToWireTimestamp(value.ExpiresAt),
+			LastRefreshedAt:   ToWireTimestamp(value.LastRefreshedAt),
+			RefreshErrorCount: value.RefreshErrorCount,
+		}
+		return out
+	})
 }
 
 func FromWireExternalCredentialGrant(value *proto.ExternalCredentialGrant) *ExternalCredentialGrant {
-	if value == nil {
-		return nil
-	}
-	out := &ExternalCredentialGrant{
-		AccessToken:       value.AccessToken,
-		RefreshToken:      value.RefreshToken,
-		Scope:             value.Scope,
-		ExpiresAt:         FromWireTimestamp(value.ExpiresAt),
-		LastRefreshedAt:   FromWireTimestamp(value.LastRefreshedAt),
-		RefreshErrorCount: value.RefreshErrorCount,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExternalCredentialGrant) *ExternalCredentialGrant {
+		out := &ExternalCredentialGrant{
+			AccessToken:       value.AccessToken,
+			RefreshToken:      value.RefreshToken,
+			Scope:             value.Scope,
+			ExpiresAt:         FromWireTimestamp(value.ExpiresAt),
+			LastRefreshedAt:   FromWireTimestamp(value.LastRefreshedAt),
+			RefreshErrorCount: value.RefreshErrorCount,
+		}
+		return out
+	})
 }
 
 func ToWireExternalCredentialOpaque(value *ExternalCredentialOpaque) *proto.ExternalCredentialOpaque {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExternalCredentialOpaque{
-		Fields: value.Fields,
-	}
-	return out
+	return convertMessage(value, func(value *ExternalCredentialOpaque) *proto.ExternalCredentialOpaque {
+		out := &proto.ExternalCredentialOpaque{
+			Fields: value.Fields,
+		}
+		return out
+	})
 }
 
 func FromWireExternalCredentialOpaque(value *proto.ExternalCredentialOpaque) *ExternalCredentialOpaque {
-	if value == nil {
-		return nil
-	}
-	out := &ExternalCredentialOpaque{
-		Fields: value.Fields,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExternalCredentialOpaque) *ExternalCredentialOpaque {
+		out := &ExternalCredentialOpaque{
+			Fields: value.Fields,
+		}
+		return out
+	})
 }
 
 func ToWireExternalCredentialTokenExchangeDriver(value *ExternalCredentialTokenExchangeDriver) *proto.ExternalCredentialTokenExchangeDriver {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExternalCredentialTokenExchangeDriver{
-		Type:            value.Type,
-		TargetPrincipal: value.TargetPrincipal,
-		Scopes:          value.Scopes,
-		LifetimeSeconds: value.LifetimeSeconds,
-		Endpoint:        value.Endpoint,
-		Params:          value.Params,
-	}
-	return out
+	return convertMessage(value, func(value *ExternalCredentialTokenExchangeDriver) *proto.ExternalCredentialTokenExchangeDriver {
+		out := &proto.ExternalCredentialTokenExchangeDriver{
+			Type:            value.Type,
+			TargetPrincipal: value.TargetPrincipal,
+			Scopes:          value.Scopes,
+			LifetimeSeconds: value.LifetimeSeconds,
+			Endpoint:        value.Endpoint,
+			Params:          value.Params,
+		}
+		return out
+	})
 }
 
 func FromWireExternalCredentialTokenExchangeDriver(value *proto.ExternalCredentialTokenExchangeDriver) *ExternalCredentialTokenExchangeDriver {
-	if value == nil {
-		return nil
-	}
-	out := &ExternalCredentialTokenExchangeDriver{
-		Type:            value.Type,
-		TargetPrincipal: value.TargetPrincipal,
-		Scopes:          value.Scopes,
-		LifetimeSeconds: value.LifetimeSeconds,
-		Endpoint:        value.Endpoint,
-		Params:          value.Params,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExternalCredentialTokenExchangeDriver) *ExternalCredentialTokenExchangeDriver {
+		out := &ExternalCredentialTokenExchangeDriver{
+			Type:            value.Type,
+			TargetPrincipal: value.TargetPrincipal,
+			Scopes:          value.Scopes,
+			LifetimeSeconds: value.LifetimeSeconds,
+			Endpoint:        value.Endpoint,
+			Params:          value.Params,
+		}
+		return out
+	})
 }
 
 func ToWireExternalCredentialTokenResponse(value *ExternalCredentialTokenResponse) *proto.ExternalCredentialTokenResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExternalCredentialTokenResponse{
-		AccessToken:   value.AccessToken,
-		RefreshToken:  value.RefreshToken,
-		ExpiresIn:     value.ExpiresIn,
-		TokenType:     value.TokenType,
-		ExtraJson:     value.ExtraJson,
-		RefreshSource: value.RefreshSource,
-	}
-	return out
+	return convertMessage(value, func(value *ExternalCredentialTokenResponse) *proto.ExternalCredentialTokenResponse {
+		out := &proto.ExternalCredentialTokenResponse{
+			AccessToken:   value.AccessToken,
+			RefreshToken:  value.RefreshToken,
+			ExpiresIn:     value.ExpiresIn,
+			TokenType:     value.TokenType,
+			ExtraJson:     value.ExtraJson,
+			RefreshSource: value.RefreshSource,
+		}
+		return out
+	})
 }
 
 func FromWireExternalCredentialTokenResponse(value *proto.ExternalCredentialTokenResponse) *ExternalCredentialTokenResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ExternalCredentialTokenResponse{
-		AccessToken:   value.AccessToken,
-		RefreshToken:  value.RefreshToken,
-		ExpiresIn:     value.ExpiresIn,
-		TokenType:     value.TokenType,
-		ExtraJson:     value.ExtraJson,
-		RefreshSource: value.RefreshSource,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExternalCredentialTokenResponse) *ExternalCredentialTokenResponse {
+		out := &ExternalCredentialTokenResponse{
+			AccessToken:   value.AccessToken,
+			RefreshToken:  value.RefreshToken,
+			ExpiresIn:     value.ExpiresIn,
+			TokenType:     value.TokenType,
+			ExtraJson:     value.ExtraJson,
+			RefreshSource: value.RefreshSource,
+		}
+		return out
+	})
 }
 
 func ToWireGetExternalCredentialRequest(value *GetExternalCredentialRequest) *proto.GetExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetExternalCredentialRequest{
-		Subject:   value.Subject,
-		Audience:  value.Audience,
-		Qualifier: value.Qualifier,
-	}
-	return out
+	return convertMessage(value, func(value *GetExternalCredentialRequest) *proto.GetExternalCredentialRequest {
+		out := &proto.GetExternalCredentialRequest{
+			Subject:   value.Subject,
+			Audience:  value.Audience,
+			Qualifier: value.Qualifier,
+		}
+		return out
+	})
 }
 
 func FromWireGetExternalCredentialRequest(value *proto.GetExternalCredentialRequest) *GetExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetExternalCredentialRequest{
-		Subject:   value.Subject,
-		Audience:  value.Audience,
-		Qualifier: value.Qualifier,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetExternalCredentialRequest) *GetExternalCredentialRequest {
+		out := &GetExternalCredentialRequest{
+			Subject:   value.Subject,
+			Audience:  value.Audience,
+			Qualifier: value.Qualifier,
+		}
+		return out
+	})
 }
 
 func ToWireListExternalCredentialsRequest(value *ListExternalCredentialsRequest) *proto.ListExternalCredentialsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListExternalCredentialsRequest{
-		Subject:  value.Subject,
-		Audience: value.Audience,
-	}
-	return out
+	return convertMessage(value, func(value *ListExternalCredentialsRequest) *proto.ListExternalCredentialsRequest {
+		out := &proto.ListExternalCredentialsRequest{
+			Subject:  value.Subject,
+			Audience: value.Audience,
+		}
+		return out
+	})
 }
 
 func FromWireListExternalCredentialsRequest(value *proto.ListExternalCredentialsRequest) *ListExternalCredentialsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListExternalCredentialsRequest{
-		Subject:  value.Subject,
-		Audience: value.Audience,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListExternalCredentialsRequest) *ListExternalCredentialsRequest {
+		out := &ListExternalCredentialsRequest{
+			Subject:  value.Subject,
+			Audience: value.Audience,
+		}
+		return out
+	})
 }
 
 func ToWireListExternalCredentialsResponse(value *ListExternalCredentialsResponse) *proto.ListExternalCredentialsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListExternalCredentialsResponse{}
-	appendMessageSlice(&out.Credentials, value.Credentials, ToWireExternalCredential)
-	return out
+	return convertMessage(value, func(value *ListExternalCredentialsResponse) *proto.ListExternalCredentialsResponse {
+		out := &proto.ListExternalCredentialsResponse{}
+		appendMessageSlice(&out.Credentials, value.Credentials, ToWireExternalCredential)
+		return out
+	})
 }
 
 func FromWireListExternalCredentialsResponse(value *proto.ListExternalCredentialsResponse) *ListExternalCredentialsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListExternalCredentialsResponse{}
-	appendMessageSlice(&out.Credentials, value.Credentials, FromWireExternalCredential)
-	return out
+	return convertMessage(value, func(value *proto.ListExternalCredentialsResponse) *ListExternalCredentialsResponse {
+		out := &ListExternalCredentialsResponse{}
+		appendMessageSlice(&out.Credentials, value.Credentials, FromWireExternalCredential)
+		return out
+	})
 }
 
 func ToWireResolveExternalCredentialRequest(value *ResolveExternalCredentialRequest) *proto.ResolveExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ResolveExternalCredentialRequest{
-		Provider:            value.Provider,
-		Connection:          value.Connection,
-		ConnectionId:        value.ConnectionId,
-		Mode:                value.Mode,
-		CredentialSubjectId: value.CredentialSubjectId,
-		ActorSubjectId:      value.ActorSubjectId,
-		Instance:            value.Instance,
-		Auth:                ToWireExternalCredentialAuthConfig(value.Auth),
-		ConnectionParams:    value.ConnectionParams,
-	}
-	return out
+	return convertMessage(value, func(value *ResolveExternalCredentialRequest) *proto.ResolveExternalCredentialRequest {
+		out := &proto.ResolveExternalCredentialRequest{
+			Provider:            value.Provider,
+			Connection:          value.Connection,
+			ConnectionId:        value.ConnectionId,
+			Mode:                value.Mode,
+			CredentialSubjectId: value.CredentialSubjectId,
+			ActorSubjectId:      value.ActorSubjectId,
+			Instance:            value.Instance,
+			Auth:                ToWireExternalCredentialAuthConfig(value.Auth),
+			ConnectionParams:    value.ConnectionParams,
+		}
+		return out
+	})
 }
 
 func FromWireResolveExternalCredentialRequest(value *proto.ResolveExternalCredentialRequest) *ResolveExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ResolveExternalCredentialRequest{
-		Provider:            value.Provider,
-		Connection:          value.Connection,
-		ConnectionId:        value.ConnectionId,
-		Mode:                value.Mode,
-		CredentialSubjectId: value.CredentialSubjectId,
-		ActorSubjectId:      value.ActorSubjectId,
-		Instance:            value.Instance,
-		Auth:                FromWireExternalCredentialAuthConfig(value.Auth),
-		ConnectionParams:    value.ConnectionParams,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ResolveExternalCredentialRequest) *ResolveExternalCredentialRequest {
+		out := &ResolveExternalCredentialRequest{
+			Provider:            value.Provider,
+			Connection:          value.Connection,
+			ConnectionId:        value.ConnectionId,
+			Mode:                value.Mode,
+			CredentialSubjectId: value.CredentialSubjectId,
+			ActorSubjectId:      value.ActorSubjectId,
+			Instance:            value.Instance,
+			Auth:                FromWireExternalCredentialAuthConfig(value.Auth),
+			ConnectionParams:    value.ConnectionParams,
+		}
+		return out
+	})
 }
 
 func ToWireResolveExternalCredentialResponse(value *ResolveExternalCredentialResponse) *proto.ResolveExternalCredentialResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ResolveExternalCredentialResponse{
-		Token:        value.Token,
-		ExpiresAt:    ToWireTimestamp(value.ExpiresAt),
-		MetadataJson: value.MetadataJson,
-		Params:       value.Params,
-		Credential:   ToWireExternalCredential(value.Credential),
-	}
-	return out
+	return convertMessage(value, func(value *ResolveExternalCredentialResponse) *proto.ResolveExternalCredentialResponse {
+		out := &proto.ResolveExternalCredentialResponse{
+			Token:        value.Token,
+			ExpiresAt:    ToWireTimestamp(value.ExpiresAt),
+			MetadataJson: value.MetadataJson,
+			Params:       value.Params,
+			Credential:   ToWireExternalCredential(value.Credential),
+		}
+		return out
+	})
 }
 
 func FromWireResolveExternalCredentialResponse(value *proto.ResolveExternalCredentialResponse) *ResolveExternalCredentialResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ResolveExternalCredentialResponse{
-		Token:        value.Token,
-		ExpiresAt:    FromWireTimestamp(value.ExpiresAt),
-		MetadataJson: value.MetadataJson,
-		Params:       value.Params,
-		Credential:   FromWireExternalCredential(value.Credential),
-	}
-	return out
+	return convertMessage(value, func(value *proto.ResolveExternalCredentialResponse) *ResolveExternalCredentialResponse {
+		out := &ResolveExternalCredentialResponse{
+			Token:        value.Token,
+			ExpiresAt:    FromWireTimestamp(value.ExpiresAt),
+			MetadataJson: value.MetadataJson,
+			Params:       value.Params,
+			Credential:   FromWireExternalCredential(value.Credential),
+		}
+		return out
+	})
 }
 
 func ToWireUpsertExternalCredentialRequest(value *UpsertExternalCredentialRequest) *proto.UpsertExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.UpsertExternalCredentialRequest{
-		Credential:           ToWireExternalCredential(value.Credential),
-		ExpectedCredentialId: value.ExpectedCredentialId,
-	}
-	return out
+	return convertMessage(value, func(value *UpsertExternalCredentialRequest) *proto.UpsertExternalCredentialRequest {
+		out := &proto.UpsertExternalCredentialRequest{
+			Credential:           ToWireExternalCredential(value.Credential),
+			ExpectedCredentialId: value.ExpectedCredentialId,
+		}
+		return out
+	})
 }
 
 func FromWireUpsertExternalCredentialRequest(value *proto.UpsertExternalCredentialRequest) *UpsertExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	out := &UpsertExternalCredentialRequest{
-		Credential:           FromWireExternalCredential(value.Credential),
-		ExpectedCredentialId: value.ExpectedCredentialId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.UpsertExternalCredentialRequest) *UpsertExternalCredentialRequest {
+		out := &UpsertExternalCredentialRequest{
+			Credential:           FromWireExternalCredential(value.Credential),
+			ExpectedCredentialId: value.ExpectedCredentialId,
+		}
+		return out
+	})
 }
 
 func ToWireValidateExternalCredentialConfigRequest(value *ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ValidateExternalCredentialConfigRequest{
-		Provider:         value.Provider,
-		Connection:       value.Connection,
-		ConnectionId:     value.ConnectionId,
-		Mode:             value.Mode,
-		Auth:             ToWireExternalCredentialAuthConfig(value.Auth),
-		ConnectionParams: value.ConnectionParams,
-	}
-	return out
+	return convertMessage(value, func(value *ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
+		out := &proto.ValidateExternalCredentialConfigRequest{
+			Provider:         value.Provider,
+			Connection:       value.Connection,
+			ConnectionId:     value.ConnectionId,
+			Mode:             value.Mode,
+			Auth:             ToWireExternalCredentialAuthConfig(value.Auth),
+			ConnectionParams: value.ConnectionParams,
+		}
+		return out
+	})
 }
 
 func FromWireValidateExternalCredentialConfigRequest(value *proto.ValidateExternalCredentialConfigRequest) *ValidateExternalCredentialConfigRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ValidateExternalCredentialConfigRequest{
-		Provider:         value.Provider,
-		Connection:       value.Connection,
-		ConnectionId:     value.ConnectionId,
-		Mode:             value.Mode,
-		Auth:             FromWireExternalCredentialAuthConfig(value.Auth),
-		ConnectionParams: value.ConnectionParams,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ValidateExternalCredentialConfigRequest) *ValidateExternalCredentialConfigRequest {
+		out := &ValidateExternalCredentialConfigRequest{
+			Provider:         value.Provider,
+			Connection:       value.Connection,
+			ConnectionId:     value.ConnectionId,
+			Mode:             value.Mode,
+			Auth:             FromWireExternalCredentialAuthConfig(value.Auth),
+			ConnectionParams: value.ConnectionParams,
+		}
+		return out
+	})
 }

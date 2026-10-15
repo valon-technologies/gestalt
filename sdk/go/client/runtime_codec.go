@@ -7,141 +7,129 @@ import (
 )
 
 func ToWireConfigureProviderRequest(value *ConfigureProviderRequest) *proto.ConfigureProviderRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ConfigureProviderRequest{
-		Name:            value.Name,
-		Config:          ToWireStruct(value.Config),
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *ConfigureProviderRequest) *proto.ConfigureProviderRequest {
+		out := &proto.ConfigureProviderRequest{
+			Name:            value.Name,
+			Config:          ToWireStruct(value.Config),
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func FromWireConfigureProviderRequest(value *proto.ConfigureProviderRequest) *ConfigureProviderRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ConfigureProviderRequest{
-		Name:            value.Name,
-		Config:          FromWireStruct(value.Config),
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ConfigureProviderRequest) *ConfigureProviderRequest {
+		out := &ConfigureProviderRequest{
+			Name:            value.Name,
+			Config:          FromWireStruct(value.Config),
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func ToWireConfigureProviderResponse(value *ConfigureProviderResponse) *proto.ConfigureProviderResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ConfigureProviderResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *ConfigureProviderResponse) *proto.ConfigureProviderResponse {
+		out := &proto.ConfigureProviderResponse{
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func FromWireConfigureProviderResponse(value *proto.ConfigureProviderResponse) *ConfigureProviderResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ConfigureProviderResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ConfigureProviderResponse) *ConfigureProviderResponse {
+		out := &ConfigureProviderResponse{
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func ToWireHealthCheckResponse(value *HealthCheckResponse) *proto.HealthCheckResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.HealthCheckResponse{
-		Ready:   value.Ready,
-		Message: value.Message,
-	}
-	return out
+	return convertMessage(value, func(value *HealthCheckResponse) *proto.HealthCheckResponse {
+		out := &proto.HealthCheckResponse{
+			Ready:   value.Ready,
+			Message: value.Message,
+		}
+		return out
+	})
 }
 
 func FromWireHealthCheckResponse(value *proto.HealthCheckResponse) *HealthCheckResponse {
-	if value == nil {
-		return nil
-	}
-	out := &HealthCheckResponse{
-		Ready:   value.Ready,
-		Message: value.Message,
-	}
-	return out
+	return convertMessage(value, func(value *proto.HealthCheckResponse) *HealthCheckResponse {
+		out := &HealthCheckResponse{
+			Ready:   value.Ready,
+			Message: value.Message,
+		}
+		return out
+	})
 }
 
 func ToWirePromoteWorkersResponse(value *PromoteWorkersResponse) *proto.PromoteWorkersResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.PromoteWorkersResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *PromoteWorkersResponse) *proto.PromoteWorkersResponse {
+		out := &proto.PromoteWorkersResponse{
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func FromWirePromoteWorkersResponse(value *proto.PromoteWorkersResponse) *PromoteWorkersResponse {
-	if value == nil {
-		return nil
-	}
-	out := &PromoteWorkersResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *proto.PromoteWorkersResponse) *PromoteWorkersResponse {
+		out := &PromoteWorkersResponse{
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func ToWireProviderIdentity(value *ProviderIdentity) *proto.ProviderIdentity {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ProviderIdentity{
-		Kind:               proto.ProviderKind(value.Kind),
-		Name:               value.Name,
-		DisplayName:        value.DisplayName,
-		Description:        value.Description,
-		Version:            value.Version,
-		Warnings:           value.Warnings,
-		MinProtocolVersion: value.MinProtocolVersion,
-		MaxProtocolVersion: value.MaxProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *ProviderIdentity) *proto.ProviderIdentity {
+		out := &proto.ProviderIdentity{
+			Kind:               proto.ProviderKind(value.Kind),
+			Name:               value.Name,
+			DisplayName:        value.DisplayName,
+			Description:        value.Description,
+			Version:            value.Version,
+			Warnings:           value.Warnings,
+			MinProtocolVersion: value.MinProtocolVersion,
+			MaxProtocolVersion: value.MaxProtocolVersion,
+		}
+		return out
+	})
 }
 
 func FromWireProviderIdentity(value *proto.ProviderIdentity) *ProviderIdentity {
-	if value == nil {
-		return nil
-	}
-	out := &ProviderIdentity{
-		Kind:               ProviderKind(value.Kind),
-		Name:               value.Name,
-		DisplayName:        value.DisplayName,
-		Description:        value.Description,
-		Version:            value.Version,
-		Warnings:           value.Warnings,
-		MinProtocolVersion: value.MinProtocolVersion,
-		MaxProtocolVersion: value.MaxProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ProviderIdentity) *ProviderIdentity {
+		out := &ProviderIdentity{
+			Kind:               ProviderKind(value.Kind),
+			Name:               value.Name,
+			DisplayName:        value.DisplayName,
+			Description:        value.Description,
+			Version:            value.Version,
+			Warnings:           value.Warnings,
+			MinProtocolVersion: value.MinProtocolVersion,
+			MaxProtocolVersion: value.MaxProtocolVersion,
+		}
+		return out
+	})
 }
 
 func ToWireStartRuntimeProviderResponse(value *StartRuntimeProviderResponse) *proto.StartRuntimeProviderResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StartRuntimeProviderResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *StartRuntimeProviderResponse) *proto.StartRuntimeProviderResponse {
+		out := &proto.StartRuntimeProviderResponse{
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func FromWireStartRuntimeProviderResponse(value *proto.StartRuntimeProviderResponse) *StartRuntimeProviderResponse {
-	if value == nil {
-		return nil
-	}
-	out := &StartRuntimeProviderResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *proto.StartRuntimeProviderResponse) *StartRuntimeProviderResponse {
+		out := &StartRuntimeProviderResponse{
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }

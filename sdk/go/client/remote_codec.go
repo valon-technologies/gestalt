@@ -7,335 +7,307 @@ import (
 )
 
 func ToWireCreateRemoteRequest(value *CreateRemoteRequest) *proto.CreateRemoteRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateRemoteRequest{
-		Tunnel:             ToWireTunnelEndpoint(value.Tunnel),
-		ExpectedGeneration: value.ExpectedGeneration,
-	}
-	appendMessageSlice(&out.Providers, value.Providers, ToWireRemoteProviderDefinition)
-	return out
+	return convertMessage(value, func(value *CreateRemoteRequest) *proto.CreateRemoteRequest {
+		out := &proto.CreateRemoteRequest{
+			Tunnel:             ToWireTunnelEndpoint(value.Tunnel),
+			ExpectedGeneration: value.ExpectedGeneration,
+		}
+		appendMessageSlice(&out.Providers, value.Providers, ToWireRemoteProviderDefinition)
+		return out
+	})
 }
 
 func FromWireCreateRemoteRequest(value *proto.CreateRemoteRequest) *CreateRemoteRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CreateRemoteRequest{
-		Tunnel:             FromWireTunnelEndpoint(value.Tunnel),
-		ExpectedGeneration: value.ExpectedGeneration,
-	}
-	appendMessageSlice(&out.Providers, value.Providers, FromWireRemoteProviderDefinition)
-	return out
+	return convertMessage(value, func(value *proto.CreateRemoteRequest) *CreateRemoteRequest {
+		out := &CreateRemoteRequest{
+			Tunnel:             FromWireTunnelEndpoint(value.Tunnel),
+			ExpectedGeneration: value.ExpectedGeneration,
+		}
+		appendMessageSlice(&out.Providers, value.Providers, FromWireRemoteProviderDefinition)
+		return out
+	})
 }
 
 func ToWireDeleteRemoteRequest(value *DeleteRemoteRequest) *proto.DeleteRemoteRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteRemoteRequest{
-		Id:                 value.Id,
-		ExpectedGeneration: value.ExpectedGeneration,
-	}
-	return out
+	return convertMessage(value, func(value *DeleteRemoteRequest) *proto.DeleteRemoteRequest {
+		out := &proto.DeleteRemoteRequest{
+			Id:                 value.Id,
+			ExpectedGeneration: value.ExpectedGeneration,
+		}
+		return out
+	})
 }
 
 func FromWireDeleteRemoteRequest(value *proto.DeleteRemoteRequest) *DeleteRemoteRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteRemoteRequest{
-		Id:                 value.Id,
-		ExpectedGeneration: value.ExpectedGeneration,
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeleteRemoteRequest) *DeleteRemoteRequest {
+		out := &DeleteRemoteRequest{
+			Id:                 value.Id,
+			ExpectedGeneration: value.ExpectedGeneration,
+		}
+		return out
+	})
 }
 
 func ToWireListRemotesRequest(value *ListRemotesRequest) *proto.ListRemotesRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListRemotesRequest{}
-	return out
+	return convertMessage(value, func(value *ListRemotesRequest) *proto.ListRemotesRequest {
+		out := &proto.ListRemotesRequest{}
+		return out
+	})
 }
 
 func FromWireListRemotesRequest(value *proto.ListRemotesRequest) *ListRemotesRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListRemotesRequest{}
-	return out
+	return convertMessage(value, func(value *proto.ListRemotesRequest) *ListRemotesRequest {
+		out := &ListRemotesRequest{}
+		return out
+	})
 }
 
 func ToWireListRemotesResponse(value *ListRemotesResponse) *proto.ListRemotesResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListRemotesResponse{
-		ServerIdentity: ToWireServerIdentity(value.ServerIdentity),
-		Tunnel:         ToWireTunnelBootstrap(value.Tunnel),
-		LeaseDuration:  ToWireDuration(value.LeaseDuration),
-	}
-	appendMessageSlice(&out.Remotes, value.Remotes, ToWireRemote)
-	return out
+	return convertMessage(value, func(value *ListRemotesResponse) *proto.ListRemotesResponse {
+		out := &proto.ListRemotesResponse{
+			ServerIdentity: ToWireServerIdentity(value.ServerIdentity),
+			Tunnel:         ToWireTunnelBootstrap(value.Tunnel),
+			LeaseDuration:  ToWireDuration(value.LeaseDuration),
+		}
+		appendMessageSlice(&out.Remotes, value.Remotes, ToWireRemote)
+		return out
+	})
 }
 
 func FromWireListRemotesResponse(value *proto.ListRemotesResponse) *ListRemotesResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListRemotesResponse{
-		ServerIdentity: FromWireServerIdentity(value.ServerIdentity),
-		Tunnel:         FromWireTunnelBootstrap(value.Tunnel),
-		LeaseDuration:  FromWireDuration(value.LeaseDuration),
-	}
-	appendMessageSlice(&out.Remotes, value.Remotes, FromWireRemote)
-	return out
+	return convertMessage(value, func(value *proto.ListRemotesResponse) *ListRemotesResponse {
+		out := &ListRemotesResponse{
+			ServerIdentity: FromWireServerIdentity(value.ServerIdentity),
+			Tunnel:         FromWireTunnelBootstrap(value.Tunnel),
+			LeaseDuration:  FromWireDuration(value.LeaseDuration),
+		}
+		appendMessageSlice(&out.Remotes, value.Remotes, FromWireRemote)
+		return out
+	})
 }
 
 func ToWireProviderRef(value *ProviderRef) *proto.ProviderRef {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ProviderRef{
-		Kind: value.Kind,
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *ProviderRef) *proto.ProviderRef {
+		out := &proto.ProviderRef{
+			Kind: value.Kind,
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func FromWireProviderRef(value *proto.ProviderRef) *ProviderRef {
-	if value == nil {
-		return nil
-	}
-	out := &ProviderRef{
-		Kind: value.Kind,
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ProviderRef) *ProviderRef {
+		out := &ProviderRef{
+			Kind: value.Kind,
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func ToWireRegistrationCheckRequest(value *RegistrationCheckRequest) *proto.RegistrationCheckRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RegistrationCheckRequest{
-		RegistrationId: value.RegistrationId,
-		Generation:     value.Generation,
-	}
-	appendMessageSlice(&out.Providers, value.Providers, ToWireProviderRef)
-	return out
+	return convertMessage(value, func(value *RegistrationCheckRequest) *proto.RegistrationCheckRequest {
+		out := &proto.RegistrationCheckRequest{
+			RegistrationId: value.RegistrationId,
+			Generation:     value.Generation,
+		}
+		appendMessageSlice(&out.Providers, value.Providers, ToWireProviderRef)
+		return out
+	})
 }
 
 func FromWireRegistrationCheckRequest(value *proto.RegistrationCheckRequest) *RegistrationCheckRequest {
-	if value == nil {
-		return nil
-	}
-	out := &RegistrationCheckRequest{
-		RegistrationId: value.RegistrationId,
-		Generation:     value.Generation,
-	}
-	appendMessageSlice(&out.Providers, value.Providers, FromWireProviderRef)
-	return out
+	return convertMessage(value, func(value *proto.RegistrationCheckRequest) *RegistrationCheckRequest {
+		out := &RegistrationCheckRequest{
+			RegistrationId: value.RegistrationId,
+			Generation:     value.Generation,
+		}
+		appendMessageSlice(&out.Providers, value.Providers, FromWireProviderRef)
+		return out
+	})
 }
 
 func ToWireRegistrationCheckResponse(value *RegistrationCheckResponse) *proto.RegistrationCheckResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RegistrationCheckResponse{
-		Ready:   value.Ready,
-		Message: value.Message,
-	}
-	return out
+	return convertMessage(value, func(value *RegistrationCheckResponse) *proto.RegistrationCheckResponse {
+		out := &proto.RegistrationCheckResponse{
+			Ready:   value.Ready,
+			Message: value.Message,
+		}
+		return out
+	})
 }
 
 func FromWireRegistrationCheckResponse(value *proto.RegistrationCheckResponse) *RegistrationCheckResponse {
-	if value == nil {
-		return nil
-	}
-	out := &RegistrationCheckResponse{
-		Ready:   value.Ready,
-		Message: value.Message,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RegistrationCheckResponse) *RegistrationCheckResponse {
+		out := &RegistrationCheckResponse{
+			Ready:   value.Ready,
+			Message: value.Message,
+		}
+		return out
+	})
 }
 
 func ToWireRemote(value *Remote) *proto.Remote {
-	if value == nil {
-		return nil
-	}
-	out := &proto.Remote{
-		Id:                        value.Id,
-		OwnerSubjectId:            value.OwnerSubjectId,
-		Generation:                value.Generation,
-		Reachability:              ToWireRemoteReachability(value.Reachability),
-		ServerSpkiSha256:          value.ServerSpkiSha256,
-		CreatedAt:                 ToWireTimestamp(value.CreatedAt),
-		UpdatedAt:                 ToWireTimestamp(value.UpdatedAt),
-		LastCheckedAt:             ToWireTimestamp(value.LastCheckedAt),
-		LastSuccessfulHeartbeatAt: ToWireTimestamp(value.LastSuccessfulHeartbeatAt),
-		LastError:                 value.LastError,
-		LeaseExpiresAt:            ToWireTimestamp(value.LeaseExpiresAt),
-		ConnectUrl:                value.ConnectUrl,
-	}
-	appendMessageSlice(&out.Providers, value.Providers, ToWireRemoteProviderSummary)
-	return out
+	return convertMessage(value, func(value *Remote) *proto.Remote {
+		out := &proto.Remote{
+			Id:                        value.Id,
+			OwnerSubjectId:            value.OwnerSubjectId,
+			Generation:                value.Generation,
+			Reachability:              ToWireRemoteReachability(value.Reachability),
+			ServerSpkiSha256:          value.ServerSpkiSha256,
+			CreatedAt:                 ToWireTimestamp(value.CreatedAt),
+			UpdatedAt:                 ToWireTimestamp(value.UpdatedAt),
+			LastCheckedAt:             ToWireTimestamp(value.LastCheckedAt),
+			LastSuccessfulHeartbeatAt: ToWireTimestamp(value.LastSuccessfulHeartbeatAt),
+			LastError:                 value.LastError,
+			LeaseExpiresAt:            ToWireTimestamp(value.LeaseExpiresAt),
+			ConnectUrl:                value.ConnectUrl,
+		}
+		appendMessageSlice(&out.Providers, value.Providers, ToWireRemoteProviderSummary)
+		return out
+	})
 }
 
 func FromWireRemote(value *proto.Remote) *Remote {
-	if value == nil {
-		return nil
-	}
-	out := &Remote{
-		Id:                        value.Id,
-		OwnerSubjectId:            value.OwnerSubjectId,
-		Generation:                value.Generation,
-		Reachability:              FromWireRemoteReachability(value.Reachability),
-		ServerSpkiSha256:          value.ServerSpkiSha256,
-		CreatedAt:                 FromWireTimestamp(value.CreatedAt),
-		UpdatedAt:                 FromWireTimestamp(value.UpdatedAt),
-		LastCheckedAt:             FromWireTimestamp(value.LastCheckedAt),
-		LastSuccessfulHeartbeatAt: FromWireTimestamp(value.LastSuccessfulHeartbeatAt),
-		LastError:                 value.LastError,
-		LeaseExpiresAt:            FromWireTimestamp(value.LeaseExpiresAt),
-		ConnectUrl:                value.ConnectUrl,
-	}
-	appendMessageSlice(&out.Providers, value.Providers, FromWireRemoteProviderSummary)
-	return out
+	return convertMessage(value, func(value *proto.Remote) *Remote {
+		out := &Remote{
+			Id:                        value.Id,
+			OwnerSubjectId:            value.OwnerSubjectId,
+			Generation:                value.Generation,
+			Reachability:              FromWireRemoteReachability(value.Reachability),
+			ServerSpkiSha256:          value.ServerSpkiSha256,
+			CreatedAt:                 FromWireTimestamp(value.CreatedAt),
+			UpdatedAt:                 FromWireTimestamp(value.UpdatedAt),
+			LastCheckedAt:             FromWireTimestamp(value.LastCheckedAt),
+			LastSuccessfulHeartbeatAt: FromWireTimestamp(value.LastSuccessfulHeartbeatAt),
+			LastError:                 value.LastError,
+			LeaseExpiresAt:            FromWireTimestamp(value.LeaseExpiresAt),
+			ConnectUrl:                value.ConnectUrl,
+		}
+		appendMessageSlice(&out.Providers, value.Providers, FromWireRemoteProviderSummary)
+		return out
+	})
 }
 
 func ToWireRemoteProviderDefinition(value *RemoteProviderDefinition) *proto.RemoteProviderDefinition {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RemoteProviderDefinition{
-		Kind:       value.Kind,
-		Name:       value.Name,
-		Definition: ToWireStruct(value.Definition),
-	}
-	return out
+	return convertMessage(value, func(value *RemoteProviderDefinition) *proto.RemoteProviderDefinition {
+		out := &proto.RemoteProviderDefinition{
+			Kind:       value.Kind,
+			Name:       value.Name,
+			Definition: ToWireStruct(value.Definition),
+		}
+		return out
+	})
 }
 
 func FromWireRemoteProviderDefinition(value *proto.RemoteProviderDefinition) *RemoteProviderDefinition {
-	if value == nil {
-		return nil
-	}
-	out := &RemoteProviderDefinition{
-		Kind:       value.Kind,
-		Name:       value.Name,
-		Definition: FromWireStruct(value.Definition),
-	}
-	return out
+	return convertMessage(value, func(value *proto.RemoteProviderDefinition) *RemoteProviderDefinition {
+		out := &RemoteProviderDefinition{
+			Kind:       value.Kind,
+			Name:       value.Name,
+			Definition: FromWireStruct(value.Definition),
+		}
+		return out
+	})
 }
 
 func ToWireRemoteProviderSummary(value *RemoteProviderSummary) *proto.RemoteProviderSummary {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RemoteProviderSummary{
-		Kind: value.Kind,
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *RemoteProviderSummary) *proto.RemoteProviderSummary {
+		out := &proto.RemoteProviderSummary{
+			Kind: value.Kind,
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func FromWireRemoteProviderSummary(value *proto.RemoteProviderSummary) *RemoteProviderSummary {
-	if value == nil {
-		return nil
-	}
-	out := &RemoteProviderSummary{
-		Kind: value.Kind,
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RemoteProviderSummary) *RemoteProviderSummary {
+		out := &RemoteProviderSummary{
+			Kind: value.Kind,
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func ToWireRemoteReachability(value *RemoteReachability) *proto.RemoteReachability {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RemoteReachability{
-		Reachable: value.Reachable,
-		Message:   value.Message,
-	}
-	return out
+	return convertMessage(value, func(value *RemoteReachability) *proto.RemoteReachability {
+		out := &proto.RemoteReachability{
+			Reachable: value.Reachable,
+			Message:   value.Message,
+		}
+		return out
+	})
 }
 
 func FromWireRemoteReachability(value *proto.RemoteReachability) *RemoteReachability {
-	if value == nil {
-		return nil
-	}
-	out := &RemoteReachability{
-		Reachable: value.Reachable,
-		Message:   value.Message,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RemoteReachability) *RemoteReachability {
+		out := &RemoteReachability{
+			Reachable: value.Reachable,
+			Message:   value.Message,
+		}
+		return out
+	})
 }
 
 func ToWireServerIdentity(value *ServerIdentity) *proto.ServerIdentity {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ServerIdentity{
-		ClientSpkiSha256: value.ClientSpkiSha256,
-	}
-	return out
+	return convertMessage(value, func(value *ServerIdentity) *proto.ServerIdentity {
+		out := &proto.ServerIdentity{
+			ClientSpkiSha256: value.ClientSpkiSha256,
+		}
+		return out
+	})
 }
 
 func FromWireServerIdentity(value *proto.ServerIdentity) *ServerIdentity {
-	if value == nil {
-		return nil
-	}
-	out := &ServerIdentity{
-		ClientSpkiSha256: value.ClientSpkiSha256,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ServerIdentity) *ServerIdentity {
+		out := &ServerIdentity{
+			ClientSpkiSha256: value.ClientSpkiSha256,
+		}
+		return out
+	})
 }
 
 func ToWireTunnelBootstrap(value *TunnelBootstrap) *proto.TunnelBootstrap {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TunnelBootstrap{
-		FrpsAddress:   value.FrpsAddress,
-		LeaseDuration: ToWireDuration(value.LeaseDuration),
-	}
-	return out
+	return convertMessage(value, func(value *TunnelBootstrap) *proto.TunnelBootstrap {
+		out := &proto.TunnelBootstrap{
+			FrpsAddress:   value.FrpsAddress,
+			LeaseDuration: ToWireDuration(value.LeaseDuration),
+		}
+		return out
+	})
 }
 
 func FromWireTunnelBootstrap(value *proto.TunnelBootstrap) *TunnelBootstrap {
-	if value == nil {
-		return nil
-	}
-	out := &TunnelBootstrap{
-		FrpsAddress:   value.FrpsAddress,
-		LeaseDuration: FromWireDuration(value.LeaseDuration),
-	}
-	return out
+	return convertMessage(value, func(value *proto.TunnelBootstrap) *TunnelBootstrap {
+		out := &TunnelBootstrap{
+			FrpsAddress:   value.FrpsAddress,
+			LeaseDuration: FromWireDuration(value.LeaseDuration),
+		}
+		return out
+	})
 }
 
 func ToWireTunnelEndpoint(value *TunnelEndpoint) *proto.TunnelEndpoint {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TunnelEndpoint{
-		Host:             value.Host,
-		Certificate:      value.Certificate,
-		ServerSpkiSha256: value.ServerSpkiSha256,
-	}
-	return out
+	return convertMessage(value, func(value *TunnelEndpoint) *proto.TunnelEndpoint {
+		out := &proto.TunnelEndpoint{
+			Host:             value.Host,
+			Certificate:      value.Certificate,
+			ServerSpkiSha256: value.ServerSpkiSha256,
+		}
+		return out
+	})
 }
 
 func FromWireTunnelEndpoint(value *proto.TunnelEndpoint) *TunnelEndpoint {
-	if value == nil {
-		return nil
-	}
-	out := &TunnelEndpoint{
-		Host:             value.Host,
-		Certificate:      value.Certificate,
-		ServerSpkiSha256: value.ServerSpkiSha256,
-	}
-	return out
+	return convertMessage(value, func(value *proto.TunnelEndpoint) *TunnelEndpoint {
+		out := &TunnelEndpoint{
+			Host:             value.Host,
+			Certificate:      value.Certificate,
+			ServerSpkiSha256: value.ServerSpkiSha256,
+		}
+		return out
+	})
 }

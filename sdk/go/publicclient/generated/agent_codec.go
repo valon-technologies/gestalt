@@ -8,156 +8,145 @@ import (
 )
 
 func ToWireCancelAgentProviderTurnRequest(value *CancelAgentProviderTurnRequest) *proto.CancelAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CancelAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
-		Reason:       value.Reason,
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *CancelAgentProviderTurnRequest) *proto.CancelAgentProviderTurnRequest {
+		out := &proto.CancelAgentProviderTurnRequest{
+			TurnId:       value.TurnId,
+			Reason:       value.Reason,
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func ToWireCreateAgentProviderSessionRequest(value *CreateAgentProviderSessionRequest) *proto.CreateAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:    value.IdempotencyKey,
-		Model:             value.Model,
-		ClientRef:         value.ClientRef,
-		Metadata:          gestaltclient.ToWireStruct(value.Metadata),
-		SessionStart:      gestaltclient.ToWireAgentSessionStartConfig(value.SessionStart),
-		PreparedWorkspace: gestaltclient.ToWirePreparedAgentWorkspace(value.PreparedWorkspace),
-		ProviderName:      value.ProviderName,
-		Workspace:         gestaltclient.ToWireAgentWorkspace(value.Workspace),
-		Tools:             gestaltclient.ToWireAgentToolConfig(value.Tools),
-	}
-	return out
+	return convertMessage(value, func(value *CreateAgentProviderSessionRequest) *proto.CreateAgentProviderSessionRequest {
+		out := &proto.CreateAgentProviderSessionRequest{
+			IdempotencyKey:    value.IdempotencyKey,
+			Model:             value.Model,
+			ClientRef:         value.ClientRef,
+			Metadata:          gestaltclient.ToWireStruct(value.Metadata),
+			SessionStart:      gestaltclient.ToWireAgentSessionStartConfig(value.SessionStart),
+			PreparedWorkspace: gestaltclient.ToWirePreparedAgentWorkspace(value.PreparedWorkspace),
+			ProviderName:      value.ProviderName,
+			Workspace:         gestaltclient.ToWireAgentWorkspace(value.Workspace),
+			Tools:             gestaltclient.ToWireAgentToolConfig(value.Tools),
+		}
+		return out
+	})
 }
 
 func ToWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest) *proto.CreateAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateAgentProviderTurnRequest{
-		TurnId:         value.TurnId,
-		SessionId:      value.SessionId,
-		IdempotencyKey: value.IdempotencyKey,
-		Model:          value.Model,
-		Metadata:       gestaltclient.ToWireStruct(value.Metadata),
-		ExecutionRef:   value.ExecutionRef,
-		ModelOptions:   gestaltclient.ToWireStruct(value.ModelOptions),
-		TimeoutSeconds: value.TimeoutSeconds,
-		Output:         gestaltclient.ToWireAgentOutput(value.Output),
-		ProviderName:   value.ProviderName,
-	}
-	appendMessageSlice(&out.Messages, value.Messages, gestaltclient.ToWireAgentMessage)
-	return out
+	return convertMessage(value, func(value *CreateAgentProviderTurnRequest) *proto.CreateAgentProviderTurnRequest {
+		out := &proto.CreateAgentProviderTurnRequest{
+			TurnId:         value.TurnId,
+			SessionId:      value.SessionId,
+			IdempotencyKey: value.IdempotencyKey,
+			Model:          value.Model,
+			Metadata:       gestaltclient.ToWireStruct(value.Metadata),
+			ExecutionRef:   value.ExecutionRef,
+			ModelOptions:   gestaltclient.ToWireStruct(value.ModelOptions),
+			TimeoutSeconds: value.TimeoutSeconds,
+			Output:         gestaltclient.ToWireAgentOutput(value.Output),
+			ProviderName:   value.ProviderName,
+		}
+		appendMessageSlice(&out.Messages, value.Messages, gestaltclient.ToWireAgentMessage)
+		return out
+	})
 }
 
 func ToWireGetAgentProviderSessionRequest(value *GetAgentProviderSessionRequest) *proto.GetAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *GetAgentProviderSessionRequest) *proto.GetAgentProviderSessionRequest {
+		out := &proto.GetAgentProviderSessionRequest{
+			SessionId:    value.SessionId,
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireGetAgentProviderTurnRequest(value *GetAgentProviderTurnRequest) *proto.GetAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *GetAgentProviderTurnRequest) *proto.GetAgentProviderTurnRequest {
+		out := &proto.GetAgentProviderTurnRequest{
+			TurnId:       value.TurnId,
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderInteractionsRequest(value *ListAgentProviderInteractionsRequest) *proto.ListAgentProviderInteractionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderInteractionsRequest{
-		TurnId:       value.TurnId,
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *ListAgentProviderInteractionsRequest) *proto.ListAgentProviderInteractionsRequest {
+		out := &proto.ListAgentProviderInteractionsRequest{
+			TurnId:       value.TurnId,
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderSessionsRequest(value *ListAgentProviderSessionsRequest) *proto.ListAgentProviderSessionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderSessionsRequest{
-		SessionIds:   value.SessionIds,
-		State:        proto.AgentSessionState(value.State),
-		Limit:        value.Limit,
-		SummaryOnly:  value.SummaryOnly,
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *ListAgentProviderSessionsRequest) *proto.ListAgentProviderSessionsRequest {
+		out := &proto.ListAgentProviderSessionsRequest{
+			SessionIds:   value.SessionIds,
+			State:        proto.AgentSessionState(value.State),
+			Limit:        value.Limit,
+			SummaryOnly:  value.SummaryOnly,
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderTurnEventsRequest(value *ListAgentProviderTurnEventsRequest) *proto.ListAgentProviderTurnEventsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderTurnEventsRequest{
-		TurnId:       value.TurnId,
-		AfterSeq:     value.AfterSeq,
-		Limit:        value.Limit,
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *ListAgentProviderTurnEventsRequest) *proto.ListAgentProviderTurnEventsRequest {
+		out := &proto.ListAgentProviderTurnEventsRequest{
+			TurnId:       value.TurnId,
+			AfterSeq:     value.AfterSeq,
+			Limit:        value.Limit,
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderTurnsRequest(value *ListAgentProviderTurnsRequest) *proto.ListAgentProviderTurnsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderTurnsRequest{
-		SessionId:    value.SessionId,
-		TurnIds:      value.TurnIds,
-		Status:       proto.AgentExecutionStatus(value.Status),
-		Limit:        value.Limit,
-		SummaryOnly:  value.SummaryOnly,
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *ListAgentProviderTurnsRequest) *proto.ListAgentProviderTurnsRequest {
+		out := &proto.ListAgentProviderTurnsRequest{
+			SessionId:    value.SessionId,
+			TurnIds:      value.TurnIds,
+			Status:       proto.AgentExecutionStatus(value.Status),
+			Limit:        value.Limit,
+			SummaryOnly:  value.SummaryOnly,
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireResolveAgentProviderInteractionRequest(value *ResolveAgentProviderInteractionRequest) *proto.ResolveAgentProviderInteractionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ResolveAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
-		Resolution:    gestaltclient.ToWireStruct(value.Resolution),
-		TurnId:        value.TurnId,
-		ProviderName:  value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *ResolveAgentProviderInteractionRequest) *proto.ResolveAgentProviderInteractionRequest {
+		out := &proto.ResolveAgentProviderInteractionRequest{
+			InteractionId: value.InteractionId,
+			Resolution:    gestaltclient.ToWireStruct(value.Resolution),
+			TurnId:        value.TurnId,
+			ProviderName:  value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireUpdateAgentProviderSessionRequest(value *UpdateAgentProviderSessionRequest) *proto.UpdateAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.UpdateAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
-		ClientRef:    value.ClientRef,
-		State:        proto.AgentSessionState(value.State),
-		Metadata:     gestaltclient.ToWireStruct(value.Metadata),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *UpdateAgentProviderSessionRequest) *proto.UpdateAgentProviderSessionRequest {
+		out := &proto.UpdateAgentProviderSessionRequest{
+			SessionId:    value.SessionId,
+			ClientRef:    value.ClientRef,
+			State:        proto.AgentSessionState(value.State),
+			Metadata:     gestaltclient.ToWireStruct(value.Metadata),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }

@@ -7,1171 +7,1085 @@ import (
 )
 
 func ToWireAgentCatalogToolConfig(value *AgentCatalogToolConfig) *proto.AgentCatalogToolConfig {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentCatalogToolConfig{}
-	appendMessageSlice(&out.Refs, value.Refs, ToWireAgentToolRef)
-	appendMessageSlice(&out.Tools, value.Tools, ToWireListedAgentTool)
-	return out
+	return convertMessage(value, func(value *AgentCatalogToolConfig) *proto.AgentCatalogToolConfig {
+		out := &proto.AgentCatalogToolConfig{}
+		appendMessageSlice(&out.Refs, value.Refs, ToWireAgentToolRef)
+		appendMessageSlice(&out.Tools, value.Tools, ToWireListedAgentTool)
+		return out
+	})
 }
 
 func FromWireAgentCatalogToolConfig(value *proto.AgentCatalogToolConfig) *AgentCatalogToolConfig {
-	if value == nil {
-		return nil
-	}
-	out := &AgentCatalogToolConfig{}
-	appendMessageSlice(&out.Refs, value.Refs, FromWireAgentToolRef)
-	appendMessageSlice(&out.Tools, value.Tools, FromWireListedAgentTool)
-	return out
+	return convertMessage(value, func(value *proto.AgentCatalogToolConfig) *AgentCatalogToolConfig {
+		out := &AgentCatalogToolConfig{}
+		appendMessageSlice(&out.Refs, value.Refs, FromWireAgentToolRef)
+		appendMessageSlice(&out.Tools, value.Tools, FromWireListedAgentTool)
+		return out
+	})
 }
 
 func ToWireAgentInteraction(value *AgentInteraction) *proto.AgentInteraction {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentInteraction{
-		Id:         value.Id,
-		Type:       proto.AgentInteractionType(value.Type),
-		State:      proto.AgentInteractionState(value.State),
-		Title:      value.Title,
-		Prompt:     value.Prompt,
-		Request:    ToWireStruct(value.Request),
-		Resolution: ToWireStruct(value.Resolution),
-		CreatedAt:  ToWireTimestamp(value.CreatedAt),
-		ResolvedAt: ToWireTimestamp(value.ResolvedAt),
-		TurnId:     value.TurnId,
-		SessionId:  value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *AgentInteraction) *proto.AgentInteraction {
+		out := &proto.AgentInteraction{
+			Id:         value.Id,
+			Type:       proto.AgentInteractionType(value.Type),
+			State:      proto.AgentInteractionState(value.State),
+			Title:      value.Title,
+			Prompt:     value.Prompt,
+			Request:    ToWireStruct(value.Request),
+			Resolution: ToWireStruct(value.Resolution),
+			CreatedAt:  ToWireTimestamp(value.CreatedAt),
+			ResolvedAt: ToWireTimestamp(value.ResolvedAt),
+			TurnId:     value.TurnId,
+			SessionId:  value.SessionId,
+		}
+		return out
+	})
 }
 
 func FromWireAgentInteraction(value *proto.AgentInteraction) *AgentInteraction {
-	if value == nil {
-		return nil
-	}
-	out := &AgentInteraction{
-		Id:         value.Id,
-		Type:       AgentInteractionType(value.Type),
-		State:      AgentInteractionState(value.State),
-		Title:      value.Title,
-		Prompt:     value.Prompt,
-		Request:    FromWireStruct(value.Request),
-		Resolution: FromWireStruct(value.Resolution),
-		CreatedAt:  FromWireTimestamp(value.CreatedAt),
-		ResolvedAt: FromWireTimestamp(value.ResolvedAt),
-		TurnId:     value.TurnId,
-		SessionId:  value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentInteraction) *AgentInteraction {
+		out := &AgentInteraction{
+			Id:         value.Id,
+			Type:       AgentInteractionType(value.Type),
+			State:      AgentInteractionState(value.State),
+			Title:      value.Title,
+			Prompt:     value.Prompt,
+			Request:    FromWireStruct(value.Request),
+			Resolution: FromWireStruct(value.Resolution),
+			CreatedAt:  FromWireTimestamp(value.CreatedAt),
+			ResolvedAt: FromWireTimestamp(value.ResolvedAt),
+			TurnId:     value.TurnId,
+			SessionId:  value.SessionId,
+		}
+		return out
+	})
 }
 
 func ToWireAgentMessage(value *AgentMessage) *proto.AgentMessage {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentMessage{
-		Role:     value.Role,
-		Text:     value.Text,
-		Metadata: ToWireStruct(value.Metadata),
-	}
-	appendMessageSlice(&out.Parts, value.Parts, ToWireAgentMessagePart)
-	return out
+	return convertMessage(value, func(value *AgentMessage) *proto.AgentMessage {
+		out := &proto.AgentMessage{
+			Role:     value.Role,
+			Text:     value.Text,
+			Metadata: ToWireStruct(value.Metadata),
+		}
+		appendMessageSlice(&out.Parts, value.Parts, ToWireAgentMessagePart)
+		return out
+	})
 }
 
 func FromWireAgentMessage(value *proto.AgentMessage) *AgentMessage {
-	if value == nil {
-		return nil
-	}
-	out := &AgentMessage{
-		Role:     value.Role,
-		Text:     value.Text,
-		Metadata: FromWireStruct(value.Metadata),
-	}
-	appendMessageSlice(&out.Parts, value.Parts, FromWireAgentMessagePart)
-	return out
+	return convertMessage(value, func(value *proto.AgentMessage) *AgentMessage {
+		out := &AgentMessage{
+			Role:     value.Role,
+			Text:     value.Text,
+			Metadata: FromWireStruct(value.Metadata),
+		}
+		appendMessageSlice(&out.Parts, value.Parts, FromWireAgentMessagePart)
+		return out
+	})
 }
 
 func ToWireAgentMessagePart(value *AgentMessagePart) *proto.AgentMessagePart {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentMessagePart{
-		Type:       proto.AgentMessagePartType(value.Type),
-		Text:       value.Text,
-		Json:       ToWireStruct(value.Json),
-		ToolCall:   ToWireAgentMessagePartToolCall(value.ToolCall),
-		ToolResult: ToWireAgentMessagePartToolResult(value.ToolResult),
-		ImageRef:   ToWireAgentMessagePartImageRef(value.ImageRef),
-	}
-	return out
+	return convertMessage(value, func(value *AgentMessagePart) *proto.AgentMessagePart {
+		out := &proto.AgentMessagePart{
+			Type:       proto.AgentMessagePartType(value.Type),
+			Text:       value.Text,
+			Json:       ToWireStruct(value.Json),
+			ToolCall:   ToWireAgentMessagePartToolCall(value.ToolCall),
+			ToolResult: ToWireAgentMessagePartToolResult(value.ToolResult),
+			ImageRef:   ToWireAgentMessagePartImageRef(value.ImageRef),
+		}
+		return out
+	})
 }
 
 func FromWireAgentMessagePart(value *proto.AgentMessagePart) *AgentMessagePart {
-	if value == nil {
-		return nil
-	}
-	out := &AgentMessagePart{
-		Type:       AgentMessagePartType(value.Type),
-		Text:       value.Text,
-		Json:       FromWireStruct(value.Json),
-		ToolCall:   FromWireAgentMessagePartToolCall(value.ToolCall),
-		ToolResult: FromWireAgentMessagePartToolResult(value.ToolResult),
-		ImageRef:   FromWireAgentMessagePartImageRef(value.ImageRef),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentMessagePart) *AgentMessagePart {
+		out := &AgentMessagePart{
+			Type:       AgentMessagePartType(value.Type),
+			Text:       value.Text,
+			Json:       FromWireStruct(value.Json),
+			ToolCall:   FromWireAgentMessagePartToolCall(value.ToolCall),
+			ToolResult: FromWireAgentMessagePartToolResult(value.ToolResult),
+			ImageRef:   FromWireAgentMessagePartImageRef(value.ImageRef),
+		}
+		return out
+	})
 }
 
 func ToWireAgentMessagePartImageRef(value *AgentMessagePartImageRef) *proto.AgentMessagePartImageRef {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentMessagePartImageRef{
-		Uri:      value.Uri,
-		MimeType: value.MimeType,
-	}
-	return out
+	return convertMessage(value, func(value *AgentMessagePartImageRef) *proto.AgentMessagePartImageRef {
+		out := &proto.AgentMessagePartImageRef{
+			Uri:      value.Uri,
+			MimeType: value.MimeType,
+		}
+		return out
+	})
 }
 
 func FromWireAgentMessagePartImageRef(value *proto.AgentMessagePartImageRef) *AgentMessagePartImageRef {
-	if value == nil {
-		return nil
-	}
-	out := &AgentMessagePartImageRef{
-		Uri:      value.Uri,
-		MimeType: value.MimeType,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentMessagePartImageRef) *AgentMessagePartImageRef {
+		out := &AgentMessagePartImageRef{
+			Uri:      value.Uri,
+			MimeType: value.MimeType,
+		}
+		return out
+	})
 }
 
 func ToWireAgentMessagePartToolCall(value *AgentMessagePartToolCall) *proto.AgentMessagePartToolCall {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentMessagePartToolCall{
-		Id:        value.Id,
-		ToolId:    value.ToolId,
-		Arguments: ToWireStruct(value.Arguments),
-	}
-	return out
+	return convertMessage(value, func(value *AgentMessagePartToolCall) *proto.AgentMessagePartToolCall {
+		out := &proto.AgentMessagePartToolCall{
+			Id:        value.Id,
+			ToolId:    value.ToolId,
+			Arguments: ToWireStruct(value.Arguments),
+		}
+		return out
+	})
 }
 
 func FromWireAgentMessagePartToolCall(value *proto.AgentMessagePartToolCall) *AgentMessagePartToolCall {
-	if value == nil {
-		return nil
-	}
-	out := &AgentMessagePartToolCall{
-		Id:        value.Id,
-		ToolId:    value.ToolId,
-		Arguments: FromWireStruct(value.Arguments),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentMessagePartToolCall) *AgentMessagePartToolCall {
+		out := &AgentMessagePartToolCall{
+			Id:        value.Id,
+			ToolId:    value.ToolId,
+			Arguments: FromWireStruct(value.Arguments),
+		}
+		return out
+	})
 }
 
 func ToWireAgentMessagePartToolResult(value *AgentMessagePartToolResult) *proto.AgentMessagePartToolResult {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentMessagePartToolResult{
-		ToolCallId: value.ToolCallId,
-		Status:     value.Status,
-		Content:    value.Content,
-		Output:     ToWireStruct(value.Output),
-	}
-	return out
+	return convertMessage(value, func(value *AgentMessagePartToolResult) *proto.AgentMessagePartToolResult {
+		out := &proto.AgentMessagePartToolResult{
+			ToolCallId: value.ToolCallId,
+			Status:     value.Status,
+			Content:    value.Content,
+			Output:     ToWireStruct(value.Output),
+		}
+		return out
+	})
 }
 
 func FromWireAgentMessagePartToolResult(value *proto.AgentMessagePartToolResult) *AgentMessagePartToolResult {
-	if value == nil {
-		return nil
-	}
-	out := &AgentMessagePartToolResult{
-		ToolCallId: value.ToolCallId,
-		Status:     value.Status,
-		Content:    value.Content,
-		Output:     FromWireStruct(value.Output),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentMessagePartToolResult) *AgentMessagePartToolResult {
+		out := &AgentMessagePartToolResult{
+			ToolCallId: value.ToolCallId,
+			Status:     value.Status,
+			Content:    value.Content,
+			Output:     FromWireStruct(value.Output),
+		}
+		return out
+	})
 }
 
 func ToWireAgentNoTools(value *AgentNoTools) *proto.AgentNoTools {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentNoTools{}
-	return out
+	return convertMessage(value, func(value *AgentNoTools) *proto.AgentNoTools {
+		out := &proto.AgentNoTools{}
+		return out
+	})
 }
 
 func FromWireAgentNoTools(value *proto.AgentNoTools) *AgentNoTools {
-	if value == nil {
-		return nil
-	}
-	out := &AgentNoTools{}
-	return out
+	return convertMessage(value, func(value *proto.AgentNoTools) *AgentNoTools {
+		out := &AgentNoTools{}
+		return out
+	})
 }
 
 func ToWireAgentOutput(value *AgentOutput) *proto.AgentOutput {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentOutput{}
-	switch variant := value.Kind.(type) {
-	case *AgentOutputKindText:
-		out.Kind = &proto.AgentOutput_Text{Text: ToWireAgentTextOutput(variant.Value)}
-	case *AgentOutputKindStructured:
-		out.Kind = &proto.AgentOutput_Structured{Structured: ToWireAgentStructuredOutput(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *AgentOutput) *proto.AgentOutput {
+		out := &proto.AgentOutput{}
+		switch variant := value.Kind.(type) {
+		case *AgentOutputKindText:
+			out.Kind = &proto.AgentOutput_Text{Text: ToWireAgentTextOutput(variant.Value)}
+		case *AgentOutputKindStructured:
+			out.Kind = &proto.AgentOutput_Structured{Structured: ToWireAgentStructuredOutput(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireAgentOutput(value *proto.AgentOutput) *AgentOutput {
-	if value == nil {
-		return nil
-	}
-	out := &AgentOutput{}
-	switch variant := value.Kind.(type) {
-	case *proto.AgentOutput_Text:
-		out.Kind = &AgentOutputKindText{Value: FromWireAgentTextOutput(variant.Text)}
-	case *proto.AgentOutput_Structured:
-		out.Kind = &AgentOutputKindStructured{Value: FromWireAgentStructuredOutput(variant.Structured)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentOutput) *AgentOutput {
+		out := &AgentOutput{}
+		switch variant := value.Kind.(type) {
+		case *proto.AgentOutput_Text:
+			out.Kind = &AgentOutputKindText{Value: FromWireAgentTextOutput(variant.Text)}
+		case *proto.AgentOutput_Structured:
+			out.Kind = &AgentOutputKindStructured{Value: FromWireAgentStructuredOutput(variant.Structured)}
+		}
+		return out
+	})
 }
 
 func ToWireAgentProviderCapabilities(value *AgentProviderCapabilities) *proto.AgentProviderCapabilities {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentProviderCapabilities{
-		StreamingText:             value.StreamingText,
-		ToolCalls:                 value.ToolCalls,
-		ParallelToolCalls:         value.ParallelToolCalls,
-		Interactions:              value.Interactions,
-		ResumableTurns:            value.ResumableTurns,
-		ReasoningSummaries:        value.ReasoningSummaries,
-		BoundedListHydration:      value.BoundedListHydration,
-		SupportsSessionStart:      value.SupportsSessionStart,
-		SupportsPreparedWorkspace: value.SupportsPreparedWorkspace,
-	}
-	for _, item := range value.SupportedToolSources {
-		out.SupportedToolSources = append(out.SupportedToolSources, proto.AgentToolSourceMode(item))
-	}
-	return out
+	return convertMessage(value, func(value *AgentProviderCapabilities) *proto.AgentProviderCapabilities {
+		out := &proto.AgentProviderCapabilities{
+			StreamingText:             value.StreamingText,
+			ToolCalls:                 value.ToolCalls,
+			ParallelToolCalls:         value.ParallelToolCalls,
+			Interactions:              value.Interactions,
+			ResumableTurns:            value.ResumableTurns,
+			ReasoningSummaries:        value.ReasoningSummaries,
+			BoundedListHydration:      value.BoundedListHydration,
+			SupportsSessionStart:      value.SupportsSessionStart,
+			SupportsPreparedWorkspace: value.SupportsPreparedWorkspace,
+		}
+		for _, item := range value.SupportedToolSources {
+			out.SupportedToolSources = append(out.SupportedToolSources, proto.AgentToolSourceMode(item))
+		}
+		return out
+	})
 }
 
 func FromWireAgentProviderCapabilities(value *proto.AgentProviderCapabilities) *AgentProviderCapabilities {
-	if value == nil {
-		return nil
-	}
-	out := &AgentProviderCapabilities{
-		StreamingText:             value.StreamingText,
-		ToolCalls:                 value.ToolCalls,
-		ParallelToolCalls:         value.ParallelToolCalls,
-		Interactions:              value.Interactions,
-		ResumableTurns:            value.ResumableTurns,
-		ReasoningSummaries:        value.ReasoningSummaries,
-		BoundedListHydration:      value.BoundedListHydration,
-		SupportsSessionStart:      value.SupportsSessionStart,
-		SupportsPreparedWorkspace: value.SupportsPreparedWorkspace,
-	}
-	for _, item := range value.SupportedToolSources {
-		out.SupportedToolSources = append(out.SupportedToolSources, AgentToolSourceMode(item))
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentProviderCapabilities) *AgentProviderCapabilities {
+		out := &AgentProviderCapabilities{
+			StreamingText:             value.StreamingText,
+			ToolCalls:                 value.ToolCalls,
+			ParallelToolCalls:         value.ParallelToolCalls,
+			Interactions:              value.Interactions,
+			ResumableTurns:            value.ResumableTurns,
+			ReasoningSummaries:        value.ReasoningSummaries,
+			BoundedListHydration:      value.BoundedListHydration,
+			SupportsSessionStart:      value.SupportsSessionStart,
+			SupportsPreparedWorkspace: value.SupportsPreparedWorkspace,
+		}
+		for _, item := range value.SupportedToolSources {
+			out.SupportedToolSources = append(out.SupportedToolSources, AgentToolSourceMode(item))
+		}
+		return out
+	})
 }
 
 func ToWireAgentSession(value *AgentSession) *proto.AgentSession {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentSession{
-		Id:                 value.Id,
-		ProviderName:       value.ProviderName,
-		Model:              value.Model,
-		ClientRef:          value.ClientRef,
-		State:              proto.AgentSessionState(value.State),
-		Metadata:           ToWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          ToWireTimestamp(value.CreatedAt),
-		UpdatedAt:          ToWireTimestamp(value.UpdatedAt),
-		LastTurnAt:         ToWireTimestamp(value.LastTurnAt),
-	}
-	return out
+	return convertMessage(value, func(value *AgentSession) *proto.AgentSession {
+		out := &proto.AgentSession{
+			Id:                 value.Id,
+			ProviderName:       value.ProviderName,
+			Model:              value.Model,
+			ClientRef:          value.ClientRef,
+			State:              proto.AgentSessionState(value.State),
+			Metadata:           ToWireStruct(value.Metadata),
+			CreatedBySubjectId: value.CreatedBySubjectId,
+			CreatedAt:          ToWireTimestamp(value.CreatedAt),
+			UpdatedAt:          ToWireTimestamp(value.UpdatedAt),
+			LastTurnAt:         ToWireTimestamp(value.LastTurnAt),
+		}
+		return out
+	})
 }
 
 func FromWireAgentSession(value *proto.AgentSession) *AgentSession {
-	if value == nil {
-		return nil
-	}
-	out := &AgentSession{
-		Id:                 value.Id,
-		ProviderName:       value.ProviderName,
-		Model:              value.Model,
-		ClientRef:          value.ClientRef,
-		State:              AgentSessionState(value.State),
-		Metadata:           FromWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          FromWireTimestamp(value.CreatedAt),
-		UpdatedAt:          FromWireTimestamp(value.UpdatedAt),
-		LastTurnAt:         FromWireTimestamp(value.LastTurnAt),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentSession) *AgentSession {
+		out := &AgentSession{
+			Id:                 value.Id,
+			ProviderName:       value.ProviderName,
+			Model:              value.Model,
+			ClientRef:          value.ClientRef,
+			State:              AgentSessionState(value.State),
+			Metadata:           FromWireStruct(value.Metadata),
+			CreatedBySubjectId: value.CreatedBySubjectId,
+			CreatedAt:          FromWireTimestamp(value.CreatedAt),
+			UpdatedAt:          FromWireTimestamp(value.UpdatedAt),
+			LastTurnAt:         FromWireTimestamp(value.LastTurnAt),
+		}
+		return out
+	})
 }
 
 func ToWireAgentSessionStartConfig(value *AgentSessionStartConfig) *proto.AgentSessionStartConfig {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentSessionStartConfig{}
-	appendMessageSlice(&out.Hooks, value.Hooks, ToWireAgentSessionStartHook)
-	return out
+	return convertMessage(value, func(value *AgentSessionStartConfig) *proto.AgentSessionStartConfig {
+		out := &proto.AgentSessionStartConfig{}
+		appendMessageSlice(&out.Hooks, value.Hooks, ToWireAgentSessionStartHook)
+		return out
+	})
 }
 
 func FromWireAgentSessionStartConfig(value *proto.AgentSessionStartConfig) *AgentSessionStartConfig {
-	if value == nil {
-		return nil
-	}
-	out := &AgentSessionStartConfig{}
-	appendMessageSlice(&out.Hooks, value.Hooks, FromWireAgentSessionStartHook)
-	return out
+	return convertMessage(value, func(value *proto.AgentSessionStartConfig) *AgentSessionStartConfig {
+		out := &AgentSessionStartConfig{}
+		appendMessageSlice(&out.Hooks, value.Hooks, FromWireAgentSessionStartHook)
+		return out
+	})
 }
 
 func ToWireAgentSessionStartHook(value *AgentSessionStartHook) *proto.AgentSessionStartHook {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentSessionStartHook{
-		Id:      value.Id,
-		Type:    value.Type,
-		Command: value.Command,
-		Cwd:     value.Cwd,
-		Timeout: value.Timeout,
-		Env:     value.Env,
-		Output:  ToWireAgentSessionStartHookOutput(value.Output),
-	}
-	return out
+	return convertMessage(value, func(value *AgentSessionStartHook) *proto.AgentSessionStartHook {
+		out := &proto.AgentSessionStartHook{
+			Id:      value.Id,
+			Type:    value.Type,
+			Command: value.Command,
+			Cwd:     value.Cwd,
+			Timeout: value.Timeout,
+			Env:     value.Env,
+			Output:  ToWireAgentSessionStartHookOutput(value.Output),
+		}
+		return out
+	})
 }
 
 func FromWireAgentSessionStartHook(value *proto.AgentSessionStartHook) *AgentSessionStartHook {
-	if value == nil {
-		return nil
-	}
-	out := &AgentSessionStartHook{
-		Id:      value.Id,
-		Type:    value.Type,
-		Command: value.Command,
-		Cwd:     value.Cwd,
-		Timeout: value.Timeout,
-		Env:     value.Env,
-		Output:  FromWireAgentSessionStartHookOutput(value.Output),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentSessionStartHook) *AgentSessionStartHook {
+		out := &AgentSessionStartHook{
+			Id:      value.Id,
+			Type:    value.Type,
+			Command: value.Command,
+			Cwd:     value.Cwd,
+			Timeout: value.Timeout,
+			Env:     value.Env,
+			Output:  FromWireAgentSessionStartHookOutput(value.Output),
+		}
+		return out
+	})
 }
 
 func ToWireAgentSessionStartHookOutput(value *AgentSessionStartHookOutput) *proto.AgentSessionStartHookOutput {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentSessionStartHookOutput{
-		AdditionalContext: value.AdditionalContext,
-		Metadata:          value.Metadata,
-	}
-	return out
+	return convertMessage(value, func(value *AgentSessionStartHookOutput) *proto.AgentSessionStartHookOutput {
+		out := &proto.AgentSessionStartHookOutput{
+			AdditionalContext: value.AdditionalContext,
+			Metadata:          value.Metadata,
+		}
+		return out
+	})
 }
 
 func FromWireAgentSessionStartHookOutput(value *proto.AgentSessionStartHookOutput) *AgentSessionStartHookOutput {
-	if value == nil {
-		return nil
-	}
-	out := &AgentSessionStartHookOutput{
-		AdditionalContext: value.AdditionalContext,
-		Metadata:          value.Metadata,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentSessionStartHookOutput) *AgentSessionStartHookOutput {
+		out := &AgentSessionStartHookOutput{
+			AdditionalContext: value.AdditionalContext,
+			Metadata:          value.Metadata,
+		}
+		return out
+	})
 }
 
 func ToWireAgentStructuredOutput(value *AgentStructuredOutput) *proto.AgentStructuredOutput {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentStructuredOutput{
-		Schema: ToWireStruct(value.Schema),
-	}
-	return out
+	return convertMessage(value, func(value *AgentStructuredOutput) *proto.AgentStructuredOutput {
+		out := &proto.AgentStructuredOutput{
+			Schema: ToWireStruct(value.Schema),
+		}
+		return out
+	})
 }
 
 func FromWireAgentStructuredOutput(value *proto.AgentStructuredOutput) *AgentStructuredOutput {
-	if value == nil {
-		return nil
-	}
-	out := &AgentStructuredOutput{
-		Schema: FromWireStruct(value.Schema),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentStructuredOutput) *AgentStructuredOutput {
+		out := &AgentStructuredOutput{
+			Schema: FromWireStruct(value.Schema),
+		}
+		return out
+	})
 }
 
 func ToWireAgentTextOutput(value *AgentTextOutput) *proto.AgentTextOutput {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentTextOutput{}
-	return out
+	return convertMessage(value, func(value *AgentTextOutput) *proto.AgentTextOutput {
+		out := &proto.AgentTextOutput{}
+		return out
+	})
 }
 
 func FromWireAgentTextOutput(value *proto.AgentTextOutput) *AgentTextOutput {
-	if value == nil {
-		return nil
-	}
-	out := &AgentTextOutput{}
-	return out
+	return convertMessage(value, func(value *proto.AgentTextOutput) *AgentTextOutput {
+		out := &AgentTextOutput{}
+		return out
+	})
 }
 
 func ToWireAgentToolConfig(value *AgentToolConfig) *proto.AgentToolConfig {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentToolConfig{}
-	switch variant := value.Source.(type) {
-	case *AgentToolConfigSourceNone:
-		out.Source = &proto.AgentToolConfig_None{None: ToWireAgentNoTools(variant.Value)}
-	case *AgentToolConfigSourceCatalog:
-		out.Source = &proto.AgentToolConfig_Catalog{Catalog: ToWireAgentCatalogToolConfig(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *AgentToolConfig) *proto.AgentToolConfig {
+		out := &proto.AgentToolConfig{}
+		switch variant := value.Source.(type) {
+		case *AgentToolConfigSourceNone:
+			out.Source = &proto.AgentToolConfig_None{None: ToWireAgentNoTools(variant.Value)}
+		case *AgentToolConfigSourceCatalog:
+			out.Source = &proto.AgentToolConfig_Catalog{Catalog: ToWireAgentCatalogToolConfig(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireAgentToolConfig(value *proto.AgentToolConfig) *AgentToolConfig {
-	if value == nil {
-		return nil
-	}
-	out := &AgentToolConfig{}
-	switch variant := value.Source.(type) {
-	case *proto.AgentToolConfig_None:
-		out.Source = &AgentToolConfigSourceNone{Value: FromWireAgentNoTools(variant.None)}
-	case *proto.AgentToolConfig_Catalog:
-		out.Source = &AgentToolConfigSourceCatalog{Value: FromWireAgentCatalogToolConfig(variant.Catalog)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentToolConfig) *AgentToolConfig {
+		out := &AgentToolConfig{}
+		switch variant := value.Source.(type) {
+		case *proto.AgentToolConfig_None:
+			out.Source = &AgentToolConfigSourceNone{Value: FromWireAgentNoTools(variant.None)}
+		case *proto.AgentToolConfig_Catalog:
+			out.Source = &AgentToolConfigSourceCatalog{Value: FromWireAgentCatalogToolConfig(variant.Catalog)}
+		}
+		return out
+	})
 }
 
 func ToWireAgentTurn(value *AgentTurn) *proto.AgentTurn {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentTurn{
-		Id:                 value.Id,
-		SessionId:          value.SessionId,
-		ProviderName:       value.ProviderName,
-		Model:              value.Model,
-		Status:             proto.AgentExecutionStatus(value.Status),
-		StatusMessage:      value.StatusMessage,
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          ToWireTimestamp(value.CreatedAt),
-		StartedAt:          ToWireTimestamp(value.StartedAt),
-		CompletedAt:        ToWireTimestamp(value.CompletedAt),
-		ExecutionRef:       value.ExecutionRef,
-	}
-	appendMessageSlice(&out.Messages, value.Messages, ToWireAgentMessage)
-	switch variant := value.Output.(type) {
-	case *AgentTurnOutputText:
-		out.Output = &proto.AgentTurn_Text{Text: ToWireAgentTurnTextOutput(variant.Value)}
-	case *AgentTurnOutputStructured:
-		out.Output = &proto.AgentTurn_Structured{Structured: ToWireAgentTurnStructuredOutput(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *AgentTurn) *proto.AgentTurn {
+		out := &proto.AgentTurn{
+			Id:                 value.Id,
+			SessionId:          value.SessionId,
+			ProviderName:       value.ProviderName,
+			Model:              value.Model,
+			Status:             proto.AgentExecutionStatus(value.Status),
+			StatusMessage:      value.StatusMessage,
+			CreatedBySubjectId: value.CreatedBySubjectId,
+			CreatedAt:          ToWireTimestamp(value.CreatedAt),
+			StartedAt:          ToWireTimestamp(value.StartedAt),
+			CompletedAt:        ToWireTimestamp(value.CompletedAt),
+			ExecutionRef:       value.ExecutionRef,
+		}
+		appendMessageSlice(&out.Messages, value.Messages, ToWireAgentMessage)
+		switch variant := value.Output.(type) {
+		case *AgentTurnOutputText:
+			out.Output = &proto.AgentTurn_Text{Text: ToWireAgentTurnTextOutput(variant.Value)}
+		case *AgentTurnOutputStructured:
+			out.Output = &proto.AgentTurn_Structured{Structured: ToWireAgentTurnStructuredOutput(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireAgentTurn(value *proto.AgentTurn) *AgentTurn {
-	if value == nil {
-		return nil
-	}
-	out := &AgentTurn{
-		Id:                 value.Id,
-		SessionId:          value.SessionId,
-		ProviderName:       value.ProviderName,
-		Model:              value.Model,
-		Status:             AgentExecutionStatus(value.Status),
-		StatusMessage:      value.StatusMessage,
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          FromWireTimestamp(value.CreatedAt),
-		StartedAt:          FromWireTimestamp(value.StartedAt),
-		CompletedAt:        FromWireTimestamp(value.CompletedAt),
-		ExecutionRef:       value.ExecutionRef,
-	}
-	appendMessageSlice(&out.Messages, value.Messages, FromWireAgentMessage)
-	switch variant := value.Output.(type) {
-	case *proto.AgentTurn_Text:
-		out.Output = &AgentTurnOutputText{Value: FromWireAgentTurnTextOutput(variant.Text)}
-	case *proto.AgentTurn_Structured:
-		out.Output = &AgentTurnOutputStructured{Value: FromWireAgentTurnStructuredOutput(variant.Structured)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentTurn) *AgentTurn {
+		out := &AgentTurn{
+			Id:                 value.Id,
+			SessionId:          value.SessionId,
+			ProviderName:       value.ProviderName,
+			Model:              value.Model,
+			Status:             AgentExecutionStatus(value.Status),
+			StatusMessage:      value.StatusMessage,
+			CreatedBySubjectId: value.CreatedBySubjectId,
+			CreatedAt:          FromWireTimestamp(value.CreatedAt),
+			StartedAt:          FromWireTimestamp(value.StartedAt),
+			CompletedAt:        FromWireTimestamp(value.CompletedAt),
+			ExecutionRef:       value.ExecutionRef,
+		}
+		appendMessageSlice(&out.Messages, value.Messages, FromWireAgentMessage)
+		switch variant := value.Output.(type) {
+		case *proto.AgentTurn_Text:
+			out.Output = &AgentTurnOutputText{Value: FromWireAgentTurnTextOutput(variant.Text)}
+		case *proto.AgentTurn_Structured:
+			out.Output = &AgentTurnOutputStructured{Value: FromWireAgentTurnStructuredOutput(variant.Structured)}
+		}
+		return out
+	})
 }
 
 func ToWireAgentTurnDisplay(value *AgentTurnDisplay) *proto.AgentTurnDisplay {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentTurnDisplay{
-		Kind:      value.Kind,
-		Phase:     value.Phase,
-		Text:      value.Text,
-		Label:     value.Label,
-		Ref:       value.Ref,
-		ParentRef: value.ParentRef,
-		Input:     ToWireValue(value.Input),
-		Output:    ToWireValue(value.Output),
-		Error:     ToWireValue(value.Error),
-		Action:    value.Action,
-		Format:    value.Format,
-		Language:  value.Language,
-	}
-	return out
+	return convertMessage(value, func(value *AgentTurnDisplay) *proto.AgentTurnDisplay {
+		out := &proto.AgentTurnDisplay{
+			Kind:      value.Kind,
+			Phase:     value.Phase,
+			Text:      value.Text,
+			Label:     value.Label,
+			Ref:       value.Ref,
+			ParentRef: value.ParentRef,
+			Input:     ToWireValue(value.Input),
+			Output:    ToWireValue(value.Output),
+			Error:     ToWireValue(value.Error),
+			Action:    value.Action,
+			Format:    value.Format,
+			Language:  value.Language,
+		}
+		return out
+	})
 }
 
 func FromWireAgentTurnDisplay(value *proto.AgentTurnDisplay) *AgentTurnDisplay {
-	if value == nil {
-		return nil
-	}
-	out := &AgentTurnDisplay{
-		Kind:      value.Kind,
-		Phase:     value.Phase,
-		Text:      value.Text,
-		Label:     value.Label,
-		Ref:       value.Ref,
-		ParentRef: value.ParentRef,
-		Input:     FromWireValue(value.Input),
-		Output:    FromWireValue(value.Output),
-		Error:     FromWireValue(value.Error),
-		Action:    value.Action,
-		Format:    value.Format,
-		Language:  value.Language,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentTurnDisplay) *AgentTurnDisplay {
+		out := &AgentTurnDisplay{
+			Kind:      value.Kind,
+			Phase:     value.Phase,
+			Text:      value.Text,
+			Label:     value.Label,
+			Ref:       value.Ref,
+			ParentRef: value.ParentRef,
+			Input:     FromWireValue(value.Input),
+			Output:    FromWireValue(value.Output),
+			Error:     FromWireValue(value.Error),
+			Action:    value.Action,
+			Format:    value.Format,
+			Language:  value.Language,
+		}
+		return out
+	})
 }
 
 func ToWireAgentTurnEvent(value *AgentTurnEvent) *proto.AgentTurnEvent {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentTurnEvent{
-		Id:         value.Id,
-		TurnId:     value.TurnId,
-		Seq:        value.Seq,
-		Type:       value.Type,
-		Source:     value.Source,
-		Visibility: value.Visibility,
-		Data:       ToWireStruct(value.Data),
-		CreatedAt:  ToWireTimestamp(value.CreatedAt),
-		Display:    ToWireAgentTurnDisplay(value.Display),
-	}
-	return out
+	return convertMessage(value, func(value *AgentTurnEvent) *proto.AgentTurnEvent {
+		out := &proto.AgentTurnEvent{
+			Id:         value.Id,
+			TurnId:     value.TurnId,
+			Seq:        value.Seq,
+			Type:       value.Type,
+			Source:     value.Source,
+			Visibility: value.Visibility,
+			Data:       ToWireStruct(value.Data),
+			CreatedAt:  ToWireTimestamp(value.CreatedAt),
+			Display:    ToWireAgentTurnDisplay(value.Display),
+		}
+		return out
+	})
 }
 
 func FromWireAgentTurnEvent(value *proto.AgentTurnEvent) *AgentTurnEvent {
-	if value == nil {
-		return nil
-	}
-	out := &AgentTurnEvent{
-		Id:         value.Id,
-		TurnId:     value.TurnId,
-		Seq:        value.Seq,
-		Type:       value.Type,
-		Source:     value.Source,
-		Visibility: value.Visibility,
-		Data:       FromWireStruct(value.Data),
-		CreatedAt:  FromWireTimestamp(value.CreatedAt),
-		Display:    FromWireAgentTurnDisplay(value.Display),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentTurnEvent) *AgentTurnEvent {
+		out := &AgentTurnEvent{
+			Id:         value.Id,
+			TurnId:     value.TurnId,
+			Seq:        value.Seq,
+			Type:       value.Type,
+			Source:     value.Source,
+			Visibility: value.Visibility,
+			Data:       FromWireStruct(value.Data),
+			CreatedAt:  FromWireTimestamp(value.CreatedAt),
+			Display:    FromWireAgentTurnDisplay(value.Display),
+		}
+		return out
+	})
 }
 
 func ToWireAgentTurnStructuredOutput(value *AgentTurnStructuredOutput) *proto.AgentTurnStructuredOutput {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentTurnStructuredOutput{
-		Text:  value.Text,
-		Value: ToWireStruct(value.Value),
-	}
-	return out
+	return convertMessage(value, func(value *AgentTurnStructuredOutput) *proto.AgentTurnStructuredOutput {
+		out := &proto.AgentTurnStructuredOutput{
+			Text:  value.Text,
+			Value: ToWireStruct(value.Value),
+		}
+		return out
+	})
 }
 
 func FromWireAgentTurnStructuredOutput(value *proto.AgentTurnStructuredOutput) *AgentTurnStructuredOutput {
-	if value == nil {
-		return nil
-	}
-	out := &AgentTurnStructuredOutput{
-		Text:  value.Text,
-		Value: FromWireStruct(value.Value),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentTurnStructuredOutput) *AgentTurnStructuredOutput {
+		out := &AgentTurnStructuredOutput{
+			Text:  value.Text,
+			Value: FromWireStruct(value.Value),
+		}
+		return out
+	})
 }
 
 func ToWireAgentTurnTextOutput(value *AgentTurnTextOutput) *proto.AgentTurnTextOutput {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentTurnTextOutput{
-		Text: value.Text,
-	}
-	return out
+	return convertMessage(value, func(value *AgentTurnTextOutput) *proto.AgentTurnTextOutput {
+		out := &proto.AgentTurnTextOutput{
+			Text: value.Text,
+		}
+		return out
+	})
 }
 
 func FromWireAgentTurnTextOutput(value *proto.AgentTurnTextOutput) *AgentTurnTextOutput {
-	if value == nil {
-		return nil
-	}
-	out := &AgentTurnTextOutput{
-		Text: value.Text,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentTurnTextOutput) *AgentTurnTextOutput {
+		out := &AgentTurnTextOutput{
+			Text: value.Text,
+		}
+		return out
+	})
 }
 
 func ToWireAgentWorkspace(value *AgentWorkspace) *proto.AgentWorkspace {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentWorkspace{
-		Cwd: value.Cwd,
-	}
-	appendMessageSlice(&out.Checkouts, value.Checkouts, ToWireAgentWorkspaceGitCheckout)
-	return out
+	return convertMessage(value, func(value *AgentWorkspace) *proto.AgentWorkspace {
+		out := &proto.AgentWorkspace{
+			Cwd: value.Cwd,
+		}
+		appendMessageSlice(&out.Checkouts, value.Checkouts, ToWireAgentWorkspaceGitCheckout)
+		return out
+	})
 }
 
 func FromWireAgentWorkspace(value *proto.AgentWorkspace) *AgentWorkspace {
-	if value == nil {
-		return nil
-	}
-	out := &AgentWorkspace{
-		Cwd: value.Cwd,
-	}
-	appendMessageSlice(&out.Checkouts, value.Checkouts, FromWireAgentWorkspaceGitCheckout)
-	return out
+	return convertMessage(value, func(value *proto.AgentWorkspace) *AgentWorkspace {
+		out := &AgentWorkspace{
+			Cwd: value.Cwd,
+		}
+		appendMessageSlice(&out.Checkouts, value.Checkouts, FromWireAgentWorkspaceGitCheckout)
+		return out
+	})
 }
 
 func ToWireAgentWorkspaceGitCheckout(value *AgentWorkspaceGitCheckout) *proto.AgentWorkspaceGitCheckout {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentWorkspaceGitCheckout{
-		Url:  value.Url,
-		Ref:  value.Ref,
-		Path: value.Path,
-	}
-	return out
+	return convertMessage(value, func(value *AgentWorkspaceGitCheckout) *proto.AgentWorkspaceGitCheckout {
+		out := &proto.AgentWorkspaceGitCheckout{
+			Url:  value.Url,
+			Ref:  value.Ref,
+			Path: value.Path,
+		}
+		return out
+	})
 }
 
 func FromWireAgentWorkspaceGitCheckout(value *proto.AgentWorkspaceGitCheckout) *AgentWorkspaceGitCheckout {
-	if value == nil {
-		return nil
-	}
-	out := &AgentWorkspaceGitCheckout{
-		Url:  value.Url,
-		Ref:  value.Ref,
-		Path: value.Path,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentWorkspaceGitCheckout) *AgentWorkspaceGitCheckout {
+		out := &AgentWorkspaceGitCheckout{
+			Url:  value.Url,
+			Ref:  value.Ref,
+			Path: value.Path,
+		}
+		return out
+	})
 }
 
 func ToWireCancelAgentProviderTurnRequest(value *CancelAgentProviderTurnRequest) *proto.CancelAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CancelAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
-		Reason:       value.Reason,
-		Context:      ToWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *CancelAgentProviderTurnRequest) *proto.CancelAgentProviderTurnRequest {
+		out := &proto.CancelAgentProviderTurnRequest{
+			TurnId:       value.TurnId,
+			Reason:       value.Reason,
+			Context:      ToWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func FromWireCancelAgentProviderTurnRequest(value *proto.CancelAgentProviderTurnRequest) *CancelAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CancelAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
-		Reason:       value.Reason,
-		Context:      FromWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CancelAgentProviderTurnRequest) *CancelAgentProviderTurnRequest {
+		out := &CancelAgentProviderTurnRequest{
+			TurnId:       value.TurnId,
+			Reason:       value.Reason,
+			Context:      FromWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func ToWireCreateAgentProviderSessionRequest(value *CreateAgentProviderSessionRequest) *proto.CreateAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:    value.IdempotencyKey,
-		Model:             value.Model,
-		ClientRef:         value.ClientRef,
-		Metadata:          ToWireStruct(value.Metadata),
-		SessionStart:      ToWireAgentSessionStartConfig(value.SessionStart),
-		PreparedWorkspace: ToWirePreparedAgentWorkspace(value.PreparedWorkspace),
-		ProviderName:      value.ProviderName,
-		Workspace:         ToWireAgentWorkspace(value.Workspace),
-		Context:           ToWireRequestContext(value.Context),
-		Tools:             ToWireAgentToolConfig(value.Tools),
-	}
-	return out
+	return convertMessage(value, func(value *CreateAgentProviderSessionRequest) *proto.CreateAgentProviderSessionRequest {
+		out := &proto.CreateAgentProviderSessionRequest{
+			IdempotencyKey:    value.IdempotencyKey,
+			Model:             value.Model,
+			ClientRef:         value.ClientRef,
+			Metadata:          ToWireStruct(value.Metadata),
+			SessionStart:      ToWireAgentSessionStartConfig(value.SessionStart),
+			PreparedWorkspace: ToWirePreparedAgentWorkspace(value.PreparedWorkspace),
+			ProviderName:      value.ProviderName,
+			Workspace:         ToWireAgentWorkspace(value.Workspace),
+			Context:           ToWireRequestContext(value.Context),
+			Tools:             ToWireAgentToolConfig(value.Tools),
+		}
+		return out
+	})
 }
 
 func FromWireCreateAgentProviderSessionRequest(value *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CreateAgentProviderSessionRequest{
-		IdempotencyKey:    value.IdempotencyKey,
-		Model:             value.Model,
-		ClientRef:         value.ClientRef,
-		Metadata:          FromWireStruct(value.Metadata),
-		SessionStart:      FromWireAgentSessionStartConfig(value.SessionStart),
-		PreparedWorkspace: FromWirePreparedAgentWorkspace(value.PreparedWorkspace),
-		ProviderName:      value.ProviderName,
-		Workspace:         FromWireAgentWorkspace(value.Workspace),
-		Context:           FromWireRequestContext(value.Context),
-		Tools:             FromWireAgentToolConfig(value.Tools),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
+		out := &CreateAgentProviderSessionRequest{
+			IdempotencyKey:    value.IdempotencyKey,
+			Model:             value.Model,
+			ClientRef:         value.ClientRef,
+			Metadata:          FromWireStruct(value.Metadata),
+			SessionStart:      FromWireAgentSessionStartConfig(value.SessionStart),
+			PreparedWorkspace: FromWirePreparedAgentWorkspace(value.PreparedWorkspace),
+			ProviderName:      value.ProviderName,
+			Workspace:         FromWireAgentWorkspace(value.Workspace),
+			Context:           FromWireRequestContext(value.Context),
+			Tools:             FromWireAgentToolConfig(value.Tools),
+		}
+		return out
+	})
 }
 
 func ToWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest) *proto.CreateAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateAgentProviderTurnRequest{
-		TurnId:         value.TurnId,
-		SessionId:      value.SessionId,
-		IdempotencyKey: value.IdempotencyKey,
-		Model:          value.Model,
-		Metadata:       ToWireStruct(value.Metadata),
-		ExecutionRef:   value.ExecutionRef,
-		ModelOptions:   ToWireStruct(value.ModelOptions),
-		TimeoutSeconds: value.TimeoutSeconds,
-		Output:         ToWireAgentOutput(value.Output),
-		Context:        ToWireRequestContext(value.Context),
-		ProviderName:   value.ProviderName,
-	}
-	appendMessageSlice(&out.Messages, value.Messages, ToWireAgentMessage)
-	return out
+	return convertMessage(value, func(value *CreateAgentProviderTurnRequest) *proto.CreateAgentProviderTurnRequest {
+		out := &proto.CreateAgentProviderTurnRequest{
+			TurnId:         value.TurnId,
+			SessionId:      value.SessionId,
+			IdempotencyKey: value.IdempotencyKey,
+			Model:          value.Model,
+			Metadata:       ToWireStruct(value.Metadata),
+			ExecutionRef:   value.ExecutionRef,
+			ModelOptions:   ToWireStruct(value.ModelOptions),
+			TimeoutSeconds: value.TimeoutSeconds,
+			Output:         ToWireAgentOutput(value.Output),
+			Context:        ToWireRequestContext(value.Context),
+			ProviderName:   value.ProviderName,
+		}
+		appendMessageSlice(&out.Messages, value.Messages, ToWireAgentMessage)
+		return out
+	})
 }
 
 func FromWireCreateAgentProviderTurnRequest(value *proto.CreateAgentProviderTurnRequest) *CreateAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CreateAgentProviderTurnRequest{
-		TurnId:         value.TurnId,
-		SessionId:      value.SessionId,
-		IdempotencyKey: value.IdempotencyKey,
-		Model:          value.Model,
-		Metadata:       FromWireStruct(value.Metadata),
-		ExecutionRef:   value.ExecutionRef,
-		ModelOptions:   FromWireStruct(value.ModelOptions),
-		TimeoutSeconds: value.TimeoutSeconds,
-		Output:         FromWireAgentOutput(value.Output),
-		Context:        FromWireRequestContext(value.Context),
-		ProviderName:   value.ProviderName,
-	}
-	appendMessageSlice(&out.Messages, value.Messages, FromWireAgentMessage)
-	return out
+	return convertMessage(value, func(value *proto.CreateAgentProviderTurnRequest) *CreateAgentProviderTurnRequest {
+		out := &CreateAgentProviderTurnRequest{
+			TurnId:         value.TurnId,
+			SessionId:      value.SessionId,
+			IdempotencyKey: value.IdempotencyKey,
+			Model:          value.Model,
+			Metadata:       FromWireStruct(value.Metadata),
+			ExecutionRef:   value.ExecutionRef,
+			ModelOptions:   FromWireStruct(value.ModelOptions),
+			TimeoutSeconds: value.TimeoutSeconds,
+			Output:         FromWireAgentOutput(value.Output),
+			Context:        FromWireRequestContext(value.Context),
+			ProviderName:   value.ProviderName,
+		}
+		appendMessageSlice(&out.Messages, value.Messages, FromWireAgentMessage)
+		return out
+	})
 }
 
 func ToWireGetAgentProviderCapabilitiesRequest(value *GetAgentProviderCapabilitiesRequest) *proto.GetAgentProviderCapabilitiesRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetAgentProviderCapabilitiesRequest{}
-	return out
+	return convertMessage(value, func(value *GetAgentProviderCapabilitiesRequest) *proto.GetAgentProviderCapabilitiesRequest {
+		out := &proto.GetAgentProviderCapabilitiesRequest{}
+		return out
+	})
 }
 
 func FromWireGetAgentProviderCapabilitiesRequest(value *proto.GetAgentProviderCapabilitiesRequest) *GetAgentProviderCapabilitiesRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetAgentProviderCapabilitiesRequest{}
-	return out
+	return convertMessage(value, func(value *proto.GetAgentProviderCapabilitiesRequest) *GetAgentProviderCapabilitiesRequest {
+		out := &GetAgentProviderCapabilitiesRequest{}
+		return out
+	})
 }
 
 func ToWireGetAgentProviderInteractionRequest(value *GetAgentProviderInteractionRequest) *proto.GetAgentProviderInteractionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
-		Context:       ToWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *GetAgentProviderInteractionRequest) *proto.GetAgentProviderInteractionRequest {
+		out := &proto.GetAgentProviderInteractionRequest{
+			InteractionId: value.InteractionId,
+			Context:       ToWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func FromWireGetAgentProviderInteractionRequest(value *proto.GetAgentProviderInteractionRequest) *GetAgentProviderInteractionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
-		Context:       FromWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetAgentProviderInteractionRequest) *GetAgentProviderInteractionRequest {
+		out := &GetAgentProviderInteractionRequest{
+			InteractionId: value.InteractionId,
+			Context:       FromWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func ToWireGetAgentProviderSessionRequest(value *GetAgentProviderSessionRequest) *proto.GetAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
-		Context:      ToWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *GetAgentProviderSessionRequest) *proto.GetAgentProviderSessionRequest {
+		out := &proto.GetAgentProviderSessionRequest{
+			SessionId:    value.SessionId,
+			Context:      ToWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func FromWireGetAgentProviderSessionRequest(value *proto.GetAgentProviderSessionRequest) *GetAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
-		Context:      FromWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetAgentProviderSessionRequest) *GetAgentProviderSessionRequest {
+		out := &GetAgentProviderSessionRequest{
+			SessionId:    value.SessionId,
+			Context:      FromWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireGetAgentProviderTurnRequest(value *GetAgentProviderTurnRequest) *proto.GetAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
-		Context:      ToWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *GetAgentProviderTurnRequest) *proto.GetAgentProviderTurnRequest {
+		out := &proto.GetAgentProviderTurnRequest{
+			TurnId:       value.TurnId,
+			Context:      ToWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func FromWireGetAgentProviderTurnRequest(value *proto.GetAgentProviderTurnRequest) *GetAgentProviderTurnRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
-		Context:      FromWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetAgentProviderTurnRequest) *GetAgentProviderTurnRequest {
+		out := &GetAgentProviderTurnRequest{
+			TurnId:       value.TurnId,
+			Context:      FromWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderInteractionsRequest(value *ListAgentProviderInteractionsRequest) *proto.ListAgentProviderInteractionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderInteractionsRequest{
-		TurnId:       value.TurnId,
-		Context:      ToWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *ListAgentProviderInteractionsRequest) *proto.ListAgentProviderInteractionsRequest {
+		out := &proto.ListAgentProviderInteractionsRequest{
+			TurnId:       value.TurnId,
+			Context:      ToWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func FromWireListAgentProviderInteractionsRequest(value *proto.ListAgentProviderInteractionsRequest) *ListAgentProviderInteractionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListAgentProviderInteractionsRequest{
-		TurnId:       value.TurnId,
-		Context:      FromWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListAgentProviderInteractionsRequest) *ListAgentProviderInteractionsRequest {
+		out := &ListAgentProviderInteractionsRequest{
+			TurnId:       value.TurnId,
+			Context:      FromWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderInteractionsResponse(value *ListAgentProviderInteractionsResponse) *proto.ListAgentProviderInteractionsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderInteractionsResponse{}
-	appendMessageSlice(&out.Interactions, value.Interactions, ToWireAgentInteraction)
-	return out
+	return convertMessage(value, func(value *ListAgentProviderInteractionsResponse) *proto.ListAgentProviderInteractionsResponse {
+		out := &proto.ListAgentProviderInteractionsResponse{}
+		appendMessageSlice(&out.Interactions, value.Interactions, ToWireAgentInteraction)
+		return out
+	})
 }
 
 func FromWireListAgentProviderInteractionsResponse(value *proto.ListAgentProviderInteractionsResponse) *ListAgentProviderInteractionsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListAgentProviderInteractionsResponse{}
-	appendMessageSlice(&out.Interactions, value.Interactions, FromWireAgentInteraction)
-	return out
+	return convertMessage(value, func(value *proto.ListAgentProviderInteractionsResponse) *ListAgentProviderInteractionsResponse {
+		out := &ListAgentProviderInteractionsResponse{}
+		appendMessageSlice(&out.Interactions, value.Interactions, FromWireAgentInteraction)
+		return out
+	})
 }
 
 func ToWireListAgentProviderSessionsRequest(value *ListAgentProviderSessionsRequest) *proto.ListAgentProviderSessionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderSessionsRequest{
-		SessionIds:   value.SessionIds,
-		State:        proto.AgentSessionState(value.State),
-		Limit:        value.Limit,
-		SummaryOnly:  value.SummaryOnly,
-		ProviderName: value.ProviderName,
-		Context:      ToWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *ListAgentProviderSessionsRequest) *proto.ListAgentProviderSessionsRequest {
+		out := &proto.ListAgentProviderSessionsRequest{
+			SessionIds:   value.SessionIds,
+			State:        proto.AgentSessionState(value.State),
+			Limit:        value.Limit,
+			SummaryOnly:  value.SummaryOnly,
+			ProviderName: value.ProviderName,
+			Context:      ToWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func FromWireListAgentProviderSessionsRequest(value *proto.ListAgentProviderSessionsRequest) *ListAgentProviderSessionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListAgentProviderSessionsRequest{
-		SessionIds:   value.SessionIds,
-		State:        AgentSessionState(value.State),
-		Limit:        value.Limit,
-		SummaryOnly:  value.SummaryOnly,
-		ProviderName: value.ProviderName,
-		Context:      FromWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListAgentProviderSessionsRequest) *ListAgentProviderSessionsRequest {
+		out := &ListAgentProviderSessionsRequest{
+			SessionIds:   value.SessionIds,
+			State:        AgentSessionState(value.State),
+			Limit:        value.Limit,
+			SummaryOnly:  value.SummaryOnly,
+			ProviderName: value.ProviderName,
+			Context:      FromWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderSessionsResponse(value *ListAgentProviderSessionsResponse) *proto.ListAgentProviderSessionsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderSessionsResponse{}
-	appendMessageSlice(&out.Sessions, value.Sessions, ToWireAgentSession)
-	return out
+	return convertMessage(value, func(value *ListAgentProviderSessionsResponse) *proto.ListAgentProviderSessionsResponse {
+		out := &proto.ListAgentProviderSessionsResponse{}
+		appendMessageSlice(&out.Sessions, value.Sessions, ToWireAgentSession)
+		return out
+	})
 }
 
 func FromWireListAgentProviderSessionsResponse(value *proto.ListAgentProviderSessionsResponse) *ListAgentProviderSessionsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListAgentProviderSessionsResponse{}
-	appendMessageSlice(&out.Sessions, value.Sessions, FromWireAgentSession)
-	return out
+	return convertMessage(value, func(value *proto.ListAgentProviderSessionsResponse) *ListAgentProviderSessionsResponse {
+		out := &ListAgentProviderSessionsResponse{}
+		appendMessageSlice(&out.Sessions, value.Sessions, FromWireAgentSession)
+		return out
+	})
 }
 
 func ToWireListAgentProviderTurnEventsRequest(value *ListAgentProviderTurnEventsRequest) *proto.ListAgentProviderTurnEventsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderTurnEventsRequest{
-		TurnId:       value.TurnId,
-		AfterSeq:     value.AfterSeq,
-		Limit:        value.Limit,
-		Context:      ToWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *ListAgentProviderTurnEventsRequest) *proto.ListAgentProviderTurnEventsRequest {
+		out := &proto.ListAgentProviderTurnEventsRequest{
+			TurnId:       value.TurnId,
+			AfterSeq:     value.AfterSeq,
+			Limit:        value.Limit,
+			Context:      ToWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func FromWireListAgentProviderTurnEventsRequest(value *proto.ListAgentProviderTurnEventsRequest) *ListAgentProviderTurnEventsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListAgentProviderTurnEventsRequest{
-		TurnId:       value.TurnId,
-		AfterSeq:     value.AfterSeq,
-		Limit:        value.Limit,
-		Context:      FromWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListAgentProviderTurnEventsRequest) *ListAgentProviderTurnEventsRequest {
+		out := &ListAgentProviderTurnEventsRequest{
+			TurnId:       value.TurnId,
+			AfterSeq:     value.AfterSeq,
+			Limit:        value.Limit,
+			Context:      FromWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderTurnEventsResponse(value *ListAgentProviderTurnEventsResponse) *proto.ListAgentProviderTurnEventsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderTurnEventsResponse{}
-	appendMessageSlice(&out.Events, value.Events, ToWireAgentTurnEvent)
-	return out
+	return convertMessage(value, func(value *ListAgentProviderTurnEventsResponse) *proto.ListAgentProviderTurnEventsResponse {
+		out := &proto.ListAgentProviderTurnEventsResponse{}
+		appendMessageSlice(&out.Events, value.Events, ToWireAgentTurnEvent)
+		return out
+	})
 }
 
 func FromWireListAgentProviderTurnEventsResponse(value *proto.ListAgentProviderTurnEventsResponse) *ListAgentProviderTurnEventsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListAgentProviderTurnEventsResponse{}
-	appendMessageSlice(&out.Events, value.Events, FromWireAgentTurnEvent)
-	return out
+	return convertMessage(value, func(value *proto.ListAgentProviderTurnEventsResponse) *ListAgentProviderTurnEventsResponse {
+		out := &ListAgentProviderTurnEventsResponse{}
+		appendMessageSlice(&out.Events, value.Events, FromWireAgentTurnEvent)
+		return out
+	})
 }
 
 func ToWireListAgentProviderTurnsRequest(value *ListAgentProviderTurnsRequest) *proto.ListAgentProviderTurnsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderTurnsRequest{
-		SessionId:    value.SessionId,
-		TurnIds:      value.TurnIds,
-		Status:       proto.AgentExecutionStatus(value.Status),
-		Limit:        value.Limit,
-		SummaryOnly:  value.SummaryOnly,
-		Context:      ToWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *ListAgentProviderTurnsRequest) *proto.ListAgentProviderTurnsRequest {
+		out := &proto.ListAgentProviderTurnsRequest{
+			SessionId:    value.SessionId,
+			TurnIds:      value.TurnIds,
+			Status:       proto.AgentExecutionStatus(value.Status),
+			Limit:        value.Limit,
+			SummaryOnly:  value.SummaryOnly,
+			Context:      ToWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func FromWireListAgentProviderTurnsRequest(value *proto.ListAgentProviderTurnsRequest) *ListAgentProviderTurnsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListAgentProviderTurnsRequest{
-		SessionId:    value.SessionId,
-		TurnIds:      value.TurnIds,
-		Status:       AgentExecutionStatus(value.Status),
-		Limit:        value.Limit,
-		SummaryOnly:  value.SummaryOnly,
-		Context:      FromWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListAgentProviderTurnsRequest) *ListAgentProviderTurnsRequest {
+		out := &ListAgentProviderTurnsRequest{
+			SessionId:    value.SessionId,
+			TurnIds:      value.TurnIds,
+			Status:       AgentExecutionStatus(value.Status),
+			Limit:        value.Limit,
+			SummaryOnly:  value.SummaryOnly,
+			Context:      FromWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireListAgentProviderTurnsResponse(value *ListAgentProviderTurnsResponse) *proto.ListAgentProviderTurnsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListAgentProviderTurnsResponse{}
-	appendMessageSlice(&out.Turns, value.Turns, ToWireAgentTurn)
-	return out
+	return convertMessage(value, func(value *ListAgentProviderTurnsResponse) *proto.ListAgentProviderTurnsResponse {
+		out := &proto.ListAgentProviderTurnsResponse{}
+		appendMessageSlice(&out.Turns, value.Turns, ToWireAgentTurn)
+		return out
+	})
 }
 
 func FromWireListAgentProviderTurnsResponse(value *proto.ListAgentProviderTurnsResponse) *ListAgentProviderTurnsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListAgentProviderTurnsResponse{}
-	appendMessageSlice(&out.Turns, value.Turns, FromWireAgentTurn)
-	return out
+	return convertMessage(value, func(value *proto.ListAgentProviderTurnsResponse) *ListAgentProviderTurnsResponse {
+		out := &ListAgentProviderTurnsResponse{}
+		appendMessageSlice(&out.Turns, value.Turns, FromWireAgentTurn)
+		return out
+	})
 }
 
 func ToWireListedAgentTool(value *ListedAgentTool) *proto.ListedAgentTool {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListedAgentTool{
-		Id:           value.Id,
-		McpName:      value.McpName,
-		Title:        value.Title,
-		Description:  value.Description,
-		InputSchema:  value.InputSchema,
-		OutputSchema: value.OutputSchema,
-		Annotations:  ToWireOperationAnnotations(value.Annotations),
-		Ref:          ToWireAgentToolRef(value.Ref),
-		Tags:         value.Tags,
-		SearchText:   value.SearchText,
-	}
-	return out
+	return convertMessage(value, func(value *ListedAgentTool) *proto.ListedAgentTool {
+		out := &proto.ListedAgentTool{
+			Id:           value.Id,
+			McpName:      value.McpName,
+			Title:        value.Title,
+			Description:  value.Description,
+			InputSchema:  value.InputSchema,
+			OutputSchema: value.OutputSchema,
+			Annotations:  ToWireOperationAnnotations(value.Annotations),
+			Ref:          ToWireAgentToolRef(value.Ref),
+			Tags:         value.Tags,
+			SearchText:   value.SearchText,
+		}
+		return out
+	})
 }
 
 func FromWireListedAgentTool(value *proto.ListedAgentTool) *ListedAgentTool {
-	if value == nil {
-		return nil
-	}
-	out := &ListedAgentTool{
-		Id:           value.Id,
-		McpName:      value.McpName,
-		Title:        value.Title,
-		Description:  value.Description,
-		InputSchema:  value.InputSchema,
-		OutputSchema: value.OutputSchema,
-		Annotations:  FromWireOperationAnnotations(value.Annotations),
-		Ref:          FromWireAgentToolRef(value.Ref),
-		Tags:         value.Tags,
-		SearchText:   value.SearchText,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListedAgentTool) *ListedAgentTool {
+		out := &ListedAgentTool{
+			Id:           value.Id,
+			McpName:      value.McpName,
+			Title:        value.Title,
+			Description:  value.Description,
+			InputSchema:  value.InputSchema,
+			OutputSchema: value.OutputSchema,
+			Annotations:  FromWireOperationAnnotations(value.Annotations),
+			Ref:          FromWireAgentToolRef(value.Ref),
+			Tags:         value.Tags,
+			SearchText:   value.SearchText,
+		}
+		return out
+	})
 }
 
 func ToWirePreparedAgentWorkspace(value *PreparedAgentWorkspace) *proto.PreparedAgentWorkspace {
-	if value == nil {
-		return nil
-	}
-	out := &proto.PreparedAgentWorkspace{
-		Root: value.Root,
-		Cwd:  value.Cwd,
-	}
-	return out
+	return convertMessage(value, func(value *PreparedAgentWorkspace) *proto.PreparedAgentWorkspace {
+		out := &proto.PreparedAgentWorkspace{
+			Root: value.Root,
+			Cwd:  value.Cwd,
+		}
+		return out
+	})
 }
 
 func FromWirePreparedAgentWorkspace(value *proto.PreparedAgentWorkspace) *PreparedAgentWorkspace {
-	if value == nil {
-		return nil
-	}
-	out := &PreparedAgentWorkspace{
-		Root: value.Root,
-		Cwd:  value.Cwd,
-	}
-	return out
+	return convertMessage(value, func(value *proto.PreparedAgentWorkspace) *PreparedAgentWorkspace {
+		out := &PreparedAgentWorkspace{
+			Root: value.Root,
+			Cwd:  value.Cwd,
+		}
+		return out
+	})
 }
 
 func ToWireResolveAgentProviderInteractionRequest(value *ResolveAgentProviderInteractionRequest) *proto.ResolveAgentProviderInteractionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ResolveAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
-		Resolution:    ToWireStruct(value.Resolution),
-		TurnId:        value.TurnId,
-		Context:       ToWireRequestContext(value.Context),
-		ProviderName:  value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *ResolveAgentProviderInteractionRequest) *proto.ResolveAgentProviderInteractionRequest {
+		out := &proto.ResolveAgentProviderInteractionRequest{
+			InteractionId: value.InteractionId,
+			Resolution:    ToWireStruct(value.Resolution),
+			TurnId:        value.TurnId,
+			Context:       ToWireRequestContext(value.Context),
+			ProviderName:  value.ProviderName,
+		}
+		return out
+	})
 }
 
 func FromWireResolveAgentProviderInteractionRequest(value *proto.ResolveAgentProviderInteractionRequest) *ResolveAgentProviderInteractionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ResolveAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
-		Resolution:    FromWireStruct(value.Resolution),
-		TurnId:        value.TurnId,
-		Context:       FromWireRequestContext(value.Context),
-		ProviderName:  value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ResolveAgentProviderInteractionRequest) *ResolveAgentProviderInteractionRequest {
+		out := &ResolveAgentProviderInteractionRequest{
+			InteractionId: value.InteractionId,
+			Resolution:    FromWireStruct(value.Resolution),
+			TurnId:        value.TurnId,
+			Context:       FromWireRequestContext(value.Context),
+			ProviderName:  value.ProviderName,
+		}
+		return out
+	})
 }
 
 func ToWireUpdateAgentProviderSessionRequest(value *UpdateAgentProviderSessionRequest) *proto.UpdateAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.UpdateAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
-		ClientRef:    value.ClientRef,
-		State:        proto.AgentSessionState(value.State),
-		Metadata:     ToWireStruct(value.Metadata),
-		Context:      ToWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *UpdateAgentProviderSessionRequest) *proto.UpdateAgentProviderSessionRequest {
+		out := &proto.UpdateAgentProviderSessionRequest{
+			SessionId:    value.SessionId,
+			ClientRef:    value.ClientRef,
+			State:        proto.AgentSessionState(value.State),
+			Metadata:     ToWireStruct(value.Metadata),
+			Context:      ToWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }
 
 func FromWireUpdateAgentProviderSessionRequest(value *proto.UpdateAgentProviderSessionRequest) *UpdateAgentProviderSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &UpdateAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
-		ClientRef:    value.ClientRef,
-		State:        AgentSessionState(value.State),
-		Metadata:     FromWireStruct(value.Metadata),
-		Context:      FromWireRequestContext(value.Context),
-		ProviderName: value.ProviderName,
-	}
-	return out
+	return convertMessage(value, func(value *proto.UpdateAgentProviderSessionRequest) *UpdateAgentProviderSessionRequest {
+		out := &UpdateAgentProviderSessionRequest{
+			SessionId:    value.SessionId,
+			ClientRef:    value.ClientRef,
+			State:        AgentSessionState(value.State),
+			Metadata:     FromWireStruct(value.Metadata),
+			Context:      FromWireRequestContext(value.Context),
+			ProviderName: value.ProviderName,
+		}
+		return out
+	})
 }

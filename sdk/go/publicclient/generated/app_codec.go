@@ -8,34 +8,32 @@ import (
 )
 
 func ToWireAppInvokeGraphQLRequest(value *AppInvokeGraphQLRequest) *proto.AppInvokeGraphQLRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AppInvokeGraphQLRequest{
-		App:            value.App,
-		Document:       value.Document,
-		Variables:      gestaltclient.ToWireStruct(value.Variables),
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		IdempotencyKey: value.IdempotencyKey,
-		Headers:        value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *AppInvokeGraphQLRequest) *proto.AppInvokeGraphQLRequest {
+		out := &proto.AppInvokeGraphQLRequest{
+			App:            value.App,
+			Document:       value.Document,
+			Variables:      gestaltclient.ToWireStruct(value.Variables),
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			IdempotencyKey: value.IdempotencyKey,
+			Headers:        value.Headers,
+		}
+		return out
+	})
 }
 
 func ToWireAppInvokeRequest(value *AppInvokeRequest) *proto.AppInvokeRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AppInvokeRequest{
-		App:            value.App,
-		Operation:      value.Operation,
-		Params:         gestaltclient.ToWireStruct(value.Params),
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		IdempotencyKey: value.IdempotencyKey,
-		CredentialMode: value.CredentialMode,
-		Headers:        value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *AppInvokeRequest) *proto.AppInvokeRequest {
+		out := &proto.AppInvokeRequest{
+			App:            value.App,
+			Operation:      value.Operation,
+			Params:         gestaltclient.ToWireStruct(value.Params),
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			IdempotencyKey: value.IdempotencyKey,
+			CredentialMode: value.CredentialMode,
+			Headers:        value.Headers,
+		}
+		return out
+	})
 }

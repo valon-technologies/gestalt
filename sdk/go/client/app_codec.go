@@ -7,955 +7,887 @@ import (
 )
 
 func ToWireAccessContext(value *AccessContext) *proto.AccessContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AccessContext{
-		Policy: value.Policy,
-		Role:   value.Role,
-	}
-	return out
+	return convertMessage(value, func(value *AccessContext) *proto.AccessContext {
+		out := &proto.AccessContext{
+			Policy: value.Policy,
+			Role:   value.Role,
+		}
+		return out
+	})
 }
 
 func FromWireAccessContext(value *proto.AccessContext) *AccessContext {
-	if value == nil {
-		return nil
-	}
-	out := &AccessContext{
-		Policy: value.Policy,
-		Role:   value.Role,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AccessContext) *AccessContext {
+		out := &AccessContext{
+			Policy: value.Policy,
+			Role:   value.Role,
+		}
+		return out
+	})
 }
 
 func ToWireAgentInvocationContext(value *AgentInvocationContext) *proto.AgentInvocationContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentInvocationContext{
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-		TurnId:       value.TurnId,
-	}
-	return out
+	return convertMessage(value, func(value *AgentInvocationContext) *proto.AgentInvocationContext {
+		out := &proto.AgentInvocationContext{
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+			TurnId:       value.TurnId,
+		}
+		return out
+	})
 }
 
 func FromWireAgentInvocationContext(value *proto.AgentInvocationContext) *AgentInvocationContext {
-	if value == nil {
-		return nil
-	}
-	out := &AgentInvocationContext{
-		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-		TurnId:       value.TurnId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentInvocationContext) *AgentInvocationContext {
+		out := &AgentInvocationContext{
+			ProviderName: value.ProviderName,
+			SessionId:    value.SessionId,
+			TurnId:       value.TurnId,
+		}
+		return out
+	})
 }
 
 func ToWireAgentToolRef(value *AgentToolRef) *proto.AgentToolRef {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AgentToolRef{
-		App:            value.App,
-		Operation:      value.Operation,
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		Title:          value.Title,
-		Description:    value.Description,
-		CredentialMode: value.CredentialMode,
-		System:         value.System,
-		RunAs:          ToWireSubjectContext(value.RunAs),
-	}
-	return out
+	return convertMessage(value, func(value *AgentToolRef) *proto.AgentToolRef {
+		out := &proto.AgentToolRef{
+			App:            value.App,
+			Operation:      value.Operation,
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			Title:          value.Title,
+			Description:    value.Description,
+			CredentialMode: value.CredentialMode,
+			System:         value.System,
+			RunAs:          ToWireSubjectContext(value.RunAs),
+		}
+		return out
+	})
 }
 
 func FromWireAgentToolRef(value *proto.AgentToolRef) *AgentToolRef {
-	if value == nil {
-		return nil
-	}
-	out := &AgentToolRef{
-		App:            value.App,
-		Operation:      value.Operation,
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		Title:          value.Title,
-		Description:    value.Description,
-		CredentialMode: value.CredentialMode,
-		System:         value.System,
-		RunAs:          FromWireSubjectContext(value.RunAs),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AgentToolRef) *AgentToolRef {
+		out := &AgentToolRef{
+			App:            value.App,
+			Operation:      value.Operation,
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			Title:          value.Title,
+			Description:    value.Description,
+			CredentialMode: value.CredentialMode,
+			System:         value.System,
+			RunAs:          FromWireSubjectContext(value.RunAs),
+		}
+		return out
+	})
 }
 
 func ToWireAppInvokeGraphQLRequest(value *AppInvokeGraphQLRequest) *proto.AppInvokeGraphQLRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AppInvokeGraphQLRequest{
-		App:            value.App,
-		Document:       value.Document,
-		Variables:      ToWireStruct(value.Variables),
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		IdempotencyKey: value.IdempotencyKey,
-		Context:        ToWireRequestContext(value.Context),
-		Headers:        value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *AppInvokeGraphQLRequest) *proto.AppInvokeGraphQLRequest {
+		out := &proto.AppInvokeGraphQLRequest{
+			App:            value.App,
+			Document:       value.Document,
+			Variables:      ToWireStruct(value.Variables),
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			IdempotencyKey: value.IdempotencyKey,
+			Context:        ToWireRequestContext(value.Context),
+			Headers:        value.Headers,
+		}
+		return out
+	})
 }
 
 func FromWireAppInvokeGraphQLRequest(value *proto.AppInvokeGraphQLRequest) *AppInvokeGraphQLRequest {
-	if value == nil {
-		return nil
-	}
-	out := &AppInvokeGraphQLRequest{
-		App:            value.App,
-		Document:       value.Document,
-		Variables:      FromWireStruct(value.Variables),
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		IdempotencyKey: value.IdempotencyKey,
-		Context:        FromWireRequestContext(value.Context),
-		Headers:        value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AppInvokeGraphQLRequest) *AppInvokeGraphQLRequest {
+		out := &AppInvokeGraphQLRequest{
+			App:            value.App,
+			Document:       value.Document,
+			Variables:      FromWireStruct(value.Variables),
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			IdempotencyKey: value.IdempotencyKey,
+			Context:        FromWireRequestContext(value.Context),
+			Headers:        value.Headers,
+		}
+		return out
+	})
 }
 
 func ToWireAppInvokeRequest(value *AppInvokeRequest) *proto.AppInvokeRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AppInvokeRequest{
-		App:            value.App,
-		Operation:      value.Operation,
-		Params:         ToWireStruct(value.Params),
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		IdempotencyKey: value.IdempotencyKey,
-		CredentialMode: value.CredentialMode,
-		Context:        ToWireRequestContext(value.Context),
-		RunAs:          ToWireSubjectContext(value.RunAs),
-		Headers:        value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *AppInvokeRequest) *proto.AppInvokeRequest {
+		out := &proto.AppInvokeRequest{
+			App:            value.App,
+			Operation:      value.Operation,
+			Params:         ToWireStruct(value.Params),
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			IdempotencyKey: value.IdempotencyKey,
+			CredentialMode: value.CredentialMode,
+			Context:        ToWireRequestContext(value.Context),
+			RunAs:          ToWireSubjectContext(value.RunAs),
+			Headers:        value.Headers,
+		}
+		return out
+	})
 }
 
 func FromWireAppInvokeRequest(value *proto.AppInvokeRequest) *AppInvokeRequest {
-	if value == nil {
-		return nil
-	}
-	out := &AppInvokeRequest{
-		App:            value.App,
-		Operation:      value.Operation,
-		Params:         FromWireStruct(value.Params),
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		IdempotencyKey: value.IdempotencyKey,
-		CredentialMode: value.CredentialMode,
-		Context:        FromWireRequestContext(value.Context),
-		RunAs:          FromWireSubjectContext(value.RunAs),
-		Headers:        value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AppInvokeRequest) *AppInvokeRequest {
+		out := &AppInvokeRequest{
+			App:            value.App,
+			Operation:      value.Operation,
+			Params:         FromWireStruct(value.Params),
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			IdempotencyKey: value.IdempotencyKey,
+			CredentialMode: value.CredentialMode,
+			Context:        FromWireRequestContext(value.Context),
+			RunAs:          FromWireSubjectContext(value.RunAs),
+			Headers:        value.Headers,
+		}
+		return out
+	})
 }
 
 func ToWireCatalog(value *Catalog) *proto.Catalog {
-	if value == nil {
-		return nil
-	}
-	out := &proto.Catalog{
-		Name:        value.Name,
-		DisplayName: value.DisplayName,
-		Description: value.Description,
-		IconSvg:     value.IconSvg,
-	}
-	appendMessageSlice(&out.Operations, value.Operations, ToWireCatalogOperation)
-	return out
+	return convertMessage(value, func(value *Catalog) *proto.Catalog {
+		out := &proto.Catalog{
+			Name:        value.Name,
+			DisplayName: value.DisplayName,
+			Description: value.Description,
+			IconSvg:     value.IconSvg,
+		}
+		appendMessageSlice(&out.Operations, value.Operations, ToWireCatalogOperation)
+		return out
+	})
 }
 
 func FromWireCatalog(value *proto.Catalog) *Catalog {
-	if value == nil {
-		return nil
-	}
-	out := &Catalog{
-		Name:        value.Name,
-		DisplayName: value.DisplayName,
-		Description: value.Description,
-		IconSvg:     value.IconSvg,
-	}
-	appendMessageSlice(&out.Operations, value.Operations, FromWireCatalogOperation)
-	return out
+	return convertMessage(value, func(value *proto.Catalog) *Catalog {
+		out := &Catalog{
+			Name:        value.Name,
+			DisplayName: value.DisplayName,
+			Description: value.Description,
+			IconSvg:     value.IconSvg,
+		}
+		appendMessageSlice(&out.Operations, value.Operations, FromWireCatalogOperation)
+		return out
+	})
 }
 
 func ToWireCatalogOperation(value *CatalogOperation) *proto.CatalogOperation {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CatalogOperation{
-		Id:             value.Id,
-		Method:         value.Method,
-		Title:          value.Title,
-		Description:    value.Description,
-		InputSchema:    value.InputSchema,
-		Annotations:    ToWireOperationAnnotations(value.Annotations),
-		RequiredScopes: value.RequiredScopes,
-		Tags:           value.Tags,
-		ReadOnly:       value.ReadOnly,
-		Visible:        value.Visible,
-		Transport:      value.Transport,
-		AllowedRoles:   value.AllowedRoles,
-		Response:       ToWireOperationResponseSpec(value.Response),
-		Api:            value.Api,
-		Mcp:            value.Mcp,
-	}
-	appendMessageSlice(&out.Parameters, value.Parameters, ToWireCatalogParameter)
-	if value.ApiMode != nil {
-		wireValue := proto.APIExposureMode(*value.ApiMode)
-		out.ApiMode = &wireValue
-	}
-	return out
+	return convertMessage(value, func(value *CatalogOperation) *proto.CatalogOperation {
+		out := &proto.CatalogOperation{
+			Id:             value.Id,
+			Method:         value.Method,
+			Title:          value.Title,
+			Description:    value.Description,
+			InputSchema:    value.InputSchema,
+			Annotations:    ToWireOperationAnnotations(value.Annotations),
+			RequiredScopes: value.RequiredScopes,
+			Tags:           value.Tags,
+			ReadOnly:       value.ReadOnly,
+			Visible:        value.Visible,
+			Transport:      value.Transport,
+			AllowedRoles:   value.AllowedRoles,
+			Response:       ToWireOperationResponseSpec(value.Response),
+			Api:            value.Api,
+			Mcp:            value.Mcp,
+		}
+		appendMessageSlice(&out.Parameters, value.Parameters, ToWireCatalogParameter)
+		if value.ApiMode != nil {
+			wireValue := proto.APIExposureMode(*value.ApiMode)
+			out.ApiMode = &wireValue
+		}
+		return out
+	})
 }
 
 func FromWireCatalogOperation(value *proto.CatalogOperation) *CatalogOperation {
-	if value == nil {
-		return nil
-	}
-	out := &CatalogOperation{
-		Id:             value.Id,
-		Method:         value.Method,
-		Title:          value.Title,
-		Description:    value.Description,
-		InputSchema:    value.InputSchema,
-		Annotations:    FromWireOperationAnnotations(value.Annotations),
-		RequiredScopes: value.RequiredScopes,
-		Tags:           value.Tags,
-		ReadOnly:       value.ReadOnly,
-		Visible:        value.Visible,
-		Transport:      value.Transport,
-		AllowedRoles:   value.AllowedRoles,
-		Response:       FromWireOperationResponseSpec(value.Response),
-		Api:            value.Api,
-		Mcp:            value.Mcp,
-	}
-	appendMessageSlice(&out.Parameters, value.Parameters, FromWireCatalogParameter)
-	if value.ApiMode != nil {
-		nativeValue := APIExposureMode(*value.ApiMode)
-		out.ApiMode = &nativeValue
-	}
-	return out
+	return convertMessage(value, func(value *proto.CatalogOperation) *CatalogOperation {
+		out := &CatalogOperation{
+			Id:             value.Id,
+			Method:         value.Method,
+			Title:          value.Title,
+			Description:    value.Description,
+			InputSchema:    value.InputSchema,
+			Annotations:    FromWireOperationAnnotations(value.Annotations),
+			RequiredScopes: value.RequiredScopes,
+			Tags:           value.Tags,
+			ReadOnly:       value.ReadOnly,
+			Visible:        value.Visible,
+			Transport:      value.Transport,
+			AllowedRoles:   value.AllowedRoles,
+			Response:       FromWireOperationResponseSpec(value.Response),
+			Api:            value.Api,
+			Mcp:            value.Mcp,
+		}
+		appendMessageSlice(&out.Parameters, value.Parameters, FromWireCatalogParameter)
+		if value.ApiMode != nil {
+			nativeValue := APIExposureMode(*value.ApiMode)
+			out.ApiMode = &nativeValue
+		}
+		return out
+	})
 }
 
 func ToWireCatalogParameter(value *CatalogParameter) *proto.CatalogParameter {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CatalogParameter{
-		Name:        value.Name,
-		Type:        value.Type,
-		Description: value.Description,
-		Required:    value.Required,
-		Default:     ToWireValue(value.Default),
-	}
-	return out
+	return convertMessage(value, func(value *CatalogParameter) *proto.CatalogParameter {
+		out := &proto.CatalogParameter{
+			Name:        value.Name,
+			Type:        value.Type,
+			Description: value.Description,
+			Required:    value.Required,
+			Default:     ToWireValue(value.Default),
+		}
+		return out
+	})
 }
 
 func FromWireCatalogParameter(value *proto.CatalogParameter) *CatalogParameter {
-	if value == nil {
-		return nil
-	}
-	out := &CatalogParameter{
-		Name:        value.Name,
-		Type:        value.Type,
-		Description: value.Description,
-		Required:    value.Required,
-		Default:     FromWireValue(value.Default),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CatalogParameter) *CatalogParameter {
+		out := &CatalogParameter{
+			Name:        value.Name,
+			Type:        value.Type,
+			Description: value.Description,
+			Required:    value.Required,
+			Default:     FromWireValue(value.Default),
+		}
+		return out
+	})
 }
 
 func ToWireConnectionParamDef(value *ConnectionParamDef) *proto.ConnectionParamDef {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ConnectionParamDef{
-		Required:        value.Required,
-		Description:     value.Description,
-		DefaultValue:    value.DefaultValue,
-		From:            value.From,
-		Field:           value.Field,
-		AccountIdentity: value.AccountIdentity,
-	}
-	return out
+	return convertMessage(value, func(value *ConnectionParamDef) *proto.ConnectionParamDef {
+		out := &proto.ConnectionParamDef{
+			Required:        value.Required,
+			Description:     value.Description,
+			DefaultValue:    value.DefaultValue,
+			From:            value.From,
+			Field:           value.Field,
+			AccountIdentity: value.AccountIdentity,
+		}
+		return out
+	})
 }
 
 func FromWireConnectionParamDef(value *proto.ConnectionParamDef) *ConnectionParamDef {
-	if value == nil {
-		return nil
-	}
-	out := &ConnectionParamDef{
-		Required:        value.Required,
-		Description:     value.Description,
-		DefaultValue:    value.DefaultValue,
-		From:            value.From,
-		Field:           value.Field,
-		AccountIdentity: value.AccountIdentity,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ConnectionParamDef) *ConnectionParamDef {
+		out := &ConnectionParamDef{
+			Required:        value.Required,
+			Description:     value.Description,
+			DefaultValue:    value.DefaultValue,
+			From:            value.From,
+			Field:           value.Field,
+			AccountIdentity: value.AccountIdentity,
+		}
+		return out
+	})
 }
 
 func ToWireCredentialContext(value *CredentialContext) *proto.CredentialContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CredentialContext{
-		Mode:       value.Mode,
-		SubjectId:  value.SubjectId,
-		Connection: value.Connection,
-		Instance:   value.Instance,
-	}
-	return out
+	return convertMessage(value, func(value *CredentialContext) *proto.CredentialContext {
+		out := &proto.CredentialContext{
+			Mode:       value.Mode,
+			SubjectId:  value.SubjectId,
+			Connection: value.Connection,
+			Instance:   value.Instance,
+		}
+		return out
+	})
 }
 
 func FromWireCredentialContext(value *proto.CredentialContext) *CredentialContext {
-	if value == nil {
-		return nil
-	}
-	out := &CredentialContext{
-		Mode:       value.Mode,
-		SubjectId:  value.SubjectId,
-		Connection: value.Connection,
-		Instance:   value.Instance,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CredentialContext) *CredentialContext {
+		out := &CredentialContext{
+			Mode:       value.Mode,
+			SubjectId:  value.SubjectId,
+			Connection: value.Connection,
+			Instance:   value.Instance,
+		}
+		return out
+	})
 }
 
 func ToWireExecuteRequest(value *ExecuteRequest) *proto.ExecuteRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ExecuteRequest{
-		Operation:        value.Operation,
-		Params:           ToWireStruct(value.Params),
-		Token:            value.Token,
-		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
-		Context:          ToWireRequestContext(value.Context),
-		IdempotencyKey:   value.IdempotencyKey,
-	}
-	return out
+	return convertMessage(value, func(value *ExecuteRequest) *proto.ExecuteRequest {
+		out := &proto.ExecuteRequest{
+			Operation:        value.Operation,
+			Params:           ToWireStruct(value.Params),
+			Token:            value.Token,
+			ConnectionParams: value.ConnectionParams,
+			InvocationId:     value.InvocationId,
+			Context:          ToWireRequestContext(value.Context),
+			IdempotencyKey:   value.IdempotencyKey,
+		}
+		return out
+	})
 }
 
 func FromWireExecuteRequest(value *proto.ExecuteRequest) *ExecuteRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ExecuteRequest{
-		Operation:        value.Operation,
-		Params:           FromWireStruct(value.Params),
-		Token:            value.Token,
-		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
-		Context:          FromWireRequestContext(value.Context),
-		IdempotencyKey:   value.IdempotencyKey,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ExecuteRequest) *ExecuteRequest {
+		out := &ExecuteRequest{
+			Operation:        value.Operation,
+			Params:           FromWireStruct(value.Params),
+			Token:            value.Token,
+			ConnectionParams: value.ConnectionParams,
+			InvocationId:     value.InvocationId,
+			Context:          FromWireRequestContext(value.Context),
+			IdempotencyKey:   value.IdempotencyKey,
+		}
+		return out
+	})
 }
 
 func ToWireGetSessionCatalogRequest(value *GetSessionCatalogRequest) *proto.GetSessionCatalogRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetSessionCatalogRequest{
-		Token:            value.Token,
-		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
-		Context:          ToWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *GetSessionCatalogRequest) *proto.GetSessionCatalogRequest {
+		out := &proto.GetSessionCatalogRequest{
+			Token:            value.Token,
+			ConnectionParams: value.ConnectionParams,
+			InvocationId:     value.InvocationId,
+			Context:          ToWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func FromWireGetSessionCatalogRequest(value *proto.GetSessionCatalogRequest) *GetSessionCatalogRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetSessionCatalogRequest{
-		Token:            value.Token,
-		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
-		Context:          FromWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetSessionCatalogRequest) *GetSessionCatalogRequest {
+		out := &GetSessionCatalogRequest{
+			Token:            value.Token,
+			ConnectionParams: value.ConnectionParams,
+			InvocationId:     value.InvocationId,
+			Context:          FromWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func ToWireGetSessionCatalogResponse(value *GetSessionCatalogResponse) *proto.GetSessionCatalogResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetSessionCatalogResponse{
-		Catalog: ToWireCatalog(value.Catalog),
-	}
-	return out
+	return convertMessage(value, func(value *GetSessionCatalogResponse) *proto.GetSessionCatalogResponse {
+		out := &proto.GetSessionCatalogResponse{
+			Catalog: ToWireCatalog(value.Catalog),
+		}
+		return out
+	})
 }
 
 func FromWireGetSessionCatalogResponse(value *proto.GetSessionCatalogResponse) *GetSessionCatalogResponse {
-	if value == nil {
-		return nil
-	}
-	out := &GetSessionCatalogResponse{
-		Catalog: FromWireCatalog(value.Catalog),
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetSessionCatalogResponse) *GetSessionCatalogResponse {
+		out := &GetSessionCatalogResponse{
+			Catalog: FromWireCatalog(value.Catalog),
+		}
+		return out
+	})
 }
 
 func ToWireHTTPSubjectRequest(value *HTTPSubjectRequest) *proto.HTTPSubjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.HTTPSubjectRequest{
-		Binding:         value.Binding,
-		Method:          value.Method,
-		Path:            value.Path,
-		ContentType:     value.ContentType,
-		Params:          ToWireStruct(value.Params),
-		RawBody:         value.RawBody,
-		SecurityScheme:  value.SecurityScheme,
-		VerifiedSubject: value.VerifiedSubject,
-		VerifiedClaims:  value.VerifiedClaims,
-	}
-	out.Headers = convertMessageMap(value.Headers, ToWireStringList)
-	out.Query = convertMessageMap(value.Query, ToWireStringList)
-	return out
+	return convertMessage(value, func(value *HTTPSubjectRequest) *proto.HTTPSubjectRequest {
+		out := &proto.HTTPSubjectRequest{
+			Binding:         value.Binding,
+			Method:          value.Method,
+			Path:            value.Path,
+			ContentType:     value.ContentType,
+			Params:          ToWireStruct(value.Params),
+			RawBody:         value.RawBody,
+			SecurityScheme:  value.SecurityScheme,
+			VerifiedSubject: value.VerifiedSubject,
+			VerifiedClaims:  value.VerifiedClaims,
+		}
+		out.Headers = convertMessageMap(value.Headers, ToWireStringList)
+		out.Query = convertMessageMap(value.Query, ToWireStringList)
+		return out
+	})
 }
 
 func FromWireHTTPSubjectRequest(value *proto.HTTPSubjectRequest) *HTTPSubjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &HTTPSubjectRequest{
-		Binding:         value.Binding,
-		Method:          value.Method,
-		Path:            value.Path,
-		ContentType:     value.ContentType,
-		Params:          FromWireStruct(value.Params),
-		RawBody:         value.RawBody,
-		SecurityScheme:  value.SecurityScheme,
-		VerifiedSubject: value.VerifiedSubject,
-		VerifiedClaims:  value.VerifiedClaims,
-	}
-	out.Headers = convertMessageMap(value.Headers, FromWireStringList)
-	out.Query = convertMessageMap(value.Query, FromWireStringList)
-	return out
+	return convertMessage(value, func(value *proto.HTTPSubjectRequest) *HTTPSubjectRequest {
+		out := &HTTPSubjectRequest{
+			Binding:         value.Binding,
+			Method:          value.Method,
+			Path:            value.Path,
+			ContentType:     value.ContentType,
+			Params:          FromWireStruct(value.Params),
+			RawBody:         value.RawBody,
+			SecurityScheme:  value.SecurityScheme,
+			VerifiedSubject: value.VerifiedSubject,
+			VerifiedClaims:  value.VerifiedClaims,
+		}
+		out.Headers = convertMessageMap(value.Headers, FromWireStringList)
+		out.Query = convertMessageMap(value.Query, FromWireStringList)
+		return out
+	})
 }
 
 func ToWireHostContext(value *HostContext) *proto.HostContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.HostContext{
-		PublicBaseUrl: value.PublicBaseUrl,
-	}
-	return out
+	return convertMessage(value, func(value *HostContext) *proto.HostContext {
+		out := &proto.HostContext{
+			PublicBaseUrl: value.PublicBaseUrl,
+		}
+		return out
+	})
 }
 
 func FromWireHostContext(value *proto.HostContext) *HostContext {
-	if value == nil {
-		return nil
-	}
-	out := &HostContext{
-		PublicBaseUrl: value.PublicBaseUrl,
-	}
-	return out
+	return convertMessage(value, func(value *proto.HostContext) *HostContext {
+		out := &HostContext{
+			PublicBaseUrl: value.PublicBaseUrl,
+		}
+		return out
+	})
 }
 
 func ToWireInvocationContext(value *InvocationContext) *proto.InvocationContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.InvocationContext{
-		RequestId:                value.RequestId,
-		Depth:                    value.Depth,
-		CallChain:                value.CallChain,
-		Surface:                  value.Surface,
-		InternalConnectionAccess: value.InternalConnectionAccess,
-		Connection:               value.Connection,
-	}
-	return out
+	return convertMessage(value, func(value *InvocationContext) *proto.InvocationContext {
+		out := &proto.InvocationContext{
+			RequestId:                value.RequestId,
+			Depth:                    value.Depth,
+			CallChain:                value.CallChain,
+			Surface:                  value.Surface,
+			InternalConnectionAccess: value.InternalConnectionAccess,
+			Connection:               value.Connection,
+		}
+		return out
+	})
 }
 
 func FromWireInvocationContext(value *proto.InvocationContext) *InvocationContext {
-	if value == nil {
-		return nil
-	}
-	out := &InvocationContext{
-		RequestId:                value.RequestId,
-		Depth:                    value.Depth,
-		CallChain:                value.CallChain,
-		Surface:                  value.Surface,
-		InternalConnectionAccess: value.InternalConnectionAccess,
-		Connection:               value.Connection,
-	}
-	return out
+	return convertMessage(value, func(value *proto.InvocationContext) *InvocationContext {
+		out := &InvocationContext{
+			RequestId:                value.RequestId,
+			Depth:                    value.Depth,
+			CallChain:                value.CallChain,
+			Surface:                  value.Surface,
+			InternalConnectionAccess: value.InternalConnectionAccess,
+			Connection:               value.Connection,
+		}
+		return out
+	})
 }
 
 func ToWireInvokeFrame(value *InvokeFrame) *proto.InvokeFrame {
-	if value == nil {
-		return nil
-	}
-	out := &proto.InvokeFrame{}
-	switch variant := value.Value.(type) {
-	case *InvokeFrameValueMetadata:
-		out.Value = &proto.InvokeFrame_Metadata{Metadata: ToWireInvokeMetadata(variant.Value)}
-	case *InvokeFrameValueData:
-		out.Value = &proto.InvokeFrame_Data{Data: variant.Value}
-	}
-	return out
+	return convertMessage(value, func(value *InvokeFrame) *proto.InvokeFrame {
+		out := &proto.InvokeFrame{}
+		switch variant := value.Value.(type) {
+		case *InvokeFrameValueMetadata:
+			out.Value = &proto.InvokeFrame_Metadata{Metadata: ToWireInvokeMetadata(variant.Value)}
+		case *InvokeFrameValueData:
+			out.Value = &proto.InvokeFrame_Data{Data: variant.Value}
+		}
+		return out
+	})
 }
 
 func FromWireInvokeFrame(value *proto.InvokeFrame) *InvokeFrame {
-	if value == nil {
-		return nil
-	}
-	out := &InvokeFrame{}
-	switch variant := value.Value.(type) {
-	case *proto.InvokeFrame_Metadata:
-		out.Value = &InvokeFrameValueMetadata{Value: FromWireInvokeMetadata(variant.Metadata)}
-	case *proto.InvokeFrame_Data:
-		out.Value = &InvokeFrameValueData{Value: variant.Data}
-	}
-	return out
+	return convertMessage(value, func(value *proto.InvokeFrame) *InvokeFrame {
+		out := &InvokeFrame{}
+		switch variant := value.Value.(type) {
+		case *proto.InvokeFrame_Metadata:
+			out.Value = &InvokeFrameValueMetadata{Value: FromWireInvokeMetadata(variant.Metadata)}
+		case *proto.InvokeFrame_Data:
+			out.Value = &InvokeFrameValueData{Value: variant.Data}
+		}
+		return out
+	})
 }
 
 func ToWireInvokeMetadata(value *InvokeMetadata) *proto.InvokeMetadata {
-	if value == nil {
-		return nil
-	}
-	out := &proto.InvokeMetadata{
-		Status:    value.Status,
-		MediaType: value.MediaType,
-	}
-	out.Headers = convertMessageMap(value.Headers, ToWireStringList)
-	return out
+	return convertMessage(value, func(value *InvokeMetadata) *proto.InvokeMetadata {
+		out := &proto.InvokeMetadata{
+			Status:    value.Status,
+			MediaType: value.MediaType,
+		}
+		out.Headers = convertMessageMap(value.Headers, ToWireStringList)
+		return out
+	})
 }
 
 func FromWireInvokeMetadata(value *proto.InvokeMetadata) *InvokeMetadata {
-	if value == nil {
-		return nil
-	}
-	out := &InvokeMetadata{
-		Status:    value.Status,
-		MediaType: value.MediaType,
-	}
-	out.Headers = convertMessageMap(value.Headers, FromWireStringList)
-	return out
+	return convertMessage(value, func(value *proto.InvokeMetadata) *InvokeMetadata {
+		out := &InvokeMetadata{
+			Status:    value.Status,
+			MediaType: value.MediaType,
+		}
+		out.Headers = convertMessageMap(value.Headers, FromWireStringList)
+		return out
+	})
 }
 
 func ToWireOperationAnnotations(value *OperationAnnotations) *proto.OperationAnnotations {
-	if value == nil {
-		return nil
-	}
-	out := &proto.OperationAnnotations{
-		ReadOnlyHint:    value.ReadOnlyHint,
-		IdempotentHint:  value.IdempotentHint,
-		DestructiveHint: value.DestructiveHint,
-		OpenWorldHint:   value.OpenWorldHint,
-	}
-	return out
+	return convertMessage(value, func(value *OperationAnnotations) *proto.OperationAnnotations {
+		out := &proto.OperationAnnotations{
+			ReadOnlyHint:    value.ReadOnlyHint,
+			IdempotentHint:  value.IdempotentHint,
+			DestructiveHint: value.DestructiveHint,
+			OpenWorldHint:   value.OpenWorldHint,
+		}
+		return out
+	})
 }
 
 func FromWireOperationAnnotations(value *proto.OperationAnnotations) *OperationAnnotations {
-	if value == nil {
-		return nil
-	}
-	out := &OperationAnnotations{
-		ReadOnlyHint:    value.ReadOnlyHint,
-		IdempotentHint:  value.IdempotentHint,
-		DestructiveHint: value.DestructiveHint,
-		OpenWorldHint:   value.OpenWorldHint,
-	}
-	return out
+	return convertMessage(value, func(value *proto.OperationAnnotations) *OperationAnnotations {
+		out := &OperationAnnotations{
+			ReadOnlyHint:    value.ReadOnlyHint,
+			IdempotentHint:  value.IdempotentHint,
+			DestructiveHint: value.DestructiveHint,
+			OpenWorldHint:   value.OpenWorldHint,
+		}
+		return out
+	})
 }
 
 func ToWireOperationResponseSpec(value *OperationResponseSpec) *proto.OperationResponseSpec {
-	if value == nil {
-		return nil
-	}
-	out := &proto.OperationResponseSpec{}
-	switch variant := value.Kind.(type) {
-	case *OperationResponseSpecKindUnary:
-		out.Kind = &proto.OperationResponseSpec_Unary{Unary: ToWireUnaryResponseSpec(variant.Value)}
-	case *OperationResponseSpecKindStream:
-		out.Kind = &proto.OperationResponseSpec_Stream{Stream: ToWireStreamResponseSpec(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *OperationResponseSpec) *proto.OperationResponseSpec {
+		out := &proto.OperationResponseSpec{}
+		switch variant := value.Kind.(type) {
+		case *OperationResponseSpecKindUnary:
+			out.Kind = &proto.OperationResponseSpec_Unary{Unary: ToWireUnaryResponseSpec(variant.Value)}
+		case *OperationResponseSpecKindStream:
+			out.Kind = &proto.OperationResponseSpec_Stream{Stream: ToWireStreamResponseSpec(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireOperationResponseSpec(value *proto.OperationResponseSpec) *OperationResponseSpec {
-	if value == nil {
-		return nil
-	}
-	out := &OperationResponseSpec{}
-	switch variant := value.Kind.(type) {
-	case *proto.OperationResponseSpec_Unary:
-		out.Kind = &OperationResponseSpecKindUnary{Value: FromWireUnaryResponseSpec(variant.Unary)}
-	case *proto.OperationResponseSpec_Stream:
-		out.Kind = &OperationResponseSpecKindStream{Value: FromWireStreamResponseSpec(variant.Stream)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.OperationResponseSpec) *OperationResponseSpec {
+		out := &OperationResponseSpec{}
+		switch variant := value.Kind.(type) {
+		case *proto.OperationResponseSpec_Unary:
+			out.Kind = &OperationResponseSpecKindUnary{Value: FromWireUnaryResponseSpec(variant.Unary)}
+		case *proto.OperationResponseSpec_Stream:
+			out.Kind = &OperationResponseSpecKindStream{Value: FromWireStreamResponseSpec(variant.Stream)}
+		}
+		return out
+	})
 }
 
 func ToWireOperationResult(value *OperationResult) *proto.OperationResult {
-	if value == nil {
-		return nil
-	}
-	out := &proto.OperationResult{
-		Status: value.Status,
-		Body:   value.Body,
-	}
-	out.Headers = convertMessageMap(value.Headers, ToWireStringList)
-	return out
+	return convertMessage(value, func(value *OperationResult) *proto.OperationResult {
+		out := &proto.OperationResult{
+			Status: value.Status,
+			Body:   value.Body,
+		}
+		out.Headers = convertMessageMap(value.Headers, ToWireStringList)
+		return out
+	})
 }
 
 func FromWireOperationResult(value *proto.OperationResult) *OperationResult {
-	if value == nil {
-		return nil
-	}
-	out := &OperationResult{
-		Status: value.Status,
-		Body:   value.Body,
-	}
-	out.Headers = convertMessageMap(value.Headers, FromWireStringList)
-	return out
+	return convertMessage(value, func(value *proto.OperationResult) *OperationResult {
+		out := &OperationResult{
+			Status: value.Status,
+			Body:   value.Body,
+		}
+		out.Headers = convertMessageMap(value.Headers, FromWireStringList)
+		return out
+	})
 }
 
 func ToWireProviderContext(value *ProviderContext) *proto.ProviderContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ProviderContext{
-		Kind: value.Kind,
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *ProviderContext) *proto.ProviderContext {
+		out := &proto.ProviderContext{
+			Kind: value.Kind,
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func FromWireProviderContext(value *proto.ProviderContext) *ProviderContext {
-	if value == nil {
-		return nil
-	}
-	out := &ProviderContext{
-		Kind: value.Kind,
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ProviderContext) *ProviderContext {
+		out := &ProviderContext{
+			Kind: value.Kind,
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func ToWireProviderMetadata(value *ProviderMetadata) *proto.ProviderMetadata {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ProviderMetadata{
-		Name:                    value.Name,
-		DisplayName:             value.DisplayName,
-		Description:             value.Description,
-		ConnectionMode:          proto.ConnectionMode(value.ConnectionMode),
-		AuthTypes:               value.AuthTypes,
-		StaticCatalog:           ToWireCatalog(value.StaticCatalog),
-		SupportsSessionCatalog:  value.SupportsSessionCatalog,
-		MinProtocolVersion:      value.MinProtocolVersion,
-		MaxProtocolVersion:      value.MaxProtocolVersion,
-		WorkflowDefinitionSpecs: value.WorkflowDefinitionSpecs,
-	}
-	out.ConnectionParams = convertMessageMap(value.ConnectionParams, ToWireConnectionParamDef)
-	return out
+	return convertMessage(value, func(value *ProviderMetadata) *proto.ProviderMetadata {
+		out := &proto.ProviderMetadata{
+			Name:                    value.Name,
+			DisplayName:             value.DisplayName,
+			Description:             value.Description,
+			ConnectionMode:          proto.ConnectionMode(value.ConnectionMode),
+			AuthTypes:               value.AuthTypes,
+			StaticCatalog:           ToWireCatalog(value.StaticCatalog),
+			SupportsSessionCatalog:  value.SupportsSessionCatalog,
+			MinProtocolVersion:      value.MinProtocolVersion,
+			MaxProtocolVersion:      value.MaxProtocolVersion,
+			WorkflowDefinitionSpecs: value.WorkflowDefinitionSpecs,
+		}
+		out.ConnectionParams = convertMessageMap(value.ConnectionParams, ToWireConnectionParamDef)
+		return out
+	})
 }
 
 func FromWireProviderMetadata(value *proto.ProviderMetadata) *ProviderMetadata {
-	if value == nil {
-		return nil
-	}
-	out := &ProviderMetadata{
-		Name:                    value.Name,
-		DisplayName:             value.DisplayName,
-		Description:             value.Description,
-		ConnectionMode:          ConnectionMode(value.ConnectionMode),
-		AuthTypes:               value.AuthTypes,
-		StaticCatalog:           FromWireCatalog(value.StaticCatalog),
-		SupportsSessionCatalog:  value.SupportsSessionCatalog,
-		MinProtocolVersion:      value.MinProtocolVersion,
-		MaxProtocolVersion:      value.MaxProtocolVersion,
-		WorkflowDefinitionSpecs: value.WorkflowDefinitionSpecs,
-	}
-	out.ConnectionParams = convertMessageMap(value.ConnectionParams, FromWireConnectionParamDef)
-	return out
+	return convertMessage(value, func(value *proto.ProviderMetadata) *ProviderMetadata {
+		out := &ProviderMetadata{
+			Name:                    value.Name,
+			DisplayName:             value.DisplayName,
+			Description:             value.Description,
+			ConnectionMode:          ConnectionMode(value.ConnectionMode),
+			AuthTypes:               value.AuthTypes,
+			StaticCatalog:           FromWireCatalog(value.StaticCatalog),
+			SupportsSessionCatalog:  value.SupportsSessionCatalog,
+			MinProtocolVersion:      value.MinProtocolVersion,
+			MaxProtocolVersion:      value.MaxProtocolVersion,
+			WorkflowDefinitionSpecs: value.WorkflowDefinitionSpecs,
+		}
+		out.ConnectionParams = convertMessageMap(value.ConnectionParams, FromWireConnectionParamDef)
+		return out
+	})
 }
 
 func ToWireRequestContext(value *RequestContext) *proto.RequestContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RequestContext{
-		Subject:      ToWireSubjectContext(value.Subject),
-		Credential:   ToWireCredentialContext(value.Credential),
-		Access:       ToWireAccessContext(value.Access),
-		Workflow:     ToWireStruct(value.Workflow),
-		Host:         ToWireHostContext(value.Host),
-		AgentSubject: ToWireSubjectContext(value.AgentSubject),
-		Caller:       ToWireProviderContext(value.Caller),
-		Invocation:   ToWireInvocationContext(value.Invocation),
-		ToolRefsSet:  value.ToolRefsSet,
-		RequestMeta:  ToWireRequestMetaContext(value.RequestMeta),
-		Agent:        ToWireAgentInvocationContext(value.Agent),
-	}
-	appendMessageSlice(&out.ToolRefs, value.ToolRefs, ToWireAgentToolRef)
-	return out
+	return convertMessage(value, func(value *RequestContext) *proto.RequestContext {
+		out := &proto.RequestContext{
+			Subject:      ToWireSubjectContext(value.Subject),
+			Credential:   ToWireCredentialContext(value.Credential),
+			Access:       ToWireAccessContext(value.Access),
+			Workflow:     ToWireStruct(value.Workflow),
+			Host:         ToWireHostContext(value.Host),
+			AgentSubject: ToWireSubjectContext(value.AgentSubject),
+			Caller:       ToWireProviderContext(value.Caller),
+			Invocation:   ToWireInvocationContext(value.Invocation),
+			ToolRefsSet:  value.ToolRefsSet,
+			RequestMeta:  ToWireRequestMetaContext(value.RequestMeta),
+			Agent:        ToWireAgentInvocationContext(value.Agent),
+		}
+		appendMessageSlice(&out.ToolRefs, value.ToolRefs, ToWireAgentToolRef)
+		return out
+	})
 }
 
 func FromWireRequestContext(value *proto.RequestContext) *RequestContext {
-	if value == nil {
-		return nil
-	}
-	out := &RequestContext{
-		Subject:      FromWireSubjectContext(value.Subject),
-		Credential:   FromWireCredentialContext(value.Credential),
-		Access:       FromWireAccessContext(value.Access),
-		Workflow:     FromWireStruct(value.Workflow),
-		Host:         FromWireHostContext(value.Host),
-		AgentSubject: FromWireSubjectContext(value.AgentSubject),
-		Caller:       FromWireProviderContext(value.Caller),
-		Invocation:   FromWireInvocationContext(value.Invocation),
-		ToolRefsSet:  value.ToolRefsSet,
-		RequestMeta:  FromWireRequestMetaContext(value.RequestMeta),
-		Agent:        FromWireAgentInvocationContext(value.Agent),
-	}
-	appendMessageSlice(&out.ToolRefs, value.ToolRefs, FromWireAgentToolRef)
-	return out
+	return convertMessage(value, func(value *proto.RequestContext) *RequestContext {
+		out := &RequestContext{
+			Subject:      FromWireSubjectContext(value.Subject),
+			Credential:   FromWireCredentialContext(value.Credential),
+			Access:       FromWireAccessContext(value.Access),
+			Workflow:     FromWireStruct(value.Workflow),
+			Host:         FromWireHostContext(value.Host),
+			AgentSubject: FromWireSubjectContext(value.AgentSubject),
+			Caller:       FromWireProviderContext(value.Caller),
+			Invocation:   FromWireInvocationContext(value.Invocation),
+			ToolRefsSet:  value.ToolRefsSet,
+			RequestMeta:  FromWireRequestMetaContext(value.RequestMeta),
+			Agent:        FromWireAgentInvocationContext(value.Agent),
+		}
+		appendMessageSlice(&out.ToolRefs, value.ToolRefs, FromWireAgentToolRef)
+		return out
+	})
 }
 
 func ToWireRequestMetaContext(value *RequestMetaContext) *proto.RequestMetaContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RequestMetaContext{
-		ClientIp:   value.ClientIp,
-		RemoteAddr: value.RemoteAddr,
-		UserAgent:  value.UserAgent,
-	}
-	return out
+	return convertMessage(value, func(value *RequestMetaContext) *proto.RequestMetaContext {
+		out := &proto.RequestMetaContext{
+			ClientIp:   value.ClientIp,
+			RemoteAddr: value.RemoteAddr,
+			UserAgent:  value.UserAgent,
+		}
+		return out
+	})
 }
 
 func FromWireRequestMetaContext(value *proto.RequestMetaContext) *RequestMetaContext {
-	if value == nil {
-		return nil
-	}
-	out := &RequestMetaContext{
-		ClientIp:   value.ClientIp,
-		RemoteAddr: value.RemoteAddr,
-		UserAgent:  value.UserAgent,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RequestMetaContext) *RequestMetaContext {
+		out := &RequestMetaContext{
+			ClientIp:   value.ClientIp,
+			RemoteAddr: value.RemoteAddr,
+			UserAgent:  value.UserAgent,
+		}
+		return out
+	})
 }
 
 func ToWireResolveHTTPSubjectRequest(value *ResolveHTTPSubjectRequest) *proto.ResolveHTTPSubjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ResolveHTTPSubjectRequest{
-		Request: ToWireHTTPSubjectRequest(value.Request),
-		Context: ToWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *ResolveHTTPSubjectRequest) *proto.ResolveHTTPSubjectRequest {
+		out := &proto.ResolveHTTPSubjectRequest{
+			Request: ToWireHTTPSubjectRequest(value.Request),
+			Context: ToWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func FromWireResolveHTTPSubjectRequest(value *proto.ResolveHTTPSubjectRequest) *ResolveHTTPSubjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ResolveHTTPSubjectRequest{
-		Request: FromWireHTTPSubjectRequest(value.Request),
-		Context: FromWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *proto.ResolveHTTPSubjectRequest) *ResolveHTTPSubjectRequest {
+		out := &ResolveHTTPSubjectRequest{
+			Request: FromWireHTTPSubjectRequest(value.Request),
+			Context: FromWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func ToWireResolveHTTPSubjectResponse(value *ResolveHTTPSubjectResponse) *proto.ResolveHTTPSubjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ResolveHTTPSubjectResponse{
-		Subject:       ToWireSubjectContext(value.Subject),
-		RejectStatus:  value.RejectStatus,
-		RejectMessage: value.RejectMessage,
-	}
-	return out
+	return convertMessage(value, func(value *ResolveHTTPSubjectResponse) *proto.ResolveHTTPSubjectResponse {
+		out := &proto.ResolveHTTPSubjectResponse{
+			Subject:       ToWireSubjectContext(value.Subject),
+			RejectStatus:  value.RejectStatus,
+			RejectMessage: value.RejectMessage,
+		}
+		return out
+	})
 }
 
 func FromWireResolveHTTPSubjectResponse(value *proto.ResolveHTTPSubjectResponse) *ResolveHTTPSubjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ResolveHTTPSubjectResponse{
-		Subject:       FromWireSubjectContext(value.Subject),
-		RejectStatus:  value.RejectStatus,
-		RejectMessage: value.RejectMessage,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ResolveHTTPSubjectResponse) *ResolveHTTPSubjectResponse {
+		out := &ResolveHTTPSubjectResponse{
+			Subject:       FromWireSubjectContext(value.Subject),
+			RejectStatus:  value.RejectStatus,
+			RejectMessage: value.RejectMessage,
+		}
+		return out
+	})
 }
 
 func ToWireStartProviderRequest(value *StartProviderRequest) *proto.StartProviderRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StartProviderRequest{
-		Name:            value.Name,
-		Config:          ToWireStruct(value.Config),
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *StartProviderRequest) *proto.StartProviderRequest {
+		out := &proto.StartProviderRequest{
+			Name:            value.Name,
+			Config:          ToWireStruct(value.Config),
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func FromWireStartProviderRequest(value *proto.StartProviderRequest) *StartProviderRequest {
-	if value == nil {
-		return nil
-	}
-	out := &StartProviderRequest{
-		Name:            value.Name,
-		Config:          FromWireStruct(value.Config),
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *proto.StartProviderRequest) *StartProviderRequest {
+		out := &StartProviderRequest{
+			Name:            value.Name,
+			Config:          FromWireStruct(value.Config),
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func ToWireStartProviderResponse(value *StartProviderResponse) *proto.StartProviderResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StartProviderResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *StartProviderResponse) *proto.StartProviderResponse {
+		out := &proto.StartProviderResponse{
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func FromWireStartProviderResponse(value *proto.StartProviderResponse) *StartProviderResponse {
-	if value == nil {
-		return nil
-	}
-	out := &StartProviderResponse{
-		ProtocolVersion: value.ProtocolVersion,
-	}
-	return out
+	return convertMessage(value, func(value *proto.StartProviderResponse) *StartProviderResponse {
+		out := &StartProviderResponse{
+			ProtocolVersion: value.ProtocolVersion,
+		}
+		return out
+	})
 }
 
 func ToWireStreamResponseSpec(value *StreamResponseSpec) *proto.StreamResponseSpec {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StreamResponseSpec{
-		MediaType:  value.MediaType,
-		ItemSchema: ToWireStruct(value.ItemSchema),
-	}
-	return out
+	return convertMessage(value, func(value *StreamResponseSpec) *proto.StreamResponseSpec {
+		out := &proto.StreamResponseSpec{
+			MediaType:  value.MediaType,
+			ItemSchema: ToWireStruct(value.ItemSchema),
+		}
+		return out
+	})
 }
 
 func FromWireStreamResponseSpec(value *proto.StreamResponseSpec) *StreamResponseSpec {
-	if value == nil {
-		return nil
-	}
-	out := &StreamResponseSpec{
-		MediaType:  value.MediaType,
-		ItemSchema: FromWireStruct(value.ItemSchema),
-	}
-	return out
+	return convertMessage(value, func(value *proto.StreamResponseSpec) *StreamResponseSpec {
+		out := &StreamResponseSpec{
+			MediaType:  value.MediaType,
+			ItemSchema: FromWireStruct(value.ItemSchema),
+		}
+		return out
+	})
 }
 
 func ToWireStringList(value *StringList) *proto.StringList {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StringList{
-		Values: value.Values,
-	}
-	return out
+	return convertMessage(value, func(value *StringList) *proto.StringList {
+		out := &proto.StringList{
+			Values: value.Values,
+		}
+		return out
+	})
 }
 
 func FromWireStringList(value *proto.StringList) *StringList {
-	if value == nil {
-		return nil
-	}
-	out := &StringList{
-		Values: value.Values,
-	}
-	return out
+	return convertMessage(value, func(value *proto.StringList) *StringList {
+		out := &StringList{
+			Values: value.Values,
+		}
+		return out
+	})
 }
 
 func ToWireSubjectContext(value *SubjectContext) *proto.SubjectContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SubjectContext{
-		Id:          value.Id,
-		Email:       value.Email,
-		DisplayName: value.DisplayName,
-		Scopes:      value.Scopes,
-	}
-	appendMessageSlice(&out.Permissions, value.Permissions, ToWireSubjectPermissionContext)
-	return out
+	return convertMessage(value, func(value *SubjectContext) *proto.SubjectContext {
+		out := &proto.SubjectContext{
+			Id:          value.Id,
+			Email:       value.Email,
+			DisplayName: value.DisplayName,
+			Scopes:      value.Scopes,
+		}
+		appendMessageSlice(&out.Permissions, value.Permissions, ToWireSubjectPermissionContext)
+		return out
+	})
 }
 
 func FromWireSubjectContext(value *proto.SubjectContext) *SubjectContext {
-	if value == nil {
-		return nil
-	}
-	out := &SubjectContext{
-		Id:          value.Id,
-		Email:       value.Email,
-		DisplayName: value.DisplayName,
-		Scopes:      value.Scopes,
-	}
-	appendMessageSlice(&out.Permissions, value.Permissions, FromWireSubjectPermissionContext)
-	return out
+	return convertMessage(value, func(value *proto.SubjectContext) *SubjectContext {
+		out := &SubjectContext{
+			Id:          value.Id,
+			Email:       value.Email,
+			DisplayName: value.DisplayName,
+			Scopes:      value.Scopes,
+		}
+		appendMessageSlice(&out.Permissions, value.Permissions, FromWireSubjectPermissionContext)
+		return out
+	})
 }
 
 func ToWireSubjectPermissionContext(value *SubjectPermissionContext) *proto.SubjectPermissionContext {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SubjectPermissionContext{
-		App:           value.App,
-		Operations:    value.Operations,
-		AllOperations: value.AllOperations,
-	}
-	return out
+	return convertMessage(value, func(value *SubjectPermissionContext) *proto.SubjectPermissionContext {
+		out := &proto.SubjectPermissionContext{
+			App:           value.App,
+			Operations:    value.Operations,
+			AllOperations: value.AllOperations,
+		}
+		return out
+	})
 }
 
 func FromWireSubjectPermissionContext(value *proto.SubjectPermissionContext) *SubjectPermissionContext {
-	if value == nil {
-		return nil
-	}
-	out := &SubjectPermissionContext{
-		App:           value.App,
-		Operations:    value.Operations,
-		AllOperations: value.AllOperations,
-	}
-	return out
+	return convertMessage(value, func(value *proto.SubjectPermissionContext) *SubjectPermissionContext {
+		out := &SubjectPermissionContext{
+			App:           value.App,
+			Operations:    value.Operations,
+			AllOperations: value.AllOperations,
+		}
+		return out
+	})
 }
 
 func ToWireUnaryResponseSpec(value *UnaryResponseSpec) *proto.UnaryResponseSpec {
-	if value == nil {
-		return nil
-	}
-	out := &proto.UnaryResponseSpec{
-		Schema: ToWireStruct(value.Schema),
-	}
-	return out
+	return convertMessage(value, func(value *UnaryResponseSpec) *proto.UnaryResponseSpec {
+		out := &proto.UnaryResponseSpec{
+			Schema: ToWireStruct(value.Schema),
+		}
+		return out
+	})
 }
 
 func FromWireUnaryResponseSpec(value *proto.UnaryResponseSpec) *UnaryResponseSpec {
-	if value == nil {
-		return nil
-	}
-	out := &UnaryResponseSpec{
-		Schema: FromWireStruct(value.Schema),
-	}
-	return out
+	return convertMessage(value, func(value *proto.UnaryResponseSpec) *UnaryResponseSpec {
+		out := &UnaryResponseSpec{
+			Schema: FromWireStruct(value.Schema),
+		}
+		return out
+	})
 }

@@ -10,1069 +10,989 @@ import (
 )
 
 func ToWireBeginTransactionRequest(value *BeginTransactionRequest) *proto.BeginTransactionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.BeginTransactionRequest{
-		Stores:         value.Stores,
-		Mode:           proto.TransactionMode(value.Mode),
-		DurabilityHint: proto.TransactionDurabilityHint(value.DurabilityHint),
-	}
-	return out
+	return convertMessage(value, func(value *BeginTransactionRequest) *proto.BeginTransactionRequest {
+		out := &proto.BeginTransactionRequest{
+			Stores:         value.Stores,
+			Mode:           proto.TransactionMode(value.Mode),
+			DurabilityHint: proto.TransactionDurabilityHint(value.DurabilityHint),
+		}
+		return out
+	})
 }
 
 func FromWireBeginTransactionRequest(value *proto.BeginTransactionRequest) *BeginTransactionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &BeginTransactionRequest{
-		Stores:         value.Stores,
-		Mode:           TransactionMode(value.Mode),
-		DurabilityHint: TransactionDurabilityHint(value.DurabilityHint),
-	}
-	return out
+	return convertMessage(value, func(value *proto.BeginTransactionRequest) *BeginTransactionRequest {
+		out := &BeginTransactionRequest{
+			Stores:         value.Stores,
+			Mode:           TransactionMode(value.Mode),
+			DurabilityHint: TransactionDurabilityHint(value.DurabilityHint),
+		}
+		return out
+	})
 }
 
 func ToWireColumnDef(value *ColumnDef) *proto.ColumnDef {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ColumnDef{
-		Name:       value.Name,
-		Type:       value.Type,
-		PrimaryKey: value.PrimaryKey,
-		NotNull:    value.NotNull,
-		Unique:     value.Unique,
-	}
-	return out
+	return convertMessage(value, func(value *ColumnDef) *proto.ColumnDef {
+		out := &proto.ColumnDef{
+			Name:       value.Name,
+			Type:       value.Type,
+			PrimaryKey: value.PrimaryKey,
+			NotNull:    value.NotNull,
+			Unique:     value.Unique,
+		}
+		return out
+	})
 }
 
 func FromWireColumnDef(value *proto.ColumnDef) *ColumnDef {
-	if value == nil {
-		return nil
-	}
-	out := &ColumnDef{
-		Name:       value.Name,
-		Type:       value.Type,
-		PrimaryKey: value.PrimaryKey,
-		NotNull:    value.NotNull,
-		Unique:     value.Unique,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ColumnDef) *ColumnDef {
+		out := &ColumnDef{
+			Name:       value.Name,
+			Type:       value.Type,
+			PrimaryKey: value.PrimaryKey,
+			NotNull:    value.NotNull,
+			Unique:     value.Unique,
+		}
+		return out
+	})
 }
 
 func ToWireCountResponse(value *CountResponse) *proto.CountResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CountResponse{
-		Count: value.Count,
-	}
-	return out
+	return convertMessage(value, func(value *CountResponse) *proto.CountResponse {
+		out := &proto.CountResponse{
+			Count: value.Count,
+		}
+		return out
+	})
 }
 
 func FromWireCountResponse(value *proto.CountResponse) *CountResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CountResponse{
-		Count: value.Count,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CountResponse) *CountResponse {
+		out := &CountResponse{
+			Count: value.Count,
+		}
+		return out
+	})
 }
 
 func ToWireCreateIndexRequest(value *CreateIndexRequest) *proto.CreateIndexRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateIndexRequest{
-		Store:   value.Store,
-		Name:    value.Name,
-		KeyPath: value.KeyPath,
-		Unique:  value.Unique,
-	}
-	return out
+	return convertMessage(value, func(value *CreateIndexRequest) *proto.CreateIndexRequest {
+		out := &proto.CreateIndexRequest{
+			Store:   value.Store,
+			Name:    value.Name,
+			KeyPath: value.KeyPath,
+			Unique:  value.Unique,
+		}
+		return out
+	})
 }
 
 func FromWireCreateIndexRequest(value *proto.CreateIndexRequest) *CreateIndexRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CreateIndexRequest{
-		Store:   value.Store,
-		Name:    value.Name,
-		KeyPath: value.KeyPath,
-		Unique:  value.Unique,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CreateIndexRequest) *CreateIndexRequest {
+		out := &CreateIndexRequest{
+			Store:   value.Store,
+			Name:    value.Name,
+			KeyPath: value.KeyPath,
+			Unique:  value.Unique,
+		}
+		return out
+	})
 }
 
 func ToWireCreateObjectStoreRequest(value *CreateObjectStoreRequest) *proto.CreateObjectStoreRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateObjectStoreRequest{
-		Name:   value.Name,
-		Schema: ToWireObjectStoreSchema(value.Schema),
-	}
-	return out
+	return convertMessage(value, func(value *CreateObjectStoreRequest) *proto.CreateObjectStoreRequest {
+		out := &proto.CreateObjectStoreRequest{
+			Name:   value.Name,
+			Schema: ToWireObjectStoreSchema(value.Schema),
+		}
+		return out
+	})
 }
 
 func FromWireCreateObjectStoreRequest(value *proto.CreateObjectStoreRequest) *CreateObjectStoreRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CreateObjectStoreRequest{
-		Name:   value.Name,
-		Schema: FromWireObjectStoreSchema(value.Schema),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CreateObjectStoreRequest) *CreateObjectStoreRequest {
+		out := &CreateObjectStoreRequest{
+			Name:   value.Name,
+			Schema: FromWireObjectStoreSchema(value.Schema),
+		}
+		return out
+	})
 }
 
 func ToWireCursorClientMessage(value *CursorClientMessage) *proto.CursorClientMessage {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CursorClientMessage{}
-	switch variant := value.Msg.(type) {
-	case *CursorClientMessageMsgOpen:
-		out.Msg = &proto.CursorClientMessage_Open{Open: ToWireOpenCursorRequest(variant.Value)}
-	case *CursorClientMessageMsgCommand:
-		out.Msg = &proto.CursorClientMessage_Command{Command: ToWireCursorCommand(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *CursorClientMessage) *proto.CursorClientMessage {
+		out := &proto.CursorClientMessage{}
+		switch variant := value.Msg.(type) {
+		case *CursorClientMessageMsgOpen:
+			out.Msg = &proto.CursorClientMessage_Open{Open: ToWireOpenCursorRequest(variant.Value)}
+		case *CursorClientMessageMsgCommand:
+			out.Msg = &proto.CursorClientMessage_Command{Command: ToWireCursorCommand(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireCursorClientMessage(value *proto.CursorClientMessage) *CursorClientMessage {
-	if value == nil {
-		return nil
-	}
-	out := &CursorClientMessage{}
-	switch variant := value.Msg.(type) {
-	case *proto.CursorClientMessage_Open:
-		out.Msg = &CursorClientMessageMsgOpen{Value: FromWireOpenCursorRequest(variant.Open)}
-	case *proto.CursorClientMessage_Command:
-		out.Msg = &CursorClientMessageMsgCommand{Value: FromWireCursorCommand(variant.Command)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.CursorClientMessage) *CursorClientMessage {
+		out := &CursorClientMessage{}
+		switch variant := value.Msg.(type) {
+		case *proto.CursorClientMessage_Open:
+			out.Msg = &CursorClientMessageMsgOpen{Value: FromWireOpenCursorRequest(variant.Open)}
+		case *proto.CursorClientMessage_Command:
+			out.Msg = &CursorClientMessageMsgCommand{Value: FromWireCursorCommand(variant.Command)}
+		}
+		return out
+	})
 }
 
 func ToWireCursorCommand(value *CursorCommand) *proto.CursorCommand {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CursorCommand{}
-	switch variant := value.Command.(type) {
-	case *CursorCommandCommandNext:
-		out.Command = &proto.CursorCommand_Next{Next: variant.Value}
-	case *CursorCommandCommandContinueToKey:
-		out.Command = &proto.CursorCommand_ContinueToKey{ContinueToKey: ToWireCursorKeyTarget(variant.Value)}
-	case *CursorCommandCommandAdvance:
-		out.Command = &proto.CursorCommand_Advance{Advance: variant.Value}
-	case *CursorCommandCommandUpdate:
-		out.Command = &proto.CursorCommand_Update{Update: ToWireRecord(variant.Value)}
-	case *CursorCommandCommandDelete:
-		out.Command = &proto.CursorCommand_Delete{Delete: variant.Value}
-	case *CursorCommandCommandClose:
-		out.Command = &proto.CursorCommand_Close{Close: variant.Value}
-	}
-	return out
+	return convertMessage(value, func(value *CursorCommand) *proto.CursorCommand {
+		out := &proto.CursorCommand{}
+		switch variant := value.Command.(type) {
+		case *CursorCommandCommandNext:
+			out.Command = &proto.CursorCommand_Next{Next: variant.Value}
+		case *CursorCommandCommandContinueToKey:
+			out.Command = &proto.CursorCommand_ContinueToKey{ContinueToKey: ToWireCursorKeyTarget(variant.Value)}
+		case *CursorCommandCommandAdvance:
+			out.Command = &proto.CursorCommand_Advance{Advance: variant.Value}
+		case *CursorCommandCommandUpdate:
+			out.Command = &proto.CursorCommand_Update{Update: ToWireRecord(variant.Value)}
+		case *CursorCommandCommandDelete:
+			out.Command = &proto.CursorCommand_Delete{Delete: variant.Value}
+		case *CursorCommandCommandClose:
+			out.Command = &proto.CursorCommand_Close{Close: variant.Value}
+		}
+		return out
+	})
 }
 
 func FromWireCursorCommand(value *proto.CursorCommand) *CursorCommand {
-	if value == nil {
-		return nil
-	}
-	out := &CursorCommand{}
-	switch variant := value.Command.(type) {
-	case *proto.CursorCommand_Next:
-		out.Command = &CursorCommandCommandNext{Value: variant.Next}
-	case *proto.CursorCommand_ContinueToKey:
-		out.Command = &CursorCommandCommandContinueToKey{Value: FromWireCursorKeyTarget(variant.ContinueToKey)}
-	case *proto.CursorCommand_Advance:
-		out.Command = &CursorCommandCommandAdvance{Value: variant.Advance}
-	case *proto.CursorCommand_Update:
-		out.Command = &CursorCommandCommandUpdate{Value: FromWireRecord(variant.Update)}
-	case *proto.CursorCommand_Delete:
-		out.Command = &CursorCommandCommandDelete{Value: variant.Delete}
-	case *proto.CursorCommand_Close:
-		out.Command = &CursorCommandCommandClose{Value: variant.Close}
-	}
-	return out
+	return convertMessage(value, func(value *proto.CursorCommand) *CursorCommand {
+		out := &CursorCommand{}
+		switch variant := value.Command.(type) {
+		case *proto.CursorCommand_Next:
+			out.Command = &CursorCommandCommandNext{Value: variant.Next}
+		case *proto.CursorCommand_ContinueToKey:
+			out.Command = &CursorCommandCommandContinueToKey{Value: FromWireCursorKeyTarget(variant.ContinueToKey)}
+		case *proto.CursorCommand_Advance:
+			out.Command = &CursorCommandCommandAdvance{Value: variant.Advance}
+		case *proto.CursorCommand_Update:
+			out.Command = &CursorCommandCommandUpdate{Value: FromWireRecord(variant.Update)}
+		case *proto.CursorCommand_Delete:
+			out.Command = &CursorCommandCommandDelete{Value: variant.Delete}
+		case *proto.CursorCommand_Close:
+			out.Command = &CursorCommandCommandClose{Value: variant.Close}
+		}
+		return out
+	})
 }
 
 func ToWireCursorEntry(value *CursorEntry) *proto.CursorEntry {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CursorEntry{
-		Key:        ToWireKeyValue(value.Key),
-		PrimaryKey: value.PrimaryKey,
-		Record:     ToWireRecord(value.Record),
-	}
-	return out
+	return convertMessage(value, func(value *CursorEntry) *proto.CursorEntry {
+		out := &proto.CursorEntry{
+			Key:        ToWireKeyValue(value.Key),
+			PrimaryKey: value.PrimaryKey,
+			Record:     ToWireRecord(value.Record),
+		}
+		return out
+	})
 }
 
 func FromWireCursorEntry(value *proto.CursorEntry) *CursorEntry {
-	if value == nil {
-		return nil
-	}
-	out := &CursorEntry{
-		Key:        FromWireKeyValue(value.Key),
-		PrimaryKey: value.PrimaryKey,
-		Record:     FromWireRecord(value.Record),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CursorEntry) *CursorEntry {
+		out := &CursorEntry{
+			Key:        FromWireKeyValue(value.Key),
+			PrimaryKey: value.PrimaryKey,
+			Record:     FromWireRecord(value.Record),
+		}
+		return out
+	})
 }
 
 func ToWireCursorKeyTarget(value *CursorKeyTarget) *proto.CursorKeyTarget {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CursorKeyTarget{
-		Key: ToWireKeyValue(value.Key),
-	}
-	return out
+	return convertMessage(value, func(value *CursorKeyTarget) *proto.CursorKeyTarget {
+		out := &proto.CursorKeyTarget{
+			Key: ToWireKeyValue(value.Key),
+		}
+		return out
+	})
 }
 
 func FromWireCursorKeyTarget(value *proto.CursorKeyTarget) *CursorKeyTarget {
-	if value == nil {
-		return nil
-	}
-	out := &CursorKeyTarget{
-		Key: FromWireKeyValue(value.Key),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CursorKeyTarget) *CursorKeyTarget {
+		out := &CursorKeyTarget{
+			Key: FromWireKeyValue(value.Key),
+		}
+		return out
+	})
 }
 
 func ToWireCursorResponse(value *CursorResponse) *proto.CursorResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CursorResponse{}
-	switch variant := value.Result.(type) {
-	case *CursorResponseResultEntry:
-		out.Result = &proto.CursorResponse_Entry{Entry: ToWireCursorEntry(variant.Value)}
-	case *CursorResponseResultDone:
-		out.Result = &proto.CursorResponse_Done{Done: variant.Value}
-	}
-	return out
+	return convertMessage(value, func(value *CursorResponse) *proto.CursorResponse {
+		out := &proto.CursorResponse{}
+		switch variant := value.Result.(type) {
+		case *CursorResponseResultEntry:
+			out.Result = &proto.CursorResponse_Entry{Entry: ToWireCursorEntry(variant.Value)}
+		case *CursorResponseResultDone:
+			out.Result = &proto.CursorResponse_Done{Done: variant.Value}
+		}
+		return out
+	})
 }
 
 func FromWireCursorResponse(value *proto.CursorResponse) *CursorResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CursorResponse{}
-	switch variant := value.Result.(type) {
-	case *proto.CursorResponse_Entry:
-		out.Result = &CursorResponseResultEntry{Value: FromWireCursorEntry(variant.Entry)}
-	case *proto.CursorResponse_Done:
-		out.Result = &CursorResponseResultDone{Value: variant.Done}
-	}
-	return out
+	return convertMessage(value, func(value *proto.CursorResponse) *CursorResponse {
+		out := &CursorResponse{}
+		switch variant := value.Result.(type) {
+		case *proto.CursorResponse_Entry:
+			out.Result = &CursorResponseResultEntry{Value: FromWireCursorEntry(variant.Entry)}
+		case *proto.CursorResponse_Done:
+			out.Result = &CursorResponseResultDone{Value: variant.Done}
+		}
+		return out
+	})
 }
 
 func ToWireDeleteIndexRequest(value *DeleteIndexRequest) *proto.DeleteIndexRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteIndexRequest{
-		Store: value.Store,
-		Name:  value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *DeleteIndexRequest) *proto.DeleteIndexRequest {
+		out := &proto.DeleteIndexRequest{
+			Store: value.Store,
+			Name:  value.Name,
+		}
+		return out
+	})
 }
 
 func FromWireDeleteIndexRequest(value *proto.DeleteIndexRequest) *DeleteIndexRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteIndexRequest{
-		Store: value.Store,
-		Name:  value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeleteIndexRequest) *DeleteIndexRequest {
+		out := &DeleteIndexRequest{
+			Store: value.Store,
+			Name:  value.Name,
+		}
+		return out
+	})
 }
 
 func ToWireDeleteObjectStoreRequest(value *DeleteObjectStoreRequest) *proto.DeleteObjectStoreRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteObjectStoreRequest{
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *DeleteObjectStoreRequest) *proto.DeleteObjectStoreRequest {
+		out := &proto.DeleteObjectStoreRequest{
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func FromWireDeleteObjectStoreRequest(value *proto.DeleteObjectStoreRequest) *DeleteObjectStoreRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteObjectStoreRequest{
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeleteObjectStoreRequest) *DeleteObjectStoreRequest {
+		out := &DeleteObjectStoreRequest{
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func ToWireDeleteResponse(value *DeleteResponse) *proto.DeleteResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteResponse{
-		Deleted: value.Deleted,
-	}
-	return out
+	return convertMessage(value, func(value *DeleteResponse) *proto.DeleteResponse {
+		out := &proto.DeleteResponse{
+			Deleted: value.Deleted,
+		}
+		return out
+	})
 }
 
 func FromWireDeleteResponse(value *proto.DeleteResponse) *DeleteResponse {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteResponse{
-		Deleted: value.Deleted,
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeleteResponse) *DeleteResponse {
+		out := &DeleteResponse{
+			Deleted: value.Deleted,
+		}
+		return out
+	})
 }
 
 func ToWireIndexQueryRequest(value *IndexQueryRequest) *proto.IndexQueryRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.IndexQueryRequest{
-		Store: value.Store,
-		Index: value.Index,
-		Query: ToWireIndexedDBQuery(value.Query),
-		Count: value.Count,
-	}
-	appendMessageSlice(&out.Queries, value.Queries, ToWireIndexedDBQuery)
-	return out
+	return convertMessage(value, func(value *IndexQueryRequest) *proto.IndexQueryRequest {
+		out := &proto.IndexQueryRequest{
+			Store: value.Store,
+			Index: value.Index,
+			Query: ToWireIndexedDBQuery(value.Query),
+			Count: value.Count,
+		}
+		appendMessageSlice(&out.Queries, value.Queries, ToWireIndexedDBQuery)
+		return out
+	})
 }
 
 func FromWireIndexQueryRequest(value *proto.IndexQueryRequest) *IndexQueryRequest {
-	if value == nil {
-		return nil
-	}
-	out := &IndexQueryRequest{
-		Store: value.Store,
-		Index: value.Index,
-		Query: FromWireIndexedDBQuery(value.Query),
-		Count: value.Count,
-	}
-	appendMessageSlice(&out.Queries, value.Queries, FromWireIndexedDBQuery)
-	return out
+	return convertMessage(value, func(value *proto.IndexQueryRequest) *IndexQueryRequest {
+		out := &IndexQueryRequest{
+			Store: value.Store,
+			Index: value.Index,
+			Query: FromWireIndexedDBQuery(value.Query),
+			Count: value.Count,
+		}
+		appendMessageSlice(&out.Queries, value.Queries, FromWireIndexedDBQuery)
+		return out
+	})
 }
 
 func ToWireIndexSchema(value *IndexSchema) *proto.IndexSchema {
-	if value == nil {
-		return nil
-	}
-	out := &proto.IndexSchema{
-		Name:    value.Name,
-		KeyPath: value.KeyPath,
-		Unique:  value.Unique,
-	}
-	return out
+	return convertMessage(value, func(value *IndexSchema) *proto.IndexSchema {
+		out := &proto.IndexSchema{
+			Name:    value.Name,
+			KeyPath: value.KeyPath,
+			Unique:  value.Unique,
+		}
+		return out
+	})
 }
 
 func FromWireIndexSchema(value *proto.IndexSchema) *IndexSchema {
-	if value == nil {
-		return nil
-	}
-	out := &IndexSchema{
-		Name:    value.Name,
-		KeyPath: value.KeyPath,
-		Unique:  value.Unique,
-	}
-	return out
+	return convertMessage(value, func(value *proto.IndexSchema) *IndexSchema {
+		out := &IndexSchema{
+			Name:    value.Name,
+			KeyPath: value.KeyPath,
+			Unique:  value.Unique,
+		}
+		return out
+	})
 }
 
 func ToWireIndexedDBQuery(value *IndexedDBQuery) *proto.IndexedDBQuery {
-	if value == nil {
-		return nil
-	}
-	out := &proto.IndexedDBQuery{}
-	switch variant := value.Query.(type) {
-	case *IndexedDBQueryQueryKey:
-		out.Query = &proto.IndexedDBQuery_Key{Key: ToWireKeyValue(variant.Value)}
-	case *IndexedDBQueryQueryRange:
-		out.Query = &proto.IndexedDBQuery_Range{Range: ToWireKeyRange(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *IndexedDBQuery) *proto.IndexedDBQuery {
+		out := &proto.IndexedDBQuery{}
+		switch variant := value.Query.(type) {
+		case *IndexedDBQueryQueryKey:
+			out.Query = &proto.IndexedDBQuery_Key{Key: ToWireKeyValue(variant.Value)}
+		case *IndexedDBQueryQueryRange:
+			out.Query = &proto.IndexedDBQuery_Range{Range: ToWireKeyRange(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireIndexedDBQuery(value *proto.IndexedDBQuery) *IndexedDBQuery {
-	if value == nil {
-		return nil
-	}
-	out := &IndexedDBQuery{}
-	switch variant := value.Query.(type) {
-	case *proto.IndexedDBQuery_Key:
-		out.Query = &IndexedDBQueryQueryKey{Value: FromWireKeyValue(variant.Key)}
-	case *proto.IndexedDBQuery_Range:
-		out.Query = &IndexedDBQueryQueryRange{Value: FromWireKeyRange(variant.Range)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.IndexedDBQuery) *IndexedDBQuery {
+		out := &IndexedDBQuery{}
+		switch variant := value.Query.(type) {
+		case *proto.IndexedDBQuery_Key:
+			out.Query = &IndexedDBQueryQueryKey{Value: FromWireKeyValue(variant.Key)}
+		case *proto.IndexedDBQuery_Range:
+			out.Query = &IndexedDBQueryQueryRange{Value: FromWireKeyRange(variant.Range)}
+		}
+		return out
+	})
 }
 
 func ToWireKeyRange(value *KeyRange) *proto.KeyRange {
-	if value == nil {
-		return nil
-	}
-	out := &proto.KeyRange{
-		Lower:     ToWireKeyValue(value.Lower),
-		Upper:     ToWireKeyValue(value.Upper),
-		LowerOpen: value.LowerOpen,
-		UpperOpen: value.UpperOpen,
-	}
-	return out
+	return convertMessage(value, func(value *KeyRange) *proto.KeyRange {
+		out := &proto.KeyRange{
+			Lower:     ToWireKeyValue(value.Lower),
+			Upper:     ToWireKeyValue(value.Upper),
+			LowerOpen: value.LowerOpen,
+			UpperOpen: value.UpperOpen,
+		}
+		return out
+	})
 }
 
 func FromWireKeyRange(value *proto.KeyRange) *KeyRange {
-	if value == nil {
-		return nil
-	}
-	out := &KeyRange{
-		Lower:     FromWireKeyValue(value.Lower),
-		Upper:     FromWireKeyValue(value.Upper),
-		LowerOpen: value.LowerOpen,
-		UpperOpen: value.UpperOpen,
-	}
-	return out
+	return convertMessage(value, func(value *proto.KeyRange) *KeyRange {
+		out := &KeyRange{
+			Lower:     FromWireKeyValue(value.Lower),
+			Upper:     FromWireKeyValue(value.Upper),
+			LowerOpen: value.LowerOpen,
+			UpperOpen: value.UpperOpen,
+		}
+		return out
+	})
 }
 
 func ToWireKeyResponse(value *KeyResponse) *proto.KeyResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.KeyResponse{
-		Key: value.Key,
-	}
-	return out
+	return convertMessage(value, func(value *KeyResponse) *proto.KeyResponse {
+		out := &proto.KeyResponse{
+			Key: value.Key,
+		}
+		return out
+	})
 }
 
 func FromWireKeyResponse(value *proto.KeyResponse) *KeyResponse {
-	if value == nil {
-		return nil
-	}
-	out := &KeyResponse{
-		Key: value.Key,
-	}
-	return out
+	return convertMessage(value, func(value *proto.KeyResponse) *KeyResponse {
+		out := &KeyResponse{
+			Key: value.Key,
+		}
+		return out
+	})
 }
 
 func ToWireKeyValue(value *KeyValue) *proto.KeyValue {
-	if value == nil {
-		return nil
-	}
-	out := &proto.KeyValue{}
-	switch variant := value.Kind.(type) {
-	case *KeyValueKindScalar:
-		out.Kind = &proto.KeyValue_Scalar{Scalar: ToWireTypedValue(variant.Value)}
-	case *KeyValueKindArray:
-		out.Kind = &proto.KeyValue_Array{Array: ToWireKeyValueArray(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *KeyValue) *proto.KeyValue {
+		out := &proto.KeyValue{}
+		switch variant := value.Kind.(type) {
+		case *KeyValueKindScalar:
+			out.Kind = &proto.KeyValue_Scalar{Scalar: ToWireTypedValue(variant.Value)}
+		case *KeyValueKindArray:
+			out.Kind = &proto.KeyValue_Array{Array: ToWireKeyValueArray(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireKeyValue(value *proto.KeyValue) *KeyValue {
-	if value == nil {
-		return nil
-	}
-	out := &KeyValue{}
-	switch variant := value.Kind.(type) {
-	case *proto.KeyValue_Scalar:
-		out.Kind = &KeyValueKindScalar{Value: FromWireTypedValue(variant.Scalar)}
-	case *proto.KeyValue_Array:
-		out.Kind = &KeyValueKindArray{Value: FromWireKeyValueArray(variant.Array)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.KeyValue) *KeyValue {
+		out := &KeyValue{}
+		switch variant := value.Kind.(type) {
+		case *proto.KeyValue_Scalar:
+			out.Kind = &KeyValueKindScalar{Value: FromWireTypedValue(variant.Scalar)}
+		case *proto.KeyValue_Array:
+			out.Kind = &KeyValueKindArray{Value: FromWireKeyValueArray(variant.Array)}
+		}
+		return out
+	})
 }
 
 func ToWireKeyValueArray(value *KeyValueArray) *proto.KeyValueArray {
-	if value == nil {
-		return nil
-	}
-	out := &proto.KeyValueArray{}
-	appendMessageSlice(&out.Elements, value.Elements, ToWireKeyValue)
-	return out
+	return convertMessage(value, func(value *KeyValueArray) *proto.KeyValueArray {
+		out := &proto.KeyValueArray{}
+		appendMessageSlice(&out.Elements, value.Elements, ToWireKeyValue)
+		return out
+	})
 }
 
 func FromWireKeyValueArray(value *proto.KeyValueArray) *KeyValueArray {
-	if value == nil {
-		return nil
-	}
-	out := &KeyValueArray{}
-	appendMessageSlice(&out.Elements, value.Elements, FromWireKeyValue)
-	return out
+	return convertMessage(value, func(value *proto.KeyValueArray) *KeyValueArray {
+		out := &KeyValueArray{}
+		appendMessageSlice(&out.Elements, value.Elements, FromWireKeyValue)
+		return out
+	})
 }
 
 func ToWireKeysResponse(value *KeysResponse) *proto.KeysResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.KeysResponse{
-		Keys: value.Keys,
-	}
-	return out
+	return convertMessage(value, func(value *KeysResponse) *proto.KeysResponse {
+		out := &proto.KeysResponse{
+			Keys: value.Keys,
+		}
+		return out
+	})
 }
 
 func FromWireKeysResponse(value *proto.KeysResponse) *KeysResponse {
-	if value == nil {
-		return nil
-	}
-	out := &KeysResponse{
-		Keys: value.Keys,
-	}
-	return out
+	return convertMessage(value, func(value *proto.KeysResponse) *KeysResponse {
+		out := &KeysResponse{
+			Keys: value.Keys,
+		}
+		return out
+	})
 }
 
 func ToWireObjectStoreNameRequest(value *ObjectStoreNameRequest) *proto.ObjectStoreNameRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ObjectStoreNameRequest{
-		Store: value.Store,
-	}
-	return out
+	return convertMessage(value, func(value *ObjectStoreNameRequest) *proto.ObjectStoreNameRequest {
+		out := &proto.ObjectStoreNameRequest{
+			Store: value.Store,
+		}
+		return out
+	})
 }
 
 func FromWireObjectStoreNameRequest(value *proto.ObjectStoreNameRequest) *ObjectStoreNameRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ObjectStoreNameRequest{
-		Store: value.Store,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ObjectStoreNameRequest) *ObjectStoreNameRequest {
+		out := &ObjectStoreNameRequest{
+			Store: value.Store,
+		}
+		return out
+	})
 }
 
 func ToWireObjectStoreRangeRequest(value *ObjectStoreRangeRequest) *proto.ObjectStoreRangeRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ObjectStoreRangeRequest{
-		Store: value.Store,
-		Query: ToWireIndexedDBQuery(value.Query),
-		Count: value.Count,
-	}
-	return out
+	return convertMessage(value, func(value *ObjectStoreRangeRequest) *proto.ObjectStoreRangeRequest {
+		out := &proto.ObjectStoreRangeRequest{
+			Store: value.Store,
+			Query: ToWireIndexedDBQuery(value.Query),
+			Count: value.Count,
+		}
+		return out
+	})
 }
 
 func FromWireObjectStoreRangeRequest(value *proto.ObjectStoreRangeRequest) *ObjectStoreRangeRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ObjectStoreRangeRequest{
-		Store: value.Store,
-		Query: FromWireIndexedDBQuery(value.Query),
-		Count: value.Count,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ObjectStoreRangeRequest) *ObjectStoreRangeRequest {
+		out := &ObjectStoreRangeRequest{
+			Store: value.Store,
+			Query: FromWireIndexedDBQuery(value.Query),
+			Count: value.Count,
+		}
+		return out
+	})
 }
 
 func ToWireObjectStoreRequest(value *ObjectStoreRequest) *proto.ObjectStoreRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ObjectStoreRequest{
-		Store: value.Store,
-		Id:    value.Id,
-	}
-	return out
+	return convertMessage(value, func(value *ObjectStoreRequest) *proto.ObjectStoreRequest {
+		out := &proto.ObjectStoreRequest{
+			Store: value.Store,
+			Id:    value.Id,
+		}
+		return out
+	})
 }
 
 func FromWireObjectStoreRequest(value *proto.ObjectStoreRequest) *ObjectStoreRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ObjectStoreRequest{
-		Store: value.Store,
-		Id:    value.Id,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ObjectStoreRequest) *ObjectStoreRequest {
+		out := &ObjectStoreRequest{
+			Store: value.Store,
+			Id:    value.Id,
+		}
+		return out
+	})
 }
 
 func ToWireObjectStoreSchema(value *ObjectStoreSchema) *proto.ObjectStoreSchema {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ObjectStoreSchema{}
-	appendMessageSlice(&out.Indexes, value.Indexes, ToWireIndexSchema)
-	appendMessageSlice(&out.Columns, value.Columns, ToWireColumnDef)
-	return out
+	return convertMessage(value, func(value *ObjectStoreSchema) *proto.ObjectStoreSchema {
+		out := &proto.ObjectStoreSchema{}
+		appendMessageSlice(&out.Indexes, value.Indexes, ToWireIndexSchema)
+		appendMessageSlice(&out.Columns, value.Columns, ToWireColumnDef)
+		return out
+	})
 }
 
 func FromWireObjectStoreSchema(value *proto.ObjectStoreSchema) *ObjectStoreSchema {
-	if value == nil {
-		return nil
-	}
-	out := &ObjectStoreSchema{}
-	appendMessageSlice(&out.Indexes, value.Indexes, FromWireIndexSchema)
-	appendMessageSlice(&out.Columns, value.Columns, FromWireColumnDef)
-	return out
+	return convertMessage(value, func(value *proto.ObjectStoreSchema) *ObjectStoreSchema {
+		out := &ObjectStoreSchema{}
+		appendMessageSlice(&out.Indexes, value.Indexes, FromWireIndexSchema)
+		appendMessageSlice(&out.Columns, value.Columns, FromWireColumnDef)
+		return out
+	})
 }
 
 func ToWireOpenCursorRequest(value *OpenCursorRequest) *proto.OpenCursorRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.OpenCursorRequest{
-		Store:     value.Store,
-		Index:     value.Index,
-		Query:     ToWireIndexedDBQuery(value.Query),
-		Direction: proto.CursorDirection(value.Direction),
-		KeysOnly:  value.KeysOnly,
-	}
-	return out
+	return convertMessage(value, func(value *OpenCursorRequest) *proto.OpenCursorRequest {
+		out := &proto.OpenCursorRequest{
+			Store:     value.Store,
+			Index:     value.Index,
+			Query:     ToWireIndexedDBQuery(value.Query),
+			Direction: proto.CursorDirection(value.Direction),
+			KeysOnly:  value.KeysOnly,
+		}
+		return out
+	})
 }
 
 func FromWireOpenCursorRequest(value *proto.OpenCursorRequest) *OpenCursorRequest {
-	if value == nil {
-		return nil
-	}
-	out := &OpenCursorRequest{
-		Store:     value.Store,
-		Index:     value.Index,
-		Query:     FromWireIndexedDBQuery(value.Query),
-		Direction: CursorDirection(value.Direction),
-		KeysOnly:  value.KeysOnly,
-	}
-	return out
+	return convertMessage(value, func(value *proto.OpenCursorRequest) *OpenCursorRequest {
+		out := &OpenCursorRequest{
+			Store:     value.Store,
+			Index:     value.Index,
+			Query:     FromWireIndexedDBQuery(value.Query),
+			Direction: CursorDirection(value.Direction),
+			KeysOnly:  value.KeysOnly,
+		}
+		return out
+	})
 }
 
 func ToWireRecord(value *Record) *proto.Record {
-	if value == nil {
-		return nil
-	}
-	out := &proto.Record{}
-	out.Fields = convertMessageMap(value.Fields, ToWireTypedValue)
-	return out
+	return convertMessage(value, func(value *Record) *proto.Record {
+		out := &proto.Record{}
+		out.Fields = convertMessageMap(value.Fields, ToWireTypedValue)
+		return out
+	})
 }
 
 func FromWireRecord(value *proto.Record) *Record {
-	if value == nil {
-		return nil
-	}
-	out := &Record{}
-	out.Fields = convertMessageMap(value.Fields, FromWireTypedValue)
-	return out
+	return convertMessage(value, func(value *proto.Record) *Record {
+		out := &Record{}
+		out.Fields = convertMessageMap(value.Fields, FromWireTypedValue)
+		return out
+	})
 }
 
 func ToWireRecordRequest(value *RecordRequest) *proto.RecordRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RecordRequest{
-		Store:  value.Store,
-		Record: ToWireRecord(value.Record),
-	}
-	return out
+	return convertMessage(value, func(value *RecordRequest) *proto.RecordRequest {
+		out := &proto.RecordRequest{
+			Store:  value.Store,
+			Record: ToWireRecord(value.Record),
+		}
+		return out
+	})
 }
 
 func FromWireRecordRequest(value *proto.RecordRequest) *RecordRequest {
-	if value == nil {
-		return nil
-	}
-	out := &RecordRequest{
-		Store:  value.Store,
-		Record: FromWireRecord(value.Record),
-	}
-	return out
+	return convertMessage(value, func(value *proto.RecordRequest) *RecordRequest {
+		out := &RecordRequest{
+			Store:  value.Store,
+			Record: FromWireRecord(value.Record),
+		}
+		return out
+	})
 }
 
 func ToWireRecordResponse(value *RecordResponse) *proto.RecordResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RecordResponse{
-		Record: ToWireRecord(value.Record),
-	}
-	return out
+	return convertMessage(value, func(value *RecordResponse) *proto.RecordResponse {
+		out := &proto.RecordResponse{
+			Record: ToWireRecord(value.Record),
+		}
+		return out
+	})
 }
 
 func FromWireRecordResponse(value *proto.RecordResponse) *RecordResponse {
-	if value == nil {
-		return nil
-	}
-	out := &RecordResponse{
-		Record: FromWireRecord(value.Record),
-	}
-	return out
+	return convertMessage(value, func(value *proto.RecordResponse) *RecordResponse {
+		out := &RecordResponse{
+			Record: FromWireRecord(value.Record),
+		}
+		return out
+	})
 }
 
 func ToWireRecordsResponse(value *RecordsResponse) *proto.RecordsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RecordsResponse{}
-	appendMessageSlice(&out.Records, value.Records, ToWireRecord)
-	return out
+	return convertMessage(value, func(value *RecordsResponse) *proto.RecordsResponse {
+		out := &proto.RecordsResponse{}
+		appendMessageSlice(&out.Records, value.Records, ToWireRecord)
+		return out
+	})
 }
 
 func FromWireRecordsResponse(value *proto.RecordsResponse) *RecordsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &RecordsResponse{}
-	appendMessageSlice(&out.Records, value.Records, FromWireRecord)
-	return out
+	return convertMessage(value, func(value *proto.RecordsResponse) *RecordsResponse {
+		out := &RecordsResponse{}
+		appendMessageSlice(&out.Records, value.Records, FromWireRecord)
+		return out
+	})
 }
 
 func ToWireTransactionAbortRequest(value *TransactionAbortRequest) *proto.TransactionAbortRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionAbortRequest{
-		Reason: value.Reason,
-	}
-	return out
+	return convertMessage(value, func(value *TransactionAbortRequest) *proto.TransactionAbortRequest {
+		out := &proto.TransactionAbortRequest{
+			Reason: value.Reason,
+		}
+		return out
+	})
 }
 
 func FromWireTransactionAbortRequest(value *proto.TransactionAbortRequest) *TransactionAbortRequest {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionAbortRequest{
-		Reason: value.Reason,
-	}
-	return out
+	return convertMessage(value, func(value *proto.TransactionAbortRequest) *TransactionAbortRequest {
+		out := &TransactionAbortRequest{
+			Reason: value.Reason,
+		}
+		return out
+	})
 }
 
 func ToWireTransactionAbortResponse(value *TransactionAbortResponse) *proto.TransactionAbortResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionAbortResponse{
-		Error: ToWireStatus(value.Error),
-	}
-	return out
+	return convertMessage(value, func(value *TransactionAbortResponse) *proto.TransactionAbortResponse {
+		out := &proto.TransactionAbortResponse{
+			Error: ToWireStatus(value.Error),
+		}
+		return out
+	})
 }
 
 func FromWireTransactionAbortResponse(value *proto.TransactionAbortResponse) *TransactionAbortResponse {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionAbortResponse{
-		Error: FromWireStatus(value.Error),
-	}
-	return out
+	return convertMessage(value, func(value *proto.TransactionAbortResponse) *TransactionAbortResponse {
+		out := &TransactionAbortResponse{
+			Error: FromWireStatus(value.Error),
+		}
+		return out
+	})
 }
 
 func ToWireTransactionBeginResponse(value *TransactionBeginResponse) *proto.TransactionBeginResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionBeginResponse{}
-	return out
+	return convertMessage(value, func(value *TransactionBeginResponse) *proto.TransactionBeginResponse {
+		out := &proto.TransactionBeginResponse{}
+		return out
+	})
 }
 
 func FromWireTransactionBeginResponse(value *proto.TransactionBeginResponse) *TransactionBeginResponse {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionBeginResponse{}
-	return out
+	return convertMessage(value, func(value *proto.TransactionBeginResponse) *TransactionBeginResponse {
+		out := &TransactionBeginResponse{}
+		return out
+	})
 }
 
 func ToWireTransactionClientMessage(value *TransactionClientMessage) *proto.TransactionClientMessage {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionClientMessage{}
-	switch variant := value.Msg.(type) {
-	case *TransactionClientMessageMsgBegin:
-		out.Msg = &proto.TransactionClientMessage_Begin{Begin: ToWireBeginTransactionRequest(variant.Value)}
-	case *TransactionClientMessageMsgOperation:
-		out.Msg = &proto.TransactionClientMessage_Operation{Operation: ToWireTransactionOperation(variant.Value)}
-	case *TransactionClientMessageMsgCommit:
-		out.Msg = &proto.TransactionClientMessage_Commit{Commit: ToWireTransactionCommitRequest(variant.Value)}
-	case *TransactionClientMessageMsgAbort:
-		out.Msg = &proto.TransactionClientMessage_Abort{Abort: ToWireTransactionAbortRequest(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *TransactionClientMessage) *proto.TransactionClientMessage {
+		out := &proto.TransactionClientMessage{}
+		switch variant := value.Msg.(type) {
+		case *TransactionClientMessageMsgBegin:
+			out.Msg = &proto.TransactionClientMessage_Begin{Begin: ToWireBeginTransactionRequest(variant.Value)}
+		case *TransactionClientMessageMsgOperation:
+			out.Msg = &proto.TransactionClientMessage_Operation{Operation: ToWireTransactionOperation(variant.Value)}
+		case *TransactionClientMessageMsgCommit:
+			out.Msg = &proto.TransactionClientMessage_Commit{Commit: ToWireTransactionCommitRequest(variant.Value)}
+		case *TransactionClientMessageMsgAbort:
+			out.Msg = &proto.TransactionClientMessage_Abort{Abort: ToWireTransactionAbortRequest(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireTransactionClientMessage(value *proto.TransactionClientMessage) *TransactionClientMessage {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionClientMessage{}
-	switch variant := value.Msg.(type) {
-	case *proto.TransactionClientMessage_Begin:
-		out.Msg = &TransactionClientMessageMsgBegin{Value: FromWireBeginTransactionRequest(variant.Begin)}
-	case *proto.TransactionClientMessage_Operation:
-		out.Msg = &TransactionClientMessageMsgOperation{Value: FromWireTransactionOperation(variant.Operation)}
-	case *proto.TransactionClientMessage_Commit:
-		out.Msg = &TransactionClientMessageMsgCommit{Value: FromWireTransactionCommitRequest(variant.Commit)}
-	case *proto.TransactionClientMessage_Abort:
-		out.Msg = &TransactionClientMessageMsgAbort{Value: FromWireTransactionAbortRequest(variant.Abort)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.TransactionClientMessage) *TransactionClientMessage {
+		out := &TransactionClientMessage{}
+		switch variant := value.Msg.(type) {
+		case *proto.TransactionClientMessage_Begin:
+			out.Msg = &TransactionClientMessageMsgBegin{Value: FromWireBeginTransactionRequest(variant.Begin)}
+		case *proto.TransactionClientMessage_Operation:
+			out.Msg = &TransactionClientMessageMsgOperation{Value: FromWireTransactionOperation(variant.Operation)}
+		case *proto.TransactionClientMessage_Commit:
+			out.Msg = &TransactionClientMessageMsgCommit{Value: FromWireTransactionCommitRequest(variant.Commit)}
+		case *proto.TransactionClientMessage_Abort:
+			out.Msg = &TransactionClientMessageMsgAbort{Value: FromWireTransactionAbortRequest(variant.Abort)}
+		}
+		return out
+	})
 }
 
 func ToWireTransactionCommitRequest(value *TransactionCommitRequest) *proto.TransactionCommitRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionCommitRequest{}
-	return out
+	return convertMessage(value, func(value *TransactionCommitRequest) *proto.TransactionCommitRequest {
+		out := &proto.TransactionCommitRequest{}
+		return out
+	})
 }
 
 func FromWireTransactionCommitRequest(value *proto.TransactionCommitRequest) *TransactionCommitRequest {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionCommitRequest{}
-	return out
+	return convertMessage(value, func(value *proto.TransactionCommitRequest) *TransactionCommitRequest {
+		out := &TransactionCommitRequest{}
+		return out
+	})
 }
 
 func ToWireTransactionCommitResponse(value *TransactionCommitResponse) *proto.TransactionCommitResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionCommitResponse{
-		Error: ToWireStatus(value.Error),
-	}
-	return out
+	return convertMessage(value, func(value *TransactionCommitResponse) *proto.TransactionCommitResponse {
+		out := &proto.TransactionCommitResponse{
+			Error: ToWireStatus(value.Error),
+		}
+		return out
+	})
 }
 
 func FromWireTransactionCommitResponse(value *proto.TransactionCommitResponse) *TransactionCommitResponse {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionCommitResponse{
-		Error: FromWireStatus(value.Error),
-	}
-	return out
+	return convertMessage(value, func(value *proto.TransactionCommitResponse) *TransactionCommitResponse {
+		out := &TransactionCommitResponse{
+			Error: FromWireStatus(value.Error),
+		}
+		return out
+	})
 }
 
 func ToWireTransactionOperation(value *TransactionOperation) *proto.TransactionOperation {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionOperation{
-		RequestId: value.RequestId,
-	}
-	switch variant := value.Operation.(type) {
-	case *TransactionOperationOperationGet:
-		out.Operation = &proto.TransactionOperation_Get{Get: ToWireObjectStoreRequest(variant.Value)}
-	case *TransactionOperationOperationGetKey:
-		out.Operation = &proto.TransactionOperation_GetKey{GetKey: ToWireObjectStoreRequest(variant.Value)}
-	case *TransactionOperationOperationAdd:
-		out.Operation = &proto.TransactionOperation_Add{Add: ToWireRecordRequest(variant.Value)}
-	case *TransactionOperationOperationPut:
-		out.Operation = &proto.TransactionOperation_Put{Put: ToWireRecordRequest(variant.Value)}
-	case *TransactionOperationOperationDelete:
-		out.Operation = &proto.TransactionOperation_Delete{Delete: ToWireObjectStoreRequest(variant.Value)}
-	case *TransactionOperationOperationClear:
-		out.Operation = &proto.TransactionOperation_Clear{Clear: ToWireObjectStoreNameRequest(variant.Value)}
-	case *TransactionOperationOperationGetAll:
-		out.Operation = &proto.TransactionOperation_GetAll{GetAll: ToWireObjectStoreRangeRequest(variant.Value)}
-	case *TransactionOperationOperationGetAllKeys:
-		out.Operation = &proto.TransactionOperation_GetAllKeys{GetAllKeys: ToWireObjectStoreRangeRequest(variant.Value)}
-	case *TransactionOperationOperationCount:
-		out.Operation = &proto.TransactionOperation_Count{Count: ToWireObjectStoreRangeRequest(variant.Value)}
-	case *TransactionOperationOperationDeleteRange:
-		out.Operation = &proto.TransactionOperation_DeleteRange{DeleteRange: ToWireObjectStoreRangeRequest(variant.Value)}
-	case *TransactionOperationOperationIndexGet:
-		out.Operation = &proto.TransactionOperation_IndexGet{IndexGet: ToWireIndexQueryRequest(variant.Value)}
-	case *TransactionOperationOperationIndexGetKey:
-		out.Operation = &proto.TransactionOperation_IndexGetKey{IndexGetKey: ToWireIndexQueryRequest(variant.Value)}
-	case *TransactionOperationOperationIndexGetAll:
-		out.Operation = &proto.TransactionOperation_IndexGetAll{IndexGetAll: ToWireIndexQueryRequest(variant.Value)}
-	case *TransactionOperationOperationIndexGetAllKeys:
-		out.Operation = &proto.TransactionOperation_IndexGetAllKeys{IndexGetAllKeys: ToWireIndexQueryRequest(variant.Value)}
-	case *TransactionOperationOperationIndexCount:
-		out.Operation = &proto.TransactionOperation_IndexCount{IndexCount: ToWireIndexQueryRequest(variant.Value)}
-	case *TransactionOperationOperationIndexDelete:
-		out.Operation = &proto.TransactionOperation_IndexDelete{IndexDelete: ToWireIndexQueryRequest(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *TransactionOperation) *proto.TransactionOperation {
+		out := &proto.TransactionOperation{
+			RequestId: value.RequestId,
+		}
+		switch variant := value.Operation.(type) {
+		case *TransactionOperationOperationGet:
+			out.Operation = &proto.TransactionOperation_Get{Get: ToWireObjectStoreRequest(variant.Value)}
+		case *TransactionOperationOperationGetKey:
+			out.Operation = &proto.TransactionOperation_GetKey{GetKey: ToWireObjectStoreRequest(variant.Value)}
+		case *TransactionOperationOperationAdd:
+			out.Operation = &proto.TransactionOperation_Add{Add: ToWireRecordRequest(variant.Value)}
+		case *TransactionOperationOperationPut:
+			out.Operation = &proto.TransactionOperation_Put{Put: ToWireRecordRequest(variant.Value)}
+		case *TransactionOperationOperationDelete:
+			out.Operation = &proto.TransactionOperation_Delete{Delete: ToWireObjectStoreRequest(variant.Value)}
+		case *TransactionOperationOperationClear:
+			out.Operation = &proto.TransactionOperation_Clear{Clear: ToWireObjectStoreNameRequest(variant.Value)}
+		case *TransactionOperationOperationGetAll:
+			out.Operation = &proto.TransactionOperation_GetAll{GetAll: ToWireObjectStoreRangeRequest(variant.Value)}
+		case *TransactionOperationOperationGetAllKeys:
+			out.Operation = &proto.TransactionOperation_GetAllKeys{GetAllKeys: ToWireObjectStoreRangeRequest(variant.Value)}
+		case *TransactionOperationOperationCount:
+			out.Operation = &proto.TransactionOperation_Count{Count: ToWireObjectStoreRangeRequest(variant.Value)}
+		case *TransactionOperationOperationDeleteRange:
+			out.Operation = &proto.TransactionOperation_DeleteRange{DeleteRange: ToWireObjectStoreRangeRequest(variant.Value)}
+		case *TransactionOperationOperationIndexGet:
+			out.Operation = &proto.TransactionOperation_IndexGet{IndexGet: ToWireIndexQueryRequest(variant.Value)}
+		case *TransactionOperationOperationIndexGetKey:
+			out.Operation = &proto.TransactionOperation_IndexGetKey{IndexGetKey: ToWireIndexQueryRequest(variant.Value)}
+		case *TransactionOperationOperationIndexGetAll:
+			out.Operation = &proto.TransactionOperation_IndexGetAll{IndexGetAll: ToWireIndexQueryRequest(variant.Value)}
+		case *TransactionOperationOperationIndexGetAllKeys:
+			out.Operation = &proto.TransactionOperation_IndexGetAllKeys{IndexGetAllKeys: ToWireIndexQueryRequest(variant.Value)}
+		case *TransactionOperationOperationIndexCount:
+			out.Operation = &proto.TransactionOperation_IndexCount{IndexCount: ToWireIndexQueryRequest(variant.Value)}
+		case *TransactionOperationOperationIndexDelete:
+			out.Operation = &proto.TransactionOperation_IndexDelete{IndexDelete: ToWireIndexQueryRequest(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireTransactionOperation(value *proto.TransactionOperation) *TransactionOperation {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionOperation{
-		RequestId: value.RequestId,
-	}
-	switch variant := value.Operation.(type) {
-	case *proto.TransactionOperation_Get:
-		out.Operation = &TransactionOperationOperationGet{Value: FromWireObjectStoreRequest(variant.Get)}
-	case *proto.TransactionOperation_GetKey:
-		out.Operation = &TransactionOperationOperationGetKey{Value: FromWireObjectStoreRequest(variant.GetKey)}
-	case *proto.TransactionOperation_Add:
-		out.Operation = &TransactionOperationOperationAdd{Value: FromWireRecordRequest(variant.Add)}
-	case *proto.TransactionOperation_Put:
-		out.Operation = &TransactionOperationOperationPut{Value: FromWireRecordRequest(variant.Put)}
-	case *proto.TransactionOperation_Delete:
-		out.Operation = &TransactionOperationOperationDelete{Value: FromWireObjectStoreRequest(variant.Delete)}
-	case *proto.TransactionOperation_Clear:
-		out.Operation = &TransactionOperationOperationClear{Value: FromWireObjectStoreNameRequest(variant.Clear)}
-	case *proto.TransactionOperation_GetAll:
-		out.Operation = &TransactionOperationOperationGetAll{Value: FromWireObjectStoreRangeRequest(variant.GetAll)}
-	case *proto.TransactionOperation_GetAllKeys:
-		out.Operation = &TransactionOperationOperationGetAllKeys{Value: FromWireObjectStoreRangeRequest(variant.GetAllKeys)}
-	case *proto.TransactionOperation_Count:
-		out.Operation = &TransactionOperationOperationCount{Value: FromWireObjectStoreRangeRequest(variant.Count)}
-	case *proto.TransactionOperation_DeleteRange:
-		out.Operation = &TransactionOperationOperationDeleteRange{Value: FromWireObjectStoreRangeRequest(variant.DeleteRange)}
-	case *proto.TransactionOperation_IndexGet:
-		out.Operation = &TransactionOperationOperationIndexGet{Value: FromWireIndexQueryRequest(variant.IndexGet)}
-	case *proto.TransactionOperation_IndexGetKey:
-		out.Operation = &TransactionOperationOperationIndexGetKey{Value: FromWireIndexQueryRequest(variant.IndexGetKey)}
-	case *proto.TransactionOperation_IndexGetAll:
-		out.Operation = &TransactionOperationOperationIndexGetAll{Value: FromWireIndexQueryRequest(variant.IndexGetAll)}
-	case *proto.TransactionOperation_IndexGetAllKeys:
-		out.Operation = &TransactionOperationOperationIndexGetAllKeys{Value: FromWireIndexQueryRequest(variant.IndexGetAllKeys)}
-	case *proto.TransactionOperation_IndexCount:
-		out.Operation = &TransactionOperationOperationIndexCount{Value: FromWireIndexQueryRequest(variant.IndexCount)}
-	case *proto.TransactionOperation_IndexDelete:
-		out.Operation = &TransactionOperationOperationIndexDelete{Value: FromWireIndexQueryRequest(variant.IndexDelete)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.TransactionOperation) *TransactionOperation {
+		out := &TransactionOperation{
+			RequestId: value.RequestId,
+		}
+		switch variant := value.Operation.(type) {
+		case *proto.TransactionOperation_Get:
+			out.Operation = &TransactionOperationOperationGet{Value: FromWireObjectStoreRequest(variant.Get)}
+		case *proto.TransactionOperation_GetKey:
+			out.Operation = &TransactionOperationOperationGetKey{Value: FromWireObjectStoreRequest(variant.GetKey)}
+		case *proto.TransactionOperation_Add:
+			out.Operation = &TransactionOperationOperationAdd{Value: FromWireRecordRequest(variant.Add)}
+		case *proto.TransactionOperation_Put:
+			out.Operation = &TransactionOperationOperationPut{Value: FromWireRecordRequest(variant.Put)}
+		case *proto.TransactionOperation_Delete:
+			out.Operation = &TransactionOperationOperationDelete{Value: FromWireObjectStoreRequest(variant.Delete)}
+		case *proto.TransactionOperation_Clear:
+			out.Operation = &TransactionOperationOperationClear{Value: FromWireObjectStoreNameRequest(variant.Clear)}
+		case *proto.TransactionOperation_GetAll:
+			out.Operation = &TransactionOperationOperationGetAll{Value: FromWireObjectStoreRangeRequest(variant.GetAll)}
+		case *proto.TransactionOperation_GetAllKeys:
+			out.Operation = &TransactionOperationOperationGetAllKeys{Value: FromWireObjectStoreRangeRequest(variant.GetAllKeys)}
+		case *proto.TransactionOperation_Count:
+			out.Operation = &TransactionOperationOperationCount{Value: FromWireObjectStoreRangeRequest(variant.Count)}
+		case *proto.TransactionOperation_DeleteRange:
+			out.Operation = &TransactionOperationOperationDeleteRange{Value: FromWireObjectStoreRangeRequest(variant.DeleteRange)}
+		case *proto.TransactionOperation_IndexGet:
+			out.Operation = &TransactionOperationOperationIndexGet{Value: FromWireIndexQueryRequest(variant.IndexGet)}
+		case *proto.TransactionOperation_IndexGetKey:
+			out.Operation = &TransactionOperationOperationIndexGetKey{Value: FromWireIndexQueryRequest(variant.IndexGetKey)}
+		case *proto.TransactionOperation_IndexGetAll:
+			out.Operation = &TransactionOperationOperationIndexGetAll{Value: FromWireIndexQueryRequest(variant.IndexGetAll)}
+		case *proto.TransactionOperation_IndexGetAllKeys:
+			out.Operation = &TransactionOperationOperationIndexGetAllKeys{Value: FromWireIndexQueryRequest(variant.IndexGetAllKeys)}
+		case *proto.TransactionOperation_IndexCount:
+			out.Operation = &TransactionOperationOperationIndexCount{Value: FromWireIndexQueryRequest(variant.IndexCount)}
+		case *proto.TransactionOperation_IndexDelete:
+			out.Operation = &TransactionOperationOperationIndexDelete{Value: FromWireIndexQueryRequest(variant.IndexDelete)}
+		}
+		return out
+	})
 }
 
 func ToWireTransactionOperationResponse(value *TransactionOperationResponse) *proto.TransactionOperationResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionOperationResponse{
-		RequestId: value.RequestId,
-		Error:     ToWireStatus(value.Error),
-	}
-	switch variant := value.Result.(type) {
-	case *TransactionOperationResponseResultEmpty:
-		out.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
-	case *TransactionOperationResponseResultRecord:
-		out.Result = &proto.TransactionOperationResponse_Record{Record: ToWireRecordResponse(variant.Value)}
-	case *TransactionOperationResponseResultRecords:
-		out.Result = &proto.TransactionOperationResponse_Records{Records: ToWireRecordsResponse(variant.Value)}
-	case *TransactionOperationResponseResultKey:
-		out.Result = &proto.TransactionOperationResponse_Key{Key: ToWireKeyResponse(variant.Value)}
-	case *TransactionOperationResponseResultKeys:
-		out.Result = &proto.TransactionOperationResponse_Keys{Keys: ToWireKeysResponse(variant.Value)}
-	case *TransactionOperationResponseResultCount:
-		out.Result = &proto.TransactionOperationResponse_Count{Count: ToWireCountResponse(variant.Value)}
-	case *TransactionOperationResponseResultDelete:
-		out.Result = &proto.TransactionOperationResponse_Delete{Delete: ToWireDeleteResponse(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *TransactionOperationResponse) *proto.TransactionOperationResponse {
+		out := &proto.TransactionOperationResponse{
+			RequestId: value.RequestId,
+			Error:     ToWireStatus(value.Error),
+		}
+		switch variant := value.Result.(type) {
+		case *TransactionOperationResponseResultEmpty:
+			out.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
+		case *TransactionOperationResponseResultRecord:
+			out.Result = &proto.TransactionOperationResponse_Record{Record: ToWireRecordResponse(variant.Value)}
+		case *TransactionOperationResponseResultRecords:
+			out.Result = &proto.TransactionOperationResponse_Records{Records: ToWireRecordsResponse(variant.Value)}
+		case *TransactionOperationResponseResultKey:
+			out.Result = &proto.TransactionOperationResponse_Key{Key: ToWireKeyResponse(variant.Value)}
+		case *TransactionOperationResponseResultKeys:
+			out.Result = &proto.TransactionOperationResponse_Keys{Keys: ToWireKeysResponse(variant.Value)}
+		case *TransactionOperationResponseResultCount:
+			out.Result = &proto.TransactionOperationResponse_Count{Count: ToWireCountResponse(variant.Value)}
+		case *TransactionOperationResponseResultDelete:
+			out.Result = &proto.TransactionOperationResponse_Delete{Delete: ToWireDeleteResponse(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireTransactionOperationResponse(value *proto.TransactionOperationResponse) *TransactionOperationResponse {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionOperationResponse{
-		RequestId: value.RequestId,
-		Error:     FromWireStatus(value.Error),
-	}
-	switch variant := value.Result.(type) {
-	case *proto.TransactionOperationResponse_Empty:
-		out.Result = &TransactionOperationResponseResultEmpty{}
-	case *proto.TransactionOperationResponse_Record:
-		out.Result = &TransactionOperationResponseResultRecord{Value: FromWireRecordResponse(variant.Record)}
-	case *proto.TransactionOperationResponse_Records:
-		out.Result = &TransactionOperationResponseResultRecords{Value: FromWireRecordsResponse(variant.Records)}
-	case *proto.TransactionOperationResponse_Key:
-		out.Result = &TransactionOperationResponseResultKey{Value: FromWireKeyResponse(variant.Key)}
-	case *proto.TransactionOperationResponse_Keys:
-		out.Result = &TransactionOperationResponseResultKeys{Value: FromWireKeysResponse(variant.Keys)}
-	case *proto.TransactionOperationResponse_Count:
-		out.Result = &TransactionOperationResponseResultCount{Value: FromWireCountResponse(variant.Count)}
-	case *proto.TransactionOperationResponse_Delete:
-		out.Result = &TransactionOperationResponseResultDelete{Value: FromWireDeleteResponse(variant.Delete)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.TransactionOperationResponse) *TransactionOperationResponse {
+		out := &TransactionOperationResponse{
+			RequestId: value.RequestId,
+			Error:     FromWireStatus(value.Error),
+		}
+		switch variant := value.Result.(type) {
+		case *proto.TransactionOperationResponse_Empty:
+			out.Result = &TransactionOperationResponseResultEmpty{}
+		case *proto.TransactionOperationResponse_Record:
+			out.Result = &TransactionOperationResponseResultRecord{Value: FromWireRecordResponse(variant.Record)}
+		case *proto.TransactionOperationResponse_Records:
+			out.Result = &TransactionOperationResponseResultRecords{Value: FromWireRecordsResponse(variant.Records)}
+		case *proto.TransactionOperationResponse_Key:
+			out.Result = &TransactionOperationResponseResultKey{Value: FromWireKeyResponse(variant.Key)}
+		case *proto.TransactionOperationResponse_Keys:
+			out.Result = &TransactionOperationResponseResultKeys{Value: FromWireKeysResponse(variant.Keys)}
+		case *proto.TransactionOperationResponse_Count:
+			out.Result = &TransactionOperationResponseResultCount{Value: FromWireCountResponse(variant.Count)}
+		case *proto.TransactionOperationResponse_Delete:
+			out.Result = &TransactionOperationResponseResultDelete{Value: FromWireDeleteResponse(variant.Delete)}
+		}
+		return out
+	})
 }
 
 func ToWireTransactionServerMessage(value *TransactionServerMessage) *proto.TransactionServerMessage {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TransactionServerMessage{}
-	switch variant := value.Msg.(type) {
-	case *TransactionServerMessageMsgBegin:
-		out.Msg = &proto.TransactionServerMessage_Begin{Begin: ToWireTransactionBeginResponse(variant.Value)}
-	case *TransactionServerMessageMsgOperation:
-		out.Msg = &proto.TransactionServerMessage_Operation{Operation: ToWireTransactionOperationResponse(variant.Value)}
-	case *TransactionServerMessageMsgCommit:
-		out.Msg = &proto.TransactionServerMessage_Commit{Commit: ToWireTransactionCommitResponse(variant.Value)}
-	case *TransactionServerMessageMsgAbort:
-		out.Msg = &proto.TransactionServerMessage_Abort{Abort: ToWireTransactionAbortResponse(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *TransactionServerMessage) *proto.TransactionServerMessage {
+		out := &proto.TransactionServerMessage{}
+		switch variant := value.Msg.(type) {
+		case *TransactionServerMessageMsgBegin:
+			out.Msg = &proto.TransactionServerMessage_Begin{Begin: ToWireTransactionBeginResponse(variant.Value)}
+		case *TransactionServerMessageMsgOperation:
+			out.Msg = &proto.TransactionServerMessage_Operation{Operation: ToWireTransactionOperationResponse(variant.Value)}
+		case *TransactionServerMessageMsgCommit:
+			out.Msg = &proto.TransactionServerMessage_Commit{Commit: ToWireTransactionCommitResponse(variant.Value)}
+		case *TransactionServerMessageMsgAbort:
+			out.Msg = &proto.TransactionServerMessage_Abort{Abort: ToWireTransactionAbortResponse(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireTransactionServerMessage(value *proto.TransactionServerMessage) *TransactionServerMessage {
-	if value == nil {
-		return nil
-	}
-	out := &TransactionServerMessage{}
-	switch variant := value.Msg.(type) {
-	case *proto.TransactionServerMessage_Begin:
-		out.Msg = &TransactionServerMessageMsgBegin{Value: FromWireTransactionBeginResponse(variant.Begin)}
-	case *proto.TransactionServerMessage_Operation:
-		out.Msg = &TransactionServerMessageMsgOperation{Value: FromWireTransactionOperationResponse(variant.Operation)}
-	case *proto.TransactionServerMessage_Commit:
-		out.Msg = &TransactionServerMessageMsgCommit{Value: FromWireTransactionCommitResponse(variant.Commit)}
-	case *proto.TransactionServerMessage_Abort:
-		out.Msg = &TransactionServerMessageMsgAbort{Value: FromWireTransactionAbortResponse(variant.Abort)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.TransactionServerMessage) *TransactionServerMessage {
+		out := &TransactionServerMessage{}
+		switch variant := value.Msg.(type) {
+		case *proto.TransactionServerMessage_Begin:
+			out.Msg = &TransactionServerMessageMsgBegin{Value: FromWireTransactionBeginResponse(variant.Begin)}
+		case *proto.TransactionServerMessage_Operation:
+			out.Msg = &TransactionServerMessageMsgOperation{Value: FromWireTransactionOperationResponse(variant.Operation)}
+		case *proto.TransactionServerMessage_Commit:
+			out.Msg = &TransactionServerMessageMsgCommit{Value: FromWireTransactionCommitResponse(variant.Commit)}
+		case *proto.TransactionServerMessage_Abort:
+			out.Msg = &TransactionServerMessageMsgAbort{Value: FromWireTransactionAbortResponse(variant.Abort)}
+		}
+		return out
+	})
 }
 
 func ToWireTypedValue(value *TypedValue) *proto.TypedValue {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TypedValue{}
-	switch variant := value.Kind.(type) {
-	case *TypedValueKindNullValue:
-		out.Kind = &proto.TypedValue_NullValue{NullValue: structpb.NullValue_NULL_VALUE}
-	case *TypedValueKindStringValue:
-		out.Kind = &proto.TypedValue_StringValue{StringValue: variant.Value}
-	case *TypedValueKindIntValue:
-		out.Kind = &proto.TypedValue_IntValue{IntValue: variant.Value}
-	case *TypedValueKindFloatValue:
-		out.Kind = &proto.TypedValue_FloatValue{FloatValue: variant.Value}
-	case *TypedValueKindBoolValue:
-		out.Kind = &proto.TypedValue_BoolValue{BoolValue: variant.Value}
-	case *TypedValueKindTimeValue:
-		out.Kind = &proto.TypedValue_TimeValue{TimeValue: timestamppb.New(variant.Value)}
-	case *TypedValueKindBytesValue:
-		out.Kind = &proto.TypedValue_BytesValue{BytesValue: variant.Value}
-	case *TypedValueKindJsonValue:
-		out.Kind = &proto.TypedValue_JsonValue{JsonValue: ToWireValue(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *TypedValue) *proto.TypedValue {
+		out := &proto.TypedValue{}
+		switch variant := value.Kind.(type) {
+		case *TypedValueKindNullValue:
+			out.Kind = &proto.TypedValue_NullValue{NullValue: structpb.NullValue_NULL_VALUE}
+		case *TypedValueKindStringValue:
+			out.Kind = &proto.TypedValue_StringValue{StringValue: variant.Value}
+		case *TypedValueKindIntValue:
+			out.Kind = &proto.TypedValue_IntValue{IntValue: variant.Value}
+		case *TypedValueKindFloatValue:
+			out.Kind = &proto.TypedValue_FloatValue{FloatValue: variant.Value}
+		case *TypedValueKindBoolValue:
+			out.Kind = &proto.TypedValue_BoolValue{BoolValue: variant.Value}
+		case *TypedValueKindTimeValue:
+			out.Kind = &proto.TypedValue_TimeValue{TimeValue: timestamppb.New(variant.Value)}
+		case *TypedValueKindBytesValue:
+			out.Kind = &proto.TypedValue_BytesValue{BytesValue: variant.Value}
+		case *TypedValueKindJsonValue:
+			out.Kind = &proto.TypedValue_JsonValue{JsonValue: ToWireValue(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireTypedValue(value *proto.TypedValue) *TypedValue {
-	if value == nil {
-		return nil
-	}
-	out := &TypedValue{}
-	switch variant := value.Kind.(type) {
-	case *proto.TypedValue_NullValue:
-		out.Kind = &TypedValueKindNullValue{}
-	case *proto.TypedValue_StringValue:
-		out.Kind = &TypedValueKindStringValue{Value: variant.StringValue}
-	case *proto.TypedValue_IntValue:
-		out.Kind = &TypedValueKindIntValue{Value: variant.IntValue}
-	case *proto.TypedValue_FloatValue:
-		out.Kind = &TypedValueKindFloatValue{Value: variant.FloatValue}
-	case *proto.TypedValue_BoolValue:
-		out.Kind = &TypedValueKindBoolValue{Value: variant.BoolValue}
-	case *proto.TypedValue_TimeValue:
-		out.Kind = &TypedValueKindTimeValue{Value: variant.TimeValue.AsTime()}
-	case *proto.TypedValue_BytesValue:
-		out.Kind = &TypedValueKindBytesValue{Value: variant.BytesValue}
-	case *proto.TypedValue_JsonValue:
-		out.Kind = &TypedValueKindJsonValue{Value: FromWireValue(variant.JsonValue)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.TypedValue) *TypedValue {
+		out := &TypedValue{}
+		switch variant := value.Kind.(type) {
+		case *proto.TypedValue_NullValue:
+			out.Kind = &TypedValueKindNullValue{}
+		case *proto.TypedValue_StringValue:
+			out.Kind = &TypedValueKindStringValue{Value: variant.StringValue}
+		case *proto.TypedValue_IntValue:
+			out.Kind = &TypedValueKindIntValue{Value: variant.IntValue}
+		case *proto.TypedValue_FloatValue:
+			out.Kind = &TypedValueKindFloatValue{Value: variant.FloatValue}
+		case *proto.TypedValue_BoolValue:
+			out.Kind = &TypedValueKindBoolValue{Value: variant.BoolValue}
+		case *proto.TypedValue_TimeValue:
+			out.Kind = &TypedValueKindTimeValue{Value: variant.TimeValue.AsTime()}
+		case *proto.TypedValue_BytesValue:
+			out.Kind = &TypedValueKindBytesValue{Value: variant.BytesValue}
+		case *proto.TypedValue_JsonValue:
+			out.Kind = &TypedValueKindJsonValue{Value: FromWireValue(variant.JsonValue)}
+		}
+		return out
+	})
 }

@@ -7,837 +7,763 @@ import (
 )
 
 func ToWireAction(value *Action) *proto.Action {
-	if value == nil {
-		return nil
-	}
-	out := &proto.Action{
-		Name:       value.Name,
-		Properties: ToWireStruct(value.Properties),
-	}
-	return out
+	return convertMessage(value, func(value *Action) *proto.Action {
+		out := &proto.Action{
+			Name:       value.Name,
+			Properties: ToWireStruct(value.Properties),
+		}
+		return out
+	})
 }
 
 func FromWireAction(value *proto.Action) *Action {
-	if value == nil {
-		return nil
-	}
-	out := &Action{
-		Name:       value.Name,
-		Properties: FromWireStruct(value.Properties),
-	}
-	return out
+	return convertMessage(value, func(value *proto.Action) *Action {
+		out := &Action{
+			Name:       value.Name,
+			Properties: FromWireStruct(value.Properties),
+		}
+		return out
+	})
 }
 
 func ToWireAddRelationshipRequest(value *AddRelationshipRequest) *proto.AddRelationshipRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AddRelationshipRequest{
-		Relationship: ToWireRelationship(value.Relationship),
-	}
-	return out
+	return convertMessage(value, func(value *AddRelationshipRequest) *proto.AddRelationshipRequest {
+		out := &proto.AddRelationshipRequest{
+			Relationship: ToWireRelationship(value.Relationship),
+		}
+		return out
+	})
 }
 
 func FromWireAddRelationshipRequest(value *proto.AddRelationshipRequest) *AddRelationshipRequest {
-	if value == nil {
-		return nil
-	}
-	out := &AddRelationshipRequest{
-		Relationship: FromWireRelationship(value.Relationship),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AddRelationshipRequest) *AddRelationshipRequest {
+		out := &AddRelationshipRequest{
+			Relationship: FromWireRelationship(value.Relationship),
+		}
+		return out
+	})
 }
 
 func ToWireAddRelationshipResponse(value *AddRelationshipResponse) *proto.AddRelationshipResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AddRelationshipResponse{
-		Relationship: ToWireRelationship(value.Relationship),
-	}
-	return out
+	return convertMessage(value, func(value *AddRelationshipResponse) *proto.AddRelationshipResponse {
+		out := &proto.AddRelationshipResponse{
+			Relationship: ToWireRelationship(value.Relationship),
+		}
+		return out
+	})
 }
 
 func FromWireAddRelationshipResponse(value *proto.AddRelationshipResponse) *AddRelationshipResponse {
-	if value == nil {
-		return nil
-	}
-	out := &AddRelationshipResponse{
-		Relationship: FromWireRelationship(value.Relationship),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AddRelationshipResponse) *AddRelationshipResponse {
+		out := &AddRelationshipResponse{
+			Relationship: FromWireRelationship(value.Relationship),
+		}
+		return out
+	})
 }
 
 func ToWireAuthorizationModel(value *AuthorizationModel) *proto.AuthorizationModel {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AuthorizationModel{
-		Id:      value.Id,
-		Version: value.Version,
-	}
-	appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, ToWireAuthorizationModelResourceType)
-	return out
+	return convertMessage(value, func(value *AuthorizationModel) *proto.AuthorizationModel {
+		out := &proto.AuthorizationModel{
+			Id:      value.Id,
+			Version: value.Version,
+		}
+		appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, ToWireAuthorizationModelResourceType)
+		return out
+	})
 }
 
 func FromWireAuthorizationModel(value *proto.AuthorizationModel) *AuthorizationModel {
-	if value == nil {
-		return nil
-	}
-	out := &AuthorizationModel{
-		Id:      value.Id,
-		Version: value.Version,
-	}
-	appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, FromWireAuthorizationModelResourceType)
-	return out
+	return convertMessage(value, func(value *proto.AuthorizationModel) *AuthorizationModel {
+		out := &AuthorizationModel{
+			Id:      value.Id,
+			Version: value.Version,
+		}
+		appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, FromWireAuthorizationModelResourceType)
+		return out
+	})
 }
 
 func ToWireAuthorizationModelRef(value *AuthorizationModelRef) *proto.AuthorizationModelRef {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AuthorizationModelRef{
-		Id:        value.Id,
-		Version:   value.Version,
-		CreatedAt: ToWireTimestamp(value.CreatedAt),
-	}
-	return out
+	return convertMessage(value, func(value *AuthorizationModelRef) *proto.AuthorizationModelRef {
+		out := &proto.AuthorizationModelRef{
+			Id:        value.Id,
+			Version:   value.Version,
+			CreatedAt: ToWireTimestamp(value.CreatedAt),
+		}
+		return out
+	})
 }
 
 func FromWireAuthorizationModelRef(value *proto.AuthorizationModelRef) *AuthorizationModelRef {
-	if value == nil {
-		return nil
-	}
-	out := &AuthorizationModelRef{
-		Id:        value.Id,
-		Version:   value.Version,
-		CreatedAt: FromWireTimestamp(value.CreatedAt),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AuthorizationModelRef) *AuthorizationModelRef {
+		out := &AuthorizationModelRef{
+			Id:        value.Id,
+			Version:   value.Version,
+			CreatedAt: FromWireTimestamp(value.CreatedAt),
+		}
+		return out
+	})
 }
 
 func ToWireAuthorizationModelResourceType(value *AuthorizationModelResourceType) *proto.AuthorizationModelResourceType {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AuthorizationModelResourceType{
-		Name:        value.Name,
-		SourceLayer: proto.SourceLayer(value.SourceLayer),
-		DefaultRole: value.DefaultRole,
-	}
-	appendMessageSlice(&out.Relations, value.Relations, ToWireModelRelation)
-	appendMessageSlice(&out.Actions, value.Actions, ToWireModelAction)
-	return out
+	return convertMessage(value, func(value *AuthorizationModelResourceType) *proto.AuthorizationModelResourceType {
+		out := &proto.AuthorizationModelResourceType{
+			Name:        value.Name,
+			SourceLayer: proto.SourceLayer(value.SourceLayer),
+			DefaultRole: value.DefaultRole,
+		}
+		appendMessageSlice(&out.Relations, value.Relations, ToWireModelRelation)
+		appendMessageSlice(&out.Actions, value.Actions, ToWireModelAction)
+		return out
+	})
 }
 
 func FromWireAuthorizationModelResourceType(value *proto.AuthorizationModelResourceType) *AuthorizationModelResourceType {
-	if value == nil {
-		return nil
-	}
-	out := &AuthorizationModelResourceType{
-		Name:        value.Name,
-		SourceLayer: SourceLayer(value.SourceLayer),
-		DefaultRole: value.DefaultRole,
-	}
-	appendMessageSlice(&out.Relations, value.Relations, FromWireModelRelation)
-	appendMessageSlice(&out.Actions, value.Actions, FromWireModelAction)
-	return out
+	return convertMessage(value, func(value *proto.AuthorizationModelResourceType) *AuthorizationModelResourceType {
+		out := &AuthorizationModelResourceType{
+			Name:        value.Name,
+			SourceLayer: SourceLayer(value.SourceLayer),
+			DefaultRole: value.DefaultRole,
+		}
+		appendMessageSlice(&out.Relations, value.Relations, FromWireModelRelation)
+		appendMessageSlice(&out.Actions, value.Actions, FromWireModelAction)
+		return out
+	})
 }
 
 func ToWireAuthorizationModelResourceTypeFilter(value *AuthorizationModelResourceTypeFilter) *proto.AuthorizationModelResourceTypeFilter {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AuthorizationModelResourceTypeFilter{
-		Name:        value.Name,
-		SourceLayer: proto.SourceLayer(value.SourceLayer),
-	}
-	return out
+	return convertMessage(value, func(value *AuthorizationModelResourceTypeFilter) *proto.AuthorizationModelResourceTypeFilter {
+		out := &proto.AuthorizationModelResourceTypeFilter{
+			Name:        value.Name,
+			SourceLayer: proto.SourceLayer(value.SourceLayer),
+		}
+		return out
+	})
 }
 
 func FromWireAuthorizationModelResourceTypeFilter(value *proto.AuthorizationModelResourceTypeFilter) *AuthorizationModelResourceTypeFilter {
-	if value == nil {
-		return nil
-	}
-	out := &AuthorizationModelResourceTypeFilter{
-		Name:        value.Name,
-		SourceLayer: SourceLayer(value.SourceLayer),
-	}
-	return out
+	return convertMessage(value, func(value *proto.AuthorizationModelResourceTypeFilter) *AuthorizationModelResourceTypeFilter {
+		out := &AuthorizationModelResourceTypeFilter{
+			Name:        value.Name,
+			SourceLayer: SourceLayer(value.SourceLayer),
+		}
+		return out
+	})
 }
 
 func ToWireCheckAccessManyRequest(value *CheckAccessManyRequest) *proto.CheckAccessManyRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CheckAccessManyRequest{}
-	appendMessageSlice(&out.Requests, value.Requests, ToWireCheckAccessRequest)
-	return out
+	return convertMessage(value, func(value *CheckAccessManyRequest) *proto.CheckAccessManyRequest {
+		out := &proto.CheckAccessManyRequest{}
+		appendMessageSlice(&out.Requests, value.Requests, ToWireCheckAccessRequest)
+		return out
+	})
 }
 
 func FromWireCheckAccessManyRequest(value *proto.CheckAccessManyRequest) *CheckAccessManyRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CheckAccessManyRequest{}
-	appendMessageSlice(&out.Requests, value.Requests, FromWireCheckAccessRequest)
-	return out
+	return convertMessage(value, func(value *proto.CheckAccessManyRequest) *CheckAccessManyRequest {
+		out := &CheckAccessManyRequest{}
+		appendMessageSlice(&out.Requests, value.Requests, FromWireCheckAccessRequest)
+		return out
+	})
 }
 
 func ToWireCheckAccessManyResponse(value *CheckAccessManyResponse) *proto.CheckAccessManyResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CheckAccessManyResponse{}
-	appendMessageSlice(&out.Decisions, value.Decisions, ToWireCheckAccessResponse)
-	return out
+	return convertMessage(value, func(value *CheckAccessManyResponse) *proto.CheckAccessManyResponse {
+		out := &proto.CheckAccessManyResponse{}
+		appendMessageSlice(&out.Decisions, value.Decisions, ToWireCheckAccessResponse)
+		return out
+	})
 }
 
 func FromWireCheckAccessManyResponse(value *proto.CheckAccessManyResponse) *CheckAccessManyResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CheckAccessManyResponse{}
-	appendMessageSlice(&out.Decisions, value.Decisions, FromWireCheckAccessResponse)
-	return out
+	return convertMessage(value, func(value *proto.CheckAccessManyResponse) *CheckAccessManyResponse {
+		out := &CheckAccessManyResponse{}
+		appendMessageSlice(&out.Decisions, value.Decisions, FromWireCheckAccessResponse)
+		return out
+	})
 }
 
 func ToWireCheckAccessRequest(value *CheckAccessRequest) *proto.CheckAccessRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CheckAccessRequest{
-		Subject:  ToWireSubject(value.Subject),
-		Action:   ToWireAction(value.Action),
-		Resource: ToWireResource(value.Resource),
-	}
-	return out
+	return convertMessage(value, func(value *CheckAccessRequest) *proto.CheckAccessRequest {
+		out := &proto.CheckAccessRequest{
+			Subject:  ToWireSubject(value.Subject),
+			Action:   ToWireAction(value.Action),
+			Resource: ToWireResource(value.Resource),
+		}
+		return out
+	})
 }
 
 func FromWireCheckAccessRequest(value *proto.CheckAccessRequest) *CheckAccessRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CheckAccessRequest{
-		Subject:  FromWireSubject(value.Subject),
-		Action:   FromWireAction(value.Action),
-		Resource: FromWireResource(value.Resource),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CheckAccessRequest) *CheckAccessRequest {
+		out := &CheckAccessRequest{
+			Subject:  FromWireSubject(value.Subject),
+			Action:   FromWireAction(value.Action),
+			Resource: FromWireResource(value.Resource),
+		}
+		return out
+	})
 }
 
 func ToWireCheckAccessResponse(value *CheckAccessResponse) *proto.CheckAccessResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CheckAccessResponse{
-		Allowed:          value.Allowed,
-		ModelId:          value.ModelId,
-		MatchedRelations: value.MatchedRelations,
-	}
-	return out
+	return convertMessage(value, func(value *CheckAccessResponse) *proto.CheckAccessResponse {
+		out := &proto.CheckAccessResponse{
+			Allowed:          value.Allowed,
+			ModelId:          value.ModelId,
+			MatchedRelations: value.MatchedRelations,
+		}
+		return out
+	})
 }
 
 func FromWireCheckAccessResponse(value *proto.CheckAccessResponse) *CheckAccessResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CheckAccessResponse{
-		Allowed:          value.Allowed,
-		ModelId:          value.ModelId,
-		MatchedRelations: value.MatchedRelations,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CheckAccessResponse) *CheckAccessResponse {
+		out := &CheckAccessResponse{
+			Allowed:          value.Allowed,
+			ModelId:          value.ModelId,
+			MatchedRelations: value.MatchedRelations,
+		}
+		return out
+	})
 }
 
 func ToWireDeleteRelationshipRequest(value *DeleteRelationshipRequest) *proto.DeleteRelationshipRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteRelationshipRequest{
-		RelationshipTuple: ToWireRelationshipTuple(value.RelationshipTuple),
-	}
-	return out
+	return convertMessage(value, func(value *DeleteRelationshipRequest) *proto.DeleteRelationshipRequest {
+		out := &proto.DeleteRelationshipRequest{
+			RelationshipTuple: ToWireRelationshipTuple(value.RelationshipTuple),
+		}
+		return out
+	})
 }
 
 func FromWireDeleteRelationshipRequest(value *proto.DeleteRelationshipRequest) *DeleteRelationshipRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteRelationshipRequest{
-		RelationshipTuple: FromWireRelationshipTuple(value.RelationshipTuple),
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeleteRelationshipRequest) *DeleteRelationshipRequest {
+		out := &DeleteRelationshipRequest{
+			RelationshipTuple: FromWireRelationshipTuple(value.RelationshipTuple),
+		}
+		return out
+	})
 }
 
 func ToWireDeleteRelationshipResponse(value *DeleteRelationshipResponse) *proto.DeleteRelationshipResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteRelationshipResponse{}
-	return out
+	return convertMessage(value, func(value *DeleteRelationshipResponse) *proto.DeleteRelationshipResponse {
+		out := &proto.DeleteRelationshipResponse{}
+		return out
+	})
 }
 
 func FromWireDeleteRelationshipResponse(value *proto.DeleteRelationshipResponse) *DeleteRelationshipResponse {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteRelationshipResponse{}
-	return out
+	return convertMessage(value, func(value *proto.DeleteRelationshipResponse) *DeleteRelationshipResponse {
+		out := &DeleteRelationshipResponse{}
+		return out
+	})
 }
 
 func ToWireGetActiveModelRefResponse(value *GetActiveModelRefResponse) *proto.GetActiveModelRefResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetActiveModelRefResponse{
-		Model: ToWireAuthorizationModelRef(value.Model),
-	}
-	return out
+	return convertMessage(value, func(value *GetActiveModelRefResponse) *proto.GetActiveModelRefResponse {
+		out := &proto.GetActiveModelRefResponse{
+			Model: ToWireAuthorizationModelRef(value.Model),
+		}
+		return out
+	})
 }
 
 func FromWireGetActiveModelRefResponse(value *proto.GetActiveModelRefResponse) *GetActiveModelRefResponse {
-	if value == nil {
-		return nil
-	}
-	out := &GetActiveModelRefResponse{
-		Model: FromWireAuthorizationModelRef(value.Model),
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetActiveModelRefResponse) *GetActiveModelRefResponse {
+		out := &GetActiveModelRefResponse{
+			Model: FromWireAuthorizationModelRef(value.Model),
+		}
+		return out
+	})
 }
 
 func ToWireListActiveModelResourceTypesRequest(value *ListActiveModelResourceTypesRequest) *proto.ListActiveModelResourceTypesRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListActiveModelResourceTypesRequest{
-		Filter:    ToWireAuthorizationModelResourceTypeFilter(value.Filter),
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}
-	return out
+	return convertMessage(value, func(value *ListActiveModelResourceTypesRequest) *proto.ListActiveModelResourceTypesRequest {
+		out := &proto.ListActiveModelResourceTypesRequest{
+			Filter:    ToWireAuthorizationModelResourceTypeFilter(value.Filter),
+			PageSize:  value.PageSize,
+			PageToken: value.PageToken,
+		}
+		return out
+	})
 }
 
 func FromWireListActiveModelResourceTypesRequest(value *proto.ListActiveModelResourceTypesRequest) *ListActiveModelResourceTypesRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListActiveModelResourceTypesRequest{
-		Filter:    FromWireAuthorizationModelResourceTypeFilter(value.Filter),
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListActiveModelResourceTypesRequest) *ListActiveModelResourceTypesRequest {
+		out := &ListActiveModelResourceTypesRequest{
+			Filter:    FromWireAuthorizationModelResourceTypeFilter(value.Filter),
+			PageSize:  value.PageSize,
+			PageToken: value.PageToken,
+		}
+		return out
+	})
 }
 
 func ToWireListActiveModelResourceTypesResponse(value *ListActiveModelResourceTypesResponse) *proto.ListActiveModelResourceTypesResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListActiveModelResourceTypesResponse{
-		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
-	}
-	appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, ToWireAuthorizationModelResourceType)
-	return out
+	return convertMessage(value, func(value *ListActiveModelResourceTypesResponse) *proto.ListActiveModelResourceTypesResponse {
+		out := &proto.ListActiveModelResourceTypesResponse{
+			NextPageToken: value.NextPageToken,
+			ModelId:       value.ModelId,
+		}
+		appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, ToWireAuthorizationModelResourceType)
+		return out
+	})
 }
 
 func FromWireListActiveModelResourceTypesResponse(value *proto.ListActiveModelResourceTypesResponse) *ListActiveModelResourceTypesResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListActiveModelResourceTypesResponse{
-		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
-	}
-	appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, FromWireAuthorizationModelResourceType)
-	return out
+	return convertMessage(value, func(value *proto.ListActiveModelResourceTypesResponse) *ListActiveModelResourceTypesResponse {
+		out := &ListActiveModelResourceTypesResponse{
+			NextPageToken: value.NextPageToken,
+			ModelId:       value.ModelId,
+		}
+		appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, FromWireAuthorizationModelResourceType)
+		return out
+	})
 }
 
 func ToWireListRelationshipsRequest(value *ListRelationshipsRequest) *proto.ListRelationshipsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListRelationshipsRequest{
-		Filter:    ToWireRelationshipFilter(value.Filter),
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}
-	return out
+	return convertMessage(value, func(value *ListRelationshipsRequest) *proto.ListRelationshipsRequest {
+		out := &proto.ListRelationshipsRequest{
+			Filter:    ToWireRelationshipFilter(value.Filter),
+			PageSize:  value.PageSize,
+			PageToken: value.PageToken,
+		}
+		return out
+	})
 }
 
 func FromWireListRelationshipsRequest(value *proto.ListRelationshipsRequest) *ListRelationshipsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListRelationshipsRequest{
-		Filter:    FromWireRelationshipFilter(value.Filter),
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListRelationshipsRequest) *ListRelationshipsRequest {
+		out := &ListRelationshipsRequest{
+			Filter:    FromWireRelationshipFilter(value.Filter),
+			PageSize:  value.PageSize,
+			PageToken: value.PageToken,
+		}
+		return out
+	})
 }
 
 func ToWireListRelationshipsResponse(value *ListRelationshipsResponse) *proto.ListRelationshipsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListRelationshipsResponse{
-		NextPageToken: value.NextPageToken,
-	}
-	appendMessageSlice(&out.Relationships, value.Relationships, ToWireRelationship)
-	return out
+	return convertMessage(value, func(value *ListRelationshipsResponse) *proto.ListRelationshipsResponse {
+		out := &proto.ListRelationshipsResponse{
+			NextPageToken: value.NextPageToken,
+		}
+		appendMessageSlice(&out.Relationships, value.Relationships, ToWireRelationship)
+		return out
+	})
 }
 
 func FromWireListRelationshipsResponse(value *proto.ListRelationshipsResponse) *ListRelationshipsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListRelationshipsResponse{
-		NextPageToken: value.NextPageToken,
-	}
-	appendMessageSlice(&out.Relationships, value.Relationships, FromWireRelationship)
-	return out
+	return convertMessage(value, func(value *proto.ListRelationshipsResponse) *ListRelationshipsResponse {
+		out := &ListRelationshipsResponse{
+			NextPageToken: value.NextPageToken,
+		}
+		appendMessageSlice(&out.Relationships, value.Relationships, FromWireRelationship)
+		return out
+	})
 }
 
 func ToWireModelAction(value *ModelAction) *proto.ModelAction {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ModelAction{
-		Name:      value.Name,
-		Relations: value.Relations,
-	}
-	return out
+	return convertMessage(value, func(value *ModelAction) *proto.ModelAction {
+		out := &proto.ModelAction{
+			Name:      value.Name,
+			Relations: value.Relations,
+		}
+		return out
+	})
 }
 
 func FromWireModelAction(value *proto.ModelAction) *ModelAction {
-	if value == nil {
-		return nil
-	}
-	out := &ModelAction{
-		Name:      value.Name,
-		Relations: value.Relations,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ModelAction) *ModelAction {
+		out := &ModelAction{
+			Name:      value.Name,
+			Relations: value.Relations,
+		}
+		return out
+	})
 }
 
 func ToWireModelAllowedTarget(value *ModelAllowedTarget) *proto.ModelAllowedTarget {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ModelAllowedTarget{}
-	switch variant := value.Kind.(type) {
-	case *ModelAllowedTargetKindSubjectType:
-		out.Kind = &proto.ModelAllowedTarget_SubjectType{SubjectType: variant.Value}
-	case *ModelAllowedTargetKindResourceType:
-		out.Kind = &proto.ModelAllowedTarget_ResourceType{ResourceType: variant.Value}
-	case *ModelAllowedTargetKindSubjectSetType:
-		out.Kind = &proto.ModelAllowedTarget_SubjectSetType{SubjectSetType: ToWireSubjectSetType(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *ModelAllowedTarget) *proto.ModelAllowedTarget {
+		out := &proto.ModelAllowedTarget{}
+		switch variant := value.Kind.(type) {
+		case *ModelAllowedTargetKindSubjectType:
+			out.Kind = &proto.ModelAllowedTarget_SubjectType{SubjectType: variant.Value}
+		case *ModelAllowedTargetKindResourceType:
+			out.Kind = &proto.ModelAllowedTarget_ResourceType{ResourceType: variant.Value}
+		case *ModelAllowedTargetKindSubjectSetType:
+			out.Kind = &proto.ModelAllowedTarget_SubjectSetType{SubjectSetType: ToWireSubjectSetType(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireModelAllowedTarget(value *proto.ModelAllowedTarget) *ModelAllowedTarget {
-	if value == nil {
-		return nil
-	}
-	out := &ModelAllowedTarget{}
-	switch variant := value.Kind.(type) {
-	case *proto.ModelAllowedTarget_SubjectType:
-		out.Kind = &ModelAllowedTargetKindSubjectType{Value: variant.SubjectType}
-	case *proto.ModelAllowedTarget_ResourceType:
-		out.Kind = &ModelAllowedTargetKindResourceType{Value: variant.ResourceType}
-	case *proto.ModelAllowedTarget_SubjectSetType:
-		out.Kind = &ModelAllowedTargetKindSubjectSetType{Value: FromWireSubjectSetType(variant.SubjectSetType)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.ModelAllowedTarget) *ModelAllowedTarget {
+		out := &ModelAllowedTarget{}
+		switch variant := value.Kind.(type) {
+		case *proto.ModelAllowedTarget_SubjectType:
+			out.Kind = &ModelAllowedTargetKindSubjectType{Value: variant.SubjectType}
+		case *proto.ModelAllowedTarget_ResourceType:
+			out.Kind = &ModelAllowedTargetKindResourceType{Value: variant.ResourceType}
+		case *proto.ModelAllowedTarget_SubjectSetType:
+			out.Kind = &ModelAllowedTargetKindSubjectSetType{Value: FromWireSubjectSetType(variant.SubjectSetType)}
+		}
+		return out
+	})
 }
 
 func ToWireModelRelation(value *ModelRelation) *proto.ModelRelation {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ModelRelation{
-		Name: value.Name,
-	}
-	appendMessageSlice(&out.AllowedTargets, value.AllowedTargets, ToWireModelAllowedTarget)
-	return out
+	return convertMessage(value, func(value *ModelRelation) *proto.ModelRelation {
+		out := &proto.ModelRelation{
+			Name: value.Name,
+		}
+		appendMessageSlice(&out.AllowedTargets, value.AllowedTargets, ToWireModelAllowedTarget)
+		return out
+	})
 }
 
 func FromWireModelRelation(value *proto.ModelRelation) *ModelRelation {
-	if value == nil {
-		return nil
-	}
-	out := &ModelRelation{
-		Name: value.Name,
-	}
-	appendMessageSlice(&out.AllowedTargets, value.AllowedTargets, FromWireModelAllowedTarget)
-	return out
+	return convertMessage(value, func(value *proto.ModelRelation) *ModelRelation {
+		out := &ModelRelation{
+			Name: value.Name,
+		}
+		appendMessageSlice(&out.AllowedTargets, value.AllowedTargets, FromWireModelAllowedTarget)
+		return out
+	})
 }
 
 func ToWirePrecondition(value *Precondition) *proto.Precondition {
-	if value == nil {
-		return nil
-	}
-	out := &proto.Precondition{
-		Operation: proto.Precondition_Operation(value.Operation),
-		Filter:    ToWireRelationshipFilter(value.Filter),
-	}
-	return out
+	return convertMessage(value, func(value *Precondition) *proto.Precondition {
+		out := &proto.Precondition{
+			Operation: proto.Precondition_Operation(value.Operation),
+			Filter:    ToWireRelationshipFilter(value.Filter),
+		}
+		return out
+	})
 }
 
 func FromWirePrecondition(value *proto.Precondition) *Precondition {
-	if value == nil {
-		return nil
-	}
-	out := &Precondition{
-		Operation: PreconditionOperation(value.Operation),
-		Filter:    FromWireRelationshipFilter(value.Filter),
-	}
-	return out
+	return convertMessage(value, func(value *proto.Precondition) *Precondition {
+		out := &Precondition{
+			Operation: PreconditionOperation(value.Operation),
+			Filter:    FromWireRelationshipFilter(value.Filter),
+		}
+		return out
+	})
 }
 
 func ToWireRelationship(value *Relationship) *proto.Relationship {
-	if value == nil {
-		return nil
-	}
-	out := &proto.Relationship{
-		Tuple:       ToWireRelationshipTuple(value.Tuple),
-		Properties:  ToWireStruct(value.Properties),
-		SourceLayer: proto.SourceLayer(value.SourceLayer),
-	}
-	return out
+	return convertMessage(value, func(value *Relationship) *proto.Relationship {
+		out := &proto.Relationship{
+			Tuple:       ToWireRelationshipTuple(value.Tuple),
+			Properties:  ToWireStruct(value.Properties),
+			SourceLayer: proto.SourceLayer(value.SourceLayer),
+		}
+		return out
+	})
 }
 
 func FromWireRelationship(value *proto.Relationship) *Relationship {
-	if value == nil {
-		return nil
-	}
-	out := &Relationship{
-		Tuple:       FromWireRelationshipTuple(value.Tuple),
-		Properties:  FromWireStruct(value.Properties),
-		SourceLayer: SourceLayer(value.SourceLayer),
-	}
-	return out
+	return convertMessage(value, func(value *proto.Relationship) *Relationship {
+		out := &Relationship{
+			Tuple:       FromWireRelationshipTuple(value.Tuple),
+			Properties:  FromWireStruct(value.Properties),
+			SourceLayer: SourceLayer(value.SourceLayer),
+		}
+		return out
+	})
 }
 
 func ToWireRelationshipFilter(value *RelationshipFilter) *proto.RelationshipFilter {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RelationshipFilter{
-		Target:           ToWireRelationshipTarget(value.Target),
-		Relation:         value.Relation,
-		Resource:         ToWireResource(value.Resource),
-		TargetType:       proto.RelationshipTargetType(value.TargetType),
-		TargetEntityType: value.TargetEntityType,
-		ResourceType:     value.ResourceType,
-		SourceLayer:      proto.SourceLayer(value.SourceLayer),
-	}
-	return out
+	return convertMessage(value, func(value *RelationshipFilter) *proto.RelationshipFilter {
+		out := &proto.RelationshipFilter{
+			Target:           ToWireRelationshipTarget(value.Target),
+			Relation:         value.Relation,
+			Resource:         ToWireResource(value.Resource),
+			TargetType:       proto.RelationshipTargetType(value.TargetType),
+			TargetEntityType: value.TargetEntityType,
+			ResourceType:     value.ResourceType,
+			SourceLayer:      proto.SourceLayer(value.SourceLayer),
+		}
+		return out
+	})
 }
 
 func FromWireRelationshipFilter(value *proto.RelationshipFilter) *RelationshipFilter {
-	if value == nil {
-		return nil
-	}
-	out := &RelationshipFilter{
-		Target:           FromWireRelationshipTarget(value.Target),
-		Relation:         value.Relation,
-		Resource:         FromWireResource(value.Resource),
-		TargetType:       RelationshipTargetType(value.TargetType),
-		TargetEntityType: value.TargetEntityType,
-		ResourceType:     value.ResourceType,
-		SourceLayer:      SourceLayer(value.SourceLayer),
-	}
-	return out
+	return convertMessage(value, func(value *proto.RelationshipFilter) *RelationshipFilter {
+		out := &RelationshipFilter{
+			Target:           FromWireRelationshipTarget(value.Target),
+			Relation:         value.Relation,
+			Resource:         FromWireResource(value.Resource),
+			TargetType:       RelationshipTargetType(value.TargetType),
+			TargetEntityType: value.TargetEntityType,
+			ResourceType:     value.ResourceType,
+			SourceLayer:      SourceLayer(value.SourceLayer),
+		}
+		return out
+	})
 }
 
 func ToWireRelationshipTarget(value *RelationshipTarget) *proto.RelationshipTarget {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RelationshipTarget{}
-	switch variant := value.Kind.(type) {
-	case *RelationshipTargetKindSubject:
-		out.Kind = &proto.RelationshipTarget_Subject{Subject: ToWireSubject(variant.Value)}
-	case *RelationshipTargetKindResource:
-		out.Kind = &proto.RelationshipTarget_Resource{Resource: ToWireResource(variant.Value)}
-	case *RelationshipTargetKindSubjectSet:
-		out.Kind = &proto.RelationshipTarget_SubjectSet{SubjectSet: ToWireSubjectSet(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *RelationshipTarget) *proto.RelationshipTarget {
+		out := &proto.RelationshipTarget{}
+		switch variant := value.Kind.(type) {
+		case *RelationshipTargetKindSubject:
+			out.Kind = &proto.RelationshipTarget_Subject{Subject: ToWireSubject(variant.Value)}
+		case *RelationshipTargetKindResource:
+			out.Kind = &proto.RelationshipTarget_Resource{Resource: ToWireResource(variant.Value)}
+		case *RelationshipTargetKindSubjectSet:
+			out.Kind = &proto.RelationshipTarget_SubjectSet{SubjectSet: ToWireSubjectSet(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireRelationshipTarget(value *proto.RelationshipTarget) *RelationshipTarget {
-	if value == nil {
-		return nil
-	}
-	out := &RelationshipTarget{}
-	switch variant := value.Kind.(type) {
-	case *proto.RelationshipTarget_Subject:
-		out.Kind = &RelationshipTargetKindSubject{Value: FromWireSubject(variant.Subject)}
-	case *proto.RelationshipTarget_Resource:
-		out.Kind = &RelationshipTargetKindResource{Value: FromWireResource(variant.Resource)}
-	case *proto.RelationshipTarget_SubjectSet:
-		out.Kind = &RelationshipTargetKindSubjectSet{Value: FromWireSubjectSet(variant.SubjectSet)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.RelationshipTarget) *RelationshipTarget {
+		out := &RelationshipTarget{}
+		switch variant := value.Kind.(type) {
+		case *proto.RelationshipTarget_Subject:
+			out.Kind = &RelationshipTargetKindSubject{Value: FromWireSubject(variant.Subject)}
+		case *proto.RelationshipTarget_Resource:
+			out.Kind = &RelationshipTargetKindResource{Value: FromWireResource(variant.Resource)}
+		case *proto.RelationshipTarget_SubjectSet:
+			out.Kind = &RelationshipTargetKindSubjectSet{Value: FromWireSubjectSet(variant.SubjectSet)}
+		}
+		return out
+	})
 }
 
 func ToWireRelationshipTuple(value *RelationshipTuple) *proto.RelationshipTuple {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RelationshipTuple{
-		Target:   ToWireRelationshipTarget(value.Target),
-		Relation: value.Relation,
-		Resource: ToWireResource(value.Resource),
-	}
-	return out
+	return convertMessage(value, func(value *RelationshipTuple) *proto.RelationshipTuple {
+		out := &proto.RelationshipTuple{
+			Target:   ToWireRelationshipTarget(value.Target),
+			Relation: value.Relation,
+			Resource: ToWireResource(value.Resource),
+		}
+		return out
+	})
 }
 
 func FromWireRelationshipTuple(value *proto.RelationshipTuple) *RelationshipTuple {
-	if value == nil {
-		return nil
-	}
-	out := &RelationshipTuple{
-		Target:   FromWireRelationshipTarget(value.Target),
-		Relation: value.Relation,
-		Resource: FromWireResource(value.Resource),
-	}
-	return out
+	return convertMessage(value, func(value *proto.RelationshipTuple) *RelationshipTuple {
+		out := &RelationshipTuple{
+			Target:   FromWireRelationshipTarget(value.Target),
+			Relation: value.Relation,
+			Resource: FromWireResource(value.Resource),
+		}
+		return out
+	})
 }
 
 func ToWireRelationshipUpdate(value *RelationshipUpdate) *proto.RelationshipUpdate {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RelationshipUpdate{
-		Operation:    proto.RelationshipUpdate_Operation(value.Operation),
-		Relationship: ToWireRelationship(value.Relationship),
-	}
-	return out
+	return convertMessage(value, func(value *RelationshipUpdate) *proto.RelationshipUpdate {
+		out := &proto.RelationshipUpdate{
+			Operation:    proto.RelationshipUpdate_Operation(value.Operation),
+			Relationship: ToWireRelationship(value.Relationship),
+		}
+		return out
+	})
 }
 
 func FromWireRelationshipUpdate(value *proto.RelationshipUpdate) *RelationshipUpdate {
-	if value == nil {
-		return nil
-	}
-	out := &RelationshipUpdate{
-		Operation:    RelationshipUpdateOperation(value.Operation),
-		Relationship: FromWireRelationship(value.Relationship),
-	}
-	return out
+	return convertMessage(value, func(value *proto.RelationshipUpdate) *RelationshipUpdate {
+		out := &RelationshipUpdate{
+			Operation:    RelationshipUpdateOperation(value.Operation),
+			Relationship: FromWireRelationship(value.Relationship),
+		}
+		return out
+	})
 }
 
 func ToWireResource(value *Resource) *proto.Resource {
-	if value == nil {
-		return nil
-	}
-	out := &proto.Resource{
-		Type:       value.Type,
-		Id:         value.Id,
-		Properties: ToWireStruct(value.Properties),
-	}
-	return out
+	return convertMessage(value, func(value *Resource) *proto.Resource {
+		out := &proto.Resource{
+			Type:       value.Type,
+			Id:         value.Id,
+			Properties: ToWireStruct(value.Properties),
+		}
+		return out
+	})
 }
 
 func FromWireResource(value *proto.Resource) *Resource {
-	if value == nil {
-		return nil
-	}
-	out := &Resource{
-		Type:       value.Type,
-		Id:         value.Id,
-		Properties: FromWireStruct(value.Properties),
-	}
-	return out
+	return convertMessage(value, func(value *proto.Resource) *Resource {
+		out := &Resource{
+			Type:       value.Type,
+			Id:         value.Id,
+			Properties: FromWireStruct(value.Properties),
+		}
+		return out
+	})
 }
 
 func ToWireSetActiveModelRequest(value *SetActiveModelRequest) *proto.SetActiveModelRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SetActiveModelRequest{
-		Model: ToWireAuthorizationModel(value.Model),
-	}
-	return out
+	return convertMessage(value, func(value *SetActiveModelRequest) *proto.SetActiveModelRequest {
+		out := &proto.SetActiveModelRequest{
+			Model: ToWireAuthorizationModel(value.Model),
+		}
+		return out
+	})
 }
 
 func FromWireSetActiveModelRequest(value *proto.SetActiveModelRequest) *SetActiveModelRequest {
-	if value == nil {
-		return nil
-	}
-	out := &SetActiveModelRequest{
-		Model: FromWireAuthorizationModel(value.Model),
-	}
-	return out
+	return convertMessage(value, func(value *proto.SetActiveModelRequest) *SetActiveModelRequest {
+		out := &SetActiveModelRequest{
+			Model: FromWireAuthorizationModel(value.Model),
+		}
+		return out
+	})
 }
 
 func ToWireSetActiveModelResponse(value *SetActiveModelResponse) *proto.SetActiveModelResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SetActiveModelResponse{
-		Model: ToWireAuthorizationModelRef(value.Model),
-	}
-	return out
+	return convertMessage(value, func(value *SetActiveModelResponse) *proto.SetActiveModelResponse {
+		out := &proto.SetActiveModelResponse{
+			Model: ToWireAuthorizationModelRef(value.Model),
+		}
+		return out
+	})
 }
 
 func FromWireSetActiveModelResponse(value *proto.SetActiveModelResponse) *SetActiveModelResponse {
-	if value == nil {
-		return nil
-	}
-	out := &SetActiveModelResponse{
-		Model: FromWireAuthorizationModelRef(value.Model),
-	}
-	return out
+	return convertMessage(value, func(value *proto.SetActiveModelResponse) *SetActiveModelResponse {
+		out := &SetActiveModelResponse{
+			Model: FromWireAuthorizationModelRef(value.Model),
+		}
+		return out
+	})
 }
 
 func ToWireSetAuthorizationStateRequest(value *SetAuthorizationStateRequest) *proto.SetAuthorizationStateRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SetAuthorizationStateRequest{
-		Model: ToWireAuthorizationModel(value.Model),
-	}
-	appendMessageSlice(&out.Relationships, value.Relationships, ToWireRelationship)
-	return out
+	return convertMessage(value, func(value *SetAuthorizationStateRequest) *proto.SetAuthorizationStateRequest {
+		out := &proto.SetAuthorizationStateRequest{
+			Model: ToWireAuthorizationModel(value.Model),
+		}
+		appendMessageSlice(&out.Relationships, value.Relationships, ToWireRelationship)
+		return out
+	})
 }
 
 func FromWireSetAuthorizationStateRequest(value *proto.SetAuthorizationStateRequest) *SetAuthorizationStateRequest {
-	if value == nil {
-		return nil
-	}
-	out := &SetAuthorizationStateRequest{
-		Model: FromWireAuthorizationModel(value.Model),
-	}
-	appendMessageSlice(&out.Relationships, value.Relationships, FromWireRelationship)
-	return out
+	return convertMessage(value, func(value *proto.SetAuthorizationStateRequest) *SetAuthorizationStateRequest {
+		out := &SetAuthorizationStateRequest{
+			Model: FromWireAuthorizationModel(value.Model),
+		}
+		appendMessageSlice(&out.Relationships, value.Relationships, FromWireRelationship)
+		return out
+	})
 }
 
 func ToWireSetAuthorizationStateResponse(value *SetAuthorizationStateResponse) *proto.SetAuthorizationStateResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SetAuthorizationStateResponse{
-		ActiveModel: ToWireAuthorizationModelRef(value.ActiveModel),
-	}
-	return out
+	return convertMessage(value, func(value *SetAuthorizationStateResponse) *proto.SetAuthorizationStateResponse {
+		out := &proto.SetAuthorizationStateResponse{
+			ActiveModel: ToWireAuthorizationModelRef(value.ActiveModel),
+		}
+		return out
+	})
 }
 
 func FromWireSetAuthorizationStateResponse(value *proto.SetAuthorizationStateResponse) *SetAuthorizationStateResponse {
-	if value == nil {
-		return nil
-	}
-	out := &SetAuthorizationStateResponse{
-		ActiveModel: FromWireAuthorizationModelRef(value.ActiveModel),
-	}
-	return out
+	return convertMessage(value, func(value *proto.SetAuthorizationStateResponse) *SetAuthorizationStateResponse {
+		out := &SetAuthorizationStateResponse{
+			ActiveModel: FromWireAuthorizationModelRef(value.ActiveModel),
+		}
+		return out
+	})
 }
 
 func ToWireSubject(value *Subject) *proto.Subject {
-	if value == nil {
-		return nil
-	}
-	out := &proto.Subject{
-		Type:       value.Type,
-		Id:         value.Id,
-		Properties: ToWireStruct(value.Properties),
-	}
-	return out
+	return convertMessage(value, func(value *Subject) *proto.Subject {
+		out := &proto.Subject{
+			Type:       value.Type,
+			Id:         value.Id,
+			Properties: ToWireStruct(value.Properties),
+		}
+		return out
+	})
 }
 
 func FromWireSubject(value *proto.Subject) *Subject {
-	if value == nil {
-		return nil
-	}
-	out := &Subject{
-		Type:       value.Type,
-		Id:         value.Id,
-		Properties: FromWireStruct(value.Properties),
-	}
-	return out
+	return convertMessage(value, func(value *proto.Subject) *Subject {
+		out := &Subject{
+			Type:       value.Type,
+			Id:         value.Id,
+			Properties: FromWireStruct(value.Properties),
+		}
+		return out
+	})
 }
 
 func ToWireSubjectSet(value *SubjectSet) *proto.SubjectSet {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SubjectSet{
-		Resource: ToWireResource(value.Resource),
-		Relation: value.Relation,
-	}
-	return out
+	return convertMessage(value, func(value *SubjectSet) *proto.SubjectSet {
+		out := &proto.SubjectSet{
+			Resource: ToWireResource(value.Resource),
+			Relation: value.Relation,
+		}
+		return out
+	})
 }
 
 func FromWireSubjectSet(value *proto.SubjectSet) *SubjectSet {
-	if value == nil {
-		return nil
-	}
-	out := &SubjectSet{
-		Resource: FromWireResource(value.Resource),
-		Relation: value.Relation,
-	}
-	return out
+	return convertMessage(value, func(value *proto.SubjectSet) *SubjectSet {
+		out := &SubjectSet{
+			Resource: FromWireResource(value.Resource),
+			Relation: value.Relation,
+		}
+		return out
+	})
 }
 
 func ToWireSubjectSetType(value *SubjectSetType) *proto.SubjectSetType {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SubjectSetType{
-		ResourceType: value.ResourceType,
-		Relation:     value.Relation,
-	}
-	return out
+	return convertMessage(value, func(value *SubjectSetType) *proto.SubjectSetType {
+		out := &proto.SubjectSetType{
+			ResourceType: value.ResourceType,
+			Relation:     value.Relation,
+		}
+		return out
+	})
 }
 
 func FromWireSubjectSetType(value *proto.SubjectSetType) *SubjectSetType {
-	if value == nil {
-		return nil
-	}
-	out := &SubjectSetType{
-		ResourceType: value.ResourceType,
-		Relation:     value.Relation,
-	}
-	return out
+	return convertMessage(value, func(value *proto.SubjectSetType) *SubjectSetType {
+		out := &SubjectSetType{
+			ResourceType: value.ResourceType,
+			Relation:     value.Relation,
+		}
+		return out
+	})
 }
 
 func ToWireWriteRelationshipsRequest(value *WriteRelationshipsRequest) *proto.WriteRelationshipsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WriteRelationshipsRequest{}
-	appendMessageSlice(&out.Updates, value.Updates, ToWireRelationshipUpdate)
-	appendMessageSlice(&out.OptionalPreconditions, value.OptionalPreconditions, ToWirePrecondition)
-	return out
+	return convertMessage(value, func(value *WriteRelationshipsRequest) *proto.WriteRelationshipsRequest {
+		out := &proto.WriteRelationshipsRequest{}
+		appendMessageSlice(&out.Updates, value.Updates, ToWireRelationshipUpdate)
+		appendMessageSlice(&out.OptionalPreconditions, value.OptionalPreconditions, ToWirePrecondition)
+		return out
+	})
 }
 
 func FromWireWriteRelationshipsRequest(value *proto.WriteRelationshipsRequest) *WriteRelationshipsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &WriteRelationshipsRequest{}
-	appendMessageSlice(&out.Updates, value.Updates, FromWireRelationshipUpdate)
-	appendMessageSlice(&out.OptionalPreconditions, value.OptionalPreconditions, FromWirePrecondition)
-	return out
+	return convertMessage(value, func(value *proto.WriteRelationshipsRequest) *WriteRelationshipsRequest {
+		out := &WriteRelationshipsRequest{}
+		appendMessageSlice(&out.Updates, value.Updates, FromWireRelationshipUpdate)
+		appendMessageSlice(&out.OptionalPreconditions, value.OptionalPreconditions, FromWirePrecondition)
+		return out
+	})
 }
 
 func ToWireWriteRelationshipsResponse(value *WriteRelationshipsResponse) *proto.WriteRelationshipsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WriteRelationshipsResponse{}
-	return out
+	return convertMessage(value, func(value *WriteRelationshipsResponse) *proto.WriteRelationshipsResponse {
+		out := &proto.WriteRelationshipsResponse{}
+		return out
+	})
 }
 
 func FromWireWriteRelationshipsResponse(value *proto.WriteRelationshipsResponse) *WriteRelationshipsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &WriteRelationshipsResponse{}
-	return out
+	return convertMessage(value, func(value *proto.WriteRelationshipsResponse) *WriteRelationshipsResponse {
+		out := &WriteRelationshipsResponse{}
+		return out
+	})
 }

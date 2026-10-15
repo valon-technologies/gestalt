@@ -133,3 +133,10 @@ func convertMessageMap[Key comparable, Input, Output any](values map[Key]*Input,
 	}
 	return out
 }
+
+func convertMessage[Input, Output any](value *Input, convert func(*Input) *Output) *Output {
+	if value == nil {
+		return nil
+	}
+	return convert(value)
+}
