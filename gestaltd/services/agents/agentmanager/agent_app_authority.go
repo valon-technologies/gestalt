@@ -342,17 +342,13 @@ func validateAgentWorkflowSystemRef(scope agentturnscope.Scope, path string, ref
 }
 
 func agentWorkflowAppStepAllowed(scope agentturnscope.Scope, target coreworkflow.AppCall) bool {
-	for i := range scope.ToolRefs {
-		if agentWorkflowToolRefMatchesAppCall(scope.ToolRefs[i], target) {
-			return true
-		}
-	}
-	for i := range scope.ListedTools {
-		if scope.ListedTools[i].Target.Unavailable == nil && agentWorkflowToolTargetMatchesAppCall(scope.ListedTools[i].Target, target) {
-			return true
-		}
-	}
-	return false
+	return agentWorkflowAppRefAllowed(scope, coreagent.ToolRef{
+		App:            target.Name,
+		Operation:      target.Operation,
+		Connection:     target.Connection,
+		Instance:       target.Instance,
+		CredentialMode: target.CredentialMode,
+	})
 }
 
 func agentWorkflowAppRefAllowed(scope agentturnscope.Scope, target coreagent.ToolRef) bool {
@@ -369,19 +365,6 @@ func agentWorkflowAppRefAllowed(scope agentturnscope.Scope, target coreagent.Too
 	return false
 }
 
-func agentWorkflowToolRefMatchesAppCall(ref coreagent.ToolRef, target coreworkflow.AppCall) bool {
-	if strings.TrimSpace(ref.System) != "" || strings.TrimSpace(ref.App) == "" || strings.TrimSpace(ref.App) == agentToolSearchAllApp || strings.TrimSpace(ref.Operation) == "" {
-		return false
-	}
-	if strings.TrimSpace(ref.App) != strings.TrimSpace(target.Name) || strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
-		return false
-	}
-	if !agentWorkflowCredentialModeMatches(ref.CredentialMode, target.CredentialMode) {
-		return false
-	}
-	return agentWorkflowFlexibleBindingMatches(ref.Connection, ref.Instance, target.Connection, target.Instance)
-}
-
 func agentWorkflowToolRefMatchesToolRef(ref coreagent.ToolRef, target coreagent.ToolRef) bool {
 	if strings.TrimSpace(ref.System) != "" || strings.TrimSpace(ref.App) == "" || strings.TrimSpace(ref.App) == agentToolSearchAllApp || strings.TrimSpace(ref.Operation) == "" {
 		return false
@@ -393,19 +376,6 @@ func agentWorkflowToolRefMatchesToolRef(ref coreagent.ToolRef, target coreagent.
 		return false
 	}
 	return agentWorkflowFlexibleBindingMatches(ref.Connection, ref.Instance, target.Connection, target.Instance)
-}
-
-func agentWorkflowToolTargetMatchesAppCall(tool coreagent.ToolTarget, target coreworkflow.AppCall) bool {
-	if strings.TrimSpace(tool.System) != "" || strings.TrimSpace(tool.App) == "" || strings.TrimSpace(tool.Operation) == "" {
-		return false
-	}
-	if strings.TrimSpace(tool.App) != strings.TrimSpace(target.Name) || strings.TrimSpace(tool.Operation) != strings.TrimSpace(target.Operation) {
-		return false
-	}
-	if !agentWorkflowCredentialModeMatches(tool.CredentialMode, target.CredentialMode) {
-		return false
-	}
-	return agentWorkflowExactBindingMatches(tool.Connection, tool.Instance, target.Connection, target.Instance)
 }
 
 func agentWorkflowToolTargetMatchesToolRef(tool coreagent.ToolTarget, target coreagent.ToolRef) bool {
@@ -424,7 +394,7 @@ func agentWorkflowToolTargetMatchesToolRef(tool coreagent.ToolTarget, target cor
 func agentWorkflowCredentialModeMatches(scope, target core.ConnectionMode) bool {
 	scope = core.NormalizeOptionalConnectionMode(scope)
 	target = core.NormalizeOptionalConnectionMode(target)
-	return (scope == "" && target == "") || scope == target
+	return scope == target
 }
 
 func agentWorkflowFlexibleBindingMatches(scopeConnection, scopeInstance, targetConnection, targetInstance string) bool {
