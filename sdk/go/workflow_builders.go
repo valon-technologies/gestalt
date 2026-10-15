@@ -262,22 +262,18 @@ func workflowStepAgentTurnFromProto(value *proto.WorkflowStepAgentTurn) *Workflo
 }
 
 func workflowAgentMessagesToProto(values []WorkflowAgentMessage) ([]*proto.WorkflowAgentMessage, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowAgentMessage, 0, len(values))
-	for i, value := range values {
+	return collectProtoSlice(len(values), func(i int) (*proto.WorkflowAgentMessage, error) {
+		value := values[i]
 		metadata, err := structFromAny(value.Metadata)
 		if err != nil {
 			return nil, fmt.Errorf("messages[%d].metadata: %w", i, err)
 		}
-		out = append(out, &proto.WorkflowAgentMessage{
+		return &proto.WorkflowAgentMessage{
 			Role:     value.Role,
 			Text:     workflowTextToProto(value.Text),
 			Metadata: metadata,
-		})
-	}
-	return out, nil
+		}, nil
+	})
 }
 
 func workflowAgentMessagesFromProto(values []*proto.WorkflowAgentMessage) []WorkflowAgentMessage {
