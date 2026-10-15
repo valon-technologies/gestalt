@@ -15,3 +15,15 @@ func ConvertNonNilSlice[T, R any](values []*T, convert func(*T) R) []R {
 	}
 	return out
 }
+
+// ConvertSlice converts every element in order and returns nil for empty input.
+func ConvertSlice[T, R any](values []T, convert func(T) R) []R {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]R, 0, len(values))
+	for _, value := range values {
+		out = append(out, convert(value))
+	}
+	return out
+}

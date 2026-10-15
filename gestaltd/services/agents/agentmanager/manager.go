@@ -2576,14 +2576,7 @@ func listedAgentToolUnavailable(tool coreagent.ListedTool) bool {
 }
 
 func listedAgentToolsToProto(tools []coreagent.ListedTool) []*proto.ListedAgentTool {
-	if len(tools) == 0 {
-		return nil
-	}
-	out := make([]*proto.ListedAgentTool, 0, len(tools))
-	for i := range tools {
-		out = append(out, listedAgentToolToProto(tools[i]))
-	}
-	return out
+	return protoutil.ConvertSlice(tools, listedAgentToolToProto)
 }
 
 func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
