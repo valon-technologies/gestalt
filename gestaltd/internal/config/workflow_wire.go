@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 )
 
 // WorkflowValueToCore converts config YAML value form into core workflow value form.
@@ -42,11 +43,7 @@ func workflowValueMapToCore(values map[string]WorkflowValueConfig) map[string]co
 	if values == nil {
 		return nil
 	}
-	out := make(map[string]coreworkflow.Value, len(values))
-	for key := range values {
-		out[key] = WorkflowValueToCore(values[key])
-	}
-	return out
+	return maputil.Convert(values, WorkflowValueToCore)
 }
 
 func workflowValueArrayToCore(values []WorkflowValueConfig) []coreworkflow.Value {

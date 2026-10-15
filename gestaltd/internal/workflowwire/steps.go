@@ -8,6 +8,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
@@ -417,12 +418,7 @@ func workflowValueFromProto(value *proto.WorkflowValue) coreworkflow.Value {
 	case *proto.WorkflowValue_Literal:
 		return coreworkflow.Value{Literal: protoutil.ValueToAny(typed.Literal), LiteralSet: true}
 	case *proto.WorkflowValue_Object:
-		fields := typed.Object.GetFields()
-		out := make(map[string]coreworkflow.Value, len(fields))
-		for key, value := range fields {
-			out[key] = workflowValueFromProto(value)
-		}
-		return coreworkflow.Value{Object: out}
+		return coreworkflow.Value{Object: maputil.Convert(typed.Object.GetFields(), workflowValueFromProto)}
 	case *proto.WorkflowValue_Array:
 		items := typed.Array.GetValues()
 		out := make([]coreworkflow.Value, 0, len(items))

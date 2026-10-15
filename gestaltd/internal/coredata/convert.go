@@ -5,6 +5,7 @@ import (
 	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 )
 
 func recString(rec idb.Record, key string) string {
@@ -94,20 +95,12 @@ func jsonValue(v any) any {
 		if len(value) == 0 {
 			return nil
 		}
-		out := make(map[string]any, len(value))
-		for k, v := range value {
-			out[k] = v
-		}
-		return out
+		return maputil.Convert(value, func(v string) any { return v })
 	case map[string]any:
 		if len(value) == 0 {
 			return nil
 		}
-		out := make(map[string]any, len(value))
-		for k, v := range value {
-			out[k] = jsonValue(v)
-		}
-		return out
+		return maputil.Convert(value, jsonValue)
 	default:
 		return v
 	}
