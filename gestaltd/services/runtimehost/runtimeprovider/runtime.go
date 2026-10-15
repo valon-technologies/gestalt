@@ -1,6 +1,7 @@
 package runtimeprovider
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -89,13 +90,7 @@ func paginateSortedSessionIDs(sessionIDs []string, req *proto.ListRuntimeSession
 			return nil, "", fmt.Errorf("%w: page_token has invalid page_size", ErrInvalidListSessionsPagination)
 		}
 	}
-	if pageSize == 0 {
-		if rawToken != "" {
-			pageSize = token.PageSize
-		} else {
-			pageSize = defaultListSessionsPageSize
-		}
-	}
+	pageSize = cmp.Or(pageSize, token.PageSize, defaultListSessionsPageSize)
 	if pageSize > maxListSessionsPageSize {
 		pageSize = maxListSessionsPageSize
 	}
