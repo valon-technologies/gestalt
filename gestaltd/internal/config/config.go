@@ -1296,9 +1296,9 @@ func cloneProviderEntryHarnessInstallConfig(src *ProviderEntryHarnessInstallConf
 
 func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	updateOptionalConfig(entry, func(entry *ProviderEntry) {
-		if entry.Egress != nil {
-			entry.Egress.AllowedHosts = trimStringSlice(entry.Egress.AllowedHosts)
-		}
+		updateOptionalConfig(entry.Egress, func(egress *ProviderEgressConfig) {
+			egress.AllowedHosts = trimStringSlice(egress.AllowedHosts)
+		})
 		normalizeAgentProviderLifecycle(entry.Lifecycle)
 		entry.DefaultHarness = strings.TrimSpace(entry.DefaultHarness)
 		for name, harness := range entry.Harnesses {
@@ -2623,16 +2623,9 @@ func normalizeProviderEntries(cfg *Config) {
 		for _, entry := range cfg.Apps {
 			normalizeProviderEntryAliases(entry)
 		}
-		for _, collection := range providerEntryCollections(cfg) {
-			for _, entry := range collection.entries {
-				normalizeProviderEntryAliases(entry)
-			}
-		}
-		for _, entry := range cfg.Runtime.Providers {
-			if entry != nil {
-				normalizeProviderEntryAliases(&entry.ProviderEntry)
-			}
-		}
+		visitConfiguredProviders(cfg, func(_ string, entry *ProviderEntry) {
+			normalizeProviderEntryAliases(entry)
+		})
 	})
 }
 
@@ -3462,25 +3455,15 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		cfg.APIVersion = strings.TrimSpace(cfg.APIVersion)
 
 		normalizeEntry := func(kind string, entry *ProviderEntry) {
-			if entry == nil {
-				return
-			}
-			normalizeProviderSource(kind, &entry.Source)
+			updateOptionalConfig(entry, func(entry *ProviderEntry) {
+				normalizeProviderSource(kind, &entry.Source)
+			})
 		}
 
 		for _, entry := range cfg.Apps {
 			normalizeEntry(providermanifestv1.KindApp, entry)
 		}
-		for _, collection := range providerEntryCollections(cfg) {
-			for _, entry := range collection.entries {
-				normalizeEntry(collection.kind, entry)
-			}
-		}
-		for _, entry := range cfg.Runtime.Providers {
-			if entry != nil {
-				normalizeEntry(providermanifestv1.KindRuntime, &entry.ProviderEntry)
-			}
-		}
+		visitConfiguredProviders(cfg, normalizeEntry)
 	})
 }
 
@@ -3980,34 +3963,26 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	}
 
 	resolveEntry := func(entry *ProviderEntry) {
-		if entry == nil {
-			return
-		}
-		entry.IconFile = resolveRelativePath(baseDir, entry.IconFile)
-		entry.Source.Path = resolveRelativePath(baseDir, entry.Source.Path)
-		entry.Source.metadataPath = resolveRelativePath(baseDir, entry.Source.metadataPath)
-		for _, harness := range entry.Harnesses {
-			if harness != nil {
-				harness.WorkingDirectory = resolveRelativePath(baseDir, harness.WorkingDirectory)
+		updateOptionalConfig(entry, func(entry *ProviderEntry) {
+			entry.IconFile = resolveRelativePath(baseDir, entry.IconFile)
+			entry.Source.Path = resolveRelativePath(baseDir, entry.Source.Path)
+			entry.Source.metadataPath = resolveRelativePath(baseDir, entry.Source.metadataPath)
+			for _, harness := range entry.Harnesses {
+				updateOptionalConfig(harness, func(harness *ProviderEntryHarnessConfig) {
+					harness.WorkingDirectory = resolveRelativePath(baseDir, harness.WorkingDirectory)
+				})
 			}
-		}
-		if entry.Lifecycle != nil {
-			for i := range entry.Lifecycle.SessionStart {
-				entry.Lifecycle.SessionStart[i].CWD = resolveRelativePath(baseDir, entry.Lifecycle.SessionStart[i].CWD)
-			}
-		}
+			updateOptionalConfig(entry.Lifecycle, func(lifecycle *AgentProviderLifecycleConfig) {
+				for i := range lifecycle.SessionStart {
+					lifecycle.SessionStart[i].CWD = resolveRelativePath(baseDir, lifecycle.SessionStart[i].CWD)
+				}
+			})
+		})
 	}
 
-	for _, collection := range providerEntryCollections(cfg) {
-		for _, entry := range collection.entries {
-			resolveEntry(entry)
-		}
-	}
-	for _, entry := range cfg.Runtime.Providers {
-		if entry != nil {
-			resolveEntry(&entry.ProviderEntry)
-		}
-	}
+	visitConfiguredProviders(cfg, func(_ string, entry *ProviderEntry) {
+		resolveEntry(entry)
+	})
 	for _, entry := range cfg.Apps {
 		resolveEntry(entry)
 	}
@@ -4084,9 +4059,9 @@ type providerEntryCollection struct {
 	entries map[string]*ProviderEntry
 }
 
-// providerEntryCollections lists host providers in normalization order.
-func providerEntryCollections(cfg *Config) []providerEntryCollection {
-	return []providerEntryCollection{
+// visitConfiguredProviders visits host and runtime providers in normalization order.
+func visitConfiguredProviders(cfg *Config, visit func(string, *ProviderEntry)) {
+	for _, collection := range []providerEntryCollection{
 		{providermanifestv1.KindIdentity, cfg.Providers.Identity},
 		{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
 		{providermanifestv1.KindExternalCredentials, cfg.Providers.ExternalCredentials},
@@ -4098,5 +4073,14 @@ func providerEntryCollections(cfg *Config) []providerEntryCollection {
 		{providermanifestv1.KindS3, cfg.Providers.S3},
 		{string(HostProviderKindWorkflow), cfg.Providers.Workflow},
 		{string(HostProviderKindAgent), cfg.Providers.Agent},
+	} {
+		for _, entry := range collection.entries {
+			visit(collection.kind, entry)
+		}
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		updateOptionalConfig(entry, func(entry *RuntimeProviderEntry) {
+			visit(providermanifestv1.KindRuntime, &entry.ProviderEntry)
+		})
 	}
 }
