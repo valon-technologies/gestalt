@@ -1,9 +1,11 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 )
 
 func getHostedAgentValue[T any](
@@ -114,4 +116,27 @@ func listHostedAgentValues[T any](
 		return nil, lastNotFound
 	}
 	return out, nil
+}
+
+func mutateHostedAgentValue[T any](
+	ctx context.Context,
+	p *hostedAgentProviderPool,
+	backend *hostedAgentPoolBackend,
+	call func(coreagent.Provider) (*T, error),
+	record func(*T, *hostedAgentPoolBackend),
+) (*T, error) {
+	if backend == nil {
+		return nil, core.ErrNotFound
+	}
+	acquired, release, err := p.acquireBackend(ctx, backend, true)
+	if err != nil {
+		return nil, err
+	}
+	value, err := call(acquired.provider)
+	release()
+	p.maybeProbeAfterCallError(acquired, err)
+	if err == nil {
+		record(value, acquired)
+	}
+	return value, err
 }

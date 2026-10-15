@@ -482,33 +482,26 @@ func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req *proto.
 		}
 		backend = p.sessionBackend(sessionIDForSession(session))
 	}
-	if backend == nil {
-		return nil, core.ErrNotFound
-	}
-	acquired, release, err := p.acquireBackend(ctx, backend, true)
-	if err != nil {
-		return nil, err
-	}
-	session, err := acquired.provider.UpdateSession(ctx, req)
-	release()
-	p.maybeProbeAfterCallError(acquired, err)
-	if err == nil {
-		if req.GetState() == proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED || sessionState(session) == coreagent.SessionStateArchived {
-			cleanupID := sessionID
-			if fromSession := sessionIDForSession(session); fromSession != "" {
-				cleanupID = fromSession
-			}
-			if workspaceRef := p.takeSessionWorkspace(cleanupID); workspaceRef != "" {
-				if cleanupErr := p.removeAgentWorkspace(ctx, acquired, workspaceRef); cleanupErr != nil {
-					slog.Warn("failed to clean up prepared hosted agent workspace after archive", "provider", p.name, "session", cleanupID, "workspace", workspaceRef, "error", cleanupErr)
+	return mutateHostedAgentValue(ctx, p, backend,
+		func(provider coreagent.Provider) (*coreagent.Session, error) {
+			return provider.UpdateSession(ctx, req)
+		},
+		func(session *coreagent.Session, acquired *hostedAgentPoolBackend) {
+			if req.GetState() == proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED || sessionState(session) == coreagent.SessionStateArchived {
+				cleanupID := sessionID
+				if fromSession := sessionIDForSession(session); fromSession != "" {
+					cleanupID = fromSession
 				}
+				if workspaceRef := p.takeSessionWorkspace(cleanupID); workspaceRef != "" {
+					if cleanupErr := p.removeAgentWorkspace(ctx, acquired, workspaceRef); cleanupErr != nil {
+						slog.Warn("failed to clean up prepared hosted agent workspace after archive", "provider", p.name, "session", cleanupID, "workspace", workspaceRef, "error", cleanupErr)
+					}
+				}
+				p.deleteSessionBackend(cleanupID)
+			} else {
+				p.recordSession(session, acquired)
 			}
-			p.deleteSessionBackend(cleanupID)
-		} else {
-			p.recordSession(session, acquired)
-		}
-	}
-	return session, err
+		})
 }
 
 func (p *hostedAgentProviderPool) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
@@ -577,20 +570,11 @@ func (p *hostedAgentProviderPool) CancelTurn(ctx context.Context, req *proto.Can
 		}
 		backend = p.turnBackend(turnIDForTurn(turn))
 	}
-	if backend == nil {
-		return nil, core.ErrNotFound
-	}
-	acquired, release, err := p.acquireBackend(ctx, backend, true)
-	if err != nil {
-		return nil, err
-	}
-	turn, err := acquired.provider.CancelTurn(ctx, req)
-	release()
-	p.maybeProbeAfterCallError(acquired, err)
-	if err == nil {
-		p.recordTurn(turn, acquired)
-	}
-	return turn, err
+	return mutateHostedAgentValue(ctx, p, backend,
+		func(provider coreagent.Provider) (*coreagent.Turn, error) {
+			return provider.CancelTurn(ctx, req)
+		},
+		p.recordTurn)
 }
 
 func (p *hostedAgentProviderPool) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
@@ -644,20 +628,11 @@ func (p *hostedAgentProviderPool) ResolveInteraction(ctx context.Context, req *p
 		}
 		backend = p.interactionBackend(interactionIDForInteraction(interaction))
 	}
-	if backend == nil {
-		return nil, core.ErrNotFound
-	}
-	acquired, release, err := p.acquireBackend(ctx, backend, true)
-	if err != nil {
-		return nil, err
-	}
-	interaction, err := acquired.provider.ResolveInteraction(ctx, req)
-	release()
-	p.maybeProbeAfterCallError(acquired, err)
-	if err == nil {
-		p.recordInteraction(interaction, acquired)
-	}
-	return interaction, err
+	return mutateHostedAgentValue(ctx, p, backend,
+		func(provider coreagent.Provider) (*coreagent.Interaction, error) {
+			return provider.ResolveInteraction(ctx, req)
+		},
+		p.recordInteraction)
 }
 
 func (p *hostedAgentProviderPool) GetCapabilities(ctx context.Context, req *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {

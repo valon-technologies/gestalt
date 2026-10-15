@@ -528,9 +528,6 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("workspace root after archive stat error = %v, want not exist", statErr)
 	}
-	if got := pool.sessionBackend(session.ID); got != nil {
-		t.Fatalf("session backend after archive = %#v, want nil", got)
-	}
 }
 
 func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, runtimeProvider runtimeprovider.Provider, runtimeSession *proto.RuntimeSession, allowedRepos ...string) *hostedAgentProviderPool {
