@@ -4,25 +4,14 @@ import (
 	"maps"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func ConnectionParamDefsFromManifest(defs map[string]providermanifestv1.ProviderConnectionParam) map[string]core.ConnectionParamDef {
-	if len(defs) == 0 {
-		return nil
-	}
-	out := make(map[string]core.ConnectionParamDef, len(defs))
-	for name, def := range defs {
-		out[name] = core.ConnectionParamDef{
-			Required:        def.Required,
-			Description:     def.Description,
-			Default:         def.Default,
-			From:            def.From,
-			Field:           def.Field,
-			AccountIdentity: def.AccountIdentity,
-		}
-	}
-	return out
+	return maputil.ConvertNonEmpty(defs, func(value providermanifestv1.ProviderConnectionParam) core.ConnectionParamDef {
+		return core.ConnectionParamDef(value)
+	})
 }
 
 func CredentialFieldsFromManifest(fields []providermanifestv1.CredentialField) []core.CredentialFieldDef {
@@ -31,11 +20,7 @@ func CredentialFieldsFromManifest(fields []providermanifestv1.CredentialField) [
 	}
 	out := make([]core.CredentialFieldDef, len(fields))
 	for i, field := range fields {
-		out[i] = core.CredentialFieldDef{
-			Name:        field.Name,
-			Label:       field.Label,
-			Description: field.Description,
-		}
+		out[i] = core.CredentialFieldDef(field)
 	}
 	return out
 }
