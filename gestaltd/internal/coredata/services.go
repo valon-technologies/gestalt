@@ -185,22 +185,10 @@ func ensureDeferredAppRegistryStores(ctx context.Context, ds indexeddb.IndexedDB
 	)
 }
 
-func ensureAppAllowedOperationsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreAppAllowedOperations, &AppAllowedOperationsSchema})
-}
-
 func ensureAppAccessProfilesStore(ctx context.Context, ds indexeddb.IndexedDB) error {
 	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreAppAccessProfiles, &AppAccessProfilesSchema})
 }
 
 func ensureAppAutoDeploySettingsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
 	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreAppAutoDeploySettings, &AppAutoDeploySettingsSchema})
-}
-
-func ensureGestaltdInstanceHeartbeatsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreGestaltdInstanceHeartbeats, &GestaltdInstanceHeartbeatsSchema})
-}
-
-func ensureAppVersionRecoveryObservationsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreAppVersionRecoveryObservations, &AppVersionRecoveryObservationsSchema})
 }
