@@ -131,20 +131,18 @@ func DecodeAppResult(app, operation string, status int32, body []byte) (any, err
 			body,
 		)
 	}
-	if object, ok := parsed.(map[string]any); ok {
-		if statusValue, ok := object["status"].(string); ok {
-			switch statusValue {
-			case "error":
-				message, reason := extractInvokeErrorFields(parsed)
-				if message == "" {
-					message = "app invoke failed"
-				}
-				return nil, newInvokeError(app, operation, 0, message, reason, parsed, body)
-			case "success":
-				if data, ok := object["data"]; ok {
-					return data, nil
-				}
-			}
+	object, _ := parsed.(map[string]any)
+	statusValue, _ := object["status"].(string)
+	switch statusValue {
+	case "error":
+		message, reason := extractInvokeErrorFields(parsed)
+		if message == "" {
+			message = "app invoke failed"
+		}
+		return nil, newInvokeError(app, operation, 0, message, reason, parsed, body)
+	case "success":
+		if data, ok := object["data"]; ok {
+			return data, nil
 		}
 	}
 	return parsed, nil
