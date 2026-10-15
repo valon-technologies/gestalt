@@ -105,9 +105,6 @@ func (s cacheProviderServer) Touch(ctx context.Context, req *proto.CacheTouchReq
 }
 
 func cacheTTLFromProto(ttl *durationpb.Duration) (time.Duration, error) {
-	if ttl == nil {
-		return 0, nil
-	}
 	value := ttl.AsDuration()
 	if value < 0 {
 		return 0, status.Error(codes.InvalidArgument, "cache: ttl must be non-negative")
