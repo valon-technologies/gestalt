@@ -8,8 +8,8 @@ import (
 
 // WithOverrides attaches trimmed, canonical header overrides using the caller's context key.
 func WithOverrides(ctx context.Context, key any, headers map[string]string) context.Context {
-	if ctx == nil || len(headers) == 0 {
-		return ctx
+	if ctx == nil {
+		return nil
 	}
 	normalized := make(map[string]string, len(headers))
 	for name, value := range headers {
