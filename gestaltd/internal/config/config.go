@@ -2623,38 +2623,10 @@ func normalizeProviderEntries(cfg *Config) {
 		for _, entry := range cfg.Apps {
 			normalizeProviderEntryAliases(entry)
 		}
-		for _, entry := range cfg.Providers.Identity {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.Authorization {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.ExternalCredentials {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.Secrets {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.Telemetry {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.Audit {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.IndexedDB {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.Cache {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.S3 {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.Workflow {
-			normalizeProviderEntryAliases(entry)
-		}
-		for _, entry := range cfg.Providers.Agent {
-			normalizeProviderEntryAliases(entry)
+		for _, collection := range providerEntryCollections(cfg) {
+			for _, entry := range collection.entries {
+				normalizeProviderEntryAliases(entry)
+			}
 		}
 		for _, entry := range cfg.Runtime.Providers {
 			if entry != nil {
@@ -3499,22 +3471,7 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		for _, entry := range cfg.Apps {
 			normalizeEntry(providermanifestv1.KindApp, entry)
 		}
-		for _, collection := range []struct {
-			kind    string
-			entries map[string]*ProviderEntry
-		}{
-			{providermanifestv1.KindIdentity, cfg.Providers.Identity},
-			{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
-			{providermanifestv1.KindExternalCredentials, cfg.Providers.ExternalCredentials},
-			{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
-			{string(HostProviderKindTelemetry), cfg.Providers.Telemetry},
-			{string(HostProviderKindAudit), cfg.Providers.Audit},
-			{providermanifestv1.KindIndexedDB, cfg.Providers.IndexedDB},
-			{providermanifestv1.KindCache, cfg.Providers.Cache},
-			{providermanifestv1.KindS3, cfg.Providers.S3},
-			{string(HostProviderKindWorkflow), cfg.Providers.Workflow},
-			{string(HostProviderKindAgent), cfg.Providers.Agent},
-		} {
+		for _, collection := range providerEntryCollections(cfg) {
 			for _, entry := range collection.entries {
 				normalizeEntry(collection.kind, entry)
 			}
@@ -4041,38 +3998,10 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 	}
 
-	for _, entry := range cfg.Providers.Identity {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.Authorization {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.ExternalCredentials {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.Secrets {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.Telemetry {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.Audit {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.IndexedDB {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.Cache {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.S3 {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.Workflow {
-		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.Agent {
-		resolveEntry(entry)
+	for _, collection := range providerEntryCollections(cfg) {
+		for _, entry := range collection.entries {
+			resolveEntry(entry)
+		}
 	}
 	for _, entry := range cfg.Runtime.Providers {
 		if entry != nil {
@@ -4148,4 +4077,26 @@ func updateOptionalConfig[T any](dst *T, update func(*T)) {
 		return
 	}
 	update(dst)
+}
+
+type providerEntryCollection struct {
+	kind    string
+	entries map[string]*ProviderEntry
+}
+
+// providerEntryCollections lists host providers in normalization order.
+func providerEntryCollections(cfg *Config) []providerEntryCollection {
+	return []providerEntryCollection{
+		{providermanifestv1.KindIdentity, cfg.Providers.Identity},
+		{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
+		{providermanifestv1.KindExternalCredentials, cfg.Providers.ExternalCredentials},
+		{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
+		{string(HostProviderKindTelemetry), cfg.Providers.Telemetry},
+		{string(HostProviderKindAudit), cfg.Providers.Audit},
+		{providermanifestv1.KindIndexedDB, cfg.Providers.IndexedDB},
+		{providermanifestv1.KindCache, cfg.Providers.Cache},
+		{providermanifestv1.KindS3, cfg.Providers.S3},
+		{string(HostProviderKindWorkflow), cfg.Providers.Workflow},
+		{string(HostProviderKindAgent), cfg.Providers.Agent},
+	}
 }
