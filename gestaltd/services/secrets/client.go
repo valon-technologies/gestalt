@@ -29,7 +29,7 @@ type remoteSecretManager struct {
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.SecretManager, error) {
-	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
+	proc, _, err := runtimehost.StartConfiguredAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Workdir:      cfg.Workdir,
@@ -38,19 +38,12 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.SecretManager, err
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		ProviderName: cfg.Name,
-	})
+	}, proto.ProviderKind_PROVIDER_KIND_SECRETS, cfg.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	runtimeClient := proc.Lifecycle()
 	secretsClient := proto.NewSecretsClient(proc.Conn())
-
-	_, err = runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_SECRETS, cfg.Name, cfg.Config)
-	if err != nil {
-		_ = proc.Close()
-		return nil, err
-	}
 
 	return &remoteSecretManager{
 		client: secretsClient,
