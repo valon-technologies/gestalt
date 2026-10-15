@@ -556,54 +556,12 @@ func (p *hostedAgentProviderPool) ListTurns(ctx context.Context, req *proto.List
 	if req == nil {
 		req = &proto.ListAgentProviderTurnsRequest{}
 	}
-	var retryableErr error
-	var lastNotFound error
-	succeeded := false
-	tried := map[*hostedAgentPoolBackend]struct{}{}
 	sessionID := strings.TrimSpace(req.GetSessionId())
-	if backend := p.sessionBackend(sessionID); backend != nil {
-		tried[backend] = struct{}{}
-		turns, err := p.listTurnsFromBackend(ctx, backend, req)
-		if err == nil {
-			return turns, nil
-		}
-		switch {
-		case errors.Is(err, core.ErrNotFound):
-			p.deleteSessionBackend(sessionID)
-			lastNotFound = err
-		case isHostedAgentReadRetryableError(err):
-			retryableErr = err
-		default:
-			return nil, err
-		}
-	}
-	var out []*coreagent.Turn
-	for _, backend := range p.availableBackends(true) {
-		if _, ok := tried[backend]; ok {
-			continue
-		}
-		turns, err := p.listTurnsFromBackend(ctx, backend, req)
-		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
-				lastNotFound = err
-				continue
-			}
-			if isHostedAgentReadRetryableError(err) {
-				retryableErr = err
-				continue
-			}
-			return nil, err
-		}
-		succeeded = true
-		out = append(out, turns...)
-	}
-	if !succeeded && retryableErr != nil {
-		return nil, retryableErr
-	}
-	if !succeeded && lastNotFound != nil {
-		return nil, lastNotFound
-	}
-	return out, nil
+	return listHostedAgentValues(p, p.sessionBackend(sessionID),
+		func(backend *hostedAgentPoolBackend) ([]*coreagent.Turn, error) {
+			return p.listTurnsFromBackend(ctx, backend, req)
+		},
+		func() { p.deleteSessionBackend(sessionID) })
 }
 
 func (p *hostedAgentProviderPool) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
@@ -703,54 +661,12 @@ func (p *hostedAgentProviderPool) ListInteractions(ctx context.Context, req *pro
 	if req == nil {
 		req = &proto.ListAgentProviderInteractionsRequest{}
 	}
-	var retryableErr error
-	var lastNotFound error
-	succeeded := false
-	tried := map[*hostedAgentPoolBackend]struct{}{}
 	turnID := strings.TrimSpace(req.GetTurnId())
-	if backend := p.turnBackend(turnID); backend != nil {
-		tried[backend] = struct{}{}
-		interactions, err := p.listInteractionsFromBackend(ctx, backend, req)
-		if err == nil {
-			return interactions, nil
-		}
-		switch {
-		case errors.Is(err, core.ErrNotFound):
-			p.deleteTurnBackend(turnID)
-			lastNotFound = err
-		case isHostedAgentReadRetryableError(err):
-			retryableErr = err
-		default:
-			return nil, err
-		}
-	}
-	var out []*coreagent.Interaction
-	for _, backend := range p.availableBackends(true) {
-		if _, ok := tried[backend]; ok {
-			continue
-		}
-		interactions, err := p.listInteractionsFromBackend(ctx, backend, req)
-		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
-				lastNotFound = err
-				continue
-			}
-			if isHostedAgentReadRetryableError(err) {
-				retryableErr = err
-				continue
-			}
-			return nil, err
-		}
-		succeeded = true
-		out = append(out, interactions...)
-	}
-	if !succeeded && retryableErr != nil {
-		return nil, retryableErr
-	}
-	if !succeeded && lastNotFound != nil {
-		return nil, lastNotFound
-	}
-	return out, nil
+	return listHostedAgentValues(p, p.turnBackend(turnID),
+		func(backend *hostedAgentPoolBackend) ([]*coreagent.Interaction, error) {
+			return p.listInteractionsFromBackend(ctx, backend, req)
+		},
+		func() { p.deleteTurnBackend(turnID) })
 }
 
 func (p *hostedAgentProviderPool) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
