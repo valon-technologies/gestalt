@@ -31,38 +31,26 @@ func agentToolSourceModesFromProto(modes []proto.AgentToolSourceMode) []coreagen
 	return out
 }
 
+var agentExecutionStatusesToProto = map[coreagent.ExecutionStatus]proto.AgentExecutionStatus{
+	coreagent.ExecutionStatusPending:         proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING,
+	coreagent.ExecutionStatusRunning:         proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
+	coreagent.ExecutionStatusSucceeded:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
+	coreagent.ExecutionStatusFailed:          proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED,
+	coreagent.ExecutionStatusCanceled:        proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED,
+	coreagent.ExecutionStatusWaitingForInput: proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
+}
+
 func agentExecutionStatusToProto(status coreagent.ExecutionStatus) proto.AgentExecutionStatus {
-	switch status {
-	case "":
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED
-	case coreagent.ExecutionStatusPending:
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING
-	case coreagent.ExecutionStatusRunning:
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING
-	case coreagent.ExecutionStatusSucceeded:
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED
-	case coreagent.ExecutionStatusFailed:
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED
-	case coreagent.ExecutionStatusCanceled:
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED
-	case coreagent.ExecutionStatusWaitingForInput:
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT
-	default:
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED
-	}
+	return agentExecutionStatusesToProto[status]
+}
+
+var agentSessionStatesToProto = map[coreagent.SessionState]proto.AgentSessionState{
+	coreagent.SessionStateActive:   proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+	coreagent.SessionStateArchived: proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED,
 }
 
 func agentSessionStateToProto(state coreagent.SessionState) proto.AgentSessionState {
-	switch state {
-	case "":
-		return proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
-	case coreagent.SessionStateActive:
-		return proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE
-	case coreagent.SessionStateArchived:
-		return proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED
-	default:
-		return proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
-	}
+	return agentSessionStatesToProto[state]
 }
 
 func agentSessionFromProto(session *proto.AgentSession) (*coreagent.Session, error) {

@@ -302,38 +302,34 @@ func MessagePartsFromProto(parts []*proto.AgentMessagePart) []coreagent.MessageP
 	return out
 }
 
+var executionStatusesFromProto = map[proto.AgentExecutionStatus]coreagent.ExecutionStatus{
+	proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED:       "",
+	proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING:           coreagent.ExecutionStatusPending,
+	proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING:           coreagent.ExecutionStatusRunning,
+	proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED:         coreagent.ExecutionStatusSucceeded,
+	proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED:            coreagent.ExecutionStatusFailed,
+	proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED:          coreagent.ExecutionStatusCanceled,
+	proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT: coreagent.ExecutionStatusWaitingForInput,
+}
+
 // ExecutionStatusFromProto converts a protobuf enum and rejects unknown values.
 func ExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent.ExecutionStatus, error) {
-	switch status {
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED:
-		return "", nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING:
-		return coreagent.ExecutionStatusPending, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING:
-		return coreagent.ExecutionStatusRunning, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED:
-		return coreagent.ExecutionStatusSucceeded, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED:
-		return coreagent.ExecutionStatusFailed, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED:
-		return coreagent.ExecutionStatusCanceled, nil
-	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT:
-		return coreagent.ExecutionStatusWaitingForInput, nil
-	default:
-		return "", fmt.Errorf("unknown agent execution status %v", status)
+	if mapped, ok := executionStatusesFromProto[status]; ok {
+		return mapped, nil
 	}
+	return "", fmt.Errorf("unknown agent execution status %v", status)
+}
+
+var sessionStatesFromProto = map[proto.AgentSessionState]coreagent.SessionState{
+	proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED: "",
+	proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:      coreagent.SessionStateActive,
+	proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED:    coreagent.SessionStateArchived,
 }
 
 // SessionStateFromProto converts a protobuf enum and rejects unknown values.
 func SessionStateFromProto(state proto.AgentSessionState) (coreagent.SessionState, error) {
-	switch state {
-	case proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED:
-		return "", nil
-	case proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:
-		return coreagent.SessionStateActive, nil
-	case proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED:
-		return coreagent.SessionStateArchived, nil
-	default:
-		return "", fmt.Errorf("unknown agent session state %v", state)
+	if mapped, ok := sessionStatesFromProto[state]; ok {
+		return mapped, nil
 	}
+	return "", fmt.Errorf("unknown agent session state %v", state)
 }
