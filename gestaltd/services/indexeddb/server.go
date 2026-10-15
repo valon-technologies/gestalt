@@ -186,55 +186,33 @@ func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequ
 }
 
 func (s *indexedDBServer) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-	record, err := recordFromProto(req.GetRecord())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
-	}
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	if err := store.Add(ctx, record); err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &emptypb.Empty{}, nil
+	return s.writeRecord(ctx, req, idb.ObjectStore.Add)
 }
 
 func (s *indexedDBServer) Put(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
+	return s.writeRecord(ctx, req, idb.ObjectStore.Put)
+}
+
+func (s *indexedDBServer) writeRecord(ctx context.Context, req *proto.RecordRequest, write func(idb.ObjectStore, context.Context, idb.Record) error) (*emptypb.Empty, error) {
 	record, err := recordFromProto(req.GetRecord())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	if err := store.Put(ctx, record); err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &emptypb.Empty{}, nil
+	return s.writeObjectStore(req.GetStore(), func(store idb.ObjectStore) error {
+		return write(store, ctx, record)
+	})
 }
 
 func (s *indexedDBServer) Delete(ctx context.Context, req *proto.ObjectStoreRequest) (*emptypb.Empty, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	if err := store.Delete(ctx, req.GetId()); err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &emptypb.Empty{}, nil
+	return s.writeObjectStore(req.GetStore(), func(store idb.ObjectStore) error {
+		return store.Delete(ctx, req.GetId())
+	})
 }
 
 func (s *indexedDBServer) Clear(ctx context.Context, req *proto.ObjectStoreNameRequest) (*emptypb.Empty, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	if err := store.Clear(ctx); err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &emptypb.Empty{}, nil
+	return s.writeObjectStore(req.GetStore(), func(store idb.ObjectStore) error {
+		return store.Clear(ctx)
+	})
 }
 
 func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.RecordsResponse, error) {
@@ -753,11 +731,7 @@ func rpcStatusFromError(err error) *rpcstatus.Status {
 	if st, ok := status.FromError(err); ok {
 		return &rpcstatus.Status{Code: int32(st.Code()), Message: st.Message()}
 	}
-	grpcErr := indexeddbToGRPCErr(err)
-	st, ok := status.FromError(grpcErr)
-	if !ok {
-		return &rpcstatus.Status{Code: int32(codes.Internal), Message: err.Error()}
-	}
+	st := status.Convert(indexeddbToGRPCErr(err))
 	return &rpcstatus.Status{Code: int32(st.Code()), Message: st.Message()}
 }
 
@@ -952,6 +926,14 @@ func cursorEntryToProto(c idb.Cursor, keysOnly bool) (*proto.CursorEntry, error)
 	return entry, nil
 }
 
+func (s *indexedDBServer) writeObjectStore(name string, write func(idb.ObjectStore) error) (*emptypb.Empty, error) {
+	return objectStoreResponse(s, name, func(store idb.ObjectStore) (struct{}, error) {
+		return struct{}{}, write(store)
+	}, func(struct{}) (*emptypb.Empty, error) {
+		return &emptypb.Empty{}, nil
+	})
+}
+
 func objectStoreResponse[T, R any](s *indexedDBServer, name string, call func(idb.ObjectStore) (T, error), encode func(T) (*R, error)) (*R, error) {
 	store, err := s.objectStore(name)
 	if err != nil {
@@ -1019,9 +1001,6 @@ func protoToSchema(ps *proto.ObjectStoreSchema) idb.ObjectStoreOptions {
 }
 
 func indexeddbToGRPCErr(err error) error {
-	if err == nil {
-		return nil
-	}
 	if errors.Is(err, idb.ErrNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
