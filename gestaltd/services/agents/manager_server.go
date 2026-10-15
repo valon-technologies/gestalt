@@ -64,10 +64,7 @@ func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAge
 		return nil, err
 	}
 	session, err := s.manager.CreateSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return agentSessionToProto(session)
+	return agentManagerResponse(session, err, agentSessionToProto)
 }
 
 func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
@@ -86,10 +83,7 @@ func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProv
 		return nil, err
 	}
 	session, err := s.manager.GetSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return agentSessionToProto(session)
+	return agentManagerResponse(session, err, agentSessionToProto)
 }
 
 func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
@@ -137,10 +131,7 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 		return nil, err
 	}
 	session, err := s.manager.UpdateSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return agentSessionToProto(session)
+	return agentManagerResponse(session, err, agentSessionToProto)
 }
 
 func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
@@ -159,10 +150,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 		return nil, err
 	}
 	turn, err := s.manager.CreateTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return agentTurnToProto(turn)
+	return agentManagerResponse(turn, err, agentTurnToProto)
 }
 
 func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
@@ -181,10 +169,7 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 		return nil, err
 	}
 	turn, err := s.manager.GetTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return agentTurnToProto(turn)
+	return agentManagerResponse(turn, err, agentTurnToProto)
 }
 
 func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
@@ -236,10 +221,7 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 		return nil, err
 	}
 	turn, err := s.manager.CancelTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return agentTurnToProto(turn)
+	return agentManagerResponse(turn, err, agentTurnToProto)
 }
 
 func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
@@ -310,10 +292,7 @@ func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.Reso
 		return nil, err
 	}
 	interaction, err := s.manager.ResolveInteraction(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return agentInteractionToProto(interaction)
+	return agentManagerResponse(interaction, err, agentInteractionToProto)
 }
 
 func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
@@ -395,3 +374,10 @@ func agentManagerStatusError(err error) error {
 }
 
 var _ proto.AgentServer = (*ProviderServer)(nil)
+
+func agentManagerResponse[T, R any](value T, err error, encode func(T) (*R, error)) (*R, error) {
+	if err != nil {
+		return nil, agentManagerStatusError(err)
+	}
+	return encode(value)
+}
