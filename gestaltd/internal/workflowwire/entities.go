@@ -322,18 +322,7 @@ func DefinitionToProto(definition *coreworkflow.Definition) (*proto.WorkflowDefi
 }
 
 func ActivationsToProto(values []coreworkflow.Activation) ([]*proto.WorkflowActivation, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowActivation, 0, len(values))
-	for i := range values {
-		activation, err := ActivationToProto(values[i])
-		if err != nil {
-			return nil, fmt.Errorf("workflow activations[%d]: %w", i, err)
-		}
-		out = append(out, activation)
-	}
-	return out, nil
+	return encodeWorkflowList(values, "workflow activations", ActivationToProto)
 }
 
 func ActivationToProto(activation coreworkflow.Activation) (*proto.WorkflowActivation, error) {
@@ -397,18 +386,7 @@ func ActivationFromProto(value *proto.WorkflowActivation) coreworkflow.Activatio
 }
 
 func StepExecutionsToProto(values []coreworkflow.StepExecution) ([]*proto.WorkflowStepExecution, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowStepExecution, 0, len(values))
-	for i := range values {
-		step, err := StepExecutionToProto(values[i])
-		if err != nil {
-			return nil, fmt.Errorf("workflow step executions[%d]: %w", i, err)
-		}
-		out = append(out, step)
-	}
-	return out, nil
+	return encodeWorkflowList(values, "workflow step executions", StepExecutionToProto)
 }
 
 func StepExecutionToProto(step coreworkflow.StepExecution) (*proto.WorkflowStepExecution, error) {
@@ -438,21 +416,7 @@ func StepExecutionToProto(step coreworkflow.StepExecution) (*proto.WorkflowStepE
 }
 
 func StepExecutionsFromProto(values []*proto.WorkflowStepExecution) ([]coreworkflow.StepExecution, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]coreworkflow.StepExecution, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		step, err := StepExecutionFromProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, step)
-	}
-	return out, nil
+	return decodeWorkflowList(values, StepExecutionFromProto)
 }
 
 func StepExecutionFromProto(value *proto.WorkflowStepExecution) (coreworkflow.StepExecution, error) {
@@ -478,18 +442,7 @@ func StepExecutionFromProto(value *proto.WorkflowStepExecution) (coreworkflow.St
 }
 
 func StepAttemptsToProto(values []coreworkflow.StepAttempt) ([]*proto.WorkflowStepAttempt, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowStepAttempt, 0, len(values))
-	for i := range values {
-		attempt, err := StepAttemptToProto(values[i])
-		if err != nil {
-			return nil, fmt.Errorf("workflow step attempts[%d]: %w", i, err)
-		}
-		out = append(out, attempt)
-	}
-	return out, nil
+	return encodeWorkflowList(values, "workflow step attempts", StepAttemptToProto)
 }
 
 func StepAttemptToProto(attempt coreworkflow.StepAttempt) (*proto.WorkflowStepAttempt, error) {
@@ -514,21 +467,7 @@ func StepAttemptToProto(attempt coreworkflow.StepAttempt) (*proto.WorkflowStepAt
 }
 
 func StepAttemptsFromProto(values []*proto.WorkflowStepAttempt) ([]coreworkflow.StepAttempt, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]coreworkflow.StepAttempt, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		attempt, err := StepAttemptFromProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, attempt)
-	}
-	return out, nil
+	return decodeWorkflowList(values, StepAttemptFromProto)
 }
 
 func StepAttemptFromProto(value *proto.WorkflowStepAttempt) (coreworkflow.StepAttempt, error) {
