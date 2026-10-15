@@ -423,18 +423,8 @@ func ToWireHTTPSubjectRequest(value *HTTPSubjectRequest) *proto.HTTPSubjectReque
 		VerifiedSubject: value.VerifiedSubject,
 		VerifiedClaims:  value.VerifiedClaims,
 	}
-	if value.Headers != nil {
-		out.Headers = make(map[string]*proto.StringList, len(value.Headers))
-		for key, item := range value.Headers {
-			out.Headers[key] = ToWireStringList(item)
-		}
-	}
-	if value.Query != nil {
-		out.Query = make(map[string]*proto.StringList, len(value.Query))
-		for key, item := range value.Query {
-			out.Query[key] = ToWireStringList(item)
-		}
-	}
+	out.Headers = convertMessageMap(value.Headers, ToWireStringList)
+	out.Query = convertMessageMap(value.Query, ToWireStringList)
 	return out
 }
 
@@ -453,18 +443,8 @@ func FromWireHTTPSubjectRequest(value *proto.HTTPSubjectRequest) *HTTPSubjectReq
 		VerifiedSubject: value.VerifiedSubject,
 		VerifiedClaims:  value.VerifiedClaims,
 	}
-	if value.Headers != nil {
-		out.Headers = make(map[string]*StringList, len(value.Headers))
-		for key, item := range value.Headers {
-			out.Headers[key] = FromWireStringList(item)
-		}
-	}
-	if value.Query != nil {
-		out.Query = make(map[string]*StringList, len(value.Query))
-		for key, item := range value.Query {
-			out.Query[key] = FromWireStringList(item)
-		}
-	}
+	out.Headers = convertMessageMap(value.Headers, FromWireStringList)
+	out.Query = convertMessageMap(value.Query, FromWireStringList)
 	return out
 }
 
@@ -554,12 +534,7 @@ func ToWireInvokeMetadata(value *InvokeMetadata) *proto.InvokeMetadata {
 		Status:    value.Status,
 		MediaType: value.MediaType,
 	}
-	if value.Headers != nil {
-		out.Headers = make(map[string]*proto.StringList, len(value.Headers))
-		for key, item := range value.Headers {
-			out.Headers[key] = ToWireStringList(item)
-		}
-	}
+	out.Headers = convertMessageMap(value.Headers, ToWireStringList)
 	return out
 }
 
@@ -571,12 +546,7 @@ func FromWireInvokeMetadata(value *proto.InvokeMetadata) *InvokeMetadata {
 		Status:    value.Status,
 		MediaType: value.MediaType,
 	}
-	if value.Headers != nil {
-		out.Headers = make(map[string]*StringList, len(value.Headers))
-		for key, item := range value.Headers {
-			out.Headers[key] = FromWireStringList(item)
-		}
-	}
+	out.Headers = convertMessageMap(value.Headers, FromWireStringList)
 	return out
 }
 
@@ -642,12 +612,7 @@ func ToWireOperationResult(value *OperationResult) *proto.OperationResult {
 		Status: value.Status,
 		Body:   value.Body,
 	}
-	if value.Headers != nil {
-		out.Headers = make(map[string]*proto.StringList, len(value.Headers))
-		for key, item := range value.Headers {
-			out.Headers[key] = ToWireStringList(item)
-		}
-	}
+	out.Headers = convertMessageMap(value.Headers, ToWireStringList)
 	return out
 }
 
@@ -659,12 +624,7 @@ func FromWireOperationResult(value *proto.OperationResult) *OperationResult {
 		Status: value.Status,
 		Body:   value.Body,
 	}
-	if value.Headers != nil {
-		out.Headers = make(map[string]*StringList, len(value.Headers))
-		for key, item := range value.Headers {
-			out.Headers[key] = FromWireStringList(item)
-		}
-	}
+	out.Headers = convertMessageMap(value.Headers, FromWireStringList)
 	return out
 }
 
@@ -706,12 +666,7 @@ func ToWireProviderMetadata(value *ProviderMetadata) *proto.ProviderMetadata {
 		MaxProtocolVersion:      value.MaxProtocolVersion,
 		WorkflowDefinitionSpecs: value.WorkflowDefinitionSpecs,
 	}
-	if value.ConnectionParams != nil {
-		out.ConnectionParams = make(map[string]*proto.ConnectionParamDef, len(value.ConnectionParams))
-		for key, item := range value.ConnectionParams {
-			out.ConnectionParams[key] = ToWireConnectionParamDef(item)
-		}
-	}
+	out.ConnectionParams = convertMessageMap(value.ConnectionParams, ToWireConnectionParamDef)
 	return out
 }
 
@@ -731,12 +686,7 @@ func FromWireProviderMetadata(value *proto.ProviderMetadata) *ProviderMetadata {
 		MaxProtocolVersion:      value.MaxProtocolVersion,
 		WorkflowDefinitionSpecs: value.WorkflowDefinitionSpecs,
 	}
-	if value.ConnectionParams != nil {
-		out.ConnectionParams = make(map[string]*ConnectionParamDef, len(value.ConnectionParams))
-		for key, item := range value.ConnectionParams {
-			out.ConnectionParams[key] = FromWireConnectionParamDef(item)
-		}
-	}
+	out.ConnectionParams = convertMessageMap(value.ConnectionParams, FromWireConnectionParamDef)
 	return out
 }
 

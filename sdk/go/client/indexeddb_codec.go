@@ -646,12 +646,7 @@ func ToWireRecord(value *Record) *proto.Record {
 		return nil
 	}
 	out := &proto.Record{}
-	if value.Fields != nil {
-		out.Fields = make(map[string]*proto.TypedValue, len(value.Fields))
-		for key, item := range value.Fields {
-			out.Fields[key] = ToWireTypedValue(item)
-		}
-	}
+	out.Fields = convertMessageMap(value.Fields, ToWireTypedValue)
 	return out
 }
 
@@ -660,12 +655,7 @@ func FromWireRecord(value *proto.Record) *Record {
 		return nil
 	}
 	out := &Record{}
-	if value.Fields != nil {
-		out.Fields = make(map[string]*TypedValue, len(value.Fields))
-		for key, item := range value.Fields {
-			out.Fields[key] = FromWireTypedValue(item)
-		}
-	}
+	out.Fields = convertMessageMap(value.Fields, FromWireTypedValue)
 	return out
 }
 

@@ -28,7 +28,7 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		idx.enums[e.FullName] = e
 	}
 
-	if err := set.Add("generated/rpc_support.go", []byte(publicRPCSupportFile + messageSliceSupportFile)); err != nil {
+	if err := set.Add("generated/rpc_support.go", []byte(publicRPCSupportFile + messageSliceSupportFile + messageMapSupportFile)); err != nil {
 		return nil, err
 	}
 

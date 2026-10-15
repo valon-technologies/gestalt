@@ -462,6 +462,11 @@ func (r *renderer) fieldToWire(f *model.Field) conversionParts {
 		if identityValue(f.MapValue) {
 			return conversionParts{entry: name + ": " + expr}
 		}
+		if f.MapValue.Kind == model.KindMessage {
+			return conversionParts{post: []string{
+				"out." + name + " = convertMessageMap(" + expr + ", " + r.toWireFuncName(f.MapValue.Message) + ")",
+			}}
+		}
 		return conversionParts{post: []string{
 			"if " + expr + " != nil {",
 			"\tout." + name + " = make(map[" + goScalarType(f.MapKey) + "]" + r.wireValueType(f.MapValue) + ", len(" + expr + "))",
@@ -535,6 +540,11 @@ func (r *renderer) fieldFromWire(f *model.Field) conversionParts {
 	case model.KindMap:
 		if identityValue(f.MapValue) {
 			return conversionParts{entry: name + ": " + expr}
+		}
+		if f.MapValue.Kind == model.KindMessage {
+			return conversionParts{post: []string{
+				"out." + name + " = convertMessageMap(" + expr + ", " + r.fromWireFuncName(f.MapValue.Message) + ")",
+			}}
 		}
 		return conversionParts{post: []string{
 			"if " + expr + " != nil {",
