@@ -130,8 +130,8 @@ func validateVersionIndex[T any](kind string, schemaVersion, expectedSchemaVersi
 	return nil
 }
 
-func validatePendingVersion(appName, mapKey string, entry PendingVersion) error {
-	version := strings.TrimSpace(entry.Version)
+func validateTrackedVersion(appName, mapKey, rawVersion, sourceRef, repository string, startedAt time.Time) error {
+	version := strings.TrimSpace(rawVersion)
 	if version == "" {
 		return fmt.Errorf("version is required")
 	}
@@ -141,16 +141,23 @@ func validatePendingVersion(appName, mapKey string, entry PendingVersion) error 
 	if err := source.ValidateVersion(version); err != nil {
 		return fmt.Errorf("version: %w", err)
 	}
-	if err := validateSourceRef(entry.SourceRef); err != nil {
+	if err := validateSourceRef(sourceRef); err != nil {
 		return fmt.Errorf("sourceRef: %w", err)
 	}
-	if repository := strings.TrimSpace(entry.Repository); repository != "" {
+	if repository := strings.TrimSpace(repository); repository != "" {
 		if err := validateEntryRepository(repository, appName); err != nil {
 			return fmt.Errorf("repository: %w", err)
 		}
 	}
-	if entry.StartedAt.IsZero() {
+	if startedAt.IsZero() {
 		return fmt.Errorf("startedAt is required")
+	}
+	return nil
+}
+
+func validatePendingVersion(appName, mapKey string, entry PendingVersion) error {
+	if err := validateTrackedVersion(appName, mapKey, entry.Version, entry.SourceRef, entry.Repository, entry.StartedAt); err != nil {
+		return err
 	}
 	if entry.UpdatedAt.IsZero() {
 		return fmt.Errorf("updatedAt is required")
@@ -165,26 +172,8 @@ func validatePendingVersion(appName, mapKey string, entry PendingVersion) error 
 }
 
 func validateFailedVersion(appName, mapKey string, entry FailedVersion) error {
-	version := strings.TrimSpace(entry.Version)
-	if version == "" {
-		return fmt.Errorf("version is required")
-	}
-	if mapKey != version {
-		return fmt.Errorf("map key %q does not match version field %q", mapKey, version)
-	}
-	if err := source.ValidateVersion(version); err != nil {
-		return fmt.Errorf("version: %w", err)
-	}
-	if err := validateSourceRef(entry.SourceRef); err != nil {
-		return fmt.Errorf("sourceRef: %w", err)
-	}
-	if repository := strings.TrimSpace(entry.Repository); repository != "" {
-		if err := validateEntryRepository(repository, appName); err != nil {
-			return fmt.Errorf("repository: %w", err)
-		}
-	}
-	if entry.StartedAt.IsZero() {
-		return fmt.Errorf("startedAt is required")
+	if err := validateTrackedVersion(appName, mapKey, entry.Version, entry.SourceRef, entry.Repository, entry.StartedAt); err != nil {
+		return err
 	}
 	if entry.FailedAt.IsZero() {
 		return fmt.Errorf("failedAt is required")
