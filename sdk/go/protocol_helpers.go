@@ -55,10 +55,7 @@ func structFromAny(value any) (*structpb.Struct, error) {
 
 // mapFromStruct converts a protobuf Struct into its Go map representation.
 func mapFromStruct(value *structpb.Struct) map[string]any {
-	if value == nil {
-		return nil
-	}
-	return value.AsMap()
+	return convertProtoMessage(value, (*structpb.Struct).AsMap)
 }
 
 // valueFromAny converts a Go JSON-compatible value into a protobuf Value.
@@ -80,10 +77,7 @@ func mapFromValues(values map[string]*structpb.Value) map[string]any {
 
 // timeFromTimestamp converts a protobuf Timestamp into a Go time.
 func timeFromTimestamp(value *timestamppb.Timestamp) time.Time {
-	if value == nil {
-		return time.Time{}
-	}
-	return value.AsTime()
+	return convertProtoMessage(value, (*timestamppb.Timestamp).AsTime)
 }
 
 // timePtrFromTimestamp converts an optional protobuf Timestamp into an optional time.
@@ -343,9 +337,10 @@ func convertAllocatedProtoSlice[Input, Output any](values []*Input, convert func
 }
 
 // convertProtoMessage preserves absence before converting a message.
-func convertProtoMessage[Input, Output any](value *Input, convert func(*Input) *Output) *Output {
+func convertProtoMessage[Input, Output any](value *Input, convert func(*Input) Output) Output {
 	if value == nil {
-		return nil
+		var zero Output
+		return zero
 	}
 	return convert(value)
 }

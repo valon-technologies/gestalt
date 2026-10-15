@@ -167,23 +167,22 @@ func workflowStepToProto(step WorkflowStep) (*proto.WorkflowStep, error) {
 }
 
 func workflowStepFromProto(step *proto.WorkflowStep) WorkflowStep {
-	if step == nil {
-		return WorkflowStep{}
-	}
-	out := WorkflowStep{
-		ID:             step.GetId(),
-		Inputs:         workflowValueMapFromProto(step.GetInputs()),
-		When:           workflowStepWhenFromProto(step.GetWhen()),
-		TimeoutSeconds: step.GetTimeoutSeconds(),
-		Metadata:       mapFromStruct(step.GetMetadata()),
-	}
-	if step.GetApp() != nil {
-		out.App = workflowStepAppCallFromProto(step.GetApp())
-	}
-	if step.GetAgent() != nil {
-		out.Agent = workflowStepAgentTurnFromProto(step.GetAgent())
-	}
-	return out
+	return convertProtoMessage(step, func(step *proto.WorkflowStep) WorkflowStep {
+		out := WorkflowStep{
+			ID:             step.GetId(),
+			Inputs:         workflowValueMapFromProto(step.GetInputs()),
+			When:           workflowStepWhenFromProto(step.GetWhen()),
+			TimeoutSeconds: step.GetTimeoutSeconds(),
+			Metadata:       mapFromStruct(step.GetMetadata()),
+		}
+		if step.GetApp() != nil {
+			out.App = workflowStepAppCallFromProto(step.GetApp())
+		}
+		if step.GetAgent() != nil {
+			out.Agent = workflowStepAgentTurnFromProto(step.GetAgent())
+		}
+		return out
+	})
 }
 
 func workflowStepAppCallToProto(input *WorkflowStepAppCall) (*proto.WorkflowStepAppCall, error) {
@@ -507,20 +506,19 @@ func workflowEventToProto(input WorkflowEvent) (*proto.WorkflowEvent, error) {
 
 // workflowEventFromProto converts an existing protocol event into builder input.
 func workflowEventFromProto(value *proto.WorkflowEvent) WorkflowEvent {
-	if value == nil {
-		return WorkflowEvent{}
-	}
-	return WorkflowEvent{
-		ID:              value.GetId(),
-		Source:          value.GetSource(),
-		SpecVersion:     value.GetSpecVersion(),
-		Type:            value.GetType(),
-		Subject:         value.GetSubject(),
-		Time:            timeFromTimestamp(value.GetTime()),
-		DataContentType: value.GetDatacontenttype(),
-		Data:            mapFromStruct(value.GetData()),
-		Extensions:      mapFromValues(value.GetExtensions()),
-	}
+	return convertProtoMessage(value, func(value *proto.WorkflowEvent) WorkflowEvent {
+		return WorkflowEvent{
+			ID:              value.GetId(),
+			Source:          value.GetSource(),
+			SpecVersion:     value.GetSpecVersion(),
+			Type:            value.GetType(),
+			Subject:         value.GetSubject(),
+			Time:            timeFromTimestamp(value.GetTime()),
+			DataContentType: value.GetDatacontenttype(),
+			Data:            mapFromStruct(value.GetData()),
+			Extensions:      mapFromValues(value.GetExtensions()),
+		}
+	})
 }
 
 // WorkflowSignal contains fields for constructing a
@@ -559,18 +557,17 @@ func workflowSignalToProto(input WorkflowSignal) (*proto.WorkflowSignal, error) 
 
 // workflowSignalFromProto converts an existing protocol signal into builder input.
 func workflowSignalFromProto(value *proto.WorkflowSignal) WorkflowSignal {
-	if value == nil {
-		return WorkflowSignal{}
-	}
-	return WorkflowSignal{
-		ID:             value.GetId(),
-		Name:           value.GetName(),
-		Payload:        mapFromStruct(value.GetPayload()),
-		Metadata:       mapFromStruct(value.GetMetadata()),
-		CreatedAt:      timeFromTimestamp(value.GetCreatedAt()),
-		IdempotencyKey: value.GetIdempotencyKey(),
-		Sequence:       value.GetSequence(),
-	}
+	return convertProtoMessage(value, func(value *proto.WorkflowSignal) WorkflowSignal {
+		return WorkflowSignal{
+			ID:             value.GetId(),
+			Name:           value.GetName(),
+			Payload:        mapFromStruct(value.GetPayload()),
+			Metadata:       mapFromStruct(value.GetMetadata()),
+			CreatedAt:      timeFromTimestamp(value.GetCreatedAt()),
+			IdempotencyKey: value.GetIdempotencyKey(),
+			Sequence:       value.GetSequence(),
+		}
+	})
 }
 
 // WorkflowScheduleTrigger contains fields for constructing a
@@ -707,17 +704,16 @@ func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.Workflo
 }
 
 func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) WorkflowDefinitionSpec {
-	if value == nil {
-		return WorkflowDefinitionSpec{}
-	}
-	activations := convertProtoNonNilSlice(value.GetActivations(), workflowActivationFromProto)
-	return WorkflowDefinitionSpec{
-		ID:          value.GetId(),
-		Target:      workflowTargetInputPtrFromTarget(value.GetTarget()),
-		Activations: activations,
-		Paused:      value.GetPaused(),
-		RunAs:       strings.TrimSpace(value.GetRunAs()),
-	}
+	return convertProtoMessage(value, func(value *proto.WorkflowDefinitionSpec) WorkflowDefinitionSpec {
+		activations := convertProtoNonNilSlice(value.GetActivations(), workflowActivationFromProto)
+		return WorkflowDefinitionSpec{
+			ID:          value.GetId(),
+			Target:      workflowTargetInputPtrFromTarget(value.GetTarget()),
+			Activations: activations,
+			Paused:      value.GetPaused(),
+			RunAs:       strings.TrimSpace(value.GetRunAs()),
+		}
+	})
 }
 
 func workflowDefinitionToProto(input WorkflowDefinition) (*proto.WorkflowDefinition, error) {
@@ -1035,10 +1031,9 @@ func workflowEventMatchInputPtrFromMatch(value *proto.WorkflowEventMatch) *Workf
 }
 
 func workflowSubjectID(value *Subject) string {
-	if value == nil {
-		return ""
-	}
-	return strings.TrimSpace(value.ID)
+	return convertProtoMessage(value, func(value *Subject) string {
+		return strings.TrimSpace(value.ID)
+	})
 }
 
 // WorkflowRefInput references a run-input path in a workflow definition.
