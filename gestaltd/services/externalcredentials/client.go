@@ -41,7 +41,7 @@ type remoteExternalCredentialProvider struct {
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredentialProvider, error) {
-	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
+	proc, _, err := runtimehost.StartConfiguredAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Workdir:      cfg.Workdir,
@@ -51,17 +51,12 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 		Cleanup:      cfg.Cleanup,
 		HostServices: cfg.HostServices,
 		ProviderName: cfg.Name,
-	})
+	}, proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL, cfg.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	runtimeClient := proc.Lifecycle()
 	client := proto.NewExternalCredentialsClient(proc.Conn())
-	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL, cfg.Name, cfg.Config); err != nil {
-		_ = proc.Close()
-		return nil, err
-	}
 
 	capabilities := externalCredentialProviderCapabilities(ctx, client.GetCapabilities)
 

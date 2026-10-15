@@ -29,7 +29,7 @@ type executableProvider struct {
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider, error) {
-	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
+	proc, _, err := runtimehost.StartConfiguredAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -38,14 +38,8 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 		HostServices: cfg.HostServices,
 		ProviderName: cfg.Name,
 		Telemetry:    cfg.Telemetry,
-	})
+	}, proto.ProviderKind_PROVIDER_KIND_RUNTIME, cfg.Config)
 	if err != nil {
-		return nil, err
-	}
-
-	lifecycle := proto.NewProviderLifecycleClient(proc.Conn())
-	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, lifecycle, proto.ProviderKind_PROVIDER_KIND_RUNTIME, cfg.Name, cfg.Config); err != nil {
-		_ = proc.Close()
 		return nil, err
 	}
 

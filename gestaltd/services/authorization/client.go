@@ -46,7 +46,7 @@ type Executable struct {
 }
 
 func StartExecutable(ctx context.Context, cfg ExecConfig) (*Executable, error) {
-	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
+	proc, runtimeClient, err := runtimehost.StartConfiguredAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:           cfg.Command,
 		Args:              cfg.Args,
 		Workdir:           cfg.Workdir,
@@ -57,15 +57,8 @@ func StartExecutable(ctx context.Context, cfg ExecConfig) (*Executable, error) {
 		HostServices:      cfg.HostServices,
 		ProviderName:      cfg.Name,
 		GRPCServerOptions: cfg.HostServiceGRPCOptions,
-	})
+	}, proto.ProviderKind_PROVIDER_KIND_AUTHORIZATION, cfg.Config)
 	if err != nil {
-		return nil, err
-	}
-
-	runtimeClient := proc.Lifecycle()
-	_, err = runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_AUTHORIZATION, cfg.Name, cfg.Config)
-	if err != nil {
-		_ = proc.Close()
 		return nil, err
 	}
 

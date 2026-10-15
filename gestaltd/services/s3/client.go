@@ -32,7 +32,7 @@ type remoteS3 struct {
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (s3sdk.S3, error) {
-	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
+	proc, runtimeClient, err := runtimehost.StartConfiguredAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Workdir:      cfg.Workdir,
@@ -41,15 +41,8 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (s3sdk.S3, error) {
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		ProviderName: cfg.Name,
-	})
+	}, proto.ProviderKind_PROVIDER_KIND_S3, cfg.Config)
 	if err != nil {
-		return nil, err
-	}
-
-	runtimeClient := proc.Lifecycle()
-	_, err = runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_S3, cfg.Name, cfg.Config)
-	if err != nil {
-		_ = proc.Close()
 		return nil, err
 	}
 
