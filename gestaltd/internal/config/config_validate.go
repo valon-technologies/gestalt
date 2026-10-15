@@ -141,18 +141,17 @@ func ValidateCanonicalStructure(cfg *Config) error {
 }
 
 func validateAPIVersion(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	// YAML roots require apiVersion before this point; direct programmatic
-	// Config values may omit it and use current source normalization.
-	apiVersion := strings.TrimSpace(cfg.APIVersion)
-	switch apiVersion {
-	case "", ConfigAPIVersion:
-		return nil
-	default:
-		return fmt.Errorf("config validation: unsupported apiVersion %q", apiVersion)
-	}
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		// YAML roots require apiVersion before this point; direct programmatic
+		// Config values may omit it and use current source normalization.
+		apiVersion := strings.TrimSpace(cfg.APIVersion)
+		switch apiVersion {
+		case "", ConfigAPIVersion:
+			return nil
+		default:
+			return fmt.Errorf("config validation: unsupported apiVersion %q", apiVersion)
+		}
+	})
 }
 
 func requiredAPIVersionError() error {
@@ -160,73 +159,70 @@ func requiredAPIVersionError() error {
 }
 
 func validateProviderRepositories(cfg *Config) error {
-	if cfg == nil {
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		for name, repo := range cfg.ProviderRepositories {
+			if err := providerregistry.ValidateRepositoryName(name); err != nil {
+				return fmt.Errorf("config validation: providerRepositories.%s: %w", name, err)
+			}
+			if strings.TrimSpace(repo.URL) == "" {
+				return fmt.Errorf("config validation: providerRepositories.%s.url is required", name)
+			}
+		}
 		return nil
-	}
-	for name, repo := range cfg.ProviderRepositories {
-		if err := providerregistry.ValidateRepositoryName(name); err != nil {
-			return fmt.Errorf("config validation: providerRepositories.%s: %w", name, err)
-		}
-		if strings.TrimSpace(repo.URL) == "" {
-			return fmt.Errorf("config validation: providerRepositories.%s.url is required", name)
-		}
-	}
-	return nil
+	})
 }
 
 func validateProviderSnapshotRepositories(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	for name, repo := range cfg.ProviderSnapshotRepositories {
-		if err := providerregistry.ValidateRepositoryName(name); err != nil {
-			return fmt.Errorf("config validation: providerSnapshotRepositories.%s: %w", name, err)
-		}
-		rawURL := strings.TrimSpace(repo.URL)
-		if rawURL == "" {
-			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.url is required", name)
-		}
-		parsed, err := url.ParseRequestURI(rawURL)
-		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.url must be an absolute http(s) URL", name)
-		}
-		if ref := strings.TrimSpace(repo.GestaltRef); ref != "" && !isFullGitSHA(ref) {
-			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.gestaltRef must be a 40-character commit SHA", name)
-		}
-		switch repo.Auth {
-		case "":
-		case ProviderSnapshotRepositoryAuthGCPADC:
-			if parsed.Scheme != "https" || !strings.EqualFold(parsed.Hostname(), "storage.googleapis.com") || parsed.Port() != "" || parsed.User != nil {
-				return fmt.Errorf("config validation: providerSnapshotRepositories.%s.auth %q requires an https://storage.googleapis.com URL", name, repo.Auth)
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		for name, repo := range cfg.ProviderSnapshotRepositories {
+			if err := providerregistry.ValidateRepositoryName(name); err != nil {
+				return fmt.Errorf("config validation: providerSnapshotRepositories.%s: %w", name, err)
 			}
-		default:
-			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.auth must be %q when set", name, ProviderSnapshotRepositoryAuthGCPADC)
+			rawURL := strings.TrimSpace(repo.URL)
+			if rawURL == "" {
+				return fmt.Errorf("config validation: providerSnapshotRepositories.%s.url is required", name)
+			}
+			parsed, err := url.ParseRequestURI(rawURL)
+			if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+				return fmt.Errorf("config validation: providerSnapshotRepositories.%s.url must be an absolute http(s) URL", name)
+			}
+			if ref := strings.TrimSpace(repo.GestaltRef); ref != "" && !isFullGitSHA(ref) {
+				return fmt.Errorf("config validation: providerSnapshotRepositories.%s.gestaltRef must be a 40-character commit SHA", name)
+			}
+			switch repo.Auth {
+			case "":
+			case ProviderSnapshotRepositoryAuthGCPADC:
+				if parsed.Scheme != "https" || !strings.EqualFold(parsed.Hostname(), "storage.googleapis.com") || parsed.Port() != "" || parsed.User != nil {
+					return fmt.Errorf("config validation: providerSnapshotRepositories.%s.auth %q requires an https://storage.googleapis.com URL", name, repo.Auth)
+				}
+			default:
+				return fmt.Errorf("config validation: providerSnapshotRepositories.%s.auth must be %q when set", name, ProviderSnapshotRepositoryAuthGCPADC)
+			}
+			if err := validateProviderSnapshotRepositoryPublish(name, repo.Publish); err != nil {
+				return err
+			}
 		}
-		if err := validateProviderSnapshotRepositoryPublish(name, repo.Publish); err != nil {
-			return err
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func validateAppRegistries(cfg *Config) error {
-	if cfg == nil {
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		for name, registry := range cfg.AppRegistries {
+			if err := providerregistry.ValidateRepositoryName(name); err != nil {
+				return fmt.Errorf("config validation: appRegistries.%s: %w", name, err)
+			}
+			if err := validateAppRegistryLocation("appRegistries", name, registry); err != nil {
+				return err
+			}
+			switch registry.Auth {
+			case "", AppRegistryAuthGCPADC:
+			default:
+				return fmt.Errorf("config validation: appRegistries.%s.auth must be %q when set", name, AppRegistryAuthGCPADC)
+			}
+		}
 		return nil
-	}
-	for name, registry := range cfg.AppRegistries {
-		if err := providerregistry.ValidateRepositoryName(name); err != nil {
-			return fmt.Errorf("config validation: appRegistries.%s: %w", name, err)
-		}
-		if err := validateAppRegistryLocation("appRegistries", name, registry); err != nil {
-			return err
-		}
-		switch registry.Auth {
-		case "", AppRegistryAuthGCPADC:
-		default:
-			return fmt.Errorf("config validation: appRegistries.%s.auth must be %q when set", name, AppRegistryAuthGCPADC)
-		}
-	}
-	return nil
+	})
 }
 
 func validateAppRegistryLocation(prefix, name string, registry AppRegistryConfig) error {
@@ -254,87 +250,85 @@ func validateAppRegistryLocation(prefix, name string, registry AppRegistryConfig
 }
 
 func validateServerAppRegistry(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	attempts := cfg.Server.AppRegistry.MaxReconcileAttempts
-	if !cfg.Server.AppRegistry.maxReconcileAttemptsSet && attempts == 0 {
-		cfg.Server.AppRegistry.MaxReconcileAttempts = DefaultAppRegistryMaxReconcileAttempts
-	} else if attempts <= 0 {
-		return fmt.Errorf("config validation: server.appRegistry.maxReconcileAttempts must be a positive integer")
-	}
-	if _, err := cfg.Server.AppRegistry.CatalogPollIntervalDuration(); err != nil {
-		return fmt.Errorf("config validation: server.appRegistry.catalogPollInterval: %w", err)
-	}
-	if _, err := cfg.Server.AppRegistry.AutoDeployPollIntervalDuration(); err != nil {
-		return fmt.Errorf("config validation: server.appRegistry.autoDeployPollInterval: %w", err)
-	}
-	heartbeatInterval, err := cfg.Server.AppRegistry.HeartbeatIntervalDuration()
-	if err != nil {
-		return fmt.Errorf("config validation: server.appRegistry.heartbeatInterval: %w", err)
-	}
-	heartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
-	if err != nil {
-		return fmt.Errorf("config validation: server.appRegistry.heartbeatTtl: %w", err)
-	}
-	if heartbeatTTL <= heartbeatInterval {
-		return fmt.Errorf("config validation: server.appRegistry.heartbeatTtl must be greater than heartbeatInterval")
-	}
-	healthyStabilityWindow, err := cfg.Server.AppRegistry.HealthyStabilityWindowDuration()
-	if err != nil {
-		return fmt.Errorf("config validation: server.appRegistry.healthyStabilityWindow: %w", err)
-	}
-	if healthyStabilityWindow <= heartbeatTTL {
-		return fmt.Errorf("config validation: server.appRegistry.healthyStabilityWindow must be greater than heartbeatTtl")
-	}
-	if _, err := cfg.Server.AppRegistry.HeartbeatRetentionDuration(); err != nil {
-		return fmt.Errorf("config validation: server.appRegistry.heartbeatRetention: %w", err)
-	}
-	cfg.Server.AppRegistry.RolloutMode = AppRegistryRolloutMode(strings.TrimSpace(string(cfg.Server.AppRegistry.RolloutMode)))
-	if cfg.Server.AppRegistry.RolloutMode == "" {
-		cfg.Server.AppRegistry.RolloutMode = AppRegistryRolloutModeEnrollment
-	}
-	switch cfg.Server.AppRegistry.RolloutMode {
-	case AppRegistryRolloutModeEnrollment, AppRegistryRolloutModeHeartbeat:
-	default:
-		return fmt.Errorf(
-			"config validation: server.appRegistry.rolloutMode must be %q or %q",
-			AppRegistryRolloutModeEnrollment,
-			AppRegistryRolloutModeHeartbeat,
-		)
-	}
-	return validateAppRegistryPublishSettings(cfg)
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		attempts := cfg.Server.AppRegistry.MaxReconcileAttempts
+		if !cfg.Server.AppRegistry.maxReconcileAttemptsSet && attempts == 0 {
+			cfg.Server.AppRegistry.MaxReconcileAttempts = DefaultAppRegistryMaxReconcileAttempts
+		} else if attempts <= 0 {
+			return fmt.Errorf("config validation: server.appRegistry.maxReconcileAttempts must be a positive integer")
+		}
+		if _, err := cfg.Server.AppRegistry.CatalogPollIntervalDuration(); err != nil {
+			return fmt.Errorf("config validation: server.appRegistry.catalogPollInterval: %w", err)
+		}
+		if _, err := cfg.Server.AppRegistry.AutoDeployPollIntervalDuration(); err != nil {
+			return fmt.Errorf("config validation: server.appRegistry.autoDeployPollInterval: %w", err)
+		}
+		heartbeatInterval, err := cfg.Server.AppRegistry.HeartbeatIntervalDuration()
+		if err != nil {
+			return fmt.Errorf("config validation: server.appRegistry.heartbeatInterval: %w", err)
+		}
+		heartbeatTTL, err := cfg.Server.AppRegistry.HeartbeatTTLDuration()
+		if err != nil {
+			return fmt.Errorf("config validation: server.appRegistry.heartbeatTtl: %w", err)
+		}
+		if heartbeatTTL <= heartbeatInterval {
+			return fmt.Errorf("config validation: server.appRegistry.heartbeatTtl must be greater than heartbeatInterval")
+		}
+		healthyStabilityWindow, err := cfg.Server.AppRegistry.HealthyStabilityWindowDuration()
+		if err != nil {
+			return fmt.Errorf("config validation: server.appRegistry.healthyStabilityWindow: %w", err)
+		}
+		if healthyStabilityWindow <= heartbeatTTL {
+			return fmt.Errorf("config validation: server.appRegistry.healthyStabilityWindow must be greater than heartbeatTtl")
+		}
+		if _, err := cfg.Server.AppRegistry.HeartbeatRetentionDuration(); err != nil {
+			return fmt.Errorf("config validation: server.appRegistry.heartbeatRetention: %w", err)
+		}
+		cfg.Server.AppRegistry.RolloutMode = AppRegistryRolloutMode(strings.TrimSpace(string(cfg.Server.AppRegistry.RolloutMode)))
+		if cfg.Server.AppRegistry.RolloutMode == "" {
+			cfg.Server.AppRegistry.RolloutMode = AppRegistryRolloutModeEnrollment
+		}
+		switch cfg.Server.AppRegistry.RolloutMode {
+		case AppRegistryRolloutModeEnrollment, AppRegistryRolloutModeHeartbeat:
+		default:
+			return fmt.Errorf(
+				"config validation: server.appRegistry.rolloutMode must be %q or %q",
+				AppRegistryRolloutModeEnrollment,
+				AppRegistryRolloutModeHeartbeat,
+			)
+		}
+		return validateAppRegistryPublishSettings(cfg)
+	})
 }
 
 func validateAppRegistryPublishSettings(cfg *Config) error {
-	if cfg == nil {
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		publish := cfg.Server.AppRegistry.Publish
+		if !publish.Enabled {
+			return nil
+		}
+		registryName := strings.TrimSpace(publish.WritableRegistry)
+		if registryName == "" {
+			return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry is required when publish is enabled")
+		}
+		registry, ok := cfg.AppRegistries[registryName]
+		if !ok {
+			return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q is not configured under appRegistries", registryName)
+		}
+		if strings.TrimSpace(registry.Kind) != AppRegistryKindGCS {
+			return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q must be a GCS app registry", registryName)
+		}
+		if _, err := registry.StorageURL(); err != nil {
+			return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q: %w", registryName, err)
+		}
+		if _, err := publish.PublishLimits(); err != nil {
+			return fmt.Errorf("config validation: server.appRegistry.publish: %w", err)
+		}
+		if len(publish.AllowedAppSet()) == 0 {
+			return fmt.Errorf("config validation: server.appRegistry.publish.allowedApps must list at least one app when publish is enabled")
+		}
 		return nil
-	}
-	publish := cfg.Server.AppRegistry.Publish
-	if !publish.Enabled {
-		return nil
-	}
-	registryName := strings.TrimSpace(publish.WritableRegistry)
-	if registryName == "" {
-		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry is required when publish is enabled")
-	}
-	registry, ok := cfg.AppRegistries[registryName]
-	if !ok {
-		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q is not configured under appRegistries", registryName)
-	}
-	if strings.TrimSpace(registry.Kind) != AppRegistryKindGCS {
-		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q must be a GCS app registry", registryName)
-	}
-	if _, err := registry.StorageURL(); err != nil {
-		return fmt.Errorf("config validation: server.appRegistry.publish.writableRegistry %q: %w", registryName, err)
-	}
-	if _, err := publish.PublishLimits(); err != nil {
-		return fmt.Errorf("config validation: server.appRegistry.publish: %w", err)
-	}
-	if len(publish.AllowedAppSet()) == 0 {
-		return fmt.Errorf("config validation: server.appRegistry.publish.allowedApps must list at least one app when publish is enabled")
-	}
-	return nil
+	})
 }
 
 func validateProviderSnapshotRepositoryPublish(name string, publish ProviderSnapshotRepositoryPublishConfig) error {
@@ -377,99 +371,98 @@ func isFullGitSHA(value string) bool {
 }
 
 func normalizeConnectionBindings(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	if cfg.Connections == nil {
-		cfg.Connections = map[string]*ConnectionDef{}
-	}
-	for id, conn := range cfg.Connections {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return fmt.Errorf("config validation: connections contains an empty connection id")
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		if cfg.Connections == nil {
+			cfg.Connections = map[string]*ConnectionDef{}
 		}
-		if conn == nil {
-			return fmt.Errorf("config validation: connections.%s is required", id)
+		for id, conn := range cfg.Connections {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				return fmt.Errorf("config validation: connections contains an empty connection id")
+			}
+			if conn == nil {
+				return fmt.Errorf("config validation: connections.%s is required", id)
+			}
+			conn.Ref = strings.TrimSpace(conn.Ref)
+			if conn.Ref != "" {
+				return fmt.Errorf("config validation: connections.%s.ref is not allowed on top-level connections", id)
+			}
+			if conn.Exposure != "" {
+				return fmt.Errorf("config validation: connections.%s.exposure is not supported", id)
+			}
+			conn.ConnectionID = id
+			conn.BindingResolved = false
 		}
-		conn.Ref = strings.TrimSpace(conn.Ref)
-		if conn.Ref != "" {
-			return fmt.Errorf("config validation: connections.%s.ref is not allowed on top-level connections", id)
-		}
-		if conn.Exposure != "" {
-			return fmt.Errorf("config validation: connections.%s.exposure is not supported", id)
-		}
-		conn.ConnectionID = id
-		conn.BindingResolved = false
-	}
 
-	normalizeEntry := func(kind, name string, entry *ProviderEntry) error {
-		if entry == nil || len(entry.Connections) == 0 {
+		normalizeEntry := func(kind, name string, entry *ProviderEntry) error {
+			if entry == nil || len(entry.Connections) == 0 {
+				return nil
+			}
+			for _, rawLocalName := range slices.Sorted(maps.Keys(entry.Connections)) {
+				binding := entry.Connections[rawLocalName]
+				if binding == nil {
+					return fmt.Errorf("config validation: %s.%s.connections.%s is required", kind, name, rawLocalName)
+				}
+				localName := ResolveConnectionAlias(rawLocalName)
+				if localName == "" {
+					return fmt.Errorf("config validation: %s.%s.connections contains an empty connection name", kind, name)
+				}
+				if localName != rawLocalName {
+					if existing := entry.Connections[localName]; existing != nil && existing != binding {
+						return fmt.Errorf("config validation: %s.%s.connections.%s conflicts with alias %q", kind, name, localName, rawLocalName)
+					}
+					delete(entry.Connections, rawLocalName)
+					entry.Connections[localName] = binding
+				}
+				ref := strings.TrimSpace(binding.Ref)
+				if ref == "" {
+					if binding.ConnectionID == "" {
+						binding.ConnectionID = inlineConnectionID(kind, name, localName)
+					}
+					if !binding.BindingResolved && ConnectionModeForConnection(*binding) == core.ConnectionModeSubject && connectionBindingRequiresUserCredential(binding) {
+						return fmt.Errorf("config validation: %s.%s.connections.%s user-owned inline connections are not supported; define a top-level connection and reference it with ref", kind, name, localName)
+					}
+					continue
+				}
+				if binding.BindingResolved && binding.ConnectionID == ref {
+					continue
+				}
+				if connectionBindingHasCredentialMaterial(binding) {
+					return fmt.Errorf("config validation: %s.%s.connections.%s uses ref %q and cannot override mode, auth, or params", kind, name, localName, ref)
+				}
+				global := cfg.Connections[ref]
+				if global == nil {
+					return fmt.Errorf("config validation: %s.%s.connections.%s references unknown top-level connection %q", kind, name, localName, ref)
+				}
+				resolved := cloneConnectionDef(*global)
+				resolved.Ref = ref
+				resolved.ConnectionID = ref
+				resolved.BindingResolved = true
+				if binding.DisplayName != "" {
+					resolved.DisplayName = binding.DisplayName
+				}
+				if strings.TrimSpace(binding.Exposure) != "" {
+					return fmt.Errorf("config validation: %s.%s.connections.%s.exposure is not supported", kind, name, localName)
+				}
+				if binding.CredentialRefresh != nil {
+					resolved.CredentialRefresh = cloneCredentialRefreshDef(binding.CredentialRefresh)
+				}
+				entry.Connections[localName] = &resolved
+			}
 			return nil
 		}
-		for _, rawLocalName := range slices.Sorted(maps.Keys(entry.Connections)) {
-			binding := entry.Connections[rawLocalName]
-			if binding == nil {
-				return fmt.Errorf("config validation: %s.%s.connections.%s is required", kind, name, rawLocalName)
+		for name, entry := range cfg.Apps {
+			if err := normalizeEntry("apps", name, entry); err != nil {
+				return err
 			}
-			localName := ResolveConnectionAlias(rawLocalName)
-			if localName == "" {
-				return fmt.Errorf("config validation: %s.%s.connections contains an empty connection name", kind, name)
+		}
+		for name, entry := range cfg.Providers.Agent {
+			if err := normalizeEntry("providers.agent", name, entry); err != nil {
+				return err
 			}
-			if localName != rawLocalName {
-				if existing := entry.Connections[localName]; existing != nil && existing != binding {
-					return fmt.Errorf("config validation: %s.%s.connections.%s conflicts with alias %q", kind, name, localName, rawLocalName)
-				}
-				delete(entry.Connections, rawLocalName)
-				entry.Connections[localName] = binding
-			}
-			ref := strings.TrimSpace(binding.Ref)
-			if ref == "" {
-				if binding.ConnectionID == "" {
-					binding.ConnectionID = inlineConnectionID(kind, name, localName)
-				}
-				if !binding.BindingResolved && ConnectionModeForConnection(*binding) == core.ConnectionModeSubject && connectionBindingRequiresUserCredential(binding) {
-					return fmt.Errorf("config validation: %s.%s.connections.%s user-owned inline connections are not supported; define a top-level connection and reference it with ref", kind, name, localName)
-				}
-				continue
-			}
-			if binding.BindingResolved && binding.ConnectionID == ref {
-				continue
-			}
-			if connectionBindingHasCredentialMaterial(binding) {
-				return fmt.Errorf("config validation: %s.%s.connections.%s uses ref %q and cannot override mode, auth, or params", kind, name, localName, ref)
-			}
-			global := cfg.Connections[ref]
-			if global == nil {
-				return fmt.Errorf("config validation: %s.%s.connections.%s references unknown top-level connection %q", kind, name, localName, ref)
-			}
-			resolved := cloneConnectionDef(*global)
-			resolved.Ref = ref
-			resolved.ConnectionID = ref
-			resolved.BindingResolved = true
-			if binding.DisplayName != "" {
-				resolved.DisplayName = binding.DisplayName
-			}
-			if strings.TrimSpace(binding.Exposure) != "" {
-				return fmt.Errorf("config validation: %s.%s.connections.%s.exposure is not supported", kind, name, localName)
-			}
-			if binding.CredentialRefresh != nil {
-				resolved.CredentialRefresh = cloneCredentialRefreshDef(binding.CredentialRefresh)
-			}
-			entry.Connections[localName] = &resolved
 		}
 		return nil
-	}
-	for name, entry := range cfg.Apps {
-		if err := normalizeEntry("apps", name, entry); err != nil {
-			return err
-		}
-	}
-	for name, entry := range cfg.Providers.Agent {
-		if err := normalizeEntry("providers.agent", name, entry); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func inlineConnectionID(kind, name, localName string) string {
@@ -828,39 +821,38 @@ func validateConfigSecretRefs(cfg *Config) error {
 }
 
 func validateTopLevelConnections(cfg *Config) error {
-	if cfg == nil {
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		for id, conn := range cfg.Connections {
+			if conn == nil {
+				return fmt.Errorf("config validation: connections.%s is required", id)
+			}
+			mode := ConnectionModeForConnection(*conn)
+			switch mode {
+			case core.ConnectionModeNone, core.ConnectionModeSubject:
+			default:
+				return fmt.Errorf("config validation: connections.%s mode %q is not supported", id, conn.Mode)
+			}
+			if err := validateCredentialRefresh(fmt.Sprintf("connections.%s", id), *conn); err != nil {
+				return err
+			}
+			if len(conn.Auth.TokenExchangeDrivers) > 0 {
+				return fmt.Errorf("config validation: connections.%s auth.tokenExchangeDrivers is not supported; use managed-subject credentials", id)
+			}
+			if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "client_credentials" {
+				return fmt.Errorf("config validation: connections.%s oauth2 client_credentials is not supported; use managed-subject credentials", id)
+			}
+			if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "refresh_token" {
+				return fmt.Errorf("config validation: connections.%s oauth2 refresh_token is not supported; use managed-subject credentials", id)
+			}
+			if strings.TrimSpace(conn.Auth.GrantType) != "" {
+				return fmt.Errorf("config validation: connections.%s auth.grantType is only supported for oauth2 client_credentials or refresh_token", id)
+			}
+			if strings.TrimSpace(conn.Auth.RefreshToken) != "" {
+				return fmt.Errorf("config validation: connections.%s auth.refreshToken is only supported for oauth2 refresh_token", id)
+			}
+		}
 		return nil
-	}
-	for id, conn := range cfg.Connections {
-		if conn == nil {
-			return fmt.Errorf("config validation: connections.%s is required", id)
-		}
-		mode := ConnectionModeForConnection(*conn)
-		switch mode {
-		case core.ConnectionModeNone, core.ConnectionModeSubject:
-		default:
-			return fmt.Errorf("config validation: connections.%s mode %q is not supported", id, conn.Mode)
-		}
-		if err := validateCredentialRefresh(fmt.Sprintf("connections.%s", id), *conn); err != nil {
-			return err
-		}
-		if len(conn.Auth.TokenExchangeDrivers) > 0 {
-			return fmt.Errorf("config validation: connections.%s auth.tokenExchangeDrivers is not supported; use managed-subject credentials", id)
-		}
-		if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "client_credentials" {
-			return fmt.Errorf("config validation: connections.%s oauth2 client_credentials is not supported; use managed-subject credentials", id)
-		}
-		if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "refresh_token" {
-			return fmt.Errorf("config validation: connections.%s oauth2 refresh_token is not supported; use managed-subject credentials", id)
-		}
-		if strings.TrimSpace(conn.Auth.GrantType) != "" {
-			return fmt.Errorf("config validation: connections.%s auth.grantType is only supported for oauth2 client_credentials or refresh_token", id)
-		}
-		if strings.TrimSpace(conn.Auth.RefreshToken) != "" {
-			return fmt.Errorf("config validation: connections.%s auth.refreshToken is only supported for oauth2 refresh_token", id)
-		}
-	}
-	return nil
+	})
 }
 
 // ValidateResolvedStructure checks integration fields whose support depends on
@@ -894,51 +886,50 @@ func ValidateRuntime(cfg *Config) error {
 }
 
 func validateRuntimeConfig(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	cfg.Server.Runtime.DefaultProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultProvider)
-	cfg.Server.Runtime.RelayBaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Runtime.RelayBaseURL), "/")
-	if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
-		return err
-	}
-	if err := validateRemotesConfig(cfg); err != nil {
-		return err
-	}
-	for name, entry := range cfg.Runtime.Providers {
-		if entry == nil {
-			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
-		}
-		if err := validateAppOnlyProviderFields("runtime.providers."+name, &entry.ProviderEntry); err != nil {
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		cfg.Server.Runtime.DefaultProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultProvider)
+		cfg.Server.Runtime.RelayBaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Runtime.RelayBaseURL), "/")
+		if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
 			return err
 		}
-		if err := validateUnsupportedRemotePlacement("runtime.providers."+name, &entry.ProviderEntry); err != nil {
+		if err := validateRemotesConfig(cfg); err != nil {
 			return err
 		}
-		entry.Driver = RuntimeProviderDriver(strings.TrimSpace(string(entry.Driver)))
-		switch entry.Driver {
-		case "":
-			if entry.Source.IsBuiltin() {
-				return fmt.Errorf("config validation: runtime provider %q does not support builtin providers; use a provider source reference or driver: %q", name, RuntimeProviderDriverLocal)
+		for name, entry := range cfg.Runtime.Providers {
+			if entry == nil {
+				return fmt.Errorf("config validation: runtime.providers.%s is required", name)
 			}
-			if err := validateProviderEntrySource("runtime", name, &entry.ProviderEntry); err != nil {
+			if err := validateAppOnlyProviderFields("runtime.providers."+name, &entry.ProviderEntry); err != nil {
 				return err
 			}
-		case RuntimeProviderDriverLocal:
-			if runtimeProviderUsesSource(entry) {
-				return fmt.Errorf("config validation: runtime.providers.%s.source is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+			if err := validateUnsupportedRemotePlacement("runtime.providers."+name, &entry.ProviderEntry); err != nil {
+				return err
 			}
-			if entry.Config.Kind != 0 {
-				return fmt.Errorf("config validation: runtime.providers.%s.config is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+			entry.Driver = RuntimeProviderDriver(strings.TrimSpace(string(entry.Driver)))
+			switch entry.Driver {
+			case "":
+				if entry.Source.IsBuiltin() {
+					return fmt.Errorf("config validation: runtime provider %q does not support builtin providers; use a provider source reference or driver: %q", name, RuntimeProviderDriverLocal)
+				}
+				if err := validateProviderEntrySource("runtime", name, &entry.ProviderEntry); err != nil {
+					return err
+				}
+			case RuntimeProviderDriverLocal:
+				if runtimeProviderUsesSource(entry) {
+					return fmt.Errorf("config validation: runtime.providers.%s.source is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+				}
+				if entry.Config.Kind != 0 {
+					return fmt.Errorf("config validation: runtime.providers.%s.config is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+				}
+			default:
+				return fmt.Errorf("config validation: runtime.providers.%s.driver %q is not supported; use driver %q or a provider source reference", name, entry.Driver, RuntimeProviderDriverLocal)
 			}
-		default:
-			return fmt.Errorf("config validation: runtime.providers.%s.driver %q is not supported; use driver %q or a provider source reference", name, entry.Driver, RuntimeProviderDriverLocal)
 		}
-	}
-	if _, _, err := cfg.SelectedRuntimeProvider(); err != nil {
-		return err
-	}
-	return nil
+		if _, _, err := cfg.SelectedRuntimeProvider(); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func validateHTTPOriginURL(label, raw string) error {
@@ -963,21 +954,20 @@ func validateRuntimeRelayBaseURL(raw string) error {
 
 // ValidateRemoteGestaltd checks serve-time remote requirements.
 func ValidateRemoteGestaltd(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	if err := validateRemotesConfig(cfg); err != nil {
-		return err
-	}
-	referenced := cfg.ReferencedRemoteNames()
-	for _, name := range referenced {
-		remote := cfg.Server.Remotes[name]
-		if remote == nil || strings.TrimSpace(remote.Token) != "" {
-			continue
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		if err := validateRemotesConfig(cfg); err != nil {
+			return err
 		}
-		return fmt.Errorf("config validation: server.remotes.%s.token is required when remote %q is referenced", name, name)
-	}
-	return nil
+		referenced := cfg.ReferencedRemoteNames()
+		for _, name := range referenced {
+			remote := cfg.Server.Remotes[name]
+			if remote == nil || strings.TrimSpace(remote.Token) != "" {
+				continue
+			}
+			return fmt.Errorf("config validation: server.remotes.%s.token is required when remote %q is referenced", name, name)
+		}
+		return nil
+	})
 }
 
 // ApplyServeRemoteOverrides applies gestaltd serve CLI overrides for remote
@@ -2208,68 +2198,67 @@ func validateStringList(path string, values []string) error {
 }
 
 func validateAdminConfig(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	admin := cfg.Server.Admin
-	policy := strings.TrimSpace(admin.AuthorizationPolicy)
-	action := strings.TrimSpace(admin.AuthorizationAction)
-	if action != "" && policy == "" {
-		return fmt.Errorf("config validation: server.admin.authorizationAction requires server.admin.authorizationPolicy")
-	}
-	if policy != "" || action != "" || len(admin.AllowedRoles) > 0 {
-		_, authProvider, err := cfg.SelectedIdentityProvider()
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		admin := cfg.Server.Admin
+		policy := strings.TrimSpace(admin.AuthorizationPolicy)
+		action := strings.TrimSpace(admin.AuthorizationAction)
+		if action != "" && policy == "" {
+			return fmt.Errorf("config validation: server.admin.authorizationAction requires server.admin.authorizationPolicy")
+		}
+		if policy != "" || action != "" || len(admin.AllowedRoles) > 0 {
+			_, authProvider, err := cfg.SelectedIdentityProvider()
+			if err != nil {
+				return err
+			}
+			if authProvider == nil {
+				return fmt.Errorf("config validation: server.admin authorization requires providers.identity to be configured")
+			}
+			_, authorizationProvider, err := cfg.SelectedAuthorizationProvider()
+			if err != nil {
+				return err
+			}
+			if authorizationProvider == nil {
+				return fmt.Errorf("config validation: server.admin authorization requires providers.authorization to be configured")
+			}
+			if policy != "" && len(admin.AllowedRoles) == 0 {
+				return fmt.Errorf("config validation: server.admin.allowedRoles must not be empty when server.admin.authorizationPolicy is set")
+			}
+		}
+
+		_, hasManagement := cfg.Server.ManagementListener()
+		if !hasManagement {
+			if policy != "" && strings.TrimSpace(cfg.Server.ManagementBaseURL()) != "" {
+				return fmt.Errorf("config validation: server.management.baseUrl requires server.management.host/server.management.port when server.admin.authorizationPolicy is set")
+			}
+			return nil
+		}
+		if policy == "" {
+			return nil
+		}
+
+		publicURL, err := validateAbsoluteBaseURL("server.baseUrl", cfg.Server.BaseURL)
 		if err != nil {
 			return err
 		}
-		if authProvider == nil {
-			return fmt.Errorf("config validation: server.admin authorization requires providers.identity to be configured")
-		}
-		_, authorizationProvider, err := cfg.SelectedAuthorizationProvider()
+		managementURL, err := validateAbsoluteBaseURL("server.management.baseUrl", cfg.Server.ManagementBaseURL())
 		if err != nil {
 			return err
 		}
-		if authorizationProvider == nil {
-			return fmt.Errorf("config validation: server.admin authorization requires providers.authorization to be configured")
-		}
-		if policy != "" && len(admin.AllowedRoles) == 0 {
-			return fmt.Errorf("config validation: server.admin.allowedRoles must not be empty when server.admin.authorizationPolicy is set")
-		}
-	}
 
-	_, hasManagement := cfg.Server.ManagementListener()
-	if !hasManagement {
-		if policy != "" && strings.TrimSpace(cfg.Server.ManagementBaseURL()) != "" {
-			return fmt.Errorf("config validation: server.management.baseUrl requires server.management.host/server.management.port when server.admin.authorizationPolicy is set")
+		if publicURL == nil {
+			return fmt.Errorf("config validation: server.admin.authorizationPolicy on a split management listener requires server.baseUrl")
+		}
+		if managementURL == nil {
+			return fmt.Errorf("config validation: server.admin.authorizationPolicy on a split management listener requires server.management.baseUrl")
+		}
+		if publicURL.Hostname() != managementURL.Hostname() {
+			return fmt.Errorf("config validation: server.baseUrl and server.management.baseUrl must use the same hostname when server.admin.authorizationPolicy is enabled on a split management listener")
+		}
+		if strings.EqualFold(publicURL.Scheme, "https") && !strings.EqualFold(managementURL.Scheme, "https") {
+			return fmt.Errorf("config validation: server.management.baseUrl must use https when server.baseUrl uses https and server.admin.authorizationPolicy is enabled on a split management listener")
 		}
 		return nil
-	}
-	if policy == "" {
-		return nil
-	}
-
-	publicURL, err := validateAbsoluteBaseURL("server.baseUrl", cfg.Server.BaseURL)
-	if err != nil {
-		return err
-	}
-	managementURL, err := validateAbsoluteBaseURL("server.management.baseUrl", cfg.Server.ManagementBaseURL())
-	if err != nil {
-		return err
-	}
-
-	if publicURL == nil {
-		return fmt.Errorf("config validation: server.admin.authorizationPolicy on a split management listener requires server.baseUrl")
-	}
-	if managementURL == nil {
-		return fmt.Errorf("config validation: server.admin.authorizationPolicy on a split management listener requires server.management.baseUrl")
-	}
-	if publicURL.Hostname() != managementURL.Hostname() {
-		return fmt.Errorf("config validation: server.baseUrl and server.management.baseUrl must use the same hostname when server.admin.authorizationPolicy is enabled on a split management listener")
-	}
-	if strings.EqualFold(publicURL.Scheme, "https") && !strings.EqualFold(managementURL.Scheme, "https") {
-		return fmt.Errorf("config validation: server.management.baseUrl must use https when server.baseUrl uses https and server.admin.authorizationPolicy is enabled on a split management listener")
-	}
-	return nil
+	})
 }
 
 func validateAbsoluteBaseURL(label, raw string) (*url.URL, error) {

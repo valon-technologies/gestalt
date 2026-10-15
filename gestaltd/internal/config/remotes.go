@@ -200,38 +200,37 @@ func canonicalizeRemotes(cfg *Config) error {
 // validateRemotesConfig validates the canonicalized remotes config: required
 // URLs, origin checks, at most one default, known remote references.
 func validateRemotesConfig(cfg *Config) error {
-	if cfg == nil {
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		defaultCount := 0
+		remoteCount := 0
+		for name, remote := range cfg.Server.Remotes {
+			if remote == nil {
+				return fmt.Errorf("config validation: server.remotes.%s is required", name)
+			}
+			remoteCount++
+			if remote.Default {
+				defaultCount++
+			}
+			if remote.URL == "" {
+				return fmt.Errorf("config validation: server.remotes.%s.url is required", name)
+			}
+			if err := validateHTTPOriginURL("server.remotes."+name+".url", remote.URL); err != nil {
+				return err
+			}
+		}
+		if defaultCount > 1 {
+			return fmt.Errorf("config validation: at most one server.remotes entry may set default: true")
+		}
+		if remoteCount > 1 && defaultCount == 0 {
+			return fmt.Errorf("config validation: exactly one server.remotes entry must set default: true when multiple remotes are configured")
+		}
+		for _, name := range cfg.ReferencedRemoteNames() {
+			if cfg.Server.Remotes[name] == nil {
+				return fmt.Errorf("config validation: remote %q is not defined under server.remotes", name)
+			}
+		}
 		return nil
-	}
-	defaultCount := 0
-	remoteCount := 0
-	for name, remote := range cfg.Server.Remotes {
-		if remote == nil {
-			return fmt.Errorf("config validation: server.remotes.%s is required", name)
-		}
-		remoteCount++
-		if remote.Default {
-			defaultCount++
-		}
-		if remote.URL == "" {
-			return fmt.Errorf("config validation: server.remotes.%s.url is required", name)
-		}
-		if err := validateHTTPOriginURL("server.remotes."+name+".url", remote.URL); err != nil {
-			return err
-		}
-	}
-	if defaultCount > 1 {
-		return fmt.Errorf("config validation: at most one server.remotes entry may set default: true")
-	}
-	if remoteCount > 1 && defaultCount == 0 {
-		return fmt.Errorf("config validation: exactly one server.remotes entry must set default: true when multiple remotes are configured")
-	}
-	for _, name := range cfg.ReferencedRemoteNames() {
-		if cfg.Server.Remotes[name] == nil {
-			return fmt.Errorf("config validation: remote %q is not defined under server.remotes", name)
-		}
-	}
-	return nil
+	})
 }
 
 func validateProviderEntryRemote(subject string, entry *ProviderEntry) error {
