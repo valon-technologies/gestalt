@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -215,39 +216,23 @@ func (p *Policy) RestrictedMap() map[string]string {
 }
 
 func (p *Policy) DescriptionOverrides() map[string]string {
-	if len(p.descriptions) == 0 {
-		return nil
-	}
-
-	descriptions := make(map[string]string, len(p.descriptions))
-	for exposed, description := range p.descriptions {
-		descriptions[exposed] = description
-	}
-	return descriptions
+	return maputil.CloneNonEmpty(p.descriptions)
 }
 
 func (p *Policy) AllowedRoles() map[string][]string {
-	if len(p.allowedRoles) == 0 {
-		return nil
-	}
-
-	roles := make(map[string][]string, len(p.allowedRoles))
-	for exposed, allowed := range p.allowedRoles {
-		roles[exposed] = append([]string(nil), allowed...)
-	}
-	return roles
+	return cloneOperationLists(p.allowedRoles)
 }
 
 func (p *Policy) Tags() map[string][]string {
-	if len(p.tags) == 0 {
-		return nil
-	}
+	return cloneOperationLists(p.tags)
+}
 
-	tags := make(map[string][]string, len(p.tags))
-	for exposed, values := range p.tags {
-		tags[exposed] = append([]string(nil), values...)
+func cloneOperationLists(values map[string][]string) map[string][]string {
+	out := maputil.CloneNonEmpty(values)
+	for name, items := range out {
+		out[name] = append([]string(nil), items...)
 	}
-	return tags
+	return out
 }
 
 func (p *Policy) ApplyOperations(ops []core.Operation) []core.Operation {
