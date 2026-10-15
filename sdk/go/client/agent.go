@@ -599,9 +599,7 @@ type AgentCreateSessionOptions struct {
 
 // CreateSession is the ergonomic form of [Agent.CreateSessionRaw].
 func (c *Agent) CreateSession(ctx context.Context, idempotencyKey string, model string, opts *AgentCreateSessionOptions) (*AgentSession, error) {
-	if opts == nil {
-		opts = &AgentCreateSessionOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &CreateAgentProviderSessionRequest{IdempotencyKey: idempotencyKey, Model: model, ProviderName: opts.ProviderName, ClientRef: opts.ClientRef, Metadata: opts.Metadata, Workspace: opts.Workspace, Tools: opts.Tools, Context: c.context}
 	response, err := c.client.CreateSession(ctx, ToWireCreateAgentProviderSessionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentSession)
@@ -622,9 +620,7 @@ type AgentGetSessionOptions struct {
 
 // GetSession is the ergonomic form of [Agent.GetSessionRaw].
 func (c *Agent) GetSession(ctx context.Context, sessionId string, opts *AgentGetSessionOptions) (*AgentSession, error) {
-	if opts == nil {
-		opts = &AgentGetSessionOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &GetAgentProviderSessionRequest{SessionId: sessionId, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.GetSession(ctx, ToWireGetAgentProviderSessionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentSession)
@@ -654,9 +650,7 @@ type AgentListSessionsOptions struct {
 // ListSessions is the ergonomic form of [Agent.ListSessionsRaw].
 // The response collapses to its sessions field.
 func (c *Agent) ListSessions(ctx context.Context, opts *AgentListSessionsOptions) ([]*AgentSession, error) {
-	if opts == nil {
-		opts = &AgentListSessionsOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &ListAgentProviderSessionsRequest{SessionIds: opts.SessionIds, State: opts.State, Limit: opts.Limit, SummaryOnly: opts.SummaryOnly, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ListSessions(ctx, ToWireListAgentProviderSessionsRequest(request))
 	if err != nil {
@@ -683,9 +677,7 @@ type AgentUpdateSessionOptions struct {
 
 // UpdateSession is the ergonomic form of [Agent.UpdateSessionRaw].
 func (c *Agent) UpdateSession(ctx context.Context, sessionId string, opts *AgentUpdateSessionOptions) (*AgentSession, error) {
-	if opts == nil {
-		opts = &AgentUpdateSessionOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &UpdateAgentProviderSessionRequest{SessionId: sessionId, ClientRef: opts.ClientRef, State: opts.State, ProviderName: opts.ProviderName, Metadata: opts.Metadata, Context: c.context}
 	response, err := c.client.UpdateSession(ctx, ToWireUpdateAgentProviderSessionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentSession)
@@ -714,9 +706,7 @@ type AgentCreateTurnOptions struct {
 
 // CreateTurn is the ergonomic form of [Agent.CreateTurnRaw].
 func (c *Agent) CreateTurn(ctx context.Context, sessionId string, idempotencyKey string, model string, messages []*AgentMessage, opts *AgentCreateTurnOptions) (*AgentTurn, error) {
-	if opts == nil {
-		opts = &AgentCreateTurnOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &CreateAgentProviderTurnRequest{SessionId: sessionId, IdempotencyKey: idempotencyKey, Model: model, Messages: messages, ExecutionRef: opts.ExecutionRef, TimeoutSeconds: opts.TimeoutSeconds, ProviderName: opts.ProviderName, Metadata: opts.Metadata, ModelOptions: opts.ModelOptions, Output: opts.Output, Context: c.context}
 	response, err := c.client.CreateTurn(ctx, ToWireCreateAgentProviderTurnRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentTurn)
@@ -737,9 +727,7 @@ type AgentGetTurnOptions struct {
 
 // GetTurn is the ergonomic form of [Agent.GetTurnRaw].
 func (c *Agent) GetTurn(ctx context.Context, turnId string, opts *AgentGetTurnOptions) (*AgentTurn, error) {
-	if opts == nil {
-		opts = &AgentGetTurnOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &GetAgentProviderTurnRequest{TurnId: turnId, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.GetTurn(ctx, ToWireGetAgentProviderTurnRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentTurn)
@@ -770,9 +758,7 @@ type AgentListTurnsOptions struct {
 // ListTurns is the ergonomic form of [Agent.ListTurnsRaw].
 // The response collapses to its turns field.
 func (c *Agent) ListTurns(ctx context.Context, sessionId string, opts *AgentListTurnsOptions) ([]*AgentTurn, error) {
-	if opts == nil {
-		opts = &AgentListTurnsOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &ListAgentProviderTurnsRequest{SessionId: sessionId, TurnIds: opts.TurnIds, Status: opts.Status, Limit: opts.Limit, SummaryOnly: opts.SummaryOnly, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ListTurns(ctx, ToWireListAgentProviderTurnsRequest(request))
 	if err != nil {
@@ -797,9 +783,7 @@ type AgentCancelTurnOptions struct {
 
 // CancelTurn is the ergonomic form of [Agent.CancelTurnRaw].
 func (c *Agent) CancelTurn(ctx context.Context, turnId string, opts *AgentCancelTurnOptions) (*AgentTurn, error) {
-	if opts == nil {
-		opts = &AgentCancelTurnOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &CancelAgentProviderTurnRequest{TurnId: turnId, Reason: opts.Reason, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.CancelTurn(ctx, ToWireCancelAgentProviderTurnRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentTurn)
@@ -823,9 +807,7 @@ type AgentListTurnEventsOptions struct {
 // ListTurnEvents is the ergonomic form of [Agent.ListTurnEventsRaw].
 // The response collapses to its events field.
 func (c *Agent) ListTurnEvents(ctx context.Context, turnId string, opts *AgentListTurnEventsOptions) ([]*AgentTurnEvent, error) {
-	if opts == nil {
-		opts = &AgentListTurnEventsOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &ListAgentProviderTurnEventsRequest{TurnId: turnId, AfterSeq: opts.AfterSeq, Limit: opts.Limit, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ListTurnEvents(ctx, ToWireListAgentProviderTurnEventsRequest(request))
 	if err != nil {
@@ -864,9 +846,7 @@ type AgentListInteractionsOptions struct {
 // ListInteractions is the ergonomic form of [Agent.ListInteractionsRaw].
 // The response collapses to its interactions field.
 func (c *Agent) ListInteractions(ctx context.Context, turnId string, opts *AgentListInteractionsOptions) ([]*AgentInteraction, error) {
-	if opts == nil {
-		opts = &AgentListInteractionsOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &ListAgentProviderInteractionsRequest{TurnId: turnId, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ListInteractions(ctx, ToWireListAgentProviderInteractionsRequest(request))
 	if err != nil {
@@ -892,9 +872,7 @@ type AgentResolveInteractionOptions struct {
 
 // ResolveInteraction is the ergonomic form of [Agent.ResolveInteractionRaw].
 func (c *Agent) ResolveInteraction(ctx context.Context, interactionId string, turnId string, resolution map[string]any, opts *AgentResolveInteractionOptions) (*AgentInteraction, error) {
-	if opts == nil {
-		opts = &AgentResolveInteractionOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &ResolveAgentProviderInteractionRequest{InteractionId: interactionId, TurnId: turnId, Resolution: resolution, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ResolveInteraction(ctx, ToWireResolveAgentProviderInteractionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentInteraction)

@@ -73,6 +73,14 @@ func toGestaltError(err error) *GestaltError {
 	return &GestaltError{Code: GestaltErrorCodeUnknown, Message: err.Error(), cause: err}
 }
 
+// optionsOrZero supplies zero-value options while preserving supplied options.
+func optionsOrZero[T any](options *T) *T {
+	if options == nil {
+		return new(T)
+	}
+	return options
+}
+
 // decodeUnaryResponse applies native conversion only after a successful RPC.
 func decodeUnaryResponse[Wire, Native any](response *Wire, err error, convert func(*Wire) *Native) (*Native, error) {
 	if err != nil {

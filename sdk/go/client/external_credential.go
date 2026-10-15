@@ -299,9 +299,7 @@ type ExternalCredentialsListCredentialsOptions struct {
 // ListCredentials is the ergonomic form of [ExternalCredentials.ListCredentialsRaw].
 // The response collapses to its credentials field.
 func (c *ExternalCredentials) ListCredentials(ctx context.Context, subject string, opts *ExternalCredentialsListCredentialsOptions) ([]*ExternalCredential, error) {
-	if opts == nil {
-		opts = &ExternalCredentialsListCredentialsOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &ListExternalCredentialsRequest{Subject: subject, Audience: opts.Audience}
 	response, err := c.client.ListCredentials(ctx, ToWireListExternalCredentialsRequest(request))
 	if err != nil {

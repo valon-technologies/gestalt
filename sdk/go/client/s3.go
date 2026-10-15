@@ -419,9 +419,7 @@ type S3PresignObjectOptions struct {
 
 // PresignObject is the ergonomic form of [S3.PresignObjectRaw].
 func (c *S3) PresignObject(ctx context.Context, method PresignMethod, expiresSeconds int64, ref *S3ObjectRef, opts *S3PresignObjectOptions) (*PresignObjectResponse, error) {
-	if opts == nil {
-		opts = &S3PresignObjectOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &PresignObjectRequest{Method: method, ExpiresSeconds: expiresSeconds, Ref: ref, ContentType: opts.ContentType, ContentDisposition: opts.ContentDisposition}
 	response, err := c.client.PresignObject(ctx, ToWirePresignObjectRequest(request))
 	return decodeUnaryResponse(response, err, FromWirePresignObjectResponse)
@@ -555,9 +553,7 @@ type S3ObjectAccessCreateObjectAccessURLOptions struct {
 
 // CreateObjectAccessURL is the ergonomic form of [S3ObjectAccess.CreateObjectAccessURLRaw].
 func (c *S3ObjectAccess) CreateObjectAccessURL(ctx context.Context, method PresignMethod, expiresSeconds int64, ref *S3ObjectRef, opts *S3ObjectAccessCreateObjectAccessURLOptions) (*CreateObjectAccessURLResponse, error) {
-	if opts == nil {
-		opts = &S3ObjectAccessCreateObjectAccessURLOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &CreateObjectAccessURLRequest{Method: method, ExpiresSeconds: expiresSeconds, Ref: ref, ContentType: opts.ContentType, ContentDisposition: opts.ContentDisposition}
 	response, err := c.client.CreateObjectAccessURL(ctx, ToWireCreateObjectAccessURLRequest(request))
 	return decodeUnaryResponse(response, err, FromWireCreateObjectAccessURLResponse)

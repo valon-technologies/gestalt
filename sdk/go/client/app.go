@@ -531,9 +531,7 @@ type AppInvokeOptions struct {
 // The result decodes with the standard JSON operation envelope semantics;
 // // envelope failures return *InvokeError.
 func (c *App) Invoke(ctx context.Context, app string, operation string, params map[string]any, opts *AppInvokeOptions) (any, error) {
-	if opts == nil {
-		opts = &AppInvokeOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs, Headers: opts.Headers, Context: c.context}
 	response, err := c.client.Invoke(ctx, ToWireAppInvokeRequest(request))
 	if err != nil {
@@ -571,9 +569,7 @@ type AppInvokeStreamOptions struct {
 // A mid-stream error may emit a trailing metadata frame with an error status
 // followed by a JSON error body, after which the stream ends.
 func (c *App) InvokeStream(ctx context.Context, app string, operation string, params map[string]any, opts *AppInvokeStreamOptions) (*AppInvokeStreamStream, error) {
-	if opts == nil {
-		opts = &AppInvokeStreamOptions{}
-	}
+	opts = optionsOrZero(opts)
 
 	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs, Headers: opts.Headers}
 
@@ -615,9 +611,7 @@ type AppInvokeGraphQLOptions struct {
 
 // InvokeGraphQL is the ergonomic form of [App.InvokeGraphQLRaw].
 func (c *App) InvokeGraphQL(ctx context.Context, app string, document string, opts *AppInvokeGraphQLOptions) (*OperationResult, error) {
-	if opts == nil {
-		opts = &AppInvokeGraphQLOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &AppInvokeGraphQLRequest{App: app, Document: document, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, Variables: opts.Variables, Headers: opts.Headers, Context: c.context}
 	response, err := c.client.InvokeGraphQL(ctx, ToWireAppInvokeGraphQLRequest(request))
 	return decodeUnaryResponse(response, err, FromWireOperationResult)
