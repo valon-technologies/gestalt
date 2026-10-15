@@ -254,10 +254,7 @@ func (s *Server) hasExplicitAppAdmin(ctx context.Context, subjectID, appName str
 		Resource:     s.authorizationResource(appName),
 		AllowedRoles: []string{appAdminRole},
 	})
-	if err != nil {
-		return false, err
-	}
-	return decision.Allowed && decision.Role == appAdminRole, nil
+	return decision.Allowed && decision.Role == appAdminRole, err
 }
 
 func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
