@@ -96,7 +96,7 @@ type WorkflowStepInputSource struct {
 
 // boundWorkflowTargetToProto creates a workflow target.
 func boundWorkflowTargetToProto(input BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
-	steps, err := workflowStepsToProto(input.Steps)
+	steps, err := convertProtoSliceIndexed(input.Steps, "steps", workflowStepToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -110,21 +110,6 @@ func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflo
 		return BoundWorkflowTarget{}
 	}
 	return BoundWorkflowTarget{Steps: workflowStepsFromProto(value.GetSteps())}
-}
-
-func workflowStepsToProto(steps []WorkflowStep) ([]*proto.WorkflowStep, error) {
-	if len(steps) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowStep, 0, len(steps))
-	for i := range steps {
-		step, err := workflowStepToProto(steps[i])
-		if err != nil {
-			return nil, fmt.Errorf("steps[%d]: %w", i, err)
-		}
-		out = append(out, step)
-	}
-	return out, nil
 }
 
 func workflowStepsFromProto(steps []*proto.WorkflowStep) []WorkflowStep {
@@ -785,7 +770,7 @@ func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.Workflo
 	if err != nil {
 		return nil, err
 	}
-	activations, err := workflowActivationsToProto(input.Activations)
+	activations, err := convertProtoSliceIndexed(input.Activations, "activations", workflowActivationToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -820,7 +805,7 @@ func workflowDefinitionToProto(input WorkflowDefinition) (*proto.WorkflowDefinit
 	if err != nil {
 		return nil, err
 	}
-	activations, err := workflowActivationsToProto(input.Activations)
+	activations, err := convertProtoSliceIndexed(input.Activations, "activations", workflowActivationToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -835,21 +820,6 @@ func workflowDefinitionToProto(input WorkflowDefinition) (*proto.WorkflowDefinit
 		Provider:    input.ProviderName,
 		RunAs:       workflowSubjectID(input.RunAs),
 	}, nil
-}
-
-func workflowActivationsToProto(values []WorkflowActivation) ([]*proto.WorkflowActivation, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowActivation, 0, len(values))
-	for i := range values {
-		activation, err := workflowActivationToProto(values[i])
-		if err != nil {
-			return nil, fmt.Errorf("activations[%d]: %w", i, err)
-		}
-		out = append(out, activation)
-	}
-	return out, nil
 }
 
 func workflowActivationToProto(input WorkflowActivation) (*proto.WorkflowActivation, error) {
@@ -969,7 +939,7 @@ func workflowRunToProto(input WorkflowRun) (*proto.WorkflowRun, error) {
 	if err != nil {
 		return nil, fmt.Errorf("input: %w", err)
 	}
-	steps, err := workflowStepExecutionsToProto(input.Steps)
+	steps, err := convertProtoSliceIndexed(input.Steps, "steps", workflowStepExecutionToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -994,23 +964,8 @@ func workflowRunToProto(input WorkflowRun) (*proto.WorkflowRun, error) {
 	}, nil
 }
 
-func workflowStepExecutionsToProto(values []WorkflowStepExecution) ([]*proto.WorkflowStepExecution, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowStepExecution, 0, len(values))
-	for i := range values {
-		value, err := workflowStepExecutionToProto(values[i])
-		if err != nil {
-			return nil, fmt.Errorf("steps[%d]: %w", i, err)
-		}
-		out = append(out, value)
-	}
-	return out, nil
-}
-
 func workflowStepExecutionToProto(input WorkflowStepExecution) (*proto.WorkflowStepExecution, error) {
-	attempts, err := workflowStepAttemptsToProto(input.Attempts)
+	attempts, err := convertProtoSliceIndexed(input.Attempts, "attempts", workflowStepAttemptToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -1033,21 +988,6 @@ func workflowStepExecutionToProto(input WorkflowStepExecution) (*proto.WorkflowS
 		StartedAt:     timestampFromOptionalTime(input.StartedAt),
 		CompletedAt:   timestampFromOptionalTime(input.CompletedAt),
 	}, nil
-}
-
-func workflowStepAttemptsToProto(values []WorkflowStepAttempt) ([]*proto.WorkflowStepAttempt, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowStepAttempt, 0, len(values))
-	for i := range values {
-		value, err := workflowStepAttemptToProto(values[i])
-		if err != nil {
-			return nil, fmt.Errorf("attempts[%d]: %w", i, err)
-		}
-		out = append(out, value)
-	}
-	return out, nil
 }
 
 func workflowStepAttemptToProto(input WorkflowStepAttempt) (*proto.WorkflowStepAttempt, error) {

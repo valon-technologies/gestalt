@@ -373,3 +373,19 @@ func convertProtoSlicePointers[Input, Output any](values []Input, convert func(*
 	}
 	return out, nil
 }
+
+// convertProtoSliceIndexed keeps the failing element's path in conversion errors.
+func convertProtoSliceIndexed[Input, Output any](values []Input, path string, convert func(Input) (Output, error)) ([]Output, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]Output, 0, len(values))
+	for index := range values {
+		converted, err := convert(values[index])
+		if err != nil {
+			return nil, fmt.Errorf("%s[%d]: %w", path, index, err)
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
