@@ -97,17 +97,11 @@ func appScopedRelationshipActionFromMethod(fullMethod string) string {
 }
 
 func isAppBootstrapRelationshipTuple(tuple *proto.RelationshipTuple) bool {
-	if tuple == nil {
-		return false
-	}
 	return strings.TrimSpace(tuple.GetResource().GetType()) == appAuthorizationResourceType &&
 		strings.TrimSpace(tuple.GetRelation()) == appAdminRelation
 }
 
 func isAppScopedRelationshipTuple(tuple *proto.RelationshipTuple) bool {
-	if tuple == nil {
-		return false
-	}
 	return strings.TrimSpace(tuple.GetResource().GetType()) == appAuthorizationResourceType
 }
 
@@ -207,9 +201,6 @@ func (t *ProviderGatewayTransport) allowsGroupScopedRelationshipMutation(
 }
 
 func isGroupMemberRelationshipTuple(tuple *proto.RelationshipTuple) bool {
-	if tuple == nil {
-		return false
-	}
 	return strings.TrimSpace(tuple.GetResource().GetType()) == groupAuthorizationResourceType &&
 		strings.TrimSpace(tuple.GetRelation()) == groupMemberRelation
 }

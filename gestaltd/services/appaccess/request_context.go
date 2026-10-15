@@ -340,9 +340,6 @@ func (c ProviderRequestContext) Restore(ctx context.Context, connectionOverride 
 // SubjectIDFromRequestContext returns the caller subject ID carried on a
 // provider request context.
 func SubjectIDFromRequestContext(reqCtx *proto.RequestContext) string {
-	if reqCtx == nil {
-		return ""
-	}
 	if p := PrincipalFromSubjectContext(reqCtx.GetSubject()); p != nil {
 		return strings.TrimSpace(p.SubjectID)
 	}
@@ -446,9 +443,6 @@ func requestMetaFromProviderRequestContext(meta *proto.RequestMetaContext) invoc
 }
 
 func workflowFromProviderRequestContext(workflow *structpb.Struct) map[string]any {
-	if workflow == nil {
-		return nil
-	}
 	return invocation.CloneWorkflowContext(workflow.AsMap())
 }
 
@@ -464,9 +458,6 @@ func agentFromProviderRequestContext(agent *proto.AgentInvocationContext) invoca
 }
 
 func mergeSubjectScopes(subject *proto.SubjectContext) []string {
-	if subject == nil {
-		return nil
-	}
 	scopes := cloneStrings(subject.GetScopes())
 	if len(scopes) > 0 {
 		return scopes
