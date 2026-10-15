@@ -14,6 +14,7 @@ import (
 
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -1049,25 +1050,24 @@ func recordsResponseFromRecords(recs []idb.Record) (*proto.RecordsResponse, erro
 }
 
 func protoToSchema(ps *proto.ObjectStoreSchema) idb.ObjectStoreOptions {
-	if ps == nil {
-		return idb.ObjectStoreOptions{}
-	}
-	schema := idb.ObjectStoreOptions{
-		Indexes: make([]idb.IndexSchema, len(ps.GetIndexes())),
-		Columns: make([]idb.ColumnDef, len(ps.GetColumns())),
-	}
-	for i, idx := range ps.GetIndexes() {
-		schema.Indexes[i] = idb.IndexSchema{
-			Name: idx.GetName(), KeyPath: idx.GetKeyPath(), Unique: idx.GetUnique(),
+	return protoutil.ConvertMessage(ps, func(ps *proto.ObjectStoreSchema) idb.ObjectStoreOptions {
+		schema := idb.ObjectStoreOptions{
+			Indexes: make([]idb.IndexSchema, len(ps.GetIndexes())),
+			Columns: make([]idb.ColumnDef, len(ps.GetColumns())),
 		}
-	}
-	for i, col := range ps.GetColumns() {
-		schema.Columns[i] = idb.ColumnDef{
-			Name: col.GetName(), Type: idb.ColumnType(col.GetType()),
-			PrimaryKey: col.GetPrimaryKey(), NotNull: col.GetNotNull(), Unique: col.GetUnique(),
+		for i, idx := range ps.GetIndexes() {
+			schema.Indexes[i] = idb.IndexSchema{
+				Name: idx.GetName(), KeyPath: idx.GetKeyPath(), Unique: idx.GetUnique(),
+			}
 		}
-	}
-	return schema
+		for i, col := range ps.GetColumns() {
+			schema.Columns[i] = idb.ColumnDef{
+				Name: col.GetName(), Type: idb.ColumnType(col.GetType()),
+				PrimaryKey: col.GetPrimaryKey(), NotNull: col.GetNotNull(), Unique: col.GetUnique(),
+			}
+		}
+		return schema
+	})
 }
 
 func indexeddbToGRPCErr(err error) error {

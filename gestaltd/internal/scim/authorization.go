@@ -8,6 +8,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -288,10 +289,9 @@ func changedRuntimeRelationships(before, after []*proto.Relationship) relationsh
 }
 
 func relationshipKeyWithLayer(relationship *proto.Relationship) string {
-	if relationship == nil {
-		return ""
-	}
-	return tupleKey(relationship.GetTuple()) + "\x00" + relationship.GetSourceLayer().String()
+	return protoutil.ConvertMessage(relationship, func(relationship *proto.Relationship) string {
+		return tupleKey(relationship.GetTuple()) + "\x00" + relationship.GetSourceLayer().String()
+	})
 }
 
 func (g *authorizationGate) GetActiveModelRef(ctx context.Context) (*proto.GetActiveModelRefResponse, error) {
