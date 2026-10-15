@@ -43,17 +43,7 @@ func workflowStepsToProto(steps []coreworkflow.Step) ([]*proto.WorkflowStep, err
 }
 
 func workflowStepsFromProto(steps []*proto.WorkflowStep) []coreworkflow.Step {
-	if len(steps) == 0 {
-		return nil
-	}
-	out := make([]coreworkflow.Step, 0, len(steps))
-	for _, step := range steps {
-		if step == nil {
-			continue
-		}
-		out = append(out, workflowStepFromProto(step))
-	}
-	return out
+	return protoutil.ConvertNonNilSlice(steps, workflowStepFromProto)
 }
 
 func workflowStepToProto(step coreworkflow.Step) (*proto.WorkflowStep, error) {

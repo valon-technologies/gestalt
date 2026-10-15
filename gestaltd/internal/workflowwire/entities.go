@@ -348,17 +348,7 @@ func ActivationToProto(activation coreworkflow.Activation) (*proto.WorkflowActiv
 }
 
 func ActivationsFromProto(values []*proto.WorkflowActivation) []coreworkflow.Activation {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]coreworkflow.Activation, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, ActivationFromProto(value))
-	}
-	return out
+	return protoutil.ConvertNonNilSlice(values, ActivationFromProto)
 }
 
 func ActivationFromProto(value *proto.WorkflowActivation) coreworkflow.Activation {
