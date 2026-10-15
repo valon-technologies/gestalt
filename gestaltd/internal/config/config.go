@@ -2170,11 +2170,7 @@ const (
 )
 
 func (c ServerAppRegistryConfig) AutoDeployPollIntervalDuration() (time.Duration, error) {
-	raw := strings.TrimSpace(c.AutoDeployPollInterval)
-	if raw == "" {
-		return DefaultAppRegistryAutoDeployPollInterval, nil
-	}
-	return ParseDuration(raw)
+	return appRegistryDuration(c.AutoDeployPollInterval, DefaultAppRegistryAutoDeployPollInterval)
 }
 
 func (c ServerAppRegistryConfig) CatalogPollIntervalDuration() (time.Duration, error) {
