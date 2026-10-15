@@ -872,7 +872,7 @@ func (r *renderer) renderErgonomicServerStream(svcName string, m *model.Method) 
 		if len(m.OptionalSignature) > 0 {
 			optionsType := r.renderOptionsStruct(svcName, m)
 			decls = append(decls, "opts *"+optionsType)
-			requestLines = append(requestLines, fmt.Sprintf("\tif opts == nil {\n\t\topts = &%s{}\n\t}\n", optionsType))
+			requestLines = append(requestLines, "\topts = optionsOrZero(opts)\n")
 			for _, name := range m.OptionalSignature {
 				f := findField(m.Input, name)
 				fields = append(fields, fieldGoName(f)+": opts."+fieldGoName(f))
@@ -953,7 +953,7 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 		if len(m.OptionalSignature) > 0 {
 			optionsType := r.renderOptionsStruct(svcName, m)
 			decls = append(decls, "opts *"+optionsType)
-			requestLines = append(requestLines, fmt.Sprintf("\tif opts == nil {\n\t\topts = &%s{}\n\t}\n", optionsType))
+			requestLines = append(requestLines, "\topts = optionsOrZero(opts)\n")
 			for _, name := range m.OptionalSignature {
 				if omitted[name] {
 					continue

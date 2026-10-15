@@ -233,9 +233,7 @@ type IdentityTokenOptions struct {
 
 // Token is the ergonomic form of [Identity.TokenRaw].
 func (c *Identity) Token(ctx context.Context, grantType string, code string, redirectUri string, clientId string, state string, scope string, subjectToken string, subjectTokenType string, opts *IdentityTokenOptions) (*TokenResponse, error) {
-	if opts == nil {
-		opts = &IdentityTokenOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType, ExpiresIn: opts.ExpiresIn, Name: opts.Name, GrantSubject: opts.GrantSubject}
 	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
 	return decodeUnaryResponse(response, err, FromWireTokenResponse)

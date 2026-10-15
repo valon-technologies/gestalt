@@ -969,9 +969,7 @@ type IndexedDBGetAllOptions struct {
 
 // GetAll is the ergonomic form of [IndexedDB.GetAllRaw].
 func (c *IndexedDB) GetAll(ctx context.Context, store string, query *IndexedDBQuery, opts *IndexedDBGetAllOptions) (*RecordsResponse, error) {
-	if opts == nil {
-		opts = &IndexedDBGetAllOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &ObjectStoreRangeRequest{Store: store, Query: query, Count: opts.Count}
 	response, err := c.client.GetAll(ctx, ToWireObjectStoreRangeRequest(request))
 	return decodeUnaryResponse(response, err, FromWireRecordsResponse)
@@ -991,9 +989,7 @@ type IndexedDBGetAllKeysOptions struct {
 
 // GetAllKeys is the ergonomic form of [IndexedDB.GetAllKeysRaw].
 func (c *IndexedDB) GetAllKeys(ctx context.Context, store string, query *IndexedDBQuery, opts *IndexedDBGetAllKeysOptions) (*KeysResponse, error) {
-	if opts == nil {
-		opts = &IndexedDBGetAllKeysOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &ObjectStoreRangeRequest{Store: store, Query: query, Count: opts.Count}
 	response, err := c.client.GetAllKeys(ctx, ToWireObjectStoreRangeRequest(request))
 	return decodeUnaryResponse(response, err, FromWireKeysResponse)
@@ -1073,9 +1069,7 @@ type IndexedDBIndexGetAllOptions struct {
 
 // IndexGetAll is the ergonomic form of [IndexedDB.IndexGetAllRaw].
 func (c *IndexedDB) IndexGetAll(ctx context.Context, store string, index string, query *IndexedDBQuery, opts *IndexedDBIndexGetAllOptions) (*RecordsResponse, error) {
-	if opts == nil {
-		opts = &IndexedDBIndexGetAllOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &IndexQueryRequest{Store: store, Index: index, Query: query, Count: opts.Count}
 	response, err := c.client.IndexGetAll(ctx, ToWireIndexQueryRequest(request))
 	return decodeUnaryResponse(response, err, FromWireRecordsResponse)
@@ -1095,9 +1089,7 @@ type IndexedDBIndexGetAllKeysOptions struct {
 
 // IndexGetAllKeys is the ergonomic form of [IndexedDB.IndexGetAllKeysRaw].
 func (c *IndexedDB) IndexGetAllKeys(ctx context.Context, store string, index string, query *IndexedDBQuery, opts *IndexedDBIndexGetAllKeysOptions) (*KeysResponse, error) {
-	if opts == nil {
-		opts = &IndexedDBIndexGetAllKeysOptions{}
-	}
+	opts = optionsOrZero(opts)
 	request := &IndexQueryRequest{Store: store, Index: index, Query: query, Count: opts.Count}
 	response, err := c.client.IndexGetAllKeys(ctx, ToWireIndexQueryRequest(request))
 	return decodeUnaryResponse(response, err, FromWireKeysResponse)
