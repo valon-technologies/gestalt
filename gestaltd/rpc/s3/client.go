@@ -2,6 +2,7 @@ package s3
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -55,9 +56,7 @@ func (c *rpcClient) ReadObject(ctx context.Context, req s3.ReadRequest) (s3.Read
 }
 
 func (c *rpcClient) readObjectStream(ctx context.Context, req s3.ReadRequest) (s3.ObjectMeta, io.ReadCloser, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	readCtx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.ReadObject(readCtx, readRequestToProto(req))
 	if err != nil {
