@@ -120,134 +120,122 @@ type UserInfoResponse struct {
 }
 
 func authorizeRequestFromProto(req *proto.AuthorizeRequest) *AuthorizeRequest {
-	if req == nil {
-		return nil
-	}
-	return &AuthorizeRequest{
-		ResponseType: req.GetResponseType(),
-		ClientID:     req.GetClientId(),
-		RedirectURI:  req.GetRedirectUri(),
-		Scope:        req.GetScope(),
-		State:        req.GetState(),
-	}
+	return convertProtoMessage(req, func(req *proto.AuthorizeRequest) *AuthorizeRequest {
+		return &AuthorizeRequest{
+			ResponseType: req.GetResponseType(),
+			ClientID:     req.GetClientId(),
+			RedirectURI:  req.GetRedirectUri(),
+			Scope:        req.GetScope(),
+			State:        req.GetState(),
+		}
+	})
 }
 
 func authorizeResponseToProto(resp *AuthorizeResponse) *proto.AuthorizeResponse {
-	if resp == nil {
-		return nil
-	}
-	return &proto.AuthorizeResponse{RedirectUri: resp.RedirectURI}
+	return convertProtoMessage(resp, func(resp *AuthorizeResponse) *proto.AuthorizeResponse {
+		return &proto.AuthorizeResponse{RedirectUri: resp.RedirectURI}
+	})
 }
 
 func tokenRequestFromProto(req *proto.TokenRequest) *TokenRequest {
-	if req == nil {
-		return nil
-	}
-	return &TokenRequest{
-		GrantType:        req.GetGrantType(),
-		Code:             req.GetCode(),
-		RedirectURI:      req.GetRedirectUri(),
-		ClientID:         req.GetClientId(),
-		State:            req.GetState(),
-		Scope:            req.GetScope(),
-		SubjectToken:     req.GetSubjectToken(),
-		SubjectTokenType: req.GetSubjectTokenType(),
-		ExpiresIn:        req.GetExpiresIn(),
-		Name:             req.GetName(),
-		GrantSubject:     req.GetGrantSubject(),
-	}
+	return convertProtoMessage(req, func(req *proto.TokenRequest) *TokenRequest {
+		return &TokenRequest{
+			GrantType:        req.GetGrantType(),
+			Code:             req.GetCode(),
+			RedirectURI:      req.GetRedirectUri(),
+			ClientID:         req.GetClientId(),
+			State:            req.GetState(),
+			Scope:            req.GetScope(),
+			SubjectToken:     req.GetSubjectToken(),
+			SubjectTokenType: req.GetSubjectTokenType(),
+			ExpiresIn:        req.GetExpiresIn(),
+			Name:             req.GetName(),
+			GrantSubject:     req.GetGrantSubject(),
+		}
+	})
 }
 
 func tokenResponseToProto(resp *TokenResponse) *proto.TokenResponse {
-	if resp == nil {
-		return nil
-	}
-	return &proto.TokenResponse{
-		AccessToken:  resp.AccessToken,
-		TokenType:    resp.TokenType,
-		ExpiresIn:    resp.ExpiresIn,
-		RefreshToken: resp.RefreshToken,
-		Scope:        resp.Scope,
-		GrantId:      resp.GrantID,
-	}
+	return convertProtoMessage(resp, func(resp *TokenResponse) *proto.TokenResponse {
+		return &proto.TokenResponse{
+			AccessToken:  resp.AccessToken,
+			TokenType:    resp.TokenType,
+			ExpiresIn:    resp.ExpiresIn,
+			RefreshToken: resp.RefreshToken,
+			Scope:        resp.Scope,
+			GrantId:      resp.GrantID,
+		}
+	})
 }
 
 func introspectRequestFromProto(req *proto.IntrospectRequest) *IntrospectRequest {
-	if req == nil {
-		return nil
-	}
-	return &IntrospectRequest{
-		Token:         req.GetToken(),
-		TokenTypeHint: req.GetTokenTypeHint(),
-	}
+	return convertProtoMessage(req, func(req *proto.IntrospectRequest) *IntrospectRequest {
+		return &IntrospectRequest{
+			Token:         req.GetToken(),
+			TokenTypeHint: req.GetTokenTypeHint(),
+		}
+	})
 }
 
 func introspectResponseToProto(resp *IntrospectResponse) *proto.IntrospectResponse {
-	if resp == nil {
-		return nil
-	}
-	return &proto.IntrospectResponse{
-		Active:   resp.Active,
-		Subject:  resp.Subject,
-		Scope:    resp.Scope,
-		ClientId: resp.ClientID,
-		Audience: append([]string(nil), resp.Audience...),
-	}
+	return convertProtoMessage(resp, func(resp *IntrospectResponse) *proto.IntrospectResponse {
+		return &proto.IntrospectResponse{
+			Active:   resp.Active,
+			Subject:  resp.Subject,
+			Scope:    resp.Scope,
+			ClientId: resp.ClientID,
+			Audience: append([]string(nil), resp.Audience...),
+		}
+	})
 }
 
 func listGrantsResponseToProto(resp *ListGrantsResponse) *proto.ListGrantsResponse {
-	if resp == nil {
-		return nil
-	}
-	return &proto.ListGrantsResponse{GrantIds: append([]string(nil), resp.GrantIDs...)}
+	return convertProtoMessage(resp, func(resp *ListGrantsResponse) *proto.ListGrantsResponse {
+		return &proto.ListGrantsResponse{GrantIds: append([]string(nil), resp.GrantIDs...)}
+	})
 }
 
 func getGrantRequestFromProto(req *proto.GetGrantRequest) *GetGrantRequest {
-	if req == nil {
-		return nil
-	}
-	return &GetGrantRequest{GrantID: req.GetGrantId()}
+	return convertProtoMessage(req, func(req *proto.GetGrantRequest) *GetGrantRequest {
+		return &GetGrantRequest{GrantID: req.GetGrantId()}
+	})
 }
 
 func getGrantResponseToProto(resp *GetGrantResponse) *proto.GetGrantResponse {
-	if resp == nil {
-		return nil
-	}
-	out := &proto.GetGrantResponse{
-		CreatedAt: resp.CreatedAt,
-		ExpiresAt: resp.ExpiresAt,
-		Name:      resp.Name,
-	}
-	for _, scope := range resp.Scopes {
-		out.Scopes = append(out.Scopes, &proto.GrantScope{
-			Scope:    scope.Scope,
-			Resource: append([]string(nil), scope.Resource...),
-		})
-	}
-	return out
+	return convertProtoMessage(resp, func(resp *GetGrantResponse) *proto.GetGrantResponse {
+		out := &proto.GetGrantResponse{
+			CreatedAt: resp.CreatedAt,
+			ExpiresAt: resp.ExpiresAt,
+			Name:      resp.Name,
+		}
+		for _, scope := range resp.Scopes {
+			out.Scopes = append(out.Scopes, &proto.GrantScope{
+				Scope:    scope.Scope,
+				Resource: append([]string(nil), scope.Resource...),
+			})
+		}
+		return out
+	})
 }
 
 func revokeGrantRequestFromProto(req *proto.RevokeGrantRequest) *RevokeGrantRequest {
-	if req == nil {
-		return nil
-	}
-	return &RevokeGrantRequest{GrantID: req.GetGrantId()}
+	return convertProtoMessage(req, func(req *proto.RevokeGrantRequest) *RevokeGrantRequest {
+		return &RevokeGrantRequest{GrantID: req.GetGrantId()}
+	})
 }
 
 func userInfoRequestFromProto(req *proto.UserInfoRequest) *UserInfoRequest {
-	if req == nil {
-		return nil
-	}
-	return &UserInfoRequest{}
+	return convertProtoMessage(req, func(req *proto.UserInfoRequest) *UserInfoRequest {
+		return &UserInfoRequest{}
+	})
 }
 
 func userInfoResponseToProto(resp *UserInfoResponse) *proto.UserInfoResponse {
-	if resp == nil {
-		return nil
-	}
-	return &proto.UserInfoResponse{
-		SubjectId: resp.SubjectID,
-		Email:     resp.Email,
-		Name:      resp.Name,
-	}
+	return convertProtoMessage(resp, func(resp *UserInfoResponse) *proto.UserInfoResponse {
+		return &proto.UserInfoResponse{
+			SubjectId: resp.SubjectID,
+			Email:     resp.Email,
+			Name:      resp.Name,
+		}
+	})
 }

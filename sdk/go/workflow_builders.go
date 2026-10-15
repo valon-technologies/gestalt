@@ -205,17 +205,16 @@ func workflowStepAppCallToProto(input *WorkflowStepAppCall) (*proto.WorkflowStep
 }
 
 func workflowStepAppCallFromProto(value *proto.WorkflowStepAppCall) *WorkflowStepAppCall {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowStepAppCall{
-		Name:           value.GetName(),
-		Operation:      value.GetOperation(),
-		Input:          workflowValueFromProto(value.GetInput()),
-		Connection:     value.GetConnection(),
-		Instance:       value.GetInstance(),
-		CredentialMode: value.GetCredentialMode(),
-	}
+	return convertProtoMessage(value, func(value *proto.WorkflowStepAppCall) *WorkflowStepAppCall {
+		return &WorkflowStepAppCall{
+			Name:           value.GetName(),
+			Operation:      value.GetOperation(),
+			Input:          workflowValueFromProto(value.GetInput()),
+			Connection:     value.GetConnection(),
+			Instance:       value.GetInstance(),
+			CredentialMode: value.GetCredentialMode(),
+		}
+	})
 }
 
 func workflowStepAgentTurnToProto(input *WorkflowStepAgentTurn) (*proto.WorkflowStepAgentTurn, error) {
@@ -247,19 +246,18 @@ func workflowStepAgentTurnToProto(input *WorkflowStepAgentTurn) (*proto.Workflow
 }
 
 func workflowStepAgentTurnFromProto(value *proto.WorkflowStepAgentTurn) *WorkflowStepAgentTurn {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowStepAgentTurn{
-		Provider:     value.GetProvider(),
-		Model:        value.GetModel(),
-		SessionKey:   value.GetSessionKey(),
-		Prompt:       workflowTextFromProto(value.GetPrompt()),
-		Messages:     workflowAgentMessagesFromProto(value.GetMessages()),
-		Tools:        agentToolRefsFromProto(value.GetTools()),
-		Output:       agentOutputFromProto(value.GetOutput()),
-		ModelOptions: mapFromStruct(value.GetModelOptions()),
-	}
+	return convertProtoMessage(value, func(value *proto.WorkflowStepAgentTurn) *WorkflowStepAgentTurn {
+		return &WorkflowStepAgentTurn{
+			Provider:     value.GetProvider(),
+			Model:        value.GetModel(),
+			SessionKey:   value.GetSessionKey(),
+			Prompt:       workflowTextFromProto(value.GetPrompt()),
+			Messages:     workflowAgentMessagesFromProto(value.GetMessages()),
+			Tools:        agentToolRefsFromProto(value.GetTools()),
+			Output:       agentOutputFromProto(value.GetOutput()),
+			ModelOptions: mapFromStruct(value.GetModelOptions()),
+		}
+	})
 }
 
 func workflowAgentMessagesToProto(values []WorkflowAgentMessage) ([]*proto.WorkflowAgentMessage, error) {
@@ -321,13 +319,12 @@ func workflowStepWhenToProto(input *WorkflowStepWhen) (*proto.WorkflowStepWhen, 
 }
 
 func workflowStepWhenFromProto(value *proto.WorkflowStepWhen) *WorkflowStepWhen {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowStepWhen{
-		Value:  workflowValueFromProto(value.GetValue()),
-		Equals: value.GetEquals().AsInterface(),
-	}
+	return convertProtoMessage(value, func(value *proto.WorkflowStepWhen) *WorkflowStepWhen {
+		return &WorkflowStepWhen{
+			Value:  workflowValueFromProto(value.GetValue()),
+			Equals: value.GetEquals().AsInterface(),
+		}
+	})
 }
 
 func workflowValueMapFromProto(values map[string]*proto.WorkflowValue) map[string]WorkflowValue {
@@ -1016,33 +1013,30 @@ func newOptionalWorkflowRunTrigger(input *WorkflowRunTrigger) (*proto.WorkflowRu
 }
 
 func workflowTargetInputPtrFromTarget(value *proto.BoundWorkflowTarget) *BoundWorkflowTarget {
-	if value == nil {
-		return nil
-	}
-	input := boundWorkflowTargetFromProto(value)
-	return &input
+	return convertProtoMessage(value, func(value *proto.BoundWorkflowTarget) *BoundWorkflowTarget {
+		input := boundWorkflowTargetFromProto(value)
+		return &input
+	})
 }
 
 func workflowEventMatchFromInput(input *WorkflowEventMatch) *proto.WorkflowEventMatch {
-	if input == nil {
-		return nil
-	}
-	return &proto.WorkflowEventMatch{
-		Type:    input.Type,
-		Source:  input.Source,
-		Subject: input.Subject,
-	}
+	return convertProtoMessage(input, func(input *WorkflowEventMatch) *proto.WorkflowEventMatch {
+		return &proto.WorkflowEventMatch{
+			Type:    input.Type,
+			Source:  input.Source,
+			Subject: input.Subject,
+		}
+	})
 }
 
 func workflowEventMatchInputPtrFromMatch(value *proto.WorkflowEventMatch) *WorkflowEventMatch {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowEventMatch{
-		Type:    value.GetType(),
-		Source:  value.GetSource(),
-		Subject: value.GetSubject(),
-	}
+	return convertProtoMessage(value, func(value *proto.WorkflowEventMatch) *WorkflowEventMatch {
+		return &WorkflowEventMatch{
+			Type:    value.GetType(),
+			Source:  value.GetSource(),
+			Subject: value.GetSubject(),
+		}
+	})
 }
 
 func workflowSubjectID(value *Subject) string {

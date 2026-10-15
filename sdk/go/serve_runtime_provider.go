@@ -241,24 +241,23 @@ func removeRuntimeWorkspaceRequestFromProto(req *proto.RemoveRuntimeWorkspaceReq
 }
 
 func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *AgentWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &AgentWorkspace{
-		Checkouts: make([]AgentWorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
-		CWD:       workspace.GetCwd(),
-	}
-	for _, checkout := range workspace.GetCheckouts() {
-		if checkout == nil {
-			continue
+	return convertProtoMessage(workspace, func(workspace *proto.AgentWorkspace) *AgentWorkspace {
+		out := &AgentWorkspace{
+			Checkouts: make([]AgentWorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
+			CWD:       workspace.GetCwd(),
 		}
-		out.Checkouts = append(out.Checkouts, AgentWorkspaceGitCheckout{
-			URL:  checkout.GetUrl(),
-			Ref:  checkout.GetRef(),
-			Path: checkout.GetPath(),
-		})
-	}
-	return out
+		for _, checkout := range workspace.GetCheckouts() {
+			if checkout == nil {
+				continue
+			}
+			out.Checkouts = append(out.Checkouts, AgentWorkspaceGitCheckout{
+				URL:  checkout.GetUrl(),
+				Ref:  checkout.GetRef(),
+				Path: checkout.GetPath(),
+			})
+		}
+		return out
+	})
 }
 
 func prepareRuntimeWorkspaceResponseToProto(resp PrepareRuntimeWorkspaceResponse) *proto.PrepareRuntimeWorkspaceResponse {
@@ -268,13 +267,12 @@ func prepareRuntimeWorkspaceResponseToProto(resp PrepareRuntimeWorkspaceResponse
 }
 
 func preparedAgentWorkspaceToProto(workspace *PreparedAgentWorkspace) *proto.PreparedAgentWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	return &proto.PreparedAgentWorkspace{
-		Root: workspace.Root,
-		Cwd:  workspace.CWD,
-	}
+	return convertProtoMessage(workspace, func(workspace *PreparedAgentWorkspace) *proto.PreparedAgentWorkspace {
+		return &proto.PreparedAgentWorkspace{
+			Root: workspace.Root,
+			Cwd:  workspace.CWD,
+		}
+	})
 }
 
 func hostedAppToProto(app HostedApp) *proto.HostedApp {
