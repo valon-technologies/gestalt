@@ -342,3 +342,11 @@ func convertAllocatedProtoSlice[Input, Output any](values []*Input, convert func
 	}
 	return out
 }
+
+// convertProtoMessage preserves absence before converting a message.
+func convertProtoMessage[Input, Output any](value *Input, convert func(*Input) *Output) *Output {
+	if value == nil {
+		return nil
+	}
+	return convert(value)
+}
