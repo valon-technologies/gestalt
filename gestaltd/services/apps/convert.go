@@ -230,14 +230,13 @@ func responseSpecToProto(spec *catalog.OperationResponseSpec, legacyOutputSchema
 
 // structToJSONRaw converts a protobuf Struct to a JSON RawMessage.
 func structToJSONRaw(s *structpb.Struct) json.RawMessage {
-	if s == nil {
-		return nil
-	}
-	data, err := protojson.Marshal(s)
-	if err != nil {
-		return nil
-	}
-	return json.RawMessage(data)
+	return protoutil.ConvertMessage(s, func(s *structpb.Struct) json.RawMessage {
+		data, err := protojson.Marshal(s)
+		if err != nil {
+			return nil
+		}
+		return json.RawMessage(data)
+	})
 }
 
 // jsonRawToStruct converts a JSON RawMessage to a protobuf Struct.

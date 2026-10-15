@@ -443,43 +443,42 @@ func externalCredentialAuthConfigToProto(auth core.ExternalCredentialAuthConfig)
 }
 
 func externalCredentialAuthConfigFromProto(auth *proto.ExternalCredentialAuthConfig) core.ExternalCredentialAuthConfig {
-	if auth == nil {
-		return core.ExternalCredentialAuthConfig{}
-	}
-	drivers := make([]core.ExternalCredentialTokenExchangeDriver, 0, len(auth.GetTokenExchangeDrivers()))
-	for _, driver := range auth.GetTokenExchangeDrivers() {
-		if driver == nil {
-			continue
+	return protoutil.ConvertMessage(auth, func(auth *proto.ExternalCredentialAuthConfig) core.ExternalCredentialAuthConfig {
+		drivers := make([]core.ExternalCredentialTokenExchangeDriver, 0, len(auth.GetTokenExchangeDrivers()))
+		for _, driver := range auth.GetTokenExchangeDrivers() {
+			if driver == nil {
+				continue
+			}
+			drivers = append(drivers, core.ExternalCredentialTokenExchangeDriver{
+				Type:            driver.GetType(),
+				TargetPrincipal: driver.GetTargetPrincipal(),
+				Scopes:          append([]string(nil), driver.GetScopes()...),
+				LifetimeSeconds: int(driver.GetLifetimeSeconds()),
+				Endpoint:        driver.GetEndpoint(),
+				Params:          cloneStringMap(driver.GetParams()),
+			})
 		}
-		drivers = append(drivers, core.ExternalCredentialTokenExchangeDriver{
-			Type:            driver.GetType(),
-			TargetPrincipal: driver.GetTargetPrincipal(),
-			Scopes:          append([]string(nil), driver.GetScopes()...),
-			LifetimeSeconds: int(driver.GetLifetimeSeconds()),
-			Endpoint:        driver.GetEndpoint(),
-			Params:          cloneStringMap(driver.GetParams()),
-		})
-	}
-	return core.ExternalCredentialAuthConfig{
-		Type:                 auth.GetType(),
-		Token:                auth.GetToken(),
-		TokenPrefix:          auth.GetTokenPrefix(),
-		GrantType:            auth.GetGrantType(),
-		RefreshToken:         auth.GetRefreshToken(),
-		TokenURL:             auth.GetTokenUrl(),
-		ClientID:             auth.GetClientId(),
-		ClientSecret:         auth.GetClientSecret(),
-		ClientAuth:           auth.GetClientAuth(),
-		TokenExchange:        auth.GetTokenExchange(),
-		Scopes:               append([]string(nil), auth.GetScopes()...),
-		ScopeParam:           auth.GetScopeParam(),
-		ScopeSeparator:       auth.GetScopeSeparator(),
-		TokenParams:          cloneStringMap(auth.GetTokenParams()),
-		RefreshParams:        cloneStringMap(auth.GetRefreshParams()),
-		AcceptHeader:         auth.GetAcceptHeader(),
-		AccessTokenPath:      auth.GetAccessTokenPath(),
-		TokenExchangeDrivers: drivers,
-	}
+		return core.ExternalCredentialAuthConfig{
+			Type:                 auth.GetType(),
+			Token:                auth.GetToken(),
+			TokenPrefix:          auth.GetTokenPrefix(),
+			GrantType:            auth.GetGrantType(),
+			RefreshToken:         auth.GetRefreshToken(),
+			TokenURL:             auth.GetTokenUrl(),
+			ClientID:             auth.GetClientId(),
+			ClientSecret:         auth.GetClientSecret(),
+			ClientAuth:           auth.GetClientAuth(),
+			TokenExchange:        auth.GetTokenExchange(),
+			Scopes:               append([]string(nil), auth.GetScopes()...),
+			ScopeParam:           auth.GetScopeParam(),
+			ScopeSeparator:       auth.GetScopeSeparator(),
+			TokenParams:          cloneStringMap(auth.GetTokenParams()),
+			RefreshParams:        cloneStringMap(auth.GetRefreshParams()),
+			AcceptHeader:         auth.GetAcceptHeader(),
+			AccessTokenPath:      auth.GetAccessTokenPath(),
+			TokenExchangeDrivers: drivers,
+		}
+	})
 }
 
 func cloneStringMap(in map[string]string) map[string]string {

@@ -24,10 +24,7 @@ func StructFromMap(values map[string]any) (*structpb.Struct, error) {
 }
 
 func MapFromStruct(s *structpb.Struct) map[string]any {
-	if s == nil {
-		return nil
-	}
-	return s.AsMap()
+	return ConvertMessage(s, (*structpb.Struct).AsMap)
 }
 
 func StringSlicesToProto[V ~map[string][]string](values V) map[string]*proto.StringList {

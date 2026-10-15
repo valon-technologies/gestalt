@@ -1,9 +1,10 @@
 package protoutil
 
 // ConvertMessage preserves absence before converting a message.
-func ConvertMessage[Input, Output any](value *Input, convert func(*Input) *Output) *Output {
+func ConvertMessage[Input, Output any](value *Input, convert func(*Input) Output) Output {
 	if value == nil {
-		return nil
+		var zero Output
+		return zero
 	}
 	return convert(value)
 }
