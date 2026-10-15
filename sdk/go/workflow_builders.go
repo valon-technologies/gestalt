@@ -128,7 +128,7 @@ func workflowStepsToProto(steps []WorkflowStep) ([]*proto.WorkflowStep, error) {
 }
 
 func workflowStepToProto(step WorkflowStep) (*proto.WorkflowStep, error) {
-	inputs, err := workflowValueMapToProto(step.Inputs)
+	inputs, err := convertProtoMap(step.Inputs, workflowValueToProto)
 	if err != nil {
 		return nil, fmt.Errorf("inputs: %w", err)
 	}
@@ -326,23 +326,8 @@ func workflowStepWhenFromProto(value *proto.WorkflowStepWhen) *WorkflowStepWhen 
 	}
 	return &WorkflowStepWhen{
 		Value:  workflowValueFromProto(value.GetValue()),
-		Equals: anyFromValue(value.GetEquals()),
+		Equals: value.GetEquals().AsInterface(),
 	}
-}
-
-func workflowValueMapToProto(values map[string]WorkflowValue) (map[string]*proto.WorkflowValue, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make(map[string]*proto.WorkflowValue, len(values))
-	for key, value := range values {
-		converted, err := workflowValueToProto(value)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", key, err)
-		}
-		out[key] = converted
-	}
-	return out, nil
 }
 
 func workflowValueMapFromProto(values map[string]*proto.WorkflowValue) map[string]WorkflowValue {
@@ -396,7 +381,7 @@ func workflowValueToProto(input WorkflowValue) (*proto.WorkflowValue, error) {
 		}
 		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Literal{Literal: literal}}, nil
 	case input.Object != nil:
-		fields, err := workflowValueMapToProto(input.Object)
+		fields, err := convertProtoMap(input.Object, workflowValueToProto)
 		if err != nil {
 			return nil, err
 		}
@@ -438,7 +423,7 @@ func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
 	}
 	switch typed := value.GetKind().(type) {
 	case *proto.WorkflowValue_Literal:
-		return WorkflowValue{Literal: anyFromValue(typed.Literal), LiteralSet: true}
+		return WorkflowValue{Literal: typed.Literal.AsInterface(), LiteralSet: true}
 	case *proto.WorkflowValue_Object:
 		var fields map[string]*proto.WorkflowValue
 		if typed.Object != nil {
@@ -509,7 +494,7 @@ func workflowEventToProto(input WorkflowEvent) (*proto.WorkflowEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-	extensions, err := valuesFromMap(input.Extensions)
+	extensions, err := convertProtoMap(input.Extensions, valueFromAny)
 	if err != nil {
 		return nil, err
 	}
