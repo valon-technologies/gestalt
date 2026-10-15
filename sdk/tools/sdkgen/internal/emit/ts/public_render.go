@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
@@ -124,9 +125,7 @@ func renderPublicTypes(view *publicsurface.View, paths PublicImports) string {
 			native := localName(m.Input.FullName)
 			typeName := publicRequestTypeName(svc.Service, m)
 			base := generatedFileBase(m.Input.ProtoFile)
-			if imports[base] == nil {
-				imports[base] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(imports, base)
 			imports[base][native] = true
 			typeExpr := native
 			if len(omit) > 0 {
@@ -215,18 +214,12 @@ func renderPublicConverters(view *publicsurface.View, paths PublicImports) strin
 		codecName := toWireFunc(conv.input.FullName)
 		codecAlias := "codec" + upperFirst(codecName)
 		protoFile := conv.input.ProtoFile
-		if codecImports[protoFile] == nil {
-			codecImports[protoFile] = map[string]bool{}
-		}
+		emit.EnsureImportGroup(codecImports, protoFile)
 		codecImports[protoFile][codecName] = true
-		if nativeImports[protoFile] == nil {
-			nativeImports[protoFile] = map[string]bool{}
-		}
+		emit.EnsureImportGroup(nativeImports, protoFile)
 		nativeAlias := "Native" + native
 		nativeImports[protoFile][native+" as "+nativeAlias] = true
-		if wireImports[protoFile] == nil {
-			wireImports[protoFile] = map[string]bool{}
-		}
+		emit.EnsureImportGroup(wireImports, protoFile)
 		wireImports[protoFile][native] = true
 		for _, typeName := range conv.requestTypes {
 			typeImports[typeName] = true
@@ -273,7 +266,6 @@ func renderPublicConverters(view *publicsurface.View, paths PublicImports) strin
 	}
 	return b.String()
 }
-
 
 type publicWireConverter struct {
 	input        *model.Message
@@ -350,45 +342,29 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 		if m.Input != nil && m.Output != nil {
 			inputNative := localName(m.Input.FullName)
 			outputNative := localName(m.Output.FullName)
-			if schemaImports[m.Input.ProtoFile] == nil {
-				schemaImports[m.Input.ProtoFile] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(schemaImports, m.Input.ProtoFile)
 			schemaImports[m.Input.ProtoFile][inputNative+"Schema"] = true
-			if schemaImports[m.Output.ProtoFile] == nil {
-				schemaImports[m.Output.ProtoFile] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(schemaImports, m.Output.ProtoFile)
 			schemaImports[m.Output.ProtoFile][outputNative+"Schema"] = true
-			if nativeImports[m.Output.ProtoFile] == nil {
-				nativeImports[m.Output.ProtoFile] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(nativeImports, m.Output.ProtoFile)
 			nativeImports[m.Output.ProtoFile][outputNative] = true
-			if codecImports[m.Output.ProtoFile] == nil {
-				codecImports[m.Output.ProtoFile] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(codecImports, m.Output.ProtoFile)
 			codecImports[m.Output.ProtoFile]["fromWire"+outputNative] = true
 			requestTypes = append(requestTypes, publicRequestTypeName(svc, m))
 			converterImports["toWire"+inputNative] = true
 		} else if m.Input != nil && !m.InputIsEmpty {
 			inputNative := localName(m.Input.FullName)
-			if schemaImports[m.Input.ProtoFile] == nil {
-				schemaImports[m.Input.ProtoFile] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(schemaImports, m.Input.ProtoFile)
 			schemaImports[m.Input.ProtoFile][inputNative+"Schema"] = true
 			requestTypes = append(requestTypes, publicRequestTypeName(svc, m))
 			converterImports["toWire"+inputNative] = true
 		} else if m.Output != nil && !m.OutputIsEmpty {
 			outputNative := localName(m.Output.FullName)
-			if schemaImports[m.Output.ProtoFile] == nil {
-				schemaImports[m.Output.ProtoFile] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(schemaImports, m.Output.ProtoFile)
 			schemaImports[m.Output.ProtoFile][outputNative+"Schema"] = true
-			if nativeImports[m.Output.ProtoFile] == nil {
-				nativeImports[m.Output.ProtoFile] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(nativeImports, m.Output.ProtoFile)
 			nativeImports[m.Output.ProtoFile][outputNative] = true
-			if codecImports[m.Output.ProtoFile] == nil {
-				codecImports[m.Output.ProtoFile] = map[string]bool{}
-			}
+			emit.EnsureImportGroup(codecImports, m.Output.ProtoFile)
 			codecImports[m.Output.ProtoFile]["fromWire"+outputNative] = true
 		}
 	}

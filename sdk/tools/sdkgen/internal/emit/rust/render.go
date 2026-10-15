@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -140,9 +141,7 @@ func (r *renderer) convRef(protoFile, name string) string {
 }
 
 func recordReference(imports map[string]map[string]bool, base, name string) string {
-	if imports[base] == nil {
-		imports[base] = map[string]bool{}
-	}
+	emit.EnsureImportGroup(imports, base)
 	imports[base][name] = true
 	return name
 }
