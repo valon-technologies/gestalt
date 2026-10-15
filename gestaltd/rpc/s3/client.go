@@ -8,6 +8,7 @@ import (
 	"time"
 
 	s3 "github.com/valon-technologies/gestalt/sdk/go/s3"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -304,17 +305,16 @@ func requiredObjectMeta(meta *proto.S3ObjectMeta, op string) (s3.ObjectMeta, err
 }
 
 func byteRangeToProto(r *s3.ByteRange) *proto.ByteRange {
-	if r == nil {
-		return nil
-	}
-	out := &proto.ByteRange{}
-	if r.Start != nil {
-		out.Start = r.Start
-	}
-	if r.End != nil {
-		out.End = r.End
-	}
-	return out
+	return protoutil.ConvertMessage(r, func(r *s3.ByteRange) *proto.ByteRange {
+		out := &proto.ByteRange{}
+		if r.Start != nil {
+			out.Start = r.Start
+		}
+		if r.End != nil {
+			out.End = r.End
+		}
+		return out
+	})
 }
 
 func byteRangeFromProto(r *proto.ByteRange) *s3.ByteRange {

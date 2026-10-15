@@ -2,6 +2,7 @@ package s3
 
 import (
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -39,19 +40,18 @@ func objectMetaToProto(meta s3sdk.ObjectMeta) *proto.S3ObjectMeta {
 }
 
 func byteRangeFromProto(r *proto.ByteRange) *s3sdk.ByteRange {
-	if r == nil {
-		return nil
-	}
-	out := &s3sdk.ByteRange{}
-	if r.Start != nil {
-		start := r.GetStart()
-		out.Start = &start
-	}
-	if r.End != nil {
-		end := r.GetEnd()
-		out.End = &end
-	}
-	return out
+	return protoutil.ConvertMessage(r, func(r *proto.ByteRange) *s3sdk.ByteRange {
+		out := &s3sdk.ByteRange{}
+		if r.Start != nil {
+			start := r.GetStart()
+			out.Start = &start
+		}
+		if r.End != nil {
+			end := r.GetEnd()
+			out.End = &end
+		}
+		return out
+	})
 }
 
 func presignMethodToProto(method s3sdk.PresignMethod) proto.PresignMethod {

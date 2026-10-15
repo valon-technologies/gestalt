@@ -131,17 +131,16 @@ func workflowStepAppCallToProto(target *coreworkflow.AppCall) (*proto.WorkflowSt
 }
 
 func workflowStepAppCallFromProto(target *proto.WorkflowStepAppCall) *coreworkflow.AppCall {
-	if target == nil {
-		return nil
-	}
-	return &coreworkflow.AppCall{
-		Name:           strings.TrimSpace(target.GetName()),
-		Operation:      strings.TrimSpace(target.GetOperation()),
-		Connection:     strings.TrimSpace(target.GetConnection()),
-		Instance:       strings.TrimSpace(target.GetInstance()),
-		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(target.GetCredentialMode())),
-		Input:          workflowValueFromProto(target.GetInput()),
-	}
+	return protoutil.ConvertMessage(target, func(target *proto.WorkflowStepAppCall) *coreworkflow.AppCall {
+		return &coreworkflow.AppCall{
+			Name:           strings.TrimSpace(target.GetName()),
+			Operation:      strings.TrimSpace(target.GetOperation()),
+			Connection:     strings.TrimSpace(target.GetConnection()),
+			Instance:       strings.TrimSpace(target.GetInstance()),
+			CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(target.GetCredentialMode())),
+			Input:          workflowValueFromProto(target.GetInput()),
+		}
+	})
 }
 
 func workflowStepAgentTurnToProto(target *coreworkflow.AgentTurn) (*proto.WorkflowStepAgentTurn, error) {
@@ -173,19 +172,18 @@ func workflowStepAgentTurnToProto(target *coreworkflow.AgentTurn) (*proto.Workfl
 }
 
 func workflowStepAgentTurnFromProto(target *proto.WorkflowStepAgentTurn) *coreworkflow.AgentTurn {
-	if target == nil {
-		return nil
-	}
-	return &coreworkflow.AgentTurn{
-		ProviderName: strings.TrimSpace(target.GetProvider()),
-		Model:        strings.TrimSpace(target.GetModel()),
-		SessionKey:   strings.TrimSpace(target.GetSessionKey()),
-		Prompt:       workflowTextFromProto(target.GetPrompt()),
-		Messages:     workflowAgentMessagesFromProto(target.GetMessages()),
-		ToolRefs:     agentwire.ToolRefsFromProto(target.GetTools()),
-		Output:       workflowAgentOutputFromProto(target.GetOutput()),
-		ModelOptions: protoutil.MapFromStruct(target.GetModelOptions()),
-	}
+	return protoutil.ConvertMessage(target, func(target *proto.WorkflowStepAgentTurn) *coreworkflow.AgentTurn {
+		return &coreworkflow.AgentTurn{
+			ProviderName: strings.TrimSpace(target.GetProvider()),
+			Model:        strings.TrimSpace(target.GetModel()),
+			SessionKey:   strings.TrimSpace(target.GetSessionKey()),
+			Prompt:       workflowTextFromProto(target.GetPrompt()),
+			Messages:     workflowAgentMessagesFromProto(target.GetMessages()),
+			ToolRefs:     agentwire.ToolRefsFromProto(target.GetTools()),
+			Output:       workflowAgentOutputFromProto(target.GetOutput()),
+			ModelOptions: protoutil.MapFromStruct(target.GetModelOptions()),
+		}
+	})
 }
 
 func workflowAgentOutputToProto(output coreagent.Output) (*proto.AgentOutput, error) {
@@ -297,14 +295,13 @@ func workflowStepWhenToProto(when *coreworkflow.StepWhen) (*proto.WorkflowStepWh
 }
 
 func workflowStepWhenFromProto(when *proto.WorkflowStepWhen) *coreworkflow.StepWhen {
-	if when == nil {
-		return nil
-	}
-	return &coreworkflow.StepWhen{
-		Value:     workflowValueFromProto(when.GetValue()),
-		Equals:    protoutil.ValueToAny(when.GetEquals()),
-		EqualsSet: when.Equals != nil,
-	}
+	return protoutil.ConvertMessage(when, func(when *proto.WorkflowStepWhen) *coreworkflow.StepWhen {
+		return &coreworkflow.StepWhen{
+			Value:     workflowValueFromProto(when.GetValue()),
+			Equals:    protoutil.ValueToAny(when.GetEquals()),
+			EqualsSet: when.Equals != nil,
+		}
+	})
 }
 
 func workflowValueMapToProto(values map[string]coreworkflow.Value) (map[string]*proto.WorkflowValue, error) {

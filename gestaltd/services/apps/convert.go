@@ -71,62 +71,61 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 }
 
 func catalogToProto(cat *catalog.Catalog) *proto.Catalog {
-	if cat == nil {
-		return nil
-	}
-	out := &proto.Catalog{
-		Name:        cat.Name,
-		DisplayName: cat.DisplayName,
-		Description: cat.Description,
-		IconSvg:     cat.IconSVG,
-		Operations:  make([]*proto.CatalogOperation, 0, len(cat.Operations)),
-	}
-	for i := range cat.Operations {
-		op := &cat.Operations[i]
-		api, apiMode := apiExposureModeToProto(op.API)
-		pOp := &proto.CatalogOperation{
-			Id:             op.ID,
-			Method:         op.Method,
-			Title:          op.Title,
-			Description:    op.Description,
-			InputSchema:    string(op.InputSchema),
-			Response:       responseSpecToProto(op.Response, op.OutputSchema),
-			AllowedRoles:   op.AllowedRoles,
-			RequiredScopes: op.RequiredScopes,
-			Tags:           op.Tags,
-			ReadOnly:       op.ReadOnly,
-			Visible:        op.Visible,
-			Api:            api,
-			ApiMode:        apiMode,
-			Mcp:            op.MCP,
-			Transport:      op.Transport,
+	return protoutil.ConvertMessage(cat, func(cat *catalog.Catalog) *proto.Catalog {
+		out := &proto.Catalog{
+			Name:        cat.Name,
+			DisplayName: cat.DisplayName,
+			Description: cat.Description,
+			IconSvg:     cat.IconSVG,
+			Operations:  make([]*proto.CatalogOperation, 0, len(cat.Operations)),
 		}
-		ann := op.Annotations
-		if ann.ReadOnlyHint != nil || ann.IdempotentHint != nil || ann.DestructiveHint != nil || ann.OpenWorldHint != nil {
-			pOp.Annotations = &proto.OperationAnnotations{
-				ReadOnlyHint:    ann.ReadOnlyHint,
-				IdempotentHint:  ann.IdempotentHint,
-				DestructiveHint: ann.DestructiveHint,
-				OpenWorldHint:   ann.OpenWorldHint,
+		for i := range cat.Operations {
+			op := &cat.Operations[i]
+			api, apiMode := apiExposureModeToProto(op.API)
+			pOp := &proto.CatalogOperation{
+				Id:             op.ID,
+				Method:         op.Method,
+				Title:          op.Title,
+				Description:    op.Description,
+				InputSchema:    string(op.InputSchema),
+				Response:       responseSpecToProto(op.Response, op.OutputSchema),
+				AllowedRoles:   op.AllowedRoles,
+				RequiredScopes: op.RequiredScopes,
+				Tags:           op.Tags,
+				ReadOnly:       op.ReadOnly,
+				Visible:        op.Visible,
+				Api:            api,
+				ApiMode:        apiMode,
+				Mcp:            op.MCP,
+				Transport:      op.Transport,
 			}
-		}
-		for _, p := range op.Parameters {
-			param := &proto.CatalogParameter{
-				Name:        p.Name,
-				Type:        p.Type,
-				Description: p.Description,
-				Required:    p.Required,
-			}
-			if p.Default != nil {
-				if v, err := structpb.NewValue(p.Default); err == nil {
-					param.Default = v
+			ann := op.Annotations
+			if ann.ReadOnlyHint != nil || ann.IdempotentHint != nil || ann.DestructiveHint != nil || ann.OpenWorldHint != nil {
+				pOp.Annotations = &proto.OperationAnnotations{
+					ReadOnlyHint:    ann.ReadOnlyHint,
+					IdempotentHint:  ann.IdempotentHint,
+					DestructiveHint: ann.DestructiveHint,
+					OpenWorldHint:   ann.OpenWorldHint,
 				}
 			}
-			pOp.Parameters = append(pOp.Parameters, param)
+			for _, p := range op.Parameters {
+				param := &proto.CatalogParameter{
+					Name:        p.Name,
+					Type:        p.Type,
+					Description: p.Description,
+					Required:    p.Required,
+				}
+				if p.Default != nil {
+					if v, err := structpb.NewValue(p.Default); err == nil {
+						param.Default = v
+					}
+				}
+				pOp.Parameters = append(pOp.Parameters, param)
+			}
+			out.Operations = append(out.Operations, pOp)
 		}
-		out.Operations = append(out.Operations, pOp)
-	}
-	return out
+		return out
+	})
 }
 
 func apiExposureModeFromProto(op *proto.CatalogOperation) (*catalog.APIExposureMode, error) {
@@ -185,20 +184,19 @@ func legacyOutputSchemaFromResponse(resp *proto.OperationResponseSpec) json.RawM
 }
 
 func responseSpecFromProto(resp *proto.OperationResponseSpec) *catalog.OperationResponseSpec {
-	if resp == nil {
-		return nil
-	}
-	out := &catalog.OperationResponseSpec{}
-	if u := resp.GetUnary(); u != nil {
-		out.Unary = &catalog.UnaryResponseSpec{Schema: structToJSONRaw(u.GetSchema())}
-	}
-	if s := resp.GetStream(); s != nil {
-		out.Stream = &catalog.StreamResponseSpec{
-			MediaType:  s.GetMediaType(),
-			ItemSchema: structToJSONRaw(s.GetItemSchema()),
+	return protoutil.ConvertMessage(resp, func(resp *proto.OperationResponseSpec) *catalog.OperationResponseSpec {
+		out := &catalog.OperationResponseSpec{}
+		if u := resp.GetUnary(); u != nil {
+			out.Unary = &catalog.UnaryResponseSpec{Schema: structToJSONRaw(u.GetSchema())}
 		}
-	}
-	return out
+		if s := resp.GetStream(); s != nil {
+			out.Stream = &catalog.StreamResponseSpec{
+				MediaType:  s.GetMediaType(),
+				ItemSchema: structToJSONRaw(s.GetItemSchema()),
+			}
+		}
+		return out
+	})
 }
 
 func responseSpecToProto(spec *catalog.OperationResponseSpec, legacyOutputSchema json.RawMessage) *proto.OperationResponseSpec {

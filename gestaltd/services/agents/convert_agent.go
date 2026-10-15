@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
@@ -202,20 +203,19 @@ func agentTurnOutputFromProto(turn *proto.AgentTurn) coreagent.TurnOutput {
 }
 
 func agentTurnEventFromProto(event *proto.AgentTurnEvent) *coreagent.TurnEvent {
-	if event == nil {
-		return nil
-	}
-	return &coreagent.TurnEvent{
-		ID:         event.GetId(),
-		TurnID:     event.GetTurnId(),
-		Seq:        event.GetSeq(),
-		Type:       event.GetType(),
-		Source:     event.GetSource(),
-		Visibility: event.GetVisibility(),
-		Data:       mapFromStruct(event.GetData()),
-		CreatedAt:  timeFromProto(event.GetCreatedAt()),
-		Display:    agentTurnDisplayFromProto(event.GetDisplay()),
-	}
+	return protoutil.ConvertMessage(event, func(event *proto.AgentTurnEvent) *coreagent.TurnEvent {
+		return &coreagent.TurnEvent{
+			ID:         event.GetId(),
+			TurnID:     event.GetTurnId(),
+			Seq:        event.GetSeq(),
+			Type:       event.GetType(),
+			Source:     event.GetSource(),
+			Visibility: event.GetVisibility(),
+			Data:       mapFromStruct(event.GetData()),
+			CreatedAt:  timeFromProto(event.GetCreatedAt()),
+			Display:    agentTurnDisplayFromProto(event.GetDisplay()),
+		}
+	})
 }
 
 func agentTurnEventsFromProto(events []*proto.AgentTurnEvent) []*coreagent.TurnEvent {
@@ -230,23 +230,22 @@ func agentTurnEventsFromProto(events []*proto.AgentTurnEvent) []*coreagent.TurnE
 }
 
 func agentTurnDisplayFromProto(display *proto.AgentTurnDisplay) *coreagent.TurnDisplay {
-	if display == nil {
-		return nil
-	}
-	return &coreagent.TurnDisplay{
-		Kind:      display.GetKind(),
-		Phase:     display.GetPhase(),
-		Text:      display.GetText(),
-		Label:     display.GetLabel(),
-		Ref:       display.GetRef(),
-		ParentRef: display.GetParentRef(),
-		Input:     protoValueToAny(display.GetInput()),
-		Output:    protoValueToAny(display.GetOutput()),
-		Error:     protoValueToAny(display.GetError()),
-		Action:    display.GetAction(),
-		Format:    display.GetFormat(),
-		Language:  display.GetLanguage(),
-	}
+	return protoutil.ConvertMessage(display, func(display *proto.AgentTurnDisplay) *coreagent.TurnDisplay {
+		return &coreagent.TurnDisplay{
+			Kind:      display.GetKind(),
+			Phase:     display.GetPhase(),
+			Text:      display.GetText(),
+			Label:     display.GetLabel(),
+			Ref:       display.GetRef(),
+			ParentRef: display.GetParentRef(),
+			Input:     protoValueToAny(display.GetInput()),
+			Output:    protoValueToAny(display.GetOutput()),
+			Error:     protoValueToAny(display.GetError()),
+			Action:    display.GetAction(),
+			Format:    display.GetFormat(),
+			Language:  display.GetLanguage(),
+		}
+	})
 }
 
 func agentTurnDisplayToProto(display *coreagent.TurnDisplay) (*proto.AgentTurnDisplay, error) {
@@ -366,21 +365,20 @@ func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
 }
 
 func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) *coreagent.ProviderCapabilities {
-	if value == nil {
-		return nil
-	}
-	return &coreagent.ProviderCapabilities{
-		StreamingText:             value.GetStreamingText(),
-		ToolCalls:                 value.GetToolCalls(),
-		ParallelToolCalls:         value.GetParallelToolCalls(),
-		Interactions:              value.GetInteractions(),
-		ResumableTurns:            value.GetResumableTurns(),
-		ReasoningSummaries:        value.GetReasoningSummaries(),
-		SupportsSessionStart:      value.GetSupportsSessionStart(),
-		SupportsPreparedWorkspace: value.GetSupportsPreparedWorkspace(),
-		BoundedListHydration:      value.GetBoundedListHydration(),
-		SupportedToolSources:      agentToolSourceModesFromProto(value.GetSupportedToolSources()),
-	}
+	return protoutil.ConvertMessage(value, func(value *proto.AgentProviderCapabilities) *coreagent.ProviderCapabilities {
+		return &coreagent.ProviderCapabilities{
+			StreamingText:             value.GetStreamingText(),
+			ToolCalls:                 value.GetToolCalls(),
+			ParallelToolCalls:         value.GetParallelToolCalls(),
+			Interactions:              value.GetInteractions(),
+			ResumableTurns:            value.GetResumableTurns(),
+			ReasoningSummaries:        value.GetReasoningSummaries(),
+			SupportsSessionStart:      value.GetSupportsSessionStart(),
+			SupportsPreparedWorkspace: value.GetSupportsPreparedWorkspace(),
+			BoundedListHydration:      value.GetBoundedListHydration(),
+			SupportedToolSources:      agentToolSourceModesFromProto(value.GetSupportedToolSources()),
+		}
+	})
 }
 
 func agentInteractionTypeFromProto(value proto.AgentInteractionType) (coreagent.InteractionType, error) {
