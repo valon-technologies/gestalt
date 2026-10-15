@@ -19,7 +19,7 @@ func releaseRequiresBuildForKind(manifest *providermanifestv1.Manifest, kind str
 	if manifest == nil {
 		return false
 	}
-	if kind == providermanifestv1.KindApp && manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
+	if kind == providermanifestv1.KindApp && manifest.Spec.IsManifestBacked() {
 		return false
 	}
 	if SourceBuildProducesOutput(manifest) {

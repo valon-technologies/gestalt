@@ -579,7 +579,7 @@ func (s *Spec) IsSpecLoaded() bool {
 }
 
 func (s *Spec) IsManifestBacked() bool {
-	return s != nil && (s.IsDeclarative() || s.IsSpecLoaded())
+	return s.IsDeclarative() || s.IsSpecLoaded()
 }
 
 func (s *Spec) OpenAPIDocument() string {
@@ -671,11 +671,11 @@ func (s *Spec) DefaultConnectionDef() *ManifestConnectionDef {
 }
 
 func (m *Manifest) IsHybridProvider() bool {
-	return m != nil && m.Spec != nil && m.Spec.IsManifestBacked() && m.Entrypoint != nil
+	return m != nil && m.Spec.IsManifestBacked() && m.Entrypoint != nil
 }
 
 func (m *Manifest) IsDeclarativeOnlyProvider() bool {
-	return m != nil && m.Spec != nil && m.Spec.IsManifestBacked() && m.Entrypoint == nil
+	return m != nil && m.Spec.IsManifestBacked() && m.Entrypoint == nil
 }
 
 type ProviderSurfaces struct {

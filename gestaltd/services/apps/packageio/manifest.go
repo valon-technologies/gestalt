@@ -234,7 +234,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		} else if sourceMode && spec != nil && spec.AssetRoot != "" {
 			return fmt.Errorf("spec.assetRoot is only allowed in prepared app manifests")
 		}
-		if spec != nil && spec.IsDeclarative() {
+		if spec.IsDeclarative() {
 			if err := validateDeclarativeProvider(spec); err != nil {
 				return err
 			}
@@ -248,7 +248,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		case manifest.Build != nil && !manifest.Build.PrepareOnly && !sourceMode:
 			return fmt.Errorf("entrypoint is required when build is set")
 		case manifest.IsDeclarativeOnlyProvider():
-		case spec != nil && spec.IsSpecLoaded():
+		case spec.IsSpecLoaded():
 		case sourceMode:
 		default:
 			return fmt.Errorf("entrypoint is required")

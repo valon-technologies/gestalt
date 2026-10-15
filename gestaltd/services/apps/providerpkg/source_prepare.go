@@ -114,7 +114,7 @@ func ensureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 }
 
 func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *providermanifestv1.Manifest, catalogPath string, opts sourceCatalogOptions) error {
-	if manifest != nil && manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
+	if manifest != nil && manifest.Spec.IsManifestBacked() {
 		return nil
 	}
 	var resolved ResolvedSourceExecution

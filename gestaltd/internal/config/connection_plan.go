@@ -93,7 +93,7 @@ type ResolvedSpecSurface struct {
 func BuildStaticConnectionPlan(app *ProviderEntry, manifestApp *providermanifestv1.Spec) (StaticConnectionPlan, error) {
 	declaredNames := namedConnectionNames(app, manifestApp)
 	plan := StaticConnectionPlan{
-		manifestBacked:   manifestApp != nil && manifestApp.IsManifestBacked(),
+		manifestBacked:   manifestApp.IsManifestBacked(),
 		appConnection:    ResolveAppConnectionDef(app),
 		namedConnections: make(map[string]ResolvedConnectionDef),
 		surfaces:         make(map[SpecSurface]ResolvedSpecSurface),

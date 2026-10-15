@@ -283,7 +283,7 @@ func executablePathForManifest(root string, manifest *providermanifestv1.Manifes
 	}
 	entry := packageio.EntrypointForKind(manifest, kind)
 	if entry == nil {
-		if manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
+		if manifest.Spec.IsManifestBacked() {
 			return "", nil
 		}
 		return "", fmt.Errorf("manifest does not define an executable entrypoint")
