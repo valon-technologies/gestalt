@@ -611,18 +611,14 @@ func (r *Result) Close(ctx context.Context) error {
 	}
 	// App and registry startup may still be using runtime dependencies.
 	r.startupOperations.Wait()
-	if r.startup != nil {
-		r.startup.waitReady()
-	}
+	r.startup.waitReady()
 	if r.deferred != nil {
 		r.deferred.waitReady()
 	} else if r.ProvidersReady != nil {
 		<-r.ProvidersReady
 	}
-	if r.DevSupervisor != nil {
-		r.DevSupervisor.Stop()
-		r.DevSupervisor = nil
-	}
+	r.DevSupervisor.Stop()
+	r.DevSupervisor = nil
 	var errs []error
 	authCloseErr := closeAuth(r.Auth)
 	if len(r.AuthProviders) != 0 {

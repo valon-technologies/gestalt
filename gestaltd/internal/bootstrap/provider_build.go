@@ -424,9 +424,7 @@ func (b *preparedProviderBuilds) Start(
 				if b.onInstalled != nil && pending.sha != "" {
 					b.onInstalled(pending.name, pending.sha)
 				}
-				if deps.AppWorkflowDeclarations != nil {
-					deps.AppWorkflowDeclarations.Set(pending.name, pending.entry, result.WorkflowDeclarations)
-				}
+				deps.AppWorkflowDeclarations.Set(pending.name, pending.entry, result.WorkflowDeclarations)
 				slog.Debug("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
 			}(pending)
 		}
