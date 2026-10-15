@@ -2235,33 +2235,24 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 		if src.Type != "" && dst.Type != "" && src.Type != dst.Type {
 			*dst = ConnectionAuthDef{}
 		}
-		setString := func(dst *string, src string) {
-			if src != "" {
-				*dst = src
-			}
-		}
-		if src.Type != "" {
-			dst.Type = src.Type
-		}
-		setString(&dst.Token, src.Token)
-		setString(&dst.GrantType, src.GrantType)
-		setString(&dst.RefreshToken, src.RefreshToken)
-		setString(&dst.AuthorizationURL, src.AuthorizationURL)
-		setString(&dst.TokenURL, src.TokenURL)
-		setString(&dst.ClientID, src.ClientID)
-		setString(&dst.ClientSecret, src.ClientSecret)
-		setString(&dst.RedirectURL, src.RedirectURL)
-		setString(&dst.ClientAuth, src.ClientAuth)
-		setString(&dst.TokenExchange, src.TokenExchange)
-		setString(&dst.TokenPrefix, src.TokenPrefix)
+		dst.Type = cmp.Or(src.Type, dst.Type)
+		dst.Token = cmp.Or(src.Token, dst.Token)
+		dst.GrantType = cmp.Or(src.GrantType, dst.GrantType)
+		dst.RefreshToken = cmp.Or(src.RefreshToken, dst.RefreshToken)
+		dst.AuthorizationURL = cmp.Or(src.AuthorizationURL, dst.AuthorizationURL)
+		dst.TokenURL = cmp.Or(src.TokenURL, dst.TokenURL)
+		dst.ClientID = cmp.Or(src.ClientID, dst.ClientID)
+		dst.ClientSecret = cmp.Or(src.ClientSecret, dst.ClientSecret)
+		dst.RedirectURL = cmp.Or(src.RedirectURL, dst.RedirectURL)
+		dst.ClientAuth = cmp.Or(src.ClientAuth, dst.ClientAuth)
+		dst.TokenExchange = cmp.Or(src.TokenExchange, dst.TokenExchange)
+		dst.TokenPrefix = cmp.Or(src.TokenPrefix, dst.TokenPrefix)
 		if src.Scopes != nil {
 			dst.Scopes = src.Scopes
 		}
-		setString(&dst.ScopeParam, src.ScopeParam)
-		setString(&dst.ScopeSeparator, src.ScopeSeparator)
-		if src.PKCE {
-			dst.PKCE = true
-		}
+		dst.ScopeParam = cmp.Or(src.ScopeParam, dst.ScopeParam)
+		dst.ScopeSeparator = cmp.Or(src.ScopeSeparator, dst.ScopeSeparator)
+		dst.PKCE = cmp.Or(src.PKCE, dst.PKCE)
 		if src.AuthorizationParams != nil {
 			dst.AuthorizationParams = src.AuthorizationParams
 		}
@@ -2271,8 +2262,8 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 		if src.RefreshParams != nil {
 			dst.RefreshParams = src.RefreshParams
 		}
-		setString(&dst.AcceptHeader, src.AcceptHeader)
-		setString(&dst.AccessTokenPath, src.AccessTokenPath)
+		dst.AcceptHeader = cmp.Or(src.AcceptHeader, dst.AcceptHeader)
+		dst.AccessTokenPath = cmp.Or(src.AccessTokenPath, dst.AccessTokenPath)
 		if src.TokenMetadata != nil {
 			dst.TokenMetadata = src.TokenMetadata
 		}
@@ -2323,33 +2314,19 @@ func mergeCredentialField(dst *CredentialFieldDef, src CredentialFieldDef) {
 	if dst == nil {
 		return
 	}
-	if dst.Name == "" {
-		dst.Name = src.Name
-	}
-	if src.Label != "" {
-		dst.Label = src.Label
-	}
-	if src.Description != "" {
-		dst.Description = src.Description
-	}
+	dst.Name = cmp.Or(dst.Name, src.Name)
+	dst.Label = cmp.Or(src.Label, dst.Label)
+	dst.Description = cmp.Or(src.Description, dst.Description)
 }
 
 func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if dst == nil || src == nil {
 		return
 	}
-	if src.Ref != "" {
-		dst.Ref = src.Ref
-	}
-	if src.DisplayName != "" {
-		dst.DisplayName = src.DisplayName
-	}
-	if src.Mode != "" {
-		dst.Mode = src.Mode
-	}
-	if src.Exposure != "" {
-		dst.Exposure = src.Exposure
-	}
+	dst.Ref = cmp.Or(src.Ref, dst.Ref)
+	dst.DisplayName = cmp.Or(src.DisplayName, dst.DisplayName)
+	dst.Mode = cmp.Or(src.Mode, dst.Mode)
+	dst.Exposure = cmp.Or(src.Exposure, dst.Exposure)
 	MergeConnectionAuth(&dst.Auth, src.Auth)
 	if len(src.ConnectionParams) > 0 {
 		dst.ConnectionParams = maps.Clone(src.ConnectionParams)
@@ -2360,12 +2337,8 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if src.Discovery != nil {
 		dst.Discovery = src.Discovery
 	}
-	if src.ConnectionID != "" {
-		dst.ConnectionID = src.ConnectionID
-	}
-	if src.BindingResolved {
-		dst.BindingResolved = true
-	}
+	dst.ConnectionID = cmp.Or(src.ConnectionID, dst.ConnectionID)
+	dst.BindingResolved = cmp.Or(src.BindingResolved, dst.BindingResolved)
 }
 
 func ManifestAuthToConnectionAuthDef(auth *providermanifestv1.ProviderAuth) ConnectionAuthDef {
