@@ -261,7 +261,7 @@ func retentionVersion(index *RetentionIndex, version string) (RetentionVersion, 
 // DeployedVersionsFromRetention returns versions marked everDeployed in retention.json.
 func DeployedVersionsFromRetention(index *RetentionIndex) map[string]struct{} {
 	out := map[string]struct{}{}
-	if index == nil || len(index.Versions) == 0 {
+	if index == nil {
 		return out
 	}
 	for version, entry := range index.Versions {
