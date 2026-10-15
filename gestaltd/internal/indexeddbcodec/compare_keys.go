@@ -2,9 +2,10 @@ package indexeddbcodec
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
-	"math"
 	"math/big"
+	"slices"
 	"time"
 	"unicode/utf16"
 
@@ -31,10 +32,7 @@ func CompareKeys(a, b any) int {
 		return compareFallback(a, b)
 	}
 	if ka != kb {
-		if ka < kb {
-			return -1
-		}
-		return 1
+		return cmp.Compare(ka, kb)
 	}
 	switch ka {
 	case keyKindNumber:
@@ -129,67 +127,25 @@ func keyKindOf(v any) (keyKind, bool) {
 	case bool:
 		return keyKindNumber, true
 	}
-	if _, ok := numberRat(v); ok {
-		return keyKindNumber, true
-	}
-	return 0, false
+	_, ok := numberRat(v)
+	return keyKindNumber, ok
 }
 
 func keyArrayParts(v any) []any {
-	if parts, ok := KeyValueArrayParts(v); ok {
-		return parts
-	}
-	return nil
+	parts, _ := KeyValueArrayParts(v)
+	return parts
 }
 
 func compareArrayKeys(a, b []any) int {
-	for i := range a {
-		if i >= len(b) {
-			return 1
-		}
-		if cmp := CompareKeys(a[i], b[i]); cmp != 0 {
-			return cmp
-		}
-	}
-	if len(a) < len(b) {
-		return -1
-	}
-	return 0
+	return slices.CompareFunc(a, b, CompareKeys)
 }
 
 func compareDates(a, b time.Time) int {
-	av := a.UnixNano()
-	bv := b.UnixNano()
-	switch {
-	case av < bv:
-		return -1
-	case av > bv:
-		return 1
-	default:
-		return 0
-	}
+	return cmp.Compare(a.UnixNano(), b.UnixNano())
 }
 
 func compareUTF16Strings(a, b string) int {
-	au := utf16.Encode([]rune(a))
-	bu := utf16.Encode([]rune(b))
-	limit := min(len(au), len(bu))
-	for i := 0; i < limit; i++ {
-		if au[i] < bu[i] {
-			return -1
-		}
-		if au[i] > bu[i] {
-			return 1
-		}
-	}
-	switch {
-	case len(au) < len(bu):
-		return -1
-	case len(au) > len(bu):
-		return 1
-	default:
-		return 0
-	}
+	return slices.Compare(utf16.Encode([]rune(a)), utf16.Encode([]rune(b)))
 }
 
 func compareNumbers(a, b any) int {
@@ -238,29 +194,10 @@ func numberRat(v any) (*big.Rat, bool) {
 }
 
 func floatRat(v float64) (*big.Rat, bool) {
-	if math.IsNaN(v) {
-		return nil, false
-	}
 	r := new(big.Rat).SetFloat64(v)
-	if r == nil {
-		return nil, false
-	}
-	return r, true
+	return r, r != nil
 }
 
 func compareFallback(a, b any) int {
-	as := fmtString(a)
-	bs := fmtString(b)
-	switch {
-	case as < bs:
-		return -1
-	case as > bs:
-		return 1
-	default:
-		return 0
-	}
-}
-
-func fmtString(v any) string {
-	return fmt.Sprint(v)
+	return cmp.Compare(fmt.Sprint(a), fmt.Sprint(b))
 }
