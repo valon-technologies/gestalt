@@ -435,10 +435,7 @@ func (s *ManagedSecretService) Put(ctx context.Context, input PutSecretInput) (*
 		return nil, nil, fmt.Errorf("managed secret write: current pointer: %w", err)
 	}
 
-	auditID, err := NewSecretAuditID()
-	if err != nil {
-		return nil, nil, err
-	}
+	auditID, _ := NewSecretAuditID()
 	logRow := &ManagedSecretAuditLog{
 		ID:         auditID,
 		Name:       input.Name,
@@ -522,10 +519,7 @@ func (s *ManagedSecretService) Retire(ctx context.Context, name, actor, reason s
 		return nil, fmt.Errorf("retire managed secret: write: %w", err)
 	}
 
-	auditID, err := NewSecretAuditID()
-	if err != nil {
-		return nil, err
-	}
+	auditID, _ := NewSecretAuditID()
 	logRow := &ManagedSecretAuditLog{
 		ID:        auditID,
 		Name:      name,

@@ -2094,10 +2094,7 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 	if err != nil {
 		return nil, err
 	}
-	tokenManager, err := egressproxy.NewTokenManager(deps.EncryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("init egress proxy tokens: %w", err)
-	}
+	tokenManager, _ := egressproxy.NewTokenManager(deps.EncryptionKey)
 	token, err := tokenManager.MintToken(egressproxy.TokenRequest{
 		AppName:       providerName,
 		SessionID:     sessionID,

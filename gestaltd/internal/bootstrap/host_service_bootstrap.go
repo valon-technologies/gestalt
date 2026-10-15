@@ -33,10 +33,7 @@ func configuredHostServiceRelayTokenManager(deps Deps) (*runtimehost.HostService
 	if len(deps.EncryptionKey) == 0 {
 		return nil, fmt.Errorf("server.encryptionKey is required for host-service capabilities")
 	}
-	manager, err := runtimehost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
-	if err != nil {
-		return nil, err
-	}
+	manager, _ := runtimehost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
 	manager.SetCapabilityIngressDecorator(hostserviceingress.ApplyCapability)
 	return manager, nil
 }
@@ -312,10 +309,7 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, de
 	if err != nil {
 		return "", nil, "", false, err
 	}
-	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
-	if err != nil {
-		return "", nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
-	}
+	tokenManager, _ := runtimehost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		AppName:   providerName,
 		SessionID: sessionID,
