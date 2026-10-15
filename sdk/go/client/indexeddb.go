@@ -1136,10 +1136,7 @@ func (c *IndexedDB) IndexDeleteRaw(ctx context.Context, request *IndexQueryReque
 // Cursor iteration (bidirectional stream)
 func (c *IndexedDB) OpenCursor(ctx context.Context) (*IndexedDBOpenCursorStream, error) {
 	stream, err := c.client.OpenCursor(ctx)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return &IndexedDBOpenCursorStream{stream: stream}, nil
+	return streamOrError(&IndexedDBOpenCursorStream{stream: stream}, err)
 }
 
 // Transaction calls the Transaction RPC of IndexedDB.
@@ -1148,10 +1145,7 @@ func (c *IndexedDB) OpenCursor(ctx context.Context) (*IndexedDBOpenCursorStream,
 // BeginTransactionRequest. Stream close before commit aborts the transaction.
 func (c *IndexedDB) Transaction(ctx context.Context) (*IndexedDBTransactionStream, error) {
 	stream, err := c.client.Transaction(ctx)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return &IndexedDBTransactionStream{stream: stream}, nil
+	return streamOrError(&IndexedDBTransactionStream{stream: stream}, err)
 }
 
 // Cursor iteration (bidirectional stream)
@@ -1172,10 +1166,7 @@ func (s *IndexedDBOpenCursorStream) Send(request *CursorClientMessage) error {
 // stream; every other error is a *GestaltError.
 func (s *IndexedDBOpenCursorStream) Recv() (*CursorResponse, error) {
 	frame, err := s.stream.Recv()
-	if err != nil {
-		return nil, streamError(err)
-	}
-	return FromWireCursorResponse(frame), nil
+	return decodeStreamFrame(frame, err, FromWireCursorResponse)
 }
 
 // CloseSend closes the send side of the stream.
@@ -1202,10 +1193,7 @@ func (s *IndexedDBTransactionStream) Send(request *TransactionClientMessage) err
 // stream; every other error is a *GestaltError.
 func (s *IndexedDBTransactionStream) Recv() (*TransactionServerMessage, error) {
 	frame, err := s.stream.Recv()
-	if err != nil {
-		return nil, streamError(err)
-	}
-	return FromWireTransactionServerMessage(frame), nil
+	return decodeStreamFrame(frame, err, FromWireTransactionServerMessage)
 }
 
 // CloseSend closes the send side of the stream.

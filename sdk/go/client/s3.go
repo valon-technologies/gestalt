@@ -333,10 +333,7 @@ func (c *S3) ReadObject(ctx context.Context, request *ReadObjectRequest) (*S3Obj
 // carry byte chunks. Zero-byte objects therefore emit exactly one frame.
 func (c *S3) ReadObjectRaw(ctx context.Context, request *ReadObjectRequest) (*S3ReadObjectStream, error) {
 	stream, err := c.client.ReadObject(ctx, ToWireReadObjectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return &S3ReadObjectStream{stream: stream}, nil
+	return streamOrError(&S3ReadObjectStream{stream: stream}, err)
 }
 
 // WriteObject is the ergonomic form of [S3.WriteObjectRaw]: it sends the open
@@ -367,10 +364,7 @@ func (c *S3) WriteObject(ctx context.Context, open *WriteObjectOpen) (*S3WriteOb
 // object has been durably committed by the provider.
 func (c *S3) WriteObjectRaw(ctx context.Context) (*S3WriteObjectStream, error) {
 	stream, err := c.client.WriteObject(ctx)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return &S3WriteObjectStream{stream: stream}, nil
+	return streamOrError(&S3WriteObjectStream{stream: stream}, err)
 }
 
 // DeleteObject is the ergonomic form of [S3.DeleteObjectRaw].
@@ -444,10 +438,7 @@ type S3ReadObjectStream struct {
 // stream; every other error is a *GestaltError.
 func (s *S3ReadObjectStream) Recv() (*ReadObjectChunk, error) {
 	frame, err := s.stream.Recv()
-	if err != nil {
-		return nil, streamError(err)
-	}
-	return FromWireReadObjectChunk(frame), nil
+	return decodeStreamFrame(frame, err, FromWireReadObjectChunk)
 }
 
 // S3ReadObjectDataStream is the stream of data payloads returned by
@@ -506,10 +497,7 @@ func (s *S3WriteObjectStream) Send(request *WriteObjectRequest) error {
 // CloseAndRecv closes the send side and receives the response.
 func (s *S3WriteObjectStream) CloseAndRecv() (*WriteObjectResponse, error) {
 	response, err := s.stream.CloseAndRecv()
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWriteObjectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireWriteObjectResponse)
 }
 
 // S3WriteObjectDataStream is the stream of data payloads accepted by
