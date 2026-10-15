@@ -96,7 +96,7 @@ func TypedValueFromAny(v any) (*proto.TypedValue, error) {
 }
 
 func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
-	if v == nil || v.GetKind() == nil {
+	if v.GetKind() == nil {
 		return nil, nil
 	}
 

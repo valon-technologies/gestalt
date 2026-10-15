@@ -177,7 +177,7 @@ func isAuthorizationServiceMethod(fullMethod string) bool {
 }
 
 func recordAppScopedRelationshipAuthFailure(ctx context.Context, subjectID string, tuple *proto.RelationshipTuple, fullMethod string, err error) {
-	if tuple == nil || strings.TrimSpace(tuple.GetResource().GetType()) != appAuthorizationResourceType {
+	if strings.TrimSpace(tuple.GetResource().GetType()) != appAuthorizationResourceType {
 		return
 	}
 	appID := strings.TrimSpace(tuple.GetResource().GetId())

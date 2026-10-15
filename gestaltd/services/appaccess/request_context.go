@@ -145,7 +145,7 @@ func MergeRequestContext(existing, fallback *proto.RequestContext) *proto.Reques
 	if merged.GetSubject().GetId() == "" && fallback.GetSubject() != nil {
 		merged.Subject = fallback.GetSubject()
 	}
-	if caller := merged.GetCaller(); caller == nil || strings.TrimSpace(caller.GetKind()) == "" || strings.TrimSpace(caller.GetName()) == "" {
+	if caller := merged.GetCaller(); strings.TrimSpace(caller.GetKind()) == "" || strings.TrimSpace(caller.GetName()) == "" {
 		if fallback.GetCaller() != nil {
 			merged.Caller = fallback.GetCaller()
 		}

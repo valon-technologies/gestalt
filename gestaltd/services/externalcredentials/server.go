@@ -31,7 +31,7 @@ func (s *externalCredentialProviderServer) GetCapabilities(context.Context, *emp
 }
 
 func (s *externalCredentialProviderServer) CreateCredential(ctx context.Context, req *proto.CreateExternalCredentialRequest) (*proto.ExternalCredential, error) {
-	if req == nil || req.GetCredential() == nil {
+	if req.GetCredential() == nil {
 		return nil, status.Error(codes.InvalidArgument, "credential is required")
 	}
 	credential := externalCredentialFromProto(req.GetCredential())
@@ -42,7 +42,7 @@ func (s *externalCredentialProviderServer) CreateCredential(ctx context.Context,
 }
 
 func (s *externalCredentialProviderServer) UpsertCredential(ctx context.Context, req *proto.UpsertExternalCredentialRequest) (*proto.ExternalCredential, error) {
-	if req == nil || req.GetCredential() == nil {
+	if req.GetCredential() == nil {
 		return nil, status.Error(codes.InvalidArgument, "credential is required")
 	}
 	credential := externalCredentialFromProto(req.GetCredential())
@@ -67,7 +67,7 @@ func (s *externalCredentialProviderServer) UpsertCredential(ctx context.Context,
 }
 
 func (s *externalCredentialProviderServer) GetCredential(ctx context.Context, req *proto.GetExternalCredentialRequest) (*proto.ExternalCredential, error) {
-	if req == nil || strings.TrimSpace(req.GetSubject()) == "" {
+	if strings.TrimSpace(req.GetSubject()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "subject is required")
 	}
 	credential, err := s.provider.GetCredential(ctx, req.GetSubject(), req.GetAudience(), req.GetQualifier())
@@ -102,7 +102,7 @@ func (s *externalCredentialProviderServer) ListCredentials(ctx context.Context, 
 }
 
 func (s *externalCredentialProviderServer) DeleteCredential(ctx context.Context, req *proto.DeleteExternalCredentialRequest) (*emptypb.Empty, error) {
-	if req == nil || strings.TrimSpace(req.GetId()) == "" {
+	if strings.TrimSpace(req.GetId()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "credential id is required")
 	}
 	if _, ok := publicrpc.PublicOriginFromContext(ctx); ok {

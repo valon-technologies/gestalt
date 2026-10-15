@@ -1836,7 +1836,7 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 }
 
 func (m *Manager) agentSessionTools(ctx context.Context, p *principal.Principal, providerName string, provider coreagent.Provider, config *proto.AgentToolConfig) (agentSessionTools, error) {
-	if config == nil || config.GetSource() == nil {
+	if config.GetSource() == nil {
 		return agentSessionTools{}, nil
 	}
 	switch source := config.GetSource().(type) {

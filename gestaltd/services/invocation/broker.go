@@ -1361,7 +1361,7 @@ func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrAuthorizationDenied, providerName, err)
 	}
-	if decision == nil || !decision.GetAllowed() {
+	if !decision.GetAllowed() {
 		return fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
 	}
 	return nil
