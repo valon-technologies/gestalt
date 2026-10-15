@@ -119,10 +119,7 @@ func NewProviderLifecycle(conn grpc.ClientConnInterface) *ProviderLifecycle {
 // GetProviderIdentity calls the GetProviderIdentity RPC of ProviderLifecycle.
 func (c *ProviderLifecycle) GetProviderIdentity(ctx context.Context) (*ProviderIdentity, error) {
 	response, err := c.client.GetProviderIdentity(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireProviderIdentity(response), nil
+	return decodeUnaryResponse(response, err, FromWireProviderIdentity)
 }
 
 // ConfigureProvider is the ergonomic form of [ProviderLifecycle.ConfigureProviderRaw].
@@ -139,19 +136,13 @@ func (c *ProviderLifecycle) ConfigureProvider(ctx context.Context, name string, 
 // ConfigureProviderRaw is the faithful form of [ProviderLifecycle.ConfigureProvider].
 func (c *ProviderLifecycle) ConfigureProviderRaw(ctx context.Context, request *ConfigureProviderRequest) (*ConfigureProviderResponse, error) {
 	response, err := c.client.ConfigureProvider(ctx, ToWireConfigureProviderRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireConfigureProviderResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireConfigureProviderResponse)
 }
 
 // HealthCheck calls the HealthCheck RPC of ProviderLifecycle.
 func (c *ProviderLifecycle) HealthCheck(ctx context.Context) (*HealthCheckResponse, error) {
 	response, err := c.client.HealthCheck(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireHealthCheckResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireHealthCheckResponse)
 }
 
 // StartProvider is the ergonomic form of [ProviderLifecycle.StartProviderRaw].
@@ -167,10 +158,7 @@ func (c *ProviderLifecycle) StartProvider(ctx context.Context) (int32, error) {
 // StartProviderRaw is the faithful form of [ProviderLifecycle.StartProvider].
 func (c *ProviderLifecycle) StartProviderRaw(ctx context.Context) (*StartRuntimeProviderResponse, error) {
 	response, err := c.client.StartProvider(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireStartRuntimeProviderResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireStartRuntimeProviderResponse)
 }
 
 // PromoteWorkers is the ergonomic form of [ProviderLifecycle.PromoteWorkersRaw].
@@ -186,8 +174,5 @@ func (c *ProviderLifecycle) PromoteWorkers(ctx context.Context) (int32, error) {
 // PromoteWorkersRaw is the faithful form of [ProviderLifecycle.PromoteWorkers].
 func (c *ProviderLifecycle) PromoteWorkersRaw(ctx context.Context) (*PromoteWorkersResponse, error) {
 	response, err := c.client.PromoteWorkers(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWirePromoteWorkersResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWirePromoteWorkersResponse)
 }

@@ -49,8 +49,5 @@ func (c *Test) HelloWorld(ctx context.Context, request *HelloWorldRequest) (stri
 // HelloWorldRaw is the faithful form of [Test.HelloWorld].
 func (c *Test) HelloWorldRaw(ctx context.Context, request *HelloWorldRequest) (*HelloWorldResponse, error) {
 	response, err := c.client.HelloWorld(ctx, ToWireHelloWorldRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireHelloWorldResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireHelloWorldResponse)
 }

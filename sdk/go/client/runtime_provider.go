@@ -149,57 +149,39 @@ func NewRuntime(conn grpc.ClientConnInterface) *Runtime {
 // GetSupport calls the GetSupport RPC of Runtime.
 func (c *Runtime) GetSupport(ctx context.Context) (*RuntimeSupport, error) {
 	response, err := c.client.GetSupport(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRuntimeSupport(response), nil
+	return decodeUnaryResponse(response, err, FromWireRuntimeSupport)
 }
 
 // StartSession is the ergonomic form of [Runtime.StartSessionRaw].
 func (c *Runtime) StartSession(ctx context.Context, appName string, template string, image string, imagePullAuth *RuntimeImagePullAuth) (*RuntimeSession, error) {
 	request := &StartRuntimeSessionRequest{AppName: appName, Template: template, Image: image, ImagePullAuth: imagePullAuth}
 	response, err := c.client.StartSession(ctx, ToWireStartRuntimeSessionRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRuntimeSession(response), nil
+	return decodeUnaryResponse(response, err, FromWireRuntimeSession)
 }
 
 // StartSessionRaw is the faithful form of [Runtime.StartSession].
 func (c *Runtime) StartSessionRaw(ctx context.Context, request *StartRuntimeSessionRequest) (*RuntimeSession, error) {
 	response, err := c.client.StartSession(ctx, ToWireStartRuntimeSessionRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRuntimeSession(response), nil
+	return decodeUnaryResponse(response, err, FromWireRuntimeSession)
 }
 
 // GetSession is the ergonomic form of [Runtime.GetSessionRaw].
 func (c *Runtime) GetSession(ctx context.Context, sessionId string) (*RuntimeSession, error) {
 	request := &GetRuntimeSessionRequest{SessionId: sessionId}
 	response, err := c.client.GetSession(ctx, ToWireGetRuntimeSessionRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRuntimeSession(response), nil
+	return decodeUnaryResponse(response, err, FromWireRuntimeSession)
 }
 
 // GetSessionRaw is the faithful form of [Runtime.GetSession].
 func (c *Runtime) GetSessionRaw(ctx context.Context, request *GetRuntimeSessionRequest) (*RuntimeSession, error) {
 	response, err := c.client.GetSession(ctx, ToWireGetRuntimeSessionRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRuntimeSession(response), nil
+	return decodeUnaryResponse(response, err, FromWireRuntimeSession)
 }
 
 // ListSessions calls the ListSessions RPC of Runtime.
 func (c *Runtime) ListSessions(ctx context.Context, request *ListRuntimeSessionsRequest) (*ListRuntimeSessionsResponse, error) {
 	response, err := c.client.ListSessions(ctx, ToWireListRuntimeSessionsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListRuntimeSessionsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListRuntimeSessionsResponse)
 }
 
 // StopSession is the ergonomic form of [Runtime.StopSessionRaw].
@@ -233,10 +215,7 @@ func (c *Runtime) PrepareWorkspace(ctx context.Context, sessionId string, agentS
 // PrepareWorkspaceRaw is the faithful form of [Runtime.PrepareWorkspace].
 func (c *Runtime) PrepareWorkspaceRaw(ctx context.Context, request *PrepareRuntimeWorkspaceRequest) (*PrepareRuntimeWorkspaceResponse, error) {
 	response, err := c.client.PrepareWorkspace(ctx, ToWirePrepareRuntimeWorkspaceRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWirePrepareRuntimeWorkspaceResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWirePrepareRuntimeWorkspaceResponse)
 }
 
 // RemoveWorkspace is the ergonomic form of [Runtime.RemoveWorkspaceRaw].
@@ -260,17 +239,11 @@ func (c *Runtime) RemoveWorkspaceRaw(ctx context.Context, request *RemoveRuntime
 func (c *Runtime) StartApp(ctx context.Context, sessionId string, appName string, command string, args []string, allowedHosts []string, defaultAction string, hostBinary string, workdir string) (*HostedApp, error) {
 	request := &StartHostedAppRequest{SessionId: sessionId, AppName: appName, Command: command, Args: args, AllowedHosts: allowedHosts, DefaultAction: defaultAction, HostBinary: hostBinary, Workdir: workdir}
 	response, err := c.client.StartApp(ctx, ToWireStartHostedAppRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireHostedApp(response), nil
+	return decodeUnaryResponse(response, err, FromWireHostedApp)
 }
 
 // StartAppRaw is the faithful form of [Runtime.StartApp].
 func (c *Runtime) StartAppRaw(ctx context.Context, request *StartHostedAppRequest) (*HostedApp, error) {
 	response, err := c.client.StartApp(ctx, ToWireStartHostedAppRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireHostedApp(response), nil
+	return decodeUnaryResponse(response, err, FromWireHostedApp)
 }

@@ -50,8 +50,5 @@ func (c *Secrets) GetSecret(ctx context.Context, name string) (string, error) {
 // GetSecretRaw is the faithful form of [Secrets.GetSecret].
 func (c *Secrets) GetSecretRaw(ctx context.Context, request *GetSecretRequest) (*GetSecretResponse, error) {
 	response, err := c.client.GetSecret(ctx, ToWireGetSecretRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireGetSecretResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireGetSecretResponse)
 }

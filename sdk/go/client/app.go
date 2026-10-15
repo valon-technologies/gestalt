@@ -551,10 +551,7 @@ func (c *App) InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*Operat
 		request = &shallow
 	}
 	response, err := c.client.Invoke(ctx, ToWireAppInvokeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireOperationResult(response), nil
+	return decodeUnaryResponse(response, err, FromWireOperationResult)
 }
 
 // AppInvokeStreamOptions carries the optional parameters of [App.InvokeStream].
@@ -635,10 +632,7 @@ func (c *App) InvokeGraphQL(ctx context.Context, app string, document string, op
 	}
 	request := &AppInvokeGraphQLRequest{App: app, Document: document, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, Variables: opts.Variables, Headers: opts.Headers, Context: c.context}
 	response, err := c.client.InvokeGraphQL(ctx, ToWireAppInvokeGraphQLRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireOperationResult(response), nil
+	return decodeUnaryResponse(response, err, FromWireOperationResult)
 }
 
 // InvokeGraphQLRaw is the faithful form of [App.InvokeGraphQL].
@@ -649,10 +643,7 @@ func (c *App) InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLReq
 		request = &shallow
 	}
 	response, err := c.client.InvokeGraphQL(ctx, ToWireAppInvokeGraphQLRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireOperationResult(response), nil
+	return decodeUnaryResponse(response, err, FromWireOperationResult)
 }
 
 // InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
@@ -698,39 +689,27 @@ func NewAppProvider(conn grpc.ClientConnInterface, opts ...ClientOption) *AppPro
 // GetMetadata calls the GetMetadata RPC of AppProvider.
 func (c *AppProvider) GetMetadata(ctx context.Context) (*ProviderMetadata, error) {
 	response, err := c.client.GetMetadata(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireProviderMetadata(response), nil
+	return decodeUnaryResponse(response, err, FromWireProviderMetadata)
 }
 
 // StartProvider is the ergonomic form of [AppProvider.StartProviderRaw].
 func (c *AppProvider) StartProvider(ctx context.Context, name string, protocolVersion int32, config map[string]any) (*StartProviderResponse, error) {
 	request := &StartProviderRequest{Name: name, ProtocolVersion: protocolVersion, Config: config}
 	response, err := c.client.StartProvider(ctx, ToWireStartProviderRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireStartProviderResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireStartProviderResponse)
 }
 
 // StartProviderRaw is the faithful form of [AppProvider.StartProvider].
 func (c *AppProvider) StartProviderRaw(ctx context.Context, request *StartProviderRequest) (*StartProviderResponse, error) {
 	response, err := c.client.StartProvider(ctx, ToWireStartProviderRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireStartProviderResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireStartProviderResponse)
 }
 
 // Execute is the ergonomic form of [AppProvider.ExecuteRaw].
 func (c *AppProvider) Execute(ctx context.Context, operation string, token string, invocationId string, idempotencyKey string, params map[string]any) (*OperationResult, error) {
 	request := &ExecuteRequest{Operation: operation, Token: token, InvocationId: invocationId, IdempotencyKey: idempotencyKey, Params: params, Context: c.context}
 	response, err := c.client.Execute(ctx, ToWireExecuteRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireOperationResult(response), nil
+	return decodeUnaryResponse(response, err, FromWireOperationResult)
 }
 
 // ExecuteRaw is the faithful form of [AppProvider.Execute].
@@ -741,10 +720,7 @@ func (c *AppProvider) ExecuteRaw(ctx context.Context, request *ExecuteRequest) (
 		request = &shallow
 	}
 	response, err := c.client.Execute(ctx, ToWireExecuteRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireOperationResult(response), nil
+	return decodeUnaryResponse(response, err, FromWireOperationResult)
 }
 
 // ExecuteStream is the ergonomic form of [AppProvider.ExecuteStreamRaw].
@@ -795,20 +771,14 @@ func (c *AppProvider) ResolveHTTPSubject(ctx context.Context, request *ResolveHT
 		request = &shallow
 	}
 	response, err := c.client.ResolveHTTPSubject(ctx, ToWireResolveHTTPSubjectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireResolveHTTPSubjectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireResolveHTTPSubjectResponse)
 }
 
 // GetSessionCatalog is the ergonomic form of [AppProvider.GetSessionCatalogRaw].
 func (c *AppProvider) GetSessionCatalog(ctx context.Context, token string, invocationId string) (*GetSessionCatalogResponse, error) {
 	request := &GetSessionCatalogRequest{Token: token, InvocationId: invocationId, Context: c.context}
 	response, err := c.client.GetSessionCatalog(ctx, ToWireGetSessionCatalogRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireGetSessionCatalogResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireGetSessionCatalogResponse)
 }
 
 // GetSessionCatalogRaw is the faithful form of [AppProvider.GetSessionCatalog].
@@ -819,10 +789,7 @@ func (c *AppProvider) GetSessionCatalogRaw(ctx context.Context, request *GetSess
 		request = &shallow
 	}
 	response, err := c.client.GetSessionCatalog(ctx, ToWireGetSessionCatalogRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireGetSessionCatalogResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireGetSessionCatalogResponse)
 }
 
 // ExecuteStream is the streaming counterpart of Execute. The first response

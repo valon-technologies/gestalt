@@ -396,76 +396,52 @@ func ConnectAuthorization(ctx context.Context, name string) (*Authorization, err
 func (c *Authorization) CheckAccess(ctx context.Context, action *Action, resource *Resource) (*CheckAccessResponse, error) {
 	request := &CheckAccessRequest{Action: action, Resource: resource}
 	response, err := c.client.CheckAccess(ctx, ToWireCheckAccessRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCheckAccessResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCheckAccessResponse)
 }
 
 // CheckAccessRaw is the faithful form of [Authorization.CheckAccess].
 func (c *Authorization) CheckAccessRaw(ctx context.Context, request *CheckAccessRequest) (*CheckAccessResponse, error) {
 	response, err := c.client.CheckAccess(ctx, ToWireCheckAccessRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCheckAccessResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCheckAccessResponse)
 }
 
 // CheckAccessMany is the ergonomic form of [Authorization.CheckAccessManyRaw].
 func (c *Authorization) CheckAccessMany(ctx context.Context, requests []*CheckAccessRequest) (*CheckAccessManyResponse, error) {
 	request := &CheckAccessManyRequest{Requests: requests}
 	response, err := c.client.CheckAccessMany(ctx, ToWireCheckAccessManyRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCheckAccessManyResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCheckAccessManyResponse)
 }
 
 // CheckAccessManyRaw is the faithful form of [Authorization.CheckAccessMany].
 func (c *Authorization) CheckAccessManyRaw(ctx context.Context, request *CheckAccessManyRequest) (*CheckAccessManyResponse, error) {
 	response, err := c.client.CheckAccessMany(ctx, ToWireCheckAccessManyRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCheckAccessManyResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCheckAccessManyResponse)
 }
 
 // ListRelationships is the ergonomic form of [Authorization.ListRelationshipsRaw].
 func (c *Authorization) ListRelationships(ctx context.Context, pageSize int32, pageToken string, filter *RelationshipFilter) (*ListRelationshipsResponse, error) {
 	request := &ListRelationshipsRequest{PageSize: pageSize, PageToken: pageToken, Filter: filter}
 	response, err := c.client.ListRelationships(ctx, ToWireListRelationshipsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListRelationshipsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListRelationshipsResponse)
 }
 
 // ListRelationshipsRaw is the faithful form of [Authorization.ListRelationships].
 func (c *Authorization) ListRelationshipsRaw(ctx context.Context, request *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
 	response, err := c.client.ListRelationships(ctx, ToWireListRelationshipsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListRelationshipsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListRelationshipsResponse)
 }
 
 // WriteRelationships is the ergonomic form of [Authorization.WriteRelationshipsRaw].
 func (c *Authorization) WriteRelationships(ctx context.Context, updates []*RelationshipUpdate, optionalPreconditions []*Precondition) (*WriteRelationshipsResponse, error) {
 	request := &WriteRelationshipsRequest{Updates: updates, OptionalPreconditions: optionalPreconditions}
 	response, err := c.client.WriteRelationships(ctx, ToWireWriteRelationshipsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWriteRelationshipsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireWriteRelationshipsResponse)
 }
 
 // WriteRelationshipsRaw is the faithful form of [Authorization.WriteRelationships].
 func (c *Authorization) WriteRelationshipsRaw(ctx context.Context, request *WriteRelationshipsRequest) (*WriteRelationshipsResponse, error) {
 	response, err := c.client.WriteRelationships(ctx, ToWireWriteRelationshipsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWriteRelationshipsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireWriteRelationshipsResponse)
 }
 
 // AddRelationship is the ergonomic form of [Authorization.AddRelationshipRaw].
@@ -482,29 +458,20 @@ func (c *Authorization) AddRelationship(ctx context.Context, relationship *Relat
 // AddRelationshipRaw is the faithful form of [Authorization.AddRelationship].
 func (c *Authorization) AddRelationshipRaw(ctx context.Context, request *AddRelationshipRequest) (*AddRelationshipResponse, error) {
 	response, err := c.client.AddRelationship(ctx, ToWireAddRelationshipRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireAddRelationshipResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireAddRelationshipResponse)
 }
 
 // DeleteRelationship is the ergonomic form of [Authorization.DeleteRelationshipRaw].
 func (c *Authorization) DeleteRelationship(ctx context.Context, relationshipTuple *RelationshipTuple) (*DeleteRelationshipResponse, error) {
 	request := &DeleteRelationshipRequest{RelationshipTuple: relationshipTuple}
 	response, err := c.client.DeleteRelationship(ctx, ToWireDeleteRelationshipRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireDeleteRelationshipResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireDeleteRelationshipResponse)
 }
 
 // DeleteRelationshipRaw is the faithful form of [Authorization.DeleteRelationship].
 func (c *Authorization) DeleteRelationshipRaw(ctx context.Context, request *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error) {
 	response, err := c.client.DeleteRelationship(ctx, ToWireDeleteRelationshipRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireDeleteRelationshipResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireDeleteRelationshipResponse)
 }
 
 // SetAuthorizationState is the ergonomic form of [Authorization.SetAuthorizationStateRaw].
@@ -521,10 +488,7 @@ func (c *Authorization) SetAuthorizationState(ctx context.Context, relationships
 // SetAuthorizationStateRaw is the faithful form of [Authorization.SetAuthorizationState].
 func (c *Authorization) SetAuthorizationStateRaw(ctx context.Context, request *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error) {
 	response, err := c.client.SetAuthorizationState(ctx, ToWireSetAuthorizationStateRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireSetAuthorizationStateResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireSetAuthorizationStateResponse)
 }
 
 // GetActiveModelRef is the ergonomic form of [Authorization.GetActiveModelRefRaw].
@@ -540,10 +504,7 @@ func (c *Authorization) GetActiveModelRef(ctx context.Context) (*AuthorizationMo
 // GetActiveModelRefRaw is the faithful form of [Authorization.GetActiveModelRef].
 func (c *Authorization) GetActiveModelRefRaw(ctx context.Context) (*GetActiveModelRefResponse, error) {
 	response, err := c.client.GetActiveModelRef(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireGetActiveModelRefResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireGetActiveModelRefResponse)
 }
 
 // SetActiveModel is the ergonomic form of [Authorization.SetActiveModelRaw].
@@ -560,27 +521,18 @@ func (c *Authorization) SetActiveModel(ctx context.Context, model *Authorization
 // SetActiveModelRaw is the faithful form of [Authorization.SetActiveModel].
 func (c *Authorization) SetActiveModelRaw(ctx context.Context, request *SetActiveModelRequest) (*SetActiveModelResponse, error) {
 	response, err := c.client.SetActiveModel(ctx, ToWireSetActiveModelRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireSetActiveModelResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireSetActiveModelResponse)
 }
 
 // ListActiveModelResourceTypes is the ergonomic form of [Authorization.ListActiveModelResourceTypesRaw].
 func (c *Authorization) ListActiveModelResourceTypes(ctx context.Context, pageSize int32, pageToken string, filter *AuthorizationModelResourceTypeFilter) (*ListActiveModelResourceTypesResponse, error) {
 	request := &ListActiveModelResourceTypesRequest{PageSize: pageSize, PageToken: pageToken, Filter: filter}
 	response, err := c.client.ListActiveModelResourceTypes(ctx, ToWireListActiveModelResourceTypesRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListActiveModelResourceTypesResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListActiveModelResourceTypesResponse)
 }
 
 // ListActiveModelResourceTypesRaw is the faithful form of [Authorization.ListActiveModelResourceTypes].
 func (c *Authorization) ListActiveModelResourceTypesRaw(ctx context.Context, request *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error) {
 	response, err := c.client.ListActiveModelResourceTypes(ctx, ToWireListActiveModelResourceTypesRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListActiveModelResourceTypesResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListActiveModelResourceTypesResponse)
 }

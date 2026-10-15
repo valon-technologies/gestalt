@@ -169,10 +169,7 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 // GetRaw is the faithful form of [Cache.Get].
 func (c *Cache) GetRaw(ctx context.Context, request *CacheGetRequest) (*CacheGetResponse, error) {
 	response, err := c.client.Get(ctx, ToWireCacheGetRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCacheGetResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCacheGetResponse)
 }
 
 // GetMany is the ergonomic form of [Cache.GetManyRaw].
@@ -195,10 +192,7 @@ func (c *Cache) GetMany(ctx context.Context, keys []string) (map[string][]byte, 
 // GetManyRaw is the faithful form of [Cache.GetMany].
 func (c *Cache) GetManyRaw(ctx context.Context, request *CacheGetManyRequest) (*CacheGetManyResponse, error) {
 	response, err := c.client.GetMany(ctx, ToWireCacheGetManyRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCacheGetManyResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCacheGetManyResponse)
 }
 
 // Set is the ergonomic form of [Cache.SetRaw].
@@ -249,10 +243,7 @@ func (c *Cache) Delete(ctx context.Context, key string) (bool, error) {
 // DeleteRaw is the faithful form of [Cache.Delete].
 func (c *Cache) DeleteRaw(ctx context.Context, request *CacheDeleteRequest) (*CacheDeleteResponse, error) {
 	response, err := c.client.Delete(ctx, ToWireCacheDeleteRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCacheDeleteResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCacheDeleteResponse)
 }
 
 // DeleteMany is the ergonomic form of [Cache.DeleteManyRaw].
@@ -269,10 +260,7 @@ func (c *Cache) DeleteMany(ctx context.Context, keys []string) (int64, error) {
 // DeleteManyRaw is the faithful form of [Cache.DeleteMany].
 func (c *Cache) DeleteManyRaw(ctx context.Context, request *CacheDeleteManyRequest) (*CacheDeleteManyResponse, error) {
 	response, err := c.client.DeleteMany(ctx, ToWireCacheDeleteManyRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCacheDeleteManyResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCacheDeleteManyResponse)
 }
 
 // Touch is the ergonomic form of [Cache.TouchRaw].
@@ -289,8 +277,5 @@ func (c *Cache) Touch(ctx context.Context, key string, ttl *time.Duration) (bool
 // TouchRaw is the faithful form of [Cache.Touch].
 func (c *Cache) TouchRaw(ctx context.Context, request *CacheTouchRequest) (*CacheTouchResponse, error) {
 	response, err := c.client.Touch(ctx, ToWireCacheTouchRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCacheTouchResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCacheTouchResponse)
 }
