@@ -208,10 +208,6 @@ func workflowErrorType(err error) string {
 // WorkflowGRPCCodeName returns the normalized gRPC status code name used by workflow telemetry.
 func WorkflowGRPCCodeName(code codes.Code) string {
 	switch code {
-	case codes.Canceled:
-		return "canceled"
-	case codes.Unknown:
-		return "unknown"
 	case codes.InvalidArgument:
 		return "invalid_argument"
 	case codes.DeadlineExceeded:
@@ -226,20 +222,10 @@ func WorkflowGRPCCodeName(code codes.Code) string {
 		return "resource_exhausted"
 	case codes.FailedPrecondition:
 		return "failed_precondition"
-	case codes.Aborted:
-		return "aborted"
 	case codes.OutOfRange:
 		return "out_of_range"
-	case codes.Unimplemented:
-		return "unimplemented"
-	case codes.Internal:
-		return "internal"
-	case codes.Unavailable:
-		return "unavailable"
 	case codes.DataLoss:
 		return "data_loss"
-	case codes.Unauthenticated:
-		return "unauthenticated"
 	default:
 		return strings.ToLower(code.String())
 	}
