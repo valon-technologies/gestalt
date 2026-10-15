@@ -1,6 +1,7 @@
 package metricutil
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"strings"
@@ -98,9 +99,7 @@ type IndexedDBMetricLabels struct {
 }
 
 func RecordDBClientOperation(ctx context.Context, startedAt time.Time, dims DBMetricDims) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	duration := dbClientMetricsCache.Load(ctx, meterName, func(meter metric.Meter) metric.Float64Histogram {
 		return NewFloat64Histogram(
 			meter,
@@ -198,9 +197,7 @@ func indexedDBErrorType(err error) string {
 }
 
 func recordCounterMetrics(ctx context.Context, metrics counterMetrics, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
 	metrics.duration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(attrs...))
 	if failed {

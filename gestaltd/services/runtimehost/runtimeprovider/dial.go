@@ -1,6 +1,7 @@
 package runtimeprovider
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -152,9 +153,7 @@ func dialHostedConn(ctx context.Context, target string, opts ...DialOption) (*gr
 }
 
 func waitForHostedGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	readyCtx, cancel := context.WithTimeout(ctx, hostedGRPCReadyTimeout)
 	defer cancel()
 	for {

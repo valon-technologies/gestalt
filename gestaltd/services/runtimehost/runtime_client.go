@@ -1,6 +1,7 @@
 package runtimehost
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -171,18 +172,14 @@ func validateRuntimeProtocol(meta *proto.ProviderIdentity) error {
 
 // ProviderCallContext returns a child context with the default provider RPC deadline.
 func ProviderCallContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
+	parent = cmp.Or(parent, context.Background())
 	return context.WithTimeout(parent, ProviderRPCTimeout)
 }
 
 // ProviderSessionCreateContext returns a child context for agent CreateSession RPCs.
 // It preserves caller deadlines when present and otherwise applies a bounded fallback.
 func ProviderSessionCreateContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
+	parent = cmp.Or(parent, context.Background())
 	if _, ok := parent.Deadline(); ok {
 		return context.WithCancel(parent)
 	}
@@ -190,16 +187,12 @@ func ProviderSessionCreateContext(parent context.Context) (context.Context, cont
 }
 
 func providerStartContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
+	parent = cmp.Or(parent, context.Background())
 	return context.WithTimeout(parent, providerStartTimeout)
 }
 
 func providerPromotionContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
+	parent = cmp.Or(parent, context.Background())
 	if _, ok := parent.Deadline(); ok {
 		return context.WithCancel(parent)
 	}
@@ -207,9 +200,7 @@ func providerPromotionContext(parent context.Context) (context.Context, context.
 }
 
 func providerConfigureContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
+	parent = cmp.Or(parent, context.Background())
 	if _, ok := parent.Deadline(); ok {
 		return context.WithCancel(parent)
 	}

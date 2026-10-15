@@ -1,6 +1,7 @@
 package appaccess
 
 import (
+	"cmp"
 	"context"
 	"strings"
 
@@ -276,9 +277,7 @@ func (c ProviderRequestContext) WithWorkflow(workflow *structpb.Struct) Provider
 }
 
 func (c ProviderRequestContext) Restore(ctx context.Context, connectionOverride string) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	ctx = invocation.WithEntry(ctx, invocation.EntryGRPC)
 	if c.principal != nil {
 		ctx = principal.WithPrincipal(ctx, principal.Canonicalized(c.principal))

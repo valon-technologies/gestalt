@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"cmp"
 	"context"
 	"time"
 
@@ -75,9 +76,7 @@ var (
 var genAIClientOperationDurationBuckets = []float64{0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92}
 
 func WithTracerProvider(ctx context.Context, provider trace.TracerProvider) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	if provider == nil {
 		return ctx
 	}
@@ -94,9 +93,7 @@ func TracerProviderFromContext(ctx context.Context) trace.TracerProvider {
 }
 
 func StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	return TracerProviderFromContext(ctx).Tracer(tracerName).Start(ctx, name,
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(attrs...),
@@ -133,9 +130,7 @@ func RecordAgentProviderOperation(ctx context.Context, startedAt time.Time, fail
 }
 
 func RecordAgentRuntimeInstances(ctx context.Context, ready, starting, draining int64, attrs ...attribute.KeyValue) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	metrics := agentRuntimeInstanceMetrics.Load(ctx, tracerName, func(meter metric.Meter) agentRuntimeInstanceMetricSet {
 		return agentRuntimeInstanceMetricSet{
 			ready: metricutil.NewInt64Gauge(
@@ -178,9 +173,7 @@ func RecordAgentToolResolve(ctx context.Context, startedAt time.Time, failed boo
 }
 
 func RecordGenAIClientOperationDuration(ctx context.Context, startedAt time.Time, attrs ...attribute.KeyValue) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	duration := genAIClientOperationDurationMetrics.Load(ctx, tracerName, func(meter metric.Meter) metric.Float64Histogram {
 		return metricutil.NewFloat64Histogram(
 			meter,
@@ -206,9 +199,7 @@ func RecordInvokeAuthorization(ctx context.Context, startedAt time.Time, denied 
 }
 
 func record(ctx context.Context, cache *metricutil.MeterCache[metricSet], prefix, desc string, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	metrics := cache.Load(ctx, tracerName, func(meter metric.Meter) metricSet {
 		return metricSet{
 			count: metricutil.NewInt64Counter(
@@ -237,9 +228,7 @@ func record(ctx context.Context, cache *metricutil.MeterCache[metricSet], prefix
 }
 
 func recordCount(ctx context.Context, cache *metricutil.MeterCache[countMetricSet], prefix, desc string, failed bool, attrs ...attribute.KeyValue) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	metrics := cache.Load(ctx, tracerName, func(meter metric.Meter) countMetricSet {
 		return countMetricSet{
 			count: metricutil.NewInt64Counter(

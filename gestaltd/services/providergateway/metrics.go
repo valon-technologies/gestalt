@@ -1,6 +1,7 @@
 package providergateway
 
 import (
+	"cmp"
 	"context"
 	"strconv"
 	"time"
@@ -52,9 +53,7 @@ func newProviderGatewayMetrics(meter metric.Meter) providerGatewayMetrics {
 }
 
 func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, err error, req ProviderGatewayRequest, transportPath TransportPath) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	metrics := providerGatewayOperationMetrics.Load(ctx, "gestaltd", newProviderGatewayMetrics)
 	attrs := []attribute.KeyValue{
 		attrProviderGatewayProviderID.String(metricutil.AttrValue(req.ProviderID)),
