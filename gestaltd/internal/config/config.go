@@ -1269,11 +1269,8 @@ func cloneAgentProviderSessionStartHookConfig(src AgentProviderSessionStartHookC
 }
 
 func cloneProviderEntryHarnessConfigMap(src map[string]*ProviderEntryHarnessConfig) map[string]*ProviderEntryHarnessConfig {
-	if src == nil {
-		return nil
-	}
-	dst := make(map[string]*ProviderEntryHarnessConfig, len(src))
-	for name, harness := range src {
+	dst := maps.Clone(src)
+	for name, harness := range dst {
 		dst[name] = cloneProviderEntryHarnessConfig(harness)
 	}
 	return dst
@@ -1529,14 +1526,12 @@ func cloneHTTPBindings(src map[string]*HTTPBinding) map[string]*HTTPBinding {
 func cloneHTTPRequestBody(src *providermanifestv1.HTTPRequestBody) *providermanifestv1.HTTPRequestBody {
 	return cloneOptionalConfig(src, func(src *providermanifestv1.HTTPRequestBody) *providermanifestv1.HTTPRequestBody {
 		cloned := *src
-		if src.Content != nil {
-			cloned.Content = make(map[string]*providermanifestv1.HTTPMediaType, len(src.Content))
-			for mediaType, value := range src.Content {
-				cloned.Content[mediaType] = cloneOptionalConfig(value, func(value *providermanifestv1.HTTPMediaType) *providermanifestv1.HTTPMediaType {
-					copyMediaType := *value
-					return &copyMediaType
-				})
-			}
+		cloned.Content = maps.Clone(src.Content)
+		for mediaType, value := range cloned.Content {
+			cloned.Content[mediaType] = cloneOptionalConfig(value, func(value *providermanifestv1.HTTPMediaType) *providermanifestv1.HTTPMediaType {
+				copyMediaType := *value
+				return &copyMediaType
+			})
 		}
 		return &cloned
 	})
@@ -2495,12 +2490,12 @@ func CloneAuthMapping(src *AuthMappingDef) *AuthMappingDef {
 				dst.Headers[name] = cloneAuthValue(value)
 			}
 		}
-		if src.Basic != nil {
-			dst.Basic = &BasicAuthMappingDef{
-				Username: cloneAuthValue(src.Basic.Username),
-				Password: cloneAuthValue(src.Basic.Password),
+		dst.Basic = cloneOptionalConfig(src.Basic, func(basic *BasicAuthMappingDef) *BasicAuthMappingDef {
+			return &BasicAuthMappingDef{
+				Username: cloneAuthValue(basic.Username),
+				Password: cloneAuthValue(basic.Password),
 			}
-		}
+		})
 		return dst
 	})
 }
