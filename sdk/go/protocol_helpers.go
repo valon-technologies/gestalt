@@ -328,3 +328,12 @@ func convertProtoMap[Input, Output any](values map[string]Input, convert func(In
 	}
 	return out, nil
 }
+
+// convertAllocatedProtoSlice preserves allocated empty results and element order.
+func convertAllocatedProtoSlice[Input, Output any](values []Input, convert func(Input) Output) []Output {
+	out := make([]Output, 0, len(values))
+	for _, value := range values {
+		out = append(out, convert(value))
+	}
+	return out
+}

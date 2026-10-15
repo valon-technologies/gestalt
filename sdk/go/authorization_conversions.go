@@ -218,25 +218,9 @@ func writeRelationshipsRequestFromProto(in *proto.WriteRelationshipsRequest) *Wr
 		return nil
 	}
 	return &WriteRelationshipsRequest{
-		Updates:               relationshipUpdatesFromProto(in.GetUpdates()),
-		OptionalPreconditions: preconditionsFromProto(in.GetOptionalPreconditions()),
+		Updates:               convertAllocatedProtoSlice(in.GetUpdates(), relationshipUpdateFromProto),
+		OptionalPreconditions: convertAllocatedProtoSlice(in.GetOptionalPreconditions(), preconditionFromProto),
 	}
-}
-
-func relationshipUpdatesFromProto(in []*proto.RelationshipUpdate) []*RelationshipUpdate {
-	out := make([]*RelationshipUpdate, 0, len(in))
-	for _, item := range in {
-		out = append(out, relationshipUpdateFromProto(item))
-	}
-	return out
-}
-
-func preconditionsFromProto(in []*proto.Precondition) []*Precondition {
-	out := make([]*Precondition, 0, len(in))
-	for _, item := range in {
-		out = append(out, preconditionFromProto(item))
-	}
-	return out
 }
 
 func protoWriteRelationshipsResponse(in *WriteRelationshipsResponse) *proto.WriteRelationshipsResponse {
@@ -270,14 +254,6 @@ func protoRelationship(in *Relationship) (*proto.Relationship, error) {
 		return nil, fmt.Errorf("relationship properties: %w", err)
 	}
 	return &proto.Relationship{Tuple: tuple, Properties: properties, SourceLayer: proto.SourceLayer(in.SourceLayer)}, nil
-}
-
-func relationshipsFromProto(in []*proto.Relationship) []*Relationship {
-	out := make([]*Relationship, 0, len(in))
-	for _, item := range in {
-		out = append(out, relationshipFromProto(item))
-	}
-	return out
 }
 
 func protoRelationships(in []*Relationship) ([]*proto.Relationship, error) {
@@ -356,7 +332,7 @@ func setAuthorizationStateRequestFromProto(in *proto.SetAuthorizationStateReques
 	}
 	return &SetAuthorizationStateRequest{
 		Model:         authorizationModelFromProto(in.GetModel()),
-		Relationships: relationshipsFromProto(in.GetRelationships()),
+		Relationships: convertAllocatedProtoSlice(in.GetRelationships(), relationshipFromProto),
 	}
 }
 
@@ -374,7 +350,7 @@ func authorizationModelFromProto(in *proto.AuthorizationModel) *AuthorizationMod
 	return &AuthorizationModel{
 		Id:            in.GetId(),
 		Version:       in.GetVersion(),
-		ResourceTypes: authorizationModelResourceTypesFromProto(in.GetResourceTypes()),
+		ResourceTypes: convertAllocatedProtoSlice(in.GetResourceTypes(), authorizationModelResourceTypeFromProto),
 	}
 }
 
@@ -437,99 +413,59 @@ func protoAuthorizationModelResourceType(in *AuthorizationModelResourceType) *pr
 	}
 }
 
-func authorizationModelResourceTypesFromProto(in []*proto.AuthorizationModelResourceType) []*AuthorizationModelResourceType {
-	out := make([]*AuthorizationModelResourceType, 0, len(in))
-	for _, item := range in {
-		out = append(out, authorizationModelResourceTypeFromProto(item))
-	}
-	return out
-}
-
-func protoAuthorizationModelResourceTypes(in []*AuthorizationModelResourceType) []*proto.AuthorizationModelResourceType {
-	out := make([]*proto.AuthorizationModelResourceType, 0, len(in))
-	for _, item := range in {
-		resourceType := protoAuthorizationModelResourceType(item)
-		out = append(out, resourceType)
-	}
-	return out
-}
-
 func modelRelationsFromProto(in []*proto.ModelRelation) []*ModelRelation {
-	out := make([]*ModelRelation, 0, len(in))
-	for _, item := range in {
+	return convertAllocatedProtoSlice(in, func(item *proto.ModelRelation) *ModelRelation {
 		if item == nil {
-			out = append(out, nil)
-			continue
+			return nil
 		}
-		out = append(out, &ModelRelation{Name: item.GetName(), AllowedTargets: modelAllowedTargetsFromProto(item.GetAllowedTargets())})
-	}
-	return out
+		return &ModelRelation{Name: item.GetName(), AllowedTargets: modelAllowedTargetsFromProto(item.GetAllowedTargets())}
+	})
 }
 
 func protoModelRelations(in []*ModelRelation) []*proto.ModelRelation {
-	out := make([]*proto.ModelRelation, 0, len(in))
-	for _, item := range in {
+	return convertAllocatedProtoSlice(in, func(item *ModelRelation) *proto.ModelRelation {
 		if item == nil {
-			out = append(out, nil)
-			continue
+			return nil
 		}
-		allowedTargets := protoModelAllowedTargets(item.AllowedTargets)
-		out = append(out, &proto.ModelRelation{Name: item.Name, AllowedTargets: allowedTargets})
-	}
-	return out
+		allowedTargets := convertAllocatedProtoSlice(item.AllowedTargets, protoModelAllowedTarget)
+		return &proto.ModelRelation{Name: item.Name, AllowedTargets: allowedTargets}
+	})
 }
 
 func modelActionsFromProto(in []*proto.ModelAction) []*ModelAction {
-	out := make([]*ModelAction, 0, len(in))
-	for _, item := range in {
+	return convertAllocatedProtoSlice(in, func(item *proto.ModelAction) *ModelAction {
 		if item == nil {
-			out = append(out, nil)
-			continue
+			return nil
 		}
-		out = append(out, &ModelAction{Name: item.GetName(), Relations: append([]string(nil), item.GetRelations()...)})
-	}
-	return out
+		return &ModelAction{Name: item.GetName(), Relations: append([]string(nil), item.GetRelations()...)}
+	})
 }
 
 func protoModelActions(in []*ModelAction) []*proto.ModelAction {
-	out := make([]*proto.ModelAction, 0, len(in))
-	for _, item := range in {
+	return convertAllocatedProtoSlice(in, func(item *ModelAction) *proto.ModelAction {
 		if item == nil {
-			out = append(out, nil)
-			continue
+			return nil
 		}
-		out = append(out, &proto.ModelAction{Name: item.Name, Relations: append([]string(nil), item.Relations...)})
-	}
-	return out
+		return &proto.ModelAction{Name: item.Name, Relations: append([]string(nil), item.Relations...)}
+	})
 }
 
 func modelAllowedTargetsFromProto(in []*proto.ModelAllowedTarget) []*ModelAllowedTarget {
-	out := make([]*ModelAllowedTarget, 0, len(in))
-	for _, item := range in {
+	return convertAllocatedProtoSlice(in, func(item *proto.ModelAllowedTarget) *ModelAllowedTarget {
 		if item == nil {
-			out = append(out, nil)
-			continue
+			return nil
 		}
 		switch kind := item.GetKind().(type) {
 		case *proto.ModelAllowedTarget_SubjectType:
-			out = append(out, &ModelAllowedTarget{SubjectType: kind.SubjectType})
+			return &ModelAllowedTarget{SubjectType: kind.SubjectType}
 		case *proto.ModelAllowedTarget_ResourceType:
-			out = append(out, &ModelAllowedTarget{ResourceType: kind.ResourceType})
+			return &ModelAllowedTarget{ResourceType: kind.ResourceType}
 		case *proto.ModelAllowedTarget_SubjectSetType:
-			out = append(out, &ModelAllowedTarget{SubjectSetType: subjectSetTypeFromProto(kind.SubjectSetType)})
+			return &ModelAllowedTarget{SubjectSetType: subjectSetTypeFromProto(kind.SubjectSetType)}
 		default:
-			out = append(out, &ModelAllowedTarget{})
+			return &ModelAllowedTarget{}
 		}
-	}
-	return out
-}
-
-func protoModelAllowedTargets(in []*ModelAllowedTarget) []*proto.ModelAllowedTarget {
-	out := make([]*proto.ModelAllowedTarget, 0, len(in))
-	for _, item := range in {
-		out = append(out, protoModelAllowedTarget(item))
-	}
-	return out
+	})
 }
 
 func protoModelAllowedTarget(in *ModelAllowedTarget) *proto.ModelAllowedTarget {
@@ -584,7 +520,7 @@ func protoListActiveModelResourceTypesResponse(in *ListActiveModelResourceTypesR
 	if in == nil {
 		return nil
 	}
-	resourceTypes := protoAuthorizationModelResourceTypes(in.ResourceTypes)
+	resourceTypes := convertAllocatedProtoSlice(in.ResourceTypes, protoAuthorizationModelResourceType)
 	return &proto.ListActiveModelResourceTypesResponse{
 		ResourceTypes: resourceTypes,
 		NextPageToken: in.NextPageToken,
