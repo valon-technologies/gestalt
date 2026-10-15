@@ -1,53 +1,17 @@
 package indexeddbcodec
 
 import (
-	"bytes"
-	"cmp"
 	"fmt"
-	"math/big"
-	"slices"
-	"time"
-	"unicode/utf16"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-)
-
-type keyKind int
-
-const (
-	keyKindNumber keyKind = iota
-	keyKindDate
-	keyKindString
-	keyKindBinary
-	keyKindArray
 )
 
 // CompareKeys compares two native IndexedDB keys using W3C ordering:
 // number < date < string < binary < array, with element-wise array compare
 // and shorter prefixes sorting first.
 func CompareKeys(a, b any) int {
-	ka, okA := keyKindOf(a)
-	kb, okB := keyKindOf(b)
-	if !okA || !okB {
-		return compareFallback(a, b)
-	}
-	if ka != kb {
-		return cmp.Compare(ka, kb)
-	}
-	switch ka {
-	case keyKindNumber:
-		return compareNumbers(a, b)
-	case keyKindDate:
-		return compareDates(a.(time.Time), b.(time.Time))
-	case keyKindString:
-		return compareUTF16Strings(a.(string), b.(string))
-	case keyKindBinary:
-		return bytes.Compare(a.([]byte), b.([]byte))
-	case keyKindArray:
-		return compareArrayKeys(keyArrayParts(a), keyArrayParts(b))
-	default:
-		return compareFallback(a, b)
-	}
+	return idb.CompareKeys(a, b)
 }
 
 // KeyInRange reports whether key satisfies kr. A nil range includes all keys.
@@ -107,97 +71,4 @@ func MatchQuery(key any, query *proto.IndexedDBQuery) (bool, error) {
 	default:
 		return true, nil
 	}
-}
-
-func keyKindOf(v any) (keyKind, bool) {
-	if v == nil {
-		return 0, false
-	}
-	if parts, ok := KeyValueArrayParts(v); ok {
-		_ = parts
-		return keyKindArray, true
-	}
-	switch v.(type) {
-	case []byte:
-		return keyKindBinary, true
-	case time.Time:
-		return keyKindDate, true
-	case string:
-		return keyKindString, true
-	case bool:
-		return keyKindNumber, true
-	}
-	_, ok := numberRat(v)
-	return keyKindNumber, ok
-}
-
-func keyArrayParts(v any) []any {
-	parts, _ := KeyValueArrayParts(v)
-	return parts
-}
-
-func compareArrayKeys(a, b []any) int {
-	return slices.CompareFunc(a, b, CompareKeys)
-}
-
-func compareDates(a, b time.Time) int {
-	return cmp.Compare(a.UnixNano(), b.UnixNano())
-}
-
-func compareUTF16Strings(a, b string) int {
-	return slices.Compare(utf16.Encode([]rune(a)), utf16.Encode([]rune(b)))
-}
-
-func compareNumbers(a, b any) int {
-	ar, okA := numberRat(a)
-	br, okB := numberRat(b)
-	if !okA || !okB {
-		return compareFallback(a, b)
-	}
-	return ar.Cmp(br)
-}
-
-func numberRat(v any) (*big.Rat, bool) {
-	switch n := v.(type) {
-	case bool:
-		if n {
-			return big.NewRat(1, 1), true
-		}
-		return big.NewRat(0, 1), true
-	case int:
-		return big.NewRat(int64(n), 1), true
-	case int8:
-		return big.NewRat(int64(n), 1), true
-	case int16:
-		return big.NewRat(int64(n), 1), true
-	case int32:
-		return big.NewRat(int64(n), 1), true
-	case int64:
-		return big.NewRat(n, 1), true
-	case uint:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(n))), true
-	case uint8:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(n))), true
-	case uint16:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(n))), true
-	case uint32:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(n))), true
-	case uint64:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(n)), true
-	case float32:
-		return floatRat(float64(n))
-	case float64:
-		return floatRat(n)
-	default:
-		return nil, false
-	}
-}
-
-func floatRat(v float64) (*big.Rat, bool) {
-	r := new(big.Rat).SetFloat64(v)
-	return r, r != nil
-}
-
-func compareFallback(a, b any) int {
-	return cmp.Compare(fmt.Sprint(a), fmt.Sprint(b))
 }
