@@ -54,13 +54,10 @@ func FailedVersionsForAdmin(failed *FailedIndex, published, pending map[string]s
 
 // PublishedVersionKeys returns version keys present in a published app index.
 func PublishedVersionKeys(index *Index, appName string) map[string]struct{} {
-	if index == nil || len(index.Apps) == 0 {
+	if index == nil {
 		return map[string]struct{}{}
 	}
-	appVersions, ok := index.Apps[appName]
-	if !ok || len(appVersions.Versions) == 0 {
-		return map[string]struct{}{}
-	}
+	appVersions := index.Apps[appName]
 	out := make(map[string]struct{}, len(appVersions.Versions))
 	for version := range appVersions.Versions {
 		out[version] = struct{}{}
@@ -70,7 +67,7 @@ func PublishedVersionKeys(index *Index, appName string) map[string]struct{} {
 
 // PendingVersionKeys returns version keys present in a pending catalog.
 func PendingVersionKeys(pending *PendingIndex) map[string]struct{} {
-	if pending == nil || len(pending.Pending) == 0 {
+	if pending == nil {
 		return map[string]struct{}{}
 	}
 	out := make(map[string]struct{}, len(pending.Pending))

@@ -240,13 +240,10 @@ type VersionSummary struct {
 
 // VersionsFromIndex returns version summaries for appName, newest first.
 func VersionsFromIndex(index *Index, appName string) []VersionSummary {
-	if index == nil || len(index.Apps) == 0 {
+	if index == nil {
 		return []VersionSummary{}
 	}
-	appVersions, ok := index.Apps[appName]
-	if !ok || len(appVersions.Versions) == 0 {
-		return []VersionSummary{}
-	}
+	appVersions := index.Apps[appName]
 	out := make([]VersionSummary, 0, len(appVersions.Versions))
 	for version := range appVersions.Versions {
 		summary := appVersions.Versions[version]

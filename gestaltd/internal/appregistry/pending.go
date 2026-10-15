@@ -190,14 +190,11 @@ func validateFailedVersion(appName, mapKey string, entry FailedVersion) error {
 }
 
 func IndexContainsVersion(index *Index, appName, version string) bool {
-	if index == nil || len(index.Apps) == 0 {
+	if index == nil {
 		return false
 	}
-	appVersions, ok := index.Apps[strings.TrimSpace(appName)]
-	if !ok {
-		return false
-	}
-	_, ok = appVersions.Versions[strings.TrimSpace(version)]
+	appVersions := index.Apps[strings.TrimSpace(appName)]
+	_, ok := appVersions.Versions[strings.TrimSpace(version)]
 	return ok
 }
 
@@ -240,7 +237,7 @@ func PrunePendingIndex(pending *PendingIndex, failed *FailedIndex, published *In
 
 // PruneFailedIndex removes old or already-published failed entries.
 func PruneFailedIndex(failed *FailedIndex, published *Index, now time.Time) bool {
-	if failed == nil || len(failed.Failed) == 0 {
+	if failed == nil {
 		return false
 	}
 	now = now.UTC()
