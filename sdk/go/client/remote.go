@@ -161,8 +161,5 @@ func (c *RemoteManagement) ListRemotes(ctx context.Context, request *ListRemotes
 
 // DeleteRemote calls the DeleteRemote RPC of RemoteManagement.
 func (c *RemoteManagement) DeleteRemote(ctx context.Context, request *DeleteRemoteRequest) error {
-	if _, err := c.client.DeleteRemote(ctx, ToWireDeleteRemoteRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteRemote(ctx, ToWireDeleteRemoteRequest(request)))
 }

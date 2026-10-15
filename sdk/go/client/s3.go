@@ -376,18 +376,12 @@ func (c *S3) WriteObjectRaw(ctx context.Context) (*S3WriteObjectStream, error) {
 // DeleteObject is the ergonomic form of [S3.DeleteObjectRaw].
 func (c *S3) DeleteObject(ctx context.Context, ref *S3ObjectRef) error {
 	request := &DeleteObjectRequest{Ref: ref}
-	if _, err := c.client.DeleteObject(ctx, ToWireDeleteObjectRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteObject(ctx, ToWireDeleteObjectRequest(request)))
 }
 
 // DeleteObjectRaw is the faithful form of [S3.DeleteObject].
 func (c *S3) DeleteObjectRaw(ctx context.Context, request *DeleteObjectRequest) error {
-	if _, err := c.client.DeleteObject(ctx, ToWireDeleteObjectRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteObject(ctx, ToWireDeleteObjectRequest(request)))
 }
 
 // ListObjects is the ergonomic form of [S3.ListObjectsRaw].
