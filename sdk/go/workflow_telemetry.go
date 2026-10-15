@@ -1,6 +1,7 @@
 package gestalt
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"strings"
@@ -95,9 +96,7 @@ var (
 
 // WorkflowOperation starts a telemetry span for one workflow operation.
 func WorkflowOperation(ctx context.Context, opts WorkflowOperationOptions) (context.Context, *WorkflowTelemetryOperation) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	opts = normalizeWorkflowOperationOptions(opts)
 	ctx, span := otel.Tracer(TelemetryInstrumentationName).Start(
 		ctx,
@@ -146,17 +145,13 @@ func (op *WorkflowTelemetryOperation) End(err error) {
 
 // RecordWorkflowRunStarted counts a workflow run start.
 func RecordWorkflowRunStarted(ctx context.Context, opts WorkflowOperationOptions) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	workflowMetrics().runStartedCount.Add(ctx, 1, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
 }
 
 // RecordWorkflowRunCompleted counts a workflow run completion by outcome.
 func RecordWorkflowRunCompleted(ctx context.Context, startedAt time.Time, opts WorkflowOperationOptions) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	attrs := workflowTelemetryAttrs(opts, nil)
 	metrics := workflowMetrics()
 	metrics.runCompletedCount.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -165,9 +160,7 @@ func RecordWorkflowRunCompleted(ctx context.Context, startedAt time.Time, opts W
 
 // RecordWorkflowEventDelivered counts a delivered workflow event.
 func RecordWorkflowEventDelivered(ctx context.Context, err error, opts WorkflowOperationOptions) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	attrs := workflowTelemetryAttrs(opts, err)
 	metrics := workflowMetrics()
 	metrics.eventDeliveredCount.Add(ctx, 1, metric.WithAttributes(attrs...))
@@ -182,17 +175,13 @@ func RecordWorkflowEventMatchedActivations(ctx context.Context, count int64, opt
 	if count <= 0 {
 		return
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	workflowMetrics().eventMatchedActivationsCount.Add(ctx, count, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
 }
 
 // RecordWorkflowActivationFired counts an activation firing.
 func RecordWorkflowActivationFired(ctx context.Context, opts WorkflowOperationOptions) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	workflowMetrics().activationFiredCount.Add(ctx, 1, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
 }
 

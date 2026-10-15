@@ -1,6 +1,7 @@
 package gestalt
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -129,9 +130,7 @@ var indexedDBTransports sync.Map
 
 // IndexedDB connects to the IndexedDB provider exposed by gestaltd.
 func IndexedDB(ctx context.Context, name ...string) (indexeddb.Database, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	target, token, err := host.Target("indexeddb")
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package gestalt
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"reflect"
@@ -280,9 +281,7 @@ func startGenAIOperation(
 	spanAttrs []attribute.KeyValue,
 	metricAttrs []attribute.KeyValue,
 ) (context.Context, *GenAIOperation) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	ctx, span := otel.Tracer(TelemetryInstrumentationName).Start(
 		ctx,
 		name,
